@@ -236,16 +236,16 @@ jobs:
       - name: protoc
         run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
 
-      - name: Run process_invariants Rust test
+      - name: Run process_invariants Rust test (hard gate I.2)
         run: |
           set -eo pipefail
-          # The test lives in PR #25 ; until it lands, run --nocapture
-          # to surface output and gracefully no-op if the test doesn't exist.
-          if cargo test --release --no-run --test process_invariants -p efe-bench-harness 2>/dev/null ; then
-              cargo test --release --test process_invariants -p efe-bench-harness -- --nocapture
-          else
-              echo "::warning title=I.2 placeholder::process_invariants test not yet present (PR #25 day 3)"
-          fi
+          # PR #25 day 3 made this a HARD gate (was warn-only at day 1).
+          # Both the positive (workspace scan) and negative (synthetic
+          # input) test files must pass.
+          cargo test --release --test process_invariants -p efe-bench-harness -- --nocapture
+          cargo test --release --test process_invariants_negatives -p efe-bench-harness
+          # The v1.7 stability tests lock the frozen process invariants.
+          cargo test --release --test stability_contract_v17 -p efe-bench-harness
 
       - name: Workspace-wide SOT scan (informational)
         run: |
