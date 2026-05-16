@@ -69,7 +69,7 @@ Each row is a PR.  Columns :
 | [#22](https://github.com/efe-ai/efe/pull/22) | SLO portal | — | — | — | — | — | — | — | (pre-process) | grandfathered | Pre-I.1 |
 | [#23](https://github.com/efe-ai/efe/pull/23) | Cluster-provisioner extraction | — | — | — | — | — | — | — | (pre-process) | grandfathered | Byte-compat shim |
 | [#24](https://github.com/efe-ai/efe/pull/24) | Publish bench results | 20 | 8 | 40 | 20 | 30 | **150** | **67** | [pr24-lessons-learned.md](../lessons/pr24-lessons-learned.md) | **outlier** | First PR with explicit audit ; calibration anchor |
-| [#25](https://github.com/efe-ai/efe/pull/25) | Process changes I.1+I.2+I.6 | 5 | 2 | 40 | _filled at merge_ | _filled at merge_ | _filled_ | _count_ | _link_ | _filled_ | Self-cohérent : PR #25 audits itself |
+| [#25](https://github.com/efe-ai/efe/pull/25) | Process changes I.1+I.2+I.6 | 5 | 2 | 40 | 5 | 2 | 40 | 8 | [PR-25-lessons.md](../lessons/PR-25-lessons.md) | **pass** | First PR under new rules ; 8 defects vs PR #24's 67 (10× reduction) ; ratio met estimate exactly |
 | #26 | _placeholder — first Phase-3 PR under new rules_ | _est_ | _est_ | _est_ | _filled_ | _filled_ | _filled_ | _count_ | _link_ | _filled_ | |
 | #27 | _placeholder_ | _est_ | _est_ | _est_ | _filled_ | _filled_ | _filled_ | _count_ | _link_ | _filled_ | |
 | #28 | _placeholder_ | _est_ | _est_ | _est_ | _filled_ | _filled_ | _filled_ | _count_ | _link_ | _filled_ | |
@@ -170,15 +170,27 @@ echo "Total PRs (I.1 era) : $(awk -F'|' '/^\| #2[5-9]|^\| #3[0-9]/ {n++} END {pr
 > updates these aggregates automatically.  Until then : update by
 > hand after each batch.
 
-### 6.1 Live numbers (last updated : 2026-05-16)
+### 6.1 Live numbers (last updated : 2026-05-16, post-PR #25 merge)
 
 | Metric | Value |
 |---|---|
-| PRs in tracker | 10 (9 grandfathered + 1 anchor + 1 in-flight) |
-| PRs under I.1 (i.e. with real audit data) | 1 (PR #24, anchor) |
-| Mean Actual % (I.1 era only) | N/A (need ≥ 3 PRs) |
-| Mean Defects found (I.1 era only) | N/A |
+| PRs in tracker | 10 (9 grandfathered + 1 anchor + 1 first-of-Phase-3) |
+| PRs under I.1 (i.e. with real audit data) | 2 (PR #24 anchor, PR #25 first Phase-3) |
+| Mean Actual % (I.1 era, n=2) | 95 % (still pre-steady-state ; PR #24 outlier dominates) |
+| Median Actual % (I.1 era, n=2) | 95 % (same) |
+| Mean Defects found (I.1 era, n=2) | 37.5 (driven by PR #24 = 67 ; PR #25 = 8) |
+| Defect-count reduction PR #24 → PR #25 | 10× (67 → 8) |
+| Audit-overhead reduction PR #24 → PR #25 | 3.75× (150 % → 40 %) |
 | Outlier ratio (PR #24 vs target) | 150 / 30 = 5× |
+| Outlier ratio (PR #25 vs target) | 40 / 30 = 1.33× |
+
+**Status** : PR #25 came in at 40 % audit ratio against a 30 % target.
+That's a 1.33× outlier, well within the "pass" verdict range and a
+strong signal the steady-state target is achievable but may need
+adjustment to 35-40 % after 3 more Phase-3 PRs are measured.
+
+Recalibration trigger : after PR #26 + #27 + #28 (3 Phase-3 PRs).
+Current recommendation : maintain 30 % target ; revisit at recalibration.
 
 ---
 

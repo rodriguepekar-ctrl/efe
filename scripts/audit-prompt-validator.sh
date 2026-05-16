@@ -252,7 +252,11 @@ pass_count=$(
         BEGIN { inside = 0 }
         /^##+[[:space:]]+2\.[[:space:]]+Timeline/ { inside = 1; next }
         /^##+[[:space:]]+3\./ { inside = 0; exit }
-        inside && /^\|[[:space:]]*[0-9]+[[:space:]]*\|/ { print }
+        # A pass row : first cell starts with a digit (the pass number).
+        # The cell may carry annotation text after the digit
+        # ("| 1 (initial) |", "| 1 (Day 1 — foo) |").  Anchor only on
+        # "| <whitespace>* <digit>".
+        inside && /^\|[[:space:]]*[0-9]/ { print }
     ' "$LESSONS_FILE" | wc -l | tr -d '[:space:]'
 )
 pass_count=${pass_count:-0}
