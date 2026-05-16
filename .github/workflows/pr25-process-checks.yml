@@ -247,14 +247,13 @@ jobs:
           # The v1.7 stability tests lock the frozen process invariants.
           cargo test --release --test stability_contract_v17 -p efe-bench-harness
 
-      - name: Workspace-wide SOT scan (informational)
+      - name: Workspace-wide SOT scan (informational companion)
         run: |
           set -eo pipefail
-          if [ -x scripts/sot-audit.sh ] ; then
-              bash scripts/sot-audit.sh
-          else
-              echo "::warning title=I.2 placeholder::scripts/sot-audit.sh not yet present (PR #25 day 1)"
-          fi
+          # Shell sister of the Rust hard gate above.  Informational :
+          # the Rust test is what blocks the merge ; this surfaces the
+          # same scan in human-readable form for the CI log.
+          bash scripts/sot-audit.sh
 
   # ════════════════════════════════════════════════════════════════════
   #                              I.6
