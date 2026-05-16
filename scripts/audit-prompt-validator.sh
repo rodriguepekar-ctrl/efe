@@ -27,8 +27,11 @@
 #
 #  References :
 #    docs/architecture/EFE_A1_PHASE3_PR25_ARCHITECTURE.md § 6.5
-#    docs/lessons/_template.md
-#    docs/lessons/pr24-lessons-learned.md  (golden example — must validate)
+#    docs/lessons/_template.md                  (canonical 7-section schema)
+#    docs/lessons/PR-25-lessons.md              (first file produced under the schema)
+#    docs/lessons/pr24-lessons-learned.md       (grandfathered ; 10-section narrative
+#                                                from before this schema existed —
+#                                                does NOT validate, by design)
 # ─────────────────────────────────────────────────────────────────────
 
 set -euo pipefail
@@ -78,11 +81,15 @@ EXIT CODES
     6   the audit prompt structural invariant violated (≥ 1 pass)
 
 EXAMPLE
-    # Validate PR #24's lessons file (the golden reference).
-    scripts/audit-prompt-validator.sh docs/lessons/pr24-lessons-learned.md
+    # Validate the canonical reference (PR #25 lessons file).
+    scripts/audit-prompt-validator.sh docs/lessons/PR-25-lessons.md
 
     # Validate a new lessons file before pushing.
     scripts/audit-prompt-validator.sh docs/lessons/PR-26-lessons.md
+
+    # Note : docs/lessons/pr24-lessons-learned.md is the GRANDFATHERED
+    # PR #24 lessons (10 sections, predates this schema).  It WILL fail
+    # validation by design — see architecture § 2.2.
 
 ENVIRONMENT
     NO_COLOR=1    Disable ANSI colour codes (default : auto-detect TTY).
