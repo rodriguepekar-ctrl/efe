@@ -143,13 +143,26 @@ cd "$ROOT_DIR"
 TMP_DIR=$(mktemp -d -t sot-audit-XXXXXX)
 trap 'rm -rf "$TMP_DIR"' EXIT
 
-# Extract candidate files.  Skip target/ + .git/ + node_modules/ +
-# generated build dirs.  Include workspace src dirs explicitly so a
-# top-level scratch .rs doesn't sneak in.
+# Extract candidate files.  Mirror the Rust scanner's exclusion list
+# (tests/common/sot.rs::walk) so the two tools agree :
+#   * target/        — build artefacts
+#   * .git/          — version control
+#   * node_modules/  — frontend deps
+#   * generated/     — generated code (any depth)
+#   * tests/         — integration tests : synthetic fixtures look like
+#                       const declarations but are string literals
+#   * examples/      — same rationale
+#   * benches/       — same rationale
+#
+# Production const lists live ONLY in `*/src/` ; scanning the other
+# trees produces false-positives that pollute the signal.  This was
+# discovered + documented in PR #25 day 3 when the Rust scanner first
+# flagged 8 phantom duplicates from synthetic fixtures.
 find . \
     -path ./target -prune -o \
     -path ./.git -prune -o \
     -path ./node_modules -prune -o \
+    \( -name tests -o -name examples -o -name benches -o -name generated \) -prune -o \
     -name '*.rs' -print 2>/dev/null > "$TMP_DIR/files.txt" || true
 
 FILE_COUNT=$(wc -l < "$TMP_DIR/files.txt" | tr -d '[:space:]')

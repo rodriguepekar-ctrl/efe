@@ -127,6 +127,56 @@ fn i_2_badge_filenames_canonical_and_unique() {
     }
 }
 
+/// The 5-element `API_ENDPOINT_FILENAMES` const — STABILITY v1.6 § 24.3.
+///
+/// **PR #25 day 4** — hoisted from a local `REQUIRED_API` const in
+/// `publish/deploy/ratchet.rs` to the canonical
+/// `crate::publish::api::API_ENDPOINT_FILENAMES`.  This test asserts :
+///   1. The canonical const exists with 5 entries.
+///   2. No parallel-list duplication elsewhere in the workspace.
+#[test]
+fn i_2_api_endpoint_filenames_canonical_and_unique() {
+    use efe_bench_harness::publish::api::API_ENDPOINT_FILENAMES;
+
+    // (1) Canonical presence + count.
+    assert_eq!(
+        API_ENDPOINT_FILENAMES.len(),
+        5,
+        "API_ENDPOINT_FILENAMES must have 5 entries (v1.6 § 24.3)"
+    );
+
+    // (2) No parallel const list with >= 80 % overlap.
+    let canonical_items: Vec<String> =
+        API_ENDPOINT_FILENAMES.iter().map(|s| (*s).to_string()).collect();
+    let consts = collect_workspace_qualifying_consts();
+    let canonical_loc = consts.iter().find(|c| c.name == "API_ENDPOINT_FILENAMES");
+    assert!(
+        canonical_loc.is_some(),
+        "API_ENDPOINT_FILENAMES not found by the extractor — extractor regression \
+         OR the day-4 hoist was undone"
+    );
+
+    for other in &consts {
+        if other.name == "API_ENDPOINT_FILENAMES" {
+            continue; // canonical itself
+        }
+        if is_whitelisted(other) {
+            continue;
+        }
+        let pct = overlap_pct(&canonical_items, &other.items);
+        assert!(
+            pct < SOT_OVERLAP_THRESHOLD_PCT,
+            "{} {} mirrors API_ENDPOINT_FILENAMES at {}% (must be < {}%) — \
+             a parallel-list duplication of the 5 JSON endpoints has been \
+             reintroduced ; the day-4 SOT cleanup must hold",
+            other.location(),
+            other.name,
+            pct,
+            SOT_OVERLAP_THRESHOLD_PCT
+        );
+    }
+}
+
 /// The 10-element `SCENARIO_PAGE_FILENAMES` const — STABILITY v1.6 § 24.2.
 ///
 /// Note : this const is `&[(&str, &str)]`, not `&[&str]`, so the SOT

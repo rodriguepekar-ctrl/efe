@@ -223,6 +223,39 @@ fn v1_7_section_25_2_canonical_scenario_page_filenames_present() {
     );
 }
 
+/// **PR #25 day 4** — the canonical `API_ENDPOINT_FILENAMES` const
+/// lives at its frozen location (`publish/api/mod.rs`).
+///
+/// Before day 4, the 5 names lived as a local `REQUIRED_API` in
+/// `publish/deploy/ratchet.rs`.  Day 4 hoists them to the most
+/// general module that DEFINES the concept (the api module itself).
+#[test]
+fn v1_7_section_25_2_canonical_api_endpoint_filenames_present() {
+    let path = "bench/harness/src/publish/api/mod.rs";
+    assert!(
+        workspace_file_exists(path),
+        "STABILITY § 25.2 : canonical {path} missing"
+    );
+    let body = read_workspace_file(path);
+    assert!(
+        body.contains("pub const API_ENDPOINT_FILENAMES: &[&str]"),
+        "STABILITY § 25.2 : canonical API_ENDPOINT_FILENAMES const missing — \
+         the hoist from REQUIRED_API was undone?"
+    );
+
+    // The ratchet MUST use the canonical const, not a local copy.
+    let ratchet = read_workspace_file("bench/harness/src/publish/deploy/ratchet.rs");
+    assert!(
+        ratchet.contains("use crate::publish::api::API_ENDPOINT_FILENAMES"),
+        "STABILITY § 25.2 : ratchet does not import API_ENDPOINT_FILENAMES"
+    );
+    assert!(
+        !ratchet.contains("const REQUIRED_API:"),
+        "STABILITY § 25.2 : ratchet still carries the deprecated REQUIRED_API const — \
+         day-4 hoist incomplete (D-AS regression)"
+    );
+}
+
 // ═══════════════════════════════════════════════════════════════════
 // § 25.3  I.6 — audit budget
 // ═══════════════════════════════════════════════════════════════════
