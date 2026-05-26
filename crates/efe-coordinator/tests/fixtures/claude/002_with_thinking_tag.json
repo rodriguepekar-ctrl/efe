@@ -1,0 +1,15 @@
+{
+  "id": "msg_02DEF456thinking",
+  "type": "message",
+  "role": "assistant",
+  "model": "claude-sonnet-4-6",
+  "content": [
+    {"type": "text", "text": "<thinking>The user asked about the speed of light. This is a fundamental physics constant. c = 299,792,458 m/s exactly (since the 1983 redefinition of the metre).</thinking>\n\nThe speed of light in a vacuum is exactly 299,792,458 meters per second."}
+  ],
+  "stop_reason": "end_turn",
+  "stop_sequence": null,
+  "usage": {
+    "input_tokens": 18,
+    "output_tokens": 67
+  }
+}

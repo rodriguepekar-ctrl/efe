@@ -1,0 +1,11 @@
+{
+  "candidates": [],
+  "usageMetadata": {
+    "promptTokenCount": 5,
+    "candidatesTokenCount": 0,
+    "totalTokenCount": 5
+  },
+  "promptFeedback": {
+    "blockReason": "OTHER"
+  }
+}

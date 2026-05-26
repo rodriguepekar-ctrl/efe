@@ -1,0 +1,17 @@
+{
+  "candidates": [
+    {
+      "content": {
+        "parts": [{"text": "Computing history began with mechanical devices. Pascal's calculator (1642) and Leibniz's stepped reckoner (1673) preceded Babbage's analytical engine"}],
+        "role": "model"
+      },
+      "finishReason": "MAX_TOKENS",
+      "index": 0
+    }
+  ],
+  "usageMetadata": {
+    "promptTokenCount": 14,
+    "candidatesTokenCount": 50,
+    "totalTokenCount": 64
+  }
+}

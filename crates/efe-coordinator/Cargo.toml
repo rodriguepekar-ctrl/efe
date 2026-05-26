@@ -1,0 +1,167 @@
+[package]
+name        = "efe-coordinator"
+version     = { workspace = true }
+edition     = { workspace = true }
+rust-version = { workspace = true }
+authors     = { workspace = true }
+license     = { workspace = true }
+repository  = { workspace = true }
+description = "Phase 2 — DAG orchestrator + stigmergic blackboard + multi-LLM bridge + SSE streaming for the nano-robots swarm."
+
+[features]
+default = []
+# Active le bus NATS JetStream (sinon InMemoryBus uniquement).
+nats-bus = ["dep:async-nats"]
+# Phase 3 R1a : providers Anthropic Claude (Sonnet 4.6 défaut).
+anthropic = []
+# Phase 3 R1a : provider Google Gemini (Flash défaut).
+gemini = []
+# Raccourci : tous les providers R1a.
+all-providers = ["anthropic", "gemini"]
+
+[dependencies]
+# Crate frère : les 6 clients nano-robots Phase 1.
+efe-nano-app-coordinator = { path = "../efe-nano-app-coordinator" }
+
+# Workspace-pinned.
+tokio       = { workspace = true, features = ["sync", "time", "rt-multi-thread", "macros", "signal"] }
+serde       = { workspace = true }
+serde_json  = { workspace = true }
+thiserror   = { workspace = true }
+async-trait = { workspace = true }
+tracing     = { workspace = true }
+futures     = { workspace = true }
+uuid        = { workspace = true }
+dashmap     = { workspace = true }
+anyhow      = { workspace = true }
+
+# Spécifiques.
+blake3      = "1.5"
+bytes       = "1.7"
+reqwest     = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "stream"] }
+chrono      = { version = "0.4", features = ["serde"] }
+parking_lot = "0.12"
+tokio-util  = { version = "0.7", features = ["rt"] }
+
+# Optionnel : bus NATS JetStream pour le mode prod.
+async-nats  = { version = "0.35", optional = true }
+
+[dev-dependencies]
+tokio       = { workspace = true, features = ["full", "test-util", "macros"] }
+proptest    = "1.5"
+serial_test = "3.1"
+criterion   = { version = "0.5", features = ["async_tokio", "html_reports"] }
+futures     = { workspace = true }
+
+[lib]
+name = "efe_coordinator"
+path = "src/lib.rs"
+
+[[test]]
+name = "unit_blackboard"
+path = "tests/unit_blackboard.rs"
+
+[[test]]
+name = "unit_bus"
+path = "tests/unit_bus.rs"
+
+[[test]]
+name = "unit_dag"
+path = "tests/unit_dag.rs"
+
+[[test]]
+name = "unit_vote"
+path = "tests/unit_vote.rs"
+
+[[test]]
+name = "unit_speculator"
+path = "tests/unit_speculator.rs"
+
+[[test]]
+name = "unit_bridge"
+path = "tests/unit_bridge.rs"
+
+[[test]]
+name = "workflow_mission_a"
+path = "tests/workflow_mission_a.rs"
+
+[[test]]
+name = "workflow_mission_b"
+path = "tests/workflow_mission_b.rs"
+
+[[test]]
+name = "workflow_speculative"
+path = "tests/workflow_speculative.rs"
+
+[[test]]
+name = "sse_stream"
+path = "tests/sse_stream.rs"
+
+[[test]]
+name = "invariants"
+path = "tests/invariants.rs"
+
+[[test]]
+name = "unit_audit"
+path = "tests/unit_audit.rs"
+
+[[test]]
+name = "unit_heartbeat"
+path = "tests/unit_heartbeat.rs"
+
+[[test]]
+name = "unit_sse"
+path = "tests/unit_sse.rs"
+
+[[test]]
+name = "unit_stream_many"
+path = "tests/unit_stream_many.rs"
+
+[[test]]
+name = "unit_streaming_events"
+path = "tests/unit_streaming_events.rs"
+
+[[test]]
+name = "unit_dag_dataflow"
+path = "tests/unit_dag_dataflow.rs"
+
+[[test]]
+name = "unit_bus_filters"
+path = "tests/unit_bus_filters.rs"
+
+[[test]]
+name = "live_providers"
+path = "tests/live_providers.rs"
+required-features = ["all-providers"]
+
+[[test]]
+name = "unit_parse_claude"
+path = "tests/unit_parse_claude.rs"
+required-features = ["anthropic"]
+
+[[test]]
+name = "unit_parse_gemini"
+path = "tests/unit_parse_gemini.rs"
+required-features = ["gemini"]
+
+[[test]]
+name = "unit_streaming_edge"
+path = "tests/unit_streaming_edge.rs"
+required-features = ["all-providers"]
+
+[[example]]
+name = "mission_a_demo"
+path = "examples/mission_a_demo.rs"
+
+[[example]]
+name = "mission_b_demo"
+path = "examples/mission_b_demo.rs"
+
+[[example]]
+name = "speculative_demo"
+path = "examples/speculative_demo.rs"
+
+[[bench]]
+name    = "coordinator_throughput"
+path    = "benches/coordinator_throughput.rs"
+harness = false

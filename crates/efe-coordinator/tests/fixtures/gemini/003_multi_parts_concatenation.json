@@ -1,0 +1,21 @@
+{
+  "candidates": [
+    {
+      "content": {
+        "parts": [
+          {"text": "Part one. "},
+          {"text": "Part two. "},
+          {"text": "Part three."}
+        ],
+        "role": "model"
+      },
+      "finishReason": "STOP",
+      "index": 0
+    }
+  ],
+  "usageMetadata": {
+    "promptTokenCount": 8,
+    "candidatesTokenCount": 15,
+    "totalTokenCount": 23
+  }
+}

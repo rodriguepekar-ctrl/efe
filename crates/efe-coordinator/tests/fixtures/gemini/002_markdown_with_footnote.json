@@ -1,0 +1,17 @@
+{
+  "candidates": [
+    {
+      "content": {
+        "parts": [{"text": "**Paris** is the capital of France [^1]. It has a population of approximately 2.16 million in the city proper [^2].\n\n[^1]: cf. CIA World Factbook 2026.\n[^2]: INSEE official estimates."}],
+        "role": "model"
+      },
+      "finishReason": "STOP",
+      "index": 0
+    }
+  ],
+  "usageMetadata": {
+    "promptTokenCount": 18,
+    "candidatesTokenCount": 56,
+    "totalTokenCount": 74
+  }
+}
