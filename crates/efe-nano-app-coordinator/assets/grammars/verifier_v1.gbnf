@@ -1,0 +1,19 @@
+# VerifierOutput v1.0.0 — GBNF pour llama.cpp b9297+
+# Schéma source : assets/schemas/verifier_v1.json
+
+root ::= "{" ws "\"verdict\":" ws verdict ws "," ws "\"best_source_id\":" ws (source-id | "null") ws "," ws "\"similarity\":" ws confidence ws "," ws "\"contradictions\":" ws contradictions-arr ws "," ws "\"severity\":" ws severity (ws "," ws "\"explanation\":" ws explanation)? ws "}"
+
+verdict ::= "\"SUPPORTED\"" | "\"UNSUPPORTED\"" | "\"CONTRADICTED\"" | "\"INSUFFICIENT_EVIDENCE\""
+
+severity ::= "\"INFO\"" | "\"WARN\"" | "\"ERROR\""
+
+source-id ::= "\"" [a-zA-Z0-9_-]{1,64} "\""
+
+contradictions-arr ::= "[" ws "]" | "[" ws source-id (ws "," ws source-id){0,4} ws "]"
+
+# Explication courte (500 chars max)
+explanation ::= "\"" char{0,500} "\""
+char ::= [^"\\] | "\\" ([\"\\/bfnrt] | "u" [0-9a-fA-F]{4})
+
+confidence ::= [0-9]+ ("." [0-9]+)?
+ws ::= [ \t\n]*

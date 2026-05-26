@@ -1,0 +1,18 @@
+# CompressorOutput v1.0.0 — GBNF pour llama.cpp b9297+
+# Schéma source : assets/schemas/compressor_v1.json
+
+root ::= "{" ws "\"summary\":" ws long-string ws "," ws "\"word_count\":" ws integer ws "," ws "\"preserved\":" ws preserved-arr ws "," ws "\"omitted_for_brevity\":" ws omitted-arr ws "," ws "\"compression_ratio\":" ws number ws "}"
+
+preserved-arr ::= "[" ws "]" | "[" ws short-string (ws "," ws short-string){0,19} ws "]"
+
+omitted-arr ::= "[" ws "]" | "[" ws tiny-string (ws "," ws tiny-string){0,9} ws "]"
+
+long-string ::= "\"" char{1,500} "\""
+short-string ::= "\"" char{1,100} "\""
+tiny-string ::= "\"" char{1,50} "\""
+char ::= [^"\\] | "\\" ([\"\\/bfnrt] | "u" [0-9a-fA-F]{4})
+
+integer ::= [0-9]+
+number ::= [0-9]+ ("." [0-9]+)?
+
+ws ::= [ \t\n]*

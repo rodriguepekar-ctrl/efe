@@ -1,0 +1,24 @@
+# ReformulatorOutput v1.0.0 — GBNF pour llama.cpp b9297+
+# Schéma source : assets/schemas/reformulator_v1.json
+#
+# Spécificité : "canonical" est un JSON arbitraire (pas de contrainte au
+# niveau grammar — la validation du schema_id-specific est faite côté Rust).
+
+root ::= "{" ws "\"canonical\":" ws json-value ws "," ws "\"schema_id\":" ws schema-id ws "," ws "\"extraction_warnings\":" ws warnings-arr ws "}"
+
+schema-id ::= "\"citation_v1\"" | "\"fact_v1\"" | "\"tool_call_v1\"" | "\"claim_v1\"" | "\"source_ref_v1\""
+
+warnings-arr ::= "[" ws "]" | "[" ws short-string (ws "," ws short-string){0,9} ws "]"
+
+# JSON value récursif (standard JSON minus quelques edge cases inutiles).
+json-value ::= object | array | json-string | json-number | "true" | "false" | "null"
+object ::= "{" ws "}" | "{" ws member (ws "," ws member)* ws "}"
+member ::= json-string ws ":" ws json-value
+array ::= "[" ws "]" | "[" ws json-value (ws "," ws json-value)* ws "]"
+
+json-string ::= "\"" char* "\""
+json-number ::= "-"? ("0" | [1-9] [0-9]*) ("." [0-9]+)? ([eE] [+-]? [0-9]+)?
+
+short-string ::= "\"" char{0,200} "\""
+char ::= [^"\\] | "\\" ([\"\\/bfnrt] | "u" [0-9a-fA-F]{4})
+ws ::= [ \t\n]*

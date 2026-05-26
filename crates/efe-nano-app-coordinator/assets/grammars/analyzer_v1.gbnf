@@ -1,0 +1,31 @@
+# AnalyzerOutput v1.0.0 — GBNF pour llama.cpp b9297+
+# Schéma source : assets/schemas/analyzer_v1.json
+#
+# Raffinements vs auto-gen :
+# - Borne {0,19} sur entities (limite 20 = la première + 19 suivantes)
+# - Borne {0,200} sur les strings (DoS prevention)
+# - sentiment / confidence non bornées par grammar (validation Rust post-parse)
+#
+# Coût mesuré sur SmolLM2-360M Q5 M3 : ~7% overhead vs sans grammar.
+
+root ::= "{" ws "\"entities\":" ws entities-arr ws "," ws "\"intent\":" ws intent ws "," ws "\"sentiment\":" ws sentiment ws "," ws "\"language\":" ws language ws "," ws "\"one_line_summary\":" ws short-string ws "," ws "\"confidence\":" ws confidence ws "}"
+
+entities-arr ::= "[" ws "]" | "[" ws entity (ws "," ws entity){0,19} ws "]"
+
+entity ::= "{" ws "\"text\":" ws short-string ws "," ws "\"kind\":" ws entity-kind ws "," ws "\"start_char\":" ws integer ws "," ws "\"end_char\":" ws integer ws "," ws "\"confidence\":" ws confidence ws "}"
+
+entity-kind ::= "\"PERSON\"" | "\"ORG\"" | "\"LOCATION\"" | "\"MONEY\"" | "\"DATE\"" | "\"DRUG\"" | "\"EVENT\"" | "\"PRODUCT\"" | "\"OTHER\""
+
+intent ::= "\"FACTUAL\"" | "\"ANALYTICAL\"" | "\"COMPARATIVE\"" | "\"TEMPORAL\"" | "\"OPINION\"" | "\"INSTRUCTIONAL\""
+
+language ::= "\"en\"" | "\"fr\"" | "\"de\"" | "\"es\"" | "\"it\"" | "\"pt\"" | "\"ja\"" | "\"zh\"" | "\"ru\"" | "\"ar\"" | "\"und\""
+
+sentiment ::= "-"? [0-9]+ ("." [0-9]+)?
+confidence ::= [0-9]+ ("." [0-9]+)?
+integer ::= [0-9]+
+
+# String borné à 200 chars (DoS prevention)
+short-string ::= "\"" char{0,200} "\""
+char ::= [^"\\] | "\\" ([\"\\/bfnrt] | "u" [0-9a-fA-F]{4})
+
+ws ::= [ \t\n]*
