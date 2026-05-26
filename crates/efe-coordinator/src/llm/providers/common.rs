@@ -62,7 +62,7 @@ pub fn strip_thinking_tags(s: &str) -> String {
 /// - timeout request total : 120 s (les inférences LLM peuvent être lentes).
 /// - rustls-tls (pas openssl, ADR-P3R1-001).
 /// - user-agent identifiable pour les abuse-reports providers.
-#[cfg(any(feature = "anthropic", feature = "gemini"))]
+#[cfg(any(feature = "anthropic", feature = "gemini", feature = "openai"))]
 pub fn build_http_client() -> reqwest::Client {
     reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(120))
@@ -144,7 +144,7 @@ mod tests {
         assert!(trunc.len() < 600);
     }
 
-    #[cfg(any(feature = "anthropic", feature = "gemini"))]
+    #[cfg(any(feature = "anthropic", feature = "gemini", feature = "openai"))]
     #[test]
     fn http_client_builds() {
         let _client = build_http_client();

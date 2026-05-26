@@ -318,7 +318,7 @@ async fn live_vote_3llm_real_claude_gemini_gpt() {
             r.provider, r.text.trim(), r.cost_cents, r.latency_ms);
     }
     let total_cost: u32 = results.iter().map(|r| r.cost_cents).sum();
-    eprintln!("Total cost (all 3 real providers): {} cents", total_cost);
+    eprintln!("Total cost (all 3 real providers): {total_cost} cents");
     eprintln!("Total latency (parallel): {} ms", total.as_millis());
     assert_eq!(results.len(), 3, "all 3 real providers should respond");
     // Consensus exigé : 3/3 doivent dire "Paris".
