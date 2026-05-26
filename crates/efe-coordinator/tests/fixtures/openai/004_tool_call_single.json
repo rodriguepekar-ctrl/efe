@@ -1,0 +1,35 @@
+{
+  "id": "chatcmpl-9pXfToolCallSingle",
+  "object": "chat.completion",
+  "created": 1716738930,
+  "model": "gpt-4o-2024-11-20",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": null,
+        "tool_calls": [
+          {
+            "id": "call_1aZxQpKn3LfP8w4mRT5jVbYu",
+            "type": "function",
+            "function": {
+              "name": "get_weather",
+              "arguments": "{\"location\":\"Paris, France\",\"unit\":\"celsius\"}"
+            }
+          }
+        ],
+        "refusal": null
+      },
+      "logprobs": null,
+      "finish_reason": "tool_calls"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 87,
+    "completion_tokens": 24,
+    "total_tokens": 111
+  },
+  "system_fingerprint": "fp_45c6de4934",
+  "service_tier": "default"
+}

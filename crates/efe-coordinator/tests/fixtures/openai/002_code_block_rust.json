@@ -1,0 +1,25 @@
+{
+  "id": "chatcmpl-9pXfCodeBlockRust",
+  "object": "chat.completion",
+  "created": 1716738910,
+  "model": "gpt-4o-2024-11-20",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "Here is a simple Rust function:\n\n```rust\nfn add(a: i32, b: i32) -> i32 {\n    a + b\n}\n```\n\nThis returns the sum of two `i32` integers.",
+        "refusal": null
+      },
+      "logprobs": null,
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 22,
+    "completion_tokens": 47,
+    "total_tokens": 69
+  },
+  "system_fingerprint": "fp_45c6de4934",
+  "service_tier": "default"
+}

@@ -16,8 +16,10 @@ nats-bus = ["dep:async-nats"]
 anthropic = []
 # Phase 3 R1a : provider Google Gemini (Flash défaut).
 gemini = []
-# Raccourci : tous les providers R1a.
-all-providers = ["anthropic", "gemini"]
+# Phase 3 R1b : provider OpenAI GPT (gpt-4o défaut).
+openai = []
+# Raccourci : tous les providers R1a+R1b.
+all-providers = ["anthropic", "gemini", "openai"]
 
 [dependencies]
 # Crate frère : les 6 clients nano-robots Phase 1.
@@ -143,6 +145,11 @@ required-features = ["anthropic"]
 name = "unit_parse_gemini"
 path = "tests/unit_parse_gemini.rs"
 required-features = ["gemini"]
+
+[[test]]
+name = "unit_parse_openai"
+path = "tests/unit_parse_openai.rs"
+required-features = ["openai"]
 
 [[test]]
 name = "unit_streaming_edge"

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: UNLICENSED
-//! Tests edge cases parsing SSE pour les 2 providers.
+//! Tests edge cases parsing SSE pour les 3 providers (Anthropic, Gemini, OpenAI).
 
-#![cfg(any(feature = "anthropic", feature = "gemini"))]
+#![cfg(any(feature = "anthropic", feature = "gemini", feature = "openai"))]
 
 use bytes::Bytes;
 use futures::stream;
@@ -151,5 +151,120 @@ mod gemini {
         while rx.recv().await.is_some() {}
         assert_eq!(res.input_tokens, 3);
         assert!(res.output_tokens >= 1);
+    }
+}
+
+#[cfg(feature = "openai")]
+mod openai {
+    use super::*;
+    use efe_coordinator::llm::providers::streaming::parse_openai_sse;
+
+    #[tokio::test]
+    async fn handles_single_byte_chunks() {
+        // Stress test : 1 octet par chunk, séparateur \n\n.
+        let sse = "data: {\"choices\":[{\"delta\":{\"content\":\"OK\"}}]}\n\ndata: [DONE]\n\n";
+        let (tx, mut rx) = tokio::sync::mpsc::channel(8);
+        let stream = str_to_byte_stream(sse);
+        let res = parse_openai_sse(stream, tx).await.unwrap();
+        let mut got = vec![];
+        while let Some(c) = rx.recv().await {
+            got.push(c.token);
+        }
+        assert_eq!(got, vec!["OK"]);
+        assert_eq!(res.text, "OK");
+    }
+
+    #[tokio::test]
+    async fn handles_done_sentinel_terminates_stream() {
+        // Pas de finish_reason explicite, mais [DONE] arrête le parsing.
+        let sse = "data: {\"choices\":[{\"delta\":{\"content\":\"hello \"}}]}\n\ndata: {\"choices\":[{\"delta\":{\"content\":\"world\"}}]}\n\ndata: [DONE]\n\ndata: {\"choices\":[{\"delta\":{\"content\":\"NEVER\"}}]}\n\n";
+        let (tx, mut rx) = tokio::sync::mpsc::channel(8);
+        let stream = str_to_byte_stream_big(sse);
+        let res = parse_openai_sse(stream, tx).await.unwrap();
+        let mut got = vec![];
+        while let Some(c) = rx.recv().await {
+            got.push(c.token);
+        }
+        assert_eq!(got, vec!["hello ", "world"]);
+        assert!(!res.text.contains("NEVER"));
+        assert_eq!(res.text, "hello world");
+    }
+
+    #[tokio::test]
+    async fn handles_malformed_json_data_skipped() {
+        let sse = "data: {garbage}\n\ndata: {\"choices\":[{\"delta\":{\"content\":\"clean\"}}]}\n\ndata: [DONE]\n\n";
+        let (tx, mut rx) = tokio::sync::mpsc::channel(8);
+        let stream = str_to_byte_stream_big(sse);
+        let res = parse_openai_sse(stream, tx).await.unwrap();
+        let mut got = vec![];
+        while let Some(c) = rx.recv().await {
+            got.push(c.token);
+        }
+        assert_eq!(got, vec!["clean"]);
+        assert_eq!(res.text, "clean");
+    }
+
+    #[tokio::test]
+    async fn handles_empty_stream() {
+        let (tx, mut rx) = tokio::sync::mpsc::channel(8);
+        let stream = str_to_byte_stream_big("");
+        let res = parse_openai_sse(stream, tx).await.unwrap();
+        assert!(rx.recv().await.is_none());
+        assert_eq!(res.text, "");
+        assert_eq!(res.output_tokens, 0);
+    }
+
+    #[tokio::test]
+    async fn captures_usage_from_final_chunk() {
+        // OpenAI envoie `usage` dans le dernier chunk avant [DONE] si
+        // stream_options.include_usage=true.
+        let sse = "data: {\"choices\":[{\"delta\":{\"content\":\"a\"}}]}\n\ndata: {\"choices\":[{\"delta\":{\"content\":\"b\"}}]}\n\ndata: {\"choices\":[],\"usage\":{\"prompt_tokens\":5,\"completion_tokens\":2,\"total_tokens\":7}}\n\ndata: [DONE]\n\n";
+        let (tx, mut rx) = tokio::sync::mpsc::channel(8);
+        let stream = str_to_byte_stream_big(sse);
+        let res = parse_openai_sse(stream, tx).await.unwrap();
+        while rx.recv().await.is_some() {}
+        assert_eq!(res.text, "ab");
+        assert_eq!(res.input_tokens, 5);
+        assert_eq!(res.output_tokens, 2);
+    }
+
+    #[tokio::test]
+    async fn handles_crlf_separators() {
+        // HTTP utilise typiquement \r\n\r\n comme séparateur SSE.
+        let sse = "data: {\"choices\":[{\"delta\":{\"content\":\"crlf\"}}]}\r\n\r\ndata: [DONE]\r\n\r\n";
+        let (tx, mut rx) = tokio::sync::mpsc::channel(8);
+        let stream = str_to_byte_stream_big(sse);
+        let res = parse_openai_sse(stream, tx).await.unwrap();
+        let mut got = vec![];
+        while let Some(c) = rx.recv().await {
+            got.push(c.token);
+        }
+        assert_eq!(got, vec!["crlf"]);
+        assert_eq!(res.text, "crlf");
+    }
+
+    #[tokio::test]
+    async fn handles_finish_reason_followed_by_done() {
+        let sse = "data: {\"choices\":[{\"delta\":{\"content\":\"x\"}}]}\n\ndata: {\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\"}]}\n\ndata: [DONE]\n\n";
+        let (tx, mut rx) = tokio::sync::mpsc::channel(8);
+        let stream = str_to_byte_stream_big(sse);
+        let res = parse_openai_sse(stream, tx).await.unwrap();
+        while rx.recv().await.is_some() {}
+        assert_eq!(res.text, "x");
+    }
+
+    #[tokio::test]
+    async fn handles_role_only_first_chunk() {
+        // 1er chunk : delta.role="assistant" (pas de content) → ignoré silencieusement.
+        let sse = "data: {\"choices\":[{\"delta\":{\"role\":\"assistant\"}}]}\n\ndata: {\"choices\":[{\"delta\":{\"content\":\"go\"}}]}\n\ndata: [DONE]\n\n";
+        let (tx, mut rx) = tokio::sync::mpsc::channel(8);
+        let stream = str_to_byte_stream_big(sse);
+        let res = parse_openai_sse(stream, tx).await.unwrap();
+        let mut got = vec![];
+        while let Some(c) = rx.recv().await {
+            got.push(c.token);
+        }
+        assert_eq!(got, vec!["go"]);
+        assert_eq!(res.text, "go");
     }
 }

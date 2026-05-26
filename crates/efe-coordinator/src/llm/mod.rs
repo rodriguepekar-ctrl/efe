@@ -16,3 +16,5 @@ pub use registry::ProviderRegistry;
 pub use providers::ClaudeProvider;
 #[cfg(feature = "gemini")]
 pub use providers::GeminiProvider;
+#[cfg(feature = "openai")]
+pub use providers::GptProvider;

@@ -1,0 +1,8 @@
+{
+  "error": {
+    "message": "Rate limit reached for gpt-4o in organization org-abc123 on requests per minute (RPM): Limit 500, Used 500, Requested 1. Please try again in 120ms. Visit https://platform.openai.com/account/rate-limits to learn more.",
+    "type": "rate_limit_exceeded",
+    "param": null,
+    "code": "rate_limit_exceeded"
+  }
+}

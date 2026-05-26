@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: UNLICENSED
-//! Tests live R1a — frappent les vrais Claude (Sonnet 4.6) + Gemini (Flash).
+//! Tests live R1a+R1b — frappent les vrais Claude (Sonnet 4.6) + Gemini (Flash) + GPT (gpt-4o).
 //!
 //! ## Activation
 //!
@@ -7,14 +7,16 @@
 //! sinon.  Les clés sont attendues dans :
 //! - `ANTHROPIC_API_KEY` (commence par `sk-ant-`)
 //! - `GOOGLE_AI_KEY` (commence par `AIza`)
+//! - `OPENAI_API_KEY` (commence par `sk-` ou `sk-proj-`)
 //!
 //! ```bash
 //! export ANTHROPIC_API_KEY="sk-ant-..."
 //! export GOOGLE_AI_KEY="AIza..."
+//! export OPENAI_API_KEY="sk-proj-..."
 //! EFE_LIVE_LLM=1 cargo test -p efe-coordinator --features all-providers --test live_providers -- --test-threads=1 --nocapture
 //! ```
 //!
-//! ## Coût estimé du run complet : ~$0.05 (10 calls cumulés).
+//! ## Coût estimé du run complet : ~$0.10 (15+ calls cumulés sur 3 providers).
 
 #![cfg(feature = "all-providers")]
 
@@ -22,7 +24,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use efe_coordinator::llm::{LlmCall, LlmProvider, MultiLlmBridge, ProviderRegistry};
-use efe_coordinator::{ClaudeProvider, GeminiProvider};
+use efe_coordinator::{ClaudeProvider, GeminiProvider, GptProvider};
 
 fn live_enabled() -> bool {
     std::env::var("EFE_LIVE_LLM").as_deref() == Ok("1")
@@ -210,40 +212,120 @@ async fn live_cascade_gemini_drafter_claude_verifier() {
     assert!(outcome.final_text.to_lowercase().contains("paris"));
 }
 
-// ─── Mission Vote 3-LLM avec 2 vrais providers + 1 mock placeholder GPT ──
+// ─── GPT (OpenAI) ─────────────────────────────────────────────────────
 
 #[tokio::test]
-async fn live_vote_3llm_with_2_real_plus_mock_gpt_placeholder() {
-    if !live_enabled() { return; }
-    use efe_coordinator::MockLlmProvider;
+async fn live_gpt_simple_question() {
+    if !live_enabled() {
+        eprintln!("[skip] set EFE_LIVE_LLM=1 + OPENAI_API_KEY to enable");
+        return;
+    }
+    let p = GptProvider::from_env().expect("OPENAI_API_KEY must be set");
+    let resp = p
+        .call(LlmCall::simple(
+            "What is 2+2? Answer with one digit only.",
+            50,
+        ))
+        .await
+        .expect("gpt call");
+    eprintln!("GPT: text={:?} cost={} cents latency={}ms",
+        resp.text, resp.cost_cents, resp.latency_ms);
+    assert!(resp.text.contains('4'), "answer must contain '4', got: {}", resp.text);
+    assert!(resp.cost_cents <= 5, "single short call should be ≤ 5 cents, got {}", resp.cost_cents);
+    assert!(resp.latency_ms < 30_000);
+    assert!(resp.tokens_generated > 0);
+    assert!(resp.provider.starts_with("gpt_"));
+}
 
+#[tokio::test]
+async fn live_gpt_streaming_works() {
+    if !live_enabled() { return; }
+    let p = GptProvider::from_env().expect("OPENAI_API_KEY must be set");
+    let (tx, mut rx) = tokio::sync::mpsc::channel(64);
+    let task = tokio::spawn(async move {
+        p.stream(
+            LlmCall::simple("Count from 1 to 5. One number per line.", 100),
+            tx,
+        )
+        .await
+    });
+    let mut tokens_received = Vec::new();
+    while let Some(chunk) = rx.recv().await {
+        tokens_received.push(chunk.token);
+    }
+    let resp = task.await.unwrap().expect("stream");
+    eprintln!("GPT STREAM: {} chunks, text={:?}", tokens_received.len(), resp.text);
+    assert!(!tokens_received.is_empty(), "must receive at least 1 token chunk");
+    assert!(resp.text.contains('5'));
+}
+
+#[tokio::test]
+async fn live_gpt_temperature_zero_deterministic() {
+    if !live_enabled() { return; }
+    let p = GptProvider::from_env().expect("OPENAI_API_KEY");
+    let mut call = LlmCall::simple("Capital of France? One word.", 30);
+    call.temperature = 0.0;
+    let r1 = p.call(call.clone()).await.unwrap();
+    let r2 = p.call(call).await.unwrap();
+    assert!(r1.text.to_lowercase().contains("paris"));
+    assert!(r2.text.to_lowercase().contains("paris"));
+}
+
+#[tokio::test]
+async fn live_gpt_rate_limits_observable() {
+    if !live_enabled() { return; }
+    let p = GptProvider::from_env().expect("OPENAI_API_KEY");
+    let _r = p.call(LlmCall::simple("Hi", 20)).await.expect("call");
+    let rl = p.last_rate_limits();
+    eprintln!("GPT rate limits:");
+    eprintln!("  requests:  {:?} / {:?} (reset {:?})",
+        rl.requests_remaining, rl.requests_limit, rl.requests_reset);
+    eprintln!("  tokens:    {:?} / {:?} (reset {:?})",
+        rl.tokens_remaining, rl.tokens_limit, rl.tokens_reset);
+    eprintln!("  org:       {:?}", rl.organization);
+    // OpenAI doit exposer au moins un header `x-ratelimit-*`.
+    assert!(
+        rl.requests_limit.is_some() || rl.tokens_limit.is_some(),
+        "expected at least one rate-limit header from OpenAI"
+    );
+}
+
+// ─── Vote 3-LLM RÉEL (Claude + Gemini + GPT — R1b holy grail) ────────
+
+#[tokio::test]
+async fn live_vote_3llm_real_claude_gemini_gpt() {
+    if !live_enabled() { return; }
     let reg = ProviderRegistry::new();
     reg.register(Arc::new(ClaudeProvider::from_env().expect("claude")));
     reg.register(Arc::new(GeminiProvider::from_env().expect("gemini")));
-    // Mock GPT en attendant R1b — la diversité de provenance est préservée.
-    reg.register(Arc::new(
-        MockLlmProvider::new("gpt_mock_placeholder")
-            .with_response("Paris is the capital of France."),
-    ));
+    reg.register(Arc::new(GptProvider::from_env().expect("gpt")));
     let bridge = MultiLlmBridge::new(reg);
     let llms = vec![
         "claude_claude-sonnet-4-6".to_string(),
         "gemini_gemini-2.5-flash".to_string(),
-        "gpt_mock_placeholder".to_string(),
+        "gpt_gpt-4o".to_string(),
     ];
     let call = LlmCall::simple(
         "What is the capital of France? Answer with the city name only.",
         30,
     );
+    let started = std::time::Instant::now();
     let results = bridge.call_many_ok(&llms, call).await;
-    eprintln!("=== Live 3-LLM (2 real + 1 mock) ===");
+    let total = started.elapsed();
+    eprintln!("=== Live 3-LLM REAL (Claude + Gemini + GPT) ===");
     for r in &results {
         eprintln!("  {} → {:?}  ({} cents, {} ms)",
             r.provider, r.text.trim(), r.cost_cents, r.latency_ms);
     }
-    assert_eq!(results.len(), 3, "all 3 should respond");
+    let total_cost: u32 = results.iter().map(|r| r.cost_cents).sum();
+    eprintln!("Total cost (all 3 real providers): {} cents", total_cost);
+    eprintln!("Total latency (parallel): {} ms", total.as_millis());
+    assert_eq!(results.len(), 3, "all 3 real providers should respond");
+    // Consensus exigé : 3/3 doivent dire "Paris".
     let consensus = results.iter().filter(|r| r.text.to_lowercase().contains("paris")).count();
-    assert!(consensus >= 2, "consensus on Paris ≥ 2/3, got {consensus}");
+    assert_eq!(consensus, 3, "factual consensus expected: 3/3 say Paris, got {consensus}/3");
+    assert!(total_cost <= 10, "3 LLMs on a short factual question should cost ≤ 10 cents");
+    assert!(total < Duration::from_secs(30));
 }
 
 // ─── Rate-limit observability (Claude) ──
@@ -317,4 +399,12 @@ async fn live_gemini_health() {
     let p = GeminiProvider::from_env().expect("GOOGLE_AI_KEY");
     let ok = p.health().await.expect("health call");
     assert!(ok, "Gemini /models should respond OK");
+}
+
+#[tokio::test]
+async fn live_gpt_health() {
+    if !live_enabled() { return; }
+    let p = GptProvider::from_env().expect("OPENAI_API_KEY");
+    let ok = p.health().await.expect("health call");
+    assert!(ok, "OpenAI /v1/models should respond OK");
 }

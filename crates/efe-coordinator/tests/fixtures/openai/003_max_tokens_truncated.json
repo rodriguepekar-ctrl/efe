@@ -1,0 +1,25 @@
+{
+  "id": "chatcmpl-9pXfTruncatedSample",
+  "object": "chat.completion",
+  "created": 1716738920,
+  "model": "gpt-4o-2024-11-20",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "Once upon a time in a distant kingdom, there lived a young apprentice who loved to study the ancient",
+        "refusal": null
+      },
+      "logprobs": null,
+      "finish_reason": "length"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 18,
+    "completion_tokens": 20,
+    "total_tokens": 38
+  },
+  "system_fingerprint": "fp_45c6de4934",
+  "service_tier": "default"
+}

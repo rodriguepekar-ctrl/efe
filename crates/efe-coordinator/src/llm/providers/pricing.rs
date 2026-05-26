@@ -31,6 +31,32 @@ impl PricingTable {
         Self { rates }
     }
 
+    /// Table OpenAI GPT.
+    ///
+    /// Pricing officiel (vérifié au moment du commit R1b — à reverifier au
+    /// déploiement, OpenAI met à jour fréquemment).
+    /// Valeurs en cents par M tokens (entiers, arrondi sup).
+    #[must_use]
+    pub fn openai() -> Self {
+        let mut rates = HashMap::new();
+        // GPT-5 — $5 in / $15 out (estimation 2026 prélancement).
+        rates.insert("gpt-5".into(), (500, 1500));
+        rates.insert("gpt-5-mini".into(), (50, 200));
+        // GPT-4o — $2.50 in / $10 out (DEFAULT R1b).
+        rates.insert("gpt-4o".into(), (250, 1000));
+        rates.insert("gpt-4o-2024-11-20".into(), (250, 1000));
+        rates.insert("gpt-4o-mini".into(), (15, 60));
+        // GPT-4-turbo — $10 in / $30 out.
+        rates.insert("gpt-4-turbo".into(), (1000, 3000));
+        rates.insert("gpt-4".into(), (3000, 6000));
+        // GPT-3.5-turbo — $0.50 in / $1.50 out.
+        rates.insert("gpt-3.5-turbo".into(), (50, 150));
+        // o1 / o3 reasoning models — $15 in / $60 out.
+        rates.insert("o1".into(), (1500, 6000));
+        rates.insert("o3-mini".into(), (110, 440));
+        Self { rates }
+    }
+
     /// Table Google Gemini.
     #[must_use]
     pub fn gemini() -> Self {
@@ -93,6 +119,39 @@ mod tests {
         // (10_000 × 1500 + 10_000 × 7500) / 1_000_000 = 90 cents
         let cost = p.calc("claude-opus-4-6", 10_000, 10_000);
         assert_eq!(cost, 90);
+    }
+
+    #[test]
+    fn openai_gpt4o_default_cost() {
+        let p = PricingTable::openai();
+        // 1000 in + 1000 out sur GPT-4o : (1000 × 250 + 1000 × 1000) / 1M = 1.25 → 2
+        let cost = p.calc("gpt-4o", 1000, 1000);
+        assert_eq!(cost, 2);
+    }
+
+    #[test]
+    fn openai_gpt4o_mini_cheap() {
+        let p = PricingTable::openai();
+        // GPT-4o-mini : (1000 × 15 + 1000 × 60) / 1M = 0.075 → 1 (arrondi sup)
+        let cost = p.calc("gpt-4o-mini", 1000, 1000);
+        assert_eq!(cost, 1);
+    }
+
+    #[test]
+    fn openai_o1_reasoning_premium() {
+        let p = PricingTable::openai();
+        // o1 reasoning : (10_000 × 1500 + 10_000 × 6000) / 1M = 75 cents
+        let cost = p.calc("o1", 10_000, 10_000);
+        assert_eq!(cost, 75);
+    }
+
+    #[test]
+    fn openai_models_listing() {
+        let p = PricingTable::openai();
+        let m = p.models();
+        assert!(m.iter().any(|n| *n == "gpt-4o"));
+        assert!(m.iter().any(|n| *n == "gpt-4o-mini"));
+        assert!(m.iter().any(|n| *n == "gpt-5"));
     }
 
     #[test]

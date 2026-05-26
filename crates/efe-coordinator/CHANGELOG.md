@@ -8,11 +8,107 @@ Toutes les modifications notables sont documentées ici.  Format suit
 
 _(rolling — prochains items)_
 
-- **R1b** : ajout `GptProvider` OpenAI (quand clé API disponible).
 - **Phase 4** : Frontend SSE — composants UI (preview lab) consommant
   `StreamEvent` v1.0.0.
 - **Phase 7** : Tests live NATS (env-gated `EFE_NATS_LIVE=1`) +
   rotation de la chaîne d'audit cross-tenant.
+
+---
+
+## [0.0.5] — 2026-05-26 — Phase 3 R1b (OpenAI GPT — vote 3-LLM réel)
+
+### Ajout du 3ᵉ provider réel : `GptProvider` (OpenAI Chat Completions v1)
+
+**Endpoint câblé** :
+- `POST https://api.openai.com/v1/chat/completions` avec `Authorization: Bearer …`.
+- Header optionnel `OpenAI-Organization` pour comptes multi-org.
+- Health-check sur `GET /v1/models` (cheap, pas d'inférence).
+
+**Pricing** (`PricingTable::openai`, cents/M tokens entiers) :
+- `gpt-4o` (250/1000) — défaut R1b, balance qualité/coût.
+- `gpt-4o-mini` (15/60) — premium cheap.
+- `gpt-5` (500/1500), `gpt-5-mini` (50/200) — estimations.
+- `gpt-4-turbo` (1000/3000), `gpt-4` (3000/6000).
+- `gpt-3.5-turbo` (50/150).
+- `o1` (1500/6000), `o3-mini` (110/440) — reasoning premium.
+- Fallback (1000/5000) cents/M sur modèle inconnu (conservateur).
+
+**Parsing OpenAI** (`GptProvider::extract_text_and_tools`) :
+- `choices[0].message.content` → texte direct.
+- `choices[0].message.tool_calls[]` → sérialisé
+  `[tool_call id=X name=Y]\n{args}\n[/tool_call]` (cohérent avec format Claude).
+- Tool-calls parallèles supportés (plusieurs entrées dans le tableau).
+- `content: null` géré (refusal ou tool-only response).
+
+**Streaming SSE OpenAI** (`parse_openai_sse`) :
+- Pas de `event:` prefix (différent d'Anthropic).
+- Termine sur sentinelle littérale `data: [DONE]\n\n`.
+- `choices[0].delta.content` → texte du chunk.
+- `usage.prompt_tokens` / `completion_tokens` lu dans le dernier chunk si
+  `stream_options.include_usage=true` (défaut R1b).
+- Séparateurs `\n\n` ET `\r\n\r\n` (HTTP CRLF) supportés.
+- `delta.role` premier chunk ignoré silencieusement.
+
+**Rate-limit observability** (`OpenAiRateLimits`) :
+- Lecture auto des headers `x-ratelimit-{limit,remaining,reset}-{requests,tokens}`.
+- Header `openai-organization` capturé.
+- Snapshot atomique partagé entre `call` et `stream` (mis à jour même en cas
+  d'erreur HTTP — utile pour 429).
+- `provider.last_rate_limits()` exposé publiquement.
+
+**Validation `OPENAI_API_KEY`** :
+- Préfixe attendu `sk-` (couvre clés legacy ET `sk-proj-…`).
+- `ApiKey::from_env("OPENAI_API_KEY", "sk-")` rejette les valeurs sans préfixe.
+
+**Fixtures réalistes** (8 fichiers `tests/fixtures/openai/*.json`) :
+- 001 factual_qa_simple, 002 code_block_rust, 003 max_tokens_truncated.
+- 004 tool_call_single, 005 tool_call_parallel.
+- 006 long_reasoning, 007 error_rate_limit, 008 refusal.
+
+**Tests offline** :
+- `tests/unit_parse_openai.rs` : 12 tests sur fixtures + pricing.
+- `tests/unit_streaming_edge.rs` : 8 nouveaux tests OpenAI
+  (single-byte chunks, `[DONE]` sentinel termine le stream, JSON malformé skipped,
+  empty stream, usage final chunk, CRLF separators, finish_reason+DONE,
+  role-only first chunk).
+- `openai.rs` inline : 12 tests unit.
+- `streaming.rs` inline : 3 tests OpenAI.
+
+**Tests live env-gated** (`tests/live_providers.rs`, `EFE_LIVE_LLM=1` + clé) :
+- `live_gpt_simple_question` : `2+2 = 4` avec coût < 5¢.
+- `live_gpt_streaming_works` : streaming chunks reçus.
+- `live_gpt_temperature_zero_deterministic` : reproducibilité Paris.
+- `live_gpt_rate_limits_observable` : headers `x-ratelimit-*` snapshotés.
+- `live_gpt_health` : `/v1/models` 200 OK.
+- **`live_vote_3llm_real_claude_gemini_gpt`** : the holy grail — 3 vrais
+  providers en parallèle (Claude + Gemini + GPT) sur question factuelle,
+  consensus 3/3 sur "Paris", coût total ≤ 10¢, latence parallèle < 30s.
+
+### Cargo features
+
+- Nouvelle feature `openai` (ajoutée à `all-providers`).
+- `all-providers = ["anthropic", "gemini", "openai"]`.
+- Default `DEFAULT_GPT_MODEL = "gpt-4o"`.
+
+### Re-exports publics
+
+- `efe_coordinator::GptProvider` (sous `feature = "openai"`).
+- `efe_coordinator::OpenAiRateLimits`.
+- `llm::providers::DEFAULT_GPT_MODEL`.
+
+### Architecture identique aux 2 autres providers
+
+- `LlmProvider` trait : `call` / `stream` / `health` async.
+- Retry exponential + jitter (`RetryPolicy`).
+- Circuit breaker 3-state (Closed/Open/HalfOpen, invariant I17).
+- PII redactor closure intégré (`with_redactor`, invariant I15).
+- `ApiKey` wrapper redacted en Debug/Display (invariant I14).
+- `tracing::info!` structuré (provider, tokens, cost, latency_ms).
+
+### Non-régression
+
+- **394 tests passent** (208 lib + 186 integration) — 0 failure.
+- Claude (R1a) + Gemini (R1a v2) inchangés.
 
 ---
 

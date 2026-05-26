@@ -1,0 +1,43 @@
+{
+  "id": "chatcmpl-9pXfToolCallParallel",
+  "object": "chat.completion",
+  "created": 1716738940,
+  "model": "gpt-4o-2024-11-20",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "I'll check both cities for you.",
+        "tool_calls": [
+          {
+            "id": "call_paris001",
+            "type": "function",
+            "function": {
+              "name": "get_weather",
+              "arguments": "{\"location\":\"Paris\"}"
+            }
+          },
+          {
+            "id": "call_lyon002",
+            "type": "function",
+            "function": {
+              "name": "get_weather",
+              "arguments": "{\"location\":\"Lyon\"}"
+            }
+          }
+        ],
+        "refusal": null
+      },
+      "logprobs": null,
+      "finish_reason": "tool_calls"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 102,
+    "completion_tokens": 58,
+    "total_tokens": 160
+  },
+  "system_fingerprint": "fp_45c6de4934",
+  "service_tier": "default"
+}

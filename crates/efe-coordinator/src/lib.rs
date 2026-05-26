@@ -138,12 +138,16 @@ pub use llm::{
 pub use llm::ClaudeProvider;
 #[cfg(feature = "gemini")]
 pub use llm::GeminiProvider;
-#[cfg(any(feature = "anthropic", feature = "gemini"))]
+#[cfg(feature = "openai")]
+pub use llm::GptProvider;
+#[cfg(any(feature = "anthropic", feature = "gemini", feature = "openai"))]
 pub use llm::providers::{strip_thinking_tags, PiiRedactor};
 #[cfg(feature = "anthropic")]
 pub use llm::providers::ClaudeRateLimits;
 #[cfg(feature = "gemini")]
 pub use llm::providers::GeminiObservability;
+#[cfg(feature = "openai")]
+pub use llm::providers::OpenAiRateLimits;
 pub use request::{
     CandidateSourceRef, FactCheck, MissionAResponse, MissionARequest, MissionBRequest,
     MissionBResponse, SpeculativeRequest, SpeculativeResponse,
