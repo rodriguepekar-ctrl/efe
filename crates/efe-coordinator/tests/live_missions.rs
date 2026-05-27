@@ -332,3 +332,381 @@ async fn live_mission_a_naked_no_slm_just_claude() {
         "A11: LLM_FINISHED manquant (le LLM n'a peut-être pas été appelé), got tags={tags:?}"
     );
 }
+
+// ─── Helpers Sprint S3 (analyzer + verifier nano-robots Phase 1) ────────────
+
+/// URL de l'analyzer (port 8090). Convention env `ANALYZER_URL` ou défaut local.
+/// Aligné avec `crates/efe-nano-app-coordinator/tests/live_smoke.rs:39-41`.
+fn analyzer_endpoint() -> String {
+    std::env::var("ANALYZER_URL")
+        .unwrap_or_else(|_| "http://127.0.0.1:8090".to_string())
+}
+
+/// URL du verifier (port 8093). Convention env `VERIFIER_URL` ou défaut local.
+fn verifier_endpoint() -> String {
+    std::env::var("VERIFIER_URL")
+        .unwrap_or_else(|_| "http://127.0.0.1:8093".to_string())
+}
+
+/// Gate spécifique aux tests requérant les SLM Phase 1 (en plus de `EFE_LIVE_LLM`).
+///
+/// Convention : un test live qui exige `llama-server` actif vérifie d'abord
+/// `EFE_LIVE_SLM=1`. Ceci permet aux utilisateurs sans SLM locaux (mais avec
+/// clé API Claude) de continuer à faire passer la suite live sans erreurs.
+fn live_slm_enabled() -> bool {
+    std::env::var("EFE_LIVE_SLM").as_deref() == Ok("1")
+}
+
+/// Pré-flight async : ping HTTP /health des 2 endpoints SLM (analyzer + verifier).
+/// Retourne `true` si les 2 répondent 200 OK, `false` sinon.
+///
+/// Non bloquant — l'appelant skip si false (cf. test ci-dessous). Cela permet
+/// de lancer la suite avec `EFE_LIVE_SLM=1` même si les daemons ne sont pas
+/// (encore) démarrés : le test skip proprement avec un message explicite.
+async fn analyzer_and_verifier_alive() -> bool {
+    let client = reqwest::Client::new();
+    let ping = |url: String| {
+        let c = client.clone();
+        async move {
+            c.get(format!("{url}/health"))
+                .timeout(Duration::from_secs(2))
+                .send()
+                .await
+                .map(|r| r.status().is_success())
+                .unwrap_or(false)
+        }
+    };
+    let analyzer_ok = ping(analyzer_endpoint()).await;
+    let verifier_ok = ping(verifier_endpoint()).await;
+    if !analyzer_ok {
+        eprintln!("  [health-check] analyzer  DOWN  → {}/health", analyzer_endpoint());
+    }
+    if !verifier_ok {
+        eprintln!("  [health-check] verifier  DOWN  → {}/health", verifier_endpoint());
+    }
+    analyzer_ok && verifier_ok
+}
+
+/// Variante de `build_factual_request` qui inclut des `candidate_sources`
+/// (requis pour activer le verifier en S3+).
+///
+/// **Double trigger du verifier** (workflows/mission_a.rs:307-352) :
+///   1. `req.candidate_sources.is_empty() == false`  ← cette fonction garantit ≥1
+///   2. `coord.clients.verifier.is_some()`           ← responsabilité du builder
+///
+/// Si l'un manque, le verifier skip silencieusement et `verdicts` reste vide.
+fn build_factual_request_with_sources(
+    query: &str,
+    llm_id: &str,
+    sources: Vec<(String, String)>, // tuples (id, text)
+) -> MissionARequest {
+    let mut metadata = HashMap::new();
+    metadata.insert(llm_id.to_string(), default_claude_metadata());
+    MissionARequest {
+        user_text: query.to_string(),
+        task_class: TaskClass::FactualQa,
+        available_llms: vec![llm_id.to_string()],
+        llm_metadata: metadata,
+        budget: Budget {
+            // Budget élargi vs S2 car analyzer + verifier ajoutent ~1 s cumulés.
+            max_cost_cents: 10,
+            max_latency_ms: 60_000,
+            min_quality_score: 0.0,
+        },
+        candidate_sources: sources
+            .into_iter()
+            .map(|(id, text)| efe_coordinator::CandidateSourceRef { id, text })
+            .collect(),
+        max_total_latency: Duration::from_secs(60),
+    }
+}
+
+/// Construit un `Coordinator` partiel : 1 provider LLM + analyzer + verifier
+/// (les 4 autres nano-robots sont `None`).
+///
+/// C'est la configuration testée en Sprint S3. Variante intermédiaire entre
+/// `make_naked_coordinator` (S2, 0 robot) et `make_full_coordinator` (S4, 6 robots).
+///
+/// Les clients SLM lisent leur grammar GBNF + prompt depuis `assets/grammars/`
+/// et `assets/prompts/` du crate `efe-nano-app-coordinator` (cf. `from_assets`).
+/// Si ces fichiers sont absents → `from_assets` retourne une erreur → expect panique.
+fn make_coord_with_analyzer_verifier(provider: Arc<dyn LlmProvider>) -> Coordinator {
+    use efe_coordinator::CoordinatorClients;
+    use efe_nano_app_coordinator::clients::{AnalyzerClient, VerifierClient};
+
+    let analyzer = Arc::new(
+        AnalyzerClient::from_assets(analyzer_endpoint())
+            .expect("AnalyzerClient::from_assets — assets/grammars/analyzer_v1.gbnf manquant ?"),
+    );
+    let verifier = Arc::new(
+        VerifierClient::from_assets(verifier_endpoint())
+            .expect("VerifierClient::from_assets — assets/grammars/verifier_v1.gbnf manquant ?"),
+    );
+
+    let clients = CoordinatorClients {
+        analyzer: Some(analyzer),
+        verifier: Some(verifier),
+        reformulator: None,
+        compressor: None,
+        filter: None,
+        router: None,
+    };
+
+    let registry = ProviderRegistry::new();
+    registry.register(provider);
+
+    Coordinator::builder()
+        .registry(registry)
+        .clients(clients)
+        .build()
+        .expect("coordinator builds with analyzer + verifier")
+}
+
+// ─── Sprint S3 ── Mission A + analyzer + verifier ───────────────────────────
+
+/// Test S3 : Coordinator + Claude + 2 nano-robots Phase 1 (analyzer :8090,
+/// verifier :8093).
+///
+/// Prouve que la collaboration **SLM ↔ LLM ↔ SLM** fonctionne en mission live :
+///   1. analyzer extrait l'intent + les entités du `user_text`
+///   2. les entités sont déposées comme phéromones dans la blackboard
+///   3. Claude génère la réponse sur le `user_text` (pas encore compressé en S3)
+///   4. verifier fact-check le `final_text` contre les `candidate_sources`
+///   5. le verdict est attaché à `MissionAResponse.verdicts`
+///
+/// 16 assertions B1-B16 (cf. doc architecture §4.3) :
+/// - B1-B9   héritées S2 (final_text, cost, latency, audit hash, wall-clock)
+/// - B10     verdicts non vide (verifier a tourné)
+/// - B11     verdict == SUPPORTED (consensus factuel claim ↔ sources)
+/// - B12     similarity ≥ seuil fixture (0.3 par défaut)
+/// - B13     events ROBOT_STARTED + ROBOT_FINISHED (analyzer)
+/// - B14     event PHEROMONE_DEPOSITED ≥ 1 (analyzer dépose au moins 1 entité)
+/// - B15     event VERDICT_READY (verifier branché au bus)
+/// - B16     latency < 10 s (cap S3, élargi vs S2 car +analyzer+verifier)
+#[tokio::test]
+async fn live_mission_a_with_analyzer_verifier() {
+    // ── Gates en cascade (les 3 doivent être vraies) ────────────────────
+    if !live_enabled() {
+        eprintln!("[skip] set EFE_LIVE_LLM=1 + ANTHROPIC_API_KEY (Claude requis)");
+        return;
+    }
+    if !live_slm_enabled() {
+        eprintln!("[skip] set EFE_LIVE_SLM=1 (llama-server :8090/:8093 requis)");
+        return;
+    }
+    if !analyzer_and_verifier_alive().await {
+        eprintln!("[skip] analyzer or verifier not responding on /health");
+        eprintln!("       → lance : ./scripts/slm/start.sh && ./scripts/slm/health.sh");
+        return;
+    }
+
+    // ── 1. Charge la fixture enrichie S3 ────────────────────────────────
+    let fixture = load_fixture("02_factual_with_sources.json");
+    let query = fixture["query"].as_str().expect("fixture.query missing");
+    let expected_kw = fixture["expected_keyword"]
+        .as_str()
+        .expect("fixture.expected_keyword missing");
+    let expected_verdict = fixture["expected_verifier_verdict"]
+        .as_str()
+        .unwrap_or("SUPPORTED");
+    let expected_sim_min: f32 = fixture["expected_verifier_similarity_min"]
+        .as_f64()
+        .unwrap_or(0.3) as f32;
+    let sources: Vec<(String, String)> = fixture["candidate_sources"]
+        .as_array()
+        .expect("fixture.candidate_sources missing")
+        .iter()
+        .map(|s| {
+            (
+                s["id"].as_str().expect("source.id missing").to_string(),
+                s["text"].as_str().expect("source.text missing").to_string(),
+            )
+        })
+        .collect();
+    assert!(!sources.is_empty(), "fixture must provide ≥1 candidate_source");
+
+    // ── 2. Provider Claude réel (la clé est lue depuis l'env) ───────────
+    let claude = Arc::new(
+        ClaudeProvider::from_env()
+            .expect("ANTHROPIC_API_KEY must be set (and start with 'sk-ant-')"),
+    );
+    let claude_id = claude.id();
+
+    // ── 3. Coordinator partiel (analyzer + verifier, 4 autres None) ─────
+    let coord = make_coord_with_analyzer_verifier(claude);
+
+    eprintln!("=== Mission A with analyzer + verifier ===");
+    eprintln!("  query          : {query}");
+    eprintln!("  llm_id         : {claude_id}");
+    eprintln!("  analyzer_url   : {}", analyzer_endpoint());
+    eprintln!("  verifier_url   : {}", verifier_endpoint());
+    eprintln!(
+        "  candidate_srcs : {} ({:?})",
+        sources.len(),
+        sources.iter().map(|(id, _)| id.as_str()).collect::<Vec<_>>(),
+    );
+
+    // ── 4. Abonnement au bus AVANT le run (capture des events) ──────────
+    let (_token, mut rx) = coord.subscribe(Some("s3-analyzer-verifier-test"));
+
+    // ── 5. Construit la requête avec sources (active le verifier) ───────
+    let req = build_factual_request_with_sources(query, &claude_id, sources.clone());
+
+    // ── 6. Exécution + mesure wall-clock ────────────────────────────────
+    let started = std::time::Instant::now();
+    let resp = run_mission_a(&coord, req)
+        .await
+        .expect("mission_a should succeed (analyzer + claude + verifier all OK)");
+    let wall_ms = started.elapsed().as_millis() as u64;
+
+    // ── 7. Drain events bus (timeout 200ms, plus large car +6 events S3) ─
+    let mut tags: Vec<&'static str> = Vec::new();
+    while let Ok(Some(ev)) =
+        tokio::time::timeout(Duration::from_millis(200), rx.recv()).await
+    {
+        tags.push(ev.tag());
+    }
+
+    // ── 8. Affichage humain (visible via --nocapture) ───────────────────
+    let audit_hash_head = &resp.audit_chain_hash[..8.min(resp.audit_chain_hash.len())];
+    let audit_hash_tail_start = resp.audit_chain_hash.len().saturating_sub(8);
+    let audit_hash_tail = &resp.audit_chain_hash[audit_hash_tail_start..];
+    eprintln!("  cost_cents     : {}", resp.cost_cents);
+    eprintln!(
+        "  latency_ms     : {} (mission_a) / {} (wall-clock)",
+        resp.latency_ms, wall_ms
+    );
+    eprintln!(
+        "  audit_hash     : {}…{} ({} chars)",
+        audit_hash_head,
+        audit_hash_tail,
+        resp.audit_chain_hash.len()
+    );
+    eprintln!("  final_text     : {:?}", resp.final_text);
+
+    if let Some(v) = resp.verdicts.first() {
+        eprintln!("  verifier:");
+        eprintln!("    verdict      : {}", v.verdict);
+        eprintln!("    severity     : {}", v.severity);
+        eprintln!("    similarity   : {:.3}", v.similarity);
+        eprintln!("    best_source  : {:?}", v.best_source_id);
+    } else {
+        eprintln!("  verifier       : (NO VERDICT — verifier skipped ?!)");
+    }
+    eprintln!("  events_seen ({}) : {tags:?}", tags.len());
+
+    // ── 9. Assertions B1-B16 ────────────────────────────────────────────
+
+    // B1 — Le LLM a produit du texte.
+    assert!(!resp.final_text.is_empty(), "B1: final_text non vide");
+
+    // B2 — Convergence factuelle "paris" (lowercase tolerant).
+    assert!(
+        resp.final_text.to_lowercase().contains(expected_kw),
+        "B2: la réponse doit contenir '{expected_kw}', got: {:?}",
+        resp.final_text
+    );
+
+    // B3 — Pas de substitution par un mock.
+    assert_eq!(
+        resp.llm_used, claude_id,
+        "B3: le LLM doit être '{claude_id}', got '{}'",
+        resp.llm_used
+    );
+
+    // B4 — Coût raisonnable (Sonnet sur 30+30 tokens ≈ 1¢ + analyzer/verifier gratuits).
+    assert!(
+        resp.cost_cents <= 5,
+        "B4: coût ≤ 5 ¢, got {} ¢",
+        resp.cost_cents
+    );
+
+    // B5 — Cap deadline globale (60 s pour S3 — analyzer + verifier en plus).
+    assert!(
+        resp.latency_ms < 60_000,
+        "B5: latency < 60 s, got {} ms",
+        resp.latency_ms
+    );
+
+    // B6 — Plancher de réalité (handshake TLS Claude ~100 ms).
+    assert!(
+        resp.latency_ms >= 100,
+        "B6: latency ≥ 100 ms (sinon mock suspect), got {} ms",
+        resp.latency_ms
+    );
+
+    // B7 — audit_chain_hash = BLAKE3 hex 64 chars.
+    assert_eq!(
+        resp.audit_chain_hash.len(),
+        64,
+        "B7: audit_chain_hash = BLAKE3 hex 64 chars, got {}: {:?}",
+        resp.audit_chain_hash.len(),
+        resp.audit_chain_hash
+    );
+
+    // B9 — Wall-clock sanity check.
+    assert!(wall_ms < 60_000, "B9: wall-clock < 60 s, got {wall_ms} ms");
+
+    // B10 — Verifier a tourné (verdicts non vide).
+    //
+    // Différence majeure vs S2 (où on assertait l'inverse) : ici les
+    // candidate_sources sont fournies ET le client verifier est instantié.
+    assert!(
+        !resp.verdicts.is_empty(),
+        "B10: verifier doit avoir produit ≥1 verdict (sources fournies + verifier UP). \
+         events_seen={tags:?}"
+    );
+    let v = &resp.verdicts[0];
+
+    // B11 — Verdict attendu (SUPPORTED par défaut pour la fixture 02).
+    assert_eq!(
+        v.verdict.to_uppercase(),
+        expected_verdict.to_uppercase(),
+        "B11: verdict attendu '{expected_verdict}', got '{}'. Sources: {:?}, claim: {:?}",
+        v.verdict,
+        sources.iter().map(|(id, _)| id).collect::<Vec<_>>(),
+        resp.final_text,
+    );
+
+    // B12 — Similarity ≥ seuil fixture.
+    assert!(
+        v.similarity >= expected_sim_min,
+        "B12: similarity ≥ {expected_sim_min}, got {}",
+        v.similarity
+    );
+
+    // B13 — Events analyzer (ROBOT_STARTED + ROBOT_FINISHED).
+    assert!(
+        tags.contains(&"ROBOT_STARTED"),
+        "B13a: ROBOT_STARTED manquant (analyzer pas branché ?), got {tags:?}"
+    );
+    assert!(
+        tags.contains(&"ROBOT_FINISHED"),
+        "B13b: ROBOT_FINISHED manquant, got {tags:?}"
+    );
+
+    // B14 — Au moins 1 phéromone déposée (analyzer a extrait ≥1 entité).
+    //
+    // Pour la query "Quelle est la capitale de la France ?", l'analyzer doit
+    // détecter au moins 1 entité (typiquement "France"). Sinon le modèle
+    // SmolLM2-360M n'a pas tagué correctement, ou la blackboard ne reçoit pas.
+    assert!(
+        tags.contains(&"PHEROMONE_DEPOSITED"),
+        "B14: PHEROMONE_DEPOSITED manquant (analyzer doit déposer ≥1 entité). \
+         Inspecter logs analyzer : ./scripts/slm/logs.sh analyzer --last 30. \
+         events_seen={tags:?}"
+    );
+
+    // B15 — Verifier branché au bus (event VERDICT_READY).
+    assert!(
+        tags.contains(&"VERDICT_READY"),
+        "B15: VERDICT_READY manquant (le verifier doit émettre cet event), got {tags:?}"
+    );
+
+    // B16 — Cap latency S3 (10 s — laissant la marge pour analyzer + verifier).
+    assert!(
+        resp.latency_ms < 10_000,
+        "B16: latency < 10 s (cap S3), got {} ms",
+        resp.latency_ms
+    );
+}

@@ -1,0 +1,23 @@
+{
+  "name": "factual_with_sources",
+  "task_class": "FactualQa",
+  "query": "Quelle est la capitale de la France ? Réponds en une seule phrase courte.",
+  "expected_keyword": "paris",
+  "expected_lang": "fr",
+  "candidate_sources": [
+    {
+      "id": "wp_paris_fr",
+      "text": "Paris est la capitale et la plus grande ville de la France. Elle compte environ 2,1 millions d'habitants intra-muros."
+    },
+    {
+      "id": "wp_france_admin",
+      "text": "La République française a pour capitale Paris depuis le Xᵉ siècle, située sur la Seine en région Île-de-France."
+    }
+  ],
+  "expected_verifier_verdict": "SUPPORTED",
+  "expected_verifier_similarity_min": 0.3,
+  "expected_analyzer_intent": "Factual",
+  "expected_analyzer_language": "Fr",
+  "expected_analyzer_min_entities": 1,
+  "comment": "Fixture R2 Sprint S3 — étend 01_factual_simple avec 2 sources Wikipédia (FR + admin) pour activer le verifier. Le LLM dira 'Paris' qui matche les 2 sources, donc verdict SUPPORTED attendu avec similarity > 0.3 (Phi-4-mini Q4 sur courts textes français)."
+}

@@ -69,12 +69,12 @@ Fichiers numérotés `NN_<name>.json` pour ordre prédictif :
 
 | # | Fichier | Sprint d'origine | Task class | Objectif |
 |---|---|---|---|---|
-| 01 | `01_factual_simple.json` | S2 | FactualQa | Hello-World — réponse factuelle 1-token |
-| 02 | (à venir) `02_factual_with_numbers.json` | S3 | FactualQa | Forcer chiffres dans la réponse (vitesse lumière) |
-| 03 | (à venir) `03_code_gen_rust.json` | S6 | Code | Test du router → Claude pour code |
-| 04 | (à venir) `04_summary_short.json` | S9 | Analysis | Compresseur testé |
-| 05 | (à venir) `05_long_reasoning.json` | S9 | Reasoning | Multi-step, Claude Opus typiquement |
-| 06 | (à venir) `06_multi_step.json` | S9 | Reasoning | Transitivité logique |
+| 01 | `01_factual_simple.json` | S2 | FactualQa | Hello-World — réponse factuelle 1-token, pas de verifier |
+| 02 | `02_factual_with_sources.json` | **S3** | FactualQa | Étend 01 avec 2 sources Wikipédia → active le verifier (SUPPORTED attendu) |
+| 03 | (à venir) `03_factual_with_numbers.json` | S4 | FactualQa | Forcer chiffres dans la réponse (vitesse lumière) |
+| 04 | (à venir) `04_code_gen_rust.json` | S6 | Code | Test du router → Claude pour code |
+| 05 | (à venir) `05_summary_short.json` | S9 | Analysis | Compresseur testé |
+| 06 | (à venir) `06_long_reasoning.json` | S9 | Reasoning | Multi-step, Claude Opus typiquement |
 | 07 | (à venir) `07_ambiguous.json` | S4 | FactualQa | Force reformulator à se déclencher |
 | 08 | (à venir) `08_pii_heavy.json` | S8 | FactualQa | Stress PII redactor (I15) |
 
