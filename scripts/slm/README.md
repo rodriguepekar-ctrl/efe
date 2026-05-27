@@ -50,7 +50,7 @@ EFE_LIVE_SMOKE=1 cargo test -p efe-nano-app-coordinator --test live_smoke -- --n
 
 ---
 
-## Détail des 6 scripts
+## Détail des 10 scripts (S1 final)
 
 ### `lib_common.sh`
 Bibliothèque sourcée par les autres scripts. Définit :
@@ -145,6 +145,65 @@ Affiche / tail les logs des llama-server.
 ./scripts/slm/logs.sh --all --tail        # tail -f multiplexé
 ```
 
+### `verify_inference.sh` (Sprint S1 patch — gap G1)
+Vérifie l'inférence **réelle** via `POST /completion` (au-delà de `/health` qui
+répond OK dès que le modèle est en RAM mais ne prouve pas que la génération marche).
+
+```bash
+./scripts/slm/verify_inference.sh                 # 1 requête × 4 robots
+./scripts/slm/verify_inference.sh analyzer        # 1 robot seul
+./scripts/slm/verify_inference.sh --timeout 30    # timeout par requête
+./scripts/slm/verify_inference.sh --quiet         # exit code only
+```
+
+Exit code = nombre de robots avec inférence cassée.
+
+### `bench.sh` (Sprint S1 patch — gap G8)
+Mesure la latence p50/p99/max avec N requêtes × M tokens. Détecte
+automatiquement si Metal/CUDA fonctionne (verdict GPU vs CPU).
+
+```bash
+./scripts/slm/bench.sh                  # 5 requêtes × 16 tokens × 4 robots
+./scripts/slm/bench.sh -n 20            # 20 requêtes (p99 fiable)
+./scripts/slm/bench.sh -t 64            # 64 tokens par requête
+./scripts/slm/bench.sh --json           # output JSON pour scripts
+```
+
+Cibles : p50 < 500 ms = GPU OK ; p50 > 2000 ms = CPU-only (problème).
+
+### `print_env.sh` (Sprint S1 patch — gap G6)
+Génère les `export ANALYZER_URL=…` à sourcer dans le shell qui lance les
+tests Phase 1 live ou le Coordinator Phase 3 R2.
+
+```bash
+./scripts/slm/print_env.sh > .env.slm   # crée un fichier à sourcer
+source .env.slm                          # active les vars dans le shell
+eval "$(./scripts/slm/print_env.sh)"     # alternative one-shot
+./scripts/slm/print_env.sh --bare        # juste les exports, sans commentaires
+```
+
+Variables exportées : `ANALYZER_URL`, `REFORMULATOR_URL`, `COMPRESSOR_URL`,
+`VERIFIER_URL` (conventions des tests `live_smoke.rs`).
+
+### `e2e_smoke.sh` (Sprint S1 patch — gap G2, **critère d'acceptation S1**)
+Méta-validation en 8 étapes : pre-flight → models → start → health → inference
+réelle → bench → env exports → stop.
+
+```bash
+./scripts/slm/e2e_smoke.sh                # full smoke (stop à la fin)
+./scripts/slm/e2e_smoke.sh --keep-running # laisse les daemons UP en fin
+./scripts/slm/e2e_smoke.sh --download     # télécharge les modèles avant
+./scripts/slm/e2e_smoke.sh --quick        # skip bench (plus rapide)
+./scripts/slm/e2e_smoke.sh --verbose      # affiche tous les détails
+```
+
+C'est la commande à exécuter pour confirmer que Sprint S1 fonctionne
+end-to-end sur ton hardware. Critère d'acceptation S1 :
+
+```text
+✅ Sprint S1 validé end-to-end
+```
+
 ---
 
 ## Variables d'environnement reconnues
@@ -201,13 +260,28 @@ recompile/réinstalle llama.cpp avec Metal. Sur Linux, avec `LLAMA_CUDA=1`.
 Targets disponibles depuis la racine du repo :
 
 ```bash
-just slm-download    # = ./scripts/slm/download_models.sh
-just slm-start       # = ./scripts/slm/start.sh
-just slm-stop        # = ./scripts/slm/stop.sh
-just slm-restart     # = stop + start
-just slm-status      # = ./scripts/slm/status.sh
-just slm-health      # = ./scripts/slm/health.sh
-just slm-logs ROBOT  # = ./scripts/slm/logs.sh ROBOT --tail
+# Cycle de vie des daemons
+just slm-download       # = ./scripts/slm/download_models.sh
+just slm-check          # = ./scripts/slm/download_models.sh --check
+just slm-start          # = ./scripts/slm/start.sh
+just slm-start-one ROBOT
+just slm-stop           # = ./scripts/slm/stop.sh
+just slm-restart        # = stop + start
+just slm-status         # = ./scripts/slm/status.sh
+just slm-health         # = ./scripts/slm/health.sh
+just slm-watch          # = ./scripts/slm/health.sh --watch
+just slm-logs ROBOT     # = ./scripts/slm/logs.sh ROBOT --tail
+just slm-logs-all       # = ./scripts/slm/logs.sh --all --tail
+
+# Validation (S1 patches)
+just slm-verify         # = ./scripts/slm/verify_inference.sh
+just slm-bench          # = ./scripts/slm/bench.sh (5 req)
+just slm-bench-long     # = ./scripts/slm/bench.sh -n 20 (p99 fiable)
+just slm-env            # = écrit .env.slm dans la racine du repo
+
+# Méta-validation
+just slm-smoke          # = ./scripts/slm/e2e_smoke.sh (critère S1)
+just slm-smoke-keep     # = e2e_smoke --download --keep-running
 ```
 
 ---

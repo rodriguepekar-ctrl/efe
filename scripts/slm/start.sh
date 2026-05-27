@@ -74,9 +74,55 @@ else
     INDICES_TO_START+=("${idx}")
 fi
 
+# ─── Signal trap : cleanup en cas d'interruption pendant le démarrage ──────
+# Garde la liste des PIDs démarrés dans cette session pour cleanup si Ctrl+C.
+STARTED_PIDS=()
+SIGNAL_CLEANUP_DONE=0
+
+cleanup_on_signal() {
+    local sig="$1"
+    if (( SIGNAL_CLEANUP_DONE == 1 )); then return; fi
+    SIGNAL_CLEANUP_DONE=1
+    echo ""
+    log_warn "Signal ${sig} reçu. Cleanup des process partiellement démarrés…"
+    local pid
+    for pid in "${STARTED_PIDS[@]}"; do
+        if pid_alive "${pid}"; then
+            log_info "Kill ${pid}"
+            kill -TERM "${pid}" 2>/dev/null || true
+        fi
+    done
+    # Cleanup pidfiles écrits pendant cette session.
+    for i in "${!ROBOT_NAMES[@]}"; do
+        local pf; pf="$(robot_pid_path "$i")"
+        if [[ -f "${pf}" ]]; then
+            local pid_in_file; pid_in_file="$(cat "${pf}" 2>/dev/null || true)"
+            for spid in "${STARTED_PIDS[@]}"; do
+                if [[ "${spid}" == "${pid_in_file}" ]]; then
+                    rm -f "${pf}"
+                    break
+                fi
+            done
+        fi
+    done
+    log_warn "Cleanup terminé. Si certains process ont survécu : ./scripts/slm/stop.sh --force"
+    exit 130   # convention : 130 = INT
+}
+
+trap 'cleanup_on_signal INT' INT
+trap 'cleanup_on_signal TERM' TERM
+
 # ─── Pre-flight ─────────────────────────────────────────────────────────────
 log_step "Pre-flight check"
+
+# Étape 1 : binaire llama-server présent ET version compatible.
 require_llama_server || exit 1
+check_llama_server_version 9297 || exit 1
+
+# Étape 2 : assets Phase 1 (grammars + prompts) présents.
+log_info "Validation des assets Phase 1…"
+check_assets_phase1 || exit 1
+log_ok "Assets Phase 1 OK (4 grammars + 4 prompts dans ${EFE_SLM_ASSETS_DIR})"
 
 ensure_runtime_dirs
 
@@ -138,6 +184,10 @@ if (( ${#to_start[@]} == 0 )); then
     log_ok "Rien à démarrer (tout est déjà UP)."
     exit 0
 fi
+
+# Étape 3 : check RAM disponible pour la liste finale de robots à démarrer.
+# Non bloquant : on warn et on continue (l'utilisateur sait ce qu'il fait).
+check_ram_sufficient "${to_start[@]}" || true
 
 log_ok "Pre-flight passé. ${#to_start[@]} robot(s) à démarrer."
 
@@ -225,6 +275,7 @@ for i in "${to_start[@]}"; do
         nohup bash -c "${cmd}" >"${log_file}" 2>&1 < /dev/null &
     fi
     pid=$!
+    STARTED_PIDS+=("${pid}")
     echo "${pid}" > "${pid_file}"
     log_info "  PID  : ${pid} (écrit dans ${pid_file})"
 
@@ -296,6 +347,11 @@ for i in "${to_start[@]}"; do
         unhealthy+=("${name} (timeout)")
     fi
 done
+
+# ─── Désactivation des traps après démarrage ────────────────────────────────
+# À partir d'ici, les daemons sont stables. Si l'utilisateur Ctrl+C maintenant,
+# c'est sur le récap final — on ne tue PAS les daemons légitimes.
+trap - INT TERM
 
 # ─── Résumé final ───────────────────────────────────────────────────────────
 log_step "Résumé démarrage"

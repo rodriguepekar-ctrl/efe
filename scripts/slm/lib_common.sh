@@ -247,7 +247,174 @@ ensure_runtime_dirs() {
     mkdir -p "${EFE_SLM_MODELS_DIR}" "${EFE_SLM_PIDS_DIR}" "${EFE_SLM_LOGS_DIR}"
 }
 
-# Affiche un résumé de la configuration courante (utile en --help/--info).
+# ─── Helpers Sprint S1 patch (G3/G4/G7) ─────────────────────────────────────
+
+# Retourne la RAM totale en MB. Compatible macOS et Linux.
+total_ram_mb() {
+    if [[ "${EFE_SLM_OS}" == "macos" ]]; then
+        # sysctl hw.memsize → bytes
+        local bytes; bytes="$(sysctl -n hw.memsize 2>/dev/null || echo 0)"
+        echo "$(( bytes / 1024 / 1024 ))"
+    else
+        # /proc/meminfo MemTotal en KB
+        local kb; kb="$(awk '/^MemTotal:/ {print $2}' /proc/meminfo 2>/dev/null || echo 0)"
+        echo "$(( kb / 1024 ))"
+    fi
+}
+
+# Retourne la RAM disponible en MB (best-effort cross-platform).
+available_ram_mb() {
+    if [[ "${EFE_SLM_OS}" == "macos" ]]; then
+        # macOS : vm_stat (4K pages). "Pages free" + "Pages inactive" + "Pages purgeable"
+        # est une approximation honnête de la RAM utilisable sans pressure.
+        local page_size=4096
+        local stats; stats="$(vm_stat 2>/dev/null || echo "")"
+        if [[ -z "${stats}" ]]; then echo 0; return; fi
+        local free inactive purgeable
+        free="$(echo "${stats}"      | awk '/Pages free:/      {gsub(/\./,"",$3); print $3}')"
+        inactive="$(echo "${stats}"  | awk '/Pages inactive:/  {gsub(/\./,"",$3); print $3}')"
+        purgeable="$(echo "${stats}" | awk '/Pages purgeable:/ {gsub(/\./,"",$3); print $3}')"
+        free="${free:-0}"; inactive="${inactive:-0}"; purgeable="${purgeable:-0}"
+        local pages=$(( free + inactive + purgeable ))
+        echo "$(( pages * page_size / 1024 / 1024 ))"
+    else
+        # Linux : MemAvailable (recommandé depuis kernel 3.14)
+        local kb; kb="$(awk '/^MemAvailable:/ {print $2}' /proc/meminfo 2>/dev/null || echo 0)"
+        if (( kb == 0 )); then
+            # Fallback : MemFree + Buffers + Cached
+            kb="$(awk '/^(MemFree|Buffers|^Cached):/ {sum+=$2} END {print sum}' /proc/meminfo 2>/dev/null || echo 0)"
+        fi
+        echo "$(( kb / 1024 ))"
+    fi
+}
+
+# Somme attendue de RAM consommée par les 4 robots (≈ taille modèle + KV cache).
+# Approximation conservative : modèle + 30% KV cache.
+expected_ram_mb_for_robots() {
+    local indices=("$@")
+    local total=0 i
+    for i in "${indices[@]}"; do
+        local model_mb; model_mb="$(robot_size_mb "$i")"
+        # +30% pour KV cache + overhead llama-server.
+        total=$(( total + model_mb + (model_mb * 30 / 100) ))
+    done
+    echo "${total}"
+}
+
+# Vérifie que la RAM disponible est suffisante pour la liste de robots donnée.
+# Retourne 0 si OK, 1 si insuffisant. Affiche un warning détaillé.
+check_ram_sufficient() {
+    local indices=("$@")
+    local needed; needed="$(expected_ram_mb_for_robots "${indices[@]}")"
+    local available; available="$(available_ram_mb)"
+    local total; total="$(total_ram_mb)"
+
+    log_info "RAM check : ${available} MB libres / ${total} MB total ; besoin estimé ${needed} MB"
+
+    if (( available == 0 )); then
+        log_warn "Impossible de déterminer la RAM disponible. Skip check."
+        return 0
+    fi
+
+    # Marge de sécurité 10% : on veut au moins needed × 1.1 dispo.
+    local needed_with_margin=$(( needed * 11 / 10 ))
+    if (( available < needed_with_margin )); then
+        log_warn "RAM disponible (${available} MB) < besoin avec marge (${needed_with_margin} MB)."
+        log_warn "Risque de swap intense. Considère :"
+        log_warn "  - Démarrer moins de robots simultanément"
+        log_warn "  - Utiliser des quantizations plus petites (Q4 au lieu de Q5)"
+        log_warn "  - Fermer d'autres applications gourmandes"
+        return 1
+    fi
+    return 0
+}
+
+# Chemin canonique vers les assets Phase 1 (grammars + prompts).
+EFE_SLM_ASSETS_DIR="${EFE_REPO_ROOT}/crates/efe-nano-app-coordinator/assets"
+export EFE_SLM_ASSETS_DIR
+
+# Vérifie que les 8 assets Phase 1 (4 grammars + 4 prompts) existent et sont non vides.
+# Retourne 0 si tous OK, 1 si manque ou vide.
+check_assets_phase1() {
+    local missing=()
+    local empty=()
+    local i name g p
+
+    for i in "${!ROBOT_NAMES[@]}"; do
+        name="$(robot_name "$i")"
+        # Filter et router n'ont pas de grammar/prompt → on skip leur check ici.
+        # Mais on a SEULEMENT 4 robots LLM-based dans ROBOT_NAMES (filter et router
+        # sont absents car non llama-server based).
+        g="${EFE_SLM_ASSETS_DIR}/grammars/${name}_v1.gbnf"
+        p="${EFE_SLM_ASSETS_DIR}/prompts/${name}.txt"
+
+        if [[ ! -f "${g}" ]]; then missing+=("${g}"); elif [[ ! -s "${g}" ]]; then empty+=("${g}"); fi
+        if [[ ! -f "${p}" ]]; then missing+=("${p}"); elif [[ ! -s "${p}" ]]; then empty+=("${p}"); fi
+    done
+
+    if (( ${#missing[@]} > 0 )); then
+        log_err "Assets Phase 1 manquants (${#missing[@]}) :"
+        for f in "${missing[@]}"; do echo "    ${f}" >&2; done
+    fi
+    if (( ${#empty[@]} > 0 )); then
+        log_err "Assets Phase 1 vides (${#empty[@]}) :"
+        for f in "${empty[@]}"; do echo "    ${f}" >&2; done
+    fi
+
+    if (( ${#missing[@]} + ${#empty[@]} > 0 )); then
+        log_warn "Régénère les grammars : crates/efe-nano-app-coordinator/scripts/generate-grammars.sh"
+        return 1
+    fi
+    return 0
+}
+
+# Détecte la version de llama-server. Retourne sur stdout le numéro de build
+# (ex: "5023" pour "version: 5023 (b9297-something)"), vide si non détectable.
+llama_server_build_number() {
+    local out
+    out="$(llama-server --version 2>&1 | head -5 || true)"
+    # Patterns observés :
+    #   "version: 5023 (...)"
+    #   "build = 5023 (b9297-xyz)"
+    #   "llama.cpp version: ... b9297"
+    local n
+    n="$(echo "${out}" | grep -oE '(b|build[= ]|version:[ ])([0-9]+)' | head -1 | grep -oE '[0-9]+' || true)"
+    echo "${n}"
+}
+
+# Vérifie que llama-server est ≥ une version min (b9297 par défaut).
+# Retourne 0 si OK ou si version indéterminable (warning), 1 si trop ancien.
+check_llama_server_version() {
+    local min_build="${1:-9297}"
+    local build; build="$(llama_server_build_number)"
+    if [[ -z "${build}" ]]; then
+        log_warn "Version llama-server indéterminable. Continuer en supposant compatible."
+        return 0
+    fi
+    log_info "llama-server build = ${build} (min requis ${min_build})"
+    if (( build < min_build )); then
+        log_err "llama-server trop ancien : build ${build} < ${min_build}."
+        log_warn "Mise à jour : brew upgrade llama.cpp  (ou recompile depuis source)"
+        return 1
+    fi
+    return 0
+}
+
+# Construit la liste des env vars pour le Coordinator (G6).
+# Affiche sur stdout les `export X=Y` à sourcer dans un shell.
+print_coordinator_env_exports() {
+    local host="${EFE_SLM_HOST:-127.0.0.1}"
+    echo "# EFE Phase 1 nano-robot endpoints (à sourcer dans le shell qui lance le Coordinator)"
+    echo "# Généré par scripts/slm/lib_common.sh"
+    local i
+    for i in "${!ROBOT_NAMES[@]}"; do
+        local upname; upname="$(robot_name "$i" | tr '[:lower:]' '[:upper:]')"
+        echo "export ${upname}_URL=\"http://${host}:$(robot_port "$i")\""
+    done
+}
+
+# ─── Helper : affiche un résumé de la configuration courante ────────────────
+
 print_config_summary() {
     echo "${EFE_C_BOLD}EFE SLM bootstrap configuration${EFE_C_RESET}"
     echo "  OS               : ${EFE_SLM_OS}"
