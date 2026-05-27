@@ -71,8 +71,8 @@ Fichiers numérotés `NN_<name>.json` pour ordre prédictif :
 |---|---|---|---|---|
 | 01 | `01_factual_simple.json` | S2 | FactualQa | Hello-World — réponse factuelle 1-token, pas de verifier |
 | 02 | `02_factual_with_sources.json` | S3 | FactualQa | Étend 01 avec 2 sources Wikipédia → active le verifier (SUPPORTED attendu) |
-| 03 | `03_factual_compressible.json` | **S4** | FactualQa | Query LONGUE (527 chars > 500) → déclenche compressor + active toutes les ChewingMetrics |
-| 04 | (à venir) `04_factual_with_numbers.json` | S5 | FactualQa | Forcer chiffres dans la réponse (vitesse lumière) — pour Mission B 3-LLM vote |
+| 03 | `03_factual_compressible.json` | **S4 + S5** | FactualQa | Query LONGUE (547 chars > 500) → déclenche compressor + active toutes les ChewingMetrics. **Réutilisée par S5** (Mission B 3-LLM consensus) pour démontrer la multiplication économique savings × 3 |
+| 04 | (à venir) `04_factual_with_numbers.json` | S6 | FactualQa | Forcer chiffres dans la réponse (vitesse lumière) — pour Router tuning |
 | 05 | (à venir) `05_code_gen_rust.json` | S6 | Code | Test du router → Claude pour code |
 | 06 | (à venir) `06_summary_short.json` | S9 | Analysis | Compresseur testé sur paragraphe long |
 | 07 | (à venir) `07_long_reasoning.json` | S9 | Reasoning | Multi-step, Claude Opus typiquement |
