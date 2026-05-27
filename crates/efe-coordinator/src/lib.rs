@@ -109,6 +109,7 @@ pub mod error;
 pub mod events;
 pub mod heartbeat;
 pub mod llm;
+pub mod metrics;
 pub mod request;
 pub mod speculate;
 pub mod sse;
@@ -133,6 +134,7 @@ pub use llm::{
     LlmCall, LlmProvider, LlmResponse, MockLlmProvider, MultiLlmBridge, ProviderHandle,
     ProviderRegistry,
 };
+pub use metrics::ChewingMetrics;
 
 #[cfg(feature = "anthropic")]
 pub use llm::ClaudeProvider;

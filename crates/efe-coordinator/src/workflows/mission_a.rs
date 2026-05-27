@@ -21,6 +21,7 @@ use crate::coordinator::Coordinator;
 use crate::error::{CoordError, CoordResult};
 use crate::events::{MissionTag, StreamEvent};
 use crate::llm::LlmCall;
+use crate::metrics::ChewingMetrics;
 use crate::request::{FactCheck, MissionARequest, MissionAResponse};
 
 /// Exécute la Mission A : pré-mâcher pour 1 LLM, retourne la réponse finale.
@@ -35,6 +36,12 @@ use crate::request::{FactCheck, MissionARequest, MissionAResponse};
 ///
 /// Tous les robots optionnels sont skippés si non fournis dans
 /// `coord.clients`.
+//
+// `field_reassign_with_default` : pattern voulu — on accumule incrémentalement
+// les champs de `ChewingMetrics` au fil des phases de la mission. La syntaxe
+// struct littéral n'est pas applicable car les valeurs viennent de différents
+// blocs `match`/branches.
+#[allow(clippy::field_reassign_with_default)]
 pub async fn run_mission_a(
     coord: &Coordinator,
     req: MissionARequest,
@@ -42,6 +49,12 @@ pub async fn run_mission_a(
     let started = Instant::now();
     let swarm_id = Uuid::now_v7();
     let mut audit_entries: Vec<Uuid> = vec![];
+
+    // ── Sprint S4 R2 : ChewingMetrics tracking ──────────────────────────
+    // Initialisation avec les tokens d'entrée bruts (avant pré-mâchage).
+    // Tous les autres champs seront remplis incrémentalement à chaque étape.
+    let mut chewing_metrics = ChewingMetrics::default();
+    chewing_metrics.input_tokens_raw = ChewingMetrics::estimate_tokens(&req.user_text);
 
     // Subscribe nos propres events sur la blackboard via mock-audit + bus.
     let _ = coord
@@ -77,6 +90,7 @@ pub async fn run_mission_a(
         };
         let res = analyzer.invoke(input, &ctx).await;
         let latency = started_node.elapsed().as_millis() as u64;
+        chewing_metrics.analyzer_latency_ms = latency;
         match res {
             Ok(out) => {
                 // Dépose une phéromone d'entités.
@@ -153,6 +167,9 @@ pub async fn run_mission_a(
         match router.invoke(r_input, &ctx).await {
             Ok(out) => {
                 let latency = started_node.elapsed().as_millis() as u64;
+                chewing_metrics.router_latency_ms = latency;
+                chewing_metrics.router_reason = out.reason.clone();
+                chewing_metrics.router_estimated_cost_cents = out.estimated_cost_cents;
                 let _ = coord
                     .bus
                     .publish(StreamEvent::RobotFinished {
@@ -174,6 +191,7 @@ pub async fn run_mission_a(
             }
             Err(e) => {
                 let latency = started_node.elapsed().as_millis() as u64;
+                chewing_metrics.router_latency_ms = latency;
                 let _ = coord
                     .bus
                     .publish(StreamEvent::RobotFinished {
@@ -198,6 +216,8 @@ pub async fn run_mission_a(
             .cloned()
             .ok_or_else(|| CoordError::Config("no available LLMs".into()))?
     };
+    // Le LLM finalement choisi (par router ou fallback) est tracé dans les métriques.
+    chewing_metrics.selected_llm = selected_llm.clone();
 
     // ── Étape 3 : Compressor (optionnel — appliqué si texte long) ─────
     let final_prompt = if let Some(compressor) = &coord.clients.compressor {
@@ -220,6 +240,7 @@ pub async fn run_mission_a(
             match compressor.invoke(c_input, &ctx).await {
                 Ok(out) => {
                     let latency = started_node.elapsed().as_millis() as u64;
+                    chewing_metrics.compressor_latency_ms = latency;
                     let _ = coord
                         .bus
                         .publish(StreamEvent::RobotFinished {
@@ -240,6 +261,7 @@ pub async fn run_mission_a(
                 }
                 Err(e) => {
                     let latency = started_node.elapsed().as_millis() as u64;
+                    chewing_metrics.compressor_latency_ms = latency;
                     let _ = coord
                         .bus
                         .publish(StreamEvent::RobotFinished {
@@ -260,6 +282,10 @@ pub async fn run_mission_a(
     } else {
         req.user_text.clone()
     };
+
+    // S4 R2 : capture des tokens compressés (le LLM va recevoir final_prompt).
+    chewing_metrics.input_tokens_compressed = ChewingMetrics::estimate_tokens(&final_prompt);
+    chewing_metrics.recompute_savings();
 
     // ── Étape 4 : appel LLM en streaming ─────────────────────────────
     let llm_call = LlmCall {
@@ -292,6 +318,9 @@ pub async fn run_mission_a(
         .stream_one(&selected_llm, llm_call, chunk_tx)
         .await?;
     let _ = pump.await;
+    // S4 R2 : capture metrics LLM (tokens + latence venant du provider).
+    chewing_metrics.llm_latency_ms = llm_resp.latency_ms;
+    chewing_metrics.llm_tokens_generated = llm_resp.tokens_generated;
     let _ = coord
         .bus
         .publish(StreamEvent::LlmFinished {
@@ -320,8 +349,12 @@ pub async fn run_mission_a(
                     .collect(),
                 strictness: VerifierStrictness::Standard,
             };
+            // S4 R2 : instrumenter la latence du verifier (manquait dans le code original).
+            let verifier_started = Instant::now();
             match verifier.invoke(v_input, &ctx).await {
                 Ok(out) => {
+                    chewing_metrics.verifier_latency_ms =
+                        verifier_started.elapsed().as_millis() as u64;
                     let verdict_str = format!("{:?}", out.verdict).to_uppercase();
                     let severity_str = format!("{:?}", out.severity).to_uppercase();
                     let _ = coord
@@ -345,6 +378,8 @@ pub async fn run_mission_a(
                     });
                 }
                 Err(_) => {
+                    chewing_metrics.verifier_latency_ms =
+                        verifier_started.elapsed().as_millis() as u64;
                     // Verifier optionnel — on continue sans verdicts.
                 }
             }
@@ -358,6 +393,23 @@ pub async fn run_mission_a(
     }
     let audit_hash = super::audit_chain_hash(&audit_entries);
 
+    // ── Sprint S4 R2 : finalisation des ChewingMetrics ────────────────
+    // À ce point, toutes les latences par phase sont déjà tracées. On calcule
+    // les agrégats (somme SLM + total pipeline) et on émet l'event PRE_CHEWING_METRICS
+    // avant SWARM_FINISHED pour permettre aux consommateurs (UI / tests) de
+    // voir les métriques en parallèle de la fin de mission.
+    chewing_metrics.total_pipeline_latency_ms = started.elapsed().as_millis() as u64;
+    chewing_metrics.recompute_total_slm_latency();
+
+    let _ = coord
+        .bus
+        .publish(StreamEvent::PreChewingMetrics {
+            swarm_id,
+            metrics: chewing_metrics.clone(),
+            ts: Utc::now(),
+        })
+        .await;
+
     let response = MissionAResponse {
         final_text: llm_resp.text,
         llm_used: llm_resp.provider,
@@ -365,6 +417,7 @@ pub async fn run_mission_a(
         latency_ms: started.elapsed().as_millis() as u64,
         verdicts,
         audit_chain_hash: audit_hash.clone(),
+        chewing_metrics: Some(chewing_metrics),
     };
 
     let _ = coord

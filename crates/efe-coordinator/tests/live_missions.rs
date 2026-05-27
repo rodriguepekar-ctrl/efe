@@ -718,3 +718,432 @@ async fn live_mission_a_with_analyzer_verifier() {
         resp.latency_ms
     );
 }
+
+// ─── Helpers Sprint S4 (full pre-chewing pipeline + ChewingMetrics) ─────────
+
+/// URL du compressor (port 8092). Convention env `COMPRESSOR_URL` ou défaut local.
+fn compressor_endpoint() -> String {
+    std::env::var("COMPRESSOR_URL")
+        .unwrap_or_else(|_| "http://127.0.0.1:8092".to_string())
+}
+
+/// Pré-flight S4 : ping HTTP /health des 3 endpoints SLM utiles à la pipeline
+/// complète (analyzer + compressor + verifier). Retourne `true` si les 3
+/// répondent 200 OK. Reformulator (:8091) n'est PAS vérifié car le workflow
+/// `run_mission_a` ne l'utilise pas (cf. doc architecture S4 §1.3).
+async fn full_pipeline_slm_alive() -> bool {
+    let client = reqwest::Client::new();
+    let ping = |url: String| {
+        let c = client.clone();
+        async move {
+            c.get(format!("{url}/health"))
+                .timeout(Duration::from_secs(2))
+                .send()
+                .await
+                .map(|r| r.status().is_success())
+                .unwrap_or(false)
+        }
+    };
+    let analyzer_ok = ping(analyzer_endpoint()).await;
+    let compressor_ok = ping(compressor_endpoint()).await;
+    let verifier_ok = ping(verifier_endpoint()).await;
+    if !analyzer_ok {
+        eprintln!("  [health-check] analyzer    DOWN → {}/health", analyzer_endpoint());
+    }
+    if !compressor_ok {
+        eprintln!("  [health-check] compressor  DOWN → {}/health", compressor_endpoint());
+    }
+    if !verifier_ok {
+        eprintln!("  [health-check] verifier    DOWN → {}/health", verifier_endpoint());
+    }
+    analyzer_ok && compressor_ok && verifier_ok
+}
+
+/// Construit un `Coordinator` avec le **pipeline complet** Mission A actif :
+/// analyzer + router + compressor + verifier (les 4 robots réellement utilisés
+/// par le workflow). Reformulator et filter restent `None` car le workflow
+/// `run_mission_a` ne les invoque pas (audit S4 §1.3).
+///
+/// Variante "full" de `make_naked_coordinator` (S2) et de
+/// `make_coord_with_analyzer_verifier` (S3).
+fn make_coord_full_pipeline(provider: Arc<dyn LlmProvider>) -> Coordinator {
+    use efe_coordinator::CoordinatorClients;
+    use efe_nano_app_coordinator::clients::{
+        AnalyzerClient, CompressorClient, RouterClient, VerifierClient,
+    };
+
+    let analyzer = Arc::new(
+        AnalyzerClient::from_assets(analyzer_endpoint())
+            .expect("AnalyzerClient::from_assets — assets manquants ?"),
+    );
+    let compressor = Arc::new(
+        CompressorClient::from_assets(compressor_endpoint())
+            .expect("CompressorClient::from_assets — assets manquants ?"),
+    );
+    let verifier = Arc::new(
+        VerifierClient::from_assets(verifier_endpoint())
+            .expect("VerifierClient::from_assets — assets manquants ?"),
+    );
+    // Router : heuristique Pareto in-process, pas de from_assets.
+    let router = Arc::new(RouterClient::new());
+
+    let clients = CoordinatorClients {
+        analyzer: Some(analyzer),
+        compressor: Some(compressor),
+        verifier: Some(verifier),
+        router: Some(router),
+        // reformulator et filter : wired-but-unused dans le workflow actuel,
+        // donc on les laisse None pour ne pas masquer une intégration ultérieure
+        // (cf. architecture S4 §1.3 — Sprint S5+ ou Phase 4).
+        reformulator: None,
+        filter: None,
+    };
+
+    let registry = ProviderRegistry::new();
+    registry.register(provider);
+
+    Coordinator::builder()
+        .registry(registry)
+        .clients(clients)
+        .build()
+        .expect("coordinator builds with full pipeline (4 robots)")
+}
+
+// ─── Sprint S4 ── Mission A FULL pre-chewing pipeline + ChewingMetrics ──────
+
+/// Test S4 : pipeline pré-mâchage COMPLET (4 robots actifs) + mesure
+/// quantitative des économies de tokens via `ChewingMetrics`.
+///
+/// **C'est LE test qui prouve enfin le but premier de R2** : économiser
+/// des tokens sur les gros LLMs grâce au pré-mâchage SLM.
+///
+/// Flow attendu :
+/// 1. analyzer extrait entités + intent
+/// 2. router choisit Claude (1 seul candidat → trivial)
+/// 3. compressor réduit le user_text de ~130 tokens à ~30 tokens
+/// 4. Claude reçoit le summary compressé (pas le paragraphe original)
+/// 5. verifier fact-check contre les sources
+/// 6. ChewingMetrics agrégées émises en event PRE_CHEWING_METRICS
+/// 7. MissionAResponse.chewing_metrics rempli pour audit
+///
+/// 28 assertions C1-C28 (cf. doc architecture S4 §4.3).
+#[tokio::test]
+async fn live_mission_a_full_pre_chewing_pipeline() {
+    // ── Gates en cascade ────────────────────────────────────────────────
+    if !live_enabled() {
+        eprintln!("[skip] set EFE_LIVE_LLM=1 + ANTHROPIC_API_KEY (Claude requis)");
+        return;
+    }
+    if !live_slm_enabled() {
+        eprintln!("[skip] set EFE_LIVE_SLM=1 (llama-server :8090/:8092/:8093 requis)");
+        return;
+    }
+    if !full_pipeline_slm_alive().await {
+        eprintln!("[skip] analyzer, compressor ou verifier not responding on /health");
+        eprintln!("       → lance : ./scripts/slm/start.sh && ./scripts/slm/health.sh");
+        return;
+    }
+
+    // ── 1. Charge la fixture S4 (query ≥ 500 chars pour déclencher compressor) ─
+    let fixture = load_fixture("03_factual_compressible.json");
+    let query = fixture["query"].as_str().expect("fixture.query missing");
+    assert!(
+        query.len() > 500,
+        "fixture.query DOIT faire > 500 chars (seuil compressor mission_a.rs:204), \
+         got {} chars",
+        query.len()
+    );
+    let expected_kw = fixture["expected_keyword"]
+        .as_str()
+        .expect("fixture.expected_keyword");
+    let expected_verdict = fixture["expected_verifier_verdict"]
+        .as_str()
+        .unwrap_or("SUPPORTED");
+    let expected_sim_min: f32 = fixture["expected_verifier_similarity_min"]
+        .as_f64()
+        .unwrap_or(0.3) as f32;
+    let expected_ratio_max: f32 = fixture["expected_compression_ratio_max"]
+        .as_f64()
+        .unwrap_or(0.7) as f32;
+    let expected_savings_min: u32 = fixture["expected_savings_tokens_min"]
+        .as_u64()
+        .unwrap_or(20) as u32;
+    let sources: Vec<(String, String)> = fixture["candidate_sources"]
+        .as_array()
+        .expect("fixture.candidate_sources")
+        .iter()
+        .map(|s| {
+            (
+                s["id"].as_str().expect("source.id").to_string(),
+                s["text"].as_str().expect("source.text").to_string(),
+            )
+        })
+        .collect();
+
+    // ── 2. Provider Claude ──────────────────────────────────────────────
+    let claude = Arc::new(
+        ClaudeProvider::from_env().expect("ANTHROPIC_API_KEY must be set"),
+    );
+    let claude_id = claude.id();
+
+    // ── 3. Coordinator avec pipeline complet (4 robots) ─────────────────
+    let coord = make_coord_full_pipeline(claude);
+
+    eprintln!("=== Mission A FULL pre-chewing pipeline ===");
+    eprintln!("  query_raw      : \"{}…\" ({} chars)", &query[..80.min(query.len())], query.len());
+    eprintln!("  llm_id         : {claude_id}");
+    eprintln!("  analyzer_url   : {}", analyzer_endpoint());
+    eprintln!("  compressor_url : {}", compressor_endpoint());
+    eprintln!("  verifier_url   : {}", verifier_endpoint());
+    eprintln!("  router         : in-process Pareto heuristic");
+    eprintln!("  candidate_srcs : {}", sources.len());
+
+    // ── 4. Subscribe bus (capture événements + PRE_CHEWING_METRICS) ─────
+    let (_token, mut rx) = coord.subscribe(Some("s4-full-pipeline-test"));
+
+    // ── 5. Build request ────────────────────────────────────────────────
+    let req = build_factual_request_with_sources(query, &claude_id, sources.clone());
+
+    // ── 6. Run mission + mesure wall-clock ──────────────────────────────
+    let started = std::time::Instant::now();
+    let resp = run_mission_a(&coord, req)
+        .await
+        .expect("mission_a full pipeline should succeed");
+    let wall_ms = started.elapsed().as_millis() as u64;
+
+    // ── 7. Drain events (timeout 300 ms — plus de tags qu'en S3) ────────
+    let mut tags: Vec<&'static str> = Vec::new();
+    while let Ok(Some(ev)) =
+        tokio::time::timeout(Duration::from_millis(300), rx.recv()).await
+    {
+        tags.push(ev.tag());
+    }
+
+    // ── 8. Extract ChewingMetrics depuis la response ────────────────────
+    let metrics = resp
+        .chewing_metrics
+        .as_ref()
+        .expect("C16: MissionAResponse.chewing_metrics doit être Some(...) en S4");
+
+    // ── 9. Affichage humain enrichi ─────────────────────────────────────
+    let audit_hash_head = &resp.audit_chain_hash[..8.min(resp.audit_chain_hash.len())];
+    let audit_hash_tail_start = resp.audit_chain_hash.len().saturating_sub(8);
+    let audit_hash_tail = &resp.audit_chain_hash[audit_hash_tail_start..];
+    eprintln!();
+    eprintln!("  ── Phase 1 : Pre-chewing SLM ──");
+    eprintln!(
+        "    analyzer     : {} ms",
+        metrics.analyzer_latency_ms
+    );
+    eprintln!(
+        "    router       : {} ms   → {}  (reason: {:?})",
+        metrics.router_latency_ms, metrics.selected_llm, metrics.router_reason
+    );
+    eprintln!(
+        "    compressor   : {} ms   ({} → {} tokens, ratio={:.3}, savings={} tokens {:.0}%)",
+        metrics.compressor_latency_ms,
+        metrics.input_tokens_raw,
+        metrics.input_tokens_compressed,
+        metrics.compression_ratio,
+        metrics.savings_tokens,
+        metrics.savings_ratio * 100.0,
+    );
+    eprintln!();
+    eprintln!("  ── Phase 2 : LLM sur prompt compressé ──");
+    eprintln!(
+        "    llm          : {} ms   ({} out tokens, cost {} ¢)",
+        metrics.llm_latency_ms, metrics.llm_tokens_generated, resp.cost_cents
+    );
+    eprintln!("    final_text   : {:?}", resp.final_text);
+    eprintln!();
+    eprintln!("  ── Phase 3 : Verifier post-LLM ──");
+    eprintln!("    verifier     : {} ms", metrics.verifier_latency_ms);
+    if let Some(v) = resp.verdicts.first() {
+        eprintln!("    verdict      : {}", v.verdict);
+        eprintln!("    similarity   : {:.3}", v.similarity);
+        eprintln!("    best_source  : {:?}", v.best_source_id);
+    }
+    eprintln!();
+    eprintln!("  ── ChewingMetrics ──");
+    eprintln!(
+        "    total_slm_latency_ms      : {}",
+        metrics.total_slm_latency_ms
+    );
+    eprintln!(
+        "    total_pipeline_latency_ms : {}",
+        metrics.total_pipeline_latency_ms
+    );
+    eprintln!("    wall_clock_ms             : {wall_ms}");
+    eprintln!(
+        "    audit_hash   : {audit_hash_head}…{audit_hash_tail} ({} chars)",
+        resp.audit_chain_hash.len()
+    );
+    eprintln!("    events_seen ({}) : {tags:?}", tags.len());
+
+    // ── 10. Assertions C1-C28 (cf. doc architecture S4 §4.3) ────────────
+
+    // C1-C9 — héritées B1-B9 (S3)
+    assert!(!resp.final_text.is_empty(), "C1: final_text non vide");
+    assert!(
+        resp.final_text.to_lowercase().contains(expected_kw),
+        "C2: contient '{expected_kw}', got {:?}",
+        resp.final_text
+    );
+    assert_eq!(resp.llm_used, claude_id, "C3: llm_used = Claude");
+    assert!(
+        resp.cost_cents <= 5,
+        "C4: cost ≤ 5 ¢, got {} ¢",
+        resp.cost_cents
+    );
+    assert!(
+        resp.latency_ms < 60_000,
+        "C5: latency < 60 s, got {} ms",
+        resp.latency_ms
+    );
+    assert!(
+        resp.latency_ms >= 100,
+        "C6: latency ≥ 100 ms, got {} ms",
+        resp.latency_ms
+    );
+    assert_eq!(
+        resp.audit_chain_hash.len(),
+        64,
+        "C7: audit_hash 64 chars, got {}",
+        resp.audit_chain_hash.len()
+    );
+    assert!(wall_ms < 60_000, "C9: wall-clock < 60 s, got {wall_ms}");
+
+    // C10-C12 — héritées B10-B12 (S3) : verifier
+    assert!(
+        !resp.verdicts.is_empty(),
+        "C10: verifier doit avoir produit ≥ 1 verdict"
+    );
+    let v = &resp.verdicts[0];
+    assert_eq!(
+        v.verdict.to_uppercase(),
+        expected_verdict.to_uppercase(),
+        "C11: verdict attendu '{expected_verdict}', got '{}'",
+        v.verdict
+    );
+    assert!(
+        v.similarity >= expected_sim_min,
+        "C12: similarity ≥ {expected_sim_min}, got {}",
+        v.similarity
+    );
+
+    // C13-C15 — héritées B13-B15 : events analyzer/verifier
+    assert!(
+        tags.contains(&"ROBOT_STARTED"),
+        "C13a: ROBOT_STARTED missing, got {tags:?}"
+    );
+    assert!(
+        tags.contains(&"ROBOT_FINISHED"),
+        "C13b: ROBOT_FINISHED missing"
+    );
+    assert!(
+        tags.contains(&"PHEROMONE_DEPOSITED"),
+        "C14: PHEROMONE_DEPOSITED missing (analyzer doit déposer ≥ 1 entité)"
+    );
+    assert!(
+        tags.contains(&"VERDICT_READY"),
+        "C15: VERDICT_READY missing"
+    );
+
+    // ── Assertions S4 spécifiques (C16-C28) ──────────────────────────────
+
+    // C16 — MissionAResponse.chewing_metrics rempli
+    // (déjà vérifié via .expect() au début — re-affirm here)
+    assert!(
+        resp.chewing_metrics.is_some(),
+        "C16: chewing_metrics doit être Some(...)"
+    );
+
+    // C17 — input_tokens_raw ≥ 100 (query ≥ 500 chars ≈ 125+ tokens)
+    assert!(
+        metrics.input_tokens_raw >= 100,
+        "C17: input_tokens_raw ≥ 100 (query longue), got {}",
+        metrics.input_tokens_raw
+    );
+
+    // C18 — compressor a effectivement réduit le texte
+    assert!(
+        metrics.input_tokens_compressed < metrics.input_tokens_raw,
+        "C18: compressor doit avoir réduit (raw={} > compressed={})",
+        metrics.input_tokens_raw,
+        metrics.input_tokens_compressed,
+    );
+
+    // C19 — compression_ratio sous le cap fixture
+    assert!(
+        metrics.compression_ratio <= expected_ratio_max,
+        "C19: compression_ratio ≤ {expected_ratio_max}, got {:.3}",
+        metrics.compression_ratio
+    );
+
+    // C20 — savings_tokens au-dessus du minimum fixture
+    assert!(
+        metrics.savings_tokens >= expected_savings_min,
+        "C20: savings_tokens ≥ {expected_savings_min}, got {}",
+        metrics.savings_tokens
+    );
+
+    // C21 — compressor a tourné dans un délai raisonnable
+    assert!(
+        metrics.compressor_latency_ms > 0,
+        "C21a: compressor_latency_ms > 0 (compressor doit avoir tourné, pas skip)"
+    );
+    assert!(
+        metrics.compressor_latency_ms < 10_000,
+        "C21b: compressor_latency_ms < 10s, got {}",
+        metrics.compressor_latency_ms
+    );
+
+    // C22 — router heuristique in-process Rust = très rapide
+    assert!(
+        metrics.router_latency_ms < 100,
+        "C22: router_latency_ms < 100 ms (heuristique Pareto in-process), got {}",
+        metrics.router_latency_ms
+    );
+
+    // C23 — avec 1 seul LLM candidat, le router pick lui
+    assert_eq!(
+        metrics.selected_llm, claude_id,
+        "C23: router doit sélectionner claude (1 seul candidat), got {:?}",
+        metrics.selected_llm
+    );
+
+    // C24 — router a écrit une justification
+    assert!(
+        !metrics.router_reason.is_empty(),
+        "C24: router_reason doit être non vide (audit trail)"
+    );
+
+    // C25 — event PRE_CHEWING_METRICS émis par le workflow
+    assert!(
+        tags.contains(&"PRE_CHEWING_METRICS"),
+        "C25: PRE_CHEWING_METRICS missing dans les events (workflow doit l'émettre), \
+         got {tags:?}"
+    );
+
+    // C26 — cohérence : SLM total ≤ total pipeline
+    assert!(
+        metrics.total_slm_latency_ms <= metrics.total_pipeline_latency_ms,
+        "C26: SLM ({}) <= pipeline ({}) — incohérence si SLM > pipeline",
+        metrics.total_slm_latency_ms,
+        metrics.total_pipeline_latency_ms,
+    );
+
+    // C27 — plancher LLM (handshake TLS Claude)
+    assert!(
+        metrics.llm_latency_ms >= 100,
+        "C27: llm_latency ≥ 100 ms (plancher TLS), got {}",
+        metrics.llm_latency_ms
+    );
+
+    // C28 — cap latency S4 (élargi vs S3 car compressor en plus)
+    assert!(
+        resp.latency_ms < 25_000,
+        "C28: latency < 25 s (cap S4), got {} ms",
+        resp.latency_ms
+    );
+}

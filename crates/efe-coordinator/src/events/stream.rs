@@ -9,6 +9,8 @@ use uuid::Uuid;
 
 use efe_nano_app_coordinator::types::router::TaskClass;
 
+use crate::metrics::ChewingMetrics;
+
 /// Version SemVer du protocole SSE (`StreamEvent`).
 ///
 /// Bump MAJOR si un variant est supprimé ou son `tag` change.
@@ -180,6 +182,24 @@ pub enum StreamEvent {
         ts: DateTime<Utc>,
     },
 
+    /// Métriques de pré-mâchage agrégées en fin de mission (Sprint S4 R2).
+    ///
+    /// Émis juste avant `SwarmFinished` (donc après `LlmFinished` + éventuel
+    /// `VerdictReady`). Contient les tokens d'entrée bruts vs compressés, les
+    /// latences par phase SLM, le LLM choisi par le router, et les ratios de
+    /// savings.
+    ///
+    /// Permet aux UIs / tests / outils d'audit de quantifier objectivement le
+    /// gain économique du pipeline EFE vs un appel naïf au gros LLM.
+    PreChewingMetrics {
+        /// Swarm.
+        swarm_id: Uuid,
+        /// Métriques agrégées (cf. [`crate::metrics::ChewingMetrics`]).
+        metrics: ChewingMetrics,
+        /// Estampille d'émission.
+        ts: DateTime<Utc>,
+    },
+
     /// Le swarm est terminé, succès complet.
     SwarmFinished {
         /// Swarm.
@@ -231,6 +251,7 @@ impl StreamEvent {
             Self::VoteResolved { .. } => "VOTE_RESOLVED",
             Self::DraftToken { .. } => "DRAFT_TOKEN",
             Self::SpeculationResolved { .. } => "SPECULATION_RESOLVED",
+            Self::PreChewingMetrics { .. } => "PRE_CHEWING_METRICS",
             Self::SwarmFinished { .. } => "SWARM_FINISHED",
             Self::SwarmFailed { .. } => "SWARM_FAILED",
             Self::Heartbeat { .. } => "HEARTBEAT",
@@ -251,6 +272,7 @@ impl StreamEvent {
             | Self::VoteResolved { swarm_id, .. }
             | Self::DraftToken { swarm_id, .. }
             | Self::SpeculationResolved { swarm_id, .. }
+            | Self::PreChewingMetrics { swarm_id, .. }
             | Self::SwarmFinished { swarm_id, .. }
             | Self::SwarmFailed { swarm_id, .. } => Some(*swarm_id),
             Self::Heartbeat { .. } => None,
@@ -343,6 +365,28 @@ mod tests {
                 tokens_accepted: 50,
                 tokens_regenerated: 10,
                 latency_saved_ms: 300,
+                ts: Utc::now(),
+            },
+            StreamEvent::PreChewingMetrics {
+                swarm_id: swarm,
+                metrics: ChewingMetrics {
+                    input_tokens_raw: 100,
+                    input_tokens_compressed: 25,
+                    llm_tokens_generated: 30,
+                    compression_ratio: 0.25,
+                    savings_tokens: 75,
+                    savings_ratio: 0.75,
+                    analyzer_latency_ms: 500,
+                    router_latency_ms: 2,
+                    compressor_latency_ms: 800,
+                    llm_latency_ms: 1500,
+                    verifier_latency_ms: 400,
+                    total_slm_latency_ms: 1700,
+                    total_pipeline_latency_ms: 3200,
+                    selected_llm: "claude_claude-sonnet-4-6".into(),
+                    router_reason: "highest quality".into(),
+                    router_estimated_cost_cents: 2,
+                },
                 ts: Utc::now(),
             },
             StreamEvent::SwarmFinished {

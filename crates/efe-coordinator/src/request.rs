@@ -15,6 +15,8 @@ use serde::{Deserialize, Serialize};
 use efe_nano_app_coordinator::types::router::TaskClass;
 use efe_nano_app_coordinator::types::{Budget, LlmMetadata};
 
+use crate::metrics::ChewingMetrics;
+
 /// Requête utilisateur pour la Mission A.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MissionARequest {
@@ -63,6 +65,15 @@ pub struct MissionAResponse {
 
     /// Hash BLAKE3 de la chaîne d'audit complète (preuve d'intégrité).
     pub audit_chain_hash: String,
+
+    /// Métriques de pré-mâchage (Sprint S4 R2) — `None` si la mission n'a pas
+    /// calculé les métriques (ex: tests offline avec mocks, ou versions
+    /// antérieures de Mission A).
+    ///
+    /// `#[serde(default)]` garantit la backward-compat : les `MissionAResponse`
+    /// sérialisés sans ce champ continuent à désérialiser correctement.
+    #[serde(default)]
+    pub chewing_metrics: Option<ChewingMetrics>,
 }
 
 /// Requête pour la Mission B (multi-LLM + vote).
