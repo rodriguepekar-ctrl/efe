@@ -42,18 +42,36 @@ while [[ $# -gt 0 ]]; do
 done
 
 # ─── Helper : taille humaine d'un fichier ───────────────────────────────────
+# IMPORTANT : on n'utilise PAS `printf %.1f` car le bash printf builtin sur
+# macOS dépend de LC_NUMERIC pour parser les floats — sur certaines locales
+# il rejette "6.7" avec "invalid number". On reste donc en arithmétique
+# entière pure : on calcule mb = bytes/MB et rem = (bytes*10/MB)%10 puis on
+# affiche "%d.%dM". Portable bash 3+ / zsh.
 file_size_human() {
     local path="$1"
     if [[ ! -f "${path}" ]]; then echo "-"; return; fi
+    local bytes
     if [[ "${EFE_SLM_OS}" == "macos" ]]; then
-        local bytes; bytes="$(stat -f%z "${path}" 2>/dev/null || echo 0)"
+        bytes="$(stat -f%z "${path}" 2>/dev/null || echo 0)"
     else
-        local bytes; bytes="$(stat -c%s "${path}" 2>/dev/null || echo 0)"
+        bytes="$(stat -c%s "${path}" 2>/dev/null || echo 0)"
     fi
-    if   (( bytes >= 1073741824 )); then printf "%.1fG" "$(echo "scale=1; ${bytes}/1073741824" | bc)"
-    elif (( bytes >= 1048576 ));    then printf "%.1fM" "$(echo "scale=1; ${bytes}/1048576" | bc)"
-    elif (( bytes >= 1024 ));       then printf "%.1fK" "$(echo "scale=1; ${bytes}/1024" | bc)"
-    else                                  printf "%dB" "${bytes}"
+
+    local whole rem
+    if (( bytes >= 1073741824 )); then
+        whole=$(( bytes / 1073741824 ))
+        rem=$(( (bytes * 10 / 1073741824) % 10 ))
+        printf "%d.%dG" "${whole}" "${rem}"
+    elif (( bytes >= 1048576 )); then
+        whole=$(( bytes / 1048576 ))
+        rem=$(( (bytes * 10 / 1048576) % 10 ))
+        printf "%d.%dM" "${whole}" "${rem}"
+    elif (( bytes >= 1024 )); then
+        whole=$(( bytes / 1024 ))
+        rem=$(( (bytes * 10 / 1024) % 10 ))
+        printf "%d.%dK" "${whole}" "${rem}"
+    else
+        printf "%dB" "${bytes}"
     fi
 }
 

@@ -101,7 +101,18 @@ run_step() {
         if (( rc != 0 )); then
             cat "${tmp}" >&2
         else
-            grep -E '\[(OK|INFO|WARN|ERR)\]' "${tmp}" | head -15 || true
+            # Mode succès condensé : affiche les lignes signal ([OK]/etc) PUIS
+            # un bloc lisible des dernières lignes du fichier (utile pour
+            # verify_inference.sh et bench.sh qui utilisent printf et donc
+            # n'émettent pas de tags [OK]/[INFO]).
+            local nb_signal
+            nb_signal="$(grep -cE '\[(OK|INFO|WARN|ERR)\]' "${tmp}" || true)"
+            if (( nb_signal > 0 )); then
+                grep -E '\[(OK|INFO|WARN|ERR)\]' "${tmp}" | head -15
+            else
+                # Pas de signal-tag → affiche tail brut (cap à 15 lignes).
+                tail -15 "${tmp}"
+            fi
         fi
         rm -f "${tmp}"
     fi
