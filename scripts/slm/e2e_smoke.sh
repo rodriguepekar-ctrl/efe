@@ -77,26 +77,35 @@ done
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # Helper : exécute un sous-script et abort en cas d'échec.
+#
+# IMPORTANT : on capture le code de retour avec le pattern `&& rc=0 || rc=$?`
+# pour neutraliser `set -e` (hérité de lib_common.sh). Sinon, un sous-script
+# qui retourne non-zero fait exit le script entier sans afficher l'erreur.
+#
+# Mode `passthrough=1` : ne redirige PAS stdout/stderr — utile pour les étapes
+# longues (download) où l'utilisateur veut voir la progress bar curl en live.
 run_step() {
     local label="$1"
-    shift
+    local passthrough="${2:-0}"
+    shift 2
     log_step "[${label}]"
-    if (( VERBOSE == 1 )); then
-        "$@"
-        local rc=$?
+
+    local rc=0
+    if (( VERBOSE == 1 )) || (( passthrough == 1 )); then
+        # Pass-through : pas de capture, l'utilisateur voit tout en live.
+        "$@" && rc=0 || rc=$?
     else
-        # Mode condensé : redirige stdout, garde stderr pour erreurs.
+        # Mode condensé : capture, affichage filtré post-coup.
         local tmp; tmp="$(mktemp)"
-        "$@" >"${tmp}" 2>&1
-        local rc=$?
+        "$@" >"${tmp}" 2>&1 && rc=0 || rc=$?
         if (( rc != 0 )); then
             cat "${tmp}" >&2
         else
-            # En mode silencieux, on affiche juste les lignes [OK]/[INFO].
             grep -E '\[(OK|INFO|WARN|ERR)\]' "${tmp}" | head -15 || true
         fi
         rm -f "${tmp}"
     fi
+
     if (( rc != 0 )); then
         log_err "Étape '${label}' a échoué (exit ${rc}). Smoke S1 STOPPED."
         exit "${rc}"
@@ -128,7 +137,12 @@ log_ok "Pre-flight OK"
 # ─── Étape 2 : Models ──────────────────────────────────────────────────────
 log_step "[2/8] Vérification modèles GGUF"
 if (( DOWNLOAD == 1 )); then
-    run_step "Download modèles manquants" "${SCRIPT_DIR}/download_models.sh"
+    # Pass-through OBLIGATOIRE : sinon la curl progress bar est invisible
+    # pendant 5-15 minutes → utilisateur croit que le script est gelé.
+    log_info "Téléchargement en cours (~4.1 GB cumulés, 5-15 min)…"
+    log_info "Tu vas voir 4 progress bars curl, une par modèle. Ne ferme PAS ce terminal."
+    echo ""
+    run_step "Download modèles manquants" 1 "${SCRIPT_DIR}/download_models.sh"
 else
     if ! "${SCRIPT_DIR}/download_models.sh" --check >/dev/null 2>&1; then
         log_err "Modèles manquants. Relance avec --download ou exécute :"
@@ -139,7 +153,8 @@ else
 fi
 
 # ─── Étape 3 : Start ───────────────────────────────────────────────────────
-run_step "[3/8] Démarrage 4 daemons llama-server" "${SCRIPT_DIR}/start.sh"
+# Pass-through pour le démarrage : utilisateur veut voir le polling /health en live.
+run_step "[3/8] Démarrage 4 daemons llama-server" 1 "${SCRIPT_DIR}/start.sh"
 
 # ─── Étape 4 : Health ──────────────────────────────────────────────────────
 log_step "[4/8] Health-check HTTP /health (× 4)"
@@ -151,11 +166,11 @@ fi
 log_ok "Health 4/4 OK"
 
 # ─── Étape 5 : Inference réelle ────────────────────────────────────────────
-run_step "[5/8] Inférence réelle (POST /completion × 4)" "${SCRIPT_DIR}/verify_inference.sh"
+run_step "[5/8] Inférence réelle (POST /completion × 4)" 0 "${SCRIPT_DIR}/verify_inference.sh"
 
 # ─── Étape 6 : Bench ───────────────────────────────────────────────────────
 if (( QUICK == 0 )); then
-    run_step "[6/8] Bench latence (${BENCH_REQUESTS} req × 4 robots)" \
+    run_step "[6/8] Bench latence (${BENCH_REQUESTS} req × 4 robots)" 0 \
         "${SCRIPT_DIR}/bench.sh" -n "${BENCH_REQUESTS}"
 else
     log_info "[6/8] Skip bench (--quick)"
@@ -169,7 +184,7 @@ log_info "À sourcer dans le shell qui lance le Coordinator :  source .env.slm"
 
 # ─── Étape 8 : Stop ────────────────────────────────────────────────────────
 if (( KEEP_RUNNING == 0 )); then
-    run_step "[8/8] Arrêt propre des daemons" "${SCRIPT_DIR}/stop.sh"
+    run_step "[8/8] Arrêt propre des daemons" 0 "${SCRIPT_DIR}/stop.sh"
 else
     log_info "[8/8] Daemons laissés UP (--keep-running)"
     "${SCRIPT_DIR}/status.sh"

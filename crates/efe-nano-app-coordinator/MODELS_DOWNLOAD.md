@@ -14,12 +14,16 @@ canoniques, leurs tailles, leurs licences, et la procédure de téléchargement.
 
 ## 1. Vue d'ensemble
 
-| Robot | Modèle | Quant. | Port | Taille | Licence |
-|---|---|---|---|---|---|
-| `analyzer` | [SmolLM2-360M-Instruct](https://huggingface.co/HuggingFaceTB/SmolLM2-360M-Instruct-GGUF) | Q5_K_M | 8090 | ~290 MB | Apache-2.0 |
-| `reformulator` | [Qwen3-0.6B](https://huggingface.co/Qwen/Qwen3-0.6B-GGUF) | Q5_K_M | 8091 | ~444 MB | Apache-2.0 |
-| `compressor` | [Llama-3.2-1B-Instruct](https://huggingface.co/bartowski/Llama-3.2-1B-Instruct-GGUF) | Q5_K_M | 8092 | ~912 MB | Llama 3.2 Community License |
-| `verifier` | [Phi-4-mini-instruct](https://huggingface.co/bartowski/Phi-4-mini-instruct-GGUF) | Q4_K_M | 8093 | ~2.5 GB | MIT |
+| Robot | Modèle | Quant. | Port | Taille | Licence | Repo HF |
+|---|---|---|---|---|---|---|
+| `analyzer` | SmolLM2-360M-Instruct | Q5_K_M | 8090 | ~290 MB | Apache-2.0 | [unsloth/SmolLM2-360M-Instruct-GGUF](https://huggingface.co/unsloth/SmolLM2-360M-Instruct-GGUF) |
+| `reformulator` | Qwen3-0.6B | Q5_K_M | 8091 | ~444 MB | Apache-2.0 | [unsloth/Qwen3-0.6B-GGUF](https://huggingface.co/unsloth/Qwen3-0.6B-GGUF) |
+| `compressor` | Llama-3.2-1B-Instruct | Q5_K_M | 8092 | ~912 MB | Llama 3.2 Community License | [bartowski/Llama-3.2-1B-Instruct-GGUF](https://huggingface.co/bartowski/Llama-3.2-1B-Instruct-GGUF) |
+| `verifier` | Phi-4-mini-instruct | Q4_K_M | 8093 | ~2.5 GB | MIT | [unsloth/Phi-4-mini-instruct-GGUF](https://huggingface.co/unsloth/Phi-4-mini-instruct-GGUF) |
+
+> **Note R2 S1 patch** : on privilégie les repos `unsloth/*` (validés HTTP 200 le 2026-05-27).
+> Les repos officiels HF (HuggingFaceTB, Qwen) sont souvent incomplets en Q5_K_M.
+> Le repo Bartowski Phi-4-mini est gated (401), unsloth est non-gated.
 
 **Total cumulé** : ~4.1 GB. Mémoire RAM requise pour les 4 chargés simultanément :
 ~5-6 GB (modèle + KV cache 2-4 K).
@@ -40,8 +44,8 @@ correspondant et mettre à jour `ROBOT_HF_URLS` dans `scripts/slm/lib_common.sh`
 ### Analyzer — SmolLM2-360M-Instruct Q5_K_M
 
 ```
-URL    : https://huggingface.co/HuggingFaceTB/SmolLM2-360M-Instruct-GGUF/resolve/main/smollm2-360m-instruct-q5_k_m.gguf
-Repo   : https://huggingface.co/HuggingFaceTB/SmolLM2-360M-Instruct-GGUF
+URL    : https://huggingface.co/unsloth/SmolLM2-360M-Instruct-GGUF/resolve/main/SmolLM2-360M-Instruct-Q5_K_M.gguf
+Repo   : https://huggingface.co/unsloth/SmolLM2-360M-Instruct-GGUF
 Taille : ~290 MB
 Licence: Apache-2.0
 ```
@@ -49,14 +53,17 @@ Licence: Apache-2.0
 Téléchargement manuel :
 ```bash
 curl -L -o models/analyzer.gguf \
-  https://huggingface.co/HuggingFaceTB/SmolLM2-360M-Instruct-GGUF/resolve/main/smollm2-360m-instruct-q5_k_m.gguf
+  https://huggingface.co/unsloth/SmolLM2-360M-Instruct-GGUF/resolve/main/SmolLM2-360M-Instruct-Q5_K_M.gguf
 ```
+
+> Note : le repo officiel `HuggingFaceTB/SmolLM2-360M-Instruct-GGUF` n'a que la
+> quantization Q8_0 (pas Q5_K_M). `unsloth/*` republie toutes les quants.
 
 ### Reformulator — Qwen3-0.6B Q5_K_M
 
 ```
-URL    : https://huggingface.co/Qwen/Qwen3-0.6B-GGUF/resolve/main/Qwen3-0.6B-Q5_K_M.gguf
-Repo   : https://huggingface.co/Qwen/Qwen3-0.6B-GGUF
+URL    : https://huggingface.co/unsloth/Qwen3-0.6B-GGUF/resolve/main/Qwen3-0.6B-Q5_K_M.gguf
+Repo   : https://huggingface.co/unsloth/Qwen3-0.6B-GGUF
 Taille : ~444 MB
 Licence: Apache-2.0
 ```
@@ -64,11 +71,12 @@ Licence: Apache-2.0
 Téléchargement manuel :
 ```bash
 curl -L -o models/reformulator.gguf \
-  https://huggingface.co/Qwen/Qwen3-0.6B-GGUF/resolve/main/Qwen3-0.6B-Q5_K_M.gguf
+  https://huggingface.co/unsloth/Qwen3-0.6B-GGUF/resolve/main/Qwen3-0.6B-Q5_K_M.gguf
 ```
 
-> Si Qwen3-0.6B-GGUF n'est pas (encore) publié officiellement par Alibaba, fallback :
-> `Qwen/Qwen2.5-0.5B-Instruct-GGUF/resolve/main/qwen2.5-0.5b-instruct-q5_k_m.gguf`.
+> Note : le repo officiel `Qwen/Qwen3-0.6B-GGUF` n'a que la quantization Q8_0.
+> Fallback si `unsloth/Qwen3-0.6B-GGUF` indisponible :
+> `bartowski/Qwen2.5-0.5B-Instruct-GGUF/resolve/main/Qwen2.5-0.5B-Instruct-Q5_K_M.gguf`.
 
 ### Compressor — Llama-3.2-1B-Instruct Q5_K_M
 
@@ -92,8 +100,8 @@ curl -L -o models/compressor.gguf \
 ### Verifier — Phi-4-mini-instruct Q4_K_M
 
 ```
-URL    : https://huggingface.co/bartowski/Phi-4-mini-instruct-GGUF/resolve/main/Phi-4-mini-instruct-Q4_K_M.gguf
-Repo   : https://huggingface.co/bartowski/Phi-4-mini-instruct-GGUF
+URL    : https://huggingface.co/unsloth/Phi-4-mini-instruct-GGUF/resolve/main/Phi-4-mini-instruct-Q4_K_M.gguf
+Repo   : https://huggingface.co/unsloth/Phi-4-mini-instruct-GGUF
 Taille : ~2.5 GB
 Licence: MIT
 ```
@@ -101,8 +109,11 @@ Licence: MIT
 Téléchargement manuel :
 ```bash
 curl -L -o models/verifier.gguf \
-  https://huggingface.co/bartowski/Phi-4-mini-instruct-GGUF/resolve/main/Phi-4-mini-instruct-Q4_K_M.gguf
+  https://huggingface.co/unsloth/Phi-4-mini-instruct-GGUF/resolve/main/Phi-4-mini-instruct-Q4_K_M.gguf
 ```
+
+> Note : le repo `bartowski/Phi-4-mini-instruct-GGUF` retourne HTTP 401 (gated).
+> Le repo `unsloth/*` est non-gated et propose les mêmes quantizations.
 
 ---
 

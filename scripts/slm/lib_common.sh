@@ -110,11 +110,16 @@ ROBOT_MODEL_LABELS=(
     "Llama-3.2-1B-Instruct Q5_K_M"
     "Phi-4-mini-instruct Q4_K_M"
 )
+# URLs validées HTTP 200 le 2026-05-27 (cf. tests dans le commit qui suit).
+# Convention adoptée : on privilégie `unsloth/*` quand disponible — repos
+# bien maintenus, non-gated, avec toutes les quantizations standards.
+# Repos officiels (HuggingFaceTB, Qwen) souvent incomplets en Q5_K_M ;
+# repos Bartowski parfois gated. Voir MODELS_DOWNLOAD.md pour alternatives.
 ROBOT_HF_URLS=(
-    "https://huggingface.co/HuggingFaceTB/SmolLM2-360M-Instruct-GGUF/resolve/main/smollm2-360m-instruct-q5_k_m.gguf"
-    "https://huggingface.co/Qwen/Qwen3-0.6B-GGUF/resolve/main/Qwen3-0.6B-Q5_K_M.gguf"
+    "https://huggingface.co/unsloth/SmolLM2-360M-Instruct-GGUF/resolve/main/SmolLM2-360M-Instruct-Q5_K_M.gguf"
+    "https://huggingface.co/unsloth/Qwen3-0.6B-GGUF/resolve/main/Qwen3-0.6B-Q5_K_M.gguf"
     "https://huggingface.co/bartowski/Llama-3.2-1B-Instruct-GGUF/resolve/main/Llama-3.2-1B-Instruct-Q5_K_M.gguf"
-    "https://huggingface.co/bartowski/Phi-4-mini-instruct-GGUF/resolve/main/Phi-4-mini-instruct-Q4_K_M.gguf"
+    "https://huggingface.co/unsloth/Phi-4-mini-instruct-GGUF/resolve/main/Phi-4-mini-instruct-Q4_K_M.gguf"
 )
 ROBOT_SIZES_MB=(290 444 912 2500)
 ROBOT_CTX_SIZES=(2048 2048 4096 4096)
