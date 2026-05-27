@@ -137,6 +137,11 @@ path = "tests/live_providers.rs"
 required-features = ["all-providers"]
 
 [[test]]
+name = "live_missions"
+path = "tests/live_missions.rs"
+required-features = ["all-providers"]
+
+[[test]]
 name = "unit_parse_claude"
 path = "tests/unit_parse_claude.rs"
 required-features = ["anthropic"]

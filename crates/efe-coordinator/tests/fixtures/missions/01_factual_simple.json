@@ -1,0 +1,8 @@
+{
+  "name": "factual_simple",
+  "task_class": "FactualQa",
+  "query": "Quelle est la capitale de la France ? Réponds en une seule phrase courte.",
+  "expected_keyword": "paris",
+  "expected_lang": "fr",
+  "comment": "Fixture R2 Sprint S2 — question factuelle vérifiable, robuste à la langue via lowercase(), courte pour cap < 1¢ sur Sonnet. Réutilisable en S3-S9 (le pré-mâchage doit produire le même résultat 'paris')."
+}
