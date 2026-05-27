@@ -97,21 +97,66 @@ pub async fn run_mission_b(
 
     let prompt_for_llms = if let Some(compressor) = &coord.clients.compressor {
         if req.user_text.len() > 500 {
+            // S5 R2 patch : émettre RobotStarted/RobotFinished + capturer
+            // l'erreur dans le bus si l'invoke échoue. Avant ce patch,
+            // un compressor qui fail était SWALLOW silencieusement
+            // (`unwrap_or_else(|_| req.user_text.clone())` retombait sur le
+            // texte original sans laisser de trace observable).
             let started_node = Instant::now();
+            let _ = coord
+                .bus
+                .publish(StreamEvent::RobotStarted {
+                    swarm_id,
+                    robot_id: "compressor".into(),
+                    ts: Utc::now(),
+                })
+                .await;
             let c = CompressorInput {
                 text: req.user_text.clone(),
                 target_words: 100,
                 must_preserve: vec![],
                 style: CompressionStyle::Extractive,
             };
-            let summary = compressor
-                .invoke(c, &ctx)
-                .await
-                .map(|o| o.summary)
-                .unwrap_or_else(|_| req.user_text.clone());
-            // S5 R2 : capture latency compressor (mutualisé pour les N LLMs).
-            chewing_metrics.compressor_latency_ms = started_node.elapsed().as_millis() as u64;
-            summary
+            let res = compressor.invoke(c, &ctx).await;
+            let latency = started_node.elapsed().as_millis() as u64;
+            chewing_metrics.compressor_latency_ms = latency;
+            match res {
+                Ok(out) => {
+                    let _ = coord
+                        .bus
+                        .publish(StreamEvent::RobotFinished {
+                            swarm_id,
+                            robot_id: "compressor".into(),
+                            success: true,
+                            latency_ms: latency,
+                            error: None,
+                            ts: Utc::now(),
+                        })
+                        .await;
+                    let _ = coord.blackboard.deposit(BlackboardEntry::new(
+                        "compressor",
+                        EntryKind::CompressedText,
+                        serde_json::json!({"summary": out.summary, "ratio": out.compression_ratio}),
+                    ));
+                    out.summary
+                }
+                Err(e) => {
+                    let _ = coord
+                        .bus
+                        .publish(StreamEvent::RobotFinished {
+                            swarm_id,
+                            robot_id: "compressor".into(),
+                            success: false,
+                            latency_ms: latency,
+                            error: Some(e.to_string()),
+                            ts: Utc::now(),
+                        })
+                        .await;
+                    // Fallback : on garde le user_text original (pas de compression).
+                    // Le savings sera 0 mais la mission continue avec la qualité préservée.
+                    req.user_text.clone()
+                }
+            }
         } else {
             req.user_text.clone()
         }
