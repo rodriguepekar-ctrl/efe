@@ -233,7 +233,11 @@ pub async fn run_mission_a(
             let started_node = Instant::now();
             let c_input = CompressorInput {
                 text: req.user_text.clone(),
-                target_words: 100,
+                // S5 R2 patch (symétrie avec mission_b.rs) : target_words=100
+                // était trop lâche, le modèle produisait des résumés ≈ même
+                // taille que l'input. 30 mots ≈ 30 tokens → savings ≈ 100,
+                // ratio ≈ 0.22. S4 avait passé par chance non-déterministe.
+                target_words: 30,
                 must_preserve: vec![],
                 style: CompressionStyle::Extractive,
             };

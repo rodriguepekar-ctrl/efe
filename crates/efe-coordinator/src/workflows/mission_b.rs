@@ -113,7 +113,11 @@ pub async fn run_mission_b(
                 .await;
             let c = CompressorInput {
                 text: req.user_text.clone(),
-                target_words: 100,
+                // S5 R2 patch D15 : target_words=100 donnait des résumés
+                // ≈ même taille que la fixture 547 chars (≈ 137 tokens raw).
+                // 30 mots ≈ 120 chars ≈ 30 tokens output → ratio ≈ 0.22,
+                // savings ≈ 100 tokens, ce qui se MULTIPLIE × 3 LLMs.
+                target_words: 30,
                 must_preserve: vec![],
                 style: CompressionStyle::Extractive,
             };
