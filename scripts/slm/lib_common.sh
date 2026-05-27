@@ -405,6 +405,40 @@ check_llama_server_version() {
     return 0
 }
 
+# Retourne l'horloge actuelle en NANOSECONDES depuis epoch (entier).
+#
+# Pourquoi cette fonction ? `date +%s%N` est une extension GNU non disponible
+# sur macOS BSD : le `%N` est retourné LITTÉRALEMENT (ex: "1779888620N"),
+# faisant crasher toute arithmétique bash subséquente avec "value too great
+# for base". Cette fonction garantit une horloge nanoseconde portable.
+ns_now() {
+    if [[ "${EFE_SLM_OS}" == "macos" ]]; then
+        # Python3 est garanti sur macOS 12.3+ (et installé via Homebrew sinon).
+        if command -v python3 >/dev/null 2>&1; then
+            python3 -c 'import time; print(time.time_ns())'
+        elif command -v gdate >/dev/null 2>&1; then
+            # Homebrew coreutils → gdate supporte %N comme GNU date.
+            gdate +%s%N
+        else
+            # Fallback secondes (perd la précision mais ne crashe pas).
+            echo "$(date +%s)000000000"
+        fi
+    else
+        # Linux : GNU date supporte %N nativement.
+        date +%s%N
+    fi
+}
+
+# Convertit un float (output de bc ou curl %{time_total}) en entier multiplié
+# par un facteur. Utilise awk pour éviter le bash printf builtin qui rejette
+# les floats sur certaines locales macOS ("printf: 6.7: invalid number").
+#
+# Exemple : float_to_int_ms 0.061082 → 61
+float_to_int_ms() {
+    local seconds="$1"
+    awk -v t="${seconds:-0}" 'BEGIN { printf "%d", t * 1000 }' 2>/dev/null || echo "0"
+}
+
 # Construit la liste des env vars pour le Coordinator (G6).
 # Affiche sur stdout les `export X=Y` à sourcer dans un shell.
 print_coordinator_env_exports() {

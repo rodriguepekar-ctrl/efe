@@ -79,7 +79,7 @@ measure_one() {
     local start_ns end_ns elapsed_ms
     local http_code
 
-    start_ns="$(date +%s%N 2>/dev/null || python3 -c 'import time; print(int(time.time()*1_000_000_000))')"
+    start_ns="$(ns_now)"
 
     http_code="$(curl -sS -o /dev/null -w '%{http_code}' \
         -m 60 \
@@ -87,14 +87,15 @@ measure_one() {
         -X POST "http://127.0.0.1:${port}/completion" \
         -d "${payload}" 2>/dev/null || echo "000")"
 
-    end_ns="$(date +%s%N 2>/dev/null || python3 -c 'import time; print(int(time.time()*1_000_000_000))')"
+    end_ns="$(ns_now)"
 
     if [[ "${http_code}" != "200" ]]; then
         echo "FAIL:${http_code}"
         return
     fi
 
-    elapsed_ms=$(( (end_ns - start_ns) / 1_000_000 ))
+    # 1_000_000 NON portable (bash 3.2 macOS rejette les literals avec _) → 1000000.
+    elapsed_ms=$(( (end_ns - start_ns) / 1000000 ))
     echo "${elapsed_ms}"
 }
 

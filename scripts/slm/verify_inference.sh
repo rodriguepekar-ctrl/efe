@@ -122,10 +122,11 @@ test_robot_inference() {
         reason="HTTP ${http_status}"
     fi
 
-    # Latence en ms (formatage).
+    # Latence en ms. Utilise float_to_int_ms (awk) au lieu de bash printf %.0f
+    # qui rejette les floats sur macOS dans certaines locales.
     local latency_ms="-"
     if [[ -n "${time_total}" ]]; then
-        latency_ms="$(printf "%.0f" "$(echo "${time_total} * 1000" | bc 2>/dev/null || echo 0)")"
+        latency_ms="$(float_to_int_ms "${time_total}")"
     fi
 
     if (( QUIET == 0 )); then
