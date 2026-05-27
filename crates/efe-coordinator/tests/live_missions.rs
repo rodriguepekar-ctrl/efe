@@ -42,7 +42,9 @@ use std::time::Duration;
 
 use efe_coordinator::llm::{LlmProvider, ProviderRegistry};
 use efe_coordinator::workflows::run_mission_a;
-use efe_coordinator::{ClaudeProvider, Coordinator, MissionARequest};
+use efe_coordinator::{
+    ClaudeProvider, Coordinator, MissionARequest, MissionBRequest,
+};
 use efe_nano_app_coordinator::types::router::TaskClass;
 use efe_nano_app_coordinator::types::{Budget, LlmMetadata};
 
@@ -1145,5 +1147,491 @@ async fn live_mission_a_full_pre_chewing_pipeline() {
         resp.latency_ms < 25_000,
         "C28: latency < 25 s (cap S4), got {} ms",
         resp.latency_ms
+    );
+}
+
+// ─── Helpers Sprint S5 (Mission B 3-LLM consensus + pré-mâchage mutualisé) ──
+
+/// Métadonnées par défaut pour Gemini Flash (cohérent avec R1b live data).
+fn default_gemini_metadata() -> LlmMetadata {
+    LlmMetadata {
+        cost_input_per_million: 8,
+        cost_output_per_million: 30,
+        p50_latency_ms: 800,
+        p99_latency_ms: 2500,
+        success_rate: 0.99,
+        capability_scores: HashMap::new(),
+        circuit_open: false,
+    }
+}
+
+/// Métadonnées par défaut pour GPT-4o (cohérent avec R1b live data).
+fn default_gpt_metadata() -> LlmMetadata {
+    LlmMetadata {
+        cost_input_per_million: 250,
+        cost_output_per_million: 1000,
+        p50_latency_ms: 900,
+        p99_latency_ms: 3000,
+        success_rate: 0.99,
+        capability_scores: HashMap::new(),
+        circuit_open: false,
+    }
+}
+
+/// Gate S5 : vérifie les 3 clés API (Anthropic + Google + OpenAI).
+/// Retourne `false` si l'une manque — le test skip avec message clair.
+fn all_three_api_keys_set() -> bool {
+    let anth = std::env::var("ANTHROPIC_API_KEY").is_ok();
+    let goog = std::env::var("GOOGLE_AI_KEY").is_ok();
+    let openai = std::env::var("OPENAI_API_KEY").is_ok();
+    if !anth {
+        eprintln!("  [env] ANTHROPIC_API_KEY missing");
+    }
+    if !goog {
+        eprintln!("  [env] GOOGLE_AI_KEY missing");
+    }
+    if !openai {
+        eprintln!("  [env] OPENAI_API_KEY missing");
+    }
+    anth && goog && openai
+}
+
+/// Construit un `MissionBRequest` avec 3 LLMs + sources Wikipédia.
+/// Vote uniforme (défaut), quorum None (= ceil(3/2) = 2).
+fn build_mission_b_request_3llm(
+    query: &str,
+    llm_ids: [&str; 3],
+    sources: Vec<(String, String)>,
+) -> MissionBRequest {
+    let mut metadata = HashMap::new();
+    metadata.insert(llm_ids[0].to_string(), default_claude_metadata());
+    metadata.insert(llm_ids[1].to_string(), default_gemini_metadata());
+    metadata.insert(llm_ids[2].to_string(), default_gpt_metadata());
+    MissionBRequest {
+        user_text: query.to_string(),
+        task_class: TaskClass::FactualQa,
+        llms: llm_ids.iter().map(|s| s.to_string()).collect(),
+        llm_metadata: metadata,
+        vote_weights: HashMap::new(), // uniform
+        quorum: None,                 // défaut ceil(N/2) = 2
+        candidate_sources: sources
+            .into_iter()
+            .map(|(id, text)| efe_coordinator::CandidateSourceRef { id, text })
+            .collect(),
+        max_total_latency: Duration::from_secs(60),
+    }
+}
+
+/// Construit un Coordinator avec les 3 providers réels + 4 nano-robots Phase 1
+/// (analyzer + compressor + verifier + router — reformulator/filter restent None).
+///
+/// Sprint S5 — testé en live avec les 3 vrais providers en parallèle.
+fn make_coord_for_mission_b_pipeline(
+    claude: Arc<dyn LlmProvider>,
+    gemini: Arc<dyn LlmProvider>,
+    gpt: Arc<dyn LlmProvider>,
+) -> Coordinator {
+    use efe_coordinator::CoordinatorClients;
+    use efe_nano_app_coordinator::clients::{
+        AnalyzerClient, CompressorClient, RouterClient, VerifierClient,
+    };
+
+    let analyzer = Arc::new(
+        AnalyzerClient::from_assets(analyzer_endpoint())
+            .expect("AnalyzerClient::from_assets — assets manquants ?"),
+    );
+    let compressor = Arc::new(
+        CompressorClient::from_assets(compressor_endpoint())
+            .expect("CompressorClient::from_assets — assets manquants ?"),
+    );
+    let verifier = Arc::new(
+        VerifierClient::from_assets(verifier_endpoint())
+            .expect("VerifierClient::from_assets — assets manquants ?"),
+    );
+    let router = Arc::new(RouterClient::new());
+
+    let clients = CoordinatorClients {
+        analyzer: Some(analyzer),
+        compressor: Some(compressor),
+        verifier: Some(verifier),
+        router: Some(router),
+        reformulator: None,
+        filter: None,
+    };
+
+    let registry = ProviderRegistry::new();
+    registry.register(claude);
+    registry.register(gemini);
+    registry.register(gpt);
+
+    Coordinator::builder()
+        .registry(registry)
+        .clients(clients)
+        .build()
+        .expect("coordinator builds with 3 providers + 4 robots")
+}
+
+// ─── Sprint S5 ── Mission B 3-LLM consensus + pré-mâchage MUTUALISÉ ─────────
+
+/// Test S5 : Mission B end-to-end avec **3 vrais providers**
+/// (Claude + Gemini + GPT) en parallèle, pré-mâchage **mutualisé** (1×
+/// compressor pour les 3 LLMs), vote Symphony, et `ChewingMetrics` qui
+/// quantifie le savings × N.
+///
+/// **C'est le sprint qui démontre l'argument économique multiplié de R2** :
+/// le savings de 85 % observé en S4 s'applique × 3 LLMs ici → savings cumulés
+/// énormes sur les tokens d'entrée envoyés aux gros LLMs.
+///
+/// 25 assertions D1-D25 (cf. doc architecture S5 §4).
+#[tokio::test]
+async fn live_mission_b_full_3llm_consensus_with_pre_chewing() {
+    use efe_coordinator::workflows::run_mission_b;
+    use efe_coordinator::{GeminiProvider, GptProvider};
+
+    // ── Gates en cascade ─────────────────────────────────────────────────
+    if !live_enabled() {
+        eprintln!("[skip] set EFE_LIVE_LLM=1 + 3 clés API");
+        return;
+    }
+    if !live_slm_enabled() {
+        eprintln!("[skip] set EFE_LIVE_SLM=1 (llama-server :8090/:8092/:8093 requis)");
+        return;
+    }
+    if !all_three_api_keys_set() {
+        eprintln!("[skip] 3 clés API requises : ANTHROPIC_API_KEY + GOOGLE_AI_KEY + OPENAI_API_KEY");
+        return;
+    }
+    if !full_pipeline_slm_alive().await {
+        eprintln!("[skip] analyzer/compressor/verifier not responding");
+        return;
+    }
+
+    // ── 1. Charge fixture (réutilise 03 — query > 500 chars) ─────────────
+    let fixture = load_fixture("03_factual_compressible.json");
+    let query = fixture["query"].as_str().expect("fixture.query");
+    assert!(
+        query.len() > 500,
+        "fixture.query DOIT faire > 500 chars (seuil compressor mission_b.rs), got {}",
+        query.len()
+    );
+    let expected_kw = fixture["expected_keyword"].as_str().expect("kw");
+    let expected_verdict = fixture["expected_verifier_verdict"]
+        .as_str()
+        .unwrap_or("SUPPORTED");
+    let expected_sim_min: f32 = fixture["expected_verifier_similarity_min"]
+        .as_f64()
+        .unwrap_or(0.3) as f32;
+    let expected_ratio_max: f32 = fixture["expected_compression_ratio_max"]
+        .as_f64()
+        .unwrap_or(0.7) as f32;
+    let expected_savings_min: u32 = fixture["expected_savings_tokens_min"]
+        .as_u64()
+        .unwrap_or(30) as u32;
+    let sources: Vec<(String, String)> = fixture["candidate_sources"]
+        .as_array()
+        .expect("fixture.candidate_sources")
+        .iter()
+        .map(|s| {
+            (
+                s["id"].as_str().unwrap().to_string(),
+                s["text"].as_str().unwrap().to_string(),
+            )
+        })
+        .collect();
+
+    // ── 2. 3 providers réels ─────────────────────────────────────────────
+    let claude = Arc::new(
+        ClaudeProvider::from_env().expect("ANTHROPIC_API_KEY"),
+    );
+    let gemini = Arc::new(
+        GeminiProvider::from_env().expect("GOOGLE_AI_KEY"),
+    );
+    let gpt = Arc::new(
+        GptProvider::from_env().expect("OPENAI_API_KEY"),
+    );
+    let claude_id = claude.id();
+    let gemini_id = gemini.id();
+    let gpt_id = gpt.id();
+
+    // ── 3. Coordinator avec 3 providers + 4 nano-robots ─────────────────
+    let coord = make_coord_for_mission_b_pipeline(claude, gemini, gpt);
+
+    eprintln!("=== Mission B 3-LLM consensus + pré-mâchage MUTUALISÉ ===");
+    eprintln!(
+        "  query_raw      : \"{}…\" ({} chars)",
+        &query[..80.min(query.len())],
+        query.len()
+    );
+    eprintln!("  3 LLMs         :");
+    eprintln!("    • {claude_id}");
+    eprintln!("    • {gemini_id}");
+    eprintln!("    • {gpt_id}");
+    eprintln!("  4 robots actifs: analyzer + compressor + verifier + router");
+    eprintln!("  candidate_srcs : {}", sources.len());
+
+    // ── 4. Subscribe bus ─────────────────────────────────────────────────
+    let (_token, mut rx) = coord.subscribe(Some("s5-mission-b-test"));
+
+    // ── 5. Build MissionBRequest avec 3 LLMs ─────────────────────────────
+    let req = build_mission_b_request_3llm(
+        query,
+        [&claude_id, &gemini_id, &gpt_id],
+        sources.clone(),
+    );
+
+    // ── 6. Run Mission B + mesure wall-clock ────────────────────────────
+    let started = std::time::Instant::now();
+    let resp = run_mission_b(&coord, req)
+        .await
+        .expect("mission_b should succeed (3 LLMs + 4 robots)");
+    let wall_ms = started.elapsed().as_millis() as u64;
+
+    // ── 7. Drain events (timeout 400 ms — beaucoup d'events en Mission B) ─
+    let mut tags: Vec<&'static str> = Vec::new();
+    while let Ok(Some(ev)) =
+        tokio::time::timeout(Duration::from_millis(400), rx.recv()).await
+    {
+        tags.push(ev.tag());
+    }
+
+    // ── 8. Extract chewing_metrics ───────────────────────────────────────
+    let metrics = resp
+        .chewing_metrics
+        .as_ref()
+        .expect("D13: MissionBResponse.chewing_metrics doit être Some(...) en S5");
+
+    // ── 9. Affichage humain ──────────────────────────────────────────────
+    let audit_head = &resp.audit_chain_hash[..8.min(resp.audit_chain_hash.len())];
+    let audit_tail_start = resp.audit_chain_hash.len().saturating_sub(8);
+    let audit_tail = &resp.audit_chain_hash[audit_tail_start..];
+    eprintln!();
+    eprintln!("  ── Phase 1 : Pré-mâchage MUTUALISÉ ──");
+    eprintln!("    analyzer     : {} ms", metrics.analyzer_latency_ms);
+    eprintln!(
+        "    compressor   : {} ms   ({} → {} tokens, ratio={:.3}, savings={} tokens {:.0}%)",
+        metrics.compressor_latency_ms,
+        metrics.input_tokens_raw,
+        metrics.input_tokens_compressed,
+        metrics.compression_ratio,
+        metrics.savings_tokens,
+        metrics.savings_ratio * 100.0,
+    );
+    eprintln!(
+        "    ► Le savings de {} tokens s'applique × 3 LLMs en aval ◄",
+        metrics.savings_tokens
+    );
+    eprintln!(
+        "    Savings cumulés : {} × 3 = {} tokens d'entrée économisés",
+        metrics.savings_tokens,
+        metrics.savings_tokens * 3
+    );
+    eprintln!();
+    eprintln!("  ── Phase 2 : Fan-out 3 LLMs PARALLÈLE ──");
+    eprintln!(
+        "    llm_latency_ms (max des 3)        : {} ms",
+        metrics.llm_latency_ms
+    );
+    eprintln!(
+        "    llm_tokens_generated (somme des 3): {}",
+        metrics.llm_tokens_generated
+    );
+    eprintln!("    total_cost_cents (somme des 3)    : {} ¢", resp.total_cost_cents);
+    eprintln!();
+    eprintln!("  ── Phase 3 : Vote Symphony ──");
+    eprintln!("    winner_llm   : {}", resp.winner_llm);
+    eprintln!("    winner_score : {:.2}", resp.winner_score);
+    eprintln!("    per_llm_scores ({}):", resp.per_llm_scores.len());
+    for (id, score) in &resp.per_llm_scores {
+        eprintln!("      • {id} → {score:.2}");
+    }
+    eprintln!();
+    eprintln!("  ── Phase 4 : Verifier post-vote ──");
+    eprintln!("    verifier     : {} ms", metrics.verifier_latency_ms);
+    if let Some(v) = resp.verdicts.first() {
+        eprintln!("    verdict      : {}", v.verdict);
+        eprintln!("    similarity   : {:.3}", v.similarity);
+        eprintln!("    best_source  : {:?}", v.best_source_id);
+    }
+    eprintln!();
+    eprintln!("  ── Mission B Response ──");
+    eprintln!("    final_text   : {:?}", resp.final_text);
+    eprintln!(
+        "    total_pipeline_latency_ms : {} (wall_clock = {})",
+        metrics.total_pipeline_latency_ms, wall_ms
+    );
+    eprintln!(
+        "    audit_hash   : {audit_head}…{audit_tail} ({} chars)",
+        resp.audit_chain_hash.len()
+    );
+    eprintln!("    events_seen ({}) : VOTE_RESOLVED in {}, PRE_CHEWING_METRICS in {}",
+        tags.len(),
+        tags.contains(&"VOTE_RESOLVED"),
+        tags.contains(&"PRE_CHEWING_METRICS"),
+    );
+
+    // ── 10. Assertions D1-D25 ────────────────────────────────────────────
+
+    // D1 — final_text non vide
+    assert!(!resp.final_text.is_empty(), "D1: final_text non vide");
+
+    // D2 — convergence factuelle "paris"
+    assert!(
+        resp.final_text.to_lowercase().contains(expected_kw),
+        "D2: contient '{expected_kw}', got {:?}",
+        resp.final_text
+    );
+
+    // D3 — winner_llm est un des 3 réels
+    let valid_winners = [claude_id.as_str(), gemini_id.as_str(), gpt_id.as_str()];
+    assert!(
+        valid_winners.contains(&resp.winner_llm.as_str()),
+        "D3: winner_llm doit être l'un des 3 candidats, got {:?}",
+        resp.winner_llm
+    );
+
+    // D4 — per_llm_scores contient les 3 LLMs
+    assert_eq!(
+        resp.per_llm_scores.len(),
+        3,
+        "D4: 3 scores attendus, got {}",
+        resp.per_llm_scores.len()
+    );
+
+    // D5 — tous les scores per-LLM > 0 (= les 3 ont produit un ballot valide)
+    for (id, score) in &resp.per_llm_scores {
+        assert!(
+            *score > 0.0,
+            "D5: tous scores > 0, mais {id} = {score}"
+        );
+    }
+
+    // D6 — cap coût total (3 LLMs)
+    assert!(
+        resp.total_cost_cents <= 10,
+        "D6: total cost ≤ 10¢ (somme 3 LLMs), got {}¢",
+        resp.total_cost_cents
+    );
+
+    // D7 — coût au moins 1¢ (= vrais providers, pas mocks)
+    assert!(
+        resp.total_cost_cents >= 1,
+        "D7: total cost ≥ 1¢ (sinon mocks ?), got {}¢",
+        resp.total_cost_cents
+    );
+
+    // D8 — cap deadline
+    assert!(
+        resp.latency_ms < 30_000,
+        "D8: latency < 30s, got {}ms",
+        resp.latency_ms
+    );
+
+    // D9 — audit hash 64 chars
+    assert_eq!(resp.audit_chain_hash.len(), 64, "D9: audit hash 64 chars");
+
+    // D10 — verifier a tourné
+    assert!(!resp.verdicts.is_empty(), "D10: verdicts non vide");
+    let v = &resp.verdicts[0];
+
+    // D11 — verdict SUPPORTED
+    assert_eq!(
+        v.verdict.to_uppercase(),
+        expected_verdict.to_uppercase(),
+        "D11: verdict '{expected_verdict}' attendu, got '{}'",
+        v.verdict
+    );
+
+    // D12 — similarity ≥ seuil
+    assert!(
+        v.similarity >= expected_sim_min,
+        "D12: similarity ≥ {expected_sim_min}, got {}",
+        v.similarity
+    );
+
+    // D13 — chewing_metrics.is_some()
+    // (déjà vérifié via .expect() au début)
+    assert!(resp.chewing_metrics.is_some(), "D13: chewing_metrics Some");
+
+    // D14 — input_tokens_raw ≥ 100
+    assert!(
+        metrics.input_tokens_raw >= 100,
+        "D14: input_tokens_raw ≥ 100, got {}",
+        metrics.input_tokens_raw
+    );
+
+    // D15 — compressed < raw
+    assert!(
+        metrics.input_tokens_compressed < metrics.input_tokens_raw,
+        "D15: compressed < raw ({} < {})",
+        metrics.input_tokens_compressed,
+        metrics.input_tokens_raw
+    );
+
+    // D16 — compression_ratio ≤ cap fixture
+    assert!(
+        metrics.compression_ratio <= expected_ratio_max,
+        "D16: compression_ratio ≤ {expected_ratio_max}, got {:.3}",
+        metrics.compression_ratio
+    );
+
+    // D17 — savings_tokens ≥ min fixture
+    assert!(
+        metrics.savings_tokens >= expected_savings_min,
+        "D17: savings_tokens ≥ {expected_savings_min}, got {}",
+        metrics.savings_tokens
+    );
+
+    // D18 — compressor a tourné (mutualisé, 1× pour les 3 LLMs)
+    assert!(
+        metrics.compressor_latency_ms > 0 && metrics.compressor_latency_ms < 10_000,
+        "D18: 0 < compressor_latency < 10s, got {}ms",
+        metrics.compressor_latency_ms
+    );
+
+    // D19 — llm_latency (max des 3) < 15s (parallèle, pas somme)
+    assert!(
+        metrics.llm_latency_ms < 15_000,
+        "D19: llm_latency_ms (max des 3) < 15s, got {}ms",
+        metrics.llm_latency_ms
+    );
+
+    // D20 — selected_llm == winner_llm (cohérence)
+    assert_eq!(
+        metrics.selected_llm, resp.winner_llm,
+        "D20: selected_llm should == winner_llm"
+    );
+
+    // D21 — event VOTE_RESOLVED
+    assert!(
+        tags.contains(&"VOTE_RESOLVED"),
+        "D21: VOTE_RESOLVED missing, got tags={tags:?}"
+    );
+
+    // D22 — event PRE_CHEWING_METRICS (S5 NEW)
+    assert!(
+        tags.contains(&"PRE_CHEWING_METRICS"),
+        "D22: PRE_CHEWING_METRICS missing, got tags={tags:?}"
+    );
+
+    // D23 — events ROBOT_FINISHED ≥ 2 (analyzer + compressor + verifier)
+    let robot_finished_count =
+        tags.iter().filter(|t| **t == "ROBOT_FINISHED").count();
+    assert!(
+        robot_finished_count >= 2,
+        "D23: ROBOT_FINISHED ≥ 2, got {robot_finished_count}"
+    );
+
+    // D24 — wall-clock sanity
+    assert!(
+        wall_ms < 35_000,
+        "D24: wall_clock < 35s, got {wall_ms}ms"
+    );
+
+    // D25 — MULTIPLICATIF : savings × 3 LLMs (= économie cumulée)
+    let cumulative_savings = metrics.savings_tokens * 3;
+    assert!(
+        cumulative_savings >= 60,
+        "D25: cumulative_savings (savings × 3 LLMs) ≥ 60, got {cumulative_savings}\n\
+         → démonstration de la multiplication économique : 1× compressor pour 3 LLMs payants"
     );
 }

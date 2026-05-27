@@ -124,6 +124,24 @@ pub struct MissionBResponse {
     /// Score de chaque LLM ayant participé (ordre = paramètres).
     pub per_llm_scores: HashMap<String, f32>,
 
+    /// Métriques de pré-mâchage **mutualisé** (Sprint S5 R2) — `None` si la
+    /// mission n'a pas calculé les métriques (mocks offline anciens).
+    ///
+    /// En Mission B, le compressor tourne **1× seulement** mais son output est
+    /// envoyé aux N LLMs en parallèle. Les économies sont donc multipliées :
+    /// `savings_tokens × N` est l'économie cumulée sur l'ensemble des LLMs.
+    ///
+    /// - `llm_latency_ms` = `max` des N latences (fan-out parallèle, pas somme)
+    /// - `llm_tokens_generated` = somme des tokens output des N LLMs
+    /// - `selected_llm` = `winner_llm` (LLM gagnant du vote Symphony, pas du
+    ///   router — Mission B n'utilise pas le router)
+    /// - `router_*` = vides (Mission B appelle tous les LLMs sans choisir)
+    ///
+    /// `#[serde(default)]` garantit la backward-compat avec des
+    /// `MissionBResponse` sérialisés pré-S5.
+    #[serde(default)]
+    pub chewing_metrics: Option<ChewingMetrics>,
+
     /// Coût agrégé (cents).
     pub total_cost_cents: u32,
 

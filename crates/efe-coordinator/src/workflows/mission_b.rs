@@ -21,11 +21,16 @@ use crate::coordinator::Coordinator;
 use crate::error::{CoordError, CoordResult};
 use crate::events::{MissionTag, StreamEvent};
 use crate::llm::LlmCall;
+use crate::metrics::ChewingMetrics;
 use crate::request::{FactCheck, MissionBRequest, MissionBResponse};
 use crate::vote::{Ballot, VoteEngine};
 
 /// Exécute la Mission B : pré-mâcher une fois, fan-out vers N LLMs en
 /// parallèle, agréger via vote pondéré, fact-check le winner.
+///
+/// `field_reassign_with_default` : pattern voulu — accumulation
+/// incrémentale des métriques par phase (cf. mission_a.rs).
+#[allow(clippy::field_reassign_with_default)]
 pub async fn run_mission_b(
     coord: &Coordinator,
     req: MissionBRequest,
@@ -37,6 +42,12 @@ pub async fn run_mission_b(
     let started = Instant::now();
     let swarm_id = Uuid::now_v7();
     let mut audit_entries: Vec<Uuid> = vec![];
+
+    // ── Sprint S5 R2 : ChewingMetrics mutualisé (1 compressor × N LLMs) ─
+    // Initialisation des tokens d'entrée bruts (avant pré-mâchage).
+    // Les latences par phase seront capturées incrémentalement au fil des étapes.
+    let mut chewing_metrics = ChewingMetrics::default();
+    chewing_metrics.input_tokens_raw = ChewingMetrics::estimate_tokens(&req.user_text);
 
     let _ = coord
         .bus
@@ -70,6 +81,7 @@ pub async fn run_mission_b(
         };
         let success = analyzer.invoke(input, &ctx).await.is_ok();
         let latency = started_node.elapsed().as_millis() as u64;
+        chewing_metrics.analyzer_latency_ms = latency;
         let _ = coord
             .bus
             .publish(StreamEvent::RobotFinished {
@@ -85,23 +97,33 @@ pub async fn run_mission_b(
 
     let prompt_for_llms = if let Some(compressor) = &coord.clients.compressor {
         if req.user_text.len() > 500 {
+            let started_node = Instant::now();
             let c = CompressorInput {
                 text: req.user_text.clone(),
                 target_words: 100,
                 must_preserve: vec![],
                 style: CompressionStyle::Extractive,
             };
-            compressor
+            let summary = compressor
                 .invoke(c, &ctx)
                 .await
                 .map(|o| o.summary)
-                .unwrap_or_else(|_| req.user_text.clone())
+                .unwrap_or_else(|_| req.user_text.clone());
+            // S5 R2 : capture latency compressor (mutualisé pour les N LLMs).
+            chewing_metrics.compressor_latency_ms = started_node.elapsed().as_millis() as u64;
+            summary
         } else {
             req.user_text.clone()
         }
     } else {
         req.user_text.clone()
     };
+
+    // S5 R2 : capture tokens compressés (envoyés en parallèle aux N LLMs).
+    // Le savings de `raw - compressed` s'applique × N (1 compressor pour tous).
+    chewing_metrics.input_tokens_compressed =
+        ChewingMetrics::estimate_tokens(&prompt_for_llms);
+    chewing_metrics.recompute_savings();
 
     // ── Étape 2 : fan-out vers N LLMs en streaming parallèle ─────────
     let llm_call = LlmCall {
@@ -171,6 +193,13 @@ pub async fn run_mission_b(
         ));
     }
 
+    // S5 R2 : agrégats LLM en Mission B.
+    // - latency = MAX des N (fan-out parallèle, pas somme)
+    // - tokens_generated = SOMME des N (chaque LLM a produit ses tokens)
+    chewing_metrics.llm_latency_ms = responses.iter().map(|r| r.latency_ms).max().unwrap_or(0);
+    chewing_metrics.llm_tokens_generated =
+        responses.iter().map(|r| r.tokens_generated).sum();
+
     // ── Étape 3 : vote pondéré ───────────────────────────────────────
     let ballots: Vec<Ballot> = responses
         .iter()
@@ -194,6 +223,11 @@ pub async fn run_mission_b(
         VoteEngine::new(req.vote_weights.clone(), success_rates)
     };
     let outcome = vote_engine.tally(&ballots, quorum)?;
+
+    // S5 R2 : en Mission B, selected_llm = winner du vote Symphony (pas du
+    // router, qui n'est pas utilisé). router_reason reste vide car le router
+    // nano-robot n'a pas tourné — c'est le VoteEngine qui sélectionne.
+    chewing_metrics.selected_llm = outcome.winner.clone();
 
     let _ = coord
         .bus
@@ -222,7 +256,12 @@ pub async fn run_mission_b(
                     .collect(),
                 strictness: VerifierStrictness::Standard,
             };
-            if let Ok(out) = verifier.invoke(v_input, &ctx).await {
+            // S5 R2 : instrumenter latence verifier.
+            let verifier_started = Instant::now();
+            let res = verifier.invoke(v_input, &ctx).await;
+            chewing_metrics.verifier_latency_ms =
+                verifier_started.elapsed().as_millis() as u64;
+            if let Ok(out) = res {
                 let verdict_str = format!("{:?}", out.verdict).to_uppercase();
                 let severity_str = format!("{:?}", out.severity).to_uppercase();
                 let _ = coord
@@ -256,6 +295,27 @@ pub async fn run_mission_b(
     let audit_hash = super::audit_chain_hash(&audit_entries);
 
     let total_cost: u32 = responses.iter().map(|r| r.cost_cents).sum();
+
+    // ── Sprint S5 R2 : finalisation des ChewingMetrics ────────────────
+    // À ce point :
+    //   - analyzer/compressor/verifier latencies déjà trackées
+    //   - llm_latency_ms = max(N) déjà calculé
+    //   - llm_tokens_generated = sum(N) déjà calculé
+    //   - selected_llm = winner du vote déjà setté
+    // On finalise les agrégats globaux et on émet l'event PRE_CHEWING_METRICS
+    // juste avant SwarmFinished (cohérent avec Mission A).
+    chewing_metrics.total_pipeline_latency_ms = started.elapsed().as_millis() as u64;
+    chewing_metrics.recompute_total_slm_latency();
+
+    let _ = coord
+        .bus
+        .publish(StreamEvent::PreChewingMetrics {
+            swarm_id,
+            metrics: chewing_metrics.clone(),
+            ts: Utc::now(),
+        })
+        .await;
+
     let resp = MissionBResponse {
         final_text: outcome.winner_text,
         winner_llm: outcome.winner,
@@ -265,6 +325,7 @@ pub async fn run_mission_b(
         latency_ms: started.elapsed().as_millis() as u64,
         verdicts,
         audit_chain_hash: audit_hash.clone(),
+        chewing_metrics: Some(chewing_metrics),
     };
 
     let _ = coord
