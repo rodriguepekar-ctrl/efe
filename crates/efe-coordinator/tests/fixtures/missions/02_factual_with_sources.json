@@ -19,5 +19,15 @@
   "expected_analyzer_intent": "Factual",
   "expected_analyzer_language": "Fr",
   "expected_analyzer_min_entities": 1,
-  "comment": "Fixture R2 Sprint S3 — étend 01_factual_simple avec 2 sources Wikipédia (FR + admin) pour activer le verifier. Le LLM dira 'Paris' qui matche les 2 sources, donc verdict SUPPORTED attendu avec similarity > 0.3 (Phi-4-mini Q4 sur courts textes français)."
+  "comment": "Fixture R2 Sprint S3 — étend 01_factual_simple avec 2 sources Wikipédia (FR + admin) pour activer le verifier. Le LLM dira 'Paris' qui matche les 2 sources, donc verdict SUPPORTED attendu avec similarity > 0.3 (Phi-4-mini Q4 sur courts textes français).",
+
+  "_notes_internal": {
+    "asserted_by_s3": [
+      "expected_keyword", "expected_verifier_verdict", "expected_verifier_similarity_min"
+    ],
+    "aspirational_for_s4plus": [
+      "expected_analyzer_intent", "expected_analyzer_language", "expected_analyzer_min_entities"
+    ],
+    "aspirational_note": "Ces 3 champs analyzer_* sont là pour la cohérence du format de fixture (cf. README.md format S2 vs S3-S9). Ils ne sont PAS encore assertés en S3 car MissionAResponse n'expose pas directement AnalyzerOutput — l'output va dans la blackboard sous forme de phéromones. En S4, on aura accès via les events PHEROMONE_DEPOSITED ou via une extension de MissionAResponse."
+  }
 }
