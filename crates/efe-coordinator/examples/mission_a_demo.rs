@@ -69,6 +69,7 @@ async fn main() -> anyhow::Result<()> {
         },
         candidate_sources: vec![],
         max_total_latency: Duration::from_secs(5),
+        task_class_scoring_table: None,
     };
     let resp = run_mission_a(&coord, req).await?;
 

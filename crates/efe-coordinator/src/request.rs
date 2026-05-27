@@ -8,12 +8,13 @@
 //! - [`SpeculativeRequest`] / [`SpeculativeResponse`] — drafter/verifier.
 
 use std::collections::HashMap;
+use std::sync::Arc;
 use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
 
 use efe_nano_app_coordinator::types::router::TaskClass;
-use efe_nano_app_coordinator::types::{Budget, LlmMetadata};
+use efe_nano_app_coordinator::types::{Budget, LlmMetadata, TaskClassScoringTable};
 
 use crate::metrics::ChewingMetrics;
 
@@ -43,6 +44,68 @@ pub struct MissionARequest {
     /// Deadline globale de la mission.
     #[serde(default = "default_deadline")]
     pub max_total_latency: Duration,
+
+    /// **Sprint S6 R2** — Table de scoring statique optionnelle.
+    ///
+    /// Si présent, override `coord.clients.router` (qui utilise des poids
+    /// uniformes 1.0/1.0/1.0) avec un `RouterClient::for_task_class(...)`
+    /// construit à la volée dans `run_mission_a`. C'est ce qui permet à
+    /// FactualQa de router vers Gemini (cost-driven) tandis que Code route
+    /// vers Claude (quality-driven), à partir de la même invocation
+    /// utilisateur.
+    ///
+    /// `#[serde(skip)]` : la table est versionnée + chargée en mémoire au
+    /// démarrage de l'app. Inutile de la roundtripper dans les payloads
+    /// JSON ; l'audit chain trace déjà le `router.reason` (cf. S5).
+    ///
+    /// `Arc` : permet le partage cheap entre Mission A et Mission B sans
+    /// clone profond, et entre threads (fan-out parallèle Mission B).
+    #[serde(skip)]
+    pub task_class_scoring_table: Option<Arc<TaskClassScoringTable>>,
+}
+
+impl MissionARequest {
+    /// **Sprint S6 R2** — Helper : construit une `MissionARequest` avec la
+    /// table de scoring par défaut (3 LLMs : Claude + Gemini + GPT, 6
+    /// task_class calibrés).
+    ///
+    /// Évite au caller de remplir manuellement `llm_metadata` et `budget`.
+    /// `budget` est défini à 50 ¢ / 30 s / qualité 0 (non-contraignant).
+    ///
+    /// Le caller peut toujours patcher les champs après construction :
+    ///
+    /// ```ignore
+    /// let mut req = MissionARequest::with_default_scoring(
+    ///     "Écris une fonction Rust pour fibonacci".to_string(),
+    ///     TaskClass::Code,
+    ///     vec!["claude_…".into(), "gemini_…".into(), "gpt_…".into()],
+    /// );
+    /// req.budget.max_cost_cents = 10;  // override : cap budget
+    /// req.candidate_sources = my_sources;  // ajoute fact-check
+    /// ```
+    #[must_use]
+    pub fn with_default_scoring(
+        user_text: String,
+        task_class: TaskClass,
+        available_llms: Vec<String>,
+    ) -> Self {
+        let table = TaskClassScoringTable::default_3llm_table();
+        let llm_metadata = table.build_metadata_map(&available_llms, task_class);
+        Self {
+            user_text,
+            task_class,
+            available_llms,
+            llm_metadata,
+            budget: Budget {
+                max_cost_cents: 50,
+                max_latency_ms: 30_000,
+                min_quality_score: 0.0,
+            },
+            candidate_sources: vec![],
+            max_total_latency: Duration::from_secs(30),
+            task_class_scoring_table: Some(Arc::new(table)),
+        }
+    }
 }
 
 /// Réponse finale produite par la Mission A.
@@ -261,6 +324,7 @@ mod tests {
             },
             candidate_sources: vec![],
             max_total_latency: Duration::from_secs(10),
+            task_class_scoring_table: None,
         };
         let s = serde_json::to_string(&req).unwrap();
         let back: MissionARequest = serde_json::from_str(&s).unwrap();

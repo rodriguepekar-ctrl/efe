@@ -1,0 +1,10 @@
+{
+  "name": "creative_writing",
+  "task_class": "Creative",
+  "query": "Imagine un dialogue absurde et drôle entre un poulpe philosophe et un grille-pain existentialiste, en exactement 5 répliques courtes alternées. Commence par le poulpe.",
+  "expected_keyword": "poulpe",
+  "expected_lang": "fr",
+  "expected_route": "gpt_gpt-4o",
+  "expected_route_justification_keyword": "p50=",
+  "comment": "Fixture S6 — TaskClass::Creative, doit router vers GPT-4o (capability 0.93 vs 0.88 Claude vs 0.80 Gemini — GPT-4o excellent en style narratif + variété). Weights Pareto pour Creative : (q=1.5, l=1.0, c=1.0) — balanced, qualité légèrement prioritaire."
+}

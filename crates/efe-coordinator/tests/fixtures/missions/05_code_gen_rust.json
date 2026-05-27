@@ -1,0 +1,10 @@
+{
+  "name": "code_gen_rust",
+  "task_class": "Code",
+  "query": "Écris une fonction Rust 'fn factorial(n: u64) -> u64' qui calcule la factorielle de n avec gestion de l'overflow via checked_mul, et retourne 0 en cas de débordement. Inclus aussi un test #[test].",
+  "expected_keyword": "factorial",
+  "expected_lang": "rust",
+  "expected_route": "claude_claude-sonnet-4-6",
+  "expected_route_justification_keyword": "p50=",
+  "comment": "Fixture S6 — TaskClass::Code, doit router vers Claude (HumanEval+ ~89% vs 79% GPT-4o, 72% Gemini Flash). Weights Pareto pour Code : (q=2.5, l=0.5, c=0.2) — qualité strongly dominante, coût soft pour ne pas laisser Gemini gagner sur l'écart de prix x30."
+}

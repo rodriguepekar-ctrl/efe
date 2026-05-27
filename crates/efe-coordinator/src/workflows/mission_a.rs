@@ -7,6 +7,7 @@ use std::time::Instant;
 use chrono::Utc;
 use uuid::Uuid;
 
+use efe_nano_app_coordinator::clients::router::RouterClient;
 use efe_nano_app_coordinator::types::{
     AnalyzerInput, CompressionStyle, CompressorInput, RouterInput, TaskDescription,
     VerifierInput, VerifierStrictness,
@@ -143,7 +144,22 @@ pub async fn run_mission_a(
     }
 
     // ── Étape 2 : Router ──────────────────────────────────────────────
-    let selected_llm = if let Some(router) = &coord.clients.router {
+    //
+    // S6 R2 : si la requête fournit une `task_class_scoring_table`, on
+    // construit un `RouterClient` tuné pour la `task_class` à la volée
+    // (poids Pareto = ceux du `weights_per_task` de la table). Sinon on
+    // utilise le router instancié au démarrage du Coordinator (poids
+    // uniformes 1.0/1.0/1.0).
+    //
+    // `RouterClient: Copy` (3 × f32 = 12 bytes) → le binding owned est
+    // trivialement déplaçable, pas de coût de clone Arc.
+    let router_for_call: Option<RouterClient> =
+        if let Some(table) = req.task_class_scoring_table.as_ref() {
+            Some(RouterClient::for_task_class(table.as_ref(), req.task_class))
+        } else {
+            coord.clients.router.as_deref().copied()
+        };
+    let selected_llm = if let Some(router) = router_for_call.as_ref() {
         let _ = coord
             .bus
             .publish(StreamEvent::RobotStarted {

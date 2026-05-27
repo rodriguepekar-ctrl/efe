@@ -44,6 +44,7 @@ async fn mission_a_runs_with_mock_llm_only() {
         },
         candidate_sources: vec![],
         max_total_latency: Duration::from_secs(5),
+        task_class_scoring_table: None,
     };
     let resp = run_mission_a(&coord, req).await.unwrap();
     assert_eq!(resp.llm_used, "claude_mock");
@@ -74,6 +75,7 @@ async fn mission_a_publishes_swarm_started_and_finished() {
         },
         candidate_sources: vec![],
         max_total_latency: Duration::from_secs(5),
+        task_class_scoring_table: None,
     };
     let _resp = run_mission_a(&coord, req).await.unwrap();
 
@@ -102,6 +104,7 @@ async fn mission_a_with_no_available_llm_errors() {
         },
         candidate_sources: vec![],
         max_total_latency: Duration::from_secs(2),
+        task_class_scoring_table: None,
     };
     let r = run_mission_a(&coord, req).await;
     assert!(r.is_err());
@@ -126,6 +129,7 @@ async fn mission_a_falls_back_to_first_llm_if_router_absent() {
         },
         candidate_sources: vec![],
         max_total_latency: Duration::from_secs(2),
+        task_class_scoring_table: None,
     };
     let resp = run_mission_a(&coord, req).await.unwrap();
     assert_eq!(resp.llm_used, "first");
@@ -163,6 +167,7 @@ async fn mission_a_chewing_metrics_filled_with_mocks() {
         },
         candidate_sources: vec![],
         max_total_latency: Duration::from_secs(5),
+        task_class_scoring_table: None,
     };
     let resp = run_mission_a(&coord, req).await.unwrap();
 
@@ -255,6 +260,7 @@ async fn mission_a_emits_pre_chewing_metrics_event() {
         },
         candidate_sources: vec![],
         max_total_latency: Duration::from_secs(5),
+        task_class_scoring_table: None,
     };
     let _resp = run_mission_a(&coord, req).await.unwrap();
 
@@ -305,6 +311,7 @@ async fn mission_a_chewing_metrics_serializable_through_response() {
         },
         candidate_sources: vec![],
         max_total_latency: Duration::from_secs(5),
+        task_class_scoring_table: None,
     };
     let resp = run_mission_a(&coord, req).await.unwrap();
 
@@ -340,5 +347,174 @@ async fn mission_a_backward_compat_old_response_without_chewing_metrics() {
         "chewing_metrics doit être None pour un JSON pré-S4 (#[serde(default)])"
     );
     assert_eq!(parsed.final_text, "Paris est la capitale");
+}
+
+// ─── Sprint S6 R2 — Tests offline d'intégration du router tuning ──────────
+//
+// Ces 3 tests prouvent en OFFLINE (avec MockProviders, sans clés API) que le
+// wiring `task_class_scoring_table → RouterClient::for_task_class → invoke`
+// route bien vers le LLM attendu DANS le workflow `run_mission_a` complet
+// (pas juste dans les tests isolés du module `scoring` qui n'instanciaient
+// que le router sans pipeline complet).
+//
+// Pourquoi c'est crucial : les tests du module `scoring` valident la table
+// + le scoring Pareto, mais PAS l'intégration dans `run_mission_a` (capture
+// du `selected_llm`, propagation vers `resp.llm_used`, etc.). Sans ces
+// tests, un bug d'integration (ex: oubli de propager `selected`) serait
+// invisible jusqu'au test live à 3-5 ¢.
+
+/// Helper S6 offline : enregistre les 3 providers réels (claude_…, gemini_…,
+/// gpt_…) mais avec MockLlmProvider pour ne pas appeler les vrais LLMs.
+///
+/// Les IDs matchent EXACTEMENT ceux de la table `default_3llm_table()`
+/// pour que le routing puisse résoudre les capability_scores.
+fn make_coord_with_3_mock_providers() -> Coordinator {
+    let reg = ProviderRegistry::new();
+    reg.register(Arc::new(
+        MockLlmProvider::new("claude_claude-sonnet-4-6")
+            .with_response("Claude offline response"),
+    ));
+    reg.register(Arc::new(
+        MockLlmProvider::new("gemini_gemini-2.5-flash")
+            .with_response("Gemini offline response"),
+    ));
+    reg.register(Arc::new(
+        MockLlmProvider::new("gpt_gpt-4o").with_response("GPT offline response"),
+    ));
+    Coordinator::builder().registry(reg).build().unwrap()
+}
+
+/// **S6 offline intégration** : avec la table par défaut + 3 mock providers
+/// + `TaskClass::Code`, `run_mission_a` doit choisir Claude (winner Code
+/// quality-driven, weights q=2.5, c=0.2).
+///
+/// Prouve que :
+/// 1. Le champ `task_class_scoring_table` est bien consommé par `run_mission_a`
+/// 2. `RouterClient::for_task_class` est bien construit avec les bons weights
+/// 3. Le router retourne `selected = "claude_…"` qui propage à `resp.llm_used`
+/// 4. La réponse vient bien du provider Claude (pas Gemini ou GPT)
+#[tokio::test]
+async fn mission_a_with_scoring_table_picks_claude_for_code_offline() {
+    let coord = make_coord_with_3_mock_providers();
+    let req = MissionARequest::with_default_scoring(
+        "Écris une fonction Rust fibonacci".to_string(),
+        TaskClass::Code,
+        vec![
+            "claude_claude-sonnet-4-6".to_string(),
+            "gemini_gemini-2.5-flash".to_string(),
+            "gpt_gpt-4o".to_string(),
+        ],
+    );
+    let resp = run_mission_a(&coord, req)
+        .await
+        .expect("mission_a doit succeed avec 3 mock providers + table de scoring");
+
+    // Winner Code = Claude (cf. scoring::tests::code_picks_claude)
+    assert_eq!(
+        resp.llm_used, "claude_claude-sonnet-4-6",
+        "Code task_class doit router vers Claude (HumanEval cap=0.95 vs 0.72/0.85)"
+    );
+    // La réponse doit venir du mock Claude.
+    assert_eq!(resp.final_text, "Claude offline response");
+    // router_reason rempli = preuve que le router a tourné.
+    let metrics = resp.chewing_metrics.as_ref().expect("chewing_metrics");
+    assert!(
+        !metrics.router_reason.is_empty(),
+        "router_reason doit être rempli (preuve que le router tuné a invoqué)"
+    );
+    assert!(
+        metrics.router_reason.contains("claude"),
+        "router_reason doit mentionner le LLM choisi, got: {}",
+        metrics.router_reason
+    );
+}
+
+/// **S6 offline intégration (variante)** : avec `TaskClass::Translation`, le
+/// même set de providers doit router vers **Gemini** (cost-driven, weights
+/// q=1.0, c=2.0). Démontre que la même table donne des décisions
+/// DIFFÉRENTES selon la task_class.
+#[tokio::test]
+async fn mission_a_with_scoring_table_picks_gemini_for_translation_offline() {
+    let coord = make_coord_with_3_mock_providers();
+    let req = MissionARequest::with_default_scoring(
+        "Traduis : Le crépuscule baigne Paris".to_string(),
+        TaskClass::Translation,
+        vec![
+            "claude_claude-sonnet-4-6".to_string(),
+            "gemini_gemini-2.5-flash".to_string(),
+            "gpt_gpt-4o".to_string(),
+        ],
+    );
+    let resp = run_mission_a(&coord, req).await.unwrap();
+
+    // Winner Translation = Gemini (cost 30x moins cher, cap 0.92)
+    assert_eq!(
+        resp.llm_used, "gemini_gemini-2.5-flash",
+        "Translation task_class doit router vers Gemini (cost-driven c=2.0)"
+    );
+    assert_eq!(resp.final_text, "Gemini offline response");
+}
+
+/// **S6 offline intégration (3e variante)** : avec `TaskClass::Creative`, le
+/// router doit choisir **GPT-4o** (capability 0.93 — meilleur sur style/variété).
+#[tokio::test]
+async fn mission_a_with_scoring_table_picks_gpt_for_creative_offline() {
+    let coord = make_coord_with_3_mock_providers();
+    let req = MissionARequest::with_default_scoring(
+        "Écris un haïku sur les huitres".to_string(),
+        TaskClass::Creative,
+        vec![
+            "claude_claude-sonnet-4-6".to_string(),
+            "gemini_gemini-2.5-flash".to_string(),
+            "gpt_gpt-4o".to_string(),
+        ],
+    );
+    let resp = run_mission_a(&coord, req).await.unwrap();
+
+    assert_eq!(
+        resp.llm_used, "gpt_gpt-4o",
+        "Creative task_class doit router vers GPT-4o (cap=0.93 vs 0.88/0.80)"
+    );
+    assert_eq!(resp.final_text, "GPT offline response");
+}
+
+/// **S6 offline backward-compat** : sans `task_class_scoring_table` et sans
+/// `coord.clients.router`, le workflow doit tomber sur le 1er LLM disponible.
+/// Comportement S2-S5 préservé.
+#[tokio::test]
+async fn mission_a_without_scoring_table_falls_back_pre_s6_behavior() {
+    let reg = ProviderRegistry::new();
+    reg.register(Arc::new(
+        MockLlmProvider::new("claude_first").with_response("first response"),
+    ));
+    reg.register(Arc::new(
+        MockLlmProvider::new("gemini_second").with_response("second response"),
+    ));
+    let coord = Coordinator::builder().registry(reg).build().unwrap();
+
+    let mut metas = HashMap::new();
+    metas.insert("claude_first".to_string(), meta());
+    metas.insert("gemini_second".to_string(), meta());
+
+    let req = MissionARequest {
+        user_text: "x".into(),
+        task_class: TaskClass::Code, // task_class IGNORÉ sans table
+        available_llms: vec!["claude_first".into(), "gemini_second".into()],
+        llm_metadata: metas,
+        budget: Budget {
+            max_cost_cents: 1000,
+            max_latency_ms: 10_000,
+            min_quality_score: 0.0,
+        },
+        candidate_sources: vec![],
+        max_total_latency: Duration::from_secs(5),
+        // Pas de table → fallback first LLM (pas de routing).
+        task_class_scoring_table: None,
+    };
+    let resp = run_mission_a(&coord, req).await.unwrap();
+    // Sans router + sans table → prend le 1er. Code n'est PAS routé vers
+    // Claude car la décision dépendait de la table.
+    assert_eq!(resp.llm_used, "claude_first");
+    assert_eq!(resp.final_text, "first response");
 }
 

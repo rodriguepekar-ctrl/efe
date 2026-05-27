@@ -126,6 +126,9 @@ fn build_factual_request(query: &str, llm_id: &str) -> MissionARequest {
         // se déclenche accidentellement.
         candidate_sources: vec![],
         max_total_latency: Duration::from_secs(30),
+        // S6 : pas de tuning router pour S2 (test single-LLM, available_llms
+        // = [claude_id] → routage trivial).
+        task_class_scoring_table: None,
     }
 }
 
@@ -420,6 +423,8 @@ fn build_factual_request_with_sources(
             .map(|(id, text)| efe_coordinator::CandidateSourceRef { id, text })
             .collect(),
         max_total_latency: Duration::from_secs(60),
+        // S6 : pas de tuning router pour S3 (test single-LLM Claude).
+        task_class_scoring_table: None,
     }
 }
 
@@ -1634,4 +1639,278 @@ async fn live_mission_b_full_3llm_consensus_with_pre_chewing() {
         "D25: cumulative_savings (savings × 3 LLMs) ≥ 60, got {cumulative_savings}\n\
          → démonstration de la multiplication économique : 1× compressor pour 3 LLMs payants"
     );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ─── Sprint S6 R2 — Router Tuning par TaskClass ────────────────────────────
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// S6 teste **le premier vrai choix multi-LLM live de R2** : avec 3 LLMs
+// disponibles (Claude + Gemini + GPT), le RouterClient tuné via
+// `TaskClassScoringTable::default_3llm_table()` doit choisir le BON LLM
+// selon la `task_class` :
+//
+//  | TaskClass    | Winner attendu                | Driver        |
+//  |--------------|-------------------------------|---------------|
+//  | FactualQa    | gemini_gemini-2.5-flash       | cost (c=2.0)  |
+//  | Code         | claude_claude-sonnet-4-6      | quality (q=2.5) |
+//  | Creative     | gpt_gpt-4o                    | quality (q=1.5) |
+//  | Translation  | gemini_gemini-2.5-flash       | cost (c=2.0)  |
+//
+// Pré-conditions : 3 clés API (ANTHROPIC + GOOGLE + OPENAI) + `EFE_LIVE_LLM=1`.
+// SLM daemons NON requis (le router tuné est inline, pas un robot ONNX).
+
+/// Construit une `MissionARequest` avec la table de scoring S6 par défaut +
+/// override du budget cap à 10 ¢ pour les tests live (économie).
+///
+/// `available_llms` doit contenir les 3 IDs réels (Claude + Gemini + GPT).
+fn build_mission_a_with_scoring(
+    query: &str,
+    task: TaskClass,
+    available_llms: Vec<String>,
+) -> MissionARequest {
+    let mut req = MissionARequest::with_default_scoring(
+        query.to_string(),
+        task,
+        available_llms,
+    );
+    req.budget.max_cost_cents = 10; // cap pour tests live
+    req
+}
+
+/// Construit un Coordinator avec les 3 providers réels enregistrés.
+///
+/// Aucun nano-robot Phase 1 activé : le router tuning S6 est purement
+/// inline (poids Pareto via `RouterClient::for_task_class`, pas via le
+/// robot ONNX `coord.clients.router`).
+fn make_coord_for_router_tuning(
+    claude: Arc<dyn LlmProvider>,
+    gemini: Arc<dyn LlmProvider>,
+    gpt: Arc<dyn LlmProvider>,
+) -> Coordinator {
+    let registry = ProviderRegistry::new();
+    registry.register(claude);
+    registry.register(gemini);
+    registry.register(gpt);
+    Coordinator::builder()
+        .registry(registry)
+        .build()
+        .expect("coordinator builds with default clients (all None)")
+}
+
+/// Helper commun pour les 4 tests S6 : skip si pré-conditions manquantes,
+/// charge fixture, instancie 3 providers, run Mission A avec scoring.
+///
+/// Retourne `(resp, fixture)` pour permettre les assertions E1-E10 dans
+/// chaque test individuel (qui peut varier les seuils selon le LLM gagnant).
+async fn run_s6_router_test(
+    fixture_name: &str,
+) -> Option<(efe_coordinator::MissionAResponse, serde_json::Value)> {
+    use efe_coordinator::{GeminiProvider, GptProvider};
+
+    if !live_enabled() {
+        eprintln!("[skip] set EFE_LIVE_LLM=1 to enable S6 router tuning tests");
+        return None;
+    }
+    if !all_three_api_keys_set() {
+        eprintln!("[skip] S6 router tuning needs ALL 3 keys (Claude + Gemini + GPT)");
+        return None;
+    }
+
+    let fixture = load_fixture(fixture_name);
+    let query = fixture["query"].as_str().expect("fixture.query");
+    let task_class_str = fixture["task_class"].as_str().expect("fixture.task_class");
+    // Parse la task_class via serde (cohérent avec router.rs:101-104).
+    let task_class: TaskClass =
+        serde_json::from_value(serde_json::json!(task_class_str))
+            .or_else(|_| {
+                // Fallback : convert PascalCase → SCREAMING_SNAKE_CASE
+                let upper = match task_class_str {
+                    "FactualQa" => "FACTUAL_QA",
+                    "Analysis" => "ANALYSIS",
+                    "Code" => "CODE",
+                    "Creative" => "CREATIVE",
+                    "Reasoning" => "REASONING",
+                    "Translation" => "TRANSLATION",
+                    other => other,
+                };
+                serde_json::from_value::<TaskClass>(serde_json::json!(upper))
+            })
+            .expect("fixture.task_class invalid");
+
+    let claude: Arc<dyn LlmProvider> = Arc::new(
+        ClaudeProvider::from_env().expect("ANTHROPIC_API_KEY"),
+    );
+    let gemini: Arc<dyn LlmProvider> = Arc::new(
+        GeminiProvider::from_env().expect("GOOGLE_AI_KEY"),
+    );
+    let gpt: Arc<dyn LlmProvider> = Arc::new(
+        GptProvider::from_env().expect("OPENAI_API_KEY"),
+    );
+    let claude_id = claude.id();
+    let gemini_id = gemini.id();
+    let gpt_id = gpt.id();
+
+    eprintln!("\n=== Mission A — Router Tuning S6 ({fixture_name}) ===");
+    eprintln!("  query        : {} ({} chars)", &query.chars().take(80).collect::<String>(), query.len());
+    eprintln!("  task_class   : {task_class:?}");
+    eprintln!("  available    : [{claude_id}, {gemini_id}, {gpt_id}]");
+    eprintln!("  expected     : {}", fixture["expected_route"].as_str().unwrap_or("?"));
+
+    let coord = make_coord_for_router_tuning(claude, gemini, gpt);
+    let req = build_mission_a_with_scoring(
+        query,
+        task_class,
+        vec![claude_id.clone(), gemini_id.clone(), gpt_id.clone()],
+    );
+
+    let started = std::time::Instant::now();
+    let resp = run_mission_a(&coord, req)
+        .await
+        .expect("mission_a should succeed (HTTP 200, valid JSON, audit chain OK)");
+    let wall_ms = started.elapsed().as_millis() as u64;
+
+    eprintln!("\n  ── Router decision ──");
+    eprintln!("    selected     : {}", resp.llm_used);
+    if let Some(metrics) = &resp.chewing_metrics {
+        eprintln!("    router reason: {}", metrics.router_reason);
+    }
+    eprintln!("    cost_cents   : {} ¢", resp.cost_cents);
+    eprintln!("    latency_ms   : {} ms", resp.latency_ms);
+    eprintln!("    audit_hash   : {}…{} ({} chars)",
+        &resp.audit_chain_hash[..8],
+        &resp.audit_chain_hash[resp.audit_chain_hash.len()-8..],
+        resp.audit_chain_hash.len());
+    eprintln!("    wall_clock   : {wall_ms} ms");
+
+    Some((resp, fixture))
+}
+
+/// E1-E10 assertions communes aux 4 tests S6.
+fn assert_s6_routing(
+    resp: &efe_coordinator::MissionAResponse,
+    fixture: &serde_json::Value,
+) {
+    let expected_route = fixture["expected_route"].as_str().expect("expected_route");
+    let expected_keyword = fixture["expected_keyword"].as_str().expect("expected_keyword");
+    let expected_justif = fixture["expected_route_justification_keyword"]
+        .as_str()
+        .unwrap_or("p50=");
+
+    // E1 — final_text non vide
+    assert!(!resp.final_text.is_empty(), "E1: final_text must be non-empty");
+
+    // E2 — llm_used == expected_route
+    assert_eq!(
+        resp.llm_used, expected_route,
+        "E2: router should pick {expected_route}, got {}",
+        resp.llm_used
+    );
+
+    // E3 — final_text non vide (sanity, dup E1)
+    assert!(!resp.final_text.is_empty(), "E3: final_text safety check");
+
+    // E4 — contient le keyword attendu (lowercase substring)
+    let final_lc = resp.final_text.to_lowercase();
+    assert!(
+        final_lc.contains(&expected_keyword.to_lowercase()),
+        "E4: final_text should contain '{expected_keyword}', got: {}",
+        &resp.final_text.chars().take(200).collect::<String>()
+    );
+
+    // E5 — cost_cents ≤ 10
+    assert!(
+        resp.cost_cents <= 10,
+        "E5: cost_cents ≤ 10, got {}",
+        resp.cost_cents
+    );
+
+    // E6 — cost_cents ≥ 1 (pas mocks)
+    assert!(
+        resp.cost_cents >= 1,
+        "E6: cost_cents ≥ 1 (preuve qu'on a appelé un vrai LLM), got {}",
+        resp.cost_cents
+    );
+
+    // E7 — latency_ms < 30s
+    assert!(
+        resp.latency_ms < 30_000,
+        "E7: latency_ms < 30s, got {}ms",
+        resp.latency_ms
+    );
+
+    // E8 — audit_chain_hash 64 chars BLAKE3
+    assert_eq!(
+        resp.audit_chain_hash.len(),
+        64,
+        "E8: audit_chain_hash must be 64-char BLAKE3 hex, got {} chars",
+        resp.audit_chain_hash.len()
+    );
+
+    // E9 — chewing_metrics.router_reason est rempli (preuve que le router
+    // a bien tourné, pas skippé)
+    let metrics = resp.chewing_metrics.as_ref().expect("E9: chewing_metrics");
+    assert!(
+        !metrics.router_reason.is_empty(),
+        "E9: router_reason should be non-empty (router must have run)"
+    );
+
+    // E10 — router_reason contient la justification keyword (e.g. "p50=")
+    assert!(
+        metrics.router_reason.contains(expected_justif),
+        "E10: router_reason should contain '{expected_justif}', got: {}",
+        metrics.router_reason
+    );
+}
+
+/// **Test S6-A** : `TaskClass::FactualQa` → Gemini gagne (cost-driven).
+///
+/// Question simple "capitale de la France". Avec budget 10 ¢ et 3 LLMs
+/// disponibles, le router doit choisir Gemini Flash (cost 0.075 $/M vs
+/// Claude 3 $/M) car les capabilities FactualQa sont équivalentes
+/// (Gemini 0.92 vs Claude 0.85 vs GPT 0.86).
+#[tokio::test]
+async fn live_mission_a_router_picks_gemini_for_factual_qa() {
+    let Some((resp, fixture)) = run_s6_router_test("01_factual_simple.json").await else {
+        return;
+    };
+    assert_s6_routing(&resp, &fixture);
+}
+
+/// **Test S6-B** : `TaskClass::Code` → Claude gagne (quality-driven).
+///
+/// Génération de code Rust. Weights Code (q=2.5, l=0.5, c=0.2) → Claude
+/// gagne malgré son coût 30× supérieur, parce que HumanEval+ ≈ 89 % vs
+/// Gemini ≈ 72 %.
+#[tokio::test]
+async fn live_mission_a_router_picks_claude_for_code() {
+    let Some((resp, fixture)) = run_s6_router_test("05_code_gen_rust.json").await else {
+        return;
+    };
+    assert_s6_routing(&resp, &fixture);
+}
+
+/// **Test S6-C** : `TaskClass::Creative` → GPT-4o gagne.
+///
+/// Génération créative (dialogue absurde). Weights Creative (q=1.5, l=1.0,
+/// c=1.0) balanced. GPT-4o gagne via capability 0.93 (style + variété)
+/// vs Claude 0.88 vs Gemini 0.80.
+#[tokio::test]
+async fn live_mission_a_router_picks_gpt_for_creative() {
+    let Some((resp, fixture)) = run_s6_router_test("06_creative_writing.json").await else {
+        return;
+    };
+    assert_s6_routing(&resp, &fixture);
+}
+
+/// **Test S6-D** : `TaskClass::Translation` → Gemini gagne (cost-driven).
+///
+/// Traduction FR→EN. Weights Translation (q=1.0, l=1.0, c=2.0) → Gemini
+/// gagne via cost + capability multilingue 0.92.
+#[tokio::test]
+async fn live_mission_a_router_picks_gemini_for_translation() {
+    let Some((resp, fixture)) = run_s6_router_test("07_translation_fr_en.json").await else {
+        return;
+    };
+    assert_s6_routing(&resp, &fixture);
 }

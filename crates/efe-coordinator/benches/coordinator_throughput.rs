@@ -207,6 +207,7 @@ fn bench_mission_a_minimal(c: &mut Criterion) {
         },
         candidate_sources: vec![],
         max_total_latency: Duration::from_secs(2),
+        task_class_scoring_table: None,
     };
     let mut group = c.benchmark_group("workflow");
     group.measurement_time(Duration::from_secs(8));

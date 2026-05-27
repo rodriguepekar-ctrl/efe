@@ -47,6 +47,7 @@ async fn mission_a_emits_llm_token_streamed_events() {
         },
         candidate_sources: vec![],
         max_total_latency: Duration::from_secs(2),
+        task_class_scoring_table: None,
     };
     let _resp = run_mission_a(&coord, req).await.unwrap();
 

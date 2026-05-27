@@ -164,6 +164,7 @@ async fn i4_same_request_runs_independently() {
         },
         candidate_sources: vec![],
         max_total_latency: Duration::from_secs(2),
+        task_class_scoring_table: None,
     };
     let r1 = run_mission_a(&coord, mk_req()).await.unwrap();
     let r2 = run_mission_a(&coord, mk_req()).await.unwrap();
