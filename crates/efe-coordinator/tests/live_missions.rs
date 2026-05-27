@@ -73,33 +73,41 @@ fn load_fixture(name: &str) -> serde_json::Value {
         .unwrap_or_else(|e| panic!("invalid JSON in {}: {e}", path.display()))
 }
 
+/// Métadonnées LLM par défaut pour Claude Sonnet 4.6 (R1a). Coûts/latences
+/// alignés avec ce que les R1b live tests ont observé.
+///
+/// Réutilisable par n'importe quel test live R2 qui veut un Claude raisonnable.
+/// En S6 (router tuning), ces valeurs seront remplacées par des données issues
+/// d'un metering live, mais pour S2-S5 elles sont suffisantes.
+fn default_claude_metadata() -> LlmMetadata {
+    LlmMetadata {
+        // Coût Claude Sonnet 4.6 : 3 $ / 1M input, 15 $ / 1M output.
+        cost_input_per_million: 300,
+        cost_output_per_million: 1500,
+        // Latence observée en R1b live : ~1.2 s p50, ~3 s p99.
+        p50_latency_ms: 1200,
+        p99_latency_ms: 3000,
+        success_rate: 0.99,
+        capability_scores: HashMap::new(),
+        circuit_open: false,
+    }
+}
+
 /// Construit un `MissionARequest` minimal pour une question factuelle, en
 /// forçant un LLM précis via `available_llms = vec![llm_id]`. Sans Router
 /// nano-robot, `run_mission_a` prend le premier de cette liste (cf.
 /// `src/workflows/mission_a.rs:131-200`).
 ///
-/// Métadonnées LLM : valeurs raisonnables R2 R1a pour Claude Sonnet 4.6.
-/// Budget large pour ne pas faire échouer le test sur les caps.
+/// Budget large pour ne pas faire échouer le test sur les caps. Pour des
+/// tests qui veulent éprouver les caps (S8 failure modes), construire la
+/// requête à la main.
 ///
 /// Réutilisable en S3-S9 : on garde la signature stable pour permettre
 /// d'enrichir les fixtures (`expected_route`, `min_compression_ratio`, …)
 /// sans modifier la fonction.
 fn build_factual_request(query: &str, llm_id: &str) -> MissionARequest {
     let mut metadata = HashMap::new();
-    metadata.insert(
-        llm_id.to_string(),
-        LlmMetadata {
-            // Coût Claude Sonnet 4.6 : 3 $ / 1M input, 15 $ / 1M output.
-            cost_input_per_million: 300,
-            cost_output_per_million: 1500,
-            // Latence observée en R1b (live) : ~1.2 s p50, ~3 s p99.
-            p50_latency_ms: 1200,
-            p99_latency_ms: 3000,
-            success_rate: 0.99,
-            capability_scores: HashMap::new(),
-            circuit_open: false,
-        },
-    );
+    metadata.insert(llm_id.to_string(), default_claude_metadata());
     MissionARequest {
         user_text: query.to_string(),
         task_class: TaskClass::FactualQa,
@@ -119,22 +127,46 @@ fn build_factual_request(query: &str, llm_id: &str) -> MissionARequest {
     }
 }
 
+/// Construit un `Coordinator` « naked » : 1 provider + 0 nano-robot Phase 1.
+///
+/// C'est la configuration testée en S2. Extraite ici pour permettre la
+/// réutilisation par S5 (Mission B naked) et par les futurs tests de
+/// régression qui veulent isoler le wiring du pré-mâchage.
+///
+/// Le `Coordinator` est entièrement default sauf le registry :
+/// - `clients`  : `CoordinatorClients::default()` (tous None)
+/// - `config`   : `CoordinatorConfig::default()` (deadline 30 s, conc 8)
+/// - `bus`      : `InMemoryBus` (visible via `coord.subscribe(...)`)
+/// - `vote`     : `VoteEngine::default()`
+fn make_naked_coordinator(provider: Arc<dyn LlmProvider>) -> Coordinator {
+    let registry = ProviderRegistry::new();
+    registry.register(provider);
+    Coordinator::builder()
+        .registry(registry)
+        .build()
+        .expect("coordinator builds with default clients (all None)")
+}
+
 // ─── Sprint S2 ── Mission A naked ───────────────────────────────────────────
 
 /// Le test fondateur de R2 : Coordinator + 1 vrai provider Claude, ZÉRO
 /// nano-robot Phase 1, 1 question factuelle. Prouve que la tuyauterie
-/// `MultiLlmBridge → LlmProvider::call()` fonctionne en conditions réelles.
+/// `MultiLlmBridge → LlmProvider::call()` fonctionne en conditions réelles
+/// ET que le bus SSE émet bien les événements `SWARM_STARTED`/`SWARM_FINISHED`/
+/// `LLM_FINISHED` (preuve que le wiring `EventBus` est branché).
 ///
-/// Couvert par 9 assertions (cf. doc architecture §4.3) :
-/// A1 final_text non vide
-/// A2 final_text contient "paris"
-/// A3 llm_used = claude
-/// A4 cost_cents ≤ 5
-/// A5 latency_ms < 30 000
-/// A6 latency_ms ≥ 100 (sinon mock suspect)
-/// A7 audit_chain_hash = 64 chars BLAKE3 hex
-/// A8 verdicts vide (pas de verifier)
-/// A9 wall-clock < 35 000 ms
+/// 11 assertions A1-A11 :
+/// - A1 final_text non vide
+/// - A2 final_text contient "paris"
+/// - A3 llm_used = claude
+/// - A4 cost_cents ≤ 5
+/// - A5 latency_ms < 30 000
+/// - A6 latency_ms ≥ 100 (sinon mock suspect)
+/// - A7 audit_chain_hash = 64 chars BLAKE3 hex
+/// - A8 verdicts vide (pas de verifier)
+/// - A9 wall-clock < 35 000 ms
+/// - A10 events SSE : SWARM_STARTED + SWARM_FINISHED présents (G2 patch S2)
+/// - A11 events SSE : LLM_FINISHED présent
 #[tokio::test]
 async fn live_mission_a_naked_no_slm_just_claude() {
     if !live_enabled() {
@@ -160,21 +192,16 @@ async fn live_mission_a_naked_no_slm_just_claude() {
     eprintln!("  query    : {query}");
     eprintln!("  llm_id   : {claude_id}");
 
-    // ── 3. ProviderRegistry avec 1 seul provider ────────────────────────
-    let registry = ProviderRegistry::new();
-    registry.register(claude);
+    // ── 3. Coordinator naked (via helper réutilisable S5+) ──────────────
+    let coord = make_naked_coordinator(claude);
 
-    // ── 4. Coordinator minimal : tous les nano-robots à None (default) ─
+    // ── 4. Abonnement au bus AVANT le run pour capturer tous les events ─
     //
-    // CoordinatorClients::default() = analyzer/reformulator/compressor/
-    // verifier/filter/router tous `None`. C'est EXACTEMENT ce qu'on veut
-    // pour S2 « naked » — voir mission_a.rs:63,131,203,310 : chaque
-    // robot est testé via `if let Some(...) = &coord.clients.xxx` et
-    // skippé silencieusement si absent.
-    let coord = Coordinator::builder()
-        .registry(registry)
-        .build()
-        .expect("coordinator builds with default clients (all None)");
+    // Convention du Coordinator : `subscribe(Some(token))` retourne un
+    // `(SubscriberToken, tokio::sync::mpsc::Receiver<StreamEvent>)`.
+    // On consommera les events après le run_mission_a en non-bloquant
+    // (cf. pattern du test offline mission_a_publishes_swarm_started_and_finished).
+    let (_subscriber_token, mut rx) = coord.subscribe(Some("s2-naked-test"));
 
     // ── 5. Construit la requête MissionA forçant Claude ─────────────────
     //
@@ -190,7 +217,19 @@ async fn live_mission_a_naked_no_slm_just_claude() {
         .expect("mission_a should succeed (HTTP 200, valid JSON, audit chain OK)");
     let wall_ms = started.elapsed().as_millis() as u64;
 
-    // ── 7. Affichage humain du résumé (visible via --nocapture) ─────────
+    // ── 7. Drain les events du bus en non-bloquant (timeout 50 ms) ──────
+    //
+    // Les events sont émis dans `run_mission_a` de manière fire-and-forget.
+    // Si l'EventBus est branché correctement, on devrait recevoir au moins
+    // `SWARM_STARTED`, `LLM_FINISHED`, `SWARM_FINISHED` dans le canal.
+    let mut tags: Vec<&'static str> = Vec::new();
+    while let Ok(Some(ev)) =
+        tokio::time::timeout(Duration::from_millis(50), rx.recv()).await
+    {
+        tags.push(ev.tag());
+    }
+
+    // ── 8. Affichage humain du résumé (visible via --nocapture) ─────────
     let audit_hash_head = &resp.audit_chain_hash[..8.min(resp.audit_chain_hash.len())];
     let audit_hash_tail_start = resp.audit_chain_hash.len().saturating_sub(8);
     let audit_hash_tail = &resp.audit_chain_hash[audit_hash_tail_start..];
@@ -206,8 +245,9 @@ async fn live_mission_a_naked_no_slm_just_claude() {
         resp.audit_chain_hash.len()
     );
     eprintln!("  final_text  : {:?}", resp.final_text);
+    eprintln!("  events_seen : {tags:?}");
 
-    // ── 8. Assertions A1-A9 (cf. doc architecture §4.3) ─────────────────
+    // ── 9. Assertions A1-A11 (cf. doc architecture §4.3 + patch G2) ─────
 
     // A1 — Le LLM a produit du texte (sinon = bug provider ou stream vide).
     assert!(
@@ -253,8 +293,6 @@ async fn live_mission_a_naked_no_slm_just_claude() {
     );
 
     // A7 — audit_chain_hash = BLAKE3 hex (256 bits = 64 chars hex).
-    // Cf. request.rs:65, audit.rs::HmacAuditChain (BLAKE3, pas HMAC malgré
-    // le nom historique).
     assert_eq!(
         resp.audit_chain_hash.len(),
         64,
@@ -264,7 +302,6 @@ async fn live_mission_a_naked_no_slm_just_claude() {
     );
 
     // A8 — Pas de verifier nano-robot activé → pas de FactCheck verdict.
-    // (Si on voit des verdicts, c'est qu'un verifier s'est faufilé.)
     assert!(
         resp.verdicts.is_empty(),
         "A8: pas de verifier nano-robot → verdicts vide, got {} verdicts",
@@ -275,5 +312,23 @@ async fn live_mission_a_naked_no_slm_just_claude() {
     assert!(
         wall_ms < 35_000,
         "A9: wall-clock < 35 s (sanity global), got {wall_ms} ms"
+    );
+
+    // A10 — Events SSE émis : SWARM_STARTED + SWARM_FINISHED (preuve que
+    // l'EventBus est branché et que le workflow émet bien les bornes).
+    assert!(
+        tags.contains(&"SWARM_STARTED"),
+        "A10a: SWARM_STARTED manquant dans les events, got tags={tags:?}"
+    );
+    assert!(
+        tags.contains(&"SWARM_FINISHED"),
+        "A10b: SWARM_FINISHED manquant dans les events, got tags={tags:?}"
+    );
+
+    // A11 — Au moins un événement LLM_FINISHED (preuve que le LLM a bien
+    // été appelé via le bridge — pas un retour précoce silencieux).
+    assert!(
+        tags.contains(&"LLM_FINISHED"),
+        "A11: LLM_FINISHED manquant (le LLM n'a peut-être pas été appelé), got tags={tags:?}"
     );
 }
