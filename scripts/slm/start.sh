@@ -211,29 +211,63 @@ log_ok "Pre-flight passé. ${#to_start[@]} robot(s) à démarrer."
 # Ne pas spécifier --grammar : les nano-robot clients envoient leur grammar
 # par requête (cf. llama_server.rs:120-169).
 
-build_llama_cmd() {
+# Construit la liste d'arguments llama-server dans la variable globale
+# LLAMA_ARGS (bash array). On utilise un array et PAS une string car le path
+# du repo peut contenir des espaces (ex: "jjjj copie/efe/models/...gguf").
+# Avec un array passé en "${LLAMA_ARGS[@]}", bash préserve naturellement
+# les espaces sans nécessiter de quoting manuel ni `bash -c`.
+#
+# Optimisations choisies (cf. llama-server --help b9297+) :
+#   --host             bind 127.0.0.1 par défaut (sécurité local-only)
+#   --port             par robot
+#   --model            chemin GGUF (peut contenir espaces — array safe)
+#   --ctx-size         taille KV cache (par robot)
+#   --n-gpu-layers     offload GPU max (999 = toutes ; auto-fallback CPU)
+#   --threads          calculé selon le hardware
+#   --threads-batch    idem pour batch
+#   --parallel         1 slot suffit pour Phase 3 R2 (1 requête à la fois)
+#   --cont-batching    continuous batching (efficace même à parallel=1)
+#   --metrics          expose /metrics Prometheus
+#   --no-warmup        accélère le startup (warmup à la 1ère requête)
+#   --alias            nom human-readable du modèle
+#   --cache-reuse      reuse KV cache prefix (utile car prompt système commun)
+#
+# Ne pas spécifier --grammar : les nano-robot clients envoient leur grammar
+# par requête (cf. llama_server.rs:120-169).
+build_llama_args() {
     local i="$1"
-    local name="$(robot_name "$i")"
-    local port="$(robot_port "$i")"
-    local model="$(robot_model_path "$i")"
-    local ctx="$(robot_ctx_size "$i")"
+    local name port model ctx
+    name="$(robot_name "$i")"
+    port="$(robot_port "$i")"
+    model="$(robot_model_path "$i")"
+    ctx="$(robot_ctx_size "$i")"
 
-    cat <<EOF
-llama-server \
-  --host ${HOST_BIND} \
-  --port ${port} \
-  --model ${model} \
-  --alias ${name} \
-  --ctx-size ${ctx} \
-  --n-gpu-layers ${NGL_OVERRIDE} \
-  --threads ${EFE_SLM_THREADS_PER_ROBOT} \
-  --threads-batch ${EFE_SLM_THREADS_PER_ROBOT} \
-  --parallel 1 \
-  --cont-batching \
-  --cache-reuse 256 \
-  --metrics \
-  --no-warmup
-EOF
+    LLAMA_ARGS=(
+        --host           "${HOST_BIND}"
+        --port           "${port}"
+        --model          "${model}"
+        --alias          "${name}"
+        --ctx-size       "${ctx}"
+        --n-gpu-layers   "${NGL_OVERRIDE}"
+        --threads        "${EFE_SLM_THREADS_PER_ROBOT}"
+        --threads-batch  "${EFE_SLM_THREADS_PER_ROBOT}"
+        --parallel       1
+        --cont-batching
+        --cache-reuse    256
+        --metrics
+        --no-warmup
+    )
+}
+
+# Affiche les LLAMA_ARGS sous forme de string copier-collable pour debug.
+# Utilise printf %q pour escape correctement les espaces / caractères spéciaux.
+format_llama_args_for_display() {
+    local out="llama-server"
+    local arg
+    for arg in "${LLAMA_ARGS[@]}"; do
+        out+=" $(printf '%q' "${arg}")"
+    done
+    echo "${out}"
 }
 
 # ─── Démarrage effectif ─────────────────────────────────────────────────────
@@ -248,10 +282,12 @@ for i in "${to_start[@]}"; do
     log_file="$(robot_log_path "$i")"
     pid_file="$(robot_pid_path "$i")"
 
-    cmd="$(build_llama_cmd "$i")"
+    # Remplit la variable globale LLAMA_ARGS (array).
+    build_llama_args "$i"
+    display_cmd="$(format_llama_args_for_display)"
 
     echo "${EFE_C_BOLD}▶ ${name} (port ${port})${EFE_C_RESET}"
-    echo "${EFE_C_DIM}  cmd  : ${cmd//$'\n'/}${EFE_C_RESET}"
+    echo "${EFE_C_DIM}  cmd  : ${display_cmd}${EFE_C_RESET}"
     echo "${EFE_C_DIM}  log  : ${log_file}${EFE_C_RESET}"
 
     if (( DRY_RUN == 1 )); then
@@ -265,15 +301,19 @@ for i in "${to_start[@]}"; do
     fi
 
     # Lance en arrière-plan, détaché du shell parent.
-    # nohup + setsid pour survie même si terminal se ferme.
-    # eval requis pour résoudre les \ multilignes de build_llama_cmd.
-    if command -v setsid >/dev/null 2>&1; then
-        # Linux : setsid sépare la session.
-        setsid bash -c "${cmd}" >"${log_file}" 2>&1 < /dev/null &
-    else
-        # macOS : nohup suffit (pas de setsid de base).
-        nohup bash -c "${cmd}" >"${log_file}" 2>&1 < /dev/null &
-    fi
+    # ── IMPORTANT (Sprint S1 patch fix) ──
+    # On lance llama-server DIRECTEMENT avec son array d'arguments — PAS via
+    # `bash -c "${cmd}"`. Raison : si le path du repo contient des espaces
+    # (cas du clone "jjjj copie/efe/..."), `bash -c` re-parse la string et
+    # casse les arguments aux espaces, faisant crasher llama-server avec
+    # "error: invalid argument: copie/efe/...".
+    #
+    # Avec un array, bash passe chaque élément comme un seul argv[i] au
+    # binaire, sans re-parsing ni word splitting.
+    #
+    # nohup conserve le process si le shell parent meurt (SIGHUP ignoré).
+    # `< /dev/null` détache stdin pour éviter blocage sur input.
+    nohup llama-server "${LLAMA_ARGS[@]}" >"${log_file}" 2>&1 < /dev/null &
     pid=$!
     STARTED_PIDS+=("${pid}")
     echo "${pid}" > "${pid_file}"
@@ -283,6 +323,10 @@ for i in "${to_start[@]}"; do
     sleep 1
     if ! pid_alive "${pid}"; then
         log_err "  ${name} a crashé immédiatement. Voir : ${log_file}"
+        # Affiche les 3 dernières lignes du log pour debug rapide.
+        if [[ -s "${log_file}" ]]; then
+            tail -3 "${log_file}" 2>/dev/null | sed "s/^/      ${EFE_C_RED}│${EFE_C_RESET} /"
+        fi
         failed+=("${name}")
         rm -f "${pid_file}"
         continue
