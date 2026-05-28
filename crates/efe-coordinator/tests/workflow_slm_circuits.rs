@@ -733,3 +733,148 @@ async fn r3s2_gap2_build_with_slm_client_and_circuits_no_warn() {
     assert_eq!(coord.clients.slm_circuits.len(), 3);
     assert!(coord.clients.analyzer.is_some());
 }
+
+// =====================================================================
+// R3.S2 — Test cumulation 3 missions (Gap 3, architecture §6.1.3)
+// =====================================================================
+
+/// **R3.S2 Gap 3 (architecture §6.1.3)** —
+/// `r3s2_mission_a_opens_circuit_after_3_failures_cumulative` :
+///
+/// Valide le pattern CUMULATIF du circuit breaker à travers PLUSIEURS
+/// missions consécutives (vs threshold=1 immédiat des autres tests).
+///
+/// ## Setup
+/// - `threshold=3` (default R3.S2).
+/// - `analyzer` fail-fast (URL inaccessible → connection refused).
+///
+/// ## Scénario
+/// - Mission 1 : analyzer fail → record_failure (1/3) → circuit Closed.
+/// - Mission 2 : analyzer fail → record_failure (2/3) → circuit Closed.
+/// - Mission 3 : analyzer fail → record_failure (3/3) → **circuit Open**
+///   + 1× event `SlmCircuitOpened`.
+/// - Mission 4 : circuit Open → skip analyzer (record_failure NON appelé)
+///   → failure_count stable à 3, pas de nouvel event.
+///
+/// ## Signaux déterministes (PAS de timing — la connexion à `127.0.0.1:1`
+/// est refusée instantanément, `latency_ms` peut arrondir à 0).
+/// On inspecte l'état du circuit APRÈS chaque mission :
+/// - `failure_count()` : incrémente sur Proceed+fail, stable sur Skip.
+/// - `is_open()` : false jusqu'au 3ème échec, true après.
+#[tokio::test]
+async fn r3s2_mission_a_opens_circuit_after_3_failures_cumulative() {
+    use efe_coordinator::StreamEvent;
+
+    let reg = ProviderRegistry::new();
+    reg.register(Arc::new(MockLlmProvider::new("claude").with_response("ok")));
+
+    let mut circuits = HashMap::new();
+    // threshold=3 (default R3.S2 production) → cumulation requise.
+    circuits.insert(
+        "analyzer".to_string(),
+        SlmCircuitBreaker::new(3, Duration::from_secs(10)),
+    );
+
+    let coord = Coordinator::builder()
+        .registry(reg)
+        .clients(efe_coordinator::CoordinatorClients {
+            analyzer: Some(Arc::new(fail_fast_analyzer())),
+            slm_circuits: circuits,
+            ..efe_coordinator::CoordinatorClients::default()
+        })
+        .build()
+        .expect("OK");
+    let (_t, mut rx) = coord.subscribe(Some("r3s2-gap3-cumul"));
+
+    let mut metas = HashMap::new();
+    metas.insert("claude".to_string(), meta());
+    let make_req = || MissionARequest {
+        user_text: "test".into(),
+        task_class: TaskClass::FactualQa,
+        available_llms: vec!["claude".into()],
+        llm_metadata: metas.clone(),
+        budget: Budget {
+            max_cost_cents: 1000,
+            max_cost_microcents: 0,
+            max_latency_ms: 10_000,
+            min_quality_score: 0.0,
+        },
+        candidate_sources: vec![],
+        max_total_latency: Duration::from_secs(2),
+        task_class_scoring_table: None,
+    };
+
+    let cb = coord.clients.slm_circuit("analyzer").unwrap().clone();
+
+    // ── Mission 1 : 1er échec → failure_count=1, Closed ──────────────
+    let resp1 = run_mission_a(&coord, make_req()).await.expect("M1 OK");
+    assert_eq!(
+        cb.failure_count(),
+        1,
+        "Mission 1 : analyzer invoqué + fail → failure_count == 1"
+    );
+    assert!(!cb.is_open(), "Mission 1 : circuit encore Closed (1/3)");
+    assert!(
+        matches!(resp1.failure_mode, FailureMode::SlmDown(ref r) if r == "analyzer"),
+        "Mission 1 : SlmDown(analyzer) tracé, got {:?}",
+        resp1.failure_mode
+    );
+
+    // ── Mission 2 : 2ème échec → failure_count=2, Closed ─────────────
+    let _resp2 = run_mission_a(&coord, make_req()).await.expect("M2 OK");
+    assert_eq!(
+        cb.failure_count(),
+        2,
+        "Mission 2 : 2ème fail → failure_count == 2"
+    );
+    assert!(!cb.is_open(), "Mission 2 : circuit encore Closed (2/3)");
+
+    // ── Mission 3 : 3ème échec → failure_count=3, OPEN + event ───────
+    let _resp3 = run_mission_a(&coord, make_req()).await.expect("M3 OK");
+    assert_eq!(
+        cb.failure_count(),
+        3,
+        "Mission 3 : 3ème fail → failure_count == 3"
+    );
+    assert!(
+        cb.is_open(),
+        "Mission 3 : threshold 3 atteint → circuit Open"
+    );
+
+    // ── Mission 4 : circuit Open → SKIP (record_failure PAS appelé) ──
+    let resp4 = run_mission_a(&coord, make_req()).await.expect("M4 OK");
+    assert_eq!(
+        cb.failure_count(),
+        3,
+        "Mission 4 : circuit Open → analyzer skippé → record_failure PAS \
+         appelé → failure_count STABLE à 3 (got {})",
+        cb.failure_count()
+    );
+    assert!(cb.is_open(), "Mission 4 : circuit reste Open");
+    assert!(
+        matches!(resp4.failure_mode, FailureMode::SlmDown(ref r) if r == "analyzer"),
+        "Mission 4 : SlmDown(analyzer) tracé via Skip, got {:?}",
+        resp4.failure_mode
+    );
+
+    // ── Bus : exactement 1 event SlmCircuitOpened (transition M3) ────
+    let mut event_count = 0;
+    while let Ok(Some(ev)) =
+        tokio::time::timeout(Duration::from_millis(100), rx.recv()).await
+    {
+        if let StreamEvent::SlmCircuitOpened { robot, failures, .. } = ev {
+            assert_eq!(robot, "analyzer");
+            assert!(
+                failures >= 3,
+                "failures count à l'émission doit être ≥ threshold 3, got {failures}"
+            );
+            event_count += 1;
+        }
+    }
+    assert_eq!(
+        event_count, 1,
+        "Cumulation : exactement 1 SlmCircuitOpened event (got {event_count}). \
+         Transition UNIQUEMENT au 3ème failure (mission 3), pas avant ni \
+         après (mission 4 skip n'émet pas)."
+    );
+}

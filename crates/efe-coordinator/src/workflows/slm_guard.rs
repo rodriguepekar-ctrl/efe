@@ -25,7 +25,7 @@ use std::sync::Arc;
 use chrono::Utc;
 use uuid::Uuid;
 
-use efe_nano_app_coordinator::SlmCircuitBreaker;
+use efe_nano_app_coordinator::{SlmCircuitBreaker, SlmCircuitState};
 
 use crate::events::{EventBus, StreamEvent};
 use crate::failure::{combine_failure_modes, FailureMode};
@@ -102,19 +102,27 @@ pub(crate) fn slm_guard_record_success(circuit: Option<&SlmCircuitBreaker>) {
 ///    dans `chewing_metrics` (TOUJOURS, même sans circuit).
 /// 2. Si `circuit` configuré, `record_failure()` → potentiellement
 ///    transition `Closed → Open`.
-/// 3. Si la transition vers `Open` vient de se produire (= ce call a
-///    causé l'ouverture), publie `StreamEvent::SlmCircuitOpened` sur
-///    le bus 1× exactement.
+/// 3. Si la transition `Closed → Open` vient de se produire (= ce call a
+///    causé l'ouverture FRAÎCHE), publie `StreamEvent::SlmCircuitOpened`
+///    sur le bus 1× exactement.
 ///
 /// Retourne `true` si la transition `Closed → Open` vient de se produire,
-/// `false` sinon (déjà Open, pas encore ouverture, ou pas de circuit).
+/// `false` sinon (déjà Open, HalfOpen → Open, pas encore ouverture, ou
+/// pas de circuit).
+///
+/// ## Sémantique d'émission (architecture §2.4 + §9 R2)
+///
+/// L'event n'est émis QUE sur transition **`Closed → Open`** (ouverture
+/// fraîche). La transition **`HalfOpen → Open`** (probe qui échoue) N'ÉMET
+/// PAS — le circuit avait déjà signalé son ouverture lors du `Closed →
+/// Open` initial. Un nouveau cycle complet (`… → Closed → Open`) ré-émet.
 ///
 /// ## Race condition tolérée
 ///
 /// Si 2 missions concurrentes appellent simultanément alors que
-/// `failures = threshold - 1`, les 2 peuvent observer
-/// `was_open_pre = false` et `now_open = true` → 2 events émis. C'est
-/// rare et le consumer dédup via `(robot, timestamp)`. Voir R3 §9 R3.
+/// `failures = threshold - 1`, les 2 peuvent observer `state_pre == Closed`
+/// et `now_open == true` → 2 events émis. C'est rare et le consumer dédup
+/// via `(robot, timestamp)`. Voir R3 §9 R3.
 pub(crate) async fn slm_guard_record_failure(
     circuit: Option<&SlmCircuitBreaker>,
     robot_name: &str,
@@ -139,14 +147,17 @@ pub(crate) async fn slm_guard_record_failure(
     );
     chewing_metrics.degradations_count = chewing_metrics.failure_mode.count_degradations();
 
-    // 3. Capture l'état avant record_failure, puis after, détecte la
-    //    transition Closed/HalfOpen → Open.
-    let was_open_pre = c.is_open();
+    // 3. R3.S2 §2.4 — Capture l'état AVANT record_failure via `state()`
+    //    (qui distingue Closed / Open / HalfOpen, contrairement à
+    //    `is_open()` qui confond Closed et HalfOpen). On émet UNIQUEMENT
+    //    sur transition fraîche `Closed → Open` : HalfOpen → Open (probe
+    //    fail) ne ré-émet pas (déjà signalé au Closed → Open initial).
+    let state_pre = c.state();
     c.record_failure();
     let now_open = c.is_open();
 
-    if !was_open_pre && now_open {
-        // Transition Closed/HalfOpen → Open : émet 1 event sur le bus.
+    if state_pre == SlmCircuitState::Closed && now_open {
+        // Transition fraîche Closed → Open : émet 1 event sur le bus.
         let _ = bus
             .publish(StreamEvent::SlmCircuitOpened {
                 swarm_id,
@@ -330,6 +341,83 @@ mod tests {
             metrics.failure_mode,
             FailureMode::SlmDown("analyzer".to_string()),
             "3× SlmDown(analyzer) doit dédup en 1 SlmDown"
+        );
+    }
+
+    /// **R3.S2 §2.4 + §9 R2 (Gap 4)** — La transition `HalfOpen → Open`
+    /// (probe qui échoue) NE DOIT PAS ré-émettre d'event `SlmCircuitOpened`.
+    /// Seul le `Closed → Open` initial émet. Un cycle complet de recovery
+    /// (`… → Closed → Open`) ré-émet.
+    #[tokio::test]
+    async fn r3s2_slm_guard_halfopen_to_open_does_not_reemit() {
+        // threshold=1 → 1 failure ouvre. reset_timeout court pour test rapide.
+        let cb = SlmCircuitBreaker::new(1, Duration::from_millis(30));
+        let bus = mock_bus();
+        let mut metrics = ChewingMetrics::default();
+        let swarm = Uuid::new_v4();
+
+        // 1ère failure → Closed → Open → ÉMET (1er event).
+        let opened1 =
+            slm_guard_record_failure(Some(&cb), "analyzer", &mut metrics, &bus, swarm)
+                .await;
+        assert!(opened1, "Closed → Open initial doit émettre");
+        assert!(cb.is_open());
+
+        // Attendre reset_timeout → le circuit passe HalfOpen au prochain
+        // state()/is_open().
+        tokio::time::sleep(Duration::from_millis(50)).await;
+        assert_eq!(
+            cb.state(),
+            SlmCircuitState::HalfOpen,
+            "Après reset_timeout, circuit doit être HalfOpen"
+        );
+
+        // Probe échoue : record_failure depuis HalfOpen → Open.
+        // Architecture §9 R2 : NE DOIT PAS ré-émettre (déjà signalé).
+        let opened2 =
+            slm_guard_record_failure(Some(&cb), "analyzer", &mut metrics, &bus, swarm)
+                .await;
+        assert!(
+            !opened2,
+            "HalfOpen → Open (probe fail) NE DOIT PAS ré-émettre d'event \
+             (architecture §9 R2)"
+        );
+        assert!(cb.is_open(), "circuit re-Open après probe fail");
+    }
+
+    /// **R3.S2 §2.4 (Gap 4)** — Un cycle complet de recovery
+    /// (`Closed → Open → HalfOpen → Closed → Open`) émet 2× au total :
+    /// 1 par chaque `Closed → Open`.
+    #[tokio::test]
+    async fn r3s2_slm_guard_full_recovery_cycle_emits_twice() {
+        let cb = SlmCircuitBreaker::new(1, Duration::from_millis(30));
+        let bus = mock_bus();
+        let mut metrics = ChewingMetrics::default();
+        let swarm = Uuid::new_v4();
+
+        // Cycle 1 : Closed → Open → ÉMET (1).
+        let e1 =
+            slm_guard_record_failure(Some(&cb), "analyzer", &mut metrics, &bus, swarm)
+                .await;
+        assert!(e1, "1er Closed → Open émet");
+
+        // reset_timeout → HalfOpen, puis probe SUCCESS → Closed.
+        tokio::time::sleep(Duration::from_millis(50)).await;
+        assert_eq!(cb.state(), SlmCircuitState::HalfOpen);
+        slm_guard_record_success(Some(&cb));
+        assert_eq!(
+            cb.state(),
+            SlmCircuitState::Closed,
+            "probe success → recovery → Closed"
+        );
+
+        // Cycle 2 : nouvelle failure → Closed → Open → ÉMET (2).
+        let e2 =
+            slm_guard_record_failure(Some(&cb), "analyzer", &mut metrics, &bus, swarm)
+                .await;
+        assert!(
+            e2,
+            "2ème Closed → Open (après recovery complète) ré-émet (cycle complet)"
         );
     }
 }
