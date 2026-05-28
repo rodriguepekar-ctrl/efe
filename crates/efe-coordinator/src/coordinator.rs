@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: UNLICENSED
 //! `Coordinator` — pièce centrale : orchestre nano-robots, LLM gros, blackboard, bus, vote, speculator.
 
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -12,6 +13,7 @@ use crate::llm::{MultiLlmBridge, ProviderRegistry};
 use crate::vote::VoteEngine;
 use crate::DEFAULT_MAX_CONCURRENCY;
 
+use efe_nano_app_coordinator::clients::SlmCircuitBreaker;
 use efe_nano_app_coordinator::{
     AnalyzerClient, CompressorClient, FilterClient, ReformulatorClient, RouterClient,
     VerifierClient,
@@ -35,6 +37,18 @@ pub struct CoordinatorClients {
     pub filter: Option<Arc<FilterClient>>,
     /// Routeur (sélection LLM Pareto).
     pub router: Option<Arc<RouterClient>>,
+    /// **R3.S2 (fix L2)** — Circuit breakers per-SLM (analyzer/compressor/verifier).
+    ///
+    /// Si `HashMap` vide (default), les workflows n'appliquent **PAS** de
+    /// circuit guard et fonctionnent en mode S8 (= comportement R2
+    /// préservé pour backward-compat).
+    ///
+    /// Pour activer la résilience R3.S2, utiliser
+    /// [`CoordinatorClients::default_slm_circuits`] ou
+    /// [`CoordinatorBuilder::with_default_slm_circuits`].
+    ///
+    /// Keys typiques : `"analyzer"`, `"compressor"`, `"verifier"`.
+    pub slm_circuits: HashMap<String, SlmCircuitBreaker>,
 }
 
 impl Default for CoordinatorClients {
@@ -46,6 +60,7 @@ impl Default for CoordinatorClients {
             verifier: None,
             filter: None,
             router: None,
+            slm_circuits: HashMap::new(),
         }
     }
 }
@@ -66,6 +81,43 @@ impl CoordinatorClients {
             && self.verifier.is_some()
             && self.filter.is_some()
             && self.router.is_some()
+    }
+
+    /// **R3.S2** — Helper pour créer un `HashMap` par défaut avec les 3 SLM
+    /// circuits préconfigurés (threshold=3 échecs, reset_timeout=10s).
+    ///
+    /// Robots protégés : `analyzer`, `compressor`, `verifier` (les 3 SLM
+    /// Phase 1 backed par `llama-server` Metal). Reformulator/filter/router
+    /// NON protégés (cf. §1.4 architecture R3.S2).
+    ///
+    /// ## Exemple
+    /// ```ignore
+    /// use efe_coordinator::CoordinatorClients;
+    ///
+    /// let mut clients = CoordinatorClients::default();
+    /// clients.slm_circuits = CoordinatorClients::default_slm_circuits();
+    /// // 3 circuits : analyzer/compressor/verifier, threshold=3, timeout=10s.
+    /// ```
+    #[must_use]
+    pub fn default_slm_circuits() -> HashMap<String, SlmCircuitBreaker> {
+        let mut m = HashMap::new();
+        for robot in ["analyzer", "compressor", "verifier"] {
+            m.insert(
+                robot.to_string(),
+                SlmCircuitBreaker::new(3, Duration::from_secs(10)),
+            );
+        }
+        m
+    }
+
+    /// **R3.S2** — Lookup helper pour récupérer un circuit par nom de robot.
+    ///
+    /// Retourne `None` si le circuit n'est pas configuré (= mode S8
+    /// backward-compat → le workflow appelle directement le client sans
+    /// guard).
+    #[must_use]
+    pub fn slm_circuit(&self, robot: &str) -> Option<&SlmCircuitBreaker> {
+        self.slm_circuits.get(robot)
     }
 }
 
@@ -165,6 +217,51 @@ impl CoordinatorBuilder {
     #[must_use]
     pub fn vote(mut self, v: VoteEngine) -> Self {
         self.vote = Some(v);
+        self
+    }
+
+    /// **R3.S2 (fix L2)** — Active les 3 SLM circuit breakers par défaut
+    /// (analyzer/compressor/verifier, threshold=3, reset_timeout=10s).
+    ///
+    /// Sans cet appel, le `Coordinator` fonctionne en mode S8 (pas de
+    /// circuit → comportement R2 préservé pour backward-compat).
+    ///
+    /// ## Exemple
+    /// ```ignore
+    /// let coord = Coordinator::builder()
+    ///     .with_default_slm_circuits()
+    ///     .build()?;
+    /// ```
+    #[must_use]
+    pub fn with_default_slm_circuits(mut self) -> Self {
+        self.clients.slm_circuits = CoordinatorClients::default_slm_circuits();
+        self
+    }
+
+    /// **R3.S2** — Override avec une `HashMap` de circuits personnalisée.
+    ///
+    /// Utile pour les tests déterministes qui ont besoin de seuils
+    /// différents (e.g. `threshold=1` pour ouverture immédiate, ou
+    /// `reset_timeout=10ms` pour test temporel rapide).
+    ///
+    /// ## Exemple
+    /// ```ignore
+    /// use efe_nano_app_coordinator::clients::SlmCircuitBreaker;
+    /// use std::collections::HashMap;
+    /// use std::time::Duration;
+    ///
+    /// let mut circuits = HashMap::new();
+    /// circuits.insert(
+    ///     "analyzer".to_string(),
+    ///     SlmCircuitBreaker::new(1, Duration::from_millis(50)),
+    /// );
+    /// let coord = Coordinator::builder()
+    ///     .slm_circuits(circuits)
+    ///     .build()?;
+    /// ```
+    #[must_use]
+    pub fn slm_circuits(mut self, circuits: HashMap<String, SlmCircuitBreaker>) -> Self {
+        self.clients.slm_circuits = circuits;
         self
     }
 

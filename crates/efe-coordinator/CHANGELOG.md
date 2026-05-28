@@ -89,10 +89,83 @@ _(rolling — prochains items)_
   **0 failed**.
 - `cargo clippy` : 0 warning R3.S1-spécifique.
 
-### Phase 3 R3 — Suite (R3.S2-S10, à venir)
+### Phase 3 R3.S2 — SLM Circuit Wiring (fix L2) (LIVRÉ 2026-05-28, commit `<HEAD>`)
 
-- **R3.S2** : SLM Circuit Wiring (fix L2) — wire `SlmCircuitBreaker` aux
-  workflows, bus event `SlmCircuitOpened` avec `cost_microcents` overhead.
+> Fix L2 (`SlmCircuitBreaker` non câblé en R2) : wire les 3 SLM
+> circuits per-robot (analyzer/compressor/verifier) aux workflows
+> `run_mission_a/b`. Bus event `SlmCircuitOpened` émis 1× par
+> transition Closed→Open. `FailureMode::SlmDown` propagé end-to-end.
+> Gain opérationnel ~97 % sur scénario "SLM down" (3000s → 90s sur 100
+> missions). Backward-compat 100 %.
+
+#### Ajouté
+- **`combine_failure_modes(existing, new) -> FailureMode`** helper
+  publique dans `failure.rs` — flatten + dedup + simplification du
+  Composite-of-one. 6 tests unit (None+X, Composite+simple, dedup
+  duplicates, simplify composite of one, etc.).
+- **Module interne `workflows/slm_guard.rs`** (`pub(crate)`) — 3
+  helpers factorisés :
+  - `slm_guard_check(circuit, robot, metrics) -> SlmGuardOutcome` :
+    Skip/Proceed selon état circuit.
+  - `slm_guard_record_success(circuit)` : reset compteur.
+  - `slm_guard_record_failure(circuit, robot, metrics, bus, swarm_id)
+    -> bool` : record_failure + auto-emit `SlmCircuitOpened` event sur
+    transition Closed→Open.
+  - 8 tests unit du module.
+- **`CoordinatorClients.slm_circuits: HashMap<String, SlmCircuitBreaker>`**
+  field. Backward-compat 100 % : `HashMap::new()` par défaut = mode S8.
+- **`CoordinatorClients::default_slm_circuits()`** helper — crée les 3
+  circuits préconfigurés (threshold=3, reset_timeout=10s).
+- **`CoordinatorClients::slm_circuit(robot)`** lookup helper.
+- **`CoordinatorBuilder::with_default_slm_circuits()`** + **`.slm_circuits(custom)`**
+  helpers builder.
+- **Tests intégration `tests/workflow_slm_circuits.rs`** (NEW file) :
+  - `r3s2_mission_a_skips_{analyzer,compressor,verifier}_when_circuit_pre_open` (3 tests)
+  - `r3s2_mission_a_multiple_circuits_open_produces_composite` (test Composite)
+  - `r3s2_mission_a_no_circuits_falls_back_to_s8_behavior` (backward-compat)
+  - `r3s2_default_slm_circuits_helper_creates_3_robots`
+  - `r3s2_builder_with_default_slm_circuits_activates_circuits`
+  - `r3s2_mission_b_skips_{analyzer,compressor}_when_circuit_pre_open` (2 tests Mission B)
+  - `r3s2_circuit_recovers_open_to_halfopen_to_closed` (temporel)
+  - `r3s2_mission_a_emits_slm_circuit_opened_event_on_transition` (bus event)
+  - `r3s2_speculative_unaffected_by_slm_circuits` (Mission Spec inchangée)
+  - **12 tests integration** au total (vs 7 spec'd dans architecture §3.7).
+- **Test live env-gated** `r3s2_live_mission_a_resilient_when_analyzer_unreachable`
+  dans `tests/live_missions.rs` — opt-in via `EFE_LIVE_SLM_UNREACHABLE_TEST=1`
+  (analyzer port 8090 down). Coût $ ~10 ¢ pour 4 missions Claude.
+
+#### Modifié
+- **`run_mission_a`** : 3 sites SLM guards (analyzer L78-149, compressor
+  L284-350, verifier L504-552). Le `failure_mode` final agrège
+  désormais SLM + LLM fallback via `combine_failure_modes`.
+- **`run_mission_b`** : 3 sites SLM guards (analyzer L71-100, compressor
+  mutualisé L102-173, verifier L398-440).
+- **`run_speculative`** : 0 changement (LLM cloud only, déjà protégé par
+  `CircuitBreaker` LLM de S2).
+- **`slm_guard_record_failure`** : **strict S8 backward-compat** — si
+  `circuit == None`, no-op COMPLET (ne trace pas `failure_mode` ni
+  `failed_components`). Garantie : Coordinator sans
+  `.with_default_slm_circuits()` se comporte EXACTEMENT comme R2.
+
+#### Sémantique bus event `SlmCircuitOpened`
+- Émis **1× par transition Closed→Open** (et non sur chaque failure
+  pendant que circuit est Open).
+- Si HalfOpen → Open (probe fail), aucun nouveau event (déjà signalé).
+- Si Closed → Open (recovery cycle), un nouveau event est émis
+  (intentionnel — cycle complet = nouvelle alerte).
+- Race condition tolérée : 2 missions concurrent peuvent émettre 2× sur
+  la transition (rare, consumer dédup via timestamp).
+
+#### Validation
+- **583 tests offline** PASS (vs 557 base post-R3.S1) → **+26 tests R3.S2
+  net** (6 combine + 8 slm_guard + 12 integration).
+- **0 failed**, 0 ignored.
+- **0 clippy warning** R3.S2-spécifique.
+- **Backward-compat 100 %** : 24 sites `CoordinatorClients` literal
+  patchés à `slm_circuits: HashMap::new()` (mode S8 préservé).
+
+### Phase 3 R3 — Suite (R3.S3-S10, à venir)
+
 - **R3.S3** : Speculator noise rejection (fix L4/S9.1 D6).
 - **R3.S4** : SLM drafter (Gemma 2 1.5B local).
 - **R3.S5** : Multi-tenant policies (tenant_id propagation).

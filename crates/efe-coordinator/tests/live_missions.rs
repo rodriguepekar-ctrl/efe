@@ -464,6 +464,8 @@ fn make_coord_with_analyzer_verifier(provider: Arc<dyn LlmProvider>) -> Coordina
         compressor: None,
         filter: None,
         router: None,
+        // R3.S2 : default empty (mode S8 backward-compat).
+        slm_circuits: std::collections::HashMap::new(),
     };
 
     let registry = ProviderRegistry::new();
@@ -811,6 +813,8 @@ fn make_coord_full_pipeline(provider: Arc<dyn LlmProvider>) -> Coordinator {
         // (cf. architecture S4 §1.3 — Sprint S5+ ou Phase 4).
         reformulator: None,
         filter: None,
+        // R3.S2 : default empty (mode S8 backward-compat).
+        slm_circuits: std::collections::HashMap::new(),
     };
 
     let registry = ProviderRegistry::new();
@@ -1275,6 +1279,8 @@ fn make_coord_for_mission_b_pipeline(
         router: Some(router),
         reformulator: None,
         filter: None,
+        // R3.S2 : default empty (mode S8 backward-compat).
+        slm_circuits: std::collections::HashMap::new(),
     };
 
     let registry = ProviderRegistry::new();
@@ -2194,4 +2200,188 @@ async fn live_mission_speculative_savings_metrics_filled() {
         "router_reason doit mentionner 'hot path', got: {}",
         metrics.router_reason
     );
+}
+
+// ====================================================================
+// R3.S2 — Test live env-gated : résilience SLM circuit
+// ====================================================================
+
+/// **R3.S2 (fix L2) — Test live** : valide que Mission A reste résiliente
+/// quand `llama-server analyzer` (port 8090) est UNREACHABLE.
+///
+/// ## Pré-conditions
+/// - `EFE_LIVE_LLM=1` (clés API LLM cloud)
+/// - `EFE_LIVE_SLM_UNREACHABLE_TEST=1` (opt-in explicite pour ce test
+///   destructif — il REQUIERT que le port 8090 soit DOWN).
+/// - Port 8090 (`llama-server analyzer`) **non démarré** :
+///   ```bash
+///   pkill -f "llama-server.*8090" || true
+///   ```
+///
+/// ## Scénario validé
+/// 1. Coordinator construit avec `.with_default_slm_circuits()` (threshold=3,
+///    reset_timeout=10s) + AnalyzerClient pointant sur `http://127.0.0.1:8090`.
+/// 2. Lancer 4 missions A consécutives.
+/// 3. Missions 1-3 : analyzer.invoke() fail (connection refused ou timeout),
+///    record_failure cumule → 3 failures → circuit Open après la 3ème.
+/// 4. Mission 4 : circuit Open → skip analyzer en <1ms.
+/// 5. **Assertions** :
+///    - 4 missions ont toutes terminé (final_text non vide).
+///    - Mission 4 : `chewing_metrics.failure_mode == SlmDown("analyzer")`.
+///    - Mission 4 : `analyzer_latency_ms == 0` (skipped, pas de timeout 30s).
+///    - Bus a reçu exactement **1** event `SlmCircuitOpened`.
+///
+/// ## Coût $ estimé : ~10 ¢ (4 missions Claude Sonnet sur prompt court).
+#[tokio::test]
+async fn r3s2_live_mission_a_resilient_when_analyzer_unreachable() {
+    use std::time::Instant;
+    use efe_coordinator::StreamEvent;
+
+    if !live_enabled() {
+        eprintln!("[skip] set EFE_LIVE_LLM=1 + ANTHROPIC_API_KEY (Claude requis)");
+        return;
+    }
+    if std::env::var("EFE_LIVE_SLM_UNREACHABLE_TEST").as_deref() != Ok("1") {
+        eprintln!(
+            "[skip] R3.S2 live : set EFE_LIVE_SLM_UNREACHABLE_TEST=1 + ensure \
+             analyzer port 8090 is DOWN (pkill llama-server analyzer)"
+        );
+        return;
+    }
+
+    // Build le Coordinator avec circuit R3.S2 activé + Claude provider.
+    use efe_nano_app_coordinator::clients::AnalyzerClient;
+    let reg = ProviderRegistry::new();
+    let claude = Arc::new(
+        ClaudeProvider::from_env()
+            .expect("ANTHROPIC_API_KEY must be set"),
+    );
+    reg.register(claude);
+
+    let analyzer = AnalyzerClient::from_assets(analyzer_endpoint())
+        .expect("AnalyzerClient::from_assets — assets/grammars manquants ?");
+    let clients = efe_coordinator::CoordinatorClients {
+        analyzer: Some(Arc::new(analyzer)),
+        // Compresseur/verifier non requis pour ce test.
+        ..efe_coordinator::CoordinatorClients::default()
+    };
+
+    let coord = Coordinator::builder()
+        .registry(reg)
+        .clients(clients)
+        .with_default_slm_circuits()
+        .build()
+        .expect("Coordinator OK");
+
+    let (_t, mut rx) = coord.subscribe(Some("r3s2-live"));
+    let mut metas = HashMap::new();
+    metas.insert(
+        "claude_claude-sonnet-4-6".to_string(),
+        LlmMetadata {
+            cost_input_per_million: 300,
+            cost_output_per_million: 1500,
+            cost_input_per_million_microcents: 300_000,
+            cost_output_per_million_microcents: 1_500_000,
+            p50_latency_ms: 1200,
+            p99_latency_ms: 3000,
+            success_rate: 0.99,
+            capability_scores: HashMap::new(),
+            circuit_open: false,
+        },
+    );
+
+    let make_req = || MissionARequest {
+        user_text: "What is the capital of France?".into(),
+        task_class: TaskClass::FactualQa,
+        available_llms: vec!["claude_claude-sonnet-4-6".to_string()],
+        llm_metadata: metas.clone(),
+        budget: Budget {
+            max_cost_cents: 1000,
+            max_cost_microcents: 0,
+            max_latency_ms: 60_000,
+            min_quality_score: 0.0,
+        },
+        candidate_sources: vec![],
+        max_total_latency: Duration::from_secs(60),
+        task_class_scoring_table: None,
+    };
+
+    // Lance 4 missions consécutives.
+    let mut latencies_analyzer = Vec::new();
+    let mut final_texts = Vec::new();
+    let mut last_failure_mode = efe_coordinator::FailureMode::None;
+    for i in 1..=4 {
+        let _t0 = Instant::now();
+        let resp = run_mission_a(&coord, make_req())
+            .await
+            .unwrap_or_else(|e| panic!("Mission {i} doit terminer (résilience) : {e}"));
+        let cm = resp.chewing_metrics.as_ref().expect("chewing_metrics");
+        latencies_analyzer.push(cm.analyzer_latency_ms);
+        final_texts.push(resp.final_text.clone());
+        last_failure_mode = resp.failure_mode.clone();
+        eprintln!(
+            "[r3s2-live] Mission {i}: analyzer_latency={}ms, final_text={:?}, failure_mode={:?}",
+            cm.analyzer_latency_ms,
+            resp.final_text.chars().take(50).collect::<String>(),
+            resp.failure_mode
+        );
+    }
+
+    // ── Assertions ─────────────────────────────────────────────────
+    // 1. Les 4 missions ont toutes terminé (résilience).
+    for (i, ft) in final_texts.iter().enumerate() {
+        assert!(
+            !ft.is_empty(),
+            "Mission {} doit produire un final_text non vide",
+            i + 1
+        );
+    }
+    // 2. Mission 4 : circuit Open → analyzer_latency_ms == 0.
+    assert_eq!(
+        latencies_analyzer[3], 0,
+        "Mission 4 : circuit Open → analyzer_latency_ms == 0 (skip <1ms), got {}",
+        latencies_analyzer[3]
+    );
+    // 3. Mission 4 : failure_mode contient SlmDown("analyzer").
+    let has_slm_down = matches!(
+        last_failure_mode,
+        efe_coordinator::FailureMode::SlmDown(ref r) if r == "analyzer"
+    ) || matches!(
+        last_failure_mode,
+        efe_coordinator::FailureMode::Composite(ref modes)
+            if modes.iter().any(|m|
+                matches!(m, efe_coordinator::FailureMode::SlmDown(ref r) if r == "analyzer")
+            )
+    );
+    assert!(
+        has_slm_down,
+        "Mission 4 doit avoir FailureMode contenant SlmDown(\"analyzer\"), got {:?}",
+        last_failure_mode
+    );
+
+    // 4. Bus : 1 (et 1 seul) event SlmCircuitOpened pour analyzer.
+    let mut event_count = 0;
+    while let Ok(Some(ev)) =
+        tokio::time::timeout(Duration::from_millis(100), rx.recv()).await
+    {
+        if let StreamEvent::SlmCircuitOpened { robot, .. } = ev {
+            if robot == "analyzer" {
+                event_count += 1;
+            }
+        }
+    }
+    assert_eq!(
+        event_count, 1,
+        "Bus doit recevoir exactement 1 SlmCircuitOpened{{robot=analyzer}} \
+         (got {}). 0 = circuit jamais ouvert ; ≥2 = bug d'émission multi-trigger.",
+        event_count
+    );
+
+    // 5. Le circuit doit être Open à la fin du test.
+    assert!(
+        coord.clients.slm_circuit("analyzer").unwrap().is_open(),
+        "Circuit analyzer doit être Open après 3 failures cumulées"
+    );
+
+    eprintln!("[r3s2-live] OK : 4 missions résilientes, circuit Open, 1 event émis.");
 }

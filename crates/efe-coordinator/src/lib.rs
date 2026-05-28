@@ -136,7 +136,7 @@ pub use llm::{
     LlmCall, LlmProvider, LlmResponse, MockLlmProvider, MultiLlmBridge, ProviderHandle,
     ProviderRegistry,
 };
-pub use failure::FailureMode;
+pub use failure::{combine_failure_modes, FailureMode};
 pub use metrics::ChewingMetrics;
 pub use savings_report::{ModeSummary, RunMode, RunRecord, SavingsReport};
 

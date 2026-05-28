@@ -23,6 +23,10 @@ use crate::error::{CoordError, CoordResult};
 use crate::events::{MissionTag, StreamEvent};
 use crate::failure::FailureMode;
 use crate::llm::LlmCall;
+// R3.S2 (fix L2) : helpers SLM circuit guards.
+use crate::workflows::slm_guard::{
+    slm_guard_check, slm_guard_record_failure, slm_guard_record_success, SlmGuardOutcome,
+};
 use crate::metrics::ChewingMetrics;
 use crate::request::{FactCheck, MissionARequest, MissionAResponse};
 
@@ -74,72 +78,106 @@ pub async fn run_mission_a(
     let audit = Arc::new(InMemoryAuditWriter::default());
     let ctx = CallContext::with_swarm(coord.config.default_tenant, swarm_id, audit.clone());
 
-    // ── Étape 1 : Analyzer ───────────────────────────────────────────
+    // ── Étape 1 : Analyzer (R3.S2 fix L2 : guard SLM circuit) ────────
     if let Some(analyzer) = &coord.clients.analyzer {
-        let _ = coord
-            .bus
-            .publish(StreamEvent::RobotStarted {
-                swarm_id,
-                robot_id: "analyzer".into(),
-                ts: Utc::now(),
-            })
-            .await;
-        let started_node = Instant::now();
-        let input = AnalyzerInput {
-            text: req.user_text.clone(),
-            max_entities: 20,
-            source_agent: None,
-        };
-        let res = analyzer.invoke(input, &ctx).await;
-        let latency = started_node.elapsed().as_millis() as u64;
-        chewing_metrics.analyzer_latency_ms = latency;
-        match res {
-            Ok(out) => {
-                // Dépose une phéromone d'entités.
-                for e in &out.entities {
-                    let entry = BlackboardEntry::new(
-                        "analyzer",
-                        EntryKind::Entity,
-                        serde_json::json!({"text": e.text, "kind": format!("{:?}", e.kind)}),
-                    );
-                    let entry_id = entry.entry_id;
-                    let _ = coord.blackboard.deposit(entry);
-                    let _ = coord
-                        .bus
-                        .publish(StreamEvent::PheromoneDeposited {
-                            swarm_id,
-                            author: "analyzer".into(),
-                            kind: "ENTITY".into(),
-                            entry_id,
-                            ts: Utc::now(),
-                        })
-                        .await;
-                }
-                let _ = coord
-                    .bus
-                    .publish(StreamEvent::RobotFinished {
-                        swarm_id,
-                        robot_id: "analyzer".into(),
-                        success: true,
-                        latency_ms: latency,
-                        error: None,
-                        ts: Utc::now(),
-                    })
-                    .await;
-            }
-            Err(e) => {
+        let circuit = coord.clients.slm_circuit("analyzer");
+        match slm_guard_check(circuit, "analyzer", &mut chewing_metrics) {
+            SlmGuardOutcome::Skip => {
+                // R3.S2 : circuit Open → skip analyzer immédiat (<1ms).
+                // chewing_metrics.failure_mode/failed_components déjà tracés.
                 let _ = coord
                     .bus
                     .publish(StreamEvent::RobotFinished {
                         swarm_id,
                         robot_id: "analyzer".into(),
                         success: false,
-                        latency_ms: latency,
-                        error: Some(e.to_string()),
+                        latency_ms: 0,
+                        error: Some("slm_circuit_open".into()),
                         ts: Utc::now(),
                     })
                     .await;
-                // Analyzer optionnel : on continue.
+                // chewing_metrics.analyzer_latency_ms reste 0 (signal "skipped").
+            }
+            SlmGuardOutcome::Proceed => {
+                let _ = coord
+                    .bus
+                    .publish(StreamEvent::RobotStarted {
+                        swarm_id,
+                        robot_id: "analyzer".into(),
+                        ts: Utc::now(),
+                    })
+                    .await;
+                let started_node = Instant::now();
+                let input = AnalyzerInput {
+                    text: req.user_text.clone(),
+                    max_entities: 20,
+                    source_agent: None,
+                };
+                let res = analyzer.invoke(input, &ctx).await;
+                let latency = started_node.elapsed().as_millis() as u64;
+                chewing_metrics.analyzer_latency_ms = latency;
+                match res {
+                    Ok(out) => {
+                        // R3.S2 : succès → reset compteur du circuit.
+                        slm_guard_record_success(circuit);
+                        // Dépose une phéromone d'entités.
+                        for e in &out.entities {
+                            let entry = BlackboardEntry::new(
+                                "analyzer",
+                                EntryKind::Entity,
+                                serde_json::json!({"text": e.text, "kind": format!("{:?}", e.kind)}),
+                            );
+                            let entry_id = entry.entry_id;
+                            let _ = coord.blackboard.deposit(entry);
+                            let _ = coord
+                                .bus
+                                .publish(StreamEvent::PheromoneDeposited {
+                                    swarm_id,
+                                    author: "analyzer".into(),
+                                    kind: "ENTITY".into(),
+                                    entry_id,
+                                    ts: Utc::now(),
+                                })
+                                .await;
+                        }
+                        let _ = coord
+                            .bus
+                            .publish(StreamEvent::RobotFinished {
+                                swarm_id,
+                                robot_id: "analyzer".into(),
+                                success: true,
+                                latency_ms: latency,
+                                error: None,
+                                ts: Utc::now(),
+                            })
+                            .await;
+                    }
+                    Err(e) => {
+                        // R3.S2 : échec → record_failure, potentiellement
+                        // ouvre circuit + émet SlmCircuitOpened event.
+                        // Auto-trace FailureMode + failed_components.
+                        let _opened = slm_guard_record_failure(
+                            circuit,
+                            "analyzer",
+                            &mut chewing_metrics,
+                            &coord.bus,
+                            swarm_id,
+                        )
+                        .await;
+                        let _ = coord
+                            .bus
+                            .publish(StreamEvent::RobotFinished {
+                                swarm_id,
+                                robot_id: "analyzer".into(),
+                                success: false,
+                                latency_ms: latency,
+                                error: Some(e.to_string()),
+                                ts: Utc::now(),
+                            })
+                            .await;
+                        // Analyzer optionnel : on continue.
+                    }
+                }
             }
         }
     }
@@ -243,65 +281,96 @@ pub async fn run_mission_a(
     // Le LLM finalement choisi (par router ou fallback) est tracé dans les métriques.
     chewing_metrics.selected_llm = selected_llm.clone();
 
-    // ── Étape 3 : Compressor (optionnel — appliqué si texte long) ─────
+    // ── Étape 3 : Compressor (R3.S2 fix L2 : guard SLM circuit) ─────
     let final_prompt = if let Some(compressor) = &coord.clients.compressor {
         if req.user_text.len() > 500 {
-            let _ = coord
-                .bus
-                .publish(StreamEvent::RobotStarted {
-                    swarm_id,
-                    robot_id: "compressor".into(),
-                    ts: Utc::now(),
-                })
-                .await;
-            let started_node = Instant::now();
-            let c_input = CompressorInput {
-                text: req.user_text.clone(),
-                // S5 R2 patch (symétrie avec mission_b.rs) : target_words=100
-                // était trop lâche, le modèle produisait des résumés ≈ même
-                // taille que l'input. 30 mots ≈ 30 tokens → savings ≈ 100,
-                // ratio ≈ 0.22. S4 avait passé par chance non-déterministe.
-                target_words: 30,
-                must_preserve: vec![],
-                style: CompressionStyle::Extractive,
-            };
-            match compressor.invoke(c_input, &ctx).await {
-                Ok(out) => {
-                    let latency = started_node.elapsed().as_millis() as u64;
-                    chewing_metrics.compressor_latency_ms = latency;
-                    let _ = coord
-                        .bus
-                        .publish(StreamEvent::RobotFinished {
-                            swarm_id,
-                            robot_id: "compressor".into(),
-                            success: true,
-                            latency_ms: latency,
-                            error: None,
-                            ts: Utc::now(),
-                        })
-                        .await;
-                    let _ = coord.blackboard.deposit(BlackboardEntry::new(
-                        "compressor",
-                        EntryKind::CompressedText,
-                        serde_json::json!({"summary": out.summary, "ratio": out.compression_ratio}),
-                    ));
-                    out.summary
-                }
-                Err(e) => {
-                    let latency = started_node.elapsed().as_millis() as u64;
-                    chewing_metrics.compressor_latency_ms = latency;
+            let circuit = coord.clients.slm_circuit("compressor");
+            match slm_guard_check(circuit, "compressor", &mut chewing_metrics) {
+                SlmGuardOutcome::Skip => {
+                    // R3.S2 : circuit Open → skip compressor, utilise raw prompt.
                     let _ = coord
                         .bus
                         .publish(StreamEvent::RobotFinished {
                             swarm_id,
                             robot_id: "compressor".into(),
                             success: false,
-                            latency_ms: latency,
-                            error: Some(e.to_string()),
+                            latency_ms: 0,
+                            error: Some("slm_circuit_open".into()),
                             ts: Utc::now(),
                         })
                         .await;
                     req.user_text.clone()
+                }
+                SlmGuardOutcome::Proceed => {
+                    let _ = coord
+                        .bus
+                        .publish(StreamEvent::RobotStarted {
+                            swarm_id,
+                            robot_id: "compressor".into(),
+                            ts: Utc::now(),
+                        })
+                        .await;
+                    let started_node = Instant::now();
+                    let c_input = CompressorInput {
+                        text: req.user_text.clone(),
+                        // S5 R2 patch (symétrie avec mission_b.rs) : target_words=100
+                        // était trop lâche, le modèle produisait des résumés ≈ même
+                        // taille que l'input. 30 mots ≈ 30 tokens → savings ≈ 100,
+                        // ratio ≈ 0.22. S4 avait passé par chance non-déterministe.
+                        target_words: 30,
+                        must_preserve: vec![],
+                        style: CompressionStyle::Extractive,
+                    };
+                    match compressor.invoke(c_input, &ctx).await {
+                        Ok(out) => {
+                            // R3.S2 : succès → reset circuit.
+                            slm_guard_record_success(circuit);
+                            let latency = started_node.elapsed().as_millis() as u64;
+                            chewing_metrics.compressor_latency_ms = latency;
+                            let _ = coord
+                                .bus
+                                .publish(StreamEvent::RobotFinished {
+                                    swarm_id,
+                                    robot_id: "compressor".into(),
+                                    success: true,
+                                    latency_ms: latency,
+                                    error: None,
+                                    ts: Utc::now(),
+                                })
+                                .await;
+                            let _ = coord.blackboard.deposit(BlackboardEntry::new(
+                                "compressor",
+                                EntryKind::CompressedText,
+                                serde_json::json!({"summary": out.summary, "ratio": out.compression_ratio}),
+                            ));
+                            out.summary
+                        }
+                        Err(e) => {
+                            // R3.S2 : échec → record_failure + auto-emit event si transition.
+                            let _opened = slm_guard_record_failure(
+                                circuit,
+                                "compressor",
+                                &mut chewing_metrics,
+                                &coord.bus,
+                                swarm_id,
+                            )
+                            .await;
+                            let latency = started_node.elapsed().as_millis() as u64;
+                            chewing_metrics.compressor_latency_ms = latency;
+                            let _ = coord
+                                .bus
+                                .publish(StreamEvent::RobotFinished {
+                                    swarm_id,
+                                    robot_id: "compressor".into(),
+                                    success: false,
+                                    latency_ms: latency,
+                                    error: Some(e.to_string()),
+                                    ts: Utc::now(),
+                                })
+                                .await;
+                            req.user_text.clone()
+                        }
+                    }
                 }
             }
         } else {
@@ -429,54 +498,84 @@ pub async fn run_mission_a(
         })
         .await;
 
-    // ── Étape 5 : Verifier (si sources) ──────────────────────────────
+    // ── Étape 5 : Verifier (R3.S2 fix L2 : guard SLM circuit + si sources) ──
     let mut verdicts = Vec::new();
     if !req.candidate_sources.is_empty() {
         if let Some(verifier) = &coord.clients.verifier {
-            let v_input = VerifierInput {
-                claim: llm_resp.text.clone(),
-                candidate_sources: req
-                    .candidate_sources
-                    .iter()
-                    .map(|cs| CandidateSource {
-                        id: cs.id.clone(),
-                        text: cs.text.clone(),
-                    })
-                    .collect(),
-                strictness: VerifierStrictness::Standard,
-            };
-            // S4 R2 : instrumenter la latence du verifier (manquait dans le code original).
-            let verifier_started = Instant::now();
-            match verifier.invoke(v_input, &ctx).await {
-                Ok(out) => {
-                    chewing_metrics.verifier_latency_ms =
-                        verifier_started.elapsed().as_millis() as u64;
-                    let verdict_str = format!("{:?}", out.verdict).to_uppercase();
-                    let severity_str = format!("{:?}", out.severity).to_uppercase();
+            let circuit = coord.clients.slm_circuit("verifier");
+            match slm_guard_check(circuit, "verifier", &mut chewing_metrics) {
+                SlmGuardOutcome::Skip => {
+                    // R3.S2 : circuit Open → skip verifier, pas de verdicts.
                     let _ = coord
                         .bus
-                        .publish(StreamEvent::VerdictReady {
+                        .publish(StreamEvent::RobotFinished {
                             swarm_id,
-                            claim: llm_resp.text.clone(),
-                            verdict: verdict_str.clone(),
-                            severity: severity_str.clone(),
-                            best_source_id: out.best_source_id.clone(),
-                            similarity: out.similarity,
+                            robot_id: "verifier".into(),
+                            success: false,
+                            latency_ms: 0,
+                            error: Some("slm_circuit_open".into()),
                             ts: Utc::now(),
                         })
                         .await;
-                    verdicts.push(FactCheck {
-                        claim: llm_resp.text.clone(),
-                        verdict: verdict_str,
-                        severity: severity_str,
-                        best_source_id: out.best_source_id,
-                        similarity: out.similarity,
-                    });
                 }
-                Err(_) => {
-                    chewing_metrics.verifier_latency_ms =
-                        verifier_started.elapsed().as_millis() as u64;
-                    // Verifier optionnel — on continue sans verdicts.
+                SlmGuardOutcome::Proceed => {
+                    let v_input = VerifierInput {
+                        claim: llm_resp.text.clone(),
+                        candidate_sources: req
+                            .candidate_sources
+                            .iter()
+                            .map(|cs| CandidateSource {
+                                id: cs.id.clone(),
+                                text: cs.text.clone(),
+                            })
+                            .collect(),
+                        strictness: VerifierStrictness::Standard,
+                    };
+                    // S4 R2 : instrumenter la latence du verifier.
+                    let verifier_started = Instant::now();
+                    match verifier.invoke(v_input, &ctx).await {
+                        Ok(out) => {
+                            // R3.S2 : succès → reset circuit.
+                            slm_guard_record_success(circuit);
+                            chewing_metrics.verifier_latency_ms =
+                                verifier_started.elapsed().as_millis() as u64;
+                            let verdict_str = format!("{:?}", out.verdict).to_uppercase();
+                            let severity_str = format!("{:?}", out.severity).to_uppercase();
+                            let _ = coord
+                                .bus
+                                .publish(StreamEvent::VerdictReady {
+                                    swarm_id,
+                                    claim: llm_resp.text.clone(),
+                                    verdict: verdict_str.clone(),
+                                    severity: severity_str.clone(),
+                                    best_source_id: out.best_source_id.clone(),
+                                    similarity: out.similarity,
+                                    ts: Utc::now(),
+                                })
+                                .await;
+                            verdicts.push(FactCheck {
+                                claim: llm_resp.text.clone(),
+                                verdict: verdict_str,
+                                severity: severity_str,
+                                best_source_id: out.best_source_id,
+                                similarity: out.similarity,
+                            });
+                        }
+                        Err(_) => {
+                            // R3.S2 : échec → record_failure + auto-emit event.
+                            let _opened = slm_guard_record_failure(
+                                circuit,
+                                "verifier",
+                                &mut chewing_metrics,
+                                &coord.bus,
+                                swarm_id,
+                            )
+                            .await;
+                            chewing_metrics.verifier_latency_ms =
+                                verifier_started.elapsed().as_millis() as u64;
+                            // Verifier optionnel — on continue sans verdicts.
+                        }
+                    }
                 }
             }
         }
@@ -497,10 +596,25 @@ pub async fn run_mission_a(
     chewing_metrics.total_pipeline_latency_ms = started.elapsed().as_millis() as u64;
     chewing_metrics.recompute_total_slm_latency();
 
-    // S8 R2 : wire les champs de failure tracking dans chewing_metrics.
-    chewing_metrics.failure_mode = failure_mode.clone();
-    chewing_metrics.degradations_count = failure_mode.count_degradations();
-    chewing_metrics.failed_components = failed_components;
+    // S8 R2 + R3.S2 : wire les champs de failure tracking dans chewing_metrics.
+    //
+    // R3.S2 chirurgicale : les guards SLM ont déjà tracé failure_mode +
+    // failed_components dans chewing_metrics au fil de l'exécution. Le
+    // tracking S8 LLM fallback ci-dessous compose AVEC les traces SLM via
+    // `combine_failure_modes` (pas d'écrasement).
+    let combined_failure_mode = crate::failure::combine_failure_modes(
+        std::mem::take(&mut chewing_metrics.failure_mode),
+        failure_mode.clone(),
+    );
+    chewing_metrics.failure_mode = combined_failure_mode;
+    chewing_metrics.degradations_count =
+        chewing_metrics.failure_mode.count_degradations();
+    // failed_components : merge (les SLM ont push, les LLM fallback ajoutent).
+    for c in failed_components {
+        if !chewing_metrics.failed_components.contains(&c) {
+            chewing_metrics.failed_components.push(c);
+        }
+    }
     // selected_llm reflète le LLM réellement utilisé (post-fallback).
     chewing_metrics.selected_llm = llm_resp.provider.clone();
 
@@ -515,6 +629,9 @@ pub async fn run_mission_a(
 
     // R3.S1 : propagation explicite cost_microcents (resolved fallback si absent).
     let cost_mc = llm_resp.cost_microcents_resolved();
+    // R3.S2 : la `failure_mode` finale = combinaison SLM circuits (tracés
+    // dans chewing_metrics.failure_mode) + LLM fallback S8 (local `failure_mode`).
+    let final_failure_mode = chewing_metrics.failure_mode.clone();
     let response = MissionAResponse {
         final_text: llm_resp.text,
         llm_used: llm_resp.provider,
@@ -526,8 +643,13 @@ pub async fn run_mission_a(
         chewing_metrics: Some(chewing_metrics),
         // S8 R2 : fallback tracing
         fallback_chain_used,
-        failure_mode,
+        // R3.S2 : failure_mode combiné (SLM + LLM fallback).
+        failure_mode: final_failure_mode,
     };
+    // R3.S2 : variable locale `failure_mode` n'est plus utilisée dans la
+    // response (la valeur est désormais sur chewing_metrics + duplicated).
+    // On garde le binding S8 pour minimiser le diff, mais il est mort.
+    let _ = failure_mode;
 
     let _ = coord
         .bus

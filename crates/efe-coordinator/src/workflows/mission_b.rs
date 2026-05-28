@@ -24,6 +24,10 @@ use crate::llm::LlmCall;
 use crate::metrics::ChewingMetrics;
 use crate::request::{FactCheck, MissionBRequest, MissionBResponse};
 use crate::vote::{Ballot, VoteEngine};
+// R3.S2 (fix L2) : helpers SLM circuit guards.
+use crate::workflows::slm_guard::{
+    slm_guard_check, slm_guard_record_failure, slm_guard_record_success, SlmGuardOutcome,
+};
 
 /// Exécute la Mission B : pré-mâcher une fois, fan-out vers N LLMs en
 /// parallèle, agréger via vote pondéré, fact-check le winner.
@@ -64,101 +68,163 @@ pub async fn run_mission_b(
     let ctx = CallContext::with_swarm(coord.config.default_tenant, swarm_id, audit.clone());
 
     // ── Étape 1 : pre-chew unique (analyzer + compressor) ────────────
+    // R3.S2 (fix L2) : guards SLM circuit autour des invokes.
     if let Some(analyzer) = &coord.clients.analyzer {
-        let started_node = Instant::now();
-        let _ = coord
-            .bus
-            .publish(StreamEvent::RobotStarted {
-                swarm_id,
-                robot_id: "analyzer".into(),
-                ts: Utc::now(),
-            })
-            .await;
-        let input = AnalyzerInput {
-            text: req.user_text.clone(),
-            max_entities: 20,
-            source_agent: None,
-        };
-        let success = analyzer.invoke(input, &ctx).await.is_ok();
-        let latency = started_node.elapsed().as_millis() as u64;
-        chewing_metrics.analyzer_latency_ms = latency;
-        let _ = coord
-            .bus
-            .publish(StreamEvent::RobotFinished {
-                swarm_id,
-                robot_id: "analyzer".into(),
-                success,
-                latency_ms: latency,
-                error: None,
-                ts: Utc::now(),
-            })
-            .await;
+        let circuit = coord.clients.slm_circuit("analyzer");
+        match slm_guard_check(circuit, "analyzer", &mut chewing_metrics) {
+            SlmGuardOutcome::Skip => {
+                // R3.S2 : circuit Open → skip analyzer.
+                let _ = coord
+                    .bus
+                    .publish(StreamEvent::RobotFinished {
+                        swarm_id,
+                        robot_id: "analyzer".into(),
+                        success: false,
+                        latency_ms: 0,
+                        error: Some("slm_circuit_open".into()),
+                        ts: Utc::now(),
+                    })
+                    .await;
+            }
+            SlmGuardOutcome::Proceed => {
+                let started_node = Instant::now();
+                let _ = coord
+                    .bus
+                    .publish(StreamEvent::RobotStarted {
+                        swarm_id,
+                        robot_id: "analyzer".into(),
+                        ts: Utc::now(),
+                    })
+                    .await;
+                let input = AnalyzerInput {
+                    text: req.user_text.clone(),
+                    max_entities: 20,
+                    source_agent: None,
+                };
+                let invoke_res = analyzer.invoke(input, &ctx).await;
+                let success = invoke_res.is_ok();
+                let latency = started_node.elapsed().as_millis() as u64;
+                chewing_metrics.analyzer_latency_ms = latency;
+                if let Err(_e) = &invoke_res {
+                    // R3.S2 : échec → record_failure + auto-emit event.
+                    let _opened = slm_guard_record_failure(
+                        circuit,
+                        "analyzer",
+                        &mut chewing_metrics,
+                        &coord.bus,
+                        swarm_id,
+                    )
+                    .await;
+                } else {
+                    // R3.S2 : succès → reset.
+                    slm_guard_record_success(circuit);
+                }
+                let _ = coord
+                    .bus
+                    .publish(StreamEvent::RobotFinished {
+                        swarm_id,
+                        robot_id: "analyzer".into(),
+                        success,
+                        latency_ms: latency,
+                        error: None,
+                        ts: Utc::now(),
+                    })
+                    .await;
+            }
+        }
     }
 
+    // R3.S2 (fix L2) : compressor mutualisé Mission B avec guard SLM
+    // circuit. Sur fan-out N LLMs, le compressor tourne 1× → 1 seul guard
+    // (cohérent avec S5 mutualisation).
     let prompt_for_llms = if let Some(compressor) = &coord.clients.compressor {
         if req.user_text.len() > 500 {
-            // S5 R2 patch : émettre RobotStarted/RobotFinished + capturer
-            // l'erreur dans le bus si l'invoke échoue. Avant ce patch,
-            // un compressor qui fail était SWALLOW silencieusement
-            // (`unwrap_or_else(|_| req.user_text.clone())` retombait sur le
-            // texte original sans laisser de trace observable).
-            let started_node = Instant::now();
-            let _ = coord
-                .bus
-                .publish(StreamEvent::RobotStarted {
-                    swarm_id,
-                    robot_id: "compressor".into(),
-                    ts: Utc::now(),
-                })
-                .await;
-            let c = CompressorInput {
-                text: req.user_text.clone(),
-                // S5 R2 patch D15 : target_words=100 donnait des résumés
-                // ≈ même taille que la fixture 547 chars (≈ 137 tokens raw).
-                // 30 mots ≈ 120 chars ≈ 30 tokens output → ratio ≈ 0.22,
-                // savings ≈ 100 tokens, ce qui se MULTIPLIE × 3 LLMs.
-                target_words: 30,
-                must_preserve: vec![],
-                style: CompressionStyle::Extractive,
-            };
-            let res = compressor.invoke(c, &ctx).await;
-            let latency = started_node.elapsed().as_millis() as u64;
-            chewing_metrics.compressor_latency_ms = latency;
-            match res {
-                Ok(out) => {
-                    let _ = coord
-                        .bus
-                        .publish(StreamEvent::RobotFinished {
-                            swarm_id,
-                            robot_id: "compressor".into(),
-                            success: true,
-                            latency_ms: latency,
-                            error: None,
-                            ts: Utc::now(),
-                        })
-                        .await;
-                    let _ = coord.blackboard.deposit(BlackboardEntry::new(
-                        "compressor",
-                        EntryKind::CompressedText,
-                        serde_json::json!({"summary": out.summary, "ratio": out.compression_ratio}),
-                    ));
-                    out.summary
-                }
-                Err(e) => {
+            let circuit = coord.clients.slm_circuit("compressor");
+            match slm_guard_check(circuit, "compressor", &mut chewing_metrics) {
+                SlmGuardOutcome::Skip => {
+                    // R3.S2 : circuit Open → skip compressor, use raw prompt.
                     let _ = coord
                         .bus
                         .publish(StreamEvent::RobotFinished {
                             swarm_id,
                             robot_id: "compressor".into(),
                             success: false,
-                            latency_ms: latency,
-                            error: Some(e.to_string()),
+                            latency_ms: 0,
+                            error: Some("slm_circuit_open".into()),
                             ts: Utc::now(),
                         })
                         .await;
-                    // Fallback : on garde le user_text original (pas de compression).
-                    // Le savings sera 0 mais la mission continue avec la qualité préservée.
                     req.user_text.clone()
+                }
+                SlmGuardOutcome::Proceed => {
+                    // S5 R2 patch : émettre RobotStarted/RobotFinished + capturer
+                    // l'erreur dans le bus si l'invoke échoue.
+                    let started_node = Instant::now();
+                    let _ = coord
+                        .bus
+                        .publish(StreamEvent::RobotStarted {
+                            swarm_id,
+                            robot_id: "compressor".into(),
+                            ts: Utc::now(),
+                        })
+                        .await;
+                    let c = CompressorInput {
+                        text: req.user_text.clone(),
+                        // S5 R2 patch D15 : target_words=30 → ratio ≈ 0.22.
+                        target_words: 30,
+                        must_preserve: vec![],
+                        style: CompressionStyle::Extractive,
+                    };
+                    let res = compressor.invoke(c, &ctx).await;
+                    let latency = started_node.elapsed().as_millis() as u64;
+                    chewing_metrics.compressor_latency_ms = latency;
+                    match res {
+                        Ok(out) => {
+                            // R3.S2 : succès → reset circuit.
+                            slm_guard_record_success(circuit);
+                            let _ = coord
+                                .bus
+                                .publish(StreamEvent::RobotFinished {
+                                    swarm_id,
+                                    robot_id: "compressor".into(),
+                                    success: true,
+                                    latency_ms: latency,
+                                    error: None,
+                                    ts: Utc::now(),
+                                })
+                                .await;
+                            let _ = coord.blackboard.deposit(BlackboardEntry::new(
+                                "compressor",
+                                EntryKind::CompressedText,
+                                serde_json::json!({"summary": out.summary, "ratio": out.compression_ratio}),
+                            ));
+                            out.summary
+                        }
+                        Err(e) => {
+                            // R3.S2 : échec → record_failure + auto-emit event.
+                            let _opened = slm_guard_record_failure(
+                                circuit,
+                                "compressor",
+                                &mut chewing_metrics,
+                                &coord.bus,
+                                swarm_id,
+                            )
+                            .await;
+                            let _ = coord
+                                .bus
+                                .publish(StreamEvent::RobotFinished {
+                                    swarm_id,
+                                    robot_id: "compressor".into(),
+                                    success: false,
+                                    latency_ms: latency,
+                                    error: Some(e.to_string()),
+                                    ts: Utc::now(),
+                                })
+                                .await;
+                            // Fallback : on garde le user_text original.
+                            req.user_text.clone()
+                        }
+                    }
                 }
             }
         } else {
@@ -326,49 +392,83 @@ pub async fn run_mission_b(
         })
         .await;
 
-    // ── Étape 4 : Verifier (optionnel) ───────────────────────────────
+    // ── Étape 4 : Verifier (R3.S2 fix L2 : guard SLM circuit + si sources) ──
     let mut verdicts = Vec::new();
     if !req.candidate_sources.is_empty() {
         if let Some(verifier) = &coord.clients.verifier {
-            let v_input = VerifierInput {
-                claim: outcome.winner_text.clone(),
-                candidate_sources: req
-                    .candidate_sources
-                    .iter()
-                    .map(|cs| CandidateSource {
-                        id: cs.id.clone(),
-                        text: cs.text.clone(),
-                    })
-                    .collect(),
-                strictness: VerifierStrictness::Standard,
-            };
-            // S5 R2 : instrumenter latence verifier.
-            let verifier_started = Instant::now();
-            let res = verifier.invoke(v_input, &ctx).await;
-            chewing_metrics.verifier_latency_ms =
-                verifier_started.elapsed().as_millis() as u64;
-            if let Ok(out) = res {
-                let verdict_str = format!("{:?}", out.verdict).to_uppercase();
-                let severity_str = format!("{:?}", out.severity).to_uppercase();
-                let _ = coord
-                    .bus
-                    .publish(StreamEvent::VerdictReady {
-                        swarm_id,
+            let circuit = coord.clients.slm_circuit("verifier");
+            match slm_guard_check(circuit, "verifier", &mut chewing_metrics) {
+                SlmGuardOutcome::Skip => {
+                    // R3.S2 : circuit Open → skip verifier, pas de verdicts.
+                    let _ = coord
+                        .bus
+                        .publish(StreamEvent::RobotFinished {
+                            swarm_id,
+                            robot_id: "verifier".into(),
+                            success: false,
+                            latency_ms: 0,
+                            error: Some("slm_circuit_open".into()),
+                            ts: Utc::now(),
+                        })
+                        .await;
+                }
+                SlmGuardOutcome::Proceed => {
+                    let v_input = VerifierInput {
                         claim: outcome.winner_text.clone(),
-                        verdict: verdict_str.clone(),
-                        severity: severity_str.clone(),
-                        best_source_id: out.best_source_id.clone(),
-                        similarity: out.similarity,
-                        ts: Utc::now(),
-                    })
-                    .await;
-                verdicts.push(FactCheck {
-                    claim: outcome.winner_text.clone(),
-                    verdict: verdict_str,
-                    severity: severity_str,
-                    best_source_id: out.best_source_id,
-                    similarity: out.similarity,
-                });
+                        candidate_sources: req
+                            .candidate_sources
+                            .iter()
+                            .map(|cs| CandidateSource {
+                                id: cs.id.clone(),
+                                text: cs.text.clone(),
+                            })
+                            .collect(),
+                        strictness: VerifierStrictness::Standard,
+                    };
+                    // S5 R2 : instrumenter latence verifier.
+                    let verifier_started = Instant::now();
+                    let res = verifier.invoke(v_input, &ctx).await;
+                    chewing_metrics.verifier_latency_ms =
+                        verifier_started.elapsed().as_millis() as u64;
+                    match res {
+                        Ok(out) => {
+                            // R3.S2 : succès → reset circuit.
+                            slm_guard_record_success(circuit);
+                            let verdict_str = format!("{:?}", out.verdict).to_uppercase();
+                            let severity_str = format!("{:?}", out.severity).to_uppercase();
+                            let _ = coord
+                                .bus
+                                .publish(StreamEvent::VerdictReady {
+                                    swarm_id,
+                                    claim: outcome.winner_text.clone(),
+                                    verdict: verdict_str.clone(),
+                                    severity: severity_str.clone(),
+                                    best_source_id: out.best_source_id.clone(),
+                                    similarity: out.similarity,
+                                    ts: Utc::now(),
+                                })
+                                .await;
+                            verdicts.push(FactCheck {
+                                claim: outcome.winner_text.clone(),
+                                verdict: verdict_str,
+                                severity: severity_str,
+                                best_source_id: out.best_source_id,
+                                similarity: out.similarity,
+                            });
+                        }
+                        Err(_) => {
+                            // R3.S2 : échec → record_failure + auto-emit event.
+                            let _opened = slm_guard_record_failure(
+                                circuit,
+                                "verifier",
+                                &mut chewing_metrics,
+                                &coord.bus,
+                                swarm_id,
+                            )
+                            .await;
+                        }
+                    }
+                }
             }
         }
     }

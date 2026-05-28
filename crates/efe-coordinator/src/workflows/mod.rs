@@ -8,6 +8,7 @@
 mod mission_a;
 mod mission_b;
 mod speculative;
+pub(crate) mod slm_guard;
 
 pub use mission_a::run_mission_a;
 pub use mission_b::run_mission_b;

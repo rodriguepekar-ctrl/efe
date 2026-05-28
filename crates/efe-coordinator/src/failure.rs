@@ -132,6 +132,104 @@ impl FailureMode {
     }
 }
 
+/// **R3.S2 (§2.3 architecture)** — Compose deux `FailureMode` en gérant
+/// flatten + dedup + simplification du Composite-of-one.
+///
+/// Règles appliquées :
+/// - **Normalisation préalable** : chaque input passe par `normalize()`
+///   qui dédupe les Composite et simplifie `Composite([X])` → `X`.
+/// - `None` + `X` → `X` (no-op)
+/// - `X` + `None` → `X`
+/// - `X` + `X` (égalité après normalisation) → `X` (dedup)
+/// - `Composite(a)` + `Composite(b)` → `Composite(a ∪ b)` (dedup'd)
+/// - `Composite(modes)` + `X` (non-composite) → `Composite(modes + X)` si X
+///   pas déjà dans modes
+/// - `X` (non-composite) + `Composite(modes)` → `Composite([X] + modes)`
+/// - `X` + `Y` (deux simples distincts) → `Composite([X, Y])`
+/// - Si le résultat est `Composite([single])`, simplifie en `single`.
+///
+/// **Garantie** : pas de `Composite` imbriqué dans le résultat (flatten).
+/// **Garantie** : aucun `Composite([X])` dans le résultat (simplification).
+///
+/// Utilisé par les workflows R3.S2 pour accumuler les failure modes
+/// au fur et à mesure que les guards SLM s'activent dans une même mission.
+#[must_use]
+pub fn combine_failure_modes(existing: FailureMode, new: FailureMode) -> FailureMode {
+    use FailureMode::*;
+    // R3.S2 (§2.3) : normaliser les inputs pour garantir simplification
+    // même quand on reçoit déjà du Composite([X]) (cas légal mais
+    // dégénéré).
+    let existing = normalize_failure_mode(existing);
+    let new = normalize_failure_mode(new);
+    match (existing, new) {
+        // Cas trivial : un des deux est None.
+        (None, other) | (other, None) => other,
+        // Égalité parfaite → dedup.
+        (a, b) if a == b => a,
+        // Deux composites → union dédupliquée.
+        (Composite(a), Composite(b)) => {
+            let mut merged: Vec<FailureMode> = a;
+            for m in b {
+                if !merged.contains(&m) {
+                    merged.push(m);
+                }
+            }
+            simplify_composite(merged)
+        }
+        // Composite + simple → append si pas déjà dedans.
+        (Composite(mut modes), other) => {
+            if !modes.contains(&other) {
+                modes.push(other);
+            }
+            simplify_composite(modes)
+        }
+        // Simple + composite → prepend et dedup.
+        (other, Composite(modes)) => {
+            let mut combined: Vec<FailureMode> = vec![other];
+            for m in modes {
+                if !combined.contains(&m) {
+                    combined.push(m);
+                }
+            }
+            simplify_composite(combined)
+        }
+        // Deux simples distincts → Composite([a, b]).
+        (a, b) => Composite(vec![a, b]),
+    }
+}
+
+/// **R3.S2** — Normalise un `FailureMode` :
+/// - `Composite([])` → `None`
+/// - `Composite([X])` → `X` (simplification)
+/// - `Composite([X, X, Y])` → `Composite([X, Y])` (dedup)
+/// - autres variants → inchangés
+fn normalize_failure_mode(m: FailureMode) -> FailureMode {
+    match m {
+        FailureMode::Composite(modes) => {
+            let dedup: Vec<FailureMode> =
+                modes
+                    .into_iter()
+                    .fold(Vec::new(), |mut acc, m| {
+                        if !acc.contains(&m) {
+                            acc.push(m);
+                        }
+                        acc
+                    });
+            simplify_composite(dedup)
+        }
+        other => other,
+    }
+}
+
+/// Simplifie un vec de FailureMode : `[]` → `None`, `[x]` → `x`, sinon `Composite(vec)`.
+fn simplify_composite(modes: Vec<FailureMode>) -> FailureMode {
+    match modes.len() {
+        0 => FailureMode::None,
+        1 => modes.into_iter().next().expect("len 1"),
+        _ => FailureMode::Composite(modes),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -260,5 +358,80 @@ mod tests {
         let s = serde_json::to_string(&f).unwrap();
         let back: FailureMode = serde_json::from_str(&s).unwrap();
         assert_eq!(back, f);
+    }
+
+    // ================================================================
+    // R3.S2 — Tests `combine_failure_modes` (§6.1.1 architecture, 6 tests)
+    // ================================================================
+
+    #[test]
+    fn r3s2_combine_none_with_x_returns_x() {
+        let x = FailureMode::SlmDown("analyzer".into());
+        assert_eq!(combine_failure_modes(FailureMode::None, x.clone()), x);
+    }
+
+    #[test]
+    fn r3s2_combine_x_with_none_returns_x() {
+        let x = FailureMode::LlmFallbackTriggered {
+            from: "claude_sonnet".into(),
+            to: "gemini_flash".into(),
+        };
+        assert_eq!(combine_failure_modes(x.clone(), FailureMode::None), x);
+    }
+
+    #[test]
+    fn r3s2_combine_two_simples_returns_composite() {
+        let a = FailureMode::SlmDown("analyzer".into());
+        let b = FailureMode::SlmDown("verifier".into());
+        let combined = combine_failure_modes(a.clone(), b.clone());
+        assert_eq!(
+            combined,
+            FailureMode::Composite(vec![a, b]),
+            "deux simples distincts doivent produire Composite([a, b])"
+        );
+    }
+
+    #[test]
+    fn r3s2_combine_composite_with_simple_appends() {
+        let pre = FailureMode::Composite(vec![FailureMode::SlmDown("analyzer".into())]);
+        let new = FailureMode::SlmDown("compressor".into());
+        let combined = combine_failure_modes(pre, new);
+        if let FailureMode::Composite(modes) = combined {
+            assert_eq!(modes.len(), 2, "Composite + simple → 2 entries");
+            assert!(modes.contains(&FailureMode::SlmDown("analyzer".into())));
+            assert!(modes.contains(&FailureMode::SlmDown("compressor".into())));
+        } else {
+            panic!("attendu Composite, got {:?}", combined);
+        }
+    }
+
+    #[test]
+    fn r3s2_combine_dedupes_duplicates() {
+        let a = FailureMode::SlmDown("analyzer".into());
+        // Simple + même simple → garde une seule entry.
+        let combined = combine_failure_modes(a.clone(), a.clone());
+        assert_eq!(combined, a, "deux identiques dédupliqués → 1 entry");
+
+        // Composite + simple déjà présent → pas de doublon.
+        let pre = FailureMode::Composite(vec![a.clone(), FailureMode::SlmDown("v".into())]);
+        let combined2 = combine_failure_modes(pre.clone(), a.clone());
+        // Composite([analyzer, v]) inchangé.
+        if let FailureMode::Composite(modes) = combined2 {
+            assert_eq!(modes.len(), 2, "dedup dans Composite + simple");
+        } else {
+            panic!("attendu Composite");
+        }
+    }
+
+    #[test]
+    fn r3s2_combine_simplifies_composite_of_one() {
+        // Composite([A]) + None → simplifie en A (par le helper simplify_composite
+        // appliqué via le path Composite + Composite).
+        // On force le path : Composite([a]) + Composite([a]) → dedup → [a] → A.
+        let a = FailureMode::SlmDown("analyzer".into());
+        let composite_a = FailureMode::Composite(vec![a.clone()]);
+        let combined = combine_failure_modes(composite_a.clone(), composite_a);
+        // Avec dedup, l'union reste [a] → simplify_composite → A.
+        assert_eq!(combined, a, "Composite([A]) + Composite([A]) → A (simplifié)");
     }
 }
