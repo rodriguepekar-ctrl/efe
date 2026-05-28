@@ -333,19 +333,28 @@ impl Speculator {
         // ce seuil ET n'est PAS du bruit → on accepte le draft SANS appeler
         // le verifier. C'est l'optimisation économique fondamentale de S7.
         //
-        // R3.S3 (fix L4/D6) : le gate de bruit `noise_policy.detect` bloque
-        // les drafts sans contenu (« La »), les refus et les répétitions.
-        // Un draft-bruit tombe sur le slow path où le verifier produit la
-        // vraie réponse. `draft_words > 0` est ABSORBÉ par le gate (un draft
-        // vide déclenche `EmptyOrWhitespace`).
+        // R3.S3 (fix L4/D6) — sémantique PRÉCISE du « noise rejection » :
+        // le gate ne s'applique QUE quand le draft était un CANDIDAT au hot
+        // path (hot path activé ET draft assez court). Un draft trop long
+        // OU le mode slow-path-only (max_words=0) ne passe jamais par le hot
+        // path → la détection de bruit y serait du bruit télémétrique (on
+        // signalerait une « rejection » alors que rien n'aurait été
+        // hot-accepté). On ne détecte/émet donc QUE quand le bruit FLIP un
+        // hot-accept qui aurait sinon eu lieu. C'est exactement le problème
+        // L4/D6 : « du bruit était hot-accepté à tort ».
         let draft_words = draft.text.split_whitespace().count();
-        let noise = self.noise_policy.detect(&draft.text, &req.prompt);
-        let hot_path = self.max_words_for_quick_accept > 0
-            && draft_words <= self.max_words_for_quick_accept
-            && noise.is_none();
+        let is_hot_path_candidate = self.max_words_for_quick_accept > 0
+            && draft_words <= self.max_words_for_quick_accept;
+        let noise = if is_hot_path_candidate {
+            self.noise_policy.detect(&draft.text, &req.prompt)
+        } else {
+            None // hors hot path → bruit non pertinent (pas de rejection)
+        };
+        let hot_path = is_hot_path_candidate && noise.is_none();
 
-        // R3.S3 : observabilité — si le draft est du bruit, émet un event
-        // (le draft va retomber sur le slow path).
+        // R3.S3 : observabilité — si le bruit a bloqué un hot-accept qui
+        // aurait sinon eu lieu, émet l'event (le draft retombe sur le slow
+        // path où le verifier produit la vraie réponse).
         if let Some(signal) = noise {
             if let (Some(bus), Some(swarm)) = (bus_opt.as_ref(), swarm_opt) {
                 let excerpt: String = draft.text.chars().take(40).collect();
@@ -711,5 +720,47 @@ mod tests {
         assert!(out.verifier_skipped, "permissive_s7 → « La » prend le hot path");
         assert_eq!(out.final_text, "La");
         assert_eq!(out.noise_signal, None);
+    }
+
+    /// **R3.S3 (sémantique précise)** : un draft-bruit TROP LONG (> max_words)
+    /// n'est PAS flaggé comme noise — il n'était pas candidat au hot path
+    /// (rejeté pour longueur, pas pour bruit). `noise_signal` doit rester
+    /// `None` (il va au slow path pour cause de longueur).
+    #[tokio::test]
+    async fn r3s3_long_noisy_draft_not_flagged_as_noise() {
+        // 12 « La » > max_words 10 → jamais candidat hot path.
+        let long_noise = "La ".repeat(12);
+        let drafter =
+            Arc::new(MockLlmProvider::new("drafter").with_response(long_noise.trim()));
+        let verifier =
+            Arc::new(MockLlmProvider::new("verifier").with_response("Paris"));
+        let s = Speculator::new(drafter, verifier, 0.5)
+            .with_quick_accept(10)
+            .with_noise_policy(NoiseRejectionPolicy::default());
+        let out = s.run(LlmCall::simple("q", 10)).await.unwrap();
+        assert!(!out.verifier_skipped, "draft long → slow path (longueur)");
+        assert_eq!(
+            out.noise_signal, None,
+            "draft trop long → rejeté pour LONGUEUR, pas pour bruit → noise_signal None"
+        );
+    }
+
+    /// **R3.S3 (sémantique précise)** : en mode slow-path-only (max_words=0,
+    /// hot path désactivé), un draft-bruit n'est PAS flaggé — le hot path
+    /// n'était pas une option, donc aucune « rejection » de bruit n'a lieu.
+    #[tokio::test]
+    async fn r3s3_slow_path_only_mode_does_not_flag_noise() {
+        let drafter = Arc::new(MockLlmProvider::new("drafter").with_response("La"));
+        let verifier =
+            Arc::new(MockLlmProvider::new("verifier").with_response("Paris"));
+        // PAS de with_quick_accept → max_words=0 → hot path off.
+        let s = Speculator::new(drafter, verifier, 0.5)
+            .with_noise_policy(NoiseRejectionPolicy::default());
+        let out = s.run(LlmCall::simple("q", 10)).await.unwrap();
+        assert!(!out.verifier_skipped, "max_words=0 → toujours slow path");
+        assert_eq!(
+            out.noise_signal, None,
+            "hot path désactivé → pas de candidat → noise_signal None"
+        );
     }
 }

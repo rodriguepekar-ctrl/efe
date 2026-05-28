@@ -523,7 +523,58 @@ mod tests {
                 ts: Utc::now(),
             },
             StreamEvent::Heartbeat { ts: Utc::now() },
+            // ── S8 R2 — Failure modes (gap pré-R3.S3 : ces 4 events
+            //    n'étaient PAS couverts par l'invariant I3) ──
+            StreamEvent::LlmFallbackTriggered {
+                swarm_id: swarm,
+                from: "claude".into(),
+                to: "gemini".into(),
+                reason: "HTTP 429".into(),
+                ts: Utc::now(),
+            },
+            StreamEvent::LlmFailed {
+                swarm_id: swarm,
+                provider: "gpt4".into(),
+                reason: "circuit open".into(),
+                ts: Utc::now(),
+            },
+            StreamEvent::SlmCircuitOpened {
+                swarm_id: swarm,
+                robot: "analyzer".into(),
+                failures: 3,
+                ts: Utc::now(),
+            },
+            StreamEvent::DrafterBypassed {
+                swarm_id: swarm,
+                drafter: "gemini".into(),
+                fallback_to_verifier: "claude".into(),
+                reason: "timeout".into(),
+                ts: Utc::now(),
+            },
+            // ── R3.S3 — Speculator noise rejection ──
+            StreamEvent::DraftRejectedAsNoise {
+                swarm_id: swarm,
+                signal: "ONLY_STOPWORDS".into(),
+                draft_excerpt: "La".into(),
+                ts: Utc::now(),
+            },
         ];
+        // Garde-fou anti-dérive : l'invariant I3 DOIT couvrir TOUS les
+        // variants de `StreamEvent`. Le match `tag()` est exhaustif
+        // (compilateur-enforced), mais ce `vec!` ne l'est PAS. Si un futur
+        // sprint ajoute un variant sans l'ajouter ici, ce compteur de tags
+        // distincts échoue → tripwire forçant la mise à jour.
+        const STREAM_EVENT_VARIANT_COUNT: usize = 19;
+        let distinct_tags: std::collections::HashSet<&'static str> =
+            evs.iter().map(StreamEvent::tag).collect();
+        assert_eq!(
+            distinct_tags.len(),
+            STREAM_EVENT_VARIANT_COUNT,
+            "Invariant I3 : le vec doit couvrir les {STREAM_EVENT_VARIANT_COUNT} \
+             variants de StreamEvent (tags distincts vus : {}). Un variant a \
+             probablement été ajouté sans l'inclure dans ce test.",
+            distinct_tags.len()
+        );
         for ev in evs {
             let s = serde_json::to_string(&ev).unwrap();
             let back: StreamEvent = serde_json::from_str(&s).unwrap();
