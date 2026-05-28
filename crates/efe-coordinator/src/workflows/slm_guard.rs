@@ -25,7 +25,7 @@ use std::sync::Arc;
 use chrono::Utc;
 use uuid::Uuid;
 
-use efe_nano_app_coordinator::clients::SlmCircuitBreaker;
+use efe_nano_app_coordinator::SlmCircuitBreaker;
 
 use crate::events::{EventBus, StreamEvent};
 use crate::failure::{combine_failure_modes, FailureMode};

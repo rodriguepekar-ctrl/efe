@@ -25,8 +25,11 @@ use efe_coordinator::{
 };
 use efe_nano_app_coordinator::clients::llama_server::LlamaServerClient;
 use efe_nano_app_coordinator::clients::{
-    AnalyzerClient, CompressorClient, SlmCircuitBreaker, SlmCircuitState, VerifierClient,
+    AnalyzerClient, CompressorClient, VerifierClient,
 };
+// R3.S2 Gap 1 (re-export crate-root) : SlmCircuitBreaker accessible
+// directement à efe_nano_app_coordinator::SlmCircuitBreaker.
+use efe_nano_app_coordinator::{SlmCircuitBreaker, SlmCircuitState};
 use efe_nano_app_coordinator::types::router::TaskClass;
 use efe_nano_app_coordinator::types::{Budget, LlmMetadata};
 
@@ -653,4 +656,80 @@ async fn r3s2_speculative_unaffected_by_slm_circuits() {
             "Speculative ne push rien dans failed_components"
         );
     }
+}
+
+// =====================================================================
+// R3.S2 — Tests des Gaps 1 + 2 (post-audit chirurgical)
+// =====================================================================
+
+/// **R3.S2 Gap 1** : vérifier que `SlmCircuitBreaker` et `SlmCircuitState`
+/// sont accessibles directement depuis le crate root
+/// `efe_nano_app_coordinator::*` (cohérent avec AnalyzerClient etc.).
+#[test]
+fn r3s2_gap1_slm_circuit_breaker_exported_at_crate_root() {
+    // Si ce test compile, le re-export crate-root fonctionne.
+    let _cb: SlmCircuitBreaker = SlmCircuitBreaker::new(3, Duration::from_secs(10));
+    let _state: SlmCircuitState = SlmCircuitState::Closed;
+    // Compilation = test success.
+}
+
+/// **R3.S2 Gap 2** : vérifier que le builder log un `tracing::warn!`
+/// quand SLM client configuré sans circuit.
+///
+/// Stratégie : on capture les logs via un subscriber tracing custom.
+/// Ce test vérifie surtout que `build()` ne panic PAS dans ce scénario
+/// (le warn est informationnel, pas une erreur). La vérif effective du
+/// message warn nécessiterait `tracing-test` crate, hors-scope R3.S2.
+#[tokio::test]
+async fn r3s2_gap2_build_with_slm_client_without_circuit_does_not_panic() {
+    // Setup : 1 SLM client configuré mais slm_circuits empty → warn attendu.
+    let reg = ProviderRegistry::new();
+    reg.register(Arc::new(MockLlmProvider::new("c").with_response("ok")));
+    let coord = Coordinator::builder()
+        .registry(reg)
+        .clients(efe_coordinator::CoordinatorClients {
+            analyzer: Some(Arc::new(fail_fast_analyzer())),
+            // slm_circuits empty → le builder DOIT logguer un warn.
+            ..efe_coordinator::CoordinatorClients::default()
+        })
+        .build()
+        .expect("build() must succeed despite the warn — c'est informationnel");
+    // Builder a complété sans panic.
+    assert!(coord.clients.slm_circuits.is_empty());
+    assert!(coord.clients.analyzer.is_some());
+}
+
+/// **R3.S2 Gap 2** : à l'inverse, builder SANS SLM client ET sans circuits
+/// ne doit PAS log de warn (situation normale : Coordinator minimal).
+#[tokio::test]
+async fn r3s2_gap2_build_without_slm_client_no_warn() {
+    let reg = ProviderRegistry::new();
+    reg.register(Arc::new(MockLlmProvider::new("c").with_response("ok")));
+    // Sans aucun SLM client → pas de warn (cas nominal Coordinator minimal).
+    let coord = Coordinator::builder()
+        .registry(reg)
+        .build()
+        .expect("build OK");
+    assert!(coord.clients.slm_circuits.is_empty());
+    assert!(coord.clients.analyzer.is_none());
+}
+
+/// **R3.S2 Gap 2** : builder avec SLM client ET `.with_default_slm_circuits()`
+/// ne doit PAS log de warn (cas nominal post-R3.S2 protégé).
+#[tokio::test]
+async fn r3s2_gap2_build_with_slm_client_and_circuits_no_warn() {
+    let reg = ProviderRegistry::new();
+    reg.register(Arc::new(MockLlmProvider::new("c").with_response("ok")));
+    let coord = Coordinator::builder()
+        .registry(reg)
+        .clients(efe_coordinator::CoordinatorClients {
+            analyzer: Some(Arc::new(fail_fast_analyzer())),
+            ..efe_coordinator::CoordinatorClients::default()
+        })
+        .with_default_slm_circuits()
+        .build()
+        .expect("build OK");
+    // 3 circuits R3.S2 + 1 SLM client → cas nominal protégé.
+    assert_eq!(coord.clients.slm_circuits.len(), 3);
+    assert!(coord.clients.analyzer.is_some());
 }

@@ -13,10 +13,9 @@ use crate::llm::{MultiLlmBridge, ProviderRegistry};
 use crate::vote::VoteEngine;
 use crate::DEFAULT_MAX_CONCURRENCY;
 
-use efe_nano_app_coordinator::clients::SlmCircuitBreaker;
 use efe_nano_app_coordinator::{
     AnalyzerClient, CompressorClient, FilterClient, ReformulatorClient, RouterClient,
-    VerifierClient,
+    SlmCircuitBreaker, VerifierClient,
 };
 
 /// Bundle des 6 clients nano-robots Phase 1.
@@ -246,7 +245,7 @@ impl CoordinatorBuilder {
     ///
     /// ## Exemple
     /// ```ignore
-    /// use efe_nano_app_coordinator::clients::SlmCircuitBreaker;
+    /// use efe_nano_app_coordinator::SlmCircuitBreaker;
     /// use std::collections::HashMap;
     /// use std::time::Duration;
     ///
@@ -271,6 +270,25 @@ impl CoordinatorBuilder {
             return Err(CoordError::Config(
                 "max_concurrency must be >= 1".into(),
             ));
+        }
+        // R3.S2 (§9 R7 mitigation) — Warn au boot si l'opérateur a configuré
+        // des SLM clients (analyzer/compressor/verifier) mais N'A PAS activé
+        // les circuit breakers. C'est probablement un oubli en production :
+        // sans circuits, les workflows fonctionnent en mode S8 (= comportement
+        // R2 préservé pour backward-compat), MAIS la résilience aux SLM
+        // crashes n'est pas activée → cascade de timeouts possible.
+        let has_any_slm_client = self.clients.analyzer.is_some()
+            || self.clients.compressor.is_some()
+            || self.clients.verifier.is_some();
+        if has_any_slm_client && self.clients.slm_circuits.is_empty() {
+            tracing::warn!(
+                target: "efe_coordinator::slm_circuit",
+                "Coordinator built with SLM clients (analyzer/compressor/verifier) \
+                 but WITHOUT slm_circuits configured. Workflows will run in S8 \
+                 mode (no circuit protection). For production resilience, call \
+                 `.with_default_slm_circuits()` on the builder (see R3.S2 \
+                 architecture for fix L2)."
+            );
         }
         let registry = self.registry.unwrap_or_default();
         let bridge = MultiLlmBridge::new(registry);
