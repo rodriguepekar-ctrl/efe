@@ -15,6 +15,9 @@ fn meta() -> LlmMetadata {
     LlmMetadata {
         cost_input_per_million: 1000,
         cost_output_per_million: 3000,
+        // R3.S1 : 0 → _resolved() fallback à cents × 1000.
+        cost_input_per_million_microcents: 0,
+        cost_output_per_million_microcents: 0,
         p50_latency_ms: 500,
         p99_latency_ms: 2000,
         success_rate: 0.99,

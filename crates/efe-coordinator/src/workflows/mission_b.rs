@@ -381,6 +381,11 @@ pub async fn run_mission_b(
     let audit_hash = super::audit_chain_hash(&audit_entries);
 
     let total_cost: u32 = responses.iter().map(|r| r.cost_cents).sum();
+    // R3.S1 : agrégation µ¢ avec saturating_add — Mission B amplifie l'erreur
+    // d'arrondi cent par N (= 1 par LLM), donc µ¢ critique ici.
+    let total_cost_mc: u64 = responses
+        .iter()
+        .fold(0_u64, |acc, r| acc.saturating_add(r.cost_microcents_resolved()));
 
     // ── Sprint S5 R2 : finalisation des ChewingMetrics ────────────────
     // À ce point :
@@ -419,6 +424,8 @@ pub async fn run_mission_b(
         winner_score: outcome.winner_score,
         per_llm_scores: outcome.per_provider_scores,
         total_cost_cents: total_cost,
+        // R3.S1 : agrégation µ¢ précise.
+        total_cost_microcents: total_cost_mc,
         latency_ms: started.elapsed().as_millis() as u64,
         verdicts,
         audit_chain_hash: audit_hash.clone(),

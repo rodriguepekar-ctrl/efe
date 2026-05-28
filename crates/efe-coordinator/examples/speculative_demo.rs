@@ -48,6 +48,9 @@ async fn main() -> anyhow::Result<()> {
         verifier_metadata: LlmMetadata {
             cost_input_per_million: 1500,
             cost_output_per_million: 7500,
+            // R3.S1 : 0 → _resolved() fallback à cents × 1000.
+            cost_input_per_million_microcents: 0,
+            cost_output_per_million_microcents: 0,
             p50_latency_ms: 40,
             p99_latency_ms: 200,
             success_rate: 0.99,

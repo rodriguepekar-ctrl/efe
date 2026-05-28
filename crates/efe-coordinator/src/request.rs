@@ -119,7 +119,17 @@ pub struct MissionAResponse {
     pub llm_used: String,
 
     /// Coût constaté (cents).
+    ///
+    /// **LEGACY** : utiliser `cost_microcents` (R3.S1) pour la précision sub-cent.
     pub cost_cents: u32,
+
+    /// **R3.S1** : coût constaté en microcents (1 µ¢ = 1/1000 cent).
+    ///
+    /// `#[serde(default)]` pour rétrocompat avec les `MissionAResponse`
+    /// sérialisés pré-R3 (champ absent → 0). Le workflow peut utiliser le
+    /// helper `microcents_or_legacy()` pour fallback transparent.
+    #[serde(default)]
+    pub cost_microcents: u64,
 
     /// Latence end-to-end (ms).
     pub latency_ms: u64,
@@ -222,7 +232,17 @@ pub struct MissionBResponse {
     pub chewing_metrics: Option<ChewingMetrics>,
 
     /// Coût agrégé (cents).
+    ///
+    /// **LEGACY** : utiliser `total_cost_microcents` (R3.S1) pour la précision
+    /// sub-cent — en Mission B la somme des coûts des N LLMs amplifie l'erreur
+    /// d'arrondi cents (notamment quand 1 LLM = Gemini Flash).
     pub total_cost_cents: u32,
+
+    /// **R3.S1** : coût agrégé en microcents (somme des `cost_microcents` des
+    /// N LLMs participants).  Précision conservée même pour Mission B avec
+    /// Gemini Flash dans la vote.
+    #[serde(default)]
+    pub total_cost_microcents: u64,
 
     /// Latence end-to-end.
     pub latency_ms: u64,
@@ -406,6 +426,22 @@ pub struct SpeculativeResponse {
     /// `#[serde(default)]` pour backward-compat S2-S6.
     #[serde(default)]
     pub cost_cents: u32,
+
+    /// **R3.S1** : coût total en microcents (1 µ¢ = 1/1000 cent).
+    ///
+    /// Particulièrement important en HOT PATH (Speculative bypass verifier) :
+    /// le drafter étant typiquement Gemini Flash, le coût constaté est de
+    /// l'ordre de quelques microcents et n'apparaît PAS dans `cost_cents`
+    /// (arrondi à 1 cent par sécurité). `cost_microcents` montre le vrai
+    /// chiffre.
+    ///
+    /// Formule :
+    /// - HOT PATH : `cost_microcents = drafter.cost_microcents`
+    /// - SLOW PATH : `cost_microcents = drafter.cost_microcents + verifier.cost_microcents`
+    ///
+    /// `#[serde(default)]` pour backward-compat S2-S6/S7-S10 (pré-R3).
+    #[serde(default)]
+    pub cost_microcents: u64,
 }
 
 /// Verdict de fact-check résumé (alias UI-friendly).

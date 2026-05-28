@@ -38,6 +38,28 @@ fn estimate_savings_cents(
     (in_c + out_c) as u32
 }
 
+/// **R3.S1** — Calcule les **µ¢** économisés sur le verifier en HOT PATH.
+///
+/// Symétrique de `estimate_savings_cents()` mais retourne en microcents pour
+/// la précision sub-cent.  Utilise `_microcents_resolved()` pour gérer
+/// transparently les LlmMetadata pré-R3.
+#[must_use]
+fn estimate_savings_microcents(
+    verifier_skipped: bool,
+    verifier_meta: &efe_nano_app_coordinator::types::LlmMetadata,
+    estimated_input_tokens: u32,
+    expected_output_tokens: u32,
+) -> u64 {
+    if !verifier_skipped {
+        return 0;
+    }
+    let in_rate = verifier_meta.cost_input_microcents_resolved();
+    let out_rate = verifier_meta.cost_output_microcents_resolved();
+    let in_mc = (estimated_input_tokens as u64).saturating_mul(in_rate) / 1_000_000;
+    let out_mc = (expected_output_tokens as u64).saturating_mul(out_rate) / 1_000_000;
+    in_mc.saturating_add(out_mc)
+}
+
 /// Exécute la Mission speculative.
 ///
 /// **Sprint S7 R2** — Le drafter est trouvé dans le registre sous l'ID
@@ -133,6 +155,15 @@ pub async fn run_speculative(
         chewing_metrics.input_tokens_raw,
         req.max_draft_tokens.min(500), // expected_output estimate, cap 500
     );
+    // R3.S1 : précision µ¢ — un Speculative qui économise 0.5 cent (= 500 µ¢)
+    // sur 1 mission n'apparaît PAS dans `spec_savings_cents` (arrondi),
+    // mais s'agrège honnêtement sur N missions.
+    chewing_metrics.spec_savings_microcents = estimate_savings_microcents(
+        outcome.verifier_skipped,
+        &req.verifier_metadata,
+        chewing_metrics.input_tokens_raw,
+        req.max_draft_tokens.min(500),
+    );
     chewing_metrics.total_pipeline_latency_ms = started.elapsed().as_millis() as u64;
     chewing_metrics.router_reason = if outcome.verifier_skipped {
         format!(
@@ -183,6 +214,8 @@ pub async fn run_speculative(
         // S7 R2 : propager le coût réel observé (drafter seul en hot path,
         // drafter + verifier en slow path).
         cost_cents: outcome.cost_cents,
+        // R3.S1 : précision µ¢ (Gemini Flash drafter ne se voit qu'ici).
+        cost_microcents: outcome.cost_microcents,
     };
 
     let _ = coord

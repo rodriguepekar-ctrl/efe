@@ -470,11 +470,15 @@ mod tests {
                     selected_llm: "claude_claude-sonnet-4-6".into(),
                     router_reason: "highest quality".into(),
                     router_estimated_cost_cents: 2,
+                    // R3.S1 : 2 cents × 1000 = 2_000 µ¢.
+                    router_estimated_cost_microcents: 2_000,
                     // S7 R2 — Mission Spec fields, None pour Mission A
                     verifier_skipped: None,
                     spec_drafter_latency_ms: 0,
                     spec_verifier_latency_ms: 0,
                     spec_savings_cents: 0,
+                    // R3.S1 : 0 (non-Spec mission).
+                    spec_savings_microcents: 0,
                     // S8 R2 — Graceful degradation fields
                     failure_mode: crate::failure::FailureMode::None,
                     degradations_count: 0,

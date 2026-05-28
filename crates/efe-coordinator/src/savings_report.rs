@@ -120,7 +120,16 @@ pub struct RunRecord {
     /// Mode d'exécution (cf. [`RunMode`]).
     pub mode: RunMode,
     /// Coût observé en cents.
+    ///
+    /// **LEGACY** : utiliser `cost_microcents` (R3.S1) pour la précision sub-cent.
     pub cost_cents: u32,
+    /// **R3.S1** : coût observé en microcents (1 µ¢ = 1/1000 cent).
+    ///
+    /// `#[serde(default)]` pour rétrocompat avec les `RunRecord` sérialisés
+    /// pré-R3 (champ absent → 0 → l'agrégation utilisera `cost_cents × 1000`
+    /// comme fallback via `cost_microcents_resolved()`).
+    #[serde(default)]
+    pub cost_microcents: u64,
     /// Latence end-to-end en ms.
     pub latency_ms: u64,
     /// Tokens output générés par le LLM final (depuis `LlmResponse.tokens_generated`).
@@ -154,6 +163,9 @@ impl RunRecord {
     /// Constructeur depuis champs bruts. Utilisé par le test live.
     ///
     /// `final_text_excerpt` est automatiquement tronqué à 200 chars.
+    ///
+    /// **R3.S1** : `cost_microcents` est dérivé de `cost_cents × 1000` par
+    /// défaut.  Utiliser `new_with_microcents()` pour précision sub-cent.
     #[must_use]
     pub fn new(
         fixture_name: String,
@@ -172,6 +184,9 @@ impl RunRecord {
             fixture_name,
             mode,
             cost_cents,
+            // R3.S1 : dérivé par défaut. Utiliser `new_with_microcents` pour
+            // un coût µ¢ explicite (test live R3+).
+            cost_microcents: (cost_cents as u64) * 1000,
             latency_ms,
             tokens_output,
             final_text_excerpt: Self::truncate_text(final_text, 200),
@@ -180,6 +195,52 @@ impl RunRecord {
             chewing_metrics,
             passed_quality,
             failure_mode,
+        }
+    }
+
+    /// **R3.S1** — Constructeur avec coût µ¢ explicite.
+    ///
+    /// `cost_cents` est automatiquement dérivé de `cost_microcents` via
+    /// `microcents_to_cents` (policy ≥ 1 si > 0 µ¢) pour cohérence affichage.
+    #[must_use]
+    #[allow(clippy::too_many_arguments)]
+    pub fn new_with_microcents(
+        fixture_name: String,
+        mode: RunMode,
+        cost_microcents: u64,
+        latency_ms: u64,
+        tokens_output: u32,
+        final_text: &str,
+        llm_used: String,
+        task_class: String,
+        chewing_metrics: Option<ChewingMetrics>,
+        passed_quality: bool,
+        failure_mode: FailureMode,
+    ) -> Self {
+        let cost_cents = crate::llm::microcents_to_cents(cost_microcents);
+        Self {
+            fixture_name,
+            mode,
+            cost_cents,
+            cost_microcents,
+            latency_ms,
+            tokens_output,
+            final_text_excerpt: Self::truncate_text(final_text, 200),
+            llm_used,
+            task_class,
+            chewing_metrics,
+            passed_quality,
+            failure_mode,
+        }
+    }
+
+    /// **R3.S1** — Coût µ¢ avec fallback vers `cost_cents × 1000` si absent.
+    #[must_use]
+    pub fn cost_microcents_resolved(&self) -> u64 {
+        if self.cost_microcents > 0 {
+            self.cost_microcents
+        } else {
+            (self.cost_cents as u64) * 1000
         }
     }
 }
@@ -197,8 +258,18 @@ pub struct ModeSummary {
     pub n_runs: usize,
     /// Somme des coûts en cents (utile pour comparer baseline_total vs full_total).
     pub total_cost_cents: u32,
+    /// **R3.S1** : somme des coûts en microcents (1 µ¢ = 1/1000 cent).
+    ///
+    /// Précision conservée : 100 runs × 37 µ¢ = 3 700 µ¢ (= 3.7 ¢), distinct
+    /// de 100 × 1 ¢ arrondi = 100 ¢ — l'erreur est 27× sur 100 runs en cents.
+    /// `#[serde(default)]` pour rétrocompat.
+    #[serde(default)]
+    pub total_cost_microcents: u64,
     /// Coût moyen par run (cents).
     pub avg_cost_cents: f32,
+    /// **R3.S1** : coût moyen par run en microcents (float pour précision).
+    #[serde(default)]
+    pub avg_cost_microcents: f64,
     /// Latence moyenne par run (ms).
     pub avg_latency_ms: f32,
     /// Tokens output moyens par run.
@@ -220,7 +291,9 @@ impl ModeSummary {
                 mode,
                 n_runs: 0,
                 total_cost_cents: 0,
+                total_cost_microcents: 0,
                 avg_cost_cents: 0.0,
+                avg_cost_microcents: 0.0,
                 avg_latency_ms: 0.0,
                 avg_tokens_output: 0.0,
                 quality_pass_rate: 0.0,
@@ -228,6 +301,10 @@ impl ModeSummary {
             };
         }
         let total_cost: u32 = records.iter().map(|r| r.cost_cents).sum();
+        // R3.S1 : agrégation µ¢ avec saturating_add — résolu pour pré-R3.
+        let total_cost_mc: u64 = records
+            .iter()
+            .fold(0_u64, |acc, r| acc.saturating_add(r.cost_microcents_resolved()));
         let total_lat: u64 = records.iter().map(|r| r.latency_ms).sum();
         let total_tokens: u32 = records.iter().map(|r| r.tokens_output).sum();
         let n_passed: usize = records.iter().filter(|r| r.passed_quality).count();
@@ -239,7 +316,11 @@ impl ModeSummary {
             mode,
             n_runs: n,
             total_cost_cents: total_cost,
+            total_cost_microcents: total_cost_mc,
             avg_cost_cents: total_cost as f32 / n as f32,
+            // R3.S1 : avg_µ¢ en f64 (les arrondis float ne dépassent pas 1 µ¢
+            // ce qui est largement sous la précision business).
+            avg_cost_microcents: total_cost_mc as f64 / n as f64,
             avg_latency_ms: total_lat as f32 / n as f32,
             avg_tokens_output: total_tokens as f32 / n as f32,
             quality_pass_rate: n_passed as f32 / n as f32,
@@ -269,10 +350,27 @@ pub struct SavingsReport {
     pub baseline_total_cost_cents: u32,
     /// Total cost cents pour `Full` (calculé par aggregate).
     pub full_total_cost_cents: u32,
+    /// **R3.S1** : total µ¢ baseline (précision sub-cent).
+    #[serde(default)]
+    pub baseline_total_cost_microcents: u64,
+    /// **R3.S1** : total µ¢ full (précision sub-cent).
+    #[serde(default)]
+    pub full_total_cost_microcents: u64,
     /// Savings absolus en cents (= baseline - full). Peut être négatif si full > baseline.
     pub savings_cents: i32,
+    /// **R3.S1** : savings en µ¢ (i64 pour gérer les valeurs négatives).
+    #[serde(default)]
+    pub savings_microcents: i64,
     /// Savings ratio ∈ [0,1]. `0.75` = 75 % savings. Peut être négatif.
+    ///
+    /// **LEGACY** : calculé depuis `*_cents` (peut être 0.0 quand
+    /// fixtures < 1¢ chacune). Le `savings_ratio_microcents` (R3.S1) est
+    /// numériquement plus stable.
     pub savings_ratio: f32,
+    /// **R3.S1** : ratio savings calculé en µ¢ (= savings_µ¢ / baseline_µ¢).
+    /// Numériquement stable même quand toutes les fixtures coûtent < 1 ¢.
+    #[serde(default)]
+    pub savings_ratio_microcents: f32,
     /// Timestamp ISO 8601 UTC de génération.
     pub generated_at: String,
     /// Version `"s9-r2-YYYY-MM-DD"`.
@@ -295,10 +393,14 @@ impl SavingsReport {
             summaries: HashMap::new(),
             baseline_total_cost_cents: 0,
             full_total_cost_cents: 0,
+            baseline_total_cost_microcents: 0,
+            full_total_cost_microcents: 0,
             savings_cents: 0,
+            savings_microcents: 0,
             savings_ratio: 0.0,
+            savings_ratio_microcents: 0.0,
             generated_at: now.to_rfc3339(),
-            version: format!("s9-r2-{}", now.format("%Y-%m-%d")),
+            version: format!("r3s1-{}", now.format("%Y-%m-%d")),
         }
     }
 
@@ -346,6 +448,25 @@ impl SavingsReport {
             self.baseline_total_cost_cents as i32 - self.full_total_cost_cents as i32;
         self.savings_ratio = if self.baseline_total_cost_cents > 0 {
             self.savings_cents as f32 / self.baseline_total_cost_cents as f32
+        } else {
+            0.0
+        };
+        // R3.S1 : agrégation µ¢ stable (gère sub-cent fidèlement).
+        self.baseline_total_cost_microcents = self
+            .summaries
+            .get(&RunMode::Baseline)
+            .map(|s| s.total_cost_microcents)
+            .unwrap_or(0);
+        self.full_total_cost_microcents = self
+            .summaries
+            .get(&RunMode::Full)
+            .map(|s| s.total_cost_microcents)
+            .unwrap_or(0);
+        self.savings_microcents = self.baseline_total_cost_microcents as i64
+            - self.full_total_cost_microcents as i64;
+        self.savings_ratio_microcents = if self.baseline_total_cost_microcents > 0 {
+            self.savings_microcents as f32
+                / self.baseline_total_cost_microcents as f32
         } else {
             0.0
         };
@@ -549,6 +670,138 @@ impl SavingsReport {
     pub fn to_json(&self) -> Result<String, serde_json::Error> {
         serde_json::to_string_pretty(self)
     }
+
+    /// **R3.S1** — Rapport markdown en **microcents** (précision sub-cent).
+    ///
+    /// Distinct de `to_markdown()` (legacy cents) sur 3 axes :
+    /// 1. Toutes les valeurs cost affichées en `X.XXX ¢` (3 décimales = µ¢).
+    /// 2. Le résumé exécutif utilise `savings_ratio_microcents` (stable même
+    ///    quand toutes les fixtures coûtent < 1 ¢).
+    /// 3. Une note explicative en tête sur la précision µ¢ vs cents.
+    ///
+    /// Utilisé pour le rapport R3.S1+ — `to_markdown()` reste pour les pipes
+    /// de CI/CD legacy qui s'attendent au format cents.
+    #[must_use]
+    pub fn to_markdown_v2(&self) -> String {
+        let mut md = String::new();
+        md.push_str("# EFE Phase 3 R3 — Chewing Savings Report (µ¢ precision)\n\n");
+        md.push_str(&format!("> **Version** : `{}`  \n", self.version));
+        md.push_str(&format!("> **Généré le** : {}  \n", self.generated_at));
+        md.push_str("> **Précision** : microcents (1 µ¢ = 1/1000 cent = 1/100 000 USD).\n");
+        md.push_str("> Les valeurs `X.XXX ¢` agrègent fidèlement même les missions sub-cent\n");
+        md.push_str("> (Gemini Flash 1k/1k tokens = 0.037 ¢ exact ↔ 1 ¢ arrondi en legacy).\n\n");
+        md.push_str("---\n\n");
+
+        // ── Résumé exécutif (µ¢ precision) ──
+        md.push_str("## Résumé exécutif (µ¢ precision)\n\n");
+        md.push_str("| Métrique | Baseline | Full (S4+S6) | Savings |\n");
+        md.push_str("|---|---|---|---|\n");
+        let baseline = self.summaries.get(&RunMode::Baseline);
+        let full = self.summaries.get(&RunMode::Full);
+        let pct_savings_mc = (self.savings_ratio_microcents * 100.0).round() as i32;
+        let fmt_mc = |mc: u64| format!("{:.3} ¢", mc as f64 / 1000.0);
+        md.push_str(&format!(
+            "| Coût total ({} fixtures) | {} | {} | **{:+} %** |\n",
+            baseline.map(|s| s.n_runs).unwrap_or(0),
+            fmt_mc(self.baseline_total_cost_microcents),
+            fmt_mc(self.full_total_cost_microcents),
+            -pct_savings_mc,
+        ));
+        md.push_str(&format!(
+            "| Coût moyen / run | {} | {} | — |\n",
+            baseline
+                .map(|s| format!("{:.3} ¢", s.avg_cost_microcents / 1000.0))
+                .unwrap_or_else(|| "n/a".to_string()),
+            full.map(|s| format!("{:.3} ¢", s.avg_cost_microcents / 1000.0))
+                .unwrap_or_else(|| "n/a".to_string()),
+        ));
+        md.push_str(&format!(
+            "| Latence moyenne | {:.0} ms | {:.0} ms | — |\n",
+            baseline.map(|s| s.avg_latency_ms).unwrap_or(0.0),
+            full.map(|s| s.avg_latency_ms).unwrap_or(0.0),
+        ));
+        md.push_str(&format!(
+            "| Qualité (pass rate) | {:.0} % | {:.0} % | — |\n",
+            baseline.map(|s| s.quality_pass_rate * 100.0).unwrap_or(0.0),
+            full.map(|s| s.quality_pass_rate * 100.0).unwrap_or(0.0),
+        ));
+        md.push_str(&format!(
+            "| Failure modes observés | {} | {} | — |\n",
+            baseline.map(|s| s.degradations_count).unwrap_or(0),
+            full.map(|s| s.degradations_count).unwrap_or(0),
+        ));
+        if self.baseline_total_cost_microcents > 0 && self.full_total_cost_microcents > 0 {
+            let mult = self.baseline_total_cost_microcents as f64
+                / self.full_total_cost_microcents as f64;
+            md.push_str(&format!(
+                "\n→ **EFE coûte ~{:.2}× moins cher que Claude direct** (calculé µ¢).\n\n",
+                mult
+            ));
+        }
+        md.push_str("---\n\n");
+
+        // ── Comparaison legacy cents vs µ¢ R3.S1 ──
+        md.push_str("## Comparaison résolution legacy (cents) vs R3.S1 (µ¢)\n\n");
+        md.push_str("| Métrique | Legacy (cents) | R3.S1 (µ¢) | Δ |\n");
+        md.push_str("|---|---|---|---|\n");
+        md.push_str(&format!(
+            "| Baseline total | {} ¢ | {} | {:+.3} ¢ |\n",
+            self.baseline_total_cost_cents,
+            fmt_mc(self.baseline_total_cost_microcents),
+            (self.baseline_total_cost_microcents as f64 / 1000.0)
+                - self.baseline_total_cost_cents as f64,
+        ));
+        md.push_str(&format!(
+            "| Full total | {} ¢ | {} | {:+.3} ¢ |\n",
+            self.full_total_cost_cents,
+            fmt_mc(self.full_total_cost_microcents),
+            (self.full_total_cost_microcents as f64 / 1000.0)
+                - self.full_total_cost_cents as f64,
+        ));
+        md.push_str(&format!(
+            "| Savings ratio | {:.1} % | {:.1} % | {:+.1} pp |\n",
+            self.savings_ratio * 100.0,
+            self.savings_ratio_microcents * 100.0,
+            (self.savings_ratio_microcents - self.savings_ratio) * 100.0,
+        ));
+        md.push_str("\n---\n\n");
+
+        // ── Détail par mode (µ¢) ──
+        md.push_str("## Détail par mode (µ¢ precision)\n\n");
+        for mode in RunMode::all() {
+            md.push_str(&format!("### {}\n\n", mode.description()));
+            if let Some(s) = self.summaries.get(mode) {
+                if s.n_runs == 0 {
+                    md.push_str("_Aucun run pour ce mode._\n\n");
+                    continue;
+                }
+                md.push_str(&format!(
+                    "- **{} runs**, total = {}, moy = {:.3} ¢/run\n",
+                    s.n_runs,
+                    fmt_mc(s.total_cost_microcents),
+                    s.avg_cost_microcents / 1000.0,
+                ));
+                md.push_str(&format!(
+                    "- Latence moy = {:.0} ms, tokens moy = {:.0}, qualité = {:.0} %\n",
+                    s.avg_latency_ms,
+                    s.avg_tokens_output,
+                    s.quality_pass_rate * 100.0,
+                ));
+                if s.degradations_count > 0 {
+                    md.push_str(&format!(
+                        "- ⚠ {} dégradations observées\n",
+                        s.degradations_count
+                    ));
+                }
+                md.push('\n');
+            }
+        }
+        md.push_str("---\n\n");
+        md.push_str(
+            "_Rapport généré via `SavingsReport::to_markdown_v2()` (R3.S1)._\n",
+        );
+        md
+    }
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -724,9 +977,10 @@ mod tests {
     #[test]
     fn version_format_is_sprint_release_yyyy_mm_dd() {
         let report = SavingsReport::new();
-        assert!(report.version.starts_with("s9-r2-"));
+        // R3.S1 : version par défaut a bougé de "s9-r2-..." à "r3s1-...".
+        assert!(report.version.starts_with("r3s1-"));
         // Format YYYY-MM-DD doit ajouter 10 chars après le prefix.
-        assert_eq!(report.version.len(), "s9-r2-".len() + 10);
+        assert_eq!(report.version.len(), "r3s1-".len() + 10);
     }
 
     #[test]
@@ -757,5 +1011,171 @@ mod tests {
         // Doit être tronqué à 200 chars + "…" → 201 chars max.
         assert!(r.final_text_excerpt.chars().count() <= 201);
         assert!(r.final_text_excerpt.ends_with('…'));
+    }
+
+    // ============================================================
+    // R3.S1 — Tests microcents
+    // ============================================================
+
+    #[test]
+    fn r3s1_new_record_derives_microcents_from_cents() {
+        let r = make_record("01", RunMode::Baseline, 5, 1000, true);
+        assert_eq!(r.cost_cents, 5);
+        // R3.S1 default : cost_microcents = cost_cents × 1000.
+        assert_eq!(r.cost_microcents, 5_000);
+    }
+
+    #[test]
+    fn r3s1_new_with_microcents_derives_cents() {
+        // Gemini Flash 1k/1k = 37 µ¢ exact → arrondi 1 ¢.
+        let r = RunRecord::new_with_microcents(
+            "flash_test".to_string(),
+            RunMode::Speculative,
+            37,  // µ¢
+            150, // ms
+            10,
+            "ok",
+            "gemini".to_string(),
+            "FactualQa".to_string(),
+            None,
+            true,
+            FailureMode::None,
+        );
+        assert_eq!(r.cost_microcents, 37);
+        assert_eq!(r.cost_cents, 1); // 37 µ¢ < 500 → arrondi à 1 (policy ≥ 1).
+    }
+
+    #[test]
+    fn r3s1_aggregate_microcents_sub_cent_precision() {
+        // 100 fixtures × 37 µ¢ = 3 700 µ¢ = 3.7 ¢.
+        // En legacy : 100 × 1¢ = 100 ¢ (arrondi → +27× drift).
+        let mut report = SavingsReport::with_version("r3s1-test");
+        for i in 0..100 {
+            report.add_run(RunRecord::new_with_microcents(
+                format!("f{i}"),
+                RunMode::Speculative,
+                37,
+                100,
+                10,
+                "ok",
+                "g".to_string(),
+                "FactualQa".to_string(),
+                None,
+                true,
+                FailureMode::None,
+            ));
+        }
+        report.aggregate();
+        let spec = report.summaries.get(&RunMode::Speculative).unwrap();
+        assert_eq!(spec.total_cost_microcents, 3_700);
+        // Legacy cents : 100 × 1 = 100.
+        assert_eq!(spec.total_cost_cents, 100);
+        // L'erreur legacy en cents est de +96.3 ¢ vs réalité 3.7 ¢ (27×).
+    }
+
+    #[test]
+    fn r3s1_savings_ratio_microcents_stable_when_cents_arrondis() {
+        // Sub-cent : baseline = 100 × 37 µ¢ = 3 700 µ¢, full = 100 × 7 µ¢ = 700 µ¢.
+        // savings_ratio_µ¢ ≈ (3700-700)/3700 = 0.81
+        // En cents : tous arrondis à 1 → savings_ratio_cents = 0.
+        let mut report = SavingsReport::with_version("r3s1-test");
+        for i in 0..100 {
+            report.add_run(RunRecord::new_with_microcents(
+                format!("b{i}"),
+                RunMode::Baseline,
+                37,
+                100,
+                10,
+                "ok",
+                "claude".into(),
+                "FactualQa".into(),
+                None,
+                true,
+                FailureMode::None,
+            ));
+            report.add_run(RunRecord::new_with_microcents(
+                format!("f{i}"),
+                RunMode::Full,
+                7,
+                100,
+                10,
+                "ok",
+                "flash".into(),
+                "FactualQa".into(),
+                None,
+                true,
+                FailureMode::None,
+            ));
+        }
+        report.aggregate();
+        // savings_ratio µ¢ doit être très proche de 0.81.
+        assert!(
+            (report.savings_ratio_microcents - 0.81).abs() < 0.01,
+            "savings_ratio µ¢ ≈ 0.81 attendu, got {}",
+            report.savings_ratio_microcents
+        );
+        // savings_ratio legacy cents : DOIT être 0.0 (tous arrondis à 1¢ →
+        // baseline 100 ¢, full 100 ¢, ratio 0).
+        assert_eq!(report.savings_ratio, 0.0);
+    }
+
+    #[test]
+    fn r3s1_to_markdown_v2_contains_microcents_precision() {
+        let mut report = SavingsReport::with_version("r3s1-test");
+        report.add_run(RunRecord::new_with_microcents(
+            "01".to_string(),
+            RunMode::Baseline,
+            37_000, // 37 cents (large enough to show)
+            1000,
+            10,
+            "ok",
+            "claude".to_string(),
+            "FactualQa".to_string(),
+            None,
+            true,
+            FailureMode::None,
+        ));
+        report.add_run(RunRecord::new_with_microcents(
+            "01".to_string(),
+            RunMode::Full,
+            7_000,
+            800,
+            10,
+            "ok",
+            "flash".to_string(),
+            "FactualQa".to_string(),
+            None,
+            true,
+            FailureMode::None,
+        ));
+        report.aggregate();
+        let md = report.to_markdown_v2();
+        assert!(md.contains("µ¢ precision"));
+        assert!(md.contains("microcents"));
+        // Format X.XXX ¢ visible.
+        assert!(md.contains("37.000 ¢") || md.contains("37.0 ¢"), "markdown v2 doit afficher 37.000 ¢");
+    }
+
+    #[test]
+    fn r3s1_run_record_backward_compat_pre_r3_json() {
+        // JSON sérialisé pré-R3 (sans cost_microcents).
+        // FailureMode est adjacently tagged : `{"kind": "NONE"}`.
+        let json = r#"{
+            "fixture_name": "01_legacy",
+            "mode": "BASELINE",
+            "cost_cents": 5,
+            "latency_ms": 1000,
+            "tokens_output": 10,
+            "final_text_excerpt": "ok",
+            "llm_used": "claude",
+            "task_class": "FactualQa",
+            "chewing_metrics": null,
+            "passed_quality": true,
+            "failure_mode": {"kind": "NONE"}
+        }"#;
+        let r: RunRecord = serde_json::from_str(json).unwrap();
+        assert_eq!(r.cost_microcents, 0); // default
+        // Mais cost_microcents_resolved() doit dériver depuis cents.
+        assert_eq!(r.cost_microcents_resolved(), 5_000);
     }
 }

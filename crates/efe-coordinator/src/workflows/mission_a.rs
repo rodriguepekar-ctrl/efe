@@ -187,6 +187,13 @@ pub async fn run_mission_a(
                 chewing_metrics.router_latency_ms = latency;
                 chewing_metrics.router_reason = out.reason.clone();
                 chewing_metrics.router_estimated_cost_cents = out.estimated_cost_cents;
+                // R3.S1 : si le router R3 a peuplé `estimated_cost_microcents`,
+                // on l'utilise ; sinon fallback `cents × 1000`.
+                chewing_metrics.router_estimated_cost_microcents = if out.estimated_cost_microcents > 0 {
+                    out.estimated_cost_microcents
+                } else {
+                    (out.estimated_cost_cents as u64) * 1000
+                };
                 let _ = coord
                     .bus
                     .publish(StreamEvent::RobotFinished {
@@ -506,10 +513,13 @@ pub async fn run_mission_a(
         })
         .await;
 
+    // R3.S1 : propagation explicite cost_microcents (resolved fallback si absent).
+    let cost_mc = llm_resp.cost_microcents_resolved();
     let response = MissionAResponse {
         final_text: llm_resp.text,
         llm_used: llm_resp.provider,
         cost_cents: llm_resp.cost_cents,
+        cost_microcents: cost_mc,
         latency_ms: started.elapsed().as_millis() as u64,
         verdicts,
         audit_chain_hash: audit_hash.clone(),

@@ -113,6 +113,9 @@ fn stub_meta() -> LlmMetadata {
     LlmMetadata {
         cost_input_per_million: 300,
         cost_output_per_million: 1500,
+        // R3.S1 : 0 → _resolved() fallback à cents × 1000.
+        cost_input_per_million_microcents: 0,
+        cost_output_per_million_microcents: 0,
         p50_latency_ms: 1200,
         p99_latency_ms: 3000,
         success_rate: 0.99,

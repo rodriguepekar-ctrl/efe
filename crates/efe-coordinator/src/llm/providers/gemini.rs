@@ -314,12 +314,18 @@ impl LlmProvider for GeminiProvider {
             .as_u64()
             .unwrap_or(0) as u32;
         let cost = self.pricing.calc(&self.model, input_tokens, output_tokens);
+        // R3.S1 (D7) : précision µ¢ — Gemini Flash $0.075/M = 7_500 µ¢/M
+        // EXACT (vs. arrondi 8 cents/M = +6.7% drift dans calc()).
+        let cost_mc = self
+            .pricing
+            .calc_microcents(&self.model, input_tokens, output_tokens);
 
         tracing::info!(
             provider = %self.id(),
             input_tokens,
             output_tokens,
             cost_cents = cost,
+            cost_microcents = cost_mc,
             latency_ms = started.elapsed().as_millis() as u64,
             "gemini.call ok"
         );
@@ -328,6 +334,7 @@ impl LlmProvider for GeminiProvider {
             text,
             tokens_generated: output_tokens,
             cost_cents: cost,
+            cost_microcents: cost_mc,
             latency_ms: started.elapsed().as_millis() as u64,
             provider: self.id(),
             self_quality: 1.0,
@@ -403,10 +410,17 @@ impl LlmProvider for GeminiProvider {
                 self.breaker.record_success();
                 let cost =
                     self.pricing.calc(&self.model, res.input_tokens, res.output_tokens);
+                // R3.S1 (D7) : précision µ¢ pour stream() également.
+                let cost_mc = self.pricing.calc_microcents(
+                    &self.model,
+                    res.input_tokens,
+                    res.output_tokens,
+                );
                 Ok(LlmResponse {
                     text: res.text,
                     tokens_generated: res.output_tokens,
                     cost_cents: cost,
+                    cost_microcents: cost_mc,
                     latency_ms: started.elapsed().as_millis() as u64,
                     provider: self.id(),
                     self_quality: 1.0,

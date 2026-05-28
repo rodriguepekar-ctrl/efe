@@ -178,15 +178,18 @@ impl NanoRobotClient for RouterClient {
         let (selected, sel_meta, _) = sorted.first().cloned().expect("non-empty checked above");
         let fallback_chain: Vec<LlmRef> = sorted.iter().skip(1).map(|(l, _, _)| l.clone()).collect();
         let est_cost = estimate_cost_cents(&sel_meta, &input.task);
+        // R3.S1 : également exposer l'estimation en µ¢ (précis).
+        let est_cost_mc = estimate_cost_microcents(&sel_meta, &input.task);
         let est_lat = sel_meta.p50_latency_ms;
         let reason = format!(
-            "selected {selected} (p50={est_lat}ms, est_cost={est_cost}c, fallback={fallback_chain:?})"
+            "selected {selected} (p50={est_lat}ms, est_cost={est_cost}c [{est_cost_mc}µ¢], fallback={fallback_chain:?})"
         );
 
         let output = RouterOutput {
             selected,
             fallback_chain,
             estimated_cost_cents: est_cost,
+            estimated_cost_microcents: est_cost_mc,
             estimated_latency_ms: est_lat,
             reason,
         };
@@ -219,6 +222,9 @@ impl NanoRobotClient for RouterClient {
 }
 
 /// Coût estimé d'une tâche en cents (input × $/M + output × $/M).
+///
+/// **LEGACY** : utiliser `estimate_cost_microcents()` (R3.S1) pour la précision
+/// sub-cent.
 #[must_use]
 pub fn estimate_cost_cents(
     meta: &LlmMetadata,
@@ -229,6 +235,24 @@ pub fn estimate_cost_cents(
     let output_cost = (task.expected_output_tokens as u64 * meta.cost_output_per_million as u64)
         / 1_000_000;
     (input_cost + output_cost) as u32
+}
+
+/// **R3.S1** — Coût estimé d'une tâche en **microcents** (1 µ¢ = 1/1000 cent).
+///
+/// Utilise `LlmMetadata::cost_{input,output}_microcents_resolved()` pour gérer
+/// le cas legacy (fields µ¢ à 0 → fallback `cents × 1000`).
+///
+/// Saturating math pour éviter tout overflow sur tokens gargantuesques.
+#[must_use]
+pub fn estimate_cost_microcents(
+    meta: &LlmMetadata,
+    task: &crate::types::router::TaskDescription,
+) -> u64 {
+    let in_rate = meta.cost_input_microcents_resolved();
+    let out_rate = meta.cost_output_microcents_resolved();
+    let in_mc = (task.estimated_input_tokens as u64).saturating_mul(in_rate) / 1_000_000;
+    let out_mc = (task.expected_output_tokens as u64).saturating_mul(out_rate) / 1_000_000;
+    in_mc.saturating_add(out_mc)
 }
 
 #[cfg(test)]
@@ -250,6 +274,9 @@ mod tests {
         LlmMetadata {
             cost_input_per_million: cost_in,
             cost_output_per_million: cost_out,
+            // R3.S1 : dérivé cents × 1000.
+            cost_input_per_million_microcents: (cost_in as u64) * 1000,
+            cost_output_per_million_microcents: (cost_out as u64) * 1000,
             p50_latency_ms: p50,
             p99_latency_ms: p50 * 3,
             success_rate: success,

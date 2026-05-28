@@ -115,15 +115,49 @@ impl ScoringWeights {
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct LlmStaticMetadata {
     /// Coût input pour 1M tokens en cents (ex: 1500 = 15 $/M).
+    ///
+    /// **LEGACY** : utiliser `cost_input_per_million_microcents` (R3.S1) pour
+    /// précision sub-cent (Gemini Flash : 7.5 cents/M exacte, sinon arrondi 8).
     pub cost_input_per_million: u32,
     /// Coût output pour 1M tokens en cents.
     pub cost_output_per_million: u32,
+    /// **R3.S1** : coût input pour 1M tokens en **microcents** (1 µ¢ = 1/1000 c).
+    ///
+    /// `#[serde(default)]` pour rétrocompat ; quand vaut 0, fallback runtime
+    /// via `cost_input_microcents_resolved()` (= `cost_input_per_million × 1000`).
+    #[serde(default)]
+    pub cost_input_per_million_microcents: u64,
+    /// **R3.S1** : coût output pour 1M tokens en **microcents**.
+    #[serde(default)]
+    pub cost_output_per_million_microcents: u64,
     /// Latence p50 historique (ms).
     pub p50_latency_ms: u32,
     /// Latence p99 historique (ms).
     pub p99_latency_ms: u32,
     /// Taux de succès historique ∈ [0,1].
     pub success_rate: f32,
+}
+
+impl LlmStaticMetadata {
+    /// **R3.S1** : tarif input en µ¢/M résolu (fallback legacy si µ¢ == 0).
+    #[must_use]
+    pub fn cost_input_microcents_resolved(&self) -> u64 {
+        if self.cost_input_per_million_microcents > 0 {
+            self.cost_input_per_million_microcents
+        } else {
+            (self.cost_input_per_million as u64).saturating_mul(1000)
+        }
+    }
+
+    /// **R3.S1** : tarif output en µ¢/M résolu (fallback legacy si µ¢ == 0).
+    #[must_use]
+    pub fn cost_output_microcents_resolved(&self) -> u64 {
+        if self.cost_output_per_million_microcents > 0 {
+            self.cost_output_per_million_microcents
+        } else {
+            (self.cost_output_per_million as u64).saturating_mul(1000)
+        }
+    }
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -213,8 +247,11 @@ impl TaskClassScoringTable {
         static_metadata.insert(
             claude.to_string(),
             LlmStaticMetadata {
-                cost_input_per_million: 300,    // 3 $ / 1M input
-                cost_output_per_million: 1500,  // 15 $ / 1M output
+                cost_input_per_million: 300,    // 3 $ / 1M input (legacy cents)
+                cost_output_per_million: 1500,  // 15 $ / 1M output (legacy cents)
+                // R3.S1 : 3 $ = 300 cents = 300_000 µ¢ EXACT.
+                cost_input_per_million_microcents: 300_000,
+                cost_output_per_million_microcents: 1_500_000,
                 p50_latency_ms: 1200,
                 p99_latency_ms: 3000,
                 success_rate: 0.99,
@@ -224,13 +261,15 @@ impl TaskClassScoringTable {
             gemini.to_string(),
             LlmStaticMetadata {
                 // Gemini 2.5 Flash : ridiculement bon marché.
-                // 0.075 $ / 1M ≈ 7.5 cents/100M → on stocke en cents/M.
-                // 0.075 $ / 1M = 7.5 ¢/100M → 0.075 ¢/M ≈ ratio 1/10
-                // Pour rester dans u32 entier : stockons en
-                // **dixièmes de cent par million** ? NON : c'est `cents/M`.
-                // 0.075 $/M = 7.5 ¢/M → arrondi à 8 ¢/M pour rester u32.
-                cost_input_per_million: 8,      // arrondi 0.075 $ → 8 ¢/M
-                cost_output_per_million: 30,    // arrondi 0.30 $ → 30 ¢/M
+                // Pricing officiel : $0.075/M in, $0.30/M out.
+                // R3.S1 (D7) : on stocke EXACT en µ¢/M (7_500/30_000).
+                // Le legacy `cost_input_per_million: 8` reste pour compat mais
+                // introduit +6.7% d'erreur — utiliser `_microcents_resolved()`.
+                cost_input_per_million: 8,      // legacy, arrondi sup.
+                cost_output_per_million: 30,    // legacy.
+                // R3.S1 EXACT :
+                cost_input_per_million_microcents: 7_500,   // = $0.075/M EXACT
+                cost_output_per_million_microcents: 30_000, // = $0.30/M EXACT
                 p50_latency_ms: 800,
                 p99_latency_ms: 2500,
                 success_rate: 0.99,
@@ -239,8 +278,11 @@ impl TaskClassScoringTable {
         static_metadata.insert(
             gpt.to_string(),
             LlmStaticMetadata {
-                cost_input_per_million: 250,    // 2.50 $ / 1M
-                cost_output_per_million: 1000,  // 10 $ / 1M
+                cost_input_per_million: 250,    // 2.50 $ / 1M (legacy)
+                cost_output_per_million: 1000,  // 10 $ / 1M (legacy)
+                // R3.S1 EXACT : 2.50 $/M = 250_000 µ¢/M, 10 $/M = 1_000_000 µ¢/M.
+                cost_input_per_million_microcents: 250_000,
+                cost_output_per_million_microcents: 1_000_000,
                 p50_latency_ms: 900,
                 p99_latency_ms: 3000,
                 success_rate: 0.99,
@@ -319,6 +361,9 @@ impl TaskClassScoringTable {
             Some(sm) => LlmMetadata {
                 cost_input_per_million: sm.cost_input_per_million,
                 cost_output_per_million: sm.cost_output_per_million,
+                // R3.S1 : propagation des µ¢ depuis le scoring table.
+                cost_input_per_million_microcents: sm.cost_input_microcents_resolved(),
+                cost_output_per_million_microcents: sm.cost_output_microcents_resolved(),
                 p50_latency_ms: sm.p50_latency_ms,
                 p99_latency_ms: sm.p99_latency_ms,
                 success_rate: sm.success_rate,
@@ -328,6 +373,9 @@ impl TaskClassScoringTable {
             None => LlmMetadata {
                 cost_input_per_million: 500,
                 cost_output_per_million: 2000,
+                // R3.S1 : fallback unknown = 500 cents × 1000 = 500_000 µ¢/M.
+                cost_input_per_million_microcents: 500_000,
+                cost_output_per_million_microcents: 2_000_000,
                 p50_latency_ms: 1000,
                 p99_latency_ms: 3000,
                 success_rate: 0.95,

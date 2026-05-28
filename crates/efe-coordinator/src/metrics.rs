@@ -100,7 +100,17 @@ pub struct ChewingMetrics {
 
     /// Coût estimé en cents par le router avant l'appel (différent de
     /// `LlmResponse.cost_cents` qui est l'observé post-call).
+    ///
+    /// **LEGACY** : utiliser `router_estimated_cost_microcents` (R3.S1) pour
+    /// la précision sub-cent (Gemini Flash).
     pub router_estimated_cost_cents: u32,
+
+    /// **R3.S1** : coût estimé en microcents (1 µ¢ = 1/1000 cent).
+    ///
+    /// `#[serde(default)]` pour backward-compat avec les `ChewingMetrics`
+    /// sérialisés pré-R3 (champ absent → 0).
+    #[serde(default)]
+    pub router_estimated_cost_microcents: u64,
 
     // ── Sprint S7 R2 — Métriques Mission Speculative ─────────────────────
     //
@@ -126,8 +136,18 @@ pub struct ChewingMetrics {
 
     /// **S7** — Coût économisé estimé en cents si `verifier_skipped == true`.
     /// Calculé via `verifier_metadata.cost_*_per_million × tokens_attendus`.
+    ///
+    /// **LEGACY** : utiliser `spec_savings_microcents` (R3.S1).
     #[serde(default)]
     pub spec_savings_cents: u32,
+
+    /// **R3.S1** : économies en microcents quand HOT PATH déclenche le bypass
+    /// du verifier.  Précision sub-cent : un Speculative qui économise 0.5 ¢
+    /// (= 500 µ¢) sur 1 mission n'apparaît PAS dans `spec_savings_cents`
+    /// (arrondi à 0 ou 1) mais s'agrège honnêtement sur 1000 missions
+    /// (= 500_000 µ¢ = 500 ¢ = 5 $).
+    #[serde(default)]
+    pub spec_savings_microcents: u64,
 
     // ── Sprint S8 R2 — Graceful degradation tracing ───────────────────────
     /// **S8** — Mode de failure observé pendant la mission.
@@ -320,11 +340,15 @@ mod tests {
             selected_llm: "claude_claude-sonnet-4-6".into(),
             router_reason: "highest quality_score for FactualQa".into(),
             router_estimated_cost_cents: 2,
+            // R3.S1 : 2 cents × 1000 = 2_000 µ¢.
+            router_estimated_cost_microcents: 2_000,
             // S7 R2 — champs Mission Speculative
             verifier_skipped: Some(true),
             spec_drafter_latency_ms: 400,
             spec_verifier_latency_ms: 0,
             spec_savings_cents: 5,
+            // R3.S1 : 5 cents × 1000 = 5_000 µ¢.
+            spec_savings_microcents: 5_000,
             // S8 R2 — Graceful degradation
             failure_mode: FailureMode::None,
             degradations_count: 0,

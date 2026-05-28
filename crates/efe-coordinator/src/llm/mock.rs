@@ -22,6 +22,9 @@ pub struct MockLlmProvider {
     id: ProviderId,
     response_text: String,
     cost_cents_per_call: u32,
+    /// **R3.S1** : coût µ¢ par appel.  Si non explicitement défini,
+    /// dérivé de `cost_cents_per_call × 1000` au moment de l'appel.
+    cost_microcents_per_call: Option<u64>,
     simulated_latency: Duration,
     self_quality: f32,
     /// Si Some(n), échoue à partir de l'appel `n+1`.
@@ -41,6 +44,7 @@ impl MockLlmProvider {
             id: id.into(),
             response_text: "mock response".into(),
             cost_cents_per_call: 1,
+            cost_microcents_per_call: None,
             simulated_latency: Duration::from_millis(1),
             self_quality: 0.9,
             fail_after_n: None,
@@ -76,6 +80,21 @@ impl MockLlmProvider {
     #[must_use]
     pub fn with_cost_cents(mut self, c: u32) -> Self {
         self.cost_cents_per_call = c;
+        self
+    }
+
+    /// **R3.S1** — Override explicite du coût en microcents.
+    ///
+    /// Si défini, le mock retourne EXACTEMENT cette valeur en
+    /// `LlmResponse.cost_microcents` (et calque `cost_cents` via
+    /// `microcents_to_cents`).  Sans appel, le mock dérive
+    /// `cost_microcents = cost_cents × 1000` au moment du call().
+    #[must_use]
+    pub fn with_cost_microcents(mut self, mc: u64) -> Self {
+        self.cost_microcents_per_call = Some(mc);
+        // Synchronise cost_cents pour cohérence (≥ 1 si > 0).
+        self.cost_cents_per_call =
+            super::provider::microcents_to_cents(mc);
         self
     }
 
@@ -137,10 +156,16 @@ impl LlmProvider for MockLlmProvider {
         }
         tokio::time::sleep(self.simulated_latency).await;
         let tokens = self.response_text.split_whitespace().count() as u32;
+        // R3.S1 : si cost_microcents_per_call n'est pas défini explicitement,
+        // dériver de cost_cents × 1000 pour rester cohérent.
+        let cost_mc = self
+            .cost_microcents_per_call
+            .unwrap_or_else(|| super::provider::cents_to_microcents(self.cost_cents_per_call));
         Ok(LlmResponse {
             text: self.response_text.clone(),
             tokens_generated: tokens,
             cost_cents: self.cost_cents_per_call,
+            cost_microcents: cost_mc,
             latency_ms: self.simulated_latency.as_millis() as u64,
             provider: self.id.clone(),
             self_quality: self.self_quality,
@@ -213,5 +238,41 @@ mod tests {
             p.call(LlmCall::simple("?", 10)).await.unwrap();
         }
         assert_eq!(p.call_count(), 3);
+    }
+
+    // ============================================================
+    // R3.S1 — Tests microcents
+    // ============================================================
+
+    #[tokio::test]
+    async fn r3s1_mock_with_cost_microcents_explicit() {
+        // Définit 37 µ¢ (= Gemini Flash 1k/1k) explicitement.
+        let p = MockLlmProvider::new("flash-mock")
+            .with_response("ok")
+            .with_cost_microcents(37);
+        let r = p.call(LlmCall::simple("?", 10)).await.unwrap();
+        assert_eq!(r.cost_microcents, 37);
+        // cost_cents doit être arrondi à 1 (≥ 1 si > 0 µ¢) par la policy
+        // `microcents_to_cents`.
+        assert_eq!(r.cost_cents, 1);
+    }
+
+    #[tokio::test]
+    async fn r3s1_mock_default_derives_microcents_from_cents() {
+        // Sans with_cost_microcents, on doit avoir cost_microcents
+        // = cost_cents × 1000.
+        let p = MockLlmProvider::new("c").with_cost_cents(5);
+        let r = p.call(LlmCall::simple("?", 10)).await.unwrap();
+        assert_eq!(r.cost_cents, 5);
+        assert_eq!(r.cost_microcents, 5_000);
+    }
+
+    #[tokio::test]
+    async fn r3s1_mock_with_cost_microcents_zero() {
+        // 0 µ¢ → cost_cents reste 0 (pas de promo arbitraire à 1).
+        let p = MockLlmProvider::new("free").with_cost_microcents(0);
+        let r = p.call(LlmCall::simple("?", 10)).await.unwrap();
+        assert_eq!(r.cost_microcents, 0);
+        assert_eq!(r.cost_cents, 0);
     }
 }

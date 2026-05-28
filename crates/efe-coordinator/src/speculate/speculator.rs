@@ -83,6 +83,17 @@ pub struct SpeculationOutcome {
     #[serde(default)]
     pub cost_cents: u32,
 
+    /// **R3.S1** : coût total en microcents (1 µ¢ = 1/1000 cent).
+    ///
+    /// Particulièrement précieux pour Speculative HOT PATH : le drafter
+    /// Gemini Flash coûte en pratique quelques dizaines de µ¢ (e.g. 37 µ¢
+    /// pour 1k/1k tokens), invisible dans `cost_cents` (arrondi à 1).
+    /// L'agrégation sur N missions devient honnête.
+    ///
+    /// `#[serde(default)]` pour backward-compat avec outcomes pré-R3.
+    #[serde(default)]
+    pub cost_microcents: u64,
+
     /// **Sprint S8 R2** — `true` si le drafter a échoué et qu'on a sauté
     /// direct au verifier (fallback graceful). Distinct de `verifier_skipped` :
     ///
@@ -265,6 +276,8 @@ impl Speculator {
                     drafter_latency_ms,
                     verifier_latency_ms,
                     cost_cents: verify_res.cost_cents,
+                    // R3.S1 : précision µ¢ — drafter bypassed → verifier only.
+                    cost_microcents: verify_res.cost_microcents_resolved(),
                     drafter_bypassed: true,
                 });
             }
@@ -282,6 +295,8 @@ impl Speculator {
 
         if hot_path {
             let total_latency_ms = started.elapsed().as_millis() as u64;
+            // R3.S1 : précompute avant le partial-move de draft.text.
+            let cost_microcents = draft.cost_microcents_resolved();
             return Ok(SpeculationOutcome {
                 final_text: draft.text.clone(),
                 draft_text: draft.text,
@@ -299,6 +314,11 @@ impl Speculator {
                 verifier_latency_ms: 0,
                 // S7 R2 : hot path → seul le drafter a été facturé.
                 cost_cents: draft.cost_cents,
+                // R3.S1 : précision µ¢ — HOT PATH seul drafter facturé.
+                // C'est ici que la précision µ¢ paie le plus :
+                // Gemini Flash 1k/1k tokens = 37 µ¢ EXACT (vs 1 cent
+                // arrondi sur cost_cents).
+                cost_microcents,
                 // S8 R2 : hot path nominal — drafter a réussi.
                 drafter_bypassed: false,
             });
@@ -331,6 +351,11 @@ impl Speculator {
         // ce nombre sera typiquement négatif (on a perdu).
         let latency_saved_ms =
             verifier_latency_ms as i64 - total_latency_ms as i64;
+        // R3.S1 : précompute avant le partial-move sur draft.text et verify_res.
+        let cost_cents = draft.cost_cents.saturating_add(verify_res.cost_cents);
+        let cost_microcents = draft
+            .cost_microcents_resolved()
+            .saturating_add(verify_res.cost_microcents_resolved());
 
         Ok(SpeculationOutcome {
             final_text,
@@ -345,7 +370,9 @@ impl Speculator {
             drafter_latency_ms,
             verifier_latency_ms,
             // S7 R2 : slow path → drafter + verifier facturés tous les deux.
-            cost_cents: draft.cost_cents.saturating_add(verify_res.cost_cents),
+            cost_cents,
+            // R3.S1 : précision µ¢ — SLOW PATH = drafter + verifier.
+            cost_microcents,
             // S8 R2 : slow path nominal — drafter a réussi.
             drafter_bypassed: false,
         })

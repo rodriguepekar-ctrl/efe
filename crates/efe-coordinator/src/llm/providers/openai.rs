@@ -329,12 +329,18 @@ impl LlmProvider for GptProvider {
         let completion_tokens =
             json_resp["usage"]["completion_tokens"].as_u64().unwrap_or(0) as u32;
         let cost = self.pricing.calc(&self.model, prompt_tokens, completion_tokens);
+        // R3.S1 : précision µ¢ (= cost × 1000 pour OpenAI, pas de sub-cent
+        // dans la grille OpenAI mais on harmonise l'API).
+        let cost_mc =
+            self.pricing
+                .calc_microcents(&self.model, prompt_tokens, completion_tokens);
 
         tracing::info!(
             provider = %self.id(),
             prompt_tokens,
             completion_tokens,
             cost_cents = cost,
+            cost_microcents = cost_mc,
             latency_ms = started.elapsed().as_millis() as u64,
             "gpt.call ok"
         );
@@ -343,6 +349,7 @@ impl LlmProvider for GptProvider {
             text,
             tokens_generated: completion_tokens,
             cost_cents: cost,
+            cost_microcents: cost_mc,
             latency_ms: started.elapsed().as_millis() as u64,
             provider: self.id(),
             self_quality: 1.0,
@@ -418,10 +425,17 @@ impl LlmProvider for GptProvider {
             Ok(res) => {
                 self.breaker.record_success();
                 let cost = self.pricing.calc(&self.model, res.input_tokens, res.output_tokens);
+                // R3.S1 : précision µ¢ pour stream() également.
+                let cost_mc = self.pricing.calc_microcents(
+                    &self.model,
+                    res.input_tokens,
+                    res.output_tokens,
+                );
                 Ok(LlmResponse {
                     text: res.text,
                     tokens_generated: res.output_tokens,
                     cost_cents: cost,
+                    cost_microcents: cost_mc,
                     latency_ms: started.elapsed().as_millis() as u64,
                     provider: self.id(),
                     self_quality: 1.0,

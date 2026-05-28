@@ -86,6 +86,9 @@ fn default_claude_metadata() -> LlmMetadata {
         // Coût Claude Sonnet 4.6 : 3 $ / 1M input, 15 $ / 1M output.
         cost_input_per_million: 300,
         cost_output_per_million: 1500,
+        // R3.S1 : 0 → _resolved() fallback à cents × 1000.
+        cost_input_per_million_microcents: 0,
+        cost_output_per_million_microcents: 0,
         // Latence observée en R1b live : ~1.2 s p50, ~3 s p99.
         p50_latency_ms: 1200,
         p99_latency_ms: 3000,
@@ -1162,6 +1165,9 @@ fn default_gemini_metadata() -> LlmMetadata {
     LlmMetadata {
         cost_input_per_million: 8,
         cost_output_per_million: 30,
+        // R3.S1 : 0 → _resolved() fallback à cents × 1000.
+        cost_input_per_million_microcents: 0,
+        cost_output_per_million_microcents: 0,
         p50_latency_ms: 800,
         p99_latency_ms: 2500,
         success_rate: 0.99,
@@ -1175,6 +1181,9 @@ fn default_gpt_metadata() -> LlmMetadata {
     LlmMetadata {
         cost_input_per_million: 250,
         cost_output_per_million: 1000,
+        // R3.S1 : 0 → _resolved() fallback à cents × 1000.
+        cost_input_per_million_microcents: 0,
+        cost_output_per_million_microcents: 0,
         p50_latency_ms: 900,
         p99_latency_ms: 3000,
         success_rate: 0.99,

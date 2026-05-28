@@ -300,12 +300,18 @@ impl LlmProvider for ClaudeProvider {
         let input_tokens = json_resp["usage"]["input_tokens"].as_u64().unwrap_or(0) as u32;
         let output_tokens = json_resp["usage"]["output_tokens"].as_u64().unwrap_or(0) as u32;
         let cost = self.pricing.calc(&self.model, input_tokens, output_tokens);
+        // R3.S1 : précision µ¢ (= cost × 1000 pour Anthropic, pas de sub-cent
+        // dans la grille Claude mais on harmonise l'API).
+        let cost_mc = self
+            .pricing
+            .calc_microcents(&self.model, input_tokens, output_tokens);
 
         tracing::info!(
             provider = %self.id(),
             input_tokens,
             output_tokens,
             cost_cents = cost,
+            cost_microcents = cost_mc,
             latency_ms = started.elapsed().as_millis() as u64,
             "claude.call ok"
         );
@@ -314,6 +320,7 @@ impl LlmProvider for ClaudeProvider {
             text,
             tokens_generated: output_tokens,
             cost_cents: cost,
+            cost_microcents: cost_mc,
             latency_ms: started.elapsed().as_millis() as u64,
             provider: self.id(),
             self_quality: 1.0,
@@ -383,10 +390,17 @@ impl LlmProvider for ClaudeProvider {
                 self.breaker.record_success();
                 let cost =
                     self.pricing.calc(&self.model, res.input_tokens, res.output_tokens);
+                // R3.S1 : précision µ¢ pour stream() également.
+                let cost_mc = self.pricing.calc_microcents(
+                    &self.model,
+                    res.input_tokens,
+                    res.output_tokens,
+                );
                 Ok(LlmResponse {
                     text: res.text,
                     tokens_generated: res.output_tokens,
                     cost_cents: cost,
+                    cost_microcents: cost_mc,
                     latency_ms: started.elapsed().as_millis() as u64,
                     provider: self.id(),
                     self_quality: 1.0,

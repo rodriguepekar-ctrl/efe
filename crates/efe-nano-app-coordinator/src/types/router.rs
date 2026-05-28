@@ -54,10 +54,25 @@ pub enum TaskClass {
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct LlmMetadata {
     /// Coût input pour 1M tokens en cents (ex: 1500 = 15 $).
+    ///
+    /// **LEGACY** : utiliser `cost_input_per_million_microcents` (R3.S1)
+    /// pour la précision sub-cent (Gemini Flash : 7.5 cents/M).
     pub cost_input_per_million: u32,
 
     /// Coût output pour 1M tokens en cents.
     pub cost_output_per_million: u32,
+
+    /// **R3.S1** : coût input pour 1M tokens en **microcents** (1 µ¢ = 1/1000 cent).
+    ///
+    /// `#[serde(default)]` pour rétrocompat avec les fichiers JSON pré-R3.
+    /// Quand vaut `0`, fallback sur `cost_input_per_million × 1000` au runtime
+    /// (cf. helper `cost_input_microcents_resolved()`).
+    #[serde(default)]
+    pub cost_input_per_million_microcents: u64,
+
+    /// **R3.S1** : coût output pour 1M tokens en **microcents**.  Cf. ci-dessus.
+    #[serde(default)]
+    pub cost_output_per_million_microcents: u64,
 
     /// Latence p50 récente (ms).
     pub p50_latency_ms: u32,
@@ -74,6 +89,30 @@ pub struct LlmMetadata {
 
     /// Circuit breaker actuellement ouvert ?
     pub circuit_open: bool,
+}
+
+impl LlmMetadata {
+    /// **R3.S1** : résout le tarif input en µ¢/M en gérant les anciens JSON
+    /// (où `cost_input_per_million_microcents` vaut 0).  Si > 0, on l'utilise
+    /// tel quel ; sinon, on dérive du legacy `cost_input_per_million × 1000`.
+    #[must_use]
+    pub fn cost_input_microcents_resolved(&self) -> u64 {
+        if self.cost_input_per_million_microcents > 0 {
+            self.cost_input_per_million_microcents
+        } else {
+            (self.cost_input_per_million as u64).saturating_mul(1000)
+        }
+    }
+
+    /// **R3.S1** : résout le tarif output en µ¢/M (cf. ci-dessus).
+    #[must_use]
+    pub fn cost_output_microcents_resolved(&self) -> u64 {
+        if self.cost_output_per_million_microcents > 0 {
+            self.cost_output_per_million_microcents
+        } else {
+            (self.cost_output_per_million as u64).saturating_mul(1000)
+        }
+    }
 }
 
 /// Contraintes budgétaires pour cette requête.
@@ -117,7 +156,17 @@ pub struct RouterOutput {
     pub fallback_chain: Vec<LlmRef>,
 
     /// Coût estimé en cents.
+    ///
+    /// **LEGACY** : utiliser `estimated_cost_microcents` (R3.S1) pour la
+    /// précision sub-cent.
     pub estimated_cost_cents: u32,
+
+    /// **R3.S1** : coût estimé en microcents (1 µ¢ = 1/1000 cent).
+    ///
+    /// `#[serde(default)]` pour compat ; quand vaut 0, fallback sur
+    /// `estimated_cost_cents × 1000`.
+    #[serde(default)]
+    pub estimated_cost_microcents: u64,
 
     /// Latence estimée en ms.
     pub estimated_latency_ms: u32,
@@ -162,6 +211,8 @@ mod tests {
         let meta = LlmMetadata {
             cost_input_per_million: 1500,
             cost_output_per_million: 7500,
+            cost_input_per_million_microcents: 1_500_000,
+            cost_output_per_million_microcents: 7_500_000,
             p50_latency_ms: 900,
             p99_latency_ms: 3000,
             success_rate: 0.995,
@@ -171,5 +222,68 @@ mod tests {
         let s = serde_json::to_string(&meta).unwrap();
         let back: LlmMetadata = serde_json::from_str(&s).unwrap();
         assert_eq!(meta.cost_input_per_million, back.cost_input_per_million);
+        assert_eq!(
+            meta.cost_input_per_million_microcents,
+            back.cost_input_per_million_microcents
+        );
+    }
+
+    // ============================================================
+    // R3.S1 — Tests microcents
+    // ============================================================
+
+    #[test]
+    fn r3s1_llm_metadata_backward_compat_pre_r3_json() {
+        // JSON sans champs microcents (= pré-R3 sérialisé).
+        let json = r#"{
+            "cost_input_per_million": 300,
+            "cost_output_per_million": 1500,
+            "p50_latency_ms": 800,
+            "p99_latency_ms": 2500,
+            "success_rate": 0.99,
+            "capability_scores": {},
+            "circuit_open": false
+        }"#;
+        let m: LlmMetadata = serde_json::from_str(json).unwrap();
+        // Les champs µ¢ doivent être 0 par défaut.
+        assert_eq!(m.cost_input_per_million_microcents, 0);
+        assert_eq!(m.cost_output_per_million_microcents, 0);
+        // Mais le helper `_resolved()` doit reconstruire depuis cents.
+        assert_eq!(m.cost_input_microcents_resolved(), 300_000);
+        assert_eq!(m.cost_output_microcents_resolved(), 1_500_000);
+    }
+
+    #[test]
+    fn r3s1_llm_metadata_resolved_uses_microcents_when_set() {
+        let m = LlmMetadata {
+            cost_input_per_million: 8, // legacy (arrondi sup pour Flash)
+            cost_output_per_million: 30,
+            cost_input_per_million_microcents: 7_500, // précis (D7 fix)
+            cost_output_per_million_microcents: 30_000,
+            p50_latency_ms: 400,
+            p99_latency_ms: 1200,
+            success_rate: 0.99,
+            capability_scores: HashMap::new(),
+            circuit_open: false,
+        };
+        // _resolved() doit privilégier les µ¢ (précis) → pas le legacy arrondi.
+        assert_eq!(m.cost_input_microcents_resolved(), 7_500);
+        assert_eq!(m.cost_output_microcents_resolved(), 30_000);
+    }
+
+    #[test]
+    fn r3s1_router_output_backward_compat_pre_r3_json() {
+        // LlmRef est un alias String → la valeur est une string nue.
+        let json = r#"{
+            "selected": "claude-sonnet-4-6",
+            "fallback_chain": [],
+            "estimated_cost_cents": 5,
+            "estimated_latency_ms": 1500,
+            "reason": "test"
+        }"#;
+        let o: RouterOutput = serde_json::from_str(json).unwrap();
+        // µ¢ par défaut = 0 (pas re-dérivé ici, on garde la valeur stockée).
+        assert_eq!(o.estimated_cost_microcents, 0);
+        assert_eq!(o.estimated_cost_cents, 5);
     }
 }
