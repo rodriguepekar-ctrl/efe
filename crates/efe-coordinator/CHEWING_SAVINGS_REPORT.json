@@ -1,0 +1,1004 @@
+{
+  "runs": [
+    {
+      "fixture_name": "01_factual_simple",
+      "mode": "BASELINE",
+      "cost_cents": 1,
+      "latency_ms": 1641,
+      "tokens_output": 12,
+      "final_text_excerpt": "La capitale de la France est **Paris**.",
+      "llm_used": "claude_claude-sonnet-4-6",
+      "task_class": "FactualQa",
+      "chewing_metrics": {
+        "input_tokens_raw": 19,
+        "input_tokens_compressed": 19,
+        "llm_tokens_generated": 12,
+        "compression_ratio": 1.0,
+        "savings_tokens": 0,
+        "savings_ratio": 0.0,
+        "analyzer_latency_ms": 0,
+        "router_latency_ms": 0,
+        "compressor_latency_ms": 0,
+        "llm_latency_ms": 1640,
+        "verifier_latency_ms": 0,
+        "total_slm_latency_ms": 0,
+        "total_pipeline_latency_ms": 1641,
+        "selected_llm": "claude_claude-sonnet-4-6",
+        "router_reason": "",
+        "router_estimated_cost_cents": 0,
+        "verifier_skipped": null,
+        "spec_drafter_latency_ms": 0,
+        "spec_verifier_latency_ms": 0,
+        "spec_savings_cents": 0,
+        "failure_mode": {
+          "kind": "NONE"
+        },
+        "degradations_count": 0,
+        "failed_components": []
+      },
+      "passed_quality": true,
+      "failure_mode": {
+        "kind": "NONE"
+      }
+    },
+    {
+      "fixture_name": "01_factual_simple",
+      "mode": "S4_CHEWING",
+      "cost_cents": 1,
+      "latency_ms": 1063,
+      "tokens_output": 12,
+      "final_text_excerpt": "La capitale de la France est **Paris**.",
+      "llm_used": "claude_claude-sonnet-4-6",
+      "task_class": "FactualQa",
+      "chewing_metrics": {
+        "input_tokens_raw": 19,
+        "input_tokens_compressed": 19,
+        "llm_tokens_generated": 12,
+        "compression_ratio": 1.0,
+        "savings_tokens": 0,
+        "savings_ratio": 0.0,
+        "analyzer_latency_ms": 0,
+        "router_latency_ms": 0,
+        "compressor_latency_ms": 0,
+        "llm_latency_ms": 1062,
+        "verifier_latency_ms": 0,
+        "total_slm_latency_ms": 0,
+        "total_pipeline_latency_ms": 1062,
+        "selected_llm": "claude_claude-sonnet-4-6",
+        "router_reason": "",
+        "router_estimated_cost_cents": 0,
+        "verifier_skipped": null,
+        "spec_drafter_latency_ms": 0,
+        "spec_verifier_latency_ms": 0,
+        "spec_savings_cents": 0,
+        "failure_mode": {
+          "kind": "NONE"
+        },
+        "degradations_count": 0,
+        "failed_components": []
+      },
+      "passed_quality": true,
+      "failure_mode": {
+        "kind": "NONE"
+      }
+    },
+    {
+      "fixture_name": "01_factual_simple",
+      "mode": "S6_ROUTING",
+      "cost_cents": 1,
+      "latency_ms": 512,
+      "tokens_output": 8,
+      "final_text_excerpt": "La capitale de la France est Paris.",
+      "llm_used": "gemini_gemini-2.5-flash",
+      "task_class": "FactualQa",
+      "chewing_metrics": {
+        "input_tokens_raw": 19,
+        "input_tokens_compressed": 19,
+        "llm_tokens_generated": 8,
+        "compression_ratio": 1.0,
+        "savings_tokens": 0,
+        "savings_ratio": 0.0,
+        "analyzer_latency_ms": 0,
+        "router_latency_ms": 1,
+        "compressor_latency_ms": 0,
+        "llm_latency_ms": 510,
+        "verifier_latency_ms": 0,
+        "total_slm_latency_ms": 0,
+        "total_pipeline_latency_ms": 512,
+        "selected_llm": "gemini_gemini-2.5-flash",
+        "router_reason": "selected gemini_gemini-2.5-flash (p50=800ms, est_cost=0c, fallback=[\"gpt_gpt-4o\", \"claude_claude-sonnet-4-6\"])",
+        "router_estimated_cost_cents": 0,
+        "verifier_skipped": null,
+        "spec_drafter_latency_ms": 0,
+        "spec_verifier_latency_ms": 0,
+        "spec_savings_cents": 0,
+        "failure_mode": {
+          "kind": "NONE"
+        },
+        "degradations_count": 0,
+        "failed_components": []
+      },
+      "passed_quality": true,
+      "failure_mode": {
+        "kind": "NONE"
+      }
+    },
+    {
+      "fixture_name": "01_factual_simple",
+      "mode": "FULL",
+      "cost_cents": 1,
+      "latency_ms": 447,
+      "tokens_output": 8,
+      "final_text_excerpt": "La capitale de la France est Paris.",
+      "llm_used": "gemini_gemini-2.5-flash",
+      "task_class": "FactualQa",
+      "chewing_metrics": {
+        "input_tokens_raw": 19,
+        "input_tokens_compressed": 19,
+        "llm_tokens_generated": 8,
+        "compression_ratio": 1.0,
+        "savings_tokens": 0,
+        "savings_ratio": 0.0,
+        "analyzer_latency_ms": 0,
+        "router_latency_ms": 0,
+        "compressor_latency_ms": 0,
+        "llm_latency_ms": 446,
+        "verifier_latency_ms": 0,
+        "total_slm_latency_ms": 0,
+        "total_pipeline_latency_ms": 447,
+        "selected_llm": "gemini_gemini-2.5-flash",
+        "router_reason": "selected gemini_gemini-2.5-flash (p50=800ms, est_cost=0c, fallback=[\"gpt_gpt-4o\", \"claude_claude-sonnet-4-6\"])",
+        "router_estimated_cost_cents": 0,
+        "verifier_skipped": null,
+        "spec_drafter_latency_ms": 0,
+        "spec_verifier_latency_ms": 0,
+        "spec_savings_cents": 0,
+        "failure_mode": {
+          "kind": "NONE"
+        },
+        "degradations_count": 0,
+        "failed_components": []
+      },
+      "passed_quality": true,
+      "failure_mode": {
+        "kind": "NONE"
+      }
+    },
+    {
+      "fixture_name": "01_factual_simple",
+      "mode": "SPECULATIVE",
+      "cost_cents": 1,
+      "latency_ms": 1272,
+      "tokens_output": 12,
+      "final_text_excerpt": "La capitale de la France est **Paris**.",
+      "llm_used": "claude_claude-sonnet-4-6",
+      "task_class": "FactualQa",
+      "chewing_metrics": {
+        "input_tokens_raw": 19,
+        "input_tokens_compressed": 19,
+        "llm_tokens_generated": 12,
+        "compression_ratio": 1.0,
+        "savings_tokens": 0,
+        "savings_ratio": 0.0,
+        "analyzer_latency_ms": 0,
+        "router_latency_ms": 0,
+        "compressor_latency_ms": 0,
+        "llm_latency_ms": 1272,
+        "verifier_latency_ms": 0,
+        "total_slm_latency_ms": 0,
+        "total_pipeline_latency_ms": 1272,
+        "selected_llm": "claude_claude-sonnet-4-6",
+        "router_reason": "S7 slow path : drafter gemini_gemini-2.5-flash insufficient, verifier claude_claude-sonnet-4-6 called for arbitrage",
+        "router_estimated_cost_cents": 0,
+        "verifier_skipped": false,
+        "spec_drafter_latency_ms": 99,
+        "spec_verifier_latency_ms": 1172,
+        "spec_savings_cents": 0,
+        "failure_mode": {
+          "kind": "NONE"
+        },
+        "degradations_count": 0,
+        "failed_components": []
+      },
+      "passed_quality": true,
+      "failure_mode": {
+        "kind": "NONE"
+      }
+    },
+    {
+      "fixture_name": "03_factual_compressible",
+      "mode": "BASELINE",
+      "cost_cents": 1,
+      "latency_ms": 1423,
+      "tokens_output": 17,
+      "final_text_excerpt": "La capitale historique et administrative de la République française est **Paris**.",
+      "llm_used": "claude_claude-sonnet-4-6",
+      "task_class": "FactualQa",
+      "chewing_metrics": {
+        "input_tokens_raw": 132,
+        "input_tokens_compressed": 132,
+        "llm_tokens_generated": 17,
+        "compression_ratio": 1.0,
+        "savings_tokens": 0,
+        "savings_ratio": 0.0,
+        "analyzer_latency_ms": 0,
+        "router_latency_ms": 0,
+        "compressor_latency_ms": 0,
+        "llm_latency_ms": 1423,
+        "verifier_latency_ms": 0,
+        "total_slm_latency_ms": 0,
+        "total_pipeline_latency_ms": 1423,
+        "selected_llm": "claude_claude-sonnet-4-6",
+        "router_reason": "",
+        "router_estimated_cost_cents": 0,
+        "verifier_skipped": null,
+        "spec_drafter_latency_ms": 0,
+        "spec_verifier_latency_ms": 0,
+        "spec_savings_cents": 0,
+        "failure_mode": {
+          "kind": "NONE"
+        },
+        "degradations_count": 0,
+        "failed_components": []
+      },
+      "passed_quality": true,
+      "failure_mode": {
+        "kind": "NONE"
+      }
+    },
+    {
+      "fixture_name": "03_factual_compressible",
+      "mode": "S4_CHEWING",
+      "cost_cents": 1,
+      "latency_ms": 1667,
+      "tokens_output": 17,
+      "final_text_excerpt": "La capitale historique et administrative de la République française est **Paris**.",
+      "llm_used": "claude_claude-sonnet-4-6",
+      "task_class": "FactualQa",
+      "chewing_metrics": {
+        "input_tokens_raw": 132,
+        "input_tokens_compressed": 132,
+        "llm_tokens_generated": 17,
+        "compression_ratio": 1.0,
+        "savings_tokens": 0,
+        "savings_ratio": 0.0,
+        "analyzer_latency_ms": 0,
+        "router_latency_ms": 0,
+        "compressor_latency_ms": 0,
+        "llm_latency_ms": 1666,
+        "verifier_latency_ms": 0,
+        "total_slm_latency_ms": 0,
+        "total_pipeline_latency_ms": 1667,
+        "selected_llm": "claude_claude-sonnet-4-6",
+        "router_reason": "",
+        "router_estimated_cost_cents": 0,
+        "verifier_skipped": null,
+        "spec_drafter_latency_ms": 0,
+        "spec_verifier_latency_ms": 0,
+        "spec_savings_cents": 0,
+        "failure_mode": {
+          "kind": "NONE"
+        },
+        "degradations_count": 0,
+        "failed_components": []
+      },
+      "passed_quality": true,
+      "failure_mode": {
+        "kind": "NONE"
+      }
+    },
+    {
+      "fixture_name": "03_factual_compressible",
+      "mode": "S6_ROUTING",
+      "cost_cents": 1,
+      "latency_ms": 1454,
+      "tokens_output": 17,
+      "final_text_excerpt": "La capitale historique et administrative de la République française est **Paris**.",
+      "llm_used": "claude_claude-sonnet-4-6",
+      "task_class": "FactualQa",
+      "chewing_metrics": {
+        "input_tokens_raw": 132,
+        "input_tokens_compressed": 132,
+        "llm_tokens_generated": 17,
+        "compression_ratio": 1.0,
+        "savings_tokens": 0,
+        "savings_ratio": 0.0,
+        "analyzer_latency_ms": 0,
+        "router_latency_ms": 0,
+        "compressor_latency_ms": 0,
+        "llm_latency_ms": 1364,
+        "verifier_latency_ms": 0,
+        "total_slm_latency_ms": 0,
+        "total_pipeline_latency_ms": 1454,
+        "selected_llm": "claude_claude-sonnet-4-6",
+        "router_reason": "selected gemini_gemini-2.5-flash (p50=800ms, est_cost=0c, fallback=[\"gpt_gpt-4o\", \"claude_claude-sonnet-4-6\"])",
+        "router_estimated_cost_cents": 0,
+        "verifier_skipped": null,
+        "spec_drafter_latency_ms": 0,
+        "spec_verifier_latency_ms": 0,
+        "spec_savings_cents": 0,
+        "failure_mode": {
+          "kind": "LLM_FALLBACK_TRIGGERED",
+          "detail": {
+            "from": "gemini_gemini-2.5-flash",
+            "to": "claude_claude-sonnet-4-6"
+          }
+        },
+        "degradations_count": 1,
+        "failed_components": [
+          "llm:gemini_gemini-2.5-flash"
+        ]
+      },
+      "passed_quality": true,
+      "failure_mode": {
+        "kind": "LLM_FALLBACK_TRIGGERED",
+        "detail": {
+          "from": "gemini_gemini-2.5-flash",
+          "to": "claude_claude-sonnet-4-6"
+        }
+      }
+    },
+    {
+      "fixture_name": "03_factual_compressible",
+      "mode": "FULL",
+      "cost_cents": 1,
+      "latency_ms": 2012,
+      "tokens_output": 55,
+      "final_text_excerpt": "**Paris** est la capitale historique et administrative de la République française, où sont concentrées les principales institutions politiques nationales, dont le palais de l'Élysée, l'Assemblée natio…",
+      "llm_used": "claude_claude-sonnet-4-6",
+      "task_class": "FactualQa",
+      "chewing_metrics": {
+        "input_tokens_raw": 132,
+        "input_tokens_compressed": 132,
+        "llm_tokens_generated": 55,
+        "compression_ratio": 1.0,
+        "savings_tokens": 0,
+        "savings_ratio": 0.0,
+        "analyzer_latency_ms": 0,
+        "router_latency_ms": 0,
+        "compressor_latency_ms": 0,
+        "llm_latency_ms": 1916,
+        "verifier_latency_ms": 0,
+        "total_slm_latency_ms": 0,
+        "total_pipeline_latency_ms": 2012,
+        "selected_llm": "claude_claude-sonnet-4-6",
+        "router_reason": "selected gemini_gemini-2.5-flash (p50=800ms, est_cost=0c, fallback=[\"gpt_gpt-4o\", \"claude_claude-sonnet-4-6\"])",
+        "router_estimated_cost_cents": 0,
+        "verifier_skipped": null,
+        "spec_drafter_latency_ms": 0,
+        "spec_verifier_latency_ms": 0,
+        "spec_savings_cents": 0,
+        "failure_mode": {
+          "kind": "LLM_FALLBACK_TRIGGERED",
+          "detail": {
+            "from": "gemini_gemini-2.5-flash",
+            "to": "claude_claude-sonnet-4-6"
+          }
+        },
+        "degradations_count": 1,
+        "failed_components": [
+          "llm:gemini_gemini-2.5-flash"
+        ]
+      },
+      "passed_quality": true,
+      "failure_mode": {
+        "kind": "LLM_FALLBACK_TRIGGERED",
+        "detail": {
+          "from": "gemini_gemini-2.5-flash",
+          "to": "claude_claude-sonnet-4-6"
+        }
+      }
+    },
+    {
+      "fixture_name": "03_factual_compressible",
+      "mode": "SPECULATIVE",
+      "cost_cents": 1,
+      "latency_ms": 4576,
+      "tokens_output": 55,
+      "final_text_excerpt": "**Paris** est la capitale historique et administrative de la République française, où sont concentrées les principales institutions politiques nationales, dont le palais de l'Élysée, l'Assemblée natio…",
+      "llm_used": "claude_claude-sonnet-4-6",
+      "task_class": "FactualQa",
+      "chewing_metrics": {
+        "input_tokens_raw": 132,
+        "input_tokens_compressed": 132,
+        "llm_tokens_generated": 55,
+        "compression_ratio": 1.0,
+        "savings_tokens": 0,
+        "savings_ratio": 0.0,
+        "analyzer_latency_ms": 0,
+        "router_latency_ms": 0,
+        "compressor_latency_ms": 0,
+        "llm_latency_ms": 4576,
+        "verifier_latency_ms": 0,
+        "total_slm_latency_ms": 0,
+        "total_pipeline_latency_ms": 4576,
+        "selected_llm": "claude_claude-sonnet-4-6",
+        "router_reason": "S7 slow path : drafter gemini_gemini-2.5-flash insufficient, verifier claude_claude-sonnet-4-6 called for arbitrage",
+        "router_estimated_cost_cents": 0,
+        "verifier_skipped": false,
+        "spec_drafter_latency_ms": 96,
+        "spec_verifier_latency_ms": 4479,
+        "spec_savings_cents": 0,
+        "failure_mode": {
+          "kind": "NONE"
+        },
+        "degradations_count": 0,
+        "failed_components": []
+      },
+      "passed_quality": true,
+      "failure_mode": {
+        "kind": "NONE"
+      }
+    },
+    {
+      "fixture_name": "05_code_gen_rust",
+      "mode": "BASELINE",
+      "cost_cents": 2,
+      "latency_ms": 14564,
+      "tokens_output": 1000,
+      "final_text_excerpt": "# Fonction Factorielle en Rust avec Gestion d'Overflow\n\n## Code\n\n```rust\n/// Calcule la factorielle de `n` (n!).\n///\n/// Retourne `0` en cas de débordement arithmétique (overflow).\n///\n/// # Exemples\n…",
+      "llm_used": "claude_claude-sonnet-4-6",
+      "task_class": "Code",
+      "chewing_metrics": {
+        "input_tokens_raw": 49,
+        "input_tokens_compressed": 49,
+        "llm_tokens_generated": 1000,
+        "compression_ratio": 1.0,
+        "savings_tokens": 0,
+        "savings_ratio": 0.0,
+        "analyzer_latency_ms": 0,
+        "router_latency_ms": 0,
+        "compressor_latency_ms": 0,
+        "llm_latency_ms": 14563,
+        "verifier_latency_ms": 0,
+        "total_slm_latency_ms": 0,
+        "total_pipeline_latency_ms": 14564,
+        "selected_llm": "claude_claude-sonnet-4-6",
+        "router_reason": "",
+        "router_estimated_cost_cents": 0,
+        "verifier_skipped": null,
+        "spec_drafter_latency_ms": 0,
+        "spec_verifier_latency_ms": 0,
+        "spec_savings_cents": 0,
+        "failure_mode": {
+          "kind": "NONE"
+        },
+        "degradations_count": 0,
+        "failed_components": []
+      },
+      "passed_quality": true,
+      "failure_mode": {
+        "kind": "NONE"
+      }
+    },
+    {
+      "fixture_name": "05_code_gen_rust",
+      "mode": "S4_CHEWING",
+      "cost_cents": 2,
+      "latency_ms": 15799,
+      "tokens_output": 1000,
+      "final_text_excerpt": "# Factorielle en Rust avec gestion d'overflow\n\n## Code\n\n```rust\n/// Calcule la factorielle de `n` (n!).\n///\n/// Retourne `0` si un débordement arithmétique est détecté.\n///\n/// # Exemples\n/// ```\n/// …",
+      "llm_used": "claude_claude-sonnet-4-6",
+      "task_class": "Code",
+      "chewing_metrics": {
+        "input_tokens_raw": 49,
+        "input_tokens_compressed": 49,
+        "llm_tokens_generated": 1000,
+        "compression_ratio": 1.0,
+        "savings_tokens": 0,
+        "savings_ratio": 0.0,
+        "analyzer_latency_ms": 0,
+        "router_latency_ms": 0,
+        "compressor_latency_ms": 0,
+        "llm_latency_ms": 15799,
+        "verifier_latency_ms": 0,
+        "total_slm_latency_ms": 0,
+        "total_pipeline_latency_ms": 15799,
+        "selected_llm": "claude_claude-sonnet-4-6",
+        "router_reason": "",
+        "router_estimated_cost_cents": 0,
+        "verifier_skipped": null,
+        "spec_drafter_latency_ms": 0,
+        "spec_verifier_latency_ms": 0,
+        "spec_savings_cents": 0,
+        "failure_mode": {
+          "kind": "NONE"
+        },
+        "degradations_count": 0,
+        "failed_components": []
+      },
+      "passed_quality": true,
+      "failure_mode": {
+        "kind": "NONE"
+      }
+    },
+    {
+      "fixture_name": "05_code_gen_rust",
+      "mode": "S6_ROUTING",
+      "cost_cents": 2,
+      "latency_ms": 14308,
+      "tokens_output": 997,
+      "final_text_excerpt": "# Factorielle en Rust avec gestion d'overflow\n\n## Code\n\n```rust\n/// Calcule la factorielle de `n` (n!).\n///\n/// Retourne `0` en cas de débordement arithmétique (overflow).\n///\n/// # Exemples\n///\n/// `…",
+      "llm_used": "claude_claude-sonnet-4-6",
+      "task_class": "Code",
+      "chewing_metrics": {
+        "input_tokens_raw": 49,
+        "input_tokens_compressed": 49,
+        "llm_tokens_generated": 997,
+        "compression_ratio": 1.0,
+        "savings_tokens": 0,
+        "savings_ratio": 0.0,
+        "analyzer_latency_ms": 0,
+        "router_latency_ms": 0,
+        "compressor_latency_ms": 0,
+        "llm_latency_ms": 14307,
+        "verifier_latency_ms": 0,
+        "total_slm_latency_ms": 0,
+        "total_pipeline_latency_ms": 14308,
+        "selected_llm": "claude_claude-sonnet-4-6",
+        "router_reason": "selected claude_claude-sonnet-4-6 (p50=1200ms, est_cost=0c, fallback=[\"gpt_gpt-4o\", \"gemini_gemini-2.5-flash\"])",
+        "router_estimated_cost_cents": 0,
+        "verifier_skipped": null,
+        "spec_drafter_latency_ms": 0,
+        "spec_verifier_latency_ms": 0,
+        "spec_savings_cents": 0,
+        "failure_mode": {
+          "kind": "NONE"
+        },
+        "degradations_count": 0,
+        "failed_components": []
+      },
+      "passed_quality": true,
+      "failure_mode": {
+        "kind": "NONE"
+      }
+    },
+    {
+      "fixture_name": "05_code_gen_rust",
+      "mode": "FULL",
+      "cost_cents": 2,
+      "latency_ms": 14373,
+      "tokens_output": 1000,
+      "final_text_excerpt": "# Factorielle en Rust avec gestion d'overflow\n\n## Code\n\n```rust\n/// Calcule la factorielle de `n` (n!).\n///\n/// Retourne `0` en cas de débordement arithmétique (overflow).\n///\n/// # Exemples\n///\n/// `…",
+      "llm_used": "claude_claude-sonnet-4-6",
+      "task_class": "Code",
+      "chewing_metrics": {
+        "input_tokens_raw": 49,
+        "input_tokens_compressed": 49,
+        "llm_tokens_generated": 1000,
+        "compression_ratio": 1.0,
+        "savings_tokens": 0,
+        "savings_ratio": 0.0,
+        "analyzer_latency_ms": 0,
+        "router_latency_ms": 0,
+        "compressor_latency_ms": 0,
+        "llm_latency_ms": 14372,
+        "verifier_latency_ms": 0,
+        "total_slm_latency_ms": 0,
+        "total_pipeline_latency_ms": 14373,
+        "selected_llm": "claude_claude-sonnet-4-6",
+        "router_reason": "selected claude_claude-sonnet-4-6 (p50=1200ms, est_cost=0c, fallback=[\"gpt_gpt-4o\", \"gemini_gemini-2.5-flash\"])",
+        "router_estimated_cost_cents": 0,
+        "verifier_skipped": null,
+        "spec_drafter_latency_ms": 0,
+        "spec_verifier_latency_ms": 0,
+        "spec_savings_cents": 0,
+        "failure_mode": {
+          "kind": "NONE"
+        },
+        "degradations_count": 0,
+        "failed_components": []
+      },
+      "passed_quality": true,
+      "failure_mode": {
+        "kind": "NONE"
+      }
+    },
+    {
+      "fixture_name": "06_creative_writing",
+      "mode": "BASELINE",
+      "cost_cents": 1,
+      "latency_ms": 7461,
+      "tokens_output": 300,
+      "final_text_excerpt": "# Le Poulpe et le Grille-Pain\n\n---\n\n**Le Poulpe :** J'ai huit bras et je ne sais toujours pas lequel agiter en premier le matin. C'est ça, le libre arbitre.\n\n**Le Grille-Pain :** Moi je brûle le pain …",
+      "llm_used": "claude_claude-sonnet-4-6",
+      "task_class": "Creative",
+      "chewing_metrics": {
+        "input_tokens_raw": 42,
+        "input_tokens_compressed": 42,
+        "llm_tokens_generated": 300,
+        "compression_ratio": 1.0,
+        "savings_tokens": 0,
+        "savings_ratio": 0.0,
+        "analyzer_latency_ms": 0,
+        "router_latency_ms": 0,
+        "compressor_latency_ms": 0,
+        "llm_latency_ms": 7460,
+        "verifier_latency_ms": 0,
+        "total_slm_latency_ms": 0,
+        "total_pipeline_latency_ms": 7461,
+        "selected_llm": "claude_claude-sonnet-4-6",
+        "router_reason": "",
+        "router_estimated_cost_cents": 0,
+        "verifier_skipped": null,
+        "spec_drafter_latency_ms": 0,
+        "spec_verifier_latency_ms": 0,
+        "spec_savings_cents": 0,
+        "failure_mode": {
+          "kind": "NONE"
+        },
+        "degradations_count": 0,
+        "failed_components": []
+      },
+      "passed_quality": true,
+      "failure_mode": {
+        "kind": "NONE"
+      }
+    },
+    {
+      "fixture_name": "06_creative_writing",
+      "mode": "S4_CHEWING",
+      "cost_cents": 1,
+      "latency_ms": 7764,
+      "tokens_output": 299,
+      "final_text_excerpt": "# Le Poulpe et le Grille-Pain\n\n---\n\n**🐙 Le Poulpe :** J'ai huit bras et je ne sais toujours pas lequel agiter en premier. C'est ça, le libre arbitre ?\n\n**🍞 Le Grille-Pain :** Moi j'ai deux fentes et r…",
+      "llm_used": "claude_claude-sonnet-4-6",
+      "task_class": "Creative",
+      "chewing_metrics": {
+        "input_tokens_raw": 42,
+        "input_tokens_compressed": 42,
+        "llm_tokens_generated": 299,
+        "compression_ratio": 1.0,
+        "savings_tokens": 0,
+        "savings_ratio": 0.0,
+        "analyzer_latency_ms": 0,
+        "router_latency_ms": 0,
+        "compressor_latency_ms": 0,
+        "llm_latency_ms": 7764,
+        "verifier_latency_ms": 0,
+        "total_slm_latency_ms": 0,
+        "total_pipeline_latency_ms": 7764,
+        "selected_llm": "claude_claude-sonnet-4-6",
+        "router_reason": "",
+        "router_estimated_cost_cents": 0,
+        "verifier_skipped": null,
+        "spec_drafter_latency_ms": 0,
+        "spec_verifier_latency_ms": 0,
+        "spec_savings_cents": 0,
+        "failure_mode": {
+          "kind": "NONE"
+        },
+        "degradations_count": 0,
+        "failed_components": []
+      },
+      "passed_quality": true,
+      "failure_mode": {
+        "kind": "NONE"
+      }
+    },
+    {
+      "fixture_name": "06_creative_writing",
+      "mode": "S6_ROUTING",
+      "cost_cents": 1,
+      "latency_ms": 3206,
+      "tokens_output": 134,
+      "final_text_excerpt": "Poulpe : « La mer est-elle vraiment bleue, ou est-ce juste le reflet de notre âme en quête de sens ? »\n\nGrille-pain : « Peut-être, mais pourquoi le pain doit-il toujours être grillé pour trouver sa ra…",
+      "llm_used": "gpt_gpt-4o",
+      "task_class": "Creative",
+      "chewing_metrics": {
+        "input_tokens_raw": 42,
+        "input_tokens_compressed": 42,
+        "llm_tokens_generated": 134,
+        "compression_ratio": 1.0,
+        "savings_tokens": 0,
+        "savings_ratio": 0.0,
+        "analyzer_latency_ms": 0,
+        "router_latency_ms": 0,
+        "compressor_latency_ms": 0,
+        "llm_latency_ms": 3205,
+        "verifier_latency_ms": 0,
+        "total_slm_latency_ms": 0,
+        "total_pipeline_latency_ms": 3206,
+        "selected_llm": "gpt_gpt-4o",
+        "router_reason": "selected gpt_gpt-4o (p50=900ms, est_cost=0c, fallback=[\"gemini_gemini-2.5-flash\", \"claude_claude-sonnet-4-6\"])",
+        "router_estimated_cost_cents": 0,
+        "verifier_skipped": null,
+        "spec_drafter_latency_ms": 0,
+        "spec_verifier_latency_ms": 0,
+        "spec_savings_cents": 0,
+        "failure_mode": {
+          "kind": "NONE"
+        },
+        "degradations_count": 0,
+        "failed_components": []
+      },
+      "passed_quality": true,
+      "failure_mode": {
+        "kind": "NONE"
+      }
+    },
+    {
+      "fixture_name": "06_creative_writing",
+      "mode": "FULL",
+      "cost_cents": 1,
+      "latency_ms": 2811,
+      "tokens_output": 152,
+      "final_text_excerpt": "Poulpe Philosophe : « Si la mer est une bibliothèque de sel, suis-je le livre ou l'auteur ? »\n\nGrille-pain Existentialiste : « Et si chaque tranche de pain était un chapitre de ma vie, quelle histoire…",
+      "llm_used": "gpt_gpt-4o",
+      "task_class": "Creative",
+      "chewing_metrics": {
+        "input_tokens_raw": 42,
+        "input_tokens_compressed": 42,
+        "llm_tokens_generated": 152,
+        "compression_ratio": 1.0,
+        "savings_tokens": 0,
+        "savings_ratio": 0.0,
+        "analyzer_latency_ms": 0,
+        "router_latency_ms": 0,
+        "compressor_latency_ms": 0,
+        "llm_latency_ms": 2809,
+        "verifier_latency_ms": 0,
+        "total_slm_latency_ms": 0,
+        "total_pipeline_latency_ms": 2810,
+        "selected_llm": "gpt_gpt-4o",
+        "router_reason": "selected gpt_gpt-4o (p50=900ms, est_cost=0c, fallback=[\"gemini_gemini-2.5-flash\", \"claude_claude-sonnet-4-6\"])",
+        "router_estimated_cost_cents": 0,
+        "verifier_skipped": null,
+        "spec_drafter_latency_ms": 0,
+        "spec_verifier_latency_ms": 0,
+        "spec_savings_cents": 0,
+        "failure_mode": {
+          "kind": "NONE"
+        },
+        "degradations_count": 0,
+        "failed_components": []
+      },
+      "passed_quality": true,
+      "failure_mode": {
+        "kind": "NONE"
+      }
+    },
+    {
+      "fixture_name": "07_translation_fr_en",
+      "mode": "BASELINE",
+      "cost_cents": 1,
+      "latency_ms": 6117,
+      "tokens_output": 199,
+      "final_text_excerpt": "Here is a rendering that preserves the elevated, literary register of the original:\n\n---\n\n**\"Dusk bathes the rooftops of Paris in a burnished golden light that hurrying passers-by no longer pause to n…",
+      "llm_used": "claude_claude-sonnet-4-6",
+      "task_class": "Translation",
+      "chewing_metrics": {
+        "input_tokens_raw": 50,
+        "input_tokens_compressed": 50,
+        "llm_tokens_generated": 199,
+        "compression_ratio": 1.0,
+        "savings_tokens": 0,
+        "savings_ratio": 0.0,
+        "analyzer_latency_ms": 0,
+        "router_latency_ms": 0,
+        "compressor_latency_ms": 0,
+        "llm_latency_ms": 6117,
+        "verifier_latency_ms": 0,
+        "total_slm_latency_ms": 0,
+        "total_pipeline_latency_ms": 6117,
+        "selected_llm": "claude_claude-sonnet-4-6",
+        "router_reason": "",
+        "router_estimated_cost_cents": 0,
+        "verifier_skipped": null,
+        "spec_drafter_latency_ms": 0,
+        "spec_verifier_latency_ms": 0,
+        "spec_savings_cents": 0,
+        "failure_mode": {
+          "kind": "NONE"
+        },
+        "degradations_count": 0,
+        "failed_components": []
+      },
+      "passed_quality": true,
+      "failure_mode": {
+        "kind": "NONE"
+      }
+    },
+    {
+      "fixture_name": "07_translation_fr_en",
+      "mode": "S4_CHEWING",
+      "cost_cents": 1,
+      "latency_ms": 5843,
+      "tokens_output": 188,
+      "final_text_excerpt": "Here is my proposed translation:\n\n**\"Dusk bathes the rooftops of Paris in a burnished golden light that hurried passersby no longer pause to notice.\"**\n\n---\n\n**A few notes on the choices made:**\n\n- **…",
+      "llm_used": "claude_claude-sonnet-4-6",
+      "task_class": "Translation",
+      "chewing_metrics": {
+        "input_tokens_raw": 50,
+        "input_tokens_compressed": 50,
+        "llm_tokens_generated": 188,
+        "compression_ratio": 1.0,
+        "savings_tokens": 0,
+        "savings_ratio": 0.0,
+        "analyzer_latency_ms": 0,
+        "router_latency_ms": 0,
+        "compressor_latency_ms": 0,
+        "llm_latency_ms": 5843,
+        "verifier_latency_ms": 0,
+        "total_slm_latency_ms": 0,
+        "total_pipeline_latency_ms": 5843,
+        "selected_llm": "claude_claude-sonnet-4-6",
+        "router_reason": "",
+        "router_estimated_cost_cents": 0,
+        "verifier_skipped": null,
+        "spec_drafter_latency_ms": 0,
+        "spec_verifier_latency_ms": 0,
+        "spec_savings_cents": 0,
+        "failure_mode": {
+          "kind": "NONE"
+        },
+        "degradations_count": 0,
+        "failed_components": []
+      },
+      "passed_quality": true,
+      "failure_mode": {
+        "kind": "NONE"
+      }
+    },
+    {
+      "fixture_name": "07_translation_fr_en",
+      "mode": "S6_ROUTING",
+      "cost_cents": 1,
+      "latency_ms": 7096,
+      "tokens_output": 233,
+      "final_text_excerpt": "Here is a possible rendering in idiomatic, elevated English:\n\n**\"Dusk bathes the rooftops of Paris in a burnished golden light that hurried passers-by no longer pause to notice.\"**\n\n---\n\n**A few notes…",
+      "llm_used": "claude_claude-sonnet-4-6",
+      "task_class": "Translation",
+      "chewing_metrics": {
+        "input_tokens_raw": 50,
+        "input_tokens_compressed": 50,
+        "llm_tokens_generated": 233,
+        "compression_ratio": 1.0,
+        "savings_tokens": 0,
+        "savings_ratio": 0.0,
+        "analyzer_latency_ms": 0,
+        "router_latency_ms": 0,
+        "compressor_latency_ms": 0,
+        "llm_latency_ms": 6884,
+        "verifier_latency_ms": 0,
+        "total_slm_latency_ms": 0,
+        "total_pipeline_latency_ms": 7096,
+        "selected_llm": "claude_claude-sonnet-4-6",
+        "router_reason": "selected gemini_gemini-2.5-flash (p50=800ms, est_cost=0c, fallback=[\"gpt_gpt-4o\", \"claude_claude-sonnet-4-6\"])",
+        "router_estimated_cost_cents": 0,
+        "verifier_skipped": null,
+        "spec_drafter_latency_ms": 0,
+        "spec_verifier_latency_ms": 0,
+        "spec_savings_cents": 0,
+        "failure_mode": {
+          "kind": "LLM_FALLBACK_TRIGGERED",
+          "detail": {
+            "from": "gemini_gemini-2.5-flash",
+            "to": "claude_claude-sonnet-4-6"
+          }
+        },
+        "degradations_count": 1,
+        "failed_components": [
+          "llm:gemini_gemini-2.5-flash"
+        ]
+      },
+      "passed_quality": true,
+      "failure_mode": {
+        "kind": "LLM_FALLBACK_TRIGGERED",
+        "detail": {
+          "from": "gemini_gemini-2.5-flash",
+          "to": "claude_claude-sonnet-4-6"
+        }
+      }
+    },
+    {
+      "fixture_name": "07_translation_fr_en",
+      "mode": "FULL",
+      "cost_cents": 1,
+      "latency_ms": 7924,
+      "tokens_output": 208,
+      "final_text_excerpt": "Here is a rendering that preserves the elevated, literary register of the original:\n\n**\"Dusk bathes the rooftops of Paris in a burnished golden light that hurrying passers-by no longer pause to notice…",
+      "llm_used": "claude_claude-sonnet-4-6",
+      "task_class": "Translation",
+      "chewing_metrics": {
+        "input_tokens_raw": 50,
+        "input_tokens_compressed": 50,
+        "llm_tokens_generated": 208,
+        "compression_ratio": 1.0,
+        "savings_tokens": 0,
+        "savings_ratio": 0.0,
+        "analyzer_latency_ms": 0,
+        "router_latency_ms": 0,
+        "compressor_latency_ms": 0,
+        "llm_latency_ms": 7923,
+        "verifier_latency_ms": 0,
+        "total_slm_latency_ms": 0,
+        "total_pipeline_latency_ms": 7924,
+        "selected_llm": "claude_claude-sonnet-4-6",
+        "router_reason": "selected gemini_gemini-2.5-flash (p50=800ms, est_cost=0c, fallback=[\"gpt_gpt-4o\", \"claude_claude-sonnet-4-6\"])",
+        "router_estimated_cost_cents": 0,
+        "verifier_skipped": null,
+        "spec_drafter_latency_ms": 0,
+        "spec_verifier_latency_ms": 0,
+        "spec_savings_cents": 0,
+        "failure_mode": {
+          "kind": "LLM_FALLBACK_TRIGGERED",
+          "detail": {
+            "from": "gemini_gemini-2.5-flash",
+            "to": "claude_claude-sonnet-4-6"
+          }
+        },
+        "degradations_count": 1,
+        "failed_components": [
+          "llm:gemini_gemini-2.5-flash"
+        ]
+      },
+      "passed_quality": true,
+      "failure_mode": {
+        "kind": "LLM_FALLBACK_TRIGGERED",
+        "detail": {
+          "from": "gemini_gemini-2.5-flash",
+          "to": "claude_claude-sonnet-4-6"
+        }
+      }
+    }
+  ],
+  "summaries": {
+    "S6_ROUTING": {
+      "mode": "S6_ROUTING",
+      "n_runs": 5,
+      "total_cost_cents": 6,
+      "avg_cost_cents": 1.2,
+      "avg_latency_ms": 5315.2,
+      "avg_tokens_output": 277.8,
+      "quality_pass_rate": 1.0,
+      "degradations_count": 2
+    },
+    "SPECULATIVE": {
+      "mode": "SPECULATIVE",
+      "n_runs": 2,
+      "total_cost_cents": 2,
+      "avg_cost_cents": 1.0,
+      "avg_latency_ms": 2924.0,
+      "avg_tokens_output": 33.5,
+      "quality_pass_rate": 1.0,
+      "degradations_count": 0
+    },
+    "S4_CHEWING": {
+      "mode": "S4_CHEWING",
+      "n_runs": 5,
+      "total_cost_cents": 6,
+      "avg_cost_cents": 1.2,
+      "avg_latency_ms": 6427.2,
+      "avg_tokens_output": 303.2,
+      "quality_pass_rate": 1.0,
+      "degradations_count": 0
+    },
+    "FULL": {
+      "mode": "FULL",
+      "n_runs": 5,
+      "total_cost_cents": 6,
+      "avg_cost_cents": 1.2,
+      "avg_latency_ms": 5513.4,
+      "avg_tokens_output": 284.6,
+      "quality_pass_rate": 1.0,
+      "degradations_count": 2
+    },
+    "BASELINE": {
+      "mode": "BASELINE",
+      "n_runs": 5,
+      "total_cost_cents": 6,
+      "avg_cost_cents": 1.2,
+      "avg_latency_ms": 6241.2,
+      "avg_tokens_output": 305.6,
+      "quality_pass_rate": 1.0,
+      "degradations_count": 0
+    }
+  },
+  "baseline_total_cost_cents": 6,
+  "full_total_cost_cents": 6,
+  "savings_cents": 0,
+  "savings_ratio": 0.0,
+  "generated_at": "2026-05-28T07:57:13.906686+00:00",
+  "version": "s9-r2-2026-05-28"
+}

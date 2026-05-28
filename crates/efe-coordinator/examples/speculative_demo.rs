@@ -61,6 +61,9 @@ async fn main() -> anyhow::Result<()> {
         },
         max_draft_tokens: 64,
         max_total_latency: Duration::from_secs(3),
+        drafter_llm: "drafter".to_string(),
+        accept_threshold: 0.7,
+        max_words_for_quick_accept: 0,
     };
     let resp = run_speculative(&coord, req).await?;
 

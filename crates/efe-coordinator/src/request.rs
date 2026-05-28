@@ -16,6 +16,7 @@ use serde::{Deserialize, Serialize};
 use efe_nano_app_coordinator::types::router::TaskClass;
 use efe_nano_app_coordinator::types::{Budget, LlmMetadata, TaskClassScoringTable};
 
+use crate::failure::FailureMode;
 use crate::metrics::ChewingMetrics;
 
 /// Requête utilisateur pour la Mission A.
@@ -137,6 +138,21 @@ pub struct MissionAResponse {
     /// sérialisés sans ce champ continuent à désérialiser correctement.
     #[serde(default)]
     pub chewing_metrics: Option<ChewingMetrics>,
+
+    /// **Sprint S8 R2** — Si un fallback LLM a été déclenché, contient le
+    /// LLM cible effectivement utilisé. `None` pour le cas nominal (LLM
+    /// `selected` du router a marché du premier coup).
+    ///
+    /// Permet à l'utilisateur de tracer rétroactivement : "ma mission a
+    /// utilisé Gemini alors que le router avait choisi Claude → Claude
+    /// était down ou rate limited".
+    #[serde(default)]
+    pub fallback_chain_used: Option<String>,
+
+    /// **Sprint S8 R2** — Mode de failure observé pendant la mission.
+    /// `FailureMode::None` pour cas nominal.
+    #[serde(default)]
+    pub failure_mode: FailureMode,
 }
 
 /// Requête pour la Mission B (multi-LLM + vote).
@@ -216,9 +232,34 @@ pub struct MissionBResponse {
 
     /// Hash audit chain.
     pub audit_chain_hash: String,
+
+    /// **Sprint S8 R2** — `true` si quorum atteint MAIS moins de N LLMs
+    /// ont effectivement voté (1 ou 2 LLMs sur N ont fail).
+    ///
+    /// Le frontend peut afficher un badge "low confidence" sans casser l'UX
+    /// — la mission a quand même retourné une réponse.
+    #[serde(default)]
+    pub vote_degraded: bool,
+
+    /// **Sprint S8 R2** — LLMs ayant échoué pendant le fan-out parallèle.
+    /// Chaque entry : `(provider_id, reason)`. Vide si tous les LLMs ont
+    /// répondu (cas nominal).
+    #[serde(default)]
+    pub failed_llms: Vec<(String, String)>,
+
+    /// **Sprint S8 R2** — Mode de failure observé pendant la mission.
+    #[serde(default)]
+    pub failure_mode: FailureMode,
 }
 
-/// Requête pour la Mission speculative (drafter local + verifier gros LLM).
+/// Requête pour la Mission speculative (drafter LLM cheap + verifier LLM premium).
+///
+/// **Sprint S7 R2** — Pattern Speculative RAG :
+/// 1. Drafter (LLM cheap, e.g. Gemini Flash) produit la réponse candidate.
+/// 2. Si elle est courte (≤ `max_words_for_quick_accept`) → accept direct.
+///    Verifier NON appelé (HOT PATH, savings ~98 %).
+/// 3. Sinon → verifier (LLM premium, e.g. Claude) appelé pour arbitrage
+///    Jaccard (SLOW PATH, savings 0).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SpeculativeRequest {
     /// Texte d'entrée.
@@ -226,6 +267,11 @@ pub struct SpeculativeRequest {
 
     /// Catégorie.
     pub task_class: TaskClass,
+
+    /// **Sprint S7 R2** — ID du drafter (cheap LLM, e.g. `"gemini_gemini-2.5-flash"`).
+    /// Défaut `"drafter"` pour backward-compat S2-S6.
+    #[serde(default = "default_drafter_id")]
+    pub drafter_llm: String,
 
     /// LLM "verifier" (gros — Claude/GPT-4/...).
     pub verifier_llm: String,
@@ -243,6 +289,58 @@ pub struct SpeculativeRequest {
     /// Deadline globale.
     #[serde(default = "default_deadline")]
     pub max_total_latency: Duration,
+
+    /// **Sprint S7 R2** — Seuil de similarité Jaccard pour slow path.
+    /// Défaut 0.7.
+    #[serde(default = "default_accept_threshold")]
+    pub accept_threshold: f32,
+
+    /// **Sprint S7 R2** — Nombre max de mots dans le draft pour déclencher
+    /// le **hot path** (accept sans verifier). `0` désactive le hot path
+    /// → toujours slow path (backward-compat S2-S6). Défaut 10.
+    #[serde(default = "default_max_words_for_quick_accept")]
+    pub max_words_for_quick_accept: usize,
+}
+
+impl SpeculativeRequest {
+    /// **Sprint S7 R2** — Helper : construit avec drafter cheap + verifier
+    /// premium, `verifier_metadata` injecté depuis la table S6.
+    ///
+    /// ```ignore
+    /// let req = SpeculativeRequest::with_drafter_and_verifier(
+    ///     "Capital of France?".into(),
+    ///     TaskClass::FactualQa,
+    ///     "gemini_gemini-2.5-flash".into(),
+    ///     "claude_claude-sonnet-4-6".into(),
+    /// );
+    /// ```
+    #[must_use]
+    pub fn with_drafter_and_verifier(
+        user_text: String,
+        task_class: TaskClass,
+        drafter_llm: String,
+        verifier_llm: String,
+    ) -> Self {
+        use efe_nano_app_coordinator::types::TaskClassScoringTable;
+        let table = TaskClassScoringTable::default_3llm_table();
+        let verifier_metadata = table.build_llm_metadata(&verifier_llm, task_class);
+        Self {
+            user_text,
+            task_class,
+            drafter_llm,
+            verifier_llm,
+            verifier_metadata,
+            budget: Budget {
+                max_cost_cents: 50,
+                max_latency_ms: 30_000,
+                min_quality_score: 0.0,
+            },
+            max_draft_tokens: default_speculative_window(),
+            max_total_latency: default_deadline(),
+            accept_threshold: default_accept_threshold(),
+            max_words_for_quick_accept: default_max_words_for_quick_accept(),
+        }
+    }
 }
 
 /// Réponse spéculative.
@@ -271,6 +369,43 @@ pub struct SpeculativeResponse {
 
     /// Hash audit chain.
     pub audit_chain_hash: String,
+
+    /// **Sprint S7 R2** — Le verifier API a-t-il été appelé ?
+    ///
+    /// - `true` (HOT PATH ~80 %) : drafter seul, verifier API skippée → vrai savings
+    /// - `false` (SLOW PATH ~20 %) : verifier appelé, savings 0
+    ///
+    /// `#[serde(default)]` pour backward-compat.
+    #[serde(default)]
+    pub verifier_skipped: bool,
+
+    /// **Sprint S7 R2** — Métriques de pré-mâchage adaptées Mission Spec.
+    ///
+    /// Champs Spec-spécifiques :
+    /// - `verifier_skipped: Some(bool)` — VRAI savings ?
+    /// - `spec_drafter_latency_ms` + `spec_verifier_latency_ms` (0 si skip)
+    /// - `spec_savings_cents` — estimation cents économisés
+    ///
+    /// `None` pour les anciens `SpeculativeResponse` sérialisés pré-S7.
+    #[serde(default)]
+    pub chewing_metrics: Option<ChewingMetrics>,
+
+    /// **Sprint S7 R2** — Coût total constaté de la mission speculative.
+    ///
+    /// - HOT PATH : `cost_cents = drafter.cost_cents` (seul drafter facturé)
+    /// - SLOW PATH : `cost_cents = drafter + verifier` (les deux facturés)
+    ///
+    /// Symétrique avec `MissionAResponse.cost_cents` et
+    /// `MissionBResponse.total_cost_cents`. Permet à un caller de comparer
+    /// les coûts entre missions et de quantifier empirically le savings :
+    ///
+    /// ```text
+    /// savings = baseline_cost_cents - resp.cost_cents
+    /// ```
+    ///
+    /// `#[serde(default)]` pour backward-compat S2-S6.
+    #[serde(default)]
+    pub cost_cents: u32,
 }
 
 /// Verdict de fact-check résumé (alias UI-friendly).
@@ -303,6 +438,21 @@ fn default_deadline() -> Duration {
 
 const fn default_speculative_window() -> u32 {
     128
+}
+
+/// **Sprint S7 R2** — Drafter ID par défaut pour backward-compat S2-S6.
+fn default_drafter_id() -> String {
+    "drafter".to_string()
+}
+
+/// **Sprint S7 R2** — Seuil Jaccard slow path par défaut.
+const fn default_accept_threshold() -> f32 {
+    0.7
+}
+
+/// **Sprint S7 R2** — Mots max pour hot path par défaut.
+const fn default_max_words_for_quick_accept() -> usize {
+    10
 }
 
 #[cfg(test)]

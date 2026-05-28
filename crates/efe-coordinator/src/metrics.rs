@@ -27,6 +27,8 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::failure::FailureMode;
+
 /// Métriques quantifiant le gain de pré-mâchage SLM avant l'appel au gros LLM.
 ///
 /// Sérialisable JSON via serde. Tous les champs sont publics pour permettre
@@ -99,6 +101,51 @@ pub struct ChewingMetrics {
     /// Coût estimé en cents par le router avant l'appel (différent de
     /// `LlmResponse.cost_cents` qui est l'observé post-call).
     pub router_estimated_cost_cents: u32,
+
+    // ── Sprint S7 R2 — Métriques Mission Speculative ─────────────────────
+    //
+    // Ces champs sont remplis UNIQUEMENT par `run_speculative` (Mission Spec).
+    // Pour Mission A/B, ils restent à `None` / `0`. Cohérent avec le pattern
+    // `chewing_metrics` polymorphe : certains champs sont mission-dependent.
+    // Tous `#[serde(default)]` pour backward-compat avec les JSON pré-S7.
+    /// **S7** — Le verifier API a-t-il été appelé pour Mission Spec ?
+    ///
+    /// - `Some(true)` (HOT PATH) : drafter seul a suffi, savings ~100 % sur verifier
+    /// - `Some(false)` (SLOW PATH) : verifier appelé, savings 0
+    /// - `None` : Mission non-spec (A ou B), champ n'a pas de sens
+    #[serde(default)]
+    pub verifier_skipped: Option<bool>,
+
+    /// **S7** — Latence du drafter spéculatif (0 si non-spec).
+    #[serde(default)]
+    pub spec_drafter_latency_ms: u64,
+
+    /// **S7** — Latence du verifier spéculatif (0 si skipped OU non-spec).
+    #[serde(default)]
+    pub spec_verifier_latency_ms: u64,
+
+    /// **S7** — Coût économisé estimé en cents si `verifier_skipped == true`.
+    /// Calculé via `verifier_metadata.cost_*_per_million × tokens_attendus`.
+    #[serde(default)]
+    pub spec_savings_cents: u32,
+
+    // ── Sprint S8 R2 — Graceful degradation tracing ───────────────────────
+    /// **S8** — Mode de failure observé pendant la mission.
+    ///
+    /// `FailureMode::None` (default) pour cas nominal. Permet à un audit /
+    /// dashboard de réagir : alerte si > 5 % missions dégradées, etc.
+    #[serde(default)]
+    pub failure_mode: FailureMode,
+
+    /// **S8** — Nombre total de dégradations distinctes (= 1 pour simple,
+    /// `len()` pour Composite). Pratique pour métriques agrégées (S9).
+    #[serde(default)]
+    pub degradations_count: u32,
+
+    /// **S8** — Liste des composants ayant fail (`"analyzer"`,
+    /// `"compressor"`, `"llm:claude_…"`). Ordre stable d'observation.
+    #[serde(default)]
+    pub failed_components: Vec<String>,
 }
 
 impl ChewingMetrics {
@@ -273,10 +320,93 @@ mod tests {
             selected_llm: "claude_claude-sonnet-4-6".into(),
             router_reason: "highest quality_score for FactualQa".into(),
             router_estimated_cost_cents: 2,
+            // S7 R2 — champs Mission Speculative
+            verifier_skipped: Some(true),
+            spec_drafter_latency_ms: 400,
+            spec_verifier_latency_ms: 0,
+            spec_savings_cents: 5,
+            // S8 R2 — Graceful degradation
+            failure_mode: FailureMode::None,
+            degradations_count: 0,
+            failed_components: vec![],
         };
         let s = serde_json::to_string(&m).unwrap();
         let back: ChewingMetrics = serde_json::from_str(&s).unwrap();
         assert_eq!(back, m);
+    }
+
+    #[test]
+    fn s8_default_failure_mode_is_none() {
+        let m = ChewingMetrics::default();
+        assert_eq!(m.failure_mode, FailureMode::None);
+        assert_eq!(m.degradations_count, 0);
+        assert!(m.failed_components.is_empty());
+    }
+
+    #[test]
+    fn s8_backward_compat_old_json_without_failure_fields() {
+        // JSON pré-S8 (sans failure_mode, degradations_count, failed_components).
+        let old_json = r#"{
+            "input_tokens_raw": 100,
+            "input_tokens_compressed": 25,
+            "llm_tokens_generated": 30,
+            "compression_ratio": 0.25,
+            "savings_tokens": 75,
+            "savings_ratio": 0.75,
+            "analyzer_latency_ms": 0,
+            "router_latency_ms": 0,
+            "compressor_latency_ms": 0,
+            "llm_latency_ms": 0,
+            "verifier_latency_ms": 0,
+            "total_slm_latency_ms": 0,
+            "total_pipeline_latency_ms": 0,
+            "selected_llm": "",
+            "router_reason": "",
+            "router_estimated_cost_cents": 0
+        }"#;
+        let parsed: ChewingMetrics = serde_json::from_str(old_json)
+            .expect("backward-compat S8 doit fonctionner");
+        assert_eq!(parsed.failure_mode, FailureMode::None);
+        assert_eq!(parsed.degradations_count, 0);
+        assert!(parsed.failed_components.is_empty());
+    }
+
+    #[test]
+    fn s7_default_spec_fields_are_none_or_zero() {
+        let m = ChewingMetrics::default();
+        assert_eq!(m.verifier_skipped, None);
+        assert_eq!(m.spec_drafter_latency_ms, 0);
+        assert_eq!(m.spec_verifier_latency_ms, 0);
+        assert_eq!(m.spec_savings_cents, 0);
+    }
+
+    #[test]
+    fn s7_backward_compat_old_json_without_spec_fields() {
+        // JSON pré-S7 sans les champs verifier_skipped + spec_*.
+        // #[serde(default)] doit permettre la désérialisation correcte.
+        let old_json = r#"{
+            "input_tokens_raw": 100,
+            "input_tokens_compressed": 25,
+            "llm_tokens_generated": 30,
+            "compression_ratio": 0.25,
+            "savings_tokens": 75,
+            "savings_ratio": 0.75,
+            "analyzer_latency_ms": 0,
+            "router_latency_ms": 0,
+            "compressor_latency_ms": 0,
+            "llm_latency_ms": 0,
+            "verifier_latency_ms": 0,
+            "total_slm_latency_ms": 0,
+            "total_pipeline_latency_ms": 0,
+            "selected_llm": "",
+            "router_reason": "",
+            "router_estimated_cost_cents": 0
+        }"#;
+        let parsed: ChewingMetrics = serde_json::from_str(old_json)
+            .expect("backward-compat S7 doit fonctionner");
+        assert_eq!(parsed.verifier_skipped, None);
+        assert_eq!(parsed.spec_drafter_latency_ms, 0);
+        assert_eq!(parsed.input_tokens_raw, 100);
     }
 
     #[test]

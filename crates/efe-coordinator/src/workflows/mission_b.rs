@@ -204,7 +204,41 @@ pub async fn run_mission_b(
         .stream_many(&req.llms, llm_call, chunk_tx)
         .await;
     let _ = pump.await;
-    let responses: Vec<_> = results.into_iter().filter_map(Result::ok).collect();
+
+    // S8 R2 : trace les LLMs ayant fail (au lieu de filter_map silencieux).
+    //
+    // ATTENTION ordering : `stream_many` utilise `FuturesUnordered` →
+    // l'ordre des résultats reflète l'ordre d'arrivée, PAS l'ordre des
+    // `req.llms`. On extrait donc le `provider_id` depuis :
+    // - `LlmResponse.provider` pour les succès
+    // - `CoordError::LlmProvider { provider, .. }` pour les échecs
+    let mut failed_llms: Vec<(String, String)> = Vec::new();
+    let mut responses: Vec<crate::llm::LlmResponse> = Vec::new();
+    for r in results.into_iter() {
+        match r {
+            Ok(resp) => responses.push(resp),
+            Err(e) => {
+                // Extraction chirurgicale du provider_id depuis l'erreur.
+                let llm = match &e {
+                    CoordError::LlmProvider { provider, .. } => provider.clone(),
+                    _ => "unknown".to_string(),
+                };
+                let reason = e.to_string();
+                // Bus event par LLM raté.
+                let _ = coord
+                    .bus
+                    .publish(StreamEvent::LlmFailed {
+                        swarm_id,
+                        provider: llm.clone(),
+                        reason: reason.clone(),
+                        ts: Utc::now(),
+                    })
+                    .await;
+                failed_llms.push((llm, reason));
+            }
+        }
+    }
+
     if responses.is_empty() {
         let _ = coord
             .bus
@@ -212,13 +246,16 @@ pub async fn run_mission_b(
                 swarm_id,
                 mission: MissionTag::MissionB,
                 stage: "llm_fanout".into(),
-                error: "all providers failed".into(),
+                error: format!(
+                    "all {} providers failed: {failed_llms:?}",
+                    req.llms.len()
+                ),
                 ts: Utc::now(),
             })
             .await;
         return Err(CoordError::LlmProvider {
             provider: "*".into(),
-            reason: "all providers failed".into(),
+            reason: format!("all {} providers failed", req.llms.len()),
         });
     }
 
@@ -365,6 +402,17 @@ pub async fn run_mission_b(
         })
         .await;
 
+    // S8 R2 : calcule vote_degraded + failure_mode.
+    let vote_degraded = !failed_llms.is_empty();
+    let failure_mode = if vote_degraded {
+        crate::failure::FailureMode::VoteDegraded {
+            effective_votes: responses.len(),
+            expected: req.llms.len(),
+        }
+    } else {
+        crate::failure::FailureMode::None
+    };
+
     let resp = MissionBResponse {
         final_text: outcome.winner_text,
         winner_llm: outcome.winner,
@@ -375,6 +423,10 @@ pub async fn run_mission_b(
         verdicts,
         audit_chain_hash: audit_hash.clone(),
         chewing_metrics: Some(chewing_metrics),
+        // S8 R2 : graceful degradation tracing.
+        vote_degraded,
+        failed_llms,
+        failure_mode,
     };
 
     let _ = coord

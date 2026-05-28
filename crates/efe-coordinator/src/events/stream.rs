@@ -178,6 +178,20 @@ pub enum StreamEvent {
         tokens_regenerated: u32,
         /// Latence gagnée (ms négatif si on a perdu).
         latency_saved_ms: i64,
+        /// **Sprint S7 R2** — Le verifier API a-t-il été appelé ?
+        ///
+        /// - `true` (HOT PATH) : drafter seul, verifier jamais touché → vrai
+        ///   savings économique (coût + latence du verifier non payés).
+        /// - `false` (SLOW PATH) : verifier appelé, savings 0 sur ce point.
+        ///
+        /// Sémantique distincte de `draft_accepted` : le draft peut être
+        /// "accepté" après comparaison Jaccard avec verify (slow path), mais
+        /// `verifier_skipped` = `false` car on a quand même payé le verifier.
+        ///
+        /// `#[serde(default)]` pour backward-compat avec les events S5-S6
+        /// sérialisés sans ce champ.
+        #[serde(default)]
+        verifier_skipped: bool,
         /// Estampille.
         ts: DateTime<Utc>,
     },
@@ -234,6 +248,66 @@ pub enum StreamEvent {
         /// Estampille.
         ts: DateTime<Utc>,
     },
+
+    // ─── Sprint S8 R2 — Failure modes / graceful degradation ───────────
+
+    /// **S8** — Le LLM `selected` par le router a échoué après retry épuisé.
+    /// Le bridge a basculé sur `fallback_chain[N]`.
+    LlmFallbackTriggered {
+        /// Swarm.
+        swarm_id: Uuid,
+        /// LLM initial (choix router).
+        from: String,
+        /// LLM cible du fallback effectivement utilisé.
+        to: String,
+        /// Reason de l'échec original (e.g. `"HTTP 429"`, `"circuit open"`).
+        reason: String,
+        /// Estampille.
+        ts: DateTime<Utc>,
+    },
+
+    /// **S8** — Un LLM (Mission B) a fail pendant le fan-out parallèle.
+    /// Émis par LLM raté, distinct de `RobotFinished` (qui concerne les
+    /// nano-robots SLM).
+    LlmFailed {
+        /// Swarm.
+        swarm_id: Uuid,
+        /// LLM ayant échoué.
+        provider: String,
+        /// Reason humain (e.g. `"HTTP 429"`, `"circuit open"`).
+        reason: String,
+        /// Estampille.
+        ts: DateTime<Utc>,
+    },
+
+    /// **S8** — Le circuit breaker d'un SLM (analyzer/compressor/verifier)
+    /// vient de s'ouvrir après seuil d'échecs atteint. Les missions
+    /// suivantes skipperont ce robot jusqu'au `reset_timeout`.
+    SlmCircuitOpened {
+        /// Swarm où le circuit s'est ouvert (= dernier échec).
+        swarm_id: Uuid,
+        /// Robot SLM concerné (`"analyzer"`, `"compressor"`, `"verifier"`).
+        robot: String,
+        /// Nombre d'échecs consécutifs comptés.
+        failures: u32,
+        /// Estampille.
+        ts: DateTime<Utc>,
+    },
+
+    /// **S8** — Mission Speculative : le drafter a fail, on a sauté
+    /// directement au verifier (savings perdu mais qualité préservée).
+    DrafterBypassed {
+        /// Swarm.
+        swarm_id: Uuid,
+        /// Drafter qui a fail.
+        drafter: String,
+        /// Verifier appelé en fallback.
+        fallback_to_verifier: String,
+        /// Reason humain du fail drafter.
+        reason: String,
+        /// Estampille.
+        ts: DateTime<Utc>,
+    },
 }
 
 impl StreamEvent {
@@ -255,6 +329,11 @@ impl StreamEvent {
             Self::SwarmFinished { .. } => "SWARM_FINISHED",
             Self::SwarmFailed { .. } => "SWARM_FAILED",
             Self::Heartbeat { .. } => "HEARTBEAT",
+            // S8 R2 — Failure modes
+            Self::LlmFallbackTriggered { .. } => "LLM_FALLBACK_TRIGGERED",
+            Self::LlmFailed { .. } => "LLM_FAILED",
+            Self::SlmCircuitOpened { .. } => "SLM_CIRCUIT_OPENED",
+            Self::DrafterBypassed { .. } => "DRAFTER_BYPASSED",
         }
     }
 
@@ -274,7 +353,11 @@ impl StreamEvent {
             | Self::SpeculationResolved { swarm_id, .. }
             | Self::PreChewingMetrics { swarm_id, .. }
             | Self::SwarmFinished { swarm_id, .. }
-            | Self::SwarmFailed { swarm_id, .. } => Some(*swarm_id),
+            | Self::SwarmFailed { swarm_id, .. }
+            | Self::LlmFallbackTriggered { swarm_id, .. }
+            | Self::LlmFailed { swarm_id, .. }
+            | Self::SlmCircuitOpened { swarm_id, .. }
+            | Self::DrafterBypassed { swarm_id, .. } => Some(*swarm_id),
             Self::Heartbeat { .. } => None,
         }
     }
@@ -365,6 +448,7 @@ mod tests {
                 tokens_accepted: 50,
                 tokens_regenerated: 10,
                 latency_saved_ms: 300,
+                verifier_skipped: false,
                 ts: Utc::now(),
             },
             StreamEvent::PreChewingMetrics {
@@ -386,6 +470,15 @@ mod tests {
                     selected_llm: "claude_claude-sonnet-4-6".into(),
                     router_reason: "highest quality".into(),
                     router_estimated_cost_cents: 2,
+                    // S7 R2 — Mission Spec fields, None pour Mission A
+                    verifier_skipped: None,
+                    spec_drafter_latency_ms: 0,
+                    spec_verifier_latency_ms: 0,
+                    spec_savings_cents: 0,
+                    // S8 R2 — Graceful degradation fields
+                    failure_mode: crate::failure::FailureMode::None,
+                    degradations_count: 0,
+                    failed_components: vec![],
                 },
                 ts: Utc::now(),
             },

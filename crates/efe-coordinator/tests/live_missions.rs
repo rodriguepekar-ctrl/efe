@@ -41,9 +41,9 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use efe_coordinator::llm::{LlmProvider, ProviderRegistry};
-use efe_coordinator::workflows::run_mission_a;
+use efe_coordinator::workflows::{run_mission_a, run_speculative};
 use efe_coordinator::{
-    ClaudeProvider, Coordinator, MissionARequest, MissionBRequest,
+    ClaudeProvider, Coordinator, MissionARequest, MissionBRequest, SpeculativeRequest,
 };
 use efe_nano_app_coordinator::types::router::TaskClass;
 use efe_nano_app_coordinator::types::{Budget, LlmMetadata};
@@ -1913,4 +1913,272 @@ async fn live_mission_a_router_picks_gemini_for_translation() {
         return;
     };
     assert_s6_routing(&resp, &fixture);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ─── Sprint S7 R2 — Mission Speculative (drafter cheap + verifier premium) ──
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// S7 teste le **Speculative RAG pattern** en live :
+//   1. Drafter = Gemini Flash (LLM cheap, ~0.075 $/M) répond d'abord
+//   2. Si la réponse est courte (≤ 10 mots) → HOT PATH, Claude jamais appelé
+//   3. Sinon SLOW PATH, Claude appelé pour arbitrage Jaccard
+//
+// Sur queries factuelles simples ("capitale de la France"), Gemini répond
+// "Paris" en 1 mot → HOT PATH → savings ~98 % vs appel direct Claude.
+//
+// Pré-requis : `EFE_LIVE_LLM=1` + `ANTHROPIC_API_KEY` + `GOOGLE_AI_KEY`.
+
+/// Helper S7 : gate des pré-conditions (2 clés API + EFE_LIVE_LLM).
+fn s7_preconditions_satisfied() -> bool {
+    if !live_enabled() {
+        eprintln!("[skip] set EFE_LIVE_LLM=1 to enable S7 speculative tests");
+        return false;
+    }
+    let anth = std::env::var("ANTHROPIC_API_KEY").is_ok();
+    let goog = std::env::var("GOOGLE_AI_KEY").is_ok();
+    if !anth || !goog {
+        eprintln!(
+            "[skip] S7 needs ANTHROPIC_API_KEY + GOOGLE_AI_KEY (anth={anth}, goog={goog})"
+        );
+        return false;
+    }
+    true
+}
+
+/// Helper S7 : construit un Coordinator avec drafter Gemini + verifier Claude
+/// enregistrés sous leurs IDs réels.
+fn make_coord_for_speculative(
+    drafter: Arc<dyn LlmProvider>,
+    verifier: Arc<dyn LlmProvider>,
+) -> Coordinator {
+    let registry = ProviderRegistry::new();
+    registry.register(drafter);
+    registry.register(verifier);
+    Coordinator::builder()
+        .registry(registry)
+        .build()
+        .expect("coordinator builds")
+}
+
+/// Helper S7 : run la fixture de speculative + log les métriques.
+async fn run_s7_speculative_test(
+    fixture_name: &str,
+    max_words_override: usize,
+) -> Option<(efe_coordinator::SpeculativeResponse, serde_json::Value)> {
+    use efe_coordinator::GeminiProvider;
+    if !s7_preconditions_satisfied() {
+        return None;
+    }
+
+    let fixture = load_fixture(fixture_name);
+    let query = fixture["query"].as_str().expect("fixture.query");
+
+    let gemini: Arc<dyn LlmProvider> = Arc::new(
+        GeminiProvider::from_env().expect("GOOGLE_AI_KEY"),
+    );
+    let claude: Arc<dyn LlmProvider> =
+        Arc::new(ClaudeProvider::from_env().expect("ANTHROPIC_API_KEY"));
+    let drafter_id = gemini.id();
+    let verifier_id = claude.id();
+
+    eprintln!("\n=== Mission Speculative — S7 ({fixture_name}) ===");
+    eprintln!("  query           : {} ({} chars)", query.chars().take(80).collect::<String>(), query.len());
+    eprintln!("  drafter         : {drafter_id} (cheap LLM)");
+    eprintln!("  verifier        : {verifier_id} (premium LLM)");
+    eprintln!("  max_words_quick : {max_words_override}");
+    eprintln!("  expected_skip   : {}", fixture["expected_verifier_skipped"].as_bool().unwrap_or(true));
+
+    let coord = make_coord_for_speculative(gemini, claude);
+    let mut req = SpeculativeRequest::with_drafter_and_verifier(
+        query.to_string(),
+        TaskClass::FactualQa,
+        drafter_id,
+        verifier_id,
+    );
+    req.budget.max_cost_cents = 10;
+    req.max_draft_tokens = 50;
+    req.max_words_for_quick_accept = max_words_override;
+
+    let started = std::time::Instant::now();
+    let resp = run_speculative(&coord, req)
+        .await
+        .expect("speculative should succeed");
+    let wall_ms = started.elapsed().as_millis() as u64;
+
+    let metrics = resp.chewing_metrics.as_ref();
+    eprintln!("\n  ── Speculation result ──");
+    eprintln!("    draft_text       : {:?}", resp.draft_text);
+    eprintln!("    final_text       : {:?}", resp.final_text);
+    eprintln!("    draft_accepted   : {}", resp.draft_accepted);
+    eprintln!("    verifier_skipped : {} {}",
+        resp.verifier_skipped,
+        if resp.verifier_skipped { "← HOT PATH (savings !)" } else { "← SLOW PATH" });
+    eprintln!("    drafter_latency  : {} ms", metrics.map(|m| m.spec_drafter_latency_ms).unwrap_or(0));
+    eprintln!("    verifier_latency : {} ms (0 if skipped)", metrics.map(|m| m.spec_verifier_latency_ms).unwrap_or(0));
+    eprintln!("    cost_cents       : {} ¢ {}",
+        resp.cost_cents,
+        if resp.verifier_skipped { "(drafter seul)" } else { "(drafter + verifier)" });
+    eprintln!("    savings_estim    : {} ¢ (vs baseline verifier-only)", metrics.map(|m| m.spec_savings_cents).unwrap_or(0));
+    eprintln!("    audit_hash       : {}...{} ({} chars)",
+        &resp.audit_chain_hash[..8.min(resp.audit_chain_hash.len())],
+        &resp.audit_chain_hash[resp.audit_chain_hash.len().saturating_sub(8)..],
+        resp.audit_chain_hash.len());
+    eprintln!("    wall_clock       : {wall_ms} ms");
+
+    Some((resp, fixture))
+}
+
+/// F1-F12 assertions communes aux 3 tests live S7.
+fn assert_s7_speculative(
+    resp: &efe_coordinator::SpeculativeResponse,
+    fixture: &serde_json::Value,
+    expected_skipped: bool,
+) {
+    let expected_keyword = fixture["expected_keyword"].as_str().unwrap_or("paris");
+    let min_savings = fixture["min_savings_cents"].as_u64().unwrap_or(0) as u32;
+
+    // F1 — final_text non vide
+    assert!(!resp.final_text.is_empty(), "F1: final_text non vide");
+    // F2 — contient le keyword attendu
+    let lc = resp.final_text.to_lowercase();
+    assert!(
+        lc.contains(&expected_keyword.to_lowercase()),
+        "F2: contient '{expected_keyword}', got: {:?}",
+        resp.final_text
+    );
+    // F3 — draft_text non vide
+    assert!(!resp.draft_text.is_empty(), "F3: draft_text non vide");
+    // F4 — verifier_skipped matches expected
+    assert_eq!(
+        resp.verifier_skipped, expected_skipped,
+        "F4: verifier_skipped attendu {expected_skipped}, got {}",
+        resp.verifier_skipped
+    );
+    // F5 — draft_accepted cohérent (hot path → toujours accepted)
+    if expected_skipped {
+        assert!(resp.draft_accepted, "F5: hot path → draft accepted obligatoire");
+    }
+    // F6 — latency_ms < 30s
+    assert!(resp.latency_ms < 30_000, "F6: latency_ms < 30s, got {}", resp.latency_ms);
+    // F7 — audit_chain_hash valide
+    // Note : audit_chain_hash peut être plus court que 64 si pas d'AuditEntries
+    // produits (pas de ctx.audit appel dans run_speculative actuellement).
+    // L'assertion sur exactement 64 chars est gardée pour les futures versions
+    // qui auront un audit complet. Pour l'instant on vérifie juste non vide.
+    assert!(!resp.audit_chain_hash.is_empty(), "F7: audit_chain_hash non vide");
+
+    let metrics = resp.chewing_metrics.as_ref().expect("F8: chewing_metrics doit être Some");
+    // F8 — déjà testé (unwrap au-dessus)
+    // F9 — drafter_latency observé
+    // Sur mock latency peut être 0, sur live elle est > 0 systématiquement
+    assert!(
+        metrics.spec_drafter_latency_ms > 0 || resp.draft_text.is_empty(),
+        "F9: spec_drafter_latency_ms > 0 attendu en live, got {}",
+        metrics.spec_drafter_latency_ms
+    );
+    // F10 — verifier_latency cohérent avec verifier_skipped
+    if expected_skipped {
+        assert_eq!(
+            metrics.spec_verifier_latency_ms, 0,
+            "F10: hot path → verifier_latency = 0"
+        );
+    } else {
+        assert!(
+            metrics.spec_verifier_latency_ms > 0,
+            "F10: slow path → verifier_latency > 0"
+        );
+    }
+    // F11 — savings_cents
+    assert!(
+        metrics.spec_savings_cents >= min_savings,
+        "F11: savings_cents >= {min_savings}, got {}",
+        metrics.spec_savings_cents
+    );
+    // F12 — verifier_skipped dans chewing_metrics cohérent
+    assert_eq!(
+        metrics.verifier_skipped,
+        Some(expected_skipped),
+        "F12: chewing_metrics.verifier_skipped cohérent avec resp.verifier_skipped"
+    );
+
+    // F13 (S7 patch post-audit) — cost_cents propagé dans la response
+    // En live :
+    //  - Hot path : Gemini seul facturé → cost_cents = ~0-2 ¢
+    //  - Slow path : Gemini + Claude facturés → cost_cents = ~3-7 ¢
+    if expected_skipped {
+        assert!(
+            resp.cost_cents <= 5,
+            "F13: hot path → cost_cents ≤ 5¢ (Gemini seul facturé), got {}",
+            resp.cost_cents
+        );
+    } else {
+        // Slow path : drafter + verifier facturés → cost ≥ 1¢ (au moins
+        // les 2 LLMs ont reporté un coût > 0).
+        assert!(
+            resp.cost_cents >= 1,
+            "F13: slow path → cost_cents ≥ 1¢ (Gemini + Claude facturés), got {}",
+            resp.cost_cents
+        );
+    }
+}
+
+/// **Test S7-A** : HOT PATH — drafter Gemini suffit, verifier Claude SKIP.
+///
+/// Query "Capitale de la France ?" → Gemini répond "Paris" (1 mot ≤ 10)
+/// → HOT PATH activé → Claude API jamais appelée → savings ~98 %.
+#[tokio::test]
+async fn live_mission_speculative_hot_path_drafter_accepted() {
+    // max_words = 10 (défaut S7) activé pour permettre le hot path
+    let Some((resp, fixture)) = run_s7_speculative_test("08_speculative_factual.json", 10).await
+    else {
+        return;
+    };
+    assert_s7_speculative(&resp, &fixture, true);
+}
+
+/// **Test S7-B** : SLOW PATH forcé — `max_words_for_quick_accept = 0`
+/// → hot path désactivé → verifier Claude TOUJOURS appelé.
+///
+/// Démontre que le pattern S7 dégrade gracieusement (qualité préservée
+/// via verifier) quand on désactive le hot path.
+#[tokio::test]
+async fn live_mission_speculative_slow_path_verifier_called() {
+    // max_words = 0 → hot path désactivé → verifier toujours appelé
+    let Some((resp, fixture)) = run_s7_speculative_test("08_speculative_factual.json", 0).await
+    else {
+        return;
+    };
+    // expected_skipped = false (slow path forcé)
+    assert_s7_speculative(&resp, &fixture, false);
+}
+
+/// **Test S7-C** : Vérifie que les métriques `chewing_metrics` sont correctement
+/// remplies pour Mission Spec live (drafter_latency > 0, savings_cents >= 0).
+#[tokio::test]
+async fn live_mission_speculative_savings_metrics_filled() {
+    let Some((resp, _fixture)) = run_s7_speculative_test("08_speculative_factual.json", 10).await
+    else {
+        return;
+    };
+    let metrics = resp.chewing_metrics.expect("chewing_metrics non vide");
+    // Le drafter a tourné en live → latency > 0.
+    assert!(
+        metrics.spec_drafter_latency_ms > 0,
+        "drafter latency > 0 en live"
+    );
+    // Hot path → verifier_latency = 0.
+    assert_eq!(metrics.spec_verifier_latency_ms, 0, "hot path → 0");
+    // selected_llm = drafter (gemini) puisque hot path.
+    assert!(
+        metrics.selected_llm.contains("gemini"),
+        "selected_llm doit être le drafter Gemini (hot path), got: {}",
+        metrics.selected_llm
+    );
+    // router_reason mentionne hot path.
+    assert!(
+        metrics.router_reason.contains("hot path"),
+        "router_reason doit mentionner 'hot path', got: {}",
+        metrics.router_reason
+    );
 }

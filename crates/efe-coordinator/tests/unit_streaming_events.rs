@@ -123,6 +123,9 @@ async fn speculative_emits_draft_token_events() {
         },
         max_draft_tokens: 64,
         max_total_latency: Duration::from_secs(2),
+        drafter_llm: "drafter".to_string(),
+        accept_threshold: 0.7,
+        max_words_for_quick_accept: 0,
     };
     let _ = run_speculative(&coord, req).await.unwrap();
 

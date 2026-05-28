@@ -19,7 +19,10 @@
   "expected_verifier_similarity_min": 0.3,
   "expected_compression_ratio_max": 0.7,
   "expected_savings_tokens_min": 20,
-  "comment": "Fixture R2 Sprint S4 — query LONGUE (527 chars > seuil 500 hardcodé dans mission_a.rs:204) qui DÉCLENCHE le compressor Llama-3.2-1B Q5. Compression cible : ≤ 0.7 ratio (≥ 30% de réduction). Le LLM Claude recevra le summary compressé au lieu du paragraphe original. C'est le PREMIER sprint qui prouve quantitativement le gain de pré-mâchage SLM (savings en tokens d'entrée du gros LLM).",
+  "baseline_min_cost_cents": 1,
+  "baseline_max_cost_cents": 12,
+  "s9_included": true,
+  "comment": "Fixture R2 Sprint S4 — query LONGUE (527 chars > seuil 500 hardcodé dans mission_a.rs:204) qui DÉCLENCHE le compressor Llama-3.2-1B Q5. Compression cible : ≤ 0.7 ratio (≥ 30% de réduction). S9 : fixture incluse — baseline Claude direct paie tous les input tokens, full pipeline compresse via SLM puis route Gemini (cheap).",
   "_notes_internal": {
     "asserted_by_s4": [
       "expected_keyword", "expected_verifier_verdict", "expected_verifier_similarity_min",

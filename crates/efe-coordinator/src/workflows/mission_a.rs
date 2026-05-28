@@ -21,6 +21,7 @@ use crate::blackboard::{BlackboardEntry, EntryKind};
 use crate::coordinator::Coordinator;
 use crate::error::{CoordError, CoordResult};
 use crate::events::{MissionTag, StreamEvent};
+use crate::failure::FailureMode;
 use crate::llm::LlmCall;
 use crate::metrics::ChewingMetrics;
 use crate::request::{FactCheck, MissionARequest, MissionAResponse};
@@ -307,37 +308,105 @@ pub async fn run_mission_a(
     chewing_metrics.input_tokens_compressed = ChewingMetrics::estimate_tokens(&final_prompt);
     chewing_metrics.recompute_savings();
 
-    // ── Étape 4 : appel LLM en streaming ─────────────────────────────
-    let llm_call = LlmCall {
-        prompt: final_prompt.clone(),
-        max_tokens: 1000,
-        temperature: 0.7,
-        deadline: Some(req.max_total_latency.saturating_sub(started.elapsed())),
-        trace_tag: Some(format!("swarm:{swarm_id}:mission_a")),
-    };
-    let (chunk_tx, mut chunk_rx) =
-        tokio::sync::mpsc::channel::<crate::llm::TokenChunk>(512);
-    let bus_for_pump = Arc::clone(&coord.bus);
-    let provider_for_pump = selected_llm.clone();
-    let swarm_for_pump = swarm_id;
-    let pump = tokio::spawn(async move {
-        while let Some(chunk) = chunk_rx.recv().await {
-            let _ = bus_for_pump
-                .publish(StreamEvent::LlmTokenStreamed {
-                    swarm_id: swarm_for_pump,
-                    provider: provider_for_pump.clone(),
-                    token: chunk.token,
-                    index: chunk.index,
-                    ts: Utc::now(),
-                })
-                .await;
+    // ── Étape 4 : appel LLM avec fallback chain S8 ─────────────────────
+    //
+    // S8 R2 : si le `selected_llm` fail (HTTP 429/5xx/transport après retry
+    // épuisé), on bascule sur les autres LLMs disponibles dans
+    // `req.available_llms`. Le bus event `LLM_FALLBACK_TRIGGERED` trace la
+    // bascule. La mission est préservée si AU MOINS UN candidat répond.
+    //
+    // Ordre des candidats : selected_llm en premier, puis les autres LLMs
+    // disponibles dans l'ordre fourni (= ordre de `req.available_llms`).
+    let candidates: Vec<String> = std::iter::once(selected_llm.clone())
+        .chain(
+            req.available_llms
+                .iter()
+                .filter(|l| **l != selected_llm)
+                .cloned(),
+        )
+        .collect();
+
+    let mut llm_resp_opt: Option<crate::llm::LlmResponse> = None;
+    let mut last_err: Option<CoordError> = None;
+    let mut fallback_chain_used: Option<String> = None;
+    let mut failure_mode = FailureMode::None;
+    let mut failed_components: Vec<String> = Vec::new();
+
+    for (i, candidate) in candidates.iter().enumerate() {
+        let llm_call = LlmCall {
+            prompt: final_prompt.clone(),
+            max_tokens: 1000,
+            temperature: 0.7,
+            deadline: Some(req.max_total_latency.saturating_sub(started.elapsed())),
+            trace_tag: Some(format!("swarm:{swarm_id}:mission_a:try{i}")),
+        };
+        let (chunk_tx, mut chunk_rx) =
+            tokio::sync::mpsc::channel::<crate::llm::TokenChunk>(512);
+        let bus_for_pump = Arc::clone(&coord.bus);
+        let provider_for_pump = candidate.clone();
+        let swarm_for_pump = swarm_id;
+        let pump = tokio::spawn(async move {
+            while let Some(chunk) = chunk_rx.recv().await {
+                let _ = bus_for_pump
+                    .publish(StreamEvent::LlmTokenStreamed {
+                        swarm_id: swarm_for_pump,
+                        provider: provider_for_pump.clone(),
+                        token: chunk.token,
+                        index: chunk.index,
+                        ts: Utc::now(),
+                    })
+                    .await;
+            }
+        });
+        let attempt = coord
+            .bridge
+            .stream_one(candidate, llm_call, chunk_tx)
+            .await;
+        let _ = pump.await;
+
+        match attempt {
+            Ok(r) => {
+                if i > 0 {
+                    fallback_chain_used = Some(candidate.clone());
+                    failure_mode = FailureMode::LlmFallbackTriggered {
+                        from: selected_llm.clone(),
+                        to: candidate.clone(),
+                    };
+                    let reason = last_err
+                        .as_ref()
+                        .map(|e| e.to_string())
+                        .unwrap_or_else(|| "unknown".to_string());
+                    let _ = coord
+                        .bus
+                        .publish(StreamEvent::LlmFallbackTriggered {
+                            swarm_id,
+                            from: selected_llm.clone(),
+                            to: candidate.clone(),
+                            reason,
+                            ts: Utc::now(),
+                        })
+                        .await;
+                }
+                llm_resp_opt = Some(r);
+                break;
+            }
+            Err(e) => {
+                failed_components.push(format!("llm:{candidate}"));
+                last_err = Some(e);
+                // Continue avec le prochain candidat.
+            }
         }
-    });
-    let llm_resp = coord
-        .bridge
-        .stream_one(&selected_llm, llm_call, chunk_tx)
-        .await?;
-    let _ = pump.await;
+    }
+
+    let llm_resp = llm_resp_opt.ok_or_else(|| {
+        last_err.unwrap_or_else(|| CoordError::LlmProvider {
+            provider: "all candidates exhausted".into(),
+            reason: format!(
+                "all {} LLM candidates failed in run_mission_a",
+                candidates.len()
+            ),
+        })
+    })?;
     // S4 R2 : capture metrics LLM (tokens + latence venant du provider).
     chewing_metrics.llm_latency_ms = llm_resp.latency_ms;
     chewing_metrics.llm_tokens_generated = llm_resp.tokens_generated;
@@ -421,6 +490,13 @@ pub async fn run_mission_a(
     chewing_metrics.total_pipeline_latency_ms = started.elapsed().as_millis() as u64;
     chewing_metrics.recompute_total_slm_latency();
 
+    // S8 R2 : wire les champs de failure tracking dans chewing_metrics.
+    chewing_metrics.failure_mode = failure_mode.clone();
+    chewing_metrics.degradations_count = failure_mode.count_degradations();
+    chewing_metrics.failed_components = failed_components;
+    // selected_llm reflète le LLM réellement utilisé (post-fallback).
+    chewing_metrics.selected_llm = llm_resp.provider.clone();
+
     let _ = coord
         .bus
         .publish(StreamEvent::PreChewingMetrics {
@@ -438,6 +514,9 @@ pub async fn run_mission_a(
         verdicts,
         audit_chain_hash: audit_hash.clone(),
         chewing_metrics: Some(chewing_metrics),
+        // S8 R2 : fallback tracing
+        fallback_chain_used,
+        failure_mode,
     };
 
     let _ = coord

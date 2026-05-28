@@ -3,8 +3,12 @@
   "task_class": "Translation",
   "query": "Traduis cette phrase française en anglais idiomatique, en gardant le registre soutenu : « Le crépuscule baigne les toits de Paris d'une lumière mordorée que les passants pressés ne remarquent plus. »",
   "expected_keyword": "twilight",
+  "expected_keyword_alternatives": ["twilight", "dusk", "gloaming", "nightfall", "evening"],
   "expected_lang": "en",
   "expected_route": "gemini_gemini-2.5-flash",
   "expected_route_justification_keyword": "p50=",
-  "comment": "Fixture S6 — TaskClass::Translation, doit router vers Gemini (capability 0.92 — Google's multilingue strength via STS-22 ~0.85). Weights Pareto pour Translation : (q=1.0, l=1.0, c=2.0) — cost-driven car les tops sont ~équivalents en qualité de traduction et le volume est typiquement élevé."
+  "baseline_min_cost_cents": 1,
+  "baseline_max_cost_cents": 8,
+  "s9_included": true,
+  "comment": "Fixture S6 — TaskClass::Translation → Gemini (cap 0.92 multilingue). S9 patch chirurgical post-run 2026-05-28 : 'crépuscule' peut se traduire par twilight/dusk/gloaming/nightfall/evening — tous valides en registre soutenu anglais. Le run S9 a fail 2/3 quand Claude/Gemini choisissaient 'dusk' au lieu de 'twilight'. expected_keyword_alternatives élargit l'acceptation."
 }

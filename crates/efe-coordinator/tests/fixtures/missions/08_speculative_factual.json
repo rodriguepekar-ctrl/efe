@@ -1,0 +1,13 @@
+{
+  "name": "speculative_factual",
+  "task_class": "FactualQa",
+  "query": "Quelle est la capitale de la France ? Réponds en un mot.",
+  "expected_keyword": "paris",
+  "expected_lang": "fr",
+  "expected_drafter": "gemini_gemini-2.5-flash",
+  "expected_verifier": "claude_claude-sonnet-4-6",
+  "expected_verifier_skipped": true,
+  "min_savings_cents": 0,
+  "max_words_for_quick_accept": 10,
+  "comment": "Fixture S7 — query factuelle ultra-courte. Le drafter Gemini Flash doit répondre en 1-3 mots ('Paris.' ou 'Paris'), ≤ 10 mots → HOT PATH. Verifier Claude SKIP. min_savings_cents = 0 (le verifier n'aurait coûté que ~0¢ pour cette query courte selon notre estimation, mais on a évité son appel — vrai savings = latence + le coût marginal). Sur une query plus longue (1000+ chars), savings_cents serait > 1."
+}

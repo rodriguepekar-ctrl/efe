@@ -6,5 +6,8 @@
   "expected_lang": "fr",
   "expected_route": "gpt_gpt-4o",
   "expected_route_justification_keyword": "p50=",
-  "comment": "Fixture S6 — TaskClass::Creative, doit router vers GPT-4o (capability 0.93 vs 0.88 Claude vs 0.80 Gemini — GPT-4o excellent en style narratif + variété). Weights Pareto pour Creative : (q=1.5, l=1.0, c=1.0) — balanced, qualité légèrement prioritaire."
+  "baseline_min_cost_cents": 1,
+  "baseline_max_cost_cents": 10,
+  "s9_included": true,
+  "comment": "Fixture S6 — TaskClass::Creative → GPT-4o (cap 0.93). S9 : fixture incluse — baseline Claude direct typiquement plus cher que GPT-4o sur du créatif. Le savings vient du routing S6."
 }

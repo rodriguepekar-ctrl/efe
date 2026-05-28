@@ -26,6 +26,10 @@ pub struct MockLlmProvider {
     self_quality: f32,
     /// Si Some(n), échoue à partir de l'appel `n+1`.
     fail_after_n: Option<u64>,
+    /// **Sprint S8 R2** — Si Some(reason), échoue immédiatement à chaque
+    /// appel avec ce message (utile pour tester graceful degradation
+    /// dans les workflows : fallback chain, vote dégradé, drafter bypass…).
+    always_fail_reason: Option<String>,
     call_count: Mutex<u64>,
 }
 
@@ -40,8 +44,25 @@ impl MockLlmProvider {
             simulated_latency: Duration::from_millis(1),
             self_quality: 0.9,
             fail_after_n: None,
+            always_fail_reason: None,
             call_count: Mutex::new(0),
         }
+    }
+
+    /// **Sprint S8 R2** — Le provider échoue à chaque appel avec ce
+    /// message (formaté en `CoordError::LlmProvider { reason }`).
+    ///
+    /// Pratique pour tester :
+    /// - `with_error("HTTP 429: rate limited")` → déclenche le path retry
+    /// - `with_error("simulated outage")` → déclenche le fallback chain
+    ///
+    /// Distinct de `fail_after(0)` qui aurait le même effet mais avec
+    /// un message générique. `with_error` permet d'asserter sur le
+    /// `reason` exact dans les tests de classification d'erreur.
+    #[must_use]
+    pub fn with_error(mut self, reason: impl Into<String>) -> Self {
+        self.always_fail_reason = Some(reason.into());
+        self
     }
 
     /// Override du texte de réponse.
@@ -98,6 +119,14 @@ impl LlmProvider for MockLlmProvider {
             *g += 1;
             *g
         };
+        // S8 R2 : always_fail_reason a priorité (un test qui fail
+        // toujours avec un message précis).
+        if let Some(reason) = self.always_fail_reason.as_ref() {
+            return Err(CoordError::LlmProvider {
+                provider: self.id.clone(),
+                reason: reason.clone(),
+            });
+        }
         if let Some(threshold) = self.fail_after_n {
             if n > threshold {
                 return Err(CoordError::LlmProvider {

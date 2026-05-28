@@ -6,5 +6,8 @@
   "expected_lang": "rust",
   "expected_route": "claude_claude-sonnet-4-6",
   "expected_route_justification_keyword": "p50=",
-  "comment": "Fixture S6 — TaskClass::Code, doit router vers Claude (HumanEval+ ~89% vs 79% GPT-4o, 72% Gemini Flash). Weights Pareto pour Code : (q=2.5, l=0.5, c=0.2) — qualité strongly dominante, coût soft pour ne pas laisser Gemini gagner sur l'écart de prix x30."
+  "baseline_min_cost_cents": 1,
+  "baseline_max_cost_cents": 15,
+  "s9_included": true,
+  "comment": "Fixture S6 — TaskClass::Code → Claude (HumanEval+ ~89%). S9 : fixture incluse — pour Code, le router S6 reste sur Claude (qualité-driven). Le savings vient surtout du pré-mâchage S4 (compression input) et non du routing."
 }

@@ -107,10 +107,12 @@ pub mod coordinator;
 pub mod dag;
 pub mod error;
 pub mod events;
+pub mod failure;
 pub mod heartbeat;
 pub mod llm;
 pub mod metrics;
 pub mod request;
+pub mod savings_report;
 pub mod speculate;
 pub mod sse;
 pub mod vote;
@@ -134,7 +136,9 @@ pub use llm::{
     LlmCall, LlmProvider, LlmResponse, MockLlmProvider, MultiLlmBridge, ProviderHandle,
     ProviderRegistry,
 };
+pub use failure::FailureMode;
 pub use metrics::ChewingMetrics;
+pub use savings_report::{ModeSummary, RunMode, RunRecord, SavingsReport};
 
 #[cfg(feature = "anthropic")]
 pub use llm::ClaudeProvider;

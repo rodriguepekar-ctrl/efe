@@ -6,5 +6,8 @@
   "expected_lang": "fr",
   "expected_route": "gemini_gemini-2.5-flash",
   "expected_route_justification_keyword": "p50=",
-  "comment": "Fixture R2 Sprint S2 — question factuelle vérifiable, robuste à la langue via lowercase(), courte pour cap < 1¢ sur Sonnet. Réutilisable en S3-S9 (le pré-mâchage doit produire le même résultat 'paris'). S6 : avec table de scoring par défaut + 3 LLMs, le router doit choisir Gemini (cost-driven : Gemini Flash ~30x moins cher que Claude pour qualité ~équivalente sur FactualQa)."
+  "baseline_min_cost_cents": 1,
+  "baseline_max_cost_cents": 8,
+  "s9_included": true,
+  "comment": "Fixture R2 Sprint S2 — question factuelle vérifiable. S6 : router → Gemini (cost-driven). S9 : fixture incluse dans le rapport savings — baseline Claude direct ~3-5¢, full pipeline ~1-2¢."
 }
