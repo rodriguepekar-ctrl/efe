@@ -149,6 +149,20 @@ pub struct ChewingMetrics {
     #[serde(default)]
     pub spec_savings_microcents: u64,
 
+    /// **R3.S3 (fix L4/D6)** — Le draft du drafter a-t-il été rejeté comme
+    /// bruit (forçant le slow path) ?
+    ///
+    /// - `Some(true)` : draft-bruit détecté (« La », refus…) → hot path
+    ///   bloqué → verifier appelé → vraie réponse produite.
+    /// - `Some(false)` : Speculative sans rejet de bruit (hot path nominal
+    ///   OU slow path par longueur).
+    /// - `None` : mission non-Speculative (A ou B).
+    ///
+    /// Le taux de `Some(true)` est un **signal de santé du drafter** :
+    /// > 30 % ⇒ drafter mal choisi (R3.S4 le remplacera).
+    #[serde(default)]
+    pub spec_noise_rejected: Option<bool>,
+
     // ── Sprint S8 R2 — Graceful degradation tracing ───────────────────────
     /// **S8** — Mode de failure observé pendant la mission.
     ///
@@ -349,6 +363,8 @@ mod tests {
             spec_savings_cents: 5,
             // R3.S1 : 5 cents × 1000 = 5_000 µ¢.
             spec_savings_microcents: 5_000,
+            // R3.S3 — draft rejeté comme bruit.
+            spec_noise_rejected: Some(false),
             // S8 R2 — Graceful degradation
             failure_mode: FailureMode::None,
             degradations_count: 0,

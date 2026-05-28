@@ -308,6 +308,23 @@ pub enum StreamEvent {
         /// Estampille.
         ts: DateTime<Utc>,
     },
+
+    /// **R3.S3 (fix L4/D6)** — Mission Speculative : le draft du drafter a
+    /// été détecté comme **bruit** (mot-de-contenu nul, refus, répétition)
+    /// et REJETÉ du hot path → forcé sur le slow path (verifier). La
+    /// mission produit donc la réponse correcte du verifier au lieu de
+    /// livrer le bruit. Tracé pour mesurer le taux de bruit drafter (si
+    /// élevé, le drafter est mal choisi → R3.S4).
+    DraftRejectedAsNoise {
+        /// Swarm.
+        swarm_id: Uuid,
+        /// Signal de bruit détecté (`"ONLY_STOPWORDS"`, `"REFUSAL_PATTERN"`…).
+        signal: String,
+        /// Extrait du draft rejeté (≤ 40 chars, pour debug/audit).
+        draft_excerpt: String,
+        /// Estampille.
+        ts: DateTime<Utc>,
+    },
 }
 
 impl StreamEvent {
@@ -334,6 +351,8 @@ impl StreamEvent {
             Self::LlmFailed { .. } => "LLM_FAILED",
             Self::SlmCircuitOpened { .. } => "SLM_CIRCUIT_OPENED",
             Self::DrafterBypassed { .. } => "DRAFTER_BYPASSED",
+            // R3.S3 — Speculator noise rejection
+            Self::DraftRejectedAsNoise { .. } => "DRAFT_REJECTED_AS_NOISE",
         }
     }
 
@@ -357,7 +376,8 @@ impl StreamEvent {
             | Self::LlmFallbackTriggered { swarm_id, .. }
             | Self::LlmFailed { swarm_id, .. }
             | Self::SlmCircuitOpened { swarm_id, .. }
-            | Self::DrafterBypassed { swarm_id, .. } => Some(*swarm_id),
+            | Self::DrafterBypassed { swarm_id, .. }
+            | Self::DraftRejectedAsNoise { swarm_id, .. } => Some(*swarm_id),
             Self::Heartbeat { .. } => None,
         }
     }
@@ -479,6 +499,8 @@ mod tests {
                     spec_savings_cents: 0,
                     // R3.S1 : 0 (non-Spec mission).
                     spec_savings_microcents: 0,
+                    // R3.S3 : None (non-Spec mission).
+                    spec_noise_rejected: None,
                     // S8 R2 — Graceful degradation fields
                     failure_mode: crate::failure::FailureMode::None,
                     degradations_count: 0,

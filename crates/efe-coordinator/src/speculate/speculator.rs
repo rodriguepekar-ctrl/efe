@@ -9,6 +9,8 @@ use serde::{Deserialize, Serialize};
 use crate::error::CoordResult;
 use crate::events::{EventBus, StreamEvent};
 use crate::llm::{LlmCall, LlmProvider, TokenChunk};
+// R3.S3 (fix L4/D6) : gate de rejet de bruit pour le hot path.
+use super::noise::{NoiseRejectionPolicy, NoiseSignal};
 
 /// Token spéculatif émis par le drafter pendant la frappe.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -108,6 +110,18 @@ pub struct SpeculationOutcome {
     /// `#[serde(default)]` pour backward-compat avec outcomes pré-S8.
     #[serde(default)]
     pub drafter_bypassed: bool,
+
+    /// **R3.S3 (fix L4/D6)** — Signal de bruit ayant bloqué le hot path.
+    ///
+    /// - `None` : hot path pris (draft propre), OU slow path nominal
+    ///   (draft propre mais > `max_words`), OU drafter bypassed.
+    /// - `Some(signal)` : le draft a été détecté comme bruit (« La »,
+    ///   refus, répétition…) → hot path bloqué → slow path forcé → le
+    ///   verifier a produit la vraie réponse.
+    ///
+    /// `#[serde(default)]` pour backward-compat avec outcomes pré-R3.S3.
+    #[serde(default)]
+    pub noise_signal: Option<NoiseSignal>,
 }
 
 /// Speculator : orchestre drafter + verifier.
@@ -128,6 +142,13 @@ pub struct Speculator {
     /// mots. Threshold 10 est conservateur (rejette les réponses longues
     /// type hallucinations narratives).
     max_words_for_quick_accept: usize,
+    /// **R3.S3 (fix L4/D6)** — Politique de rejet de bruit appliquée AVANT
+    /// la décision hot path. Un draft détecté comme bruit (« La », refus,
+    /// répétition) est forcé sur le slow path (verifier). Défaut :
+    /// [`NoiseRejectionPolicy::default`] (gate actif). Utiliser
+    /// [`permissive_s7`](NoiseRejectionPolicy::permissive_s7) pour
+    /// désactiver (backward-compat S7).
+    noise_policy: NoiseRejectionPolicy,
     /// Bus optionnel pour émettre `StreamEvent::DraftToken` pendant la frappe.
     bus: Option<Arc<dyn EventBus>>,
     /// `swarm_id` à attacher aux évènements (None → pas d'émission).
@@ -151,6 +172,9 @@ impl Speculator {
             verifier,
             accept_threshold: accept_threshold.clamp(0.0, 1.0),
             max_words_for_quick_accept: 0, // S7 hot path désactivé par défaut
+            // R3.S3 : gate de bruit actif par défaut (sans effet tant que le
+            // hot path est désactivé, mais prêt dès `with_quick_accept`).
+            noise_policy: NoiseRejectionPolicy::default(),
             bus: None,
             swarm_id: None,
         }
@@ -165,6 +189,24 @@ impl Speculator {
     #[must_use]
     pub fn with_quick_accept(mut self, max_words: usize) -> Self {
         self.max_words_for_quick_accept = max_words;
+        self
+    }
+
+    /// **R3.S3 (fix L4/D6)** — Configure la politique de rejet de bruit.
+    ///
+    /// Le gate s'applique AVANT la décision hot path : un draft détecté
+    /// comme bruit (mot-de-contenu nul, refus, répétition dégénérée) est
+    /// forcé sur le slow path où le verifier produit la vraie réponse.
+    ///
+    /// Exemple :
+    /// ```ignore
+    /// Speculator::new(d, v, 0.7)
+    ///     .with_quick_accept(10)
+    ///     .with_noise_policy(NoiseRejectionPolicy::default());
+    /// ```
+    #[must_use]
+    pub fn with_noise_policy(mut self, policy: NoiseRejectionPolicy) -> Self {
+        self.noise_policy = policy;
         self
     }
 
@@ -279,6 +321,8 @@ impl Speculator {
                     // R3.S1 : précision µ¢ — drafter bypassed → verifier only.
                     cost_microcents: verify_res.cost_microcents_resolved(),
                     drafter_bypassed: true,
+                    // R3.S3 : pas de draft à juger (drafter a fail) → None.
+                    noise_signal: None,
                 });
             }
         };
@@ -286,12 +330,35 @@ impl Speculator {
         // ── Step 2 : Décision Quick-Accept (HOT PATH) ──
         //
         // Si `max_words_for_quick_accept > 0` ET la réponse drafter respecte
-        // ce seuil → on accepte le draft SANS appeler le verifier.
-        // C'est l'optimisation économique fondamentale de S7.
+        // ce seuil ET n'est PAS du bruit → on accepte le draft SANS appeler
+        // le verifier. C'est l'optimisation économique fondamentale de S7.
+        //
+        // R3.S3 (fix L4/D6) : le gate de bruit `noise_policy.detect` bloque
+        // les drafts sans contenu (« La »), les refus et les répétitions.
+        // Un draft-bruit tombe sur le slow path où le verifier produit la
+        // vraie réponse. `draft_words > 0` est ABSORBÉ par le gate (un draft
+        // vide déclenche `EmptyOrWhitespace`).
         let draft_words = draft.text.split_whitespace().count();
+        let noise = self.noise_policy.detect(&draft.text, &req.prompt);
         let hot_path = self.max_words_for_quick_accept > 0
-            && draft_words > 0
-            && draft_words <= self.max_words_for_quick_accept;
+            && draft_words <= self.max_words_for_quick_accept
+            && noise.is_none();
+
+        // R3.S3 : observabilité — si le draft est du bruit, émet un event
+        // (le draft va retomber sur le slow path).
+        if let Some(signal) = noise {
+            if let (Some(bus), Some(swarm)) = (bus_opt.as_ref(), swarm_opt) {
+                let excerpt: String = draft.text.chars().take(40).collect();
+                let _ = bus
+                    .publish(StreamEvent::DraftRejectedAsNoise {
+                        swarm_id: swarm,
+                        signal: signal.as_str().to_string(),
+                        draft_excerpt: excerpt,
+                        ts: chrono::Utc::now(),
+                    })
+                    .await;
+            }
+        }
 
         if hot_path {
             let total_latency_ms = started.elapsed().as_millis() as u64;
@@ -321,6 +388,8 @@ impl Speculator {
                 cost_microcents,
                 // S8 R2 : hot path nominal — drafter a réussi.
                 drafter_bypassed: false,
+                // R3.S3 : hot path pris → draft propre → pas de bruit.
+                noise_signal: None,
             });
         }
 
@@ -375,6 +444,9 @@ impl Speculator {
             cost_microcents,
             // S8 R2 : slow path nominal — drafter a réussi.
             drafter_bypassed: false,
+            // R3.S3 : slow path par bruit → `Some(signal)` ; slow path par
+            // longueur (draft propre > max_words) → `None`.
+            noise_signal: noise,
         })
     }
 }
@@ -558,5 +630,86 @@ mod tests {
         let s = Speculator::new(drafter, verifier, 0.5).with_quick_accept(15);
         assert_eq!(s.max_words_for_quick_accept, 15);
         // Builder chainable — confirme l'ergonomie.
+    }
+
+    // ================================================================
+    // R3.S3 — Tests noise rejection (fix L4/D6)
+    // ================================================================
+
+    /// **R3.S3 (le fix D6)** : le drafter renvoie « La » (bruit, 0 mot de
+    /// contenu). Le hot path doit être BLOQUÉ → slow path → le verifier
+    /// produit « Paris ». Sans R3.S3, « La » aurait été livré tel quel.
+    #[tokio::test]
+    async fn r3s3_speculator_rejects_la_noise_falls_to_slow_path() {
+        let drafter = Arc::new(MockLlmProvider::new("drafter").with_response("La"));
+        let verifier =
+            Arc::new(MockLlmProvider::new("verifier").with_response("Paris"));
+        let s = Speculator::new(drafter, verifier, 0.5)
+            .with_quick_accept(10)
+            .with_noise_policy(NoiseRejectionPolicy::default());
+        let out = s.run(LlmCall::simple("Capitale de la France ?", 10)).await.unwrap();
+
+        assert!(
+            !out.verifier_skipped,
+            "« La » est du bruit → hot path bloqué → verifier appelé"
+        );
+        assert_eq!(out.final_text, "Paris", "le verifier produit la vraie réponse");
+        assert_eq!(
+            out.noise_signal,
+            Some(NoiseSignal::OnlyStopwords),
+            "« La » détecté comme OnlyStopwords"
+        );
+    }
+
+    /// **R3.S3 (anti-régression)** : « Paris » (1 mot de contenu) DOIT
+    /// continuer à prendre le hot path. C'est le test qui prouve qu'on ne
+    /// détruit PAS le savings sur le cas FactualQa canonique.
+    #[tokio::test]
+    async fn r3s3_speculator_accepts_paris_hot_path() {
+        let drafter = Arc::new(MockLlmProvider::new("drafter").with_response("Paris"));
+        let verifier = Arc::new(
+            MockLlmProvider::new("verifier").with_response("Paris is the capital"),
+        );
+        let s = Speculator::new(drafter, verifier, 0.5)
+            .with_quick_accept(10)
+            .with_noise_policy(NoiseRejectionPolicy::default());
+        let out = s.run(LlmCall::simple("Capital of France?", 10)).await.unwrap();
+
+        assert!(out.verifier_skipped, "« Paris » propre → hot path → verifier skip");
+        assert_eq!(out.final_text, "Paris");
+        assert_eq!(out.noise_signal, None, "pas de bruit");
+        assert!(out.draft_accepted);
+    }
+
+    /// **R3.S3** : un refus (« I don't know ») est rejeté → slow path.
+    #[tokio::test]
+    async fn r3s3_speculator_rejects_refusal() {
+        let drafter =
+            Arc::new(MockLlmProvider::new("drafter").with_response("I don't know"));
+        let verifier =
+            Arc::new(MockLlmProvider::new("verifier").with_response("Paris"));
+        let s = Speculator::new(drafter, verifier, 0.5)
+            .with_quick_accept(10)
+            .with_noise_policy(NoiseRejectionPolicy::default());
+        let out = s.run(LlmCall::simple("Capital?", 10)).await.unwrap();
+        assert!(!out.verifier_skipped);
+        assert_eq!(out.final_text, "Paris");
+        assert_eq!(out.noise_signal, Some(NoiseSignal::RefusalPattern));
+    }
+
+    /// **R3.S3 (opt-out)** : avec `permissive_s7`, « La » reprend le hot
+    /// path (comportement S7 exact restauré).
+    #[tokio::test]
+    async fn r3s3_permissive_s7_accepts_la_again() {
+        let drafter = Arc::new(MockLlmProvider::new("drafter").with_response("La"));
+        let verifier =
+            Arc::new(MockLlmProvider::new("verifier").with_response("Paris"));
+        let s = Speculator::new(drafter, verifier, 0.5)
+            .with_quick_accept(10)
+            .with_noise_policy(NoiseRejectionPolicy::permissive_s7());
+        let out = s.run(LlmCall::simple("q", 10)).await.unwrap();
+        assert!(out.verifier_skipped, "permissive_s7 → « La » prend le hot path");
+        assert_eq!(out.final_text, "La");
+        assert_eq!(out.noise_signal, None);
     }
 }

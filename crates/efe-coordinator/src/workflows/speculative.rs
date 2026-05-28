@@ -13,7 +13,7 @@ use crate::events::{MissionTag, StreamEvent};
 use crate::llm::LlmCall;
 use crate::metrics::ChewingMetrics;
 use crate::request::{SpeculativeRequest, SpeculativeResponse};
-use crate::speculate::Speculator;
+use crate::speculate::{NoiseRejectionPolicy, Speculator};
 
 /// Estime les savings_cents si le verifier a été skippé.
 ///
@@ -122,10 +122,24 @@ pub async fn run_speculative(
         }
     })?;
 
+    // ── R3.S3 : politique de rejet de bruit ──
+    //
+    // `reject_draft_noise=true` (défaut) → gate actif (fix L4/D6).
+    // `false` → permissive_s7 (comportement S7 exact, opt-out backward-compat).
+    let noise_policy = if req.reject_draft_noise {
+        NoiseRejectionPolicy {
+            min_words: req.min_words_for_quick_accept,
+            ..NoiseRejectionPolicy::default()
+        }
+    } else {
+        NoiseRejectionPolicy::permissive_s7()
+    };
+
     // ── Speculator avec hot-path activé via `max_words_for_quick_accept` ──
     let speculator = Arc::new(
         Speculator::new(drafter, verifier, req.accept_threshold)
             .with_quick_accept(req.max_words_for_quick_accept)
+            .with_noise_policy(noise_policy)
             .with_bus(Arc::clone(&coord.bus), swarm_id),
     );
     let llm_call = LlmCall {
@@ -149,6 +163,9 @@ pub async fn run_speculative(
     chewing_metrics.spec_drafter_latency_ms = outcome.drafter_latency_ms;
     chewing_metrics.spec_verifier_latency_ms = outcome.verifier_latency_ms;
     chewing_metrics.verifier_skipped = Some(outcome.verifier_skipped);
+    // R3.S3 : trace si le draft a été rejeté comme bruit (signal de santé
+    // du drafter ; taux > 30 % ⇒ drafter mal choisi).
+    chewing_metrics.spec_noise_rejected = Some(outcome.noise_signal.is_some());
     chewing_metrics.spec_savings_cents = estimate_savings_cents(
         outcome.verifier_skipped,
         &req.verifier_metadata,

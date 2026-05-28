@@ -611,7 +611,10 @@ async fn r3s2_speculative_unaffected_by_slm_circuits() {
         max_total_latency: Duration::from_secs(2),
         drafter_llm: "drafter".to_string(),
         accept_threshold: 0.7,
-        max_words_for_quick_accept: 10, // hot path activé
+        max_words_for_quick_accept: 10,
+        // R3.S3 : gate de bruit + min words.
+        reject_draft_noise: true,
+        min_words_for_quick_accept: 1, // hot path activé
     };
     // Mission Speculative doit fonctionner SANS être affectée par les
     // circuits SLM (qui ne s'appliquent pas à elle).

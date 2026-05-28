@@ -13,6 +13,8 @@
 //!   et arbitre.
 //! - [`SpeculationOutcome`] : résultat final.
 
+mod noise;
 mod speculator;
 
+pub use noise::{NoiseRejectionPolicy, NoiseSignal};
 pub use speculator::{DraftToken, SpeculationOutcome, Speculator};

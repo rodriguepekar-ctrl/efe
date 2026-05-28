@@ -89,6 +89,60 @@ _(rolling — prochains items)_
   **0 failed**.
 - `cargo clippy` : 0 warning R3.S1-spécifique.
 
+### Phase 3 R3.S3 — Speculator Noise Rejection (fix L4/D6) (LIVRÉ 2026-05-29)
+
+> Fix L4/D6 : le hot path Speculative acceptait tout draft de `]0, max_words]`
+> mots. Un drafter cheap renvoyant « La » (1 mot, fragment) voyait sa
+> réponse fausse livrée sans arbitrage verifier (S9 fixture 03, pass rate
+> 50 %). R3.S3 ajoute un **gate de rejet de bruit** local et déterministe.
+
+#### Insight chirurgical
+> Le bruit n'est pas une question de **longueur**, mais de **contenu**.
+
+Le R3 overview proposait `min_words >= 2` — REJETÉ : « Paris » (réponse
+FactualQa canonique en 1 mot) serait pénalisé, détruisant le savings.
+La bonne discrimination est par **mot de contenu** : « La » (0 content
+word, stopword) = bruit ; « Paris » (1 content word) = valide.
+
+#### Asymétrie des coûts (guide du design)
+- Faux négatif (rater du bruit) → réponse fausse livrée = SÉVÈRE.
+- Faux positif (sur-rejeter) → verifier appelé inutilement = coût.
+- → Policy calibrée pour **zéro faux négatif**, faux positifs bas. Un
+  draft-bruit rejeté tombe sur le slow path où le verifier produit la
+  vraie réponse → **le rejet de bruit ne produit jamais de sortie fausse**.
+
+#### Ajouté
+- **Module `speculate/noise.rs`** (NEW) : `NoiseRejectionPolicy` +
+  `NoiseSignal` enum + `detect()` (court-circuit, zéro appel LLM).
+  - 5 signaux : `EmptyOrWhitespace`, `BelowMinWords`, `OnlyStopwords`
+    (LE fix D6), `RefusalPattern`, `DegenerateRepetition`.
+  - Stopwords bilingues FR+EN (LazyLock HashSet), refusal patterns FR+EN.
+  - `permissive_s7()` (opt-out backward-compat).
+  - 20 tests unit.
+- **`Speculator.noise_policy`** + `with_noise_policy()` builder ; hot path
+  révisé `… && noise.is_none()`.
+- **`SpeculationOutcome.noise_signal: Option<NoiseSignal>`** (#[serde(default)]).
+- **`SpeculativeRequest.reject_draft_noise`** (master switch, défaut true)
+  + **`min_words_for_quick_accept`** (défaut 1).
+- **`StreamEvent::DraftRejectedAsNoise`** (observabilité : signal + extrait).
+- **`ChewingMetrics.spec_noise_rejected: Option<bool>`** (signal de santé
+  drafter ; > 30 % ⇒ drafter mal choisi).
+- **4 tests unit speculator** + **4 tests integration workflow** + **1 test
+  live** env-gated (`r3s3_live_speculative_rejects_noise_recovers_correct_answer`).
+
+#### Modifié
+- `Speculator::run` : gate de bruit AVANT la décision hot path + émission
+  `DraftRejectedAsNoise` sur bruit détecté.
+- `run_speculative` : wire `NoiseRejectionPolicy` depuis la requête + trace
+  `spec_noise_rejected`.
+
+#### Validation
+- **618 tests offline** PASS (vs 590 base post-R3.S2) → **+28 tests R3.S3**.
+- 0 failed, 0 clippy warning R3.S3-spécifique.
+- Backward-compat : drafts content existants (« Paris », « mock response »)
+  hot-path inchangé ; opt-out `reject_draft_noise=false` → S7 exact.
+- Cible : pass rate Speculative 50 % → ≥ 90 % sans sacrifier le savings.
+
 ### Phase 3 R3.S2 — SLM Circuit Wiring (fix L2) (LIVRÉ 2026-05-28, commit `<HEAD>`)
 
 > Fix L2 (`SlmCircuitBreaker` non câblé en R2) : wire les 3 SLM

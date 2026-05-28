@@ -322,6 +322,24 @@ pub struct SpeculativeRequest {
     /// → toujours slow path (backward-compat S2-S6). Défaut 10.
     #[serde(default = "default_max_words_for_quick_accept")]
     pub max_words_for_quick_accept: usize,
+
+    /// **R3.S3 (fix L4/D6)** — Active le gate de rejet de bruit du hot path.
+    ///
+    /// `true` (défaut) → un draft sans contenu (« La »), un refus, ou une
+    /// répétition dégénérée est rejeté du hot path et forcé sur le slow
+    /// path (verifier) → la vraie réponse est produite. `false` →
+    /// `NoiseRejectionPolicy::permissive_s7` (comportement S7 exact,
+    /// opt-out backward-compat).
+    #[serde(default = "default_true")]
+    pub reject_draft_noise: bool,
+
+    /// **R3.S3** — Mots minimum (total) pour le hot path. Défaut 1
+    /// (rejette uniquement le vide via ce check). On NE met PAS 2 : cela
+    /// pénaliserait « Paris » (réponse FactualQa canonique en 1 mot). Le
+    /// vrai discriminant de bruit est le **mot de contenu**, géré par la
+    /// `NoiseRejectionPolicy` (cf. `min_content_words`).
+    #[serde(default = "default_min_words_for_quick_accept")]
+    pub min_words_for_quick_accept: usize,
 }
 
 impl SpeculativeRequest {
@@ -363,6 +381,9 @@ impl SpeculativeRequest {
             max_total_latency: default_deadline(),
             accept_threshold: default_accept_threshold(),
             max_words_for_quick_accept: default_max_words_for_quick_accept(),
+            // R3.S3 : gate de bruit actif par défaut.
+            reject_draft_noise: default_true(),
+            min_words_for_quick_accept: default_min_words_for_quick_accept(),
         }
     }
 }
@@ -493,6 +514,16 @@ const fn default_accept_threshold() -> f32 {
 /// **Sprint S7 R2** — Mots max pour hot path par défaut.
 const fn default_max_words_for_quick_accept() -> usize {
     10
+}
+
+/// **R3.S3** — Mots minimum pour hot path par défaut (1 = vide seul rejeté).
+const fn default_min_words_for_quick_accept() -> usize {
+    1
+}
+
+/// **R3.S3** — Default `true` pour les flags serde booléens (gate actif).
+const fn default_true() -> bool {
+    true
 }
 
 #[cfg(test)]

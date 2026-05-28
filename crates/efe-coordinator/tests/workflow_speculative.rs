@@ -53,6 +53,9 @@ async fn speculative_accepts_draft_when_match() {
         drafter_llm: "drafter".to_string(),
         accept_threshold: 0.7,
         max_words_for_quick_accept: 0,
+        // R3.S3 : gate de bruit + min words.
+        reject_draft_noise: true,
+        min_words_for_quick_accept: 1,
     };
     let resp = run_speculative(&coord, req).await.unwrap();
     assert!(resp.draft_accepted);
@@ -85,6 +88,9 @@ async fn speculative_rejects_draft_when_diverge() {
         drafter_llm: "drafter".to_string(),
         accept_threshold: 0.7,
         max_words_for_quick_accept: 0,
+        // R3.S3 : gate de bruit + min words.
+        reject_draft_noise: true,
+        min_words_for_quick_accept: 1,
     };
     let resp = run_speculative(&coord, req).await.unwrap();
     assert!(!resp.draft_accepted);
@@ -114,6 +120,9 @@ async fn speculative_requires_drafter_registered() {
         drafter_llm: "drafter".to_string(),
         accept_threshold: 0.7,
         max_words_for_quick_accept: 0,
+        // R3.S3 : gate de bruit + min words.
+        reject_draft_noise: true,
+        min_words_for_quick_accept: 1,
     };
     let r = run_speculative(&coord, req).await;
     assert!(matches!(r, Err(CoordError::LlmProvider { .. })));
@@ -141,6 +150,9 @@ async fn speculative_requires_verifier_registered() {
         drafter_llm: "drafter".to_string(),
         accept_threshold: 0.7,
         max_words_for_quick_accept: 0,
+        // R3.S3 : gate de bruit + min words.
+        reject_draft_noise: true,
+        min_words_for_quick_accept: 1,
     };
     let r = run_speculative(&coord, req).await;
     assert!(matches!(r, Err(CoordError::LlmProvider { .. })));
@@ -171,6 +183,9 @@ async fn speculative_emits_speculation_resolved_event() {
         drafter_llm: "drafter".to_string(),
         accept_threshold: 0.7,
         max_words_for_quick_accept: 0,
+        // R3.S3 : gate de bruit + min words.
+        reject_draft_noise: true,
+        min_words_for_quick_accept: 1,
     };
     let _ = run_speculative(&coord, req).await.unwrap();
 
@@ -224,7 +239,10 @@ async fn s7_hot_path_skips_verifier_when_drafter_short_offline() {
         max_total_latency: Duration::from_secs(5),
         drafter_llm: "gemini_drafter".to_string(),
         accept_threshold: 0.7,
-        max_words_for_quick_accept: 10, // hot path activé
+        max_words_for_quick_accept: 10,
+        // R3.S3 : gate de bruit + min words.
+        reject_draft_noise: true,
+        min_words_for_quick_accept: 1, // hot path activé
     };
     let resp = run_speculative(&coord, req).await.unwrap();
 
@@ -266,6 +284,9 @@ async fn s7_slow_path_calls_verifier_when_drafter_long_offline() {
         drafter_llm: "gemini_drafter".to_string(),
         accept_threshold: 0.9, // strict → reject + verifier text retained
         max_words_for_quick_accept: 10,
+        // R3.S3 : gate de bruit + min words.
+        reject_draft_noise: true,
+        min_words_for_quick_accept: 1,
     };
     let resp = run_speculative(&coord, req).await.unwrap();
 
@@ -303,6 +324,9 @@ async fn s7_chewing_metrics_filled_for_spec_offline() {
         drafter_llm: "gemini_drafter".to_string(),
         accept_threshold: 0.7,
         max_words_for_quick_accept: 10,
+        // R3.S3 : gate de bruit + min words.
+        reject_draft_noise: true,
+        min_words_for_quick_accept: 1,
     };
     let resp = run_speculative(&coord, req).await.unwrap();
 
@@ -346,6 +370,9 @@ async fn s7_verifier_skipped_propagated_to_response_offline() {
         drafter_llm: "d".to_string(),
         accept_threshold: 0.7,
         max_words_for_quick_accept: 5,
+        // R3.S3 : gate de bruit + min words.
+        reject_draft_noise: true,
+        min_words_for_quick_accept: 1,
     };
     let resp = run_speculative(&coord, req).await.unwrap();
 
@@ -396,6 +423,9 @@ async fn s7_spec_savings_cents_above_zero_when_skip_offline() {
         drafter_llm: "d".to_string(),
         accept_threshold: 0.7,
         max_words_for_quick_accept: 5,
+        // R3.S3 : gate de bruit + min words.
+        reject_draft_noise: true,
+        min_words_for_quick_accept: 1,
     };
     let resp = run_speculative(&coord, req).await.unwrap();
     assert!(resp.verifier_skipped);
@@ -497,6 +527,9 @@ async fn s7_cost_cents_hot_path_equals_drafter_only() {
         drafter_llm: "d_cheap".to_string(),
         accept_threshold: 0.7,
         max_words_for_quick_accept: 10,
+        // R3.S3 : gate de bruit + min words.
+        reject_draft_noise: true,
+        min_words_for_quick_accept: 1,
     };
     let resp = run_speculative(&coord, req).await.unwrap();
 
@@ -543,7 +576,10 @@ async fn s7_cost_cents_slow_path_equals_drafter_plus_verifier() {
         max_total_latency: Duration::from_secs(5),
         drafter_llm: "d_cheap".to_string(),
         accept_threshold: 0.7,
-        max_words_for_quick_accept: 0, // hot path désactivé
+        max_words_for_quick_accept: 0,
+        // R3.S3 : gate de bruit + min words.
+        reject_draft_noise: true,
+        min_words_for_quick_accept: 1, // hot path désactivé
     };
     let resp = run_speculative(&coord, req).await.unwrap();
 
@@ -596,7 +632,10 @@ async fn r3s1_speculative_hot_path_cost_microcents_drafter_only() {
         max_total_latency: Duration::from_secs(2),
         drafter_llm: "drafter".to_string(),
         accept_threshold: 0.7,
-        max_words_for_quick_accept: 5, // hot path actif si ≤ 5 mots
+        max_words_for_quick_accept: 5,
+        // R3.S3 : gate de bruit + min words.
+        reject_draft_noise: true,
+        min_words_for_quick_accept: 1, // hot path actif si ≤ 5 mots
     };
     let resp = run_speculative(&coord, req).await.unwrap();
 
@@ -645,7 +684,10 @@ async fn r3s1_speculative_slow_path_cost_microcents_sum() {
         max_total_latency: Duration::from_secs(5),
         drafter_llm: "drafter".to_string(),
         accept_threshold: 0.7,
-        max_words_for_quick_accept: 0, // hot path désactivé
+        max_words_for_quick_accept: 0,
+        // R3.S3 : gate de bruit + min words.
+        reject_draft_noise: true,
+        min_words_for_quick_accept: 1, // hot path désactivé
     };
     let resp = run_speculative(&coord, req).await.unwrap();
 
@@ -658,3 +700,121 @@ async fn r3s1_speculative_slow_path_cost_microcents_sum() {
     );
 }
 
+
+// ====================================================================
+// R3.S3 — Tests integration noise rejection (fix L4/D6)
+// ====================================================================
+
+/// Helper : construit une `SpeculativeRequest` R3.S3 avec hot path actif.
+fn make_spec_req(reject_noise: bool) -> SpeculativeRequest {
+    SpeculativeRequest {
+        user_text: "Capitale de la France ?".into(),
+        task_class: TaskClass::FactualQa,
+        verifier_llm: "claude".into(),
+        verifier_metadata: meta(),
+        budget: Budget {
+            max_cost_cents: 100,
+            max_cost_microcents: 0,
+            max_latency_ms: 5000,
+            min_quality_score: 0.5,
+        },
+        max_draft_tokens: 100,
+        max_total_latency: Duration::from_secs(5),
+        drafter_llm: "drafter".to_string(),
+        accept_threshold: 0.7,
+        max_words_for_quick_accept: 10, // hot path activé
+        reject_draft_noise: reject_noise,
+        min_words_for_quick_accept: 1,
+    }
+}
+
+/// **R3.S3 (le fix D6 end-to-end)** : drafter renvoie « La » → le workflow
+/// doit router vers le verifier → final_text = « Paris », et tracer
+/// `spec_noise_rejected = Some(true)`.
+#[tokio::test]
+async fn r3s3_workflow_noise_draft_routes_to_verifier() {
+    let reg = ProviderRegistry::new();
+    reg.register(Arc::new(MockLlmProvider::new("drafter").with_response("La")));
+    reg.register(Arc::new(MockLlmProvider::new("claude").with_response("Paris")));
+    let coord = Coordinator::builder().registry(reg).build().unwrap();
+
+    let resp = run_speculative(&coord, make_spec_req(true)).await.unwrap();
+
+    assert_eq!(
+        resp.final_text, "Paris",
+        "« La » rejeté → verifier produit « Paris »"
+    );
+    assert!(
+        !resp.verifier_skipped,
+        "le bruit force le slow path (verifier appelé)"
+    );
+    let cm = resp.chewing_metrics.as_ref().expect("chewing_metrics");
+    assert_eq!(
+        cm.spec_noise_rejected,
+        Some(true),
+        "spec_noise_rejected doit être Some(true)"
+    );
+}
+
+/// **R3.S3 (anti-régression)** : drafter « Paris » (content word) → hot
+/// path préservé, `spec_noise_rejected = Some(false)`, verifier skip.
+#[tokio::test]
+async fn r3s3_workflow_clean_short_draft_hot_path() {
+    let reg = ProviderRegistry::new();
+    reg.register(Arc::new(MockLlmProvider::new("drafter").with_response("Paris")));
+    reg.register(Arc::new(
+        MockLlmProvider::new("claude").with_response("Paris is capital"),
+    ));
+    let coord = Coordinator::builder().registry(reg).build().unwrap();
+
+    let resp = run_speculative(&coord, make_spec_req(true)).await.unwrap();
+
+    assert_eq!(resp.final_text, "Paris");
+    assert!(resp.verifier_skipped, "« Paris » propre → hot path → verifier skip");
+    let cm = resp.chewing_metrics.as_ref().expect("chewing_metrics");
+    assert_eq!(cm.spec_noise_rejected, Some(false));
+}
+
+/// **R3.S3 (opt-out)** : `reject_draft_noise=false` → permissive_s7 →
+/// « La » reprend le hot path (comportement S7 exact, backward-compat).
+#[tokio::test]
+async fn r3s3_workflow_reject_draft_noise_false_disables_gate() {
+    let reg = ProviderRegistry::new();
+    reg.register(Arc::new(MockLlmProvider::new("drafter").with_response("La")));
+    reg.register(Arc::new(MockLlmProvider::new("claude").with_response("Paris")));
+    let coord = Coordinator::builder().registry(reg).build().unwrap();
+
+    let resp = run_speculative(&coord, make_spec_req(false)).await.unwrap();
+
+    // permissive_s7 → « La » accepté en hot path (= bug S7 restauré
+    // volontairement via opt-out).
+    assert_eq!(resp.final_text, "La", "opt-out → « La » accepté (S7 exact)");
+    assert!(resp.verifier_skipped, "permissive_s7 → hot path");
+    let cm = resp.chewing_metrics.as_ref().expect("chewing_metrics");
+    assert_eq!(cm.spec_noise_rejected, Some(false));
+}
+
+/// **R3.S3 (observabilité)** : un draft-bruit émet `DraftRejectedAsNoise`
+/// sur le bus.
+#[tokio::test]
+async fn r3s3_workflow_emits_draft_rejected_as_noise_event() {
+    use efe_coordinator::StreamEvent;
+    let reg = ProviderRegistry::new();
+    reg.register(Arc::new(MockLlmProvider::new("drafter").with_response("La")));
+    reg.register(Arc::new(MockLlmProvider::new("claude").with_response("Paris")));
+    let coord = Coordinator::builder().registry(reg).build().unwrap();
+    let (_t, mut rx) = coord.subscribe(Some("r3s3-noise-event"));
+
+    let _resp = run_speculative(&coord, make_spec_req(true)).await.unwrap();
+
+    let mut found = 0;
+    while let Ok(Some(ev)) =
+        tokio::time::timeout(Duration::from_millis(100), rx.recv()).await
+    {
+        if let StreamEvent::DraftRejectedAsNoise { signal, .. } = ev {
+            assert_eq!(signal, "ONLY_STOPWORDS");
+            found += 1;
+        }
+    }
+    assert_eq!(found, 1, "1 event DraftRejectedAsNoise attendu pour « La »");
+}

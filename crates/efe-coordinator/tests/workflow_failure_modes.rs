@@ -347,6 +347,9 @@ async fn speculative_falls_back_to_verifier_when_drafter_fails_offline() {
         drafter_llm: "drafter".to_string(),
         accept_threshold: 0.7,
         max_words_for_quick_accept: 10,
+        // R3.S3 : gate de bruit + min words.
+        reject_draft_noise: true,
+        min_words_for_quick_accept: 1,
     };
     let resp = run_speculative(&coord, req).await.unwrap();
 
@@ -393,6 +396,9 @@ async fn speculative_drafter_bypassed_event_emitted_offline() {
         drafter_llm: "d".to_string(),
         accept_threshold: 0.7,
         max_words_for_quick_accept: 10,
+        // R3.S3 : gate de bruit + min words.
+        reject_draft_noise: true,
+        min_words_for_quick_accept: 1,
     };
     let _ = run_speculative(&coord, req).await.unwrap();
 

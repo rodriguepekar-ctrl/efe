@@ -2385,3 +2385,89 @@ async fn r3s2_live_mission_a_resilient_when_analyzer_unreachable() {
 
     eprintln!("[r3s2-live] OK : 4 missions résilientes, circuit Open, 1 event émis.");
 }
+
+// ====================================================================
+// R3.S3 — Test live noise rejection (fix L4/D6)
+// ====================================================================
+
+/// **R3.S3 (fix L4/D6) — Test live** : valide que même si le drafter
+/// Gemini Flash renvoie du bruit (« La »), la réponse FINALE contient la
+/// bonne réponse — parce que le gate de bruit force le slow path vers le
+/// verifier Claude.
+///
+/// ## Pré-conditions
+/// - `EFE_LIVE_LLM=1` + `ANTHROPIC_API_KEY` + `GOOGLE_AI_KEY`.
+///
+/// ## Scénario (reproduit D6 / fixture 03)
+/// - Query factuelle (« Capitale de la France ? »).
+/// - Drafter Gemini Flash, verifier Claude, hot path activé (max_words=10),
+///   `reject_draft_noise=true`.
+/// - Le drafter PEUT renvoyer « Paris » (hot path) OU du bruit (« La »,
+///   fragment). Dans les deux cas, R3.S3 garantit que la réponse finale
+///   est correcte :
+///   - Draft propre → hot path → « Paris ».
+///   - Draft bruit → rejeté → slow path → Claude → « Paris ».
+///
+/// ## Assertions
+/// - `final_text` contient le keyword attendu (qualité préservée).
+/// - Si `spec_noise_rejected == Some(true)` → `verifier_skipped == false`
+///   (le bruit a bien forcé le slow path).
+///
+/// Coût ~12 ¢ (drafter + éventuel verifier).
+#[tokio::test]
+async fn r3s3_live_speculative_rejects_noise_recovers_correct_answer() {
+    use efe_coordinator::GeminiProvider;
+    if !s7_preconditions_satisfied() {
+        return;
+    }
+
+    let gemini: Arc<dyn LlmProvider> =
+        Arc::new(GeminiProvider::from_env().expect("GOOGLE_AI_KEY"));
+    let claude: Arc<dyn LlmProvider> =
+        Arc::new(ClaudeProvider::from_env().expect("ANTHROPIC_API_KEY"));
+    let drafter_id = gemini.id();
+    let verifier_id = claude.id();
+
+    let coord = make_coord_for_speculative(gemini, claude);
+    let mut req = SpeculativeRequest::with_drafter_and_verifier(
+        "Quelle est la capitale de la France ?".to_string(),
+        TaskClass::FactualQa,
+        drafter_id,
+        verifier_id,
+    );
+    req.budget.max_cost_cents = 12;
+    req.max_draft_tokens = 50;
+    req.max_words_for_quick_accept = 10;
+    req.reject_draft_noise = true; // R3.S3 gate actif
+
+    let resp = run_speculative(&coord, req)
+        .await
+        .expect("speculative should succeed");
+    let cm = resp.chewing_metrics.as_ref().expect("chewing_metrics");
+
+    eprintln!("\n=== R3.S3 live noise rejection ===");
+    eprintln!("  draft_text         : {:?}", resp.draft_text);
+    eprintln!("  final_text         : {:?}", resp.final_text);
+    eprintln!("  verifier_skipped   : {}", resp.verifier_skipped);
+    eprintln!("  spec_noise_rejected: {:?}", cm.spec_noise_rejected);
+
+    // 1. Qualité préservée : la réponse finale contient « paris ».
+    assert!(
+        resp.final_text.to_lowercase().contains("paris"),
+        "final_text doit contenir « Paris » (qualité préservée même si \
+         le drafter a bruité), got: {:?}",
+        resp.final_text
+    );
+
+    // 2. Cohérence : si du bruit a été rejeté, le verifier a forcément été
+    //    appelé (slow path).
+    if cm.spec_noise_rejected == Some(true) {
+        assert!(
+            !resp.verifier_skipped,
+            "bruit rejeté → slow path → verifier_skipped doit être false"
+        );
+        eprintln!("  → R3.S3 a rattrapé un draft-bruit via le slow path ✓");
+    } else {
+        eprintln!("  → drafter a produit un draft propre (hot path) ✓");
+    }
+}

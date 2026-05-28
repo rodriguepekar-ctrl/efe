@@ -133,6 +133,9 @@ async fn speculative_emits_draft_token_events() {
         drafter_llm: "drafter".to_string(),
         accept_threshold: 0.7,
         max_words_for_quick_accept: 0,
+        // R3.S3 : gate de bruit + min words.
+        reject_draft_noise: true,
+        min_words_for_quick_accept: 1,
     };
     let _ = run_speculative(&coord, req).await.unwrap();
 
