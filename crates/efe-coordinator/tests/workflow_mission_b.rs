@@ -336,3 +336,59 @@ async fn mission_b_chewing_metrics_serializable_through_response() {
     assert!(old.chewing_metrics.is_none());
     assert_eq!(old.final_text, "old answer");
 }
+
+// ====================================================================
+// R3.S1 — Tests intégration workflow Mission B microcents (Gap H)
+// ====================================================================
+
+/// **R3.S1 (§3.11)** : Mission B agrège `total_cost_microcents` saturating
+/// sur les N LLMs participants.  Vérifie que la somme µ¢ est exacte vs
+/// arrondi (cents) pour 3 LLMs aux coûts hétérogènes.
+#[tokio::test]
+async fn r3s1_mission_b_total_cost_microcents_aggregates_n_llms() {
+    let reg = ProviderRegistry::new();
+    // 3 mocks avec µ¢ déterministes : Claude=45 µ¢, GPT=32 µ¢, Gemini=1 µ¢
+    // → Total µ¢ = 78 µ¢ (vs en cents : 1+1+1 = 3 cents avec arrondi sup).
+    reg.register(Arc::new(
+        MockLlmProvider::new("claude")
+            .with_response("Paris")
+            .with_cost_microcents(45),
+    ));
+    reg.register(Arc::new(
+        MockLlmProvider::new("gpt4")
+            .with_response("Paris")
+            .with_cost_microcents(32),
+    ));
+    reg.register(Arc::new(
+        MockLlmProvider::new("gemini")
+            .with_response("Paris")
+            .with_cost_microcents(1),
+    ));
+    let coord = Coordinator::builder().registry(reg).build().unwrap();
+
+    let mut metas = HashMap::new();
+    for id in ["claude", "gpt4", "gemini"] {
+        metas.insert(id.to_string(), meta());
+    }
+
+    let req = MissionBRequest {
+        user_text: "Capital of France?".into(),
+        task_class: TaskClass::FactualQa,
+        llms: vec!["claude".into(), "gpt4".into(), "gemini".into()],
+        llm_metadata: metas,
+        vote_weights: HashMap::new(),
+        quorum: Some(2),
+        candidate_sources: vec![],
+        max_total_latency: Duration::from_secs(5),
+    };
+    let resp = run_mission_b(&coord, req).await.unwrap();
+
+    // R3.S1 : total_cost_microcents EXACT = 45 + 32 + 1 = 78 µ¢.
+    assert_eq!(
+        resp.total_cost_microcents, 78,
+        "Mission B total_cost_microcents doit être la SOMME EXACTE des µ¢ des 3 LLMs"
+    );
+    // cost_cents legacy : chaque LLM rounded à 1 cent (policy ≥ 1) → 3 cents.
+    assert_eq!(resp.total_cost_cents, 3);
+}
+

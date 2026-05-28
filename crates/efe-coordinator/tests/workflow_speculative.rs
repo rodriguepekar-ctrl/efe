@@ -555,3 +555,106 @@ async fn s7_cost_cents_slow_path_equals_drafter_plus_verifier() {
          Savings du hot path quantifié : 10¢ par query évitée."
     );
 }
+
+// ====================================================================
+// R3.S1 — Tests intégration workflow Speculative microcents (Gap H)
+// ====================================================================
+
+/// **R3.S1 (§3.11)** : Speculative HOT PATH propage `cost_microcents` du
+/// drafter SEUL (verifier bypassed).  C'est ICI que la précision µ¢ paie
+/// le plus : drafter Gemini Flash = 37 µ¢ EXACT vs 1 cent arrondi en
+/// legacy.
+#[tokio::test]
+async fn r3s1_speculative_hot_path_cost_microcents_drafter_only() {
+    let reg = ProviderRegistry::new();
+    // Drafter = Gemini Flash simulé à 37 µ¢ (= 1k/1k tokens réel).
+    reg.register(Arc::new(
+        MockLlmProvider::new("drafter")
+            .with_response("Paris")
+            .with_cost_microcents(37),
+    ));
+    // Verifier = Claude à 1500 µ¢ (= 33× plus cher) ; NE DOIT PAS être appelé.
+    reg.register(Arc::new(
+        MockLlmProvider::new("claude")
+            .with_response("Paris is capital")
+            .with_cost_microcents(1_500),
+    ));
+    let coord = Coordinator::builder().registry(reg).build().unwrap();
+
+    let req = SpeculativeRequest {
+        user_text: "Capital?".into(),
+        task_class: TaskClass::FactualQa,
+        verifier_llm: "claude".into(),
+        verifier_metadata: meta(),
+        budget: Budget {
+            max_cost_cents: 100,
+            max_cost_microcents: 0,
+            max_latency_ms: 5000,
+            min_quality_score: 0.5,
+        },
+        max_draft_tokens: 64,
+        max_total_latency: Duration::from_secs(2),
+        drafter_llm: "drafter".to_string(),
+        accept_threshold: 0.7,
+        max_words_for_quick_accept: 5, // hot path actif si ≤ 5 mots
+    };
+    let resp = run_speculative(&coord, req).await.unwrap();
+
+    // R3.S1 : HOT PATH activé (1 mot ≤ 5 quick_accept).
+    assert!(resp.verifier_skipped, "Hot path doit bypasser verifier");
+    // cost_microcents = drafter SEUL = 37 µ¢ EXACT.
+    assert_eq!(
+        resp.cost_microcents, 37,
+        "Hot path : cost_microcents = drafter seul (37 µ¢ EXACT, vs 1500 si verifier appelé)"
+    );
+    // Savings observé en µ¢ : 1_500 - 37 = 1_463 µ¢ (= 1.463 cent économisé
+    // par query). Sur 1000 queries = 1.463 $ savings honnêtement quantifié.
+    let savings_mc = 1_500_u64 - resp.cost_microcents;
+    assert!(savings_mc > 1_000, "Hot path savings ≥ 1_000 µ¢ par query");
+}
+
+/// **R3.S1 (§3.11)** : Speculative SLOW PATH propage `cost_microcents` = drafter
+/// + verifier (somme exacte).
+#[tokio::test]
+async fn r3s1_speculative_slow_path_cost_microcents_sum() {
+    let reg = ProviderRegistry::new();
+    reg.register(Arc::new(
+        MockLlmProvider::new("drafter")
+            .with_response("DIFFERENT answer A")
+            .with_cost_microcents(50),
+    ));
+    reg.register(Arc::new(
+        MockLlmProvider::new("verifier")
+            .with_response("totally different answer B")
+            .with_cost_microcents(2_000),
+    ));
+    let coord = Coordinator::builder().registry(reg).build().unwrap();
+
+    let req = SpeculativeRequest {
+        user_text: "x".into(),
+        task_class: TaskClass::FactualQa,
+        verifier_llm: "verifier".into(),
+        verifier_metadata: meta(),
+        budget: Budget {
+            max_cost_cents: 100,
+            max_cost_microcents: 0,
+            max_latency_ms: 5000,
+            min_quality_score: 0.5,
+        },
+        max_draft_tokens: 64,
+        max_total_latency: Duration::from_secs(5),
+        drafter_llm: "drafter".to_string(),
+        accept_threshold: 0.7,
+        max_words_for_quick_accept: 0, // hot path désactivé
+    };
+    let resp = run_speculative(&coord, req).await.unwrap();
+
+    // R3.S1 : SLOW PATH → cost_microcents = drafter + verifier.
+    assert!(!resp.verifier_skipped, "slow path doit appeler verifier");
+    assert_eq!(
+        resp.cost_microcents,
+        50 + 2_000,
+        "Slow path : cost_microcents = drafter (50) + verifier (2_000) = 2_050 µ¢"
+    );
+}
+

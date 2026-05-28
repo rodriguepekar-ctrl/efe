@@ -113,6 +113,31 @@ impl LlmMetadata {
             (self.cost_output_per_million as u64).saturating_mul(1000)
         }
     }
+
+    /// **R3.S1 (§3.6)** — Helper qui DÉRIVE le tarif input en cents/M depuis
+    /// la valeur µ¢/M résolue.
+    ///
+    /// Garantit la cohérence single-source-of-truth : si µ¢/M change, le
+    /// helper retourne automatiquement les cents/M dérivés (vs lire le legacy
+    /// `cost_input_per_million` qui peut être désynchronisé).
+    ///
+    /// Politique d'arrondi : half-up (cohérent avec `microcents_to_cents`).
+    /// Pour Gemini Flash : 7_500 µ¢/M → 8 cents/M (arrondi half-up).
+    #[must_use]
+    pub fn cost_input_per_million_cents_derived(&self) -> u32 {
+        let mc_per_m = self.cost_input_microcents_resolved();
+        let cents_per_m = mc_per_m.saturating_add(500) / 1000;
+        cents_per_m.min(u32::MAX as u64) as u32
+    }
+
+    /// **R3.S1 (§3.6)** — Helper qui DÉRIVE le tarif output en cents/M depuis
+    /// la valeur µ¢/M résolue (cf. ci-dessus).
+    #[must_use]
+    pub fn cost_output_per_million_cents_derived(&self) -> u32 {
+        let mc_per_m = self.cost_output_microcents_resolved();
+        let cents_per_m = mc_per_m.saturating_add(500) / 1000;
+        cents_per_m.min(u32::MAX as u64) as u32
+    }
 }
 
 /// Contraintes budgétaires pour cette requête.
@@ -276,6 +301,69 @@ mod tests {
             min_quality_score: 0.5,
         };
         assert_eq!(b.max_cost_microcents_resolved(), 0);
+    }
+
+    // ============================================================
+    // R3.S1 — Tests helpers *_cents_derived (Gap G)
+    // ============================================================
+
+    #[test]
+    fn r3s1_llm_metadata_cost_input_per_million_cents_derived_gemini_flash() {
+        // Gemini Flash : µ¢/M = 7_500 EXACT → cents/M derived = 8 (half-up).
+        let m = LlmMetadata {
+            cost_input_per_million: 0, // legacy ignoré (single source = µ¢)
+            cost_output_per_million: 0,
+            cost_input_per_million_microcents: 7_500,
+            cost_output_per_million_microcents: 30_000,
+            p50_latency_ms: 400,
+            p99_latency_ms: 1200,
+            success_rate: 0.99,
+            capability_scores: HashMap::new(),
+            circuit_open: false,
+        };
+        assert_eq!(
+            m.cost_input_per_million_cents_derived(),
+            8,
+            "7_500 µ¢/M doit dériver à 8 cents/M (half-up)"
+        );
+        assert_eq!(m.cost_output_per_million_cents_derived(), 30);
+    }
+
+    #[test]
+    fn r3s1_llm_metadata_cost_cents_derived_claude_exact() {
+        // Claude Sonnet : 300_000 µ¢/M = exact 300 cents/M.
+        let m = LlmMetadata {
+            cost_input_per_million: 0,
+            cost_output_per_million: 0,
+            cost_input_per_million_microcents: 300_000,
+            cost_output_per_million_microcents: 1_500_000,
+            p50_latency_ms: 1200,
+            p99_latency_ms: 3000,
+            success_rate: 0.99,
+            capability_scores: HashMap::new(),
+            circuit_open: false,
+        };
+        assert_eq!(m.cost_input_per_million_cents_derived(), 300);
+        assert_eq!(m.cost_output_per_million_cents_derived(), 1_500);
+    }
+
+    #[test]
+    fn r3s1_llm_metadata_cost_cents_derived_falls_back_legacy() {
+        // µ¢ = 0 → resolved utilise legacy cents × 1000 → derived = legacy cents.
+        let m = LlmMetadata {
+            cost_input_per_million: 250,
+            cost_output_per_million: 1000,
+            cost_input_per_million_microcents: 0,
+            cost_output_per_million_microcents: 0,
+            p50_latency_ms: 900,
+            p99_latency_ms: 3000,
+            success_rate: 0.99,
+            capability_scores: HashMap::new(),
+            circuit_open: false,
+        };
+        // resolved = 250 × 1000 = 250_000 → derived cents/M = (250_000 + 500) / 1000 = 250.
+        assert_eq!(m.cost_input_per_million_cents_derived(), 250);
+        assert_eq!(m.cost_output_per_million_cents_derived(), 1_000);
     }
 
     #[test]

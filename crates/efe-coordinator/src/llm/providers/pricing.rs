@@ -380,4 +380,67 @@ mod tests {
         let mc = p.calc_microcents("gpt-4o-mini", 1_000, 1_000);
         assert_eq!(mc, 75);
     }
+
+    // ============================================================
+    // R3.S1 — Tests architecture-spec'd §4.2 (Gap I)
+    // ============================================================
+
+    #[test]
+    fn r3s1_pricing_table_claude_microcents_matches_cents_x1000() {
+        // §4.2 architecture spec : Claude n'a pas de sous-cent → la table
+        // µ¢/M doit être strictement cents/M × 1000.
+        let p = PricingTable::anthropic();
+        for model in &[
+            "claude-sonnet-4-6",
+            "claude-opus-4-6",
+            "claude-haiku-4-5",
+            "claude-haiku-4-5-20251001",
+        ] {
+            let (in_mc, out_mc) = p.rates_microcents(model).unwrap_or_else(|| {
+                panic!("Claude model {model} doit avoir une entrée microrates")
+            });
+            // Calcul cross-référence sur 1M tokens (vs calc() legacy cents/M).
+            let in_cents_legacy = p.calc(model, 1_000_000, 0);
+            let out_cents_legacy = p.calc(model, 0, 1_000_000);
+            // in_mc = in_cents_legacy × 1000 (Claude pas de sous-cent).
+            assert_eq!(
+                in_mc,
+                (in_cents_legacy as u64) * 1000,
+                "Claude {model} in_mc/M doit être cents/M × 1000 (= {})",
+                in_cents_legacy
+            );
+            assert_eq!(
+                out_mc,
+                (out_cents_legacy as u64) * 1000,
+                "Claude {model} out_mc/M doit être cents/M × 1000 (= {})",
+                out_cents_legacy
+            );
+        }
+    }
+
+    #[test]
+    fn r3s1_pricing_table_gemini_flash_microcents_exact() {
+        // §4.2 architecture spec : Gemini Flash 7_500 µ¢/M EXACT (vs 8 cents/M
+        // arrondi en legacy = +6.7% drift).
+        let p = PricingTable::gemini();
+        let (in_mc, out_mc) = p.rates_microcents("gemini-2.5-flash").unwrap();
+        assert_eq!(in_mc, 7_500, "Gemini Flash input µ¢/M doit être EXACT 7_500");
+        assert_eq!(out_mc, 30_000, "Gemini Flash output µ¢/M doit être 30_000");
+        // Et le legacy cents/M reste 8/30 (rétrocompat).
+        let cents_in = p.calc("gemini-2.5-flash", 1_000_000, 0);
+        assert_eq!(cents_in, 8, "Gemini Flash legacy cents/M reste 8 (arrondi sup)");
+    }
+
+    #[test]
+    fn r3s1_pricing_cost_microcents_gemini_fixture_01() {
+        // §4.2 : fixture 01 avec 50 input + 20 output tokens, Gemini Flash :
+        // (50 × 7_500) / 1M + (20 × 30_000) / 1M = 0 + 0 = 0 µ¢
+        // Edge case integer division : 0.375 + 0.6 = 0.975 µ¢ réel → tronqué.
+        // Précision µ¢ ATTEINT SA LIMITE sur très petites fixtures, mais
+        // c'est mieux que cents (qui s'arrondit à 1 ¢ = 1_000 µ¢).
+        let p = PricingTable::gemini();
+        let mc = p.calc_microcents("gemini-2.5-flash", 50, 20);
+        // Architecture spec note : "Précision limitée mais MIEUX que u32 cents".
+        assert_eq!(mc, 0, "Gemini fixture 01 (50/20 tokens) → 0 µ¢ (limite intégrale)");
+    }
 }

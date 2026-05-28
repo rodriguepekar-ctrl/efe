@@ -537,3 +537,103 @@ async fn mission_a_without_scoring_table_falls_back_pre_s6_behavior() {
     assert_eq!(resp.final_text, "first response");
 }
 
+// ====================================================================
+// R3.S1 — Tests intégration workflow microcents (Gap H)
+// ====================================================================
+
+/// **R3.S1 (§3.11)** : assertion µ¢ end-to-end sur Mission A.  Vérifie que
+/// `cost_microcents` est non-zéro et que `cost_cents` est cohérent avec
+/// (ou ≤ que) `microcents_to_cents(cost_microcents)`.
+#[tokio::test]
+async fn r3s1_mission_a_propagates_cost_microcents_end_to_end() {
+    let reg = ProviderRegistry::new();
+    // MockLlmProvider explicitement à 45 µ¢ (= Claude fixture 01 réel).
+    reg.register(Arc::new(
+        MockLlmProvider::new("claude_mock")
+            .with_response("Paris")
+            .with_cost_microcents(45),
+    ));
+    let coord = Coordinator::builder().registry(reg).build().unwrap();
+
+    let mut metas = HashMap::new();
+    metas.insert("claude_mock".to_string(), meta());
+
+    let req = MissionARequest {
+        user_text: "What is the capital of France?".into(),
+        task_class: TaskClass::FactualQa,
+        available_llms: vec!["claude_mock".into()],
+        llm_metadata: metas,
+        budget: Budget {
+            max_cost_cents: 1000,
+            max_cost_microcents: 0,
+            max_latency_ms: 10_000,
+            min_quality_score: 0.0,
+        },
+        candidate_sources: vec![],
+        max_total_latency: Duration::from_secs(5),
+        task_class_scoring_table: None,
+    };
+    let resp = run_mission_a(&coord, req).await.unwrap();
+
+    // R3.S1 : cost_microcents propagé EXACT depuis le mock.
+    assert_eq!(
+        resp.cost_microcents, 45,
+        "MissionAResponse.cost_microcents doit refléter le mock provider (45 µ¢)"
+    );
+    // cost_cents dérivé via policy ≥ 1 si > 0 µ¢ (45 µ¢ → 1 cent).
+    assert_eq!(
+        resp.cost_cents, 1,
+        "cost_cents dérivé via microcents_to_cents (45 µ¢ < 500 → policy = 1)"
+    );
+}
+
+/// **R3.S1 (§3.11)** : assertion µ¢ — vérifie que `chewing_metrics.
+/// router_estimated_cost_microcents` est peuplé quand le router est utilisé.
+#[tokio::test]
+async fn r3s1_mission_a_chewing_metrics_router_estimated_cost_microcents() {
+    let reg = ProviderRegistry::new();
+    reg.register(Arc::new(
+        MockLlmProvider::new("claude_claude-sonnet-4-6")
+            .with_response("ok")
+            .with_cost_microcents(150),
+    ));
+    reg.register(Arc::new(
+        MockLlmProvider::new("gemini_gemini-2.5-flash")
+            .with_response("ok")
+            .with_cost_microcents(5),
+    ));
+    reg.register(Arc::new(
+        MockLlmProvider::new("gpt_gpt-4o").with_response("ok").with_cost_microcents(100),
+    ));
+    let coord = Coordinator::builder().registry(reg).build().unwrap();
+
+    // Use the default scoring table → router activé.
+    let req = MissionARequest::with_default_scoring(
+        "Translate: Bonjour".to_string(),
+        TaskClass::Translation, // cost-driven → Gemini
+        vec![
+            "claude_claude-sonnet-4-6".to_string(),
+            "gemini_gemini-2.5-flash".to_string(),
+            "gpt_gpt-4o".to_string(),
+        ],
+    );
+    let resp = run_mission_a(&coord, req).await.unwrap();
+
+    // Translation cost-driven → Gemini.
+    assert_eq!(resp.llm_used, "gemini_gemini-2.5-flash");
+
+    // chewing_metrics présent.
+    let cm = resp
+        .chewing_metrics
+        .as_ref()
+        .expect("chewing_metrics doit exister");
+    // R3.S1 : router_estimated_cost_microcents doit être > 0.
+    assert!(
+        cm.router_estimated_cost_microcents > 0,
+        "router_estimated_cost_microcents doit être peuplé (got {})",
+        cm.router_estimated_cost_microcents
+    );
+    // Cost cents legacy aussi peuplé.
+    assert!(cm.router_estimated_cost_cents <= cm.router_estimated_cost_microcents as u32 * 1000);
+}
+

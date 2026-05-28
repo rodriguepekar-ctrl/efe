@@ -299,12 +299,12 @@ impl LlmProvider for ClaudeProvider {
 
         let input_tokens = json_resp["usage"]["input_tokens"].as_u64().unwrap_or(0) as u32;
         let output_tokens = json_resp["usage"]["output_tokens"].as_u64().unwrap_or(0) as u32;
-        let cost = self.pricing.calc(&self.model, input_tokens, output_tokens);
-        // R3.S1 : précision µ¢ (= cost × 1000 pour Anthropic, pas de sub-cent
-        // dans la grille Claude mais on harmonise l'API).
+        // R3.S1 (§2.5) : SINGLE SOURCE OF TRUTH = cost_microcents.
+        // cost_cents est DÉRIVÉ via `microcents_to_cents` (policy ≥ 1 si > 0 µ¢).
         let cost_mc = self
             .pricing
             .calc_microcents(&self.model, input_tokens, output_tokens);
+        let cost = crate::llm::microcents_to_cents(cost_mc);
 
         tracing::info!(
             provider = %self.id(),
@@ -388,14 +388,13 @@ impl LlmProvider for ClaudeProvider {
         match stream_result {
             Ok(res) => {
                 self.breaker.record_success();
-                let cost =
-                    self.pricing.calc(&self.model, res.input_tokens, res.output_tokens);
-                // R3.S1 : précision µ¢ pour stream() également.
+                // R3.S1 (§2.5) : cost_cents dérivé de cost_microcents.
                 let cost_mc = self.pricing.calc_microcents(
                     &self.model,
                     res.input_tokens,
                     res.output_tokens,
                 );
+                let cost = crate::llm::microcents_to_cents(cost_mc);
                 Ok(LlmResponse {
                     text: res.text,
                     tokens_generated: res.output_tokens,

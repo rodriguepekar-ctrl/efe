@@ -158,6 +158,32 @@ impl LlmStaticMetadata {
             (self.cost_output_per_million as u64).saturating_mul(1000)
         }
     }
+
+    /// **R3.S1 (§3.7)** — Helper qui DÉRIVE le tarif input en cents/M depuis
+    /// la valeur µ¢/M résolue.
+    ///
+    /// Single-source-of-truth : permet aux callers de toujours obtenir une
+    /// valeur cents/M cohérente avec µ¢/M, indépendamment de la valeur du
+    /// legacy field `cost_input_per_million` (qui peut être désynchronisé
+    /// par exemple pour Gemini Flash : legacy 8 cents/M arrondi vs µ¢
+    /// 7_500 → derived = 8 cents/M half-up).
+    ///
+    /// Politique d'arrondi : half-up (cohérent avec `microcents_to_cents`).
+    #[must_use]
+    pub fn cost_input_per_million_cents_derived(&self) -> u32 {
+        let mc_per_m = self.cost_input_microcents_resolved();
+        let cents_per_m = mc_per_m.saturating_add(500) / 1000;
+        cents_per_m.min(u32::MAX as u64) as u32
+    }
+
+    /// **R3.S1 (§3.7)** — Helper qui DÉRIVE le tarif output en cents/M depuis
+    /// la valeur µ¢/M résolue (cf. ci-dessus).
+    #[must_use]
+    pub fn cost_output_per_million_cents_derived(&self) -> u32 {
+        let mc_per_m = self.cost_output_microcents_resolved();
+        let cents_per_m = mc_per_m.saturating_add(500) / 1000;
+        cents_per_m.min(u32::MAX as u64) as u32
+    }
 }
 
 // ─────────────────────────────────────────────────────────────────────────

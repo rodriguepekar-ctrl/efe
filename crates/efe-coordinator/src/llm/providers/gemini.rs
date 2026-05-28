@@ -313,12 +313,13 @@ impl LlmProvider for GeminiProvider {
         let output_tokens = json_resp["usageMetadata"]["candidatesTokenCount"]
             .as_u64()
             .unwrap_or(0) as u32;
-        let cost = self.pricing.calc(&self.model, input_tokens, output_tokens);
-        // R3.S1 (D7) : précision µ¢ — Gemini Flash $0.075/M = 7_500 µ¢/M
-        // EXACT (vs. arrondi 8 cents/M = +6.7% drift dans calc()).
+        // R3.S1 (§2.5 + D7) : SINGLE SOURCE OF TRUTH = cost_microcents.
+        // Gemini Flash $0.075/M = 7_500 µ¢/M EXACT (vs. arrondi 8 cents/M
+        // legacy = +6.7% drift). cost_cents dérivé via `microcents_to_cents`.
         let cost_mc = self
             .pricing
             .calc_microcents(&self.model, input_tokens, output_tokens);
+        let cost = crate::llm::microcents_to_cents(cost_mc);
 
         tracing::info!(
             provider = %self.id(),
@@ -408,14 +409,13 @@ impl LlmProvider for GeminiProvider {
         match stream_result {
             Ok(res) => {
                 self.breaker.record_success();
-                let cost =
-                    self.pricing.calc(&self.model, res.input_tokens, res.output_tokens);
-                // R3.S1 (D7) : précision µ¢ pour stream() également.
+                // R3.S1 (§2.5 + D7) : cost_cents dérivé de cost_microcents.
                 let cost_mc = self.pricing.calc_microcents(
                     &self.model,
                     res.input_tokens,
                     res.output_tokens,
                 );
+                let cost = crate::llm::microcents_to_cents(cost_mc);
                 Ok(LlmResponse {
                     text: res.text,
                     tokens_generated: res.output_tokens,

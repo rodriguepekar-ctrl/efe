@@ -328,12 +328,12 @@ impl LlmProvider for GptProvider {
         let prompt_tokens = json_resp["usage"]["prompt_tokens"].as_u64().unwrap_or(0) as u32;
         let completion_tokens =
             json_resp["usage"]["completion_tokens"].as_u64().unwrap_or(0) as u32;
-        let cost = self.pricing.calc(&self.model, prompt_tokens, completion_tokens);
-        // R3.S1 : précision µ¢ (= cost × 1000 pour OpenAI, pas de sub-cent
-        // dans la grille OpenAI mais on harmonise l'API).
+        // R3.S1 (§2.5) : SINGLE SOURCE OF TRUTH = cost_microcents.
+        // cost_cents dérivé via `microcents_to_cents` (policy ≥ 1 si > 0 µ¢).
         let cost_mc =
             self.pricing
                 .calc_microcents(&self.model, prompt_tokens, completion_tokens);
+        let cost = crate::llm::microcents_to_cents(cost_mc);
 
         tracing::info!(
             provider = %self.id(),
@@ -424,13 +424,13 @@ impl LlmProvider for GptProvider {
         match stream_result {
             Ok(res) => {
                 self.breaker.record_success();
-                let cost = self.pricing.calc(&self.model, res.input_tokens, res.output_tokens);
-                // R3.S1 : précision µ¢ pour stream() également.
+                // R3.S1 (§2.5) : cost_cents dérivé de cost_microcents.
                 let cost_mc = self.pricing.calc_microcents(
                     &self.model,
                     res.input_tokens,
                     res.output_tokens,
                 );
+                let cost = crate::llm::microcents_to_cents(cost_mc);
                 Ok(LlmResponse {
                     text: res.text,
                     tokens_generated: res.output_tokens,
