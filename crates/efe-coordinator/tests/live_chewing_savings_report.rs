@@ -199,6 +199,8 @@ fn build_baseline_request(query: &str, claude_id: &str) -> MissionARequest {
         llm_metadata: metadata,
         budget: Budget {
             max_cost_cents: 20,
+            // R3.S1 : 0 → _resolved() fallback à cents × 1000.
+            max_cost_microcents: 0,
             max_latency_ms: 30_000,
             min_quality_score: 0.0,
         },

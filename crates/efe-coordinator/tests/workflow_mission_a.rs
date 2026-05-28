@@ -42,6 +42,8 @@ async fn mission_a_runs_with_mock_llm_only() {
         llm_metadata: metas,
         budget: Budget {
             max_cost_cents: 1000,
+            // R3.S1 : 0 → _resolved() fallback à cents × 1000.
+            max_cost_microcents: 0,
             max_latency_ms: 10_000,
             min_quality_score: 0.5,
         },
@@ -73,6 +75,8 @@ async fn mission_a_publishes_swarm_started_and_finished() {
         llm_metadata: metas,
         budget: Budget {
             max_cost_cents: 1000,
+            // R3.S1 : 0 → _resolved() fallback à cents × 1000.
+            max_cost_microcents: 0,
             max_latency_ms: 10_000,
             min_quality_score: 0.5,
         },
@@ -102,6 +106,8 @@ async fn mission_a_with_no_available_llm_errors() {
         llm_metadata: HashMap::new(),
         budget: Budget {
             max_cost_cents: 100,
+            // R3.S1 : 0 → _resolved() fallback à cents × 1000.
+            max_cost_microcents: 0,
             max_latency_ms: 1000,
             min_quality_score: 0.5,
         },
@@ -127,6 +133,8 @@ async fn mission_a_falls_back_to_first_llm_if_router_absent() {
         llm_metadata: HashMap::new(),
         budget: Budget {
             max_cost_cents: 100,
+            // R3.S1 : 0 → _resolved() fallback à cents × 1000.
+            max_cost_microcents: 0,
             max_latency_ms: 1000,
             min_quality_score: 0.5,
         },
@@ -165,6 +173,8 @@ async fn mission_a_chewing_metrics_filled_with_mocks() {
         llm_metadata: metas,
         budget: Budget {
             max_cost_cents: 1000,
+            // R3.S1 : 0 → _resolved() fallback à cents × 1000.
+            max_cost_microcents: 0,
             max_latency_ms: 10_000,
             min_quality_score: 0.5,
         },
@@ -258,6 +268,8 @@ async fn mission_a_emits_pre_chewing_metrics_event() {
         llm_metadata: metas,
         budget: Budget {
             max_cost_cents: 1000,
+            // R3.S1 : 0 → _resolved() fallback à cents × 1000.
+            max_cost_microcents: 0,
             max_latency_ms: 10_000,
             min_quality_score: 0.5,
         },
@@ -309,6 +321,8 @@ async fn mission_a_chewing_metrics_serializable_through_response() {
         llm_metadata: metas,
         budget: Budget {
             max_cost_cents: 1000,
+            // R3.S1 : 0 → _resolved() fallback à cents × 1000.
+            max_cost_microcents: 0,
             max_latency_ms: 10_000,
             min_quality_score: 0.5,
         },
@@ -506,6 +520,8 @@ async fn mission_a_without_scoring_table_falls_back_pre_s6_behavior() {
         llm_metadata: metas,
         budget: Budget {
             max_cost_cents: 1000,
+            // R3.S1 : 0 → _resolved() fallback à cents × 1000.
+            max_cost_microcents: 0,
             max_latency_ms: 10_000,
             min_quality_score: 0.0,
         },

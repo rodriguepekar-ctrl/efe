@@ -53,6 +53,8 @@ fn mission_a_request(
         llm_metadata,
         budget: Budget {
             max_cost_cents: 100,
+            // R3.S1 : 0 → _resolved() fallback à cents × 1000.
+            max_cost_microcents: 0,
             max_latency_ms: 5000,
             min_quality_score: 0.0,
         },
@@ -335,6 +337,8 @@ async fn speculative_falls_back_to_verifier_when_drafter_fails_offline() {
         verifier_metadata: meta(),
         budget: Budget {
             max_cost_cents: 100,
+            // R3.S1 : 0 → _resolved() fallback à cents × 1000.
+            max_cost_microcents: 0,
             max_latency_ms: 5000,
             min_quality_score: 0.5,
         },
@@ -379,6 +383,8 @@ async fn speculative_drafter_bypassed_event_emitted_offline() {
         verifier_metadata: meta(),
         budget: Budget {
             max_cost_cents: 100,
+            // R3.S1 : 0 → _resolved() fallback à cents × 1000.
+            max_cost_microcents: 0,
             max_latency_ms: 5000,
             min_quality_score: 0.5,
         },

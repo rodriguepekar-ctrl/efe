@@ -162,6 +162,8 @@ async fn i4_same_request_runs_independently() {
         llm_metadata: metas.clone(),
         budget: Budget {
             max_cost_cents: 100,
+            // R3.S1 : 0 → _resolved() fallback à cents × 1000.
+            max_cost_microcents: 0,
             max_latency_ms: 5000,
             min_quality_score: 0.5,
         },

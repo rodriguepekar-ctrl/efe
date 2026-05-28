@@ -8,10 +8,100 @@ Toutes les modifications notables sont documentées ici.  Format suit
 
 _(rolling — prochains items)_
 
-- **Phase 3 R3** : Production hardening — cost microcents (`cost_microcents: u64`
-  pour exposer le savings ×50 invisible en u32), multi-tenant policies,
-  Prometheus telemetry, chaos engineering CI, Speculator noise rejection
-  (fix S9.1 D6).
+### Phase 3 R3.S1 — Cost Microcents (LIVRÉ 2026-05-28, commits `20984f7` + `<HEAD>`)
+
+> Fix L1/D7 (résolution u32 cents) : passage à `cost_microcents: u64`
+> (1 µ¢ = 1/1000 cent) end-to-end pour exposer le savings ×50 invisible
+> en R2. Backward-compat 100 %.
+
+#### Ajouté
+- **`LlmResponse.cost_microcents: u64`** (`#[serde(default)]` pour rétrocompat).
+- **3 helpers module-level** `llm/provider.rs` : `microcents_to_cents`,
+  `cents_to_microcents`, `compute_cost_microcents` (saturating math,
+  fix u64::MAX overflow).
+- **`PricingTable::calc_microcents()`** + `rates_microcents()` ; Gemini
+  Flash recalibré à `(7_500, 30_000)` µ¢/M EXACT (vs `(8, 30)` cents
+  arrondi pré-R3 = +6.7 % drift sur input).
+- **`MockLlmProvider::with_cost_microcents()`** builder.
+- **`LlmMetadata.cost_{input,output}_per_million_microcents: u64`** +
+  helpers `_microcents_resolved()` (fallback `cents × 1000`).
+- **`Budget.max_cost_microcents: u64`** + helper `_resolved()` (filtrage
+  budgétaire avec précision sub-cent).
+- **`LlmStaticMetadata.cost_*_per_million_microcents`** + recalibration
+  exacte de `default_3llm_table()` pour 3 LLMs.
+- **`RouterOutput.estimated_cost_microcents: u64`** +
+  `estimate_cost_microcents()` fonction publique.
+- **`MissionAResponse.cost_microcents`**,
+  **`MissionBResponse.total_cost_microcents`** (agrégation µ¢ saturating),
+  **`SpeculativeResponse.cost_microcents`**.
+- **`ChewingMetrics.router_estimated_cost_microcents`** +
+  **`spec_savings_microcents`** (avec `estimate_savings_microcents()`).
+- **`SpeculationOutcome.cost_microcents`** (3 paths : hot, slow, bypass).
+- **`SavingsReport`** : `RunRecord.cost_microcents` +
+  `RunRecord::new_with_microcents()` constructor + `cost_microcents_resolved()` ;
+  `ModeSummary.{total_cost_microcents, avg_cost_microcents}` ;
+  `SavingsReport.{baseline,full}_total_cost_microcents` +
+  `savings_microcents` (i64) + `savings_ratio_microcents` (numériquement
+  stable même quand toutes les fixtures arrondies à 1 ¢).
+- **`SavingsReport::to_markdown_v2()`** — rapport µ¢ precision avec
+  section comparative `legacy cents vs R3.S1 µ¢`.
+- **42+ tests R3.S1 NEW** : helpers (12), pricing (10), mock (3),
+  metadata backward-compat (3), Budget (4), Router Pareto µ¢ (4),
+  savings report (5+), workflow integration (1+).
+
+#### Modifié
+- **`PricingTable`** : `microrates: HashMap<String, (u64, u64)>` en
+  parallèle de `rates: HashMap<String, (u32, u32)>` (legacy préservé).
+- **3 providers** (`anthropic`, `gemini`, `openai`) populent
+  `LlmResponse.cost_microcents` via `calc_microcents()` (call() + stream()).
+- **Router Pareto algo** (`clients/router.rs`) : filtrage budgétaire et
+  normalisation `cost_norm` passent en µ¢ → discrimination ×45 retrouvée
+  sur fixtures cheap (R2 cents écrasait tout à `norm=1.0`).
+- **Workflows** (`mission_a`, `mission_b`, `speculative`) wiring µ¢
+  end-to-end.
+- **`TaskClassScoringTable::default_3llm_table()`** : recalibration des
+  poids Pareto pour 3 task_class (Analysis, Creative, Reasoning) afin
+  de préserver l'intention de routing R2 après le passage en µ¢ qui
+  expose le coût discriminant. Détails :
+  - `Analysis` : `(2.0, 0.5, 1.0)` → `(3.0, 0.5, 0.2)` — quality bump,
+    cost soft (Claude préservé pour deep reasoning, capability 0.95
+    vs 0.78/0.85).
+  - `Creative` : `(1.5, 1.0, 1.0)` → `(3.0, 1.0, 0.1)` — quality
+    strongly dominant, cost very soft (GPT préservé pour style/variété,
+    capability 0.93 vs 0.88/0.80).
+  - `Reasoning` : `(3.0, 0.3, 0.3)` → `(3.0, 0.3, 0.1)` — cost très
+    soft (Claude préservé pour extended thinking, capability 0.95).
+  - `FactualQa`, `Code`, `Translation` : poids inchangés (intent R2
+    préservé sans recalibration).
+- **`SavingsReport.new()`** : version par défaut `"s9-r2-..."` →
+  `"r3s1-..."`.
+
+#### Backward-compat
+- Tous nouveaux champs `#[serde(default)]` — JSON pré-R3 désérialisable.
+- Helpers `_resolved()` reconstruisent µ¢ depuis cents quand le champ µ¢
+  vaut 0 (sentinel rétrocompat).
+- 4 tests `*_backward_compat_pre_r3_json` PASS.
+- API publique inchangée : `cost_cents` reste field public partout,
+  dérivé via `microcents_to_cents` (policy : ≥ 1 ¢ si > 0 µ¢).
+
+#### Tests
+- **546 tests offline** passent (efe-coordinator + efe-nano-app-coordinator),
+  **0 failed**.
+- `cargo clippy` : 0 warning R3.S1-spécifique.
+
+### Phase 3 R3 — Suite (R3.S2-S10, à venir)
+
+- **R3.S2** : SLM Circuit Wiring (fix L2) — wire `SlmCircuitBreaker` aux
+  workflows, bus event `SlmCircuitOpened` avec `cost_microcents` overhead.
+- **R3.S3** : Speculator noise rejection (fix L4/S9.1 D6).
+- **R3.S4** : SLM drafter (Gemma 2 1.5B local).
+- **R3.S5** : Multi-tenant policies (tenant_id propagation).
+- **R3.S6** : Chaos engineering CI.
+- **R3.S7** : Prometheus telemetry (`efe_cost_microcents_total` counter).
+- **R3.S8** : A/B test framework.
+- **R3.S9** : Régen `CHEWING_SAVINGS_REPORT_v2.md` (consume µ¢ partout).
+- **R3.S10** : Packaging release.
+
 - **Phase 4** : Frontend SSE — composants UI (preview lab) consommant
   `StreamEvent` v1.0.0.
 - **Phase 7** : Tests live NATS (env-gated `EFE_NATS_LIVE=1`) +

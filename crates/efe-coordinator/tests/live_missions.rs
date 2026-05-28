@@ -121,6 +121,8 @@ fn build_factual_request(query: &str, llm_id: &str) -> MissionARequest {
         budget: Budget {
             // Cap budget : 10 ¢ = ~3 000 tokens cumulés Sonnet (large pour fixture).
             max_cost_cents: 10,
+            // R3.S1 : 0 → _resolved() fallback à cents × 1000.
+            max_cost_microcents: 0,
             max_latency_ms: 30_000,
             min_quality_score: 0.0,
         },
@@ -418,6 +420,8 @@ fn build_factual_request_with_sources(
         budget: Budget {
             // Budget élargi vs S2 car analyzer + verifier ajoutent ~1 s cumulés.
             max_cost_cents: 10,
+            // R3.S1 : 0 → _resolved() fallback à cents × 1000.
+            max_cost_microcents: 0,
             max_latency_ms: 60_000,
             min_quality_score: 0.0,
         },

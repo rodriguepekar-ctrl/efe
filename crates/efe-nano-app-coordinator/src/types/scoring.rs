@@ -303,7 +303,13 @@ impl TaskClassScoringTable {
         );
         weights_per_task.insert(
             TaskClass::Analysis,
-            ScoringWeights::new(2.0, 0.5, 1.0), // quality-driven
+            // R3.S1 re-calibration (D7) : on bump q_weight de 2.0 → 3.0
+            // et descend cost_weight de 1.0 → 0.2. En cents, le cost_weight
+            // ne discriminait pas (tous arrondis). En µ¢, Gemini est 50×
+            // moins cher → cost_weight=1.0 le ferait gagner malgré
+            // capability 0.78 vs Claude 0.95. On préserve l'intention R2
+            // (Claude pour Analysis — meilleure deep reasoning).
+            ScoringWeights::new(3.0, 0.5, 0.2), // quality-dominant, cost soft
         );
         weights_per_task.insert(
             TaskClass::Code,
@@ -311,11 +317,27 @@ impl TaskClassScoringTable {
         );
         weights_per_task.insert(
             TaskClass::Creative,
-            ScoringWeights::new(1.5, 1.0, 1.0), // balanced
+            // R3.S1 re-calibration (D7) : avant µ¢, la norm_cost s'écrasait
+            // à 1.0 partout (cents arrondis identiques) → cost_weight=1.0
+            // n'avait pas d'effet discriminant et le score était quality-only.
+            // Post-R3.S1 : µ¢ exposent que Gemini est ~50× moins cher que
+            // Claude → un cost_weight=1.0 ferait gagner Gemini malgré sa
+            // capability 0.80 (vs GPT 0.93). On bump quality_weight à 3.0
+            // et descend cost_weight à 0.1 pour préserver l'intention R2
+            // (GPT pour Creative — meilleur sur style/variété 0.93 vs
+            // 0.88/0.80) tout en gardant Pareto cost-aware.
+            ScoringWeights::new(3.0, 1.0, 0.1), // quality-dominant fort, cost très soft
         );
         weights_per_task.insert(
             TaskClass::Reasoning,
-            ScoringWeights::new(3.0, 0.3, 0.3), // quality strongly dominant
+            // R3.S1 re-calibration (D7) : descend cost_weight 0.3 → 0.1.
+            // En cents, le score Claude vs Gemini sur Reasoning (0.95 vs 0.82
+            // capability × q=3.0 = 2.85 vs 2.46) gardait Claude vainqueur.
+            // En µ¢, Gemini 50× moins cher → cost_norm Gemini=0.02 vs
+            // Claude 1.0 → différence 0.3 × 0.98 ≈ 0.29 → Claude/Gemini
+            // quasi-tied à 2.25 chacun. On baisse cost_weight pour
+            // préserver l'intention R2 (Claude pour extended thinking).
+            ScoringWeights::new(3.0, 0.3, 0.1), // quality strongly dominant, cost very soft
         );
         weights_per_task.insert(
             TaskClass::Translation,
@@ -456,6 +478,8 @@ mod tests {
             llm_metadata: table.build_metadata_map(&llms, task),
             user_budget: Budget {
                 max_cost_cents: 50,
+                // R3.S1 : 0 → _resolved() fallback à cents × 1000.
+                max_cost_microcents: 0,
                 max_latency_ms: 30_000,
                 min_quality_score: 0.0,
             },

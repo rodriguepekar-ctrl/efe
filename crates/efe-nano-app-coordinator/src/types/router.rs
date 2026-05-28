@@ -119,7 +119,21 @@ impl LlmMetadata {
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct Budget {
     /// Cost max en cents (ex: 100 = 1 $).
+    ///
+    /// **LEGACY** : utiliser `max_cost_microcents` (R3.S1) pour la précision
+    /// sub-cent (filtrage Pareto plus fin sur fixtures cheap).
     pub max_cost_cents: u32,
+
+    /// **R3.S1** : Cost max en microcents (1 µ¢ = 1/1000 cent).
+    ///
+    /// Permet au filtrage budgétaire du router de discriminer des LLMs
+    /// dont le coût estimé est < 1 cent (e.g. Gemini Flash sur 50/20 tokens
+    /// ≈ 1 µ¢ vs Claude 45 µ¢ — différenciation invisible en cents).
+    ///
+    /// `#[serde(default)]` pour rétrocompat : si 0 et `max_cost_cents > 0`,
+    /// le helper `max_cost_microcents_resolved()` dérive `cents × 1000`.
+    #[serde(default)]
+    pub max_cost_microcents: u64,
 
     /// Latence max en ms (souvent issue du SLA tenant).
     pub max_latency_ms: u32,
@@ -127,6 +141,22 @@ pub struct Budget {
     /// Qualité min acceptable ∈ [0,1] (proxy historique).
     #[validate(range(min = 0.0, max = 1.0))]
     pub min_quality_score: f32,
+}
+
+impl Budget {
+    /// **R3.S1** — Résout le budget µ¢ avec fallback `cents × 1000`.
+    ///
+    /// Si `max_cost_microcents > 0` → utilise directement (précision R3+).
+    /// Sinon → dérive depuis `max_cost_cents` (rétrocompat pré-R3).
+    /// Si les deux sont à 0 → 0 (budget zéro, no LLM disponible).
+    #[must_use]
+    pub fn max_cost_microcents_resolved(&self) -> u64 {
+        if self.max_cost_microcents > 0 {
+            self.max_cost_microcents
+        } else {
+            (self.max_cost_cents as u64).saturating_mul(1000)
+        }
+    }
 }
 
 /// Entrée du robot Routeur.
@@ -200,10 +230,68 @@ mod tests {
     fn budget_with_invalid_quality_fails() {
         let b = Budget {
             max_cost_cents: 100,
+            // R3.S1 : 0 → _resolved() fallback à cents × 1000.
+            max_cost_microcents: 0,
             max_latency_ms: 5000,
             min_quality_score: 1.5, // > 1.0
         };
         assert!(b.validate().is_err());
+    }
+
+    // ============================================================
+    // R3.S1 — Tests Budget microcents (Gap A)
+    // ============================================================
+
+    #[test]
+    fn r3s1_budget_max_cost_microcents_resolved_uses_microcents_when_set() {
+        let b = Budget {
+            max_cost_cents: 100,
+            max_cost_microcents: 75_500,
+            max_latency_ms: 5000,
+            min_quality_score: 0.5,
+        };
+        // R3+ caller — utilise µ¢ directement (75.5 ¢).
+        assert_eq!(b.max_cost_microcents_resolved(), 75_500);
+    }
+
+    #[test]
+    fn r3s1_budget_max_cost_microcents_resolved_falls_back_to_cents() {
+        // Pré-R3 caller — uniquement cents peuplé.
+        let b = Budget {
+            max_cost_cents: 50,
+            max_cost_microcents: 0,
+            max_latency_ms: 5000,
+            min_quality_score: 0.5,
+        };
+        // 50 cents × 1000 = 50_000 µ¢.
+        assert_eq!(b.max_cost_microcents_resolved(), 50_000);
+    }
+
+    #[test]
+    fn r3s1_budget_both_zero_returns_zero() {
+        let b = Budget {
+            max_cost_cents: 0,
+            max_cost_microcents: 0,
+            max_latency_ms: 5000,
+            min_quality_score: 0.5,
+        };
+        assert_eq!(b.max_cost_microcents_resolved(), 0);
+    }
+
+    #[test]
+    fn r3s1_budget_backward_compat_pre_r3_json() {
+        // JSON pré-R3 sans max_cost_microcents.
+        let json = r#"{
+            "max_cost_cents": 25,
+            "max_latency_ms": 3000,
+            "min_quality_score": 0.7
+        }"#;
+        let b: Budget = serde_json::from_str(json).unwrap();
+        assert_eq!(b.max_cost_cents, 25);
+        // serde(default) → 0
+        assert_eq!(b.max_cost_microcents, 0);
+        // Resolved derive depuis cents : 25 × 1000 = 25_000 µ¢.
+        assert_eq!(b.max_cost_microcents_resolved(), 25_000);
     }
 
     #[test]

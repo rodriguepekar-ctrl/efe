@@ -47,6 +47,8 @@ fn build_request_for_llm(llm_id: &str, query: &str) -> MissionARequest {
         llm_metadata: metadata,
         budget: Budget {
             max_cost_cents: 100,
+            // R3.S1 : 0 → _resolved() fallback à cents × 1000.
+            max_cost_microcents: 0,
             max_latency_ms: 5000,
             min_quality_score: 0.0,
         },

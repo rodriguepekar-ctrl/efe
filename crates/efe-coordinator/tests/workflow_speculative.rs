@@ -41,6 +41,8 @@ async fn speculative_accepts_draft_when_match() {
         verifier_metadata: meta(),
         budget: Budget {
             max_cost_cents: 100,
+            // R3.S1 : 0 → _resolved() fallback à cents × 1000.
+            max_cost_microcents: 0,
             max_latency_ms: 5000,
             min_quality_score: 0.5,
         },
@@ -71,6 +73,8 @@ async fn speculative_rejects_draft_when_diverge() {
         verifier_metadata: meta(),
         budget: Budget {
             max_cost_cents: 100,
+            // R3.S1 : 0 → _resolved() fallback à cents × 1000.
+            max_cost_microcents: 0,
             max_latency_ms: 5000,
             min_quality_score: 0.5,
         },
@@ -100,6 +104,8 @@ async fn speculative_requires_drafter_registered() {
         verifier_metadata: meta(),
         budget: Budget {
             max_cost_cents: 100,
+            // R3.S1 : 0 → _resolved() fallback à cents × 1000.
+            max_cost_microcents: 0,
             max_latency_ms: 5000,
             min_quality_score: 0.5,
         },
@@ -125,6 +131,8 @@ async fn speculative_requires_verifier_registered() {
         verifier_metadata: meta(),
         budget: Budget {
             max_cost_cents: 100,
+            // R3.S1 : 0 → _resolved() fallback à cents × 1000.
+            max_cost_microcents: 0,
             max_latency_ms: 5000,
             min_quality_score: 0.5,
         },
@@ -153,6 +161,8 @@ async fn speculative_emits_speculation_resolved_event() {
         verifier_metadata: meta(),
         budget: Budget {
             max_cost_cents: 100,
+            // R3.S1 : 0 → _resolved() fallback à cents × 1000.
+            max_cost_microcents: 0,
             max_latency_ms: 5000,
             min_quality_score: 0.5,
         },
@@ -205,6 +215,8 @@ async fn s7_hot_path_skips_verifier_when_drafter_short_offline() {
         verifier_metadata: meta(),
         budget: Budget {
             max_cost_cents: 100,
+            // R3.S1 : 0 → _resolved() fallback à cents × 1000.
+            max_cost_microcents: 0,
             max_latency_ms: 5000,
             min_quality_score: 0.5,
         },
@@ -244,6 +256,8 @@ async fn s7_slow_path_calls_verifier_when_drafter_long_offline() {
         verifier_metadata: meta(),
         budget: Budget {
             max_cost_cents: 100,
+            // R3.S1 : 0 → _resolved() fallback à cents × 1000.
+            max_cost_microcents: 0,
             max_latency_ms: 5000,
             min_quality_score: 0.5,
         },
@@ -279,6 +293,8 @@ async fn s7_chewing_metrics_filled_for_spec_offline() {
         verifier_metadata: meta(),
         budget: Budget {
             max_cost_cents: 100,
+            // R3.S1 : 0 → _resolved() fallback à cents × 1000.
+            max_cost_microcents: 0,
             max_latency_ms: 5000,
             min_quality_score: 0.5,
         },
@@ -320,6 +336,8 @@ async fn s7_verifier_skipped_propagated_to_response_offline() {
         verifier_metadata: meta(),
         budget: Budget {
             max_cost_cents: 100,
+            // R3.S1 : 0 → _resolved() fallback à cents × 1000.
+            max_cost_microcents: 0,
             max_latency_ms: 5000,
             min_quality_score: 0.5,
         },
@@ -368,6 +386,8 @@ async fn s7_spec_savings_cents_above_zero_when_skip_offline() {
         verifier_metadata: expensive_verifier_meta,
         budget: Budget {
             max_cost_cents: 100,
+            // R3.S1 : 0 → _resolved() fallback à cents × 1000.
+            max_cost_microcents: 0,
             max_latency_ms: 5000,
             min_quality_score: 0.5,
         },
@@ -467,6 +487,8 @@ async fn s7_cost_cents_hot_path_equals_drafter_only() {
         verifier_metadata: meta(),
         budget: Budget {
             max_cost_cents: 100,
+            // R3.S1 : 0 → _resolved() fallback à cents × 1000.
+            max_cost_microcents: 0,
             max_latency_ms: 5000,
             min_quality_score: 0.5,
         },
@@ -512,6 +534,8 @@ async fn s7_cost_cents_slow_path_equals_drafter_plus_verifier() {
         verifier_metadata: meta(),
         budget: Budget {
             max_cost_cents: 100,
+            // R3.S1 : 0 → _resolved() fallback à cents × 1000.
+            max_cost_microcents: 0,
             max_latency_ms: 5000,
             min_quality_score: 0.5,
         },
