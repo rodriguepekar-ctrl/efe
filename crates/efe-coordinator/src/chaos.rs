@@ -183,6 +183,15 @@ impl ChaosInjector {
     /// Décide — **et consomme un tirage RNG** — si CE provider doit fauter
     /// maintenant. Court-circuite (sans tirage) quand le taux est nul :
     /// préserve l'invariant pass-through `fault_rate = 0.0`.
+    ///
+    /// **Déterminisme** : pleinement reproductible pour un seed donné quand les
+    /// appels sont sérialisés OU quand `rate ∈ {0.0, 1.0}` (où le tirage ne
+    /// change pas la décision). En Mission B, le fan-out (`call_many`) invoque
+    /// les providers en parallèle : si **plusieurs** providers partagent cet
+    /// injecteur avec `0 < rate < 1`, l'ordre des tirages atomiques n'est pas
+    /// garanti → l'affectation des fautes devient non-déterministe (le *taux*
+    /// agrégé reste correct). Les tests offline contournent ça en ne wrappant
+    /// qu'un provider, ou avec `rate = 1.0`.
     #[must_use]
     pub fn should_fault(&self, provider_id: &str) -> bool {
         let rate = self.fault_rate(provider_id);
@@ -329,6 +338,7 @@ impl LlmProvider for ChaosLlmProvider {
 mod tests {
     use super::*;
     use crate::llm::MockLlmProvider;
+    use serial_test::serial;
 
     // ================================================================
     // 1-4 : ChaosRng + ChaosInjector
@@ -381,6 +391,34 @@ mod tests {
             (0.27..=0.33).contains(&freq),
             "fréquence observée {freq} hors [0.27, 0.33]"
         );
+    }
+
+    // `from_env` lit `EFE_CHAOS_RATE` : verrouille le contrat d'environnement
+    // câblé par le workflow CI `chaos-eng.yml`. `#[serial]` car la variable est
+    // un nom global partagé (pas de collision parallèle).
+    #[test]
+    #[serial]
+    fn chaos_injector_from_env_reads_rate() {
+        std::env::set_var("EFE_CHAOS_RATE", "1.0");
+        let inj =
+            ChaosInjector::from_env(ChaosFaultKind::HttpStatus(429), &["p".to_string()]);
+        assert_eq!(inj.fault_rate("p"), 1.0, "EFE_CHAOS_RATE=1.0 appliqué à 'p'");
+        assert!(inj.should_fault("p"), "rate 1.0 → toujours faute (seed-indépendant)");
+        // Un provider non listé reste à 0.
+        assert_eq!(inj.fault_rate("other"), 0.0);
+        std::env::remove_var("EFE_CHAOS_RATE");
+    }
+
+    #[test]
+    #[serial]
+    fn chaos_injector_from_env_absent_is_noop() {
+        std::env::remove_var("EFE_CHAOS_RATE");
+        let inj =
+            ChaosInjector::from_env(ChaosFaultKind::HttpStatus(429), &["p".to_string()]);
+        assert_eq!(inj.fault_rate("p"), 0.0, "var absente ⇒ 0.0 (no-op fail-safe)");
+        for _ in 0..100 {
+            assert!(!inj.should_fault("p"), "rate 0 → jamais de faute");
+        }
     }
 
     // ================================================================

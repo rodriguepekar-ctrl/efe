@@ -35,8 +35,9 @@ _(rolling — prochains items)_
     ET `stream()`** (Mission A passe par stream, B par call, Spec par les
     deux). Préserve l'id du provider wrappé → router/fallback transparents.
   - `CHAOS_MAX_SLEEP` (5 s) : plafond dur du sleep injecté (anti-hang CI).
-  - 9 tests unitaires (déterminisme RNG, taux 0/1/0.3, pass-through,
-    429 sur call+stream, timeout borné, empty response).
+  - 11 tests unitaires (déterminisme RNG, taux 0/1/0.3, pass-through,
+    429 sur call+stream, timeout borné, empty response, `from_env` lit
+    `EFE_CHAOS_RATE` — 2 tests `#[serial]`).
 - **Re-exports crate-root gated** : `ChaosFaultKind`, `ChaosInjector`,
   `ChaosLlmProvider`, `CHAOS_MAX_SLEEP`.
 - **`tests/chaos_offline.rs`** (NEW, 4 tests) : Mission A 429→fallback,
@@ -66,9 +67,13 @@ _(rolling — prochains items)_
 #### Backward-compat
 - Feature off ⇒ `chaos.rs` non compilé, zéro symbole `Chaos*`, binaire prod
   inchangé. `fault_rate = 0.0` ⇒ pass-through byte-pour-byte (testé).
-- 13 tests offline (9 unit + 4 intégration) PASS ; 4 tests live compilent +
+- 15 tests offline (11 unit + 4 intégration) PASS ; 4 tests live compilent +
   skip propre sans clés ; clippy `--features chaos --tests` exit 0 ; default
   build (chaos off) inchangé.
+- **Complétude** : `EFE_CHAOS_RATE` était du dead config (le workflow CI le
+  passait mais le test live codait le taux en dur). Le test live Mission A
+  utilise désormais `ChaosInjector::from_env` → la variable pilote réellement
+  le taux de faute (assertion fallback gardée par `rate > 0`).
 
 ### Phase 3 R3.S5 — Multi-tenant policies (LIVRÉ 2026-05-29)
 

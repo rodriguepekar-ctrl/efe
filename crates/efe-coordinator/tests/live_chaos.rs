@@ -83,9 +83,14 @@ async fn live_chaos_mission_a_429_at_30pct() {
     let cid = claude.id();
     let gid = gemini.id();
 
-    // Claude faute à 30 % (429), seed fixe → reproductible.
-    let injector =
-        Arc::new(ChaosInjector::seeded(ChaosFaultKind::HttpStatus(429), 0xC0FFEE).with_fault_rate(&cid, 0.3));
+    // Claude faute selon `EFE_CHAOS_RATE` (CI = 0.3 ; absent ⇒ 0.0 ⇒ no-op).
+    // `from_env` câble enfin la variable d'environnement du workflow CI — sans
+    // ça, le taux était codé en dur et `EFE_CHAOS_RATE` était du dead config.
+    let injector = Arc::new(ChaosInjector::from_env(
+        ChaosFaultKind::HttpStatus(429),
+        &[cid.clone()],
+    ));
+    let effective_rate = injector.fault_rate(&cid);
     let reg = ProviderRegistry::new();
     reg.register(injector.wrap(claude)); // id = cid, faute 30 %
     reg.register(gemini);
@@ -124,11 +129,20 @@ async fn live_chaos_mission_a_429_at_30pct() {
         }
     }
     let rate = successes as f32 / n as f32;
-    eprintln!("\n=== R3.S6 live chaos Mission A 429@30% ===");
+    eprintln!("\n=== R3.S6 live chaos Mission A 429 (EFE_CHAOS_RATE={effective_rate}) ===");
     eprintln!("  successes : {successes}/{n} ({:.0}%)", rate * 100.0);
     eprintln!("  fallbacks : {fallbacks}");
     assert!(rate > 0.80, "résilience : > 80 % attendu, got {:.0}%", rate * 100.0);
-    assert!(fallbacks > 0, "le chaos 30 % aurait dû déclencher ≥ 1 fallback");
+    // Le fallback ne peut être prouvé que si une faute a été injectée. Avec
+    // `EFE_CHAOS_RATE=0` (var absente), aucune faute → on n'asserte pas.
+    if effective_rate > 0.0 {
+        assert!(
+            fallbacks > 0,
+            "EFE_CHAOS_RATE={effective_rate} sur {n} missions aurait dû déclencher ≥ 1 fallback"
+        );
+    } else {
+        eprintln!("  (EFE_CHAOS_RATE absent/0 → aucune faute injectée, assertion fallback ignorée)");
+    }
 }
 
 // =====================================================================
