@@ -11,6 +11,8 @@ use crate::events::{EventBus, StreamEvent};
 use crate::llm::{LlmCall, LlmProvider, TokenChunk};
 // R3.S3 (fix L4/D6) : gate de rejet de bruit pour le hot path.
 use super::noise::{NoiseRejectionPolicy, NoiseSignal};
+// R3.S4 : circuit breaker pour le drafter SLM local.
+use efe_nano_app_coordinator::{SlmCircuitBreaker, SlmCircuitState};
 
 /// Token spéculatif émis par le drafter pendant la frappe.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -149,6 +151,12 @@ pub struct Speculator {
     /// [`permissive_s7`](NoiseRejectionPolicy::permissive_s7) pour
     /// désactiver (backward-compat S7).
     noise_policy: NoiseRejectionPolicy,
+    /// **R3.S4** — Circuit breaker optionnel pour le drafter (typiquement un
+    /// SLM local qui peut crasher/OOM). Si `Some` et ouvert, le drafter est
+    /// **skippé** avant même l'appel (évite le timeout sur un llama-server
+    /// mort) → verifier-only (drafter_bypassed). `None` = comportement S8
+    /// (bypass seulement après échec/timeout réel).
+    drafter_circuit: Option<SlmCircuitBreaker>,
     /// Bus optionnel pour émettre `StreamEvent::DraftToken` pendant la frappe.
     bus: Option<Arc<dyn EventBus>>,
     /// `swarm_id` à attacher aux évènements (None → pas d'émission).
@@ -175,6 +183,8 @@ impl Speculator {
             // R3.S3 : gate de bruit actif par défaut (sans effet tant que le
             // hot path est désactivé, mais prêt dès `with_quick_accept`).
             noise_policy: NoiseRejectionPolicy::default(),
+            // R3.S4 : pas de circuit drafter par défaut (comportement S8).
+            drafter_circuit: None,
             bus: None,
             swarm_id: None,
         }
@@ -210,6 +220,26 @@ impl Speculator {
         self
     }
 
+    /// **R3.S4** — Attache un circuit breaker pour le drafter.
+    ///
+    /// Si le circuit est ouvert (drafter SLM local répétitivement en
+    /// échec), le `run()` skippe le drafter et passe directement au
+    /// verifier (drafter_bypassed) — évitant le timeout sur un
+    /// llama-server mort. Réutilise la primitive R3.S2.
+    #[must_use]
+    pub fn with_drafter_circuit(mut self, circuit: SlmCircuitBreaker) -> Self {
+        self.drafter_circuit = Some(circuit);
+        self
+    }
+
+    /// **R3.S4** — Variante `Option` (ergonomie wiring workflow : le
+    /// circuit peut être absent si le drafter n'en a pas).
+    #[must_use]
+    pub fn with_drafter_circuit_opt(mut self, circuit: Option<SlmCircuitBreaker>) -> Self {
+        self.drafter_circuit = circuit;
+        self
+    }
+
     /// Attache un bus + swarm_id : chaque token drafté sera émis en
     /// `StreamEvent::DraftToken { swarm_id, token, index, ts }`.
     #[must_use]
@@ -229,6 +259,53 @@ impl Speculator {
     #[must_use]
     pub fn verifier_id(&self) -> String {
         self.verifier.id()
+    }
+
+    /// **R3.S4** — Fallback verifier-only : le drafter a été skippé
+    /// (circuit ouvert) ou a échoué. Émet `DrafterBypassed` puis appelle
+    /// le verifier directement. Facteur commun (DRY) entre le guard circuit
+    /// (Step 0) et la branche d'échec drafter (Step 1).
+    ///
+    /// `drafter_latency_ms` = 0 si skip pré-call, sinon la latence observée
+    /// avant l'échec.
+    async fn verifier_only_fallback(
+        &self,
+        req: LlmCall,
+        started: Instant,
+        drafter_latency_ms: u64,
+        bypass_reason: &str,
+    ) -> CoordResult<SpeculationOutcome> {
+        if let (Some(bus), Some(swarm)) = (self.bus.as_ref(), self.swarm_id) {
+            let _ = bus
+                .publish(StreamEvent::DrafterBypassed {
+                    swarm_id: swarm,
+                    drafter: self.drafter.id(),
+                    fallback_to_verifier: self.verifier.id(),
+                    reason: bypass_reason.to_string(),
+                    ts: chrono::Utc::now(),
+                })
+                .await;
+        }
+        let verifier_started = Instant::now();
+        let verify_res = self.verifier.call(req).await?;
+        let verifier_latency_ms = verifier_started.elapsed().as_millis() as u64;
+        Ok(SpeculationOutcome {
+            final_text: verify_res.text.clone(),
+            draft_text: String::new(),
+            draft_accepted: false,
+            tokens_accepted: 0,
+            tokens_regenerated: verify_res.tokens_generated,
+            latency_saved_ms: 0,
+            latency_ms: started.elapsed().as_millis() as u64,
+            verifier_id: self.verifier.id(),
+            verifier_skipped: false,
+            drafter_latency_ms,
+            verifier_latency_ms,
+            cost_cents: verify_res.cost_cents,
+            cost_microcents: verify_res.cost_microcents_resolved(),
+            drafter_bypassed: true,
+            noise_signal: None,
+        })
     }
 
     /// Lance le drafter d'abord ; si la réponse est suffisamment courte
@@ -252,14 +329,27 @@ impl Speculator {
         let started = Instant::now();
         let drafter = Arc::clone(&self.drafter);
         let req_d = req.clone();
+        let bus_opt = self.bus.clone();
+        let swarm_opt = self.swarm_id;
+
+        // ── Step 0 (R3.S4) : drafter circuit guard ──
+        //
+        // Si le circuit du drafter (SLM local) est ouvert, on SKIP le
+        // drafter avant même de l'appeler (évite le timeout sur un
+        // llama-server mort) → verifier-only (drafter_bypassed).
+        if let Some(cb) = &self.drafter_circuit {
+            if cb.is_open() {
+                return self
+                    .verifier_only_fallback(req, started, 0, "drafter_circuit_open")
+                    .await;
+            }
+        }
 
         // ── Step 1 : Drafter d'abord (séquentiel pour permettre hot path) ──
         //
         // S8 R2 patch : si le drafter fail, on bascule sur le verifier
         // direct au lieu de propager l'erreur. Trace via `drafter_bypassed`.
         let drafter_started = Instant::now();
-        let bus_opt = self.bus.clone();
-        let swarm_opt = self.swarm_id;
         let draft_result: CoordResult<crate::llm::LlmResponse> = if let (Some(bus), Some(swarm)) = (bus_opt.as_ref(), swarm_opt) {
             let (chunk_tx, mut chunk_rx) =
                 tokio::sync::mpsc::channel::<TokenChunk>(256);
@@ -285,45 +375,41 @@ impl Speculator {
         let drafter_latency_ms = drafter_started.elapsed().as_millis() as u64;
 
         // S8 R2 : si drafter fail → bypass + appel verifier direct.
+        // R3.S4 : record success/failure sur le circuit drafter.
         let draft = match draft_result {
-            Ok(d) => d,
-            Err(drafter_err) => {
-                // Émission event DRAFTER_BYPASSED si bus attaché.
-                if let (Some(bus), Some(swarm)) = (bus_opt.as_ref(), swarm_opt) {
-                    let _ = bus
-                        .publish(StreamEvent::DrafterBypassed {
-                            swarm_id: swarm,
-                            drafter: self.drafter.id(),
-                            fallback_to_verifier: self.verifier.id(),
-                            reason: drafter_err.to_string(),
-                            ts: chrono::Utc::now(),
-                        })
-                        .await;
+            Ok(d) => {
+                if let Some(cb) = &self.drafter_circuit {
+                    cb.record_success();
                 }
-                // Verifier direct comme fallback graceful.
-                let verifier_started = Instant::now();
-                let verify_res = self.verifier.call(req).await?;
-                let verifier_latency_ms =
-                    verifier_started.elapsed().as_millis() as u64;
-                return Ok(SpeculationOutcome {
-                    final_text: verify_res.text.clone(),
-                    draft_text: String::new(),
-                    draft_accepted: false,
-                    tokens_accepted: 0,
-                    tokens_regenerated: verify_res.tokens_generated,
-                    latency_saved_ms: 0,
-                    latency_ms: started.elapsed().as_millis() as u64,
-                    verifier_id: self.verifier.id(),
-                    verifier_skipped: false,
-                    drafter_latency_ms,
-                    verifier_latency_ms,
-                    cost_cents: verify_res.cost_cents,
-                    // R3.S1 : précision µ¢ — drafter bypassed → verifier only.
-                    cost_microcents: verify_res.cost_microcents_resolved(),
-                    drafter_bypassed: true,
-                    // R3.S3 : pas de draft à juger (drafter a fail) → None.
-                    noise_signal: None,
-                });
+                d
+            }
+            Err(drafter_err) => {
+                // R3.S4 : record_failure + emit SlmCircuitOpened si transition.
+                if let Some(cb) = &self.drafter_circuit {
+                    let was_closed = cb.state() == SlmCircuitState::Closed;
+                    cb.record_failure();
+                    if was_closed && cb.is_open() {
+                        if let (Some(bus), Some(swarm)) = (bus_opt.as_ref(), swarm_opt) {
+                            let _ = bus
+                                .publish(StreamEvent::SlmCircuitOpened {
+                                    swarm_id: swarm,
+                                    robot: self.drafter.id(),
+                                    failures: cb.failure_count() as u32,
+                                    ts: chrono::Utc::now(),
+                                })
+                                .await;
+                        }
+                    }
+                }
+                // Verifier-only fallback (factorisé, DRY avec Step 0).
+                return self
+                    .verifier_only_fallback(
+                        req,
+                        started,
+                        drafter_latency_ms,
+                        &drafter_err.to_string(),
+                    )
+                    .await;
             }
         };
 
@@ -494,6 +580,7 @@ fn tokens_accepted_count(draft: &str, verify: &str) -> u32 {
 mod tests {
     use super::*;
     use crate::llm::MockLlmProvider;
+    use std::time::Duration;
 
     #[test]
     fn jaccard_identical_is_one() {
@@ -762,5 +849,98 @@ mod tests {
             out.noise_signal, None,
             "hot path désactivé → pas de candidat → noise_signal None"
         );
+    }
+
+    // ================================================================
+    // R3.S4 — Tests drafter circuit breaker (résilience SLM local)
+    // ================================================================
+
+    /// **R3.S4** : circuit drafter pré-ouvert → le drafter n'est PAS appelé
+    /// → verifier-only (drafter_bypassed). Le drafter mock paniquerait s'il
+    /// était appelé (with_error), prouvant le skip.
+    #[tokio::test]
+    async fn r3s4_drafter_circuit_open_skips_to_verifier() {
+        // Drafter qui FAIL toujours (ne devrait jamais être atteint).
+        let drafter =
+            Arc::new(MockLlmProvider::new("local_slm").with_error("should not be called"));
+        let verifier =
+            Arc::new(MockLlmProvider::new("verifier").with_response("Paris"));
+        let cb = SlmCircuitBreaker::new(1, Duration::from_secs(10));
+        cb.record_failure(); // → Open
+        let s = Speculator::new(drafter, verifier, 0.5)
+            .with_quick_accept(10)
+            .with_drafter_circuit(cb);
+        let out = s.run(LlmCall::simple("Capital?", 10)).await.unwrap();
+
+        assert!(out.drafter_bypassed, "circuit open → drafter bypassed");
+        assert!(!out.verifier_skipped, "verifier appelé en fallback");
+        assert_eq!(out.final_text, "Paris");
+        assert_eq!(out.drafter_latency_ms, 0, "drafter skippé → latence 0");
+    }
+
+    /// **R3.S4** : un échec drafter enregistre un failure sur le circuit +
+    /// bypass vers le verifier (la mission produit quand même la réponse).
+    #[tokio::test]
+    async fn r3s4_drafter_failure_records_and_bypasses() {
+        let drafter =
+            Arc::new(MockLlmProvider::new("local_slm").with_error("llama-server down"));
+        let verifier =
+            Arc::new(MockLlmProvider::new("verifier").with_response("Paris"));
+        let cb = SlmCircuitBreaker::new(3, Duration::from_secs(10));
+        let cb_handle = cb.clone();
+        let s = Speculator::new(drafter, verifier, 0.5)
+            .with_quick_accept(10)
+            .with_drafter_circuit(cb);
+        let out = s.run(LlmCall::simple("Capital?", 10)).await.unwrap();
+
+        assert!(out.drafter_bypassed, "drafter fail → bypass");
+        assert_eq!(out.final_text, "Paris", "verifier produit la réponse");
+        assert_eq!(
+            cb_handle.failure_count(),
+            1,
+            "1 échec drafter → 1 failure enregistré sur le circuit"
+        );
+    }
+
+    /// **R3.S4** : un succès drafter enregistre un success (circuit reste
+    /// Closed) et le hot path fonctionne normalement.
+    #[tokio::test]
+    async fn r3s4_drafter_success_records_success() {
+        let drafter =
+            Arc::new(MockLlmProvider::new("local_slm").with_response("Paris"));
+        let verifier =
+            Arc::new(MockLlmProvider::new("verifier").with_response("Paris is capital"));
+        let cb = SlmCircuitBreaker::new(3, Duration::from_secs(10));
+        let cb_handle = cb.clone();
+        // Pré-charge 1 failure pour vérifier que le success reset.
+        cb_handle.record_failure();
+        let s = Speculator::new(drafter, verifier, 0.5)
+            .with_quick_accept(10)
+            .with_drafter_circuit(cb);
+        let out = s.run(LlmCall::simple("Capital?", 10)).await.unwrap();
+
+        assert!(out.verifier_skipped, "« Paris » propre → hot path");
+        assert_eq!(out.final_text, "Paris");
+        assert_eq!(
+            cb_handle.failure_count(),
+            0,
+            "succès drafter → record_success reset le compteur"
+        );
+    }
+
+    /// **R3.S4** : sans circuit drafter, comportement S8 préservé (bypass
+    /// seulement après échec réel, pas de skip proactif).
+    #[tokio::test]
+    async fn r3s4_no_drafter_circuit_keeps_s8_behavior() {
+        let drafter =
+            Arc::new(MockLlmProvider::new("local_slm").with_error("down"));
+        let verifier =
+            Arc::new(MockLlmProvider::new("verifier").with_response("Paris"));
+        // PAS de with_drafter_circuit.
+        let s = Speculator::new(drafter, verifier, 0.5).with_quick_accept(10);
+        let out = s.run(LlmCall::simple("Capital?", 10)).await.unwrap();
+        // S8 : le drafter est appelé, échoue, puis bypass.
+        assert!(out.drafter_bypassed);
+        assert_eq!(out.final_text, "Paris");
     }
 }

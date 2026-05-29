@@ -89,6 +89,51 @@ _(rolling — prochains items)_
   **0 failed**.
 - `cargo clippy` : 0 warning R3.S1-spécifique.
 
+### Phase 3 R3.S4 — Drafter SLM Local (fix L1/L3) (LIVRÉ 2026-05-29)
+
+> Fix L1/L3 : le drafter Speculative était toujours un LLM cloud (Gemini
+> Flash). R3.S4 introduit l'infrastructure d'un drafter **SLM local**
+> (llama-server Metal) + son circuit-breaker dédié + l'instrument de mesure
+> break-even (`spec_drafter_is_local`). Le local n'est économiquement viable
+> que si la chute de hot-path-rate vs cloud reste < ~1.9 points : R3.S4 livre
+> donc l'infra + la sonde de calibration, pas un déploiement aveugle.
+
+#### Ajouté
+- **`LocalSlmProvider`** (`llm/providers/local_slm.rs`, feature `local-slm`) :
+  implémente `LlmProvider` contre un `llama-server` local (`POST /completion`
+  texte-libre, `GET /health`). Builders `new` / `from_env`
+  (`EFE_LOCAL_SLM_URL` défaut `:8099`, `_MODEL` défaut `gemma-2-1.5b`, `_ID`
+  défaut `local_<model>`) + `with_cost` / `with_system_prompt` /
+  `with_max_tokens` / `with_temperature` / `with_timeout`. Coût honnête
+  `DEFAULT_LOCAL_SLM_COST_MICROCENTS_PER_M = 1_500` µ¢/M (énergie Metal).
+  **14 tests** (purs + HTTP mock in-process).
+- **`PricingTable::local()`** : `gemma-2-1.5b`→(1_500,1_500),
+  `qwen-2.5-0.5b`→(800,800), `llama-3.2-3b`→(3_000,3_000) µ¢/M. **2 tests**.
+- **`Speculator.drafter_circuit: Option<SlmCircuitBreaker>`** +
+  `with_drafter_circuit` / `with_drafter_circuit_opt`. Circuit ouvert
+  (llama-server mort) → `verifier_only_fallback` (DRY) → verifier-only sans
+  propager l'erreur (`drafter_bypassed=true`, `DrafterBypassed` émis ;
+  `SlmCircuitOpened` sur transition Closed→Open). **4 tests**.
+- **`ChewingMetrics.spec_drafter_is_local: Option<bool>`**
+  (`#[serde(default)]`) — axe de segmentation break-even.
+- **`CoordinatorBuilder::with_local_slm_drafter`** (feature `local-slm`) :
+  enregistre le provider + insère un `SlmCircuitBreaker(3, 10s)` sous son ID.
+- **Feature `local-slm`** (+ ajoutée à `all-providers`) ; re-exports
+  crate-root `LocalSlmProvider`.
+- **`tests/local_slm_drafter.rs`** : **4 tests d'intégration** (flag local
+  true/false, circuit ouvert → verifier-only, circuit fermé → hot path).
+- **`tests/live_missions.rs`** : `r3s4_live_local_drafter_calibration`
+  (gate `EFE_LIVE_SLM=1` + health-check `:8099`) — sonde de mesure du
+  hot-path-rate local pour calibrer le modèle.
+
+#### Modifié
+- **`run_speculative`** (`workflows/speculative.rs`) : branche le
+  `drafter_circuit` (clone depuis `slm_circuits[drafter_llm]`) sur le
+  Speculator + trace `spec_drafter_is_local` (`drafter_llm.starts_with("local")`).
+- **`CoordinatorBuilder::with_local_slm_drafter`** : appel `LlmProvider::id`
+  trait-qualifié (le champ privé `id` de `LocalSlmProvider` masquait la
+  méthode du trait → erreur de compilation sous `all-providers`, corrigée).
+
 ### Phase 3 R3.S3 — Speculator Noise Rejection (fix L4/D6) (LIVRÉ 2026-05-29)
 
 > Fix L4/D6 : le hot path Speculative acceptait tout draft de `]0, max_words]`

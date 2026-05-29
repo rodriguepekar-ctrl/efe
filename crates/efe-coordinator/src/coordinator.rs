@@ -264,6 +264,44 @@ impl CoordinatorBuilder {
         self
     }
 
+    /// **R3.S4** — Enregistre un drafter SLM local + son circuit breaker.
+    ///
+    /// 1. Enregistre le `LocalSlmProvider` dans le registry (résolu ensuite
+    ///    par `SpeculativeRequest.drafter_llm` = l'ID du provider).
+    /// 2. Crée un `SlmCircuitBreaker` (threshold=3, reset=10s) pour cet ID,
+    ///    que `run_speculative` passera au `Speculator` (skip drafter si le
+    ///    llama-server local est mort → verifier-only).
+    ///
+    /// ## Exemple
+    /// ```ignore
+    /// use efe_coordinator::{Coordinator, LocalSlmProvider};
+    ///
+    /// let drafter = LocalSlmProvider::from_env()?;
+    /// let coord = Coordinator::builder()
+    ///     .with_local_slm_drafter(drafter)
+    ///     .build()?;
+    /// // SpeculativeRequest.drafter_llm = "local_gemma-2-1.5b"
+    /// ```
+    #[cfg(feature = "local-slm")]
+    #[must_use]
+    pub fn with_local_slm_drafter(
+        mut self,
+        provider: crate::llm::LocalSlmProvider,
+    ) -> Self {
+        // Appel trait-qualifié : `LlmProvider` n'est pas importé au niveau
+        // module (éviterait un warning unused quand `local-slm` est off), et
+        // `LocalSlmProvider` possède un champ privé `id` qui masquerait la
+        // méthode du trait par simple `.id()`.
+        let id = crate::llm::LlmProvider::id(&provider);
+        self.registry
+            .get_or_insert_with(ProviderRegistry::new)
+            .register(Arc::new(provider));
+        self.clients
+            .slm_circuits
+            .insert(id, SlmCircuitBreaker::new(3, Duration::from_secs(10)));
+        self
+    }
+
     /// Build final.
     pub fn build(self) -> CoordResult<Coordinator> {
         if self.config.max_concurrency == 0 {

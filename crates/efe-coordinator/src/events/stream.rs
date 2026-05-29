@@ -501,6 +501,8 @@ mod tests {
                     spec_savings_microcents: 0,
                     // R3.S3 : None (non-Spec mission).
                     spec_noise_rejected: None,
+                    // R3.S4 : None (non-Spec mission).
+                    spec_drafter_is_local: None,
                     // S8 R2 — Graceful degradation fields
                     failure_mode: crate::failure::FailureMode::None,
                     degradations_count: 0,

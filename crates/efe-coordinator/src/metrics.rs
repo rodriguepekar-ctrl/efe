@@ -163,6 +163,17 @@ pub struct ChewingMetrics {
     #[serde(default)]
     pub spec_noise_rejected: Option<bool>,
 
+    /// **R3.S4** — Le drafter Speculative était-il un SLM **local** ?
+    ///
+    /// - `Some(true)` : drafter local (llama-server, ~0 µ¢) — apex savings.
+    /// - `Some(false)` : drafter cloud (Gemini Flash, etc.).
+    /// - `None` : mission non-Speculative.
+    ///
+    /// Combiné à `spec_noise_rejected`, permet de mesurer le **break-even**
+    /// local vs cloud (cf. architecture R3.S4 §9 R1 / Annexe A).
+    #[serde(default)]
+    pub spec_drafter_is_local: Option<bool>,
+
     // ── Sprint S8 R2 — Graceful degradation tracing ───────────────────────
     /// **S8** — Mode de failure observé pendant la mission.
     ///
@@ -365,6 +376,8 @@ mod tests {
             spec_savings_microcents: 5_000,
             // R3.S3 — draft rejeté comme bruit.
             spec_noise_rejected: Some(false),
+            // R3.S4 — drafter SLM local (axe break-even).
+            spec_drafter_is_local: Some(true),
             // S8 R2 — Graceful degradation
             failure_mode: FailureMode::None,
             degradations_count: 0,

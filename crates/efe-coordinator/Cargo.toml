@@ -18,8 +18,10 @@ anthropic = []
 gemini = []
 # Phase 3 R1b : provider OpenAI GPT (gpt-4o défaut).
 openai = []
-# Raccourci : tous les providers R1a+R1b.
-all-providers = ["anthropic", "gemini", "openai"]
+# Phase 3 R3.S4 : drafter SLM local (llama-server texte-libre, Gemma 2 1.5B).
+local-slm = []
+# Raccourci : tous les providers R1a+R1b + drafter local R3.S4.
+all-providers = ["anthropic", "gemini", "openai", "local-slm"]
 
 [dependencies]
 # Crate frère : les 6 clients nano-robots Phase 1.

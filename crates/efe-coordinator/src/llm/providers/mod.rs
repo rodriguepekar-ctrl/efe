@@ -42,6 +42,9 @@ pub mod anthropic;
 pub mod gemini;
 #[cfg(feature = "openai")]
 pub mod openai;
+// R3.S4 — Drafter SLM local (llama-server texte-libre).
+#[cfg(feature = "local-slm")]
+pub mod local_slm;
 
 #[cfg(feature = "anthropic")]
 pub use anthropic::ClaudeProvider;
@@ -49,6 +52,8 @@ pub use anthropic::ClaudeProvider;
 pub use gemini::GeminiProvider;
 #[cfg(feature = "openai")]
 pub use openai::GptProvider;
+#[cfg(feature = "local-slm")]
+pub use local_slm::LocalSlmProvider;
 
 pub use auth::ApiKey;
 pub use circuit::CircuitBreaker;
@@ -71,3 +76,8 @@ pub const DEFAULT_GEMINI_MODEL: &str = "gemini-2.5-flash";
 
 /// Modèle GPT par défaut (Phase 3 R1b — choix : balance qualité/coût stable).
 pub const DEFAULT_GPT_MODEL: &str = "gpt-4o";
+
+/// **R3.S4** — Modèle SLM local drafter par défaut (équilibre
+/// qualité/vitesse/énergie pour FactualQa sur Metal). Cf. architecture
+/// annexe C (Qwen 0.5B trop bruité, Llama 3B + lent).
+pub const DEFAULT_LOCAL_SLM_MODEL: &str = "gemma-2-1.5b";

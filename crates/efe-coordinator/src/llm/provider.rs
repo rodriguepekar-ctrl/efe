@@ -337,9 +337,17 @@ mod tests {
 
     #[test]
     fn r3s1_compute_cost_microcents_overflow_safe() {
-        // u32::MAX tokens × u64::MAX μ¢/M → saturating, pas de panic
+        // u32::MAX tokens × u64::MAX μ¢/M → saturating, pas de panic.
+        // Chaque terme : (u32::MAX as u64).saturating_mul(u64::MAX) sature à
+        // u64::MAX, puis `/ 1_000_000` ⇒ u64::MAX / 1M. La somme des 2 termes
+        // reste < u64::MAX (pas de saturation sur l'addition).
         let mc = compute_cost_microcents(u32::MAX, u32::MAX, u64::MAX, u64::MAX);
-        assert!(mc <= u64::MAX);
+        let per_term = u64::MAX / 1_000_000;
+        assert_eq!(
+            mc,
+            per_term.saturating_add(per_term),
+            "saturating mul→floor→sum sans panic ni overflow"
+        );
     }
 
     #[test]

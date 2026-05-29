@@ -2471,3 +2471,139 @@ async fn r3s3_live_speculative_rejects_noise_recovers_correct_answer() {
         eprintln!("  → drafter a produit un draft propre (hot path) ✓");
     }
 }
+
+// ====================================================================
+// R3.S4 — Test live calibration drafter SLM local (fix L1/L3)
+// ====================================================================
+
+/// URL du SLM local (drafter R3.S4). Convention `EFE_LOCAL_SLM_URL`,
+/// défaut aligné sur `LocalSlmProvider::from_env` (port 8099).
+#[cfg(feature = "local-slm")]
+fn local_slm_endpoint() -> String {
+    std::env::var("EFE_LOCAL_SLM_URL").unwrap_or_else(|_| "http://127.0.0.1:8099".to_string())
+}
+
+/// Ping `/health` du llama-server local. Retourne `true` si 200 OK.
+#[cfg(feature = "local-slm")]
+async fn local_slm_alive() -> bool {
+    let url = local_slm_endpoint();
+    let ok = reqwest::Client::new()
+        .get(format!("{url}/health"))
+        .timeout(Duration::from_secs(2))
+        .send()
+        .await
+        .map(|r| r.status().is_success())
+        .unwrap_or(false);
+    if !ok {
+        eprintln!("  [health-check] local SLM DOWN → {url}/health");
+    }
+    ok
+}
+
+/// **R3.S4 (fix L1/L3) — Test live de CALIBRATION** : mesure le hot-path-rate
+/// d'un drafter SLM **local** (llama-server Metal) vs verifier Claude cloud,
+/// sur une query factuelle.
+///
+/// ## Pré-conditions
+/// - `EFE_LIVE_LLM=1` + `EFE_LIVE_SLM=1` + `ANTHROPIC_API_KEY`.
+/// - `llama-server` local actif (défaut `http://127.0.0.1:8099`, override
+///   `EFE_LOCAL_SLM_URL`). Compilé avec `--features local-slm`.
+///
+/// ## Rôle
+/// Ce test est avant tout un **instrument de mesure** (cf. analyse break-even
+/// R3.S4 : le local n'est viable que si la chute de hot-path-rate vs cloud
+/// reste < ~1.9 points). Il imprime les chiffres clés (`verifier_skipped`,
+/// `spec_drafter_is_local`, latences drafter/verifier, `spec_noise_rejected`)
+/// pour que l'opérateur calibre `EFE_LOCAL_SLM_MODEL`. Les assertions se
+/// limitent aux invariants robustes :
+/// - `spec_drafter_is_local == Some(true)` (l'ID local a bien été reconnu) ;
+/// - `final_text` contient « paris » (qualité préservée quel que soit le path,
+///   grâce au gate de bruit R3.S3 + fallback verifier).
+#[cfg(feature = "local-slm")]
+#[tokio::test]
+async fn r3s4_live_local_drafter_calibration() {
+    use efe_coordinator::LocalSlmProvider;
+    use efe_nano_app_coordinator::SlmCircuitBreaker;
+
+    if !s7_preconditions_satisfied() {
+        return;
+    }
+    if !live_slm_enabled() {
+        eprintln!("[skip] set EFE_LIVE_SLM=1 + llama-server local pour R3.S4 calibration");
+        return;
+    }
+    if !local_slm_alive().await {
+        eprintln!("[skip] llama-server local injoignable — R3.S4 calibration");
+        return;
+    }
+
+    let drafter_local = LocalSlmProvider::from_env().expect("LocalSlmProvider::from_env");
+    let drafter_id = drafter_local.id().to_string();
+    let drafter: Arc<dyn LlmProvider> = Arc::new(drafter_local);
+    let claude: Arc<dyn LlmProvider> = Arc::new(ClaudeProvider::from_env().expect("ANTHROPIC_API_KEY"));
+    let verifier_id = claude.id().to_string();
+
+    // Coordinator avec circuit-breaker enregistré sous l'ID du drafter local
+    // (reproduit `CoordinatorBuilder::with_local_slm_drafter` : 3 échecs / 10 s).
+    let registry = ProviderRegistry::new();
+    registry.register(drafter);
+    registry.register(claude);
+    let mut circuits = HashMap::new();
+    circuits.insert(drafter_id.clone(), SlmCircuitBreaker::new(3, Duration::from_secs(10)));
+    let coord = Coordinator::builder()
+        .registry(registry)
+        .slm_circuits(circuits)
+        .build()
+        .expect("coordinator builds");
+
+    let mut req = SpeculativeRequest::with_drafter_and_verifier(
+        "Quelle est la capitale de la France ?".to_string(),
+        TaskClass::FactualQa,
+        drafter_id.clone(),
+        verifier_id.clone(),
+    );
+    req.budget.max_cost_cents = 12;
+    req.max_draft_tokens = 50;
+    req.max_words_for_quick_accept = 10;
+    req.reject_draft_noise = true;
+
+    let resp = run_speculative(&coord, req)
+        .await
+        .expect("speculative should succeed (fallback verifier garanti)");
+    let cm = resp.chewing_metrics.as_ref().expect("chewing_metrics");
+
+    eprintln!("\n=== R3.S4 live local drafter calibration ===");
+    eprintln!("  drafter (local)    : {drafter_id}");
+    eprintln!("  verifier (cloud)   : {verifier_id}");
+    eprintln!("  draft_text         : {:?}", resp.draft_text);
+    eprintln!("  final_text         : {:?}", resp.final_text);
+    eprintln!("  verifier_skipped   : {} (hot path = true)", resp.verifier_skipped);
+    eprintln!("  spec_drafter_local : {:?}", cm.spec_drafter_is_local);
+    eprintln!("  spec_noise_rejected: {:?}", cm.spec_noise_rejected);
+    eprintln!("  drafter_latency_ms : {}", cm.spec_drafter_latency_ms);
+    eprintln!("  verifier_latency_ms: {}", cm.spec_verifier_latency_ms);
+    eprintln!(
+        "  → break-even : comparer ce hot-path-rate à celui du drafter cloud \
+         (chute tolérée < ~1.9 pts)."
+    );
+
+    // Invariant 1 : l'ID local a bien été reconnu comme local.
+    assert_eq!(
+        cm.spec_drafter_is_local,
+        Some(true),
+        "drafter `from_env` (ID `local_*`) → spec_drafter_is_local true"
+    );
+    // Invariant 2 : qualité préservée quel que soit le path.
+    assert!(
+        resp.final_text.to_lowercase().contains("paris"),
+        "final_text doit contenir « Paris » (qualité préservée), got: {:?}",
+        resp.final_text
+    );
+    // Invariant 3 : cohérence R3.S3 — bruit rejeté ⇒ slow path.
+    if cm.spec_noise_rejected == Some(true) {
+        assert!(
+            !resp.verifier_skipped,
+            "draft local bruité rejeté → slow path → verifier appelé"
+        );
+    }
+}

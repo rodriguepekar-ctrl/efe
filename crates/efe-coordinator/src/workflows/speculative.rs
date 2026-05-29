@@ -135,11 +135,24 @@ pub async fn run_speculative(
         NoiseRejectionPolicy::permissive_s7()
     };
 
+    // ── R3.S4 : circuit-breaker du drafter ──
+    //
+    // Si un `SlmCircuitBreaker` est enregistré sous l'ID du drafter (cas
+    // typique : drafter SLM local enregistré via
+    // `CoordinatorBuilder::with_local_slm_drafter`), on le branche sur le
+    // Speculator. Quand le circuit est ouvert (drafter local en panne /
+    // llama-server down), `run()` bypasse le drafter et tombe directement
+    // sur le verifier-only (fallback dégradé mais correct). Pour un drafter
+    // cloud sans circuit configuré, `slm_circuit` renvoie `None` et le
+    // Speculator conserve son comportement S7 historique.
+    let drafter_circuit = coord.clients.slm_circuit(&req.drafter_llm).cloned();
+
     // ── Speculator avec hot-path activé via `max_words_for_quick_accept` ──
     let speculator = Arc::new(
         Speculator::new(drafter, verifier, req.accept_threshold)
             .with_quick_accept(req.max_words_for_quick_accept)
             .with_noise_policy(noise_policy)
+            .with_drafter_circuit_opt(drafter_circuit)
             .with_bus(Arc::clone(&coord.bus), swarm_id),
     );
     let llm_call = LlmCall {
@@ -166,6 +179,11 @@ pub async fn run_speculative(
     // R3.S3 : trace si le draft a été rejeté comme bruit (signal de santé
     // du drafter ; taux > 30 % ⇒ drafter mal choisi).
     chewing_metrics.spec_noise_rejected = Some(outcome.noise_signal.is_some());
+    // R3.S4 : trace si le drafter était un SLM local. Sert d'axe de
+    // segmentation pour l'analyse break-even (hot-path-rate local vs cloud).
+    // Convention d'ID : un drafter local est enregistré sous un ID préfixé
+    // `local` (cf. `LocalSlmProvider::from_env` → "local-slm" par défaut).
+    chewing_metrics.spec_drafter_is_local = Some(req.drafter_llm.starts_with("local"));
     chewing_metrics.spec_savings_cents = estimate_savings_cents(
         outcome.verifier_skipped,
         &req.verifier_metadata,

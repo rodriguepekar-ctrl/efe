@@ -21,3 +21,6 @@ pub use providers::ClaudeProvider;
 pub use providers::GeminiProvider;
 #[cfg(feature = "openai")]
 pub use providers::GptProvider;
+// R3.S4 — drafter SLM local.
+#[cfg(feature = "local-slm")]
+pub use providers::LocalSlmProvider;

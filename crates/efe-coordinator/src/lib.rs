@@ -146,6 +146,9 @@ pub use llm::ClaudeProvider;
 pub use llm::GeminiProvider;
 #[cfg(feature = "openai")]
 pub use llm::GptProvider;
+// R3.S4 — drafter SLM local.
+#[cfg(feature = "local-slm")]
+pub use llm::LocalSlmProvider;
 #[cfg(any(feature = "anthropic", feature = "gemini", feature = "openai"))]
 pub use llm::providers::{strip_thinking_tags, PiiRedactor};
 #[cfg(feature = "anthropic")]

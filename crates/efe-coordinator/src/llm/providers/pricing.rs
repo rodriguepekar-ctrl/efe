@@ -115,6 +115,30 @@ impl PricingTable {
         Self { rates, microrates }
     }
 
+    /// **R3.S4** — Table SLM **local** (llama-server, ex: Gemma 2 1.5B).
+    ///
+    /// Coût = énergie amortie (NON zéro — honnêteté). Défaut ~1500 µ¢/M
+    /// (~1110 énergie @ $0.15/kWh, 75 tok/s, 20 W + ~390 amortissement
+    /// hardware). Calibrable via RAPL (bench framework §38). C'est un
+    /// **hint** pour le router Mission A/B ; en Speculative, le
+    /// `LocalSlmProvider` self-reporte son coût (qui prime).
+    #[must_use]
+    pub fn local() -> Self {
+        let mut rates = HashMap::new();
+        let mut microrates = HashMap::new();
+        // Gemma 2 1.5B — énergie amortie ~1500 µ¢/M (≈ 0.15 ¢/M).
+        // cents/M arrondi sup : 1500 µ¢ → 2 cents/M (legacy conservateur).
+        rates.insert("gemma-2-1.5b".into(), (2, 2));
+        microrates.insert("gemma-2-1.5b".into(), (1_500, 1_500));
+        // Qwen 0.5B — moins cher en énergie (plus rapide) mais plus bruité.
+        rates.insert("qwen-2.5-0.5b".into(), (1, 1));
+        microrates.insert("qwen-2.5-0.5b".into(), (800, 800));
+        // Llama 3.2 3B — plus lent / plus d'énergie.
+        rates.insert("llama-3.2-3b".into(), (3, 3));
+        microrates.insert("llama-3.2-3b".into(), (3_000, 3_000));
+        Self { rates, microrates }
+    }
+
     /// Calcule le coût en cents.  Si le modèle est inconnu, fallback
     /// sur la moyenne (1000, 5000) — conservateur pour budget tracker.
     ///
@@ -442,5 +466,31 @@ mod tests {
         let mc = p.calc_microcents("gemini-2.5-flash", 50, 20);
         // Architecture spec note : "Précision limitée mais MIEUX que u32 cents".
         assert_eq!(mc, 0, "Gemini fixture 01 (50/20 tokens) → 0 µ¢ (limite intégrale)");
+    }
+
+    #[test]
+    fn r3s4_pricing_local_gemma_far_below_gemini() {
+        // 1000 in + 1000 out @ Gemma local (1_500/1_500 µ¢/M) = 1.5 + 1.5 = 3 µ¢.
+        let local = PricingTable::local();
+        let mc_local = local.calc_microcents("gemma-2-1.5b", 1_000, 1_000);
+        // 1000 in @ 1500 µ¢/M = 1 (floor) ; idem out → 2 µ¢.
+        assert_eq!(mc_local, 2);
+        // Gemini Flash : 1000/1000 = 37 µ¢ → local ~12× moins cher.
+        let gemini = PricingTable::gemini();
+        let mc_gemini = gemini.calc_microcents("gemini-2.5-flash", 1_000, 1_000);
+        assert!(
+            mc_local * 10 < mc_gemini,
+            "local ({mc_local} µ¢) doit être ≪ gemini ({mc_gemini} µ¢)"
+        );
+    }
+
+    #[test]
+    fn r3s4_pricing_local_known_models() {
+        let local = PricingTable::local();
+        assert!(local.has_model("gemma-2-1.5b"));
+        assert!(local.has_model("qwen-2.5-0.5b"));
+        assert!(local.has_model("llama-3.2-3b"));
+        // µ¢ exacts.
+        assert_eq!(local.rates_microcents("gemma-2-1.5b"), Some((1_500, 1_500)));
     }
 }
