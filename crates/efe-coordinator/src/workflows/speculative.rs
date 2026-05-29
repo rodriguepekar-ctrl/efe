@@ -82,6 +82,24 @@ pub async fn run_speculative(
     let started = Instant::now();
     let swarm_id = Uuid::now_v7();
 
+    // ── R3.S5 : résolution multi-tenant + allow-list (Speculative) ────────
+    //
+    // En Speculative, l'enforcement honnête se limite à l'**allow-list** :
+    // drafter ET verifier doivent être permis par la policy, sinon
+    // fail-closed (pas de fuite vers un LLM hors plan). On NE resserre PAS le
+    // `Budget` : `run_speculative` ne le consomme pas (aucun filtre router),
+    // donc le capper serait du faux contrôle (cf. principe « zéro dead
+    // config » R3.S4 / architecture §7.3, note budget).
+    let (tenant_id, policy) =
+        crate::multi_tenant::resolve(&coord.policies, req.tenant_id, coord.config.default_tenant);
+    if let Some(p) = policy {
+        if !p.permits_llm(&req.drafter_llm) || !p.permits_llm(&req.verifier_llm) {
+            return Err(CoordError::Config(
+                "tenant allow-list forbids drafter or verifier (Speculative)".into(),
+            ));
+        }
+    }
+
     // ── Initialisation chewing_metrics ──
     let mut chewing_metrics = ChewingMetrics {
         input_tokens_raw: ChewingMetrics::estimate_tokens(&req.user_text),
@@ -89,6 +107,7 @@ pub async fn run_speculative(
         compression_ratio: 1.0, // pas de compressor en mission spec
         savings_tokens: 0,
         savings_ratio: 0.0,
+        tenant_id: Some(tenant_id),
         ..ChewingMetrics::default()
     };
 

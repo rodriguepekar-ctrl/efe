@@ -36,6 +36,7 @@ async fn mission_a_runs_with_mock_llm_only() {
     metas.insert("claude_mock".to_string(), meta());
 
     let req = MissionARequest {
+        tenant_id: None,
         user_text: "Tell me X".into(),
         task_class: TaskClass::FactualQa,
         available_llms: vec!["claude_mock".into()],
@@ -69,6 +70,7 @@ async fn mission_a_publishes_swarm_started_and_finished() {
     metas.insert("c".to_string(), meta());
 
     let req = MissionARequest {
+        tenant_id: None,
         user_text: "hi".into(),
         task_class: TaskClass::FactualQa,
         available_llms: vec!["c".into()],
@@ -100,6 +102,7 @@ async fn mission_a_publishes_swarm_started_and_finished() {
 async fn mission_a_with_no_available_llm_errors() {
     let coord = Coordinator::for_tests();
     let req = MissionARequest {
+        tenant_id: None,
         user_text: "x".into(),
         task_class: TaskClass::FactualQa,
         available_llms: vec![],
@@ -127,6 +130,7 @@ async fn mission_a_falls_back_to_first_llm_if_router_absent() {
     let coord = Coordinator::builder().registry(reg).build().unwrap();
 
     let req = MissionARequest {
+        tenant_id: None,
         user_text: "x".into(),
         task_class: TaskClass::FactualQa,
         available_llms: vec!["first".into(), "second".into()],
@@ -167,6 +171,7 @@ async fn mission_a_chewing_metrics_filled_with_mocks() {
     // user_text court (< 500 chars) → compressor skip → ratio = 1.0
     let user_text = "Tell me X";
     let req = MissionARequest {
+        tenant_id: None,
         user_text: user_text.into(),
         task_class: TaskClass::FactualQa,
         available_llms: vec!["claude_mock".into()],
@@ -262,6 +267,7 @@ async fn mission_a_emits_pre_chewing_metrics_event() {
     metas.insert("c".to_string(), meta());
 
     let req = MissionARequest {
+        tenant_id: None,
         user_text: "hi".into(),
         task_class: TaskClass::FactualQa,
         available_llms: vec!["c".into()],
@@ -315,6 +321,7 @@ async fn mission_a_chewing_metrics_serializable_through_response() {
     metas.insert("c".to_string(), meta());
 
     let req = MissionARequest {
+        tenant_id: None,
         user_text: "hi".into(),
         task_class: TaskClass::FactualQa,
         available_llms: vec!["c".into()],
@@ -514,6 +521,7 @@ async fn mission_a_without_scoring_table_falls_back_pre_s6_behavior() {
     metas.insert("gemini_second".to_string(), meta());
 
     let req = MissionARequest {
+        tenant_id: None,
         user_text: "x".into(),
         task_class: TaskClass::Code, // task_class IGNORÉ sans table
         available_llms: vec!["claude_first".into(), "gemini_second".into()],
@@ -559,6 +567,7 @@ async fn r3s1_mission_a_propagates_cost_microcents_end_to_end() {
     metas.insert("claude_mock".to_string(), meta());
 
     let req = MissionARequest {
+        tenant_id: None,
         user_text: "What is the capital of France?".into(),
         task_class: TaskClass::FactualQa,
         available_llms: vec!["claude_mock".into()],

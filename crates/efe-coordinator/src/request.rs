@@ -15,6 +15,7 @@ use serde::{Deserialize, Serialize};
 
 use efe_nano_app_coordinator::types::router::TaskClass;
 use efe_nano_app_coordinator::types::{Budget, LlmMetadata, TaskClassScoringTable};
+use efe_nano_app_coordinator::TenantId;
 
 use crate::failure::FailureMode;
 use crate::metrics::ChewingMetrics;
@@ -63,6 +64,17 @@ pub struct MissionARequest {
     /// clone profond, et entre threads (fan-out parallèle Mission B).
     #[serde(skip)]
     pub task_class_scoring_table: Option<Arc<TaskClassScoringTable>>,
+
+    /// **R3.S5** — Tenant propriétaire de la requête.
+    ///
+    /// `None`/`Uuid::nil()` ⇒ `coord.config.default_tenant` global
+    /// (backward-compat). Sert (1) à propager le bon `tenant_id` dans l'audit
+    /// chain (fin de la fiction d'isolation), (2) au lookup `PolicyRegistry`
+    /// pour résoudre table de scoring / allow-list / plafond de coût.
+    ///
+    /// `#[serde(default)]` ⇒ les payloads pré-S5 désérialisent à `None`.
+    #[serde(default)]
+    pub tenant_id: Option<TenantId>,
 }
 
 impl MissionARequest {
@@ -107,6 +119,7 @@ impl MissionARequest {
             candidate_sources: vec![],
             max_total_latency: Duration::from_secs(30),
             task_class_scoring_table: Some(Arc::new(table)),
+            tenant_id: None,
         }
     }
 }
@@ -198,6 +211,12 @@ pub struct MissionBRequest {
     /// Deadline.
     #[serde(default = "default_deadline")]
     pub max_total_latency: Duration,
+
+    /// **R3.S5** — Tenant propriétaire (cf. [`MissionARequest::tenant_id`]).
+    /// En Mission B, seule l'allow-list s'applique strictement (pas de router,
+    /// pas de `Budget` ⇒ plafond de coût best-effort, cf. architecture §7.2).
+    #[serde(default)]
+    pub tenant_id: Option<TenantId>,
 }
 
 /// Réponse de la Mission B.
@@ -340,6 +359,12 @@ pub struct SpeculativeRequest {
     /// `NoiseRejectionPolicy` (cf. `min_content_words`).
     #[serde(default = "default_min_words_for_quick_accept")]
     pub min_words_for_quick_accept: usize,
+
+    /// **R3.S5** — Tenant propriétaire (cf. [`MissionARequest::tenant_id`]).
+    /// En Speculative, l'allow-list valide drafter ET verifier (fail-closed
+    /// si l'un est interdit) et le plafond de coût resserre le `Budget`.
+    #[serde(default)]
+    pub tenant_id: Option<TenantId>,
 }
 
 impl SpeculativeRequest {
@@ -384,6 +409,7 @@ impl SpeculativeRequest {
             // R3.S3 : gate de bruit actif par défaut.
             reject_draft_noise: default_true(),
             min_words_for_quick_accept: default_min_words_for_quick_accept(),
+            tenant_id: None,
         }
     }
 }
@@ -548,6 +574,7 @@ mod tests {
             candidate_sources: vec![],
             max_total_latency: Duration::from_secs(10),
             task_class_scoring_table: None,
+            tenant_id: None,
         };
         let s = serde_json::to_string(&req).unwrap();
         let back: MissionARequest = serde_json::from_str(&s).unwrap();
@@ -565,6 +592,7 @@ mod tests {
             quorum: None,
             candidate_sources: vec![],
             max_total_latency: Duration::from_secs(10),
+            tenant_id: None,
         };
         assert!(req.quorum.is_none());
     }

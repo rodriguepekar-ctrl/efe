@@ -37,7 +37,7 @@ use crate::workflows::slm_guard::{
 #[allow(clippy::field_reassign_with_default)]
 pub async fn run_mission_b(
     coord: &Coordinator,
-    req: MissionBRequest,
+    mut req: MissionBRequest,
 ) -> CoordResult<MissionBResponse> {
     if req.llms.len() < 2 {
         return Err(CoordError::MissionBTooFewLlms { n: req.llms.len() });
@@ -64,13 +64,40 @@ pub async fn run_mission_b(
         })
         .await;
 
+    // ── R3.S5 : résolution multi-tenant + enforcement (Mission B) ─────────
+    //
+    // En Mission B : pas de router ni de `Budget`. Seule l'allow-list
+    // s'applique strictement (filtre le set de fan-out `req.llms`). Le plafond
+    // de coût est best-effort (tracé post-fan-out via
+    // `tenant_cost_cap_exceeded`), faute de point de coupe pré-fan-out
+    // (cf. architecture §7.2).
+    let (tenant_id, policy) =
+        crate::multi_tenant::resolve(&coord.policies, req.tenant_id, coord.config.default_tenant);
+    let has_policy = policy.is_some();
+    let cost_cap: Option<u64> = policy.and_then(|p| p.max_cost_microcents_per_query);
+    let mut tenant_llms_filtered: Option<usize> = None;
+    if let Some(p) = policy {
+        let before = req.llms.len();
+        req.llms = p.filter_llms(&req.llms);
+        tenant_llms_filtered = Some(before - req.llms.len());
+        // Mission B exige ≥ 2 LLMs pour un vote : l'allow-list ne doit pas
+        // descendre sous le quorum minimal.
+        if req.llms.len() < 2 {
+            return Err(CoordError::Config(
+                "tenant allow-list leaves < 2 LLMs for Mission B vote".into(),
+            ));
+        }
+    }
+    chewing_metrics.tenant_id = Some(tenant_id);
+    chewing_metrics.tenant_llms_filtered = tenant_llms_filtered;
+
     let audit = Arc::new(InMemoryAuditWriter::default());
-    let ctx = CallContext::with_swarm(coord.config.default_tenant, swarm_id, audit.clone());
+    let ctx = CallContext::with_swarm(tenant_id, swarm_id, audit.clone());
 
     // ── Étape 1 : pre-chew unique (analyzer + compressor) ────────────
     // R3.S2 (fix L2) : guards SLM circuit autour des invokes.
     if let Some(analyzer) = &coord.clients.analyzer {
-        let circuit = coord.clients.slm_circuit("analyzer");
+        let circuit = coord.slm_circuit_for(tenant_id, "analyzer", has_policy);
         match slm_guard_check(circuit, "analyzer", &mut chewing_metrics) {
             SlmGuardOutcome::Skip => {
                 // R3.S2 : circuit Open → skip analyzer.
@@ -139,7 +166,7 @@ pub async fn run_mission_b(
     // (cohérent avec S5 mutualisation).
     let prompt_for_llms = if let Some(compressor) = &coord.clients.compressor {
         if req.user_text.len() > 500 {
-            let circuit = coord.clients.slm_circuit("compressor");
+            let circuit = coord.slm_circuit_for(tenant_id, "compressor", has_policy);
             match slm_guard_check(circuit, "compressor", &mut chewing_metrics) {
                 SlmGuardOutcome::Skip => {
                     // R3.S2 : circuit Open → skip compressor, use raw prompt.
@@ -396,7 +423,7 @@ pub async fn run_mission_b(
     let mut verdicts = Vec::new();
     if !req.candidate_sources.is_empty() {
         if let Some(verifier) = &coord.clients.verifier {
-            let circuit = coord.clients.slm_circuit("verifier");
+            let circuit = coord.slm_circuit_for(tenant_id, "verifier", has_policy);
             match slm_guard_check(circuit, "verifier", &mut chewing_metrics) {
                 SlmGuardOutcome::Skip => {
                     // R3.S2 : circuit Open → skip verifier, pas de verdicts.
@@ -497,6 +524,11 @@ pub async fn run_mission_b(
     // juste avant SwarmFinished (cohérent avec Mission A).
     chewing_metrics.total_pipeline_latency_ms = started.elapsed().as_millis() as u64;
     chewing_metrics.recompute_total_slm_latency();
+    // R3.S5 : plafond de coût tenant best-effort. Mission B n'a pas de point
+    // de coupe pré-fan-out (pas de `Budget`/router) ; on TRACE donc un
+    // dépassement post-fan-out pour alerting, sans bloquer (architecture §7.2).
+    chewing_metrics.tenant_cost_cap_exceeded =
+        cost_cap.map(|cap| total_cost_mc > cap);
 
     let _ = coord
         .bus

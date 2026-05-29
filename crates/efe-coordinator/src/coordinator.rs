@@ -10,12 +10,13 @@ use crate::dag::DagExecutor;
 use crate::error::{CoordError, CoordResult};
 use crate::events::{EventBus, InMemoryBus};
 use crate::llm::{MultiLlmBridge, ProviderRegistry};
+use crate::multi_tenant::{circuit_key, PolicyRegistry};
 use crate::vote::VoteEngine;
 use crate::DEFAULT_MAX_CONCURRENCY;
 
 use efe_nano_app_coordinator::{
     AnalyzerClient, CompressorClient, FilterClient, ReformulatorClient, RouterClient,
-    SlmCircuitBreaker, VerifierClient,
+    SlmCircuitBreaker, TenantId, VerifierClient,
 };
 
 /// Bundle des 6 clients nano-robots Phase 1.
@@ -118,6 +119,38 @@ impl CoordinatorClients {
     pub fn slm_circuit(&self, robot: &str) -> Option<&SlmCircuitBreaker> {
         self.slm_circuits.get(robot)
     }
+
+    /// **R3.S5** — Pré-génère des circuits keyed `"{tenant}:{robot}"` pour une
+    /// liste de tenants, afin d'**isoler le blast radius** (un tenant qui ouvre
+    /// son circuit `analyzer` n'affecte pas les autres tenants — fix L5-d).
+    ///
+    /// Les 3 robots SLM (analyzer/compressor/verifier) sont déclarés pour
+    /// chaque tenant avec le `threshold` fourni (reset_timeout 10 s, aligné
+    /// R3.S2). Les déploiements mono-tenant n'en ont pas besoin : sans clé
+    /// `"{tenant}:{robot}"`, [`Coordinator::slm_circuit_for`] retombe sur la
+    /// clé `"{robot}"` seule (sémantique R3.S2 préservée).
+    ///
+    /// ## Exemple
+    /// ```ignore
+    /// let circuits = CoordinatorClients::tenant_slm_circuits(&[tenant_a, tenant_b], 3);
+    /// let coord = Coordinator::builder().slm_circuits(circuits).build()?;
+    /// ```
+    #[must_use]
+    pub fn tenant_slm_circuits(
+        tenants: &[TenantId],
+        threshold: u32,
+    ) -> HashMap<String, SlmCircuitBreaker> {
+        let mut m = HashMap::new();
+        for tenant in tenants {
+            for robot in ["analyzer", "compressor", "verifier"] {
+                m.insert(
+                    circuit_key(*tenant, robot, true),
+                    SlmCircuitBreaker::new(threshold, Duration::from_secs(10)),
+                );
+            }
+        }
+        m
+    }
 }
 
 /// Configuration du Coordinator.
@@ -160,6 +193,10 @@ pub struct Coordinator {
     pub dag: DagExecutor,
     /// Moteur de vote (par défaut uniform).
     pub vote: VoteEngine,
+    /// **R3.S5** — Politiques par tenant. Registre vide par défaut (=
+    /// déploiement mono-tenant : tous les lookups → `None` ⇒ comportement
+    /// global R3.S4, backward-compat). `Arc` pour préserver `Clone` cheap.
+    pub policies: Arc<PolicyRegistry>,
 }
 
 /// Builder fluide pour `Coordinator`.
@@ -169,6 +206,8 @@ pub struct CoordinatorBuilder {
     registry: Option<ProviderRegistry>,
     bus: Option<Arc<dyn EventBus>>,
     vote: Option<VoteEngine>,
+    /// **R3.S5** — registre de politiques tenant (défaut : vide).
+    policies: Option<PolicyRegistry>,
 }
 
 impl Default for CoordinatorBuilder {
@@ -179,6 +218,7 @@ impl Default for CoordinatorBuilder {
             registry: None,
             bus: None,
             vote: None,
+            policies: None,
         }
     }
 }
@@ -302,6 +342,27 @@ impl CoordinatorBuilder {
         self
     }
 
+    /// **R3.S5** — Installe le registre de politiques multi-tenant.
+    ///
+    /// Sans cet appel, le `Coordinator` est mono-tenant : tous les lookups
+    /// `policies.get()` renvoient `None` → comportement global R3.S4 préservé.
+    ///
+    /// ## Exemple
+    /// ```ignore
+    /// use efe_coordinator::{Coordinator, PolicyRegistry, TenantPolicies};
+    ///
+    /// let reg = PolicyRegistry::new()
+    ///     .with(TenantPolicies::open(tenant_a))
+    ///     .with(TenantPolicies { allowed_llms: Some(vec!["gemini".into()]),
+    ///                            ..TenantPolicies::open(tenant_b) });
+    /// let coord = Coordinator::builder().policies(reg).build()?;
+    /// ```
+    #[must_use]
+    pub fn policies(mut self, reg: PolicyRegistry) -> Self {
+        self.policies = Some(reg);
+        self
+    }
+
     /// Build final.
     pub fn build(self) -> CoordResult<Coordinator> {
         if self.config.max_concurrency == 0 {
@@ -339,6 +400,7 @@ impl CoordinatorBuilder {
             blackboard: PheromoneBlackboard::new(),
             bus,
             vote: self.vote.unwrap_or_else(VoteEngine::uniform),
+            policies: Arc::new(self.policies.unwrap_or_default()),
         })
     }
 }
@@ -362,7 +424,34 @@ impl Coordinator {
             bus: Arc::new(InMemoryBus::new()),
             dag: DagExecutor::default(),
             vote: VoteEngine::uniform(),
+            policies: Arc::new(PolicyRegistry::new()),
         }
+    }
+
+    /// **R3.S5** — Résout le circuit SLM d'un robot pour un tenant donné.
+    ///
+    /// - Si `has_policy` (le tenant a une policy), on cherche d'abord la clé
+    ///   isolée `"{tenant}:{robot}"`. Si absente (circuits tenant non
+    ///   pré-déclarés), on retombe sur la clé partagée `"{robot}"`.
+    /// - Si `!has_policy` (mono-tenant), on utilise directement `"{robot}"`
+    ///   (sémantique R3.S2 inchangée).
+    ///
+    /// Cette dégradation propre garantit que l'absence de circuits tenant
+    /// pré-déclarés n'introduit pas de panne : on retrouve la garde partagée.
+    #[must_use]
+    pub fn slm_circuit_for(
+        &self,
+        tenant: TenantId,
+        robot: &str,
+        has_policy: bool,
+    ) -> Option<&SlmCircuitBreaker> {
+        if has_policy {
+            let keyed = circuit_key(tenant, robot, true);
+            if let Some(cb) = self.clients.slm_circuits.get(&keyed) {
+                return Some(cb);
+            }
+        }
+        self.clients.slm_circuit(robot)
     }
 
     /// Souscrit au bus.  Helper pour les tests.

@@ -103,6 +103,9 @@
 
 pub mod audit;
 pub mod blackboard;
+// R3.S6 — chaos engineering (feature-gated : OFF en prod).
+#[cfg(feature = "chaos")]
+pub mod chaos;
 pub mod coordinator;
 pub mod dag;
 pub mod error;
@@ -111,6 +114,7 @@ pub mod failure;
 pub mod heartbeat;
 pub mod llm;
 pub mod metrics;
+pub mod multi_tenant;
 pub mod request;
 pub mod savings_report;
 pub mod speculate;
@@ -138,6 +142,15 @@ pub use llm::{
 };
 pub use failure::{combine_failure_modes, FailureMode};
 pub use metrics::ChewingMetrics;
+// R3.S6 — chaos engineering (feature-gated).
+#[cfg(feature = "chaos")]
+pub use chaos::{ChaosFaultKind, ChaosInjector, ChaosLlmProvider, CHAOS_MAX_SLEEP};
+// R3.S5 — politiques multi-tenant.
+pub use multi_tenant::{
+    circuit_key, PolicyRegistry, TenantPolicies, DEFAULT_SLM_CIRCUIT_THRESHOLD,
+};
+// Re-export ergonomique du type tenant (défini dans efe-nano-app-coordinator).
+pub use efe_nano_app_coordinator::TenantId;
 pub use savings_report::{ModeSummary, RunMode, RunRecord, SavingsReport};
 
 #[cfg(feature = "anthropic")]

@@ -62,6 +62,7 @@ async fn main() -> anyhow::Result<()> {
         );
     }
     let req = MissionBRequest {
+        tenant_id: None,
         user_text: "What is the capital of France?".into(),
         task_class: TaskClass::FactualQa,
         llms: vec!["claude".into(), "gpt4".into(), "gemini".into()],

@@ -507,6 +507,10 @@ mod tests {
                     failure_mode: crate::failure::FailureMode::None,
                     degradations_count: 0,
                     failed_components: vec![],
+                    // R3.S5 — multi-tenant fields.
+                    tenant_id: None,
+                    tenant_cost_cap_exceeded: None,
+                    tenant_llms_filtered: None,
                 },
                 ts: Utc::now(),
             },

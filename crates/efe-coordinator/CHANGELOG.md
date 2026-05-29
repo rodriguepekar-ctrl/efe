@@ -8,6 +8,124 @@ Toutes les modifications notables sont documentées ici.  Format suit
 
 _(rolling — prochains items)_
 
+### Phase 3 R3.S6 — Chaos engineering CI (LIVRÉ 2026-05-29)
+
+> Fix L3 : la graceful degradation S8-R2 (fallback chain, vote dégradé,
+> drafter bypass, SLM skip) n'était testée que contre
+> `MockLlmProvider::with_error()` — un échec synthétique, instantané, sans
+> réseau. R3.S6 livre un framework de **chaos engineering** qui injecte de
+> **vraies** fautes (429, timeout, JSON tronqué, réponse vide) sur des
+> providers réels, prouvant la résilience en condition réseau réelle.
+> Principe « zéro dépendance » (PRNG SplitMix64 interne, pas de `rand`),
+> « zéro modif des workflows » (injection via le registry, code de prod
+> inchangé), et honnêteté (le fault `Timeout` **révèle** l'absence de
+> hard-deadline workflow — documenté, borné via `CHAOS_MAX_SLEEP`).
+
+#### Ajouté
+- **Feature `chaos`** (Cargo.toml) — OFF en prod (binaire propre, pas de
+  chaos accidentel), ON en test/CI. Aucune dépendance ajoutée.
+- **`src/chaos.rs`** (NEW, feature-gated) :
+  - `ChaosFaultKind` : `HttpStatus(u16)`, `Timeout(Duration)`,
+    `InvalidResponse`, `EmptyResponse`.
+  - `ChaosInjector` : `fault_rates` par provider-id + `fault_kind` + PRNG
+    **SplitMix64 seedé** (déterministe → tests reproductibles).
+    `seeded()`, `with_fault_rate()`, `from_env()` (lit `EFE_CHAOS_RATE`),
+    `should_fault()` (court-circuite sans tirage si taux nul), `wrap()`.
+  - `ChaosLlmProvider` : décorateur `LlmProvider` injectant dans **`call()`
+    ET `stream()`** (Mission A passe par stream, B par call, Spec par les
+    deux). Préserve l'id du provider wrappé → router/fallback transparents.
+  - `CHAOS_MAX_SLEEP` (5 s) : plafond dur du sleep injecté (anti-hang CI).
+  - 9 tests unitaires (déterminisme RNG, taux 0/1/0.3, pass-through,
+    429 sur call+stream, timeout borné, empty response).
+- **Re-exports crate-root gated** : `ChaosFaultKind`, `ChaosInjector`,
+  `ChaosLlmProvider`, `CHAOS_MAX_SLEEP`.
+- **`tests/chaos_offline.rs`** (NEW, 4 tests) : Mission A 429→fallback,
+  Mission B 503→vote dégradé, Spec drafter empty→noise gate slow path,
+  Spec drafter 503→bypass verifier.
+- **`tests/live_chaos.rs`** (NEW, 4 tests, gate `EFE_LIVE_LLM`) : Mission A
+  429@30 % sur 20 missions (> 80 % complétion + fallbacks tracés), Mission B
+  timeout→vote dégradé, Spec drafter invalide→slow path, SLM analyzer
+  injoignable→skip gracieux (vecteur infra-level, réutilise R3.S2).
+- **`.github/workflows/chaos-eng.yml`** (NEW) : CI nightly (offline garde-fou
+  + live sérialisé sous `EFE_CHAOS_RATE`).
+
+#### Vecteurs d'injection
+- **Provider-level** (`ChaosLlmProvider`) pour les LLM (Claude/Gemini/GPT,
+  drafter Spec).
+- **Infra-level** (endpoint mort) pour les SLM nano-robots
+  (`NanoRobotClient` ≠ `LlmProvider`) → valide le `SlmCircuitBreaker` R3.S2
+  sans nouveau code.
+
+#### Findings honnêtes (backlog)
+- **Pas de hard-deadline workflow** : `LlmCall.deadline` est advisory (aucun
+  `tokio::time::timeout`). Le fault `Timeout` le rend visible ; borné côté
+  chaos + harness pour la CI. Fix = sprint à part.
+- **Pas de retry/backoff** dans le bridge (1 tentative → fallback immédiat) :
+  le chaos quantifie le taux de bascule ; ajout de retry = orthogonal.
+
+#### Backward-compat
+- Feature off ⇒ `chaos.rs` non compilé, zéro symbole `Chaos*`, binaire prod
+  inchangé. `fault_rate = 0.0` ⇒ pass-through byte-pour-byte (testé).
+- 13 tests offline (9 unit + 4 intégration) PASS ; 4 tests live compilent +
+  skip propre sans clés ; clippy `--features chaos --tests` exit 0 ; default
+  build (chaos off) inchangé.
+
+### Phase 3 R3.S5 — Multi-tenant policies (LIVRÉ 2026-05-29)
+
+> Fix L5 : l'isolation tenant était une **fiction** — les 3 workflows
+> câblaient `coord.config.default_tenant` (global) dans le `CallContext`,
+> si bien que toutes les entrées d'audit portaient le même `tenant_id`.
+> R3.S5 livre la couche de **politiques par tenant** (table de scoring,
+> allow-list, plafond de coût, seuil de circuit) résolue par requête, avec
+> propagation du **vrai** `tenant_id`. Principe « zéro dead config » (hérité
+> R3.S4) : chaque champ a un point d'enforcement réel ; `retry_policy`
+> (roadmap) est **descopé** (aucune infra de retry à paramétrer).
+
+#### Ajouté
+- **`src/multi_tenant.rs`** (NEW) : `TenantPolicies` (scoring_table,
+  allowed_llms 3-états dont `Some([])`=deny-all fail-closed,
+  max_cost_microcents_per_query, slm_circuit_threshold), `PolicyRegistry`
+  (lookup O(1) par `TenantId`), `resolve()`, `circuit_key()`,
+  `DEFAULT_SLM_CIRCUIT_THRESHOLD`. 14 tests unitaires.
+- **`Coordinator.policies: Arc<PolicyRegistry>`** + builder `.policies()` ;
+  `Coordinator::slm_circuit_for(tenant, robot, has_policy)` (résolution de
+  circuit tenant-aware avec dégradation propre vers la clé partagée) ;
+  `CoordinatorClients::tenant_slm_circuits()` (pré-génération de circuits
+  keyed `"{tenant}:{robot}"` — isolation du blast radius, fix L5-d).
+- **`{MissionA,MissionB,Speculative}Request.tenant_id: Option<TenantId>`**
+  (`#[serde(default)]` — backward-compat JSON).
+- **`ChewingMetrics`** : `tenant_id`, `tenant_cost_cap_exceeded` (Mission B
+  best-effort), `tenant_llms_filtered` (tous `#[serde(default)]`).
+- **Re-exports crate-root** : `TenantPolicies`, `PolicyRegistry`,
+  `circuit_key`, `DEFAULT_SLM_CIRCUIT_THRESHOLD`, `TenantId`.
+- **`efe_nano_app_coordinator`** : `TenantId` + `SwarmId` re-exportés au
+  crate root.
+- **`tests/multi_tenant_policies.rs`** (NEW, 12 tests) + live
+  `r3s5_live_two_tenants_diverge`.
+
+#### Enforcement (par mission, points d'ancrage réels)
+- **Mission A** : allow-list filtre `available_llms` (intersection, jamais
+  union) → fail-closed si vide ; scoring table tenant injectée si la requête
+  n'en fournit pas (requête prioritaire) ; plafond de coût resserre
+  `Budget.max_cost_microcents` (`min`) avant le filtre router ; circuits
+  tenant-aware.
+- **Mission B** : allow-list filtre le fan-out `llms`, refus si < 2 (quorum) ;
+  plafond de coût best-effort (tracé via `tenant_cost_cap_exceeded`, pas de
+  point de coupe pré-fan-out).
+- **Speculative** : allow-list valide drafter **et** verifier (fail-closed).
+  Budget NON capé (workflow ne consomme pas `Budget` — anti dead-config).
+- **Audit** : `CallContext` construit avec le tenant **résolu** (fin de la
+  fiction L5-a) dans Mission A/B.
+
+#### Sécurité
+- Invariant : pour les champs sécuritaires (`allowed_llms`, `max_cost`),
+  `S_effectif ⊑ S_policy` — une requête ne peut jamais élargir sa policy.
+- `scoring_table` reste `#[serde(skip)]` (jamais désérialisée d'un payload).
+
+#### Backward-compat
+- Sans `PolicyRegistry` (défaut) + `tenant_id` absent ⇒ comportement R3.S4
+  byte-pour-byte. ~373 tests offline PASS, clippy `--tests` exit 0.
+
 ### Phase 3 R3.S1 — Cost Microcents (LIVRÉ 2026-05-28, commits `20984f7` + `<HEAD>`)
 
 > Fix L1/D7 (résolution u32 cents) : passage à `cost_microcents: u64`

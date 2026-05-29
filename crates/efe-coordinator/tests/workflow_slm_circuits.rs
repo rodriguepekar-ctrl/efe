@@ -150,6 +150,7 @@ fn make_mission_a_request() -> MissionARequest {
     let mut metas = HashMap::new();
     metas.insert("claude_mock".to_string(), meta());
     MissionARequest {
+        tenant_id: None,
         user_text: "Bonjour".into(),
         task_class: TaskClass::FactualQa,
         available_llms: vec!["claude_mock".into()],
@@ -172,6 +173,7 @@ fn make_mission_b_request() -> MissionBRequest {
         metas.insert(id.to_string(), meta());
     }
     MissionBRequest {
+        tenant_id: None,
         user_text: "Bonjour".into(),
         task_class: TaskClass::FactualQa,
         llms: vec!["claude".into(), "gpt".into(), "gemini".into()],
@@ -518,6 +520,7 @@ async fn r3s2_mission_a_emits_slm_circuit_opened_event_on_transition() {
     let mut metas = HashMap::new();
     metas.insert("claude".to_string(), meta());
     let req = MissionARequest {
+        tenant_id: None,
         user_text: "test".into(),
         task_class: TaskClass::FactualQa,
         available_llms: vec!["claude".into()],
@@ -597,6 +600,7 @@ async fn r3s2_speculative_unaffected_by_slm_circuits() {
         .expect("OK");
 
     let req = SpeculativeRequest {
+        tenant_id: None,
         user_text: "test".into(),
         task_class: TaskClass::FactualQa,
         verifier_llm: "verifier_llm".into(),
@@ -792,6 +796,7 @@ async fn r3s2_mission_a_opens_circuit_after_3_failures_cumulative() {
     let mut metas = HashMap::new();
     metas.insert("claude".to_string(), meta());
     let make_req = || MissionARequest {
+        tenant_id: None,
         user_text: "test".into(),
         task_class: TaskClass::FactualQa,
         available_llms: vec!["claude".into()],

@@ -103,6 +103,7 @@ fn i5_no_quorum_fallback_uses_success_rate() {
 async fn i6_mission_b_too_few_llms_errors() {
     let coord = Coordinator::for_tests();
     let req = MissionBRequest {
+        tenant_id: None,
         user_text: "x".into(),
         task_class: TaskClass::FactualQa,
         llms: vec!["only".into()],
@@ -156,6 +157,7 @@ async fn i4_same_request_runs_independently() {
     metas.insert("c".to_string(), meta(0.99));
 
     let mk_req = || MissionARequest {
+        tenant_id: None,
         user_text: "same".into(),
         task_class: TaskClass::FactualQa,
         available_llms: vec!["c".into()],

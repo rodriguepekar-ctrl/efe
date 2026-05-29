@@ -35,6 +35,7 @@ async fn speculative_accepts_draft_when_match() {
     let coord = Coordinator::builder().registry(reg).build().unwrap();
 
     let req = SpeculativeRequest {
+        tenant_id: None,
         user_text: "?".into(),
         task_class: TaskClass::FactualQa,
         verifier_llm: "claude".into(),
@@ -70,6 +71,7 @@ async fn speculative_rejects_draft_when_diverge() {
     let coord = Coordinator::builder().registry(reg).build().unwrap();
 
     let req = SpeculativeRequest {
+        tenant_id: None,
         user_text: "?".into(),
         task_class: TaskClass::FactualQa,
         verifier_llm: "claude".into(),
@@ -104,6 +106,7 @@ async fn speculative_requires_drafter_registered() {
     // PAS de drafter
     let coord = Coordinator::builder().registry(reg).build().unwrap();
     let req = SpeculativeRequest {
+        tenant_id: None,
         user_text: "?".into(),
         task_class: TaskClass::FactualQa,
         verifier_llm: "claude".into(),
@@ -134,6 +137,7 @@ async fn speculative_requires_verifier_registered() {
     reg.register(Arc::new(MockLlmProvider::new("drafter").with_response("X")));
     let coord = Coordinator::builder().registry(reg).build().unwrap();
     let req = SpeculativeRequest {
+        tenant_id: None,
         user_text: "?".into(),
         task_class: TaskClass::FactualQa,
         verifier_llm: "ghost-llm".into(),
@@ -167,6 +171,7 @@ async fn speculative_emits_speculation_resolved_event() {
     let (_t, mut rx) = coord.subscribe(Some("ui"));
 
     let req = SpeculativeRequest {
+        tenant_id: None,
         user_text: "?".into(),
         task_class: TaskClass::FactualQa,
         verifier_llm: "claude".into(),
@@ -224,6 +229,7 @@ async fn s7_hot_path_skips_verifier_when_drafter_short_offline() {
     let coord = Coordinator::builder().registry(reg).build().unwrap();
 
     let req = SpeculativeRequest {
+        tenant_id: None,
         user_text: "Capital of France?".into(),
         task_class: TaskClass::FactualQa,
         verifier_llm: "claude_verifier".into(),
@@ -268,6 +274,7 @@ async fn s7_slow_path_calls_verifier_when_drafter_long_offline() {
     let coord = Coordinator::builder().registry(reg).build().unwrap();
 
     let req = SpeculativeRequest {
+        tenant_id: None,
         user_text: "?".into(),
         task_class: TaskClass::FactualQa,
         verifier_llm: "claude_verifier".into(),
@@ -308,6 +315,7 @@ async fn s7_chewing_metrics_filled_for_spec_offline() {
     let coord = Coordinator::builder().registry(reg).build().unwrap();
 
     let req = SpeculativeRequest {
+        tenant_id: None,
         user_text: "ping".into(),
         task_class: TaskClass::FactualQa,
         verifier_llm: "claude_verifier".into(),
@@ -354,6 +362,7 @@ async fn s7_verifier_skipped_propagated_to_response_offline() {
     let coord = Coordinator::builder().registry(reg).build().unwrap();
 
     let req = SpeculativeRequest {
+        tenant_id: None,
         user_text: "?".into(),
         task_class: TaskClass::FactualQa,
         verifier_llm: "v".into(),
@@ -407,6 +416,7 @@ async fn s7_spec_savings_cents_above_zero_when_skip_offline() {
         ..meta()
     };
     let req = SpeculativeRequest {
+        tenant_id: None,
         user_text: "A".repeat(2000), // ~500 tokens input estimés
         task_class: TaskClass::FactualQa,
         verifier_llm: "v".into(),
@@ -511,6 +521,7 @@ async fn s7_cost_cents_hot_path_equals_drafter_only() {
     let coord = Coordinator::builder().registry(reg).build().unwrap();
 
     let req = SpeculativeRequest {
+        tenant_id: None,
         user_text: "?".into(),
         task_class: TaskClass::FactualQa,
         verifier_llm: "v_expensive".into(),
@@ -561,6 +572,7 @@ async fn s7_cost_cents_slow_path_equals_drafter_plus_verifier() {
     let coord = Coordinator::builder().registry(reg).build().unwrap();
 
     let req = SpeculativeRequest {
+        tenant_id: None,
         user_text: "?".into(),
         task_class: TaskClass::FactualQa,
         verifier_llm: "v_expensive".into(),
@@ -618,6 +630,7 @@ async fn r3s1_speculative_hot_path_cost_microcents_drafter_only() {
     let coord = Coordinator::builder().registry(reg).build().unwrap();
 
     let req = SpeculativeRequest {
+        tenant_id: None,
         user_text: "Capital?".into(),
         task_class: TaskClass::FactualQa,
         verifier_llm: "claude".into(),
@@ -670,6 +683,7 @@ async fn r3s1_speculative_slow_path_cost_microcents_sum() {
     let coord = Coordinator::builder().registry(reg).build().unwrap();
 
     let req = SpeculativeRequest {
+        tenant_id: None,
         user_text: "x".into(),
         task_class: TaskClass::FactualQa,
         verifier_llm: "verifier".into(),
@@ -708,6 +722,7 @@ async fn r3s1_speculative_slow_path_cost_microcents_sum() {
 /// Helper : construit une `SpeculativeRequest` R3.S3 avec hot path actif.
 fn make_spec_req(reject_noise: bool) -> SpeculativeRequest {
     SpeculativeRequest {
+        tenant_id: None,
         user_text: "Capitale de la France ?".into(),
         task_class: TaskClass::FactualQa,
         verifier_llm: "claude".into(),

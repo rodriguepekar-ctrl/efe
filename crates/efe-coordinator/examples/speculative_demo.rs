@@ -42,6 +42,7 @@ async fn main() -> anyhow::Result<()> {
     });
 
     let req = SpeculativeRequest {
+        tenant_id: None,
         user_text: "What is the meaning of life?".into(),
         task_class: TaskClass::FactualQa,
         verifier_llm: "claude".into(),

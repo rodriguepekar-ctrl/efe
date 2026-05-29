@@ -39,6 +39,7 @@ async fn mission_a_emits_llm_token_streamed_events() {
     let mut metas = HashMap::new();
     metas.insert("claude".to_string(), meta());
     let req = MissionARequest {
+        tenant_id: None,
         user_text: "x".into(),
         task_class: TaskClass::FactualQa,
         available_llms: vec!["claude".into()],
@@ -81,6 +82,7 @@ async fn mission_b_emits_token_streamed_for_each_provider() {
     let (_t, mut rx) = coord.subscribe(Some("test"));
 
     let req = MissionBRequest {
+        tenant_id: None,
         user_text: "x".into(),
         task_class: TaskClass::FactualQa,
         llms: vec!["a".into(), "b".into()],
@@ -117,6 +119,7 @@ async fn speculative_emits_draft_token_events() {
     let (_t, mut rx) = coord.subscribe(Some("test"));
 
     let req = SpeculativeRequest {
+        tenant_id: None,
         user_text: "?".into(),
         task_class: TaskClass::FactualQa,
         verifier_llm: "claude".into(),

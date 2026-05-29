@@ -61,6 +61,7 @@ async fn main() -> anyhow::Result<()> {
         },
     );
     let req = MissionARequest {
+        tenant_id: None,
         user_text: "What did the Fed announce today?".into(),
         task_class: TaskClass::FactualQa,
         available_llms: vec!["claude_mock".into()],

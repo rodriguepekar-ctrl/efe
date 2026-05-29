@@ -193,6 +193,7 @@ fn build_baseline_request(query: &str, claude_id: &str) -> MissionARequest {
     let mut metadata = HashMap::new();
     metadata.insert(claude_id.to_string(), stub_meta());
     MissionARequest {
+        tenant_id: None,
         user_text: query.to_string(),
         task_class: TaskClass::FactualQa,
         available_llms: vec![claude_id.to_string()],

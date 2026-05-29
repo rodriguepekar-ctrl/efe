@@ -27,6 +27,8 @@
 
 use serde::{Deserialize, Serialize};
 
+use efe_nano_app_coordinator::TenantId;
+
 use crate::failure::FailureMode;
 
 /// Métriques quantifiant le gain de pré-mâchage SLM avant l'appel au gros LLM.
@@ -191,6 +193,27 @@ pub struct ChewingMetrics {
     /// `"compressor"`, `"llm:claude_…"`). Ordre stable d'observation.
     #[serde(default)]
     pub failed_components: Vec<String>,
+
+    // ── R3.S5 — Multi-tenant policies ─────────────────────────────────────
+    /// **R3.S5** — Tenant effectif de la mission (résolu requête > default).
+    /// `None` ⇒ mission pré-S5 / pas de tenant tracé. Sert à l'analytics et au
+    /// croisement avec l'audit chain.
+    #[serde(default)]
+    pub tenant_id: Option<TenantId>,
+
+    /// **R3.S5** — `Some(true)` si le coût a dépassé le plafond tenant en
+    /// Mission B (où le cap est best-effort, faute de point de coupe
+    /// pré-fan-out — cf. architecture §7.2). `None` ⇒ pas de plafond / non
+    /// applicable (A et Spec resserrent le `Budget` en amont, jamais dépassé).
+    #[serde(default)]
+    pub tenant_cost_cap_exceeded: Option<bool>,
+
+    /// **R3.S5** — Nombre de LLMs retirés par l'allow-list tenant (`Some(0)`
+    /// si une policy existe mais ne filtre rien ; `None` si pas de policy).
+    /// Un nombre élevé signale une allow-list trop stricte qui dégrade la
+    /// qualité de routing.
+    #[serde(default)]
+    pub tenant_llms_filtered: Option<usize>,
 }
 
 impl ChewingMetrics {
@@ -382,6 +405,10 @@ mod tests {
             failure_mode: FailureMode::None,
             degradations_count: 0,
             failed_components: vec![],
+            // R3.S5 — multi-tenant.
+            tenant_id: Some(uuid::Uuid::nil()),
+            tenant_cost_cap_exceeded: Some(false),
+            tenant_llms_filtered: Some(0),
         };
         let s = serde_json::to_string(&m).unwrap();
         let back: ChewingMetrics = serde_json::from_str(&s).unwrap();

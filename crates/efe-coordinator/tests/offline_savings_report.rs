@@ -41,6 +41,7 @@ fn build_request_for_llm(llm_id: &str, query: &str) -> MissionARequest {
     let mut metadata = HashMap::new();
     metadata.insert(llm_id.to_string(), stub_metadata());
     MissionARequest {
+        tenant_id: None,
         user_text: query.to_string(),
         task_class: TaskClass::FactualQa,
         available_llms: vec![llm_id.to_string()],

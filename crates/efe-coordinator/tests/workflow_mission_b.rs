@@ -40,6 +40,7 @@ async fn mission_b_with_unanimous_llms_picks_consensus() {
     }
 
     let req = MissionBRequest {
+        tenant_id: None,
         user_text: "Capital of France?".into(),
         task_class: TaskClass::FactualQa,
         llms: vec!["claude".into(), "gpt4".into(), "gemini".into()],
@@ -59,6 +60,7 @@ async fn mission_b_with_unanimous_llms_picks_consensus() {
 async fn mission_b_too_few_llms_errors() {
     let coord = Coordinator::for_tests();
     let req = MissionBRequest {
+        tenant_id: None,
         user_text: "x".into(),
         task_class: TaskClass::FactualQa,
         llms: vec!["only-one".into()],
@@ -80,6 +82,7 @@ async fn mission_b_all_providers_fail_errors() {
     let coord = Coordinator::builder().registry(reg).build().unwrap();
 
     let req = MissionBRequest {
+        tenant_id: None,
         user_text: "x".into(),
         task_class: TaskClass::FactualQa,
         llms: vec!["a".into(), "b".into()],
@@ -102,6 +105,7 @@ async fn mission_b_publishes_vote_resolved_event() {
     let (_t, mut rx) = coord.subscribe(Some("ui"));
 
     let req = MissionBRequest {
+        tenant_id: None,
         user_text: "x".into(),
         task_class: TaskClass::FactualQa,
         llms: vec!["a".into(), "b".into()],
@@ -135,6 +139,7 @@ async fn mission_b_weighted_vote_overrides_majority() {
     weights.insert("gpt4".to_string(), 1.0);
     weights.insert("gemini".to_string(), 1.0);
     let req = MissionBRequest {
+        tenant_id: None,
         user_text: "x".into(),
         task_class: TaskClass::FactualQa,
         llms: vec!["claude".into(), "gpt4".into(), "gemini".into()],
@@ -175,6 +180,7 @@ async fn mission_b_chewing_metrics_filled_with_mocks() {
     metas.insert("gemini".to_string(), meta());
 
     let req = MissionBRequest {
+        tenant_id: None,
         user_text: "What is the capital of France?".into(), // < 500 chars → no compress
         task_class: TaskClass::FactualQa,
         llms: vec!["claude".into(), "gpt4".into(), "gemini".into()],
@@ -246,6 +252,7 @@ async fn mission_b_emits_pre_chewing_metrics_event() {
     metas.insert("a".to_string(), meta());
     metas.insert("b".to_string(), meta());
     let req = MissionBRequest {
+        tenant_id: None,
         user_text: "hi".into(),
         task_class: TaskClass::FactualQa,
         llms: vec!["a".into(), "b".into()],
@@ -298,6 +305,7 @@ async fn mission_b_chewing_metrics_serializable_through_response() {
     metas.insert("a".to_string(), meta());
     metas.insert("b".to_string(), meta());
     let req = MissionBRequest {
+        tenant_id: None,
         user_text: "hi".into(),
         task_class: TaskClass::FactualQa,
         llms: vec!["a".into(), "b".into()],
@@ -372,6 +380,7 @@ async fn r3s1_mission_b_total_cost_microcents_aggregates_n_llms() {
     }
 
     let req = MissionBRequest {
+        tenant_id: None,
         user_text: "Capital of France?".into(),
         task_class: TaskClass::FactualQa,
         llms: vec!["claude".into(), "gpt4".into(), "gemini".into()],

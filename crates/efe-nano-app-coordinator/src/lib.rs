@@ -89,7 +89,9 @@ pub use clients::{
     // verbeux `efe_nano_app_coordinator::clients::SlmCircuitBreaker`).
     SlmCircuitBreaker, SlmCircuitState,
 };
-pub use context::{AuditEntry, AuditStatus, AuditWriter, CallContext, InMemoryAuditWriter};
+pub use context::{
+    AuditEntry, AuditStatus, AuditWriter, CallContext, InMemoryAuditWriter, SwarmId, TenantId,
+};
 pub use error::{RobotError, RobotResult};
 
 /// Identifiants canoniques des 6 robots (kebab-case).

@@ -47,6 +47,7 @@ fn mission_a_request(
     llm_metadata: HashMap<String, LlmMetadata>,
 ) -> MissionARequest {
     MissionARequest {
+        tenant_id: None,
         user_text: "test".into(),
         task_class: TaskClass::FactualQa,
         available_llms,
@@ -70,6 +71,7 @@ fn mission_b_request(llms: Vec<String>) -> MissionBRequest {
         metadata.insert(l.clone(), meta());
     }
     MissionBRequest {
+        tenant_id: None,
         user_text: "test".into(),
         task_class: TaskClass::FactualQa,
         llms,
@@ -331,6 +333,7 @@ async fn speculative_falls_back_to_verifier_when_drafter_fails_offline() {
     let coord = Coordinator::builder().registry(reg).build().unwrap();
 
     let req = SpeculativeRequest {
+        tenant_id: None,
         user_text: "?".into(),
         task_class: TaskClass::FactualQa,
         verifier_llm: "verifier".into(),
@@ -380,6 +383,7 @@ async fn speculative_drafter_bypassed_event_emitted_offline() {
     let (_token, mut rx) = coord.subscribe(Some("s8-bypass-test"));
 
     let req = SpeculativeRequest {
+        tenant_id: None,
         user_text: "?".into(),
         task_class: TaskClass::FactualQa,
         verifier_llm: "v".into(),
@@ -524,6 +528,7 @@ async fn mission_b_uses_vote_fallback_i5_when_default_quorum_not_met_offline() {
     metadata.insert("dead2".to_string(), meta());
 
     let req = MissionBRequest {
+        tenant_id: None,
         user_text: "?".into(),
         task_class: TaskClass::FactualQa,
         llms: vec![
@@ -580,6 +585,7 @@ async fn mission_b_vote_degraded_distinct_from_quorum_fallback_offline() {
     // atteint → pas de fallback I5 nécessaire. Mais c a fail, donc
     // vote_degraded doit quand même être true.
     let req = MissionBRequest {
+        tenant_id: None,
         user_text: "?".into(),
         task_class: TaskClass::FactualQa,
         llms: vec!["a".to_string(), "b".to_string(), "c".to_string()],

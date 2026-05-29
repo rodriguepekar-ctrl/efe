@@ -49,6 +49,7 @@ fn meta() -> LlmMetadata {
 /// gate de bruit R3.S3 actif.
 fn spec_req(drafter_llm: &str, verifier_llm: &str) -> SpeculativeRequest {
     SpeculativeRequest {
+        tenant_id: None,
         user_text: "Quelle est la capitale de la France ?".into(),
         task_class: TaskClass::FactualQa,
         verifier_llm: verifier_llm.into(),

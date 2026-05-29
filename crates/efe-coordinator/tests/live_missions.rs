@@ -114,6 +114,7 @@ fn build_factual_request(query: &str, llm_id: &str) -> MissionARequest {
     let mut metadata = HashMap::new();
     metadata.insert(llm_id.to_string(), default_claude_metadata());
     MissionARequest {
+        tenant_id: None,
         user_text: query.to_string(),
         task_class: TaskClass::FactualQa,
         available_llms: vec![llm_id.to_string()],
@@ -413,6 +414,7 @@ fn build_factual_request_with_sources(
     let mut metadata = HashMap::new();
     metadata.insert(llm_id.to_string(), default_claude_metadata());
     MissionARequest {
+        tenant_id: None,
         user_text: query.to_string(),
         task_class: TaskClass::FactualQa,
         available_llms: vec![llm_id.to_string()],
@@ -1230,6 +1232,7 @@ fn build_mission_b_request_3llm(
     metadata.insert(llm_ids[1].to_string(), default_gemini_metadata());
     metadata.insert(llm_ids[2].to_string(), default_gpt_metadata());
     MissionBRequest {
+        tenant_id: None,
         user_text: query.to_string(),
         task_class: TaskClass::FactualQa,
         llms: llm_ids.iter().map(|s| s.to_string()).collect(),
@@ -2291,6 +2294,7 @@ async fn r3s2_live_mission_a_resilient_when_analyzer_unreachable() {
     );
 
     let make_req = || MissionARequest {
+        tenant_id: None,
         user_text: "What is the capital of France?".into(),
         task_class: TaskClass::FactualQa,
         available_llms: vec!["claude_claude-sonnet-4-6".to_string()],
@@ -2606,4 +2610,96 @@ async fn r3s4_live_local_drafter_calibration() {
             "draft local bruité rejeté → slow path → verifier appelé"
         );
     }
+}
+
+// ====================================================================
+// R3.S5 — Test live multi-tenant : 2 tenants → 2 routings (fix L5)
+// ====================================================================
+
+/// **R3.S5 (fix L5) — Test live** : deux tenants avec des allow-lists
+/// distinctes routent la MÊME requête vers des LLMs différents, prouvant
+/// l'isolation des politiques par tenant de bout en bout (réseau réel).
+///
+/// ## Pré-conditions
+/// - `EFE_LIVE_LLM=1` + `ANTHROPIC_API_KEY` + `GOOGLE_AI_KEY`.
+///
+/// ## Scénario
+/// - tenant « cost » : allow-list = `[gemini]` (cheap).
+/// - tenant « quality » : allow-list = `[claude]` (premium).
+/// - Même requête factuelle, même coordinator.
+///
+/// ## Assertions
+/// - tenant cost → `llm_used == gemini` ; tenant quality → `llm_used == claude`.
+/// - Les deux divergent (critère d'acceptation central R3.S5).
+/// - `tenant_id` tracé dans les métriques de chaque réponse.
+#[tokio::test]
+async fn r3s5_live_two_tenants_diverge() {
+    use efe_coordinator::{GeminiProvider, PolicyRegistry, TenantPolicies};
+    if !s7_preconditions_satisfied() {
+        return;
+    }
+
+    let gemini: Arc<dyn LlmProvider> =
+        Arc::new(GeminiProvider::from_env().expect("GOOGLE_AI_KEY"));
+    let claude: Arc<dyn LlmProvider> =
+        Arc::new(ClaudeProvider::from_env().expect("ANTHROPIC_API_KEY"));
+    let gid = gemini.id().to_string();
+    let cid = claude.id().to_string();
+
+    let reg = ProviderRegistry::new();
+    reg.register(gemini);
+    reg.register(claude);
+
+    let tenant_cost = uuid::Uuid::now_v7();
+    let tenant_quality = uuid::Uuid::now_v7();
+    let policies = PolicyRegistry::new()
+        .with(TenantPolicies {
+            allowed_llms: Some(vec![gid.clone()]),
+            ..TenantPolicies::open(tenant_cost)
+        })
+        .with(TenantPolicies {
+            allowed_llms: Some(vec![cid.clone()]),
+            ..TenantPolicies::open(tenant_quality)
+        });
+    let coord = Coordinator::builder()
+        .registry(reg)
+        .policies(policies)
+        .build()
+        .expect("coordinator builds");
+
+    let make_req = |tenant: uuid::Uuid| {
+        let mut req = MissionARequest::with_default_scoring(
+            "Quelle est la capitale de la France ?".to_string(),
+            TaskClass::FactualQa,
+            vec![gid.clone(), cid.clone()],
+        );
+        req.tenant_id = Some(tenant);
+        req
+    };
+
+    let resp_cost = run_mission_a(&coord, make_req(tenant_cost))
+        .await
+        .expect("cost tenant OK");
+    let resp_quality = run_mission_a(&coord, make_req(tenant_quality))
+        .await
+        .expect("quality tenant OK");
+
+    eprintln!("\n=== R3.S5 live two-tenant divergence ===");
+    eprintln!("  tenant cost    → {}", resp_cost.llm_used);
+    eprintln!("  tenant quality → {}", resp_quality.llm_used);
+
+    assert_eq!(resp_cost.llm_used, gid, "tenant cost → gemini (allow-list)");
+    assert_eq!(resp_quality.llm_used, cid, "tenant quality → claude (allow-list)");
+    assert_ne!(
+        resp_cost.llm_used, resp_quality.llm_used,
+        "2 tenants → 2 routings différents (critère d'acceptation R3.S5)"
+    );
+    assert_eq!(
+        resp_cost.chewing_metrics.as_ref().unwrap().tenant_id,
+        Some(tenant_cost)
+    );
+    assert_eq!(
+        resp_quality.chewing_metrics.as_ref().unwrap().tenant_id,
+        Some(tenant_quality)
+    );
 }

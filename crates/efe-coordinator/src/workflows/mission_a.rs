@@ -50,7 +50,7 @@ use crate::request::{FactCheck, MissionARequest, MissionAResponse};
 #[allow(clippy::field_reassign_with_default)]
 pub async fn run_mission_a(
     coord: &Coordinator,
-    req: MissionARequest,
+    mut req: MissionARequest,
 ) -> CoordResult<MissionAResponse> {
     let started = Instant::now();
     let swarm_id = Uuid::now_v7();
@@ -74,13 +74,51 @@ pub async fn run_mission_a(
         })
         .await;
 
-    // Construit CallContext.
+    // ── R3.S5 : résolution multi-tenant + enforcement des politiques ──────
+    //
+    // Résout le tenant effectif (requête > default global) et sa policy. Tous
+    // les leviers (allow-list, scoring, budget) sont appliqués EN AMONT du
+    // pipeline, en mutant `req` — ainsi le code aval (router L195, fallback
+    // L269) consomme automatiquement les valeurs enforce-ées, sans churn.
+    let (tenant_id, policy) =
+        crate::multi_tenant::resolve(&coord.policies, req.tenant_id, coord.config.default_tenant);
+    let has_policy = policy.is_some();
+
+    // (a) Allow-list : `available_llms ∩ policy.allowed_llms` (jamais union).
+    //     Une intersection vide ⇒ fail-closed (pas de fuite vers un LLM hors
+    //     plan, pas de fallback silencieux).
+    let mut tenant_llms_filtered: Option<usize> = None;
+    if let Some(p) = policy {
+        let before = req.available_llms.len();
+        req.available_llms = p.filter_llms(&req.available_llms);
+        tenant_llms_filtered = Some(before - req.available_llms.len());
+        if req.available_llms.is_empty() {
+            return Err(CoordError::Config(
+                "no LLM permitted for tenant (allow-list intersection empty)".into(),
+            ));
+        }
+        // (b) Scoring table : la requête prime (champ non-sécuritaire) ; sinon
+        //     on injecte la table du tenant. Le router (L195) la consomme tel
+        //     quel via `req.task_class_scoring_table`.
+        if req.task_class_scoring_table.is_none() {
+            req.task_class_scoring_table = p.scoring_table.clone();
+        }
+        // (c) Plafond de coût : resserre le budget µ¢ AVANT le filtre router
+        //     (router.rs:118 filtre dessus). `min(req, policy)` = plus strict.
+        let capped = p.cap_microcents(req.budget.max_cost_microcents_resolved());
+        req.budget.max_cost_microcents = capped;
+    }
+    chewing_metrics.tenant_id = Some(tenant_id);
+    chewing_metrics.tenant_llms_filtered = tenant_llms_filtered;
+
+    // Construit CallContext avec le tenant RÉSOLU (fin de la fiction L5-a :
+    // l'audit chain trace enfin le vrai tenant, plus `default_tenant` global).
     let audit = Arc::new(InMemoryAuditWriter::default());
-    let ctx = CallContext::with_swarm(coord.config.default_tenant, swarm_id, audit.clone());
+    let ctx = CallContext::with_swarm(tenant_id, swarm_id, audit.clone());
 
     // ── Étape 1 : Analyzer (R3.S2 fix L2 : guard SLM circuit) ────────
     if let Some(analyzer) = &coord.clients.analyzer {
-        let circuit = coord.clients.slm_circuit("analyzer");
+        let circuit = coord.slm_circuit_for(tenant_id, "analyzer", has_policy);
         match slm_guard_check(circuit, "analyzer", &mut chewing_metrics) {
             SlmGuardOutcome::Skip => {
                 // R3.S2 : circuit Open → skip analyzer immédiat (<1ms).
@@ -284,7 +322,7 @@ pub async fn run_mission_a(
     // ── Étape 3 : Compressor (R3.S2 fix L2 : guard SLM circuit) ─────
     let final_prompt = if let Some(compressor) = &coord.clients.compressor {
         if req.user_text.len() > 500 {
-            let circuit = coord.clients.slm_circuit("compressor");
+            let circuit = coord.slm_circuit_for(tenant_id, "compressor", has_policy);
             match slm_guard_check(circuit, "compressor", &mut chewing_metrics) {
                 SlmGuardOutcome::Skip => {
                     // R3.S2 : circuit Open → skip compressor, utilise raw prompt.
@@ -502,7 +540,7 @@ pub async fn run_mission_a(
     let mut verdicts = Vec::new();
     if !req.candidate_sources.is_empty() {
         if let Some(verifier) = &coord.clients.verifier {
-            let circuit = coord.clients.slm_circuit("verifier");
+            let circuit = coord.slm_circuit_for(tenant_id, "verifier", has_policy);
             match slm_guard_check(circuit, "verifier", &mut chewing_metrics) {
                 SlmGuardOutcome::Skip => {
                     // R3.S2 : circuit Open → skip verifier, pas de verdicts.
