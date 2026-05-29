@@ -1,0 +1,46 @@
+# R3.S6 — Chaos engineering CI (fix L3).
+#
+# Exécute la suite de chaos LIVE (fautes réelles sur providers cloud) en
+# nightly, prouvant que la graceful degradation S8-R2 tient en condition
+# réseau réelle. La suite chaos OFFLINE (mock + chaos) tourne dans la CI
+# normale ; ce workflow cible les chemins live qui exigent des secrets API.
+name: chaos-eng
+
+on:
+  schedule:
+    # Nightly 04:07 UTC (minute décalée pour éviter le pic :00).
+    - cron: "7 4 * * *"
+  workflow_dispatch:
+    inputs:
+      chaos_rate:
+        description: "Taux de faute injecté (0.0–1.0)"
+        required: false
+        default: "0.3"
+
+jobs:
+  chaos-live:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+
+      # 1) Garde-fou : la suite OFFLINE doit toujours passer (déterministe,
+      #    sans secret). Échoue vite si le décorateur chaos régresse.
+      - name: Chaos offline suite
+        run: cargo test -p efe-coordinator --features chaos --test chaos_offline -- --nocapture
+
+      # 2) Suite LIVE sous injection réelle (sérialisée : partage budget API +
+      #    état RNG). Skip proprement si les secrets manquent.
+      - name: Chaos live suite
+        run: cargo test -p efe-coordinator --features "chaos,all-providers" --test live_chaos -- --test-threads=1 --nocapture
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTH_KEY }}
+          GOOGLE_AI_KEY: ${{ secrets.GOOGLE_AI_KEY }}
+          EFE_LIVE_LLM: "1"
+          EFE_CHAOS_RATE: ${{ github.event.inputs.chaos_rate || '0.3' }}

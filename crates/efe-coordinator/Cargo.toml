@@ -22,6 +22,10 @@ openai = []
 local-slm = []
 # Raccourci : tous les providers R1a+R1b + drafter local R3.S4.
 all-providers = ["anthropic", "gemini", "openai", "local-slm"]
+# Phase 3 R3.S6 : chaos engineering (injection de fautes réelles, fix L3).
+# OFF en prod (binaire propre) ; ON en test/CI. Aucune dépendance ajoutée
+# (PRNG SplitMix64 interne).
+chaos = []
 
 [dependencies]
 # Crate frère : les 6 clients nano-robots Phase 1.
