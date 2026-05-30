@@ -6,7 +6,192 @@ Toutes les modifications notables sont documentées ici.  Format suit
 
 ## [Unreleased]
 
-_(rolling — prochains items)_
+_(rolling — prochains items R4)_
+
+## [0.2.0] — 2026-05-30 — Phase 3 R3 BOUCLÉE (production hardening)
+
+> R3 ferme les 4 limitations R2 (L1 cost-microcents, L2 SLM circuit wiring,
+> L3 chaos/local-drafter, L4 noise rejection) et ajoute 4 couches de durcissement
+> (multi-tenant S5, télémétrie Prometheus S7, A/B test S8, savings report v2 S9).
+> Méta-rapport : `R3_LIVE_VALIDATION.md`. Tag : `phase-3-r3-complete`.
+> **Note version** : le manifeste workspace racine étant *untracked* dans cet
+> arbre, `0.2.0` est un jalon **documentaire** (comme `[0.1.0]` pour R2) ;
+> `[workspace.package]` reste `0.0.1` sur disque.
+
+### Added (résumé R3 — détail par sprint ci-dessous)
+- `cost_microcents: u64` exposé via LlmResponse, MissionA/B/SpecResponse,
+  ChewingMetrics, SavingsReport (R3.S1, fix L1/D7).
+- SlmCircuitBreaker wiré dans run_mission_a/b/speculative (R3.S2, fix L2).
+- Speculator `NoiseRejectionPolicy` — rejet du bruit en hot path (R3.S3, fix L4/D6).
+- `LocalSlmProvider` drafter SLM local + break-even probe (R3.S4, fix L1/L3).
+- Multi-tenant `TenantPolicies` + `PolicyRegistry`, enforcement fail-closed (R3.S5).
+- Chaos engineering live (`ChaosLlmProvider`, fault injection réelle) (R3.S6, fix L3).
+- Prometheus `/metrics` endpoint, zéro dépendance (`tokio/net` only) (R3.S7).
+- A/B test framework entre tables de scoring, bucketing `blake3` (R3.S8).
+- `CHEWING_SAVINGS_REPORT_v2.{md,json}` + `to_markdown_v2()` intègre la section
+  A/B + fixture `08_speculative_local_only` (R3.S9).
+
+### Changed
+- `CHEWING_SAVINGS_REPORT_v2.md` produit en **microcents** : savings cost mesurés
+  **−27.4 % agrégat** + **~89 % sur la classe cheap-routable FactualQa** (vs
+  **+0 %** R2). Le R2 `CHEWING_SAVINGS_REPORT.md` (« +0 % ») est **préservé** pour
+  comparaison historique.
+
+### Phase 3 R3.S9 — Régen CHEWING_SAVINGS_REPORT_v2 (livrable visible) (LIVRÉ 2026-05-30)
+
+> Le livrable R2 affichait « +0 % » de savings cost (résolution `u32 cents`
+> écrasant les missions sub-cent). R3.S1 avait résolu la mécanique (microcents),
+> mais le livrable n'avait jamais été régénéré. R3.S9 ferme la boucle.
+
+#### Ajouté
+- **`tests/live_chewing_savings_report_v2.rs`** (NEW) : orchestrateur live v2 (6
+  fixtures × ≤ 5 modes), capture `cost_microcents` **RÉEL** via
+  `new_with_microcents` (le R2 dérivait µ¢ = cents × 1000 → `savings_ratio_microcents`
+  était condamné à 0), émet `to_markdown_v2()`, assertions **H1-H15**.
+- **`to_markdown_v2()`** intègre `ab_section_markdown()` (dette R3.S8 §13 — no-op
+  strict sans run A/B) ; 2 tests unitaires (présent/absent).
+- **`tests/fixtures/missions/08_speculative_local_only.json`** (FactualQa mono-mot,
+  pensée pour Speculative + drafter local éventuel).
+- Version report `s9-r3-YYYY-MM-DD` (corrige la contradiction latente
+  `new()`→`r3s1-` vs H8).
+
+#### Recalibration H11 (post-run live)
+- Cible aspirationnelle `> 0.50` remplacée par 2 preuves design-justifiées :
+  **H11a** agrégat µ¢ strictement positif + > 10 % (robuste à la variance du coût
+  code-gen premium-locked) ; **H11b** FactualQa cheap-routable > 80 % (routing
+  déterministe → Gemini Flash ≈ 0 µ¢). Live : **PASS H1-H15** (agrégat 27.4 %,
+  FactualQa ~89 %, latence Speculative −66 %, qualité 100 %).
+
+### Phase 3 R3.S8 — A/B test entre tables de scoring (LIVRÉ 2026-05-30)
+
+> La `TaskClassScoringTable` (calibration figée) décide du routing. Pour tester
+> une **nouvelle** table en prod sans risque, R3.S8 route un pourcentage du
+> trafic vers une table d'expérimentation et compare empiriquement les deux
+> bras. Principes : **zéro dépendance** (bucketing `blake3`, pas de `rand`),
+> **déterminisme** (même `swarm_id` → même bras), **précédence claire**
+> (`request > A/B > tenant > global`), **Mission A uniquement** (seule mission
+> avec table/router), **backward-compat** (`ab_test: None` ⇒ R3.S7 inchangé).
+
+#### Ajouté
+- **`src/ab_test.rs`** (NEW) :
+  - `ABArm` (Control/Experiment), `ABTestConfig` (tables *owned*, sérialisable),
+    `ABTestRuntime` (tables `Arc` → résolution O(1)/mission, zéro clone profond).
+  - `bucket_of(swarm_id)` = `blake3(uuid) % 100` (uniforme — casse la structure
+    temporelle d'UUID v7 ; pur → reproductible).
+  - `assign_arm(swarm_id, tenant, fixture)` : `None` hors population
+    (tenant/fixture filter) → résolution R3.S5 reprend ; `ratio 0` → toujours
+    Control, `ratio 1` → toujours Experiment.
+  - 10 tests unitaires (serde, déterminisme, distribution, ratio 0/1,
+    tenant_filter, fixture_filter, clamp).
+- **`Coordinator.ab_test: Option<Arc<ABTestRuntime>>`** + builder `.ab_test(cfg)`.
+- **`ChewingMetrics.ab_arm: Option<ABArm>`** (`#[serde(default)]`) — bras tracé.
+- **`mission_a`** : bloc A/B (précédence §4.1) — remplit
+  `req.task_class_scoring_table` AVANT l'injection tenant (zéro churn router).
+- **`ChewingMetrics.ab_table_version`** (`#[serde(default)]`) — version de la
+  table du bras (traçabilité calibration), posée par `mission_a` via
+  `ABTestRuntime::version_of`.
+- **`SavingsReport`** : `RunRecord::ab_arm()`, `RunRecord::ab_table_version()`,
+  `ArmStats` (avec `table_version`), `ABComparison`,
+  `ab_comparison()` (ségrégation control vs experiment + deltas),
+  `ab_section_markdown()` (intégré par `to_markdown_v2` en R3.S9).
+- **`tests/ab_test.rs`** (NEW, 6 tests intégration) : routing par bras
+  (experiment cost-weighted → cheap, control quality-weighted → premium),
+  pin-skip (`request > A/B`), backward-compat (pas d'A/B → pas d'arm),
+  ségrégation report.
+- **`tests/live_missions.rs`** : 2 tests live —
+  `r3s8_live_ab_test_savings_report` (50/50 sur LLMs réels → rapport segmenté)
+  et `r3s8_live_ab_arm_routing_consistency` (Control quality→Claude,
+  Experiment cost→Gemini : preuve end-to-end que la table du bras pilote le
+  routing).
+
+#### Décisions chirurgicales
+- **Config sérialisable vs runtime Arc** : `serde` d'un `Arc` exige la feature
+  `rc` (non activée) ET router via `Arc<table>` clonerait des HashMaps par
+  mission → deux types résolvent les deux contraintes.
+- **`fixture_filter`** : sens uniquement dans le harness de report (pas
+  d'identité fixture en prod) → live passe `None` ⇒ exclusion définie &
+  documentée (anti dead-config, lignée `EFE_CHAOS_RATE` R3.S6).
+- **Stats descriptives** (ségrégation + deltas), pas de p-value online (sprint
+  d'analyse à part).
+- **Déterminisme live** : un "replay" est impossible (`swarm_id` frais par
+  mission) → prouvé offline via `bucket_of` pur (documenté dans le test live).
+
+#### Backward-compat
+- `ab_test: None` (défaut) ⇒ bloc A/B court-circuité ⇒ comportement R3.S7
+  byte-pour-byte. `ab_arm` `#[serde(default)]` ⇒ rétrocompat JSON.
+- 16 tests offline R3.S8 PASS (10 unit + 6 intégration) + 2 live (compile+skip) ;
+  clippy `--all-targets --features chaos,metrics,all-providers` exit 0 (toutes
+  configs) ; suite complète (328 unit + intégration) verte ; default build
+  inchangé.
+
+### Phase 3 R3.S7 — Prometheus telemetry (LIVRÉ 2026-05-29)
+
+> R2/R3 produisaient une mine de données par mission (`ChewingMetrics`,
+> verdicts, état circuits) mais uniquement observables via SSE — aucune
+> métrique Prometheus pour le monitoring prod. R3.S7 expose un endpoint
+> `/metrics`. Principes : **zéro dépendance** (rendu Prometheus + serveur
+> `TcpListener` faits main, pas de crate `prometheus`/`hyper`), **hook
+> lossless** (RAII, capture succès ET erreur), **cardinalité bornée**
+> (`tenant_id` jamais un label), **anti dead-config** (`verdicts_total`
+> counters au lieu d'un `quality_pass_rate` gauge ; `savings{baseline,full}`
+> descopé faute de source live).
+
+#### Ajouté
+- **`src/metering.rs`** (NEW, toujours compilé, zéro dépendance) :
+  - `MetricsRegistry` (counters/histogramme en `AtomicU64`) + `render_prometheus`
+    (format d'exposition texte fait main).
+  - Familles : `efe_missions_total{type,outcome}`, `efe_cost_microcents_total{provider}`,
+    `efe_latency_ms` (histogram `{phase}`), `efe_failure_mode_total{kind}`,
+    `efe_savings_microcents_total{mode}`, `efe_verdicts_total{verdict}`,
+    `efe_slm_circuit_state{robot,state}` (gauge scrape-time).
+  - `MissionMetricGuard` (RAII) : `Drop` enregistre `outcome="error"` (mission
+    `?`-retournée) ; `record_success` désarme + enregistre les détails.
+  - `MissionRecord` + vues `from_mission_a/b/speculative` (découple le registre
+    des types `request.rs`). 9 tests unitaires.
+- **Feature `metrics = ["tokio/net"]`** : n'active `tokio/net` que pour le
+  serveur. Le registre + le hook restent toujours compilés.
+- **`src/metrics_server.rs`** (NEW, `#[cfg(feature="metrics")]`) : `serve_metrics`
+  délègue à la boucle canonique **testée** `serve_metrics_on` (zéro duplication).
+  Serveur
+  HTTP/1.1 minimal (`TcpListener`, même pattern que `local_slm.rs`).
+  `GET /metrics` → 200 `text/plain; version=0.0.4` ; `/healthz` → 200 ; 404
+  sinon. Bind `127.0.0.1:9090` par défaut. `snapshot_circuits` (pull scrape-time).
+- **`Coordinator.metrics: Option<Arc<MetricsRegistry>>`** + builder `.metrics()`.
+- **Hook 2 lignes/workflow** (mission_a/b/speculative) : `arm` + `record_success`.
+- **Re-exports** : `MetricsRegistry`, `MissionMetricGuard`, `MissionRecord`,
+  `MissionType`, `Outcome`, `Phase`, `FailureKind`, `SavingsMode`, `Verdict`,
+  `LATENCY_BUCKETS_MS`.
+- **`tests/metering.rs`** (NEW) : 5 tests intégration (Mission A succès/erreur,
+  Mission B, Speculative, none) + 4 tests serveur HTTP (200 Prometheus, 404,
+  circuit live, healthz).
+- **`benches/metering_overhead.rs`** (NEW) : bench Criterion prouvant
+  `record_mission` < 1 µs (record succès, record erreur, render scrape).
+- **Complétude** : ajout des chemins savings/verdicts/failure non testés
+  (`metrics_registry_records_savings_verdicts_failures`,
+  `error_outcome_skips_detail_metrics`) + getters
+  `savings_microcents_of`/`verdicts_count`/`failure_mode_count` ; intégration
+  Mission B + Speculative (exerce `from_mission_b`/`from_speculative`,
+  auparavant non couverts). Fix latent : `benches/coordinator_throughput.rs`
+  ne compilait plus depuis R3.S5 (`tenant_id` manquant — invisible à
+  `cargo test` qui ne compile pas les benches).
+
+#### Décisions chirurgicales
+- **Hook (pas bus)** : `SwarmFailed` n'est émis qu'en Mission B et le bus est
+  lossy → un subscriber sous-compterait les erreurs. Le hook RAII est lossless.
+- **`tenant_id` (R3.S5) banni des labels** : cardinalité non bornée → OOM TSDB
+  (testé : `render_excludes_tenant_id_label`).
+- **`quality_pass_rate` gauge → `efe_verdicts_total{verdict}` counters** (rate
+  dérivé en PromQL) ; `savings{mode}` limité à `speculative` (seule source live).
+- **Coût Mission B** : agrégat fan-out étiqueté par le gagnant du vote
+  (approximation documentée).
+
+#### Backward-compat
+- `metrics: None` (défaut) ⇒ guard inerte, overhead nul, comportement R3.S6
+  inchangé. Feature `metrics` off ⇒ `metrics_server.rs` non compilé,
+  `tokio/net` non tiré.
+- 20 tests R3.S7 PASS (11 unit + 5 intégration + 4 serveur) + bench Criterion
+  `metering_overhead` ; clippy `--all-targets --features metrics` exit 0 ;
+  default build inchangé.
 
 ### Phase 3 R3.S6 — Chaos engineering CI (LIVRÉ 2026-05-29)
 
