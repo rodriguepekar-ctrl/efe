@@ -213,6 +213,7 @@ fn bench_mission_a_minimal(c: &mut Criterion) {
         candidate_sources: vec![],
         max_total_latency: Duration::from_secs(2),
         task_class_scoring_table: None,
+        tenant_id: None,
     };
     let mut group = c.benchmark_group("workflow");
     group.measurement_time(Duration::from_secs(8));
@@ -248,6 +249,7 @@ fn bench_mission_b_three_llms(c: &mut Criterion) {
         quorum: Some(2),
         candidate_sources: vec![],
         max_total_latency: Duration::from_secs(2),
+        tenant_id: None,
     };
     let mut group = c.benchmark_group("workflow");
     group.measurement_time(Duration::from_secs(8));

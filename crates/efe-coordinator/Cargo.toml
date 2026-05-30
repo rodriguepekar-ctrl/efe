@@ -26,6 +26,11 @@ all-providers = ["anthropic", "gemini", "openai", "local-slm"]
 # OFF en prod (binaire propre) ; ON en test/CI. Aucune dépendance ajoutée
 # (PRNG SplitMix64 interne).
 chaos = []
+# Phase 3 R3.S7 : serveur HTTP /metrics Prometheus. N'active QUE `tokio/net`
+# (requis pour TcpListener). Le `MetricsRegistry` + le rendu + le hook sont
+# toujours compilés (atomiques, zéro dépendance) ; seul `metrics_server.rs`
+# est gated. Aucune crate prometheus/hyper/axum ajoutée.
+metrics = ["tokio/net"]
 
 [dependencies]
 # Crate frère : les 6 clients nano-robots Phase 1.
@@ -182,4 +187,11 @@ path = "examples/speculative_demo.rs"
 [[bench]]
 name    = "coordinator_throughput"
 path    = "benches/coordinator_throughput.rs"
+harness = false
+
+# R3.S7 : overhead du hook télémétrie (`record_mission` doit être < 1 µs →
+# < 1 ms / mission, critère d'acceptation §16).
+[[bench]]
+name    = "metering_overhead"
+path    = "benches/metering_overhead.rs"
 harness = false

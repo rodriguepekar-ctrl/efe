@@ -2703,3 +2703,237 @@ async fn r3s5_live_two_tenants_diverge() {
         Some(tenant_quality)
     );
 }
+
+// ====================================================================
+// R3.S8 — Test live A/B test de tables → rapport segmenté
+// ====================================================================
+
+/// **R3.S8 (test live)** : route 50/50 du trafic vers une table de contrôle
+/// (calibration par défaut) vs une table d'expérimentation (cost-weighted), sur
+/// des LLMs réels, et produit un `SavingsReport` **segmenté** control vs
+/// experiment.
+///
+/// ## Pré-conditions
+/// `EFE_LIVE_LLM=1` + `ANTHROPIC_API_KEY` + `GOOGLE_AI_KEY`.
+///
+/// ## Note déterminisme
+/// La reproductibilité (`même swarm_id → même bras`) est **prouvée offline**
+/// (`ab_test::tests::ab_test_assigns_buckets_deterministically`, `bucket_of`
+/// pur). Un "replay live" est impossible : chaque mission génère un `swarm_id`
+/// frais (`Uuid::now_v7`). Ce test valide la **ségrégation** en condition
+/// réelle (les deux bras reçoivent du trafic + le rapport les compare).
+#[tokio::test]
+async fn r3s8_live_ab_test_savings_report() {
+    use efe_coordinator::{
+        ABArm, ABTestConfig, GeminiProvider, RunMode, RunRecord, SavingsReport,
+    };
+    use efe_nano_app_coordinator::types::{ScoringWeights, TaskClassScoringTable};
+    if !s7_preconditions_satisfied() {
+        return;
+    }
+
+    let claude: Arc<dyn LlmProvider> =
+        Arc::new(ClaudeProvider::from_env().expect("ANTHROPIC_API_KEY"));
+    let gemini: Arc<dyn LlmProvider> =
+        Arc::new(GeminiProvider::from_env().expect("GOOGLE_AI_KEY"));
+    let cid = claude.id();
+    let gid = gemini.id();
+
+    let reg = ProviderRegistry::new();
+    reg.register(claude);
+    reg.register(gemini);
+
+    // Control = calibration par défaut. Experiment = même table mais FactualQa
+    // re-pondéré cost-dominant (route vers le moins cher).
+    let control = TaskClassScoringTable::default_3llm_table();
+    let mut experiment = control.clone();
+    experiment.version = "exp-cost-weighted".into();
+    experiment
+        .weights_per_task
+        .insert(TaskClass::FactualQa, ScoringWeights::new(1.0, 0.0, 5.0));
+
+    let cfg = ABTestConfig {
+        control_table: control.clone(),
+        experiment_table: experiment,
+        experiment_traffic_ratio: 0.5,
+        tenant_filter: None,
+        fixture_filter: None,
+    };
+    let coord = Coordinator::builder().registry(reg).ab_test(cfg).build().unwrap();
+
+    // Métadonnées des 2 LLMs depuis la table par défaut.
+    let metas = control.build_metadata_map(&[cid.clone(), gid.clone()], TaskClass::FactualQa);
+
+    let mut report = SavingsReport::new();
+    let n = 16;
+    for _ in 0..n {
+        // Table NON épinglée → l'A/B la remplit (précédence request > A/B).
+        let req = MissionARequest {
+            user_text: "Quelle est la capitale de la France ? Réponds en un mot.".into(),
+            task_class: TaskClass::FactualQa,
+            available_llms: vec![cid.clone(), gid.clone()],
+            llm_metadata: metas.clone(),
+            budget: Budget {
+                max_cost_cents: 12,
+                max_cost_microcents: 0,
+                max_latency_ms: 30_000,
+                min_quality_score: 0.0,
+            },
+            candidate_sources: vec![],
+            max_total_latency: Duration::from_secs(30),
+            task_class_scoring_table: None,
+            tenant_id: None,
+        };
+        if let Ok(resp) = run_mission_a(&coord, req).await {
+            let passed = resp.final_text.to_lowercase().contains("paris");
+            report.add_run(RunRecord::new_with_microcents(
+                "r3s8_ab".into(),
+                RunMode::Full,
+                resp.cost_microcents,
+                resp.latency_ms,
+                resp.chewing_metrics.as_ref().map_or(0, |m| m.llm_tokens_generated),
+                &resp.final_text,
+                resp.llm_used.clone(),
+                "FactualQa".into(),
+                resp.chewing_metrics.clone(),
+                passed,
+                resp.failure_mode.clone(),
+            ));
+        }
+    }
+
+    let cmp = report.ab_comparison().expect("runs A/B présents");
+    eprintln!("\n=== R3.S8 live A/B savings report ===");
+    eprintln!("{}", report.ab_section_markdown());
+
+    // Ségrégation : sur 16 runs à 50/50, les DEUX bras reçoivent du trafic
+    // (P(un bras à 0) ≈ 0.003 %).
+    assert!(cmp.control.n_runs > 0, "control doit recevoir du trafic");
+    assert!(cmp.experiment.n_runs > 0, "experiment doit recevoir du trafic");
+    assert_eq!(
+        cmp.control.n_runs + cmp.experiment.n_runs,
+        report.runs.len(),
+        "tous les runs sont étiquetés par un bras"
+    );
+    // Cohérence des arms tracés.
+    for run in &report.runs {
+        assert!(
+            matches!(run.ab_arm(), Some(ABArm::Control) | Some(ABArm::Experiment)),
+            "chaque run live A/B porte un bras"
+        );
+    }
+}
+
+/// **R3.S8 (test live #2)** : cohérence du routage **par bras** en condition
+/// réelle. Control = table quality-weighted (→ Claude, capability haute),
+/// Experiment = table cost-weighted (→ Gemini, coût bas). On vérifie que CHAQUE
+/// run étiqueté Control a effectivement utilisé Claude, et chaque Experiment a
+/// utilisé Gemini — preuve end-to-end que la table du bras pilote bien le
+/// routing (distinct du rapport de savings #1).
+///
+/// Pré-conditions : `EFE_LIVE_LLM=1` + `ANTHROPIC_API_KEY` + `GOOGLE_AI_KEY`.
+#[tokio::test]
+async fn r3s8_live_ab_arm_routing_consistency() {
+    use efe_coordinator::{ABArm, ABTestConfig, GeminiProvider};
+    use efe_nano_app_coordinator::types::{ScoringWeights, TaskClassScoringTable};
+    if !s7_preconditions_satisfied() {
+        return;
+    }
+
+    let claude: Arc<dyn LlmProvider> =
+        Arc::new(ClaudeProvider::from_env().expect("ANTHROPIC_API_KEY"));
+    let gemini: Arc<dyn LlmProvider> =
+        Arc::new(GeminiProvider::from_env().expect("GOOGLE_AI_KEY"));
+    let cid = claude.id();
+    let gid = gemini.id();
+    let reg = ProviderRegistry::new();
+    reg.register(claude);
+    reg.register(gemini);
+
+    let base = TaskClassScoringTable::default_3llm_table();
+    // Control : quality-dominant → préfère Claude (capability haute).
+    let mut control = base.clone();
+    control.version = "ctrl-quality".into();
+    control
+        .weights_per_task
+        .insert(TaskClass::FactualQa, ScoringWeights::new(5.0, 0.0, 0.0));
+    // Experiment : cost-dominant → préfère Gemini (coût bas).
+    let mut experiment = base.clone();
+    experiment.version = "exp-cost".into();
+    experiment
+        .weights_per_task
+        .insert(TaskClass::FactualQa, ScoringWeights::new(1.0, 0.0, 5.0));
+
+    let cfg = ABTestConfig {
+        control_table: control,
+        experiment_table: experiment,
+        experiment_traffic_ratio: 0.5,
+        tenant_filter: None,
+        fixture_filter: None,
+    };
+    let coord = Coordinator::builder().registry(reg).ab_test(cfg).build().unwrap();
+
+    // Métadonnées EXPLICITES avec écart de coût garanti : le routing par bras
+    // doit être déterministe (le router décide sur ces métadonnées ; les vrais
+    // LLM répondent quand même). On NE s'appuie PAS sur la calibration par
+    // défaut, dont l'écart de coût Claude/Gemini ne sépare pas assez sous
+    // pondération-coût (la capacité de Claude l'emporterait).
+    // Claude : capability haute + coût élevé. Gemini : capability basse + coût bas.
+    let meta_for = |cost_microcents_per_m: u64, capability: f32| {
+        let mut caps = std::collections::HashMap::new();
+        caps.insert("FACTUAL_QA".to_string(), capability);
+        LlmMetadata {
+            cost_input_per_million: 0,
+            cost_output_per_million: 0,
+            cost_input_per_million_microcents: cost_microcents_per_m,
+            cost_output_per_million_microcents: cost_microcents_per_m,
+            p50_latency_ms: 100,
+            p99_latency_ms: 500,
+            success_rate: 1.0,
+            capability_scores: caps,
+            circuit_open: false,
+        }
+    };
+    let mut metas = std::collections::HashMap::new();
+    metas.insert(cid.clone(), meta_for(10_000_000, 1.0)); // Claude : cher, capable
+    metas.insert(gid.clone(), meta_for(20_000, 0.5)); // Gemini : cheap, moins capable
+
+    let mut n_control = 0usize;
+    let mut n_experiment = 0usize;
+    for _ in 0..12 {
+        let req = MissionARequest {
+            user_text: "Quelle est la capitale de la France ? Un mot.".into(),
+            task_class: TaskClass::FactualQa,
+            available_llms: vec![cid.clone(), gid.clone()],
+            llm_metadata: metas.clone(),
+            budget: Budget {
+                max_cost_cents: 12,
+                max_cost_microcents: 0,
+                max_latency_ms: 30_000,
+                min_quality_score: 0.0,
+            },
+            candidate_sources: vec![],
+            max_total_latency: Duration::from_secs(30),
+            task_class_scoring_table: None,
+            tenant_id: None,
+        };
+        let Ok(resp) = run_mission_a(&coord, req).await else {
+            continue;
+        };
+        match resp.chewing_metrics.as_ref().and_then(|m| m.ab_arm) {
+            Some(ABArm::Control) => {
+                n_control += 1;
+                assert_eq!(resp.llm_used, cid, "Control (quality) doit router Claude");
+            }
+            Some(ABArm::Experiment) => {
+                n_experiment += 1;
+                assert_eq!(resp.llm_used, gid, "Experiment (cost) doit router Gemini");
+            }
+            None => panic!("mission A/B sans bras"),
+        }
+    }
+    eprintln!("\n=== R3.S8 live arm routing consistency ===");
+    eprintln!("  control(Claude)={n_control}  experiment(Gemini)={n_experiment}");
+    // Sur 12 runs à 50/50, les deux bras apparaissent (P(0) ≈ 0.05 %).
+    assert!(n_control > 0 && n_experiment > 0, "les deux bras doivent recevoir du trafic");
+}

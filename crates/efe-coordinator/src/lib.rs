@@ -101,6 +101,8 @@
 )]
 #![allow(clippy::module_name_repetitions, clippy::needless_pass_by_value)]
 
+// R3.S8 — A/B test entre tables de scoring.
+pub mod ab_test;
 pub mod audit;
 pub mod blackboard;
 // R3.S6 — chaos engineering (feature-gated : OFF en prod).
@@ -113,7 +115,11 @@ pub mod events;
 pub mod failure;
 pub mod heartbeat;
 pub mod llm;
+pub mod metering;
 pub mod metrics;
+// R3.S7 — serveur HTTP /metrics (feature-gated : n'active que tokio/net).
+#[cfg(feature = "metrics")]
+pub mod metrics_server;
 pub mod multi_tenant;
 pub mod request;
 pub mod savings_report;
@@ -142,6 +148,13 @@ pub use llm::{
 };
 pub use failure::{combine_failure_modes, FailureMode};
 pub use metrics::ChewingMetrics;
+// R3.S8 — A/B test tables.
+pub use ab_test::{ABArm, ABTestConfig, ABTestRuntime};
+// R3.S7 — télémétrie Prometheus.
+pub use metering::{
+    FailureKind, MetricsRegistry, MissionMetricGuard, MissionRecord, MissionType, Outcome, Phase,
+    SavingsMode, Verdict, LATENCY_BUCKETS_MS,
+};
 // R3.S6 — chaos engineering (feature-gated).
 #[cfg(feature = "chaos")]
 pub use chaos::{ChaosFaultKind, ChaosInjector, ChaosLlmProvider, CHAOS_MAX_SLEEP};

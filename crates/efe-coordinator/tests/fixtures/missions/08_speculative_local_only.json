@@ -1,0 +1,13 @@
+{
+  "name": "speculative_local_only",
+  "task_class": "FactualQa",
+  "query": "Quelle planète du système solaire est la plus proche du Soleil ? Réponds en un seul mot.",
+  "expected_keyword": "mercure",
+  "expected_keyword_alternatives": ["mercure", "mercury"],
+  "expected_lang": "fr",
+  "expected_route": "gemini_gemini-2.5-flash",
+  "baseline_min_cost_cents": 1,
+  "baseline_max_cost_cents": 8,
+  "s9_included": true,
+  "comment": "Fixture R3.S9 — pensée pour le mode Speculative (drafter cheap + verifier premium) avec réponse factuelle mono-mot stable → fort accord draft/vérif (hot path, verifier_skipped) et qualité ≥ 80 % (H13). Si un drafter SLM local (id préfixé 'local', R3.S4) est câblé sous EFE_LIVE_SLM, le segment draft coûte 0 µ¢ (H14). Réponse 1 mot 'Mercure' : conforme à R3.S3 (min_words=1 ne pénalise pas les réponses canoniques courtes — H15 valide le contenu réel, pas un seuil de 2 mots)."
+}

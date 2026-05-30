@@ -511,6 +511,9 @@ mod tests {
                     tenant_id: None,
                     tenant_cost_cap_exceeded: None,
                     tenant_llms_filtered: None,
+                    // R3.S8 — A/B test (None : mission non-A/B).
+                    ab_arm: None,
+                    ab_table_version: None,
                 },
                 ts: Utc::now(),
             },

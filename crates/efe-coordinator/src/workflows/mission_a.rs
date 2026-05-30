@@ -27,6 +27,7 @@ use crate::llm::LlmCall;
 use crate::workflows::slm_guard::{
     slm_guard_check, slm_guard_record_failure, slm_guard_record_success, SlmGuardOutcome,
 };
+use crate::metering::{MissionMetricGuard, MissionRecord, MissionType};
 use crate::metrics::ChewingMetrics;
 use crate::request::{FactCheck, MissionARequest, MissionAResponse};
 
@@ -56,6 +57,11 @@ pub async fn run_mission_a(
     let swarm_id = Uuid::now_v7();
     let mut audit_entries: Vec<Uuid> = vec![];
 
+    // R3.S7 : garde télémétrie. Armée → un retour `?` (erreur) enregistre
+    // `outcome="error"` via Drop ; `record_success` (avant Ok) désarme +
+    // enregistre les métriques détaillées. Inerte si `coord.metrics` est None.
+    let mut metric_guard = MissionMetricGuard::arm(coord.metrics.clone(), MissionType::A);
+
     // ── Sprint S4 R2 : ChewingMetrics tracking ──────────────────────────
     // Initialisation avec les tokens d'entrée bruts (avant pré-mâchage).
     // Tous les autres champs seront remplis incrémentalement à chaque étape.
@@ -83,6 +89,24 @@ pub async fn run_mission_a(
     let (tenant_id, policy) =
         crate::multi_tenant::resolve(&coord.policies, req.tenant_id, coord.config.default_tenant);
     let has_policy = policy.is_some();
+
+    // ── R3.S8 : A/B test de tables ────────────────────────────────────────
+    //
+    // Précédence : `request > A/B > tenant (R3.S5) > global`. L'A/B ne
+    // s'applique QUE si la requête n'épingle pas de table (sinon le caller a
+    // choisi). Il remplit alors `req.task_class_scoring_table` AVANT l'injection
+    // de la table tenant (plus bas) — qui ne s'activera donc pas. `fixture =
+    // None` en live (pas d'identité fixture ; cf. architecture §4.4).
+    if req.task_class_scoring_table.is_none() {
+        if let Some(ab) = &coord.ab_test {
+            if let Some(arm) = ab.assign_arm(swarm_id, tenant_id, None) {
+                req.task_class_scoring_table = Some(ab.table_for(arm));
+                chewing_metrics.ab_arm = Some(arm);
+                // R3.S8 : trace la version de table du bras (audit + rapport A/B).
+                chewing_metrics.ab_table_version = Some(ab.version_of(arm));
+            }
+        }
+    }
 
     // (a) Allow-list : `available_llms ∩ policy.allowed_llms` (jamais union).
     //     Une intersection vide ⇒ fail-closed (pas de fuite vers un LLM hors
@@ -700,5 +724,7 @@ pub async fn run_mission_a(
         })
         .await;
 
+    // R3.S7 : enregistre la mission réussie (désarme le guard).
+    metric_guard.record_success(&MissionRecord::from_mission_a(&response));
     Ok(response)
 }

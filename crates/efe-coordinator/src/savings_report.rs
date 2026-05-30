@@ -31,6 +31,7 @@ use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 
+use crate::ab_test::ABArm;
 use crate::failure::FailureMode;
 use crate::metrics::ChewingMetrics;
 
@@ -242,6 +243,21 @@ impl RunRecord {
         } else {
             (self.cost_cents as u64) * 1000
         }
+    }
+
+    /// **R3.S8** — Bras A/B de ce run (lu depuis `chewing_metrics.ab_arm`).
+    /// `None` si la mission n'était pas sous A/B test.
+    #[must_use]
+    pub fn ab_arm(&self) -> Option<ABArm> {
+        self.chewing_metrics.as_ref().and_then(|cm| cm.ab_arm)
+    }
+
+    /// **R3.S8** — Version de la table du bras A/B (traçabilité calibration).
+    #[must_use]
+    pub fn ab_table_version(&self) -> Option<String> {
+        self.chewing_metrics
+            .as_ref()
+            .and_then(|cm| cm.ab_table_version.clone())
     }
 }
 
@@ -797,9 +813,164 @@ impl SavingsReport {
             }
         }
         md.push_str("---\n\n");
+
+        // ── R3.S9 (dette R3.S8 §13) — Section A/B intégrée au rapport µ¢ ──
+        // `ab_section_markdown()` retourne `""` si `ab_comparison()` est `None`
+        // (aucun run étiqueté A/B). L'intégration est donc un **no-op strict**
+        // pour tout rapport sans A/B : les outputs existants (CI, tests) restent
+        // bit-identiques. Quand des runs A/B existent, la section control vs
+        // experiment (coût µ¢ / qualité / latence + Δ) s'imprime avant le footer.
+        let ab = self.ab_section_markdown();
+        if !ab.is_empty() {
+            md.push_str(&ab);
+            md.push_str("---\n\n");
+        }
+
         md.push_str(
-            "_Rapport généré via `SavingsReport::to_markdown_v2()` (R3.S1)._\n",
+            "_Rapport généré via `SavingsReport::to_markdown_v2()` (R3.S1+R3.S9)._\n",
         );
+        md
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// R3.S8 — Ségrégation A/B (control vs experiment)
+// ─────────────────────────────────────────────────────────────────────────
+
+/// Stats descriptives d'un bras A/B (sous-ensemble des runs étiquetés ce bras).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ArmStats {
+    /// Bras concerné.
+    pub arm: ABArm,
+    /// Version de la table de scoring testée par ce bras (traçabilité). Vide si
+    /// non tracée.
+    pub table_version: String,
+    /// Nombre de runs dans ce bras.
+    pub n_runs: usize,
+    /// Coût moyen par run en microcents (f64 pour précision).
+    pub avg_cost_microcents: f64,
+    /// Taux de runs ayant passé la qualité ∈ [0,1].
+    pub quality_pass_rate: f32,
+    /// Latence moyenne par run (ms).
+    pub avg_latency_ms: f32,
+}
+
+impl ArmStats {
+    /// Agrège les stats d'un bras depuis ses records. `records` vide → 0.
+    #[must_use]
+    pub fn from_records(arm: ABArm, records: &[&RunRecord]) -> Self {
+        let n = records.len();
+        // Version de table : identique pour tous les runs d'un bras → prend la
+        // première tracée.
+        let table_version = records
+            .iter()
+            .find_map(|r| r.ab_table_version())
+            .unwrap_or_default();
+        if n == 0 {
+            return Self {
+                arm,
+                table_version,
+                n_runs: 0,
+                avg_cost_microcents: 0.0,
+                quality_pass_rate: 0.0,
+                avg_latency_ms: 0.0,
+            };
+        }
+        let total_mc: u64 = records
+            .iter()
+            .fold(0_u64, |acc, r| acc.saturating_add(r.cost_microcents_resolved()));
+        let total_lat: u64 = records.iter().map(|r| r.latency_ms).sum();
+        let n_passed = records.iter().filter(|r| r.passed_quality).count();
+        Self {
+            arm,
+            table_version,
+            n_runs: n,
+            avg_cost_microcents: total_mc as f64 / n as f64,
+            quality_pass_rate: n_passed as f32 / n as f32,
+            avg_latency_ms: total_lat as f32 / n as f32,
+        }
+    }
+}
+
+/// Comparaison A/B control vs experiment + deltas (experiment − control).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ABComparison {
+    /// Stats du bras de contrôle.
+    pub control: ArmStats,
+    /// Stats du bras d'expérimentation.
+    pub experiment: ArmStats,
+    /// Δ coût moyen µ¢ (négatif = experiment moins cher).
+    pub cost_delta_microcents: f64,
+    /// Δ taux de qualité (positif = experiment meilleur).
+    pub quality_delta: f32,
+    /// Δ latence moyenne ms (négatif = experiment plus rapide).
+    pub latency_delta_ms: f32,
+}
+
+impl SavingsReport {
+    /// **R3.S8** — Ségrège les runs par bras A/B (via
+    /// `chewing_metrics.ab_arm`) et calcule une comparaison control vs
+    /// experiment. Retourne `None` si **aucun** run n'est étiqueté A/B.
+    #[must_use]
+    pub fn ab_comparison(&self) -> Option<ABComparison> {
+        let control: Vec<&RunRecord> = self
+            .runs
+            .iter()
+            .filter(|r| r.ab_arm() == Some(ABArm::Control))
+            .collect();
+        let experiment: Vec<&RunRecord> = self
+            .runs
+            .iter()
+            .filter(|r| r.ab_arm() == Some(ABArm::Experiment))
+            .collect();
+        if control.is_empty() && experiment.is_empty() {
+            return None; // aucun run A/B
+        }
+        let c = ArmStats::from_records(ABArm::Control, &control);
+        let e = ArmStats::from_records(ABArm::Experiment, &experiment);
+        let comparison = ABComparison {
+            cost_delta_microcents: e.avg_cost_microcents - c.avg_cost_microcents,
+            quality_delta: e.quality_pass_rate - c.quality_pass_rate,
+            latency_delta_ms: e.avg_latency_ms - c.avg_latency_ms,
+            control: c,
+            experiment: e,
+        };
+        Some(comparison)
+    }
+
+    /// **R3.S8** — Section markdown de la comparaison A/B (incluse par
+    /// `to_markdown_v2` en R3.S9). Vide si pas de run A/B.
+    #[must_use]
+    pub fn ab_section_markdown(&self) -> String {
+        let Some(cmp) = self.ab_comparison() else {
+            return String::new();
+        };
+        let mut md = String::new();
+        md.push_str("## A/B test — control vs experiment (R3.S8)\n\n");
+        md.push_str("| Bras | table | runs | coût moy. (µ¢) | qualité | latence moy. (ms) |\n");
+        md.push_str("|---|---|---:|---:|---:|---:|\n");
+        for s in [&cmp.control, &cmp.experiment] {
+            let version = if s.table_version.is_empty() {
+                "—"
+            } else {
+                &s.table_version
+            };
+            md.push_str(&format!(
+                "| {} | {} | {} | {:.1} | {:.1}% | {:.0} |\n",
+                s.arm.as_str(),
+                version,
+                s.n_runs,
+                s.avg_cost_microcents,
+                s.quality_pass_rate * 100.0,
+                s.avg_latency_ms
+            ));
+        }
+        md.push_str(&format!(
+            "\n**Δ (experiment − control)** : coût {:+.1} µ¢ · qualité {:+.1} pts · latence {:+.0} ms\n\n",
+            cmp.cost_delta_microcents,
+            cmp.quality_delta * 100.0,
+            cmp.latency_delta_ms
+        ));
         md
     }
 }
@@ -1177,5 +1348,86 @@ mod tests {
         assert_eq!(r.cost_microcents, 0); // default
         // Mais cost_microcents_resolved() doit dériver depuis cents.
         assert_eq!(r.cost_microcents_resolved(), 5_000);
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // R3.S9 — D4 : `to_markdown_v2()` intègre la section A/B (dette R3.S8 §13)
+    // ─────────────────────────────────────────────────────────────────────
+
+    /// Construit un `RunRecord` étiqueté A/B (bras + version de table) via
+    /// `chewing_metrics`. Coût µ¢ explicite pour exercer `ArmStats`.
+    fn ab_record(arm: crate::ab_test::ABArm, version: &str, cost_mc: u64) -> RunRecord {
+        let cm = ChewingMetrics {
+            ab_arm: Some(arm),
+            ab_table_version: Some(version.to_string()),
+            ..ChewingMetrics::default()
+        };
+        RunRecord::new_with_microcents(
+            "fixture".to_string(),
+            RunMode::Full,
+            cost_mc,
+            100,
+            10,
+            "réponse complète et non triviale",
+            "llm".to_string(),
+            "FactualQa".to_string(),
+            Some(cm),
+            true,
+            FailureMode::None,
+        )
+    }
+
+    #[test]
+    fn r3s9_to_markdown_v2_includes_ab_section_when_present() {
+        use crate::ab_test::ABArm;
+        let mut report = SavingsReport::with_version("s9-r3-test");
+        report.add_run(ab_record(ABArm::Control, "ctrl-v1", 3_000));
+        report.add_run(ab_record(ABArm::Experiment, "exp-v2", 500));
+        report.aggregate();
+
+        let md = report.to_markdown_v2();
+        // Le rapport µ¢ garde son en-tête + intègre désormais la section A/B.
+        assert!(md.contains("µ¢ precision"), "header µ¢ conservé");
+        assert!(
+            md.contains("A/B test — control vs experiment"),
+            "D4: section A/B présente quand des runs A/B existent"
+        );
+        assert!(md.contains("ctrl-v1"), "version control tracée");
+        assert!(md.contains("exp-v2"), "version experiment tracée");
+        // La section A/B doit apparaître AVANT le footer générateur.
+        let ab_pos = md.find("A/B test — control").expect("section A/B");
+        let footer_pos = md.find("_Rapport généré via").expect("footer");
+        assert!(ab_pos < footer_pos, "D4: section A/B avant le footer");
+    }
+
+    #[test]
+    fn r3s9_to_markdown_v2_omits_ab_section_when_absent() {
+        // Aucun run A/B → `ab_section_markdown()` renvoie "" → no-op strict.
+        let mut report = SavingsReport::with_version("s9-r3-test");
+        report.add_run(RunRecord::new_with_microcents(
+            "01".to_string(),
+            RunMode::Baseline,
+            3_000,
+            1000,
+            10,
+            "réponse baseline",
+            "claude".to_string(),
+            "FactualQa".to_string(),
+            None, // pas de chewing_metrics → pas d'A/B
+            true,
+            FailureMode::None,
+        ));
+        report.aggregate();
+
+        let md = report.to_markdown_v2();
+        assert!(md.contains("µ¢ precision"), "header µ¢ conservé");
+        assert!(
+            !md.contains("A/B test — control vs experiment"),
+            "D4: aucune section A/B sans run A/B (backward-compat strict)"
+        );
+        assert!(
+            md.contains("_Rapport généré via"),
+            "footer générateur toujours présent"
+        );
     }
 }

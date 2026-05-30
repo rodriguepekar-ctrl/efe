@@ -214,6 +214,19 @@ pub struct ChewingMetrics {
     /// qualité de routing.
     #[serde(default)]
     pub tenant_llms_filtered: Option<usize>,
+
+    // ── R3.S8 — A/B test tables ───────────────────────────────────────────
+    /// **R3.S8** — Bras A/B assigné à cette mission (`None` = pas d'A/B actif,
+    /// ou requête avec table épinglée, ou tenant/fixture hors population).
+    /// Sert à la ségrégation `SavingsReport` (control vs experiment).
+    #[serde(default)]
+    pub ab_arm: Option<crate::ab_test::ABArm>,
+
+    /// **R3.S8** — Version de la table de scoring du bras A/B (traçabilité :
+    /// relie le run à la calibration testée, e.g. `"s6-r2-2025-11"` vs
+    /// `"exp-cost-v2"`). `None` si pas d'A/B. Affiché dans le rapport A/B.
+    #[serde(default)]
+    pub ab_table_version: Option<String>,
 }
 
 impl ChewingMetrics {
@@ -409,6 +422,9 @@ mod tests {
             tenant_id: Some(uuid::Uuid::nil()),
             tenant_cost_cap_exceeded: Some(false),
             tenant_llms_filtered: Some(0),
+            // R3.S8 — A/B test.
+            ab_arm: Some(crate::ab_test::ABArm::Control),
+            ab_table_version: Some("ctrl-v1".to_string()),
         };
         let s = serde_json::to_string(&m).unwrap();
         let back: ChewingMetrics = serde_json::from_str(&s).unwrap();
