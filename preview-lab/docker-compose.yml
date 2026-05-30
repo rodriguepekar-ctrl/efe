@@ -1,0 +1,20 @@
+# SPDX-License-Identifier: UNLICENSED
+#
+# Single-binary du Preview Lab (UI + API) en mode mock.
+#   docker compose -f preview-lab/docker-compose.yml up --build
+#   → http://localhost:8700
+#
+# Pour les vrais LLM : passer EFE_PREVIEW_MOCK=0 + les clés API en environnement,
+# et builder l'image avec `--build-arg` ou un Dockerfile activant `real-llm`.
+services:
+  preview:
+    build:
+      context: ..
+      dockerfile: preview-lab/Dockerfile
+    ports:
+      - "8700:8700"
+    environment:
+      EFE_PREVIEW_MOCK: "1"
+      EFE_PREVIEW_ADDR: "0.0.0.0:8700"
+      EFE_PREVIEW_STATIC_DIR: "/app/static"
+    restart: unless-stopped
