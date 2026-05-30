@@ -16,7 +16,9 @@ use axum::Router;
 use http_body_util::BodyExt;
 use tower::ServiceExt; // `oneshot`
 
-use efe_preview_server::{build_app, mock_coordinator, mock_state, AppState, PreviewConfig};
+use efe_preview_server::{
+    build_app, mock_coordinator, mock_state, AppState, PreviewConfig, MOCK_LLMS,
+};
 use std::sync::Arc;
 
 /// Parse le body SSE en une liste de JSON (les frames `data: {...}`).
@@ -101,6 +103,55 @@ async fn t1_post_mission_a_streams_sse_contract() {
         0,
         "pas de fuite de subscriber après la fin du stream"
     );
+}
+
+#[tokio::test]
+async fn mission_a_reliably_reaches_swarm_finished() {
+    // Smoke déterministe du chemin de streaming lib : 8 runs de Mission A
+    // doivent TOUS aller de SWARM_STARTED jusqu'à SWARM_FINISHED. Ne couvre PAS
+    // le bug `default_llms` (qui vivait dans main.rs, hors de ce harness) — cf.
+    // `mock_default_llms_are_all_registered_providers` pour cet invariant.
+    for i in 0..8 {
+        let app = build_app(mock_state());
+        let (status, events) =
+            sse_events(app, "/v1/missions/a", r#"{"user_text":"Capitale ?"}"#).await;
+        assert_eq!(status, StatusCode::OK, "run {i}");
+        assert_eq!(events.first().unwrap()["type"], "SWARM_STARTED", "run {i}");
+        assert_eq!(
+            events.last().unwrap()["type"],
+            "SWARM_FINISHED",
+            "run {i}: Mission A doit router de façon fiable et aller jusqu'au bout"
+        );
+    }
+}
+
+#[tokio::test]
+async fn mock_default_llms_are_all_registered_providers() {
+    // Garde anti-régression du bug Phase 4 : `default_llms` contenait un id
+    // (`"mock"`) qu'aucun provider enregistré ne servait → Mission A routait
+    // vers un provider inexistant et mourait après SWARM_STARTED. On épingle
+    // l'invariant à la SOURCE : chaque id de `MOCK_LLMS` (partagé par `for_mock`
+    // ET le binaire) DOIT être un provider réellement enregistré, donc une
+    // Mission A ciblant explicitement cet id atteint SWARM_FINISHED.
+    assert!(!MOCK_LLMS.is_empty(), "MOCK_LLMS ne doit pas être vide");
+    for id in MOCK_LLMS {
+        let app = build_app(mock_state());
+        let body = format!(r#"{{"user_text":"Capitale ?","available_llms":["{id}"]}}"#);
+        let (status, events) = sse_events(app, "/v1/missions/a", &body).await;
+        assert_eq!(status, StatusCode::OK, "llm {id}");
+        let tags: Vec<_> = events.iter().map(|e| e["type"].clone()).collect();
+        assert_eq!(
+            events.last().unwrap()["type"],
+            "SWARM_FINISHED",
+            "llm {id}: provider doit être enregistré ; events = {tags:?}"
+        );
+        // Le provider effectivement utilisé doit être l'id demandé (pas un fallback).
+        let used = events
+            .iter()
+            .find(|e| e["type"] == "LLM_FINISHED")
+            .and_then(|e| e["provider"].as_str());
+        assert_eq!(used, Some(*id), "Mission A doit servir le provider {id}");
+    }
 }
 
 // ─────────────────────────────────────────────────────────────────────────
