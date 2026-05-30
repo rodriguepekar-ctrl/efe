@@ -11,6 +11,7 @@ use crate::coordinator::Coordinator;
 use crate::error::{CoordError, CoordResult};
 use crate::events::{MissionTag, StreamEvent};
 use crate::llm::LlmCall;
+use crate::metering::{MissionMetricGuard, MissionRecord, MissionType};
 use crate::metrics::ChewingMetrics;
 use crate::request::{SpeculativeRequest, SpeculativeResponse};
 use crate::speculate::{NoiseRejectionPolicy, Speculator};
@@ -79,8 +80,21 @@ pub async fn run_speculative(
     coord: &Coordinator,
     req: SpeculativeRequest,
 ) -> CoordResult<SpeculativeResponse> {
+    run_speculative_with_swarm_id(coord, req, Uuid::now_v7()).await
+}
+
+/// **P4.S1** — Mission speculative avec `swarm_id` injecté (abonnement SSE sans
+/// course). [`run_speculative`] délègue ici avec `Uuid::now_v7()`.
+pub async fn run_speculative_with_swarm_id(
+    coord: &Coordinator,
+    req: SpeculativeRequest,
+    swarm_id: Uuid,
+) -> CoordResult<SpeculativeResponse> {
     let started = Instant::now();
-    let swarm_id = Uuid::now_v7();
+
+    // R3.S7 : garde télémétrie (cf. mission_a). Capture les erreurs (allow-list,
+    // provider absent, …) via Drop ; `record_success` désarme avant Ok.
+    let mut metric_guard = MissionMetricGuard::arm(coord.metrics.clone(), MissionType::Speculative);
 
     // ── R3.S5 : résolution multi-tenant + allow-list (Speculative) ────────
     //
@@ -283,5 +297,7 @@ pub async fn run_speculative(
         })
         .await;
 
+    // R3.S7 : enregistre la mission réussie (désarme le guard).
+    metric_guard.record_success(&MissionRecord::from_speculative(&resp));
     Ok(resp)
 }

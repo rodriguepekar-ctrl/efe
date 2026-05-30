@@ -17,6 +17,38 @@ use crate::metrics::ChewingMetrics;
 /// Bump MINOR si on ajoute un nouveau variant ou un nouveau champ optionnel.
 pub const EVENT_SCHEMA_VERSION: &str = "1.0.0";
 
+/// **P4.S2** — Liste canonique des tags des **19 variants** de [`StreamEvent`].
+///
+/// Source de vérité exposée par le bridge SSE (`GET /v1/schema`) pour le
+/// garde-fou de non-dérive côté UI (le front compare cette liste + la version à
+/// ses propres types au boot).
+///
+/// **Maintenance** : tout nouveau variant doit (1) être géré par
+/// [`StreamEvent::tag`] (le compilateur force l'exhaustivité du `match`) ET
+/// (2) être ajouté ici (le test `all_event_tags_count_and_unique` rappelle de
+/// bumper la longueur).
+pub const ALL_EVENT_TAGS: &[&str] = &[
+    "SWARM_STARTED",
+    "ROBOT_STARTED",
+    "ROBOT_FINISHED",
+    "PHEROMONE_DEPOSITED",
+    "LLM_TOKEN_STREAMED",
+    "LLM_FINISHED",
+    "VERDICT_READY",
+    "VOTE_RESOLVED",
+    "DRAFT_TOKEN",
+    "SPECULATION_RESOLVED",
+    "PRE_CHEWING_METRICS",
+    "SWARM_FINISHED",
+    "SWARM_FAILED",
+    "HEARTBEAT",
+    "LLM_FALLBACK_TRIGGERED",
+    "LLM_FAILED",
+    "SLM_CIRCUIT_OPENED",
+    "DRAFTER_BYPASSED",
+    "DRAFT_REJECTED_AS_NOISE",
+];
+
 /// Mission qui a produit l'évènement (pour multiplexing UI).
 #[allow(missing_docs)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -393,6 +425,21 @@ impl StreamEvent {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn all_event_tags_count_and_unique() {
+        // 19 variants (cf. `tag()`). Si ce nombre change, mettre à jour
+        // `ALL_EVENT_TAGS` ET `tag()` (le compilateur force ce dernier).
+        assert_eq!(ALL_EVENT_TAGS.len(), 19, "ALL_EVENT_TAGS doit lister les 19 variants");
+        let mut seen = std::collections::HashSet::new();
+        for t in ALL_EVENT_TAGS {
+            assert!(seen.insert(*t), "tag dupliqué dans ALL_EVENT_TAGS: {t}");
+        }
+        // Spot-checks de cohérence avec `tag()`.
+        assert!(ALL_EVENT_TAGS.contains(&"SWARM_STARTED"));
+        assert!(ALL_EVENT_TAGS.contains(&"PRE_CHEWING_METRICS"));
+        assert!(ALL_EVENT_TAGS.contains(&"DRAFT_REJECTED_AS_NOISE"));
+    }
 
     #[test]
     fn all_variants_roundtrip_invariant_i3() {

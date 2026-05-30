@@ -21,6 +21,7 @@ use crate::coordinator::Coordinator;
 use crate::error::{CoordError, CoordResult};
 use crate::events::{MissionTag, StreamEvent};
 use crate::llm::LlmCall;
+use crate::metering::{MissionMetricGuard, MissionRecord, MissionType};
 use crate::metrics::ChewingMetrics;
 use crate::request::{FactCheck, MissionBRequest, MissionBResponse};
 use crate::vote::{Ballot, VoteEngine};
@@ -34,17 +35,33 @@ use crate::workflows::slm_guard::{
 ///
 /// `field_reassign_with_default` : pattern voulu — accumulation
 /// incrémentale des métriques par phase (cf. mission_a.rs).
-#[allow(clippy::field_reassign_with_default)]
+/// Exécute la Mission B (génère un `swarm_id` frais).
+///
+/// **Wrapper backward-compat** → délègue à [`run_mission_b_with_swarm_id`].
 pub async fn run_mission_b(
     coord: &Coordinator,
+    req: MissionBRequest,
+) -> CoordResult<MissionBResponse> {
+    run_mission_b_with_swarm_id(coord, req, Uuid::now_v7()).await
+}
+
+/// **P4.S1** — Mission B avec `swarm_id` injecté (abonnement SSE sans course :
+/// le bridge s'abonne avant le `SwarmStarted`). Cf. [`run_mission_b`].
+#[allow(clippy::field_reassign_with_default)]
+pub async fn run_mission_b_with_swarm_id(
+    coord: &Coordinator,
     mut req: MissionBRequest,
+    swarm_id: Uuid,
 ) -> CoordResult<MissionBResponse> {
     if req.llms.len() < 2 {
         return Err(CoordError::MissionBTooFewLlms { n: req.llms.len() });
     }
 
     let started = Instant::now();
-    let swarm_id = Uuid::now_v7();
+
+    // R3.S7 : garde télémétrie (cf. mission_a). Armée après la validation
+    // `< 2 LLMs` (pré-flight) ; capture les erreurs runtime via Drop.
+    let mut metric_guard = MissionMetricGuard::arm(coord.metrics.clone(), MissionType::B);
     let mut audit_entries: Vec<Uuid> = vec![];
 
     // ── Sprint S5 R2 : ChewingMetrics mutualisé (1 compressor × N LLMs) ─
@@ -579,5 +596,7 @@ pub async fn run_mission_b(
         })
         .await;
 
+    // R3.S7 : enregistre la mission réussie (désarme le guard).
+    metric_guard.record_success(&MissionRecord::from_mission_b(&resp));
     Ok(resp)
 }

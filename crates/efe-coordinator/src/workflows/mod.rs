@@ -10,9 +10,9 @@ mod mission_b;
 mod speculative;
 pub(crate) mod slm_guard;
 
-pub use mission_a::run_mission_a;
-pub use mission_b::run_mission_b;
-pub use speculative::run_speculative;
+pub use mission_a::{run_mission_a, run_mission_a_with_swarm_id};
+pub use mission_b::{run_mission_b, run_mission_b_with_swarm_id};
+pub use speculative::{run_speculative, run_speculative_with_swarm_id};
 
 /// Helper : calcule un hash BLAKE3 stable d'une chaîne d'audit
 /// (concatène les entry_id en ordre temporel).

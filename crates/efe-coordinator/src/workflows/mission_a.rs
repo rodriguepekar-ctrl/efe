@@ -48,13 +48,30 @@ use crate::request::{FactCheck, MissionARequest, MissionAResponse};
 // les champs de `ChewingMetrics` au fil des phases de la mission. La syntaxe
 // struct littéral n'est pas applicable car les valeurs viennent de différents
 // blocs `match`/branches.
-#[allow(clippy::field_reassign_with_default)]
+/// Exécute la Mission A (génère un `swarm_id` frais).
+///
+/// **Wrapper backward-compat** : délègue à [`run_mission_a_with_swarm_id`] avec
+/// `Uuid::now_v7()`. Tous les callers historiques restent inchangés.
 pub async fn run_mission_a(
     coord: &Coordinator,
+    req: MissionARequest,
+) -> CoordResult<MissionAResponse> {
+    run_mission_a_with_swarm_id(coord, req, Uuid::now_v7()).await
+}
+
+/// **P4.S1** — Mission A avec `swarm_id` injecté par le caller.
+///
+/// Identique à [`run_mission_a`] mais le `swarm_id` est fourni. Permet au bridge
+/// SSE ([`crate::Coordinator::run_mission_a_streamed`]) de s'abonner au bus
+/// **avant** que la mission publie `SwarmStarted` — abonnement sans course,
+/// zéro event manqué.
+#[allow(clippy::field_reassign_with_default)]
+pub async fn run_mission_a_with_swarm_id(
+    coord: &Coordinator,
     mut req: MissionARequest,
+    swarm_id: Uuid,
 ) -> CoordResult<MissionAResponse> {
     let started = Instant::now();
-    let swarm_id = Uuid::now_v7();
     let mut audit_entries: Vec<Uuid> = vec![];
 
     // R3.S7 : garde télémétrie. Armée → un retour `?` (erreur) enregistre

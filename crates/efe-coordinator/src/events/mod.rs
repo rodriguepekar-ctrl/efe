@@ -15,7 +15,7 @@ pub use bus::{
     SubscriberToken,
 };
 pub use inmem::InMemoryBus;
-pub use stream::{MissionTag, StreamEvent, EVENT_SCHEMA_VERSION};
+pub use stream::{MissionTag, StreamEvent, ALL_EVENT_TAGS, EVENT_SCHEMA_VERSION};
 
 #[cfg(feature = "nats-bus")]
 mod nats;

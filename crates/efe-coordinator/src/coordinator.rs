@@ -8,11 +8,21 @@ use std::time::Duration;
 use crate::blackboard::PheromoneBlackboard;
 use crate::dag::DagExecutor;
 use crate::error::{CoordError, CoordResult};
-use crate::events::{EventBus, InMemoryBus};
+use crate::events::{filter_by_swarm, EventBus, InMemoryBus, StreamEvent, SubscriberToken};
 use crate::llm::{MultiLlmBridge, ProviderRegistry};
+use crate::ab_test::{ABTestConfig, ABTestRuntime};
+use crate::metering::MetricsRegistry;
 use crate::multi_tenant::{circuit_key, PolicyRegistry};
 use crate::vote::VoteEngine;
 use crate::DEFAULT_MAX_CONCURRENCY;
+
+// P4.S1 — types pour les helpers `run_mission_*_streamed` (bridge SSE).
+use crate::request::{
+    MissionARequest, MissionAResponse, MissionBRequest, MissionBResponse,
+    SpeculativeRequest, SpeculativeResponse,
+};
+use tokio::task::JoinHandle;
+use uuid::Uuid;
 
 use efe_nano_app_coordinator::{
     AnalyzerClient, CompressorClient, FilterClient, ReformulatorClient, RouterClient,
@@ -197,6 +207,13 @@ pub struct Coordinator {
     /// déploiement mono-tenant : tous les lookups → `None` ⇒ comportement
     /// global R3.S4, backward-compat). `Arc` pour préserver `Clone` cheap.
     pub policies: Arc<PolicyRegistry>,
+    /// **R3.S7** — Registre de télémétrie Prometheus. `None` (défaut) ⇒
+    /// télémétrie off, overhead nul (le hook RAII est inerte). `Arc` partagé
+    /// avec le serveur `/metrics`.
+    pub metrics: Option<Arc<MetricsRegistry>>,
+    /// **R3.S8** — Runtime d'A/B test de tables de scoring. `None` (défaut) ⇒
+    /// pas d'A/B (résolution R3.S5/S7 inchangée). `Arc` pour `Clone` cheap.
+    pub ab_test: Option<Arc<ABTestRuntime>>,
 }
 
 /// Builder fluide pour `Coordinator`.
@@ -208,6 +225,10 @@ pub struct CoordinatorBuilder {
     vote: Option<VoteEngine>,
     /// **R3.S5** — registre de politiques tenant (défaut : vide).
     policies: Option<PolicyRegistry>,
+    /// **R3.S7** — registre de télémétrie (défaut : None = off).
+    metrics: Option<Arc<MetricsRegistry>>,
+    /// **R3.S8** — runtime A/B test (défaut : None = off).
+    ab_test: Option<Arc<ABTestRuntime>>,
 }
 
 impl Default for CoordinatorBuilder {
@@ -219,6 +240,8 @@ impl Default for CoordinatorBuilder {
             bus: None,
             vote: None,
             policies: None,
+            metrics: None,
+            ab_test: None,
         }
     }
 }
@@ -363,6 +386,48 @@ impl CoordinatorBuilder {
         self
     }
 
+    /// **R3.S7** — Installe le registre de télémétrie Prometheus.
+    ///
+    /// Sans cet appel, `metrics = None` ⇒ aucune métrique enregistrée (overhead
+    /// nul). Le même `Arc<MetricsRegistry>` est passé au serveur `/metrics`
+    /// (`metrics_server::serve_metrics`).
+    ///
+    /// ## Exemple
+    /// ```ignore
+    /// use std::sync::Arc;
+    /// use efe_coordinator::{Coordinator, MetricsRegistry};
+    ///
+    /// let reg = Arc::new(MetricsRegistry::new());
+    /// let coord = Coordinator::builder().metrics(reg.clone()).build()?;
+    /// // tokio::spawn(efe_coordinator::metrics_server::serve_metrics(addr, reg, coord.clients.clone()));
+    /// ```
+    #[must_use]
+    pub fn metrics(mut self, reg: Arc<MetricsRegistry>) -> Self {
+        self.metrics = Some(reg);
+        self
+    }
+
+    /// **R3.S8** — Installe un A/B test de tables de scoring.
+    ///
+    /// La config (tables *owned*, sérialisable) est convertie une fois en
+    /// [`ABTestRuntime`] (tables `Arc` → résolution O(1)/mission). En Mission A,
+    /// si la requête n'épingle pas de table, l'A/B assigne control/experiment
+    /// selon `blake3(swarm_id)` (précédence `request > A/B > tenant > global`).
+    ///
+    /// ## Exemple
+    /// ```ignore
+    /// use efe_coordinator::{Coordinator, ABTestConfig};
+    ///
+    /// let cfg = ABTestConfig { control_table, experiment_table,
+    ///     experiment_traffic_ratio: 0.5, tenant_filter: None, fixture_filter: None };
+    /// let coord = Coordinator::builder().ab_test(cfg).build()?;
+    /// ```
+    #[must_use]
+    pub fn ab_test(mut self, cfg: ABTestConfig) -> Self {
+        self.ab_test = Some(Arc::new(ABTestRuntime::from_config(cfg)));
+        self
+    }
+
     /// Build final.
     pub fn build(self) -> CoordResult<Coordinator> {
         if self.config.max_concurrency == 0 {
@@ -401,6 +466,8 @@ impl CoordinatorBuilder {
             bus,
             vote: self.vote.unwrap_or_else(VoteEngine::uniform),
             policies: Arc::new(self.policies.unwrap_or_default()),
+            metrics: self.metrics,
+            ab_test: self.ab_test,
         })
     }
 }
@@ -425,6 +492,8 @@ impl Coordinator {
             dag: DagExecutor::default(),
             vote: VoteEngine::uniform(),
             policies: Arc::new(PolicyRegistry::new()),
+            metrics: None,
+            ab_test: None,
         }
     }
 
@@ -463,6 +532,148 @@ impl Coordinator {
         tokio::sync::mpsc::Receiver<crate::events::StreamEvent>,
     ) {
         self.bus.subscribe(name)
+    }
+
+    /// **P4.S1** — Démarre une **Mission A** et renvoie un flux d'événements
+    /// live ([`MissionStream`]), sans course.
+    ///
+    /// Séquence : génère le `swarm_id`, s'abonne au bus **filtré** sur ce
+    /// `swarm_id` AVANT de lancer la mission, `tokio::spawn` la mission (id
+    /// injecté), puis renvoie le [`MissionStream`] (events + join + cleanup RAII).
+    ///
+    /// L'abonnement précédant le spawn, `SwarmStarted` (premier publish de la
+    /// mission) est **toujours** capté. Le receiver ne reçoit QUE les événements
+    /// de ce swarm (`filter_by_swarm`). Requiert un `Arc<Coordinator>` (la
+    /// mission est `tokio::spawn`-ée → `'static`).
+    #[must_use]
+    pub fn run_mission_a_streamed(
+        self: &Arc<Self>,
+        req: MissionARequest,
+    ) -> MissionStream<MissionAResponse> {
+        let swarm_id = Uuid::now_v7();
+        // `None` ⇒ token UUID unique : deux missions concurrentes ne
+        // collisionnent jamais dans la DashMap du bus (un nom fixe le ferait).
+        let (token, events) = self
+            .bus
+            .subscribe_filtered(None, filter_by_swarm(swarm_id));
+        let coord = Arc::clone(self);
+        let join = tokio::spawn(async move {
+            crate::workflows::run_mission_a_with_swarm_id(&coord, req, swarm_id).await
+        });
+        MissionStream {
+            swarm_id,
+            events,
+            join,
+            _unsub: Unsubscriber {
+                bus: Arc::clone(&self.bus),
+                token,
+            },
+        }
+    }
+
+    /// **P4.S1** — Idem pour une **Mission B** (fan-out N LLMs + vote).
+    #[must_use]
+    pub fn run_mission_b_streamed(
+        self: &Arc<Self>,
+        req: MissionBRequest,
+    ) -> MissionStream<MissionBResponse> {
+        let swarm_id = Uuid::now_v7();
+        let (token, events) = self
+            .bus
+            .subscribe_filtered(None, filter_by_swarm(swarm_id));
+        let coord = Arc::clone(self);
+        let join = tokio::spawn(async move {
+            crate::workflows::run_mission_b_with_swarm_id(&coord, req, swarm_id).await
+        });
+        MissionStream {
+            swarm_id,
+            events,
+            join,
+            _unsub: Unsubscriber {
+                bus: Arc::clone(&self.bus),
+                token,
+            },
+        }
+    }
+
+    /// **P4.S1** — Idem pour une **Mission speculative** (drafter + verifier).
+    #[must_use]
+    pub fn run_speculative_streamed(
+        self: &Arc<Self>,
+        req: SpeculativeRequest,
+    ) -> MissionStream<SpeculativeResponse> {
+        let swarm_id = Uuid::now_v7();
+        let (token, events) = self
+            .bus
+            .subscribe_filtered(None, filter_by_swarm(swarm_id));
+        let coord = Arc::clone(self);
+        let join = tokio::spawn(async move {
+            crate::workflows::run_speculative_with_swarm_id(&coord, req, swarm_id).await
+        });
+        MissionStream {
+            swarm_id,
+            events,
+            join,
+            _unsub: Unsubscriber {
+                bus: Arc::clone(&self.bus),
+                token,
+            },
+        }
+    }
+}
+
+/// **P4.S1** — Flux d'événements live d'une mission + sa réponse finale.
+///
+/// Retourné par `Coordinator::run_mission_{a,b,speculative}_streamed`. Conçu
+/// pour le bridge SSE (Phase 4) :
+///
+/// - **`events`** : `Receiver` filtré sur le `swarm_id` (ne reçoit QUE cette
+///   mission). À consommer en boucle (`events.recv().await`) jusqu'à
+///   `SwarmFinished`/`SwarmFailed`.
+/// - **`join`** : `JoinHandle` de la mission → réponse typée finale (audit/log
+///   serveur). S'attend via `&mut self.join` (`JoinHandle` est `Unpin`).
+/// - **`swarm_id`** : corrélation cross-événements.
+///
+/// ## Cleanup RAII (indispensable)
+///
+/// `Drop` appelle `bus.unsubscribe(token)`. C'est **obligatoire** : `InMemoryBus`
+/// ne prune PAS les receivers fermés au `publish` (il attend un `unsubscribe`
+/// explicite — cf. `events/inmem.rs`). Sans ce Drop, **chaque mission fuiterait
+/// un subscriber** dans la `DashMap` du bus.
+///
+/// Si le `MissionStream` est droppé tôt (client SSE déconnecté), la mission
+/// spawnée **continue** côté serveur (cohérence audit/billing) ; ses publishes
+/// sont simplement ignorés (subscriber retiré).
+pub struct MissionStream<R> {
+    /// `swarm_id` de la mission (corrélation).
+    pub swarm_id: Uuid,
+    /// Canal des `StreamEvent` filtrés sur ce `swarm_id`. **Movable** : le
+    /// consumer peut le déplacer (ex. boucle de stream SSE).
+    pub events: tokio::sync::mpsc::Receiver<StreamEvent>,
+    /// Handle de la mission spawnée → réponse finale (ou erreur). **Movable** :
+    /// `let resp = stream.join.await;` est permis (cf. garde interne ci-dessous).
+    pub join: JoinHandle<CoordResult<R>>,
+    /// **Garde de cleanup RAII** (champ privé). C'est CE champ — et non
+    /// `MissionStream` lui-même — qui implémente `Drop` : ainsi `events` et
+    /// `join` restent *movables* (on ne peut pas `move` hors d'un type qui impl
+    /// `Drop`), tout en garantissant le `unsubscribe` au scope-end.
+    _unsub: Unsubscriber,
+}
+
+/// Garde RAII : retire le subscriber du bus au `Drop`.
+///
+/// **Indispensable** : `InMemoryBus` ne prune PAS les receivers fermés au
+/// `publish` (il attend un `unsubscribe` explicite — cf. `events/inmem.rs`).
+/// Sans cette garde, chaque mission fuiterait un subscriber dans la `DashMap`.
+/// Isolée dans un champ dédié pour ne pas rendre `MissionStream` non-movable.
+struct Unsubscriber {
+    bus: Arc<dyn EventBus>,
+    token: SubscriberToken,
+}
+
+impl Drop for Unsubscriber {
+    fn drop(&mut self) {
+        self.bus.unsubscribe(&self.token);
     }
 }
 

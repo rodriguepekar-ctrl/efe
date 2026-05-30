@@ -135,12 +135,14 @@ pub use blackboard::{
 };
 pub use heartbeat::{HeartbeatHandle, DEFAULT_HEARTBEAT_PERIOD};
 pub use sse::{parse_sse_blob, to_sse_blob, SseByteStream, CONTENT_TYPE_SSE, SSE_PREFACE};
-pub use coordinator::{Coordinator, CoordinatorBuilder, CoordinatorClients, CoordinatorConfig};
+pub use coordinator::{
+    Coordinator, CoordinatorBuilder, CoordinatorClients, CoordinatorConfig, MissionStream,
+};
 pub use dag::{DagExecutor, DagNode, NodeId, NodeStatus, ParentOutputs};
 pub use error::{CoordError, CoordResult};
 pub use events::{
     filter_and, filter_by_swarm, filter_by_tag, filter_or, EventBus, EventFilter,
-    InMemoryBus, MissionTag, StreamEvent, SubscriberToken, EVENT_SCHEMA_VERSION,
+    InMemoryBus, MissionTag, StreamEvent, SubscriberToken, ALL_EVENT_TAGS, EVENT_SCHEMA_VERSION,
 };
 pub use llm::{
     LlmCall, LlmProvider, LlmResponse, MockLlmProvider, MultiLlmBridge, ProviderHandle,
@@ -189,7 +191,10 @@ pub use request::{
 };
 pub use speculate::{DraftToken, SpeculationOutcome, Speculator};
 pub use vote::{Ballot, VoteEngine, VoteOutcome};
-pub use workflows::{run_mission_a, run_mission_b, run_speculative};
+pub use workflows::{
+    run_mission_a, run_mission_a_with_swarm_id, run_mission_b, run_mission_b_with_swarm_id,
+    run_speculative, run_speculative_with_swarm_id,
+};
 
 /// Version du protocole SSE (`StreamEvent`).  À aligner avec le client UI.
 pub const SSE_PROTOCOL_VERSION: &str = "1.0.0";
