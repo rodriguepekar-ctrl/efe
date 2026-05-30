@@ -54,6 +54,10 @@ pub const DEFAULT_CORS_ORIGIN: &str = "http://localhost:3000";
 /// Chemin par défaut du livrable savings v2 (relatif au CWD = racine workspace).
 pub const DEFAULT_SAVINGS_REPORT_PATH: &str =
     "crates/efe-coordinator/CHEWING_SAVINGS_REPORT_v2.json";
+/// LLMs mock enregistrés par [`mock_coordinator`] — **source de vérité** des
+/// `default_llms` en mode mock (le binaire et `for_mock` doivent s'aligner
+/// dessus, sinon le router sélectionne un provider non enregistré → mission KO).
+pub const MOCK_LLMS: &[&str] = &["mock-claude", "mock-gemini", "mock-gpt"];
 
 // ─────────────────────────────────────────────────────────────────────────
 // Configuration
@@ -87,11 +91,7 @@ impl PreviewConfig {
             addr: DEFAULT_ADDR.parse().expect("addr par défaut valide"),
             cors_origin: DEFAULT_CORS_ORIGIN.to_string(),
             token: None,
-            default_llms: vec![
-                "mock-claude".to_string(),
-                "mock-gemini".to_string(),
-                "mock-gpt".to_string(),
-            ],
+            default_llms: MOCK_LLMS.iter().map(|s| (*s).to_string()).collect(),
             savings_report_path: PathBuf::from(DEFAULT_SAVINGS_REPORT_PATH),
             static_dir: None,
         }

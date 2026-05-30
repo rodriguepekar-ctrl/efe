@@ -8,7 +8,7 @@
 
 use std::sync::Arc;
 
-use efe_preview_server::{build_app, mock_coordinator, AppState, PreviewConfig};
+use efe_preview_server::{build_app, mock_coordinator, AppState, PreviewConfig, MOCK_LLMS};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -45,7 +45,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 fn build_coordinator(mock: bool) -> (Arc<efe_coordinator::Coordinator>, Vec<String>) {
     if mock {
         eprintln!("[preview] mode MOCK (EFE_PREVIEW_MOCK=1) — réponses déterministes, gratuites");
-        return (mock_coordinator(), vec!["mock".to_string()]);
+        return (mock_coordinator(), mock_default_llms());
     }
     #[cfg(feature = "real-llm")]
     {
@@ -53,7 +53,7 @@ fn build_coordinator(mock: bool) -> (Arc<efe_coordinator::Coordinator>, Vec<Stri
             return pair;
         }
         eprintln!("[preview] aucune clé LLM détectée — fallback MOCK");
-        (mock_coordinator(), vec!["mock".to_string()])
+        (mock_coordinator(), mock_default_llms())
     }
     #[cfg(not(feature = "real-llm"))]
     {
@@ -61,8 +61,14 @@ fn build_coordinator(mock: bool) -> (Arc<efe_coordinator::Coordinator>, Vec<Stri
             "[preview] feature `real-llm` désactivée — mode MOCK \
              (recompiler avec --features real-llm pour les vrais LLM)"
         );
-        (mock_coordinator(), vec!["mock".to_string()])
+        (mock_coordinator(), mock_default_llms())
     }
+}
+
+/// LLMs par défaut en mode mock — alignés sur les providers réellement
+/// enregistrés par `mock_coordinator` (cf. [`MOCK_LLMS`]).
+fn mock_default_llms() -> Vec<String> {
+    MOCK_LLMS.iter().map(|s| (*s).to_string()).collect()
 }
 
 /// Construit un coordinator avec les providers réels présents dans l'env.
