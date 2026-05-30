@@ -1,0 +1,56 @@
+# SPDX-License-Identifier: UNLICENSED
+[package]
+name = "efe-preview-server"
+version = "0.0.1"
+edition = { workspace = true }
+rust-version = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
+description = "Phase 4 — Preview Lab : bridge HTTP/SSE devant efe-coordinator (missions live + savings). Cf. docs/architecture/EFE_A1_PHASE4_PREVIEW_LAB_SSE_ARCHITECTURE.md."
+publish = false
+
+[lib]
+name = "efe_preview_server"
+path = "src/lib.rs"
+
+[[bin]]
+name = "efe-preview-server"
+path = "src/main.rs"
+
+[features]
+default = []
+# Active les vrais providers LLM (Claude/Gemini/GPT) pour le mode démo réel
+# (`main.rs`). Les tests + le mode mock n'en ont pas besoin → build par défaut
+# léger (pas de stack HTTP provider).
+real-llm = ["efe-coordinator/all-providers"]
+
+[dependencies]
+# Le moteur : on consomme `Coordinator::run_mission_*_streamed` (P4.S1) + le
+# protocole `StreamEvent`. `MockLlmProvider` est dans la base (pas de feature).
+# Feature `metrics` (R3.S7) : expose `metrics_server::snapshot_circuits` +
+# active `tokio/net` (déjà requis par notre serveur HTTP) → /metrics réexposé.
+efe-coordinator          = { path = "../efe-coordinator", version = "0.0.1", features = ["metrics"] }
+efe-nano-app-coordinator = { path = "../efe-nano-app-coordinator", version = "0.0.1" }
+
+# HTTP framework — mêmes versions que `efe-gateway` (déjà vettées au workspace).
+# La feature `tokio` d'axum 0.7 fournit les helpers SSE.
+axum       = { version = "0.7", features = ["macros", "tokio"] }
+# `fs` : ServeDir pour servir le build statique du frontend (P4.S6).
+tower-http = { version = "0.6", features = ["cors", "trace", "fs"] }
+
+# Streaming — déjà deps workspace (cf. efe-gateway).
+futures = { workspace = true }
+
+tokio   = { workspace = true, features = ["full", "signal"] }
+serde   = { workspace = true }
+serde_json = { workspace = true }
+uuid    = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
+
+[dev-dependencies]
+# `ServiceExt::oneshot` pour piloter le Router en test sans socket réel.
+tower          = { version = "0.5", features = ["util"] }
+# `BodyExt::collect` pour agréger le body SSE en bytes.
+http-body-util = "0.1"
