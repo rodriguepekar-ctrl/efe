@@ -5,6 +5,7 @@ import { useState, type FormEvent } from "react";
 
 import type { MissionDto, MissionType, TaskClass } from "@/lib/events";
 import { DEFAULT_PROMPT, EXAMPLE_PROMPTS, PRECHEW_HINT_CHARS } from "@/lib/examples";
+import { parseSources } from "@/lib/sources";
 
 const TASK_CLASSES: TaskClass[] = [
   "FACTUAL_QA",
@@ -37,6 +38,7 @@ export function MissionComposer({
   const [llmsCsv, setLlmsCsv] = useState("");
   const [drafter, setDrafter] = useState("mock-gemini");
   const [verifier, setVerifier] = useState("mock-claude");
+  const [sourcesText, setSourcesText] = useState("");
 
   const canRun = !disabled && userText.trim().length > 0;
 
@@ -46,10 +48,15 @@ export function MissionComposer({
       return { ...base, drafter_llm: drafter.trim(), verifier_llm: verifier.trim() };
     }
     const llms = parseCsv(llmsCsv);
+    // P5.5 — sources de fact-check (A et B) : présentes → réveillent le verifier.
+    const sources = parseSources(sourcesText);
+    const srcPart = sources.length > 0 ? { candidate_sources: sources } : {};
     if (type === "b") {
-      return llms.length > 0 ? { ...base, llms } : base;
+      return llms.length > 0 ? { ...base, ...srcPart, llms } : { ...base, ...srcPart };
     }
-    return llms.length > 0 ? { ...base, available_llms: llms } : base;
+    return llms.length > 0
+      ? { ...base, ...srcPart, available_llms: llms }
+      : { ...base, ...srcPart };
   }
 
   function submit(e: FormEvent) {
@@ -84,7 +91,10 @@ export function MissionComposer({
           <button
             key={ex.id}
             type="button"
-            onClick={() => setUserText(ex.text)}
+            onClick={() => {
+              setUserText(ex.text);
+              setSourcesText(ex.sources ?? "");
+            }}
             disabled={disabled}
             className="rounded-lg border border-efe-border px-2 py-1 text-[12px] text-efe-muted hover:text-efe-text disabled:cursor-not-allowed disabled:opacity-40"
           >
@@ -139,6 +149,21 @@ export function MissionComposer({
           onChange={setLlmsCsv}
           placeholder="mock-claude, mock-gemini, mock-gpt"
         />
+      )}
+
+      {type !== "speculative" && (
+        <label className="flex flex-col gap-1">
+          <span className="text-[11px] text-efe-muted">
+            candidate_sources — une par ligne (active le fact-check / verdicts)
+          </span>
+          <textarea
+            value={sourcesText}
+            onChange={(e) => setSourcesText(e.target.value)}
+            rows={2}
+            placeholder={"Paris est la capitale de la France.\n…"}
+            className="w-full resize-y rounded-lg border border-efe-border bg-efe-bg px-3 py-2 font-mono text-xs text-efe-text outline-none focus:border-efe-accent"
+          />
+        </label>
       )}
 
       <div className="flex gap-2">

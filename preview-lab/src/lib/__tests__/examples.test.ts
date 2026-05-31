@@ -51,4 +51,16 @@ describe("prompts d'exemple (P5.6)", () => {
   it("le défaut du composer est l'exemple court", () => {
     expect(DEFAULT_PROMPT).toBe(byId("short").text);
   });
+
+  it("l'exemple fact-check pré-remplit des sources (≥ 1 ligne non vide)", () => {
+    const fc = byId("factcheck");
+    expect(fc.sources, "le fact-check doit porter des sources").toBeDefined();
+    const lines = (fc.sources ?? "").split("\n").filter((l) => l.trim().length > 0);
+    expect(lines.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("seul l'exemple fact-check porte des sources (court/long n'en ont pas)", () => {
+    expect(byId("short").sources).toBeUndefined();
+    expect(byId("long").sources).toBeUndefined();
+  });
 });

@@ -20,6 +20,11 @@ export interface ExamplePrompt {
   label: string;
   /** Texte injecté dans `user_text`. */
   text: string;
+  /**
+   * Sources de fact-check à pré-remplir (UNE par ligne) — réveille le verifier
+   * → événements `VERDICT_READY` (P5.5). Absent → la chip vide le champ sources.
+   */
+  sources?: string;
 }
 
 /**
@@ -53,13 +58,29 @@ const LONG_PROMPT =
   "mieux utiliser l'une plutôt que l'autre ? Merci d'avance, et désolé pour le " +
   "pavé.";
 
+/** Prompt court factuel + 2 sources concordantes → démo fact-check en un clic
+ *  (charge le texte ET les sources → `VERDICT_READY: SUPPORTED` en live). */
+const FACTCHECK_PROMPT =
+  "Quelle est la capitale de la France ? Réponds en une phrase courte.";
+const FACTCHECK_SOURCES = [
+  "Paris est la capitale de la France.",
+  "La capitale administrative de la France est la ville de Paris.",
+].join("\n");
+
 /**
  * Jeu de prompts d'exemple. Le 1er (court) est le défaut du composer ; le 2nd
- * (long) sert à montrer le pré-mâchage en direct.
+ * (long) montre le pré-mâchage (compression) en direct ; le 3e (fact-check)
+ * pré-remplit des sources → réveille le verifier et affiche des Verdicts.
  */
 export const EXAMPLE_PROMPTS: ExamplePrompt[] = [
   { id: "short", label: "Court", text: SHORT_PROMPT },
   { id: "long", label: "Long · pré-mâchage", text: LONG_PROMPT },
+  {
+    id: "factcheck",
+    label: "Fact-check · verdicts",
+    text: FACTCHECK_PROMPT,
+    sources: FACTCHECK_SOURCES,
+  },
 ];
 
 /** Prompt par défaut du composer (= exemple court). */

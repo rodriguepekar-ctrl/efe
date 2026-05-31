@@ -251,10 +251,20 @@ export function swarmIdOf(ev: StreamEvent): string | null {
 
 export type MissionType = "a" | "b" | "speculative";
 
+/**
+ * Source de référence pour le fact-check (miroir de `CandidateSourceRef` du
+ * bridge). Fournie → réveille le verifier → événements `VERDICT_READY` (P5.5).
+ */
+export interface CandidateSourceRef {
+  id: string;
+  text: string;
+}
+
 export interface MissionADto {
   user_text: string;
   task_class?: TaskClass;
   available_llms?: string[];
+  candidate_sources?: CandidateSourceRef[];
 }
 export interface MissionBDto {
   user_text: string;
@@ -262,6 +272,7 @@ export interface MissionBDto {
   llms?: string[];
   vote_weights?: Record<string, number>;
   quorum?: number;
+  candidate_sources?: CandidateSourceRef[];
 }
 export interface SpecDto {
   user_text: string;
