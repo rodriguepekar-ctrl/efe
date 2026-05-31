@@ -66,7 +66,17 @@ impl NanoRobotClient for AnalyzerClient {
         ctx: &CallContext,
     ) -> RobotResult<Self::Output> {
         use validator::Validate as _;
-        // Validation input pré-vol.
+        // R6 — borne anti-échec AVANT la validation : le SmolLM2-360M échoue /
+        // timeoute au-delà de ~1000 tokens (observé en live ; le validateur
+        // `text` autorise pourtant jusqu'à 8000 car). L'analyzer ne fait que de
+        // l'extraction d'entités — enrichissement HORS chemin critique : elles
+        // n'alimentent NI le router NI le `must_preserve` du compresseur, juste
+        // des phéromones de blackboard + des events UI. Un excerpt de tête suffit,
+        // et borner avant validation rend l'analyzer robuste à N'IMPORTE quelle
+        // taille d'entrée (au lieu d'échouer la validation au-delà de 8000 car).
+        let input = bound_analyzer_input(input);
+        // Validation input pré-vol (texte désormais sous la limite ; les autres
+        // champs — `max_entities`, `source_agent` — restent validés).
         input.validate().map_err(|e| RobotError::SemanticViolation {
             robot: self.id(),
             issues: format!("input invalid: {e}"),
@@ -100,6 +110,39 @@ pub(crate) fn assets_dir() -> std::path::PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("assets")
 }
 
+// ─────────────────────────────────────────────────────────────────────────
+// R6 — borne d'entrée anti-échec (SmolLM2-360M)
+// ─────────────────────────────────────────────────────────────────────────
+
+/// Limite d'entrée fiable du SmolLM2-360M, en **tokens estimés**. Au-delà,
+/// l'appel unique échoue/timeoute (mesuré en live : OK ~720 t, KO ~1030 t). On
+/// reste nettement en dessous. Override : `EFE_ANALYZER_MAX_TOKENS` (plancher 32).
+const SAFE_ANALYZER_TOKENS: usize = 512;
+
+/// Budget de caractères de l'entrée analyzer (≈ 4 car/token, cohérent avec
+/// `estimate_tokens`). Lu de `EFE_ANALYZER_MAX_TOKENS` (tokens) avec défaut
+/// [`SAFE_ANALYZER_TOKENS`].
+fn safe_analyzer_chars() -> usize {
+    let toks = std::env::var("EFE_ANALYZER_MAX_TOKENS")
+        .ok()
+        .and_then(|s| s.parse::<usize>().ok())
+        .filter(|&n| n >= 32)
+        .unwrap_or(SAFE_ANALYZER_TOKENS);
+    toks.saturating_mul(4)
+}
+
+/// Borne le `text` de l'entrée analyzer à [`safe_analyzer_chars`] (troncature de
+/// TÊTE sur frontière de codepoint — jamais au milieu d'un caractère). No-op si
+/// déjà sous la limite. L'analyzer étant observationnel (entités), un excerpt de
+/// tête est un échantillon représentatif suffisant.
+fn bound_analyzer_input(mut input: AnalyzerInput) -> AnalyzerInput {
+    let max = safe_analyzer_chars();
+    if input.text.chars().count() > max {
+        input.text = input.text.chars().take(max).collect();
+    }
+    input
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -111,6 +154,57 @@ mod tests {
             d.join("grammars").exists() || !d.exists(),
             "assets/grammars/ should exist when assets/ exists"
         );
+    }
+
+    // ── R6 — borne d'entrée anti-échec ─────────────────────────────────────
+
+    fn ai(text: &str) -> AnalyzerInput {
+        AnalyzerInput {
+            text: text.to_string(),
+            max_entities: 20,
+            source_agent: None,
+        }
+    }
+
+    #[test]
+    fn safe_analyzer_chars_default_is_below_failure_point() {
+        std::env::remove_var("EFE_ANALYZER_MAX_TOKENS");
+        // Défaut = 512 t × 4 = 2048 car, bien sous le ~1030 t (~4120 car) d'échec.
+        assert_eq!(safe_analyzer_chars(), SAFE_ANALYZER_TOKENS * 4);
+        assert!(safe_analyzer_chars() < 4000, "marge sous le point d'échec live");
+    }
+
+    #[test]
+    fn bound_truncates_long_text_on_codepoint_boundary() {
+        std::env::remove_var("EFE_ANALYZER_MAX_TOKENS");
+        // « é » = 1 codepoint / 2 octets → vérifie qu'on ne coupe pas un caractère.
+        let bounded = bound_analyzer_input(ai(&"é".repeat(10_000)));
+        assert_eq!(
+            bounded.text.chars().count(),
+            SAFE_ANALYZER_TOKENS * 4,
+            "tronqué au budget exact (en CARACTÈRES)"
+        );
+        assert!(bounded.text.chars().all(|c| c == 'é'), "aucun codepoint coupé");
+    }
+
+    #[test]
+    fn bound_leaves_short_text_untouched() {
+        let bounded = bound_analyzer_input(ai("Quelle est la capitale ?"));
+        assert_eq!(bounded.text, "Quelle est la capitale ?");
+    }
+
+    /// Un input > 8000 car (qui échouait la validation `max=8000` → analyzer KO)
+    /// est borné AVANT → passe la validation et ne casse plus.
+    #[test]
+    fn oversized_input_is_bounded_then_validates() {
+        use validator::Validate as _;
+        std::env::remove_var("EFE_ANALYZER_MAX_TOKENS");
+        let bounded = bound_analyzer_input(ai(&"x".repeat(10_000)));
+        assert!(
+            bounded.text.chars().count() <= 8000,
+            "sous le max du validateur"
+        );
+        assert!(bounded.validate().is_ok(), "borné → input valide");
     }
 
     #[test]
