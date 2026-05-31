@@ -423,45 +423,20 @@ pub async fn run_mission_a_with_swarm_id(
                                 serde_json::json!({"summary": out.summary, "ratio": out.compression_ratio}),
                             ));
                             // Garde anti-garbage + préservation de la QUESTION.
-                            //
-                            // Le compresseur (Llama-3.2-1B Q5) dégénère sur les
-                            // inputs longs : au lieu de comprimer, il recrache un
-                            // placeholder de son propre template (« <the compressed
-                            // text> », cf. assets/prompts/compressor.txt:13) ou un
-                            // résumé vide. Envoyer ce garbage au LLM premium →
-                            // réponse « votre message est vide ». On détecte ces
-                            // cas et on retombe sur le prompt BRUT, qui préserve la
-                            // question : zéro savings sur cet appel, mais QUALITÉ
-                            // garantie (jamais de réponse dégradée). Sinon, on
-                            // encadre le résumé d'une consigne pour que le LLM
-                            // réponde toujours, même à un résumé terse.
-                            let summary = out.summary.trim();
-                            let degenerate = summary.is_empty()
-                                || summary.contains("<the compressed text>")
-                                || summary.contains("<source text>");
-                            if degenerate {
+                            // Logique pure extraite + unit-testée en CI :
+                            // `final_prompt_from_compression`. Le compresseur 1B
+                            // dégénère sur les inputs longs (recrache le placeholder
+                            // de son template, cf. assets/prompts/compressor.txt) ;
+                            // on détecte ça et on retombe sur le prompt brut
+                            // (qualité garantie, savings nuls), sinon on encadre.
+                            let (prompt, fell_back) =
+                                final_prompt_from_compression(&out.summary, &req.user_text);
+                            if fell_back {
                                 chewing_metrics
                                     .failed_components
                                     .push("compressor:degenerate_output".to_string());
-                                req.user_text.clone()
-                            } else {
-                                format!(
-                                    "Le texte ci-dessous est une demande d'un \
-                                     utilisateur, condensée par un pré-traitement \
-                                     (le contexte a été résumé, la question peut \
-                                     être implicite). Tu DOIS y répondre. Déduis la \
-                                     question la plus probable à partir du contenu \
-                                     et donne DIRECTEMENT la réponse, de façon BRÈVE \
-                                     (une seule phrase courte), sans préambule ni \
-                                     développement — une réponse verbeuse annulerait \
-                                     l'économie de la compression. N'indique JAMAIS \
-                                     que le texte est vide, coupé ou incomplet, et \
-                                     ne demande JAMAIS de clarification : réponds \
-                                     avec l'information disponible.\n\n\
-                                     --- Demande condensée ---\n{}",
-                                    out.summary
-                                )
                             }
+                            prompt
                         }
                         Err(e) => {
                             // R3.S2 : échec → record_failure + auto-emit event si transition.
@@ -783,4 +758,108 @@ pub async fn run_mission_a_with_swarm_id(
     // R3.S7 : enregistre la mission réussie (désarme le guard).
     metric_guard.record_success(&MissionRecord::from_mission_a(&response));
     Ok(response)
+}
+
+/// Décide le prompt final envoyé au LLM premium à partir du résumé produit par
+/// le compresseur SLM. **Logique pure (sans I/O) → unit-testable en CI.**
+///
+/// Retourne `(prompt, fell_back)` :
+/// - **Dégénéré** (résumé vide, ou contenant un placeholder de template comme
+///   `<the compressed text>` / `<source text>` que le modèle 1B recrache sur les
+///   inputs longs) → on retombe sur le prompt **brut**, qui préserve la
+///   question ; `fell_back = true`. Qualité garantie, économie nulle sur cet
+///   appel — jamais de garbage envoyé au LLM premium.
+/// - **Valide** → on encadre le résumé d'une consigne (réponse brève, ne jamais
+///   demander de clarification) pour que le LLM réponde toujours, même à un
+///   résumé terse ; `fell_back = false`.
+///
+/// Le bug ayant été découvert uniquement en live (cf.
+/// `live_mission_a_long_input_baseline_vs_chewed`), `guard_tests` ci-dessous
+/// verrouille la **détection** en CI sans infra SLM.
+fn final_prompt_from_compression(summary: &str, raw_user_text: &str) -> (String, bool) {
+    let s = summary.trim();
+    let degenerate = s.is_empty()
+        || s.contains("<the compressed text>")
+        || s.contains("<source text>");
+    if degenerate {
+        return (raw_user_text.to_string(), true);
+    }
+    let framed = format!(
+        "Le texte ci-dessous est une demande d'un utilisateur, condensée par un \
+         pré-traitement (le contexte a été résumé, la question peut être \
+         implicite). Tu DOIS y répondre. Déduis la question la plus probable à \
+         partir du contenu et donne DIRECTEMENT la réponse, de façon BRÈVE (une \
+         seule phrase courte), sans préambule ni développement — une réponse \
+         verbeuse annulerait l'économie de la compression. N'indique JAMAIS que \
+         le texte est vide, coupé ou incomplet, et ne demande JAMAIS de \
+         clarification : réponds avec l'information disponible.\n\n\
+         --- Demande condensée ---\n{s}"
+    );
+    (framed, false)
+}
+
+#[cfg(test)]
+mod guard_tests {
+    use super::final_prompt_from_compression;
+
+    const RAW: &str =
+        "Long contexte… quelle est la capitale de la France ? Réponds en une phrase.";
+
+    #[test]
+    fn placeholder_echo_falls_back_to_raw_prompt() {
+        // Mode d'échec exact observé en live : le SLM recrache le placeholder de
+        // son template au lieu de comprimer → le LLM premium recevait du garbage.
+        let (prompt, fell_back) = final_prompt_from_compression("<the compressed text>", RAW);
+        assert!(fell_back, "un placeholder doit déclencher le fallback");
+        assert_eq!(prompt, RAW, "on doit retomber EXACTEMENT sur le prompt brut");
+    }
+
+    #[test]
+    fn placeholder_embedded_in_sentence_also_caught() {
+        let (prompt, fell_back) =
+            final_prompt_from_compression("Résumé: <the compressed text> fin.", RAW);
+        assert!(fell_back);
+        assert_eq!(prompt, RAW);
+    }
+
+    #[test]
+    fn source_text_placeholder_caught() {
+        let (_p, fell_back) = final_prompt_from_compression("blah <source text> blah", RAW);
+        assert!(fell_back);
+    }
+
+    #[test]
+    fn empty_or_whitespace_summary_falls_back() {
+        for s in ["", "   ", "\n\t "] {
+            let (prompt, fell_back) = final_prompt_from_compression(s, RAW);
+            assert!(fell_back, "résumé vide/blanc doit fallback (cas: {s:?})");
+            assert_eq!(prompt, RAW);
+        }
+    }
+
+    #[test]
+    fn valid_summary_is_framed_not_raw() {
+        let summary = "Paris est la capitale de la France, siège des institutions.";
+        let (prompt, fell_back) = final_prompt_from_compression(summary, RAW);
+        assert!(!fell_back, "un résumé valide ne doit PAS fallback");
+        assert_ne!(prompt, RAW, "le prompt doit être encadré, pas le brut");
+        assert!(
+            prompt.contains(summary),
+            "le résumé doit être inclus dans l'encadrement"
+        );
+        // L'encadrement doit imposer la brièveté + interdire la clarification
+        // (les deux fixes coût/qualité de la session).
+        assert!(prompt.contains("BRÈVE"), "consigne de brièveté absente");
+        assert!(
+            prompt.contains("clarification"),
+            "consigne anti-clarification absente"
+        );
+    }
+
+    #[test]
+    fn summary_is_trimmed_before_framing() {
+        let (prompt, fell_back) = final_prompt_from_compression("  Paris.  ", RAW);
+        assert!(!fell_back);
+        assert!(prompt.contains("Paris."), "le résumé trimmé doit apparaître");
+    }
 }
