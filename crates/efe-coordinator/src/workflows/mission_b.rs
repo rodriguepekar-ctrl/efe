@@ -182,7 +182,8 @@ pub async fn run_mission_b_with_swarm_id(
     // circuit. Sur fan-out N LLMs, le compressor tourne 1× → 1 seul guard
     // (cohérent avec S5 mutualisation).
     let prompt_for_llms = if let Some(compressor) = &coord.clients.compressor {
-        if req.user_text.len() > 500 {
+        // R5 : gate sur tokens (≥ COMPRESS_MIN_TOKENS) — cf. mission_a / should_compress.
+        if super::should_compress(&req.user_text) {
             let circuit = coord.slm_circuit_for(tenant_id, "compressor", has_policy);
             match slm_guard_check(circuit, "compressor", &mut chewing_metrics) {
                 SlmGuardOutcome::Skip => {

@@ -75,7 +75,8 @@ pub struct ChewingMetrics {
     /// Latence du router (0 si skippé). Heuristique in-process, typiquement < 10 ms.
     pub router_latency_ms: u64,
 
-    /// Latence du compressor (0 si skippé ou si `user_text.len() ≤ 500`).
+    /// Latence du compressor (0 si skippé, ou si l'entrée est sous le plancher
+    /// `workflows::COMPRESS_MIN_TOKENS` → cf. `workflows::should_compress`).
     pub compressor_latency_ms: u64,
 
     /// Latence de l'appel au gros LLM (depuis `LlmResponse.latency_ms`).

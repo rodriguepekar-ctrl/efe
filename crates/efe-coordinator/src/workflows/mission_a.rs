@@ -362,7 +362,9 @@ pub async fn run_mission_a_with_swarm_id(
 
     // ── Étape 3 : Compressor (R3.S2 fix L2 : guard SLM circuit) ─────
     let final_prompt = if let Some(compressor) = &coord.clients.compressor {
-        if req.user_text.len() > 500 {
+        // R5 : gate sur tokens (≥ COMPRESS_MIN_TOKENS), cohérent avec la métrique
+        // savings et au-dessus du coût du préambule → pas de savings négatifs.
+        if super::should_compress(&req.user_text) {
             let circuit = coord.slm_circuit_for(tenant_id, "compressor", has_policy);
             match slm_guard_check(circuit, "compressor", &mut chewing_metrics) {
                 SlmGuardOutcome::Skip => {

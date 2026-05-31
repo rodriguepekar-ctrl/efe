@@ -54,16 +54,16 @@ pub(crate) fn final_prompt_from_compression(
     if degenerate {
         return (raw_user_text.to_string(), true);
     }
+    // **R5 — préambule TERSE (~50 t, contre ~140 t auparavant).** Le surcoût
+    // d'encadrement était la 1re cause d'annulation des savings (un préambule de
+    // 140 t ajouté à chaque appel dépasse à lui seul la plupart des prompts). On
+    // condense en gardant les 4 garde-fous essentiels validés en live : réponse
+    // DIRECTE, BRÈVE (une phrase), ne pas signaler un texte « incomplet », et ne
+    // jamais demander de clarification.
     let framed = format!(
-        "Le texte ci-dessous est une demande d'un utilisateur, condensée par un \
-         pré-traitement (le contexte a été résumé, la question peut être \
-         implicite). Tu DOIS y répondre. Déduis la question la plus probable à \
-         partir du contenu et donne DIRECTEMENT la réponse, de façon BRÈVE (une \
-         seule phrase courte), sans préambule ni développement — une réponse \
-         verbeuse annulerait l'économie de la compression. N'indique JAMAIS que \
-         le texte est vide, coupé ou incomplet, et ne demande JAMAIS de \
-         clarification : réponds avec l'information disponible.\n\n\
-         --- Demande condensée ---\n{s}"
+        "Demande condensée par un pré-traitement (question possiblement \
+         implicite). Réponds DIRECTEMENT en une phrase BRÈVE, sans signaler que \
+         le texte serait incomplet et sans demander de clarification :\n\n{s}"
     );
     (framed, false)
 }
@@ -77,6 +77,36 @@ pub(crate) fn final_prompt_from_compression(
 /// historique préservé).
 pub(crate) fn proportional_target_words(text: &str) -> u32 {
     (crate::metrics::ChewingMetrics::estimate_tokens(text) / 8).clamp(30, 500)
+}
+
+/// **Levier 2 (R5) — Plancher de compression (en tokens).**
+///
+/// En dessous de ce seuil, comprimer ne peut JAMAIS être rentable : le prompt
+/// final envoyé au LLM = préambule d'encadrement
+/// ([`final_prompt_from_compression`], ~50 t) + résumé (≤ 125 t, le cap de la
+/// grammaire `compressor_v1.gbnf` est de 500 caractères). Comprimer une entrée
+/// plus petite que ce coût plancher **gonfle** le prompt → savings négatifs
+/// (observé en live).
+///
+/// **Invariant clé** : `COMPRESS_MIN_TOKENS` est fixé STRICTEMENT au-dessus du
+/// coût max du prompt encadré (préambule + résumé cappé ≈ 175 t). Donc dès que
+/// le compresseur tourne, `final_prompt` est forcément plus court que le brut ⇒
+/// **savings garantis ≥ 0** (positifs, ou nuls si fallback brut sur résumé
+/// dégénéré), JAMAIS négatifs. (Verrouillé par le test
+/// `compress_gate_guarantees_non_negative_savings`.)
+///
+/// Remplace l'ancien gate `user_text.len() > 500` — qui comptait les **bytes**
+/// (incohérent avec la métrique en **chars**) ET dont le seuil (~125 t) tombait
+/// sous le coût du préambule, laissant passer des prompts qui ne pouvaient
+/// qu'expanser.
+pub(crate) const COMPRESS_MIN_TOKENS: u32 = 250;
+
+/// `true` ssi l'entrée brute est assez longue pour que la compression puisse
+/// être rentable (cf. [`COMPRESS_MIN_TOKENS`]). Sous le seuil, le compresseur
+/// est skippé → `final_prompt = user_text` (savings 0, pas négatifs) + on évite
+/// la latence SLM inutile.
+pub(crate) fn should_compress(raw_user_text: &str) -> bool {
+    crate::metrics::ChewingMetrics::estimate_tokens(raw_user_text) >= COMPRESS_MIN_TOKENS
 }
 
 #[cfg(test)]
@@ -181,5 +211,51 @@ mod tests {
         assert_eq!(proportional_target_words(&"x".repeat(8000)), 250);
         // Très long → plafond 500.
         assert_eq!(proportional_target_words(&"x".repeat(80_000)), 500);
+    }
+
+    // ── R5 — corrections compression (préambule terse + gate sur tokens) ────
+
+    use crate::metrics::ChewingMetrics;
+
+    /// **Corr.1 — lock anti-régression du préambule.** L'ancien encadrement
+    /// faisait ~140 t et annulait les savings. Pour un résumé d'1 caractère, le
+    /// prompt encadré total doit rester terse (≤ 70 t). Si quelqu'un rallonge le
+    /// préambule, ce test casse.
+    #[test]
+    fn framing_overhead_stays_terse() {
+        let (framed, fell_back) = final_prompt_from_compression("x", RAW);
+        assert!(!fell_back);
+        let overhead = ChewingMetrics::estimate_tokens(&framed);
+        assert!(overhead <= 70, "préambule trop long: {overhead} t (doit rester terse)");
+    }
+
+    /// **Corr.2 — le gate filtre bien sur le plancher en tokens.**
+    #[test]
+    fn should_compress_gates_on_token_floor() {
+        assert!(!should_compress(""), "vide → pas de compression");
+        // 200 chars ≈ 50 t < 250 → skip.
+        assert!(!should_compress(&"x".repeat(200)));
+        // Au plancher exact (250 t = 1000 chars) → compresse.
+        assert!(should_compress(&"x".repeat(COMPRESS_MIN_TOKENS as usize * 4)));
+        // Bien au-dessus → compresse.
+        assert!(should_compress(&"x".repeat(4000)));
+    }
+
+    /// **Corr.1 × Corr.2 — INVARIANT cardinal** : le plancher dépasse STRICTEMENT
+    /// le coût max du prompt encadré (préambule + résumé cappé à 500 car). Donc
+    /// dès que le compresseur tourne (`raw ≥ COMPRESS_MIN_TOKENS`), le final est
+    /// forcément plus court que le brut ⇒ savings JAMAIS négatifs. Ce test relie
+    /// les deux corrections : si l'une régresse (préambule rallongé OU plancher
+    /// abaissé), il casse.
+    #[test]
+    fn compress_gate_guarantees_non_negative_savings() {
+        // Résumé de taille MAX autorisée par la grammaire (500 car), encadré.
+        let (framed_max, _) = final_prompt_from_compression(&"x".repeat(500), "");
+        let framed_max_tokens = ChewingMetrics::estimate_tokens(&framed_max);
+        assert!(
+            COMPRESS_MIN_TOKENS > framed_max_tokens,
+            "plancher ({COMPRESS_MIN_TOKENS} t) doit dépasser le coût max du prompt \
+             encadré ({framed_max_tokens} t) → savings ≥ 0 garantis"
+        );
     }
 }
