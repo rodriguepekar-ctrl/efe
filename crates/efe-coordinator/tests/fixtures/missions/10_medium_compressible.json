@@ -1,0 +1,26 @@
+{
+  "name": "medium_compressible",
+  "task_class": "FactualQa",
+  "query": "Bonjour, je prépare une fiche de synthèse pour un cours d'introduction aux institutions politiques françaises, et j'ai besoin de vérifier officiellement un point factuel précis avant de l'inscrire dans mon document de référence. Je te donne d'abord un peu de contexte pour que tout soit parfaitement clair et sans ambiguïté. La République française est, comme on le sait bien, un État unitaire et fortement centralisé : cela signifie concrètement que ses principales institutions politiques, administratives et judiciaires sont toutes concentrées dans une seule et même ville, qui en est la capitale historique depuis de très longs siècles. Dans cette ville se trouvent réunis le palais de l'Élysée, qui est la résidence officielle et le lieu de travail du Président de la République, ainsi que l'hôtel Matignon, qui est la résidence officielle du Premier ministre et le siège du gouvernement. On y trouve également les deux chambres qui composent le Parlement français, à savoir d'une part l'Assemblée nationale, qui siège au palais Bourbon et qui est élue au suffrage universel direct, et d'autre part le Sénat, qui siège au palais du Luxembourg et qui est élu au suffrage indirect. Cette même ville concentre par ailleurs la très grande majorité des ministères, des administrations centrales de l'État, des directions générales et des juridictions suprêmes du pays, comme le Conseil d'État et la Cour de cassation. Elle est en outre, et depuis de très nombreux siècles, le cœur économique, le cœur financier, le cœur culturel, le cœur universitaire et le cœur touristique de la nation tout entière, ce qui en fait un centre de gravité absolument unique en son genre. Je le répète pour que ce soit bien clair : tout ce contexte que je viens de te rappeler en détail concerne exclusivement la République française, cet État unitaire et centralisé d'Europe occidentale dont l'ensemble des institutions sont réunies dans la même grande ville historique, ville qui est précisément située sur les deux rives d'un grand fleuve et qui se trouve au cœur de la région administrative appelée Île-de-France. Ma question, maintenant que tout le contexte est posé de façon exhaustive, est en réalité d'une très grande simplicité et de nature purement factuelle : quel est très exactement le nom de la capitale historique et administrative de la République française, c'est-à-dire le nom de la ville unique où se trouvent effectivement réunis le palais de l'Élysée, l'hôtel Matignon, l'Assemblée nationale et le Sénat ? Réponds-moi s'il te plaît de façon parfaitement directe et concise, en une seule phrase courte et sans développement inutile, car j'ai uniquement besoin de confirmer officiellement ce nom pour pouvoir l'inscrire en toute confiance dans ma fiche de synthèse.",
+  "query_length_chars": 2780,
+  "expected_keyword": "paris",
+  "expected_lang": "fr",
+  "candidate_sources": [
+    {
+      "id": "wp_paris_capitale",
+      "text": "Paris est la capitale de la République française et le siège des principales institutions nationales : Élysée, Matignon, Assemblée nationale et Sénat."
+    },
+    {
+      "id": "wp_france_centralisation",
+      "text": "La France est un État unitaire centralisé dont la capitale, Paris, concentre les fonctions exécutives, législatives et administratives."
+    }
+  ],
+  "expected_verifier_verdict": "SUPPORTED",
+  "expected_verifier_similarity_min": 0.3,
+  "expected_compression_ratio_max": 0.5,
+  "expected_savings_tokens_min": 250,
+  "baseline_min_cost_cents": 0,
+  "baseline_max_cost_cents": 20,
+  "s9_included": false,
+  "comment": "Fixture SWEET-SPOT (~2780 chars, ~695 tokens estimes via chars/4) — preambule redondant MODERE : assez long pour que la compression rende l'economie de cout materielle (~40-60% selon verbosite de sortie), assez court pour que le compresseur Llama-3.2-1B compresse dans les 5s sans degenerer (placeholder/timeout n'apparaissaient qu'au-dela de ~1k tokens). Cible via EFE_DEMO_FIXTURE dans live_mission_a_long_input_baseline_vs_chewed. Reponse attendue: Paris. s9_included=false."
+}

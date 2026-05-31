@@ -422,7 +422,46 @@ pub async fn run_mission_a_with_swarm_id(
                                 EntryKind::CompressedText,
                                 serde_json::json!({"summary": out.summary, "ratio": out.compression_ratio}),
                             ));
-                            out.summary
+                            // Garde anti-garbage + préservation de la QUESTION.
+                            //
+                            // Le compresseur (Llama-3.2-1B Q5) dégénère sur les
+                            // inputs longs : au lieu de comprimer, il recrache un
+                            // placeholder de son propre template (« <the compressed
+                            // text> », cf. assets/prompts/compressor.txt:13) ou un
+                            // résumé vide. Envoyer ce garbage au LLM premium →
+                            // réponse « votre message est vide ». On détecte ces
+                            // cas et on retombe sur le prompt BRUT, qui préserve la
+                            // question : zéro savings sur cet appel, mais QUALITÉ
+                            // garantie (jamais de réponse dégradée). Sinon, on
+                            // encadre le résumé d'une consigne pour que le LLM
+                            // réponde toujours, même à un résumé terse.
+                            let summary = out.summary.trim();
+                            let degenerate = summary.is_empty()
+                                || summary.contains("<the compressed text>")
+                                || summary.contains("<source text>");
+                            if degenerate {
+                                chewing_metrics
+                                    .failed_components
+                                    .push("compressor:degenerate_output".to_string());
+                                req.user_text.clone()
+                            } else {
+                                format!(
+                                    "Le texte ci-dessous est une demande d'un \
+                                     utilisateur, condensée par un pré-traitement \
+                                     (le contexte a été résumé, la question peut \
+                                     être implicite). Tu DOIS y répondre. Déduis la \
+                                     question la plus probable à partir du contenu \
+                                     et donne DIRECTEMENT la réponse, de façon BRÈVE \
+                                     (une seule phrase courte), sans préambule ni \
+                                     développement — une réponse verbeuse annulerait \
+                                     l'économie de la compression. N'indique JAMAIS \
+                                     que le texte est vide, coupé ou incomplet, et \
+                                     ne demande JAMAIS de clarification : réponds \
+                                     avec l'information disponible.\n\n\
+                                     --- Demande condensée ---\n{}",
+                                    out.summary
+                                )
+                            }
                         }
                         Err(e) => {
                             // R3.S2 : échec → record_failure + auto-emit event si transition.
