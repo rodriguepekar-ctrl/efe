@@ -146,6 +146,22 @@ impl LlamaServerClient {
         user_text: &str,
         ctx: &CallContext,
     ) -> RobotResult<O> {
+        self.complete_with_grammar(input, user_text, &self.grammar, ctx)
+            .await
+    }
+
+    /// Comme [`Self::complete`], mais avec une **grammar fournie** au lieu de
+    /// `self.grammar` — permet une grammar DYNAMIQUE par requête (compresseur
+    /// R5 corr.3 : cap du `summary` proportionnel à `target_words` pour forcer
+    /// la brièveté token par token). `grammar` vide ⇒ pas d'enforcement (comme
+    /// `self.grammar` vide).
+    pub async fn complete_with_grammar<I: Serialize, O: DeserializeOwned + Serialize>(
+        &self,
+        input: &I,
+        user_text: &str,
+        grammar: &str,
+        ctx: &CallContext,
+    ) -> RobotResult<O> {
         let started = Instant::now();
         let input_hash = blake3_canonical_json(input);
 
@@ -160,8 +176,8 @@ impl LlamaServerClient {
             "cache_prompt": true,
             "stop": ["\n\n\n"],
         });
-        if !self.grammar.is_empty() {
-            body["grammar"] = json!(self.grammar);
+        if !grammar.is_empty() {
+            body["grammar"] = json!(grammar);
         }
 
         // Appel HTTP avec timeout.

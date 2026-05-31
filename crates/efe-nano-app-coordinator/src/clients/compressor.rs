@@ -124,7 +124,15 @@ impl CompressorClient {
             robot: crate::robot_ids::COMPRESSOR,
             reason: format!("input serialization failed: {e}"),
         })?;
-        let output: CompressorOutput = self.inner.complete(input, &user_text, ctx).await?;
+        // R5 corr.3 — grammar DYNAMIQUE : resserre le cap du `summary` à
+        // `summary_char_budget(target_words)` pour forcer la brièveté que le 1B
+        // n'honore pas via le prompt. S'applique à CHAQUE appel (chunks du MAP
+        // ET resserrage final), chacun avec son `target_words` propre.
+        let grammar = dynamic_compressor_grammar(&self.inner.grammar, input.target_words);
+        let output: CompressorOutput = self
+            .inner
+            .complete_with_grammar(input, &user_text, &grammar, ctx)
+            .await?;
         output.validate().map_err(|e| RobotError::SemanticViolation {
             robot: crate::robot_ids::COMPRESSOR,
             issues: format!("chunk post-parse invalid: {e}"),
@@ -198,6 +206,37 @@ impl CompressorClient {
         };
         Ok(out)
     }
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// R5 corr.3 — Brièveté forcée par la grammaire (cap du summary ∝ target_words)
+// ─────────────────────────────────────────────────────────────────────────
+
+/// Caractères budgétés par mot-cible pour le `summary` (~1.3× le nb de mots :
+/// généreux, pour ne PAS tronquer un résumé bien formé).
+const SUMMARY_CHARS_PER_WORD: usize = 8;
+/// Plancher du cap (≈ 30 mots — la cible minimale de `proportional_target_words`).
+const SUMMARY_CHARS_MIN: usize = 120;
+/// Plafond du cap = cap historique de `compressor_v1.gbnf` (jamais pire qu'avant).
+const SUMMARY_CHARS_MAX: usize = 500;
+
+/// Budget de caractères du `summary`, dérivé de `target_words`. Le 1B ne respecte
+/// pas `target_words` (il remplit vers le cap de la grammaire) ; on RÉTRÉCIT donc
+/// le cap proportionnellement à la cible → brièveté forcée token par token.
+/// Borné `[120, 500]` : jamais sous ~30 mots, jamais au-dessus du cap historique
+/// (pour les grandes cibles ≥ ~62 mots, sature à 500 = comportement actuel).
+fn summary_char_budget(target_words: u32) -> usize {
+    ((target_words as usize) * SUMMARY_CHARS_PER_WORD).clamp(SUMMARY_CHARS_MIN, SUMMARY_CHARS_MAX)
+}
+
+/// Resserre le cap du `summary` dans la grammaire : substitue le littéral exact
+/// `char{1,500}` (règle `long-string` de `compressor_v1.gbnf`, UNIQUE — les
+/// `short`/`tiny-string` utilisent `{1,100}`/`{1,50}`) par `char{1,N}` avec
+/// `N = summary_char_budget(target_words)`. Motif absent (grammaire altérée) →
+/// grammaire inchangée (dégradation sûre = comportement actuel).
+fn dynamic_compressor_grammar(base: &str, target_words: u32) -> String {
+    let n = summary_char_budget(target_words);
+    base.replace("char{1,500}", &format!("char{{1,{n}}}"))
 }
 
 /// Au-dessus de ce seuil (tokens estimés), `invoke` bascule en map-reduce.
@@ -352,6 +391,51 @@ fn synthesize_output(reduced: &str, source_words: usize) -> CompressorOutput {
 #[cfg(test)]
 mod chunking_tests {
     use super::*;
+
+    // ── R5 corr.3 — brièveté forcée par grammaire dynamique ────────────────
+
+    #[test]
+    fn summary_char_budget_scales_and_clamps() {
+        assert_eq!(summary_char_budget(30), 240, "30 mots × 8 = 240");
+        assert_eq!(summary_char_budget(10), 120, "sous le plancher → 120");
+        assert_eq!(summary_char_budget(0), 120, "0 → plancher 120");
+        assert_eq!(summary_char_budget(62), 496, "62 × 8 = 496");
+        assert_eq!(summary_char_budget(100), 500, "au-dessus → plafond 500");
+        assert_eq!(summary_char_budget(500), 500, "grande cible → 500 (inchangé)");
+    }
+
+    #[test]
+    fn dynamic_grammar_tightens_only_long_string_cap() {
+        // Mini-grammaire reproduisant les 3 règles de compressor_v1.gbnf.
+        let base = "long-string ::= \"\\\"\" char{1,500} \"\\\"\"\n\
+                    short-string ::= \"\\\"\" char{1,100} \"\\\"\"\n\
+                    tiny-string ::= \"\\\"\" char{1,50} \"\\\"\"";
+        // Petite cible → cap resserré, et SEUL long-string touché.
+        let g = dynamic_compressor_grammar(base, 30);
+        assert!(g.contains("char{1,240}"), "long-string resserré à 240");
+        assert!(g.contains("char{1,100}"), "short-string {{1,100}} intact");
+        assert!(g.contains("char{1,50}"), "tiny-string {{1,50}} intact");
+        assert!(!g.contains("char{1,500}"), "l'ancien cap 500 a disparu");
+        // Grande cible → 500 → substitution no-op (identique au brut).
+        assert_eq!(dynamic_compressor_grammar(base, 500), base, "≥62 mots → inchangé");
+        // Motif absent → grammaire inchangée (dégradation sûre).
+        assert_eq!(dynamic_compressor_grammar("root ::= x", 30), "root ::= x");
+    }
+
+    /// La grammaire RÉELLE de l'asset contient bien le motif ciblé (sinon la
+    /// substitution serait un no-op silencieux). Garde-fou de couplage asset↔code.
+    #[test]
+    fn real_asset_grammar_contains_target_pattern() {
+        let path = assets_dir().join("grammars/compressor_v1.gbnf");
+        let gbnf = std::fs::read_to_string(&path).expect("grammar asset lisible");
+        assert!(
+            gbnf.contains("char{1,500}"),
+            "compressor_v1.gbnf doit contenir `char{{1,500}}` (cap long-string) — \
+             sinon dynamic_compressor_grammar ne resserre rien"
+        );
+        // Et la substitution produit un cap plus petit pour une petite cible.
+        assert!(dynamic_compressor_grammar(&gbnf, 30).contains("char{1,240}"));
+    }
 
     #[test]
     fn estimate_tokens_matches_chars_over_4_ceil() {
