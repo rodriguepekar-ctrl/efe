@@ -68,8 +68,14 @@ pub struct GeminiProvider {
 
 impl GeminiProvider {
     /// Construit depuis `GOOGLE_AI_KEY`.  Modèle par défaut.
+    ///
+    /// Pas de garde de préfixe : Google émet des clés AI Studio sous plusieurs
+    /// formats (`AIza…`, mais aussi `AQ…` sur les nouvelles clés). Un préfixe
+    /// deviné côté client rejette à tort des clés valides ; la validation
+    /// d'authentification appartient à l'API Google (400/403). On exige
+    /// seulement une valeur non vide (`""` = accepte tout préfixe non vide).
     pub fn from_env() -> CoordResult<Self> {
-        let key = ApiKey::from_env("GOOGLE_AI_KEY", "AIza")?;
+        let key = ApiKey::from_env("GOOGLE_AI_KEY", "")?;
         Ok(Self::new(key, DEFAULT_GEMINI_MODEL))
     }
 

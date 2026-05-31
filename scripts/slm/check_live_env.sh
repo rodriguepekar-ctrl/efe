@@ -79,7 +79,10 @@ esac
 
 case "${REQUIRED}" in
     gemini|all)
-        check_key GOOGLE_AI_KEY "AIza" || missing=$(( missing + 1 ))
+        # Pas de garde de préfixe : Google émet des clés AI Studio sous
+        # plusieurs formats (AIza…, AQ… sur les nouvelles). On exige seulement
+        # une valeur non vide ; l'API Google valide l'authentification.
+        check_key GOOGLE_AI_KEY "" || missing=$(( missing + 1 ))
         ;;
 esac
 
