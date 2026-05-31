@@ -54,3 +54,6 @@ tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
 tower          = { version = "0.5", features = ["util"] }
 # `BodyExt::collect` pour agréger le body SSE en bytes.
 http-body-util = "0.1"
+# P5.2 — MockServer /health pour tester `build_slm_clients` (pré-flight SLM)
+# sans vrai llama-server.
+wiremock       = "0.6"

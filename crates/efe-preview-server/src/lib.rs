@@ -38,8 +38,11 @@ use tower_http::cors::CorsLayer;
 use tower_http::services::ServeDir;
 
 use efe_coordinator::{
-    Coordinator, MetricsRegistry, MockLlmProvider, ProviderRegistry, ALL_EVENT_TAGS,
-    EVENT_SCHEMA_VERSION,
+    Coordinator, CoordinatorClients, MetricsRegistry, MockLlmProvider, ProviderRegistry,
+    ALL_EVENT_TAGS, EVENT_SCHEMA_VERSION,
+};
+use efe_nano_app_coordinator::clients::{
+    AnalyzerClient, CompressorClient, NanoRobotClient, RobotHealth, RouterClient, VerifierClient,
 };
 
 pub mod ab;
@@ -235,11 +238,13 @@ pub fn build_app(state: AppState) -> Router {
 // Helpers mock (tests + démo gratuite)
 // ─────────────────────────────────────────────────────────────────────────
 
-/// Coordinator mock : 3 providers déterministes (premium / cheap / mid) +
-/// télémétrie (R3.S7) câblée pour alimenter `/metrics`. Permet Mission A
-/// (routing), Mission B (vote ≥ 2 LLMs) et Speculative (drafter+verifier).
+/// Registry des **3 providers mock** déterministes (premium / cheap / mid).
+///
+/// **P5.1 — source unique** de la couche LLM mock : partagée par
+/// [`mock_coordinator`] (tests + `mock_state`) ET par le binaire
+/// (`build_llm_layer` → `mock_llm_layer`). Aligné sur [`MOCK_LLMS`].
 #[must_use]
-pub fn mock_coordinator() -> Arc<Coordinator> {
+pub fn mock_registry() -> ProviderRegistry {
     let reg = ProviderRegistry::new();
     reg.register(Arc::new(
         MockLlmProvider::new("mock-claude")
@@ -256,9 +261,17 @@ pub fn mock_coordinator() -> Arc<Coordinator> {
             .with_response("La capitale est Paris.")
             .with_cost_microcents(1_500),
     ));
+    reg
+}
+
+/// Coordinator mock : 3 providers déterministes ([`mock_registry`]) +
+/// télémétrie (R3.S7) câblée pour alimenter `/metrics`. Permet Mission A
+/// (routing), Mission B (vote ≥ 2 LLMs) et Speculative (drafter+verifier).
+#[must_use]
+pub fn mock_coordinator() -> Arc<Coordinator> {
     Arc::new(
         Coordinator::builder()
-            .registry(reg)
+            .registry(mock_registry())
             .metrics(Arc::new(MetricsRegistry::new()))
             .build()
             .expect("mock coordinator buildable"),
@@ -271,5 +284,263 @@ pub fn mock_state() -> AppState {
     AppState {
         coord: mock_coordinator(),
         config: Arc::new(PreviewConfig::for_mock()),
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// P5.2 — Couche SLM : health pre-flight + from_assets per-robot
+// ─────────────────────────────────────────────────────────────────────────
+
+/// Endpoint analyzer par défaut (aligné sur `scripts/slm/`).
+pub const DEFAULT_SLM_ANALYZER_URL: &str = "http://127.0.0.1:8090";
+/// Endpoint compressor par défaut.
+pub const DEFAULT_SLM_COMPRESSOR_URL: &str = "http://127.0.0.1:8092";
+/// Endpoint verifier par défaut.
+pub const DEFAULT_SLM_VERIFIER_URL: &str = "http://127.0.0.1:8093";
+
+/// Configuration de la couche SLM, lue de l'environnement.
+#[derive(Debug, Clone)]
+pub struct SlmConfig {
+    /// `EFE_LIVE_SLM == "1"` → câble les robots. Sinon couche vide (invariance P5.1).
+    pub enabled: bool,
+    /// Endpoint analyzer (`EFE_SLM_ANALYZER_URL`, défaut `:8090`).
+    pub analyzer_url: String,
+    /// Endpoint compressor (`EFE_SLM_COMPRESSOR_URL`, défaut `:8092`).
+    pub compressor_url: String,
+    /// Endpoint verifier (`EFE_SLM_VERIFIER_URL`, défaut `:8093`).
+    pub verifier_url: String,
+}
+
+impl SlmConfig {
+    /// Lit la config depuis l'environnement (avec défauts).
+    #[must_use]
+    pub fn from_env() -> Self {
+        let url = |var: &str, default: &str| {
+            std::env::var(var).unwrap_or_else(|_| default.to_string())
+        };
+        Self {
+            enabled: std::env::var("EFE_LIVE_SLM").as_deref() == Ok("1"),
+            analyzer_url: url("EFE_SLM_ANALYZER_URL", DEFAULT_SLM_ANALYZER_URL),
+            compressor_url: url("EFE_SLM_COMPRESSOR_URL", DEFAULT_SLM_COMPRESSOR_URL),
+            verifier_url: url("EFE_SLM_VERIFIER_URL", DEFAULT_SLM_VERIFIER_URL),
+        }
+    }
+}
+
+/// **P5.2** — Construit la couche SLM : pré-flight `health()` per-robot +
+/// `from_assets`.
+///
+/// Tolérant : un robot injoignable (`Down`/`Degraded`) ou aux assets manquants
+/// est laissé `None` (mission_a/b le sautent). Désactivé (`EFE_LIVE_SLM` ≠ 1) →
+/// `CoordinatorClients::default()` (invariance P5.1 stricte). Les 3 health-checks
+/// sont faits **en parallèle** (timeout 2s intégré → ~2s au pire, pas 6s).
+pub async fn build_slm_clients(cfg: &SlmConfig) -> CoordinatorClients {
+    let mut clients = CoordinatorClients::default();
+    if !cfg.enabled {
+        return clients;
+    }
+
+    // (a) Construction — `from_assets` est SYNC (lit grammaire + prompt depuis
+    //     `assets/`) ; `None` si un asset manque.
+    let analyzer = AnalyzerClient::from_assets(cfg.analyzer_url.as_str()).ok();
+    let compressor = CompressorClient::from_assets(cfg.compressor_url.as_str()).ok();
+    let verifier = VerifierClient::from_assets(cfg.verifier_url.as_str()).ok();
+
+    // (b) Health en PARALLÈLE — `Up` (200) = on câble.
+    let (up_a, up_c, up_v) = tokio::join!(
+        is_up(analyzer.as_ref()),
+        is_up(compressor.as_ref()),
+        is_up(verifier.as_ref()),
+    );
+
+    log_robot("analyzer", &cfg.analyzer_url, up_a, analyzer.is_some());
+    log_robot("compressor", &cfg.compressor_url, up_c, compressor.is_some());
+    log_robot("verifier", &cfg.verifier_url, up_v, verifier.is_some());
+
+    if up_a {
+        clients.analyzer = analyzer.map(Arc::new);
+    }
+    if up_c {
+        clients.compressor = compressor.map(Arc::new);
+    }
+    if up_v {
+        clients.verifier = verifier.map(Arc::new);
+    }
+
+    // (c) Router : heuristique Pareto in-process (pas de serveur, pas de
+    //     /health) → toujours câblé quand le SLM est actif.
+    clients.router = Some(Arc::new(RouterClient::new()));
+    eprintln!("[preview][slm] router     ✓ (heuristique in-process)");
+
+    clients
+}
+
+/// `true` ssi le client existe ET répond `Up` (200) à `/health`. `health()` ne
+/// renvoie **jamais** `Err` (timeout/transport → `Ok(Down)`), d'où le `matches!`.
+async fn is_up<C: NanoRobotClient>(client: Option<&C>) -> bool {
+    match client {
+        Some(c) => matches!(c.health().await, Ok(RobotHealth::Up)),
+        None => false,
+    }
+}
+
+/// `true` si **au moins un** robot SLM (analyzer/compressor/verifier) est câblé.
+/// **P5.3** s'en sert pour décider d'ajouter `.with_default_slm_circuits()`.
+#[must_use]
+pub fn has_robots(clients: &CoordinatorClients) -> bool {
+    clients.analyzer.is_some() || clients.compressor.is_some() || clients.verifier.is_some()
+}
+
+/// Log per-robot du résultat du pré-flight (P5.4 fera la bannière consolidée).
+fn log_robot(name: &str, url: &str, up: bool, built: bool) {
+    if up {
+        eprintln!("[preview][slm] {name:<10} ✓ {url}");
+    } else if built {
+        eprintln!("[preview][slm] {name:<10} ✗ {url} (down/degraded → sauté)");
+    } else {
+        eprintln!("[preview][slm] {name:<10} ✗ {url} (assets manquants → sauté)");
+    }
+}
+
+#[cfg(test)]
+mod slm_tests {
+    use super::*;
+    use wiremock::matchers::{method, path};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
+
+    /// MockServer répondant `status` sur `GET /health`.
+    async fn health_server(status: u16) -> MockServer {
+        let s = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/health"))
+            .respond_with(ResponseTemplate::new(status))
+            .mount(&s)
+            .await;
+        s
+    }
+
+    fn cfg(enabled: bool, a: String, c: String, v: String) -> SlmConfig {
+        SlmConfig {
+            enabled,
+            analyzer_url: a,
+            compressor_url: c,
+            verifier_url: v,
+        }
+    }
+
+    #[tokio::test]
+    async fn disabled_returns_default_no_robots_no_router() {
+        let clients = build_slm_clients(&cfg(
+            false,
+            "http://x".into(),
+            "http://x".into(),
+            "http://x".into(),
+        ))
+        .await;
+        assert!(!has_robots(&clients), "désactivé → aucun robot");
+        assert!(clients.router.is_none(), "désactivé → router non câblé");
+    }
+
+    #[tokio::test]
+    async fn all_up_wires_all_robots_and_router() {
+        let (a, c, v) = (
+            health_server(200).await,
+            health_server(200).await,
+            health_server(200).await,
+        );
+        let clients = build_slm_clients(&cfg(true, a.uri(), c.uri(), v.uri())).await;
+        assert!(clients.analyzer.is_some(), "analyzer câblé");
+        assert!(clients.compressor.is_some(), "compressor câblé");
+        assert!(clients.verifier.is_some(), "verifier câblé");
+        assert!(clients.router.is_some(), "router câblé");
+        assert!(has_robots(&clients));
+    }
+
+    #[tokio::test]
+    async fn down_robot_left_none_others_wired() {
+        let (a, v) = (health_server(200).await, health_server(200).await);
+        // compressor : port mort → connection refused → Down (rapide).
+        let clients = build_slm_clients(&cfg(
+            true,
+            a.uri(),
+            "http://127.0.0.1:9".into(),
+            v.uri(),
+        ))
+        .await;
+        assert!(clients.analyzer.is_some(), "analyzer up → câblé");
+        assert!(clients.compressor.is_none(), "compressor down → None");
+        assert!(clients.verifier.is_some(), "verifier up → câblé");
+        // Router toujours câblé tant que le SLM est actif.
+        assert!(clients.router.is_some());
+    }
+
+    #[tokio::test]
+    async fn degraded_non_200_is_skipped() {
+        let a = health_server(503).await; // non-200 → Degraded → sauté
+        let clients = build_slm_clients(&cfg(
+            true,
+            a.uri(),
+            "http://127.0.0.1:9".into(),
+            "http://127.0.0.1:9".into(),
+        ))
+        .await;
+        assert!(clients.analyzer.is_none(), "503 (Degraded) → non câblé");
+    }
+
+    #[test]
+    fn config_from_env_defaults_when_absent() {
+        std::env::remove_var("EFE_LIVE_SLM");
+        std::env::remove_var("EFE_SLM_ANALYZER_URL");
+        let c = SlmConfig::from_env();
+        assert!(!c.enabled, "EFE_LIVE_SLM absent → désactivé");
+        assert!(c.analyzer_url.contains("8090"));
+        assert!(c.compressor_url.contains("8092"));
+        assert!(c.verifier_url.contains("8093"));
+    }
+
+    #[tokio::test]
+    async fn all_robots_down_keeps_router_but_has_no_robots() {
+        // Scénario du smoke + cas CRITIQUE pour P5.3 : tous les robots
+        // injoignables → `None`, le router reste câblé, mais `has_robots()` est
+        // FALSE (le router n'est PAS un robot). P5.3 ne doit donc PAS ajouter de
+        // circuits SLM à un coordinator sans robot.
+        let dead = "http://127.0.0.1:9".to_string();
+        let clients = build_slm_clients(&cfg(true, dead.clone(), dead.clone(), dead)).await;
+        assert!(clients.analyzer.is_none());
+        assert!(clients.compressor.is_none());
+        assert!(clients.verifier.is_none());
+        assert!(clients.router.is_some(), "router toujours câblé si SLM actif");
+        assert!(
+            !has_robots(&clients),
+            "router seul ≠ robots → has_robots() doit être false (contrat P5.3)"
+        );
+    }
+
+    #[test]
+    fn has_robots_counts_robots_not_router() {
+        // Vide → false.
+        assert!(!has_robots(&CoordinatorClients::default()), "vide → false");
+
+        // Seulement le router → false (le router n'est pas compté comme robot).
+        let only_router = CoordinatorClients {
+            router: Some(Arc::new(RouterClient::new())),
+            ..Default::default()
+        };
+        assert!(
+            !has_robots(&only_router),
+            "router seul → false (router ≠ robot SLM)"
+        );
+
+        // Un robot réel (analyzer) → true. `from_assets` réussit hors-ligne (il
+        // lit les assets présents ; l'URL n'est qu'un endpoint stocké).
+        let with_analyzer = CoordinatorClients {
+            analyzer: AnalyzerClient::from_assets("http://unused").ok().map(Arc::new),
+            ..Default::default()
+        };
+        assert!(
+            with_analyzer.analyzer.is_some(),
+            "from_assets doit réussir (assets analyzer présents)"
+        );
+        assert!(has_robots(&with_analyzer), "analyzer câblé → true");
     }
 }
