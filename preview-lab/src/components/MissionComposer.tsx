@@ -4,6 +4,7 @@
 import { useState, type FormEvent } from "react";
 
 import type { MissionDto, MissionType, TaskClass } from "@/lib/events";
+import { DEFAULT_PROMPT, EXAMPLE_PROMPTS, PRECHEW_HINT_CHARS } from "@/lib/examples";
 
 const TASK_CLASSES: TaskClass[] = [
   "FACTUAL_QA",
@@ -31,9 +32,7 @@ export function MissionComposer({
   onReset: () => void;
 }) {
   const [type, setType] = useState<MissionType>("a");
-  const [userText, setUserText] = useState(
-    "Quelle est la capitale de la France ? Réponds en une phrase courte.",
-  );
+  const [userText, setUserText] = useState(DEFAULT_PROMPT);
   const [taskClass, setTaskClass] = useState<TaskClass>("FACTUAL_QA");
   const [llmsCsv, setLlmsCsv] = useState("");
   const [drafter, setDrafter] = useState("mock-gemini");
@@ -79,6 +78,21 @@ export function MissionComposer({
         </div>
       </div>
 
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-[11px] text-efe-muted">Exemples</span>
+        {EXAMPLE_PROMPTS.map((ex) => (
+          <button
+            key={ex.id}
+            type="button"
+            onClick={() => setUserText(ex.text)}
+            disabled={disabled}
+            className="rounded-lg border border-efe-border px-2 py-1 text-[12px] text-efe-muted hover:text-efe-text disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            {ex.label}
+          </button>
+        ))}
+      </div>
+
       <textarea
         value={userText}
         onChange={(e) => setUserText(e.target.value)}
@@ -86,6 +100,17 @@ export function MissionComposer({
         className="w-full resize-y rounded-lg border border-efe-border bg-efe-bg px-3 py-2 font-mono text-sm text-efe-text outline-none focus:border-efe-accent"
         placeholder="Texte de la requête…"
       />
+
+      <div className="flex justify-end">
+        <span
+          className={`text-[11px] ${
+            userText.length >= PRECHEW_HINT_CHARS ? "text-efe-accent" : "text-efe-muted"
+          }`}
+        >
+          {userText.length} caractères
+          {userText.length >= PRECHEW_HINT_CHARS ? " · pré-mâchage visible" : ""}
+        </span>
+      </div>
 
       <div className="flex flex-wrap items-center gap-3">
         <label className="text-[12px] text-efe-muted">task_class</label>
