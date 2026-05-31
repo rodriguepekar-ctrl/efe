@@ -214,8 +214,10 @@ pub async fn run_mission_b_with_swarm_id(
                         .await;
                     let c = CompressorInput {
                         text: req.user_text.clone(),
-                        // S5 R2 patch D15 : target_words=30 → ratio ≈ 0.22.
-                        target_words: 30,
+                        // Levier 1 : cible PROPORTIONNELLE (≈ 1 mot / 8 tokens,
+                        // borné [30, 500]) — mutualisée sur N LLMs, donc d'autant
+                        // plus rentable. Cf. workflows::proportional_target_words.
+                        target_words: super::proportional_target_words(&req.user_text),
                         must_preserve: vec![],
                         style: CompressionStyle::Extractive,
                     };

@@ -392,11 +392,12 @@ pub async fn run_mission_a_with_swarm_id(
                     let started_node = Instant::now();
                     let c_input = CompressorInput {
                         text: req.user_text.clone(),
-                        // S5 R2 patch (symétrie avec mission_b.rs) : target_words=100
-                        // était trop lâche, le modèle produisait des résumés ≈ même
-                        // taille que l'input. 30 mots ≈ 30 tokens → savings ≈ 100,
-                        // ratio ≈ 0.22. S4 avait passé par chance non-déterministe.
-                        target_words: 30,
+                        // Levier 1 : cible PROPORTIONNELLE à la longueur d'entrée
+                        // (≈ 1 mot / 8 tokens, borné [30, 500]). Un `30` fixe
+                        // sur-comprimait les longs documents ; les inputs courts
+                        // gardent ~30 (comportement S5 préservé). Cf.
+                        // workflows::proportional_target_words.
+                        target_words: super::proportional_target_words(&req.user_text),
                         must_preserve: vec![],
                         style: CompressionStyle::Extractive,
                     };

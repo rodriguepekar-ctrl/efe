@@ -68,6 +68,17 @@ pub(crate) fn final_prompt_from_compression(
     (framed, false)
 }
 
+/// **Levier 1** — cible de compression proportionnelle à la longueur d'entrée.
+///
+/// Un `target_words` fixe (30) sur-comprime les longs documents : 30 mots de
+/// résumé pour 2000 tokens d'entrée perd l'essentiel. On vise ~1 mot de résumé
+/// pour 8 tokens d'entrée, borné à `[30, 500]` (bornes du schéma
+/// `CompressorInput`). Les inputs courts gardent ~30 mots (comportement
+/// historique préservé).
+pub(crate) fn proportional_target_words(text: &str) -> u32 {
+    (crate::metrics::ChewingMetrics::estimate_tokens(text) / 8).clamp(30, 500)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -160,5 +171,15 @@ mod tests {
         let (prompt, fell_back) = final_prompt_from_compression("  Paris.  ", RAW);
         assert!(!fell_back);
         assert!(prompt.contains("Paris."), "le résumé trimmé doit apparaître");
+    }
+
+    #[test]
+    fn proportional_target_words_scales_and_clamps() {
+        // Court → plancher 30.
+        assert_eq!(proportional_target_words("texte court"), 30);
+        // 8000 chars ≈ 2000 tokens → 2000/8 = 250.
+        assert_eq!(proportional_target_words(&"x".repeat(8000)), 250);
+        // Très long → plafond 500.
+        assert_eq!(proportional_target_words(&"x".repeat(80_000)), 500);
     }
 }
