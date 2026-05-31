@@ -1,0 +1,78 @@
+[package]
+name        = "efe-nano-app-coordinator"
+version     = { workspace = true }
+edition     = { workspace = true }
+rust-version = { workspace = true }
+authors     = { workspace = true }
+license     = { workspace = true }
+repository  = { workspace = true }
+description = "Phase 1 — JSON Grammar enforcement + Rust clients for the 6 nano-robots SLM swarm."
+
+[features]
+default = []
+# Active fastembed-rs (ONNX runtime) pour les robots Filtreur + Routeur.
+# Par défaut OFF en CI (modèles ONNX = 3.4 GB à télécharger).  Pour activer :
+#     cargo test --features fastembed-real
+fastembed-real = ["dep:fastembed"]
+
+[dependencies]
+# Workspace-pinned (versions cohérentes avec le reste d'EFE).
+tokio       = { workspace = true }
+serde       = { workspace = true }
+serde_json  = { workspace = true }
+thiserror   = { workspace = true }
+async-trait = { workspace = true }
+tracing     = { workspace = true }
+futures     = { workspace = true }
+uuid        = { workspace = true }
+dashmap     = { workspace = true }
+anyhow      = { workspace = true }
+
+# Spécifiques à ce crate (pas dans workspace.dependencies).
+reqwest        = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "stream"] }
+blake3         = "1.5"
+chrono         = { version = "0.4", features = ["serde"] }
+validator      = { version = "0.18", features = ["derive"] }
+
+# Optionnel : fastembed-rs pour les robots ONNX (Filtreur + Routeur).
+fastembed = { version = "4", optional = true }
+
+[dev-dependencies]
+tokio       = { workspace = true, features = ["full", "test-util", "macros"] }
+wiremock    = "0.6"
+proptest    = "1.5"
+serial_test = "3.1"
+criterion   = { version = "0.5", features = ["async_tokio", "html_reports"] }
+
+[lib]
+name = "efe_nano_app_coordinator"
+path = "src/lib.rs"
+
+[[test]]
+name = "unit_schema_validation"
+path = "tests/unit_schema_validation.rs"
+
+[[test]]
+name = "phase_1_workflow"
+path = "tests/phase_1_workflow.rs"
+
+[[test]]
+name = "chaos_robot_down"
+path = "tests/chaos_robot_down.rs"
+
+[[test]]
+name = "audit_chain_integrity"
+path = "tests/audit_chain_integrity.rs"
+
+[[test]]
+name = "unit_1000_tirages"
+path = "tests/unit_1000_tirages.rs"
+
+[[test]]
+name = "live_smoke"
+path = "tests/live_smoke.rs"
+
+[[bench]]
+name    = "robot_latencies"
+path    = "benches/robot_latencies.rs"
+harness = false

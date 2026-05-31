@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://efe-projet.com/schemas/router_v1.json",
+  "title": "RouterOutput",
+  "description": "Output of the Router nano-robot (bge-m3 + heuristics). Selects the target large LLM by Pareto optimization on cost/latency/quality.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["selected", "fallback_chain", "estimated_cost_cents", "estimated_latency_ms", "reason"],
+  "properties": {
+    "selected": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "description": "Primary LLM choice (LlmRef identifier)."
+    },
+    "fallback_chain": {
+      "type": "array",
+      "maxItems": 5,
+      "items": {"type": "string", "minLength": 1, "maxLength": 128},
+      "description": "Ordered fallback options if primary fails."
+    },
+    "estimated_cost_cents": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 1000000,
+      "description": "Estimated total cost for this request in cents."
+    },
+    "estimated_latency_ms": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 600000,
+      "description": "Estimated end-to-end latency in milliseconds."
+    },
+    "reason": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 500,
+      "description": "Human-readable explanation of why this LLM was selected (audit-grade)."
+    }
+  }
+}

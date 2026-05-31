@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://efe-projet.com/schemas/verifier_v1.json",
+  "title": "VerifierOutput",
+  "description": "Strict output of the L5 Verifier (Phi-4-mini Q4). Fact-checks a claim against candidate sources.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["verdict", "similarity", "severity"],
+  "properties": {
+    "verdict":         {"enum": ["SUPPORTED", "UNSUPPORTED", "CONTRADICTED", "INSUFFICIENT_EVIDENCE"]},
+    "best_source_id":  {"type": ["string", "null"], "maxLength": 64},
+    "similarity":      {"type": "number",  "minimum": 0, "maximum": 1},
+    "contradictions":  {"type": "array", "maxItems": 5, "items": {"type": "string", "maxLength": 64}},
+    "severity":        {"enum": ["INFO", "WARN", "ERROR"]},
+    "explanation":     {"type": "string", "maxLength": 500}
+  }
+}

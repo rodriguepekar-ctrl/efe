@@ -1,0 +1,76 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://efe-projet.com/schemas/filter_v1.json",
+  "title": "FilterOutput",
+  "description": "Output of the Filter nano-robot (bge-m3, in-process). Decides which LLM agents should receive a given message based on semantic relevance + context budget.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["routing"],
+  "properties": {
+    "routing": {
+      "type": "array",
+      "description": "Routing decision per available agent. Order preserved from input.available_agents.",
+      "items": {
+        "type": "array",
+        "prefixItems": [
+          {"type": "string", "minLength": 1, "maxLength": 128, "description": "agent_ref"},
+          {
+            "oneOf": [
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["type", "data"],
+                "properties": {
+                  "type": {"const": "Send"},
+                  "data": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["priority", "reason"],
+                    "properties": {
+                      "priority": {"type": "integer", "minimum": 0, "maximum": 10},
+                      "reason":   {"type": "string", "minLength": 1, "maxLength": 200}
+                    }
+                  }
+                }
+              },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["type", "data"],
+                "properties": {
+                  "type": {"const": "Skip"},
+                  "data": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["reason"],
+                    "properties": {
+                      "reason": {"type": "string", "minLength": 1, "maxLength": 200}
+                    }
+                  }
+                }
+              },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["type", "data"],
+                "properties": {
+                  "type": {"const": "SendCompressed"},
+                  "data": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["ratio"],
+                    "properties": {
+                      "ratio": {"type": "number", "minimum": 1.5, "maximum": 50.0}
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        ],
+        "minItems": 2,
+        "maxItems": 2
+      }
+    }
+  }
+}
