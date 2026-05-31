@@ -242,7 +242,18 @@ pub async fn run_mission_b_with_swarm_id(
                                 EntryKind::CompressedText,
                                 serde_json::json!({"summary": out.summary, "ratio": out.compression_ratio}),
                             ));
-                            out.summary
+                            // Garde anti-garbage partagé (cf. mission_a). CRITIQUE
+                            // en Mission B : ce prompt part vers N LLMs en fan-out,
+                            // donc un résumé dégénéré contaminerait les N réponses
+                            // et le vote. On retombe sur le brut si dégénéré.
+                            let (prompt, fell_back) =
+                                super::final_prompt_from_compression(&out.summary, &req.user_text);
+                            if fell_back {
+                                chewing_metrics
+                                    .failed_components
+                                    .push("compressor:degenerate_output".to_string());
+                            }
+                            prompt
                         }
                         Err(e) => {
                             // R3.S2 : échec → record_failure + auto-emit event.
