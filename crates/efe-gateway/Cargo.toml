@@ -1,0 +1,77 @@
+[package]
+name = "efe-gateway"
+version = "0.0.1"
+edition = { workspace = true }
+rust-version = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
+description = "M50 — Sprint 14 N22 : HTTP gateway exposing all EFE subsystems behind a versioned, multi-tenant, auth-gated, OpenAPI-documented API."
+publish = false
+
+[lib]
+name = "efe_gateway"
+path = "src/lib.rs"
+
+[dependencies]
+# Workspace EFE crates (lib subsystems we expose)
+efe-nano-sdk             = { path = "../efe-nano-sdk", version = "0.0.1" }
+efe-publisher-identity   = { path = "../efe-publisher-identity", version = "0.0.1" }
+efe-gold-test-gate       = { path = "../efe-gold-test-gate", version = "0.0.1" }
+efe-multi-region         = { path = "../efe-multi-region", version = "0.0.1" }
+efe-llm-provenance       = { path = "../efe-llm-provenance", version = "0.0.1" }
+efe-blackboard           = { path = "../efe-blackboard", version = "0.0.1" }
+efe-swarm-orchestrator   = { path = "../efe-swarm-orchestrator", version = "0.0.1" }
+efe-agentic-bridge       = { path = "../efe-agentic-bridge", version = "0.0.1" }
+efe-nano-preanalysis     = { path = "../efe-nano-preanalysis", version = "0.0.1" }
+# Sprint 15 N23 — adapter that drives every catalogue dispatch.
+efe-nano-swarm-adapter   = { path = "../efe-nano-swarm-adapter", version = "0.0.1" }
+# Sprint 16 N24 — wired compliance runner (signature + gold + status gates).
+efe-compliance-wiring    = { path = "../efe-compliance-wiring", version = "0.0.1" }
+# Sprint 18 N26 — N17 read endpoint + collector boot wiring.
+# (efe-llm-provenance is already declared above as an N17 dep ; do not
+# duplicate.)
+
+# HTTP framework
+# **Sprint 19 — N27** : the `tokio` feature already pulls SSE
+# helpers in axum 0.7 ; no extra feature flag required.
+axum             = { version = "0.7", features = ["macros", "tokio"] }
+tower            = { version = "0.5", features = ["util", "limit", "timeout"] }
+tower-http       = { version = "0.6", features = ["trace", "limit", "request-id", "catch-panic", "set-header"] }
+
+# **Sprint 19 — N27** : streaming dependencies (mirror
+# `efe-agentic-bridge` so the SSE encoder can consume the
+# bridge's `AgenticEvent` stream).
+futures          = { workspace = true }
+tokio-stream     = { workspace = true }
+
+# Auth
+jsonwebtoken     = "9.3"
+base64           = "0.22"
+
+# Observability
+tracing                   = { workspace = true }
+tracing-subscriber        = { version = "0.3", features = ["json", "env-filter", "fmt"] }
+
+# Common
+tokio       = { workspace = true, features = ["full", "signal"] }
+async-trait = { workspace = true }
+serde       = { workspace = true }
+serde_json  = { workspace = true }
+thiserror   = { workspace = true }
+uuid        = { workspace = true }
+dashmap     = "6.1"
+chrono      = { version = "0.4", features = ["serde"] }
+http        = "1.1"
+http-body-util = "0.1"
+bytes       = "1.8"
+
+[dev-dependencies]
+tokio       = { workspace = true, features = ["macros", "rt-multi-thread", "test-util"] }
+tower       = { version = "0.5", features = ["util"] }
+# Sprint 18 N26 — mock Anthropic API in phase_9 acceptance tests.
+wiremock    = "0.6"
+
+[[bin]]
+name = "efe-gateway"
+path = "src/main.rs"
