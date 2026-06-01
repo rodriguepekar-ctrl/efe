@@ -1,0 +1,50 @@
+[
+  {
+    "user": "Ma carte a été débitée de 149 euros par un marchand que je ne connais pas.",
+    "expected_label": "fraud",
+    "language": "fr",
+    "notes": "High-confidence fraud, FR."
+  },
+  {
+    "user": "I think someone hacked my account last night.",
+    "expected_label": "fraud",
+    "language": "en",
+    "notes": "High-confidence fraud, EN."
+  },
+  {
+    "user": "The app keeps crashing every time I try to log in.",
+    "expected_label": "bug",
+    "language": "en",
+    "notes": "Technical bug report."
+  },
+  {
+    "user": "Comment télécharger mon historique de commandes ?",
+    "expected_label": "question",
+    "language": "fr",
+    "notes": "How-to question, FR."
+  },
+  {
+    "user": "Where can I change my notification preferences?",
+    "expected_label": "question",
+    "language": "en",
+    "notes": "How-to question, EN."
+  },
+  {
+    "user": "I want to cancel my subscription starting next month.",
+    "expected_label": "billing",
+    "language": "en",
+    "notes": "Subscription cancellation, billing."
+  },
+  {
+    "user": "Je voudrais recevoir une facture avec mon numéro de TVA.",
+    "expected_label": "billing",
+    "language": "fr",
+    "notes": "Invoice request, FR."
+  },
+  {
+    "user": "L'application plante dès que j'ouvre le menu paramètres.",
+    "expected_label": "bug",
+    "language": "fr",
+    "notes": "Bug report, FR."
+  }
+]

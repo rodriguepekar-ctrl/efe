@@ -1,0 +1,30 @@
+# Sprint D24 — exclude from npm publish.
+#
+# Only dist/ + LICENSE + README + CHANGELOG ship on npm.
+
+src/
+tests/
+examples/
+scripts/
+coverage/
+.github/
+.turbo/
+node_modules/
+*.log
+*.test.ts
+*.spec.ts
+
+# Configs
+tsconfig.json
+tsconfig.build.json
+tsup.config.ts
+vitest.config.ts
+playwright.config.ts
+biome.json
+buf.yaml
+buf.gen.yaml
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store

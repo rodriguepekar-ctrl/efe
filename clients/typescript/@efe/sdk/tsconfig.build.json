@@ -1,0 +1,9 @@
+{
+  "_doc": "Sprint D24 — extended config for the build (tsup uses tsc for .d.ts emission).",
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false
+  },
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "dist", "tests", "examples", "coverage", "**/*.test.ts"]
+}

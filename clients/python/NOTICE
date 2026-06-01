@@ -1,0 +1,44 @@
+EFE Python SDK
+Copyright 2026 EFE Team
+
+This product includes software developed by the EFE Team
+(https://github.com/efe-ai/efe).
+
+Licensed under the Apache License, Version 2.0 (the "License");
+see LICENSE file in this directory for the full text. You may
+obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+================================================================
+Server boundary
+================================================================
+
+This SDK is one of the Apache-2.0 client surfaces of the EFE
+project. The server-side components (everything outside the
+`clients/` directory) are governed by the proprietary license at
+the repository root (`/LICENSE`). The two license regimes are
+intentional and reflect the project's split between :
+
+  * Apache-2.0 client SDKs (Python, TypeScript, Java, Go) ;
+  * Proprietary server, model bundles, and operator tooling.
+
+See `/LICENSE` § 1 (dual-license carve-out) for the authoritative
+boundary description.
+
+================================================================
+Third-party dependencies
+================================================================
+
+Runtime dependencies of this SDK keep their own licenses and are
+listed in the published wheel's METADATA. Notable bundled or
+transitively-required works :
+
+  * grpcio, grpcio-tools — Apache-2.0 (Google LLC).
+  * protobuf — BSD-3-Clause (Google LLC).
+  * sentence-transformers — Apache-2.0 (UKPLab).
+  * numpy — BSD-3-Clause (NumPy contributors).
+  * pyyaml — MIT (Kirill Simonov, Ingy döt Net).
+
+Optional extras (anthropic, openai) keep their respective vendor
+licenses.

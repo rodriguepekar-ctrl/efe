@@ -1,0 +1,27 @@
+efe:
+  endpoint: ${EFE_ENDPOINT:staging.efe.ai:50051}
+  jwt: ${EFE_JWT_TOKEN:}
+  deadline-ms: 10000
+
+server:
+  port: 8080
+
+spring:
+  application:
+    name: efe-sdk-example-spring-boot-actuator
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: prometheus,health,info,metrics
+  endpoint:
+    prometheus:
+      access: read_only
+    health:
+      show-details: always
+
+logging:
+  level:
+    ai.efe.sdk: INFO
+    io.grpc: WARN

@@ -1,0 +1,18 @@
+# Sprint D24 (Φ-B) — buf module config for @efe/sdk.
+#
+# Cf. docs/EFE_TYPESCRIPT_SDK_EXTENSION_ARCHITECTURE.md §11.2.
+#
+# Path = 4 levels up to repo root, then protos/ — same .proto files
+# consumed by Python (M8) + Go (M9) SDKs. Cross-language wire
+# contract is THE single source of truth.
+
+version: v2
+modules:
+  - path: ../../../../protos
+deps: []
+breaking:
+  use:
+    - FILE
+lint:
+  use:
+    - DEFAULT

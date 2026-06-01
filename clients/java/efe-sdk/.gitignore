@@ -1,0 +1,34 @@
+# Sprint D26 — efe-sdk-java gitignore.
+
+# Maven build output
+target/
+**/target/
+*.jar
+*.war
+*.ear
+*.class
+dependency-reduced-pom.xml
+
+# IDE
+.idea/
+*.iml
+.vscode/
+.settings/
+.classpath
+.project
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Coverage / SBOM
+*.sarif
+bom.json
+bom.xml
+
+# Local envs
+.env
+.env.local
+
+# Maven Wrapper (committed but its target folder is gitignored)
+.mvn/wrapper/maven-wrapper.jar

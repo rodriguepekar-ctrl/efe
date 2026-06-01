@@ -1,0 +1,136 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "efe-tool"
+# Sprint D10 — keep this in sync with `efe_tool/_version.py::__version__`.
+# Pinned by ``scripts/tests/test_d10_pyproject_version_sync.py``.
+# ``release.yml`` validates the git tag matches `_version.py` BEFORE
+# publishing — so a drift here would fail the publish-pypi step
+# loudly rather than silently shipping the wrong wheel.
+version = "0.1.10"
+description = "EFE Mode-1 client: call an ephemeral fluid swarm as an LLM tool"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "Apache-2.0" }
+authors = [
+    { name = "EFE Core Team", email = "efe-core@example.com" },
+]
+keywords = ["efe", "swarm", "llm", "classification", "grpc"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "License :: OSI Approved :: Apache Software License",
+]
+dependencies = [
+    "grpcio>=1.62",
+    "grpcio-tools>=1.62",
+    # Round-5 fix S4: bumped lower bound to 4.25.5 — pre-fix `>=4.25`
+    # allowed 4.25.0 which is vulnerable to CVE-2024-7254 (DoS via
+    # recursion depth in google.protobuf json/text-format).
+    "protobuf>=4.25.5,<5",
+    "pyyaml>=6.0",
+    "numpy>=1.26",
+    "sentence-transformers>=2.7",
+]
+
+[project.optional-dependencies]
+# LLM bridges (Letter C).
+claude = ["anthropic>=0.30"]
+openai = ["openai>=1.30"]
+
+# Compilation extras — pulls the heavy sentence-transformers stack.
+# Currently redundant with the base `dependencies` (we keep sentence-
+# transformers as a hard dep for backward compatibility). The split is
+# real once consumers adopt the `[remote]` extra below: future MAJOR
+# versions (≥ 2.0) will move sentence-transformers out of the base.
+compile = [
+    "sentence-transformers>=2.7",
+    "numpy>=1.26",
+]
+
+# Remote-only consumers (Letter D hosts talking to a Letter E server).
+# No local embedder, no torch — minimal surface. Safe today because
+# sentence-transformers is still a hard dep, but users can start
+# writing `efe-tool[remote]` in their pyproject and the migration to
+# a slimmer base happens in 2.0 without touching their manifests.
+remote = [
+    "grpcio>=1.62",
+    # Round-5 fix S4: bumped lower bound to 4.25.5 — pre-fix `>=4.25`
+    # allowed 4.25.0 which is vulnerable to CVE-2024-7254 (DoS via
+    # recursion depth in google.protobuf json/text-format).
+    "protobuf>=4.25.5,<5",
+]
+
+# Development / test tooling.
+dev = [
+    "pytest>=8.1",
+    "pytest-asyncio>=0.23",
+    "pexpect>=4.9 ; sys_platform != 'win32'",   # DT-B-2 signal tests
+    "ruff>=0.4",
+    "mypy>=1.10",
+]
+
+# Sprint **D19 — DT-B-1** — Windows REPL readline support.
+# `readline` is missing from the Windows stdlib ; `pyreadline3` is
+# the canonical replacement. Install via `pip install efe-tool[repl-win]`
+# on Windows hosts ; the REPL falls back gracefully on Mac/Linux
+# (where stdlib readline is present).
+repl-win = ["pyreadline3>=3.4 ; sys_platform == 'win32'"]
+
+# Sprint **D20 — DT-D-3** — OpenTelemetry tracing extra (optional ;
+# `efe_tool.integrations._tracing` auto-detects the package and
+# degrades to a no-op tracer when absent).
+otel = ["opentelemetry-api>=1.20"]
+
+# Sprint **D20 — DT-D-4** — Prometheus metrics extra (optional ;
+# `efe_tool.integrations._metrics` auto-detects the package and
+# degrades to no-op metrics when absent).
+prom = ["prometheus_client>=0.19"]
+
+# Sprint **D25 (Φ-C)** — `EfeNativeClient` PyO3 zero-copy.
+# Pulls the binary wheel produced by `crates/efe-ffi/`. Default
+# install does NOT pull this — operators opt-in via
+# `pip install efe-tool[native]` when they want the in-process
+# client (≥ 5× speedup vs gRPC, cf. EFE_FFI_ARCHITECTURE.md).
+native = ["efe>=0.1.0 ; python_version >= '3.10'"]
+
+[project.scripts]
+efe-admin = "efe_tool.cli:main"
+efe       = "efe_tool.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/efe-project/efe"
+Architecture = "https://github.com/efe-project/efe/blob/main/MODE1_ARCHITECTURE.md"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["efe_tool*"]
+
+[tool.setuptools.package-data]
+efe_tool = [
+    "py.typed",
+    # Letter-C builtin scenarios — ship prompt.md / golden.json / README.md
+    # with the package so ``scenarios.list_builtin_scenarios`` works from
+    # a wheel install (not just editable).
+    "scenarios/builtin/*/prompt.md",
+    "scenarios/builtin/*/golden.json",
+    "scenarios/builtin/*/README.md",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "SIM", "N"]
+
+[tool.mypy]
+python_version = "3.10"
+strict = true
+exclude = ["efe_tool/_proto/"]

@@ -1,0 +1,10 @@
+# Round-5 R5-B1 fix : ensure LICENSE + NOTICE are bundled into the
+# sdist tarball (and, via setuptools' standard rule, into the wheel
+# `.dist-info/`). Without this, PyPI / pip-installed users only see
+# the SPDX identifier from the pyproject `license = { text = ... }`
+# metadata — Apache-2.0 § 4(a) requires the actual License text be
+# distributed alongside.
+include LICENSE
+include NOTICE
+include README.md
+recursive-include efe_tool *.py *.pyi *.proto

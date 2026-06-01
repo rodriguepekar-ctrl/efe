@@ -1,0 +1,38 @@
+[
+  {
+    "user": "Someone charged my card without my consent.",
+    "expected_label": "fraud",
+    "language": "en",
+    "notes": "Clear fraud."
+  },
+  {
+    "user": "J'ai reçu un email me demandant mon mot de passe, est-ce légitime ?",
+    "expected_label": "fraud",
+    "language": "fr",
+    "notes": "Phishing, FR."
+  },
+  {
+    "user": "My card was used in a country I've never visited.",
+    "expected_label": "fraud",
+    "language": "en",
+    "notes": "Geography-based fraud indicator."
+  },
+  {
+    "user": "I think my account has been hacked.",
+    "expected_label": "fraud",
+    "language": "en",
+    "notes": "Account compromise."
+  },
+  {
+    "user": "Ma carte bancaire a été utilisée sans mon consentement.",
+    "expected_label": "fraud",
+    "language": "fr",
+    "notes": "Unauthorised card use, FR."
+  },
+  {
+    "user": "How do I enable two-factor authentication?",
+    "expected_label": "question",
+    "language": "en",
+    "notes": "Not fraud — should be redirected."
+  }
+]

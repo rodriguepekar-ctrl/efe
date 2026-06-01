@@ -1,0 +1,22 @@
+{
+  "name": "@efe/sdk-example-express",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Sprint D24 (Φ-B) — Express + tsx + @efe/sdk example.",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js"
+  },
+  "dependencies": {
+    "@efe/sdk": "workspace:*",
+    "express": "^4.19.0"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.0",
+    "@types/node": "^20.14.0",
+    "tsx": "^4.16.0",
+    "typescript": "^5.4.0"
+  }
+}
