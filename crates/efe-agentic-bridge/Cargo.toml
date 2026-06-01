@@ -1,0 +1,53 @@
+[package]
+name = "efe-agentic-bridge"
+version = "0.0.1"
+edition = { workspace = true }
+rust-version = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
+description = "M50 — Sprint 13 N21 : Agentic bridge — wraps a swarm ContextBundle as a tool-use input for Claude (Anthropic Messages API)."
+publish = false
+
+[lib]
+name = "efe_agentic_bridge"
+path = "src/lib.rs"
+
+[dependencies]
+efe-nano-sdk        = { path = "../efe-nano-sdk", version = "0.0.1" }
+# Sprint 18 — N26 : wire the N17 provenance collector around every
+# Claude dispatch.  Adds the dep chain efe-agentic-bridge →
+# efe-llm-provenance → efe-nano-sdk.
+efe-llm-provenance  = { path = "../efe-llm-provenance", version = "0.0.1" }
+
+tokio       = { workspace = true, features = ["macros", "rt-multi-thread", "time", "sync"] }
+async-trait = { workspace = true }
+serde       = { workspace = true }
+serde_json  = { workspace = true }
+thiserror   = { workspace = true }
+uuid        = { workspace = true }
+tracing     = { workspace = true }
+
+# **Sprint 19 — N27** streaming + retry deps.
+# * `futures`       : Stream / StreamExt + boxed streams.
+# * `tokio-stream`  : ReceiverStream (mpsc → Stream adapter).
+# * `tokio-util`    : CancellationToken (downstream→upstream propagation).
+# * `bytes`         : reqwest::Bytes for stream chunk buffering.
+# * `httpdate`      : Retry-After HTTP-date parsing (RFC 7231).
+# * `rand`          : ±25 % retry jitter (uniform).
+futures     = { workspace = true }
+tokio-stream = { workspace = true }
+tokio-util  = { version = "0.7", features = ["rt"] }
+bytes       = "1.7"
+httpdate    = "1.0"
+rand        = "0.8"
+
+reqwest     = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "stream"] }
+
+[dev-dependencies]
+tokio    = { workspace = true, features = ["macros", "rt-multi-thread", "test-util"] }
+wiremock = "0.6"
+
+[[bin]]
+name = "efe-claude-smoke"
+path = "src/bin/efe_claude_smoke.rs"
