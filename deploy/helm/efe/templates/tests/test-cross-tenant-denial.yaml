@@ -1,0 +1,109 @@
+{{/*
+Sprint D11.2 — `helm test` cross-tenant denial smoke.
+
+Verifies that a JWT signed with a DIFFERENT tenant_id than this
+deployment's `tenant.id` is rejected with UNAUTHENTICATED or
+PERMISSION_DENIED. Activated only when `tenant.namespace.isolated`
+is true (Tier 2) — the Tier 1 default has no per-deployment
+tenant scoping at the network layer.
+
+Architecture: docs/bench/d11_per_tenant_isolation_architecture.md §6.
+*/}}
+{{- if and .Values.tenant.namespace.isolated .Values.tests.crossTenantDenial.enabled }}
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ include "efe.fullname" . }}-test-cross-tenant
+  labels: {{- include "efe.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": test
+    "helm.sh/hook-weight": "30"
+    "helm.sh/hook-delete-policy": hook-succeeded,hook-failed
+spec:
+  restartPolicy: Never
+  serviceAccountName: {{ include "efe.serviceAccountName" . }}
+  automountServiceAccountToken: false
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 65532
+    runAsGroup: 65532
+    seccompProfile:
+      type: RuntimeDefault
+  containers:
+    - name: cross-tenant-probe
+      image: {{ .Values.tests.crossTenantDenial.image | default "ghcr.io/efe-project/efe-bench:0.1.11" }}
+      imagePullPolicy: {{ .Values.image.pullPolicy }}
+      securityContext:
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: false
+        capabilities:
+          drop: ["ALL"]
+      env:
+        - name: EFE_GRPC_HOST
+          value: "{{ include "efe.fullname" . }}:{{ .Values.service.grpcPort }}"
+        - name: EXPECTED_TENANT
+          value: {{ .Values.tenant.id | quote }}
+      command: ["/bin/sh", "-c"]
+      args:
+        - |
+          set -e
+          # Probe with a JWT carrying a fake signature — this MUST
+          # fail with PERMISSION_DENIED or UNAUTHENTICATED. If it
+          # succeeds, the cross-tenant denial guarantee is broken
+          # and `helm test` fails.
+          #
+          # Audit fix H1 — earlier version used the (non-existent)
+          # ``grpc.health.v1.health_pb2_grpc`` module path. The
+          # canonical module from ``grpcio-health-checking`` is
+          # ``grpc_health.v1.health_pb2_grpc`` (underscore
+          # separator). Imported at the TOP so any ImportError
+          # surfaces immediately instead of being shadowed by a
+          # later RpcError catch.
+          python3 - <<'PY'
+          import os
+          import sys
+
+          import grpc
+          # The grpc-health-checking module is `grpc_health.v1.*`,
+          # NOT `grpc.health.v1.*` (audit fix H1).
+          from grpc_health.v1 import health_pb2, health_pb2_grpc
+
+          host = os.environ["EFE_GRPC_HOST"]
+          expected_tenant = os.environ["EXPECTED_TENANT"]
+
+          # An adversary JWT — fake signature, NOT issued by the
+          # IDP. The server should reject with UNAUTHENTICATED
+          # (signature mismatch) at the auth interceptor.
+          adversary_jwt = "Bearer fake.jwt.signature"
+
+          channel = grpc.insecure_channel(host)
+          metadata = (("authorization", adversary_jwt),)
+          stub = health_pb2_grpc.HealthStub(channel)
+
+          try:
+              stub.Check(
+                  health_pb2.HealthCheckRequest(),
+                  metadata=metadata,
+                  timeout=5,
+              )
+              print(f"FAIL: adversary JWT was accepted (tenant={expected_tenant})")
+              sys.exit(1)
+          except grpc.RpcError as e:
+              code = e.code().name
+              if code in ("UNAUTHENTICATED", "PERMISSION_DENIED"):
+                  print(f"OK: adversary JWT rejected with {code} "
+                        f"(tenant={expected_tenant})")
+                  sys.exit(0)
+              # Any OTHER error code is suspect — the auth
+              # interceptor should fire before any business logic.
+              print(f"FAIL: unexpected status {code}: {e.details()}")
+              sys.exit(1)
+          PY
+      resources:
+        requests:
+          cpu: "10m"
+          memory: "32Mi"
+        limits:
+          cpu: "100m"
+          memory: "128Mi"
+{{- end }}

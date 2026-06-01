@@ -1,0 +1,133 @@
+## M30 — Multi-modal + Multi-region alerting rules.
+##
+## Surface : 8 alertes (4 multi-modal + 4 multi-region).
+##
+## Sévérité :
+##   - critical : page on-call, SLO breach client-visible.
+##   - warning  : ticket / chat ping.
+##
+## Family label = M30-MMR, surface dans dashboard m30-01.
+
+groups:
+  - name: efe-m30-multimodal
+    rules:
+      - alert: M30MultimodalHighErrorRate
+        expr: |
+          sum by(modality) (rate(efe_multimodal_requests_total{outcome="err"}[5m]))
+            / on(modality)
+          sum by(modality) (rate(efe_multimodal_requests_total[5m])) > 0.02
+        for: 10m
+        labels:
+          severity: critical
+          family: M30-MMR
+        annotations:
+          summary: "Multimodal {{ $labels.modality }} 5xx > 2 %"
+          description: |
+            Modality {{ $labels.modality }} has > 2 % error rate over
+            the last 10 minutes ({{ $value | humanizePercentage }}).
+            Likely causes : Triton OOM, MIG slice exhaustion, model
+            file corruption.
+          runbook_url: https://docs.efe.ai/runbooks/RB_M30_TRITON_DEGRADED
+          dashboard_url: https://grafana.efe.ai/d/efe-m30-01
+
+      - alert: M30MultimodalP99HighLatency
+        expr: |
+          histogram_quantile(0.99,
+            sum by(modality, le) (rate(efe_multimodal_e2e_duration_ms_bucket[5m]))) > 2500
+        for: 10m
+        labels:
+          severity: warning
+          family: M30-MMR
+        annotations:
+          summary: "Multimodal {{ $labels.modality }} p99 > 2.5 s"
+          description: |
+            End-to-end p99 latency on modality {{ $labels.modality }}
+            is {{ $value }}ms over the last 10 min. SLO budget is
+            2500 ms.
+          runbook_url: https://docs.efe.ai/runbooks/RB_M30_TRITON_DEGRADED
+
+      - alert: M30TritonDown
+        expr: |
+          sum by(modality, model_name) (rate(efe_multimodal_triton_errors_total{kind="transport"}[5m])) > 1
+        for: 5m
+        labels:
+          severity: critical
+          family: M30-MMR
+        annotations:
+          summary: "Triton transport errors on {{ $labels.modality }} / {{ $labels.model_name }}"
+          description: |
+            Triton transport errors > 1 RPS for 5 min. Triton may
+            be crash-looping or the GPU node may have rebooted.
+          runbook_url: https://docs.efe.ai/runbooks/RB_M30_TRITON_DEGRADED
+
+      - alert: M30MultimodalGuardRejectionSpike
+        expr: |
+          sum by(modality, reason) (rate(efe_multimodal_rejections_total[5m])) > 5
+        for: 15m
+        labels:
+          severity: warning
+          family: M30-MMR
+        annotations:
+          summary: "Input-guard rejection spike on {{ $labels.modality }} ({{ $labels.reason }})"
+          description: |
+            > 5 RPS of input-guard rejections for 15 min. Either a
+            customer is sending malformed payloads (legitimate
+            client bug) or an attacker is probing the input
+            guard. Investigate via the audit log.
+          runbook_url: https://docs.efe.ai/runbooks/RB_M30_INPUT_GUARD_SPIKE
+
+  - name: efe-m30-region
+    rules:
+      - alert: M30RegionPeerDown
+        expr: efe_region_peer_up == 0
+        for: 5m
+        labels:
+          severity: critical
+          family: M30-MMR
+        annotations:
+          summary: "Region peer {{ $labels.region }} is DOWN"
+          description: |
+            Peer region {{ $labels.region }} has been unreachable
+            for 5 min. Failover preparedness is degraded.
+          runbook_url: https://docs.efe.ai/runbooks/RB_M30_REGION_HEALTH
+
+      - alert: M30RegionHighReplicationLag
+        expr: efe_region_replication_lag_secs > 30
+        for: 10m
+        labels:
+          severity: critical
+          family: M30-MMR
+        annotations:
+          summary: "Replication lag > 30 s on slot {{ $labels.slot_name }}"
+          description: |
+            Postgres logical replication lag has exceeded 30 s for
+            10 min. RPO target is 5 s. Failover would lose
+            transactions until lag recovers.
+          runbook_url: https://docs.efe.ai/runbooks/RB_M30_REPLICATION_LAG
+
+      - alert: M30FailoverInitiated
+        expr: increase(efe_region_failover_total[1m]) > 0
+        for: 0m
+        labels:
+          severity: warning
+          family: M30-MMR
+        annotations:
+          summary: "Region failover initiated towards {{ $labels.target_region }}"
+          description: |
+            A region failover has been initiated. Page the on-call
+            primary to verify the playbook is being followed.
+          runbook_url: https://docs.efe.ai/runbooks/RB_M30_FAILOVER_PLAYBOOK
+
+      - alert: M30DrillOverdue
+        expr: |
+          time() - max(dr_drill_last_run_unix_ts) > 86400 * 95
+        for: 1h
+        labels:
+          severity: warning
+          family: M30-MMR
+        annotations:
+          summary: "DR drill not run in > 95 days"
+          description: |
+            Compliance requires a quarterly DR drill. The last one
+            ran more than 95 days ago — schedule a session.
+          runbook_url: https://docs.efe.ai/runbooks/RB_M30_DR_DRILL

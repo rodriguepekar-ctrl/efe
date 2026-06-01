@@ -1,0 +1,27 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: efe-server
+  namespace: efe
+  labels:
+    app.kubernetes.io/name: efe-server
+    # kube-prometheus-stack default selector
+    release: prometheus
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: efe-server
+  namespaceSelector:
+    matchNames: [efe]
+  endpoints:
+    - port: metrics
+      interval: 15s
+      scrapeTimeout: 10s
+      path: /metrics
+      honorLabels: true
+      # Keep only EFE series — other scrapers (grpc, process, runtime)
+      # are already covered by their own dedicated collectors.
+      metricRelabelings:
+        - sourceLabels: [__name__]
+          regex: 'efe_.*'
+          action: keep

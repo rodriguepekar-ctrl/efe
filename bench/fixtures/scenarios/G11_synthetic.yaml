@@ -1,0 +1,113 @@
+# ─────────────────────────────────────────────────────────────────────
+#  bench/fixtures/scenarios/G11_synthetic.yaml
+#
+#  PR #27 — G.11 closure fixture scenario.
+#
+#  This file is a TEST FIXTURE, not a real CB-suite scenario.  It lives
+#  under bench/fixtures/scenarios/ (NOT bench/scenarios/) so that the
+#  CB-suite scenario validator does not scan it.  The `suite: FIXTURE`
+#  field is the explicit tag that distinguishes it from CB scenarios.
+#
+#  Purpose
+#    Drive the verdict aggregator across three carefully chosen metrics
+#    that exercise the three primary branches of the closed `direction`
+#    taxonomy (no_more_than, within_range, no_less_than) and the three
+#    primary branches of the closed `source` taxonomy (yaml-only,
+#    env-var override, GPU-runner override).  The fourth source branch
+#    (no_tolerance_defined) is covered by the additional metric
+#    `metric_unbounded` which intentionally lacks a `tolerance:` entry.
+#
+#  Companion tests
+#    bench/harness/tests/g11_round_trip.rs
+#    bench/harness/tests/g11_tolerance_used_populated.rs
+#
+#  Companion fixtures
+#    bench/fixtures/post_g11_ndjson/case_*.ndjson
+#    bench/fixtures/post_g11_ndjson/CB-01.ndjson  (canonical golden)
+#
+#  References
+#    docs/architecture/EFE_A1_PHASE3_PR27_ARCHITECTURE.md § 5.2, § 7
+#    docs/roadmap/EFE_A1_PHASE3_PR27_ROADMAP.md § 3.1 (preflight D2)
+# ─────────────────────────────────────────────────────────────────────
+
+schema_version: 1
+suite: FIXTURE
+id: G11_synthetic
+family: meta-bench
+subsystem: pr27-fixture-aggregator-exerciser
+description: >-
+  Four-metric synthetic scenario used by the PR #27 G.11 round-trip
+  pinning test.  Exercises the verdict aggregator across the closed
+  taxonomies of STABILITY § 27.2.5/6/7 (unit, direction, source).
+duration: "1s"
+
+# CB-suite forbids meta-swarm dependency ; the fixture is no exception.
+requires_meta_swarm: false
+
+cluster:
+  provisioner: none
+  region: local
+  notes: >-
+    The fixture is run in-process by the test harness ; no real
+    cluster is provisioned.  The runner introspection is stubbed by
+    the test to assert the resolver's branch selection.
+
+loadgen:
+  target:
+    kind: stub
+    endpoint: "stub://no-op"
+  shape:
+    type: constant
+    requests_per_sec: 1
+    duration: "1s"
+
+results:
+  emit_metrics:
+    - name: metric_no_more_than_only
+      unit: ms
+      direction: no_more_than
+      description: >-
+        Latency-like metric used to exercise the source=yaml branch.
+        No override defined ; the aggregator must report source=yaml.
+    - name: metric_within_range_pct
+      unit: pct
+      direction: within_range
+      description: >-
+        Bilateral metric (e.g. acceptance rate) used to exercise the
+        within_range direction and the array form of `value`.
+    - name: metric_no_less_than_with_gpu_override
+      unit: events_per_sec
+      direction: no_less_than
+      description: >-
+        Throughput-like metric carrying a gpu_override block.  When
+        the runner is detected as GPU-equipped, the aggregator must
+        select the override and report source=gpu_runner_override.
+    - name: metric_unbounded
+      unit: count
+      direction: no_more_than
+      description: >-
+        Metric deliberately lacking a `tolerance:` entry.  The
+        aggregator must emit a row with tolerance_used.value=null
+        and tolerance_used.source=no_tolerance_defined.
+
+tolerance:
+  metric_no_more_than_only:
+    value: 200
+    unit: ms
+    direction: no_more_than
+
+  metric_within_range_pct:
+    value: [95.0, 99.5]
+    unit: pct
+    direction: within_range
+
+  metric_no_less_than_with_gpu_override:
+    value: 50000
+    unit: events_per_sec
+    direction: no_less_than
+    gpu_override:
+      value: 100000
+      reason: "GPU runner with >40GB vRAM detected: nvidia-A100-80GB"
+
+  # NOTE : metric_unbounded is intentionally omitted from this block.
+  # The aggregator must fall through to source=no_tolerance_defined.

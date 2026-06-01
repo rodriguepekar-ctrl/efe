@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://efe.example.com/schemas/smoke/smoke-result-v1.json",
+  "title": "EFE Smoke Result — schema v1",
+  "description": "PR #23 § 9 + STABILITY_CONTRACT v1.5 § 23.5.  Frozen for ≥ 6 chart-minor versions.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "chart_version",
+    "git_sha",
+    "harness_version",
+    "run_id",
+    "started_at",
+    "completed_at",
+    "duration_s",
+    "overall_verdict",
+    "checks",
+    "stability_contract_version"
+  ],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "chart_version": { "type": "string", "minLength": 1 },
+    "git_sha": { "type": "string", "minLength": 4 },
+    "harness_version": { "type": "string", "minLength": 1 },
+    "run_id": { "type": "string", "minLength": 8 },
+    "started_at": { "type": "string", "format": "date-time" },
+    "completed_at": { "type": "string", "format": "date-time" },
+    "duration_s": { "type": "number", "minimum": 0 },
+    "overall_verdict": { "enum": ["pass", "fail"] },
+    "stability_contract_version": { "const": "1.5" },
+    "checks": {
+      "type": "object",
+      "additionalProperties": false,
+      "patternProperties": {
+        "^S[1-9]$": { "$ref": "#/$defs/checkResult" }
+      }
+    }
+  },
+  "$defs": {
+    "checkResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "verdict", "duration_s", "budget_s", "details", "error_summary"],
+      "properties": {
+        "id": {
+          "enum": ["S1", "S2", "S3", "S4", "S5", "S6", "S7", "S8", "S9"]
+        },
+        "verdict": { "enum": ["pass", "fail"] },
+        "duration_s": { "type": "number", "minimum": 0 },
+        "budget_s": { "type": "number", "minimum": 0 },
+        "details": {},
+        "error_summary": { "type": "string" }
+      }
+    }
+  }
+}

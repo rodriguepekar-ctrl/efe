@@ -1,0 +1,80 @@
+# Sprint **Φ-D D31 (Bundle completion)** — 24h soak ghz config.
+#
+# Cf. `docs/EFE_CUDA_KERNELS_COMPLETION_ARCHITECTURE.md` § 12.4.
+#
+# ## Profile
+#
+# - 100 RPS sustained pendant 24 h = 8 640 000 requests total
+# - Concurrency 32 (= 1/4 du sustained P1)
+# - mTLS obligatoire (= prod-shaped)
+# - Output JSON pour analyse via `scripts/bench/analyze_soak.py`
+#
+# ## Lancement (= en parallèle d'un cron qui collecte RSS + VRAM
+# ## toutes les 60 s)
+#
+# ```bash
+# # Terminal 1 : run le soak
+# ghz --config deploy/load-tests/gpu/soak_24h.yaml \
+#     --output target/soak-24h.json
+#
+# # Terminal 2 : collecte les métriques host (= RSS + VRAM)
+# while true; do
+#   date +%s,$(nvidia-smi --query-gpu=memory.used --format=csv,noheader,nounits),$(ps -o rss= -p $(pgrep efe-server)) >> soak-metrics.csv
+#   sleep 60
+# done
+#
+# # Post-soak : analyse
+# python scripts/bench/analyze_soak.py soak-metrics.csv \
+#     --output target/soak-analysis.json
+# ```
+#
+# ## SLO gated
+#
+# - **SLO-CUDA-SOAK-24H** : RSS drift ≤ 10 MiB/h sur 24h.
+
+proto: ../../../crates/efe-server/proto/v1/swarm.proto
+import-paths:
+  - ../../../crates/efe-server/proto
+  - ../../../crates/efe-server/proto/v1
+call: efe.v1.SwarmService.Execute
+
+# Charge sustained 24h
+total: 8640000      # = 100 RPS × 86400 s
+concurrency: 32
+rps: 100
+duration: 24h
+
+# Connexion mTLS
+insecure: false
+cert: ../../../deploy/certs/p1-client.pem
+key: ../../../deploy/certs/p1-client-key.pem
+cacert: ../../../deploy/certs/ca.pem
+authority: efe-server-gpu.efe.svc.cluster.local
+
+# Payload — réutilise ceux de P1 (= 100 prompts variés)
+data-file: ../p1/p1_payloads.json
+
+# Metadata
+metadata:
+  authorization: "Bearer ${GHZ_JWT_TOKEN}"
+  x-correlation-id: "soak-${id}"
+  grpc-timeout: "300m"
+  x-bench-run-id: "soak-24h-${GHZ_RUN_ID}"
+
+# Connexion long-lived
+connections: 4
+keepalive: 300s
+
+# Skip warmup window
+skip-first: 1000
+
+# Output
+format: json
+enable-compression: false
+
+# Tags
+tags:
+  workload: gpu_soak
+  duration: 24h
+  rps: "100"
+  slo: SLO-CUDA-SOAK-24H

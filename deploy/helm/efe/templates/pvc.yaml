@@ -1,0 +1,15 @@
+{{- if .Values.audit.persistence.enabled -}}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "efe.fullname" . }}-audit
+  labels: {{- include "efe.labels" . | nindent 4 }}
+spec:
+  accessModes: [{{ .Values.audit.persistence.accessMode | default "ReadWriteOnce" | quote }}]
+  resources:
+    requests:
+      storage: {{ .Values.audit.persistence.size | quote }}
+  {{- if .Values.audit.persistence.storageClassName }}
+  storageClassName: {{ .Values.audit.persistence.storageClassName | quote }}
+  {{- end }}
+{{- end -}}

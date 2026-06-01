@@ -1,0 +1,56 @@
+{{- /*
+  Sprint D13 — Helm test : verify the 6 dashboards are loaded by
+  Grafana under their canonical UIDs.
+
+  Skipped if dashboards are not enabled OR if helmTestEnabled is
+  false. Requires Grafana to be reachable at
+  http://grafana:3000 with the sidecar already polling. Most
+  common failure mode : sidecar is configured but the label
+  selector doesn't match (verify
+  ``GF_SIDECAR_DASHBOARDS_LABEL=grafana_dashboard``).
+
+  This test exists at the *Helm chart* level — to be run via
+  ``helm test``. Pass criterion : the 6 UIDs return HTTP 200.
+*/ -}}
+{{- if and .Values.observability.dashboards.enabled .Values.observability.dashboards.helmTestEnabled }}
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ include "efe.fullname" . }}-test-dashboards-load
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "efe.labels" . | nindent 4 }}
+    efe.observability/test: dashboards-load
+  annotations:
+    "helm.sh/hook": test
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  restartPolicy: Never
+  containers:
+    - name: test
+      image: curlimages/curl:8.4.0
+      command:
+        - sh
+        - -c
+        - |
+          set -e
+          GRAFANA_URL=${GRAFANA_URL:-http://grafana:3000}
+          for uid in \
+            efe-d13-01-operator-overview \
+            efe-d13-02-tenant-drill-down \
+            efe-d13-03-catalog-version-distribution \
+            efe-d13-04-cost-attribution \
+            efe-d13-05-audit-stream \
+            efe-d13-06-capacity-planning ; do
+            code=$(curl -s -o /dev/null -w '%{http_code}' "$GRAFANA_URL/api/dashboards/uid/$uid")
+            if [ "$code" != "200" ]; then
+              echo "FAIL : dashboard $uid returned HTTP $code (expected 200)" >&2
+              exit 1
+            fi
+            echo "OK : $uid"
+          done
+          echo "All 6 D13 dashboards loaded successfully."
+      env:
+        - name: GRAFANA_URL
+          value: "http://grafana.{{ .Release.Namespace }}.svc.cluster.local:3000"
+{{- end }}

@@ -1,0 +1,254 @@
+## Sprint D13 — alerting rules.
+##
+## 10 alertes, chacune avec un ``runbook_url`` annotation
+## obligatoire (test pinned by
+## ``scripts/tests/test_d13_alert_runbook_links.py``).
+##
+## Sévérité :
+##   - critical : page on-call (PagerDuty), SLO breach client-
+##     visible.
+##   - warning  : ticket / chat ping, dégradation à investiguer
+##     pendant business hours.
+##
+## Toutes les alertes ont ``for: ≥ 5m`` pour absorber le bruit
+## (test pinned by ``test_d13_alert_for_clause.py``).
+##
+## Family label = D13-OBS, surface dans le dashboard 01.
+
+groups:
+  - name: efe-d13-alerts
+    rules:
+      ## ─────────────────────────────────────────────────────
+      ## D13ObsHighErrorRate — critical
+      ## ─────────────────────────────────────────────────────
+      - alert: D13ObsHighErrorRate
+        expr: efe:rpc_error_rate:5m > 0.05
+        for: 10m
+        labels:
+          severity: critical
+          family: D13-OBS
+        annotations:
+          summary: "Error rate > 5% for tenant {{ $labels.tenant }}"
+          description: |
+            Tenant {{ $labels.tenant }} has seen
+            {{ $value | humanizePercentage }} error rate over the
+            last 10 minutes. The most likely root causes are
+            embedder-pool overload, tenant catalog corruption, or
+            an aggressive rate limit. See the runbook for triage
+            steps.
+          runbook_url: https://docs.efe.ai/runbooks/d13_high_error_rate
+          dashboard_url: https://grafana.efe.ai/d/efe-d13-01-operator-overview
+
+      ## ─────────────────────────────────────────────────────
+      ## D13ObsHighLatencyP99 — critical
+      ## ─────────────────────────────────────────────────────
+      - alert: D13ObsHighLatencyP99
+        expr: efe:rpc_p99_latency_seconds:5m > 1.0
+        for: 10m
+        labels:
+          severity: critical
+          family: D13-OBS
+        annotations:
+          summary: "p99 latency > 1s for tenant {{ $labels.tenant }}"
+          description: |
+            p99 latency for tenant {{ $labels.tenant }} is
+            {{ $value | humanizeDuration }}. Pivot via the trace
+            exemplar in dashboard 01 to identify which span is
+            contributing.
+          runbook_url: https://docs.efe.ai/runbooks/d13_high_latency_p99
+          dashboard_url: https://grafana.efe.ai/d/efe-d13-01-operator-overview
+
+      ## ─────────────────────────────────────────────────────
+      ## D13ObsClassifyDriftHigh — warning
+      ## ─────────────────────────────────────────────────────
+      ##
+      ## Detect a drop in confidence_high tier rate over the last
+      ## hour vs the 7-day baseline. A drop > 10% indicates the
+      ## input distribution has shifted (drift) or the catalog is
+      ## stale.
+      - alert: D13ObsClassifyDriftHigh
+        expr: |
+          (
+            sum by (tenant, catalog) (
+              rate(efe_classify_total{result="high"}[1h])
+            )
+            / on(tenant, catalog) group_left()
+            sum by (tenant, catalog) (
+              rate(efe_classify_total[1h])
+            )
+          )
+          <
+          (
+            sum by (tenant, catalog) (
+              avg_over_time(rate(efe_classify_total{result="high"}[1h])[7d:1h])
+            )
+            / on(tenant, catalog) group_left()
+            sum by (tenant, catalog) (
+              avg_over_time(rate(efe_classify_total[1h])[7d:1h])
+            )
+          ) * 0.9
+        for: 30m
+        labels:
+          severity: warning
+          family: D13-OBS
+        annotations:
+          summary: "Confidence-high tier dropped >10% for {{ $labels.tenant }}/{{ $labels.catalog }}"
+          description: |
+            Drift detected — rerun shadow eval against the latest
+            golden set to validate.
+          runbook_url: https://docs.efe.ai/runbooks/d13_classify_drift
+          dashboard_url: https://grafana.efe.ai/d/efe-d13-03-catalog-version-distribution
+
+      ## ─────────────────────────────────────────────────────
+      ## D13ObsCatalogVersionExplosion — warning
+      ## ─────────────────────────────────────────────────────
+      - alert: D13ObsCatalogVersionExplosion
+        expr: efe:catalog_chain_depth:1m > 200
+        for: 10m
+        labels:
+          severity: warning
+          family: D13-OBS
+        annotations:
+          summary: "Catalog chain {{ $labels.tenant }}/{{ $labels.name }} > 200 versions"
+          description: |
+            Reaching the per-name version quota (1000). Plan a
+            cleanup of obsolete branches.
+          runbook_url: https://docs.efe.ai/runbooks/d13_catalog_version_explosion
+          dashboard_url: https://grafana.efe.ai/d/efe-d13-03-catalog-version-distribution
+
+      ## ─────────────────────────────────────────────────────
+      ## D13ObsAuthFailureSpike — warning
+      ## ─────────────────────────────────────────────────────
+      - alert: D13ObsAuthFailureSpike
+        expr: |
+          sum by (tenant) (rate(efe_authz_failures_total[5m])) > 10
+        for: 5m
+        labels:
+          severity: warning
+          family: D13-OBS
+        annotations:
+          summary: "> 10 auth failures/sec for tenant {{ $labels.tenant }}"
+          description: |
+            Sustained burst of auth/authz failures. Could be a
+            credential leak, a misconfigured client, or an
+            attacker probing scopes.
+          runbook_url: https://docs.efe.ai/runbooks/d13_auth_failure_spike
+          dashboard_url: https://grafana.efe.ai/d/efe-d13-05-audit-stream
+
+      ## ─────────────────────────────────────────────────────
+      ## D13ObsCardinalityBomb — warning
+      ## ─────────────────────────────────────────────────────
+      - alert: D13ObsCardinalityBomb
+        expr: count(count by (__name__, job) ({__name__=~"efe_.+"})) > 50000
+        for: 15m
+        labels:
+          severity: warning
+          family: D13-OBS
+        annotations:
+          summary: "Total efe_* cardinality exceeds 50k series"
+          description: |
+            One or more metrics may have an unbounded label.
+            Investigate via the cardinality panel in dashboard 06.
+          runbook_url: https://docs.efe.ai/runbooks/d13_obs_cardinality_bomb
+          dashboard_url: https://grafana.efe.ai/d/efe-d13-06-capacity-planning
+
+      ## ─────────────────────────────────────────────────────
+      ## D13ObsAuditPrincipalUnknown — warning
+      ## ─────────────────────────────────────────────────────
+      ##
+      ## Audit attribution gap. > 5% of audit events should NOT
+      ## carry an empty `principal`. The audit fix from D12 should
+      ## have closed this — alert catches regressions.
+      ##
+      ## Audit C-1 fix : the metric now declares the
+      ## `principal_present` label (bool string "true"|"false"),
+      ## so the alert can filter cleanly. Pre-fix the metric had
+      ## no such label and the query returned empty (alert never
+      ## fired).
+      - alert: D13ObsAuditPrincipalUnknown
+        expr: |
+          (
+            sum(rate(efe_audit_events_total{principal_present="false"}[1h]))
+            / sum(rate(efe_audit_events_total[1h]))
+          ) > 0.05
+        for: 15m
+        labels:
+          severity: warning
+          family: D13-OBS
+        annotations:
+          summary: "> 5% of audit events have empty principal"
+          description: |
+            The handler that propagates the JWT `sub` claim into
+            the audit emitter regressed. Forensic evidence may
+            be incomplete.
+          runbook_url: https://docs.efe.ai/runbooks/d13_audit_unknown_principal
+          dashboard_url: https://grafana.efe.ai/d/efe-d13-05-audit-stream
+
+      ## ─────────────────────────────────────────────────────
+      ## D13ObsTraceSamplingMisconfigured — warning
+      ## ─────────────────────────────────────────────────────
+      ##
+      ## The sample rate should be 5% by default. If the trace
+      ## span volume drops to zero, the SDK was probably misconfig.
+      - alert: D13ObsTraceSamplingMisconfigured
+        expr: |
+          sum(rate(otelcol_receiver_accepted_spans{
+            service_name="efe-server"
+          }[10m])) == 0
+          AND
+          sum(rate(efe_grpc_requests_total[10m])) > 1
+        for: 15m
+        labels:
+          severity: warning
+          family: D13-OBS
+        annotations:
+          summary: "No spans being received despite active traffic"
+          description: |
+            Either OTel SDK isn't initialised, or the sample rate
+            is 0, or the OTLP endpoint is unreachable.
+          runbook_url: https://docs.efe.ai/runbooks/d13_trace_sampling
+          dashboard_url: https://grafana.efe.ai/d/efe-d13-06-capacity-planning
+
+      ## ─────────────────────────────────────────────────────
+      ## D13ObsLogPipelineLag — warning
+      ## ─────────────────────────────────────────────────────
+      - alert: D13ObsLogPipelineLag
+        expr: |
+          (time() - max(promtail_file_position_last_seconds))
+          > 30
+        for: 10m
+        labels:
+          severity: warning
+          family: D13-OBS
+        annotations:
+          summary: "promtail position cursor > 30s behind"
+          description: |
+            Logs are not landing in Loki within the SLO window.
+            Investigate promtail backpressure or Loki ingester
+            saturation.
+          runbook_url: https://docs.efe.ai/runbooks/d13_log_pipeline_lag
+          dashboard_url: https://grafana.efe.ai/d/efe-d13-06-capacity-planning
+
+      ## ─────────────────────────────────────────────────────
+      ## D13ObsRunbookMissing — warning
+      ## ─────────────────────────────────────────────────────
+      ##
+      ## Self-monitoring : if any alert fires and Alertmanager has
+      ## no runbook_url, surface a meta-alert. The CI test
+      ## prevents this at PR-time, but production alerts loaded
+      ## via Helm can drift.
+      - alert: D13ObsRunbookMissing
+        expr: |
+          ALERTS{family="D13-OBS"}
+            unless on (alertname)
+          ALERTS{family="D13-OBS", runbook_url!=""}
+        for: 5m
+        labels:
+          severity: warning
+          family: D13-OBS
+        annotations:
+          summary: "Alert {{ $labels.alertname }} has no runbook_url"
+          description: |
+            Add a runbook_url annotation to this alert + a runbook
+            file under docs/runbooks/.
+          runbook_url: https://docs.efe.ai/runbooks/d13_runbook_missing

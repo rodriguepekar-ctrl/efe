@@ -1,0 +1,32 @@
+
+ EFE {{ .Chart.AppVersion }} — release "{{ .Release.Name }}" in namespace "{{ .Release.Namespace }}".
+
+ 1. Wait for the rollout:
+
+    kubectl --namespace {{ .Release.Namespace }} rollout status deploy/{{ include "efe.fullname" . }}
+
+ 2. Port-forward for a local smoke test:
+
+    kubectl --namespace {{ .Release.Namespace }} port-forward \
+        svc/{{ include "efe.fullname" . }} 50051:{{ .Values.service.grpcPort }} 9090:{{ .Values.service.metricsPort }}
+
+ 3. Run the smoke test from the repo root:
+
+    EFE_HOST=127.0.0.1:50051 EFE_METRICS_URL=http://127.0.0.1:9090/metrics \
+        scripts/smoke.sh
+
+ 4. Health check:
+
+    grpc_health_probe -addr=127.0.0.1:50051
+
+ 5. Raw /metrics:
+
+    curl -s http://127.0.0.1:9090/metrics | grep -E '^efe_' | head
+
+ 6. Rollback (if anything goes wrong):
+
+    helm rollback {{ .Release.Name }} --namespace {{ .Release.Namespace }}
+
+ Runbook:       https://github.com/efe-project/efe/blob/main/docs/runbook.md
+ SLO:           https://github.com/efe-project/efe/blob/main/docs/slo.md
+ Architecture:  https://github.com/efe-project/efe/blob/main/M12_ARCHITECTURE.md

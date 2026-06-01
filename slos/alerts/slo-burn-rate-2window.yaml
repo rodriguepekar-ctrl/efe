@@ -1,0 +1,126 @@
+# PR #22 § 11 + Appendix D — 2-window burn-rate alerts (Google SRE).
+#
+# REPLACES PR #19's slo-burn-rate.yaml (AD40).
+# STABILITY_CONTRACT v1.4 § 22 — alert names + expressions frozen.
+#
+# This file is the **canonical** YAML — it must match exactly the
+# output of `efe-slo-rollup` `burn_rate::prom_rule::emit_yaml()` (locked
+# by a roundtrip test in `tests/burn_rate_invariant.rs`).
+
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: slo-burn-rate-2window
+  labels:
+    stability_contract: v1.4
+spec:
+  groups:
+    - name: slo-burn-rate-fast
+      interval: 1m
+      rules:
+        - alert: SLOBurnRateFast_L2_AVAILABILITY
+          expr: |
+            (1 - slo:L2_AVAILABILITY_1h{source="prod"}) / 0.005 >= 14.4 and (1 - slo:L2_AVAILABILITY_5m{source="prod"}) / 0.005 >= 14.4
+          for: 2m
+          labels:
+            severity: critical
+            slo: L2_AVAILABILITY
+            burn: fast
+            stability_contract: v1.4
+          annotations:
+            summary: "L2_AVAILABILITY fast-burn (2-day budget exhaustion)"
+            runbook: "https://efe.github.io/slos/runbooks/burn-rate.html#fast-l2_availability"
+
+        - alert: SLOBurnRateFast_L2_LATENCY_P95
+          expr: |
+            (1 - slo:L2_LATENCY_P95_1h{source="prod"}) / 0.01 >= 14.4 and (1 - slo:L2_LATENCY_P95_5m{source="prod"}) / 0.01 >= 14.4
+          for: 2m
+          labels:
+            severity: critical
+            slo: L2_LATENCY_P95
+            burn: fast
+            stability_contract: v1.4
+          annotations:
+            summary: "L2_LATENCY_P95 fast-burn (2-day budget exhaustion)"
+            runbook: "https://efe.github.io/slos/runbooks/burn-rate.html#fast-l2_latency_p95"
+
+        - alert: SLOBurnRateFast_SWARM_RECOVERY_TIME
+          expr: |
+            (1 - slo:SWARM_RECOVERY_TIME_1h{source="prod"}) / 0.01 >= 14.4 and (1 - slo:SWARM_RECOVERY_TIME_5m{source="prod"}) / 0.01 >= 14.4
+          for: 2m
+          labels:
+            severity: critical
+            slo: SWARM_RECOVERY_TIME
+            burn: fast
+            stability_contract: v1.4
+          annotations:
+            summary: "SWARM_RECOVERY_TIME fast-burn (2-day budget exhaustion)"
+            runbook: "https://efe.github.io/slos/runbooks/burn-rate.html#fast-swarm_recovery_time"
+
+        - alert: SLOBurnRateFast_REPLICATION_LAG_P99
+          expr: |
+            (1 - slo:REPLICATION_LAG_P99_1h{source="prod"}) / 0.01 >= 14.4 and (1 - slo:REPLICATION_LAG_P99_5m{source="prod"}) / 0.01 >= 14.4
+          for: 2m
+          labels:
+            severity: critical
+            slo: REPLICATION_LAG_P99
+            burn: fast
+            stability_contract: v1.4
+          annotations:
+            summary: "REPLICATION_LAG_P99 fast-burn (2-day budget exhaustion)"
+            runbook: "https://efe.github.io/slos/runbooks/burn-rate.html#fast-replication_lag_p99"
+
+    - name: slo-burn-rate-slow
+      interval: 1m
+      rules:
+        - alert: SLOBurnRateSlow_L2_AVAILABILITY
+          expr: |
+            (1 - slo:L2_AVAILABILITY_6h{source="prod"}) / 0.005 >= 6 and (1 - slo:L2_AVAILABILITY_30m{source="prod"}) / 0.005 >= 6
+          for: 5m
+          labels:
+            severity: warning
+            slo: L2_AVAILABILITY
+            burn: slow
+            stability_contract: v1.4
+          annotations:
+            summary: "L2_AVAILABILITY slow-burn (5-day budget exhaustion)"
+            runbook: "https://efe.github.io/slos/runbooks/burn-rate.html#slow-l2_availability"
+
+        - alert: SLOBurnRateSlow_L2_LATENCY_P95
+          expr: |
+            (1 - slo:L2_LATENCY_P95_6h{source="prod"}) / 0.01 >= 6 and (1 - slo:L2_LATENCY_P95_30m{source="prod"}) / 0.01 >= 6
+          for: 5m
+          labels:
+            severity: warning
+            slo: L2_LATENCY_P95
+            burn: slow
+            stability_contract: v1.4
+          annotations:
+            summary: "L2_LATENCY_P95 slow-burn (5-day budget exhaustion)"
+            runbook: "https://efe.github.io/slos/runbooks/burn-rate.html#slow-l2_latency_p95"
+
+        - alert: SLOBurnRateSlow_SWARM_RECOVERY_TIME
+          expr: |
+            (1 - slo:SWARM_RECOVERY_TIME_6h{source="prod"}) / 0.01 >= 6 and (1 - slo:SWARM_RECOVERY_TIME_30m{source="prod"}) / 0.01 >= 6
+          for: 5m
+          labels:
+            severity: warning
+            slo: SWARM_RECOVERY_TIME
+            burn: slow
+            stability_contract: v1.4
+          annotations:
+            summary: "SWARM_RECOVERY_TIME slow-burn (5-day budget exhaustion)"
+            runbook: "https://efe.github.io/slos/runbooks/burn-rate.html#slow-swarm_recovery_time"
+
+        - alert: SLOBurnRateSlow_REPLICATION_LAG_P99
+          expr: |
+            (1 - slo:REPLICATION_LAG_P99_6h{source="prod"}) / 0.01 >= 6 and (1 - slo:REPLICATION_LAG_P99_30m{source="prod"}) / 0.01 >= 6
+          for: 5m
+          labels:
+            severity: warning
+            slo: REPLICATION_LAG_P99
+            burn: slow
+            stability_contract: v1.4
+          annotations:
+            summary: "REPLICATION_LAG_P99 slow-burn (5-day budget exhaustion)"
+            runbook: "https://efe.github.io/slos/runbooks/burn-rate.html#slow-replication_lag_p99"

@@ -1,0 +1,57 @@
+# PR #21 § 7.1 — S01 : baseline sanity at 100 QPS for 5 min.
+# Gate for `bench-quick` CI workflow.  Strict tolerance ; smoke
+# regression detection.
+
+schema_version: 1
+id: S01_baseline_100qps_5min
+description: "5-min baseline sanity at 100 QPS — quick CI gate"
+duration: "5m"
+
+cluster:
+  provisioner: kind
+  kind_image: kindest/node:v1.30.0
+  topology:
+    controller_replicas: 2
+    participant_replicas: 3
+
+loadgen:
+  version: 1
+  name: S01-loadgen
+  target:
+    endpoints:
+      - url: "grpc://efe-meta-swarm-controller.efe.svc:50051"
+        weight: 1.0
+    role: controller
+    conns_per_target: 4
+    per_request_deadline: "3s"
+  pattern:
+    type: constant
+    qps: 100
+  workload:
+    type: mixed
+    mix: { iterate: 1.0 }
+  rate:
+    mode: hybrid
+    max_concurrency: 200
+  termination:
+    duration: "5m"
+  output:
+    format: ndjson
+    file: /var/run/loadgen/S01-result.ndjson
+  run:
+    seed: 42
+    mode: staging
+    allow_mutation: false
+
+chaos: []
+
+results:
+  collect_prom_snapshot: true
+  collect_chaos_events: false
+
+tolerance:
+  p50_ms_max_delta_pct: 15
+  p95_ms_max_delta_pct: 10
+  p99_ms_max_delta_pct: 15
+  error_rate_max_delta_pp: 0.1
+  throughput_qps_min_delta_pct: -10

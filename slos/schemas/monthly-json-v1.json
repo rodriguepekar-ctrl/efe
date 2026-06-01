@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://efe.example.com/schemas/slo/monthly-v1.json",
+  "title": "EFE SLO Monthly Aggregate — schema v1",
+  "description": "PR #22 § 10.2.  STABILITY_CONTRACT v1.4 § 22.4.  Frozen for ≥ 6 chart-minor versions.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "chart_version",
+    "region",
+    "period",
+    "computed_at",
+    "rollup_run_id",
+    "slos",
+    "missing_days",
+    "stability_contract_version"
+  ],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "chart_version": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(-[a-zA-Z0-9.-]+)?$" },
+    "region": { "type": "string", "enum": ["global", "us-east-1", "us-west-2", "eu-west-1", "ap-south-1"] },
+    "period": { "type": "string", "pattern": "^[0-9]{4}-(0[1-9]|1[0-2])$" },
+    "computed_at": { "type": "string", "format": "date-time" },
+    "rollup_run_id": { "type": "string", "minLength": 8 },
+    "stability_contract_version": { "const": "1.4" },
+    "missing_days": {
+      "type": "array",
+      "items": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" }
+    },
+    "slos": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "L2_AVAILABILITY",
+        "L2_LATENCY_P95",
+        "REPLICATION_LAG_P99",
+        "SWARM_RECOVERY_TIME"
+      ],
+      "properties": {
+        "L2_AVAILABILITY":      { "$ref": "#/$defs/sloEntry" },
+        "L2_LATENCY_P95":       { "$ref": "#/$defs/sloEntry" },
+        "REPLICATION_LAG_P99":  { "$ref": "#/$defs/sloEntry" },
+        "SWARM_RECOVERY_TIME":  { "$ref": "#/$defs/sloEntry" }
+      }
+    }
+  },
+  "$defs": {
+    "sloEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["target", "achieved", "verdict", "numerator", "denominator", "error_budget_consumed_pct"],
+      "properties": {
+        "target": { "type": "number" },
+        "achieved": { "type": ["number", "null"] },
+        "verdict": { "enum": ["pass", "fail", "indeterminate"] },
+        "numerator": { "type": "integer", "minimum": 0 },
+        "denominator": { "type": "integer", "minimum": 0 },
+        "error_budget_consumed_pct": { "type": "number" }
+      }
+    }
+  }
+}

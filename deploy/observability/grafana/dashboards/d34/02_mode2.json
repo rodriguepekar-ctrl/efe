@@ -1,0 +1,190 @@
+{
+  "__inputs": [],
+  "__requires": [
+    {"type": "grafana", "id": "grafana", "name": "Grafana", "version": "10.2.0"},
+    {"type": "datasource", "id": "prometheus", "name": "Prometheus", "version": "1.0.0"}
+  ],
+  "uid": "efe-d34-02-mode2",
+  "title": "EFE — 02 Mode-2 (Sprint D34)",
+  "description": "Sprint D34 — Mode-2 backend observability : LLM router cache + latency + anchors. Cf. docs/EFE_TELEMETRY_EXTENSION_ARCHITECTURE.md § 10.6. Instruments : efe_mode2_cache_hit_total, efe_mode2_cache_miss_total, efe_mode2_router_latency_seconds, efe_mode2_anchors_generated, efe_mode2_seed_mix_collisions_total. SLO C-4 : cache hit rate ≥ 60%.",
+  "tags": ["efe", "d34", "mode2", "cache", "llm-router"],
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "time": {"from": "now-1h", "to": "now"},
+  "timepicker": {"refresh_intervals": ["30s", "1m", "5m", "15m", "1h"]},
+  "graphTooltip": 1,
+  "templating": {
+    "list": [
+      {
+        "name": "datasource",
+        "type": "datasource",
+        "query": "prometheus",
+        "current": {"text": "Prometheus", "value": "Prometheus"}
+      },
+      {
+        "name": "tenant",
+        "type": "query",
+        "datasource": {"type": "prometheus", "uid": "$datasource"},
+        "query": "label_values(efe_mode2_cache_hit_total, tenant)",
+        "includeAll": true,
+        "multi": true,
+        "refresh": 2,
+        "sort": 1,
+        "label": "Tenant"
+      },
+      {
+        "name": "router_id",
+        "type": "query",
+        "datasource": {"type": "prometheus", "uid": "$datasource"},
+        "query": "label_values(efe_mode2_router_latency_seconds_bucket, router_id)",
+        "includeAll": true,
+        "multi": true,
+        "refresh": 2,
+        "sort": 1,
+        "label": "Router"
+      }
+    ]
+  },
+  "panels": [
+    {
+      "type": "row",
+      "id": 1,
+      "title": "Cache Performance",
+      "gridPos": {"x": 0, "y": 0, "w": 24, "h": 1}
+    },
+    {
+      "type": "stat",
+      "id": 2,
+      "title": "Cache Hit Rate (5m)",
+      "datasource": {"type": "prometheus", "uid": "$datasource"},
+      "gridPos": {"x": 0, "y": 1, "w": 8, "h": 6},
+      "targets": [{
+        "expr": "sum(rate(efe_mode2_cache_hit_total{tenant=~\"$tenant\", router_id=~\"$router_id\"}[5m])) / (sum(rate(efe_mode2_cache_hit_total{tenant=~\"$tenant\", router_id=~\"$router_id\"}[5m])) + sum(rate(efe_mode2_cache_miss_total{tenant=~\"$tenant\", router_id=~\"$router_id\"}[5m])))",
+        "refId": "A"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "red", "value": null},
+              {"color": "yellow", "value": 0.4},
+              {"color": "green", "value": 0.6}
+            ]
+          }
+        }
+      },
+      "description": "SLO C-4 : ≥ 60% on production fixtures. Below = router thrashing."
+    },
+    {
+      "type": "timeseries",
+      "id": 3,
+      "title": "Cache Hit/Miss per Router (stacked)",
+      "datasource": {"type": "prometheus", "uid": "$datasource"},
+      "gridPos": {"x": 8, "y": 1, "w": 16, "h": 6},
+      "targets": [
+        {
+          "expr": "sum by (router_id) (rate(efe_mode2_cache_hit_total{tenant=~\"$tenant\", router_id=~\"$router_id\"}[5m]))",
+          "legendFormat": "hit / {{router_id}}",
+          "refId": "A"
+        },
+        {
+          "expr": "sum by (router_id) (rate(efe_mode2_cache_miss_total{tenant=~\"$tenant\", router_id=~\"$router_id\"}[5m]))",
+          "legendFormat": "miss / {{router_id}}",
+          "refId": "B"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "stacking": {"mode": "normal"}
+          }
+        }
+      }
+    },
+    {
+      "type": "row",
+      "id": 4,
+      "title": "LLM Router Latency",
+      "gridPos": {"x": 0, "y": 7, "w": 24, "h": 1}
+    },
+    {
+      "type": "heatmap",
+      "id": 5,
+      "title": "Router Call Latency (s)",
+      "datasource": {"type": "prometheus", "uid": "$datasource"},
+      "gridPos": {"x": 0, "y": 8, "w": 12, "h": 8},
+      "targets": [{
+        "expr": "sum(rate(efe_mode2_router_latency_seconds_bucket{router_id=~\"$router_id\"}[1m])) by (le, router_id)",
+        "format": "heatmap",
+        "legendFormat": "{{router_id}}",
+        "refId": "A"
+      }],
+      "description": "Distribution of LLM router call wall time. Mock < 1ms, OpenAI/Anthropic 100ms - 5s."
+    },
+    {
+      "type": "timeseries",
+      "id": 6,
+      "title": "Router p99 Latency (ms)",
+      "datasource": {"type": "prometheus", "uid": "$datasource"},
+      "gridPos": {"x": 12, "y": 8, "w": 12, "h": 8},
+      "targets": [{
+        "expr": "1000 * histogram_quantile(0.99, sum(rate(efe_mode2_router_latency_seconds_bucket{router_id=~\"$router_id\"}[5m])) by (le, router_id))",
+        "legendFormat": "{{router_id}}",
+        "refId": "A"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms"
+        }
+      }
+    },
+    {
+      "type": "row",
+      "id": 7,
+      "title": "Anchors Distribution & Anomalies",
+      "gridPos": {"x": 0, "y": 16, "w": 24, "h": 1}
+    },
+    {
+      "type": "histogram",
+      "id": 8,
+      "title": "Anchors Generated per Call",
+      "datasource": {"type": "prometheus", "uid": "$datasource"},
+      "gridPos": {"x": 0, "y": 17, "w": 12, "h": 7},
+      "targets": [{
+        "expr": "sum by (le, router_id) (rate(efe_mode2_anchors_generated_bucket{router_id=~\"$router_id\"}[5m]))",
+        "legendFormat": "{{router_id}}",
+        "refId": "A"
+      }],
+      "description": "Distribution of anchor counts. Default top_k = 5 ; cap = 20."
+    },
+    {
+      "type": "stat",
+      "id": 9,
+      "title": "Seed-Mix Collisions (alarm)",
+      "datasource": {"type": "prometheus", "uid": "$datasource"},
+      "gridPos": {"x": 12, "y": 17, "w": 12, "h": 7},
+      "targets": [{
+        "expr": "rate(efe_mode2_seed_mix_collisions_total[5m])",
+        "refId": "A"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "red", "value": 0}
+            ]
+          }
+        }
+      },
+      "description": "ANY positive rate signals a flaw in the seed-mix algorithm. Alert D34Mode2SeedCollision fires on rate > 0 for 1 min."
+    }
+  ]
+}

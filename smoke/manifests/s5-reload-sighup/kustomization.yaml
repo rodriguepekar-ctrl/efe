@@ -1,0 +1,10 @@
+# PR #23 § 7.5 — S5 SIGHUP reload.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: efe-smoke-s5
+commonLabels:
+  efe.io/smoke: "true"
+  efe.io/smoke-check: "S5_reload_sighup"
+resources:
+  - namespace.yaml
+  - reload-trigger.yaml

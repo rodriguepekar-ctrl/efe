@@ -1,0 +1,22 @@
+{
+  "_comment": "Sprint D9 — sustained load scenario. Cf. d9_deep_analysis_supplement.md §1.2 (sample sizing). 5 min @ ~10 RPS = ~3000 samples ⇒ p99 IC ~±25 % (acceptable for CI). For ±10 % IC the duration would need to be ~16 min (DT-D9.A1, P3). 4 concurrent clients matches the typical Tokio worker pool dimension.",
+  "proto": "../../protos/efe/v1/efe.proto",
+  "import-paths": ["../../protos"],
+  "call": "efe.v1.SwarmService/Execute",
+  "host": "127.0.0.1:50051",
+  "insecure": true,
+  "concurrency": 4,
+  "rps": 10,
+  "duration": "5m",
+  "timeout": "15s",
+  "data-file": "fixtures/sample_request.json",
+  "metadata": {
+    "x-load-test-scenario": "sustained",
+    "x-tenant-id": "load-bench"
+  },
+  "skip-first": 20,
+  "format": "json",
+  "output": "/dev/stdout",
+  "connections": 4,
+  "_connections_explanation": "One TCP connection per concurrent client — exposes any per-replica saturation in HPA-scaled deployments. With clusterIP=None (headless service), DNS round-robin distributes connections across replicas."
+}

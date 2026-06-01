@@ -1,0 +1,46 @@
+# CB-26 — Quarterly evidence PDF generation latency.
+# Exercises `bench/publish/` quarterly-evidence pipeline.
+
+schema_version: 1
+suite: CB
+id: CB-26_publish_quarterly_pdf
+family: compliance
+subsystem: bench-publish
+description: "10 cold-starts of quarterly PDF generation + signing"
+duration: "300s"
+requires_meta_swarm: false
+
+cluster:
+  provisioner: kind
+  kind_image: kindest/node:v1.30.0
+  topology:
+    publish_replicas: 1
+    cosign_keyless_mocked: true
+    rekor_mocked: true
+
+loadgen:
+  version: 1
+  name: CB-26-runner
+  target:
+    binary: "efe-bench-harness"
+    subcommand: "publish-quarterly --quarter Q2-2026 --dry-run"
+  pattern: { type: serial, iterations: 10 }
+  workload:
+    type: quarterly-pdf
+    summary_size_kb: 80
+    expected_pdf_size_kb_min: 200
+    expected_pdf_size_kb_max: 1500
+  rate: { mode: serial, max_concurrency: 1 }
+  termination: { duration: "300s" }
+  output: { format: ndjson, file: /var/run/loadgen/CB-26-result.ndjson }
+  run: { seed: 26026, mode: staging, allow_mutation: true }
+
+chaos: []
+results:
+  emit_metrics: [pdf_generation_p99_sec, pdf_size_bytes_median, signing_p99_ms, embedded_sha_roundtrip_ms]
+
+tolerance:
+  pdf_generation_p99_sec_absolute_max: 30
+  pdf_size_bytes_median_max_delta_pct: 15
+  signing_p99_ms_absolute_max: 1500
+  embedded_sha_roundtrip_ms_absolute_max: 100

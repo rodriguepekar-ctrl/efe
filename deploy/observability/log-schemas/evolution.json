@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://efe.example.com/schemas/log/v1.0/evolution.json",
+  "title": "EFE evolution log stream (v1.0)",
+  "description": "Sprint D13. One event per catalog EvolveCatalog RPC. Carries the diff summary (what classes were added/removed, threshold deltas, etc.) for change-history forensics.",
+  "type": "object",
+  "allOf": [
+    { "$ref": "_common.json" },
+    {
+      "properties": {
+        "stream": { "const": "evolution" }
+      },
+      "required": [
+        "tenant_id",
+        "principal",
+        "from_key",
+        "to_key",
+        "op_tag"
+      ]
+    }
+  ],
+  "properties": {
+    "from_key": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_-]*\\/[a-z][a-z0-9_-]*@v[0-9]+$"
+    },
+    "to_key": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_-]*\\/[a-z][a-z0-9_-]*@v[0-9]+$"
+    },
+    "op_tag": {
+      "type": "string",
+      "enum": [
+        "append_class",
+        "remove_class",
+        "update_thresholds",
+        "replace_class_anchors",
+        "recompile"
+      ]
+    },
+    "diff_summary": {
+      "type": "object",
+      "description": "Op-specific diff. Keys depend on op_tag.",
+      "properties": {
+        "classes_added":   { "type": "array", "items": { "type": "string" } },
+        "classes_removed": { "type": "array", "items": { "type": "string" } },
+        "threshold_delta": {
+          "type": "object",
+          "properties": {
+            "confidence_high":   { "type": "number" },
+            "confidence_medium": { "type": "number" }
+          }
+        },
+        "class_replaced":          { "type": "string" },
+        "n_sentences_replaced":    { "type": "integer", "minimum": 0 },
+        "embedder_old_fingerprint": { "type": "string" },
+        "embedder_new_fingerprint": { "type": "string" }
+      },
+      "additionalProperties": true
+    },
+    "validate_duration_ms": { "type": "integer", "minimum": 0 },
+    "compile_duration_ms":  { "type": "integer", "minimum": 0 },
+    "content_sha256_before": { "type": "string", "pattern": "^[0-9a-f]{0,64}$" },
+    "content_sha256_after":  { "type": "string", "pattern": "^[0-9a-f]{0,64}$" }
+  },
+  "additionalProperties": true
+}

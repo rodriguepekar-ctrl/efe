@@ -1,0 +1,54 @@
+# CB-16 — Active learning sampling-decision latency.
+# Exercises `efe-active-learning` (M24) acquisition function path.
+
+schema_version: 1
+suite: CB
+id: CB-16_active_learning_sampling
+family: data-plane
+subsystem: efe-active-learning
+description: "50k acquisition-function calls over varied uncertainty distributions, 30s"
+duration: "30s"
+requires_meta_swarm: false
+
+cluster:
+  provisioner: kind
+  kind_image: kindest/node:v1.30.0
+  topology:
+    al_replicas: 1
+    candidate_pool_size: 100000
+
+loadgen:
+  version: 1
+  name: CB-16-loadgen
+  target:
+    endpoints:
+      - url: "grpc://efe-active-learning.efe.svc:50201"
+        weight: 1.0
+    role: al-client
+    conns_per_target: 8
+    per_request_deadline: "500ms"
+  pattern:
+    type: closed-loop-fixed
+    total_requests: 50000
+  workload:
+    type: al-acquisition
+    acquisition_mix:
+      entropy: 0.4
+      margin: 0.3
+      least_confident: 0.2
+      committee_vote: 0.1
+    batch_size_per_call: 10
+  rate: { mode: closed-loop, max_concurrency: 64 }
+  termination: { duration: "30s" }
+  output: { format: ndjson, file: /var/run/loadgen/CB-16-result.ndjson }
+  run: { seed: 26016, mode: staging, allow_mutation: false }
+
+chaos: []
+results:
+  collect_prom_snapshot: true
+  emit_metrics: [acquisition_p99_us, oracle_match_pct, qps_at_saturation, model_freshness_lag_s]
+
+tolerance:
+  acquisition_p99_us_max_delta_pct: 20
+  oracle_match_pct_absolute_min: 100.0
+  qps_at_saturation_min_delta_pct: -10

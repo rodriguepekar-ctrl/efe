@@ -1,0 +1,33 @@
+{
+  "name": "@efe-project/efe-client",
+  "version": "0.1.0",
+  "description": "TypeScript / Node.js client for the EFE Mode 1 gRPC service.",
+  "license": "Apache-2.0",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "gen": "bash ../proto-gen/scripts/gen-ts.sh",
+    "build": "tsc -p tsconfig.json",
+    "test": "mocha --recursive 'tests/**/*.spec.ts' --require ts-node/register",
+    "example": "ts-node example/index.ts"
+  },
+  "dependencies": {
+    "@grpc/grpc-js": "^1.10.0",
+    "google-protobuf": "^3.21.0"
+  },
+  "devDependencies": {
+    "ts-proto": "^2.0.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.4.0",
+    "mocha": "^10.4.0",
+    "@types/node": "^20.11.0"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "files": [
+    "dist/",
+    "README.md",
+    "LICENSE"
+  ]
+}

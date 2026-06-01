@@ -1,0 +1,53 @@
+# PR #20 UC2 — SLO regression check.
+# Validates the 4 STABILITY_CONTRACT v1.1 § 9.5 SLO targets over 5 min.
+# Exit code 1 (SloBreach) on any breach ; nightly CI workflow consumes
+# this exit code to comment on PRs.
+
+version: 1
+name: "slo-validation-5min"
+description: "5-min SLO regression check against the 4 committed targets"
+
+target:
+  endpoints:
+    - url: "grpc://efe-meta-swarm-controller.efe.svc:50051"
+      weight: 1.0
+  role: controller
+  conns_per_target: 4
+  per_request_deadline: "5s"
+
+pattern:
+  type: constant
+  qps: 100
+
+workload:
+  type: iterate
+
+rate:
+  mode: hybrid
+  max_concurrency: 200
+
+termination:
+  duration: "5m"
+  until_slo:
+    # STABILITY_CONTRACT v1.1 § 9.5 targets — committed, do not relax
+    # without a chart-major bump.
+    iterate-availability: 0.999
+    iterate-latency-p95:  1.0
+
+output:
+  format: parquet
+  file: /var/run/loadgen/slo-validation-result.parquet
+  record: false
+
+observability:
+  prometheus:
+    listen: "0.0.0.0:9095"
+  otel:
+    endpoint: "http://otel-collector.observability.svc:4317"
+    sampler_arg: 1.0
+    service_name: "efe-meta-swarm-loadgen-slo"
+
+run:
+  seed: 1715864700
+  mode: staging
+  allow_mutation: false

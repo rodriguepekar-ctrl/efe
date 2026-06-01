@@ -1,0 +1,71 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://efe.example.com/schemas/log/v1.0/_common.json",
+  "title": "EFE structured-log common envelope (v1.0)",
+  "description": "Sprint D13. Fields shared by every log stream emitted by efe-server. Pinned by scripts/tests/test_d13_log_schemas.py.",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "stream",
+    "timestamp",
+    "level",
+    "service",
+    "service_version"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+$",
+      "description": "MAJOR.MINOR. MAJOR change = surface-breaking. MINOR change = additive."
+    },
+    "stream": {
+      "type": "string",
+      "enum": ["request", "audit", "classify", "evolution", "security"],
+      "description": "Discriminator selecting which per-stream schema applies."
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "RFC 3339 UTC timestamp ; nanosecond precision allowed (e.g. 2026-04-27T14:30:00.123456Z)."
+    },
+    "level": {
+      "type": "string",
+      "enum": ["DEBUG", "INFO", "WARN", "ERROR"],
+      "description": "Log level. WARN/ERROR are alertable ; INFO is the bulk."
+    },
+    "request_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "UUID v4 stamped at request entry. Survives across logs / traces / metrics for correlation."
+    },
+    "trace_id": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{32}$",
+      "description": "OpenTelemetry trace_id (32 hex chars)."
+    },
+    "span_id": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{16}$",
+      "description": "OpenTelemetry span_id (16 hex chars)."
+    },
+    "tenant_id": {
+      "type": "string",
+      "pattern": "^tenant-[a-z0-9-]{1,62}$",
+      "description": "Canonical tenant identifier ; matches the JWT tenant_id claim."
+    },
+    "principal": {
+      "type": "string",
+      "description": "JWT `sub` claim. Empty for pre-auth events (e.g. anonymous health checks)."
+    },
+    "service": {
+      "type": "string",
+      "const": "efe-server",
+      "description": "Stable service identifier. Hardcoded — useful when multiple EFE instances ship to one Loki."
+    },
+    "service_version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+(-[A-Za-z0-9.-]+)?$",
+      "description": "SemVer of the binary that emitted the log."
+    }
+  }
+}

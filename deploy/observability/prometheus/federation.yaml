@@ -1,0 +1,74 @@
+# Sprint Φ-D-OPS (D97) — Prometheus federation config.
+#
+# Pulls metrics from the 3 regional Prometheus instances (EU / US /
+# APAC) into a single global instance that drives the master Grafana
+# dashboard.
+#
+# Cf. `docs/EFE_OPERATIONAL_PRODUCTION_ARCHITECTURE.md` § 9.
+
+global:
+  scrape_interval:     30s
+  scrape_timeout:      20s
+  evaluation_interval: 30s
+  external_labels:
+    instance:        prometheus-global
+    federation_tier: global
+
+rule_files:
+  - rules.ops/burn_rate.yaml
+  - rules.ops/alerts.yaml
+
+scrape_configs:
+- job_name: federate-eu-west-3
+  scrape_interval: 30s
+  honor_labels: true
+  metrics_path: /federate
+  params:
+    'match[]':
+      - '{job=~"efe-server|mcp-server|efe-llm-router|efe-saga|efe-region"}'
+      - '{__name__=~"efe_.*"}'
+      - '{__name__=~"job:.*"}'
+      - '{__name__=~"efe:.*"}'
+  static_configs:
+  - targets: ['prom-eu-west-3.efe.internal:9090']
+    labels: {region: eu-west-3, cloud: aws}
+
+- job_name: federate-us-east-1
+  scrape_interval: 30s
+  honor_labels: true
+  metrics_path: /federate
+  params:
+    'match[]':
+      - '{job=~"efe-server|mcp-server|efe-llm-router|efe-saga|efe-region"}'
+      - '{__name__=~"efe_.*"}'
+  static_configs:
+  - targets: ['prom-us-east-1.efe.internal:9090']
+    labels: {region: us-east-1, cloud: aws}
+
+- job_name: federate-apac-syd
+  scrape_interval: 30s
+  honor_labels: true
+  metrics_path: /federate
+  params:
+    'match[]':
+      - '{__name__=~"efe_.*"}'
+  static_configs:
+  - targets: ['prom-apac-syd.efe.internal:9090']
+    labels: {region: ap-southeast-2, cloud: aws}
+
+# Multi-cloud parity verification : also pull GCP + Azure if active.
+- job_name: federate-eu-west-3-gcp
+  scrape_interval: 60s
+  honor_labels: true
+  metrics_path: /federate
+  params:
+    'match[]':
+      - '{__name__=~"efe_.*"}'
+  static_configs:
+  - targets: ['prom-eu-west-gcp.efe.internal:9090']
+    labels: {region: europe-west3, cloud: gcp}
+
+alerting:
+  alertmanagers:
+  - static_configs:
+    - targets: ['alertmanager.efe.internal:9093']

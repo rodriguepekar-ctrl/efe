@@ -1,0 +1,1 @@
+{"schema_version":2,"scenario_id":"CB-01_events_append_throughput","metric_name":"append_p99_ms","observed":18,"verdict":"PASS","tolerance_used":50,"runner":{"kind":"cpu","id":"runner-001"}}

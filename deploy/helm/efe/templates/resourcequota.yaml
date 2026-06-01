@@ -1,0 +1,44 @@
+{{/*
+Sprint D11.2 — Tier 2 multi-tenant ResourceQuota.
+
+Activated by ``tenant.namespace.isolated: true`` (and explicitly
+``resourceQuota.enabled: true``). Caps every aggregate resource
+that namespace-scoped operations can request, so a single tenant
+cannot exhaust cluster capacity at the expense of others.
+
+Architecture: docs/bench/d11_per_tenant_isolation_architecture.md §6.2.
+
+Defaults (cf. values.tier2.yaml):
+  cpu: "4"             — 4 vCPU sustainable
+  memory: "8Gi"        — 8 GiB sustainable
+  pods: "10"           — caps pod count (HPA must respect it)
+  services: hardcoded  — small budget; tenant rarely needs > 5
+
+NB:
+  * `requests.X` and `limits.X` are pinned to the SAME value to
+    enforce GUARANTEED reservation (no oversubscription headroom).
+    Bursting under load is preferred via HPA scale-out, NOT via
+    burstable QoS within a single pod.
+  * `persistentvolumeclaims: "0"` blocks PVCs entirely. EFE is
+    stateless ; a tenant accidentally enabling persistent storage
+    would silently leak through namespace eviction.
+*/}}
+{{- if and .Values.tenant.namespace.isolated .Values.tenant.namespace.resourceQuota.enabled -}}
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: {{ include "efe.fullname" . }}-quota
+  labels: {{- include "efe.labels" . | nindent 4 }}
+spec:
+  hard:
+    requests.cpu:           {{ .Values.tenant.namespace.resourceQuota.cpu | quote }}
+    requests.memory:        {{ .Values.tenant.namespace.resourceQuota.memory | quote }}
+    limits.cpu:             {{ .Values.tenant.namespace.resourceQuota.cpu | quote }}
+    limits.memory:          {{ .Values.tenant.namespace.resourceQuota.memory | quote }}
+    pods:                   {{ .Values.tenant.namespace.resourceQuota.pods | quote }}
+    services:               {{ .Values.tenant.namespace.resourceQuota.services | default "5" | quote }}
+    persistentvolumeclaims: "0"
+    {{- with .Values.tenant.namespace.resourceQuota.extra }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+{{- end -}}

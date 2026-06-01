@@ -1,0 +1,174 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {"type": "grafana", "uid": "-- Grafana --"},
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "description": "EFE Polyglot SDK Quartet (Python + Go + TS + Java) — Φ-C-SDK Completion observability dashboard. Compares 5 OTel instruments across 4 SDKs side-by-side.",
+  "editable": true,
+  "tags": ["efe", "sdk", "polyglot", "phi-c-sdk"],
+  "templating": {
+    "list": [
+      {
+        "current": {"text": "All", "value": "$__all"},
+        "name": "sdk",
+        "label": "SDK",
+        "options": [],
+        "query": "label_values(efe_sdk_classify_total, sdk)",
+        "refresh": 1,
+        "type": "query",
+        "includeAll": true,
+        "multi": true,
+        "datasource": {"type": "prometheus", "uid": "prometheus"}
+      }
+    ]
+  },
+  "time": {"from": "now-6h", "to": "now"},
+  "title": "EFE SDK Quartet",
+  "uid": "efe-sdks-quartet",
+  "version": 1,
+  "panels": [
+    {
+      "id": 1,
+      "title": "Classify rate per SDK",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+      "targets": [
+        {
+          "expr": "sum by (sdk) (rate(efe_sdk_classify_total{sdk=~\"$sdk\"}[5m]))",
+          "legendFormat": "{{sdk}}",
+          "refId": "A"
+        }
+      ],
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "description": "Total classify calls per second, grouped by SDK. Identical workload → all 4 lines should overlap."
+    },
+    {
+      "id": 2,
+      "title": "Classify p99 latency per SDK",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.99, sum by (sdk, le) (rate(efe_sdk_classify_seconds_bucket{sdk=~\"$sdk\"}[5m])))",
+          "legendFormat": "p99 {{sdk}}",
+          "refId": "A"
+        }
+      ],
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"value": null, "color": "green"},
+              {"value": 0.05, "color": "yellow"},
+              {"value": 0.10, "color": "red"}
+            ]
+          }
+        }
+      },
+      "description": "p99 latency per SDK. SLOs : Go ≤ 50 ms, TS/Java ≤ 60 ms."
+    },
+    {
+      "id": 3,
+      "title": "Error rate per SDK",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
+      "targets": [
+        {
+          "expr": "sum by (sdk) (rate(efe_sdk_classify_total{sdk=~\"$sdk\",outcome=\"err\"}[5m])) / sum by (sdk) (rate(efe_sdk_classify_total{sdk=~\"$sdk\"}[5m]))",
+          "legendFormat": "err ratio {{sdk}}",
+          "refId": "A"
+        }
+      ],
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "percentunit"}},
+      "description": "Error ratio per SDK. > 1 % sustained warrants investigation."
+    },
+    {
+      "id": 4,
+      "title": "Retry rate per SDK",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
+      "targets": [
+        {
+          "expr": "sum by (sdk, reason) (rate(efe_sdk_retry_total{sdk=~\"$sdk\"}[5m]))",
+          "legendFormat": "{{sdk}} / {{reason}}",
+          "refId": "A"
+        }
+      ],
+      "datasource": {"type": "prometheus", "uid": "prometheus"}
+    },
+    {
+      "id": 5,
+      "title": "Circuit breaker state per SDK",
+      "type": "stat",
+      "gridPos": {"h": 6, "w": 24, "x": 0, "y": 16},
+      "targets": [
+        {
+          "expr": "efe_sdk_circuit_breaker_state{sdk=~\"$sdk\"}",
+          "legendFormat": "{{sdk}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            {"type": "value", "options": {"0": {"text": "closed"}, "1": {"text": "OPEN"}, "2": {"text": "half-open"}}}
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"value": null, "color": "green"},
+              {"value": 0.5, "color": "yellow"},
+              {"value": 1.5, "color": "red"}
+            ]
+          }
+        }
+      },
+      "datasource": {"type": "prometheus", "uid": "prometheus"}
+    },
+    {
+      "id": 6,
+      "title": "gRPC method latency (Classify)",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 22},
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.99, sum by (sdk, le) (rate(efe_sdk_grpc_seconds_bucket{sdk=~\"$sdk\",method=\"Classify\"}[5m])))",
+          "legendFormat": "p99 {{sdk}}",
+          "refId": "A"
+        }
+      ],
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "s"}},
+      "description": "Pure gRPC method latency (= excludes local marshal/unmarshal)."
+    },
+    {
+      "id": 7,
+      "title": "Classify volume distribution (24 h)",
+      "type": "piechart",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 22},
+      "targets": [
+        {
+          "expr": "sum by (sdk) (increase(efe_sdk_classify_total[24h]))",
+          "legendFormat": "{{sdk}}",
+          "refId": "A"
+        }
+      ],
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "description": "Repartition des appels entre les 4 SDKs sur 24h. Indique l'adoption."
+    }
+  ],
+  "schemaVersion": 38
+}

@@ -1,0 +1,21 @@
+{
+  "request_id": "smoke-test-0001",
+  "raw_prompt": "smoke test — minimal request; dev backend may return InvalidConfig",
+  "spec": {
+    "dim_latent": 4,
+    "problem_embedding": [0.0, 0.0, 0.0, 0.0],
+    "population": [
+      { "template_code": "na-sem", "count": 4 }
+    ],
+    "max_rounds": 3,
+    "alignment_cone": {
+      "anchors": [
+        { "values": [1.0, 0.0, 0.0, 0.0] }
+      ],
+      "max_projection_distance": 0.15
+    }
+  },
+  "decode_mode": {
+    "text": { "max_tokens": 128 }
+  }
+}

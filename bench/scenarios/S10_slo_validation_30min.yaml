@@ -1,0 +1,56 @@
+# PR #21 § 7.10 — S10 : 30-min run validating all 4 STABILITY_CONTRACT
+# v1.1 SLOs.  Auto-publishes compliance evidence.
+
+schema_version: 1
+id: S10_slo_validation_30min
+description: "30-min SLO compliance validation — all 4 v1.1 targets"
+duration: "30m"
+
+cluster:
+  provisioner: kind
+  topology:
+    controller_replicas: 3
+    participant_replicas: 5
+
+loadgen:
+  version: 1
+  name: S10-loadgen
+  target:
+    endpoints:
+      - url: "grpc://efe-meta-swarm-controller.efe.svc:50051"
+        weight: 1.0
+    role: controller
+    conns_per_target: 8
+    per_request_deadline: "3s"
+  pattern:
+    type: constant
+    qps: 200
+  workload:
+    type: mixed
+    mix:
+      iterate: 0.95
+      state:   0.05
+  rate:
+    mode: hybrid
+    max_concurrency: 400
+  termination:
+    duration: "30m"
+    until_slo:
+      iterate-availability: 0.999
+      iterate-latency-p95:  1.0
+  run:
+    seed: 42
+    mode: staging
+
+chaos: []
+
+results:
+  collect_prom_snapshot: true
+
+tolerance:
+  # SLO scenario : strict targets matching STABILITY_CONTRACT v1.1 § 9.5.
+  p50_ms_max_delta_pct: 10
+  p95_ms_max_delta_pct: 10
+  p99_ms_max_delta_pct: 15
+  error_rate_max_delta_pp: 0.1
+  throughput_qps_min_delta_pct: -5

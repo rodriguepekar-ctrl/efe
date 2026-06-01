@@ -1,0 +1,222 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": "-- Grafana --",
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "title": "EFE — Φ-D-OPS Master Dashboard",
+  "tags": ["ops", "master", "phi-d-ops"],
+  "uid": "ops-master",
+  "schemaVersion": 38,
+  "version": 1,
+  "refresh": "30s",
+  "time": {"from": "now-24h", "to": "now"},
+  "timepicker": {},
+  "templating": {
+    "list": [
+      {
+        "name": "region",
+        "type": "query",
+        "label": "Region",
+        "query": "label_values(up, region)",
+        "refresh": 1,
+        "multi": true,
+        "includeAll": true
+      },
+      {
+        "name": "cloud",
+        "type": "query",
+        "label": "Cloud",
+        "query": "label_values(up, cloud)",
+        "refresh": 1,
+        "multi": true,
+        "includeAll": true
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Master Gate",
+      "type": "stat",
+      "gridPos": {"x": 0, "y": 0, "w": 6, "h": 4},
+      "targets": [
+        {"expr": "1 - max(efe_master_gate_failed)", "legendFormat": "Gate", "refId": "A"}
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "red", "value": 0},
+              {"color": "green", "value": 1}
+            ]
+          },
+          "mappings": [
+            {"options": {"0": {"text": "BLOCK"}, "1": {"text": "PASS"}}, "type": "value"}
+          ]
+        }
+      }
+    },
+    {
+      "id": 2,
+      "title": "30-day Availability",
+      "type": "stat",
+      "gridPos": {"x": 6, "y": 0, "w": 6, "h": 4},
+      "targets": [
+        {"expr": "efe:availability_ratio:rate72h", "legendFormat": "avail", "refId": "A"}
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "decimals": 4,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "red", "value": 0},
+              {"color": "yellow", "value": 0.999},
+              {"color": "green", "value": 0.9995}
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 3,
+      "title": "Mode-1 GPU p99 (ms)",
+      "type": "stat",
+      "gridPos": {"x": 12, "y": 0, "w": 6, "h": 4},
+      "targets": [{"expr": "efe:e2e_p99:mode1", "refId": "A"}],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": 0},
+              {"color": "yellow", "value": 200},
+              {"color": "red", "value": 280}
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 4,
+      "title": "Active Tenants",
+      "type": "stat",
+      "gridPos": {"x": 18, "y": 0, "w": 6, "h": 4},
+      "targets": [
+        {"expr": "sum(efe_tenant_state{state=\"active\"})", "refId": "A"}
+      ]
+    },
+    {
+      "id": 5,
+      "title": "Burn-rate matrix (4×3)",
+      "type": "heatmap",
+      "gridPos": {"x": 0, "y": 4, "w": 24, "h": 8},
+      "targets": [
+        {"expr": "efe:availability_burn:rate1h", "legendFormat": "1h", "refId": "A"},
+        {"expr": "efe:availability_burn:rate6h", "legendFormat": "6h", "refId": "B"},
+        {"expr": "efe:availability_burn:rate24h", "legendFormat": "24h", "refId": "C"},
+        {"expr": "efe:availability_burn:rate72h", "legendFormat": "72h", "refId": "D"}
+      ]
+    },
+    {
+      "id": 6,
+      "title": "105 Surface SLO heat-map",
+      "type": "table",
+      "gridPos": {"x": 0, "y": 12, "w": 24, "h": 8},
+      "targets": [
+        {"expr": "efe_master_surface_slo_status", "refId": "A"}
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {"displayMode": "color-background"},
+          "mappings": [
+            {"options": {"0": {"text": "FAIL", "color": "red"}}, "type": "value"},
+            {"options": {"1": {"text": "PASS", "color": "green"}}, "type": "value"},
+            {"options": {"2": {"text": "SKIP-DT", "color": "yellow"}}, "type": "value"}
+          ]
+        }
+      }
+    },
+    {
+      "id": 7,
+      "title": "Provision saga p95 (s)",
+      "type": "timeseries",
+      "gridPos": {"x": 0, "y": 20, "w": 12, "h": 8},
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(efe_saga_provision_seconds_bucket[5m])))",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "title": "Cost per tenant (USD / day)",
+      "type": "bargauge",
+      "gridPos": {"x": 12, "y": 20, "w": 12, "h": 8},
+      "targets": [
+        {"expr": "topk(20, sum by (tenant) (rate(efe_tenant_cost_usd_total[24h])) * 86400)", "refId": "A"}
+      ]
+    },
+    {
+      "id": 9,
+      "title": "Active incidents",
+      "type": "table",
+      "gridPos": {"x": 0, "y": 28, "w": 12, "h": 6},
+      "targets": [
+        {"expr": "ALERTS{alertstate=\"firing\", severity=~\"critical|major\"}", "refId": "A"}
+      ]
+    },
+    {
+      "id": 10,
+      "title": "Last 5 releases",
+      "type": "table",
+      "gridPos": {"x": 12, "y": 28, "w": 12, "h": 6},
+      "targets": [
+        {"expr": "topk(5, efe_release_completed_at_seconds)", "refId": "A"}
+      ]
+    },
+    {
+      "id": 11,
+      "title": "Multi-cloud parity (variance %)",
+      "type": "timeseries",
+      "gridPos": {"x": 0, "y": 34, "w": 12, "h": 8},
+      "targets": [
+        {"expr": "efe_cloud_parity_max_variance_ratio * 100", "refId": "A"}
+      ]
+    },
+    {
+      "id": 12,
+      "title": "Audit chain gaps (24h)",
+      "type": "stat",
+      "gridPos": {"x": 12, "y": 34, "w": 12, "h": 8},
+      "targets": [
+        {"expr": "max_over_time(efe_audit_chain_gap_count[24h])", "refId": "A"}
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": 0},
+              {"color": "red", "value": 1}
+            ]
+          }
+        }
+      }
+    }
+  ]
+}

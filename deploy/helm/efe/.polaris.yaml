@@ -1,0 +1,83 @@
+# Sprint D21 (Φ-A) — Polaris validation config for the EFE Helm chart.
+#
+# Cf. docs/EFE_HELM_CHART_EXTENSION_ARCHITECTURE.md §9.3.
+#
+# Polaris (Fairwinds) validates rendered K8s manifests against
+# best-practices. M12 v1.0 GA target : 0 dangers across all
+# 3 values profiles (default + staging + prod).
+#
+# Usage in CI :
+#   helm template deploy/helm/efe/ -f deploy/helm/efe/values.prod.yaml > /tmp/manifests.yaml
+#   polaris audit --audit-path /tmp/manifests.yaml --severity danger --output-format pretty
+#
+# severity levels :
+#   - danger  : blocking ; M12 must be 0 dangers.
+#   - warning : non-blocking but tracked ; documented exemptions only.
+#   - ignore  : volontairement désactivé ; justification dans le bloc exemptions.
+#
+# CURRENT TALLY (post-audit M12-A5) :
+#   - 9 checks at danger (hostNetworkSet, hostPIDSet, hostIPCSet,
+#     hostPortSet, privilegeEscalationAllowed, runAsRootAllowed,
+#     runAsPrivileged, dangerousCapabilities, tagNotSpecified)
+#   - 12 checks at warning
+#   - 1 check at ignore (priorityClassNotSet — operator-specific)
+#
+# Pin tested by `test_m12_helm_extension_polaris_config_present`.
+# Pin tested by `test_m12_helm_extension_polaris_dangers_pinned`
+# (verifies the 9-danger list is structurally pinned).
+
+# Polaris config schema version (pinned to avoid silent tightening on Polaris bumps).
+checks:
+  # ─── Security ───
+  hostNetworkSet: danger
+  hostPIDSet: danger
+  hostIPCSet: danger
+  hostPortSet: danger
+  notReadOnlyRootFilesystem: warning
+  privilegeEscalationAllowed: danger
+  runAsRootAllowed: danger
+  runAsPrivileged: danger
+  dangerousCapabilities: danger
+  insecureCapabilities: warning
+  automountServiceAccountToken: warning
+  linuxHardening: warning
+
+  # ─── Reliability ───
+  cpuRequestsMissing: warning
+  cpuLimitsMissing: warning
+  memoryRequestsMissing: warning
+  memoryLimitsMissing: warning
+  livenessProbeMissing: warning
+  readinessProbeMissing: warning
+  pullPolicyNotAlways: warning
+  tagNotSpecified: danger
+  priorityClassNotSet: ignore   # M12 doesn't enforce PriorityClass (operator-specific).
+
+  # ─── Networking ───
+  hostAliasesSet: warning
+
+# Per-controller exemptions : justified per-resource.
+exemptions:
+  # CronJobs are exempt from probe / QoS checks (short-lived, pre-scheduled).
+  - controllerNames:
+      - efe-backup
+      - efe-dr-drill
+      - efe-dr-drill-quarterly
+      - efe-bundle-reload
+    rules:
+      - cpuLimitsMissing
+      - memoryLimitsMissing
+      - livenessProbeMissing
+      - readinessProbeMissing
+
+  # Helm-managed test pods (templates/tests/) are short-lived smoke tests.
+  - controllerNames:
+      - efe-test-connection
+      - efe-test-networkpolicy
+      - efe-test-mtls-handshake
+      - efe-test-bundle-reload
+    rules:
+      - cpuLimitsMissing
+      - memoryLimitsMissing
+      - livenessProbeMissing
+      - readinessProbeMissing

@@ -1,0 +1,3 @@
+{"schema_version":2,"scenario_id":"CB-01_events_append_throughput","metric_name":"append_p50_ms","observed":3.2,"verdict":"PASS","applied_at":"2025-10-01T03:14:00Z"}
+{"schema_version":2,"scenario_id":"CB-01_events_append_throughput","metric_name":"append_p99_ms","observed":18,"verdict":"PASS","applied_at":"2025-10-01T03:14:01Z"}
+{"schema_version":2,"scenario_id":"CB-01_events_append_throughput","metric_name":"append_rate_per_sec","observed":62000,"verdict":"PASS","applied_at":"2025-10-01T03:14:02Z"}

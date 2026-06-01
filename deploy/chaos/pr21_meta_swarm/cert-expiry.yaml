@@ -1,0 +1,21 @@
+# PR #21 § 8.3 — cert-manager-driven rotation (PodChaos exec + script).
+#
+# chaos-mesh PodChaos with action=exec — runs a small kubectl command
+# inside the cert-manager pod that recreates the Certificate CRD with
+# a 2-minute validity.  cert-manager re-issues immediately, exercising
+# the controller's inotify-driven cert reload (PR #16).
+apiVersion: chaos-mesh.org/v1alpha1
+kind: PodChaos
+metadata:
+  name: cert-rotation
+  namespace: ${BENCH_NAMESPACE}
+spec:
+  action: pod-failure
+  mode: one
+  selector:
+    labelSelectors:
+      app.kubernetes.io/name: cert-manager
+  duration: "30s"
+# Phase-2 stub : an upstream kubectl-exec wrapper recreates the
+# Certificate manifest with renewBefore tuned to fire immediately.
+# Real implementation lands when cert-manager exposes an admin RPC.

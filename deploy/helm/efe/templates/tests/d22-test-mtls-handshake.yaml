@@ -1,0 +1,104 @@
+{{- /*
+Sprint D22 (Φ-B) — helm test Pod : verify mTLS Secret is present + valid.
+
+Run via : helm test <release> -n <namespace>
+
+This Pod mounts the cert-manager-generated Secret + verifies :
+  1. The Secret exists.
+  2. The cert is parsable via `openssl x509 -text -noout`.
+  3. The cert SANs match the configured `.Values.mtls.dnsNames`.
+
+Pin tested by `test_m12_helm_extension_test_pod_mtls_present`.
+*/}}
+{{- if and .Values.mtls.enabled (default false .Values.tests.mtls.enabled) }}
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ include "efe.fullname" . }}-test-mtls-handshake
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "efe.labels" . | nindent 4 }}
+    efe.io/sprint: D22
+  annotations:
+    helm.sh/hook: test
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+spec:
+  restartPolicy: Never
+  serviceAccountName: default
+  automountServiceAccountToken: false
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 65532
+    fsGroup: 65532
+    seccompProfile:
+      type: RuntimeDefault
+  containers:
+    - name: test
+      image: alpine/openssl:3.3.0
+      securityContext:
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: true
+        capabilities:
+          drop:
+            - ALL
+      command:
+        - /bin/sh
+        - -c
+        - |
+          set -euo pipefail
+          echo "[$(date -u +%FT%TZ)] D22 mTLS handshake test"
+
+          # 1. Secret must exist + contain tls.crt + tls.key + ca.crt.
+          for f in tls.crt tls.key ca.crt; do
+            if [ ! -s /tls/${f} ]; then
+              echo "❌ FAIL : /tls/${f} missing or empty"
+              exit 1
+            fi
+            echo "✅ /tls/${f} present"
+          done
+
+          # 2. tls.crt must be parsable.
+          if ! openssl x509 -in /tls/tls.crt -noout -text > /tmp/cert.txt; then
+            echo "❌ FAIL : tls.crt not parsable as X.509"
+            exit 1
+          fi
+          echo "✅ tls.crt parses as X.509"
+
+          # 3. SANs must include at least one entry matching the service name.
+          EXPECTED="{{ include "efe.fullname" . }}.{{ .Release.Namespace }}.svc.cluster.local"
+          if grep -q "${EXPECTED}" /tmp/cert.txt; then
+            echo "✅ SANs include ${EXPECTED}"
+          else
+            echo "❌ FAIL : SANs do not include ${EXPECTED}"
+            exit 1
+          fi
+
+          echo "✅ D22 mTLS handshake test PASS"
+          exit 0
+      volumeMounts:
+        - name: tls
+          mountPath: /tls
+          readOnly: true
+        - name: tmp
+          mountPath: /tmp
+      resources:
+        requests:
+          cpu: 10m
+          memory: 32Mi
+        limits:
+          cpu: 100m
+          memory: 64Mi
+  volumes:
+    - name: tls
+      secret:
+        secretName: {{ include "efe.mtls.secretName" . }}
+        items:
+          - key: tls.crt
+            path: tls.crt
+          - key: tls.key
+            path: tls.key
+          - key: ca.crt
+            path: ca.crt
+    - name: tmp
+      emptyDir: {}
+{{- end }}

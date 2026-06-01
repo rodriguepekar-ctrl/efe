@@ -1,0 +1,71 @@
+{{- if .Values.cronjobs.monthly.enabled -}}
+{{- include "efe-slo-rollup.validate" . -}}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "efe-slo-rollup.fullname" . }}-monthly
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "efe-slo-rollup.labels" . | nindent 4 }}
+    slo.efe/cronjob: monthly
+spec:
+  schedule: "{{ .Values.cronjobs.monthly.schedule }}"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 0
+      template:
+        metadata:
+          labels:
+            {{- include "efe-slo-rollup.selectorLabels" . | nindent 12 }}
+            slo.efe/cronjob: monthly
+        spec:
+          restartPolicy: Never
+          serviceAccountName: {{ include "efe-slo-rollup.serviceAccountName" . }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          containers:
+            - name: rollup
+              image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+              imagePullPolicy: {{ .Values.image.pullPolicy }}
+              securityContext:
+                {{- toYaml .Values.containerSecurityContext | nindent 16 }}
+              # Period is rendered at apply-time via a wrapper script
+              # that resolves $(date -u +%Y-%m -d 'last month').
+              command: ["/bin/sh", "-c"]
+              args:
+                - |
+                  set -e
+                  PERIOD=$(date -u -d '1 day ago' +%Y-%m)
+                  /usr/local/bin/efe-slo-rollup rollup \
+                    --stage t2 \
+                    --period "$PERIOD" \
+                    --chart-version "{{ .Values.chartVersion }}" \
+                    --region "{{ .Values.region }}" \
+                    --storage-root /var/run/slos \
+                    --cosign-disabled
+              env:
+                - name: RUST_LOG
+                  value: "info"
+              resources:
+                {{- toYaml .Values.cronjobs.monthly.resources | nindent 16 }}
+              volumeMounts:
+                - name: data
+                  mountPath: /var/run/slos
+                - name: tmp
+                  mountPath: /tmp
+          volumes:
+            - name: data
+              {{- if .Values.storage.pvc.enabled }}
+              persistentVolumeClaim:
+                claimName: {{ include "efe-slo-rollup.fullname" . }}-data
+              {{- else }}
+              emptyDir: {}
+              {{- end }}
+            - name: tmp
+              emptyDir:
+                medium: Memory
+                sizeLimit: 64Mi
+{{- end -}}

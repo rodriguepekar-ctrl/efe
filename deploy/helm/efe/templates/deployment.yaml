@@ -1,0 +1,368 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "efe.fullname" . }}
+  labels: {{- include "efe.labels" . | nindent 4 }}
+spec:
+  # When HPA is enabled, `replicas` must be unset so HPA can manage it;
+  # otherwise the Helm-rendered value fights the HPA controller.
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.replicaCount }}
+  {{- end }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    # IMMUTABLE — must remain a stable subset of the pod template
+    # labels. Adding new labels here (e.g. tenant) would break
+    # `helm upgrade` since `Deployment.spec.selector` cannot change.
+    matchLabels: {{- include "efe.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{/* Sprint D9.A9 fix — pod template MUST carry the full
+        ``efe.labels`` set (selectorLabels + tenant + version + chart),
+        otherwise the ``app.kubernetes.io/tenant`` label added to
+        ``efe.labels`` does not reach the pods. D11 multi-tenant
+        ResourceQuotas / NetworkPolicies select on pod labels.
+        Cross-checked by ``scripts/tests/test_d9_helm_label_propagation.py``. */}}
+        {{- include "efe.labels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      annotations:
+        # Any ConfigMap change triggers a rolling restart — essential
+        # because efe-server only reads env vars at boot.
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        prometheus.io/scrape: "true"
+        prometheus.io/port: {{ .Values.service.metricsPort | quote }}
+        prometheus.io/path: "/metrics"
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      serviceAccountName: {{ include "efe.serviceAccountName" . }}
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
+      securityContext: {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: efe
+          image: {{ include "efe.image" . | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext: {{- toYaml .Values.securityContext | nindent 12 }}
+          ports:
+            - name: grpc
+              containerPort: {{ .Values.service.grpcPort }}
+              protocol: TCP
+            - name: metrics
+              containerPort: {{ .Values.service.metricsPort }}
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: {{ include "efe.fullname" . }}-config
+          {{- /*
+            Sprint D14 audit fix L4 — render `env:` only when there is
+            actually content to put in it (PG password injection or
+            extraEnv). Pre-fix, `env:` was rendered unconditionally with
+            an empty body when the operator was on memory mode without
+            extraEnv ; Kubernetes parsed it as `null` (functionally
+            equivalent to no env block) but the YAML output was
+            ambiguous and broke `kubectl get -o yaml | yq` round-trips.
+
+            The conditional now wraps the entire env block. The
+            inner if-elseif-else chain inside picks one of three
+            password-source paths (cf. comment below).
+          */}}
+          {{- $needsEnv := or (eq .Values.config.catalog.backend "postgres") .Values.extraEnv }}
+          {{- if $needsEnv }}
+          env:
+            {{- /*
+              Sprint D14 — inject EFE_PG_PASSWORD from a Secret when
+              backend=postgres. The Secret can be supplied three ways
+              (in priority order) :
+                1. existingSecretName  — name of an in-cluster Secret
+                                          owned by the operator.
+                2. externalSecretName  — left to external-secrets
+                                          operator (out-of-chart).
+                3. password (inline)  — Tier 1 only ; rendered
+                                         literally so visible in
+                                         `kubectl describe pod`.
+            */}}
+            {{- if eq .Values.config.catalog.backend "postgres" }}
+              {{- if .Values.config.catalog.postgres.existingSecretName }}
+            - name: EFE_PG_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.config.catalog.postgres.existingSecretName | quote }}
+                  key:  {{ .Values.config.catalog.postgres.existingSecretKey | default "password" | quote }}
+              {{- else if .Values.config.catalog.postgres.externalSecretName }}
+            - name: EFE_PG_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.config.catalog.postgres.externalSecretName | quote }}
+                  key:  {{ .Values.config.catalog.postgres.existingSecretKey | default "password" | quote }}
+              {{- else if .Values.config.catalog.postgres.password }}
+            - name: EFE_PG_PASSWORD
+              value: {{ .Values.config.catalog.postgres.password | quote }}
+              {{- end }}
+            {{- end }}
+            {{- with .Values.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          {{- end }}
+          livenessProbe:
+            {{- include "efe.grpcHealthProbe" (dict "Values" .Values "probe" .Values.livenessProbe) | nindent 12 }}
+          readinessProbe:
+            {{- include "efe.grpcHealthProbe" (dict "Values" .Values "probe" .Values.readinessProbe) | nindent 12 }}
+          startupProbe:
+            {{- include "efe.grpcHealthProbe" (dict "Values" .Values "probe" .Values.startupProbe) | nindent 12 }}
+          {{- /*
+            **Audit fix K-A3 (Φ-D)** — when ``runtime.gpuEnabled=true``
+            we inject ``nvidia.com/gpu: <count>`` into both
+            ``requests`` and ``limits`` so the K8s scheduler routes
+            the pod to a GPU-enabled node and the NVIDIA device
+            plugin attaches the device(s). The merge happens via
+            Helm's deepCopy + mergeOverwrite so operator-supplied
+            ``resources`` values still win for cpu/memory.
+          */}}
+          {{- if and .Values.runtime .Values.runtime.gpuEnabled }}
+          resources:
+            {{- $gpuCount := default 1 .Values.runtime.gpuCount }}
+            {{- $base := deepCopy .Values.resources }}
+            {{- $_ := set (default (dict) (index $base "requests")) "nvidia.com/gpu" $gpuCount }}
+            {{- $_ := set (default (dict) (index $base "limits"))   "nvidia.com/gpu" $gpuCount }}
+            {{- toYaml $base | nindent 12 }}
+          {{- else }}
+          resources: {{- toYaml .Values.resources | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            # Writable scratch directory (the root FS is read-only).
+            - name: tmp
+              mountPath: /tmp
+            {{- if include "efe.secretsName" . }}
+            - name: secrets
+              mountPath: /etc/efe/secrets
+              readOnly: true
+            {{- end }}
+            {{- if .Values.audit.persistence.enabled }}
+            - name: audit
+              mountPath: {{ .Values.audit.persistence.mountPath }}
+            {{- end }}
+            {{- /*
+              Sprint D14-bis — mount the HMAC keys file when audit
+              signing is enabled. The mountPath is the *directory* of
+              the keysFile ; the file inside is named "hmac.keys".
+            */}}
+            {{- if and (eq .Values.config.catalog.backend "postgres") .Values.config.catalog.audit.signing.enabled .Values.config.catalog.audit.signing.existingSecretName }}
+            - name: audit-hmac
+              mountPath: /etc/efe/secrets/audit-hmac
+              readOnly: true
+            {{- end }}
+            {{- /*
+              Sprint D15 — mount the OIDC issuers JSON when OIDC is on.
+              The Secret is opaque, single-key (`oidc-issuers.json`),
+              read-only, mode 0400.
+
+              **Audit fix D15-M7** — the pre-audit version mounted the
+              Secret at `/etc/efe` (shadowing the parent dir). When
+              both OIDC and audit-hmac were enabled, the kubelet had to
+              juggle nested mounts at `/etc/efe`, `/etc/efe/secrets`,
+              `/etc/efe/secrets/audit-hmac` — which produced confusing
+              error messages on some kubelet versions. We now mount at
+              the dedicated `/etc/efe/oidc/` sub-directory ; the file
+              path becomes `/etc/efe/oidc/oidc-issuers.json` (operators
+              must reflect this in `EFE_OIDC_ISSUERS_FILE`).
+            */}}
+            {{- if and .Values.config.auth.oidc.enabled .Values.config.auth.oidc.existingSecretName }}
+            - name: oidc-issuers
+              mountPath: /etc/efe/oidc
+              readOnly: true
+            {{- end }}
+            {{- /*
+              Sprint D16 — mount the embedder bundle when
+              `backend: bundle` AND an existing Secret is named.
+              The Secret carries the WHOLE bundle as a multi-key
+              Secret (one key per file in the bundle). The mount
+              projection turns it into a directory tree at
+              `bundle.path`.
+            */}}
+            {{- if and (eq .Values.config.embedder.backend "bundle") .Values.config.embedder.bundle.existingSecretName }}
+            - name: embedder-bundle
+              mountPath: {{ .Values.config.embedder.bundle.path | quote }}
+              readOnly: true
+            {{- end }}
+            {{- /*
+              Sprint D16 — mount the bundle trust store
+              (pubkeys.json) at the path configured by
+              `bundle.trustStorePath`.
+            */}}
+            {{- if and (eq .Values.config.embedder.backend "bundle") .Values.config.embedder.bundle.trustStoreSecretName }}
+            - name: embedder-trust
+              mountPath: {{ .Values.config.embedder.bundle.trustStorePath | quote }}
+              subPath: pubkeys.json
+              readOnly: true
+            {{- end }}
+            {{- with .Values.extraVolumeMounts }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        {{- if include "efe.secretsName" . }}
+        - name: secrets
+          secret:
+            secretName: {{ include "efe.secretsName" . }}
+            defaultMode: 0400
+        {{- end }}
+        {{- if .Values.audit.persistence.enabled }}
+        - name: audit
+          persistentVolumeClaim:
+            claimName: {{ include "efe.fullname" . }}-audit
+        {{- end }}
+        {{- /*
+          Sprint D14-bis — Secret-backed volume for the HMAC keys.
+          Mounted file path: /etc/efe/secrets/audit-hmac/hmac.keys.
+        */}}
+        {{- if and (eq .Values.config.catalog.backend "postgres") .Values.config.catalog.audit.signing.enabled .Values.config.catalog.audit.signing.existingSecretName }}
+        - name: audit-hmac
+          secret:
+            secretName: {{ .Values.config.catalog.audit.signing.existingSecretName | quote }}
+            defaultMode: 0400
+            items:
+              - key: {{ .Values.config.catalog.audit.signing.existingSecretKey | default "hmac.keys" | quote }}
+                path: hmac.keys
+        {{- end }}
+        {{- /*
+          Sprint D15 — Secret-backed volume for the OIDC issuers
+          descriptor. Single-key Secret ; `oidc-issuers.json` is
+          mounted at `/etc/efe/oidc/oidc-issuers.json` (post audit-fix
+          D15-M7 — the previous mount at the bare `/etc/efe` path
+          shadowed sibling secret mounts ; the sub-directory mount
+          isolates the OIDC volume).
+        */}}
+        {{- if and .Values.config.auth.oidc.enabled .Values.config.auth.oidc.existingSecretName }}
+        - name: oidc-issuers
+          secret:
+            secretName: {{ .Values.config.auth.oidc.existingSecretName | quote }}
+            defaultMode: 0400
+            items:
+              - key: {{ .Values.config.auth.oidc.existingSecretKey | default "oidc-issuers.json" | quote }}
+                path: oidc-issuers.json
+        {{- end }}
+        {{- /*
+          Sprint D16 — Secret-backed volume for the embedder bundle.
+          Multi-key Secret : every file of the bundle (manifest.json,
+          manifest.json.sig, weights/, tokenizer/, …) is a Secret
+          key. Kubernetes projects this into a directory tree.
+        */}}
+        {{- if and (eq .Values.config.embedder.backend "bundle") .Values.config.embedder.bundle.existingSecretName }}
+        - name: embedder-bundle
+          secret:
+            secretName: {{ .Values.config.embedder.bundle.existingSecretName | quote }}
+            defaultMode: 0444
+        {{- end }}
+        {{- /*
+          Sprint D16 — Secret-backed volume for the bundle trust
+          store (pubkeys.json). Single-key Secret.
+        */}}
+        {{- if and (eq .Values.config.embedder.backend "bundle") .Values.config.embedder.bundle.trustStoreSecretName }}
+        - name: embedder-trust
+          secret:
+            secretName: {{ .Values.config.embedder.bundle.trustStoreSecretName | quote }}
+            defaultMode: 0400
+            items:
+              - key: pubkeys.json
+                path: pubkeys.json
+        {{- end }}
+        {{- with .Values.extraVolumes }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- /*
+        **Audit fix K-A3 (Φ-D)** — GPU pods need a nodeSelector that
+        matches the NVIDIA device plugin's labels. We MERGE the
+        operator-supplied ``nodeSelector`` with the GPU selector
+        (if ``runtime.gpuEnabled=true``) so single-tenant ops can
+        still constrain placement (e.g. zone) without losing the
+        GPU constraint.
+      */}}
+      {{- $gpuOn := and .Values.runtime .Values.runtime.gpuEnabled }}
+      {{- $nodeSel := default (dict) .Values.nodeSelector }}
+      {{- if $gpuOn }}
+      {{- $gpuNodeSel := default (dict) .Values.runtime.nodeSelector }}
+      {{- $nodeSel = merge (deepCopy $nodeSel) $gpuNodeSel }}
+      {{- end }}
+      {{- if $nodeSel }}
+      nodeSelector: {{- toYaml $nodeSel | nindent 8 }}
+      {{- end }}
+      {{- /*
+        Tolerations : same merge logic (operator + GPU defaults).
+      */}}
+      {{- $tolerations := default (list) .Values.tolerations }}
+      {{- if $gpuOn }}
+      {{- $gpuTols := default (list) .Values.runtime.tolerations }}
+      {{- $tolerations = concat $tolerations $gpuTols }}
+      {{- end }}
+      {{- if $tolerations }}
+      tolerations: {{- toYaml $tolerations | nindent 8 }}
+      {{- end }}
+      {{- /*
+        Optional NVIDIA runtime class injection. Some clusters need
+        ``runtimeClassName: nvidia`` to load libcuda.so. Default
+        empty string leaves the field unset (uses the cluster default).
+      */}}
+      {{- if and $gpuOn .Values.runtime.runtimeClassName }}
+      runtimeClassName: {{ .Values.runtime.runtimeClassName | quote }}
+      {{- end }}
+      {{- /*
+        **Audit fix D18-A2** — fold the D18 top-level
+        ``podAntiAffinity`` block into the K8s ``affinity`` stanza
+        alongside the legacy ``Values.affinity`` rendering. Pre-fix
+        the operator's ``Values.podAntiAffinity.enabled = true``
+        toggle was silently dropped because no deployment template
+        consumed it.
+
+        Precedence : if ``Values.affinity`` is set, it wins (legacy
+        path). Otherwise the D18 block synthesises a
+        ``preferredDuringSchedulingIgnoredDuringExecution`` term so
+        replicas spread across nodes per architecture § 9.
+      */}}
+      {{- if .Values.affinity }}
+      affinity: {{- toYaml .Values.affinity | nindent 8 }}
+      {{- else if and .Values.podAntiAffinity .Values.podAntiAffinity.enabled }}
+      affinity:
+        podAntiAffinity:
+          {{- if eq (default "preferredDuringSchedulingIgnoredDuringExecution" .Values.podAntiAffinity.type) "preferredDuringSchedulingIgnoredDuringExecution" }}
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: {{ default 100 .Values.podAntiAffinity.weight }}
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels: {{- include "efe.selectorLabels" . | nindent 20 }}
+                topologyKey: kubernetes.io/hostname
+          {{- else }}
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchLabels: {{- include "efe.selectorLabels" . | nindent 18 }}
+              topologyKey: kubernetes.io/hostname
+          {{- end }}
+      {{- end }}
+      {{- /*
+        **Audit fix D18-A2** — also consume the D18 top-level
+        ``topologySpreadConstraints`` block so replicas distribute
+        across availability zones (architecture § 9.1). Identical
+        precedence rule : explicit operator override wins, otherwise
+        the D18 default zone-spread renders.
+      */}}
+      {{- if .Values.topologySpreadConstraints }}
+      {{- if .Values.topologySpreadConstraints.enabled }}
+      topologySpreadConstraints:
+        - maxSkew: {{ default 1 .Values.topologySpreadConstraints.maxSkew }}
+          topologyKey: {{ default "topology.kubernetes.io/zone" .Values.topologySpreadConstraints.topologyKey | quote }}
+          whenUnsatisfiable: {{ default "ScheduleAnyway" .Values.topologySpreadConstraints.whenUnsatisfiable | quote }}
+          labelSelector:
+            matchLabels: {{- include "efe.selectorLabels" . | nindent 14 }}
+      {{- end }}
+      {{- end }}

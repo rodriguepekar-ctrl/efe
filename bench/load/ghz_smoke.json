@@ -1,0 +1,21 @@
+{
+  "_comment": "Sprint D9 — smoke load scenario. Cf. docs/bench/d9_docker_helm_load_architecture.md §5.2 + d9_deep_analysis_supplement.md §1.1. Goal: a fast (30 s) Go/No-Go pre-prod liveness check. Single concurrent request, 1 RPS target, no-cache (D9.A2). NOT used for SLO gating — SLO targets attached to sustained / stress / spike scenarios.",
+  "proto": "../../protos/efe/v1/efe.proto",
+  "import-paths": ["../../protos"],
+  "call": "efe.v1.SwarmService/Execute",
+  "host": "127.0.0.1:50051",
+  "insecure": true,
+  "concurrency": 1,
+  "rps": 1,
+  "duration": "30s",
+  "timeout": "10s",
+  "data-file": "fixtures/sample_request.json",
+  "metadata": {
+    "x-load-test-scenario": "smoke",
+    "x-tenant-id": "load-bench"
+  },
+  "skip-first": 5,
+  "format": "json",
+  "output": "/dev/stdout",
+  "_skip_first_explanation": "Drop the first 5 responses from p99 statistics — they capture the JIT / cache-warm spike which is not representative of steady-state latency."
+}

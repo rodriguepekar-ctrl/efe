@@ -1,0 +1,58 @@
+{{- /*
+  Sprint D17 — egress NetworkPolicy for backup traffic.
+
+  When `backup.enabled = true`, the backup pods need outbound
+  access to :
+    * S3 endpoint (HTTPS port 443) for pgBackRest + Vault upload + rclone
+    * Vault HTTP API (cluster-internal pod port 8200)
+    * Postgres primary (cluster-internal pod port 5432)
+
+  Without this rule, the cluster's default-deny policy blocks every
+  egress and backups silently fail.
+
+  Cf. `docs/bench/d17_backup_dr_architecture.md` § 21.3.
+*/}}
+{{- if .Values.backup.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "efe.fullname" . }}-backup-egress
+  labels: {{- include "efe.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/component: backup
+  policyTypes: [Egress]
+  egress:
+    # DNS — required for resolving s3.<region>.amazonaws.com.
+    - to:
+        - namespaceSelector: {}
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    # S3 endpoint over HTTPS.
+    - to:
+        - namespaceSelector: {}
+      ports:
+        - protocol: TCP
+          port: 443
+    # Vault (intra-cluster).
+    - to:
+        - podSelector:
+            matchLabels:
+              app: vault
+      ports:
+        - protocol: TCP
+          port: 8200
+    # Postgres primary (intra-cluster).
+    - to:
+        - podSelector:
+            matchLabels:
+              role: primary
+              app.kubernetes.io/name: postgres
+      ports:
+        - protocol: TCP
+          port: 5432
+{{- end }}

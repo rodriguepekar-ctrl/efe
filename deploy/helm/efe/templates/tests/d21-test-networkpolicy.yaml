@@ -1,0 +1,82 @@
+{{- /*
+Sprint D21 (Φ-A) — helm test Pod : verify NetworkPolicy strict
+denies non-tenant ingress.
+
+Run via : helm test <release> -n <namespace>
+
+This Pod runs `wget` against the efe-server admin port FROM A POD
+LABELED WITH `efe.io/tenant=invalid`. With the strict NetworkPolicy
+in place, the connection should TIMEOUT (denied by network policy).
+
+Pin tested by `test_m12_helm_extension_test_pod_networkpolicy_present`.
+*/}}
+{{- if and .Values.networkPolicyStrict.enabled .Values.tests.networkPolicy.enabled }}
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ include "efe.fullname" . }}-test-networkpolicy
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "efe.labels" . | nindent 4 }}
+    efe.io/tenant: "invalid-test-tenant"
+    efe.io/sprint: D21
+  annotations:
+    helm.sh/hook: test
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+spec:
+  restartPolicy: Never
+  serviceAccountName: default
+  automountServiceAccountToken: false
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 65532
+    seccompProfile:
+      type: RuntimeDefault
+  containers:
+    - name: test
+      image: busybox:1.36
+      securityContext:
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: true
+        capabilities:
+          drop:
+            - ALL
+      command:
+        - /bin/sh
+        - -c
+        - |
+          set -uo pipefail
+          echo "[$(date -u +%FT%TZ)] D21 NetworkPolicy strict test"
+          # Audit fix M12-A1 (CRIT) — pre-fix this used `service.grpcPort`
+          # (50051) with HTTP `wget`. gRPC speaks HTTP/2 + protobuf, NOT
+          # HTTP/1.1, so wget ALWAYS failed regardless of NetworkPolicy
+          # state — the test was non-discriminant (passed even when the
+          # strict NP was disabled). Post-fix uses `service.metricsPort`
+          # (9090, Prometheus HTTP plaintext) :
+          #   * Without strict NP : `/metrics` responds 200 OK with
+          #     metrics body → wget succeeds → test FAILS (correctly,
+          #     since NP is supposed to deny non-tenant ingress).
+          #   * With strict NP : ingress on metricsPort allowed ONLY
+          #     from `monitoringSelector` (kube-prometheus-stack). This
+          #     test pod lives in the release namespace and is labeled
+          #     `efe.io/tenant: invalid-test-tenant`, matching neither
+          #     monitoringSelector nor tenantSelector → connection
+          #     denied → wget timeout → test PASSES.
+          TARGET="http://{{ include "efe.fullname" . }}:{{ .Values.service.metricsPort | default 9090 }}/metrics"
+          echo "Attempting wget to ${TARGET} from non-tenant pod..."
+          # We expect this to TIMEOUT (denied by NetworkPolicy strict).
+          if wget --timeout=10 -qO- "${TARGET}" >/dev/null 2>&1; then
+            echo "❌ FAIL : non-tenant pod was able to connect — NetworkPolicy strict NOT enforced"
+            exit 1
+          else
+            echo "✅ PASS : non-tenant pod was correctly denied (wget exit non-zero)"
+            exit 0
+          fi
+      resources:
+        requests:
+          cpu: 10m
+          memory: 16Mi
+        limits:
+          cpu: 50m
+          memory: 32Mi
+{{- end }}

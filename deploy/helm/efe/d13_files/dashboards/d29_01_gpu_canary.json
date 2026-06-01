@@ -1,0 +1,226 @@
+{
+  "__inputs": [],
+  "__requires": [
+    {"type": "grafana", "id": "grafana", "name": "Grafana", "version": "10.2.0"},
+    {"type": "datasource", "id": "prometheus", "name": "Prometheus", "version": "1.0.0"}
+  ],
+  "uid": "efe-d29-01-gpu-canary",
+  "title": "EFE — 01 GPU Canary (Sprint D29)",
+  "description": "Sprint D29 — GPU runtime observability + HybridFusion canary divergence tracking. Cf. docs/EFE_TELEMETRY_EXTENSION_ARCHITECTURE.md § 9.5. Instruments : efe_gpu_kernel_duration_seconds, efe_gpu_memory_used_bytes, efe_gpu_utilization_ratio, efe_gpu_kernel_calls_total, efe_gpu_oom_total, efe_gpu_nccl_allreduce_seconds.",
+  "tags": ["efe", "d29", "gpu", "canary"],
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "time": {"from": "now-1h", "to": "now"},
+  "timepicker": {"refresh_intervals": ["30s", "1m", "5m", "15m", "1h"]},
+  "graphTooltip": 1,
+  "templating": {
+    "list": [
+      {
+        "name": "datasource",
+        "type": "datasource",
+        "query": "prometheus",
+        "current": {"text": "Prometheus", "value": "Prometheus"}
+      },
+      {
+        "name": "device",
+        "type": "query",
+        "datasource": {"type": "prometheus", "uid": "$datasource"},
+        "query": "label_values(efe_gpu_memory_used_bytes, device)",
+        "includeAll": true,
+        "multi": true,
+        "refresh": 2,
+        "sort": 1,
+        "label": "GPU Device"
+      },
+      {
+        "name": "kernel",
+        "type": "query",
+        "datasource": {"type": "prometheus", "uid": "$datasource"},
+        "query": "label_values(efe_gpu_kernel_duration_seconds_bucket, kernel)",
+        "includeAll": true,
+        "multi": true,
+        "refresh": 2,
+        "sort": 1,
+        "label": "Kernel"
+      }
+    ]
+  },
+  "panels": [
+    {
+      "type": "row",
+      "id": 1,
+      "title": "GPU Utilization & Memory",
+      "gridPos": {"x": 0, "y": 0, "w": 24, "h": 1}
+    },
+    {
+      "type": "timeseries",
+      "id": 2,
+      "title": "GPU Utilization (%)",
+      "datasource": {"type": "prometheus", "uid": "$datasource"},
+      "gridPos": {"x": 0, "y": 1, "w": 12, "h": 7},
+      "targets": [{
+        "expr": "efe_gpu_utilization_ratio{device=~\"$device\"}",
+        "legendFormat": "GPU {{device}}",
+        "refId": "A"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100
+        }
+      },
+      "description": "GPU utilization sampled by NVML probe (D31). Stays at 0 until D31 ships."
+    },
+    {
+      "type": "timeseries",
+      "id": 3,
+      "title": "GPU VRAM Used (bytes)",
+      "datasource": {"type": "prometheus", "uid": "$datasource"},
+      "gridPos": {"x": 12, "y": 1, "w": 12, "h": 7},
+      "targets": [{
+        "expr": "efe_gpu_memory_used_bytes{device=~\"$device\"}",
+        "legendFormat": "GPU {{device}}",
+        "refId": "A"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes"
+        }
+      },
+      "description": "VRAM bytes currently allocated by efe-kernels. Compare to total HBM (16 GiB on T4)."
+    },
+    {
+      "type": "row",
+      "id": 4,
+      "title": "Kernel Latency",
+      "gridPos": {"x": 0, "y": 8, "w": 24, "h": 1}
+    },
+    {
+      "type": "heatmap",
+      "id": 5,
+      "title": "Kernel Latency Heatmap (s)",
+      "datasource": {"type": "prometheus", "uid": "$datasource"},
+      "gridPos": {"x": 0, "y": 9, "w": 12, "h": 8},
+      "targets": [{
+        "expr": "sum(rate(efe_gpu_kernel_duration_seconds_bucket{kernel=~\"$kernel\"}[1m])) by (le, kernel)",
+        "format": "heatmap",
+        "legendFormat": "{{kernel}}",
+        "refId": "A"
+      }],
+      "description": "All kernel latency distributions. Use template var $kernel to focus on a specific op."
+    },
+    {
+      "type": "timeseries",
+      "id": 6,
+      "title": "Kernel p99 Latency (ms)",
+      "datasource": {"type": "prometheus", "uid": "$datasource"},
+      "gridPos": {"x": 12, "y": 9, "w": 12, "h": 8},
+      "targets": [{
+        "expr": "1000 * histogram_quantile(0.99, sum(rate(efe_gpu_kernel_duration_seconds_bucket{kernel=~\"$kernel\"}[5m])) by (le, kernel))",
+        "legendFormat": "{{kernel}}",
+        "refId": "A"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms"
+        }
+      }
+    },
+    {
+      "type": "row",
+      "id": 7,
+      "title": "Canary Divergence (HybridFusion)",
+      "gridPos": {"x": 0, "y": 17, "w": 24, "h": 1}
+    },
+    {
+      "type": "stat",
+      "id": 8,
+      "title": "Divergence Rate (events/s)",
+      "datasource": {"type": "prometheus", "uid": "$datasource"},
+      "gridPos": {"x": 0, "y": 18, "w": 8, "h": 6},
+      "targets": [{
+        "expr": "rate(efe_gpu_canary_divergence_total[5m])",
+        "refId": "A"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 0.01},
+              {"color": "red", "value": 0.05}
+            ]
+          },
+          "unit": "ops"
+        }
+      },
+      "description": "HybridFusion shadow-vs-primary divergence events per second. SLO C-8 : alert > 0.05/s."
+    },
+    {
+      "type": "timeseries",
+      "id": 9,
+      "title": "Canary L2 Distance (centroid)",
+      "datasource": {"type": "prometheus", "uid": "$datasource"},
+      "gridPos": {"x": 8, "y": 18, "w": 16, "h": 6},
+      "targets": [{
+        "expr": "efe_gpu_canary_divergence_l2",
+        "legendFormat": "L2 distance",
+        "refId": "A"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 0.05},
+              {"color": "red", "value": 0.15}
+            ]
+          }
+        }
+      },
+      "description": "Last observed L2 distance between primary CPU and shadow GPU centroids. SLO C-7 threshold 0.05."
+    },
+    {
+      "type": "row",
+      "id": 10,
+      "title": "Errors & Resource Pressure",
+      "gridPos": {"x": 0, "y": 24, "w": 24, "h": 1}
+    },
+    {
+      "type": "timeseries",
+      "id": 11,
+      "title": "Kernel Errors & OOMs",
+      "datasource": {"type": "prometheus", "uid": "$datasource"},
+      "gridPos": {"x": 0, "y": 25, "w": 12, "h": 7},
+      "targets": [
+        {
+          "expr": "rate(efe_gpu_kernel_calls_total{outcome=\"fail\"}[5m])",
+          "legendFormat": "fail / {{kernel}}",
+          "refId": "A"
+        },
+        {
+          "expr": "rate(efe_gpu_kernel_calls_total{outcome=\"oom\"}[5m])",
+          "legendFormat": "oom / {{kernel}}",
+          "refId": "B"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "id": 12,
+      "title": "Total OOM Events per Device",
+      "datasource": {"type": "prometheus", "uid": "$datasource"},
+      "gridPos": {"x": 12, "y": 25, "w": 12, "h": 7},
+      "targets": [{
+        "expr": "rate(efe_gpu_oom_total{device=~\"$device\"}[5m])",
+        "legendFormat": "GPU {{device}}",
+        "refId": "A"
+      }],
+      "description": "OOM rate per device. Alert D18GpuOom fires on rate > 0 for 1 min."
+    }
+  ]
+}

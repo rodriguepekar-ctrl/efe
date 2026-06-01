@@ -1,0 +1,55 @@
+# CB-30 — Disaster recovery drill simulator.
+# Exercises `dr/` (disaster recovery playbook + backup-restore cycle).
+
+schema_version: 1
+suite: CB
+id: CB-30_dr_drill_simulator
+family: long-run
+subsystem: dr-drill
+description: "Full DR cycle : snapshot → tear-down → re-provision → restore → validate"
+duration: "3600s"
+requires_meta_swarm: false
+
+cluster:
+  provisioner: kind
+  kind_image: kindest/node:v1.30.0
+  topology:
+    pre_drill_state_size_gb: 5
+    region_pair: [eu-north-1, eu-west-1]
+
+loadgen:
+  version: 1
+  name: CB-30-runner
+  target:
+    binary: "efe-dr"
+    subcommand: "drill --full-cycle"
+  pattern: { type: single-shot }
+  workload:
+    type: dr-full-cycle
+    phases:
+      - capture_pre_drill_state
+      - take_snapshot
+      - simulate_region_loss
+      - provision_secondary
+      - restore_from_snapshot
+      - verify_state_equality
+      - failback
+  rate: { mode: serial, max_concurrency: 1 }
+  termination: { duration: "3600s" }
+  output: { format: ndjson, file: /var/run/loadgen/CB-30-result.ndjson }
+  run: { seed: 26030, mode: staging, allow_mutation: true }
+
+chaos: []
+results:
+  emit_metrics:
+    - rto_minutes
+    - rpo_seconds
+    - data_loss_bytes
+    - state_equality_pct
+    - drill_total_minutes
+
+tolerance:
+  rto_minutes_absolute_max: 30
+  rpo_seconds_absolute_max: 60
+  data_loss_bytes_absolute_max: 0
+  state_equality_pct_absolute_min: 100.0

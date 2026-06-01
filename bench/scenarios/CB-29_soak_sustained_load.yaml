@@ -1,0 +1,56 @@
+# CB-29 — Soak harness 8-hour sustained-load smoke verdict.
+# Exercises `bench/soak/` infrastructure independent of MS.
+
+schema_version: 1
+suite: CB
+id: CB-29_soak_sustained_load
+family: long-run
+subsystem: bench-soak
+description: "8h sustained-load soak of non-MS subsystems (events + cache + telemetry)"
+duration: "28800s"
+requires_meta_swarm: false
+
+cluster:
+  provisioner: kind
+  kind_image: kindest/node:v1.30.0
+  topology:
+    events_replicas: 2
+    cache_replicas: 2
+    telemetry_replicas: 1
+
+loadgen:
+  version: 1
+  name: CB-29-loadgen
+  target:
+    multi_endpoint: true
+  pattern:
+    type: constant
+    qps_per_subsystem: 1000
+  workload:
+    type: soak-mixed
+    subsystems:
+      - efe-events: { qps: 1000 }
+      - efe-cache: { qps: 5000 }
+      - efe-telemetry: { qps_spans: 10000 }
+    sampling_window_minutes: 5
+  rate: { mode: closed-loop, max_concurrency: 500 }
+  termination: { duration: "28800s" }
+  output: { format: ndjson, file: /var/run/loadgen/CB-29-result.ndjson }
+  run: { seed: 26029, mode: staging, allow_mutation: true }
+
+chaos: []
+results:
+  collect_prom_snapshot: true
+  emit_metrics:
+    - p99_ms_drift_per_hour
+    - memory_growth_mb_per_hour
+    - fd_count_growth_per_hour
+    - error_rate_pct_max
+    - sustained_qps_min_pct
+
+tolerance:
+  p99_ms_drift_per_hour_absolute_max: 2.0
+  memory_growth_mb_per_hour_absolute_max: 5.0
+  fd_count_growth_per_hour_absolute_max: 0
+  error_rate_pct_max_absolute_max: 0.1
+  sustained_qps_min_pct_absolute_min: 99.0

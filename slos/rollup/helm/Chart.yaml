@@ -1,0 +1,25 @@
+# PR #22 § 16 — Helm chart (3 CronJobs : hourly, monthly, quarterly).
+apiVersion: v2
+name: efe-slo-rollup
+description: |
+  EFE 4-SLO rollup compute (PR #22) — 3 CronJobs that run the hourly
+  daily-Parquet builder, the monthly JSON aggregator, and the quarterly
+  signed-evidence builder.  Reads from a Prometheus URL ; writes Parquet
+  + JSON + PDF to a PVC (or S3/GCS in Phase-3).
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+home: https://efe.github.io/slos/
+sources:
+  - https://github.com/efe-ai/efe/tree/main/slos/rollup
+keywords:
+  - slo
+  - compliance
+  - burn-rate
+  - efe
+maintainers:
+  - name: EFE Platform Team
+    email: platform@efe.example.com
+annotations:
+  artifacthub.io/changes: |
+    - PR #22 § 16 + AD44 : initial release.  3 CronJobs, namespace-scoped RBAC, cosign keyless OIDC for quarterly.

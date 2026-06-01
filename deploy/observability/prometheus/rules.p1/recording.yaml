@@ -1,0 +1,111 @@
+## Sprint **D19 (P1-Foundation)** — Prometheus recording rules.
+##
+## Pre-computed aggregates feeding the `efe-p1-slo.json` Grafana
+## dashboard. Cf. `docs/EFE_P1_SURFACE_ARCHITECTURE.md` § 8.2.
+##
+## Doctrine : chaque dashboard panel doit lire un recording rule
+## existant (pas faire le `histogram_quantile` à la volée). Garde
+## les dashboards sous 1 s de render même sur 100k+ séries.
+
+groups:
+  - name: efe-p1-quantiles
+    interval: 30s
+    rules:
+      # ────────────────────────────────────────────────────────────
+      # Quantiles racines (SLO C-1)
+      # ────────────────────────────────────────────────────────────
+      - record: efe:p1_e2e_p50_seconds
+        expr: |
+          histogram_quantile(
+            0.50,
+            sum by (le) (rate(efe_swarm_duration_seconds_bucket{mode="mode1"}[5m]))
+          )
+
+      - record: efe:p1_e2e_p99_seconds
+        expr: |
+          histogram_quantile(
+            0.99,
+            sum by (le) (rate(efe_swarm_duration_seconds_bucket{mode="mode1"}[5m]))
+          )
+
+      - record: efe:p1_e2e_p999_seconds
+        expr: |
+          histogram_quantile(
+            0.999,
+            sum by (le) (rate(efe_swarm_duration_seconds_bucket{mode="mode1"}[5m]))
+          )
+
+      # ────────────────────────────────────────────────────────────
+      # Quantiles par étage
+      # ────────────────────────────────────────────────────────────
+      - record: efe:p1_stage_p99_seconds:grpc_recv
+        expr: histogram_quantile(0.99, sum by (le) (rate(efe_p1_grpc_recv_duration_seconds_bucket{mode="mode1"}[5m])))
+      - record: efe:p1_stage_p99_seconds:grpc_decode
+        expr: histogram_quantile(0.99, sum by (le) (rate(efe_p1_grpc_decode_duration_seconds_bucket{mode="mode1"}[5m])))
+      - record: efe:p1_stage_p99_seconds:interceptors
+        expr: histogram_quantile(0.99, sum by (le) (rate(efe_p1_interceptor_duration_seconds_bucket{mode="mode1"}[5m])))
+      - record: efe:p1_stage_p99_seconds:tokenize
+        expr: histogram_quantile(0.99, sum by (le) (rate(efe_p1_embed_tokenize_duration_seconds_bucket{mode="mode1"}[5m])))
+      - record: efe:p1_stage_p99_seconds:embed_inference
+        expr: histogram_quantile(0.99, sum by (le) (rate(efe_p1_embed_inference_duration_seconds_bucket{mode="mode1"}[5m])))
+      - record: efe:p1_stage_p99_seconds:genesis
+        expr: histogram_quantile(0.99, sum by (le) (rate(efe_p1_genesis_duration_seconds_bucket{mode="mode1"}[5m])))
+      - record: efe:p1_stage_p99_seconds:fusion_round
+        expr: histogram_quantile(0.99, sum by (le) (rate(efe_p1_fusion_round_duration_seconds_bucket{mode="mode1"}[5m])))
+      - record: efe:p1_stage_p99_seconds:consensus
+        expr: histogram_quantile(0.99, sum by (le) (rate(efe_p1_consensus_duration_seconds_bucket{mode="mode1"}[5m])))
+      - record: efe:p1_stage_p99_seconds:dissolution_alignment
+        expr: histogram_quantile(0.99, sum by (le) (rate(efe_p1_dissolution_alignment_duration_seconds_bucket{mode="mode1"}[5m])))
+      - record: efe:p1_stage_p99_seconds:audit_chain_append
+        expr: histogram_quantile(0.99, sum by (le) (rate(efe_p1_audit_chain_append_duration_seconds_bucket{mode="mode1"}[5m])))
+      - record: efe:p1_stage_p99_seconds:grpc_encode
+        expr: histogram_quantile(0.99, sum by (le) (rate(efe_p1_grpc_encode_duration_seconds_bucket{mode="mode1"}[5m])))
+      - record: efe:p1_stage_p99_seconds:grpc_send
+        expr: histogram_quantile(0.99, sum by (le) (rate(efe_p1_grpc_send_duration_seconds_bucket{mode="mode1"}[5m])))
+
+  - name: efe-p1-burn
+    interval: 30s
+    rules:
+      # ────────────────────────────────────────────────────────────
+      # Burn rates (3 fenêtres canoniques)
+      # ────────────────────────────────────────────────────────────
+      - record: efe:p1_burn_rate:1h
+        expr: |
+          (
+            1 - (
+              sum(rate(efe_swarm_duration_seconds_bucket{mode="mode1",le="0.2"}[1h]))
+              /
+              sum(rate(efe_swarm_duration_seconds_count{mode="mode1"}[1h]))
+            )
+          ) / 0.001
+
+      - record: efe:p1_burn_rate:6h
+        expr: |
+          (
+            1 - (
+              sum(rate(efe_swarm_duration_seconds_bucket{mode="mode1",le="0.2"}[6h]))
+              /
+              sum(rate(efe_swarm_duration_seconds_count{mode="mode1"}[6h]))
+            )
+          ) / 0.001
+
+      - record: efe:p1_burn_rate:24h
+        expr: |
+          (
+            1 - (
+              sum(rate(efe_swarm_duration_seconds_bucket{mode="mode1",le="0.2"}[24h]))
+              /
+              sum(rate(efe_swarm_duration_seconds_count{mode="mode1"}[24h]))
+            )
+          ) / 0.001
+
+  - name: efe-p1-overruns
+    interval: 30s
+    rules:
+      # Taux d'overrun par étage sur 5 min — feed à
+      # `P1_STAGE_OVERRUN_BURST` ET au dashboard panel "Overrun heatmap".
+      - record: efe:p1_overrun_rate:5m
+        expr: |
+          sum by (stage) (rate(efe_p1_budget_overrun_total[5m]))
+          /
+          sum(rate(efe_swarm_duration_seconds_count{mode="mode1"}[5m]))

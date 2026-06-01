@@ -1,0 +1,44 @@
+# CB-A5 — Docker image build time (meta-benchmark).
+# Measures `docker/` multi-stage build duration without cache.
+
+schema_version: 1
+suite: CB
+id: CB-A5_docker_image_build_time
+family: meta-bench
+subsystem: docker
+description: "3 from-scratch builds of the primary EFE Docker image"
+duration: "3600s"
+requires_meta_swarm: false
+runs_in_process: false
+
+cluster:
+  provisioner: none
+
+loadgen:
+  version: 1
+  name: CB-A5-runner
+  target:
+    binary: "docker"
+    subcommand: "build --no-cache -f docker/Dockerfile -t efe:cb-a5 ."
+  pattern: { type: serial, iterations: 3 }
+  workload:
+    type: docker-build
+    expected_layers_min: 8
+    expected_image_size_mb_max: 800
+  rate: { mode: serial, max_concurrency: 1 }
+  termination: { duration: "3600s" }
+  output: { format: ndjson, file: /var/run/loadgen/CB-A5-result.ndjson }
+  run: { seed: 0, mode: ci, allow_mutation: false }
+
+chaos: []
+results:
+  emit_metrics:
+    - build_median_sec
+    - build_p99_sec
+    - final_image_size_mb
+    - layer_count
+
+tolerance:
+  build_median_sec_absolute_max: 900
+  build_p99_sec_absolute_max: 1200
+  final_image_size_mb_absolute_max: 800

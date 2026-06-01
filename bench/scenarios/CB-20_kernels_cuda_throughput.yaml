@@ -1,0 +1,50 @@
+# CB-20 — CUDA kernels throughput (GPU substrate).
+# Exercises `efe-kernels` (M2) GPU bindings.  Requires GPU runner.
+
+schema_version: 1
+suite: CB
+id: CB-20_kernels_cuda_throughput
+family: inference
+subsystem: efe-kernels
+description: "CUDA kernel suite: matmul + softmax + LayerNorm + RMSNorm"
+duration: "120s"
+requires_meta_swarm: false
+requires_gpu: true
+
+cluster:
+  provisioner: gpu-runner
+  gpu_type: "A100-40GB"
+  cuda_version: "12.3"
+
+loadgen:
+  version: 1
+  name: CB-20-runner
+  target:
+    binary: "efe-kernels-bench"
+    subcommand: "all"
+  pattern: { type: serial, iterations: 1 }
+  workload:
+    type: cuda-kernels
+    kernel_set:
+      - matmul_fp16_2048x2048
+      - matmul_bf16_4096x4096
+      - softmax_fp16_seq8192
+      - layernorm_bf16_hidden4096
+      - rmsnorm_bf16_hidden4096
+    iterations_per_kernel: 1000
+  rate: { mode: serial, max_concurrency: 1 }
+  termination: { duration: "120s" }
+  output: { format: ndjson, file: /var/run/loadgen/CB-20-result.ndjson }
+  run: { seed: 26020, mode: staging, allow_mutation: false }
+
+chaos: []
+results:
+  collect_prom_snapshot: true
+  emit_metrics: [matmul_tflops, softmax_gflops, layernorm_gflops, rmsnorm_gflops, sm_utilization_pct]
+
+tolerance:
+  matmul_tflops_min_delta_pct: -10
+  softmax_gflops_min_delta_pct: -10
+  layernorm_gflops_min_delta_pct: -10
+  rmsnorm_gflops_min_delta_pct: -10
+  sm_utilization_pct_absolute_min: 75.0

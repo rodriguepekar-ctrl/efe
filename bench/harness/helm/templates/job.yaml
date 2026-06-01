@@ -1,0 +1,103 @@
+{{- /* PR #21 AD44 — one-shot Job that runs the harness in-cluster. */ -}}
+{{- if eq (.Values.mode | lower) "production" -}}
+{{- fail "mode=production is forbidden (PR #21 AD11 / T86)" -}}
+{{- end -}}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "efe-bench-harness.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "efe-bench-harness.labels" . | nindent 4 }}
+spec:
+  backoffLimit: {{ .Values.job.backoffLimit }}
+  activeDeadlineSeconds: {{ .Values.job.activeDeadlineSeconds }}
+  ttlSecondsAfterFinished: {{ .Values.job.ttlSecondsAfterFinished }}
+  parallelism: {{ .Values.job.parallelism }}
+  completions: {{ .Values.job.completions }}
+  template:
+    metadata:
+      labels:
+        {{- include "efe-bench-harness.selectorLabels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      restartPolicy: {{ .Values.job.restartPolicy }}
+      serviceAccountName: {{ include "efe-bench-harness.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.securityContext | nindent 8 }}
+      containers:
+        - name: harness
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.containerSecurityContext | nindent 12 }}
+          args:
+            - "run"
+            - "--provisioner"
+            - "{{ .Values.provisioner }}"
+            - "--mode"
+            - "{{ .Values.mode }}"
+            {{- if .Values.scenarios }}
+            {{- range .Values.scenarios }}
+            - "--scenario"
+            - "{{ . }}"
+            {{- end }}
+            {{- else }}
+            - "--all"
+            {{- end }}
+            {{- if .Values.targetOverride }}
+            - "--target-override"
+            - "{{ .Values.targetOverride }}"
+            {{- end }}
+            - "--output-dir"
+            - "/var/run/bench"
+            - "--verdict-json-file"
+            - "/var/run/bench/verdict.json"
+          env:
+            - name: KUBECONFIG
+              value: "/var/run/secrets/kubernetes.io/serviceaccount/kubeconfig"
+            - name: RUST_LOG
+              value: "info"
+          {{- with .Values.otel }}
+          {{- if .enabled }}
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: "{{ .endpoint }}"
+          {{- end }}
+          {{- end }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - name: results
+              mountPath: /var/run/bench
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: results
+          {{- if .Values.output.persistentVolumeClaim.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ include "efe-bench-harness.fullname" . }}-results
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+        - name: tmp
+          emptyDir:
+            medium: Memory
+            sizeLimit: 64Mi
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

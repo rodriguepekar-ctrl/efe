@@ -1,0 +1,79 @@
+# Istio VirtualService — traffic split between stable and canary
+# Deployments. Optional resource: only apply when Istio is installed
+# AND a canary Deployment (e.g. `efe-server-canary`) coexists with the
+# stable one. Absent a canary, all weight goes to stable and this is a
+# no-op.
+#
+# The Helm chart does not own this file; each environment overlay
+# decides whether to include it.
+#
+# Prerequisites:
+#   - istiod installed
+#   - `efe-server` subset (stable) + `efe-server-canary` subset labelled
+#   - DestinationRule (see below) that defines the two subsets
+#
+# Traffic shifting is what canary.yml's `canary.weight` ultimately
+# manipulates, by patching `spec.http[0].route[*].weight`.
+#
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: efe-server
+  namespace: efe
+  labels:
+    app.kubernetes.io/name: efe-server
+spec:
+  hosts:
+    - efe-server.efe.svc.cluster.local
+  http:
+    - match:
+        - port: 50051
+      retries:
+        attempts: 2
+        perTryTimeout: 5s
+        retryOn: connect-failure,refused-stream,unavailable
+      timeout: 30s
+      route:
+        - destination:
+            host: efe-server.efe.svc.cluster.local
+            subset: stable
+          weight: 100        # patched by canary.yml to e.g. 95
+        - destination:
+            host: efe-server.efe.svc.cluster.local
+            subset: canary
+          weight: 0          # patched by canary.yml to e.g. 5
+---
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: efe-server
+  namespace: efe
+  labels:
+    app.kubernetes.io/name: efe-server
+spec:
+  host: efe-server.efe.svc.cluster.local
+  trafficPolicy:
+    # Use RR load balancing instead of default LEAST_REQUEST — gRPC
+    # long-lived channels otherwise pin to a single pod and bypass HPA.
+    loadBalancer:
+      simple: ROUND_ROBIN
+    connectionPool:
+      tcp:
+        maxConnections: 100
+      http:
+        http2MaxRequests: 1000
+        maxRequestsPerConnection: 0     # reuse indefinitely
+    outlierDetection:
+      consecutive5xxErrors: 5
+      interval: 30s
+      baseEjectionTime: 60s
+      maxEjectionPercent: 50
+  subsets:
+    - name: stable
+      labels:
+        app.kubernetes.io/name: efe-server
+        efe.project/track: stable
+    - name: canary
+      labels:
+        app.kubernetes.io/name: efe-server
+        efe.project/track: canary

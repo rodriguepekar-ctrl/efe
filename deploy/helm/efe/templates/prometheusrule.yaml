@@ -1,0 +1,161 @@
+{{- if .Values.prometheusRule.enabled -}}
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: {{ include "efe.fullname" . }}
+  labels:
+    {{- include "efe.labels" . | nindent 4 }}
+    {{- with .Values.prometheusRule.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  groups:
+    - name: efe.availability
+      interval: 30s
+      rules:
+        - alert: EFEHighErrorRate
+          expr: |
+            sum(rate(efe_grpc_requests_total{code!="OK"}[5m]))
+              /
+            clamp_min(sum(rate(efe_grpc_requests_total[5m])), 1) > {{ .Values.prometheusRule.thresholds.errorRate }}
+          for: 10m
+          labels:
+            severity: warning
+            service: efe
+          annotations:
+            summary: "EFE error rate above {{ .Values.prometheusRule.thresholds.errorRate }} for 10m"
+            runbook_url: "https://github.com/efe-project/efe/blob/main/docs/runbook.md#high-error-rate"
+        - alert: EFEHighLatencyP95
+          expr: |
+            histogram_quantile(0.95,
+              sum(rate(efe_grpc_request_duration_seconds_bucket{method="/efe.v1.SwarmService/Execute"}[5m]))
+              by (le)
+            ) > {{ .Values.prometheusRule.thresholds.latencyP95Seconds }}
+          for: 10m
+          labels:
+            severity: warning
+            service: efe
+          annotations:
+            summary: "p95 Execute latency above {{ .Values.prometheusRule.thresholds.latencyP95Seconds }}s for 10m"
+            runbook_url: "https://github.com/efe-project/efe/blob/main/docs/runbook.md#high-latency"
+    - name: efe.reliability
+      interval: 30s
+      rules:
+        - alert: EFEPodRestartLoop
+          expr: rate(kube_pod_container_status_restarts_total{container="efe"}[5m]) > 0.1
+          for: 5m
+          labels:
+            severity: critical
+            service: efe
+          annotations:
+            summary: "EFE pod is restarting too often"
+            runbook_url: "https://github.com/efe-project/efe/blob/main/docs/runbook.md#pod-restart-loop"
+        - alert: EFEConfidenceDrop
+          expr: |
+            histogram_quantile(0.50,
+              sum(rate(efe_swarm_confidence_bucket[15m])) by (le)
+            ) < {{ .Values.prometheusRule.thresholds.confidenceP50 }}
+          for: 15m
+          labels:
+            severity: warning
+            service: efe
+          annotations:
+            summary: "EFE confidence p50 dropped below {{ .Values.prometheusRule.thresholds.confidenceP50 }}"
+            runbook_url: "https://github.com/efe-project/efe/blob/main/docs/runbook.md#confidence-drop"
+    - name: efe.rate_limit
+      interval: 30s
+      rules:
+        - alert: EFERateLimitStorm
+          expr: sum(rate(efe_ratelimit_drops_total[5m])) > {{ .Values.prometheusRule.thresholds.ratelimitDropsPerSec }}
+          for: 5m
+          labels:
+            severity: warning
+            service: efe
+          annotations:
+            summary: "Rate-limit drops above {{ .Values.prometheusRule.thresholds.ratelimitDropsPerSec }}/s"
+            runbook_url: "https://github.com/efe-project/efe/blob/main/docs/runbook.md#rate-limit-storm"
+    {{- if .Values.tenant.namespace.isolated }}
+    # Sprint D11.2 — per-tenant alerts. Activated when the chart
+    # is deployed in Tier 2 (one Helm release per tenant). Cf.
+    # docs/bench/d11_per_tenant_isolation_architecture.md §6.6.
+    - name: efe.tenant
+      interval: 30s
+      rules:
+        # Per-tenant high error rate (decoupled from cluster-aggregate).
+        - alert: EfeTenantHighErrorRate
+          expr: |
+            sum by (tenant) (rate(efe_grpc_requests_total{code!="OK"}[5m]))
+              /
+            clamp_min(sum by (tenant) (rate(efe_grpc_requests_total[5m])), 1)
+              > {{ .Values.prometheusRule.thresholds.tenantErrorRate | default 0.05 }}
+          for: 5m
+          labels:
+            severity: warning
+            service: efe
+            scope: per-tenant
+          annotations:
+            summary: 'Tenant {{`{{ $labels.tenant }}`}} error rate > {{ .Values.prometheusRule.thresholds.tenantErrorRate | default 0.05 }} for 5m'
+            runbook_url: "https://github.com/efe-project/efe/blob/main/docs/runbook.md#per-tenant-error-rate"
+        # Per-tenant rate-limit saturation.
+        - alert: EfeTenantRateLimitSaturated
+          expr: rate(efe_ratelimit_drops_total[5m]) > 1
+          for: 10m
+          labels:
+            severity: info
+            service: efe
+            scope: per-tenant
+          annotations:
+            summary: 'Tenant {{`{{ $labels.tenant }}`}} hitting rate limit for 10m'
+            runbook_url: "https://github.com/efe-project/efe/blob/main/docs/runbook.md#tenant-rate-limit"
+        # Cone register storm (admin abuse / DoS via versioning).
+        - alert: EfeTenantConeRegisterStorm
+          expr: rate(efe_admin_register_cone_total[1h]) > {{ .Values.prometheusRule.thresholds.tenantConeRegisterPerHour | default 100 }}
+          for: 30m
+          labels:
+            severity: warning
+            service: efe
+            scope: per-tenant
+          annotations:
+            summary: 'Tenant {{`{{ $labels.tenant }}`}} > {{ .Values.prometheusRule.thresholds.tenantConeRegisterPerHour | default 100 }} cone registrations / hr'
+            runbook_url: "https://github.com/efe-project/efe/blob/main/docs/runbook.md#tenant-cone-storm"
+        # Cardinality bomb detection (HAZOP vector #12).
+        - alert: EfeTenantCardinalityExplosion
+          expr: count(count by (tenant) (efe_grpc_requests_total)) > {{ .Values.prometheusRule.thresholds.tenantCardinalityCap | default 1000 }}
+          for: 10m
+          labels:
+            severity: critical
+            service: efe
+            scope: cluster
+          annotations:
+            summary: 'Tenant cardinality > {{ .Values.prometheusRule.thresholds.tenantCardinalityCap | default 1000 }} — likely attack or misconfig'
+            runbook_url: "https://github.com/efe-project/efe/blob/main/docs/runbook.md#cardinality-bomb"
+    {{- end }}
+    - name: efe.alignment
+      interval: 30s
+      rules:
+        - alert: EFEPolicyRejectionSpike
+          expr: sum(rate(efe_policy_rejections_total[5m])) > 10
+          for: 10m
+          labels:
+            severity: warning
+            service: efe
+          annotations:
+            summary: "Alignment policy rejections exceeding 10/s for 10m"
+            runbook_url: "https://github.com/efe-project/efe/blob/main/docs/runbook.md#policy-rejection-spike"
+    - name: efe.audit
+      interval: 60s
+      rules:
+        - alert: EFEAuditBackpressure
+          expr: |
+            kubelet_volume_stats_available_bytes{persistentvolumeclaim=~".*-audit"}
+              /
+            clamp_min(kubelet_volume_stats_capacity_bytes{persistentvolumeclaim=~".*-audit"}, 1)
+              < {{ .Values.prometheusRule.thresholds.pvcAvailableFraction }}
+          for: 15m
+          labels:
+            severity: warning
+            service: efe
+          annotations:
+            summary: "Audit PVC free space below {{ .Values.prometheusRule.thresholds.pvcAvailableFraction }} of capacity"
+            runbook_url: "https://github.com/efe-project/efe/blob/main/docs/runbook.md#audit-backpressure"
+{{- end -}}

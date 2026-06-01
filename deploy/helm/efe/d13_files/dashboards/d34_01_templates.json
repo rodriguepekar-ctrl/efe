@@ -1,0 +1,147 @@
+{
+  "__inputs": [],
+  "__requires": [
+    {"type": "grafana", "id": "grafana", "name": "Grafana", "version": "10.2.0"},
+    {"type": "datasource", "id": "prometheus", "name": "Prometheus", "version": "1.0.0"}
+  ],
+  "uid": "efe-d34-01-templates",
+  "title": "EFE — 01 Nano-Agent Templates (Sprint D34)",
+  "description": "Sprint D34 — drill-down per nano-agent template (8 GA templates : NaSem, NaLog, NaCrit, NaQual, NaCausal, NaTemp, NaSafety, NaConsist). Cf. docs/EFE_TELEMETRY_EXTENSION_ARCHITECTURE.md § 10.6. Instruments : efe_nano_agent_population_total, efe_nano_agent_consensus_weight, efe_nano_agent_safety_triggered_total, efe_nano_agent_kernel_routed_total.",
+  "tags": ["efe", "d34", "templates", "nano-agent"],
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "time": {"from": "now-6h", "to": "now"},
+  "timepicker": {"refresh_intervals": ["30s", "1m", "5m", "15m", "1h"]},
+  "graphTooltip": 1,
+  "templating": {
+    "list": [
+      {
+        "name": "datasource",
+        "type": "datasource",
+        "query": "prometheus",
+        "current": {"text": "Prometheus", "value": "Prometheus"}
+      },
+      {
+        "name": "tenant",
+        "type": "query",
+        "datasource": {"type": "prometheus", "uid": "$datasource"},
+        "query": "label_values(efe_nano_agent_population_total, tenant)",
+        "includeAll": true,
+        "multi": true,
+        "refresh": 2,
+        "sort": 1,
+        "label": "Tenant"
+      },
+      {
+        "name": "template_code",
+        "type": "query",
+        "datasource": {"type": "prometheus", "uid": "$datasource"},
+        "query": "label_values(efe_nano_agent_consensus_weight, template_code)",
+        "includeAll": true,
+        "multi": true,
+        "refresh": 2,
+        "sort": 1,
+        "label": "Template"
+      }
+    ]
+  },
+  "panels": [
+    {
+      "type": "row",
+      "id": 1,
+      "title": "Population Distribution",
+      "gridPos": {"x": 0, "y": 0, "w": 24, "h": 1}
+    },
+    {
+      "type": "piechart",
+      "id": 2,
+      "title": "Population by Template (last 1h)",
+      "datasource": {"type": "prometheus", "uid": "$datasource"},
+      "gridPos": {"x": 0, "y": 1, "w": 12, "h": 9},
+      "targets": [{
+        "expr": "sum by (template_code) (increase(efe_nano_agent_population_total{tenant=~\"$tenant\", template_code=~\"$template_code\"}[1h]))",
+        "legendFormat": "{{template_code}}",
+        "refId": "A"
+      }],
+      "description": "Total nano-agents spawned per template in the last 1h. Should match the canonical share : NaSem 45%, NaQual 15%, NaCausal 10%, NaTemp 8%, NaConsist 7%, NaLog/NaCrit/NaSafety 5% each."
+    },
+    {
+      "type": "table",
+      "id": 3,
+      "title": "Consensus Weights (canonical)",
+      "datasource": {"type": "prometheus", "uid": "$datasource"},
+      "gridPos": {"x": 12, "y": 1, "w": 12, "h": 9},
+      "targets": [{
+        "expr": "efe_nano_agent_consensus_weight{template_code=~\"$template_code\"}",
+        "format": "table",
+        "instant": true,
+        "refId": "A"
+      }],
+      "description": "Per-template consensus weights as declared by the NanoAgentTemplate trait. NaSafety MUST be 2.0 (institutional invariant). NaConsist 1.5. NaQual 1.2. Others 1.0."
+    },
+    {
+      "type": "row",
+      "id": 4,
+      "title": "NaSafety Triggers",
+      "gridPos": {"x": 0, "y": 10, "w": 24, "h": 1}
+    },
+    {
+      "type": "stat",
+      "id": 5,
+      "title": "NaSafety Trigger Rate (per 5m)",
+      "datasource": {"type": "prometheus", "uid": "$datasource"},
+      "gridPos": {"x": 0, "y": 11, "w": 8, "h": 6},
+      "targets": [{
+        "expr": "sum(rate(efe_nano_agent_safety_triggered_total{tenant=~\"$tenant\"}[5m]))",
+        "refId": "A"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 0.5},
+              {"color": "red", "value": 1.0}
+            ]
+          }
+        }
+      },
+      "description": "SLO C-11 : NaSafety triggers ≥ 0.5 % of traffic. Above 1.0 ops/s flagged for review."
+    },
+    {
+      "type": "timeseries",
+      "id": 6,
+      "title": "NaSafety Triggers by Tenant",
+      "datasource": {"type": "prometheus", "uid": "$datasource"},
+      "gridPos": {"x": 8, "y": 11, "w": 16, "h": 6},
+      "targets": [{
+        "expr": "rate(efe_nano_agent_safety_triggered_total{tenant=~\"$tenant\"}[5m])",
+        "legendFormat": "{{tenant}}",
+        "refId": "A"
+      }]
+    },
+    {
+      "type": "row",
+      "id": 7,
+      "title": "Fusion Kernel Routing",
+      "gridPos": {"x": 0, "y": 17, "w": 24, "h": 1}
+    },
+    {
+      "type": "heatmap",
+      "id": 8,
+      "title": "Kernel Routing Heatmap (kernel × template)",
+      "datasource": {"type": "prometheus", "uid": "$datasource"},
+      "gridPos": {"x": 0, "y": 18, "w": 24, "h": 9},
+      "targets": [{
+        "expr": "sum by (kernel_id, template_code) (rate(efe_nano_agent_kernel_routed_total{template_code=~\"$template_code\"}[5m]))",
+        "format": "heatmap",
+        "legendFormat": "{{kernel_id}}/{{template_code}}",
+        "refId": "A"
+      }],
+      "description": "Routing decisions per (kernel_id, template_code). Should be diagonal-dominant : NaSem→Semantic, NaSafety→Safety, etc. Off-diagonal = anomaly."
+    }
+  ]
+}

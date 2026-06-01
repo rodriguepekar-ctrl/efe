@@ -1,0 +1,118 @@
+# =====================================================================
+# values.tier2.yaml — Sprint D11 Tier 2 multi-tenant preset.
+#
+# Use this with:
+#
+#   kubectl create namespace tenant-acme
+#   kubectl label namespace tenant-acme tenant.efe.ai/owner=acme
+#   helm install efe-acme oci://ghcr.io/efe-project/charts/efe \
+#     --version 0.1.11 \
+#     --namespace tenant-acme \
+#     --values values.tier2.yaml \
+#     --set tenant.id=acme \
+#     --set tenant.namespace.networkPolicy.tenantIngress.allowFromNamespaceLabels."tenant\.efe\.ai/owner"=acme
+#
+# This preset:
+#   * Activates ResourceQuota (cap 4 vCPU / 8 GiB / 10 pods).
+#   * Activates LimitRange (per-pod min/max boundaries).
+#   * Activates NetworkPolicy ingress from labelled tenant
+#     namespaces + the monitoring namespace.
+#   * Forces auth ON (Tier 2 NEVER allows anonymous).
+#   * Enables the per-tenant Prometheus rules.
+#
+# See ``docs/bench/d11_per_tenant_isolation_architecture.md`` Annexe B.
+# =====================================================================
+
+replicaCount: 2
+
+service:
+  headless: true
+
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 8
+  targetCPUUtilizationPercentage: 70
+
+# Tier 2 SHOULD pin by digest — replace before shipping.
+image:
+  repository: ghcr.io/efe-project/efe
+  tag: "0.1.11"
+
+# Auth is REQUIRED in Tier 2 — never disable.
+config:
+  auth:
+    enabled: true
+    jwtAudience: "efe.v1"
+    jwtIssuer: ""               # set per-tenant via override
+    secretsFile: "/etc/efe/secrets/hs256"
+    allowInsecureDev: false
+
+secrets:
+  # Recommended : External Secrets Operator. Set per tenant.
+  externalSecretName: ""        # e.g. "efe-jwt-acme"
+
+# ─────────────────────────────────────────────────────────────────────
+# D11 — Tier 2 isolation block (the heart of this preset)
+# ─────────────────────────────────────────────────────────────────────
+tenant:
+  # Override at install: --set tenant.id=<tenant>
+  id: "must-override"
+
+  # Optional cardinality allowlist. Recommended for shared-cluster
+  # Tier 2 deploys where Prometheus is shared.
+  allowlist: []
+
+  namespace:
+    isolated: true
+
+    resourceQuota:
+      enabled: true
+      cpu: "4"
+      memory: "8Gi"
+      pods: "10"
+      services: "5"
+
+    limitRange:
+      enabled: true
+      defaultCpu: "500m"
+      defaultMemory: "512Mi"
+      maxCpu: "2"
+      maxMemory: "2Gi"
+
+    networkPolicy:
+      tenantIngress:
+        enabled: true
+        # Override per tenant via:
+        #   --set tenant.namespace.networkPolicy.tenantIngress.allowFromNamespaceLabels."tenant\.efe\.ai/owner"=<id>
+        allowFromNamespaceLabels:
+          tenant.efe.ai/owner: "must-override"
+        allowFromMonitoringNamespaces:
+          - "monitoring"
+
+# ─────────────────────────────────────────────────────────────────────
+# Observability — full stack on
+# ─────────────────────────────────────────────────────────────────────
+serviceMonitor:
+  enabled: true
+  interval: "15s"
+  scrapeTimeout: "10s"
+
+prometheusRule:
+  enabled: true
+  thresholds:
+    errorRate: 0.05
+    latencyP95Seconds: 3.0
+    confidenceP50: 0.65
+    ratelimitDropsPerSec: 50
+    # D11 per-tenant thresholds.
+    tenantErrorRate: 0.05
+    tenantConeRegisterPerHour: 100
+    tenantCardinalityCap: 1000
+
+networkPolicy:
+  enabled: true
+
+pdb:
+  enabled: true
+  minAvailable: 1

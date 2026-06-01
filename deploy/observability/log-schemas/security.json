@@ -1,0 +1,74 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://efe.example.com/schemas/log/v1.0/security.json",
+  "title": "EFE security log stream (v1.0)",
+  "description": "Sprint D13. One event per auth/authz check. Source of the dashboard 05_audit_stream auth-failure panels and the D13ObsAuthFailureSpike alert.",
+  "type": "object",
+  "allOf": [
+    { "$ref": "_common.json" },
+    {
+      "properties": {
+        "stream": { "const": "security" }
+      },
+      "required": ["event", "level"]
+    }
+  ],
+  "properties": {
+    "event": {
+      "type": "string",
+      "enum": [
+        "jwt_invalid",
+        "jwt_expired",
+        "jwt_signature",
+        "scope_missing",
+        "tenant_mismatch",
+        "rate_limited",
+        "grafana_admin_action",
+        "auth_ok"
+      ],
+      "description": "Discriminator. auth_ok is logged at DEBUG by default ; the others at WARN/ERROR."
+    },
+    "reason": {
+      "type": "string",
+      "maxLength": 256,
+      "description": "Free-text reason. May contain a scope name (e.g. \"missing scope: admin:catalog:write\")."
+    },
+    "claimed_tenant": {
+      "type": "string",
+      "description": "tenant_id sent by the client in the request payload."
+    },
+    "actual_tenant": {
+      "type": "string",
+      "description": "tenant_id extracted from the validated JWT. Mismatch with claimed_tenant = security event."
+    },
+    "scope_required": {
+      "type": "string",
+      "description": "RBAC scope the request needed."
+    },
+    "scope_present": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Scopes present on the JWT."
+    },
+    "client_ip": { "type": "string" },
+    "user_agent": { "type": "string", "maxLength": 256 },
+    "actor": {
+      "type": "string",
+      "description": "For grafana_admin_action events : the human operator's email."
+    },
+    "action": {
+      "type": "string",
+      "description": "For grafana_admin_action events : the Grafana action (e.g. dashboard.update)."
+    },
+    "target": {
+      "type": "string",
+      "description": "For grafana_admin_action events : the target object name (e.g. dashboard UID)."
+    },
+    "diff_summary": {
+      "type": "string",
+      "maxLength": 512,
+      "description": "For grafana_admin_action events : a human-readable diff (e.g. \"panel 3 query changed\")."
+    }
+  },
+  "additionalProperties": true
+}

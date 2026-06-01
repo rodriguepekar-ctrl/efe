@@ -1,0 +1,35 @@
+# PR #21 § 28 + AD44 — optional in-cluster orchestrator chart.
+#
+# This chart deploys the bench harness as a Kubernetes Job, useful when
+# the runner cannot expose ports to the cluster (managed K8s, restricted
+# CI). It mirrors the loadgen chart in tools/loadgen/charts.
+#
+# The default `bench-quick.yml` / `bench-full.yml` workflows use a
+# port-forwarded harness from the runner host instead — this chart is
+# the **escape hatch** for environments where port-forward is blocked.
+apiVersion: v2
+name: efe-bench-harness
+description: |
+  EFE public-bench harness as a one-shot Kubernetes Job.
+  Runs scenarios in-cluster (no port-forward required) ; results are
+  emitted to a PersistentVolume claim or copied out via `kubectl cp`.
+
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+home: https://efe.github.io/bench/
+sources:
+  - https://github.com/efe/efe/tree/main/bench/harness
+keywords:
+  - benchmark
+  - chaos
+  - meta-swarm
+  - reproducibility
+  - efe
+maintainers:
+  - name: EFE Platform Team
+    email: platform@efe.example.com
+icon: https://efe.github.io/bench/icon.svg
+annotations:
+  artifacthub.io/changes: |
+    - PR #21 § 28 + AD44 : optional in-cluster orchestrator chart, stub release.

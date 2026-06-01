@@ -1,0 +1,79 @@
+# Sprint D22 (Φ-B) — helm-unittest fixtures for mTLS Certificate.
+#
+# Run via : helm unittest deploy/helm/efe/
+#
+# Pin tested by `test_m12_helm_extension_helm_unittest_d22_present`.
+suite: mTLS Certificate (D22)
+templates:
+  - d22-mtls-cert.yaml
+release:
+  name: efe
+  namespace: efe-test
+tests:
+  - it: not rendered when mtls.enabled=false (default)
+    set:
+      mtls.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: rendered with required fields when enabled
+    set:
+      mtls.enabled: true
+      mtls.issuerRef.name: efe-ca
+    asserts:
+      - isKind:
+          of: Certificate
+      - equal:
+          path: apiVersion
+          value: cert-manager.io/v1
+      - equal:
+          path: spec.issuerRef.name
+          value: efe-ca
+      - equal:
+          path: spec.issuerRef.kind
+          value: ClusterIssuer
+      - equal:
+          path: spec.privateKey.algorithm
+          value: ECDSA
+      - equal:
+          path: spec.privateKey.size
+          value: 256
+
+  - it: fails template if issuerRef.name missing
+    set:
+      mtls.enabled: true
+    asserts:
+      - failedTemplate:
+          errorMessage: ".Values.mtls.issuerRef.name is required when mtls.enabled=true"
+
+  - it: includes default DNS names when not overridden
+    set:
+      mtls.enabled: true
+      mtls.issuerRef.name: efe-ca
+    asserts:
+      - notEmpty:
+          path: spec.dnsNames
+
+  - it: respects custom duration + renewBefore
+    set:
+      mtls.enabled: true
+      mtls.issuerRef.name: efe-ca
+      mtls.duration: "2160h"
+      mtls.renewBefore: "240h"
+    asserts:
+      - equal:
+          path: spec.duration
+          value: "2160h"
+      - equal:
+          path: spec.renewBefore
+          value: "240h"
+
+  - it: has audit-fix marker for traceability
+    set:
+      mtls.enabled: true
+      mtls.issuerRef.name: efe-ca
+    asserts:
+      - equal:
+          path: metadata.annotations["efe.io/audit-fix-marker"]
+          value: "M12-D22-mtls-cert-manager"

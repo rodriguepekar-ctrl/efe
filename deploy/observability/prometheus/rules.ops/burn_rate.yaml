@@ -1,0 +1,237 @@
+# Sprint Φ-D-OPS (D97) — Burn-rate 4×3 matrix Prometheus rules.
+#
+# 4 windows × 3 severities = 12 burn-rate cells. Each cell page-owns
+# a severity-tier alert (critical, major, watch) on a specific time
+# horizon (1h / 6h / 24h / 72h).
+#
+# Doctrine : the 30-day error budget is 21.6 minutes (= (1 - 0.9995) ×
+# 30 × 24 × 60). A burn-rate of 14.4× burns the entire budget in 2 h
+# (= 1h short-window fast-burn) ; a burn-rate of 6× burns in 5 h ; a
+# burn-rate of 1× burns linearly.
+#
+# Cf. `docs/EFE_OPERATIONAL_PRODUCTION_ARCHITECTURE.md` § 10 + § 8.
+
+groups:
+- name: ops.burn_rate.availability
+  interval: 30s
+  rules:
+  - record: efe:availability_ratio:rate1h
+    expr: |
+      sum(rate(efe_request_success_total[1h]))
+      / sum(rate(efe_request_total[1h]))
+
+  - record: efe:availability_ratio:rate6h
+    expr: |
+      sum(rate(efe_request_success_total[6h]))
+      / sum(rate(efe_request_total[6h]))
+
+  - record: efe:availability_ratio:rate24h
+    expr: |
+      sum(rate(efe_request_success_total[24h]))
+      / sum(rate(efe_request_total[24h]))
+
+  - record: efe:availability_ratio:rate72h
+    expr: |
+      sum(rate(efe_request_success_total[72h]))
+      / sum(rate(efe_request_total[72h]))
+
+  - record: efe:availability_burn:rate1h
+    expr: (1 - efe:availability_ratio:rate1h) / (1 - 0.9995)
+  - record: efe:availability_burn:rate6h
+    expr: (1 - efe:availability_ratio:rate6h) / (1 - 0.9995)
+  - record: efe:availability_burn:rate24h
+    expr: (1 - efe:availability_ratio:rate24h) / (1 - 0.9995)
+  - record: efe:availability_burn:rate72h
+    expr: (1 - efe:availability_ratio:rate72h) / (1 - 0.9995)
+
+- name: ops.burn_rate.alerts
+  rules:
+  # ── 1h × critical (fast-burn page) ─────────────────────────────
+  - alert: OpsAvailabilityFastBurn1h
+    expr: efe:availability_burn:rate1h > 14.4
+    for: 2m
+    labels:
+      severity: critical
+      page: pagerduty-sre
+      ops_master_slo: SLO-OPS-AVAILABILITY
+      window: 1h
+    annotations:
+      summary: |
+        Availability burn rate over 1h is {{ $value | printf "%.1f" }}×
+        — entire 30-day budget consumed in ≤ 2 h at this rate.
+      runbook: docs/runbooks/ops_master_gate_fail.md
+      dashboard: https://grafana.efe.internal/d/ops-master
+
+  # ── 6h × critical ──────────────────────────────────────────────
+  - alert: OpsAvailabilityFastBurn6h
+    expr: efe:availability_burn:rate6h > 6
+    for: 15m
+    labels:
+      severity: critical
+      page: pagerduty-sre
+      ops_master_slo: SLO-OPS-AVAILABILITY
+      window: 6h
+    annotations:
+      summary: |
+        Availability burn rate over 6h is {{ $value | printf "%.1f" }}×
+        — 30-day budget consumed in ≤ 5 h at this rate.
+      runbook: docs/runbooks/ops_master_gate_fail.md
+
+  # ── 24h × major ────────────────────────────────────────────────
+  - alert: OpsAvailabilitySteadyBurn24h
+    expr: efe:availability_burn:rate24h > 3
+    for: 1h
+    labels:
+      severity: major
+      page: pagerduty-sre
+      ops_master_slo: SLO-OPS-AVAILABILITY
+      window: 24h
+    annotations:
+      summary: |
+        Availability burn rate over 24h is {{ $value | printf "%.1f" }}×
+        — budget exhausted in ~10 days if sustained.
+      runbook: docs/runbooks/ops_master_gate_fail.md
+
+  # ── 72h × watch ────────────────────────────────────────────────
+  - alert: OpsAvailabilityChronic72h
+    expr: efe:availability_burn:rate72h > 1
+    for: 6h
+    labels:
+      severity: watch
+      page: slack-#efe-watch
+      ops_master_slo: SLO-OPS-AVAILABILITY
+      window: 72h
+    annotations:
+      summary: |
+        Chronic burn over the last 72h — investigate before it pages.
+      runbook: docs/runbooks/ops_master_gate_fail.md
+
+- name: ops.burn_rate.latency
+  interval: 30s
+  rules:
+  - record: efe:e2e_p99:mode1
+    expr: |
+      histogram_quantile(0.99,
+        sum by (le) (rate(efe_e2e_latency_ms_bucket{mode="mode-1"}[5m])))
+
+  - record: efe:e2e_p99:mode2
+    expr: |
+      histogram_quantile(0.99,
+        sum by (le) (rate(efe_e2e_latency_ms_bucket{mode="mode-2"}[5m])))
+
+  - record: efe:e2e_p99:mode3
+    expr: |
+      histogram_quantile(0.99,
+        sum by (le) (rate(efe_e2e_latency_ms_bucket{mode="mode-3"}[5m])))
+
+  - alert: OpsLatencyP99Mode1FastBurn
+    expr: efe:e2e_p99:mode1 > 200 * 1.4
+    for: 5m
+    labels:
+      severity: critical
+      page: pagerduty-sre
+      ops_master_slo: SLO-OPS-E2E-P99-MODE1
+    annotations:
+      summary: |
+        Mode-1 p99 = {{ $value | printf "%.0f" }} ms > 280 ms (140 % of SLO).
+      runbook: docs/runbooks/RUNBOOK_RB_07_LATENCY_P99.md
+
+  - alert: OpsLatencyP99Mode2Major
+    expr: efe:e2e_p99:mode2 > 900
+    for: 10m
+    labels:
+      severity: major
+      page: pagerduty-sre
+      ops_master_slo: SLO-OPS-E2E-P99-MODE2
+    annotations:
+      summary: |
+        Mode-2 p99 = {{ $value | printf "%.0f" }} ms > 900 ms.
+      runbook: docs/runbooks/RUNBOOK_RB_07_LATENCY_P99.md
+
+  - alert: OpsLatencyP99Mode3Major
+    expr: efe:e2e_p99:mode3 > 3500
+    for: 10m
+    labels:
+      severity: major
+      page: pagerduty-sre
+      ops_master_slo: SLO-OPS-E2E-P99-MODE3
+    annotations:
+      summary: |
+        Mode-3 p99 = {{ $value | printf "%.0f" }} ms > 3500 ms.
+      runbook: docs/runbooks/RUNBOOK_RB_07_LATENCY_P99.md
+
+- name: ops.burn_rate.compliance
+  rules:
+  - alert: OpsComplianceControlStale
+    expr: max(efe_compliance_control_stale_count) > 0
+    for: 6h
+    labels:
+      severity: critical
+      page: pagerduty-dpo
+      ops_master_slo: SLO-OPS-COMPLIANCE-POSTURE
+    annotations:
+      summary: |
+        {{ $value }} compliance control(s) without fresh evidence in
+        the last 30 days — regulatory exposure.
+      runbook: docs/runbooks/ops_postmortem_overdue.md
+
+  - alert: OpsAuditChainBreak
+    expr: increase(efe_audit_chain_gap_count[10m]) > 0
+    for: 1m
+    labels:
+      severity: critical
+      page: pagerduty-sre-and-dpo
+      ops_master_slo: SLO-OPS-AUDIT-CHAIN-INTACT
+    annotations:
+      summary: |
+        HMAC audit chain gap detected — investigate immediately.
+        This is a tamper-evidence failure ; treat as Sev1.
+      runbook: docs/runbooks/d13_classify_drift.md
+
+- name: ops.burn_rate.lifecycle
+  rules:
+  - alert: OpsProvisionSlowP95
+    expr: |
+      histogram_quantile(0.95,
+        sum by (le) (rate(efe_saga_provision_seconds_bucket[6h]))) > 720
+    for: 1h
+    labels:
+      severity: major
+      page: pagerduty-saga
+      ops_master_slo: SLO-OPS-PROVISION-P95
+    annotations:
+      summary: |
+        Tenant provisioning p95 over 6 h = {{ $value | printf "%.0f" }} s
+        (>720 s budget).
+      runbook: docs/runbooks/d15_tenant_onboarding_failed.md
+
+  - alert: OpsInvalidTenantTransition
+    expr: increase(efe_tenant_invalid_transition_count[10m]) > 0
+    for: 1m
+    labels:
+      severity: critical
+      page: pagerduty-saga
+      ops_master_slo: SLO-OPS-LIFECYCLE-INVARIANTS
+    annotations:
+      summary: |
+        Tenant FSM transitioned to an invalid state — investigate.
+      runbook: docs/runbooks/ops_master_gate_fail.md
+
+- name: ops.burn_rate.release
+  rules:
+  - alert: OpsCanaryRollbackSpike
+    expr: |
+      (
+        sum(rate(efe_release_rollback_total[90d]))
+        / sum(rate(efe_release_total[90d]))
+      ) > 0.10
+    for: 1h
+    labels:
+      severity: major
+      page: pagerduty-release
+      ops_master_slo: SLO-OPS-CANARY-ROLLBACK-RATE
+    annotations:
+      summary: |
+        Canary rollback rate over the last 90 days = {{ $value | printf "%.2f" }}
+        (>10 %). Release pipeline instability.
+      runbook: docs/runbooks/ops_master_gate_fail.md

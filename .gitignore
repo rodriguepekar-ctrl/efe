@@ -49,6 +49,15 @@ node_modules/
 .pnpm-store/
 # (build/ · dist/ · coverage/ · .env.local déjà couverts plus haut/bas)
 
+# Terraform (cache de providers/modules régénérable + état/variables sensibles)
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example
+crash.log
+# (.terraform.lock.hcl et les *.tf source restent SUIVIS)
+
 # CUDA / CMake
 build/
 build-release/

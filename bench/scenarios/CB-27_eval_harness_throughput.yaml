@@ -1,0 +1,50 @@
+# CB-27 — Evaluation harness throughput.
+# Exercises `eval/` (66 source files) end-to-end evaluation runner.
+
+schema_version: 1
+suite: CB
+id: CB-27_eval_harness_throughput
+family: integration
+subsystem: eval-harness
+description: "Run 1k eval samples across 5 task types, 60s"
+duration: "60s"
+requires_meta_swarm: false
+
+cluster:
+  provisioner: kind
+  kind_image: kindest/node:v1.30.0
+  topology:
+    eval_replicas: 1
+    grader_backend_mocked: true
+
+loadgen:
+  version: 1
+  name: CB-27-runner
+  target:
+    binary: "efe-eval"
+    subcommand: "run --suite cb27-mixed"
+  pattern: { type: single-shot }
+  workload:
+    type: eval-mixed
+    task_mix:
+      classification: 0.40
+      extraction: 0.25
+      generation: 0.20
+      retrieval_qa: 0.10
+      tool_use: 0.05
+    samples_per_task: 200
+  rate: { mode: closed-loop, max_concurrency: 16 }
+  termination: { duration: "60s" }
+  output: { format: ndjson, file: /var/run/loadgen/CB-27-result.ndjson }
+  run: { seed: 26027, mode: staging, allow_mutation: false }
+
+chaos: []
+results:
+  collect_prom_snapshot: true
+  emit_metrics: [samples_per_sec, grader_p99_ms, scoring_consistency_pct, drift_from_baseline_pp]
+
+tolerance:
+  samples_per_sec_min_delta_pct: -15
+  grader_p99_ms_max_delta_pct: 20
+  scoring_consistency_pct_absolute_min: 99.0
+  drift_from_baseline_pp_absolute_max: 1.0

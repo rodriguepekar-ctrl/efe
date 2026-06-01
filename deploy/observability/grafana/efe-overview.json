@@ -1,0 +1,203 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": { "type": "grafana", "uid": "-- Grafana --" },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "title": "EFE — Overview",
+  "tags": ["efe", "slo", "platform"],
+  "uid": "efe-overview",
+  "version": 1,
+  "schemaVersion": 38,
+  "style": "dark",
+  "editable": true,
+  "timezone": "utc",
+  "refresh": "30s",
+  "time": { "from": "now-1h", "to": "now" },
+  "templating": {
+    "list": [
+      {
+        "name": "prometheus",
+        "type": "datasource",
+        "query": "prometheus",
+        "current": { "selected": false, "text": "Prometheus", "value": "Prometheus" }
+      },
+      {
+        "name": "catalog",
+        "type": "query",
+        "datasource": "$prometheus",
+        "query": "label_values(efe_classify_requests_total, catalog)",
+        "includeAll": true,
+        "multi": true,
+        "current": { "text": "All", "value": "$__all" }
+      },
+      {
+        "name": "tenant",
+        "type": "query",
+        "datasource": "$prometheus",
+        "query": "label_values(efe_classify_requests_total{catalog=~\"$catalog\"}, tenant)",
+        "includeAll": true,
+        "multi": true,
+        "current": { "text": "All", "value": "$__all" }
+      }
+    ]
+  },
+  "panels": [
+    {
+      "title": "Availability (SLO 99.5%)",
+      "type": "stat",
+      "gridPos": { "h": 5, "w": 6, "x": 0, "y": 0 },
+      "datasource": "$prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0.98, "max": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red",    "value": null },
+              { "color": "yellow", "value": 0.995 },
+              { "color": "green",  "value": 0.999 }
+            ]
+          }
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "1 - (sum(rate(efe_classify_errors_total{catalog=~\"$catalog\",tenant=~\"$tenant\"}[30d])) / sum(rate(efe_classify_requests_total{catalog=~\"$catalog\",tenant=~\"$tenant\"}[30d])))"
+        }
+      ]
+    },
+    {
+      "title": "Request rate (QPS)",
+      "type": "timeseries",
+      "gridPos": { "h": 5, "w": 12, "x": 6, "y": 0 },
+      "datasource": "$prometheus",
+      "fieldConfig": { "defaults": { "unit": "reqps" } },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (tenant) (rate(efe_classify_requests_total{catalog=~\"$catalog\",tenant=~\"$tenant\"}[1m]))",
+          "legendFormat": "{{tenant}}"
+        }
+      ]
+    },
+    {
+      "title": "Error rate (SLO < 0.5%)",
+      "type": "timeseries",
+      "gridPos": { "h": 5, "w": 6, "x": 18, "y": 0 },
+      "datasource": "$prometheus",
+      "fieldConfig": { "defaults": { "unit": "percentunit" } },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(rate(efe_classify_errors_total{catalog=~\"$catalog\",tenant=~\"$tenant\"}[5m])) / sum(rate(efe_classify_requests_total{catalog=~\"$catalog\",tenant=~\"$tenant\"}[5m]))"
+        }
+      ],
+      "options": {
+        "tooltip": { "mode": "multi" },
+        "legend": { "showLegend": true, "displayMode": "table", "placement": "bottom" }
+      }
+    },
+    {
+      "title": "Latency percentiles (seconds)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 5 },
+      "datasource": "$prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green",  "value": null },
+              { "color": "yellow", "value": 1.5 },
+              { "color": "red",    "value": 2 }
+            ]
+          }
+        }
+      },
+      "targets": [
+        { "refId": "A", "expr": "histogram_quantile(0.50, sum by (le) (rate(efe_classify_duration_seconds_bucket{catalog=~\"$catalog\",tenant=~\"$tenant\"}[5m])))", "legendFormat": "p50" },
+        { "refId": "B", "expr": "histogram_quantile(0.95, sum by (le) (rate(efe_classify_duration_seconds_bucket{catalog=~\"$catalog\",tenant=~\"$tenant\"}[5m])))", "legendFormat": "p95" },
+        { "refId": "C", "expr": "histogram_quantile(0.99, sum by (le) (rate(efe_classify_duration_seconds_bucket{catalog=~\"$catalog\",tenant=~\"$tenant\"}[5m])))", "legendFormat": "p99" }
+      ]
+    },
+    {
+      "title": "Error budget remaining (30d)",
+      "type": "bargauge",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 5 },
+      "datasource": "$prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red",    "value": null },
+              { "color": "yellow", "value": 0.30 },
+              { "color": "green",  "value": 0.70 }
+            ]
+          }
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "1 - ((sum(rate(efe_classify_errors_total[30d])) / sum(rate(efe_classify_requests_total[30d]))) / 0.005)"
+        }
+      ]
+    },
+    {
+      "title": "In-flight requests per pod",
+      "type": "timeseries",
+      "gridPos": { "h": 6, "w": 12, "x": 0, "y": 13 },
+      "datasource": "$prometheus",
+      "targets": [
+        { "refId": "A", "expr": "avg by (pod) (efe_inflight_requests)", "legendFormat": "{{pod}}" }
+      ]
+    },
+    {
+      "title": "Pod restart rate",
+      "type": "timeseries",
+      "gridPos": { "h": 6, "w": 12, "x": 12, "y": 13 },
+      "datasource": "$prometheus",
+      "targets": [
+        { "refId": "A", "expr": "rate(kube_pod_container_status_restarts_total{namespace=\"efe\",pod=~\"efe-server-.+\"}[10m])", "legendFormat": "{{pod}}" }
+      ]
+    },
+    {
+      "title": "Catalog freshness (age in seconds)",
+      "type": "timeseries",
+      "gridPos": { "h": 6, "w": 12, "x": 0, "y": 19 },
+      "datasource": "$prometheus",
+      "fieldConfig": { "defaults": { "unit": "s" } },
+      "targets": [
+        { "refId": "A", "expr": "time() - min by (catalog) (efe_catalog_loaded_timestamp_seconds)", "legendFormat": "{{catalog}}" }
+      ]
+    },
+    {
+      "title": "Reject rate (recommended review trigger)",
+      "type": "timeseries",
+      "gridPos": { "h": 6, "w": 12, "x": 12, "y": 19 },
+      "datasource": "$prometheus",
+      "fieldConfig": { "defaults": { "unit": "percentunit" } },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (catalog) (rate(efe_classify_reject_total{catalog=~\"$catalog\"}[5m])) / sum by (catalog) (rate(efe_classify_requests_total{catalog=~\"$catalog\"}[5m]))",
+          "legendFormat": "{{catalog}}"
+        }
+      ]
+    }
+  ]
+}

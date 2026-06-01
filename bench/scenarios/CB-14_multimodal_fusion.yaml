@@ -1,0 +1,58 @@
+# CB-14 — Multimodal fusion (vision + audio + long-context) throughput.
+# Exercises `efe-multimodal` (M30) including Triton client path.
+
+schema_version: 1
+suite: CB
+id: CB-14_multimodal_fusion
+family: data-plane
+subsystem: efe-multimodal
+description: "5k mixed multimodal requests (image / audio / fused) in 60s"
+duration: "60s"
+requires_meta_swarm: false
+
+cluster:
+  provisioner: kind
+  kind_image: kindest/node:v1.30.0
+  topology:
+    multimodal_replicas: 1
+    triton_replicas: 1
+    triton_backend_mocked: true
+
+loadgen:
+  version: 1
+  name: CB-14-loadgen
+  target:
+    endpoints:
+      - url: "grpc://efe-multimodal.efe.svc:50181"
+        weight: 1.0
+    role: multimodal-client
+    conns_per_target: 4
+    per_request_deadline: "5s"
+  pattern:
+    type: constant
+    qps: 83
+  workload:
+    type: multimodal-mixed
+    modality_share:
+      image_only: 0.35
+      audio_only: 0.15
+      text_long_ctx: 0.30
+      fused_image_text: 0.15
+      fused_audio_text: 0.05
+    image_size_kb_mean: 256
+    audio_clip_seconds_mean: 8
+    long_ctx_tokens_mean: 32000
+  rate: { mode: closed-loop, max_concurrency: 16 }
+  termination: { duration: "60s" }
+  output: { format: ndjson, file: /var/run/loadgen/CB-14-result.ndjson }
+  run: { seed: 26014, mode: staging, allow_mutation: false }
+
+chaos: []
+results:
+  collect_prom_snapshot: true
+  emit_metrics: [fusion_p99_ms, triton_p99_ms, per_modality_p99_ms, qps_at_saturation]
+
+tolerance:
+  fusion_p99_ms_max_delta_pct: 20
+  triton_p99_ms_max_delta_pct: 15
+  qps_at_saturation_min_delta_pct: -10

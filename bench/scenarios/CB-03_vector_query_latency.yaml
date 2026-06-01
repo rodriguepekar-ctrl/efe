@@ -1,0 +1,73 @@
+# CB-03 — Vector store query latency.
+# Exercises `efe-vector` with mixed ANN, exact, bulk-insert.
+# Meta-Swarm NOT required.
+#
+# Frozen under STABILITY § 27.1 + § 27.2.
+# Reference baseline : bench/baselines/CB-03.json
+
+schema_version: 1
+suite: CB
+id: CB-03_vector_query_latency
+family: data-plane
+subsystem: efe-vector
+description: "10k mixed queries (ANN 60% / exact 30% / bulk-insert 10%)"
+duration: "30s"
+requires_meta_swarm: false
+
+cluster:
+  provisioner: kind
+  kind_image: kindest/node:v1.30.0
+  topology:
+    vector_replicas: 1
+    vector_storage: "10Gi"
+    initial_index_size: 100000  # vectors pre-loaded
+
+loadgen:
+  version: 1
+  name: CB-03-loadgen
+  target:
+    endpoints:
+      - url: "grpc://efe-vector.efe.svc:50071"
+        weight: 1.0
+    role: vector-client
+    conns_per_target: 4
+    per_request_deadline: "2s"
+  pattern:
+    type: closed-loop-fixed
+    total_requests: 10000
+  workload:
+    type: vector-mixed
+    ann_k: 10
+    ann_share: 0.6
+    exact_share: 0.3
+    bulk_insert_share: 0.1
+    bulk_insert_batch_size: 10
+    vector_dim: 768
+  rate:
+    mode: closed-loop
+    max_concurrency: 64
+  termination:
+    duration: "30s"
+  output:
+    format: ndjson
+    file: /var/run/loadgen/CB-03-result.ndjson
+  run:
+    seed: 26003
+    mode: staging
+    allow_mutation: true
+
+chaos: []
+
+results:
+  collect_prom_snapshot: true
+  emit_metrics:
+    - query_p50_ms
+    - query_p99_ms
+    - bulk_insert_p99_ms
+    - qps_at_saturation
+    - index_size_mb
+
+tolerance:
+  query_p99_ms_max_delta_pct: 15
+  qps_at_saturation_min_delta_pct: -10
+  index_size_mb_max_delta_pct: 5

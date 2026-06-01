@@ -1,0 +1,96 @@
+## Sprint D13 — Grafana datasource provisioning example.
+##
+## Apply this to Grafana via the provisioning sidecar
+## (mount as `/etc/grafana/provisioning/datasources/`).
+##
+## When ``observability.multiTenancy.enabled = true`` in Helm
+## values, customize the `httpHeaderValue1` to the tenant id so
+## Mimir / Cortex filter server-side via the X-Scope-OrgID header.
+
+apiVersion: 1
+
+datasources:
+  ## Prometheus / Mimir / Cortex / Thanos
+  - name: Prometheus
+    uid: prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus.observability.svc.cluster.local:9090
+    isDefault: true
+    editable: false
+    jsonData:
+      timeInterval: 30s
+      ## Exemplar correlation : when a histogram bucket is clicked,
+      ## fetch the trace for the trace_id exemplar.
+      exemplarTraceIdDestinations:
+        - name: trace_id
+          datasourceUid: tempo
+      ## Multi-tenant : threaded via the Mimir X-Scope-OrgID header.
+      ## The actual value is injected per-org via grafana_org_provision.py.
+      ## Uncomment + customize when Mimir multi-tenant is on :
+      # httpHeaderName1: X-Scope-OrgID
+    # secureJsonData:
+    #   httpHeaderValue1: __TENANT_ID__   # filled by provision script
+
+  ## Loki — structured logs
+  - name: Loki
+    uid: loki
+    type: loki
+    access: proxy
+    url: http://loki.observability.svc.cluster.local:3100
+    editable: false
+    jsonData:
+      maxLines: 5000
+      ## Derived fields : when a log line contains a trace_id, render
+      ## it as a clickable link to the corresponding Tempo trace.
+      derivedFields:
+        - name: trace_id
+          matcherType: label
+          matcherRegex: trace_id
+          url: "${__value.raw}"
+          datasourceUid: tempo
+      ## Same multi-tenant header pattern as Prometheus.
+      # httpHeaderName1: X-Scope-OrgID
+    # secureJsonData:
+    #   httpHeaderValue1: __TENANT_ID__
+
+  ## Tempo — distributed traces
+  - name: Tempo
+    uid: tempo
+    type: tempo
+    access: proxy
+    url: http://tempo-query-frontend.observability.svc.cluster.local:3100
+    editable: false
+    jsonData:
+      ## Service map renders a topology graph from spans.
+      serviceMap:
+        datasourceUid: prometheus
+      tracesToLogs:
+        datasourceUid: loki
+        tags: ["tenant_id"]
+        spanStartTimeShift: -1m
+        spanEndTimeShift: 1m
+      tracesToMetrics:
+        datasourceUid: prometheus
+        spanStartTimeShift: -1m
+        spanEndTimeShift: 1m
+        queries:
+          - name: 'Sample query'
+            query: |
+              sum(rate(efe_grpc_request_duration_seconds_count{
+                tenant=~"${tenant}"
+              }[$__rate_interval]))
+      ## Multi-tenant : Tempo also supports X-Scope-OrgID.
+      # httpHeaderName1: X-Scope-OrgID
+    # secureJsonData:
+    #   httpHeaderValue1: __TENANT_ID__
+
+  ## Alertmanager — for the alert list panel in dashboard 01.
+  - name: Alertmanager
+    uid: alertmanager
+    type: alertmanager
+    access: proxy
+    url: http://alertmanager.observability.svc.cluster.local:9093
+    editable: false
+    jsonData:
+      implementation: prometheus

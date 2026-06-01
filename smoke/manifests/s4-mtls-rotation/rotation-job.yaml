@@ -1,0 +1,44 @@
+# PR #23 § 7.4 — S4 cert-rotation : after 5 s of steady traffic, swap
+# the Secret reference from CA-A to CA-B by patching the Deployment
+# and triggering a rollout-restart.
+#
+# This Job is launched by the smoke runner ~ 5 s into S4.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: efe-smoke-s4-rotation
+  labels:
+    efe.io/smoke: "true"
+    efe.io/smoke-check: "S4_mtls_rotation"
+spec:
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 60
+  template:
+    metadata:
+      labels: { efe.io/smoke: "true", efe.io/smoke-check: "S4_mtls_rotation" }
+    spec:
+      restartPolicy: Never
+      serviceAccountName: efe-smoke-runner
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: rotate
+          image: bitnami/kubectl:1.30
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: [ALL] }
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              set -eo pipefail
+              echo "[S4-rot] swapping TLS Secret efe-smoke-ca-a → efe-smoke-ca-b"
+              kubectl -n efe-smoke-s4 patch deployment efe-meta-swarm-controller \
+                  -p '{"spec":{"template":{"metadata":{"annotations":{"efe.io/cert-rotation":"'$(date -u +%s)'"}}}}}'
+              # The pod template references the Secret via projected volume ;
+              # the patch above triggers rollout restart, which picks the
+              # current Secret content (replaced separately by the runner).
+              kubectl -n efe-smoke-s4 rollout status deployment efe-meta-swarm-controller --timeout=15s

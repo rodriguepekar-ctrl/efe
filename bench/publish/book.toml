@@ -1,0 +1,16 @@
+[book]
+title    = "EFE Public Bench"
+authors  = ["EFE Platform Team"]
+language = "en"
+src      = "src"
+
+[output.html]
+default-theme        = "light"
+preferred-dark-theme = "light"
+no-section-label     = true
+git-repository-url   = "https://github.com/efe-ai/efe/tree/main/bench"
+
+# AD3 / AD20 / T125 mitigation — no client-side JS.
+playground.copyable = false
+playground.copy-js  = false
+search.enable       = false

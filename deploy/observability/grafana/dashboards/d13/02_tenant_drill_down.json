@@ -1,0 +1,325 @@
+{
+  "__inputs": [],
+  "__requires": [
+    {"type": "grafana", "id": "grafana", "name": "Grafana", "version": "10.2.0"},
+    {"type": "datasource", "id": "prometheus", "name": "Prometheus", "version": "1.0.0"},
+    {"type": "datasource", "id": "loki", "name": "Loki", "version": "1.0.0"}
+  ],
+  "uid": "efe-d13-02-tenant-drill-down",
+  "title": "EFE — 02 Tenant Drill-Down",
+  "description": "Sprint D13 — per-tenant deep-dive : RPS, error rate, latency p50/p95/p99, classify confidence, rate-limit drops, audit log tail. Source : architecture D13 § 9.2.",
+  "tags": ["efe", "d13", "tenant", "support"],
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "1m",
+  "time": {"from": "now-24h", "to": "now"},
+  "timepicker": {"refresh_intervals": ["30s", "1m", "5m", "15m", "1h"]},
+  "graphTooltip": 1,
+  "templating": {
+    "list": [
+      {
+        "name": "datasource",
+        "type": "datasource",
+        "query": "prometheus",
+        "current": {"text": "Prometheus", "value": "Prometheus"}
+      },
+      {
+        "name": "loki_datasource",
+        "type": "datasource",
+        "query": "loki",
+        "current": {"text": "Loki", "value": "Loki"}
+      },
+      {
+        "name": "tenant",
+        "type": "query",
+        "datasource": {"type": "prometheus", "uid": "$datasource"},
+        "query": "label_values(efe_grpc_requests_total, tenant)",
+        "includeAll": false,
+        "multi": false,
+        "refresh": 2,
+        "sort": 1,
+        "label": "Tenant"
+      },
+      {
+        "name": "stream",
+        "type": "custom",
+        "query": "request, audit, classify, evolution, security",
+        "current": {"text": "request", "value": "request"},
+        "label": "Log stream"
+      }
+    ]
+  },
+  "panels": [
+    {
+      "type": "row",
+      "id": 1,
+      "title": "Tenant info — $tenant",
+      "gridPos": {"x": 0, "y": 0, "w": 24, "h": 1}
+    },
+    {
+      "type": "stat",
+      "id": 2,
+      "title": "Active catalogs",
+      "datasource": {"type": "prometheus", "uid": "$datasource"},
+      "gridPos": {"x": 0, "y": 1, "w": 4, "h": 4},
+      "fieldConfig": {"defaults": {"unit": "short"}},
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "count(count by (name) (efe_catalog_versions_per_name{tenant=\"$tenant\"}))"
+        }
+      ]
+    },
+    {
+      "type": "stat",
+      "id": 3,
+      "title": "Total versions",
+      "datasource": {"type": "prometheus", "uid": "$datasource"},
+      "gridPos": {"x": 4, "y": 1, "w": 4, "h": 4},
+      "fieldConfig": {"defaults": {"unit": "short"}},
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(efe_catalog_versions_per_name{tenant=\"$tenant\"})"
+        }
+      ]
+    },
+    {
+      "type": "stat",
+      "id": 4,
+      "title": "RPS (5m)",
+      "datasource": {"type": "prometheus", "uid": "$datasource"},
+      "gridPos": {"x": 8, "y": 1, "w": 4, "h": 4},
+      "fieldConfig": {"defaults": {"unit": "reqps"}},
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(rate(efe_grpc_requests_total{tenant=\"$tenant\"}[5m]))"
+        }
+      ]
+    },
+    {
+      "type": "stat",
+      "id": 5,
+      "title": "Error rate",
+      "datasource": {"type": "prometheus", "uid": "$datasource"},
+      "gridPos": {"x": 12, "y": 1, "w": 4, "h": 4},
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green",  "value": null},
+              {"color": "yellow", "value": 0.01},
+              {"color": "red",    "value": 0.05}
+            ]
+          }
+        }
+      },
+      "options": {"colorMode": "background"},
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "efe:rpc_error_rate:5m{tenant=\"$tenant\"}"
+        }
+      ]
+    },
+    {
+      "type": "stat",
+      "id": 6,
+      "title": "Rate limit drops 24h",
+      "datasource": {"type": "prometheus", "uid": "$datasource"},
+      "gridPos": {"x": 16, "y": 1, "w": 4, "h": 4},
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green",  "value": null},
+              {"color": "yellow", "value": 100},
+              {"color": "red",    "value": 1000}
+            ]
+          }
+        }
+      },
+      "options": {"colorMode": "background"},
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(increase(efe_ratelimit_drops_total{tenant=\"$tenant\"}[24h]))"
+        }
+      ]
+    },
+    {
+      "type": "stat",
+      "id": 7,
+      "title": "Auth failures 24h",
+      "datasource": {"type": "prometheus", "uid": "$datasource"},
+      "gridPos": {"x": 20, "y": 1, "w": 4, "h": 4},
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green",  "value": null},
+              {"color": "yellow", "value": 5},
+              {"color": "red",    "value": 50}
+            ]
+          }
+        }
+      },
+      "options": {"colorMode": "background"},
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(increase(efe_authz_failures_total{tenant=\"$tenant\"}[24h]))"
+        }
+      ]
+    },
+    {
+      "type": "row",
+      "id": 8,
+      "title": "RPS & errors over 24h",
+      "gridPos": {"x": 0, "y": 5, "w": 24, "h": 1}
+    },
+    {
+      "type": "timeseries",
+      "id": 9,
+      "title": "RPS by RPC method",
+      "datasource": {"type": "prometheus", "uid": "$datasource"},
+      "gridPos": {"x": 0, "y": 6, "w": 12, "h": 8},
+      "options": {"legend": {"showLegend": true, "displayMode": "table"}},
+      "fieldConfig": {"defaults": {"unit": "reqps"}},
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (method) (rate(efe_grpc_requests_total{tenant=\"$tenant\"}[5m]))",
+          "legendFormat": "{{method}}"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "id": 10,
+      "title": "Error rate by RPC code",
+      "datasource": {"type": "prometheus", "uid": "$datasource"},
+      "gridPos": {"x": 12, "y": 6, "w": 12, "h": 8},
+      "options": {"legend": {"showLegend": true, "displayMode": "table"}},
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "custom": {"stacking": {"mode": "normal"}, "fillOpacity": 60}
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (code) (rate(efe_grpc_requests_total{tenant=\"$tenant\", code!=\"OK\"}[5m])) / scalar(sum(rate(efe_grpc_requests_total{tenant=\"$tenant\"}[5m])))",
+          "legendFormat": "{{code}}"
+        }
+      ]
+    },
+    {
+      "type": "row",
+      "id": 11,
+      "title": "Latency percentiles",
+      "gridPos": {"x": 0, "y": 14, "w": 24, "h": 1}
+    },
+    {
+      "type": "timeseries",
+      "id": 12,
+      "title": "Latency p50 / p95 / p99 by RPC",
+      "datasource": {"type": "prometheus", "uid": "$datasource"},
+      "gridPos": {"x": 0, "y": 15, "w": 24, "h": 8},
+      "options": {"legend": {"showLegend": true, "displayMode": "table"}},
+      "fieldConfig": {"defaults": {"unit": "s"}},
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.50, sum(rate(efe_grpc_request_duration_seconds_bucket{tenant=\"$tenant\"}[5m])) by (le, method))",
+          "legendFormat": "p50 {{method}}"
+        },
+        {
+          "refId": "B",
+          "expr": "histogram_quantile(0.95, sum(rate(efe_grpc_request_duration_seconds_bucket{tenant=\"$tenant\"}[5m])) by (le, method))",
+          "legendFormat": "p95 {{method}}"
+        },
+        {
+          "refId": "C",
+          "expr": "histogram_quantile(0.99, sum(rate(efe_grpc_request_duration_seconds_bucket{tenant=\"$tenant\"}[5m])) by (le, method))",
+          "legendFormat": "p99 {{method}}"
+        }
+      ]
+    },
+    {
+      "type": "row",
+      "id": 13,
+      "title": "Classify health",
+      "gridPos": {"x": 0, "y": 23, "w": 24, "h": 1}
+    },
+    {
+      "type": "heatmap",
+      "id": 14,
+      "title": "Confidence distribution (heatmap)",
+      "datasource": {"type": "prometheus", "uid": "$datasource"},
+      "gridPos": {"x": 0, "y": 24, "w": 16, "h": 8},
+      "options": {"yAxis": {"unit": "percentunit", "min": 0, "max": 1}, "calculate": false},
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (le) (rate(efe_classify_confidence_bucket{tenant=\"$tenant\"}[5m]))",
+          "format": "heatmap",
+          "legendFormat": "{{le}}"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "id": 15,
+      "title": "Idempotency hits / cache",
+      "datasource": {"type": "prometheus", "uid": "$datasource"},
+      "gridPos": {"x": 16, "y": 24, "w": 8, "h": 8},
+      "fieldConfig": {"defaults": {"unit": "ops"}},
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "rate(efe_idempotency_hits_total{tenant=\"$tenant\"}[5m])",
+          "legendFormat": "hits/s"
+        }
+      ]
+    },
+    {
+      "type": "row",
+      "id": 16,
+      "title": "Tenant log tail",
+      "gridPos": {"x": 0, "y": 32, "w": 24, "h": 1}
+    },
+    {
+      "type": "logs",
+      "id": 17,
+      "title": "Logs — stream $stream",
+      "datasource": {"type": "loki", "uid": "$loki_datasource"},
+      "gridPos": {"x": 0, "y": 33, "w": 24, "h": 12},
+      "options": {
+        "showTime": true,
+        "showLabels": true,
+        "wrapLogMessage": true,
+        "sortOrder": "Descending"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "{tenant_id=\"$tenant\", stream=\"$stream\"} | json"
+        }
+      ]
+    }
+  ],
+  "links": [
+    {"title": "Operator Overview",  "url": "/d/efe-d13-01-operator-overview",        "type": "dashboards"},
+    {"title": "Catalog versions",   "url": "/d/efe-d13-03-catalog-version-distribution?var-tenant=$tenant", "type": "dashboards"},
+    {"title": "Cost attribution",   "url": "/d/efe-d13-04-cost-attribution?var-tenant=$tenant", "type": "dashboards"}
+  ]
+}

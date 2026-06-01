@@ -1,0 +1,66 @@
+# CB-10 — Prompt rendering throughput.
+# Exercises `efe-prompts` template engine.
+#
+# Frozen under STABILITY § 27.1 + § 27.2.
+# Reference baseline : bench/baselines/CB-10.json
+
+schema_version: 1
+suite: CB
+id: CB-10_prompt_rendering_throughput
+family: inference
+subsystem: efe-prompts
+description: "100k template renders across small/medium/large in 10s"
+duration: "10s"
+requires_meta_swarm: false
+
+cluster:
+  provisioner: kind
+  kind_image: kindest/node:v1.30.0
+  topology:
+    prompts_replicas: 1
+
+loadgen:
+  version: 1
+  name: CB-10-loadgen
+  target:
+    endpoints:
+      - url: "grpc://efe-prompts.efe.svc:50141"
+        weight: 1.0
+    role: prompts-client
+    conns_per_target: 8
+    per_request_deadline: "50ms"
+  pattern:
+    type: closed-loop-fixed
+    total_requests: 100000
+  workload:
+    type: prompt-render-mixed
+    template_size_distribution:
+      small: 0.5     # ~200 tokens, ≤ 5 substitutions
+      medium: 0.35   # ~1k tokens, ≤ 20 substitutions
+      large: 0.15    # ~4k tokens, ≤ 50 substitutions
+  rate:
+    mode: closed-loop
+    max_concurrency: 64
+  termination:
+    duration: "10s"
+  output:
+    format: ndjson
+    file: /var/run/loadgen/CB-10-result.ndjson
+  run:
+    seed: 26010
+    mode: staging
+    allow_mutation: false
+
+chaos: []
+
+results:
+  collect_prom_snapshot: true
+  emit_metrics:
+    - renders_per_sec
+    - per_render_p99_us
+    - template_cache_hit_rate_pct
+
+tolerance:
+  renders_per_sec_min_delta_pct: -10
+  per_render_p99_us_max_delta_pct: 20
+  template_cache_hit_rate_pct_absolute_delta_pp_max: 2

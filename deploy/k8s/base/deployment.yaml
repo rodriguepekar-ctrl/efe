@@ -1,0 +1,159 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: efe-server
+  namespace: efe
+  labels:
+    app.kubernetes.io/name: efe-server
+    app.kubernetes.io/component: data-plane
+    app.kubernetes.io/part-of: efe-platform
+spec:
+  replicas: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      # With minReplicas=3 and PDB minAvailable=2, one pod at a time
+      # keeps us at ≥ 2 live pods throughout a rolling update.
+      maxSurge: 1
+      maxUnavailable: 0
+  revisionHistoryLimit: 5
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: efe-server
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: efe-server
+        app.kubernetes.io/component: data-plane
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9090"
+        prometheus.io/path: "/metrics"
+        # Trigger a rolling restart whenever the tenants ConfigMap
+        # changes. kustomize populates this at render time.
+        checksum/tenants: "__tenants_checksum__"
+    spec:
+      serviceAccountName: efe-server
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 45
+      # Spread across nodes for fault tolerance.
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: efe-server
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: efe-server
+          image: ghcr.io/efe-project/efe:0.1.0
+          imagePullPolicy: IfNotPresent
+          ports:
+            - { name: data,    containerPort: 50051, protocol: TCP }
+            - { name: admin,   containerPort: 50052, protocol: TCP }
+            - { name: health,  containerPort: 50053, protocol: TCP }
+            - { name: metrics, containerPort: 9090,  protocol: TCP }
+          env:
+            - { name: EFE_BACKEND,          value: mvp }
+            - { name: EFE_DATA_PORT,        value: "50051" }
+            - { name: EFE_ADMIN_PORT,       value: "50052" }
+            - { name: EFE_HEALTH_PORT,      value: "50053" }
+            - { name: EFE_METRICS_PORT,     value: "9090" }
+            - { name: EFE_CATALOG_STORE,    value: "s3://efe-catalogs-prod/" }
+            - { name: EFE_TENANTS_CONFIG,   value: "/etc/efe/tenants.yaml" }
+            - { name: EFE_JWT_PUBLIC_KEYS,  value: "/etc/efe/jwt-keys/" }
+            - { name: EFE_AUDIT_SINK,       value: "/var/lib/efe/audit" }
+            - { name: RUST_LOG,             value: "info,efe=info" }
+            - name: POD_NAME
+              valueFrom: { fieldRef: { fieldPath: metadata.name } }
+            - name: POD_NAMESPACE
+              valueFrom: { fieldRef: { fieldPath: metadata.namespace } }
+            - name: POD_IP
+              valueFrom: { fieldRef: { fieldPath: status.podIP } }
+          resources:
+            requests:
+              cpu: 500m
+              memory: 768Mi
+              ephemeral-storage: 128Mi
+            limits:
+              cpu: "2"
+              memory: 1536Mi
+              ephemeral-storage: 512Mi
+          # Kubernetes-native gRPC probes (GA since 1.24).
+          # `service` omitted → queries overall health of the server.
+          # For a finer-grained check, set service to a registered name
+          # like "efe.mode1.v1.Mode1Service".
+          readinessProbe:
+            grpc:
+              port: 50053
+            initialDelaySeconds: 20
+            periodSeconds: 5
+            timeoutSeconds: 2
+            successThreshold: 1
+            failureThreshold: 3
+          livenessProbe:
+            grpc:
+              port: 50053
+            initialDelaySeconds: 60
+            periodSeconds: 15
+            timeoutSeconds: 3
+            failureThreshold: 3
+          startupProbe:
+            grpc:
+              port: 50053
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            failureThreshold: 30    # 30 × 5s = 2.5 min max startup
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 10001
+            runAsGroup: 10001
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - { name: tmp,            mountPath: /tmp }
+            - { name: audit,          mountPath: /var/lib/efe/audit }
+            - { name: tenants-config, mountPath: /etc/efe, readOnly: true }
+            - { name: tls-certs,      mountPath: /etc/efe/tls, readOnly: true }
+            - { name: jwt-keys,       mountPath: /etc/efe/jwt-keys, readOnly: true }
+      volumes:
+        - name: tmp
+          emptyDir:
+            sizeLimit: 256Mi
+            medium: Memory
+        - name: audit
+          emptyDir:
+            sizeLimit: 128Mi
+        - name: tenants-config
+          configMap:
+            name: efe-tenants
+        - name: tls-certs
+          csi:
+            driver: secrets-store.csi.k8s.io
+            readOnly: true
+            volumeAttributes:
+              secretProviderClass: efe-server-tls
+        - name: jwt-keys
+          csi:
+            driver: secrets-store.csi.k8s.io
+            readOnly: true
+            volumeAttributes:
+              secretProviderClass: efe-jwt-keys
+      # In multi-region topologies the pod is scheduled on a node tagged
+      # for the region it serves.
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - { key: efe.project/workload, operator: In, values: ["inference"] }

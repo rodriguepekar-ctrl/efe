@@ -1,0 +1,47 @@
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: efe-server
+  namespace: efe
+  labels:
+    app.kubernetes.io/name: efe-server
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: efe-server
+  minReplicas: 3
+  maxReplicas: 20
+  metrics:
+    # Primary signal: CPU utilisation. 70 % leaves headroom for
+    # spikes while keeping cost reasonable.
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+    # Custom: in-flight classify requests per pod. 8 is a healthy
+    # saturation for a 2-core pod with embedder + swarm.
+    - type: Pods
+      pods:
+        metric:
+          name: efe_inflight_requests
+        target:
+          type: AverageValue
+          averageValue: "8"
+  behavior:
+    scaleUp:
+      # Fast enough for a 10× traffic spike, not so fast it overshoots.
+      stabilizationWindowSeconds: 30
+      policies:
+        - { type: Percent, value: 100, periodSeconds: 60 }   # double at most every min
+        - { type: Pods,    value: 4,   periodSeconds: 60 }   # or +4 pods/min
+      selectPolicy: Max
+    scaleDown:
+      # Slow scale-down avoids yo-yo on short-lived dips.
+      stabilizationWindowSeconds: 300
+      policies:
+        - { type: Percent, value: 10,  periodSeconds: 60 }   # −10 %/min
+        - { type: Pods,    value: 1,   periodSeconds: 120 }  # or −1 pod/2 min
+      selectPolicy: Min

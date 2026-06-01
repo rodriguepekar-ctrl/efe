@@ -1,0 +1,110 @@
+{{- /*
+Sprint D22 (Φ-B) — cert-manager Certificate for mTLS auto-rotation.
+
+Cf. docs/EFE_HELM_CHART_EXTENSION_ARCHITECTURE.md §10.
+
+This template provisions a cert-manager `Certificate` resource that
+issues + auto-rotates the X.509 cert+key used by the efe-server pods
+for mutual TLS (Lettre E D22 server-side enforcement).
+
+PREREQUISITES :
+  - cert-manager ≥ v1.13.0 installed in the cluster.
+  - An `Issuer` (namespaced) or `ClusterIssuer` (cluster-wide) configured
+    by the operator. The chart does NOT provision the Issuer (avoids
+    coupling to a specific CA — Vault / Let's Encrypt / self-signed).
+
+The cert-manager controller writes the rendered (cert + key + CA) to
+the Secret named `<fullname>-mtls-tls` (or `.Values.mtls.secretName`).
+The Deployment mounts this Secret read-only at `/etc/efe/tls/`.
+
+Rotation : cert-manager auto-renews 30 days before expiry (configurable
+via `.Values.mtls.renewBefore`). The efe-server pods detect the new
+cert via inotify on the mounted Secret + reload TLS config (no restart).
+
+Pin tested by `test_m12_helm_extension_mtls_cert_present`.
+*/}}
+{{- if .Values.mtls.enabled }}
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: {{ include "efe.fullname" . }}-mtls
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "efe.labels" . | nindent 4 }}
+    efe.io/sprint: D22
+    efe.io/feature: mtls
+  annotations:
+    efe.io/audit-fix-marker: "M12-D22-mtls-cert-manager"
+spec:
+  # Where cert-manager writes the rendered cert + key + ca chain.
+  secretName: {{ include "efe.mtls.secretName" . }}
+  # Audit fix M12-A3 (MED) — pre-fix this set
+  # `secretTemplate.annotations.cert-manager.io/issuer` to override
+  # what cert-manager writes. But `cert-manager.io/issuer` is NOT a
+  # canonical cert-manager annotation (the canonical set is
+  # `cert-manager.io/{certificate-name, issuer-name, issuer-kind,
+  # issuer-group}`, all auto-populated by the controller). The
+  # override produced a non-standard annotation that didn't match
+  # what cert-manager itself adds → Secret had two separate annotations
+  # for the same concern, confusing operators inspecting via kubectl.
+  # Post-fix : let cert-manager auto-populate the standard annotations.
+  # We only set our own labels for selection / ownership tracking.
+  secretTemplate:
+    labels:
+      {{- include "efe.labels" . | nindent 6 }}
+      efe.io/feature: mtls
+
+  # Validity + renewal window.
+  duration: {{ .Values.mtls.duration | default "8760h" }}
+  renewBefore: {{ .Values.mtls.renewBefore | default "720h" }}
+
+  # Subject + DNS / IP SANs.
+  subject:
+    organizations:
+      - {{ .Release.Namespace | quote }}
+    organizationalUnits:
+      - {{ include "efe.tenantId" . | quote }}
+  commonName: {{ printf "%s.%s.svc.cluster.local" (include "efe.fullname" .) .Release.Namespace | quote }}
+
+  dnsNames:
+    {{- if .Values.mtls.dnsNames }}
+    {{- range .Values.mtls.dnsNames }}
+    - {{ tpl . $ | quote }}
+    {{- end }}
+    {{- else }}
+    - {{ printf "%s.%s.svc.cluster.local" (include "efe.fullname" .) .Release.Namespace | quote }}
+    - {{ printf "%s.%s.svc" (include "efe.fullname" .) .Release.Namespace | quote }}
+    - {{ include "efe.fullname" . | quote }}
+    {{- end }}
+
+  {{- with .Values.mtls.ipAddresses }}
+  ipAddresses:
+    {{- range . }}
+    - {{ . | quote }}
+    {{- end }}
+  {{- end }}
+
+  # Key algorithm + size (defaults : ECDSA P-256, faster than RSA).
+  privateKey:
+    algorithm: {{ .Values.mtls.privateKey.algorithm | default "ECDSA" }}
+    size: {{ .Values.mtls.privateKey.size | default 256 }}
+    rotationPolicy: {{ .Values.mtls.privateKey.rotationPolicy | default "Always" }}
+    encoding: {{ .Values.mtls.privateKey.encoding | default "PKCS8" }}
+
+  # Issuer reference (caller-provided ; chart does NOT provision the Issuer).
+  issuerRef:
+    name: {{ .Values.mtls.issuerRef.name | required ".Values.mtls.issuerRef.name is required when mtls.enabled=true" }}
+    kind: {{ .Values.mtls.issuerRef.kind | default "ClusterIssuer" }}
+    group: {{ .Values.mtls.issuerRef.group | default "cert-manager.io" }}
+
+  # Usages : both server + client auth (server-side mTLS terminates ;
+  # client side enables service-to-service mTLS within the mesh).
+  usages:
+    - server auth
+    - client auth
+    {{- with .Values.mtls.additionalUsages }}
+    {{- range . }}
+    - {{ . }}
+    {{- end }}
+    {{- end }}
+{{- end }}

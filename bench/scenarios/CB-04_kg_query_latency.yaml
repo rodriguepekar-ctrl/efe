@@ -1,0 +1,75 @@
+# CB-04 — Knowledge graph + GraphRAG query latency.
+# Exercises `efe-kg` and `efe-graphrag` under mixed query patterns.
+# Meta-Swarm NOT required.
+#
+# Frozen under STABILITY § 27.1 + § 27.2.
+# Reference baseline : bench/baselines/CB-04.json
+
+schema_version: 1
+suite: CB
+id: CB-04_kg_query_latency
+family: data-plane
+subsystem: efe-kg
+description: "5k mixed KG queries (single-hop 50% / multi-hop 30% / graphrag 20%)"
+duration: "30s"
+requires_meta_swarm: false
+
+cluster:
+  provisioner: kind
+  kind_image: kindest/node:v1.30.0
+  topology:
+    kg_replicas: 1
+    graphrag_replicas: 1
+    kg_dataset_size: 1000000  # nodes pre-loaded
+
+loadgen:
+  version: 1
+  name: CB-04-loadgen
+  target:
+    endpoints:
+      - url: "grpc://efe-kg.efe.svc:50081"
+        weight: 0.8
+      - url: "grpc://efe-graphrag.efe.svc:50091"
+        weight: 0.2
+    role: kg-client
+    conns_per_target: 4
+    per_request_deadline: "3s"
+  pattern:
+    type: closed-loop-fixed
+    total_requests: 5000
+  workload:
+    type: kg-mixed
+    single_hop_share: 0.5
+    multi_hop_share: 0.3
+    graphrag_share: 0.2
+    multi_hop_max_depth: 4
+  rate:
+    mode: closed-loop
+    max_concurrency: 32
+  termination:
+    duration: "30s"
+  output:
+    format: ndjson
+    file: /var/run/loadgen/CB-04-result.ndjson
+  run:
+    seed: 26004
+    mode: staging
+    allow_mutation: false
+
+chaos: []
+
+results:
+  collect_prom_snapshot: true
+  emit_metrics:
+    - single_hop_p99_ms
+    - multi_hop_p99_ms
+    - graphrag_p99_ms
+    - plan_stability_pct
+    - qps_at_saturation
+
+tolerance:
+  single_hop_p99_ms_max_delta_pct: 20
+  multi_hop_p99_ms_max_delta_pct: 20
+  graphrag_p99_ms_max_delta_pct: 20
+  plan_stability_pct_absolute_min: 100.0
+  qps_at_saturation_min_delta_pct: -10

@@ -1,0 +1,53 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# All resources in this directory compose the EFE server base layer.
+# Overlays in ../overlays/* patch this for staging and prod.
+
+namespace: efe
+
+commonLabels:
+  app.kubernetes.io/name: efe-server
+  app.kubernetes.io/part-of: efe-platform
+  app.kubernetes.io/managed-by: kustomize
+
+commonAnnotations:
+  efe.project/source: "github.com/efe-project/efe"
+  efe.project/base-version: "0.1.0"
+
+resources:
+  - namespace.yaml
+  - serviceaccount.yaml
+  - deployment.yaml
+  - service.yaml
+  - pdb.yaml
+  - hpa.yaml
+  - networkpolicy.yaml
+  - servicemonitor.yaml
+  - prometheusrule.yaml
+  - configmap-tenants.yaml
+  # Istio VirtualService + DestinationRule for canary traffic split.
+  # Safe to include even without Istio — the resources are namespaced
+  # and Istio will ignore them if CRDs are absent. Overlays can drop
+  # this via a `$patch: delete` if needed.
+  - virtualservice.yaml
+
+images:
+  - name: ghcr.io/efe-project/efe
+    newTag: "0.1.0"
+
+configMapGenerator: []
+
+# Generate a deterministic checksum annotation on the Deployment so
+# that ConfigMap changes propagate as a rolling restart.
+replacements:
+  - source:
+      kind: ConfigMap
+      name: efe-tenants
+      fieldPath: metadata.uid
+    targets:
+      - select:
+          kind: Deployment
+          name: efe-server
+        fieldPaths:
+          - spec.template.metadata.annotations.[checksum/tenants]

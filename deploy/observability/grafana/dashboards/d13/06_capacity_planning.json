@@ -1,0 +1,264 @@
+{
+  "__inputs": [],
+  "__requires": [
+    {"type": "grafana", "id": "grafana", "name": "Grafana", "version": "10.2.0"},
+    {"type": "datasource", "id": "prometheus", "name": "Prometheus", "version": "1.0.0"}
+  ],
+  "uid": "efe-d13-06-capacity-planning",
+  "title": "EFE — 06 Capacity Planning",
+  "description": "Sprint D13 — capacity SRE view : tenant growth, RPS forecast, CPU/RAM saturation, quota usage, cardinality budget. Source : architecture D13 § 9.6.",
+  "tags": ["efe", "d13", "capacity", "sre"],
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "5m",
+  "time": {"from": "now-30d", "to": "now"},
+  "timepicker": {"refresh_intervals": ["5m", "15m", "1h", "6h"]},
+  "graphTooltip": 1,
+  "templating": {
+    "list": [
+      {
+        "name": "datasource",
+        "type": "datasource",
+        "query": "prometheus",
+        "current": {"text": "Prometheus", "value": "Prometheus"}
+      }
+    ]
+  },
+  "panels": [
+    {
+      "type": "row",
+      "id": 1,
+      "title": "Growth gauges",
+      "gridPos": {"x": 0, "y": 0, "w": 24, "h": 1}
+    },
+    {
+      "type": "stat",
+      "id": 2,
+      "title": "Total active tenants",
+      "datasource": {"type": "prometheus", "uid": "$datasource"},
+      "gridPos": {"x": 0, "y": 1, "w": 6, "h": 4},
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green",  "value": null},
+              {"color": "yellow", "value": 800},
+              {"color": "red",    "value": 1000}
+            ]
+          }
+        }
+      },
+      "options": {"colorMode": "background", "graphMode": "area"},
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "efe_active_tenants"
+        }
+      ]
+    },
+    {
+      "type": "stat",
+      "id": 3,
+      "title": "Total catalogs",
+      "datasource": {"type": "prometheus", "uid": "$datasource"},
+      "gridPos": {"x": 6, "y": 1, "w": 6, "h": 4},
+      "fieldConfig": {"defaults": {"unit": "short"}},
+      "options": {"graphMode": "area"},
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "count(efe:catalog_chain_depth:1m)"
+        }
+      ]
+    },
+    {
+      "type": "stat",
+      "id": 4,
+      "title": "Total versions",
+      "datasource": {"type": "prometheus", "uid": "$datasource"},
+      "gridPos": {"x": 12, "y": 1, "w": 6, "h": 4},
+      "fieldConfig": {"defaults": {"unit": "short"}},
+      "options": {"graphMode": "area"},
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(efe_catalog_versions_per_name)"
+        }
+      ]
+    },
+    {
+      "type": "stat",
+      "id": 5,
+      "title": "Cardinality budget",
+      "datasource": {"type": "prometheus", "uid": "$datasource"},
+      "gridPos": {"x": 18, "y": 1, "w": 6, "h": 4},
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green",  "value": null},
+              {"color": "yellow", "value": 30000},
+              {"color": "red",    "value": 50000}
+            ]
+          }
+        }
+      },
+      "options": {"colorMode": "background"},
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "count(count by (__name__, job) ({__name__=~\"efe_.+\"}))"
+        }
+      ]
+    },
+    {
+      "type": "row",
+      "id": 6,
+      "title": "Forecast & saturation",
+      "gridPos": {"x": 0, "y": 5, "w": 24, "h": 1}
+    },
+    {
+      "type": "timeseries",
+      "id": 7,
+      "title": "RPS — 30d trend (with linear forecast)",
+      "datasource": {"type": "prometheus", "uid": "$datasource"},
+      "gridPos": {"x": 0, "y": 6, "w": 12, "h": 8},
+      "options": {"legend": {"showLegend": true, "displayMode": "list"}},
+      "fieldConfig": {"defaults": {"unit": "reqps"}},
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(rate(efe_grpc_requests_total[1h]))",
+          "legendFormat": "RPS now"
+        },
+        {
+          "refId": "B",
+          "expr": "predict_linear(sum(rate(efe_grpc_requests_total[1h]))[7d:1h], 14*86400)",
+          "legendFormat": "RPS forecast (+14d)"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "id": 8,
+      "title": "CPU saturation per pod",
+      "datasource": {"type": "prometheus", "uid": "$datasource"},
+      "gridPos": {"x": 12, "y": 6, "w": 12, "h": 8},
+      "options": {"legend": {"showLegend": true, "displayMode": "table"}},
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green",  "value": null},
+              {"color": "yellow", "value": 0.8},
+              {"color": "red",    "value": 0.9}
+            ]
+          },
+          "custom": {"thresholdsStyle": {"mode": "line"}}
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "rate(container_cpu_usage_seconds_total{pod=~\".*efe.*\"}[5m]) / on(pod) group_left() kube_pod_container_resource_limits{resource=\"cpu\", pod=~\".*efe.*\"}",
+          "legendFormat": "{{pod}}"
+        }
+      ]
+    },
+    {
+      "type": "row",
+      "id": 9,
+      "title": "Quota usage",
+      "gridPos": {"x": 0, "y": 14, "w": 24, "h": 1}
+    },
+    {
+      "type": "table",
+      "id": 10,
+      "title": "Tenants near catalog version quota",
+      "datasource": {"type": "prometheus", "uid": "$datasource"},
+      "gridPos": {"x": 0, "y": 15, "w": 12, "h": 8},
+      "options": {"showHeader": true},
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green",  "value": null},
+              {"color": "yellow", "value": 700},
+              {"color": "red",    "value": 900}
+            ]
+          },
+          "custom": {"cellOptions": {"type": "color-background", "mode": "gradient"}}
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "topk(20, max by (tenant, name) (efe_catalog_versions_per_name))",
+          "instant": true,
+          "format": "table"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "id": 11,
+      "title": "Tenant cardinality (rolling 30d)",
+      "datasource": {"type": "prometheus", "uid": "$datasource"},
+      "gridPos": {"x": 12, "y": 15, "w": 12, "h": 8},
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "red",   "value": 1000}
+            ]
+          }
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "efe_active_tenants",
+          "legendFormat": "active tenants"
+        }
+      ]
+    },
+    {
+      "type": "row",
+      "id": 12,
+      "title": "Cardinality breakdown",
+      "gridPos": {"x": 0, "y": 23, "w": 24, "h": 1}
+    },
+    {
+      "type": "table",
+      "id": 13,
+      "title": "Top 20 high-cardinality metric families",
+      "datasource": {"type": "prometheus", "uid": "$datasource"},
+      "gridPos": {"x": 0, "y": 24, "w": 24, "h": 8},
+      "options": {"showHeader": true},
+      "fieldConfig": {"defaults": {"unit": "short"}},
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "topk(20, count by (__name__) ({__name__=~\"efe_.+\"}))",
+          "instant": true,
+          "format": "table"
+        }
+      ]
+    }
+  ],
+  "links": [
+    {"title": "Operator Overview", "url": "/d/efe-d13-01-operator-overview", "type": "dashboards"},
+    {"title": "Cost attribution",  "url": "/d/efe-d13-04-cost-attribution",  "type": "dashboards"}
+  ]
+}

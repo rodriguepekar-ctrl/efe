@@ -1,0 +1,120 @@
+{
+  "annotations": { "list": [] },
+  "description": "M31 — FinOps + Billing operator overview.",
+  "editable": true,
+  "panels": [
+    {
+      "id": 1,
+      "type": "timeseries",
+      "title": "Meter increments by meter (1m rate)",
+      "targets": [
+        {
+          "expr": "sum by(meter) (rate(efe_meter_inc_total[1m]))",
+          "legendFormat": "{{meter}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "ops" } },
+      "gridPos": { "x": 0, "y": 0, "w": 12, "h": 8 }
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "Meter flush p99 latency",
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.99, sum by(le) (rate(efe_meter_flush_duration_ms_bucket[5m])))",
+          "legendFormat": "p99 ms",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "ms" } },
+      "gridPos": { "x": 12, "y": 0, "w": 12, "h": 8 }
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "Stripe API p99 by endpoint",
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.99, sum by(endpoint, le) (rate(efe_stripe_api_duration_ms_bucket[5m])))",
+          "legendFormat": "{{endpoint}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "ms" } },
+      "gridPos": { "x": 0, "y": 8, "w": 12, "h": 8 }
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Webhook intake (1m rate)",
+      "targets": [
+        {
+          "expr": "sum by(event_type) (rate(efe_stripe_webhook_received_total[1m]))",
+          "legendFormat": "{{event_type}}",
+          "refId": "A"
+        }
+      ],
+      "gridPos": { "x": 12, "y": 8, "w": 12, "h": 8 }
+    },
+    {
+      "id": 5,
+      "type": "stat",
+      "title": "Invoices finalized (24h)",
+      "targets": [
+        {
+          "expr": "sum(increase(efe_invoice_status_total{status=\"finalized\"}[24h]))",
+          "refId": "A"
+        }
+      ],
+      "gridPos": { "x": 0, "y": 16, "w": 6, "h": 4 }
+    },
+    {
+      "id": 6,
+      "type": "stat",
+      "title": "Rollup lag (s)",
+      "targets": [
+        {
+          "expr": "max by(period) (efe_rollup_lag_seconds)",
+          "legendFormat": "{{period}}",
+          "refId": "A"
+        }
+      ],
+      "gridPos": { "x": 6, "y": 16, "w": 6, "h": 4 }
+    },
+    {
+      "id": 7,
+      "type": "stat",
+      "title": "Budget alerts (24h)",
+      "targets": [
+        {
+          "expr": "sum by(severity) (increase(efe_budget_exceeded_total[24h]))",
+          "legendFormat": "{{severity}}",
+          "refId": "A"
+        }
+      ],
+      "gridPos": { "x": 12, "y": 16, "w": 6, "h": 4 }
+    },
+    {
+      "id": 8,
+      "type": "stat",
+      "title": "Stripe errors (1h)",
+      "targets": [
+        {
+          "expr": "sum by(kind) (increase(efe_stripe_api_errors_total[1h]))",
+          "legendFormat": "{{kind}}",
+          "refId": "A"
+        }
+      ],
+      "gridPos": { "x": 18, "y": 16, "w": 6, "h": 4 }
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 38,
+  "tags": ["efe", "m31", "billing", "finops"],
+  "time": { "from": "now-1h", "to": "now" },
+  "title": "M31 — FinOps + Billing overview",
+  "uid": "efe-m31-01",
+  "version": 1
+}

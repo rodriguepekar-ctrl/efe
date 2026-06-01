@@ -1,0 +1,49 @@
+# CB-15 — LLM-assisted taxonomy curation throughput.
+# Exercises `efe-curation` (M23) end-to-end pipeline.
+
+schema_version: 1
+suite: CB
+id: CB-15_curation_pipeline
+family: data-plane
+subsystem: efe-curation
+description: "1k document curation passes over 60s, mocked LLM backend"
+duration: "60s"
+requires_meta_swarm: false
+
+cluster:
+  provisioner: kind
+  kind_image: kindest/node:v1.30.0
+  topology:
+    curation_replicas: 1
+    llm_backend_mocked: true
+
+loadgen:
+  version: 1
+  name: CB-15-loadgen
+  target:
+    endpoints:
+      - url: "grpc://efe-curation.efe.svc:50191"
+        weight: 1.0
+    role: curation-driver
+    conns_per_target: 4
+    per_request_deadline: "10s"
+  pattern: { type: constant, qps: 16 }
+  workload:
+    type: curation-pipeline
+    doc_size_tokens_mean: 4000
+    taxonomy_depth: 5
+    candidate_labels_per_doc: 12
+  rate: { mode: closed-loop, max_concurrency: 8 }
+  termination: { duration: "60s" }
+  output: { format: ndjson, file: /var/run/loadgen/CB-15-result.ndjson }
+  run: { seed: 26015, mode: staging, allow_mutation: false }
+
+chaos: []
+results:
+  collect_prom_snapshot: true
+  emit_metrics: [pipeline_p99_ms, docs_per_sec, mock_llm_calls_per_doc, taxonomy_drift_pct]
+
+tolerance:
+  pipeline_p99_ms_max_delta_pct: 25
+  docs_per_sec_min_delta_pct: -15
+  taxonomy_drift_pct_absolute_max: 1.0

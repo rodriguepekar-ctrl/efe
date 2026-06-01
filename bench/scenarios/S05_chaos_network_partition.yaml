@@ -1,0 +1,49 @@
+# PR #21 § 7.5 — S05 : network partition.
+
+schema_version: 1
+id: S05_chaos_network_partition
+description: "Chaos : partition controller↔participants @ 5min for 60s"
+duration: "15m"
+
+cluster:
+  provisioner: kind
+  topology:
+    controller_replicas: 2
+    participant_replicas: 3
+  namespace: efe-bench-s05
+
+loadgen:
+  version: 1
+  name: S05-loadgen
+  target:
+    endpoints:
+      - url: "grpc://efe-meta-swarm-controller.efe.svc:50051"
+        weight: 1.0
+  pattern:
+    type: constant
+    qps: 200
+  workload:
+    type: mixed
+    mix: { iterate: 1.0 }
+  termination:
+    duration: "15m"
+  run:
+    seed: 42
+    mode: staging
+    chaos_marker: "S05-network-partition"
+
+chaos:
+  - id: partition
+    at_offset: "5m"
+    crd_file: pr21_meta_swarm/network-partition.yaml
+    duration: "60s"
+
+results:
+  collect_prom_snapshot: true
+  collect_chaos_events: true
+
+tolerance:
+  p95_ms_max_delta_pct: 40
+  p99_ms_max_delta_pct: 60
+  error_rate_max_delta_pp: 30.0  # partition phase tolerates up to 30%
+  recovery_time_s_max_delta_s: 30

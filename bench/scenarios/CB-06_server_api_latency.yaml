@@ -1,0 +1,95 @@
+# CB-06 — Server API latency under fixed load.
+# Exercises `efe-server` non-MS endpoints at 1k RPS for 60s.
+#
+# Frozen under STABILITY § 27.1 + § 27.2.
+# Reference baseline : bench/baselines/CB-06.json
+
+schema_version: 1
+suite: CB
+id: CB-06_server_api_latency
+family: control-plane
+subsystem: efe-server
+description: "1000 RPS mixed endpoints (read 40% / write 40% / admin 20%) for 60s"
+duration: "60s"
+requires_meta_swarm: false
+
+cluster:
+  provisioner: kind
+  kind_image: kindest/node:v1.30.0
+  topology:
+    server_replicas: 1
+    server_cpu_limit: "2"
+    server_memory_limit: "2Gi"
+
+loadgen:
+  version: 1
+  name: CB-06-loadgen
+  target:
+    endpoints:
+      - url: "http://efe-server.efe.svc:8080"
+        weight: 0.5
+      - url: "grpc://efe-server.efe.svc:50051"
+        weight: 0.5
+    role: api-client
+    conns_per_target: 8
+    per_request_deadline: "1s"
+    # Explicit list of NON-MS endpoints to exercise.
+    routes:
+      - path: "/v1/healthz"
+        method: GET
+        weight: 0.05
+      - path: "/v1/tenants/{tenant}/profile"
+        method: GET
+        weight: 0.20
+      - path: "/v1/tenants/{tenant}/documents"
+        method: POST
+        weight: 0.30
+      - path: "/v1/tenants/{tenant}/documents/{id}"
+        method: GET
+        weight: 0.15
+      - path: "/v1/admin/regions"
+        method: GET
+        weight: 0.10
+      - path: "/v1/admin/billing/rollup"
+        method: POST
+        weight: 0.10
+      - path: "/v1/auth/refresh"
+        method: POST
+        weight: 0.10
+  pattern:
+    type: constant
+    qps: 1000
+  workload:
+    type: api-mixed
+    payload_size_bytes_mean: 2048
+    payload_size_bytes_p99: 16384
+  rate:
+    mode: closed-loop
+    max_concurrency: 200
+  termination:
+    duration: "60s"
+  output:
+    format: ndjson
+    file: /var/run/loadgen/CB-06-result.ndjson
+  run:
+    seed: 26006
+    mode: staging
+    allow_mutation: true
+
+chaos: []
+
+results:
+  collect_prom_snapshot: true
+  emit_metrics:
+    - request_p50_ms
+    - request_p95_ms
+    - request_p99_ms
+    - error_rate_pct
+    - cpu_pct_p99
+    - memory_mb_p99
+
+tolerance:
+  request_p99_ms_max_delta_pct: 15
+  error_rate_pct_absolute_max: 0.1
+  cpu_pct_p99_absolute_delta_pp_max: 5
+  memory_mb_p99_max_delta_pct: 10

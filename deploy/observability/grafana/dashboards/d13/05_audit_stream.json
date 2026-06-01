@@ -1,0 +1,245 @@
+{
+  "__inputs": [],
+  "__requires": [
+    {"type": "grafana", "id": "grafana", "name": "Grafana", "version": "10.2.0"},
+    {"type": "datasource", "id": "prometheus", "name": "Prometheus", "version": "1.0.0"},
+    {"type": "datasource", "id": "loki", "name": "Loki", "version": "1.0.0"}
+  ],
+  "uid": "efe-d13-05-audit-stream",
+  "title": "EFE — 05 Audit Stream",
+  "description": "Sprint D13 — security analyst view : audit event rate, top principals, auth failure rate, anomaly detection (z-score), recent audit events tail. Source : architecture D13 § 9.5.",
+  "tags": ["efe", "d13", "audit", "security"],
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "1m",
+  "time": {"from": "now-24h", "to": "now"},
+  "graphTooltip": 1,
+  "templating": {
+    "list": [
+      {
+        "name": "datasource",
+        "type": "datasource",
+        "query": "prometheus",
+        "current": {"text": "Prometheus", "value": "Prometheus"}
+      },
+      {
+        "name": "loki_datasource",
+        "type": "datasource",
+        "query": "loki",
+        "current": {"text": "Loki", "value": "Loki"}
+      },
+      {
+        "name": "tenant",
+        "type": "query",
+        "datasource": {"type": "prometheus", "uid": "$datasource"},
+        "query": "label_values(efe_audit_events_total, tenant)",
+        "includeAll": true,
+        "multi": true,
+        "refresh": 2
+      },
+      {
+        "name": "action",
+        "type": "custom",
+        "query": "All, register, evolve, delete",
+        "current": {"text": "All", "value": "All"}
+      },
+      {
+        "name": "op_tag",
+        "type": "custom",
+        "query": "All, register, append_class, remove_class, update_thresholds, replace_class_anchors, recompile, delete",
+        "current": {"text": "All", "value": "All"}
+      }
+    ]
+  },
+  "panels": [
+    {
+      "type": "row",
+      "id": 1,
+      "title": "Audit event flow",
+      "gridPos": {"x": 0, "y": 0, "w": 24, "h": 1}
+    },
+    {
+      "type": "timeseries",
+      "id": 2,
+      "title": "Audit event rate by action",
+      "datasource": {"type": "prometheus", "uid": "$datasource"},
+      "gridPos": {"x": 0, "y": 1, "w": 12, "h": 8},
+      "options": {"legend": {"showLegend": true, "displayMode": "table"}},
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "custom": {"stacking": {"mode": "normal"}, "fillOpacity": 60}
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (action) (rate(efe_audit_events_total{tenant=~\"$tenant\"}[5m]))",
+          "legendFormat": "{{action}}"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "id": 3,
+      "title": "Audit event rate by op_tag",
+      "datasource": {"type": "prometheus", "uid": "$datasource"},
+      "gridPos": {"x": 12, "y": 1, "w": 12, "h": 8},
+      "options": {"legend": {"showLegend": true, "displayMode": "table"}},
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "custom": {"stacking": {"mode": "normal"}, "fillOpacity": 60}
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (op_tag) (rate(efe_audit_events_total{tenant=~\"$tenant\"}[5m]))",
+          "legendFormat": "{{op_tag}}"
+        }
+      ]
+    },
+    {
+      "type": "row",
+      "id": 4,
+      "title": "Top actors",
+      "gridPos": {"x": 0, "y": 9, "w": 24, "h": 1}
+    },
+    {
+      "type": "table",
+      "id": 5,
+      "title": "Top 10 tenants by audit volume (24h)",
+      "datasource": {"type": "prometheus", "uid": "$datasource"},
+      "gridPos": {"x": 0, "y": 10, "w": 12, "h": 8},
+      "options": {"showHeader": true},
+      "fieldConfig": {"defaults": {"unit": "short"}},
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "topk(10, sum by (tenant) (increase(efe_audit_events_total[24h])))",
+          "instant": true,
+          "format": "table"
+        }
+      ]
+    },
+    {
+      "type": "stat",
+      "id": 6,
+      "title": "Auth failure rate (5m)",
+      "datasource": {"type": "prometheus", "uid": "$datasource"},
+      "gridPos": {"x": 12, "y": 10, "w": 6, "h": 4},
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green",  "value": null},
+              {"color": "yellow", "value": 1},
+              {"color": "red",    "value": 10}
+            ]
+          }
+        }
+      },
+      "options": {"colorMode": "background"},
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(rate(efe_authz_failures_total[5m]))"
+        }
+      ]
+    },
+    {
+      "type": "stat",
+      "id": 7,
+      "title": "Audit events with empty principal",
+      "datasource": {"type": "prometheus", "uid": "$datasource"},
+      "gridPos": {"x": 18, "y": 10, "w": 6, "h": 4},
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green",  "value": null},
+              {"color": "yellow", "value": 0.01},
+              {"color": "red",    "value": 0.05}
+            ]
+          }
+        }
+      },
+      "options": {"colorMode": "background"},
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(rate(efe_audit_events_total{principal_present=\"false\"}[1h])) / sum(rate(efe_audit_events_total[1h]))"
+        }
+      ]
+    },
+    {
+      "type": "row",
+      "id": 8,
+      "title": "Anomaly detection",
+      "gridPos": {"x": 0, "y": 18, "w": 24, "h": 1}
+    },
+    {
+      "type": "timeseries",
+      "id": 9,
+      "title": "z-score : remove_class rate vs 7d baseline",
+      "datasource": {"type": "prometheus", "uid": "$datasource"},
+      "gridPos": {"x": 0, "y": 19, "w": 24, "h": 6},
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {"thresholdsStyle": {"mode": "line"}},
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green",  "value": null},
+              {"color": "orange", "value": 2},
+              {"color": "red",    "value": 3}
+            ]
+          }
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "(efe:catalog_evolve_rate:5m{op_tag=\"remove_class\"} - avg_over_time(efe:catalog_evolve_rate:5m{op_tag=\"remove_class\"}[7d])) / stddev_over_time(efe:catalog_evolve_rate:5m{op_tag=\"remove_class\"}[7d])",
+          "legendFormat": "z(remove_class) {{tenant}}"
+        }
+      ]
+    },
+    {
+      "type": "row",
+      "id": 10,
+      "title": "Recent audit events (Loki)",
+      "gridPos": {"x": 0, "y": 25, "w": 24, "h": 1}
+    },
+    {
+      "type": "logs",
+      "id": 11,
+      "title": "Audit log tail",
+      "datasource": {"type": "loki", "uid": "$loki_datasource"},
+      "gridPos": {"x": 0, "y": 26, "w": 24, "h": 12},
+      "options": {
+        "showTime": true,
+        "showLabels": true,
+        "wrapLogMessage": true,
+        "sortOrder": "Descending"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "{stream=\"audit\", tenant_id=~\"$tenant\"} | json | action=~\"$action\" | op_tag=~\"$op_tag\""
+        }
+      ]
+    }
+  ],
+  "links": [
+    {"title": "Operator Overview",  "url": "/d/efe-d13-01-operator-overview", "type": "dashboards"},
+    {"title": "Tenant Drill-Down",  "url": "/d/efe-d13-02-tenant-drill-down", "type": "dashboards"},
+    {"title": "Catalog versions",   "url": "/d/efe-d13-03-catalog-version-distribution", "type": "dashboards"}
+  ]
+}

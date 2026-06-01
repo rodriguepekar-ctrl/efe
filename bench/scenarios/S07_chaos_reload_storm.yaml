@@ -1,0 +1,50 @@
+# PR #21 § 7.7 — S07 : SIGHUP-driven reload storm.
+
+schema_version: 1
+id: S07_chaos_reload_storm
+description: "Chaos : SIGHUP controller every 30s for 15min"
+duration: "15m"
+
+cluster:
+  provisioner: kind
+  topology:
+    controller_replicas: 2
+    participant_replicas: 3
+  namespace: efe-bench-s07
+
+loadgen:
+  version: 1
+  name: S07-loadgen
+  target:
+    endpoints:
+      - url: "grpc://efe-meta-swarm-controller.efe.svc:50051"
+        weight: 1.0
+  pattern:
+    type: constant
+    qps: 500
+  workload:
+    type: mixed
+    mix:
+      iterate: 0.95
+      state:   0.05
+  termination:
+    duration: "15m"
+  run:
+    seed: 42
+    mode: staging
+    chaos_marker: "S07-reload-storm"
+
+chaos:
+  - id: reload-storm
+    at_offset: "1m"
+    crd_file: pr21_meta_swarm/reload-storm.yaml
+    duration: "13m"
+
+results:
+  collect_prom_snapshot: true
+  collect_chaos_events: true
+
+tolerance:
+  p95_ms_max_delta_pct: 20
+  p99_ms_max_delta_pct: 30
+  error_rate_max_delta_pp: 0.5

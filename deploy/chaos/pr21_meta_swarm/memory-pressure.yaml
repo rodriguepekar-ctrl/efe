@@ -1,0 +1,17 @@
+# PR #21 § 8.6 — chaos-mesh StressChaos : memory pressure on controller.
+apiVersion: chaos-mesh.org/v1alpha1
+kind: StressChaos
+metadata:
+  name: memory-pressure
+  namespace: ${BENCH_NAMESPACE}
+spec:
+  mode: one
+  selector:
+    labelSelectors:
+      app.kubernetes.io/name: efe-meta-swarm
+      app.kubernetes.io/component: controller
+  stressors:
+    memory:
+      workers: 2
+      size: "2Gi"
+  duration: "5m"

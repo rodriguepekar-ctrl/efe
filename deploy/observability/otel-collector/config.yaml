@@ -1,0 +1,146 @@
+## Sprint D13 — OpenTelemetry Collector example config.
+##
+## Receives OTLP/gRPC from efe-server, applies the span attribute
+## allowlist (D13 § 7.2 + threat model T-13-3), routes to Tempo, and
+## exposes a Prometheus exporter for `otelcol_*` self-monitoring.
+##
+## DO NOT use as-is in production — customize :
+##   - Tempo endpoint
+##   - Sampling policy if you need tail-based instead of head-based
+##   - PII redaction patterns (already configured below for common cases)
+##
+## Compatible with otelcol 0.95+.
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: "0.0.0.0:4317"
+      http:
+        endpoint: "0.0.0.0:4318"
+
+processors:
+  ## 1. Memory limiter — back-pressure when the collector is under
+  ##    memory pressure. Prevents Tempo ingest from spiraling.
+  memory_limiter:
+    check_interval: 5s
+    limit_mib: 1024
+    spike_limit_mib: 256
+
+  ## 2. Batch — coalesce spans before export (Tempo prefers batches).
+  batch:
+    timeout: 5s
+    send_batch_size: 1024
+    send_batch_max_size: 2048
+
+  ## 3. Resource — stamp every span with the deployment / cluster
+  ##    metadata. The `tenant.id` attribute lets Tempo's multi-tenant
+  ##    backend route correctly.
+  resource:
+    attributes:
+      - key: deployment.environment
+        value: "${ENV:DEPLOY_ENV}"
+        action: upsert
+      - key: cluster
+        value: "${ENV:CLUSTER}"
+        action: upsert
+
+  ## 4. Attribute allowlist — strip any span attribute that's NOT
+  ##    on the canonical D13 list (cf. spans.rs). Defense in depth
+  ##    against accidental PII leakage.
+  attributes/allowlist:
+    actions:
+      ## Drop forbidden attributes (T-13-3 + T-13-4).
+      - key: text
+        action: delete
+      - key: input
+        action: delete
+      - key: raw_input
+        action: delete
+      - key: email
+        action: delete
+      - key: customer_email
+        action: delete
+      - key: phone
+        action: delete
+      - key: address
+        action: delete
+      - key: jwt
+        action: delete
+      - key: token
+        action: delete
+      - key: password
+        action: delete
+      - key: secret
+        action: delete
+      - key: api_key
+        action: delete
+      ## Truncate everything else to 512 chars (defense vs giant blobs).
+      - action: truncate_string
+        max_value_length: 512
+      ## Hash request_id if it leaked into a span (T-13-1).
+      - key: request_id
+        action: hash
+
+  ## 5. Tail-based sampling (advanced) — keep all errors, all slow,
+  ##    5 % of OK. Disabled by default ; enable in heavy-traffic
+  ##    deployments where head sampling generates too much load.
+  # tail_sampling:
+  #   decision_wait: 10s
+  #   policies:
+  #     - name: always-on-errors
+  #       type: status_code
+  #       status_code: {status_codes: [ERROR]}
+  #     - name: slow-traces
+  #       type: latency
+  #       latency: {threshold_ms: 1000}
+  #     - name: sample-5pct
+  #       type: probabilistic
+  #       probabilistic: {sampling_percentage: 5}
+
+exporters:
+  ## Tempo via OTLP/gRPC.
+  otlp/tempo:
+    endpoint: "${TEMPO_ENDPOINT:-tempo-distributor:4317}"
+    tls:
+      insecure: true
+    sending_queue:
+      enabled: true
+      num_consumers: 4
+      queue_size: 5000
+
+  ## Self-monitoring : Prometheus scrape endpoint.
+  prometheus:
+    endpoint: "0.0.0.0:8889"
+    namespace: otelcol
+    const_labels:
+      service: efe-otel-collector
+
+  ## Debug exporter (commented out — enable for local dev only).
+  # debug:
+  #   verbosity: detailed
+  #   sampling_initial: 5
+  #   sampling_thereafter: 200
+
+extensions:
+  health_check:
+    endpoint: "0.0.0.0:13133"
+  zpages:
+    endpoint: "0.0.0.0:55679"
+
+service:
+  extensions: [health_check, zpages]
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors:
+        - memory_limiter
+        - resource
+        - attributes/allowlist
+        - batch
+      exporters: [otlp/tempo]
+  telemetry:
+    metrics:
+      address: "0.0.0.0:8888"
+    logs:
+      level: info

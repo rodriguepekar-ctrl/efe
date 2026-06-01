@@ -1,0 +1,100 @@
+{{- /*
+  Sprint D18 — Prometheus recording rules + alerts for multi-replica.
+
+  Cf. architecture § 18 (7 alerts A-D18-1 → A-D18-7).
+*/}}
+{{- if and .Values.metrics.enabled (default true .Values.replicas.alerts.enabled) }}
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: {{ include "efe.fullname" . }}-d18-rules
+  labels: {{- include "efe.labels" . | nindent 4 }}
+    app.kubernetes.io/component: multi-replica-alerts
+spec:
+  groups:
+    - name: d18_multi_replica_recording
+      interval: 30s
+      rules:
+        - record: efe:d18_replicas_count
+          expr: count(efe_replica_id)
+
+        - record: efe:d18_idempotency_miss_rate_5m
+          expr: |
+            sum(rate(efe_idempotency_hits_total{result="miss"}[5m]))
+
+        - record: efe:d18_ratelimit_throttle_rate_5m
+          expr: |
+            sum(rate(efe_ratelimit_decisions_total{decision="throttled"}[5m]))
+
+    - name: d18_multi_replica_alerts
+      interval: 1m
+      rules:
+        - alert: D18ReplicasUnderTarget
+          expr: efe:d18_replicas_count < {{ .Values.replicas.min }}
+          for: 5m
+          labels:
+            severity: critical
+            sprint: D18
+          annotations:
+            summary: "D18 : replica count below configured min"
+            description: "Only {{`{{ $value }}`}} of {{ .Values.replicas.min }} replicas are running."
+
+        - alert: D18LeaderMissing
+          expr: sum(efe_leader_is_leader) == 0
+          for: 1m
+          labels:
+            severity: critical
+            sprint: D18
+          annotations:
+            summary: "D18 : no leader elected for background tasks"
+
+        - alert: D18LeaderSplit
+          expr: sum(efe_leader_is_leader) > 1
+          for: 30s
+          labels:
+            severity: critical
+            sprint: D18
+          annotations:
+            summary: "D18 : split-brain — multiple leaders elected"
+            description: "{{`{{ $value }}`}} replicas claim leadership simultaneously. Cone GC + idempotency expiry will run multiple times."
+
+        - alert: D18IdempotencyHitMiss
+          expr: efe:d18_idempotency_miss_rate_5m > 100
+          for: 10m
+          labels:
+            severity: high
+            sprint: D18
+          annotations:
+            summary: "D18 : idempotency cache miss rate elevated"
+            description: "{{`{{ $value | humanize }}`}}/s idempotency misses ; investigate retry-loop client or cache eviction policy."
+
+        - alert: D18RateLimitThrottleSpike
+          expr: efe:d18_ratelimit_throttle_rate_5m > 1000
+          for: 10m
+          labels:
+            severity: high
+            sprint: D18
+          annotations:
+            summary: "D18 : rate-limit throttle rate spike"
+            description: "{{`{{ $value | humanize }}`}}/s requests throttled ; check tenant capacity config or DoS."
+
+        - alert: D18ShutdownTimeout
+          expr: increase(efe_shutdown_phase_seconds_count{le="60"}[1h]) > 0
+          for: 1m
+          labels:
+            severity: high
+            sprint: D18
+          annotations:
+            summary: "D18 : graceful shutdown exceeded budget"
+            description: "Phase {{`{{ $labels.phase }}`}} took longer than its timeout."
+
+        - alert: D18BenchSloRegression
+          expr: increase(efe_bench_runs_total{result="slo_failed"}[1h]) > 0
+          for: 5m
+          labels:
+            severity: critical
+            sprint: D18
+          annotations:
+            summary: "D18 : bench SLO regression"
+            description: "{{`{{ $labels.workload }}`}} bench failed at least one SLO target."
+{{- end }}

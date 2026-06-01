@@ -1,0 +1,17 @@
+# PR #21 § 8.5 — chaos-mesh StressChaos : CPU throttle on controller.
+apiVersion: chaos-mesh.org/v1alpha1
+kind: StressChaos
+metadata:
+  name: cpu-throttle
+  namespace: ${BENCH_NAMESPACE}
+spec:
+  mode: one
+  selector:
+    labelSelectors:
+      app.kubernetes.io/name: efe-meta-swarm
+      app.kubernetes.io/component: controller
+  stressors:
+    cpu:
+      workers: 4
+      load: 80
+  duration: "5m"

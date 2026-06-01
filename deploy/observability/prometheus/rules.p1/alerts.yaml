@@ -1,0 +1,268 @@
+## Sprint **D19 (P1-Foundation)** — Prometheus alerting rules for the
+## P1 *Latence opposable* surface.
+##
+## Cf. `docs/EFE_P1_SURFACE_ARCHITECTURE.md` § 5.3.4 (alerting prod).
+##
+## ## Inventaire (7 alertes)
+##
+## | Alert                       | Sévérité | Fenêtre | Trigger                                      |
+## |-----------------------------|----------|---------|----------------------------------------------|
+## | P1_BURN_FAST                | critical | 1 h     | burn rate ≥ 14.4× sur 1 h                    |
+## | P1_BURN_SLOW                | warning  | 6 h     | burn rate ≥ 6× sur 6 h                       |
+## | P1_BURN_TICKET              | info     | 24 h    | burn rate ≥ 1× sur 24 h                      |
+## | P1_TAIL_p99_9_HIGH          | warning  | 15 min  | p99.9 > 400 ms                                |
+## | P1_STAGE_OVERRUN_BURST      | warning  | 5 min   | overrun rate > 5 % sur un stage              |
+## | P1_NEAR_BUDGET              | info     | 30 min  | budget_remaining p99 < 40 ms                  |
+## | P1_FINGERPRINT_DRIFT        | critical | 0       | host_fingerprint changed depuis baseline      |
+##
+## ## Doctrine "multi-window multi-burn-rate"
+##
+## Référence : SRE Workbook ch. 5 (Adopting SLOs). Permet de
+## distinguer une **panne aiguë** (burn rapide en 1 h → page) d'une
+## **dérive lente** (burn modéré sur 6 h → ticket priorisé) d'un
+## **trend hebdomadaire** (burn sur 24 h → revue mensuelle).
+##
+## Cardinalité : ≤ 5 séries actives au steady-state ; pas de label
+## tenant_id dans les alertes (ce sont des SLO globaux, pas
+## per-tenant).
+##
+## Tests pin :
+##   - `scripts/tests/test_d19_p1_alerts_smoke.py` (vérifie YAML
+##     valide + chaque alerte a un runbook_url).
+##   - `tests/integration/p1_burn_alert.rs` (sera livré quand le
+##     bench harness sera étendu pour injecter un burn artificiel).
+
+groups:
+  - name: efe-p1-burn-rate
+    interval: 30s
+    rules:
+      ## ─────────────────────────────────────────────────────────
+      ## P1_BURN_FAST — critical
+      ## ─────────────────────────────────────────────────────────
+      ## Le SLO C-1 = "p99 ≤ 200 ms" est un seuil. Le burn rate =
+      ## proportion de requêtes au-dessus du seuil divisée par le
+      ## budget mensuel d'error (= 0.001 = 0.1 % du trafic).
+      ##
+      ## Burn rate = 14.4× signifie qu'au rythme actuel, on
+      ## épuise le budget mensuel en 1 h (vs 30 j attendus, ratio
+      ## 30 × 24 / 14.4 = 50). C'est le seuil "aigu" qui page.
+      - alert: P1_BURN_FAST
+        expr: |
+          (
+            1 - (
+              sum(rate(efe_swarm_duration_seconds_bucket{mode="mode1",le="0.2"}[1h]))
+              /
+              sum(rate(efe_swarm_duration_seconds_count{mode="mode1"}[1h]))
+            )
+          ) > (0.001 * 14.4)
+        for: 5m
+        labels:
+          severity: critical
+          family: P1
+          sla_clause: C-1
+        annotations:
+          summary: "P1 burn rate ≥ 14.4× sur 1 h (SLO C-1 en danger aigu)"
+          description: |
+            La proportion de requêtes Mode-1 dépassant 200 ms sur
+            la dernière heure (= {{ $value | humanizePercentage }})
+            consomme l'error budget mensuel 14.4× plus vite que
+            soutenable. Au rythme actuel, le budget de 43 min
+            d'indispo mensuel est épuisé en 1 h.
+
+            Causes typiques :
+              - récent deploy (rollback en premier)
+              - GPU contention soudaine (cf. dashboard `efe-p1-slo`)
+              - cold cache embedder (incident pre-warm raté)
+              - leader re-élection en cours (cf. `efe_leader_is_leader`)
+          runbook_url: https://docs.efe.ai/runbooks/p1_burn_fast
+          dashboard_url: https://grafana.efe.ai/d/efe-p1-slo
+
+      ## ─────────────────────────────────────────────────────────
+      ## P1_BURN_SLOW — warning
+      ## ─────────────────────────────────────────────────────────
+      ## Burn rate = 6× signifie qu'on épuise le budget en 5 jours
+      ## (vs 30 attendus). Pattern : régression silencieuse
+      ## introduite il y a quelques jours.
+      - alert: P1_BURN_SLOW
+        expr: |
+          (
+            1 - (
+              sum(rate(efe_swarm_duration_seconds_bucket{mode="mode1",le="0.2"}[6h]))
+              /
+              sum(rate(efe_swarm_duration_seconds_count{mode="mode1"}[6h]))
+            )
+          ) > (0.001 * 6)
+        for: 30m
+        labels:
+          severity: warning
+          family: P1
+          sla_clause: C-1
+        annotations:
+          summary: "P1 burn rate ≥ 6× sur 6 h (dérive en cours)"
+          description: |
+            La proportion de requêtes Mode-1 > 200 ms sur 6 h
+            ({{ $value | humanizePercentage }}) consomme le budget
+            mensuel 6× trop vite. Indique typiquement une
+            régression introduite il y a quelques jours, sous le
+            radar de l'alerte FAST.
+          runbook_url: https://docs.efe.ai/runbooks/p1_burn_slow
+
+      ## ─────────────────────────────────────────────────────────
+      ## P1_BURN_TICKET — info (ticket Jira, pas de pager)
+      ## ─────────────────────────────────────────────────────────
+      - alert: P1_BURN_TICKET
+        expr: |
+          (
+            1 - (
+              sum(rate(efe_swarm_duration_seconds_bucket{mode="mode1",le="0.2"}[24h]))
+              /
+              sum(rate(efe_swarm_duration_seconds_count{mode="mode1"}[24h]))
+            )
+          ) > 0.001
+        for: 4h
+        labels:
+          severity: info
+          family: P1
+          sla_clause: C-1
+        annotations:
+          summary: "P1 burn rate ≥ 1× sur 24 h (trend à analyser)"
+          description: |
+            Le budget mensuel est consommé exactement au rythme
+            soutenable (1×) sur 24 h. Si la tendance persiste sur
+            la semaine, déclencher une revue capacité.
+          runbook_url: https://docs.efe.ai/runbooks/p1_burn_ticket
+
+  - name: efe-p1-tail-and-stages
+    interval: 30s
+    rules:
+      ## ─────────────────────────────────────────────────────────
+      ## P1_TAIL_p99_9_HIGH — warning
+      ## ─────────────────────────────────────────────────────────
+      ## SLO-P1-TAIL-1 = p99.9 ≤ 400 ms. Si on dépasse, c'est un
+      ## précurseur du burn (les 0.1 % les plus lents se rapprochent
+      ## du seuil p99).
+      - alert: P1_TAIL_p99_9_HIGH
+        expr: |
+          histogram_quantile(
+            0.999,
+            sum by (le) (rate(efe_swarm_duration_seconds_bucket{mode="mode1"}[15m]))
+          ) > 0.4
+        for: 10m
+        labels:
+          severity: warning
+          family: P1
+          sla_clause: SLO-P1-TAIL-1
+        annotations:
+          summary: "P1 p99.9 latency > 400 ms (tail dérive)"
+          description: |
+            Le p99.9 sur Mode-1 est à {{ $value }}s sur 15 min,
+            au-delà du SLO-P1-TAIL-1 (= 400 ms). C'est un signal
+            précurseur de burn ; investiguer les outliers via
+            les flame graphs.
+          runbook_url: https://docs.efe.ai/runbooks/p1_tail_outlier
+
+      ## ─────────────────────────────────────────────────────────
+      ## P1_STAGE_OVERRUN_BURST — warning
+      ## ─────────────────────────────────────────────────────────
+      ## Indicateur précurseur : si un étage dépasse son budget
+      ## canonique > 5 % du temps sur 5 min, c'est un signe qu'on
+      ## ronge la marge anti-tail de 47 ms.
+      - alert: P1_STAGE_OVERRUN_BURST
+        expr: |
+          (
+            sum by (stage) (rate(efe_p1_budget_overrun_total[5m]))
+            /
+            sum(rate(efe_swarm_duration_seconds_count{mode="mode1"}[5m]))
+          ) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+          family: P1
+        annotations:
+          summary: "P1 stage {{ $labels.stage }} overrun > 5 %"
+          description: |
+            L'étage {{ $labels.stage }} dépasse son budget canonique
+            sur {{ $value | humanizePercentage }} des requêtes sur
+            5 min. La marge anti-tail (47 ms) absorbe encore, mais
+            la pression est sur. Identifier la cause AVANT que
+            le burn alerte.
+          runbook_url: https://docs.efe.ai/runbooks/p1_stage_overrun
+
+      ## ─────────────────────────────────────────────────────────
+      ## P1_NEAR_BUDGET — info
+      ## ─────────────────────────────────────────────────────────
+      ## Si p99 du budget restant à l'envoi < 40 ms, on a < 20 %
+      ## de marge. Pas une violation, mais signal "on touche
+      ## le plafond".
+      - alert: P1_NEAR_BUDGET
+        expr: |
+          histogram_quantile(
+            0.99,
+            sum by (le) (rate(efe_p1_budget_remaining_seconds_bucket{mode="mode1"}[30m]))
+          ) < 0.04
+        for: 15m
+        labels:
+          severity: info
+          family: P1
+        annotations:
+          summary: "P1 budget remaining p99 < 40 ms (precursor)"
+          description: |
+            Le p99 du budget restant à l'envoi de la réponse est
+            {{ $value }}s (< 40 ms), soit < 20 % de marge sur
+            les 200 ms. Indicateur précurseur de burn ; revoir
+            la capacité GPU ou l'étage 7 fusion.
+          runbook_url: https://docs.efe.ai/runbooks/p1_near_budget
+
+  - name: efe-p1-host-fingerprint
+    interval: 5m
+    rules:
+      ## ─────────────────────────────────────────────────────────
+      ## P1_FINGERPRINT_DRIFT — critical
+      ## ─────────────────────────────────────────────────────────
+      ## Cf. doc P1 § 1.5 et § 4.5 : le `host_fingerprint_sha256`
+      ## est partie du contrat d'opposabilité. Toute modification
+      ## hardware (kernel upgrade, GPU change, …) **suspend
+      ## l'opposabilité** jusqu'à re-signature de baseline.
+      ##
+      ## L'instrument `efe_host_fingerprint_match` est une gauge
+      ## émise au boot par `efe-server` (livré par sprint D20 en
+      ## extension du fingerprint runtime).
+      ## **Audit fix D19-P1.A6** — l'expression initiale
+      ## `max(efe_host_fingerprint_match) == 0` était **silencieusement
+      ## non-fonctionnelle** quand la métrique n'existait pas encore
+      ## (livraison D20+) : `max(no_series)` renvoie no_series, ce qui
+      ## n'est jamais `== 0`, donc l'alerte ne fire jamais → drift de
+      ## fingerprint passe inaperçu. Correctif : l'alerte fire si la
+      ## métrique est **absente** (= D20 pas encore déployé OU replica
+      ## qui a perdu son init) OU si elle vaut **0** (= drift actif).
+      ## Le `for: 5m` absorbe le boot warmup (la métrique est émise
+      ## après pre-warm, ~30 s).
+      - alert: P1_FINGERPRINT_DRIFT
+        expr: |
+          absent(efe_host_fingerprint_match)
+          or
+          (max(efe_host_fingerprint_match) == 0)
+        for: 5m
+        labels:
+          severity: critical
+          family: P1
+          sla_clause: C-1
+        annotations:
+          summary: "P1 host fingerprint drift detected (or missing) — opposabilité suspendue"
+          description: |
+            Le `host_fingerprint_sha256` du replica diverge de la
+            baseline signée (ou n'est pas émis). Cette mesure n'est
+            plus opposable au sens du SLA (clause §3.1 + Annexe A).
+
+            Triage :
+              1. Vérifier que `efe-server` ≥ v0.2.1 est déployé (la
+                 gauge `efe_host_fingerprint_match` est livrée par
+                 sprint D20+). Si non, l'alerte est attendue jusqu'au
+                 deploy de v0.2.1.
+              2. Si v0.2.1+ : identifier la dérive
+                 (`kubectl describe pod`, `dmesg | grep -i upgrade`).
+              3. Re-signer la baseline si la dérive est légitime
+                 (`efe-attest sign-baseline`).
+              4. Documenter le changement dans le `host_fingerprint
+                 ledger` (audit chain).
+          runbook_url: https://docs.efe.ai/runbooks/p1_fingerprint_drift

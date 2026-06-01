@@ -1,0 +1,497 @@
+[
+  {
+    "request_id": "load-smoke-001",
+    "raw_prompt": "Ma carte a \u00e9t\u00e9 d\u00e9bit\u00e9e sans mon consentement.",
+    "spec": {
+      "swarm_id": "",
+      "problem_embedding": [
+        0.011,
+        -0.073,
+        0.052,
+        -0.018,
+        0.094,
+        -0.041,
+        0.067,
+        -0.029,
+        0.083,
+        -0.012,
+        0.038,
+        -0.061,
+        0.024,
+        -0.099,
+        0.045,
+        -0.078,
+        0.019,
+        -0.046,
+        0.087,
+        -0.033,
+        0.058,
+        -0.008,
+        0.071,
+        -0.054,
+        0.027,
+        -0.082,
+        0.041,
+        -0.015,
+        0.063,
+        -0.09,
+        0.005,
+        -0.069
+      ],
+      "dim_latent": 32,
+      "population": [
+        {
+          "template_code": "na-sem",
+          "count": 8
+        }
+      ],
+      "max_rounds": 8,
+      "alignment_cone": {
+        "anchors": [
+          {
+            "values": [
+              0.1,
+              -0.07,
+              0.05,
+              -0.02,
+              0.09,
+              -0.04,
+              0.07,
+              -0.03,
+              0.08,
+              -0.01,
+              0.04,
+              -0.06,
+              0.02,
+              -0.1,
+              0.05,
+              -0.08,
+              0.02,
+              -0.05,
+              0.09,
+              -0.03,
+              0.06,
+              -0.01,
+              0.07,
+              -0.05,
+              0.03,
+              -0.08,
+              0.04,
+              -0.02,
+              0.06,
+              -0.09,
+              0.01,
+              -0.07
+            ]
+          }
+        ],
+        "max_projection_distance": 0.5
+      },
+      "convergence": {
+        "epsilon_variance": 0.001,
+        "epsilon_gradient": 0.001,
+        "epsilon_stability": 0.001,
+        "stability_window": 3
+      }
+    },
+    "decode_mode": {
+      "pass_through": {}
+    }
+  },
+  {
+    "request_id": "load-smoke-002",
+    "raw_prompt": "Where can I see previous invoices?",
+    "spec": {
+      "swarm_id": "",
+      "problem_embedding": [
+        -0.044,
+        0.062,
+        -0.018,
+        0.075,
+        -0.031,
+        0.087,
+        -0.005,
+        0.049,
+        -0.072,
+        0.026,
+        -0.058,
+        0.09,
+        -0.013,
+        0.067,
+        -0.041,
+        0.019,
+        -0.083,
+        0.054,
+        -0.027,
+        0.071,
+        -0.009,
+        0.046,
+        -0.094,
+        0.033,
+        -0.061,
+        0.085,
+        -0.022,
+        0.058,
+        -0.077,
+        0.011,
+        -0.063,
+        0.039
+      ],
+      "dim_latent": 32,
+      "population": [
+        {
+          "template_code": "na-sem",
+          "count": 8
+        }
+      ],
+      "max_rounds": 8,
+      "alignment_cone": {
+        "anchors": [
+          {
+            "values": [
+              -0.04,
+              0.06,
+              -0.02,
+              0.07,
+              -0.03,
+              0.08,
+              -0.01,
+              0.05,
+              -0.07,
+              0.03,
+              -0.06,
+              0.09,
+              -0.01,
+              0.07,
+              -0.04,
+              0.02,
+              -0.08,
+              0.05,
+              -0.03,
+              0.07,
+              -0.01,
+              0.05,
+              -0.09,
+              0.03,
+              -0.06,
+              0.08,
+              -0.02,
+              0.06,
+              -0.08,
+              0.01,
+              -0.06,
+              0.04
+            ]
+          }
+        ],
+        "max_projection_distance": 0.5
+      },
+      "convergence": {
+        "epsilon_variance": 0.001,
+        "epsilon_gradient": 0.001,
+        "epsilon_stability": 0.001,
+        "stability_window": 3
+      }
+    },
+    "decode_mode": {
+      "pass_through": {}
+    }
+  },
+  {
+    "request_id": "load-smoke-003",
+    "raw_prompt": "L'application plante quand j'ouvre le menu param\u00e8tres.",
+    "spec": {
+      "swarm_id": "",
+      "problem_embedding": [
+        0.082,
+        -0.027,
+        0.054,
+        -0.069,
+        0.011,
+        -0.094,
+        0.045,
+        -0.018,
+        0.073,
+        -0.041,
+        0.087,
+        -0.005,
+        0.063,
+        -0.077,
+        0.029,
+        -0.052,
+        0.095,
+        -0.014,
+        0.038,
+        -0.083,
+        0.066,
+        -0.025,
+        0.049,
+        -0.071,
+        0.022,
+        -0.058,
+        0.085,
+        -0.011,
+        0.043,
+        -0.09,
+        0.067,
+        -0.034
+      ],
+      "dim_latent": 32,
+      "population": [
+        {
+          "template_code": "na-sem",
+          "count": 8
+        }
+      ],
+      "max_rounds": 8,
+      "alignment_cone": {
+        "anchors": [
+          {
+            "values": [
+              0.08,
+              -0.03,
+              0.05,
+              -0.07,
+              0.01,
+              -0.09,
+              0.05,
+              -0.02,
+              0.07,
+              -0.04,
+              0.09,
+              -0.01,
+              0.06,
+              -0.08,
+              0.03,
+              -0.05,
+              0.1,
+              -0.01,
+              0.04,
+              -0.08,
+              0.07,
+              -0.03,
+              0.05,
+              -0.07,
+              0.02,
+              -0.06,
+              0.09,
+              -0.01,
+              0.04,
+              -0.09,
+              0.07,
+              -0.03
+            ]
+          }
+        ],
+        "max_projection_distance": 0.5
+      },
+      "convergence": {
+        "epsilon_variance": 0.001,
+        "epsilon_gradient": 0.001,
+        "epsilon_stability": 0.001,
+        "stability_window": 3
+      }
+    },
+    "decode_mode": {
+      "pass_through": {}
+    }
+  },
+  {
+    "request_id": "load-smoke-004",
+    "raw_prompt": "How do I reset my two-factor authentication?",
+    "spec": {
+      "swarm_id": "",
+      "problem_embedding": [
+        -0.051,
+        0.078,
+        -0.024,
+        0.066,
+        -0.043,
+        0.089,
+        -0.018,
+        0.057,
+        -0.092,
+        0.031,
+        -0.076,
+        0.012,
+        -0.048,
+        0.069,
+        -0.027,
+        0.085,
+        -0.014,
+        0.062,
+        -0.039,
+        0.091,
+        -0.005,
+        0.074,
+        -0.058,
+        0.025,
+        -0.083,
+        0.046,
+        -0.011,
+        0.07,
+        -0.094,
+        0.038,
+        -0.062,
+        0.049
+      ],
+      "dim_latent": 32,
+      "population": [
+        {
+          "template_code": "na-sem",
+          "count": 8
+        }
+      ],
+      "max_rounds": 8,
+      "alignment_cone": {
+        "anchors": [
+          {
+            "values": [
+              -0.05,
+              0.08,
+              -0.02,
+              0.07,
+              -0.04,
+              0.09,
+              -0.02,
+              0.06,
+              -0.09,
+              0.03,
+              -0.08,
+              0.01,
+              -0.05,
+              0.07,
+              -0.03,
+              0.09,
+              -0.01,
+              0.06,
+              -0.04,
+              0.09,
+              -0.01,
+              0.07,
+              -0.06,
+              0.03,
+              -0.08,
+              0.05,
+              -0.01,
+              0.07,
+              -0.09,
+              0.04,
+              -0.06,
+              0.05
+            ]
+          }
+        ],
+        "max_projection_distance": 0.5
+      },
+      "convergence": {
+        "epsilon_variance": 0.001,
+        "epsilon_gradient": 0.001,
+        "epsilon_stability": 0.001,
+        "stability_window": 3
+      }
+    },
+    "decode_mode": {
+      "pass_through": {}
+    }
+  },
+  {
+    "request_id": "load-smoke-005",
+    "raw_prompt": "I want to cancel my subscription starting next month.",
+    "spec": {
+      "swarm_id": "",
+      "problem_embedding": [
+        0.037,
+        -0.085,
+        0.061,
+        -0.022,
+        0.078,
+        -0.046,
+        0.013,
+        -0.069,
+        0.054,
+        -0.091,
+        0.028,
+        -0.073,
+        0.087,
+        -0.014,
+        0.062,
+        -0.041,
+        0.025,
+        -0.058,
+        0.084,
+        -0.007,
+        0.049,
+        -0.077,
+        0.032,
+        -0.094,
+        0.066,
+        -0.018,
+        0.072,
+        -0.039,
+        0.005,
+        -0.083,
+        0.047,
+        -0.06
+      ],
+      "dim_latent": 32,
+      "population": [
+        {
+          "template_code": "na-sem",
+          "count": 8
+        }
+      ],
+      "max_rounds": 8,
+      "alignment_cone": {
+        "anchors": [
+          {
+            "values": [
+              0.04,
+              -0.08,
+              0.06,
+              -0.02,
+              0.08,
+              -0.05,
+              0.01,
+              -0.07,
+              0.05,
+              -0.09,
+              0.03,
+              -0.07,
+              0.09,
+              -0.01,
+              0.06,
+              -0.04,
+              0.03,
+              -0.06,
+              0.08,
+              -0.01,
+              0.05,
+              -0.08,
+              0.03,
+              -0.09,
+              0.07,
+              -0.02,
+              0.07,
+              -0.04,
+              0.01,
+              -0.08,
+              0.05,
+              -0.06
+            ]
+          }
+        ],
+        "max_projection_distance": 0.5
+      },
+      "convergence": {
+        "epsilon_variance": 0.001,
+        "epsilon_gradient": 0.001,
+        "epsilon_stability": 0.001,
+        "stability_window": 3
+      }
+    },
+    "decode_mode": {
+      "pass_through": {}
+    }
+  }
+]

@@ -1,0 +1,54 @@
+# PR #21 § 7.4 — S04 : chaos participant loss.
+# At t=3min kill a participant ; verify recovery within 30 s.
+
+schema_version: 1
+id: S04_chaos_participant_loss
+description: "Chaos : kill 1 participant @ 3min, verify <30s recovery"
+duration: "10m"
+
+cluster:
+  provisioner: kind
+  topology:
+    controller_replicas: 2
+    participant_replicas: 3
+  namespace: efe-bench-s04
+
+loadgen:
+  version: 1
+  name: S04-loadgen
+  target:
+    endpoints:
+      - url: "grpc://efe-meta-swarm-controller.efe.svc:50051"
+        weight: 1.0
+  pattern:
+    type: constant
+    qps: 200
+  workload:
+    type: mixed
+    mix: { iterate: 1.0 }
+  rate:
+    mode: hybrid
+    max_concurrency: 400
+  termination:
+    duration: "10m"
+  run:
+    seed: 42
+    mode: staging
+    chaos_marker: "S04-participant-loss"
+
+chaos:
+  - id: participant-loss
+    at_offset: "3m"
+    crd_file: pr21_meta_swarm/participant-loss.yaml
+
+results:
+  collect_prom_snapshot: true
+  collect_chaos_events: true
+
+tolerance:
+  # Chaos scenario : tolerate wider p99 swings during fault window
+  # but expect availability to recover.
+  p95_ms_max_delta_pct: 30
+  p99_ms_max_delta_pct: 50
+  error_rate_max_delta_pp: 1.5
+  recovery_time_s_max_delta_s: 10

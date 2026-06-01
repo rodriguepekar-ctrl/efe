@@ -1,0 +1,92 @@
+{{- include "efe-smoke.validate" . -}}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "efe-smoke.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "efe-smoke.labels" . | nindent 4 }}
+spec:
+  backoffLimit: {{ .Values.job.backoffLimit }}
+  activeDeadlineSeconds: {{ .Values.job.activeDeadlineSeconds }}
+  ttlSecondsAfterFinished: {{ .Values.job.ttlSecondsAfterFinished }}
+  template:
+    metadata:
+      labels:
+        {{- include "efe-smoke.labels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      restartPolicy: {{ .Values.job.restartPolicy }}
+      serviceAccountName: {{ include "efe-smoke.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.securityContext | nindent 8 }}
+      containers:
+        - name: smoke
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.containerSecurityContext | nindent 12 }}
+          args:
+            - "run"
+            - "--chart-version"
+            - "{{ .Values.chartVersion }}"
+            - "--provisioner"
+            - "external"
+            - "--kubeconfig"
+            - "/var/run/secrets/kubernetes.io/serviceaccount/kubeconfig"
+            {{- if .Values.targetNamespace }}
+            - "--namespace"
+            - "{{ .Values.targetNamespace }}"
+            {{- end }}
+            {{- range .Values.checks }}
+            - "--check"
+            - "{{ . }}"
+            {{- end }}
+            {{- if .Values.redactLogs }}
+            - "--redact-logs"
+            {{- end }}
+            - "--output"
+            - "/var/run/smoke/smoke.json"
+            - "--pr-comment-file"
+            - "/var/run/smoke/pr-comment.md"
+            - "--badge-file"
+            - "/var/run/smoke/badge.svg"
+          env:
+            - name: RUST_LOG
+              value: "info"
+            - name: EFE_CHART_VERSION
+              value: "{{ .Values.chartVersion }}"
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - name: smoke-artefacts
+              mountPath: /var/run/smoke
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: smoke-artefacts
+          emptyDir:
+            medium: Memory
+            sizeLimit: 16Mi
+        - name: tmp
+          emptyDir:
+            medium: Memory
+            sizeLimit: 64Mi
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

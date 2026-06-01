@@ -1,0 +1,57 @@
+{{- /*
+  Sprint D17 — Backup + DR : weekly DR drill CronJob.
+
+  Spins an ephemeral namespace, restores the most recent backup,
+  runs the canonical verifier suite + smoke tests, measures RTO,
+  emits metrics + audit log, then destroys the namespace.
+
+  Cf. `docs/bench/d17_backup_dr_architecture.md` § 16.
+*/}}
+{{- if and .Values.backup.enabled .Values.backup.drill.enabled }}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "efe.fullname" . }}-dr-drill
+  labels: {{- include "efe.labels" . | nindent 4 }}
+    app.kubernetes.io/component: dr-drill
+spec:
+  schedule: {{ .Values.backup.drill.schedule | quote }}
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 4
+  failedJobsHistoryLimit: 8
+  startingDeadlineSeconds: 1200
+  jobTemplate:
+    spec:
+      # Stop the drill if it exceeds the timeout — protects against
+      # a hung restore monopolising the drill ns.
+      activeDeadlineSeconds: {{ default 2700 .Values.backup.drill.activeDeadlineSeconds }}
+      backoffLimit: 0   # drills don't retry ; failure is signal
+      template:
+        metadata:
+          labels: {{- include "efe.labels" . | nindent 12 }}
+            app.kubernetes.io/component: dr-drill
+        spec:
+          restartPolicy: Never
+          serviceAccountName: {{ include "efe.fullname" . }}-backup
+          containers:
+            - name: efe-dr-drill
+              image: {{ default .Values.image.repository .Values.backup.drill.image }}:{{ default .Values.image.tag .Values.backup.drill.imageTag }}
+              imagePullPolicy: {{ default "IfNotPresent" .Values.image.pullPolicy }}
+              args:
+                - "drill"
+                - "--target-env"
+                - "drill"
+              envFrom:
+                - configMapRef:
+                    name: {{ include "efe.fullname" . }}-config
+              env:
+                - name: EFE_BACKUP_RTO_TARGET_S
+                  value: {{ default 1800 .Values.backup.drill.rtoTargetSeconds | quote }}
+              resources:
+                requests:
+                  cpu: 500m
+                  memory: 512Mi
+                limits:
+                  cpu: "4"
+                  memory: 4Gi
+{{- end }}

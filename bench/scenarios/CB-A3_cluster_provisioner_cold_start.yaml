@@ -1,0 +1,59 @@
+# CB-A3 — Cluster provisioner kind cold-start.
+# Meta-benchmark : measures the provisioner's startup behaviour.
+#
+# Frozen under STABILITY § 27.1 + § 27.2.
+# Reference baseline : bench/baselines/CB-A3.json
+
+schema_version: 1
+suite: CB
+id: CB-A3_cluster_provisioner_cold_start
+family: meta-bench
+subsystem: efe-cluster-provisioner
+description: "5 cold-start kind provisionings, image pre-pulled"
+duration: "600s"
+requires_meta_swarm: false
+runs_in_process: false
+
+cluster:
+  provisioner: kind
+  kind_image: kindest/node:v1.30.0
+  prepull_image: true
+
+loadgen:
+  version: 1
+  name: CB-A3-runner
+  target:
+    binary: "efe-cluster-provisioner"
+    subcommand: "provision"
+    args: ["--kind", "--name", "cb-a3-bench"]
+  pattern:
+    type: serial
+    iterations: 5
+  workload:
+    type: cluster-cold-start
+    teardown_between_runs: true
+    cooldown_between_runs_s: 5
+  rate:
+    mode: serial
+    max_concurrency: 1
+  termination:
+    after_iterations: 5
+  output:
+    format: ndjson
+    file: /var/run/loadgen/CB-A3-result.ndjson
+  run:
+    seed: 0
+    mode: ci
+    allow_mutation: true
+
+chaos: []
+
+results:
+  emit_metrics:
+    - provision_median_sec
+    - provision_p99_sec
+    - teardown_median_sec
+
+tolerance:
+  provision_median_sec_absolute_max: 90
+  provision_p99_sec_absolute_max: 120

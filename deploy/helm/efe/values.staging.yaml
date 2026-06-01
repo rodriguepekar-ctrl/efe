@@ -1,0 +1,39 @@
+# Staging overlay — smaller footprint + tolerant SLO thresholds.
+replicaCount: 2
+
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 6
+  targetCPUUtilizationPercentage: 75
+
+resources:
+  requests:
+    cpu: 250m
+    memory: 256Mi
+  limits:
+    cpu: "1"
+    memory: 1Gi
+
+pdb:
+  enabled: true
+  minAvailable: 1
+
+config:
+  rustLog: "info,efe=debug"
+  rateLimit:
+    defaultCapacity: 200
+    defaultRefill: 100.0
+  idempotency:
+    cacheCapacity: 10000
+    ttlMs: 60000
+
+audit:
+  persistence:
+    size: 1Gi
+
+prometheusRule:
+  thresholds:
+    errorRate: 0.02          # 2 % tolerated in staging
+    latencyP95Seconds: 1.5
+    confidenceP50: 0.70

@@ -1,0 +1,75 @@
+# CB-11 — PII redaction throughput + recall + precision.
+# Exercises `efe-pii` against seeded synthetic dataset.
+#
+# Frozen under STABILITY § 27.1 + § 27.2.
+# Reference baseline : bench/baselines/CB-11.json
+
+schema_version: 1
+suite: CB
+id: CB-11_pii_redaction_throughput
+family: compliance
+subsystem: efe-pii
+description: "10k synthetic docs with seeded PII at 5% density, 30s"
+duration: "30s"
+requires_meta_swarm: false
+
+cluster:
+  provisioner: kind
+  kind_image: kindest/node:v1.30.0
+  topology:
+    pii_replicas: 1
+    pii_classifier_model: "frozen-v1.4"
+
+loadgen:
+  version: 1
+  name: CB-11-loadgen
+  target:
+    endpoints:
+      - url: "grpc://efe-pii.efe.svc:50151"
+        weight: 1.0
+    role: redactor-client
+    conns_per_target: 4
+    per_request_deadline: "2s"
+  pattern:
+    type: closed-loop-fixed
+    total_requests: 10000
+  workload:
+    type: pii-redaction
+    pii_density_pct: 5.0
+    seeded_patterns:
+      - email: 0.25
+      - phone: 0.20
+      - ssn: 0.10
+      - credit_card: 0.10
+      - person_name: 0.20
+      - address: 0.15
+    doc_size_tokens_mean: 1024
+    doc_size_tokens_p99: 8192
+  rate:
+    mode: closed-loop
+    max_concurrency: 32
+  termination:
+    duration: "30s"
+  output:
+    format: ndjson
+    file: /var/run/loadgen/CB-11-result.ndjson
+  run:
+    seed: 26011
+    mode: staging
+    allow_mutation: false
+
+chaos: []
+
+results:
+  collect_prom_snapshot: true
+  emit_metrics:
+    - docs_per_sec
+    - per_doc_p99_ms
+    - recall_pct
+    - precision_pct
+
+tolerance:
+  docs_per_sec_min_delta_pct: -10
+  recall_pct_absolute_min: 99.5
+  precision_pct_absolute_min: 98.0
+  per_doc_p99_ms_max_delta_pct: 20

@@ -1,0 +1,38 @@
+{{- /*
+  Sprint D13 — Grafana dashboard ConfigMaps.
+
+  Renders one ConfigMap per file under ``d13_files/dashboards/``
+  (chart-local mirror of ``deploy/observability/grafana/dashboards/d13/``,
+  kept in sync by ``scripts/observability/sync_helm_d13_assets.sh`` ;
+  pinned by ``test_d13_helm_files_in_sync.py``). Each ConfigMap
+  carries the ``grafana_dashboard=1`` label so the Grafana sidecar
+  (kiwigrid/k8s-sidecar) auto-discovers and loads them.
+
+  Opt-in via ``observability.dashboards.enabled = true``.
+
+  Audit C-2 fix : Helm `.Files.Glob` cannot escape the chart
+  sandbox via `../..`. The canonical files live under
+  ``deploy/observability/`` ; the in-chart copy under
+  ``d13_files/`` is the rendering source of truth.
+*/ -}}
+{{- if .Values.observability.dashboards.enabled }}
+{{- $folder := .Values.observability.dashboards.folder | default "EFE" }}
+{{- range $path, $_ := .Files.Glob "d13_files/dashboards/*.json" }}
+{{- $slug := base $path | trimSuffix ".json" }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "efe.fullname" $ }}-dashboard-{{ $slug | replace "_" "-" }}
+  namespace: {{ $.Release.Namespace }}
+  labels:
+    {{- include "efe.labels" $ | nindent 4 }}
+    grafana_dashboard: "1"
+    efe.observability/folder: {{ $folder | quote }}
+  annotations:
+    efe.observability/dashboard-slug: {{ $slug | quote }}
+data:
+  {{ $slug }}.json: |-
+    {{- $.Files.Get $path | nindent 4 }}
+{{- end }}
+{{- end }}

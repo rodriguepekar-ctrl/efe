@@ -1,0 +1,149 @@
+{{- /*
+Sprint D21 (Φ-A) — STRICT NetworkPolicy : default-deny + tenant
+ingress whitelist + monitoring egress only.
+
+Cf. docs/EFE_HELM_CHART_EXTENSION_ARCHITECTURE.md §9.
+
+This template SUPPLEMENTS the basic networkpolicy.yaml (which exists
+post-D18). The strict variant is gated by `.Values.networkPolicyStrict.enabled`
+(default false for backward-compat) — operators opt-in for SaaS /
+multi-tenant deployments.
+
+When enabled, this NetworkPolicy enforces :
+  1. Ingress : only pods matching `tenantSelector` + optional CIDR allow-list.
+  2. Egress  : only DNS (kube-dns) + monitoring (Prometheus scrape) + audit
+                aggregator + S3 backup (if enabled) + OIDC discovery (if enabled).
+
+The basic networkpolicy.yaml remains for non-strict deployments.
+
+Pin tested by `test_m12_helm_extension_networkpolicy_strict_present`.
+*/}}
+{{- if .Values.networkPolicyStrict.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "efe.fullname" . }}-strict
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "efe.labels" . | nindent 4 }}
+    efe.io/sprint: D21
+    efe.io/policy: strict
+  annotations:
+    efe.io/audit-fix-marker: "M12-D21-strict-networkpolicy"
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "efe.selectorLabels" . | nindent 6 }}
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    {{- /* 1. Tenant ingress — selector-based whitelist. */ -}}
+    {{- with .Values.networkPolicyStrict.ingress.tenantSelector }}
+    - from:
+        - namespaceSelector: {}
+          podSelector:
+            {{- toYaml . | nindent 12 }}
+      ports:
+        - protocol: TCP
+          port: {{ $.Values.service.grpcPort | default 50051 }}
+        - protocol: TCP
+          port: {{ $.Values.service.adminPort | default 8080 }}
+    {{- end }}
+
+    {{- /* 2. CIDR allow-list (e.g., LB source IPs). */ -}}
+    {{- with .Values.networkPolicyStrict.ingress.cidrAllowList }}
+    - from:
+        {{- range . }}
+        - ipBlock:
+            cidr: {{ . | quote }}
+        {{- end }}
+      ports:
+        - protocol: TCP
+          port: {{ $.Values.service.grpcPort | default 50051 }}
+    {{- end }}
+
+    {{- /* 3. Monitoring scrape — Prometheus from monitoring namespace. */ -}}
+    {{- with .Values.networkPolicyStrict.ingress.monitoringSelector }}
+    - from:
+        - namespaceSelector:
+            {{- toYaml . | nindent 12 }}
+      ports:
+        - protocol: TCP
+          port: {{ $.Values.service.metricsPort | default 9090 }}
+    {{- end }}
+
+  egress:
+    {{- /* 1. DNS (kube-dns / CoreDNS) — REQUIRED. */ -}}
+    {{- if .Values.networkPolicyStrict.egress.dnsEnabled }}
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    {{- end }}
+
+    {{- /* 2. Audit aggregator egress (filebeat / fluentd / vector). */ -}}
+    {{- with .Values.networkPolicyStrict.egress.auditAggregatorSelector }}
+    - to:
+        - namespaceSelector:
+            {{- toYaml . | nindent 12 }}
+      ports:
+        - protocol: TCP
+          port: 5044
+        - protocol: TCP
+          port: 9200
+    {{- end }}
+
+    {{- /* 3. S3 backup egress (HTTPS) — if backup is enabled. */ -}}
+    {{- if .Values.networkPolicyStrict.egress.s3BackupEnabled }}
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 169.254.0.0/16
+              - 10.0.0.0/8
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+      ports:
+        - protocol: TCP
+          port: 443
+    {{- end }}
+
+    {{- /* 4. OIDC discovery egress — if OIDC is enabled. */ -}}
+    {{- if .Values.networkPolicyStrict.egress.oidcEnabled }}
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 169.254.0.0/16
+      ports:
+        - protocol: TCP
+          port: 443
+    {{- end }}
+
+    {{- /* 5. cert-manager webhook egress — if mTLS auto-rotation is enabled. */ -}}
+    {{- if .Values.mtls.enabled }}
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: cert-manager
+      ports:
+        - protocol: TCP
+          port: 443
+        - protocol: TCP
+          port: 9402
+    {{- end }}
+
+    {{- /* 6. Custom user-supplied egress rules. */ -}}
+    {{- with .Values.networkPolicyStrict.egress.custom }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+{{- end }}

@@ -1,0 +1,14 @@
+# PR #21 § 8.1 — chaos-mesh PodChaos : kill 1 participant for 5 s.
+apiVersion: chaos-mesh.org/v1alpha1
+kind: PodChaos
+metadata:
+  name: participant-loss
+  namespace: ${BENCH_NAMESPACE}
+spec:
+  action: pod-kill
+  mode: one
+  selector:
+    labelSelectors:
+      app.kubernetes.io/name: efe-meta-swarm
+      app.kubernetes.io/component: participant
+  duration: "5s"

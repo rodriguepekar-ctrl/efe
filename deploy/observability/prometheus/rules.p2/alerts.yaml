@@ -1,0 +1,237 @@
+## Sprint **D19 (P2-Foundation)** — Prometheus alerting rules for
+## the P2 *Activation opposable / Self-service* surface.
+##
+## Cf. `docs/EFE_P2_SELF_SERVICE_ARCHITECTURE.md` § 5.3.
+##
+## ## Inventaire (8 alertes)
+##
+## | Alert                            | Sévérité | Fenêtre | Trigger |
+## |----------------------------------|----------|---------|---------|
+## | P2_BURN_FAST                     | critical | 1 h     | burn ≥ 14.4× |
+## | P2_BURN_SLOW                     | warning  | 6 h     | burn ≥ 6×    |
+## | P2_PROVISIONING_LONG_TAIL        | warning  | 15 min  | layer p99 > 2× cible |
+## | P2_HUMAN_INTERVENTION_HIGH       | critical | 24 h    | > 5 % sessions avec ticket |
+## | P2_CLOUD_PARITY_DEGRADED         | warning  | 6 h     | écart ≥ 1.5× entre clouds |
+## | P2_ABANDON_BURST                 | warning  | 15 min  | abandon rate > 20 % |
+## | P2_ROLLBACK_BURST                | warning  | 15 min  | > 3 rollbacks / h |
+## | P2_HIGH_ERROR_CLASS_INTERNAL     | critical | 30 min  | internal errors > 1 % |
+
+groups:
+  - name: efe-p2-burn-rate
+    interval: 30s
+    rules:
+      ## ─────────────────────────────────────────────────────────
+      ## P2_BURN_FAST — critical
+      ## ─────────────────────────────────────────────────────────
+      ## Le SLO P2 = "POC p90 ≤ 30 min". Le burn rate = proportion
+      ## de POCs > 30 min / le budget mensuel d'erreur (= 10 %).
+      ##
+      ## Burn rate = 14.4× signifie qu'au rythme actuel, on épuise
+      ## le budget en 1 h (vs 30 j attendus = 14.4× plus vite).
+      - alert: P2_BURN_FAST
+        expr: |
+          (
+            sum(rate(efe_p2_funnel_t_to_first_classify_seconds_bucket{plan_target="poc",le="1800"}[1h]))
+            /
+            sum(rate(efe_p2_funnel_t_to_first_classify_seconds_count{plan_target="poc"}[1h]))
+          ) < (1 - 0.10 * 14.4)
+        for: 15m
+        labels:
+          severity: critical
+          family: P2
+          sla_clause: "P2-§3.2"
+        annotations:
+          summary: "P2 burn rate ≥ 14.4× sur 1 h (POC activation en danger aigu)"
+          description: |
+            La proportion de POCs activés sous 30 min sur la dernière
+            heure ({{ $value | humanizePercentage }}) consomme l'error
+            budget mensuel 14.4× plus vite que soutenable.
+
+            Causes typiques :
+              - Récent deploy d'un module sur le hot-path d'activation
+              - Cloud (AWS/GCP/Azure) en outage régional
+              - Service IdP (Auth0/Stripe webhook) dégradé
+              - Quota cloud du Fournisseur dépassé
+          runbook_url: https://docs.efe.ai/runbooks/p2_burn_fast
+          dashboard_url: https://grafana.efe.ai/d/efe-p2-funnel
+
+      ## ─────────────────────────────────────────────────────────
+      ## P2_BURN_SLOW — warning
+      ## ─────────────────────────────────────────────────────────
+      - alert: P2_BURN_SLOW
+        expr: |
+          (
+            sum(rate(efe_p2_funnel_t_to_first_classify_seconds_bucket{plan_target="poc",le="1800"}[6h]))
+            /
+            sum(rate(efe_p2_funnel_t_to_first_classify_seconds_count{plan_target="poc"}[6h]))
+          ) < (1 - 0.10 * 6)
+        for: 30m
+        labels:
+          severity: warning
+          family: P2
+          sla_clause: "P2-§3.2"
+        annotations:
+          summary: "P2 burn rate ≥ 6× sur 6 h (dérive d'activation en cours)"
+          description: |
+            Sur 6 h, < 40 % des POCs atteignent le first classify
+            sous 30 min. Indique typiquement une régression
+            introduite il y a quelques jours, sous le radar de
+            P2_BURN_FAST.
+          runbook_url: https://docs.efe.ai/runbooks/p2_burn_slow
+
+  - name: efe-p2-funnel-health
+    interval: 30s
+    rules:
+      ## ─────────────────────────────────────────────────────────
+      ## P2_PROVISIONING_LONG_TAIL — warning
+      ## ─────────────────────────────────────────────────────────
+      ## Le layer 2 (compute control plane) est typiquement le
+      ## plus long (~ 480 s p99 cible). Si on dépasse 2× cible,
+      ## c'est qu'un cloud / une région est dégradé.
+      - alert: P2_PROVISIONING_LONG_TAIL
+        expr: |
+          histogram_quantile(
+            0.99,
+            sum by (cloud, layer, le) (
+              rate(efe_p2_funnel_provisioning_seconds_bucket[15m])
+            )
+          ) > 960
+        for: 10m
+        labels:
+          severity: warning
+          family: P2
+        annotations:
+          summary: "P2 provisioning {{ $labels.cloud }}/{{ $labels.layer }} p99 > 16 min"
+          description: |
+            Le p99 du provisioning Terraform pour
+            {{ $labels.cloud }} layer {{ $labels.layer }} est à
+            {{ $value }} s, > 2× cible canonique. Cause probable :
+            outage régional cloud ou quota IAM dépassé.
+          runbook_url: https://docs.efe.ai/runbooks/p2_provisioning_long_tail
+
+      ## ─────────────────────────────────────────────────────────
+      ## P2_HUMAN_INTERVENTION_HIGH — critical
+      ## ─────────────────────────────────────────────────────────
+      ## Pin contractuel : "self-service" implique ≤ 5 % de
+      ## sessions ayant requis un ticket. Au-delà, le terme
+      ## marketing devient frauduleux.
+      - alert: P2_HUMAN_INTERVENTION_HIGH
+        expr: |
+          efe:p2_human_intervention_ratio:24h > 0.05
+        for: 1h
+        labels:
+          severity: critical
+          family: P2
+          sla_clause: "P2-§1.1"
+        annotations:
+          summary: "P2 self-service compromis : > 5 % des sessions requièrent un humain"
+          description: |
+            Sur 24 h, {{ $value | humanizePercentage }} des sessions
+            d'activation ont déclenché un ticket support. La promesse
+            "self-service" P2 est compromise sémantiquement.
+
+            Action immédiate :
+              1. Identifier la cause cohorte (un cloud, un step, un
+                 error_class) via le panel "Top intervention reasons".
+              2. Mitiger : doc update, code fix, ou opt-out
+                 temporaire de la promesse jusqu'à correction.
+          runbook_url: https://docs.efe.ai/runbooks/p2_human_intervention_high
+
+      ## ─────────────────────────────────────────────────────────
+      ## P2_CLOUD_PARITY_DEGRADED — warning
+      ## ─────────────────────────────────────────────────────────
+      - alert: P2_CLOUD_PARITY_DEGRADED
+        expr: |
+          (
+            max(efe:p2_ttfc_p90_by_cloud:1h)
+            /
+            min(efe:p2_ttfc_p90_by_cloud:1h)
+          ) > 1.5
+        for: 1h
+        labels:
+          severity: warning
+          family: P2
+        annotations:
+          summary: "P2 cloud parity : écart ≥ 1.5× entre clouds"
+          description: |
+            Le ratio p90 max/min entre AWS, GCP et Azure dépasse 1.5×.
+            Indique typiquement qu'un cloud est dégradé OU que les
+            Terraform modules d'un cloud ont divergé.
+
+            Action : identifier le cloud lent, alerter customer
+            success si un partner a une préférence forte.
+          runbook_url: https://docs.efe.ai/runbooks/p2_cloud_parity
+
+      ## ─────────────────────────────────────────────────────────
+      ## P2_ABANDON_BURST — warning
+      ## ─────────────────────────────────────────────────────────
+      ## Burst d'abandons à une étape précise = signe qu'une UI ou
+      ## un service est cassé.
+      - alert: P2_ABANDON_BURST
+        expr: |
+          (
+            sum by (step) (rate(efe_p2_funnel_drop_total[15m]))
+            /
+            sum(rate(efe_p2_funnel_started_total[15m]))
+          ) > 0.20
+        for: 15m
+        labels:
+          severity: warning
+          family: P2
+        annotations:
+          summary: "P2 abandon burst à l'étape {{ $labels.step }} (> 20 %)"
+          description: |
+            > 20 % des sessions abandonnent à l'étape
+            {{ $labels.step }} dans les 15 dernières minutes.
+            Investiguer : UI cassée, lien email broken, paiement
+            refusé en masse, etc.
+          runbook_url: https://docs.efe.ai/runbooks/p2_abandon_burst
+
+      ## ─────────────────────────────────────────────────────────
+      ## P2_ROLLBACK_BURST — warning
+      ## ─────────────────────────────────────────────────────────
+      - alert: P2_ROLLBACK_BURST
+        expr: |
+          sum(rate(efe_p2_funnel_rollback_total[1h])) > (3.0 / 3600.0)
+        for: 15m
+        labels:
+          severity: warning
+          family: P2
+        annotations:
+          summary: "P2 rollback burst : > 3 sagas rollback / heure"
+          description: |
+            Plus de 3 rollbacks de provisioning saga par heure.
+            Indique typiquement un cloud quota / outage / mauvais
+            module Terraform.
+          runbook_url: https://docs.efe.ai/runbooks/p2_rollback_burst
+
+      ## ─────────────────────────────────────────────────────────
+      ## P2_HIGH_ERROR_CLASS_INTERNAL — critical
+      ## ─────────────────────────────────────────────────────────
+      ## `error_class = internal` est notre "catch-all" — son
+      ## prévalence est un signal de bugs non-classifiés.
+      - alert: P2_HIGH_ERROR_CLASS_INTERNAL
+        expr: |
+          (
+            sum(rate(efe_p2_funnel_drop_total{reason="internal"}[30m]))
+            /
+            sum(rate(efe_p2_funnel_started_total[30m]))
+          ) > 0.01
+        for: 15m
+        labels:
+          severity: critical
+          family: P2
+        annotations:
+          summary: "P2 internal error rate > 1 % (= bugs non-classifiés)"
+          description: |
+            {{ $value | humanizePercentage }} des sessions
+            d'activation ont fini en `error_class = internal`. Ces
+            erreurs sont non-classifiées = bugs à analyser.
+
+            Action :
+              1. Grep des 50 dernières sessions en `internal`
+                 pour pattern.
+              2. Promouvoir le pattern récurrent vers un
+                 `error_class` dédié.
+              3. Ouvrir un Jira ticket pour le fix de fond.
+          runbook_url: https://docs.efe.ai/runbooks/p2_high_internal_errors

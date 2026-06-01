@@ -1,0 +1,71 @@
+# CB-09 — Language-model router decision latency.
+# Exercises `efe-llm-router`'s decision path WITHOUT actual model
+# invocations.  Meta-Swarm NOT required.
+#
+# Frozen under STABILITY § 27.1 + § 27.2.
+# Reference baseline : bench/baselines/CB-09.json
+
+schema_version: 1
+suite: CB
+id: CB-09_llm_router_decision_latency
+family: inference
+subsystem: efe-llm-router
+description: "10k routing decisions across varied criteria, 10s, no model calls"
+duration: "10s"
+requires_meta_swarm: false
+
+cluster:
+  provisioner: kind
+  kind_image: kindest/node:v1.30.0
+  topology:
+    router_replicas: 1
+    router_backends_mocked: true   # CRITICAL : no real model is invoked
+
+loadgen:
+  version: 1
+  name: CB-09-loadgen
+  target:
+    endpoints:
+      - url: "grpc://efe-llm-router.efe.svc:50131"
+        weight: 1.0
+    role: router-client
+    conns_per_target: 8
+    per_request_deadline: "200ms"
+  pattern:
+    type: closed-loop-fixed
+    total_requests: 10000
+  workload:
+    type: router-decision
+    criteria_distribution:
+      context_short_cheap: 0.40
+      context_short_high_latency_tolerance: 0.20
+      context_long_high_quality: 0.20
+      multimodal: 0.10
+      cost_capped: 0.10
+  rate:
+    mode: closed-loop
+    max_concurrency: 128
+  termination:
+    duration: "10s"
+  output:
+    format: ndjson
+    file: /var/run/loadgen/CB-09-result.ndjson
+  run:
+    seed: 26009
+    mode: staging
+    allow_mutation: false
+
+chaos: []
+
+results:
+  collect_prom_snapshot: true
+  emit_metrics:
+    - decision_p50_us
+    - decision_p99_us
+    - oracle_match_pct
+    - per_decision_cpu_us
+
+tolerance:
+  decision_p99_us_max_delta_pct: 25
+  oracle_match_pct_absolute_min: 100.0
+  per_decision_cpu_us_max_delta_pct: 15

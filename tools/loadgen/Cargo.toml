@@ -1,0 +1,94 @@
+#                         efe-meta-swarm-loadgen
+#  ───────────────────────────────────────────────────────────────────
+#  PR #20 — production-grade L2 meta-swarm load generator.
+#
+#  Workspace member under tools/ (per architecture AD2 — operator
+#  utility, not a service library).  Binary name has the
+#  `efe-meta-swarm-` prefix to avoid colliding with the global crate
+#  registry.
+#
+#  Reference : docs/EFE_A1_PHASE2_PR20_ARCHITECTURE.md
+[package]
+name        = "efe-meta-swarm-loadgen"
+version     = "0.1.0"
+edition     = "2021"
+license     = "UNLICENSED"
+description = "Deterministic, regression-safe load generator for the EFE Phase-2 meta-swarm gRPC L2 surface (controller + participants)."
+homepage    = "https://efe.example.com/meta-swarm"
+repository  = "https://github.com/efe-ai/efe"
+keywords    = ["loadgen", "grpc", "meta-swarm", "phase-2", "slo"]
+categories  = ["command-line-utilities", "development-tools::testing"]
+publish     = false   # internal binary, not on crates.io
+
+[[bin]]
+name = "efe-meta-swarm-loadgen"
+path = "src/main.rs"
+
+[lib]
+name = "efe_meta_swarm_loadgen"
+path = "src/lib.rs"
+
+# ────────────────────────────────────────────────────────────────────
+# Dependencies
+#
+# Workspace-shared deps come from the root `[workspace.dependencies]`
+# block so we never drift on tonic / tokio / prost versions.  Loadgen-
+# specific deps are pinned here (clap, hdrhistogram, rand_xoshiro,
+# serde_yaml, etc.).
+# ────────────────────────────────────────────────────────────────────
+[dependencies]
+# Workspace shared
+tokio       = { workspace = true }
+# Enable tonic's `tls` feature — provides ClientTlsConfig / Identity /
+# Certificate (matches PR #16 server-side wiring).
+tonic       = { workspace = true, features = ["tls"] }
+prost       = { workspace = true }
+prost-types = { workspace = true }
+tower       = { workspace = true }
+thiserror   = { workspace = true }
+serde       = { workspace = true }
+serde_json  = { workspace = true }
+uuid        = { workspace = true }
+tracing     = { workspace = true }
+tracing-subscriber = { workspace = true }
+anyhow      = { workspace = true }
+futures     = { workspace = true }
+async-trait = { workspace = true }
+dashmap     = { workspace = true }
+http        = { workspace = true }
+
+# Workspace internal — proto types + tracing module reuse.
+efe-meta-swarm-proto  = { path = "../../crates/efe-meta-swarm-proto" }
+
+# Loadgen-specific deps (not shared workspace).  Audit-pass cleanup —
+# removed 8 unused deps (chrono / indicatif / console / ring /
+# tokio-rustls / rustls* family) since tonic[tls] supplies all TLS
+# functionality and the ratatui TUI is a Phase-3 follow-up.
+clap          = { version = "4.5",  features = ["derive", "env", "wrap_help"] }
+serde_yaml    = "0.9"
+hdrhistogram  = "7.5"
+rand          = "0.8"
+rand_xoshiro  = "0.6"
+parking_lot   = "0.12"
+humantime     = "2.1"
+prometheus    = { version = "0.13", features = ["process"] }
+csv           = "1.3"
+ctrlc         = "3.4"
+glob          = "0.3"
+
+# ────────────────────────────────────────────────────────────────────
+# Dev dependencies for the integration + golden CLI tests.
+# ────────────────────────────────────────────────────────────────────
+[dev-dependencies]
+tempfile  = "3.10"
+pretty_assertions = "1.4"
+proptest  = "1.5"
+
+# Release profile inherits from the workspace root.
+
+[features]
+default = []
+# Optional features that enable additional sub-systems.  Each is opt-in
+# so a minimal build (e.g., for golden CLI snapshot tests) stays light.
+tui     = []   # ratatui terminal dashboard — Phase-3 follow-up (G.10)
+parquet = []   # parquet output via arrow — Phase-3 follow-up (G.7)

@@ -1,0 +1,31 @@
+{{- /*
+  Sprint D13-bis — egress NetworkPolicy for OTLP/gRPC traffic.
+
+  Rendered only when `observability.otel.enabled = true`. Allows
+  the efe-server pods to reach the OTel collector on port 4317.
+  In multi-tenant clusters this is critical : without an explicit
+  egress rule, the cluster's default-deny NetworkPolicy will block
+  the outbound gRPC connection and every span gets dropped.
+
+  Cf. `docs/bench/d13bis_otel_sdk_real_architecture.md` § 13.3.
+*/}}
+{{- if .Values.config.observability.otel.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "efe.fullname" . }}-otel-egress
+  labels: {{- include "efe.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels: {{- include "efe.selectorLabels" . | nindent 6 }}
+  policyTypes: [Egress]
+  egress:
+    # Allow OTLP/gRPC to the collector pod (in-cluster).
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: opentelemetry-collector
+      ports:
+        - protocol: TCP
+          port: 4317
+{{- end }}

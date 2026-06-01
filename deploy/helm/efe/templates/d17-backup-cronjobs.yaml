@@ -1,0 +1,81 @@
+{{- /*
+  Sprint D17 — Backup + DR : CronJob set for scheduled backups.
+
+  Three CronJobs are rendered :
+    * postgres-full   — weekly base via pgBackRest (Sunday 06:00 UTC)
+    * postgres-diff   — daily diff (Mon-Sat 06:00 UTC)
+    * vault-snapshot  — daily Vault Raft snapshot (06:30 UTC)
+    * bundle-sync     — weekly rclone sync (Sunday 07:00 UTC)
+
+  WAL archiving is configured on the Postgres side (archive_command
+  = `pgbackrest archive-push %p`) and runs continuously, not as a
+  Kubernetes CronJob.
+
+  Cf. `docs/bench/d17_backup_dr_architecture.md` § 9.
+*/}}
+{{- if .Values.backup.enabled }}
+{{- $top := . }}
+{{- range $key, $cron := .Values.backup.cronJobs }}
+{{- if $cron.enabled }}
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "efe.fullname" $top }}-backup-{{ $key }}
+  labels: {{- include "efe.labels" $top | nindent 4 }}
+    app.kubernetes.io/component: backup
+    backup.efe.ai/job: {{ $key }}
+spec:
+  schedule: {{ $cron.schedule | quote }}
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 5
+  startingDeadlineSeconds: 600
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      activeDeadlineSeconds: {{ default 3600 $cron.activeDeadlineSeconds }}
+      template:
+        metadata:
+          labels: {{- include "efe.labels" $top | nindent 12 }}
+            app.kubernetes.io/component: backup
+            backup.efe.ai/job: {{ $key }}
+        spec:
+          restartPolicy: OnFailure
+          serviceAccountName: {{ include "efe.fullname" $top }}-backup
+          containers:
+            - name: efe-backup
+              image: {{ default $top.Values.image.repository $cron.image }}:{{ default $top.Values.image.tag $cron.imageTag }}
+              imagePullPolicy: {{ default "IfNotPresent" $top.Values.image.pullPolicy }}
+              args:
+                - "snapshot"
+                - "--source"
+                - {{ $cron.source | quote }}
+                - "--kind"
+                - {{ $cron.kind | quote }}
+              envFrom:
+                - configMapRef:
+                    name: {{ include "efe.fullname" $top }}-config
+              env:
+                - name: PGBACKREST_REPO1_CIPHER_PASS
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ include "efe.fullname" $top }}-backup-config
+                      key: pgbackrest_cipher_pass
+                      optional: true
+                - name: VAULT_TOKEN
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ include "efe.fullname" $top }}-backup-config
+                      key: vault_token
+                      optional: true
+              resources:
+                requests:
+                  cpu: 200m
+                  memory: 256Mi
+                limits:
+                  cpu: "2"
+                  memory: 2Gi
+{{- end }}
+{{- end }}
+{{- end }}

@@ -1,0 +1,24 @@
+{
+  "_comment": "Sprint D9 — spike load scenario. Cf. d9_deep_analysis_supplement.md §1.5 (transitoire model). Step jump 1 → 16 concurrent clients at t=30 s. Total 120 s = 30 s warm + 90 s post-spike measurement window. SLO `D9-LOAD-4` requires p99 to drop back below 5 s within 30 s of the spike onset (HPA scale-up budget). The 90 s post-spike duration is calibrated so that the parser's 10 s sliding window (audit fix L21) has 80 anchors to test before declaring 'never recovered'.",
+  "proto": "../../protos/efe/v1/efe.proto",
+  "import-paths": ["../../protos"],
+  "call": "efe.v1.SwarmService/Execute",
+  "host": "127.0.0.1:50051",
+  "insecure": true,
+  "load-schedule": "step",
+  "load-start": 1,
+  "load-end": 16,
+  "load-step": 15,
+  "load-step-duration": "30s",
+  "duration": "120s",
+  "timeout": "30s",
+  "data-file": "fixtures/sample_request.json",
+  "metadata": {
+    "x-load-test-scenario": "spike",
+    "x-tenant-id": "load-bench"
+  },
+  "skip-first": 0,
+  "format": "json",
+  "output": "/dev/stdout",
+  "_recovery_metric_extraction": "The parser (parse_ghz_report.py::_ghz_spike_recovery_seconds) walks 10 s sliding windows starting at t=31 s (one second after spike onset to exclude the spike instant). The first window with p99 ≤ 5 s gives `recovery_seconds = window_start - spike_start_s`. If no window recovers, recovery_seconds = post-spike duration (forces SLO FAIL)."
+}

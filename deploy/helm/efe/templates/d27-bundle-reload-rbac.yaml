@@ -1,0 +1,113 @@
+{{- /*
+Sprint D27 (Φ-C) — RBAC for the bundle reload Job.
+
+Cf. docs/EFE_HELM_CHART_EXTENSION_ARCHITECTURE.md §11.6.
+
+The Job needs a ServiceAccount + Role + RoleBinding to :
+  - GET pods (find efe-server pods to target).
+  - GET services (resolve the admin endpoint).
+  - LIST configmaps (read bundle config).
+  - (Optional) CREATE pods/exec (if reload requires kubectl exec ;
+    current impl uses HTTP admin API instead).
+
+All annotated with helm.sh/hook so they're created BEFORE the Job
+(weight 1-3) and cleaned up AFTER success.
+
+Pin tested by `test_m12_helm_extension_bundle_reload_rbac_present`.
+*/}}
+{{- if .Values.bundleReload.enabled }}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ include "efe.fullname" . }}-bundle-reload
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "efe.labels" . | nindent 4 }}
+    efe.io/sprint: D27
+  annotations:
+    # Audit fix M12-A8 (LOW) — pre-fix this hardcoded `post-upgrade`,
+    # but the Job's hookTiming is configurable via
+    # `.Values.bundleReload.hookTiming` (default "post-upgrade", but
+    # operators may set "post-install"). If an operator chose
+    # `hookTiming: post-install`, the Job ran but the RBAC triplet
+    # was NOT created → RBAC denied → Job exit non-zero. Post-fix the
+    # RBAC declares BOTH hook events ; benign over-creation in the
+    # non-active case (Helm cleans up via the hook-delete-policy).
+    helm.sh/hook: post-install,post-upgrade
+    helm.sh/hook-weight: "1"
+    helm.sh/hook-delete-policy: hook-succeeded,before-hook-creation
+automountServiceAccountToken: true
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "efe.fullname" . }}-bundle-reload
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "efe.labels" . | nindent 4 }}
+    efe.io/sprint: D27
+  annotations:
+    # Audit fix M12-A8 (LOW) — pre-fix this hardcoded `post-upgrade`,
+    # but the Job's hookTiming is configurable via
+    # `.Values.bundleReload.hookTiming` (default "post-upgrade", but
+    # operators may set "post-install"). If an operator chose
+    # `hookTiming: post-install`, the Job ran but the RBAC triplet
+    # was NOT created → RBAC denied → Job exit non-zero. Post-fix the
+    # RBAC declares BOTH hook events ; benign over-creation in the
+    # non-active case (Helm cleans up via the hook-delete-policy).
+    helm.sh/hook: post-install,post-upgrade
+    helm.sh/hook-weight: "2"
+    helm.sh/hook-delete-policy: hook-succeeded,before-hook-creation
+rules:
+  - apiGroups: [""]
+    resources:
+      - pods
+      - services
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups: [""]
+    resources:
+      - configmaps
+    verbs:
+      - get
+      - list
+  {{- /* Optional : pods/exec — only if reload uses kubectl exec instead of HTTP. */ -}}
+  {{- if .Values.bundleReload.useKubectlExec }}
+  - apiGroups: [""]
+    resources:
+      - pods/exec
+    verbs:
+      - create
+  {{- end }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "efe.fullname" . }}-bundle-reload
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "efe.labels" . | nindent 4 }}
+    efe.io/sprint: D27
+  annotations:
+    # Audit fix M12-A8 (LOW) — pre-fix this hardcoded `post-upgrade`,
+    # but the Job's hookTiming is configurable via
+    # `.Values.bundleReload.hookTiming` (default "post-upgrade", but
+    # operators may set "post-install"). If an operator chose
+    # `hookTiming: post-install`, the Job ran but the RBAC triplet
+    # was NOT created → RBAC denied → Job exit non-zero. Post-fix the
+    # RBAC declares BOTH hook events ; benign over-creation in the
+    # non-active case (Helm cleans up via the hook-delete-policy).
+    helm.sh/hook: post-install,post-upgrade
+    helm.sh/hook-weight: "3"
+    helm.sh/hook-delete-policy: hook-succeeded,before-hook-creation
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "efe.fullname" . }}-bundle-reload
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "efe.fullname" . }}-bundle-reload
+    namespace: {{ .Release.Namespace }}
+{{- end }}

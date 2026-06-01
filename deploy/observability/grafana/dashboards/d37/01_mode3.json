@@ -1,0 +1,167 @@
+{
+  "__inputs": [],
+  "__requires": [
+    {"type": "grafana", "id": "grafana", "name": "Grafana", "version": "10.2.0"},
+    {"type": "datasource", "id": "prometheus", "name": "Prometheus", "version": "1.0.0"}
+  ],
+  "uid": "efe-d37-01-mode3",
+  "title": "EFE — 01 Mode-3 (Sprint D37)",
+  "description": "Sprint D37 — Mode-3 fan-out k-swarm + aggregation observability. Cf. docs/EFE_TELEMETRY_EXTENSION_ARCHITECTURE.md § 11.4. Instruments : efe_mode3_subswarms_spawned_total, efe_mode3_dispersion, efe_mode3_k_clamped_total, efe_mode3_aggregation_seconds. SLOs : C-3 (Mode-3 p99 ≤ 3 × Mode-1 p99), C-5 (k_max enforced), C-12 (dispersion ≤ 0.15).",
+  "tags": ["efe", "d37", "mode3", "k-swarm", "aggregation"],
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "time": {"from": "now-1h", "to": "now"},
+  "timepicker": {"refresh_intervals": ["30s", "1m", "5m", "15m", "1h"]},
+  "graphTooltip": 1,
+  "templating": {
+    "list": [
+      {
+        "name": "datasource",
+        "type": "datasource",
+        "query": "prometheus",
+        "current": {"text": "Prometheus", "value": "Prometheus"}
+      },
+      {
+        "name": "tenant",
+        "type": "query",
+        "datasource": {"type": "prometheus", "uid": "$datasource"},
+        "query": "label_values(efe_mode3_subswarms_spawned_total, tenant)",
+        "includeAll": true,
+        "multi": true,
+        "refresh": 2,
+        "sort": 1,
+        "label": "Tenant"
+      },
+      {
+        "name": "aggregator",
+        "type": "query",
+        "datasource": {"type": "prometheus", "uid": "$datasource"},
+        "query": "label_values(efe_mode3_aggregation_seconds_bucket, aggregator)",
+        "includeAll": true,
+        "multi": true,
+        "refresh": 2,
+        "sort": 1,
+        "label": "Aggregator"
+      }
+    ]
+  },
+  "panels": [
+    {
+      "type": "row",
+      "id": 1,
+      "title": "k-Swarm Throughput",
+      "gridPos": {"x": 0, "y": 0, "w": 24, "h": 1}
+    },
+    {
+      "type": "timeseries",
+      "id": 2,
+      "title": "Sub-Swarms Spawned per Minute (by mode)",
+      "datasource": {"type": "prometheus", "uid": "$datasource"},
+      "gridPos": {"x": 0, "y": 1, "w": 12, "h": 8},
+      "targets": [{
+        "expr": "sum by (mode_per_call) (rate(efe_mode3_subswarms_spawned_total{tenant=~\"$tenant\"}[1m]))",
+        "legendFormat": "{{mode_per_call}}",
+        "refId": "A"
+      }],
+      "description": "k-swarm fan-out rate. mode1 = direct backend, mode2 = via LLM router."
+    },
+    {
+      "type": "stat",
+      "id": 3,
+      "title": "k Clamping Rate (5m)",
+      "datasource": {"type": "prometheus", "uid": "$datasource"},
+      "gridPos": {"x": 12, "y": 1, "w": 12, "h": 8},
+      "targets": [{
+        "expr": "sum(rate(efe_mode3_k_clamped_total{tenant=~\"$tenant\"}[5m]))",
+        "refId": "A"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 0.1},
+              {"color": "red", "value": 1.0}
+            ]
+          }
+        }
+      },
+      "description": "SLO C-5 : k_max=5 enforced. > 0.1/s = clients abusing API. > 1.0/s = product discussion needed."
+    },
+    {
+      "type": "row",
+      "id": 4,
+      "title": "Aggregation Quality",
+      "gridPos": {"x": 0, "y": 9, "w": 24, "h": 1}
+    },
+    {
+      "type": "heatmap",
+      "id": 5,
+      "title": "Dispersion Distribution (by aggregator)",
+      "datasource": {"type": "prometheus", "uid": "$datasource"},
+      "gridPos": {"x": 0, "y": 10, "w": 12, "h": 9},
+      "targets": [{
+        "expr": "efe_mode3_dispersion{tenant=~\"$tenant\", aggregator=~\"$aggregator\"}",
+        "format": "heatmap",
+        "legendFormat": "{{aggregator}}/{{tenant}}",
+        "refId": "A"
+      }],
+      "description": "SLO C-12 : dispersion ≤ 0.15 = sub-swarms agreed. Above 0.15 = flag for human review."
+    },
+    {
+      "type": "timeseries",
+      "id": 6,
+      "title": "Aggregator p99 Latency (ms)",
+      "datasource": {"type": "prometheus", "uid": "$datasource"},
+      "gridPos": {"x": 12, "y": 10, "w": 12, "h": 9},
+      "targets": [{
+        "expr": "1000 * histogram_quantile(0.99, sum(rate(efe_mode3_aggregation_seconds_bucket{aggregator=~\"$aggregator\"}[5m])) by (le, aggregator))",
+        "legendFormat": "{{aggregator}}",
+        "refId": "A"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms"
+        }
+      },
+      "description": "Mean + Weighted are O(k). Median is O(k log k). Pathological aggregators show > 1ms p99."
+    },
+    {
+      "type": "row",
+      "id": 7,
+      "title": "Per-Tenant Drill-Down",
+      "gridPos": {"x": 0, "y": 19, "w": 24, "h": 1}
+    },
+    {
+      "type": "table",
+      "id": 8,
+      "title": "Sub-Swarms by Tenant",
+      "datasource": {"type": "prometheus", "uid": "$datasource"},
+      "gridPos": {"x": 0, "y": 20, "w": 12, "h": 8},
+      "targets": [{
+        "expr": "topk(20, sum by (tenant) (rate(efe_mode3_subswarms_spawned_total[1h])))",
+        "format": "table",
+        "instant": true,
+        "refId": "A"
+      }],
+      "description": "Top 20 tenants by Mode-3 fan-out volume."
+    },
+    {
+      "type": "table",
+      "id": 9,
+      "title": "k-Clamp Offenders (top 10)",
+      "datasource": {"type": "prometheus", "uid": "$datasource"},
+      "gridPos": {"x": 12, "y": 20, "w": 12, "h": 8},
+      "targets": [{
+        "expr": "topk(10, sum by (tenant) (rate(efe_mode3_k_clamped_total[1h])))",
+        "format": "table",
+        "instant": true,
+        "refId": "A"
+      }],
+      "description": "Tenants who request k > 5 most often. Flag for product follow-up."
+    }
+  ]
+}

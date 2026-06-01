@@ -1,0 +1,19 @@
+{{- if .Values.storage.pvc.enabled -}}
+{{- include "efe-slo-rollup.validate" . -}}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "efe-slo-rollup.fullname" . }}-data
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "efe-slo-rollup.labels" . | nindent 4 }}
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: {{ .Values.storage.pvc.size }}
+  {{- with .Values.storage.pvc.storageClassName }}
+  storageClassName: {{ . }}
+  {{- end }}
+{{- end -}}

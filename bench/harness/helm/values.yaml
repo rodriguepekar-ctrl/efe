@@ -1,0 +1,100 @@
+# PR #21 § 28 + AD44 — values for the optional in-cluster orchestrator.
+
+image:
+  repository: ghcr.io/efe/efe-bench-harness
+  tag: 0.1.0  # pinned to Chart.appVersion ; templated in deployment.
+  pullPolicy: IfNotPresent
+
+# Subset of scenarios to run inside the cluster.  Empty ⇒ --all.
+scenarios: []
+# Example :
+# scenarios:
+#   - S01_baseline_100qps_5min
+#   - S04_chaos_participant_loss
+
+# Target loadgen override : leave empty to use scenario-declared URLs
+# (in-cluster DNS resolves fine when the Job runs in the same cluster).
+# Set this only if your scenarios target an external broker.
+targetOverride: ""
+
+# Cluster provisioner — for in-cluster runs, always "external" + the
+# downward-API kubeconfig (a ServiceAccount-mounted client config).
+provisioner: external
+
+# Mode : "dev" (default) or "staging".  "production" is hard-rejected.
+mode: dev
+
+# Output handling.
+output:
+  # If non-empty, claim a PVC of this size at /var/run/bench.
+  persistentVolumeClaim:
+    enabled: true
+    size: 5Gi
+    storageClassName: ""  # default storage class
+  # Alternative : drop summary.json into a ConfigMap (small results only).
+  configMap:
+    enabled: false
+
+# Pod hardening (AD24, T93).
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 65532
+  runAsGroup: 65532
+  fsGroup: 65532
+  seccompProfile:
+    type: RuntimeDefault
+
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  privileged: false
+  capabilities:
+    drop:
+      - ALL
+
+resources:
+  requests:
+    cpu: 500m
+    memory: 512Mi
+  limits:
+    cpu: 2
+    memory: 2Gi
+
+# Scoped RBAC : the harness needs to read pods + apply chaos CRDs in its
+# own namespace only (AD21, T93).  ClusterRole is forbidden.
+rbac:
+  create: true
+  namespaceScoped: true
+
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+
+# Job-specific knobs.
+job:
+  backoffLimit: 0          # never auto-retry a failed bench run
+  activeDeadlineSeconds: 7200  # 2 h hard cap (matches S09 soak)
+  ttlSecondsAfterFinished: 86400  # 24 h retention
+  restartPolicy: Never
+  parallelism: 1
+  completions: 1
+
+# Optional Prometheus side-car scrape — disabled by default in stub.
+prometheus:
+  serviceMonitor:
+    enabled: false
+
+# Optional OTel side-car export — disabled by default.
+otel:
+  enabled: false
+  endpoint: ""  # e.g. http://otel-collector.observability.svc:4317
+
+# Node selection / tolerations — empty by default.
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+# Pod-level annotations / labels.
+podAnnotations: {}
+podLabels: {}

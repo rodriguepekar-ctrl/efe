@@ -1,0 +1,198 @@
+# PR #22 § 9.1 + Appendix C — Prometheus recording rules for the
+# 4 SLOs × 4 burn-rate windows = 16 SLI series + 4 metadata series.
+# Additive to PR #19's rules ; lives at `deploy/grafana/recording-rules/`
+# (copied at deploy time).
+#
+# STABILITY_CONTRACT v1.4 § 22.3 — recording-rule names frozen for ≥ 6
+# chart-minor versions.
+
+groups:
+
+  # ── SLO-1 : L2 availability ─────────────────────────────────────
+  - name: slo-l2-availability
+    interval: 30s
+    rules:
+      - record: slo:L2_AVAILABILITY_5m
+        expr: |
+          sum(rate(efe_l2_request_total{status="success",source="prod"}[5m]))
+          /
+          sum(rate(efe_l2_request_total{status=~"success|server_error|transport_error",source="prod"}[5m]))
+        labels:
+          slo: L2_AVAILABILITY
+          window: 5m
+          stability_contract: v1.4
+
+      - record: slo:L2_AVAILABILITY_30m
+        expr: |
+          sum(rate(efe_l2_request_total{status="success",source="prod"}[30m]))
+          /
+          sum(rate(efe_l2_request_total{status=~"success|server_error|transport_error",source="prod"}[30m]))
+        labels:
+          slo: L2_AVAILABILITY
+          window: 30m
+          stability_contract: v1.4
+
+      - record: slo:L2_AVAILABILITY_1h
+        expr: |
+          sum(rate(efe_l2_request_total{status="success",source="prod"}[1h]))
+          /
+          sum(rate(efe_l2_request_total{status=~"success|server_error|transport_error",source="prod"}[1h]))
+        labels:
+          slo: L2_AVAILABILITY
+          window: 1h
+          stability_contract: v1.4
+
+      - record: slo:L2_AVAILABILITY_6h
+        expr: |
+          sum(rate(efe_l2_request_total{status="success",source="prod"}[6h]))
+          /
+          sum(rate(efe_l2_request_total{status=~"success|server_error|transport_error",source="prod"}[6h]))
+        labels:
+          slo: L2_AVAILABILITY
+          window: 6h
+          stability_contract: v1.4
+
+  # ── SLO-2 : L2 latency p95 compliance ───────────────────────────
+  - name: slo-l2-latency-p95
+    interval: 30s
+    rules:
+      - record: slo:L2_LATENCY_P95_5m
+        expr: |
+          histogram_quantile(0.95,
+            sum by (le) (rate(efe_l2_request_duration_seconds_bucket{source="prod"}[5m])))
+        labels:
+          slo: L2_LATENCY_P95
+          window: 5m
+          stability_contract: v1.4
+
+      - record: slo:L2_LATENCY_P95_30m
+        expr: |
+          histogram_quantile(0.95,
+            sum by (le) (rate(efe_l2_request_duration_seconds_bucket{source="prod"}[30m])))
+        labels:
+          slo: L2_LATENCY_P95
+          window: 30m
+          stability_contract: v1.4
+
+      - record: slo:L2_LATENCY_P95_1h
+        expr: |
+          histogram_quantile(0.95,
+            sum by (le) (rate(efe_l2_request_duration_seconds_bucket{source="prod"}[1h])))
+        labels:
+          slo: L2_LATENCY_P95
+          window: 1h
+          stability_contract: v1.4
+
+      - record: slo:L2_LATENCY_P95_6h
+        expr: |
+          histogram_quantile(0.95,
+            sum by (le) (rate(efe_l2_request_duration_seconds_bucket{source="prod"}[6h])))
+        labels:
+          slo: L2_LATENCY_P95
+          window: 6h
+          stability_contract: v1.4
+
+  # ── SLO-3 : swarm recovery time ─────────────────────────────────
+  - name: slo-swarm-recovery-time
+    interval: 30s
+    rules:
+      - record: slo:SWARM_RECOVERY_TIME_5m
+        expr: |
+          sum(rate(efe_swarm_recovery_event_total{result="recovered",duration_le="60",source="prod"}[5m]))
+          /
+          sum(rate(efe_swarm_recovery_event_total{source="prod"}[5m]))
+        labels:
+          slo: SWARM_RECOVERY_TIME
+          window: 5m
+          stability_contract: v1.4
+
+      - record: slo:SWARM_RECOVERY_TIME_30m
+        expr: |
+          sum(rate(efe_swarm_recovery_event_total{result="recovered",duration_le="60",source="prod"}[30m]))
+          /
+          sum(rate(efe_swarm_recovery_event_total{source="prod"}[30m]))
+        labels:
+          slo: SWARM_RECOVERY_TIME
+          window: 30m
+          stability_contract: v1.4
+
+      - record: slo:SWARM_RECOVERY_TIME_1h
+        expr: |
+          sum(rate(efe_swarm_recovery_event_total{result="recovered",duration_le="60",source="prod"}[1h]))
+          /
+          sum(rate(efe_swarm_recovery_event_total{source="prod"}[1h]))
+        labels:
+          slo: SWARM_RECOVERY_TIME
+          window: 1h
+          stability_contract: v1.4
+
+      - record: slo:SWARM_RECOVERY_TIME_6h
+        expr: |
+          sum(rate(efe_swarm_recovery_event_total{result="recovered",duration_le="60",source="prod"}[6h]))
+          /
+          sum(rate(efe_swarm_recovery_event_total{source="prod"}[6h]))
+        labels:
+          slo: SWARM_RECOVERY_TIME
+          window: 6h
+          stability_contract: v1.4
+
+  # ── SLO-4 : replication lag p99 ─────────────────────────────────
+  - name: slo-replication-lag-p99
+    interval: 30s
+    rules:
+      - record: slo:REPLICATION_LAG_P99_5m
+        expr: |
+          min by (chart_version) (
+            histogram_quantile(0.99,
+              sum by (participant, le) (rate(efe_replication_lag_bucket{source="prod"}[5m]))))
+        labels:
+          slo: REPLICATION_LAG_P99
+          window: 5m
+          stability_contract: v1.4
+
+      - record: slo:REPLICATION_LAG_P99_30m
+        expr: |
+          min by (chart_version) (
+            histogram_quantile(0.99,
+              sum by (participant, le) (rate(efe_replication_lag_bucket{source="prod"}[30m]))))
+        labels:
+          slo: REPLICATION_LAG_P99
+          window: 30m
+          stability_contract: v1.4
+
+      - record: slo:REPLICATION_LAG_P99_1h
+        expr: |
+          min by (chart_version) (
+            histogram_quantile(0.99,
+              sum by (participant, le) (rate(efe_replication_lag_bucket{source="prod"}[1h]))))
+        labels:
+          slo: REPLICATION_LAG_P99
+          window: 1h
+          stability_contract: v1.4
+
+      - record: slo:REPLICATION_LAG_P99_6h
+        expr: |
+          min by (chart_version) (
+            histogram_quantile(0.99,
+              sum by (participant, le) (rate(efe_replication_lag_bucket{source="prod"}[6h]))))
+        labels:
+          slo: REPLICATION_LAG_P99
+          window: 6h
+          stability_contract: v1.4
+
+  # ── Frozen target sidecar series ────────────────────────────────
+  - name: slo-targets
+    interval: 5m
+    rules:
+      - record: slo:L2_AVAILABILITY_target
+        expr: vector(0.995)
+        labels: { slo: L2_AVAILABILITY, kind: target, stability_contract: v1.4 }
+      - record: slo:L2_LATENCY_P95_target
+        expr: vector(0.99)
+        labels: { slo: L2_LATENCY_P95, kind: target, stability_contract: v1.4 }
+      - record: slo:SWARM_RECOVERY_TIME_target
+        expr: vector(0.99)
+        labels: { slo: SWARM_RECOVERY_TIME, kind: target, stability_contract: v1.4 }
+      - record: slo:REPLICATION_LAG_P99_target
+        expr: vector(0.99)
+        labels: { slo: REPLICATION_LAG_P99, kind: target, stability_contract: v1.4 }

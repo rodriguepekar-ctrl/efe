@@ -1,0 +1,73 @@
+# CB-05 — Cache hit-rate and operations per second.
+# Exercises `efe-cache` under Zipfian access pattern.
+# Meta-Swarm NOT required.
+#
+# Frozen under STABILITY § 27.1 + § 27.2.
+# Reference baseline : bench/baselines/CB-05.json
+
+schema_version: 1
+suite: CB
+id: CB-05_cache_hit_rate
+family: data-plane
+subsystem: efe-cache
+description: "Zipfian α=1.0 over 1M keys, 100k ops/sec for 30s, no MS"
+duration: "30s"
+requires_meta_swarm: false
+
+cluster:
+  provisioner: kind
+  kind_image: kindest/node:v1.30.0
+  topology:
+    cache_replicas: 1
+    cache_capacity_keys: 800000
+    cache_memory: "2Gi"
+
+loadgen:
+  version: 1
+  name: CB-05-loadgen
+  target:
+    endpoints:
+      - url: "grpc://efe-cache.efe.svc:50101"
+        weight: 1.0
+    role: cache-client
+    conns_per_target: 4
+    per_request_deadline: "100ms"
+  pattern:
+    type: constant
+    qps: 100000
+  workload:
+    type: cache-zipfian
+    zipfian_alpha: 1.0
+    working_set_keys: 1000000
+    get_share: 0.8
+    put_share: 0.2
+    value_size_bytes: 1024
+  rate:
+    mode: closed-loop
+    max_concurrency: 200
+  termination:
+    duration: "30s"
+  output:
+    format: ndjson
+    file: /var/run/loadgen/CB-05-result.ndjson
+  run:
+    seed: 26005
+    mode: staging
+    allow_mutation: true
+
+chaos: []
+
+results:
+  collect_prom_snapshot: true
+  emit_metrics:
+    - hit_rate_pct
+    - ops_per_sec
+    - eviction_rate_per_sec
+    - get_p99_us
+    - put_p99_us
+
+tolerance:
+  hit_rate_pct_absolute_delta_pp_max: 2
+  ops_per_sec_min_delta_pct: -10
+  get_p99_us_max_delta_pct: 25
+  put_p99_us_max_delta_pct: 25
