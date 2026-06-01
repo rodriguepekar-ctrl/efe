@@ -1,0 +1,97 @@
+services:
+  efe-dev:
+    image: efe-dev:latest
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.dev
+    volumes:
+      - ..:/workspace
+      - cargo-cache:/usr/local/cargo/registry
+      - cargo-target:/workspace/target
+    environment:
+      - CARGO_INCREMENTAL=1
+      - RUST_LOG=info,efe=debug
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    stdin_open: true
+    tty: true
+    networks:
+      - efe-net
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.105.0
+    volumes:
+      - ./otel-config.yaml:/etc/otel-config.yaml
+    command: ["--config=/etc/otel-config.yaml"]
+    ports:
+      - "4317:4317"   # OTLP gRPC (front door for clients)
+      - "4318:4318"   # OTLP HTTP
+      - "13133:13133" # health_check extension (= DT-OPS-19)
+    # Round-5 DT-OPS-19 fix : healthcheck via the collector's
+    # built-in `health_check` extension (port 13133, exposed in
+    # `otel-config.yaml`). Without this, services that depend on
+    # the collector come up before it is ready and lose the first
+    # batch of traces.
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O-", "http://localhost:13133/"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+    networks:
+      - efe-net
+
+  prometheus:
+    image: prom/prometheus:v2.53.0
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+    ports:
+      - "9090:9090"
+    # Round-5 DT-OPS-19 fix : `/-/ready` is Prometheus' canonical
+    # readiness probe. Without it, `docker compose up` is non-
+    # deterministic and grafana / alertmanager can race startup.
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O-", "http://localhost:9090/-/ready"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+    networks:
+      - efe-net
+
+  jaeger:
+    image: jaegertracing/all-in-one:1.58
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+    ports:
+      - "16686:16686"   # UI
+      # Round-5 DT-OPS-18 fix (revised) : exporter in
+      # `otel-config.yaml` points at `jaeger:4317` over the
+      # internal docker network — NO host-side mapping needed
+      # (and it would collide with otel-collector's own 4317
+      # binding). For host-side `grpcurl` probes use
+      # `docker compose exec jaeger grpcurl -plaintext :4317 ...`.
+    # Round-5 DT-OPS-19 fix : Jaeger 1.58 exposes a `/` HTTP probe
+    # on the UI port that doubles as a liveness signal once boot
+    # is complete.
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O-", "http://localhost:16686/"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 8s
+    networks:
+      - efe-net
+
+networks:
+  efe-net:
+    driver: bridge
+
+volumes:
+  cargo-cache:
+  cargo-target:

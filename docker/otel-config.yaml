@@ -1,0 +1,55 @@
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  batch:
+    timeout: 1s
+    send_batch_size: 1024
+
+exporters:
+  debug:
+    verbosity: normal
+  # Round-5 DT-OPS-18 fix : Jaeger 1.58+ accepts native OTLP on
+  # 4317 (gRPC) / 4318 (HTTP). Pre-fix `:14268` was the legacy
+  # Jaeger Thrift HTTP endpoint, which rejects OTLP payloads —
+  # traces failed silently. `COLLECTOR_OTLP_ENABLED=true` env on
+  # the compose `jaeger:` service exposes 4317 internally on the
+  # docker network ; UI stays on 16686 and the legacy 14268 port
+  # is no longer needed.
+  otlp/jaeger:
+    endpoint: jaeger:4317
+    tls:
+      insecure: true
+  prometheus:
+    endpoint: 0.0.0.0:8889
+    resource_to_telemetry_conversion:
+      enabled: true
+
+# Round-5 DT-OPS-19 fix : enable the `health_check` extension on
+# :13133 so `compose.dev.yml` can wire a healthcheck. Without it
+# the compose healthcheck probes `/` on 13133 which the collector
+# does not expose by default.
+extensions:
+  health_check:
+    endpoint: 0.0.0.0:13133
+
+service:
+  extensions: [health_check]
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [debug, otlp/jaeger]
+    metrics:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [debug, prometheus]
+    logs:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [debug]
