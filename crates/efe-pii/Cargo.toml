@@ -1,0 +1,41 @@
+[package]
+name        = "efe-pii"
+version     = { workspace = true }
+edition     = { workspace = true }
+rust-version = { workspace = true }
+authors     = { workspace = true }
+license     = { workspace = true }
+repository  = { workspace = true }
+description = "M29 — PII detection + auto-redaction. Presidio-backed."
+
+[dependencies]
+tokio            = { workspace = true }
+tracing          = { workspace = true }
+serde            = { workspace = true }
+serde_json       = { workspace = true }
+thiserror        = { workspace = true }
+async-trait      = { workspace = true }
+once_cell        = "1.20"
+
+# Unicode normalization (NFKC) — essential for adversarial input
+# (e.g. confusable characters used to evade regex).
+unicode-normalization = "0.1"
+
+# SHA256 — used to hash inputs for audit events (never log raw).
+sha2             = "0.10"
+hex              = "0.4"
+
+# HTTP client to the Presidio sidecar (analyzer + anonymizer).
+reqwest          = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+
+# Metrics.
+prometheus       = { version = "0.13", default-features = false, features = ["process"] }
+
+[dev-dependencies]
+tokio            = { workspace = true, features = ["test-util", "macros"] }
+anyhow           = { workspace = true }
+
+[features]
+default = []
+# Enable when EFE_PRESIDIO_TEST_URL is set in CI.
+integration-tests = []
