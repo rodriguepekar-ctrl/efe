@@ -1,0 +1,100 @@
+[package]
+name = "efe-agent-runner"
+version = "2.1.0"          # M26 = EFE 2.1 (production graduation)
+edition = "2021"
+authors = ["EFE Engineering <eng@efe.example.com>"]
+license = "Apache-2.0"
+description = "M25 — Agent runtime EXPERIMENTAL : in-cluster Firecracker microVM sandbox for LLM agents"
+repository = "https://github.com/efe-ai/efe"
+publish = false
+
+[lib]
+name = "efe_agent_runner"
+path = "src/lib.rs"
+
+[[bin]]
+name = "efe-agent-runner"
+path = "src/main.rs"
+
+[features]
+default = []
+test-utils = []
+integration_tests = ["test-utils"]
+
+[dependencies]
+# Core async + DB
+tokio = { version = "1.40", features = ["macros", "rt-multi-thread", "time", "sync", "signal", "process"] }
+# Aligned on `sqlx 0.7` workspace-wide (efe-server pin) ; 0.8 caused a
+# `links = "sqlite3"` collision because cargo's resolver pulled
+# `sqlx-sqlite` for both versions. Runtime API we use (query / query_as
+# / query_scalar) is identical across 0.7/0.8.
+sqlx = { version = "0.7", default-features = false, features = ["runtime-tokio", "tls-rustls", "postgres", "uuid", "chrono", "json"] }
+chrono = { version = "0.4", features = ["serde"] }
+uuid = { version = "1.10", features = ["v4", "serde"] }
+
+# Async traits + lazy statics
+async-trait = "0.1"
+once_cell = "1.20"
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+serde_yaml = "0.9"
+
+# gRPC
+tonic = "0.12"
+prost = "0.13"
+prost-types = "0.13"
+
+# Crypto + audit chain
+hmac = "0.12"
+sha2 = "0.10"
+hex = "0.4"
+rand = "0.8"
+
+# Kubernetes API
+kube = { version = "0.96", features = ["runtime", "derive", "client"] }
+k8s-openapi = { version = "0.23", features = ["latest"] }
+
+# Schemars (for CRD JSONSchema)
+schemars = "0.8"
+
+# Error handling
+thiserror = "1.0"
+anyhow = "1.0"
+
+# Tracing + metrics
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+prometheus = "0.13"
+
+# Base64 (state checkpoints) + futures (signal handling on non-unix)
+base64 = "0.22"
+futures = "0.3"
+
+# M26 webhook server + low-level HTTP for Firecracker UDS client
+axum = { version = "0.7", default-features = false, features = ["json", "tokio", "http1"] }
+axum-server = { version = "0.7", default-features = false, features = ["tls-rustls"] }
+http = "1.1"
+bytes = "1.7"
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
+rustls-pemfile = "2"
+
+# Internal crates
+# `efe-curation` re-exports `TenantId` / `CatalogId` / `ClassId` and
+# the audit-chain HMAC pattern we mirror.
+efe-curation = { path = "../efe-curation" }
+# Note : we deliberately do NOT depend on `efe-llm-router` (M21) at
+# compile time. The agent core (Python) talks to LLMRouter over the
+# wire ; the controller crate only enforces feature-flag gating, which
+# is a runtime check (`EFE_FEATURE_M21_LLMROUTER`).
+
+[dev-dependencies]
+efe-agent-runner = { path = ".", features = ["test-utils"] }
+tokio = { version = "1.40", features = ["full", "test-util"] }
+sqlx = { version = "0.7", default-features = false, features = ["runtime-tokio", "tls-rustls", "postgres", "migrate"] }
+proptest = "1.5"
+mockall = "0.13"
+test-log = "0.2"
+pretty_assertions = "1.4"
+serial_test = "3"
