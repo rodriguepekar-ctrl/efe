@@ -1,0 +1,14 @@
+{
+  "op": "softmax",
+  "version": "1.0",
+  "note": "torch.nn.functional.softmax(x, dim=-1) on [1, 2, 3, 4]",
+  "inputs": {
+    "x": { "shape": [4], "data": [1.0, 2.0, 3.0, 4.0] },
+    "axis": -1
+  },
+  "expected": {
+    "shape": [4],
+    "data": [0.03205860, 0.08714432, 0.23688282, 0.64391426]
+  },
+  "tolerance": { "rtol": 1.0e-5, "atol": 1.0e-7 }
+}

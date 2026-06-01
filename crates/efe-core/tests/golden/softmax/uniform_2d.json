@@ -1,0 +1,14 @@
+{
+  "op": "softmax",
+  "version": "1.0",
+  "note": "Uniform softmax: all zeros → uniform 1/N.",
+  "inputs": {
+    "x": { "shape": [2, 4], "data": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0] },
+    "axis": -1
+  },
+  "expected": {
+    "shape": [2, 4],
+    "data": [0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25]
+  },
+  "tolerance": { "rtol": 1.0e-6, "atol": 1.0e-7 }
+}

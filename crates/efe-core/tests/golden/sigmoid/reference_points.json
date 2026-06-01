@@ -1,0 +1,13 @@
+{
+  "op": "sigmoid",
+  "version": "1.0",
+  "note": "5 canonical sigmoid reference points. Sprint 5 op. σ(0)=0.5, σ(±1)≈0.7311/0.2689, σ(±10) saturates near 1/0.",
+  "inputs": {
+    "x": { "shape": [5], "data": [0.0, 1.0, -1.0, 10.0, -10.0] }
+  },
+  "expected": {
+    "shape": [5],
+    "data": [0.5, 0.7310586, 0.2689414, 0.9999546, 4.5397868e-5]
+  },
+  "tolerance": { "rtol": 1.0e-5, "atol": 1.0e-7 }
+}

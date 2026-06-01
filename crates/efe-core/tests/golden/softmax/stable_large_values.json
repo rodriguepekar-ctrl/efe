@@ -1,0 +1,14 @@
+{
+  "op": "softmax",
+  "version": "1.0",
+  "note": "LogSumExp-stable softmax on [1000, 1001, 1002]; naive exp would overflow.",
+  "inputs": {
+    "x": { "shape": [3], "data": [1000.0, 1001.0, 1002.0] },
+    "axis": -1
+  },
+  "expected": {
+    "shape": [3],
+    "data": [0.09003057, 0.24472847, 0.66524096]
+  },
+  "tolerance": { "rtol": 1.0e-5, "atol": 1.0e-7 }
+}

@@ -1,0 +1,152 @@
+[package]
+name = "efe-core"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "EFE core runtime: types, errors, orchestration"
+
+[dependencies]
+thiserror.workspace = true
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
+uuid.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+async-trait.workspace = true
+futures.workspace = true
+toml = "0.8"
+rand = "0.8"
+rand_pcg = "0.3"
+rand_distr = "0.4"
+half = { version = "2.4" }
+
+# ---------------------------------------------------------------------
+# Sprint **M1 extension** (D33-D38) — additional deps required by the
+# new modules `agents/templates/`, `swarm/mode2/`, `swarm/mode3/`,
+# `fusion/hybrid.rs`.
+#
+#   * `dashmap` — concurrent map for `Mode2Cache`. Already in workspace
+#     deps via `efe-server` ; promoted to direct dep here for explicit
+#     surface.
+#   * `xxhash-rust` — 64-bit fast hash for the Mode-2 cache key derived
+#     from `(query, top_k, router_id)`. Used by the canonical M4 §13.4
+#     contract.
+#   * `sha2` — SHA-256 for the deterministic synthesis pipeline
+#     (`MockRouter::generate_anchors`, `synthesis::derive_embedding`).
+#   * `hex` — lowercase hex encoding for the `llm_call_id` short hash.
+# ---------------------------------------------------------------------
+dashmap = { workspace = true }
+xxhash-rust = { version = "0.8", features = ["xxh64"] }
+sha2 = "0.10"
+hex = "0.4"
+
+# --- compute module dependencies ---
+# `smallvec` holds small shapes / strides inline without heap alloc.
+smallvec = { version = "1.13", features = ["const_generics"] }
+# `libm` provides pure-Rust implementations of transcendental functions
+# (notably `erff` for the exact GELU activation).
+libm = "0.2"
+
+# --- Sprint 4 Light — optional BLAS-backed matmul ---
+# `ndarray` + `blas-src` are ONLY pulled in when one of the BLAS
+# features (`accelerate`, `openblas`) is active. The default build
+# stays pure Rust with no extra deps, preserving portability.
+#
+# Design note : on macOS, `blas-src/accelerate` transitively pulls
+# `accelerate-src`, which prints the `cargo:rustc-link-lib=framework=Accelerate`
+# directive. We don't need to list `accelerate-src` explicitly —
+# doing so as a target-specific optional dep caused the linker
+# directives to be silently dropped for test binaries on Apple Silicon.
+ndarray = { version = "0.16", optional = true }
+blas-src = { version = "0.10", optional = true, default-features = false }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["test-util", "macros"] }
+proptest = "1.4"
+tempfile = "3.10"
+criterion = { version = "0.5", default-features = false, features = ["plotters", "cargo_bench_support", "async_tokio"] }
+# Sprint C — Bench Foundation. `peak_alloc` ships a `#[global_allocator]`
+# wrapper that records peak heap usage. Used only by the `memory_e2e`
+# bench file (its own `#[global_allocator]` declaration), so it does
+# not pollute regular tests or other benches.
+peak_alloc = "0.3"
+
+[[bench]]
+name = "compute_sprint2"
+harness = false
+
+[[bench]]
+name = "compute_sprint3"
+harness = false
+
+[[bench]]
+name = "compute_sprint4"
+harness = false
+
+[[bench]]
+name = "swarm_e2e"
+harness = false
+
+[[bench]]
+name = "memory_e2e"
+harness = false
+
+# ---------------------------------------------------------------------
+# Sprint D2 — Memory pool / arena bench (production wiring).
+#
+# Measures `MemoryPool` + `Arena` + `HostBackend` in isolation, with
+# 7 criterion groups (acquire warm / cold / saturated / concurrent ;
+# arena alloc_zeroed_typed / reset ; realistic swarm alloc pattern).
+# Uses Rust's default allocator to keep timings pristine — the heap
+# peak counterpart lives in `memory_real_arena_peak.rs` (D2.5
+# follow-up). See `docs/bench/d2_memory_real_arena_architecture.md`.
+# ---------------------------------------------------------------------
+[[bench]]
+name = "memory_real_arena"
+harness = false
+
+# ---------------------------------------------------------------------
+# Sprint D3 — Compute pipeline bench (real chain of 6 ops).
+#
+# Measures the canonical sequence executed by `MvpCpuFusion::run_round`
+# at the `ComputeBackend` level: matmul (Q×Kᵀ) → softmax →
+# matmul (attn×V) → cone_project → shannon_entropy → std_dev. Three
+# fixtures (small/medium/large) matched on D1 v2 sizes, with naïve
+# vs BLAS comparison via the local feature mirror. See
+# `docs/bench/d3_compute_pipeline_architecture.md`.
+# ---------------------------------------------------------------------
+[[bench]]
+name = "compute_pipeline"
+harness = false
+
+[features]
+# `cpu` is implicit (always available through CpuBackend). `cuda` is
+# feature-gated so the crate still builds on macOS (no CUDA toolkit).
+default = []
+integration = []
+cuda = []
+# Sprint C — Bench Foundation. Enables SLO assertion tests that
+# require a fresh `target/bench-report-*.json` from
+# `scripts/bench_runner.sh`. Off by default so `cargo test` does
+# not depend on bench artefacts.
+slo_check = []
+
+# --- Sprint 4 Light — opt-in BLAS providers ---
+# Activate ONE of these to get BLAS-accelerated matmul above the
+# dispatch threshold (M·K·N ≥ 32 768). See docs/compute/tolerances.md
+# for the cross-backend numerical contract.
+accelerate = [
+    "dep:ndarray",
+    "ndarray/blas",
+    "dep:blas-src",
+    "blas-src/accelerate",
+]
+openblas = [
+    "dep:ndarray",
+    "ndarray/blas",
+    "dep:blas-src",
+    "blas-src/openblas",
+]

@@ -1,0 +1,21 @@
+{
+  "op": "cone_project",
+  "version": "1.0",
+  "note": "All latents already inside the cone (distance ≤ max_dist). Output is identical to input — pure pass-through. max_dist = 1.0 ; anchor at origin. All 3 latents have L2 norm ≤ 1.0.",
+  "inputs": {
+    "latents": {
+      "shape": [3, 2],
+      "data": [0.3, 0.4, -0.5, 0.1, 0.0, -0.8]
+    },
+    "anchors": {
+      "shape": [1, 2],
+      "data": [0.0, 0.0]
+    },
+    "max_dist": 1.0
+  },
+  "expected": {
+    "shape": [3, 2],
+    "data": [0.3, 0.4, -0.5, 0.1, 0.0, -0.8]
+  },
+  "tolerance": { "rtol": 0.0, "atol": 1.0e-7 }
+}

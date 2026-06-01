@@ -1,0 +1,18 @@
+{
+  "op": "std_dev",
+  "version": "1.0",
+  "note": "numpy.std([1,2,3,4,5], ddof=1) = 1.5811388300841898",
+  "inputs": {
+    "x": {
+      "shape": [5],
+      "data": [1.0, 2.0, 3.0, 4.0, 5.0]
+    },
+    "axis": -1,
+    "unbiased": true
+  },
+  "expected": {
+    "shape": [],
+    "data": [1.5811388]
+  },
+  "tolerance": { "rtol": 1.0e-5, "atol": 1.0e-6 }
+}

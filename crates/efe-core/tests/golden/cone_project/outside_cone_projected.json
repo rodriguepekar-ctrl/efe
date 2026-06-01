@@ -1,0 +1,21 @@
+{
+  "op": "cone_project",
+  "version": "1.0",
+  "note": "Two latents far from the single anchor at origin, max_dist=1.0. Each projected to unit sphere.",
+  "inputs": {
+    "latents": {
+      "shape": [2, 2],
+      "data": [3.0, 4.0, 6.0, 8.0]
+    },
+    "anchors": {
+      "shape": [1, 2],
+      "data": [0.0, 0.0]
+    },
+    "max_dist": 1.0
+  },
+  "expected": {
+    "shape": [2, 2],
+    "data": [0.6, 0.8, 0.6, 0.8]
+  },
+  "tolerance": { "rtol": 1.0e-5, "atol": 1.0e-6 }
+}
