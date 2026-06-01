@@ -1,0 +1,43 @@
+[package]
+name        = "efe-multimodal"
+version     = { workspace = true }
+edition     = { workspace = true }
+rust-version = { workspace = true }
+authors     = { workspace = true }
+license     = { workspace = true }
+repository  = { workspace = true }
+description = "M30 — Multi-modal (vision + audio + long-context) + Triton client + fusion."
+
+[dependencies]
+tokio            = { workspace = true }
+tracing          = { workspace = true }
+serde            = { workspace = true }
+serde_json       = { workspace = true }
+thiserror        = { workspace = true }
+async-trait      = { workspace = true }
+futures          = { workspace = true }
+once_cell        = "1.20"
+uuid             = { workspace = true }
+chrono           = { version = "0.4", default-features = false, features = ["clock", "serde"] }
+
+# Crypto for input hashing (audit-safe : never log raw multimodal input).
+sha2             = "0.10"
+hex              = "0.4"
+
+# HTTP client to Triton Inference Server (gRPC variant deferred to M30.1).
+reqwest          = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+
+# Numerical for embeddings + fusion math.
+bytes            = "1.7"
+
+# Metrics.
+prometheus       = { version = "0.13", default-features = false, features = ["process"] }
+
+[dev-dependencies]
+tokio            = { workspace = true, features = ["test-util", "macros"] }
+anyhow           = { workspace = true }
+
+[features]
+default = []
+# Real Triton integration tests. Requires EFE_TRITON_TEST_URL.
+integration-tests = []
