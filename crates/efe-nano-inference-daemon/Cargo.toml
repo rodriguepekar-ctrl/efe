@@ -1,0 +1,40 @@
+[package]
+name        = "efe-nano-inference-daemon"
+version     = { workspace = true }
+edition     = { workspace = true }
+authors     = { workspace = true }
+license     = { workspace = true }
+description = "M50 N11 — Guest-side inference daemon for the Firecracker microVM pool"
+repository  = { workspace = true }
+publish     = false
+
+# Sprint 8 — N11 days 13-15 : the guest binary is built for Linux musl
+# so it has no glibc dependency.  Building locally on macOS produces an
+# unusable binary but the code compiles and the unit tests run.
+#
+# CI build target : x86_64-unknown-linux-musl
+# Rootfs layout  : /opt/bin/inference-daemon (statically linked)
+
+[[bin]]
+name = "inference-daemon"
+path = "src/main.rs"
+
+[dependencies]
+tokio        = { workspace = true }
+serde        = { workspace = true }
+serde_json   = { workspace = true }
+uuid         = { workspace = true }
+tracing      = { workspace = true }
+tracing-subscriber = { workspace = true }
+sha2         = "0.10"
+anyhow       = { workspace = true }
+async-trait  = { workspace = true }
+chrono       = { version = "0.4", default-features = false, features = ["clock"] }
+
+# We re-use the wire-protocol types from efe-nano so the host and guest
+# can't drift apart.  This is an internal-only dep — efe-nano-sdk would
+# be cleaner, but the rpc.rs types are runtime-private to efe-nano.
+efe-nano = { path = "../efe-nano" }
+
+[dev-dependencies]
+tempfile = "3.10"
