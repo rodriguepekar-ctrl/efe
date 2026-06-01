@@ -1,0 +1,212 @@
+# R-100 — Release rollback / yank workflow.
+#
+# Manually triggered when a published release is found defective and
+# must be marked deprecated. Sigstore signatures are immutable (Rekor
+# is append-only), so we cannot un-sign — we can only :
+#   - mark images deprecated (annotation)
+#   - move chart manifest to a quarantine tag
+#   - convert the GitHub Release to draft
+#   - cargo yank
+#   - npm deprecate
+#   - emit a security advisory (VEX)
+#   - notify customers
+#
+# Cf. `docs/EFE_RELEASE_V1_GA_ARCHITECTURE.md` § 8.2.
+
+name: release-rollback
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to yank (e.g. v1.0.1)"
+        required: true
+      reason:
+        description: "Reason (mandatory, public)"
+        required: true
+      severity:
+        description: "Severity (must be one of P0|P1|P2)"
+        type: choice
+        required: true
+        options: [P0, P1, P2]
+
+permissions:
+  contents: write
+  packages: write
+  id-token: write
+
+env:
+  REGISTRY: "ghcr.io/efe-ai"
+
+concurrency:
+  group: release-rollback-${{ inputs.version }}
+  cancel-in-progress: false
+
+jobs:
+  yank:
+    name: yank ${{ inputs.version }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+
+      - name: Validate inputs
+        run: |
+          set -euo pipefail
+          VERSION="${{ inputs.version }}"
+          if ! [[ "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.\-]+)?$ ]]; then
+            echo "::error::Invalid version format : $VERSION"
+            exit 1
+          fi
+          REASON="${{ inputs.reason }}"
+          if [[ ${#REASON} -lt 20 ]]; then
+            echo "::error::Reason must be ≥ 20 characters (was ${#REASON})"
+            exit 1
+          fi
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install crane
+        run: |
+          set -euo pipefail
+          curl -fsSL -o /tmp/crane.tar.gz \
+            https://github.com/google/go-containerregistry/releases/download/v0.20.2/go-containerregistry_Linux_x86_64.tar.gz
+          tar -xzf /tmp/crane.tar.gz -C /usr/local/bin/ crane
+
+      - name: Mark Docker images deprecated
+        run: |
+          set -euo pipefail
+          VERSION_NO_V="${{ inputs.version }}"
+          VERSION_NO_V="${VERSION_NO_V#v}"
+          for img in efe-server mcp-server portal-admin efe-server-migrate; do
+            ref="${{ env.REGISTRY }}/${img}:${VERSION_NO_V}"
+            echo "==> Marking $ref deprecated"
+            crane mutate "$ref" \
+              --annotation "deprecated=true" \
+              --annotation "deprecation-reason=${{ inputs.reason }}" \
+              --annotation "deprecation-severity=${{ inputs.severity }}" \
+              --annotation "deprecation-date=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+              --tag "${ref}"
+          done
+
+      - name: Quarantine Helm chart
+        run: |
+          set -euo pipefail
+          VERSION_NO_V="${{ inputs.version }}"
+          VERSION_NO_V="${VERSION_NO_V#v}"
+          ref="${{ env.REGISTRY }}/charts/efe-stack:${VERSION_NO_V}"
+          # Re-tag to a quarantine tag (kept for forensics).
+          crane copy "$ref" "${ref}-yanked"
+          crane mutate "$ref" \
+            --annotation "deprecated=true" \
+            --annotation "deprecation-reason=${{ inputs.reason }}" \
+            --tag "${ref}"
+
+      - name: Convert GitHub Release to draft
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          # Build multi-line release-note body via printf so we don't
+          # break the YAML literal-block-scalar indentation (any line
+          # at column 0 would exit the `run: |` scope and produce a
+          # YAML parse error — this happened during R-100 audit pass).
+          BODY=$(printf '**YANKED %s** — %s\n\nThis release has been yanked. Do not use it.\nSee https://efe.example.com/security for advisory details.' \
+            "${{ inputs.severity }}" "${{ inputs.reason }}")
+          gh release edit "${{ inputs.version }}" \
+            --draft \
+            --notes "$BODY"
+
+      - name: Cargo yank
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${CARGO_REGISTRY_TOKEN:-}" ]]; then
+            echo "::warning::CARGO_TOKEN missing ; skipping cargo yank."
+            exit 0
+          fi
+          VERSION_NO_V="${{ inputs.version }}"
+          VERSION_NO_V="${VERSION_NO_V#v}"
+          # Per docs/release/DISTRIBUTION_CHANNELS.md, the only crate
+          # published to crates.io is `efe-server` (library-only). Yank
+          # is best-effort : if the crate hasn't been published for
+          # this version (e.g. cargo-publish job was skipped), yank
+          # is a no-op and we don't fail the workflow.
+          cargo yank --version "$VERSION_NO_V" efe-server || \
+            echo "::warning::cargo yank for efe-server@$VERSION_NO_V failed (crate may not have been published)"
+
+      - name: npm deprecate
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${NODE_AUTH_TOKEN:-}" ]]; then
+            echo "::warning::NPM_TOKEN missing ; skipping npm deprecate."
+            exit 0
+          fi
+          VERSION_NO_V="${{ inputs.version }}"
+          VERSION_NO_V="${VERSION_NO_V#v}"
+          npm deprecate "@efe/sdk@${VERSION_NO_V}" \
+            "Yanked due to ${{ inputs.reason }}. See https://efe.example.com/security." \
+            || echo "::warning::npm deprecate failed"
+
+      - name: Append yank to VEX feed
+        run: |
+          set -euo pipefail
+          ./scripts/release/append-vex-yank.sh \
+            "${{ inputs.version }}" \
+            "${{ inputs.severity }}" \
+            "${{ inputs.reason }}"
+
+      - name: Update security RSS feed
+        run: |
+          set -euo pipefail
+          ./scripts/release/append-security-rss.sh \
+            "${{ inputs.version }}" \
+            "yank" \
+            "${{ inputs.reason }}"
+
+      - name: Send customer notification
+        env:
+          MAILGUN_API_KEY: ${{ secrets.MAILGUN_API_KEY }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${MAILGUN_API_KEY:-}" ]]; then
+            echo "::warning::MAILGUN_API_KEY missing ; skipping email."
+            exit 0
+          fi
+          ./scripts/release/send-yank-notification.sh \
+            "${{ inputs.version }}" \
+            "${{ inputs.severity }}" \
+            "${{ inputs.reason }}"
+
+      - name: Final summary
+        run: |
+          {
+            echo "## 🚫 Release ${{ inputs.version }} yanked"
+            echo "- Reason: ${{ inputs.reason }}"
+            echo "- Severity: ${{ inputs.severity }}"
+            echo "- Yanked at: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            echo
+            echo "### Status"
+            echo "- ✅ Docker images annotated deprecated=true"
+            echo "- ✅ Helm chart quarantined as -yanked tag"
+            echo "- ✅ GitHub Release converted to draft"
+            echo "- ✅ cargo yank applied to efe-server (best-effort)"
+            echo "- ✅ npm deprecate applied to @efe/sdk"
+            echo "- ✅ VEX feed entry appended"
+            echo "- ✅ RSS feed entry appended"
+            echo "- ✅ Customer notification sent"
+            echo
+            echo "### Important"
+            echo "Sigstore signatures are immutable (Rekor append-only)."
+            echo "The yanked artefacts remain cryptographically verifiable but"
+            echo "are flagged as deprecated. Customers should pin to the next"
+            echo "patch release."
+          } >> "$GITHUB_STEP_SUMMARY"

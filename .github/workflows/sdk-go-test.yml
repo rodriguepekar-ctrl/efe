@@ -1,0 +1,222 @@
+# Sprint **D23 (Φ-B)** — `efe-sdk-go` PR-gate test workflow.
+#
+# Cf. `docs/EFE_GO_SDK_EXTENSION_ARCHITECTURE.md` § 25.1.
+#
+# Runs on every PR that touches `clients/go/efe-sdk/`. Builds the
+# module, runs `go vet`, `go test -race -coverprofile`, then
+# (advisory) `golangci-lint` + `govulncheck`. Fast — < 10 min target.
+#
+# Matrix : 2 OS (ubuntu-22.04, macos-14) × 2 Go versions (1.22, 1.23).
+# Both versions exercise the `go.mod` `go 1.22` floor + the latest
+# stable Go release. Race detector is supported on all 4 cells.
+#
+# A separate job runs the Python pin tests (anti-régression
+# structurelle) — they don't need Go installed. ~30 tests, ~5s.
+
+name: sdk-go-test
+
+on:
+  pull_request:
+    paths:
+      - "clients/go/efe-sdk/**"
+      - "scripts/tests/test_d23_go_sdk_*.py"
+      - ".github/workflows/sdk-go-test.yml"
+  workflow_dispatch:
+
+env:
+  # Go opt-in to module-aware mode (default since 1.16, but explicit
+  # here for clarity in CI logs).
+  GO111MODULE: "on"
+  # Disable Go telemetry — CI runners shouldn't phone home.
+  GOTELEMETRY: "off"
+
+jobs:
+  # ──────────────────────────────────────────────────────────────
+  # Job 1 — Go test matrix (race + coverage).
+  # ──────────────────────────────────────────────────────────────
+  go-test:
+    name: ${{ matrix.os }} / Go ${{ matrix.go }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, macos-14]
+        go: ["1.22", "1.23"]
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: clients/go/efe-sdk
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Go ${{ matrix.go }}
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ matrix.go }}
+          # Cache go.sum + GOMODCACHE / GOCACHE per OS×version.
+          cache: true
+          cache-dependency-path: clients/go/efe-sdk/go.sum
+
+      - name: go version
+        run: go version
+
+      - name: go mod download
+        # Populate the module cache before building.
+        run: go mod download
+
+      - name: go mod verify
+        # Verifies that dependencies in go.sum have not been modified
+        # since download. Catches supply-chain tampering early.
+        run: go mod verify
+
+      - name: go vet ./...
+        # stdlib analyser, always available. Catches obvious bugs
+        # (printf format strings, copying of locks, unreachable code).
+        run: go vet ./...
+
+      - name: go build ./...
+        # Confirms every package compiles before running tests.
+        run: go build ./...
+
+      - name: go test -race -coverprofile
+        # Race detector + atomic coverage mode (required for parallel
+        # tests). Coverage threshold is enforced by the pin test
+        # `test_d23_go_sdk_coverage_floor` separately — this step
+        # only collects the profile.
+        run: |
+          go test -race -coverprofile=coverage.out -covermode=atomic ./...
+
+      - name: go tool cover -func
+        # Surface package-level coverage in the CI log for quick
+        # human review.
+        run: go tool cover -func=coverage.out
+
+      - name: Upload coverage profile
+        if: matrix.os == 'ubuntu-22.04' && matrix.go == '1.23'
+        uses: actions/upload-artifact@v4
+        with:
+          name: sdk-go-coverage
+          path: clients/go/efe-sdk/coverage.out
+          retention-days: 14
+
+  # ──────────────────────────────────────────────────────────────
+  # Job 2 — Static analysis (golangci-lint + govulncheck).
+  # Both are advisory in D23 (continue-on-error) — they harden
+  # to required gates in D26 once the M9 audit pass is done.
+  # ──────────────────────────────────────────────────────────────
+  go-lint:
+    name: Lint (golangci-lint + govulncheck)
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: clients/go/efe-sdk
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.23"
+          cache: true
+          cache-dependency-path: clients/go/efe-sdk/go.sum
+
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: v1.59
+          working-directory: clients/go/efe-sdk
+          args: --timeout=5m
+        continue-on-error: true
+
+      - name: govulncheck
+        # CVE detection — run via `go install` (no separate action).
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          govulncheck ./...
+        continue-on-error: true
+
+  # ──────────────────────────────────────────────────────────────
+  # Job 3 — 3 framework examples (gin / fiber / chi).
+  # Each is an independent Go sub-module ; we build each in turn.
+  # Smoke-build only (no tests) — the SDK pin tests already verify
+  # they compile against the SDK's public surface.
+  # ──────────────────────────────────────────────────────────────
+  go-examples:
+    name: Examples build (gin / fiber / chi)
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.23"
+          cache: true
+          # Each example has its own go.sum — cache them all.
+          cache-dependency-path: |
+            clients/go/efe-sdk/go.sum
+            clients/go/efe-sdk/examples/gin/go.sum
+            clients/go/efe-sdk/examples/fiber/go.sum
+            clients/go/efe-sdk/examples/chi/go.sum
+
+      - name: Build gin example
+        working-directory: clients/go/efe-sdk/examples/gin
+        run: |
+          go mod tidy
+          go build -o /tmp/efe-gin-example ./...
+          go vet ./...
+
+      - name: Build fiber example
+        working-directory: clients/go/efe-sdk/examples/fiber
+        run: |
+          go mod tidy
+          go build -o /tmp/efe-fiber-example ./...
+          go vet ./...
+
+      - name: Build chi example
+        working-directory: clients/go/efe-sdk/examples/chi
+        run: |
+          go mod tidy
+          go build -o /tmp/efe-chi-example ./...
+          go vet ./...
+
+  # ──────────────────────────────────────────────────────────────
+  # Job 4 — Pin tests (Python — structural anti-régression).
+  # Doesn't need Go ; runs in seconds. Fails fast.
+  # ──────────────────────────────────────────────────────────────
+  pin-tests:
+    name: Pin tests (Python — structure)
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install pytest
+        run: pip install pytest
+      - name: Run efe-sdk-go pin tests
+        run: |
+          python -m pytest scripts/tests/test_d23_go_sdk_extension.py \
+            -v --tb=short
+
+  # ──────────────────────────────────────────────────────────────
+  # Job 5 — Bash syntax check (scripts/*.sh).
+  # Catches typos in publish.sh / gen-proto.sh / lint.sh / test.sh
+  # before the operator runs them by accident.
+  # ──────────────────────────────────────────────────────────────
+  bash-syntax:
+    name: Bash syntax (scripts/)
+    runs-on: ubuntu-22.04
+    timeout-minutes: 2
+    defaults:
+      run:
+        working-directory: clients/go/efe-sdk
+    steps:
+      - uses: actions/checkout@v4
+      - name: bash -n on every script
+        run: |
+          set -euo pipefail
+          for f in scripts/*.sh; do
+            echo "Checking $f"
+            bash -n "$f"
+          done
+          echo "✅ all scripts parse OK"

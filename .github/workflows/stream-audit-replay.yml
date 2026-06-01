@@ -1,0 +1,87 @@
+# Sprint **Φ-D-STREAM Completion (D84)** — Streaming audit-chain daily replay.
+#
+# Cf. docs/EFE_STREAMING_RPC_COMPLETION_ARCHITECTURE.md § 8 + artefact #40.
+#
+# Self-test the AuditStream HMAC chain replay logic on a synthetic
+# 100-event chain ; verify chain integrity holds + negative test detects
+# an injected corruption.
+
+name: stream-audit-replay
+
+on:
+  schedule:
+    - cron: "0 18 * * *"   # 18:00 UTC daily
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  PYTHONUNBUFFERED: "1"
+
+jobs:
+  audit-replay-self-test:
+    name: Self-test HMAC chain replay (100 events)
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - name: Replay 100-event self-test chain
+        run: python3 eval/scripts/stream_audit_chain_replay.py --n-self-test 100 --out target/streaming/audit_replay.json
+      - name: Verify SLO compliance
+        run: |
+          python3 -c "
+          import json
+          d = json.load(open('target/streaming/audit_replay.json'))
+          slo = d['slo_compliance']['SLO-STREAM-AUDIT-CHAIN']
+          assert slo['measured_pass_count'] == 1, f'integrity failed: {slo}'
+          assert slo['chain_length'] == 100
+          assert slo['broken_links'] == []
+          print('self-test audit replay : 100/100 events valid')
+          "
+      - name: Negative test (= corrupt one event)
+        run: |
+          python3 -c "
+          import json, hmac, hashlib
+          key = bytes(32)
+          def sig(prev, p):
+              m = hmac.new(key, digestmod=hashlib.sha256)
+              m.update(prev.encode()); m.update(p.encode()); return m.hexdigest()
+          out = []
+          prev = ''
+          for i in range(100):
+              p = json.dumps({'event_no': i, 'tenant':'tenant-acme', 'action':'test'}, sort_keys=True, separators=(',',':'))
+              s = sig(prev, p)
+              out.append({
+                  'event_id': f'01h{i:08d}', 'ts_unix_ms': 1700000000000 + i*1000,
+                  'tenant_id': 'tenant-acme', 'principal':'tester',
+                  'payload_json': p, 'signature_hex': s, 'prev_signature_hex': prev,
+              })
+              prev = s
+          # Corrupt event 42 signature.
+          out[42]['signature_hex'] = 'deadbeef' * 8
+          with open('/tmp/al_chain_corrupt.jsonl','w') as f:
+              for a in out: f.write(json.dumps(a) + chr(10))
+          print('corrupted index 42')
+          " && \
+            python3 eval/scripts/stream_audit_chain_replay.py \
+              --chain-file /tmp/al_chain_corrupt.jsonl \
+              --out target/streaming/audit_replay_corrupt.json && \
+            { echo "FATAL : corruption not detected (= faussement-PASS)" ; exit 1 ; } || \
+            { echo "Negative test OK : corruption correctly detected (exit != 0)" ; }
+      - name: Gate via check_slo.py
+        run: |
+          python3 eval/scripts/check_slo.py \
+              --baseline bench_baselines/v0.7.0/stream_slos.yaml \
+              --measure target/streaming/audit_replay.json \
+              --report target/streaming/audit_report.md
+          cat target/streaming/audit_report.md
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: stream-audit-replay
+          path: |
+            target/streaming/audit_replay.json
+            target/streaming/audit_report.md

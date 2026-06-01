@@ -1,0 +1,105 @@
+# PR #23 § 16.2 — smoke-nightly : extended-scope smoke on a multi-node
+# kind cluster (5 controllers + 15 participants).  Advisory — does NOT
+# block merge.  Catches scale regressions that pass single-node.
+
+name: smoke-nightly
+
+on:
+  schedule:
+    - cron: "0 2 * * *"  # 02:00 UTC
+  workflow_dispatch:
+    inputs:
+      chart_version:
+        description: "Chart version under test"
+        required: false
+
+concurrency:
+  group: smoke-nightly
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  smoke-nightly:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+
+      - name: protoc
+        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
+
+      - name: Multi-node kind config
+        run: |
+          cat > /tmp/kind-multi.yaml <<EOF
+          kind: Cluster
+          apiVersion: kind.x-k8s.io/v1alpha4
+          nodes:
+            - role: control-plane
+            - role: worker
+            - role: worker
+            - role: worker
+          EOF
+
+      - uses: helm/kind-action@v1
+        with:
+          cluster_name: smoke-nightly-${{ github.run_id }}
+          version: v0.24.0
+          config: /tmp/kind-multi.yaml
+          wait: 90s
+
+      - name: Build
+        run: cargo build --release -p efe-smoke
+
+      - name: Install efe-meta-swarm chart (scale = 5 controllers / 15 participants)
+        run: |
+          set -eo pipefail
+          helm repo add efe https://efe.github.io/charts || true
+          helm repo update
+          helm install efe-meta-swarm efe/efe-meta-swarm \
+              --namespace efe --create-namespace \
+              --set controller.replicas=5 \
+              --set participant.replicas=15 \
+              --set image.tag=${{ github.event.inputs.chart_version || github.sha }} \
+              --set serviceMonitor.enabled=false \
+              --wait --timeout 120s
+
+      - name: Run smoke (all 9 checks at scale)
+        env:
+          EFE_CHART_VERSION: ${{ github.event.inputs.chart_version || github.sha }}
+        run: |
+          set -o pipefail
+          # Larger global timeout : multi-node = slower boot.
+          # D4 — `--namespace efe` colocates with the chart.
+          ./target/release/efe-smoke run \
+              --chart-version "$EFE_CHART_VERSION" \
+              --provisioner external \
+              --kubeconfig "$HOME/.kube/config" \
+              --namespace efe \
+              --output /tmp/smoke-nightly.json \
+              --badge-file /tmp/smoke-nightly.svg \
+              --global-timeout 600s \
+              --redact-logs
+
+      - name: Upload artefacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-nightly-${{ github.run_id }}
+          path: |
+            /tmp/smoke-nightly.json
+            /tmp/smoke-nightly.svg
+          retention-days: 30
+
+      - name: Deploy nightly badge to gh-pages
+        if: always()
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: /tmp
+          destination_dir: smoke/nightly
+          keep_files: true

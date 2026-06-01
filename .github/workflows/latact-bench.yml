@@ -1,0 +1,94 @@
+# Sprint Φ-D-LATACT D94 — Nightly bench.
+
+name: latact-bench
+
+on:
+  schedule:
+    - cron: "0 23 * * *"
+  push:
+    tags: ["v*.*.*"]
+  workflow_dispatch:
+
+env:
+  PYTHONUNBUFFERED: "1"
+
+jobs:
+  tail-100k:
+    name: Tail bench 100k samples sustained
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - run: python3 eval/scripts/p1_tail_multi_regime_bench.py --mode synth_pass --n-samples 100000 --out target/latact/tail.json
+      - uses: actions/upload-artifact@v4
+        with: {name: latact-tail, path: target/latact/tail.json}
+
+  funnel-200-per-plan:
+    name: Funnel bench 600 sessions
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - run: python3 eval/scripts/p2_portal_funnel_query.py --mode synth_pass --n-per-plan 200 --out target/latact/funnel.json
+      - uses: actions/upload-artifact@v4
+        with: {name: latact-funnel, path: target/latact/funnel.json}
+
+  saga-100-injections:
+    name: Saga rollback 100 injections
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - run: python3 eval/scripts/p2_saga_rollback_bench.py --mode synth_pass --n-injections 100 --out target/latact/saga.json
+      - uses: actions/upload-artifact@v4
+        with: {name: latact-saga, path: target/latact/saga.json}
+
+  parity-3-clouds:
+    name: 3-cloud parity 150 sessions
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - run: python3 eval/scripts/p2_cloud_parity_bench.py --mode synth_pass --n-per-cloud 50 --out target/latact/parity.json
+      - uses: actions/upload-artifact@v4
+        with: {name: latact-parity, path: target/latact/parity.json}
+
+  summary:
+    name: Bench summary + SLO gating
+    needs: [tail-100k, funnel-200-per-plan, saga-100-injections, parity-3-clouds]
+    if: always()
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with: {path: artifacts}
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - run: pip install pyyaml
+      - name: Merge + report
+        run: |
+          mkdir -p target/latact
+          python3 -c "
+          import json, glob
+          out = {'slo_compliance': {}}
+          for f in glob.glob('artifacts/**/*.json', recursive=True):
+              try: d = json.load(open(f))
+              except Exception: continue
+              for k, v in d.get('slo_compliance', {}).items():
+                  out['slo_compliance'][k] = v
+          json.dump(out, open('target/latact/bench_consolidated.json', 'w'), indent=2)
+          "
+          python3 eval/scripts/check_slo.py \
+              --baseline bench_baselines/v0.8.0/latact_slos.yaml \
+              --measure target/latact/bench_consolidated.json \
+              --report target/latact/bench_report.md
+          cat target/latact/bench_report.md

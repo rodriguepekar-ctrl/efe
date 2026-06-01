@@ -1,0 +1,168 @@
+name: reproducibility
+
+# Sprint D9.A8 — nightly bit-for-bit reproducibility check.
+#
+# Builds the production Docker image TWICE on the same commit, with
+# the same SOURCE_DATE_EPOCH, on a fresh runner. Compares the
+# resulting image digests. A mismatch indicates that some part of
+# the build chain (rustc, cargo, an upstream dep, or the Dockerfile
+# itself) is non-deterministic — a supply-chain risk worth fixing
+# before the next release.
+#
+# Why nightly and not per-PR :
+#   * Each build is ~6-8 min ; doubling makes per-PR feedback too
+#     slow for what is a slow-moving invariant (Cargo deps don't
+#     drift digest-incompatibly often).
+#   * A digest mismatch on a PR would block merge for a reason
+#     that's typically unrelated to the PR itself ; in nightly
+#     mode it triggers an issue, not a merge gate.
+#
+# When the digest does drift, we open a GitHub issue automatically
+# and the next infra triage rotation deals with it.
+
+on:
+  schedule:
+    # 03:30 UTC daily — outside peak CI hours.
+    - cron: "30 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  reproduce:
+    name: Build twice and compare digests
+    runs-on: ubuntu-22.04
+    timeout-minutes: 35
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # need git log for SOURCE_DATE_EPOCH
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Compute canonical SOURCE_DATE_EPOCH
+        id: sde
+        run: |
+          set -Eeuo pipefail
+          sde=$(git show -s --format=%ct "${GITHUB_SHA}")
+          echo "sde=${sde}" >> "$GITHUB_OUTPUT"
+
+      # -----------------------------------------------------------
+      # Build #1
+      # -----------------------------------------------------------
+      - name: Build image #1
+        id: build1
+        run: |
+          docker buildx build \
+            --platform linux/amd64 \
+            --build-arg SOURCE_DATE_EPOCH=${{ steps.sde.outputs.sde }} \
+            -f docker/Dockerfile.prod \
+            --provenance=false \
+            --no-cache \
+            -t efe:repro-1 \
+            --load \
+            .
+          digest1=$(docker image inspect efe:repro-1 -f '{{.Id}}')
+          echo "digest=${digest1}" >> "$GITHUB_OUTPUT"
+
+      # -----------------------------------------------------------
+      # Build #2 — completely from scratch (no buildx cache).
+      # -----------------------------------------------------------
+      - name: Reset Buildx
+        run: |
+          docker buildx rm builder-2 || true
+          docker buildx create --name builder-2 --use
+
+      - name: Build image #2
+        id: build2
+        run: |
+          docker buildx build \
+            --platform linux/amd64 \
+            --build-arg SOURCE_DATE_EPOCH=${{ steps.sde.outputs.sde }} \
+            -f docker/Dockerfile.prod \
+            --provenance=false \
+            --no-cache \
+            -t efe:repro-2 \
+            --load \
+            .
+          digest2=$(docker image inspect efe:repro-2 -f '{{.Id}}')
+          echo "digest=${digest2}" >> "$GITHUB_OUTPUT"
+
+      # -----------------------------------------------------------
+      # Diff
+      # -----------------------------------------------------------
+      - name: Compare digests
+        id: diff
+        run: |
+          d1="${{ steps.build1.outputs.digest }}"
+          d2="${{ steps.build2.outputs.digest }}"
+          echo "build #1: $d1"
+          echo "build #2: $d2"
+          if [[ "$d1" == "$d2" ]]; then
+            echo "✅ digests match — build is reproducible"
+            echo "match=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::digests differ — investigate non-determinism source"
+            echo "match=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      # -----------------------------------------------------------
+      # Open issue on mismatch
+      # -----------------------------------------------------------
+      - name: Open tracking issue on mismatch
+        if: steps.diff.outputs.match == 'false'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const d1 = "${{ steps.build1.outputs.digest }}";
+            const d2 = "${{ steps.build2.outputs.digest }}";
+            const sha = context.sha;
+            const title = `Reproducibility drift on ${sha.slice(0, 8)}`;
+            // Avoid duplicate issues for the same SHA.
+            const existing = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo:  context.repo.repo,
+              state: "open",
+              labels: "supply-chain",
+            });
+            if (existing.data.some(i => i.title === title)) {
+              core.info("issue already open for this SHA, skipping");
+              return;
+            }
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo:  context.repo.repo,
+              title,
+              labels: ["supply-chain", "d9", "automation"],
+              body: [
+                "Two consecutive builds of the same commit produced different image digests.",
+                "",
+                `* SHA: \`${sha}\``,
+                `* digest #1: \`${d1}\``,
+                `* digest #2: \`${d2}\``,
+                "",
+                "Investigation hints (see ``docs/bench/d9_deep_analysis_supplement.md`` §9.2):",
+                "1. Newly added Cargo dep that bakes timestamps / build paths.",
+                "2. Toolchain version drift (rustc minor bump invalidates layout).",
+                "3. ``--remap-path-prefix`` not covering an absolute path.",
+                "",
+                "Run locally to reproduce:",
+                "```",
+                "DOCKER_BUILDKIT=1 docker buildx build --no-cache --provenance=false \\",
+                "  --build-arg SOURCE_DATE_EPOCH=$(git show -s --format=%ct) \\",
+                "  -f docker/Dockerfile.prod --platform linux/amd64 \\",
+                "  -t efe:r1 --load . && \\",
+                "DOCKER_BUILDKIT=1 docker buildx build --no-cache --provenance=false \\",
+                "  --build-arg SOURCE_DATE_EPOCH=$(git show -s --format=%ct) \\",
+                "  -f docker/Dockerfile.prod --platform linux/amd64 \\",
+                "  -t efe:r2 --load . && \\",
+                "diff <(docker image inspect efe:r1 -f '{{.Id}}') \\",
+                "     <(docker image inspect efe:r2 -f '{{.Id}}')",
+                "```",
+              ].join("\n"),
+            });

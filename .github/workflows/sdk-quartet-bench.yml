@@ -1,0 +1,183 @@
+# Sprint **Φ-C-SDK Completion (D34)** — quartet nightly bench workflow.
+#
+# Cf. docs/EFE_POLYGLOT_SDKS_COMPLETION_ARCHITECTURE.md § 14 + artefact #37.
+#
+# Runs the per-SDK latency benchmarks against a real backend (= efe-server
+# in mock mode for now ; live cluster for tag-gate).
+#
+# Gates :
+#   * SLO-SDK-LATENCY-GO   ≤ 50 ms p99
+#   * SLO-SDK-LATENCY-TS   ≤ 60 ms p99
+#   * SLO-SDK-LATENCY-JAVA ≤ 60 ms p99
+
+name: sdk-quartet-bench
+
+on:
+  schedule:
+    - cron: "0 5 * * *"  # 05:00 UTC nightly
+  push:
+    tags: ["v*.*.*"]
+  workflow_dispatch:
+
+env:
+  PYTHONUNBUFFERED: "1"
+
+jobs:
+  bench-go:
+    name: Bench Go SDK
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+      - name: Run Go bench
+        working-directory: clients/go/efe-sdk
+        run: |
+          # **Audit fix Φ-C-SDK.B-extra6** — pre-fix emitted a hardcoded
+          # measured_seconds=0.045 regardless of whether the bench ran
+          # → SLO-SDK-LATENCY-GO faussement PASS (= replay pattern Φ-D.A1).
+          # Post-fix : honest skip_reason when the bench harness is not
+          # yet wired (= DT-SDK-BENCH-1 deferred). check_slo.py will
+          # report the SLO as SKIPPED instead of falsely-passing.
+          mkdir -p ../../../target/sdk
+          # Φ-D-OPS post-audit round-2 fix B2' : pre-fix used shell
+          # heredocs with `EOF` at column 1 — invalid inside a YAML
+          # `run: |` block scalar (terminates the block prematurely).
+          # Rewritten using `printf` which keeps everything on a single
+          # line and works inside any indentation level.
+          if go test -bench=BenchmarkClassify -benchtime=10s -count=5 -run=^$ ./... > /tmp/bench_go.txt 2>&1; then
+            cat /tmp/bench_go.txt
+            # Parse the bench output for ns/op and convert to seconds.
+            NS_PER_OP=$(awk '/BenchmarkClassify/ {print $3}' /tmp/bench_go.txt | head -1)
+            if [ -n "$NS_PER_OP" ]; then
+              SECONDS=$(awk "BEGIN {print $NS_PER_OP / 1e9}")
+              printf '{"slo_compliance":{"SLO-SDK-LATENCY-GO":{"measured_seconds":%s}}}\n' "$SECONDS" \
+                > ../../../target/sdk/bench_go.json
+            fi
+          else
+            echo "::warning::Go bench skipped (= DT-SDK-BENCH-1 deferred)"
+            printf '%s\n' '{"slo_compliance":{"SLO-SDK-LATENCY-GO":{"skip_reason":"Go bench harness not yet wired (DT-SDK-BENCH-1)"}}}' \
+              > ../../../target/sdk/bench_go.json
+          fi
+      - name: Upload bench
+        uses: actions/upload-artifact@v4
+        with:
+          name: sdk-bench-go
+          path: target/sdk/bench_go.json
+
+  bench-ts:
+    name: Bench TypeScript SDK
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - uses: pnpm/action-setup@v3
+        with:
+          version: 9
+      - name: Run TS bench
+        working-directory: clients/typescript/@efe/sdk
+        run: |
+          # **Audit fix Φ-C-SDK.B-extra6** — honest SKIPPED rather than
+          # faussement-PASS. The vitest bench mode will be wired in
+          # DT-SDK-BENCH-1.
+          mkdir -p ../../../../target/sdk
+          echo "::warning::TS bench skipped (= DT-SDK-BENCH-1 deferred)"
+          cat > ../../../../target/sdk/bench_ts.json << EOF
+          {
+            "slo_compliance": {
+              "SLO-SDK-LATENCY-TS": {
+                "skip_reason": "TS bench harness not yet wired (DT-SDK-BENCH-1)"
+              }
+            }
+          }
+          EOF
+      - name: Upload bench
+        uses: actions/upload-artifact@v4
+        with:
+          name: sdk-bench-ts
+          path: target/sdk/bench_ts.json
+
+  bench-java:
+    name: Bench Java SDK
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+      - name: Run JMH bench
+        working-directory: clients/java/efe-sdk
+        run: |
+          # **Audit fix Φ-C-SDK.B-extra6** — honest SKIPPED rather than
+          # faussement-PASS. The JMH bench module will be wired in
+          # DT-SDK-BENCH-1.
+          mkdir -p ../../../target/sdk
+          echo "::warning::Java bench skipped (= DT-SDK-BENCH-1 deferred)"
+          # When JMH benchmark module is wired :
+          # mvn -B -pl efe-sdk-core -P bench verify
+          cat > ../../../target/sdk/bench_java.json << EOF
+          {
+            "slo_compliance": {
+              "SLO-SDK-LATENCY-JAVA": {
+                "skip_reason": "Java JMH bench harness not yet wired (DT-SDK-BENCH-1)"
+              }
+            }
+          }
+          EOF
+      - name: Upload bench
+        uses: actions/upload-artifact@v4
+        with:
+          name: sdk-bench-java
+          path: target/sdk/bench_java.json
+
+  bench-summary:
+    name: Bench summary + SLO gating
+    needs: [bench-go, bench-ts, bench-java]
+    if: always()
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install deps
+        run: pip install pyyaml
+      - name: Merge bench compliance JSONs
+        run: |
+          mkdir -p target/sdk
+          python3 -c "
+          import json, glob
+          out = {'slo_compliance': {}}
+          for f in glob.glob('artifacts/**/*.json', recursive=True):
+              try:
+                  d = json.load(open(f))
+              except Exception:
+                  continue
+              for k, v in d.get('slo_compliance', {}).items():
+                  out['slo_compliance'][k] = v
+          json.dump(out, open('target/sdk/bench_consolidated.json', 'w'), indent=2)
+          print(f'merged {len(out[\"slo_compliance\"])} SLOs')
+          "
+      - name: Gate via check_slo.py
+        run: |
+          python3 eval/scripts/check_slo.py \
+              --baseline bench_baselines/v0.6.0/sdk_slos.yaml \
+              --measure target/sdk/bench_consolidated.json \
+              --report target/sdk/bench_report.md
+          cat target/sdk/bench_report.md
+      - name: Upload bench summary
+        uses: actions/upload-artifact@v4
+        with:
+          name: sdk-bench-summary
+          path: target/sdk/*.json

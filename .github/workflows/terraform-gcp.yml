@@ -1,0 +1,71 @@
+name: terraform-gcp
+
+on:
+  pull_request:
+    paths:
+      - "terraform/modules/gcp/**"
+      - ".github/workflows/terraform-gcp.yml"
+  push:
+    branches: [main]
+    paths:
+      - "terraform/modules/gcp/**"
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.6.6
+
+      - name: terraform fmt
+        run: terraform fmt -check -recursive terraform/modules/gcp
+
+      - name: terraform validate
+        run: |
+          cd terraform/modules/gcp
+          terraform init -backend=false
+          terraform validate
+
+      - uses: terraform-linters/setup-tflint@v4
+        with:
+          tflint_version: v0.52.0
+
+      - name: tflint
+        run: |
+          cd terraform/modules/gcp
+          tflint --init
+          tflint --recursive
+
+      - name: tfsec
+        uses: aquasecurity/tfsec-action@v1.0.3
+        with:
+          working_directory: terraform/modules/gcp
+          soft_fail: false
+
+  terratest:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_TERRATEST_SA }}
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+
+      - env:
+          GCP_TERRATEST_PROJECT: ${{ secrets.GCP_TERRATEST_PROJECT }}
+        run: |
+          cd terraform/modules/gcp/test
+          go mod download
+          go test -timeout 60m -v ./...

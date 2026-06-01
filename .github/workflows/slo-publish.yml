@@ -1,0 +1,53 @@
+# PR #22 § 17 — slo-publish : builds the public site + badges + JSON API
+# and pushes to gh-pages.
+
+name: slo-publish
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "slos/**"
+      - "docs/EFE_A1_PHASE2_PR22_ARCHITECTURE.md"
+  workflow_dispatch:
+  workflow_run:
+    workflows: ["slo-monthly", "slo-quarterly"]
+    types: [completed]
+
+permissions:
+  contents: write   # gh-pages branch
+
+jobs:
+  publish:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Install mdbook
+        run: cargo install mdbook --version "^0.4" --locked
+
+      - name: Build
+        run: cargo build --release -p efe-slo-rollup
+
+      - name: Generate site
+        env:
+          EFE_CHART_VERSION: ${{ vars.SLO_CHART_VERSION }}
+        run: |
+          set -eo pipefail
+          ./target/release/efe-slo-rollup publish \
+              --chart-version "$EFE_CHART_VERSION" \
+              --source slos/site \
+              --output slos/site/book \
+              --storage-root ./slos
+
+      - name: Deploy to gh-pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./slos/site/book
+          publish_branch: gh-pages
+          destination_dir: slos
+          force_orphan: false

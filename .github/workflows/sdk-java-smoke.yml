@@ -1,0 +1,95 @@
+# Sprint D26 (Φ-B) — `efe-sdk-java` daily live smoke vs staging.
+#
+# Daily cron 06:00 UTC against the EFE staging endpoint using a real
+# JWT + (optional) mTLS certs from repo secrets.
+#
+# **Gates** :
+#   - Triggers : daily cron + manual workflow_dispatch.
+#   - Secrets required : EFE_STAGING_ENDPOINT, EFE_STAGING_JWT.
+#   - On secret absence (e.g. fork PR) : skips, exit 0 (advisory).
+
+name: sdk-java-smoke
+
+on:
+  schedule:
+    - cron: "0 6 * * *"
+  workflow_dispatch:
+    inputs:
+      endpoint_override:
+        description: "Override EFE_STAGING_ENDPOINT (e.g. eu-staging.efe.ai:50051)"
+        required: false
+        default: ""
+
+jobs:
+  smoke:
+    name: Live smoke vs staging
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: clients/java/efe-sdk
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with: { distribution: "temurin", java-version: "17", cache: "maven" }
+
+      - name: Validate secrets present
+        env:
+          EFE_STAGING_ENDPOINT: ${{ secrets.EFE_STAGING_ENDPOINT }}
+          EFE_STAGING_JWT: ${{ secrets.EFE_STAGING_JWT }}
+        run: |
+          if [[ -z "$EFE_STAGING_ENDPOINT" || -z "$EFE_STAGING_JWT" ]]; then
+            echo "::warning::staging secrets not present — skipping smoke"
+            echo "RUN_SMOKE=false" >> "$GITHUB_ENV"
+          else
+            echo "RUN_SMOKE=true" >> "$GITHUB_ENV"
+          fi
+
+      - name: Build + install SDK
+        if: env.RUN_SMOKE == 'true'
+        run: ./mvnw -B -ntp -DskipTests install
+
+      - name: Run live smoke (Java)
+        if: env.RUN_SMOKE == 'true'
+        env:
+          EFE_ENDPOINT: ${{ github.event.inputs.endpoint_override || secrets.EFE_STAGING_ENDPOINT }}
+          EFE_JWT_TOKEN: ${{ secrets.EFE_STAGING_JWT }}
+        run: |
+          mkdir -p target/smoke
+          cat > target/smoke/SmokeMain.java <<'EOF'
+          import ai.efe.sdk.EfeClient;
+          import ai.efe.sdk.Verdict;
+          import ai.efe.sdk.auth.JwtAuth;
+          import java.time.Duration;
+          public class SmokeMain {
+              public static void main(String[] args) throws Exception {
+                  try (EfeClient client = EfeClient.builder()
+                          .endpoint(System.getenv("EFE_ENDPOINT"))
+                          .auth(JwtAuth.of(System.getenv("EFE_JWT_TOKEN")))
+                          .deadline(Duration.ofSeconds(10))
+                          .build()) {
+                      Verdict v = client.classify("smoke test : refund please");
+                      System.out.println("verdict label=" + v.label() + " conf=" + v.confidence());
+                      if (v.label() == null) System.exit(2);
+                  }
+              }
+          }
+          EOF
+          # Compile + run with the local SDK installed.
+          CLASSPATH=$(find ~/.m2/repository/ai/efe -name '*.jar' | tr '\n' ':')
+          CLASSPATH+=$(find ~/.m2/repository/io/grpc -name '*.jar' | tr '\n' ':')
+          CLASSPATH+=$(find ~/.m2/repository/com/google -name '*.jar' | tr '\n' ':')
+          CLASSPATH+=$(find ~/.m2/repository/org/slf4j -name '*.jar' | tr '\n' ':')
+          javac -cp "$CLASSPATH" target/smoke/SmokeMain.java -d target/smoke
+          java -cp "$CLASSPATH:target/smoke" SmokeMain
+
+      - name: Notify Slack on failure
+        if: failure() && env.RUN_SMOKE == 'true'
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_EFE_STAGING_WEBHOOK }}
+        run: |
+          if [[ -n "$SLACK_WEBHOOK_URL" ]]; then
+            curl -sS -X POST -H 'Content-type: application/json' \
+              --data "{\"text\":\":rotating_light: efe-sdk-java smoke FAILED vs staging — run ${{ github.run_id }}\"}" \
+              "$SLACK_WEBHOOK_URL" || true
+          fi

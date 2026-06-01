@@ -1,0 +1,129 @@
+# Sprint **D23 (Φ-B)** — `efe-sdk-go` daily live smoke vs staging.
+#
+# Cf. `docs/EFE_GO_SDK_EXTENSION_ARCHITECTURE.md` § 25.2.
+#
+# Runs once a day (06:00 UTC) against the **staging** EFE endpoint
+# using a real JWT token + mTLS certs from repo secrets. If the
+# smoke fails, we know the SDK + staging are out of sync within 24h.
+#
+# **Gates** :
+#
+#   - Triggers : daily cron + manual `workflow_dispatch`.
+#   - Secrets required : `EFE_STAGING_ENDPOINT`, `EFE_STAGING_JWT`,
+#     `EFE_STAGING_MTLS_CERT`, `EFE_STAGING_MTLS_KEY`,
+#     `EFE_STAGING_MTLS_CA`.
+#   - On secret absence (e.g. fork PR) : skips, exit 0 (advisory).
+#   - On staging unreachable : retries once, then fails the workflow
+#     and pings #efe-staging-alerts via Slack.
+#
+# The actual test code lives in `clients/go/efe-sdk/tests/live_test.go`
+# (build tag `live`) — invoked via `go test -tags=live`. This file
+# is gitignored from the default test runs (see ffi-test pattern)
+# so PR builds never accidentally hit staging.
+#
+# Total runtime budget : ~5 min. Anything longer = staging slow
+# (worth alerting).
+
+name: sdk-go-smoke
+
+on:
+  schedule:
+    # 06:00 UTC = 08:00 CEST = 22:00 PT — operator-friendly window.
+    - cron: "0 6 * * *"
+  workflow_dispatch:
+    inputs:
+      endpoint_override:
+        description: "Override EFE_STAGING_ENDPOINT (e.g. eu-staging.efe.ai:443)"
+        required: false
+        default: ""
+
+env:
+  GO111MODULE: "on"
+  GOTELEMETRY: "off"
+
+jobs:
+  smoke:
+    name: Live smoke vs staging
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: clients/go/efe-sdk
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.23"
+          cache: true
+          cache-dependency-path: clients/go/efe-sdk/go.sum
+
+      - name: Validate secrets present
+        # If any secret is missing, exit 0 with an advisory log so
+        # the workflow doesn't fail spuriously on forks / PR builds
+        # where the secrets are intentionally not exposed.
+        env:
+          EFE_STAGING_ENDPOINT: ${{ secrets.EFE_STAGING_ENDPOINT }}
+          EFE_STAGING_JWT: ${{ secrets.EFE_STAGING_JWT }}
+        run: |
+          if [[ -z "$EFE_STAGING_ENDPOINT" || -z "$EFE_STAGING_JWT" ]]; then
+            echo "::warning::staging secrets not present — skipping smoke"
+            echo "RUN_SMOKE=false" >> "$GITHUB_ENV"
+          else
+            echo "RUN_SMOKE=true" >> "$GITHUB_ENV"
+          fi
+
+      - name: Materialize mTLS material to /tmp
+        if: env.RUN_SMOKE == 'true'
+        env:
+          EFE_STAGING_MTLS_CERT: ${{ secrets.EFE_STAGING_MTLS_CERT }}
+          EFE_STAGING_MTLS_KEY: ${{ secrets.EFE_STAGING_MTLS_KEY }}
+          EFE_STAGING_MTLS_CA: ${{ secrets.EFE_STAGING_MTLS_CA }}
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/efe-mtls
+          chmod 700 /tmp/efe-mtls
+          # The secrets are stored as PEM strings (newline-encoded).
+          printf "%s" "$EFE_STAGING_MTLS_CERT" > /tmp/efe-mtls/client.crt
+          printf "%s" "$EFE_STAGING_MTLS_KEY"  > /tmp/efe-mtls/client.key
+          printf "%s" "$EFE_STAGING_MTLS_CA"   > /tmp/efe-mtls/ca.pem
+          chmod 600 /tmp/efe-mtls/*
+
+      - name: Run live smoke (build tag `live`)
+        if: env.RUN_SMOKE == 'true'
+        env:
+          # Endpoint can be overridden by workflow_dispatch input.
+          EFE_ENDPOINT: ${{ github.event.inputs.endpoint_override || secrets.EFE_STAGING_ENDPOINT }}
+          EFE_JWT_TOKEN: ${{ secrets.EFE_STAGING_JWT }}
+          EFE_MTLS_CERT: /tmp/efe-mtls/client.crt
+          EFE_MTLS_KEY: /tmp/efe-mtls/client.key
+          EFE_MTLS_CA: /tmp/efe-mtls/ca.pem
+          # Smoke uses a tiny corpus — 5 requests max, all bounded.
+          EFE_SMOKE_BUDGET: "5"
+        run: |
+          # The `live` build tag selects tests/live_test.go (kept
+          # out of default `go test ./...` runs). Timeout 60 s
+          # belt-and-braces : the SDK already enforces 10 s/RPC.
+          go test -tags=live -timeout=60s -v ./tests/... || EXITCODE=$?
+          echo "live smoke exit : ${EXITCODE:-0}"
+          exit "${EXITCODE:-0}"
+
+      - name: Cleanup mTLS material
+        if: always() && env.RUN_SMOKE == 'true'
+        run: |
+          # Defense-in-depth — runner is ephemeral but still.
+          shred -u /tmp/efe-mtls/client.key 2>/dev/null || true
+          rm -rf /tmp/efe-mtls
+
+      - name: Notify Slack on failure
+        if: failure() && env.RUN_SMOKE == 'true'
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_EFE_STAGING_WEBHOOK }}
+        run: |
+          if [[ -n "$SLACK_WEBHOOK_URL" ]]; then
+            curl -sS -X POST -H 'Content-type: application/json' \
+              --data "{\"text\":\":rotating_light: efe-sdk-go smoke FAILED vs staging — run ${{ github.run_id }}\"}" \
+              "$SLACK_WEBHOOK_URL" || true
+          else
+            echo "::warning::SLACK_EFE_STAGING_WEBHOOK not set — skipping Slack ping"
+          fi

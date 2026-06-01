@@ -1,0 +1,359 @@
+# Sprint **Φ-C-SDK Completion (D34)** — quartet publishing workflow.
+#
+# Cf. docs/EFE_POLYGLOT_SDKS_COMPLETION_ARCHITECTURE.md § 8 + artefact #36.
+#
+# Triggers on `v*.*.*` tags. Publishes the 4 SDKs simultaneously to
+# their respective registries (PyPI, Go modules, npm, Maven Central).
+# Each artifact is :
+#   * Signed via Sigstore keyless (= GitHub OIDC) → .sig + .pem
+#   * Indexed in Rekor transparency log
+#   * Accompanied by a CycloneDX 1.5 SBOM
+#
+# Gates SLO-SDK-SIGSTORE (≥ 4 signed) + SLO-SDK-SBOM (≥ 4 SBOMs)
+# + SLO-SDK-SIZE-{GO,TS,JAVA}.
+
+name: sdk-quartet-publish
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to publish (overrides tag)"
+        required: false
+
+permissions:
+  id-token: write   # required for Sigstore keyless OIDC
+  contents: write   # required for git tag creation
+
+env:
+  PYTHONUNBUFFERED: "1"
+
+jobs:
+  # ───────────────────────────────────────────────────────────────────
+  # Pre-flight : verify version sync + proto hash before any publish.
+  # ───────────────────────────────────────────────────────────────────
+  pre-flight:
+    name: Version + proto sync pre-flight
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    outputs:
+      version: ${{ steps.parse.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Parse version
+        id: parse
+        run: |
+          if [ -n "${{ inputs.version }}" ]; then
+            V="${{ inputs.version }}"
+          else
+            V="${GITHUB_REF#refs/tags/v}"
+          fi
+          echo "version=$V" >> $GITHUB_OUTPUT
+          echo "Publishing version : $V"
+      - name: Verify version sync (= D-SDK-6)
+        run: python3 scripts/sdk/verify_version_sync.py
+      - name: Verify proto hash
+        run: |
+          NEW=$(find protos/efe/v1 -name '*.proto' -print0 | sort -z | xargs -0 cat | sha256sum | awk '{print $1}')
+          EXPECTED=$(cat bench_baselines/v0.6.0/sdk_proto_hash.txt | tr -d '[:space:]')
+          if [ "$EXPECTED" != "PLACEHOLDER_compute_at_freeze" ] && [ "$NEW" != "$EXPECTED" ]; then
+            echo "::error::Proto drift unacknowledged — fix before publishing"
+            exit 1
+          fi
+
+  # ───────────────────────────────────────────────────────────────────
+  # PyPI : delegated to ffi-publish.yml (= Φ-C-FFI existing pipeline).
+  # ───────────────────────────────────────────────────────────────────
+  publish-python:
+    name: Publish Python (delegates to ffi-publish)
+    needs: pre-flight
+    uses: ./.github/workflows/ffi-publish.yml
+    secrets: inherit
+
+  # ───────────────────────────────────────────────────────────────────
+  # Go : push tag + cosign sign + generate SBOM.
+  # ───────────────────────────────────────────────────────────────────
+  publish-go:
+    name: Publish Go SDK
+    needs: pre-flight
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # for tag creation
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+      - name: Build + test
+        working-directory: clients/go/efe-sdk
+        run: |
+          go mod tidy
+          go build ./...
+          go test ./...
+      - name: Measure package size (= SLO-SDK-SIZE-GO)
+        run: |
+          SIZE=$(du -sb clients/go/efe-sdk | awk '{print $1}')
+          echo "Go SDK size : $SIZE bytes"
+          mkdir -p target/sdk
+          cat > target/sdk/size_go.json << EOF
+          {
+            "slo_compliance": {
+              "SLO-SDK-SIZE-GO": {"measured_bytes": $SIZE}
+            }
+          }
+          EOF
+      - name: Generate SBOM via cyclonedx-gomod
+        run: |
+          go install github.com/CycloneDX/cyclonedx-gomod/cmd/cyclonedx-gomod@latest
+          cyclonedx-gomod mod -licenses -output clients/go/efe-sdk/sbom.cdx.json clients/go/efe-sdk
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3
+      - name: Sign Go module
+        env:
+          COSIGN_EXPERIMENTAL: "1"
+        run: |
+          # Sign the go.mod + go.sum + sbom as a tarball.
+          tar czf clients/go/efe-sdk/efe-go-${{ needs.pre-flight.outputs.version }}.tar.gz \
+              -C clients/go/efe-sdk go.mod go.sum sbom.cdx.json
+          cosign sign-blob --yes \
+              clients/go/efe-sdk/efe-go-${{ needs.pre-flight.outputs.version }}.tar.gz \
+              --output-signature clients/go/efe-sdk/efe-go-${{ needs.pre-flight.outputs.version }}.tar.gz.sig \
+              --output-certificate clients/go/efe-sdk/efe-go-${{ needs.pre-flight.outputs.version }}.tar.gz.pem
+      - name: Tag for Go modules
+        run: |
+          VERSION="v${{ needs.pre-flight.outputs.version }}"
+          # Go modules require `path/v2/v2.0.0`-style tags for v2+.
+          # For v0.x and v1.x, plain `v0.6.0` works.
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -a "clients/go/efe-sdk/${VERSION}" -m "Φ-C-SDK Go SDK ${VERSION}"
+          git push origin "clients/go/efe-sdk/${VERSION}"
+      - name: Upload Go artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: sdk-go-release
+          path: |
+            clients/go/efe-sdk/*.tar.gz
+            clients/go/efe-sdk/*.sig
+            clients/go/efe-sdk/*.pem
+            clients/go/efe-sdk/sbom.cdx.json
+            target/sdk/size_go.json
+
+  # ───────────────────────────────────────────────────────────────────
+  # npm : publish + cosign sign tarball.
+  # ───────────────────────────────────────────────────────────────────
+  publish-ts:
+    name: Publish TypeScript SDK
+    needs: pre-flight
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          registry-url: "https://registry.npmjs.org"
+      - uses: pnpm/action-setup@v3
+        with:
+          version: 9
+      - name: Install + build
+        working-directory: clients/typescript/@efe/sdk
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm build
+      - name: Pack
+        working-directory: clients/typescript/@efe/sdk
+        run: |
+          pnpm pack
+          ls -la *.tgz
+      - name: Measure tarball size (= SLO-SDK-SIZE-TS)
+        run: |
+          SIZE=$(stat -c%s clients/typescript/@efe/sdk/*.tgz)
+          echo "TS SDK size : $SIZE bytes"
+          mkdir -p target/sdk
+          cat > target/sdk/size_ts.json << EOF
+          {
+            "slo_compliance": {
+              "SLO-SDK-SIZE-TS": {"measured_bytes": $SIZE}
+            }
+          }
+          EOF
+      - name: Generate SBOM (CycloneDX)
+        working-directory: clients/typescript/@efe/sdk
+        run: |
+          npx -y @cyclonedx/cdxgen -t npm -o sbom.cdx.json
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3
+      - name: Sign npm tarball + SBOM
+        env:
+          COSIGN_EXPERIMENTAL: "1"
+        working-directory: clients/typescript/@efe/sdk
+        run: |
+          for f in *.tgz sbom.cdx.json; do
+            cosign sign-blob --yes "$f" \
+                --output-signature "${f}.sig" \
+                --output-certificate "${f}.pem"
+          done
+      - name: Publish to npm
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        working-directory: clients/typescript/@efe/sdk
+        run: |
+          if [ -n "$NODE_AUTH_TOKEN" ]; then
+            npm publish --access public
+          else
+            echo "WARN : NPM_TOKEN not set, skipping publish (dry-run mode)"
+          fi
+      - name: Upload TS artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: sdk-ts-release
+          path: |
+            clients/typescript/@efe/sdk/*.tgz
+            clients/typescript/@efe/sdk/*.sig
+            clients/typescript/@efe/sdk/*.pem
+            clients/typescript/@efe/sdk/sbom.cdx.json
+            target/sdk/size_ts.json
+
+  # ───────────────────────────────────────────────────────────────────
+  # Maven Central : OSSRH staging + GPG + cosign.
+  # ───────────────────────────────────────────────────────────────────
+  publish-java:
+    name: Publish Java SDK
+    needs: pre-flight
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+          server-id: ossrh
+          server-username: OSSRH_USERNAME
+          server-password: OSSRH_TOKEN
+          gpg-private-key: ${{ secrets.GPG_PRIVATE_KEY }}
+          gpg-passphrase: GPG_PASSPHRASE
+      - name: Build + test
+        working-directory: clients/java/efe-sdk
+        run: mvn -B -P release verify
+      - name: Measure jar size (= SLO-SDK-SIZE-JAVA)
+        run: |
+          JAR=$(find clients/java/efe-sdk -name '*.jar' -not -name '*sources*' -not -name '*javadoc*' | head -1)
+          SIZE=$(stat -c%s "$JAR")
+          echo "Java SDK jar size : $SIZE bytes"
+          mkdir -p target/sdk
+          cat > target/sdk/size_java.json << EOF
+          {
+            "slo_compliance": {
+              "SLO-SDK-SIZE-JAVA": {"measured_bytes": $SIZE}
+            }
+          }
+          EOF
+      - name: Generate SBOM via cyclonedx-maven-plugin
+        working-directory: clients/java/efe-sdk
+        run: |
+          mvn -B org.cyclonedx:cyclonedx-maven-plugin:2.7.11:makeBom
+          find . -name 'bom.json' -o -name '*.cdx.json' | head -3
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3
+      - name: Sign jar
+        env:
+          COSIGN_EXPERIMENTAL: "1"
+        run: |
+          JAR=$(find clients/java/efe-sdk -name '*.jar' -not -name '*sources*' -not -name '*javadoc*' | head -1)
+          cosign sign-blob --yes "$JAR" \
+              --output-signature "${JAR}.sig" \
+              --output-certificate "${JAR}.pem"
+      - name: Deploy to OSSRH
+        env:
+          OSSRH_USERNAME: ${{ secrets.OSSRH_USERNAME }}
+          OSSRH_TOKEN: ${{ secrets.OSSRH_TOKEN }}
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+        working-directory: clients/java/efe-sdk
+        run: |
+          if [ -n "$OSSRH_USERNAME" ]; then
+            mvn -B -P release deploy
+          else
+            echo "WARN : OSSRH_USERNAME not set, skipping deploy (dry-run mode)"
+          fi
+      - name: Upload Java artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: sdk-java-release
+          path: |
+            clients/java/efe-sdk/**/*.jar
+            clients/java/efe-sdk/**/*.sig
+            clients/java/efe-sdk/**/*.pem
+            clients/java/efe-sdk/**/bom.json
+            target/sdk/size_java.json
+
+  # ───────────────────────────────────────────────────────────────────
+  # Consolidated compliance check (= SLO-SDK-SIGSTORE + SBOM + SIZE).
+  # ───────────────────────────────────────────────────────────────────
+  compliance:
+    name: Quartet compliance gating
+    needs: [publish-python, publish-go, publish-ts, publish-java]
+    if: always()
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install deps
+        run: pip install pyyaml
+      - name: Count signed artifacts + SBOMs
+        run: |
+          N_SIG=$(find artifacts -name '*.sig' | wc -l)
+          N_SBOM=$(find artifacts -name 'sbom.cdx.json' -o -name 'bom.json' | wc -l)
+          echo "Signed : $N_SIG"
+          echo "SBOMs  : $N_SBOM"
+          mkdir -p target/sdk
+          cat > target/sdk/publish.json << EOF
+          {
+            "slo_compliance": {
+              "SLO-SDK-SIGSTORE": {"measured_count": $N_SIG},
+              "SLO-SDK-SBOM":     {"measured_count": $N_SBOM}
+            }
+          }
+          EOF
+      - name: Merge all SLO compliance JSONs
+        run: |
+          python3 -c "
+          import json, glob
+          out = {'slo_compliance': {}}
+          for f in glob.glob('target/sdk/*.json') + glob.glob('artifacts/**/*.json', recursive=True):
+              try:
+                  d = json.load(open(f))
+              except Exception:
+                  continue
+              for k, v in d.get('slo_compliance', {}).items():
+                  out['slo_compliance'][k] = v
+          json.dump(out, open('target/sdk/consolidated.json', 'w'), indent=2)
+          "
+      - name: Gate via check_slo.py
+        run: |
+          python3 eval/scripts/check_slo.py \
+              --baseline bench_baselines/v0.6.0/sdk_slos.yaml \
+              --measure target/sdk/consolidated.json \
+              --report target/sdk/publish_report.md
+          cat target/sdk/publish_report.md
+      - name: Upload consolidated compliance
+        uses: actions/upload-artifact@v4
+        with:
+          name: sdk-publish-compliance
+          path: |
+            target/sdk/*.json
+            target/sdk/*.md

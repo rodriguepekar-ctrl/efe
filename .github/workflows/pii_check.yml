@@ -1,0 +1,58 @@
+name: PII check on golden datasets
+
+# Sprint D8 — Defensive CI gate.
+#
+# This workflow scans every JSONL file under `eval/golden/` for PII
+# residues (email, phone, credit card with Luhn check, SSN/INSEE,
+# IBAN, URL). It runs on every PR that touches a golden file and
+# fails the merge if PII is found.
+#
+# This complements `eval/scripts/anonymize_golden.py` (the PRE-commit
+# pipeline) : even if a contributor forgets to run the anonymizer,
+# this CI gate catches the leak.
+#
+# Performance : ~5 s for 100 cases × N golden files. Negligible.
+
+on:
+  pull_request:
+    paths:
+      - 'eval/golden/**.jsonl'
+      - 'eval/scripts/check_no_pii.py'
+      - 'eval/scripts/anonymize_golden.py'
+      - '.github/workflows/pii_check.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'eval/golden/**.jsonl'
+
+concurrency:
+  group: pii-check-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  pii-scan:
+    name: Scan golden datasets for PII residues
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Scan all golden JSONL files
+        run: |
+          # We rely on stdlib only (no extra pip install) for speed.
+          set -euo pipefail
+          FAILED=0
+          for f in eval/golden/*.jsonl; do
+            if [ -f "$f" ]; then
+              echo "::group::Scanning $f"
+              python3 eval/scripts/check_no_pii.py "$f" || FAILED=1
+              echo "::endgroup::"
+            fi
+          done
+          if [ "$FAILED" = "1" ]; then
+            echo "::error title=PII detected::At least one golden JSONL contains PII patterns. Run \`python3 eval/scripts/anonymize_golden.py\` to remediate."
+            exit 1
+          fi
+          echo "✅ All golden JSONL files clean."

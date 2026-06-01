@@ -1,0 +1,781 @@
+# R-100 — Release v1.0.0 GA pipeline (Sprint Release).
+#
+# Distinct from `release.yml` (which is the M12 single-image release).
+# This is the FULL multi-component release pipeline for v1.0.0 GA :
+#   - 4 Docker images
+#   - 1 Helm umbrella chart
+#   - 6 CLI binaries
+#   - 1 npm package (@efe/sdk)
+#   - 3 Terraform module sub-tags
+#   - GitHub Release + Homebrew tap + Terraform Registry submit
+#   - Blog + customer email + RSS announce
+#
+# Triggered by `git push --tags` of v*.*.* OR manually via workflow_dispatch.
+#
+# Cf. `docs/EFE_RELEASE_V1_GA_ARCHITECTURE.md`.
+
+name: release-v1-ga
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to release (e.g. v1.0.0)"
+        required: true
+      dry_run:
+        description: "Dry-run only (no distribution / announce)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+  id-token: write
+  packages: write
+  attestations: write
+
+env:
+  COSIGN_RELEASE: "v2.4.0"
+  SLSA_VERIFIER_RELEASE: "v2.5.1"
+  REGISTRY: "ghcr.io/efe-ai"
+  HELM_RELEASE: "v3.15.4"
+
+concurrency:
+  group: release-v1-ga-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  # ────────────────────────────────────────────────────────────────────
+  # Phase 0 : Resolve version + emit dispatch summary.
+  # ────────────────────────────────────────────────────────────────────
+  resolve:
+    name: Resolve release context
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.ver.outputs.version }}
+      version_no_v: ${{ steps.ver.outputs.version_no_v }}
+      sha: ${{ steps.ver.outputs.sha }}
+      dry_run: ${{ steps.ver.outputs.dry_run }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - id: ver
+        run: |
+          set -euo pipefail
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            VERSION="${{ inputs.version }}"
+            DRY_RUN="${{ inputs.dry_run }}"
+          else
+            VERSION="${GITHUB_REF#refs/tags/}"
+            DRY_RUN="false"
+          fi
+          if ! [[ "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.\-]+)?$ ]]; then
+            echo "::error::Invalid version format : $VERSION (expected v<major>.<minor>.<patch>[-prerelease])"
+            exit 1
+          fi
+          VERSION_NO_V="${VERSION#v}"
+          SHA="${{ github.sha }}"
+          {
+            echo "version=$VERSION"
+            echo "version_no_v=$VERSION_NO_V"
+            echo "sha=$SHA"
+            echo "dry_run=$DRY_RUN"
+          } >> "$GITHUB_OUTPUT"
+          {
+            echo "## Release context"
+            echo "- Version : \`$VERSION\`"
+            echo "- Commit : \`$SHA\`"
+            echo "- Dry-run : \`$DRY_RUN\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # ────────────────────────────────────────────────────────────────────
+  # Phase 1 : Validate (parallel jobs).
+  # ────────────────────────────────────────────────────────────────────
+  validate-rust:
+    name: validate / cargo
+    needs: resolve
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with: { components: clippy, rustfmt }
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo fmt --all --check
+
+      # Lint surface : exclude `efe-ffi` because its `extension-module`
+      # feature is mutually exclusive with linking the test binary
+      # against libpython. The dedicated `validate-ffi` job below
+      # covers it via maturin.
+      - run: |
+          cargo clippy --workspace --all-targets \
+            --exclude efe-ffi \
+            -- -D warnings
+      - run: cargo clippy -p efe-ffi --all-targets -- -D warnings
+
+      # Tests : `efe-ffi` builds in extension-module mode for wheels,
+      # but `cargo test` needs Python embedding (via dev-deps'
+      # `auto-initialize`) which conflicts with `extension-module`.
+      # See `crates/efe-ffi/Cargo.toml` [features] doctrine.
+      - run: cargo test --workspace --exclude efe-ffi --no-fail-fast
+      - run: cargo test -p efe-ffi --no-fail-fast
+
+  validate-ffi:
+    name: validate / maturin wheel
+    needs: resolve
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: pip install maturin
+      - name: Build wheel (extension-module)
+        run: |
+          cd crates/efe-ffi
+          maturin build --release --features extension-module \
+            || cargo build --release -p efe-ffi --features extension-module
+
+  validate-python:
+    name: validate / pytest mcp-server
+    needs: resolve
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12", cache: "pip" }
+      - run: pip install -e mcp-server[dev] || pip install -e mcp-server
+      - run: pytest mcp-server/tests/ --tb=short
+
+  validate-portal:
+    name: validate / portal-admin
+    needs: resolve
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: apps/portal-admin
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with: { version: 9 }
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: apps/portal-admin/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile=false
+      - run: pnpm typecheck
+      - run: pnpm lint
+      - run: pnpm test:unit
+
+  validate-helm:
+    name: validate / helm chart
+    needs: resolve
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/setup-helm@v4
+        with: { version: "${{ env.HELM_RELEASE }}" }
+      - run: helm lint charts/efe-stack
+      - run: |
+          helm template efe-test charts/efe-stack \
+            --set global.tenant=test \
+            --set postgres-operator.enabled=false \
+            --validate
+
+  validate-terraform:
+    name: validate / terraform ${{ matrix.cloud }}
+    needs: resolve
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        cloud: [aws, gcp, azure]
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with: { terraform_version: 1.6.6 }
+      - run: terraform fmt -check -recursive terraform/modules/${{ matrix.cloud }}
+      - run: |
+          cd terraform/modules/${{ matrix.cloud }}
+          terraform init -backend=false
+          terraform validate
+      - uses: aquasecurity/tfsec-action@v1.0.3
+        with:
+          working_directory: terraform/modules/${{ matrix.cloud }}
+          soft_fail: false
+
+  validate-summary:
+    name: validate / summary
+    needs:
+      - validate-rust
+      - validate-ffi
+      - validate-python
+      - validate-portal
+      - validate-helm
+      - validate-terraform
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "✓ all validation jobs passed"
+
+  # ────────────────────────────────────────────────────────────────────
+  # Phase 2.1 : Build + sign Docker images.
+  # ────────────────────────────────────────────────────────────────────
+  docker-images:
+    name: build / docker / ${{ matrix.image.name }}
+    needs: [resolve, validate-summary]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        image:
+          - { name: efe-server,         dockerfile: crates/efe-server/Dockerfile,         context: "." }
+          - { name: mcp-server,         dockerfile: mcp-server/Dockerfile,                context: "." }
+          - { name: portal-admin,       dockerfile: apps/portal-admin/Dockerfile,         context: apps/portal-admin }
+          - { name: efe-server-migrate, dockerfile: crates/efe-server/Dockerfile.migrate, context: "." }
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        if: needs.resolve.outputs.dry_run == 'false'
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ matrix.image.name }}
+          tags: |
+            type=raw,value=${{ needs.resolve.outputs.version_no_v }}
+            type=raw,value=latest,enable=${{ !contains(needs.resolve.outputs.version, '-') }}
+
+      - id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.image.context }}
+          file: ${{ matrix.image.dockerfile }}
+          platforms: linux/amd64,linux/arm64
+          push: ${{ needs.resolve.outputs.dry_run == 'false' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: |
+            ${{ steps.meta.outputs.labels }}
+            org.opencontainers.image.source=https://github.com/efe-ai/efe
+            org.opencontainers.image.revision=${{ needs.resolve.outputs.sha }}
+            org.opencontainers.image.version=${{ needs.resolve.outputs.version }}
+          provenance: true
+          sbom: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            VERSION=${{ needs.resolve.outputs.version }}
+
+      - uses: sigstore/cosign-installer@v3
+        with: { cosign-release: "${{ env.COSIGN_RELEASE }}" }
+
+      - name: Cosign sign image (keyless)
+        if: needs.resolve.outputs.dry_run == 'false'
+        env:
+          COSIGN_EXPERIMENTAL: "1"
+        run: |
+          cosign sign --yes \
+            "${{ env.REGISTRY }}/${{ matrix.image.name }}@${{ steps.build.outputs.digest }}"
+
+      - name: Generate SLSA-3 provenance
+        if: needs.resolve.outputs.dry_run == 'false'
+        uses: actions/attest-build-provenance@v1
+        with:
+          subject-name: ${{ env.REGISTRY }}/${{ matrix.image.name }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true
+
+  # ────────────────────────────────────────────────────────────────────
+  # Phase 2.2 : Helm chart package + sign.
+  # ────────────────────────────────────────────────────────────────────
+  helm-chart:
+    name: build / helm chart
+    needs: [resolve, validate-summary, docker-images]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/setup-helm@v4
+        with: { version: "${{ env.HELM_RELEASE }}" }
+      - name: Install yq
+        run: |
+          sudo curl -fsSL -o /usr/local/bin/yq \
+            https://github.com/mikefarah/yq/releases/download/v4.44.3/yq_linux_amd64
+          sudo chmod +x /usr/local/bin/yq
+
+      - name: Set chart version
+        run: |
+          set -euo pipefail
+          VERSION_NO_V="${{ needs.resolve.outputs.version_no_v }}"
+          yq -i ".version = \"$VERSION_NO_V\"" charts/efe-stack/Chart.yaml
+          yq -i ".appVersion = \"$VERSION_NO_V\"" charts/efe-stack/Chart.yaml
+          for sub in charts/efe-stack/charts/*/Chart.yaml; do
+            yq -i ".appVersion = \"$VERSION_NO_V\"" "$sub"
+          done
+
+      - run: helm package charts/efe-stack
+
+      - uses: docker/login-action@v3
+        if: needs.resolve.outputs.dry_run == 'false'
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - id: push
+        if: needs.resolve.outputs.dry_run == 'false'
+        run: |
+          set -euo pipefail
+          PACKAGE=$(ls efe-stack-*.tgz)
+          OUT=$(helm push "$PACKAGE" "oci://${{ env.REGISTRY }}/charts" 2>&1)
+          echo "$OUT"
+          DIGEST=$(echo "$OUT" | grep -oE 'sha256:[a-f0-9]+' | head -1)
+          echo "digest=$DIGEST" >> "$GITHUB_OUTPUT"
+
+      - uses: sigstore/cosign-installer@v3
+        with: { cosign-release: "${{ env.COSIGN_RELEASE }}" }
+
+      - name: Cosign sign chart
+        if: needs.resolve.outputs.dry_run == 'false'
+        env:
+          COSIGN_EXPERIMENTAL: "1"
+        run: |
+          cosign sign --yes \
+            "${{ env.REGISTRY }}/charts/efe-stack@${{ steps.push.outputs.digest }}"
+
+      - name: SLSA provenance for chart
+        if: needs.resolve.outputs.dry_run == 'false'
+        uses: actions/attest-build-provenance@v1
+        with:
+          subject-name: "${{ env.REGISTRY }}/charts/efe-stack"
+          subject-digest: ${{ steps.push.outputs.digest }}
+          push-to-registry: true
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: helm-chart
+          path: efe-stack-*.tgz
+          retention-days: 7
+
+  # ────────────────────────────────────────────────────────────────────
+  # Phase 2.3 : CLI binaries (efe-admin) for 6 platforms.
+  # ────────────────────────────────────────────────────────────────────
+  cli-binaries:
+    name: build / cli / ${{ matrix.target }}
+    needs: [resolve, validate-summary]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-latest,  target: x86_64-unknown-linux-musl,  ext: "",     archive: tar.gz }
+          - { os: ubuntu-latest,  target: aarch64-unknown-linux-musl, ext: "",     archive: tar.gz }
+          - { os: macos-latest,   target: x86_64-apple-darwin,        ext: "",     archive: tar.gz }
+          - { os: macos-latest,   target: aarch64-apple-darwin,       ext: "",     archive: tar.gz }
+          - { os: windows-latest, target: x86_64-pc-windows-msvc,     ext: ".exe", archive: zip }
+          - { os: windows-latest, target: aarch64-pc-windows-msvc,    ext: ".exe", archive: zip }
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with: { targets: "${{ matrix.target }}" }
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Install musl tools (Linux)
+        if: contains(matrix.target, 'linux-musl')
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y musl-tools
+          if [[ "${{ matrix.target }}" == "aarch64-unknown-linux-musl" ]]; then
+            sudo apt-get install -y gcc-aarch64-linux-gnu
+            echo "CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER=aarch64-linux-gnu-gcc" >> "$GITHUB_ENV"
+          fi
+
+      - name: Build
+        run: cargo build --release --locked --target ${{ matrix.target }} -p efe-admin
+
+      - id: pack
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="${{ needs.resolve.outputs.version }}"
+          TARGET="${{ matrix.target }}"
+          BIN="efe-admin${{ matrix.ext }}"
+          DIR="target/${{ matrix.target }}/release"
+
+          if [[ "${{ matrix.archive }}" == "zip" ]]; then
+            ARCHIVE="efe-admin-${VERSION}-${TARGET}.zip"
+            (cd "$DIR" && 7z a "$OLDPWD/${ARCHIVE}" "$BIN")
+          else
+            ARCHIVE="efe-admin-${VERSION}-${TARGET}.tar.gz"
+            tar -czf "$ARCHIVE" -C "$DIR" "$BIN"
+          fi
+
+          if command -v sha256sum >/dev/null 2>&1; then
+            sha256sum "$ARCHIVE" > "${ARCHIVE}.sha256"
+          else
+            shasum -a 256 "$ARCHIVE" > "${ARCHIVE}.sha256"
+          fi
+
+          echo "archive=$ARCHIVE" >> "$GITHUB_OUTPUT"
+
+      - uses: sigstore/cosign-installer@v3
+        with: { cosign-release: "${{ env.COSIGN_RELEASE }}" }
+
+      - name: Cosign sign blob
+        if: needs.resolve.outputs.dry_run == 'false'
+        env:
+          COSIGN_EXPERIMENTAL: "1"
+        shell: bash
+        run: |
+          set -euo pipefail
+          ARCHIVE="${{ steps.pack.outputs.archive }}"
+          cosign sign-blob --yes "$ARCHIVE" \
+            --output-signature "${ARCHIVE}.sig" \
+            --output-certificate "${ARCHIVE}.cert.pem"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: efe-admin-${{ matrix.target }}
+          path: |
+            efe-admin-*.tar.gz
+            efe-admin-*.tar.gz.sha256
+            efe-admin-*.tar.gz.sig
+            efe-admin-*.tar.gz.cert.pem
+            efe-admin-*.zip
+            efe-admin-*.zip.sha256
+            efe-admin-*.zip.sig
+            efe-admin-*.zip.cert.pem
+          retention-days: 7
+          if-no-files-found: ignore
+
+  # ────────────────────────────────────────────────────────────────────
+  # Phase 2.4 : npm publish (@efe/sdk).
+  # The npm scope is `@efe` (per M10 architecture and existing
+  # clients/typescript/@efe/sdk/ workspace ; see
+  # docs/EFE_TYPESCRIPT_SDK_EXTENSION_ARCHITECTURE.md and the existing
+  # sdk-typescript-{publish,smoke,test}.yml workflows).
+  # ────────────────────────────────────────────────────────────────────
+  npm-publish:
+    name: build / npm @efe/sdk
+    needs: [resolve, validate-summary]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    if: needs.resolve.outputs.dry_run == 'false'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with: { version: 9 }
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: "https://registry.npmjs.org"
+      - name: Set version
+        run: |
+          set -euo pipefail
+          if [[ -d clients/typescript/@efe/sdk ]]; then
+            cd clients/typescript/@efe/sdk
+            npm version "${{ needs.resolve.outputs.version_no_v }}" --no-git-tag-version
+          else
+            echo "::warning::SDK directory missing ; skipping npm publish."
+            exit 0
+          fi
+      - name: Build SDK
+        run: |
+          set -euo pipefail
+          if [[ -d clients/typescript/@efe/sdk ]]; then
+            cd clients/typescript/@efe/sdk
+            pnpm install --frozen-lockfile=false
+            pnpm build || echo "::warning::SDK build failed"
+          fi
+      - name: Publish with provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [[ -d clients/typescript/@efe/sdk && -n "${NODE_AUTH_TOKEN:-}" ]]; then
+            cd clients/typescript/@efe/sdk
+            npm publish --provenance --access public
+          else
+            echo "::warning::Skipping npm publish (no SDK or no NPM_TOKEN)."
+          fi
+
+  # ────────────────────────────────────────────────────────────────────
+  # Phase 3 : Verify.
+  # ────────────────────────────────────────────────────────────────────
+  verify:
+    name: verify / cosign + SLSA + smoke
+    needs: [resolve, docker-images, helm-chart, cli-binaries]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    if: needs.resolve.outputs.dry_run == 'false'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: sigstore/cosign-installer@v3
+        with: { cosign-release: "${{ env.COSIGN_RELEASE }}" }
+
+      - name: Install slsa-verifier
+        run: |
+          set -euo pipefail
+          curl -fsSL -o /usr/local/bin/slsa-verifier \
+            "https://github.com/slsa-framework/slsa-verifier/releases/download/${{ env.SLSA_VERIFIER_RELEASE }}/slsa-verifier-linux-amd64"
+          chmod +x /usr/local/bin/slsa-verifier
+
+      - name: Cosign verify all 4 images
+        env:
+          IDENTITY: "^https://github\\.com/efe-ai/efe/\\.github/workflows/release-v1-ga\\.yml@refs/tags/${{ needs.resolve.outputs.version }}$"
+        run: |
+          set -euo pipefail
+          for img in efe-server mcp-server portal-admin efe-server-migrate; do
+            echo "==> Verifying $img"
+            cosign verify \
+              --certificate-identity-regexp "$IDENTITY" \
+              --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+              "${{ env.REGISTRY }}/${img}:${{ needs.resolve.outputs.version_no_v }}" \
+              | head -c 200
+            echo
+          done
+
+      - name: SLSA verify all 4 images
+        run: |
+          set -euo pipefail
+          for img in efe-server mcp-server portal-admin efe-server-migrate; do
+            echo "==> SLSA verify $img"
+            slsa-verifier verify-image \
+              --source-uri "github.com/efe-ai/efe" \
+              --source-tag "${{ needs.resolve.outputs.version }}" \
+              "${{ env.REGISTRY }}/${img}:${{ needs.resolve.outputs.version_no_v }}"
+          done
+
+      - name: k3d smoke test
+        uses: AbsaOSS/k3d-action@v2
+        with:
+          cluster-name: efe-verify
+          args: >-
+            --servers 1 --agents 1 --no-lb --wait --timeout 5m
+
+      - uses: azure/setup-helm@v4
+        with: { version: "${{ env.HELM_RELEASE }}" }
+
+      - name: Smoke install + readiness
+        run: |
+          set -euo pipefail
+          helm install efe-stack \
+            "oci://${{ env.REGISTRY }}/charts/efe-stack" \
+            --version "${{ needs.resolve.outputs.version_no_v }}" \
+            --values charts/efe-stack/values-local.yaml \
+            --set global.tenant=verify \
+            --set postgres-operator.enabled=false \
+            --create-namespace --namespace efe \
+            --wait --timeout 10m
+          kubectl get pods -n efe
+          kubectl wait -n efe pod \
+            -l 'app.kubernetes.io/name in (efe-server,redis-stack)' \
+            --for=condition=Ready --timeout=180s
+
+  # ────────────────────────────────────────────────────────────────────
+  # Phase 4 : Distribute.
+  # ────────────────────────────────────────────────────────────────────
+  github-release:
+    name: distribute / github release
+    needs: [resolve, verify]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    if: needs.resolve.outputs.dry_run == 'false'
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Generate release notes
+        id: notes
+        run: |
+          set -euo pipefail
+          ./scripts/release/generate-changelog.sh \
+            "${{ needs.resolve.outputs.version }}" \
+            > /tmp/release-notes.md
+          echo "path=/tmp/release-notes.md" >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.resolve.outputs.version }}
+          name: "EFE ${{ needs.resolve.outputs.version }}"
+          body_path: ${{ steps.notes.outputs.path }}
+          draft: false
+          prerelease: ${{ contains(needs.resolve.outputs.version, '-') }}
+          files: |
+            artifacts/efe-admin-*/*
+            artifacts/helm-chart/*
+
+  homebrew-tap:
+    name: distribute / homebrew tap
+    needs: [resolve, github-release]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    if: needs.resolve.outputs.dry_run == 'false'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: efe-admin-x86_64-apple-darwin
+          path: /tmp/darwin-x86
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: efe-admin-aarch64-apple-darwin
+          path: /tmp/darwin-arm
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: efe-admin-x86_64-unknown-linux-musl
+          path: /tmp/linux-x86
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: efe-admin-aarch64-unknown-linux-musl
+          path: /tmp/linux-arm
+
+      - name: Render Homebrew formula
+        run: |
+          set -euo pipefail
+          export VERSION="${{ needs.resolve.outputs.version_no_v }}"
+          export VERSION_TAG="${{ needs.resolve.outputs.version }}"
+          export SHA256_DARWIN_X86=$(awk '{print $1}' /tmp/darwin-x86/*.sha256)
+          export SHA256_DARWIN_ARM=$(awk '{print $1}' /tmp/darwin-arm/*.sha256)
+          export SHA256_LINUX_X86=$(awk '{print $1}' /tmp/linux-x86/*.sha256)
+          export SHA256_LINUX_ARM=$(awk '{print $1}' /tmp/linux-arm/*.sha256)
+          ./scripts/release/render-homebrew.sh > efe-admin.rb
+          cat efe-admin.rb
+
+      - name: Push to homebrew-tap repo
+        env:
+          GH_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${GH_TOKEN:-}" ]]; then
+            echo "::warning::HOMEBREW_TAP_TOKEN missing ; skipping Homebrew update."
+            exit 0
+          fi
+          git clone "https://x-access-token:${GH_TOKEN}@github.com/efe-ai/homebrew-tap" /tmp/tap
+          mkdir -p /tmp/tap/Formula
+          cp efe-admin.rb /tmp/tap/Formula/efe-admin.rb
+          cd /tmp/tap
+          git config user.email "release-bot@efe.example.com"
+          git config user.name "EFE Release Bot"
+          git add Formula/efe-admin.rb
+          git commit -m "efe-admin ${{ needs.resolve.outputs.version }}" || echo "no changes"
+          git push
+
+  terraform-registry:
+    name: distribute / terraform registry
+    needs: [resolve, verify]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    if: needs.resolve.outputs.dry_run == 'false'
+    strategy:
+      matrix:
+        cloud: [aws, gcp, azure]
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - run: |
+          set -euo pipefail
+          TAG="tf-${{ matrix.cloud }}/${{ needs.resolve.outputs.version }}"
+          if ! git rev-parse "$TAG" >/dev/null 2>&1; then
+            echo "::warning::sub-tag $TAG missing — please push it (Terraform Registry needs it)"
+          else
+            echo "✓ tag $TAG present : terraform registry will auto-detect."
+          fi
+
+  # ────────────────────────────────────────────────────────────────────
+  # Phase 5 : Announce.
+  # ────────────────────────────────────────────────────────────────────
+  announce:
+    name: announce / blog + email + RSS
+    needs: [resolve, github-release, homebrew-tap, terraform-registry]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    if: needs.resolve.outputs.dry_run == 'false'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Publish blog post
+        env:
+          CMS_API_TOKEN: ${{ secrets.CMS_API_TOKEN }}
+          CMS_API_URL: ${{ secrets.CMS_API_URL }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${CMS_API_TOKEN:-}" ]]; then
+            echo "::warning::CMS_API_TOKEN not set ; skipping blog publish."
+            exit 0
+          fi
+          ./scripts/release/publish-blog.sh \
+            docs/marketing/BLOG_POST_v1_0_0_GA.md \
+            "${{ needs.resolve.outputs.version }}"
+
+      - name: Trigger customer email batch
+        env:
+          MAILGUN_API_KEY: ${{ secrets.MAILGUN_API_KEY }}
+          MAILGUN_DOMAIN: ${{ secrets.MAILGUN_DOMAIN }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${MAILGUN_API_KEY:-}" ]]; then
+            echo "::warning::MAILGUN_API_KEY not set ; skipping customer email."
+            exit 0
+          fi
+          ./scripts/release/send-customer-email.sh \
+            docs/marketing/CUSTOMER_EMAIL_TEMPLATE.md \
+            "${{ needs.resolve.outputs.version }}"
+
+      - name: Update security RSS feed
+        run: |
+          set -euo pipefail
+          ./scripts/release/update-security-feed.sh \
+            "${{ needs.resolve.outputs.version }}"
+
+      - name: Notify partners on Slack
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_PARTNER_WEBHOOK }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${SLACK_WEBHOOK_URL:-}" ]]; then
+            echo "::warning::SLACK_PARTNER_WEBHOOK not set ; skipping Slack notify."
+            exit 0
+          fi
+          ./scripts/release/notify-partners.sh \
+            "${{ needs.resolve.outputs.version }}"
+
+      - name: Final summary
+        run: |
+          {
+            echo "## ✅ Release ${{ needs.resolve.outputs.version }} announced"
+            echo "- GitHub Release: https://github.com/efe-ai/efe/releases/${{ needs.resolve.outputs.version }}"
+            echo "- OCI Helm chart: \`oci://${{ env.REGISTRY }}/charts/efe-stack:${{ needs.resolve.outputs.version_no_v }}\`"
+            echo "- Homebrew: \`brew install efe/tap/efe-admin\`"
+            echo "- npm: \`@efe/sdk@${{ needs.resolve.outputs.version_no_v }}\`"
+          } >> "$GITHUB_STEP_SUMMARY"

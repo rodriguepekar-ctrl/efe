@@ -1,0 +1,233 @@
+# Sprint **Φ-D-STREAM Completion (D84)** — Streaming RPC contract gate.
+#
+# Cf. docs/EFE_STREAMING_RPC_COMPLETION_ARCHITECTURE.md § 16 + artefact #38.
+#
+# Triggers : PR + nightly + workflow_dispatch.
+# Gates : structural pin tests, round emission, ordering, chunk types,
+#         tenant isolation, error wrapping, replay, schema, mpsc(64) lint.
+
+name: stream-contract
+
+on:
+  pull_request:
+    paths:
+      - "crates/efe-server/src/services/**"
+      - "crates/efe-server/src/v1/audit_export/**"
+      - "protos/efe/v1/efe.proto"
+      - "protos/efe/v1/mode2.proto"
+      - "protos/efe/v1/mode3.proto"
+      - "protos/efe/v1/admin.proto"
+      # Round-5 DT-OPS-22 closure : path renamed when proto/ (singular)
+      # and protos/ (plural) were consolidated under protos/. The
+      # extension namespaces moved to protos/efe/{active_learning,
+      # curation,agent_runtime}/v1/ alongside the main efe.v1 API.
+      - "protos/efe/active_learning/v1/service.proto"
+      - "eval/scripts/stream_*.py"
+      - "scripts/tests/test_streaming_completion.py"
+      - "bench_baselines/v0.7.0/stream_slos.yaml"
+      - ".github/workflows/stream-contract.yml"
+  schedule:
+    - cron: "0 16 * * *"   # 16:00 UTC nightly
+  workflow_dispatch:
+
+env:
+  PYTHONUNBUFFERED: "1"
+
+jobs:
+  pin-tests:
+    name: Structural + semantic pin tests
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - run: pip install pytest pyyaml
+      - name: Run Φ-D-STREAM pin tests
+        run: pytest scripts/tests/test_streaming_completion.py -v --tb=short
+
+  round-emission:
+    name: Mode-1 + Mode-2 round emission
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - name: Round emission bench (synth_pass = 5 rounds)
+        run: python3 eval/scripts/stream_round_emission_bench.py --mode synth_pass --out target/streaming/round_emission.json
+      - name: Negative test (synth_fail must exit 1 = regression detected)
+        run: |
+          python3 eval/scripts/stream_round_emission_bench.py --mode synth_fail --out /tmp/round_fail.json && \
+            { echo "FATAL : synth_fail did not detect 0-round regression" ; exit 1 ; } || \
+            { echo "OK : synth_fail correctly detected regression" ; }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: stream-round-emission
+          path: target/streaming/round_emission.json
+
+  mode3-ordering:
+    name: Mode-3 ordering (Final last)
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - run: python3 eval/scripts/stream_mode3_ordering_bench.py --mode synth_pass --out target/streaming/mode3_ordering.json
+      - uses: actions/upload-artifact@v4
+        with: {name: stream-mode3-ordering, path: target/streaming/mode3_ordering.json}
+
+  admin-audit-body:
+    name: AdminService.ListAuditEvents body
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - name: Body integration (synth_pass)
+        run: python3 eval/scripts/stream_admin_audit_bench.py --mode synth_pass --out target/streaming/admin_audit_body.json
+      - name: Chain break detection (synth_fail)
+        run: python3 eval/scripts/stream_admin_audit_bench.py --mode synth_fail --out /tmp/chain_break.json
+      - name: Verify chain break detected
+        run: |
+          python3 -c "
+          import json
+          d = json.load(open('/tmp/chain_break.json'))
+          slo = d['slo_compliance']['SLO-STREAM-ADMIN-AUDIT-BODY']
+          assert slo['measured_pass_count'] == 1, f'chain break NOT detected: {slo}'
+          assert any('chain_break' in e for e in slo['errors_detected'])
+          print('chain break correctly detected')
+          "
+      - uses: actions/upload-artifact@v4
+        with: {name: stream-admin-audit-body, path: target/streaming/admin_audit_body.json}
+
+  chunk-types:
+    name: Chunk types (no disguised unary)
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - run: python3 eval/scripts/stream_chunk_types_bench.py --mode synth_pass --out target/streaming/chunk_types.json
+      - uses: actions/upload-artifact@v4
+        with: {name: stream-chunk-types, path: target/streaming/chunk_types.json}
+
+  tenant-isolation:
+    name: Tenant isolation streaming (5 adversarial)
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - run: python3 eval/scripts/stream_tenant_isolation_bench.py --mode synth_pass --out target/streaming/tenant_isolation.json
+      - uses: actions/upload-artifact@v4
+        with: {name: stream-tenant-isolation, path: target/streaming/tenant_isolation.json}
+
+  error-wrapping:
+    name: Error wrapping (6 cases)
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - run: python3 eval/scripts/stream_error_wrapping_bench.py --mode synth_pass --out target/streaming/error_wrapping.json
+      - uses: actions/upload-artifact@v4
+        with: {name: stream-error-wrapping, path: target/streaming/error_wrapping.json}
+
+  replay-determinism:
+    name: Replay determinism (Mode-1/Mode-2)
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - run: python3 eval/scripts/stream_replay_bench.py --mode synth_pass --out target/streaming/replay.json
+      - uses: actions/upload-artifact@v4
+        with: {name: stream-replay, path: target/streaming/replay.json}
+
+  static-lint:
+    name: mpsc(64) lint + admin body lint
+    runs-on: ubuntu-22.04
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - name: Static lint (= reports current production state)
+        run: python3 eval/scripts/stream_static_lint.py --out target/streaming/static_lint.json || \
+             echo "static_lint reports gaps to address ; see SLO consolidated step"
+      - uses: actions/upload-artifact@v4
+        with: {name: stream-static-lint, path: target/streaming/static_lint.json}
+
+  metric-coverage:
+    name: Metric coverage (no chunk leak)
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - run: python3 eval/scripts/stream_metric_coverage_bench.py --mode synth_pass --out target/streaming/metric_coverage.json
+      - uses: actions/upload-artifact@v4
+        with: {name: stream-metric-coverage, path: target/streaming/metric_coverage.json}
+
+  gdpr-filter:
+    name: GDPR consent filter
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - run: python3 eval/scripts/stream_gdpr_filter_bench.py --mode synth_pass --out target/streaming/gdpr_filter.json
+      - uses: actions/upload-artifact@v4
+        with: {name: stream-gdpr-filter, path: target/streaming/gdpr_filter.json}
+
+  consolidated:
+    name: SLO consolidated gating
+    needs: [pin-tests, round-emission, mode3-ordering, admin-audit-body, chunk-types,
+            tenant-isolation, error-wrapping, replay-determinism, static-lint,
+            metric-coverage, gdpr-filter]
+    if: always()
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with: {path: artifacts}
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - run: pip install pyyaml
+      - name: Merge compliance JSONs
+        run: |
+          mkdir -p target/streaming
+          python3 -c "
+          import json, glob
+          out = {'slo_compliance': {}}
+          for f in glob.glob('artifacts/**/*.json', recursive=True):
+              try: d = json.load(open(f))
+              except Exception: continue
+              for k, v in d.get('slo_compliance', {}).items():
+                  out['slo_compliance'][k] = v
+          json.dump(out, open('target/streaming/consolidated.json', 'w'), indent=2)
+          print(f'merged {len(out[\"slo_compliance\"])} SLOs')
+          "
+      - name: Gate via check_slo.py
+        run: |
+          python3 eval/scripts/check_slo.py \
+              --baseline bench_baselines/v0.7.0/stream_slos.yaml \
+              --measure target/streaming/consolidated.json \
+              --report target/streaming/contract_report.md
+          cat target/streaming/contract_report.md
+      - uses: actions/upload-artifact@v4
+        with:
+          name: stream-contract-compliance
+          path: |
+            target/streaming/*.json
+            target/streaming/*.md

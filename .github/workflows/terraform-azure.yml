@@ -1,0 +1,70 @@
+name: terraform-azure
+
+on:
+  pull_request:
+    paths:
+      - "terraform/modules/azure/**"
+      - ".github/workflows/terraform-azure.yml"
+  push:
+    branches: [main]
+    paths:
+      - "terraform/modules/azure/**"
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.6.6
+
+      - name: terraform fmt
+        run: terraform fmt -check -recursive terraform/modules/azure
+
+      - name: terraform validate
+        run: |
+          cd terraform/modules/azure
+          terraform init -backend=false
+          terraform validate
+
+      - uses: terraform-linters/setup-tflint@v4
+        with:
+          tflint_version: v0.52.0
+
+      - name: tflint
+        run: |
+          cd terraform/modules/azure
+          tflint --init
+          tflint --recursive
+
+      - name: tfsec
+        uses: aquasecurity/tfsec-action@v1.0.3
+        with:
+          working_directory: terraform/modules/azure
+          soft_fail: false
+
+  terratest:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_TERRATEST_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+
+      - run: |
+          cd terraform/modules/azure/test
+          go mod download
+          go test -timeout 60m -v ./...

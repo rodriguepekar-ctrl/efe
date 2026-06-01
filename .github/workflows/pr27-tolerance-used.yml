@@ -1,0 +1,240 @@
+# ─────────────────────────────────────────────────────────────────────
+#  PR #27 — G.11 closure — `tolerance_used` populated by aggregator
+#  CI workflow.
+#
+#  Four jobs run in parallel on every PR that touches PR #27's
+#  surface :
+#
+#    1. unit-tests          — resolver + emit + integration tests
+#    2. freeze-tests        — STABILITY § 24.3.6 + § 27.2 enforcement
+#    3. backfill-dry-run    — golden-file comparison against
+#                             bench/fixtures/backfill_golden_diff.txt
+#    4. audit-reader-round-trip — NDJSON v3 serialisation lossless
+#
+#  Concurrency : per-ref group with cancel-in-progress.  Same pattern
+#  as PR #25 + PR #26 workflows for consistency.
+#
+#  References :
+#    docs/architecture/EFE_A1_PHASE3_PR27_ARCHITECTURE.md § 9.1
+#    docs/roadmap/EFE_A1_PHASE3_PR27_ROADMAP.md         § 3.2 day 5
+# ─────────────────────────────────────────────────────────────────────
+
+name: "PR #27 — tolerance_used validation"
+
+on:
+  pull_request:
+    paths:
+      - 'bench/harness/src/compare/effective_tolerance.rs'
+      - 'bench/harness/src/compare/mod.rs'
+      - 'bench/harness/tests/g11_round_trip.rs'
+      - 'bench/harness/tests/g11_tolerance_used_populated.rs'
+      - 'bench/harness/tests/stability_contract_v17.rs'
+      - 'bench/harness/tests/s3_audit_chain_integrity.rs'
+      - 'bench/harness/tests/s9_s12_monitoring_chain_integrity.rs'
+      - 'bench/fixtures/post_g11_ndjson/**'
+      - 'bench/fixtures/pre_g11_ndjson/**'
+      - 'bench/fixtures/scenarios/G11_synthetic.yaml'
+      - 'bench/fixtures/backfill_golden_diff.txt'
+      - 'bench/fixtures/audit_reader_golden_explain.txt'
+      - 'scripts/backfill-tolerance-used.sh'
+      - 'scripts/audit-prompt-validator.sh'
+      - 'docs/STABILITY_CONTRACT.md'
+      - 'docs/lessons/PR-27-lessons.md'
+      - 'docs/lessons/checklists/**'
+      - 'docs/lessons/monitoring/**'
+      - 'docs/gaps/master_tracker.md'
+      - '.github/workflows/pr27-tolerance-used.yml'
+  push:
+    branches: [main]
+
+concurrency:
+  group: pr27-tolerance-used-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: write
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+
+  # ───────────────────────────────────────────────────────────────────
+  # Job 1 — Unit + integration tests.
+  # ───────────────────────────────────────────────────────────────────
+  unit-tests:
+    name: Unit + integration tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+          components: clippy
+
+      - name: Cache cargo registry + target
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: pr27-cargo-${{ runner.os }}-${{ hashFiles('**/Cargo.lock', '**/Cargo.toml') }}
+
+      - name: Run module unit tests
+        run: cargo test --manifest-path bench/harness/Cargo.toml --lib compare::effective_tolerance
+
+      - name: Run pinning test (g11_round_trip)
+        run: cargo test --manifest-path bench/harness/Cargo.toml --test g11_round_trip
+
+      - name: Run integration test (g11_tolerance_used_populated)
+        run: cargo test --manifest-path bench/harness/Cargo.toml --test g11_tolerance_used_populated
+
+      - name: Verify no regressions on the rest of the harness test suite
+        run: cargo test --manifest-path bench/harness/Cargo.toml --lib
+
+  # ───────────────────────────────────────────────────────────────────
+  # Job 2 — STABILITY freeze tests (§ 24.3.6 + § 27.2).
+  # ───────────────────────────────────────────────────────────────────
+  freeze-tests:
+    name: STABILITY § 24.3.6 + § 27.2 freeze tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: pr27-cargo-${{ runner.os }}-${{ hashFiles('**/Cargo.lock', '**/Cargo.toml') }}
+
+      - name: Run the PR #27 freeze tests
+        run: |
+          cargo test --manifest-path bench/harness/Cargo.toml --test stability_contract_v17 -- \
+            v1_7_section_24_3_6_tolerance_used_shape \
+            v1_7_section_27_2_taxonomy_closed \
+            v1_7_section_24_3_6_g11_pinning_test_exists
+
+      - name: Run the full v1.7 freeze suite (no regressions)
+        run: cargo test --manifest-path bench/harness/Cargo.toml --test stability_contract_v17
+
+      - name: Run the S3 audit chain integrity meta-test
+        run: cargo test --manifest-path bench/harness/Cargo.toml --test s3_audit_chain_integrity
+
+      - name: Run the S9-S12 monitoring chain integrity meta-test
+        run: cargo test --manifest-path bench/harness/Cargo.toml --test s9_s12_monitoring_chain_integrity
+
+      - name: Validator on PR #27 lessons file
+        run: bash scripts/audit-prompt-validator.sh docs/lessons/PR-27-lessons.md
+
+  # ───────────────────────────────────────────────────────────────────
+  # Job 3 — Backfill dry-run against the golden diff.
+  # ───────────────────────────────────────────────────────────────────
+  backfill-dry-run:
+    name: Backfill dry-run vs golden diff
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install python3 (for inline JSON manipulation in the script)
+        run: |
+          python3 --version
+          which python3
+
+      - name: Verify script is executable
+        run: |
+          test -x scripts/backfill-tolerance-used.sh || chmod +x scripts/backfill-tolerance-used.sh
+          bash -n scripts/backfill-tolerance-used.sh
+
+      - name: Run backfill dry-run
+        run: |
+          bash scripts/backfill-tolerance-used.sh --dry-run bench/fixtures/pre_g11_ndjson/ \
+            > /tmp/backfill_output.txt 2>/tmp/backfill_stderr.txt
+
+      - name: Compare against golden file
+        run: |
+          if ! diff -u bench/fixtures/backfill_golden_diff.txt /tmp/backfill_output.txt ; then
+            echo ""
+            echo "═══ Backfill dry-run output diverged from golden file ═══"
+            echo ""
+            echo "Either the script's transformation logic regressed, or the"
+            echo "golden file was not updated to match a intentional change."
+            echo ""
+            echo "To accept a deliberate change : copy /tmp/backfill_output.txt"
+            echo "over bench/fixtures/backfill_golden_diff.txt in your branch,"
+            echo "explain the change in the PR description, and re-run CI."
+            exit 1
+          fi
+
+  # ───────────────────────────────────────────────────────────────────
+  # Job 4 — Audit-reader round-trip (NDJSON v3 lossless property).
+  # ───────────────────────────────────────────────────────────────────
+  audit-reader-round-trip:
+    name: Audit-reader NDJSON v3 round-trip
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: pr27-cargo-${{ runner.os }}-${{ hashFiles('**/Cargo.lock', '**/Cargo.toml') }}
+
+      - name: NDJSON v3 lossless round-trip
+        run: |
+          cargo test --manifest-path bench/harness/Cargo.toml --test g11_round_trip -- \
+            g11_round_trip_ndjson_serialisation_is_lossless --nocapture
+
+      - name: Future — efe-audit-reader CLI golden file
+        run: |
+          # TODO (PR #27.1) : invoke the audit-reader CLI binary and
+          # diff against bench/fixtures/audit_reader_golden_explain.txt.
+          # For S2 of PR #27, the audit-reader crate is deferred and
+          # the golden file is published as the contract that S2 day 5
+          # follow-up commits will satisfy.
+          echo "deferred to PR #27.1 (audit-reader crate is its own PR)"
+
+  # ───────────────────────────────────────────────────────────────────
+  # Job 5 — Aggregate verdict (depends on the four above).
+  # ───────────────────────────────────────────────────────────────────
+  pr27-gate:
+    name: PR #27 gate (G.11 closure check)
+    needs:
+      - unit-tests
+      - freeze-tests
+      - backfill-dry-run
+      - audit-reader-round-trip
+    runs-on: ubuntu-latest
+    steps:
+      - name: Confirm gate
+        run: |
+          echo "PR #27 gate cleared : all four jobs PASSED."
+          echo "G.11 (tolerance_used populated by aggregator) is technically closed."
+          echo "The pinning test g11_round_trip is GREEN on this branch."

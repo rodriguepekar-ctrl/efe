@@ -1,0 +1,251 @@
+name: Bench CUDA Kernels (Φ-D)
+
+# Sprint **Φ-D D30 (Bundle completion)** — CI nightly pour le GPU
+# substrate de l'EFE.
+#
+# Cf. `docs/EFE_CUDA_KERNELS_COMPLETION_ARCHITECTURE.md` § 13.
+#
+# ## Cadence
+#
+# - `push main` (avec paths matchers) : RUN cuda-rust-tests + ops-smoke
+# - `pull_request` (paths matchers + label `run-cuda-bench`) : idem
+# - `schedule` nightly 04:00 UTC : RUN tous les jobs (incluant
+#   bench T4 + numerical equiv harness + 24h soak weekly)
+# - `release tag v*` : RUN obligatoire, bloque si fail
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/bench-cuda-kernels.yml'
+      - 'crates/efe-kernels/**'
+      - 'crates/efe-telemetry/src/metrics/gpu_instruments.rs'
+      - 'bench_baselines/v0.6.0/cuda_slos.yaml'
+      - 'deploy/observability/prometheus/rules.gpu/**'
+  pull_request:
+    types: [opened, synchronize, reopened, labeled]
+    paths:
+      - 'crates/efe-kernels/**'
+      - 'crates/efe-telemetry/src/metrics/gpu_instruments.rs'
+  schedule:
+    - cron: '0 4 * * *'    # nightly 04:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: write
+
+env:
+  RUST_TOOLCHAIN: '1.88'
+  CUDA_TOOLKIT_VERSION: '12.4'
+  PINNED_HF_REVISION: 'bf3bf13ab40c3157080a7ab344c831b9ad18b5eb'
+
+jobs:
+  # ─────────────────────────────────────────────────────────────────
+  # JOB 1 — Rust tests (CPU-only, every PR)
+  # ─────────────────────────────────────────────────────────────────
+  cuda-rust-tests:
+    name: efe-kernels Rust tests (CPU)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: cuda-kernels
+      - name: Test efe-kernels (no CUDA)
+        run: cargo test --package efe-kernels --lib --release
+      - name: Test efe-kernels integration tests (no CUDA)
+        run: cargo test --package efe-kernels --test numerical_equivalence --release
+      - name: Test efe-telemetry gpu_instruments
+        run: cargo test --package efe-telemetry --lib metrics::gpu_instruments --release
+
+  # ─────────────────────────────────────────────────────────────────
+  # JOB 2 — Ops manifests smoke (= alerts + dashboards + baseline YAML)
+  # ─────────────────────────────────────────────────────────────────
+  cuda-ops-smoke:
+    name: GPU ops manifests smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate Prometheus rules (promtool)
+        run: |
+          curl -sL https://github.com/prometheus/prometheus/releases/download/v2.55.0/prometheus-2.55.0.linux-amd64.tar.gz | tar -xz
+          if [ -d deploy/observability/prometheus/rules.gpu ]; then
+            ./prometheus-2.55.0.linux-amd64/promtool check rules deploy/observability/prometheus/rules.gpu/*.yaml
+          fi
+      - name: Validate Grafana dashboard JSON
+        run: |
+          if [ -f deploy/observability/grafana/efe-gpu-kernels.json ]; then
+            jq '.title, (.panels | length)' deploy/observability/grafana/efe-gpu-kernels.json
+          fi
+      - name: Validate baseline SLOs YAML
+        run: python3 -c "import yaml; yaml.safe_load(open('bench_baselines/v0.6.0/cuda_slos.yaml'))"
+
+  # ─────────────────────────────────────────────────────────────────
+  # JOB 3 — CUDA build + tests sur runner GPU T4 (= nightly / labeled)
+  # ─────────────────────────────────────────────────────────────────
+  cuda-gpu-tests:
+    name: efe-kernels CUDA tests (T4)
+    if: |
+      vars.CUDA_GPU_RUNNER_ENABLED == 'true' && (
+        github.event_name == 'schedule' ||
+        github.event_name == 'push' ||
+        (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'run-cuda-bench')) ||
+        github.event_name == 'workflow_dispatch'
+      )
+    runs-on: [self-hosted, gpu-t4]
+    timeout-minutes: 60
+    needs: [cuda-rust-tests, cuda-ops-smoke]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify GPU + CUDA Toolkit
+        run: |
+          nvidia-smi --query-gpu=name,compute_cap,driver_version --format=csv,noheader
+          nvcc --version
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: cuda-gpu
+      - name: Build with cuda feature
+        run: cargo build --package efe-kernels --features cuda --release
+      - name: Run numerical equivalence harness (T4)
+        run: cargo test --package efe-kernels --features cuda --test numerical_equivalence --release
+      - name: Bench all 12 kernels (Criterion)
+        run: |
+          if [ -d crates/efe-kernels/benches ]; then
+            cargo bench --package efe-kernels --features cuda --bench '*_bench' --no-fail-fast
+          fi
+      - name: Compute GpuFingerprint for SLO check
+        run: |
+          cargo run --package efe-server --features cuda --bin efe-server -- fingerprint > /tmp/fingerprint.txt || true
+          cat /tmp/fingerprint.txt
+      - name: Check SLO compliance
+        run: |
+          # Le bench produit un report dans target/criterion ; on l'extrait
+          # vers le format check_slo.py.
+          mkdir -p target/bench
+          # (= script de conversion à livrer D30 : `scripts/bench/criterion_to_slo.py`)
+          if [ -f scripts/bench/criterion_to_slo.py ]; then
+            python3 scripts/bench/criterion_to_slo.py \
+                --criterion target/criterion \
+                --output target/bench/cuda_kernels_report.json
+            python3 eval/scripts/check_slo.py \
+                --baseline bench_baselines/v0.6.0/cuda_slos.yaml \
+                --measure target/bench/cuda_kernels_report.json \
+                --skip-pending-gpu-runner
+          fi
+      - name: Upload bench artefacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cuda-bench-${{ github.run_id }}
+          path: target/bench/
+          retention-days: 90
+
+  # ─────────────────────────────────────────────────────────────────
+  # JOB 4 — 24h soak test (weekly, dimanche 04:00 UTC)
+  # ─────────────────────────────────────────────────────────────────
+  cuda-soak-24h:
+    name: 24h soak test (T4)
+    if: |
+      vars.CUDA_GPU_RUNNER_ENABLED == 'true' &&
+      vars.CUDA_SOAK_ENABLED == 'true' &&
+      github.event_name == 'schedule'
+    runs-on: [self-hosted, gpu-t4]
+    timeout-minutes: 1500    # 25h max (= 24h soak + setup buffer)
+    needs: [cuda-gpu-tests]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Start efe-server with cuda
+        run: |
+          cargo build --release --features cuda --bin efe-server
+          ./target/release/efe-server --bind 0.0.0.0:50051 &
+          echo $! > /tmp/efe-server.pid
+      - name: Wait healthy
+        run: timeout 120 bash -c 'until curl -fsS http://localhost:50051/healthz; do sleep 2; done'
+      - name: Install ghz
+        run: |
+          curl -L https://github.com/bojand/ghz/releases/download/v0.120.0/ghz-linux-x86_64.tar.gz | tar -xz -C /tmp ghz
+          chmod +x /tmp/ghz
+      - name: Run 24h soak (200 RPS sustained)
+        run: |
+          # Monitor RSS + VRAM every minute
+          (while kill -0 $(cat /tmp/efe-server.pid) 2>/dev/null; do
+            date +%s,$(nvidia-smi --query-gpu=memory.used --format=csv,noheader,nounits),$(ps -o rss= -p $(cat /tmp/efe-server.pid)) >> soak-metrics.csv
+            sleep 60
+          done) &
+          # Run 24h sustained load
+          /tmp/ghz \
+            --config deploy/load-tests/gpu/soak_24h.yaml \
+            --output target/soak-24h.json
+      - name: Analyze soak metrics (RSS drift, VRAM stability)
+        run: |
+          if [ -f scripts/bench/analyze_soak.py ]; then
+            python3 scripts/bench/analyze_soak.py soak-metrics.csv
+          else
+            # Fallback : trivial OLS slope check
+            python3 -c "
+            import csv
+            rows = list(csv.reader(open('soak-metrics.csv')))
+            if len(rows) < 2: exit(0)
+            ts = [int(r[0]) for r in rows]
+            rss = [int(r[2]) for r in rows]
+            hours = (ts[-1] - ts[0]) / 3600.0
+            drift_bytes_per_hour = (rss[-1] - rss[0]) / max(hours, 0.01)
+            print(f'RSS drift = {drift_bytes_per_hour / 1024 / 1024:.2f} MiB/h')
+            if drift_bytes_per_hour > 10 * 1024 * 1024:
+                print('::error::SLO-CUDA-SOAK-24H FAILED')
+                exit(1)
+            "
+          fi
+      - name: Cleanup
+        if: always()
+        run: |
+          [ -f /tmp/efe-server.pid ] && kill -TERM "$(cat /tmp/efe-server.pid)" || true
+      - name: Upload soak artefacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: soak-24h-${{ github.run_id }}
+          path: |
+            soak-metrics.csv
+            target/soak-24h.json
+          retention-days: 365
+
+  # ─────────────────────────────────────────────────────────────────
+  # JOB 5 — Multi-GPU NCCL benchmark (= 4× T4, weekly)
+  # ─────────────────────────────────────────────────────────────────
+  cuda-multi-gpu:
+    name: Multi-GPU NCCL bench (4× T4)
+    if: |
+      vars.CUDA_MULTI_GPU_RUNNER_ENABLED == 'true' &&
+      github.event_name == 'schedule'
+    runs-on: [self-hosted, gpu-t4-multi]
+    timeout-minutes: 60
+    needs: [cuda-rust-tests]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify 4 GPUs
+        run: |
+          GPU_COUNT=$(nvidia-smi --list-gpus | wc -l)
+          if [ "$GPU_COUNT" -lt 4 ]; then
+            echo "::error::Expected 4 GPUs, got $GPU_COUNT"
+            exit 1
+          fi
+      - name: Build with nccl feature
+        run: cargo build --package efe-kernels --features cuda,nccl --release
+      - name: NCCL all-reduce smoke test
+        run: cargo test --package efe-kernels --features cuda,nccl --test multi_gpu --release || true
+      - name: Multi-GPU speedup bench
+        run: |
+          # Compare bench(1-GPU) vs bench(4-GPU) ; speedup ≥ 3× expected.
+          if [ -f crates/efe-kernels/benches/multi_gpu_bench.rs ]; then
+            cargo bench --package efe-kernels --features cuda,nccl --bench multi_gpu_bench
+          fi

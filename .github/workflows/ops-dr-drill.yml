@@ -1,0 +1,95 @@
+# Sprint Φ-D-OPS (D99) — DR drill scheduled workflow.
+#
+# Quarterly cadence : 1st Tuesday of each Jan / Apr / Jul / Oct.
+# Manual-dispatch is also supported with explicit `mode` input.
+#
+# Cf. `docs/EFE_OPERATIONAL_PRODUCTION_ARCHITECTURE.md` § 16 ;
+# runbook : `docs/runbooks/ops_dr_drill_failure.md`.
+
+name: ops-dr-drill
+
+on:
+  # Quarterly cadence — runs on the 1st Tuesday of each fiscal quarter
+  # at 09:00 UTC. The intersection of `1-7` day-of-month and `2`
+  # day-of-week (Tuesday) gives that exact slot.
+  schedule:
+    - cron: "0 9 1-7 1,4,7,10 2"
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "Drill mode (dry|staging|prod)"
+        required: true
+        default: "dry"
+        type: choice
+        options: [dry, staging, prod]
+      region_from:
+        description: "Primary region (= the one we fail away from)"
+        required: true
+        default: "eu-west-3"
+      region_to:
+        description: "DR region (= the one we promote)"
+        required: true
+        default: "eu-west-1"
+
+permissions:
+  contents: read
+
+env:
+  PYTHONUNBUFFERED: "1"
+
+jobs:
+  dr-drill:
+    name: DR drill (${{ github.event.inputs.mode || 'dry' }})
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+
+      - name: Pre-flight (dry run sanity)
+        if: ${{ github.event.inputs.mode != 'dry' }}
+        run: |
+          python3 scripts/ops/dr_drill_simulator.py \
+            --mode dry \
+            --region-from "${{ github.event.inputs.region_from }}" \
+            --region-to   "${{ github.event.inputs.region_to }}" \
+            --out target/ops/dr_dry_report.json
+
+      - name: Execute drill
+        run: |
+          MODE="${{ github.event.inputs.mode || 'dry' }}"
+          if [[ "$MODE" == "prod" ]]; then
+            python3 scripts/ops/dr_drill_simulator.py \
+              --mode prod --prod-confirm \
+              --region-from "${{ github.event.inputs.region_from }}" \
+              --region-to   "${{ github.event.inputs.region_to }}" \
+              --out target/ops/dr_report.json
+          else
+            python3 scripts/ops/dr_drill_simulator.py \
+              --mode "$MODE" \
+              --out target/ops/dr_report.json
+          fi
+
+      - name: Upload drill report
+        uses: actions/upload-artifact@v4
+        with:
+          name: ops-dr-drill-${{ github.run_id }}
+          path: |
+            target/ops/dr_report.json
+            target/ops/dr_dry_report.json
+            target/ops/measures.dr_drill.json
+          retention-days: 365
+
+      - name: Notify on Slack
+        if: always()
+        env:
+          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK_DR }}
+        run: |
+          STATUS="${{ job.status }}"
+          MODE="${{ github.event.inputs.mode || 'dry' }}"
+          if [[ -n "$SLACK_WEBHOOK" ]]; then
+            curl -X POST -H 'Content-Type: application/json' \
+              --data "{\"text\":\"DR drill ($MODE) finished : $STATUS\"}" \
+              "$SLACK_WEBHOOK" || true
+          fi

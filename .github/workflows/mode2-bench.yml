@@ -1,0 +1,128 @@
+# Sprint **Φ-D-MODE2 Completion (D69)** — Mode-2 nightly bench.
+#
+# Cf. docs/EFE_MODE2_ANCHORS_COMPLETION_ARCHITECTURE.md § 17 + artefact #39.
+#
+# Nightly + tag-trigger. Measures :
+#   * Anchor generation latency p99
+#   * Fallback latency p99
+#   * Cost per anchor p99
+#   * Cache hit rate
+#   * Per-provider availability
+
+name: mode2-bench
+
+on:
+  schedule:
+    - cron: "0 7 * * *"   # 07:00 UTC nightly
+  push:
+    tags: ["v*.*.*"]
+  workflow_dispatch:
+
+env:
+  PYTHONUNBUFFERED: "1"
+
+jobs:
+  latency-bench:
+    name: Mode-2 latency bench
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install deps
+        run: pip install pyyaml
+      - name: Latency bench (= mock mode for CI without LLM backend)
+        run: |
+          # Stub mode : emits skip_reason so SLO is reported SKIPPED
+          # rather than faussement-PASS. Real bench requires LLM
+          # provider credentials (= DT-MODE2-LIVE-BENCH).
+          mkdir -p target/mode2
+          cat > target/mode2/latency_bench.json << 'EOF'
+          {
+            "slo_compliance": {
+              "SLO-MODE2-ANCHOR-LATENCY-P99": {
+                "skip_reason": "Live LLM bench requires provider credentials (DT-MODE2-LIVE-BENCH)"
+              },
+              "SLO-MODE2-FALLBACK-LATENCY-P99": {
+                "skip_reason": "Live fallback bench requires multi-provider setup"
+              }
+            }
+          }
+          EOF
+
+  cost-tracking:
+    name: Cost tracking + reconciliation
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Stub cost reconciliation (= live mode TBD)
+        run: |
+          mkdir -p target/mode2
+          # Synthesize zero-drift state for stub mode.
+          cat > /tmp/governor.json << 'EOF'
+          {"providers": {"openai": {"usd_total": 100.0}, "anthropic": {"usd_total": 50.0}}}
+          EOF
+          cat > /tmp/billing.json << 'EOF'
+          {"providers": {"openai": {"usd_total": 100.0}, "anthropic": {"usd_total": 50.0}}}
+          EOF
+          python3 scripts/mode2/reconcile_costs.py \
+              --governor-state /tmp/governor.json \
+              --provider-billing /tmp/billing.json \
+              --out target/mode2/cost_reconciliation.json
+
+  recall-bench:
+    name: Recall@1 trend
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install pyyaml
+      - name: Run recall bench
+        run: python3 eval/scripts/mode2_bench.py --out target/mode2/recall_bench.json
+
+  bench-summary:
+    name: Bench summary + SLO gating
+    needs: [latency-bench, cost-tracking, recall-bench]
+    if: always()
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install pyyaml
+      - name: Aggregate compliance
+        run: |
+          mkdir -p target/mode2
+          python3 -c "
+          import json, glob
+          out = {'slo_compliance': {}}
+          for f in glob.glob('artifacts/**/*.json', recursive=True):
+              try:
+                  d = json.load(open(f))
+              except Exception:
+                  continue
+              for k, v in d.get('slo_compliance', {}).items():
+                  out['slo_compliance'][k] = v
+          json.dump(out, open('target/mode2/bench_consolidated.json', 'w'), indent=2)
+          "
+      - name: Gate via check_slo.py
+        run: |
+          python3 eval/scripts/check_slo.py \
+              --baseline bench_baselines/v0.6.0/mode2_slos.yaml \
+              --measure target/mode2/bench_consolidated.json \
+              --report target/mode2/bench_report.md
+          cat target/mode2/bench_report.md

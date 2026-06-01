@@ -1,0 +1,82 @@
+# Sprint D24 (Φ-B) — `@efe/sdk` npm publish workflow.
+#
+# Triggered on tags `v*.*.*` (matching @efe/sdk semver).
+# Publishes to the private GitHub Packages registry (Φ-B) ; once GA
+# happens, the same workflow runs `npm publish --access=public` on
+# npmjs.com (gated by the v1.x.x version bump in package.json).
+
+name: sdk-typescript-publish
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+    inputs:
+      access:
+        description: "npm access (restricted=private | public=GA)"
+        required: false
+        default: "restricted"
+
+jobs:
+  publish:
+    name: Publish @efe/sdk
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: clients/typescript/@efe/sdk
+    permissions:
+      contents: read
+      packages: write
+      id-token: write  # for npm provenance attestation
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with: { version: 9.7.0 }
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "pnpm"
+          registry-url: "https://npm.pkg.github.com"
+          scope: "@efe"
+
+      - name: pnpm install
+        run: pnpm install --frozen-lockfile
+
+      - name: Type-check
+        run: pnpm typecheck
+
+      - name: Test
+        run: pnpm test
+
+      - name: Build
+        run: pnpm build
+
+      - name: Bundle size budget
+        run: pnpm bundlesize
+
+      - name: npm publish
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NPM_ACCESS: ${{ github.event.inputs.access || 'restricted' }}
+        run: |
+          if [[ "$NPM_ACCESS" == "public" ]]; then
+            VERSION=$(node -p "require('./package.json').version")
+            if [[ ! "$VERSION" =~ ^1\. ]]; then
+              echo "FATAL: public access requires v1.x.x ; got v$VERSION"
+              exit 5
+            fi
+            npm publish --access=public --provenance
+          else
+            npm publish --access=restricted
+          fi
+
+      - name: Tag verification
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          TAG=${GITHUB_REF#refs/tags/}
+          if [[ "$TAG" != "v$VERSION" ]]; then
+            echo "::error::tag $TAG does not match package.json version $VERSION"
+            exit 1
+          fi

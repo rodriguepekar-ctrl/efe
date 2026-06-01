@@ -1,0 +1,107 @@
+# Sprint Φ-D-OPS (D99) — Nightly OPS workflow.
+#
+# Runs the suite of benches that produce day-old data : chargeback,
+# capacity forecast, postmortem velocity, conformity assessment,
+# trust center freshness. Pushes the master report to the trust
+# center bucket if the gate passes.
+#
+# Cf. `docs/EFE_OPERATIONAL_PRODUCTION_ARCHITECTURE.md` § 12 + § 13.
+
+name: ops-nightly
+
+on:
+  schedule:
+    - cron: "30 4 * * *"   # daily @ 04:30 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  PYTHONUNBUFFERED: "1"
+
+jobs:
+  ops-nightly:
+    name: OPS nightly suite
+    runs-on: ubuntu-22.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+
+      - name: Install deps
+        run: pip install pyyaml
+
+      - name: Chargeback compute (demo dataset)
+        run: |
+          python3 scripts/ops/chargeback_compute.py \
+            --demo \
+            --out target/ops/chargeback.json
+
+      - name: Budget alert bench
+        run: |
+          python3 scripts/ops/budget_alert_check.py \
+            --chargeback target/ops/chargeback.json \
+            || true   # never block nightly on budget alone
+
+      - name: Cost-per-tenant bench
+        run: |
+          python3 scripts/ops/cost_per_tenant_bench.py \
+            --chargeback target/ops/chargeback.json
+
+      - name: Capacity planner (demo dataset)
+        run: |
+          python3 scripts/ops/capacity_planner.py \
+            --demo --weeks 12 \
+            --out target/ops/capacity_forecast.json
+
+      - name: Postmortem velocity
+        run: |
+          python3 scripts/ops/postmortem_velocity_audit.py \
+            --demo
+        continue-on-error: true
+
+      - name: Conformity assessment
+        run: |
+          python3 scripts/ops/conformity_assessment.py
+        continue-on-error: true
+
+      - name: Trust center freshness
+        run: |
+          python3 scripts/ops/trust_center_freshness_audit.py \
+            --max-age-hours 36
+
+      - name: Runbook autolink audit
+        run: |
+          python3 scripts/ops/runbook_auto_link.py
+
+      - name: Tenant FSM audit
+        run: |
+          python3 scripts/ops/tenant_state_machine_audit.py
+
+      - name: Saga onboarding bench
+        run: |
+          python3 scripts/ops/saga_provision_poc.py --samples 100
+
+      - name: Consolidate nightly measures
+        run: |
+          python3 scripts/ops/consolidate_all_slos.py \
+            --baselines bench_baselines/v0.9.0/ops_master_slos.yaml \
+            --master    bench_baselines/v0.9.0/ops_master_slos.yaml \
+            --measures  target/ops/measures.json \
+            --out       target/ops/master_report.md \
+            --out-json  target/ops/master_report.json
+
+      - name: Upload artefacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ops-nightly-${{ github.run_id }}
+          path: target/ops/
+          retention-days: 30
+
+      - name: Hard gate (nightly tolerates DT)
+        run: |
+          python3 scripts/ops/master_gate_check.py \
+            --report target/ops/master_report.json \
+            --tolerate-skip-with-dt

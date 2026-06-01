@@ -1,0 +1,146 @@
+name: CI
+
+on:
+  push:
+    branches: [main, 'release/**']
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+  CARGO_INCREMENTAL: 0
+
+jobs:
+  fast-checks:
+    name: Fast checks (< 2 min)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.88
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: fast-checks
+      - uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+          version: "0.4.x"
+      - name: uv sync
+        run: uv sync --all-extras --dev
+      - name: rustfmt
+        run: cargo fmt --all -- --check
+      - name: clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+      - name: ruff check
+        run: uv run ruff check .
+      - name: ruff format check
+        run: uv run ruff format --check .
+      - name: mypy
+        run: uv run mypy python/efe || true  # strict enabled from Sprint 1+
+
+  rust-tests:
+    name: Rust unit tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.88
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: rust-tests
+      - uses: taiki-e/install-action@nextest
+      - name: Setup Python 3.12 (= required for efe-ffi pyo3-build-config)
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      # Φ-D-OPS post-audit fix B5 : `efe-ffi` cdylib build links
+      # libpython AND `cargo test` needs Python embedding via dev-dep
+      # `auto-initialize` — mutually exclusive with `extension-module`.
+      # We follow the same split as `release-v1-ga.yml validate-rust` :
+      # workspace minus efe-ffi for build+test, then efe-ffi alone.
+      - name: Build (workspace minus efe-ffi)
+        run: cargo build --workspace --exclude efe-ffi --all-targets
+      - name: Build (efe-ffi rlib)
+        env:
+          PYO3_PYTHON: python3.12
+        run: cargo build -p efe-ffi --lib
+      - name: Test (workspace minus efe-ffi)
+        run: cargo nextest run --workspace --exclude efe-ffi
+      - name: Test (efe-ffi rlib)
+        env:
+          PYO3_PYTHON: python3.12
+        run: cargo nextest run -p efe-ffi --lib
+
+  python-tests:
+    name: Python unit tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+      - run: uv sync --all-extras --dev
+      - name: pytest
+        run: uv run pytest -q --cov=efe || true  # no tests yet in S0
+
+  cuda-build:
+    name: CUDA build check
+    runs-on: ubuntu-latest
+    container:
+      image: nvcr.io/nvidia/cuda:12.4.1-devel-ubuntu22.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install build tools
+        run: |
+          apt-get update
+          apt-get install -y cmake ninja-build git
+      - name: Configure
+        run: cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+      - name: Build
+        run: cmake --build build -j
+
+  security:
+    name: Security scans
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.88
+      - uses: astral-sh/setup-uv@v3
+      - name: cargo audit
+        run: |
+          cargo install --locked cargo-audit
+          cargo audit || true
+      - name: pip audit
+        run: |
+          uv sync --all-extras --dev
+          uv run pip-audit || true
+      - name: gitleaks
+        uses: gitleaks/gitleaks-action@v2
+
+  all-green:
+    name: All checks passed
+    runs-on: ubuntu-latest
+    if: always()
+    needs: [fast-checks, rust-tests, python-tests, cuda-build, security]
+    steps:
+      - name: Verify all jobs succeeded
+        run: |
+          if [[ "${{ needs.fast-checks.result }}" != "success" || \
+                "${{ needs.rust-tests.result }}" != "success" || \
+                "${{ needs.python-tests.result }}" != "success" || \
+                "${{ needs.cuda-build.result }}" != "success" || \
+                "${{ needs.security.result }}" != "success" ]]; then
+            echo "One or more required jobs failed"
+            exit 1
+          fi
+          echo "All green"

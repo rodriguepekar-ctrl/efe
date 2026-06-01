@@ -1,0 +1,96 @@
+# Sprint **Φ-D-MODE3 Completion (D74)** — Mode-3 daily audit chain replay.
+
+name: mode3-audit-replay
+
+on:
+  schedule:
+    - cron: "0 11 * * *"   # 11:00 UTC daily
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  PYTHONUNBUFFERED: "1"
+
+jobs:
+  audit-replay-self-test:
+    name: Self-test session chain replay
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - name: Generate synthetic Mode-3 chain
+        run: |
+          mkdir -p target/mode3
+          python3 -c "
+          import hmac, hashlib, json
+          key = bytes.fromhex('00' * 32)
+          CANONICAL = ['schema_version','tenant_id','request_id','timestamp_unix_micros','session_id','turn_index','consent_hash','parent_anchor_hash','refined_anchor_hash','convergence_score','convergence_status','cost_usd_micros','turn_latency_ms','human_review_status','fallback_reason','context_tokens','summarization_applied','prev_hash']
+          # 5 synthetic sessions × 5 turns = 25 attestations
+          out = []
+          for sid_idx in range(5):
+              sid = f'session-test-{sid_idx:03d}'
+              prev = '00' * 32
+              for t in range(5):
+                  att = {
+                      'schema_version': 1, 'tenant_id': 'tenant-test',
+                      'request_id': f'req-{sid_idx}-{t}',
+                      'timestamp_unix_micros': 1700000000 + sid_idx*1000 + t,
+                      'session_id': sid, 'turn_index': t,
+                      'consent_hash': 'a' * 64,
+                      'parent_anchor_hash': 'b' * 64 if t == 0 else hashlib.sha256(f'{sid}-{t-1}'.encode()).hexdigest(),
+                      'refined_anchor_hash': hashlib.sha256(f'{sid}-{t}'.encode()).hexdigest(),
+                      'convergence_score': 0.95 + t * 0.005,
+                      'convergence_status': 'STILL_EVOLVING' if t < 2 else 'CONVERGED',
+                      'cost_usd_micros': 15000 - t * 1000,
+                      'turn_latency_ms': 25000,
+                      'human_review_status': 'REVIEW_NONE',
+                      'fallback_reason': '',
+                      'context_tokens': 1000 + t * 500,
+                      'summarization_applied': False,
+                      'prev_hash': prev,
+                  }
+                  canon = {k: att[k] for k in CANONICAL}
+                  data = json.dumps(canon, sort_keys=True, separators=(',', ':')).encode()
+                  h = hmac.new(key, data, hashlib.sha256).hexdigest()
+                  att['hmac_sha256'] = h
+                  out.append(att)
+                  prev = h
+          with open('/tmp/test_chain.jsonl', 'w') as f:
+              for a in out:
+                  f.write(json.dumps(a) + chr(10))
+          print(f'wrote 25 attestations across 5 sessions')
+          "
+      - name: Replay the synthetic chain
+        run: |
+          python3 scripts/mode3/replay_session_chain.py \
+              --chain-file /tmp/test_chain.jsonl \
+              --hmac-key-hex 0000000000000000000000000000000000000000000000000000000000000000 \
+              --out target/mode3/audit_replay.json
+      - name: Verify SLO compliance
+        run: |
+          python3 -c "
+          import json
+          d = json.load(open('target/mode3/audit_replay.json'))
+          slo = d['slo_compliance']['SLO-MODE3-AUDIT-CHAIN-INTEGRITY']
+          assert slo['measured_pass_count'] == 1, f'integrity failed: {slo}'
+          assert slo['sessions_audited'] == 5
+          print('self-test audit replay : PASS')
+          "
+      - name: Gate via check_slo.py
+        run: |
+          python3 eval/scripts/check_slo.py \
+              --baseline bench_baselines/v0.6.0/mode3_slos.yaml \
+              --measure target/mode3/audit_replay.json \
+              --report target/mode3/audit_report.md
+          cat target/mode3/audit_report.md
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mode3-audit-replay
+          path: |
+            target/mode3/audit_replay.json
+            target/mode3/audit_report.md

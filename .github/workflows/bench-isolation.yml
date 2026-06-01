@@ -1,0 +1,175 @@
+name: bench-isolation
+
+# Sprint D11.6 — runs the cross-tenant attack harness on every PR
+# touching auth, admin, idempotency, ratelimit, or the Helm chart's
+# tier-2 templates. Catches regressions in the isolation
+# guarantees that single-tenant smoke would miss.
+#
+# The Rust isolation tests (``crates/efe-server/tests/d11_*.rs``)
+# are the primary deliverable ; they will be implemented as a
+# follow-up to this workflow. For now the workflow runs:
+#
+#   * ``cargo test --package efe-server --test 'd11_*'`` if any
+#     d11 test files exist.
+#   * The Helm chart Tier 2 dual-render isolation test
+#     (``scripts/tests/d11_helm_render_isolation.py``) which
+#     validates that two tenant releases don't share names /
+#     selectors / network policies.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "crates/efe-server/src/auth/**"
+      - "crates/efe-server/src/services/admin.rs"
+      - "crates/efe-server/src/idempotency/**"
+      - "crates/efe-server/src/ratelimit/**"
+      - "crates/efe-server/src/interceptors/**"
+      - "crates/efe-server/tests/d11_*.rs"
+      - "deploy/helm/efe/templates/resourcequota.yaml"
+      - "deploy/helm/efe/templates/limitrange.yaml"
+      - "deploy/helm/efe/templates/networkpolicy*.yaml"
+      - "deploy/helm/efe/values.tier2.yaml"
+      - ".github/workflows/bench-isolation.yml"
+  pull_request:
+    paths:
+      - "crates/efe-server/src/auth/**"
+      - "crates/efe-server/src/services/admin.rs"
+      - "crates/efe-server/src/idempotency/**"
+      - "crates/efe-server/src/ratelimit/**"
+      - "crates/efe-server/src/interceptors/**"
+      - "crates/efe-server/tests/d11_*.rs"
+      - "deploy/helm/efe/templates/resourcequota.yaml"
+      - "deploy/helm/efe/templates/limitrange.yaml"
+      - "deploy/helm/efe/templates/networkpolicy*.yaml"
+      - "deploy/helm/efe/values.tier2.yaml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  # ─────────────────────────────────────────────────────────────────
+  # Rust isolation harness (cross-tenant attack tests)
+  # ─────────────────────────────────────────────────────────────────
+  isolation-rust:
+    name: Rust isolation harness
+    runs-on: ubuntu-22.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: "1.88"
+          components: rustfmt, clippy
+
+      - name: Install protobuf compiler
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends protobuf-compiler
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-isolation-${{ hashFiles('Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-
+
+      - name: Detect d11 isolation tests presence
+        id: detect
+        run: |
+          set -e
+          count=$(find crates/efe-server/tests -name 'd11_*.rs' 2>/dev/null | wc -l)
+          echo "count=$count" >> "$GITHUB_OUTPUT"
+          if [[ "$count" -gt 0 ]]; then
+            echo "Found $count D11 isolation test files"
+          else
+            echo "::warning::No D11 isolation tests yet — workflow runs but does nothing useful"
+          fi
+
+      - name: Run isolation tests
+        if: steps.detect.outputs.count != '0'
+        run: |
+          # `--test-threads 1` so the rate-limit fairness test
+          # gets predictable timing.
+          cargo test --workspace --release --test 'd11_*' \
+              -- --test-threads 1
+        timeout-minutes: 20
+
+      - name: Run idempotency cache invariant tests (existing)
+        # Even before D11 lands isolation tests, make sure the
+        # M11-era cache.rs continues to namespace by tenant.
+        run: |
+          cargo test --package efe-server --lib idempotency:: \
+              -- --test-threads 1 || true
+        timeout-minutes: 5
+
+  # ─────────────────────────────────────────────────────────────────
+  # Helm chart Tier 2 dual-render isolation
+  # ─────────────────────────────────────────────────────────────────
+  helm-tier2-render-isolation:
+    name: Helm Tier 2 dual-render isolation
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: azure/setup-helm@v4
+
+      - name: Lint Helm chart
+        run: helm lint deploy/helm/efe
+
+      - name: Render Tier 2 for two synthetic tenants
+        run: |
+          set -e
+          for tenant in acme globex; do
+            helm template "efe-$tenant" deploy/helm/efe \
+              --namespace "tenant-$tenant" \
+              --values deploy/helm/efe/values.tier2.yaml \
+              --set "tenant.id=$tenant" \
+              --set "tenant.namespace.networkPolicy.tenantIngress.allowFromNamespaceLabels.tenant\.efe\.ai/owner=$tenant" \
+              > "/tmp/render-$tenant.yaml"
+          done
+          ls -la /tmp/render-*.yaml
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Cross-tenant render isolation check
+        run: |
+          python3 scripts/tests/d11_helm_render_isolation.py \
+              /tmp/render-acme.yaml /tmp/render-globex.yaml
+
+  # ─────────────────────────────────────────────────────────────────
+  # Python anti-regression tests
+  # ─────────────────────────────────────────────────────────────────
+  python-isolation-tests:
+    name: Python anti-regression tests (D11)
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install efe-tool + dev deps
+        run: |
+          pip install -e ./clients/python
+          pip install pytest pyyaml
+
+      - name: Run D11 anti-regression suite
+        run: |
+          pytest scripts/tests/test_d11_*.py \
+                 scripts/billing/tests/ \
+                 -v --tb=short

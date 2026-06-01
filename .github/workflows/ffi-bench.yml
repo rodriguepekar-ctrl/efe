@@ -1,0 +1,251 @@
+# Sprint **Φ-C-FFI Completion (D28)** — FFI nightly bench + tag gating.
+#
+# Cf. `docs/EFE_PYO3_FFI_COMPLETION_ARCHITECTURE.md` § 16 entry #23.
+#
+# ## Schedule
+#
+#   * **Nightly** at 03:00 UTC : run Criterion + pytest-benchmark
+#     suite, emit SLO compliance JSONs, gate via `check_slo.py`.
+#   * **Tag-trigger** : on `v*.*.*` push, same flow + publish bench
+#     artifacts to GitHub Releases.
+#   * **workflow_dispatch** : manual trigger pour investigation.
+#
+# ## SLO gated
+#
+#   * SLO-FFI-LATENCY-P99 (= p99 ≤ 40 ms)
+#   * SLO-FFI-SPEEDUP (= ≥ 5× vs gRPC ; skipped si efe_tool absent)
+#   * SLO-FFI-COLD-START (= p95 ≤ 100 ms)
+#   * SLO-FFI-MEMORY-DRIFT (= ≤ 5 %)
+#   * SLO-FFI-GIL-RELEASED (= 4-thread speedup ≥ 3×)
+#
+# ## Time budget
+#
+# Bench complet ≈ 30 min sur ubuntu-22.04 (= Criterion 10 min +
+# pytest 20 min). Le timeout-minutes set à 60 laisse marge.
+
+name: ffi-bench
+
+on:
+  schedule:
+    - cron: "0 3 * * *"  # 03:00 UTC nightly
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Optional tag label for the report (default: nightly-YYYY-MM-DD)"
+        required: false
+        default: ""
+
+env:
+  CARGO_TERM_COLOR: always
+  PYTHONUNBUFFERED: "1"
+
+jobs:
+  # ──────────────────────────────────────────────────────────────────
+  # Criterion bench Rust-side (= overhead pur sans Python interpreter).
+  # Cf. `crates/efe-ffi/benches/ffi_overhead.rs`.
+  # ──────────────────────────────────────────────────────────────────
+  criterion-rust:
+    name: Criterion bench (Rust-side overhead)
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Rust 1.88
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: "1.88"
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: "crates/efe-ffi -> target"
+
+      - name: Setup Python (= required for embedded interpreter tests
+                that bench harness compiles alongside)
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Run criterion bench
+        run: |
+          cargo bench -p efe-ffi --bench ffi_overhead -- --save-baseline ci
+
+      - name: Bridge Criterion → SLO JSON
+        run: |
+          python scripts/bench/criterion_ffi_to_slo.py \
+              --criterion target/criterion \
+              --out target/ffi/native_vs_grpc.json \
+              --bench end_to_end_stub_no_python
+          cat target/ffi/native_vs_grpc.json
+
+      - name: Gate via check_slo.py — LATENCY-P99 informational
+        # **Φ-C-FFI audit fix A1** : check_slo.py accepte exactement
+        # 1 --measure (= pas N --measure cumulés ; pas de --slo filter).
+        # Le bench Criterion seul ne couvre que LATENCY-P99 ; le full
+        # gate avec les 15 SLO se fait dans le job pytest-bench où
+        # les compliance JSONs sont mergés en un seul.
+        run: |
+          pip install pyyaml
+          python eval/scripts/check_slo.py \
+              --baseline bench_baselines/v0.6.0/ffi_slos.yaml \
+              --measure target/ffi/native_vs_grpc.json \
+              || echo "::warning::FFI Criterion-only gating (15-SLO full gate is in pytest-bench job)"
+
+      - name: Upload Criterion artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ffi-criterion-report
+          path: |
+            target/criterion/**
+            target/ffi/native_vs_grpc.json
+          retention-days: 30
+
+  # ──────────────────────────────────────────────────────────────────
+  # Python-side bench : cold start + memory + determinism + GIL.
+  # Le bench native_vs_grpc.py est skip si efe_tool n'est pas install.
+  # ──────────────────────────────────────────────────────────────────
+  pytest-bench:
+    name: pytest bench (Python-side)
+    runs-on: ubuntu-22.04
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.10", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python ${{ matrix.python }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+
+      - name: Setup Rust 1.88
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: "1.88"
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: "crates/efe-ffi -> target"
+
+      - name: Install Python deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install "maturin>=1.7,<2.0" pytest pytest-asyncio pytest-benchmark numpy psutil pyyaml
+
+      - name: maturin develop --release
+        working-directory: crates/efe-ffi
+        # `--features extension-module` is REQUIRED because Φ-D-OPS
+        # audit made `extension-module` opt-in. Cf.
+        # `crates/efe-ffi/Cargo.toml` [features] doctrine.
+        run: maturin develop --release --features extension-module
+
+      - name: Cold start bench (SLO-FFI-COLD-START)
+        working-directory: crates/efe-ffi
+        run: |
+          python -m pytest python/efe/tests/test_cold_start.py -v -m bench
+        continue-on-error: false
+
+      - name: Memory leak bench (SLO-FFI-MEMORY-DRIFT)
+        working-directory: crates/efe-ffi
+        run: |
+          python -m pytest python/efe/tests/test_memory_leak.py -v -m bench
+
+      - name: GIL release proxy bench (SLO-FFI-GIL-RELEASED)
+        working-directory: crates/efe-ffi
+        run: |
+          python -m pytest python/efe/tests/test_gil_release.py::test_gil_released_4thread_speedup_proxy -v
+
+      - name: Determinism strict bench (SLO-FFI-DETERMINISM)
+        working-directory: crates/efe-ffi
+        run: |
+          python -m pytest python/efe/tests/test_determinism_strict.py -v
+
+      - name: Native vs gRPC bench (SLO-FFI-LATENCY-P99 / SLO-FFI-SPEEDUP)
+        working-directory: crates/efe-ffi
+        run: |
+          python -m pytest python/efe/tests/bench/native_vs_grpc.py -v -m bench
+        continue-on-error: true  # gRPC skip si efe_tool absent
+
+      - name: Aggregate SLO compliance JSONs
+        working-directory: crates/efe-ffi
+        run: |
+          mkdir -p ../../target/ffi
+          # Le test path est `crates/efe-ffi/python/efe/tests/`
+          # (= pytest cwd) qui produit `target/ffi/*.json`
+          # **relatif au cwd du test** = `crates/efe-ffi/target/ffi/`.
+          # On consolide tout dans `<repo>/target/ffi/`.
+          cp -f target/ffi/*.json ../../target/ffi/ 2>/dev/null || true
+          ls -la ../../target/ffi/
+
+      - name: Merge per-test compliance JSONs into one consolidated file
+        # **Φ-C-FFI audit fix A1** : check_slo.py n'accepte qu'un
+        # seul --measure. On merge les `slo_compliance` dicts en
+        # un seul JSON consolidé avant le gating.
+        run: |
+          python -c "
+          import json, glob, sys
+          out = {'slo_compliance': {}}
+          for f in sorted(glob.glob('target/ffi/*.json')):
+              if f.endswith('consolidated.json') or f.endswith('compliance_report.json'):
+                  continue
+              try:
+                  d = json.load(open(f))
+              except Exception as e:
+                  sys.stderr.write(f'WARN skip {f}: {e}\n')
+                  continue
+              for k, v in d.get('slo_compliance', {}).items():
+                  out['slo_compliance'][k] = v
+          json.dump(out, open('target/ffi/consolidated.json', 'w'), indent=2)
+          print(f'merged {len(out[\"slo_compliance\"])} SLOs')
+          "
+
+      - name: Gate via check_slo.py — all FFI SLOs
+        run: |
+          python eval/scripts/check_slo.py \
+              --baseline bench_baselines/v0.6.0/ffi_slos.yaml \
+              --measure target/ffi/consolidated.json \
+              --report target/ffi/compliance_report.md \
+              || (
+                echo "::error::FFI SLO compliance check failed"
+                cat target/ffi/compliance_report.md || true
+                exit 1
+              )
+
+      - name: Upload pytest bench artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ffi-pytest-bench-py${{ matrix.python }}
+          path: |
+            target/ffi/*.json
+            crates/efe-ffi/target/ffi/*.json
+          retention-days: 30
+
+  # ──────────────────────────────────────────────────────────────────
+  # Summary job — Slack notification on regression.
+  # ──────────────────────────────────────────────────────────────────
+  summary:
+    name: Bench summary
+    needs:
+      - criterion-rust
+      - pytest-bench
+    runs-on: ubuntu-22.04
+    if: always()
+    timeout-minutes: 5
+    steps:
+      - name: Aggregate status
+        run: |
+          echo "criterion-rust : ${{ needs.criterion-rust.result }}"
+          echo "pytest-bench   : ${{ needs.pytest-bench.result }}"
+          if [ "${{ needs.criterion-rust.result }}" != "success" ] || \
+             [ "${{ needs.pytest-bench.result }}" != "success" ]; then
+            echo "::error::Φ-C-FFI bench suite REGRESSED — investigate via docs/runbook/ffi_perf_regression.md"
+            exit 1
+          fi
+          echo "Φ-C-FFI bench suite : ALL GREEN"

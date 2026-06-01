@@ -1,0 +1,108 @@
+# PR #21 § 14.2 — bench-full : 10 scenarios, nightly cron.
+
+name: bench-full
+
+on:
+  schedule:
+    - cron: '0 3 * * *'   # 03:00 UTC nightly
+  workflow_dispatch:
+    inputs:
+      scenarios:
+        description: "Comma-separated scenario IDs (default: all)"
+        required: false
+        default: ""
+
+concurrency:
+  group: bench-full
+  cancel-in-progress: false
+
+jobs:
+  bench-full:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 360       # 6 h cap for the full suite
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+
+      - name: protoc
+        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
+
+      - uses: helm/kind-action@v1
+        with:
+          cluster_name: bench-full
+          version: 'v0.24.0'
+
+      # PR #21 § 14 — G1/G2 closure (see bench-quick.yml).
+      - name: Install efe-meta-swarm chart
+        run: |
+          set -eo pipefail
+          helm repo add efe https://efe.github.io/charts || true
+          helm repo update
+          helm install efe-meta-swarm efe/efe-meta-swarm \
+              --namespace efe --create-namespace \
+              --set serviceMonitor.enabled=false \
+              --wait --timeout 5m
+          kubectl wait --for=condition=ready pod \
+              -l app.kubernetes.io/name=efe-meta-swarm-controller \
+              -n efe --timeout=180s
+
+      - name: Port-forward controller
+        run: |
+          set -eo pipefail
+          kubectl port-forward -n efe svc/efe-meta-swarm-controller \
+              50051:50051 > /tmp/pf.log 2>&1 &
+          echo $! > /tmp/pf.pid
+          for i in $(seq 1 30) ; do
+            nc -zv localhost 50051 2>/dev/null && exit 0
+            sleep 1
+          done
+          echo "port-forward did not come up in 30s — log:"
+          cat /tmp/pf.log
+          exit 1
+
+      - name: Build harness
+        run: cargo build --release -p efe-bench-harness
+
+      - name: Run bench-full
+        run: |
+          set -o pipefail
+          ARGS=(run --provisioner external \
+              --kubeconfig "$HOME/.kube/config" \
+              --target-override grpc://localhost:50051 \
+              --pr-comment-file /tmp/pr-comment.md \
+              --verdict-json-file /tmp/verdict.json)
+          if [[ -z "${{ github.event.inputs.scenarios }}" ]] ; then
+            ARGS+=(--all)
+          else
+            IFS=',' read -ra IDS <<< "${{ github.event.inputs.scenarios }}"
+            for id in "${IDS[@]}" ; do
+              ARGS+=(--scenario "$id")
+            done
+          fi
+          ./target/release/efe-bench-harness "${ARGS[@]}"
+
+      - name: Stop port-forward
+        if: always()
+        run: |
+          [ -f /tmp/pf.pid ] && kill "$(cat /tmp/pf.pid)" || true
+
+      - name: Upload artefacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bench-full-results-${{ github.run_id }}
+          path: |
+            bench/results/
+            /tmp/pr-comment.md
+            /tmp/verdict.json
+          retention-days: 30
+
+      - name: Open PR with nightly summary
+        if: always() && github.ref == 'refs/heads/main'
+        uses: peter-evans/create-pull-request@v6
+        with:
+          commit-message: "chore(bench): nightly results ${{ github.run_id }}"
+          branch: bench-nightly/${{ github.run_id }}
+          title: "Bench nightly results — ${{ github.run_id }}"
+          body-path: /tmp/pr-comment.md

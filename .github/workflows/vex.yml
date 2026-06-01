@@ -1,0 +1,61 @@
+name: Weekly VEX (Vulnerability Exploitability eXchange)
+
+on:
+  schedule:
+    - cron: "17 4 * * 1"  # Mondays at 04:17 UTC
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+  id-token: write
+
+jobs:
+  vex:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.88
+
+      - name: cargo-audit
+        run: |
+          cargo install --locked cargo-audit
+          cargo audit --json > cargo-audit.json || true
+
+      - name: pip-audit
+        if: hashFiles('python/efe/pyproject.toml') != ''
+        run: |
+          pip install pip-audit
+          pip-audit --format=json -o pip-audit.json || true
+
+      - name: govulncheck
+        if: hashFiles('cmd/vsock-relayer/go.mod') != ''
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          ( cd cmd/vsock-relayer && govulncheck -json ./... ) > go-audit.json || true
+
+      - name: Build OpenVEX document
+        id: build_vex
+        run: |
+          # Compose a single VEX file ; engineering manually updates
+          # the `status` field per CVE before this gets signed. The
+          # workflow's job is to produce the candidate file ; final
+          # statuses land via PR review.
+          python3 scripts/m29/build_vex.py \
+            --rust cargo-audit.json \
+            --python pip-audit.json \
+            --go go-audit.json \
+            --version "${{ github.sha }}" \
+            > vex-candidate.json
+
+      - name: Open / update PR with VEX candidate
+        uses: peter-evans/create-pull-request@v6
+        with:
+          commit-message: "vex: weekly candidate refresh"
+          title: "[M29] VEX candidate weekly refresh"
+          body: |
+            Automated VEX (OpenVEX) candidate produced from cargo-audit
+            + pip-audit + govulncheck. Engineering must review each CVE
+            and set `status` (not_affected | affected | fixed |
+            under_investigation) before merging.
+          branch: vex-weekly-refresh
+          add-paths: vex-candidate.json

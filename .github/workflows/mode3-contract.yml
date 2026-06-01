@@ -1,0 +1,152 @@
+# Sprint **Φ-D-MODE3 Completion (D74)** — Mode-3 contract test workflow.
+#
+# Cf. docs/EFE_MODE3_MULTI_TURN_COMPLETION_ARCHITECTURE.md § 16 + artefact #39.
+#
+# Triggers : PR + nightly + workflow_dispatch.
+# Gates : structural pin tests, recall delta, convergence, JSON schema,
+# consent log, isolation, fallback, context window, max turns, replay.
+
+name: mode3-contract
+
+on:
+  pull_request:
+    paths:
+      - "crates/efe-server/src/mode3/**"
+      - "crates/efe-server/src/audit/mode3*"
+      - "eval/mode3/**"
+      - "scripts/mode3/**"
+      - "scripts/tests/test_mode3_completion.py"
+      - "schemas/mode3_*.json"
+      - "bench_baselines/v0.6.0/mode3_*.yaml"
+      - ".github/workflows/mode3-contract.yml"
+  schedule:
+    - cron: "0 9 * * *"   # 09:00 UTC nightly
+  workflow_dispatch:
+
+env:
+  PYTHONUNBUFFERED: "1"
+
+jobs:
+  pin-tests:
+    name: Structural pin tests
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - run: pip install pytest pyyaml
+      - name: Run Mode-3 pin tests
+        run: pytest scripts/tests/test_mode3_completion.py -v --tb=short
+
+  convergence-bench:
+    name: Convergence ≥ 90 %
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - run: pip install pyyaml
+      - name: Convergence bench
+        run: python3 eval/scripts/mode3_convergence_bench.py --out target/mode3/convergence_bench.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mode3-convergence-bench
+          path: target/mode3/convergence_bench.json
+
+  recall-bench:
+    name: Recall delta vs Mode-2 ≥ +5 %
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - run: pip install pyyaml
+      - name: Recall bench
+        run: python3 eval/scripts/mode3_recall_bench.py --out target/mode3/recall_bench.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mode3-recall-bench
+          path: target/mode3/recall_bench.json
+
+  cosine-test:
+    name: Convergence cosine doctrine
+    runs-on: ubuntu-22.04
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - name: Cosine threshold test
+        run: python3 eval/scripts/mode3_convergence_cosine_test.py
+
+  schema-validation:
+    name: Session state JSON schema valid
+    runs-on: ubuntu-22.04
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - run: pip install jsonschema
+      - name: Validate session_state schema
+        run: |
+          python3 -c "
+          import json, jsonschema
+          s = json.load(open('schemas/mode3_session_state.json'))
+          jsonschema.Draft202012Validator.check_schema(s)
+          # Sanity sample.
+          sample = {
+              'schema_version': 1,
+              'session_id': '00000000-0000-0000-0000-000000000000',
+              'tenant_id': 'tenant-test',
+              'consent': {'consent_hash': 'a'*64, 'consent_version': 'v1.0', 'timestamp_unix_micros': 1700000000000000},
+              'turns': []
+          }
+          jsonschema.validate(sample, s)
+          print('schema valid + sample OK')
+          "
+
+  consolidated:
+    name: SLO consolidated gating
+    needs: [pin-tests, convergence-bench, recall-bench, cosine-test, schema-validation]
+    if: always()
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with: {path: artifacts}
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - run: pip install pyyaml
+      - name: Merge compliance JSONs
+        run: |
+          mkdir -p target/mode3
+          python3 -c "
+          import json, glob
+          out = {'slo_compliance': {}}
+          for f in glob.glob('artifacts/**/*.json', recursive=True):
+              try:
+                  d = json.load(open(f))
+              except Exception: continue
+              for k, v in d.get('slo_compliance', {}).items():
+                  out['slo_compliance'][k] = v
+          json.dump(out, open('target/mode3/consolidated.json', 'w'), indent=2)
+          print(f'merged {len(out[\"slo_compliance\"])} SLOs')
+          "
+      - name: Gate via check_slo.py
+        run: |
+          python3 eval/scripts/check_slo.py \
+              --baseline bench_baselines/v0.6.0/mode3_slos.yaml \
+              --measure target/mode3/consolidated.json \
+              --report target/mode3/contract_report.md
+          cat target/mode3/contract_report.md
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mode3-contract-compliance
+          path: |
+            target/mode3/*.json
+            target/mode3/*.md

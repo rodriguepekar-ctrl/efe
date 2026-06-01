@@ -1,0 +1,122 @@
+# Sprint **Φ-D-STREAM Completion (D84)** — Streaming RPC nightly bench.
+#
+# Cf. docs/EFE_STREAMING_RPC_COMPLETION_ARCHITECTURE.md § 16 + artefact #39.
+#
+# Bench : cancel, idle, chunk latency, emit EPS, backpressure, close reasons.
+
+name: stream-bench
+
+on:
+  schedule:
+    - cron: "0 17 * * *"   # 17:00 UTC nightly
+  push:
+    tags: ["v*.*.*"]
+  workflow_dispatch:
+
+env:
+  PYTHONUNBUFFERED: "1"
+
+jobs:
+  cancel-bench:
+    name: Cancel cleanup ≤ 1s p99
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - run: python3 eval/scripts/stream_cancellation_bench.py --mode synth_pass --out target/streaming/cancel.json
+      - uses: actions/upload-artifact@v4
+        with: {name: stream-cancel, path: target/streaming/cancel.json}
+
+  idle-bench:
+    name: Idle close ≤ 30s
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - run: python3 eval/scripts/stream_idle_bench.py --mode synth_pass --out target/streaming/idle.json
+      - uses: actions/upload-artifact@v4
+        with: {name: stream-idle, path: target/streaming/idle.json}
+
+  chunk-latency:
+    name: Inter-chunk latency p99 ≤ 50ms
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - run: python3 eval/scripts/stream_chunk_latency_bench.py --mode synth_pass --out target/streaming/chunk_latency.json
+      - uses: actions/upload-artifact@v4
+        with: {name: stream-chunk-latency, path: target/streaming/chunk_latency.json}
+
+  audit-emit-eps:
+    name: Audit emit ≥ 1000 EPS
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - run: python3 eval/scripts/stream_audit_emit_bench.py --mode synth_pass --out target/streaming/audit_emit_eps.json
+      - uses: actions/upload-artifact@v4
+        with: {name: stream-audit-emit-eps, path: target/streaming/audit_emit_eps.json}
+
+  backpressure:
+    name: Backpressure (slow consumer ≤ 128 MB/h growth)
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - run: python3 eval/scripts/stream_backpressure_bench.py --mode synth_pass --out target/streaming/backpressure.json
+      - uses: actions/upload-artifact@v4
+        with: {name: stream-backpressure, path: target/streaming/backpressure.json}
+
+  close-reasons:
+    name: 5 close reasons reachable
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - run: python3 eval/scripts/stream_close_reasons_bench.py --mode synth_pass --out target/streaming/close_reasons.json
+      - uses: actions/upload-artifact@v4
+        with: {name: stream-close-reasons, path: target/streaming/close_reasons.json}
+
+  summary:
+    name: Bench summary + SLO gating
+    needs: [cancel-bench, idle-bench, chunk-latency, audit-emit-eps, backpressure, close-reasons]
+    if: always()
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with: {path: artifacts}
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - run: pip install pyyaml
+      - name: Merge + gate
+        run: |
+          mkdir -p target/streaming
+          python3 -c "
+          import json, glob
+          out = {'slo_compliance': {}}
+          for f in glob.glob('artifacts/**/*.json', recursive=True):
+              try: d = json.load(open(f))
+              except Exception: continue
+              for k, v in d.get('slo_compliance', {}).items():
+                  out['slo_compliance'][k] = v
+          json.dump(out, open('target/streaming/bench_consolidated.json', 'w'), indent=2)
+          "
+          python3 eval/scripts/check_slo.py \
+              --baseline bench_baselines/v0.7.0/stream_slos.yaml \
+              --measure target/streaming/bench_consolidated.json \
+              --report target/streaming/bench_report.md
+          cat target/streaming/bench_report.md

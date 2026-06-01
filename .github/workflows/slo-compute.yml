@@ -1,0 +1,57 @@
+# PR #22 § 17 — slo-compute : hourly T1 rollup against the live
+# production Prometheus.  Writes the daily Parquet to S3 (or PVC).
+
+name: slo-compute
+
+on:
+  schedule:
+    - cron: "0 * * * *"        # every hour
+  workflow_dispatch:
+    inputs:
+      window:
+        description: "Window (e.g. 1h)"
+        required: false
+        default: "1h"
+      chart_version:
+        description: "Chart version under measurement"
+        required: true
+
+concurrency:
+  group: slo-compute
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write   # for AWS OIDC
+
+jobs:
+  compute:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Build
+        run: cargo build --release -p efe-slo-rollup
+
+      - name: AWS OIDC (optional S3 backend)
+        if: ${{ vars.SLO_S3_BUCKET != '' }}
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.SLO_AWS_ROLE_ARN }}
+          aws-region: ${{ vars.SLO_AWS_REGION }}
+
+      - name: Run T1
+        env:
+          EFE_PROM_URL: ${{ secrets.EFE_PROM_URL }}
+          EFE_CHART_VERSION: ${{ github.event.inputs.chart_version || vars.SLO_CHART_VERSION }}
+        run: |
+          set -eo pipefail
+          ./target/release/efe-slo-rollup compute \
+              --window "${{ github.event.inputs.window || '1h' }}" \
+              --offset 1h \
+              --chart-version "$EFE_CHART_VERSION" \
+              --region "${{ vars.SLO_REGION || 'global' }}" \
+              --storage-root ./slos

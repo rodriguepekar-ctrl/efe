@@ -1,0 +1,220 @@
+name: bench-load
+
+# Sprint D9.6 — runs the ghz load test harness against an in-CI
+# instance of efe-server, evaluates the four D9-LOAD-* SLOs, and
+# uploads the bench-format JSON for the aggregator to ingest.
+#
+# Two trigger modes:
+#   * push to main / PR → smoke + sustained scenarios only (~7 min)
+#   * workflow_dispatch  → operator can run any scenario subset
+#
+# The job is `continue-on-error: true` for the first 3 main runs
+# post-D9 merge ; flip to `false` once the SLO baselines are stable.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "bench/load/**"
+      - "Cargo.lock"
+      - "Cargo.toml"
+      - "crates/**"
+      - ".github/workflows/bench-load.yml"
+  pull_request:
+    paths:
+      - "bench/load/**"
+      - "Cargo.lock"
+      - "crates/efe-server/**"
+      - "crates/efe-core/**"
+  workflow_dispatch:
+    inputs:
+      scenario:
+        description: "Scenario subset (smoke|sustained|stress|spike|all)"
+        required: true
+        default: "all"
+
+env:
+  CARGO_TERM_COLOR: always
+  GHZ_VERSION: "0.117.0"
+
+permissions:
+  contents: read
+
+jobs:
+  bench-load:
+    name: ghz load test (${{ github.event_name == 'workflow_dispatch' && inputs.scenario || 'smoke+sustained' }})
+    runs-on: ubuntu-22.04
+    timeout-minutes: 25
+    # Bench-load is INFORMATIONAL until the post-merge baseline is
+    # frozen. Flip to `false` after 3 consecutive main runs PASS.
+    continue-on-error: true
+
+    steps:
+      # -----------------------------------------------------------
+      # Source + toolchain
+      # -----------------------------------------------------------
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: "1.88"
+          components: rustfmt, clippy
+
+      - name: Install protobuf compiler
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends protobuf-compiler
+
+      # -----------------------------------------------------------
+      # Install ghz
+      # -----------------------------------------------------------
+      - name: Install ghz
+        run: |
+          set -Eeuo pipefail
+          curl -fsSL \
+            "https://github.com/bojand/ghz/releases/download/v${GHZ_VERSION}/ghz-linux-x86_64.tar.gz" \
+            -o /tmp/ghz.tar.gz
+          # ghz tarballs have varied across releases — sometimes the
+          # binary is at root, sometimes inside a subdir. Locate the
+          # binary by name to be robust against either layout
+          # (audit fix W1).
+          mkdir -p /tmp/ghz-extracted
+          tar -xzf /tmp/ghz.tar.gz -C /tmp/ghz-extracted
+          ghz_bin="$(find /tmp/ghz-extracted -type f -name ghz | head -1)"
+          if [[ -z "$ghz_bin" ]]; then
+            echo "::error::no 'ghz' binary found inside the tarball; contents:" >&2
+            find /tmp/ghz-extracted -type f >&2
+            exit 1
+          fi
+          chmod +x "$ghz_bin"
+          sudo mv "$ghz_bin" /usr/local/bin/ghz
+          ghz --version
+
+      # -----------------------------------------------------------
+      # Build efe-server (release)
+      # -----------------------------------------------------------
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-
+
+      - name: Build efe-server (release)
+        run: cargo build --release --locked --bin efe-server
+
+      # -----------------------------------------------------------
+      # Start server in background — D9.A2 amendment: disable the
+      # idempotency cache so the load test measures real compute,
+      # not the LRU.
+      # -----------------------------------------------------------
+      - name: Start efe-server
+        run: |
+          mkdir -p target/load
+          EFE_LISTEN_ADDR=127.0.0.1:50051 \
+          EFE_METRICS_ADDR=127.0.0.1:9090 \
+          EFE_AUTH_ENABLED=false \
+          EFE_IDEMPOTENCY_TTL_MS=0 \
+          RUST_LOG="info,efe=info" \
+            ./target/release/efe-server > target/load/server.log 2>&1 &
+          echo $! > target/load/server.pid
+
+      - name: Wait for server bind
+        run: |
+          set -Eeuo pipefail
+          for _ in $(seq 1 60); do
+            if nc -z 127.0.0.1 50051 ; then break ; fi
+            sleep 1
+          done
+          # If still not bound, dump the log and fail.
+          if ! nc -z 127.0.0.1 50051 ; then
+            echo "::error::efe-server did not bind on 50051"
+            cat target/load/server.log
+            exit 1
+          fi
+
+      # -----------------------------------------------------------
+      # Run the scenarios
+      # -----------------------------------------------------------
+      - name: Run load test
+        id: run
+        run: |
+          set +e
+          scenario="${{ github.event_name == 'workflow_dispatch' && inputs.scenario || '' }}"
+          if [[ -z "$scenario" ]]; then
+            # PR / push : keep CI cost bounded → smoke + sustained only.
+            bash bench/load/run_load_test.sh smoke \
+              --endpoint 127.0.0.1:50051 \
+              --output-dir target/load \
+              --keep-going
+            bash bench/load/run_load_test.sh sustained \
+              --endpoint 127.0.0.1:50051 \
+              --output-dir target/load \
+              --keep-going
+            rc=$?
+          else
+            bash bench/load/run_load_test.sh "$scenario" \
+              --endpoint 127.0.0.1:50051 \
+              --output-dir target/load \
+              --keep-going
+            rc=$?
+          fi
+          echo "rc=$rc" >> "$GITHUB_OUTPUT"
+          # Always succeed at this step — the SLO compliance is
+          # checked downstream via the aggregator (which gates).
+          exit 0
+
+      - name: Stop efe-server
+        if: always()
+        run: |
+          pid="$(cat target/load/server.pid 2>/dev/null || true)"
+          if [[ -n "$pid" ]]; then kill "$pid" 2>/dev/null || true ; fi
+
+      # -----------------------------------------------------------
+      # Upload artefacts (bench-format + per-scenario reports)
+      # -----------------------------------------------------------
+      - name: Upload bench-format JSON
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bench-load-bench-${{ github.sha }}
+          path: target/load/load_test_bench.json
+          if-no-files-found: warn
+
+      - name: Upload load-test artefacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bench-load-artefacts-${{ github.sha }}
+          path: |
+            target/load/*.json
+            target/load/*.log
+            target/load/*.md
+          retention-days: 30
+          if-no-files-found: warn
+
+      # -----------------------------------------------------------
+      # PR comment summary (only on PR events)
+      # -----------------------------------------------------------
+      - name: Post summary as PR comment
+        if: github.event_name == 'pull_request' && always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const path = 'target/load/load_test_summary.md';
+            if (!fs.existsSync(path)) return;
+            const body = fs.readFileSync(path, 'utf-8');
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo:  context.repo.repo,
+              issue_number: context.issue.number,
+              body: '## D9 ghz load test summary\n\n' + body,
+            });

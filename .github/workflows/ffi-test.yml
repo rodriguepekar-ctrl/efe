@@ -1,0 +1,140 @@
+# Sprint **D25 (Φ-C)** — `efe-ffi` PR-gate test workflow.
+#
+# Cf. `docs/EFE_FFI_ARCHITECTURE.md` § 26.2.
+#
+# Runs on every PR that touches `crates/efe-ffi/`. Builds the wheel
+# via `maturin develop` on a 3 × 2 matrix (Linux/macOS/Windows ×
+# Python 3.10/3.12), then runs `pytest`. Fast — < 5 min target.
+
+name: ffi-test
+
+on:
+  pull_request:
+    paths:
+      - "crates/efe-ffi/**"
+      - ".github/workflows/ffi-test.yml"
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  test:
+    name: ${{ matrix.os }} / Python ${{ matrix.python }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        # Φ-C-FFI Completion : extended matrix Python 3.10 → 3.13.
+        # SLO-FFI-CROSS-PY targets 4/4 versions ; on 3 OS = 12 jobs.
+        os: [ubuntu-22.04, macos-14, windows-2022]
+        python: ["3.10", "3.11", "3.12", "3.13"]
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python ${{ matrix.python }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+
+      - name: Setup Rust 1.88
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: "1.88"
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: "crates/efe-ffi -> target"
+
+      - name: Install Python deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install "maturin>=1.7,<2.0" pytest pytest-asyncio numpy psutil pyyaml
+
+      - name: maturin develop --release
+        working-directory: crates/efe-ffi
+        # `--features extension-module` is REQUIRED because Φ-D-OPS
+        # audit made `extension-module` opt-in (= so `cargo test
+        # --workspace` works). Maturin produces a cdylib for the
+        # active Python interpreter, hence the feature is mandatory
+        # here. Cf. `crates/efe-ffi/Cargo.toml` [features] section.
+        run: maturin develop --release --features extension-module
+
+      - name: pytest (smoke + classify + zero-copy + errors)
+        working-directory: crates/efe-ffi
+        run: |
+          python -m pytest python/efe/tests/ -v \
+            --ignore=python/efe/tests/bench \
+            --deselect python/efe/tests/test_cold_start.py \
+            --deselect python/efe/tests/test_memory_leak.py \
+            --deselect python/efe/tests/test_async_overhead.py
+
+      # ──────────────────────────────────────────────────────────────
+      # Φ-C-FFI Completion (D27/D28) — PR-gated tests.
+      # Cf. docs/EFE_PYO3_FFI_COMPLETION_ARCHITECTURE.md § 5.3.
+      # ──────────────────────────────────────────────────────────────
+
+      - name: Φ-C-FFI gate — numerical equivalence (SLO-FFI-EQUIVALENCE)
+        working-directory: crates/efe-ffi
+        run: |
+          python -m pytest python/efe/tests/test_numerical_equiv.py -v
+
+      - name: Φ-C-FFI gate — determinism strict (SLO-FFI-DETERMINISM)
+        working-directory: crates/efe-ffi
+        run: |
+          python -m pytest python/efe/tests/test_determinism_strict.py -v
+
+      - name: Φ-C-FFI gate — GIL release proxy (SLO-FFI-GIL-RELEASED)
+        working-directory: crates/efe-ffi
+        run: |
+          python -m pytest python/efe/tests/test_gil_release.py -v
+
+      - name: Φ-C-FFI gate — drop-in migration (SLO-FFI-DROPIN)
+        working-directory: crates/efe-ffi
+        run: |
+          # Skipped unless efe_tool is installed AND EFE_HOST is set.
+          # On vanilla runners the test emits a SKIPPED compliance JSON.
+          python -m pytest python/efe/tests/test_dropin_migration.py -v
+
+      - name: Stub validation (mypy --strict)
+        working-directory: crates/efe-ffi
+        run: |
+          pip install "mypy>=1.10"
+          # Run mypy on the package — catches stub drift.
+          python -m mypy --strict python/efe || echo "mypy advisory only in D25 ; pin test will harden in D26"
+        continue-on-error: true
+
+  rust-tests:
+    name: Rust unit tests (no Python required)
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: "1.88"
+      - name: cargo test efe-ffi (rlib)
+        # Auto-initialize feature lets PyO3 spin up an embedded
+        # interpreter for `#[cfg(test)] mod tests`.
+        run: |
+          # Python 3.10+ MUST be installed on the runner (default
+          # ubuntu-22.04 has 3.10 + 3.11). Verify before running.
+          python3 --version
+          cargo test -p efe-ffi --lib
+
+  pin-tests:
+    name: Pin tests (structure + stub sync)
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install pytest
+        run: pip install pytest
+      - name: Run efe-ffi pin tests
+        run: |
+          python -m pytest scripts/tests/test_efe_ffi_structure.py -v --tb=short

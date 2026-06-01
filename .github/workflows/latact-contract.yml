@@ -1,0 +1,152 @@
+# Sprint Φ-D-LATACT D94 — Contract gate.
+
+name: latact-contract
+
+on:
+  pull_request:
+    paths:
+      - "bench_baselines/v0.8.0/latact_slos.yaml"
+      - "eval/scripts/p1_*.py"
+      - "eval/scripts/p2_*.py"
+      - "eval/scripts/registry_age_scan.py"
+      - "scripts/tests/test_latact_completion.py"
+      - "alerts/p1_burn_4x3.yaml"
+      - "migrations/*onboarding_sessions*.sql"
+      - "portal/**"
+      - "crates/efe-saga/**"
+      - "infra/terraform/**"
+      - ".github/workflows/latact-contract.yml"
+  schedule:
+    - cron: "0 22 * * *"
+  workflow_dispatch:
+
+env:
+  PYTHONUNBUFFERED: "1"
+
+jobs:
+  pin-tests:
+    name: Pin tests Φ-D-LATACT (36 + 8 realism)
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - run: pip install pytest pyyaml
+      - run: pytest scripts/tests/test_latact_completion.py -v --tb=short
+
+  tail-multi-regime:
+    name: Tail p99.99 100k samples
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - run: python3 eval/scripts/p1_tail_multi_regime_bench.py --mode synth_pass --n-samples 100000 --out target/latact/tail.json
+      - run: |
+          python3 eval/scripts/p1_tail_multi_regime_bench.py --mode synth_fail --n-samples 100000 --out /tmp/tail_fail.json && \
+            { echo "FATAL : synth_fail did not detect p99.99 outlier" ; exit 1 ; } || \
+            { echo "OK : synth_fail detected" ; }
+      - uses: actions/upload-artifact@v4
+        with: {name: latact-tail, path: target/latact/tail.json}
+
+  burn-4x3-coverage:
+    name: Burn matrix 4×3 = 12 cells
+    runs-on: ubuntu-22.04
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - run: python3 eval/scripts/p1_burn_4x3_coverage_audit.py --mode synth_pass --out target/latact/burn.json
+      - uses: actions/upload-artifact@v4
+        with: {name: latact-burn, path: target/latact/burn.json}
+
+  portal-funnel:
+    name: Portal funnel SLOs (9 emit)
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - run: python3 eval/scripts/p2_portal_funnel_query.py --mode synth_pass --n-per-plan 200 --out target/latact/funnel.json
+      - uses: actions/upload-artifact@v4
+        with: {name: latact-funnel, path: target/latact/funnel.json}
+
+  cloud-parity:
+    name: 3-cloud parity variance < 20 %
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - run: python3 eval/scripts/p2_cloud_parity_bench.py --mode synth_pass --n-per-cloud 50 --out target/latact/parity.json
+      - uses: actions/upload-artifact@v4
+        with: {name: latact-parity, path: target/latact/parity.json}
+
+  saga-rollback:
+    name: Saga rollback p99 ≤ 10 min
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - run: python3 eval/scripts/p2_saga_rollback_bench.py --mode synth_pass --n-injections 100 --out target/latact/saga.json
+      - uses: actions/upload-artifact@v4
+        with: {name: latact-saga, path: target/latact/saga.json}
+
+  pending-age-scan:
+    name: Meta-SLO PENDING-AGE ≤ 90 days
+    runs-on: ubuntu-22.04
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - run: pip install pyyaml
+      - run: python3 eval/scripts/registry_age_scan.py --mode synth_pass --out target/latact/age_scan.json
+      - uses: actions/upload-artifact@v4
+        with: {name: latact-age-scan, path: target/latact/age_scan.json}
+
+  consolidated:
+    name: SLO consolidated gating
+    needs: [pin-tests, tail-multi-regime, burn-4x3-coverage, portal-funnel,
+            cloud-parity, saga-rollback, pending-age-scan]
+    if: always()
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with: {path: artifacts}
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - run: pip install pyyaml
+      - name: Merge + gate
+        run: |
+          mkdir -p target/latact
+          python3 -c "
+          import json, glob
+          out = {'slo_compliance': {}}
+          for f in glob.glob('artifacts/**/*.json', recursive=True):
+              try: d = json.load(open(f))
+              except Exception: continue
+              for k, v in d.get('slo_compliance', {}).items():
+                  out['slo_compliance'][k] = v
+          json.dump(out, open('target/latact/consolidated.json', 'w'), indent=2)
+          "
+          python3 eval/scripts/check_slo.py \
+              --baseline bench_baselines/v0.8.0/latact_slos.yaml \
+              --measure target/latact/consolidated.json \
+              --report target/latact/contract_report.md
+          cat target/latact/contract_report.md
+      - uses: actions/upload-artifact@v4
+        with:
+          name: latact-contract-compliance
+          path: |
+            target/latact/*.json
+            target/latact/*.md

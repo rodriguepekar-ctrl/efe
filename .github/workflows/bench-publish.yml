@@ -1,0 +1,83 @@
+# PR #24 § 17.1 + AD39-AD41 — bench-publish.
+#
+# Triggers : push:main (after bench-full / bench-release completion) +
+# workflow_run completion + hourly safety-net cron.
+#
+# Concurrency : cancel-in-progress = false (AD31, T122 anti-race).
+# Sequential publish ⇒ no gh-pages branch race.
+
+name: bench-publish
+
+on:
+  push:
+    branches: [main]
+  workflow_run:
+    workflows: ["bench-full", "bench-release"]
+    types: [completed]
+  schedule:
+    - cron: "0 * * * *"   # hourly safety-net (AD5)
+  workflow_dispatch:
+
+concurrency:
+  group: bench-publish
+  cancel-in-progress: false   # AD31 — sequential publish (T122)
+
+permissions:
+  contents: write             # gh-pages
+  id-token: write             # OIDC for cosign + AWS (Phase-3)
+
+jobs:
+  publish:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+
+      - name: protoc
+        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
+
+      - name: Install mdbook
+        run: cargo install mdbook --version "^0.4" --locked
+
+      - name: Build harness
+        run: cargo build --release -p efe-bench-harness
+
+      - name: Generate public site
+        env:
+          EFE_CHART_VERSION: ${{ vars.BENCH_CHART_VERSION || '0.6.0' }}
+        run: |
+          set -eo pipefail
+          ./target/release/efe-bench-harness publish \
+              --chart-version "$EFE_CHART_VERSION" \
+              --output /tmp/bench-pages \
+              --bench-results bench/results \
+              --bench-baselines bench_baselines \
+              --embed-smoke \
+              --history-window-days 30
+
+      - name: Ratchet sanity (AD32)
+        run: |
+          set -eo pipefail
+          test -f /tmp/bench-pages/index.html
+          test -f /tmp/bench-pages/badges/overall.svg
+          test -d /tmp/bench-pages/api
+          test -f /tmp/bench-pages/api/current.json
+          # 11 badges expected (v1.6 § 24.1).
+          count=$(ls /tmp/bench-pages/badges/*.svg | wc -l)
+          if [ "$count" -ne 11 ]; then
+            echo "FAIL — expected 11 badges, got $count"
+            exit 1
+          fi
+
+      - name: Deploy to gh-pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: /tmp/bench-pages
+          destination_dir: bench
+          keep_files: true        # AD30 — never delete (immutable)
+          force_orphan: false
+          commit_message: "publish bench results from ${{ github.sha }}"

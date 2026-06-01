@@ -1,0 +1,113 @@
+# Sprint **Φ-D-MODE3 Completion (D74)** — Mode-3 nightly bench.
+
+name: mode3-bench
+
+on:
+  schedule:
+    - cron: "0 10 * * *"   # 10:00 UTC nightly
+  push:
+    tags: ["v*.*.*"]
+  workflow_dispatch:
+
+env:
+  PYTHONUNBUFFERED: "1"
+
+jobs:
+  cost-amortization:
+    name: Cost amortization tracking
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - name: Track cost amortization
+        run: python3 scripts/mode3/track_cost_amortization.py --sessions 100
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mode3-cost-amortization
+          path: target/mode3/cost_amortization.json
+
+  latency-bench:
+    name: Latency bench (stub mode)
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Stub latency bench
+        run: |
+          mkdir -p target/mode3
+          cat > target/mode3/latency_bench.json << 'EOF'
+          {
+            "slo_compliance": {
+              "SLO-MODE3-LATENCY-PER-TURN-P99": {
+                "skip_reason": "Live LLM bench requires provider credentials (DT-MODE3-LIVE-BENCH)"
+              },
+              "SLO-MODE3-COST-PER-SESSION-P99": {
+                "skip_reason": "Live cost tracking requires provider billing"
+              }
+            }
+          }
+          EOF
+
+  cache-stats:
+    name: Cache hit rate
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Stub cache stats
+        run: |
+          mkdir -p target/mode3
+          cat > target/mode3/cache_stats.json << 'EOF'
+          {
+            "slo_compliance": {
+              "SLO-MODE3-CACHE-HIT-RATE": {
+                "skip_reason": "Live Redis cache stats required (DT-MODE3-CACHE-STATS)"
+              }
+            }
+          }
+          EOF
+
+  oscillation-test:
+    name: Oscillation detection on adversarial sessions
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - name: Run oscillation detector
+        run: python3 eval/scripts/mode3_oscillation_detector.py
+
+  summary:
+    name: Bench summary + SLO gating
+    needs: [cost-amortization, latency-bench, cache-stats, oscillation-test]
+    if: always()
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with: {path: artifacts}
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - run: pip install pyyaml
+      - name: Merge + gate
+        run: |
+          mkdir -p target/mode3
+          python3 -c "
+          import json, glob
+          out = {'slo_compliance': {}}
+          for f in glob.glob('artifacts/**/*.json', recursive=True):
+              try: d = json.load(open(f))
+              except Exception: continue
+              for k, v in d.get('slo_compliance', {}).items():
+                  out['slo_compliance'][k] = v
+          json.dump(out, open('target/mode3/bench_consolidated.json', 'w'), indent=2)
+          "
+          python3 eval/scripts/check_slo.py \
+              --baseline bench_baselines/v0.6.0/mode3_slos.yaml \
+              --measure target/mode3/bench_consolidated.json \
+              --report target/mode3/bench_report.md
+          cat target/mode3/bench_report.md

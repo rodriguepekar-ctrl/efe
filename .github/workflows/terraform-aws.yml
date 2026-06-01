@@ -1,0 +1,76 @@
+name: terraform-aws
+
+on:
+  pull_request:
+    paths:
+      - 'terraform/modules/aws/**'
+      - '.github/workflows/terraform-aws.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'terraform/modules/aws/**'
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.6.6
+
+      - name: terraform fmt
+        run: terraform fmt -check -recursive terraform/modules/aws
+
+      - name: terraform validate
+        run: |
+          cd terraform/modules/aws
+          terraform init -backend=false
+          terraform validate
+
+      - name: tflint
+        uses: terraform-linters/setup-tflint@v4
+        with:
+          tflint_version: v0.52.0
+
+      - run: |
+          cd terraform/modules/aws
+          tflint --init
+          tflint --recursive
+
+      - name: tfsec
+        uses: aquasecurity/tfsec-action@v1.0.3
+        with:
+          working_directory: terraform/modules/aws
+          soft_fail: false
+
+      - name: checkov
+        uses: bridgecrewio/checkov-action@v12
+        with:
+          directory: terraform/modules/aws
+          framework: terraform
+          quiet: true
+
+  terratest:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_TERRATEST_ROLE_ARN }}
+          aws-region: eu-west-1
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+
+      - run: |
+          cd terraform/modules/aws/test
+          go mod download
+          go test -timeout 60m -v ./...

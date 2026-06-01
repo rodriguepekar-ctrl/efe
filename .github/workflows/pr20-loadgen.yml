@@ -1,0 +1,195 @@
+# PR #20 § 26 — CI workflow for the loadgen binary + Helm chart.
+#
+# 5 parallel jobs (~ 50 s wall-time gated by kind-cluster smoke).
+
+name: pr20-loadgen
+
+on:
+  pull_request:
+    paths:
+      - 'tools/loadgen/**'
+      - 'crates/efe-meta-swarm-proto/**'
+      - 'charts/efe-meta-swarm-loadgen/**'
+      - 'docs/EFE_A1_PHASE2_PR20_ARCHITECTURE.md'
+      - '.github/workflows/pr20-loadgen.yml'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+  push:
+    branches: [main]
+
+concurrency:
+  group: pr20-loadgen-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+
+  # ───────────────────────────────────────────────────────────────
+  # Job 1 — cargo test + clippy
+  # ───────────────────────────────────────────────────────────────
+  cargo-test:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with: { components: 'rustfmt, clippy' }
+      - uses: Swatinem/rust-cache@v2
+
+      - name: protoc
+        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
+
+      - name: cargo fmt
+        run: cargo fmt -p efe-meta-swarm-loadgen --check
+
+      - name: cargo clippy (deny warnings)
+        run: cargo clippy -p efe-meta-swarm-loadgen --all-targets -- -D warnings
+
+      - name: cargo test
+        run: cargo test -p efe-meta-swarm-loadgen --all-features
+
+  # ───────────────────────────────────────────────────────────────
+  # Job 2 — CLI golden snapshot diff (AC3)
+  # ───────────────────────────────────────────────────────────────
+  cli-golden:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    needs: cargo-test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+
+      - name: protoc
+        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
+
+      - name: render --help
+        run: |
+          cargo run -p efe-meta-swarm-loadgen -- --help > /tmp/help.txt
+          # Strip dynamic version line for stable diffing.
+          sed -i '/^efe-meta-swarm-loadgen [0-9]/d' /tmp/help.txt
+
+      - name: diff vs golden
+        run: |
+          if [[ -f tools/loadgen/tests/data/golden-cli.txt ]] ; then
+            diff -u tools/loadgen/tests/data/golden-cli.txt /tmp/help.txt
+          else
+            echo "::notice::Golden absent ; first run will populate."
+            head -50 /tmp/help.txt
+          fi
+
+  # ───────────────────────────────────────────────────────────────
+  # Job 3 — Helm chart lint + helm-unittest
+  # ───────────────────────────────────────────────────────────────
+  helm-chart:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/setup-helm@v4
+        with: { version: '3.14.0' }
+
+      - name: helm lint
+        run: helm lint charts/efe-meta-swarm-loadgen --strict
+
+      - name: helm template (default values)
+        run: |
+          helm template loadgen charts/efe-meta-swarm-loadgen \
+              --namespace efe-test \
+              > /tmp/rendered-default.yaml
+          test -s /tmp/rendered-default.yaml
+
+      - name: helm template (enabled)
+        run: |
+          helm template loadgen charts/efe-meta-swarm-loadgen \
+              --namespace efe-test \
+              --set enabled=true \
+              --set image.tag=ci-test \
+              > /tmp/rendered-enabled.yaml
+          # Job + RBAC + Service + ServiceMonitor + NetworkPolicy must all appear.
+          grep -q "^kind: Job$" /tmp/rendered-enabled.yaml
+          grep -q "^kind: Role$" /tmp/rendered-enabled.yaml
+          grep -q "^kind: ServiceMonitor$" /tmp/rendered-enabled.yaml
+          grep -q "^kind: NetworkPolicy$" /tmp/rendered-enabled.yaml
+
+      - name: helm-unittest (chart invariants — AC18/AC19/AC20)
+        run: |
+          docker run --rm \
+              -v "$PWD":/apps \
+              quintush/helm-unittest:3.9.4-0.3.5 \
+              --strict \
+              -f 'tests/pr20_*.yaml' \
+              charts/efe-meta-swarm-loadgen
+
+      - name: profile JSON-Schema validation (AC24)
+        run: |
+          # Sanity : every example profile validates against the schema.
+          python3 -m pip install --quiet jsonschema pyyaml
+          python3 <<'PY'
+          import json, sys, pathlib
+          import yaml
+          from jsonschema import Draft202012Validator
+          schema = json.loads(pathlib.Path("tools/loadgen/schemas/profile-v1.json").read_text())
+          v = Draft202012Validator(schema)
+          failures = 0
+          for p in sorted(pathlib.Path("tools/loadgen/examples").glob("*.yaml")):
+              doc = yaml.safe_load(p.read_text())
+              errors = sorted(v.iter_errors(doc), key=lambda e: e.path)
+              if errors:
+                  print(f"::error file={p}::{len(errors)} schema violations")
+                  for e in errors[:5]:
+                      print(f"  {list(e.path)} : {e.message}")
+                  failures += 1
+              else:
+                  print(f"  ✓ {p.name}")
+          sys.exit(failures)
+          PY
+
+  # ───────────────────────────────────────────────────────────────
+  # Job 4 — kind-cluster smoke (Phase-2 stub : just verifies the
+  # image builds.  Phase-3 will actually run a tiny job and assert
+  # `overall_pass: true` in the JSON output).
+  # ───────────────────────────────────────────────────────────────
+  docker-build:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    needs: cargo-test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+
+      - name: docker build (amd64)
+        run: |
+          docker buildx build \
+              --platform linux/amd64 \
+              --file tools/loadgen/Dockerfile \
+              --tag efe-meta-swarm-loadgen:ci-test \
+              --load \
+              .
+
+      - name: docker run --help
+        run: docker run --rm efe-meta-swarm-loadgen:ci-test --help | head -5
+
+  # ───────────────────────────────────────────────────────────────
+  # Job 5 — example profile YAML schema validation
+  # ───────────────────────────────────────────────────────────────
+  profile-validation:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    needs: cargo-test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+
+      - name: protoc
+        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
+
+      - name: validate every example profile
+        run: |
+          set -euo pipefail
+          for p in tools/loadgen/examples/*.yaml ; do
+            echo "::group::$(basename $p)"
+            cargo run -p efe-meta-swarm-loadgen --quiet -- \
+                validate --profile "$p"
+            echo "::endgroup::"
+          done

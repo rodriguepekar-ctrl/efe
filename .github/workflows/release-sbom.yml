@@ -1,0 +1,89 @@
+name: Release SBOM (CycloneDX)
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to build SBOM for (e.g. v2.4.0)"
+        required: true
+
+permissions:
+  contents: write          # to attach assets to releases
+  id-token: write          # cosign keyless (OIDC)
+  attestations: write      # GitHub attestation upload
+
+jobs:
+  sbom:
+    name: Build + sign CycloneDX SBOM
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+
+      - uses: dtolnay/rust-toolchain@1.88
+
+      - name: Install cargo-cyclonedx
+        run: cargo install --locked cargo-cyclonedx
+
+      - name: Generate SBOM (Rust)
+        run: |
+          cargo cyclonedx \
+            --format json \
+            --output-cdx sbom-rust.json \
+            --workspace \
+            --exclude efe-ffi
+
+      - name: Generate SBOM (Python agent-core)
+        if: hashFiles('python/efe/pyproject.toml') != ''
+        run: |
+          pip install cyclonedx-bom
+          cd python/efe && cyclonedx-py --of json -o ../../sbom-python.json
+
+      - name: Generate SBOM (Go vsock-relayer)
+        if: hashFiles('cmd/vsock-relayer/go.mod') != ''
+        run: |
+          go install github.com/CycloneDX/cyclonedx-gomod/cmd/cyclonedx-gomod@latest
+          cd cmd/vsock-relayer && cyclonedx-gomod app -json -output ../../sbom-go.json
+
+      - name: Strip private deps (defense)
+        run: |
+          # Sanity : SBOM must not contain any `efe-internal-*` deps.
+          if grep -i "efe-internal" sbom-rust.json; then
+            echo "ERROR : SBOM contains internal dep ; aborting."
+            exit 1
+          fi
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3
+
+      - name: Sign SBOM (keyless via OIDC)
+        run: |
+          for f in sbom-rust.json sbom-python.json sbom-go.json; do
+            [ -f "$f" ] && cosign sign-blob --yes "$f" \
+              --output-signature "$f.sig" \
+              --output-certificate "$f.crt"
+          done
+
+      - name: Upload SBOM + signatures to release
+        if: github.event_name == 'release'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload "${{ github.event.release.tag_name }}" \
+            sbom-rust.json sbom-rust.json.sig sbom-rust.json.crt \
+            $( [ -f sbom-python.json ] && echo "sbom-python.json sbom-python.json.sig sbom-python.json.crt" ) \
+            $( [ -f sbom-go.json ] && echo "sbom-go.json sbom-go.json.sig sbom-go.json.crt" ) \
+            --clobber
+
+      - name: Upload as workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom-${{ github.event.release.tag_name || github.event.inputs.tag }}
+          path: |
+            sbom-*.json
+            sbom-*.json.sig
+            sbom-*.json.crt
+          retention-days: 365

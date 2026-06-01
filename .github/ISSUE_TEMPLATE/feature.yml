@@ -1,0 +1,72 @@
+name: Feature Request
+description: Propose a new feature or enhancement
+title: "[feat] "
+labels: ["type:feature", "status:triage"]
+body:
+  - type: textarea
+    id: context
+    attributes:
+      label: Context
+      description: What user / developer problem does this solve?
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: High-level approach, api shape, etc.
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: Testable criteria for "done".
+      value: |
+        - [ ]
+        - [ ]
+    validations:
+      required: true
+
+  - type: dropdown
+    id: module
+    attributes:
+      label: Primary module touched
+      options:
+        - M1 Core Runtime
+        - M2 Memory Pool
+        - M3 Genesis
+        - M4 ELS
+        - M5 Fusion
+        - M6 Consensus
+        - M7 Dissolution
+        - M8 Templates
+        - M9 Alignment
+        - M10 API
+        - M11 Telemetry
+        - M12 Build/Deploy
+        - Transverse
+
+  - type: dropdown
+    id: breaking
+    attributes:
+      label: Breaking change?
+      options:
+        - "No"
+        - "Yes (requires major bump + ADR)"
+    validations:
+      required: true
+
+  - type: input
+    id: phase
+    attributes:
+      label: Target phase
+      description: MVP / P2 Alpha / P3 Beta / P4 GA / P5+
+      placeholder: "e.g. MVP S4"
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered

@@ -1,0 +1,152 @@
+name: docs
+
+# Sprint D10.5 — build the mkdocs Diátaxis site, run linkchecker,
+# and (on push to main) deploy to the `gh-pages` branch via mike.
+#
+# Triggered:
+#   * push to main on any change to docs/, clients/python/efe_tool/,
+#     or examples/ (because docs auto-include from those).
+#   * pull_request on the same paths (build + lint, no deploy).
+#   * workflow_dispatch (manual deploy).
+#
+# Three jobs:
+#   1. build-and-lint  — strict mkdocs build + link checker
+#   2. example-smoke   — the 4 examples + smoke tests
+#   3. deploy-versioned — mike deploy to gh-pages (main push only)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "docs/**"
+      - "clients/python/efe_tool/**"
+      - "examples/**"
+      - ".github/workflows/docs.yml"
+  pull_request:
+    paths:
+      - "docs/**"
+      - "clients/python/efe_tool/**"
+      - "examples/**"
+  workflow_dispatch:
+
+permissions:
+  contents: write    # mike pushes to gh-pages branch
+  pages: write
+  id-token: write
+
+env:
+  PYTHON_VERSION: "3.11"
+
+jobs:
+  # ─────────────────────────────────────────────────────────────────
+  # Build the site with strict mode (D10-DOC-1 = 0 warnings)
+  # ─────────────────────────────────────────────────────────────────
+  build-and-lint:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # mike needs full history
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Install docs deps
+        run: pip install -r docs/requirements-docs.txt
+
+      - name: Install efe-tool (editable, for mkdocstrings)
+        run: pip install -e ./clients/python
+
+      - name: mkdocs build --strict
+        working-directory: docs
+        run: mkdocs build --strict
+
+      - name: Upload built site
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: site-${{ github.sha }}
+          path: docs/site
+          retention-days: 7
+
+      - name: Link checker (linkchecker)
+        run: |
+          # `--check-extern` is too noisy for CI (LinkedIn etc. block);
+          # we check internal links only.
+          linkchecker --no-warnings --no-status \
+              --ignore-url '^https?://' \
+              docs/site/
+
+  # ─────────────────────────────────────────────────────────────────
+  # Example smoke tests (D10-DX-2 = aggregate < 30 s)
+  # ─────────────────────────────────────────────────────────────────
+  example-smoke:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Install efe-tool + dev deps
+        run: |
+          pip install -e ./clients/python
+          pip install pytest pytest-asyncio pyyaml
+
+      - name: Run example smoke (static checks only — no cluster)
+        run: |
+          pytest examples/tests/test_examples_smoke.py \
+            -k "not runs_against_stub and not requires_token" \
+            -v --tb=short
+        timeout-minutes: 5
+
+      - name: Run example dynamic smoke (with stub server)
+        # Continue-on-error during the 3-runs-bake-in period before
+        # flipping fail-closed via a separate PR.
+        continue-on-error: true
+        run: |
+          pytest examples/tests/test_examples_smoke.py \
+            -v --tb=short
+        timeout-minutes: 5
+
+  # ─────────────────────────────────────────────────────────────────
+  # Deploy versioned docs to gh-pages (main only)
+  # ─────────────────────────────────────────────────────────────────
+  deploy-versioned:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [build-and-lint, example-smoke]
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install docs deps
+        run: pip install -r docs/requirements-docs.txt
+
+      - name: Install efe-tool (for mkdocstrings)
+        run: pip install -e ./clients/python
+
+      - name: Configure git for mike
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: mike deploy dev
+        working-directory: docs
+        run: mike deploy --push --update-aliases dev

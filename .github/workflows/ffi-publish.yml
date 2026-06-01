@@ -1,0 +1,378 @@
+# Sprint **D25 (Φ-C)** — `efe-ffi` wheel publishing pipeline.
+#
+# Cf. `docs/EFE_FFI_ARCHITECTURE.md` § 21.
+#
+# Triggered on tags `v*.*.*` ; produces 5 wheels :
+#
+#   * manylinux_2_17 x86_64
+#   * manylinux_2_17 aarch64
+#   * macOS 11+ arm64 (Apple Silicon)
+#   * macOS 10.15+ x86_64 (Intel)
+#   * Windows x86_64
+#
+# A single wheel per OS×arch covers Python 3.10-3.13 thanks to the
+# `abi3-py310` Cargo feature. Total : 5 wheels per release.
+#
+# Wheels are uploaded to the private PyPI configured via the
+# `PYPI_REPOSITORY_URL` and `PYPI_TOKEN` repo secrets.
+
+name: ffi-publish
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+  # **Audit fix Φ-C-SDK.B3** — accept workflow_call so that
+  # sdk-quartet-publish.yml can `uses: ./.github/workflows/ffi-publish.yml`
+  # for the Python publisher leg of the polyglot quartet.
+  workflow_call:
+    secrets:
+      PYPI_REPOSITORY_URL:
+        required: false
+      PYPI_TOKEN:
+        required: false
+
+# **Audit fix Φ-C-SDK.B-extra2** — Sigstore cosign keyless signing
+# (in the `publish` job) REQUIRES the GitHub Actions OIDC token,
+# which is only issued when `id-token: write` is granted explicitly.
+# Without this block, the step `cosign sign-blob --yes ...` would
+# fail immediately with :
+#   `Error: signing: getting OIDC token: no matching credentials`
+# Symptom documented in `docs/runbook/sdk_publish_failure.md` Case 5.
+# `contents: read` is needed for actions/checkout ; `contents: write`
+# would be needed only if we created git tags from inside the workflow.
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  # ──────────────────────────────────────────────────────────────
+  # Linux x86_64 (manylinux_2_17 / CentOS 7 base via maturin-action)
+  # ──────────────────────────────────────────────────────────────
+  manylinux-x86_64:
+    name: manylinux x86_64
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: PyO3/maturin-action@v1
+        with:
+          target: x86_64-unknown-linux-gnu
+          manylinux: "2_17"
+          working-directory: crates/efe-ffi
+          # `--features extension-module` is REQUIRED because Φ-D-OPS
+          # audit made `extension-module` opt-in (= so `cargo test
+          # --workspace` works). Cf. Cargo.toml [features] doctrine.
+          args: --release --strip --out dist --features extension-module
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wheels-manylinux-x86_64
+          path: crates/efe-ffi/dist/*.whl
+
+  # ──────────────────────────────────────────────────────────────
+  # Linux aarch64 (cross-compiled on x86_64 runner via QEMU)
+  # ──────────────────────────────────────────────────────────────
+  manylinux-aarch64:
+    name: manylinux aarch64
+    runs-on: ubuntu-22.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: PyO3/maturin-action@v1
+        with:
+          target: aarch64-unknown-linux-gnu
+          manylinux: "2_17"
+          working-directory: crates/efe-ffi
+          # `--features extension-module` is REQUIRED because Φ-D-OPS
+          # audit made `extension-module` opt-in (= so `cargo test
+          # --workspace` works). Cf. Cargo.toml [features] doctrine.
+          args: --release --strip --out dist --features extension-module
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wheels-manylinux-aarch64
+          path: crates/efe-ffi/dist/*.whl
+
+  # ──────────────────────────────────────────────────────────────
+  # macOS arm64 (Apple Silicon — M-series runners)
+  # ──────────────────────────────────────────────────────────────
+  macos-arm64:
+    name: macOS arm64
+    runs-on: macos-14
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: PyO3/maturin-action@v1
+        with:
+          target: aarch64-apple-darwin
+          working-directory: crates/efe-ffi
+          # `--features extension-module` is REQUIRED because Φ-D-OPS
+          # audit made `extension-module` opt-in (= so `cargo test
+          # --workspace` works). Cf. Cargo.toml [features] doctrine.
+          args: --release --strip --out dist --features extension-module
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wheels-macos-arm64
+          path: crates/efe-ffi/dist/*.whl
+
+  # ──────────────────────────────────────────────────────────────
+  # macOS x86_64 (Intel)
+  # ──────────────────────────────────────────────────────────────
+  macos-x86_64:
+    name: macOS x86_64
+    runs-on: macos-13
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: PyO3/maturin-action@v1
+        with:
+          target: x86_64-apple-darwin
+          working-directory: crates/efe-ffi
+          # `--features extension-module` is REQUIRED because Φ-D-OPS
+          # audit made `extension-module` opt-in (= so `cargo test
+          # --workspace` works). Cf. Cargo.toml [features] doctrine.
+          args: --release --strip --out dist --features extension-module
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wheels-macos-x86_64
+          path: crates/efe-ffi/dist/*.whl
+
+  # ──────────────────────────────────────────────────────────────
+  # Windows x86_64 (MSVC)
+  # ──────────────────────────────────────────────────────────────
+  windows-x86_64:
+    name: Windows x86_64
+    runs-on: windows-2022
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: PyO3/maturin-action@v1
+        with:
+          target: x86_64-pc-windows-msvc
+          working-directory: crates/efe-ffi
+          # `--features extension-module` is REQUIRED because Φ-D-OPS
+          # audit made `extension-module` opt-in (= so `cargo test
+          # --workspace` works). Cf. Cargo.toml [features] doctrine.
+          args: --release --strip --out dist --features extension-module
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wheels-windows-x86_64
+          path: crates/efe-ffi/dist/*.whl
+
+  # ──────────────────────────────────────────────────────────────
+  # Sdist — source distribution for users who can't install a wheel.
+  # ──────────────────────────────────────────────────────────────
+  sdist:
+    name: Source distribution
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: PyO3/maturin-action@v1
+        with:
+          command: sdist
+          working-directory: crates/efe-ffi
+          args: --out dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sdist
+          path: crates/efe-ffi/dist/*.tar.gz
+
+  # ──────────────────────────────────────────────────────────────
+  # Publish to private PyPI.
+  # ──────────────────────────────────────────────────────────────
+  publish:
+    name: Publish to private PyPI
+    needs:
+      - manylinux-x86_64
+      - manylinux-aarch64
+      - macos-arm64
+      - macos-x86_64
+      - windows-x86_64
+      - sdist
+    runs-on: ubuntu-22.04
+    if: startsWith(github.ref, 'refs/tags/v')
+    timeout-minutes: 15
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+      - name: Flatten wheels
+        run: |
+          mkdir -p flattened
+          find dist -name '*.whl' -exec cp {} flattened/ \;
+          find dist -name '*.tar.gz' -exec cp {} flattened/ \;
+          ls -la flattened/
+      - name: Verify all 5 wheels + 1 sdist present (SLO-FFI-WHEEL-COUNT)
+        run: |
+          n_whl=$(ls flattened/*.whl 2>/dev/null | wc -l)
+          n_sdist=$(ls flattened/*.tar.gz 2>/dev/null | wc -l)
+          echo "wheels=${n_whl} sdist=${n_sdist}"
+          if [ "${n_whl}" -lt 5 ]; then
+            echo "::error::SLO-FFI-WHEEL-COUNT violated : expected 5 wheels, got ${n_whl}"
+            exit 1
+          fi
+          if [ "${n_sdist}" -lt 1 ]; then
+            echo "::error::expected 1 sdist, got ${n_sdist}"
+            exit 1
+          fi
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install build tooling
+        run: |
+          python -m pip install --upgrade pip
+          pip install twine cyclonedx-bom pyyaml
+
+      # ────────────────────────────────────────────────────────────────
+      # Φ-C-FFI Completion gates (artefacts #24).
+      # Cf. docs/EFE_PYO3_FFI_COMPLETION_ARCHITECTURE.md § 6.2.
+      # ────────────────────────────────────────────────────────────────
+
+      - name: Φ-C-FFI gate — wheel size budget (SLO-FFI-WHEEL-SIZE)
+        run: |
+          python scripts/bench/verify_wheel_size.py --max-mib 8 flattened/ \
+              --out target/ffi/wheel_size.json
+
+      - name: Φ-C-FFI gate — ABI3 symbol scan (SLO-FFI-ABI3)
+        run: |
+          python scripts/bench/verify_abi3.py flattened/ \
+              --out target/ffi/abi3.json
+
+      - name: Φ-C-FFI gate — SBOM CycloneDX (SLO-FFI-SBOM)
+        run: |
+          # Generate a CycloneDX SBOM for the active wheel deps.
+          # We point cyclonedx-bom at the maturin-built env after
+          # installing one wheel locally to capture transitive deps.
+          pip install flattened/efe-*-cp310-abi3-manylinux_2_17_x86_64.whl
+          mkdir -p flattened
+          cyclonedx-py environment -o flattened/efe-${GITHUB_REF_NAME}.cdx.json
+          ls -la flattened/*.cdx.json
+          # Emit SLO compliance JSON
+          n_sbom=$(ls flattened/*.cdx.json 2>/dev/null | wc -l)
+          mkdir -p target/ffi
+          cat > target/ffi/sbom.json << EOF
+          {
+            "slo_compliance": {
+              "SLO-FFI-SBOM": {
+                "measured_count": ${n_sbom}
+              }
+            }
+          }
+          EOF
+
+      - name: Φ-C-FFI gate — Sigstore signing (SLO-FFI-SIGSTORE)
+        uses: sigstore/cosign-installer@v3
+        with:
+          cosign-release: "v2.2.4"
+
+      - name: Sign all wheels + sdist + SBOM
+        env:
+          COSIGN_EXPERIMENTAL: "1"  # keyless via GitHub OIDC
+        run: |
+          n_signed=0
+          for f in flattened/*.whl flattened/*.tar.gz flattened/*.cdx.json; do
+            [ -f "$f" ] || continue
+            echo "signing $f"
+            cosign sign-blob --yes "$f" \
+                --output-signature "$f.sig" \
+                --output-certificate "$f.pem"
+            n_signed=$((n_signed + 1))
+          done
+          ls -la flattened/*.sig flattened/*.pem
+          mkdir -p target/ffi
+          cat > target/ffi/sigstore.json << EOF
+          {
+            "slo_compliance": {
+              "SLO-FFI-SIGSTORE": {
+                "measured_count": ${n_signed}
+              }
+            }
+          }
+          EOF
+
+      - name: Verify Rekor entries
+        env:
+          COSIGN_EXPERIMENTAL: "1"
+        run: |
+          for f in flattened/*.whl; do
+            [ -f "$f" ] || continue
+            echo "verifying $f"
+            cosign verify-blob \
+                --certificate "$f.pem" \
+                --signature "$f.sig" \
+                --certificate-identity-regexp '^https://github.com/.*' \
+                --certificate-oidc-issuer 'https://token.actions.githubusercontent.com' \
+                "$f"
+          done
+
+      - name: Φ-C-FFI consolidated SLO compliance check
+        # **Audit fix A1** : check_slo.py accepte exactement 1 --measure
+        # et n'a pas --strict ni --output. On merge inline les 4
+        # compliance JSONs (publish + wheel_size + abi3 + sbom + sigstore)
+        # en un seul fichier consolidé, puis on appelle check_slo.py
+        # avec --strict-skip (= le vrai nom du flag).
+        run: |
+          mkdir -p target/ffi
+          # Build publish.json (= les comptes basics)
+          n_whl=$(ls flattened/*.whl 2>/dev/null | wc -l)
+          n_sbom=$(ls flattened/*.cdx.json 2>/dev/null | wc -l)
+          n_signed=$(ls flattened/*.sig 2>/dev/null | wc -l)
+          cat > target/ffi/publish.json << EOF
+          {
+            "slo_compliance": {
+              "SLO-FFI-WHEEL-COUNT": {"measured_count": ${n_whl}},
+              "SLO-FFI-SBOM":         {"measured_count": ${n_sbom}},
+              "SLO-FFI-SIGSTORE":     {"measured_count": ${n_signed}}
+            }
+          }
+          EOF
+          # Merge tous les compliance JSONs en un seul (= check_slo.py
+          # n'accepte qu'un seul --measure).
+          python -c "
+          import json, glob
+          out = {'slo_compliance': {}}
+          for f in sorted(glob.glob('target/ffi/*.json')):
+              if f.endswith('consolidated.json') or f.endswith('compliance_report.md'):
+                  continue
+              try:
+                  d = json.load(open(f))
+              except Exception:
+                  continue
+              for k, v in d.get('slo_compliance', {}).items():
+                  out['slo_compliance'][k] = v
+          json.dump(out, open('target/ffi/consolidated.json', 'w'), indent=2)
+          print(f'merged {len(out[\"slo_compliance\"])} SLOs')
+          "
+          # Run check_slo.py on the consolidated file
+          python eval/scripts/check_slo.py \
+              --baseline bench_baselines/v0.6.0/ffi_slos.yaml \
+              --measure target/ffi/consolidated.json \
+              --strict-skip \
+              --report target/ffi/publish_compliance.md
+          cat target/ffi/publish_compliance.md
+
+      - name: Upload Φ-C-FFI compliance artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ffi-publish-compliance
+          path: |
+            target/ffi/*.json
+            flattened/*.sig
+            flattened/*.pem
+            flattened/*.cdx.json
+          retention-days: 90
+
+      - name: Publish to PyPI
+        env:
+          TWINE_REPOSITORY_URL: ${{ secrets.PYPI_REPOSITORY_URL }}
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.PYPI_TOKEN }}
+        run: |
+          twine upload --skip-existing flattened/*.whl flattened/*.tar.gz

@@ -1,0 +1,113 @@
+# Sprint GLOSS-B — Helm chart `charts/efe-stack/` PR-gate workflow.
+#
+# Distinct from `helm-test.yml` (which gates the M12 chart at
+# `deploy/helm/efe/`). This workflow targets the umbrella chart shipped
+# in Sprint GLOSS-B + its 6 sub-charts.
+
+name: helm-stack-test
+
+on:
+  pull_request:
+    paths:
+      - 'charts/**'
+      - '.github/workflows/helm-stack-test.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'charts/**'
+
+jobs:
+  helm-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.15.2
+
+      - name: Lint umbrella chart
+        run: helm lint charts/efe-stack
+
+      - name: Lint sub-charts
+        run: |
+          for c in charts/efe-stack/charts/*/; do
+            if [ -f "$c/Chart.yaml" ]; then
+              echo "Linting $c"
+              helm lint "$c" || exit 1
+            fi
+          done
+
+      - name: Validate values.schema.json
+        run: |
+          helm template charts/efe-stack \
+            --set global.tenant=test \
+            --validate
+
+  helm-stack-unittest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.15.2
+
+      - name: Install helm-unittest
+        run: helm plugin install https://github.com/helm-unittest/helm-unittest --version 0.5.1
+
+      - name: Run umbrella tests
+        run: |
+          if [ -d charts/efe-stack/tests ]; then
+            helm unittest charts/efe-stack
+          fi
+
+      - name: Run sub-chart tests
+        run: |
+          for c in charts/efe-stack/charts/*/; do
+            if [ -d "$c/tests" ]; then
+              echo "Testing $c"
+              helm unittest "$c" || exit 1
+            fi
+          done
+
+  k3d-e2e:
+    runs-on: ubuntu-latest
+    needs: [helm-lint, helm-stack-unittest]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.15.2
+
+      - name: Setup k3d
+        uses: AbsaOSS/k3d-action@v2
+        with:
+          cluster-name: efe-ci
+          args: >-
+            --servers 1 --agents 2
+            --no-lb
+            --wait
+            --timeout 300s
+
+      - name: Install efe-stack
+        run: |
+          helm install efe-stack ./charts/efe-stack \
+            --values ./charts/efe-stack/values-local.yaml \
+            --set global.tenant=test \
+            --set postgres-operator.enabled=false \
+            --wait --timeout 5m \
+            --create-namespace --namespace efe
+
+      - name: Verify pods
+        run: |
+          kubectl get pods -n efe
+          # mcp-server may take longer due to image pull ; wait selectively.
+          kubectl wait -n efe \
+            --for=condition=Ready pod \
+            -l 'app.kubernetes.io/name in (efe-server,redis-stack)' \
+            --timeout 180s

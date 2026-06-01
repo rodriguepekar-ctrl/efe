@@ -1,0 +1,192 @@
+# Sprint **Φ-D-COMPLIANCE D89** — Compliance contract test workflow.
+#
+# Cf. docs/EFE_COMPLIANCE_COMPLETION_ARCHITECTURE.md § 16 + artefact #33.
+
+name: comp-contract
+
+on:
+  pull_request:
+    paths:
+      - "docs/compliance/**"
+      - "eval/scripts/comp_*.py"
+      - "scripts/compliance/**"
+      - "scripts/tests/test_compliance_completion.py"
+      - "bench_baselines/v0.8.0/comp_slos.yaml"
+      - ".github/workflows/comp-contract.yml"
+  schedule:
+    - cron: "0 19 * * *"   # 19:00 UTC nightly
+  workflow_dispatch:
+
+env:
+  PYTHONUNBUFFERED: "1"
+
+jobs:
+  pin-tests:
+    name: Pin tests Φ-D-COMPLIANCE (36 + 8 audits)
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - run: pip install pytest pyyaml
+      - run: pytest scripts/tests/test_compliance_completion.py -v --tb=short
+
+  framework-mapping:
+    name: Framework mapping audit
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - run: pip install pyyaml
+      - run: python3 eval/scripts/comp_framework_mapping_audit.py --mode synth_pass --out target/compliance/framework_mapping_audit.json
+      - uses: actions/upload-artifact@v4
+        with: {name: comp-framework-mapping, path: target/compliance/framework_mapping_audit.json}
+
+  evidence-aggregator:
+    name: Evidence aggregator
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - run: pip install pyyaml
+      - run: python3 eval/scripts/comp_evidence_aggregator.py --mode synth_pass --out target/compliance/evidence_aggregator.json
+      - uses: actions/upload-artifact@v4
+        with: {name: comp-evidence-aggregator, path: target/compliance/evidence_aggregator.json}
+
+  evidences-core:
+    name: Core evidence scripts (6)
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - run: pip install pyyaml cryptography
+      - run: |
+          mkdir -p target/compliance
+          for ev in hmac_chain tenant_isolation consent_granularity encryption_at_rest data_residency subprocessor_inventory; do
+            python3 eval/scripts/comp_${ev}_evidence.py --mode synth_pass --out target/compliance/_${ev}.json
+          done
+      - uses: actions/upload-artifact@v4
+        with:
+          name: comp-evidences-core
+          path: target/compliance/_*.json
+
+  evidences-breach-erasure:
+    name: Breach + erasure evidences (4)
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - run: |
+          mkdir -p target/compliance
+          for ev in breach_72h breach_24h_containment erasure_30d portability_30d; do
+            python3 eval/scripts/comp_${ev}_evidence.py --mode synth_pass --out target/compliance/_${ev}.json
+          done
+      - uses: actions/upload-artifact@v4
+        with: {name: comp-evidences-breach-erasure, path: target/compliance/_*.json}
+
+  evidences-ai-act:
+    name: AI Act evidences (3)
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - run: |
+          mkdir -p target/compliance
+          for ev in ai_act_risk_classification ai_act_human_oversight ai_act_dpo_signoff; do
+            python3 eval/scripts/comp_${ev}_evidence.py --mode synth_pass --out target/compliance/_${ev}.json
+          done
+      - uses: actions/upload-artifact@v4
+        with: {name: comp-evidences-ai-act, path: target/compliance/_*.json}
+
+  evidences-freshness:
+    name: Freshness evidences (DPIA, ROPA, transparency)
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - run: |
+          mkdir -p target/compliance
+          for ev in dpia_freshness ropa_freshness transparency_notice; do
+            python3 eval/scripts/comp_${ev}_evidence.py --mode synth_pass --out target/compliance/_${ev}.json
+          done
+      - uses: actions/upload-artifact@v4
+        with: {name: comp-evidences-freshness, path: target/compliance/_*.json}
+
+  negative-tests:
+    name: Negative tests (= synth_fail must detect regressions)
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - run: pip install pyyaml
+      - name: synth_fail breach 72h (must exceed cap)
+        run: |
+          python3 eval/scripts/comp_breach_72h_evidence.py --mode synth_fail --out /tmp/breach_fail.json && \
+            { echo "FATAL : synth_fail did not detect breach > 72h" ; exit 1 ; } || \
+            { echo "OK : synth_fail correctly detected violation" ; }
+      - name: synth_fail audit chain break (must detect)
+        run: |
+          python3 eval/scripts/comp_audit_chain_daily.py --mode synth_fail --out /tmp/audit_fail.json
+          python3 -c "
+          import json
+          d = json.load(open('/tmp/audit_fail.json'))
+          slo = d['slo_compliance']['SLO-COMP-AUDIT-CHAIN-DAILY']
+          assert slo['measured_pass_count'] == 1, 'synth_fail must detect break'
+          assert slo['total_broken'] >= 1
+          print('OK : chain break correctly detected')
+          "
+
+  consolidated:
+    name: SLO consolidated gating
+    needs: [pin-tests, framework-mapping, evidence-aggregator, evidences-core,
+            evidences-breach-erasure, evidences-ai-act, evidences-freshness, negative-tests]
+    if: always()
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with: {path: artifacts}
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - run: pip install pyyaml
+      - name: Merge + gate
+        run: |
+          mkdir -p target/compliance
+          python3 -c "
+          import json, glob
+          out = {'slo_compliance': {}}
+          for f in glob.glob('artifacts/**/*.json', recursive=True):
+              try: d = json.load(open(f))
+              except Exception: continue
+              for k, v in d.get('slo_compliance', {}).items():
+                  out['slo_compliance'][k] = v
+          json.dump(out, open('target/compliance/consolidated.json', 'w'), indent=2)
+          print(f'merged {len(out[\"slo_compliance\"])} SLOs')
+          "
+          python3 eval/scripts/check_slo.py \
+              --baseline bench_baselines/v0.8.0/comp_slos.yaml \
+              --measure target/compliance/consolidated.json \
+              --report target/compliance/contract_report.md
+          cat target/compliance/contract_report.md
+      - uses: actions/upload-artifact@v4
+        with:
+          name: comp-contract-compliance
+          path: |
+            target/compliance/*.json
+            target/compliance/*.md

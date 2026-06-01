@@ -1,0 +1,55 @@
+name: Tech Debt
+description: Document deliberate or discovered technical debt
+title: "[debt] "
+labels: ["type:tech-debt", "status:triage"]
+body:
+  - type: textarea
+    id: debt
+    attributes:
+      label: Nature of the debt
+      description: What shortcut / workaround / suboptimal choice was taken?
+    validations:
+      required: true
+
+  - type: textarea
+    id: reason
+    attributes:
+      label: Why was the debt incurred?
+      description: Deadline pressure, lacking info, deliberate tradeoff, etc.
+    validations:
+      required: true
+
+  - type: textarea
+    id: cost
+    attributes:
+      label: Cost of NOT paying back
+      description: Which future pain does this create? (bugs, slow dev, perf)
+    validations:
+      required: true
+
+  - type: textarea
+    id: repayment
+    attributes:
+      label: Repayment plan
+      description: Estimated effort, suggested sprint, approach.
+      value: |
+        - Estimate (days):
+        - Target sprint:
+        - Approach:
+
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priority
+      options:
+        - P0 - Critical (blocks release or client)
+        - P1 - High (slows development significantly)
+        - P2 - Medium (potential source of future bugs)
+        - P3 - Low (cosmetic)
+    validations:
+      required: true
+
+  - type: input
+    id: introduced_in
+    attributes:
+      label: Introduced in (PR / commit)

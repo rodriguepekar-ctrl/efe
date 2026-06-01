@@ -1,0 +1,252 @@
+name: Bench — P1 Surface
+
+# Sprint **D19 (P1-Foundation)** — CI gating for the P1 latence
+# opposable surface.
+#
+# Cf. `docs/EFE_P1_SURFACE_ARCHITECTURE.md` § 5.3.
+#
+# ## Cadence
+#
+# - `push main` : run + freeze p1_baseline as artifact.
+# - `schedule` nightly 02:00 UTC : run + SLO check.
+# - `release tag v*` : RUN obligatoire ; bloque release si fail.
+# - `pull_request` : SKIP par défaut (GPU runner cost contrôlé) ;
+#   override possible via le label `run-p1-bench` sur la PR.
+#
+# ## SLO gated en v0.2.0
+#
+# - SLO-C-2 (CPU 800 ms), SLO-PC-REPRO (5 % drift),
+#   SLO-PC-mTLS-INIT (60 ms), SLO-P1-BUDGET-{1,2,3,4,6,8,9,10,11,12},
+#   SLO-P1-TAIL-1.
+#
+# Les SLO **GPU-required** (`SLO-C-1`, `SLO-P1-BUDGET-5`,
+# `SLO-P1-BUDGET-7` cible 100 ms) restent `PENDING_GPU_RUNNER`
+# jusqu'à Φ-D D28+.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/bench-p1-surface.yml'
+      - 'crates/efe-server/src/middleware/budget_tracker.rs'
+      - 'crates/efe-telemetry/src/metrics/p1_instruments.rs'
+      - 'crates/efe-server/src/services/swarm.rs'
+      - 'crates/efe-server/src/mode1.rs'
+      - 'crates/efe-core/src/genesis/**'
+      - 'crates/efe-core/src/fusion/**'
+      - 'crates/efe-core/src/consensus/**'
+      - 'crates/efe-core/src/dissolution/**'
+      - 'crates/efe-core/src/alignment/**'
+      - 'crates/efe-core/src/swarm/**'
+      - 'deploy/load-tests/p1/**'
+      - 'bench_baselines/**/p1_slos.yaml'
+  schedule:
+    - cron: '0 2 * * *'   # 02:00 UTC daily
+  pull_request:
+    types: [opened, synchronize, reopened, labeled]
+    paths:
+      - 'crates/efe-server/src/middleware/budget_tracker.rs'
+      - 'crates/efe-telemetry/src/metrics/p1_instruments.rs'
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  # ─────────────────────────────────────────────────────────────────
+  # JOB 1 — AST hot-path lint (cheap, runs on every PR)
+  # ─────────────────────────────────────────────────────────────────
+  p1-hot-path-lint:
+    name: P1 hot-path AST lint (ratchet)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.88
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: p1-lint
+      - name: Run AST hot-path lint
+        run: cargo test --package efe-server --test p1_hot_path_lint --release
+      - name: Print baseline summary on failure
+        if: failure()
+        run: |
+          echo "::error::P1 hot-path lint ratchet REGRESSION."
+          echo "Baseline file : crates/efe-server/tests/data/p1_hot_path_baseline.json"
+          cat crates/efe-server/tests/data/p1_hot_path_baseline.json || true
+          echo "To unbreak after a legitimate refactor :"
+          echo "  EFE_P1_LINT_UPDATE_BASELINE=1 cargo test --package efe-server --test p1_hot_path_lint -- hot_path_lint_ratchet"
+
+  # ─────────────────────────────────────────────────────────────────
+  # JOB 2 — Telemetry unit tests
+  # ─────────────────────────────────────────────────────────────────
+  p1-telemetry-unit:
+    name: P1 instruments unit tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: [p1-hot-path-lint]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.88
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: p1-tel
+      - name: Test p1_instruments
+        run: cargo test --package efe-telemetry --lib metrics::p1_instruments --release
+      - name: Test budget_tracker (inline)
+        run: cargo test --package efe-server --lib middleware::budget_tracker --release
+      - name: Test budget_tracker (integration)
+        run: cargo test --package efe-server --test p1_budget_tracker --release
+
+  # ─────────────────────────────────────────────────────────────────
+  # JOB 3 — Bench harness end-to-end (CPU only en v0.2.0)
+  # ─────────────────────────────────────────────────────────────────
+  p1-bench-cpu:
+    name: P1 sustained bench (CPU)
+    runs-on: ubuntu-latest
+    # Skip sur PR sauf label explicite (gardefou cost & runtime).
+    if: |
+      github.event_name == 'push' ||
+      github.event_name == 'schedule' ||
+      (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'run-p1-bench'))
+    timeout-minutes: 45
+    needs: [p1-telemetry-unit]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.88
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: p1-bench
+      - name: Compute host fingerprint
+        id: fp
+        run: |
+          # Cf. p1 § 4.5. Computed twice : once at boot via
+          # `efe-server`, once here for the bench report.
+          FP=$(uname -srm; cat /proc/cpuinfo | grep 'model name' | head -1; \
+               rustc --version 2>&1)
+          FP_SHA=$(echo "$FP" | sha256sum | cut -d' ' -f1)
+          echo "fp_sha256=$FP_SHA" >> "$GITHUB_OUTPUT"
+          echo "P1 host fingerprint (CPU baseline) : $FP_SHA"
+      - name: Build efe-server (release)
+        run: cargo build --release --bin efe-server
+      - name: Start efe-server (CPU, 3-replica via tokio task)
+        run: |
+          ./target/release/efe-server --bind 0.0.0.0:50051 --replicas 3 &
+          echo $! > /tmp/efe-server.pid
+      - name: Wait healthy
+        run: |
+          timeout 60 bash -c 'until curl -fsS http://localhost:50051/healthz; do sleep 1; done'
+      - name: Install ghz
+        run: |
+          curl -L https://github.com/bojand/ghz/releases/download/v0.120.0/ghz-linux-x86_64.tar.gz \
+            | tar -xz -C /tmp ghz
+          chmod +x /tmp/ghz
+      - name: Run P1 sustained workload
+        env:
+          GHZ_JWT_TOKEN: "${{ secrets.GHZ_BENCH_TOKEN }}"
+          GHZ_RUN_ID: "p1-${{ github.run_id }}"
+        run: |
+          mkdir -p target/bench
+          /tmp/ghz \
+            --config deploy/load-tests/p1/p1_sustained.yaml \
+            --host localhost:50051 \
+            --output target/bench/bench_p1_sustained.json \
+            --format json \
+            --insecure
+      - name: Stop efe-server
+        if: always()
+        run: |
+          [ -f /tmp/efe-server.pid ] && kill -TERM "$(cat /tmp/efe-server.pid)" || true
+      - name: Check SLO compliance
+        run: |
+          python3 eval/scripts/check_slo.py \
+            --baseline bench_baselines/v0.2.0/p1_slos.yaml \
+            --measure target/bench/bench_p1_sustained.json \
+            --fingerprint "${{ steps.fp.outputs.fp_sha256 }}" \
+            --skip-pending-gpu-runner
+      - name: Upload bench artefacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: bench-p1-sustained-${{ github.run_id }}
+          path: |
+            target/bench/bench_p1_sustained.json
+          retention-days: 90
+      - name: Post bench summary as PR comment
+        if: github.event_name == 'pull_request'
+        run: |
+          python3 scripts/post_bench_pr_comment.py \
+            --bench target/bench/bench_p1_sustained.json \
+            --pr-number ${{ github.event.pull_request.number }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # ─────────────────────────────────────────────────────────────────
+  # JOB 4 — GPU bench (PENDING_GPU_RUNNER, gated by env GHA secret)
+  # ─────────────────────────────────────────────────────────────────
+  p1-bench-gpu:
+    name: P1 sustained bench (GPU T4)
+    # Auto-disabled jusqu'à provisioning du runner self-hosted GPU.
+    # Activé par sprint Φ-D D28+ ; le label `runs-on` change pour
+    # `[self-hosted, gpu-t4]`.
+    if: vars.P1_GPU_RUNNER_ENABLED == 'true'
+    runs-on: [self-hosted, gpu-t4]
+    timeout-minutes: 60
+    needs: [p1-telemetry-unit]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify GPU available
+        run: nvidia-smi
+      - name: Pull bundle MiniLM
+        run: ./scripts/pull_bundle.sh minilm-L12-v2 "${{ secrets.BUNDLE_SAS_URL }}"
+      - name: Start efe-server (GPU, 3-replica compose)
+        run: docker compose -f deploy/compose-p1.yml up -d
+      - name: Wait healthy
+        run: timeout 120 bash -c 'until curl -fsS http://localhost:50051/healthz; do sleep 2; done'
+      - name: Run P1 sustained workload
+        env:
+          GHZ_JWT_TOKEN: "${{ secrets.GHZ_BENCH_TOKEN }}"
+        run: |
+          ghz --config deploy/load-tests/p1/p1_sustained.yaml \
+              --output target/bench_p1_sustained_gpu.json \
+              --format json
+      - name: Check SLO compliance (incl. GPU SLOs)
+        run: |
+          python3 eval/scripts/check_slo.py \
+            --baseline bench_baselines/v0.2.0/p1_slos.yaml \
+            --measure target/bench_p1_sustained_gpu.json
+      - name: Upload bench artefacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: bench-p1-sustained-gpu-${{ github.run_id }}
+          path: target/bench_p1_sustained_gpu.json
+          retention-days: 365
+      - name: Teardown
+        if: always()
+        run: docker compose -f deploy/compose-p1.yml down -v
+
+  # ─────────────────────────────────────────────────────────────────
+  # JOB 5 — Smoke validation : Prom rules + Grafana dashboard JSON
+  # ─────────────────────────────────────────────────────────────────
+  p1-ops-smoke:
+    name: P1 ops manifests smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate Prometheus rules (promtool)
+        run: |
+          curl -sL https://github.com/prometheus/prometheus/releases/download/v2.55.0/prometheus-2.55.0.linux-amd64.tar.gz | tar -xz
+          ./prometheus-2.55.0.linux-amd64/promtool check rules deploy/observability/prometheus/rules.p1/*.yaml
+      - name: Validate Grafana dashboard JSON
+        run: |
+          jq '.title, .panels | length' deploy/observability/grafana/efe-p1-slo.json
+      - name: Validate ghz config YAML
+        run: python3 -c "import yaml; yaml.safe_load(open('deploy/load-tests/p1/p1_sustained.yaml'))"
+      - name: Validate baseline SLOs YAML
+        run: python3 -c "import yaml; yaml.safe_load(open('bench_baselines/v0.2.0/p1_slos.yaml'))"
