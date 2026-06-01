@@ -1,0 +1,76 @@
+[package]
+name = "efe-curation"
+version = "0.1.0"
+edition = "2021"
+authors = ["EFE Engineering <eng@efe.example.com>"]
+license = "Apache-2.0"
+description = "M23 — LLM-assisted taxonomy curation for EFE"
+repository = "https://github.com/efe-ai/efe"
+publish = false
+
+[lib]
+name = "efe_curation"
+path = "src/lib.rs"
+
+[features]
+default = []
+# Expose `test_helpers` to integration tests under `tests/`. Off by
+# default ; enabled in `[dev-dependencies]` below so integration tests
+# compile without extra flags.
+test-utils = []
+integration_tests = ["test-utils"]
+
+[dependencies]
+# Core async + DB
+tokio = { version = "1.40", features = ["macros", "rt-multi-thread", "time", "sync"] }
+sqlx = { version = "0.7", default-features = false, features = ["runtime-tokio", "tls-rustls", "postgres", "uuid", "chrono", "json"] }
+chrono = { version = "0.4", features = ["serde"] }
+uuid = { version = "1.10", features = ["v4", "serde"] }
+
+# Async traits + lazy statics
+async-trait = "0.1"
+once_cell = "1.20"
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# gRPC
+tonic = "0.12"
+prost = "0.13"
+prost-types = "0.13"
+
+# Crypto + audit chain
+hmac = "0.12"
+sha2 = "0.10"
+hex = "0.4"
+
+# DAG + graph (for taxonomy version DAG validation)
+petgraph = "0.6"
+
+# Stats (KL divergence, Wasserstein)
+statrs = "0.17"
+
+# Error handling
+thiserror = "1.0"
+anyhow = "1.0"
+
+# Tracing + metrics
+tracing = "0.1"
+prometheus = "0.13"
+
+# Internal crates (paths relative to workspace root resolved by Cargo)
+efe-core = { path = "../efe-core" }
+efe-prompts = { path = "../efe-prompts" }
+efe-llm-router = { path = "../efe-llm-router" }
+
+[dev-dependencies]
+# Self with test-utils so integration tests can use the in-process mocks.
+efe-curation = { path = ".", features = ["test-utils"] }
+tokio = { version = "1.40", features = ["full", "test-util"] }
+sqlx = { version = "0.7", default-features = false, features = ["runtime-tokio", "tls-rustls", "postgres", "migrate"] }
+proptest = "1.5"
+mockall = "0.13"
+test-log = "0.2"
+pretty_assertions = "1.4"
+serial_test = "3"
