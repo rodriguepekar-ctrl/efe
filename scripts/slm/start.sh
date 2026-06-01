@@ -24,6 +24,8 @@ TARGET_ROBOT=""
 HEALTH_TIMEOUT="${EFE_SLM_HEALTH_TIMEOUT:-30}"   # secondes
 NGL_OVERRIDE="${EFE_SLM_NGL:-999}"                # n-gpu-layers (Metal/CUDA)
 HOST_BIND="${EFE_SLM_HOST:-127.0.0.1}"
+WARMUP_ENABLED="${EFE_SLM_WARMUP:-0}"            # L3 : chauffe au boot OPT-IN (défaut 0=off ; 1=on)
+WARMUP_TIMEOUT="${EFE_SLM_WARMUP_TIMEOUT:-30}"   # timeout par requête de chauffe (s)
 
 usage() {
     cat <<EOF
@@ -36,12 +38,18 @@ Options :
   --timeout SEC     Timeout health-check par robot (défaut: ${HEALTH_TIMEOUT}s)
   --ngl N           Couches GPU (défaut: ${NGL_OVERRIDE} = toutes ; 0 = CPU only)
   --host ADDR       Adresse de bind (défaut: ${HOST_BIND}, mettre 0.0.0.0 si remote)
+  --warmup          Active la chauffe au boot (L3, opt-in) — cf. EFE_SLM_WARMUP
+  --no-warmup       Désactive la chauffe au boot (= défaut)
   --help, -h        Aide
 
 Variables d'env reconnues :
   EFE_SLM_HEALTH_TIMEOUT   Timeout health-check (s)
   EFE_SLM_NGL              Couches GPU à offload
   EFE_SLM_HOST             Adresse de bind
+  EFE_SLM_WARMUP           Chauffe au boot OPT-IN (défaut 0 ; 1=on). NO-OP mesuré sur
+                           Metal/360M (l'analyzer est inférence-bound, pas cold-start) ;
+                           utile si VRAI cold-start (CUDA/serverless)
+  EFE_SLM_WARMUP_TIMEOUT   Timeout par requête de chauffe (s, défaut 30)
   NO_COLOR=1               Désactive les couleurs
 
 Exemples :
@@ -59,6 +67,8 @@ while [[ $# -gt 0 ]]; do
         --timeout)    HEALTH_TIMEOUT="$2"; shift 2 ;;
         --ngl)        NGL_OVERRIDE="$2"; shift 2 ;;
         --host)       HOST_BIND="$2"; shift 2 ;;
+        --warmup)     WARMUP_ENABLED=1; shift ;;
+        --no-warmup)  WARMUP_ENABLED=0; shift ;;
         --help|-h)    usage; exit 0 ;;
         --*)          log_err "Option inconnue : $1"; usage; exit 1 ;;
         *)            TARGET_ROBOT="$1"; shift ;;
@@ -391,6 +401,58 @@ for i in "${to_start[@]}"; do
         unhealthy+=("${name} (timeout)")
     fi
 done
+
+# ─── Chauffe au boot (L3, OPT-IN — défaut OFF) ──────────────────────────────
+# Activer via `EFE_SLM_WARMUP=1` ou `--warmup`.
+# ⚠ MESURÉ NO-OP sur Metal/SmolLM2-360M : le « cold-start ~5 s » était un
+# misdiagnostic — l'analyzer est lent à CHAQUE requête (inférence ~4,7 s décode),
+# pas seulement la 1ère (corrigé par C-B, pas par la chauffe). Conservé pour un
+# substrat à VRAI cold-start (CUDA/serverless) : une requête /completion à 1 token
+# au boot compile les graphes prefill+decode hors du chemin de la 1ère vraie
+# requête → DÉPLACE le cold-start (one-time) vers le boot, n'accélère PAS le
+# steady-state.
+warmup_robot() {
+    local i="$1" port
+    port="$(robot_port "$i")"
+    # 1 token sur le VRAI endpoint /completion → compile les graphes prefill+decode
+    # GPU. Sans grammar (inutile pour la chauffe). Exit code = celui de curl →
+    # capté par `wait` ; un échec est NON FATAL (la chauffe est une optimisation).
+    curl -fsS --max-time "${WARMUP_TIMEOUT}" \
+        -X POST "http://${HOST_BIND}:${port}/completion" \
+        -H 'content-type: application/json' \
+        -d '{"prompt":"warmup","n_predict":1,"cache_prompt":true}' >/dev/null 2>&1
+}
+
+if (( WARMUP_ENABLED == 1 )) && (( ${#healthy[@]} > 0 )); then
+    log_step "Chauffe SLM au boot — compile les shaders Metal hors du chemin de la 1ère requête"
+    warmup_pids=()
+    warmup_names=()
+    for i in "${to_start[@]}"; do
+        name="$(robot_name "$i")"
+        # Ne chauffe que les robots déclarés healthy (parallèle → temps ≈ max).
+        if [[ " ${healthy[*]} " == *" ${name} "* ]]; then
+            warmup_robot "$i" &
+            warmup_pids+=("$!")
+            warmup_names+=("${name}")
+        fi
+    done
+    warmup_fail=0
+    for idx in "${!warmup_pids[@]}"; do
+        if wait "${warmup_pids[$idx]}"; then
+            log_ok "${warmup_names[$idx]} réchauffé"
+        else
+            log_warn "${warmup_names[$idx]} : chauffe échouée (non bloquant)"
+            warmup_fail=$(( warmup_fail + 1 ))
+        fi
+    done
+    if (( warmup_fail == 0 )); then
+        log_ok "Chauffe terminée — 1ère requête CHAUDE (cold-start payé au boot)"
+    else
+        log_warn "Chauffe partielle (${warmup_fail} échec) — certaines 1ères requêtes seront froides"
+    fi
+elif (( WARMUP_ENABLED == 0 )); then
+    log_info "Chauffe au boot OFF (défaut ; EFE_SLM_WARMUP=1 ou --warmup pour activer)"
+fi
 
 # ─── Désactivation des traps après démarrage ────────────────────────────────
 # À partir d'ici, les daemons sont stables. Si l'utilisateur Ctrl+C maintenant,
