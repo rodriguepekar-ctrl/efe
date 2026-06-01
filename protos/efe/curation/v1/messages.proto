@@ -1,0 +1,451 @@
+// efe.curation.v1 — message definitions (M23).
+
+syntax = "proto3";
+package efe.curation.v1;
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/struct.proto";
+
+// ─── Common ──────────────────────────────────────────────────────────
+
+enum ExecutionMode {
+  EXECUTION_MODE_UNSPECIFIED = 0;
+  EXECUTION_MODE_SAMPLING_DELEGATION = 1;
+  EXECUTION_MODE_INTERNAL_LLM = 2;
+}
+
+enum ProposalStatus {
+  PROPOSAL_STATUS_UNSPECIFIED = 0;
+  PROPOSAL_STATUS_DRAFT = 1;
+  PROPOSAL_STATUS_PENDING = 2;
+  PROPOSAL_STATUS_APPROVED = 3;
+  PROPOSAL_STATUS_REJECTED = 4;
+  PROPOSAL_STATUS_PROMOTED = 5;
+  PROPOSAL_STATUS_ROLLED_BACK = 6;
+  PROPOSAL_STATUS_EXPIRED = 7;
+}
+
+enum ProposalKind {
+  PROPOSAL_KIND_UNSPECIFIED = 0;
+  PROPOSAL_KIND_SPLIT = 1;
+  PROPOSAL_KIND_MERGE = 2;
+  PROPOSAL_KIND_EXPLAIN = 3;
+  PROPOSAL_KIND_GENERATE_SYNTH = 4;
+  PROPOSAL_KIND_AUDIT_VS_GOLD = 5;
+}
+
+enum DriftSeverity {
+  DRIFT_SEVERITY_UNSPECIFIED = 0;
+  DRIFT_SEVERITY_LOW = 1;
+  DRIFT_SEVERITY_MEDIUM = 2;
+  DRIFT_SEVERITY_HIGH = 3;
+}
+
+enum TaxonomyVersionStatus {
+  TAXONOMY_VERSION_STATUS_UNSPECIFIED = 0;
+  TAXONOMY_VERSION_STATUS_DRAFT = 1;
+  TAXONOMY_VERSION_STATUS_CANDIDATE = 2;
+  TAXONOMY_VERSION_STATUS_ACTIVE = 3;
+  TAXONOMY_VERSION_STATUS_DEPRECATED = 4;
+  TAXONOMY_VERSION_STATUS_ROLLED_BACK = 5;
+}
+
+message LLMCallMetadata {
+  string llm_call_audit_id = 1;
+  string provider = 2;
+  string model = 3;
+  uint32 input_tokens = 4;
+  uint32 output_tokens = 5;
+  uint32 cost_cents = 6;
+  uint32 latency_ms = 7;
+  string prompt_template_name = 8;
+  uint32 prompt_template_version = 9;
+}
+
+// ─── Tool 1 : propose split ──────────────────────────────────────────
+
+message ProposeTaxonomySplitRequest {
+  string tenant_id = 1;
+  string catalog_id = 2;
+  string class_id = 3;
+  uint32 max_splits = 4;
+  bool include_examples = 5;
+  uint32 sample_size = 6;
+  ExecutionMode execution_mode = 7;
+  string idempotency_key = 8;
+}
+
+message ProposeTaxonomySplitResponse {
+  string proposal_id = 1;
+  TaxonomySplitProposal proposal = 2;
+  LLMCallMetadata llm_metadata = 3;
+}
+
+message TaxonomySplitProposal {
+  string original_class_id = 1;
+  repeated ProposedSubclass proposed_classes = 2;
+  string rationale_markdown = 3;
+  float confidence_score = 4;
+  repeated SampleAssignment sample_assignments = 5;
+}
+
+message ProposedSubclass {
+  string proposed_class_id = 1;
+  string display_name = 2;
+  repeated AnchorCandidate anchor_candidates = 3;
+  string description_markdown = 4;
+}
+
+message AnchorCandidate {
+  string text = 1;
+  float estimated_centroid_shift = 2;
+}
+
+message SampleAssignment {
+  string sample_id = 1;
+  string assigned_to = 2;
+}
+
+// ─── Tool 2 : explain misclassification ──────────────────────────────
+
+message ExplainMisclassificationRequest {
+  string tenant_id = 1;
+  string catalog_id = 2;
+  string sentence_id = 3;
+  string actual_class_id = 4;
+  string expected_class_id = 5;  // optional
+  ExecutionMode execution_mode = 6;
+  string idempotency_key = 7;
+}
+
+message ExplainMisclassificationResponse {
+  string proposal_id = 1;
+  string root_cause_markdown = 2;
+  repeated SuggestedFix suggested_fixes = 3;
+  LLMCallMetadata llm_metadata = 4;
+}
+
+message SuggestedFix {
+  enum FixType {
+    FIX_TYPE_UNSPECIFIED = 0;
+    ADD_ANCHOR = 1;
+    REMOVE_AMBIGUOUS_ANCHOR = 2;
+    SPLIT_CLASS = 3;
+    GENERATE_EXAMPLES = 4;
+  }
+  FixType type = 1;
+  string description_markdown = 2;
+  string parameters_json = 3;
+}
+
+// ─── Tool 3 : generate synthetic examples ────────────────────────────
+
+message GenerateSyntheticExamplesRequest {
+  string tenant_id = 1;
+  string catalog_id = 2;
+  string class_id = 3;
+  uint32 n_examples = 4;
+  DiversityHint diversity_hint = 5;
+  bool include_negative = 6;
+  ExecutionMode execution_mode = 7;
+  string idempotency_key = 8;
+}
+
+enum DiversityHint {
+  DIVERSITY_UNSPECIFIED = 0;
+  DIVERSITY_HIGH = 1;
+  DIVERSITY_MEDIUM = 2;
+  DIVERSITY_LOW = 3;
+}
+
+message GenerateSyntheticExamplesResponse {
+  string proposal_id = 1;
+  repeated SyntheticExample examples = 2;
+  LLMCallMetadata llm_metadata = 3;
+}
+
+message SyntheticExample {
+  string text = 1;
+  string suggested_class_id = 2;
+  float estimated_difficulty = 3;
+  string seed_anchor_id = 4;
+}
+
+// ─── Tool 4 : suggest class merge ────────────────────────────────────
+
+message SuggestClassMergeRequest {
+  string tenant_id = 1;
+  string catalog_id = 2;
+  repeated string class_ids = 3;
+  ExecutionMode execution_mode = 4;
+  string idempotency_key = 5;
+}
+
+message SuggestClassMergeResponse {
+  string proposal_id = 1;
+  ClassMergeProposal proposal = 2;
+  LLMCallMetadata llm_metadata = 3;
+}
+
+message ClassMergeProposal {
+  repeated string original_class_ids = 1;
+  string merged_class_id = 2;
+  string merged_display_name = 3;
+  repeated AnchorCandidate merged_anchors = 4;
+  string rationale_markdown = 5;
+  float estimated_accuracy_impact_pp = 6;
+  uint32 estimated_examples_re_labeled = 7;
+}
+
+// ─── Tool 5 : audit bundle vs gold ───────────────────────────────────
+
+message AuditBundleVsGoldRequest {
+  string tenant_id = 1;
+  string catalog_id = 2;
+  string bundle_id = 3;
+  string gold_dataset_id = 4;
+  uint32 max_weak_spots = 5;
+  bool include_llm_explanation = 6;
+  ExecutionMode execution_mode = 7;
+  string idempotency_key = 8;
+}
+
+message AuditBundleVsGoldResponse {
+  string scorecard_id = 1;
+  BundleAuditScorecard scorecard = 2;
+  LLMCallMetadata llm_metadata = 3;
+}
+
+message BundleAuditScorecard {
+  string bundle_id = 1;
+  string gold_dataset_id = 2;
+  float accuracy = 3;
+  float macro_f1 = 4;
+  float weighted_f1 = 5;
+  map<string, ClassMetrics> per_class = 6;
+  repeated WeakSpot weak_spots = 7;
+  string llm_explanation_markdown = 8;
+  google.protobuf.Timestamp computed_at = 9;
+}
+
+message ClassMetrics {
+  float precision = 1;
+  float recall = 2;
+  float f1 = 3;
+  uint32 support = 4;
+}
+
+message WeakSpot {
+  string class_id = 1;
+  string description = 2;
+  repeated string sample_sentences = 3;
+  float severity = 4;
+}
+
+// ─── Review queue ────────────────────────────────────────────────────
+
+message ListPendingProposalsRequest {
+  string tenant_id = 1;
+  string catalog_id = 2; // optional
+  uint32 limit = 3;
+  ProposalKind kind_filter = 4;
+}
+
+message ListPendingProposalsResponse {
+  repeated ProposalSummary proposals = 1;
+}
+
+message ProposalSummary {
+  string id = 1;
+  string tenant_id = 2;
+  string catalog_id = 3;
+  ProposalKind kind = 4;
+  ProposalStatus status = 5;
+  string proposed_by = 6;
+  string proposed_via = 7;
+  google.protobuf.Timestamp created_at = 8;
+  google.protobuf.Timestamp expires_at = 9;
+  uint64 actual_cost_cents = 10;
+  uint32 review_count = 11;
+}
+
+message GetProposalRequest { string proposal_id = 1; }
+
+message GetProposalResponse {
+  ProposalSummary summary = 1;
+  string rationale_markdown = 2;
+  google.protobuf.Struct diff_json = 3;
+  repeated CurationReviewRecord reviews = 4;
+}
+
+message CurationReviewRecord {
+  string id = 1;
+  string reviewer_oidc_sub = 2;
+  string reviewer_role = 3;
+  string decision = 4; // APPROVE | REJECT
+  string rationale = 5;
+  google.protobuf.Timestamp reviewed_at = 6;
+}
+
+message ApproveProposalRequest {
+  string proposal_id = 1;
+  string rationale = 2;
+}
+
+message ApproveProposalResponse {
+  ProposalStatus new_status = 1;
+}
+
+message RejectProposalRequest {
+  string proposal_id = 1;
+  string rationale = 2;
+}
+
+message RejectProposalResponse {
+  ProposalStatus new_status = 1;
+}
+
+// ─── Taxonomy version management ─────────────────────────────────────
+
+message ListTaxonomyVersionsRequest {
+  string tenant_id = 1;
+  string catalog_id = 2;
+  uint32 limit = 3;
+}
+
+message ListTaxonomyVersionsResponse {
+  repeated TaxonomyVersionSummary versions = 1;
+}
+
+message TaxonomyVersionSummary {
+  string id = 1;
+  string semver = 2;
+  string parent_id = 3;
+  TaxonomyVersionStatus status = 4;
+  string proposal_id = 5;
+  google.protobuf.Timestamp created_at = 6;
+  google.protobuf.Timestamp promoted_at = 7;
+  string cosign_signature_url = 8;
+  int64 rekor_log_index = 9;
+}
+
+message GetTaxonomyVersionRequest { string version_id = 1; }
+message GetTaxonomyVersionResponse {
+  TaxonomyVersionSummary summary = 1;
+  google.protobuf.Struct anchors_json = 2;
+  google.protobuf.Struct canary_metrics = 3;
+}
+
+message PromoteTaxonomyVersionRequest {
+  string proposal_id = 1;
+  string catalog_id = 2;
+  bool skip_canary = 3; // requires elevated role
+}
+
+message PromoteTaxonomyVersionResponse {
+  string candidate_version_id = 1;
+  google.protobuf.Timestamp canary_started_at = 2;
+}
+
+message RollbackTaxonomyVersionRequest {
+  string target_version_id = 1;
+  string catalog_id = 2;
+  string reason = 3;
+}
+
+message RollbackTaxonomyVersionResponse {
+  string new_active_version_id = 1;
+}
+
+// ─── Semantic diff ───────────────────────────────────────────────────
+
+message ComputeSemanticDiffRequest {
+  string from_version_id = 1;
+  string to_version_id = 2;
+  bool include_estimated_impact = 3;
+  string gold_dataset_id = 4; // required if include_estimated_impact
+}
+
+message ComputeSemanticDiffResponse {
+  string from_semver = 1;
+  string to_semver = 2;
+  repeated ClassChange class_changes = 3;
+  EstimatedImpact estimated_impact = 4;
+}
+
+message ClassChange {
+  enum Kind {
+    KIND_UNSPECIFIED = 0;
+    ADDED = 1;
+    REMOVED = 2;
+    RENAMED = 3;
+    SPLIT = 4;
+    MERGED = 5;
+    ANCHORS_CHANGED = 6;
+  }
+  Kind kind = 1;
+  repeated string affected_class_ids = 2;
+  google.protobuf.Struct details = 3;
+}
+
+message EstimatedImpact {
+  uint64 affected_examples_count = 1;
+  float estimated_accuracy_delta_pp = 2;
+  uint64 re_label_required = 3;
+  float confusion_matrix_delta_norm = 4;
+}
+
+// ─── Drift events ────────────────────────────────────────────────────
+
+message ListDriftEventsRequest {
+  string tenant_id = 1;
+  string catalog_id = 2;
+  DriftSeverity min_severity = 3;
+  bool only_unacknowledged = 4;
+  uint32 limit = 5;
+}
+
+message ListDriftEventsResponse {
+  repeated DriftEventSummary events = 1;
+}
+
+message DriftEventSummary {
+  string id = 1;
+  string class_id = 2;
+  google.protobuf.Timestamp detected_at = 3;
+  double kl_divergence = 4;
+  double mean_confidence_old = 5;
+  double mean_confidence_new = 6;
+  DriftSeverity severity = 7;
+  string triggered_proposal_id = 8;
+  google.protobuf.Timestamp acknowledged_at = 9;
+}
+
+message AcknowledgeDriftEventRequest {
+  string event_id = 1;
+  string note = 2;
+}
+
+message AcknowledgeDriftEventResponse {}
+
+// ─── Cost report ─────────────────────────────────────────────────────
+
+message GetCurationCostReportRequest {
+  string tenant_id = 1;
+  google.protobuf.Timestamp from = 2;
+  google.protobuf.Timestamp to = 3;
+  repeated string group_by = 4;
+}
+
+message GetCurationCostReportResponse {
+  uint64 total_cost_cents = 1;
+  repeated CostBucket buckets = 2;
+}
+
+message CostBucket {
+  map<string, string> labels = 1;
+  uint32 input_tokens = 2;
+  uint32 output_tokens = 3;
+  uint64 cost_cents = 4;
+  uint32 call_count = 5;
+}

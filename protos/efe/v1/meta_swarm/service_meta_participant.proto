@@ -1,0 +1,55 @@
+// Copyright (C) 2026 EFE.  UNLICENSED.
+//
+// Sprint A1 Phase 2 (PR #5) — MetaParticipantService : the
+// participant-facing gRPC surface.
+//
+// Implemented by `efe-meta-swarm-server` (participant binary, PR #6+).
+// Called by the controller only ; participants authorise callers by
+// SAN-checking the leaf cert (PR #16).
+
+syntax = "proto3";
+
+package efe.v1.meta_swarm;
+
+import "efe/v1/meta_swarm/messages.proto";
+
+service MetaParticipantService {
+  // Receive a pulled vector and produce the next contractive step.
+  // Maps to `SwarmParticipant::step_with_pull()`.
+  //
+  // This is the MOST-FREQUENT RPC of the entire transport.  At 47
+  // iters × 3 participants × 100 rps ≈ 14 100 Step RPCs/sec on a
+  // busy controller.
+  //
+  // Latency budget : ≤ 3 ms p99 in-rack on a 4-vCPU pod.
+  rpc Step (StepRequest) returns (StepResponse);
+
+  // Reset to the per-participant seed state.
+  rpc Reset (ResetParticipantRequest) returns (ResetParticipantResponse);
+
+  // Return the current state tensor.  Not called on the hot path ;
+  // reserved for the Phase-2 dashboard + the consistency probe.
+  rpc State (StateRequest) returns (StateResponse);
+
+  // Server-streaming variant : participant emits one StepResponse
+  // per incoming StepRequest, both sides streamed.  Saves one TLS
+  // record per step (~ 30 % wire overhead reduction on the hot path).
+  //
+  // OPTIONAL : controllers MAY use Step() instead.  Whether to use
+  // StepStream is decided per-deployment via
+  // `EFE_META_SWARM_USE_STEP_STREAM=true|false` (default : false in
+  // Phase 2 ; expected to flip to true in Phase 3 once we have
+  // streaming-friendly load balancers).
+  rpc StepStream (stream StepRequest) returns (stream StepResponse);
+
+  // Capability query.  Returns the participant's descriptor (dim,
+  // kappa, seed, build_sha, blas_backend, features).
+  //
+  // Called once at controller startup + on every SIGHUP.  If the
+  // returned descriptor mismatches the manifest's expectation, the
+  // controller fails to start (or aborts the reload).
+  rpc Capabilities (CapabilitiesRequest) returns (CapabilitiesResponse);
+
+  // Liveness + readiness probe.
+  rpc Health (HealthRequest) returns (HealthResponse);
+}

@@ -1,0 +1,47 @@
+// efe.active_learning.v1.ActiveLearningService — M24 closed loop.
+//
+// 16 RPCs covering :
+//   - Queue management (list, get)
+//   - Review actions (confirm, edit, reject)
+//   - Retune (trigger, list, get)
+//   - Promotion (promote, rollback)
+//   - GDPR Art. 17 (erasure, list pending)
+//   - Stats / monitoring
+//   - DPO consent management
+
+syntax = "proto3";
+package efe.active_learning.v1;
+
+import "google/protobuf/timestamp.proto";
+import "efe/active_learning/v1/messages.proto";
+
+service ActiveLearningService {
+    // ── Queue management ─────────────────────────────────────────────
+    rpc ListGoldLabelQueue(ListGoldLabelQueueRequest) returns (ListGoldLabelQueueResponse);
+    rpc GetGoldLabelProposal(GetGoldLabelProposalRequest) returns (GetGoldLabelProposalResponse);
+
+    // ── Review actions ──────────────────────────────────────────────
+    rpc ConfirmGoldLabel(ConfirmGoldLabelRequest) returns (ConfirmGoldLabelResponse);
+    rpc EditAndConfirmGoldLabel(EditAndConfirmGoldLabelRequest) returns (ConfirmGoldLabelResponse);
+    rpc RejectGoldLabel(RejectGoldLabelRequest) returns (RejectGoldLabelResponse);
+
+    // ── Retune ──────────────────────────────────────────────────────
+    rpc TriggerBundleRetune(TriggerBundleRetuneRequest) returns (TriggerBundleRetuneResponse);
+    rpc ListRetuneRuns(ListRetuneRunsRequest) returns (ListRetuneRunsResponse);
+    rpc GetRetuneRun(GetRetuneRunRequest) returns (GetRetuneRunResponse);
+
+    // ── Promotion ───────────────────────────────────────────────────
+    rpc PromoteRetunedBundle(PromoteRetunedBundleRequest) returns (PromoteRetunedBundleResponse);
+    rpc RollbackPromotion(RollbackPromotionRequest) returns (RollbackPromotionResponse);
+
+    // ── GDPR Art. 17 ────────────────────────────────────────────────
+    rpc TriggerGdprArt17Erasure(TriggerGdprArt17ErasureRequest) returns (TriggerGdprArt17ErasureResponse);
+    rpc ListGdprErasureRequests(ListGdprErasureRequestsRequest) returns (ListGdprErasureRequestsResponse);
+
+    // ── Stats / monitoring ──────────────────────────────────────────
+    rpc GetActiveLearningStats(GetActiveLearningStatsRequest) returns (GetActiveLearningStatsResponse);
+    rpc GetEffectiveBundleVersion(GetEffectiveBundleVersionRequest) returns (GetEffectiveBundleVersionResponse);
+
+    // ── DPO consent ─────────────────────────────────────────────────
+    rpc RegisterDpoConsent(RegisterDpoConsentRequest) returns (RegisterDpoConsentResponse);
+}

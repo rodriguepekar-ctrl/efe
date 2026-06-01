@@ -1,0 +1,170 @@
+// EFE M25 — Agent runtime messages.
+syntax = "proto3";
+
+package efe.agent_runtime.v1;
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/struct.proto";
+
+option go_package = "github.com/efe-ai/efe/proto/efe/agent_runtime/v1;agent_runtime_v1";
+
+// ── Enums ──────────────────────────────────────────────────────────
+
+enum AgentRunStatus {
+  AGENT_RUN_STATUS_UNSPECIFIED = 0;
+  AGENT_RUN_STATUS_PENDING = 1;
+  AGENT_RUN_STATUS_PROVISIONING = 2;
+  AGENT_RUN_STATUS_RUNNING = 3;
+  AGENT_RUN_STATUS_AWAITING_APPROVAL = 4;
+  AGENT_RUN_STATUS_PAUSED = 5;
+  AGENT_RUN_STATUS_RESUMING = 6;
+  AGENT_RUN_STATUS_COMPLETED = 7;
+  AGENT_RUN_STATUS_FAILED = 8;
+  AGENT_RUN_STATUS_TERMINATED = 9;
+  AGENT_RUN_STATUS_TIMED_OUT = 10;
+  AGENT_RUN_STATUS_COST_CAPPED = 11;
+}
+
+enum ApprovalStatus {
+  APPROVAL_STATUS_UNSPECIFIED = 0;
+  APPROVAL_STATUS_PENDING = 1;
+  APPROVAL_STATUS_GRANTED = 2;
+  APPROVAL_STATUS_REJECTED = 3;
+  APPROVAL_STATUS_EXPIRED = 4;
+  APPROVAL_STATUS_CONSUMED = 5;
+}
+
+// ── Core types ─────────────────────────────────────────────────────
+
+message AgentRun {
+  string id = 1;
+  string tenant_id = 2;
+  string template_slug = 3;
+  string profile = 4;
+  string provider = 5;
+  string model = 6;
+  AgentRunStatus status = 7;
+  string created_by = 8;
+  google.protobuf.Timestamp created_at = 9;
+  google.protobuf.Timestamp started_at = 10;
+  google.protobuf.Timestamp completed_at = 11;
+  int32 timeout_seconds = 12;
+  int64 max_cost_cents = 13;
+  int64 current_cost_cents = 14;
+  int32 current_step = 15;
+  int32 max_steps = 16;
+  string vm_id = 17;
+  google.protobuf.Struct final_output = 18;
+  string failure_reason = 19;
+}
+
+message AgentRunTemplate {
+  string id = 1;
+  string tenant_id = 2;
+  string slug = 3;
+  string display_name = 4;
+  string description = 5;
+  string profile = 6;
+  string default_provider = 7;
+  string default_model = 8;
+  string system_prompt = 9;
+  repeated string tool_whitelist = 10;
+  int32 max_steps = 11;
+  int32 default_timeout_seconds = 12;
+  int64 default_max_cost_cents = 13;
+  bool require_approval_for_writes = 14;
+  string created_by = 15;
+  google.protobuf.Timestamp created_at = 16;
+  int32 version = 17;
+  bool deprecated = 18;
+}
+
+message ApprovalRequest {
+  string id = 1;
+  string agent_run_id = 2;
+  string tenant_id = 3;
+  int32 step_index = 4;
+  string tool_name = 5;
+  google.protobuf.Struct tool_args = 6;
+  string justification = 7;
+  google.protobuf.Timestamp requested_at = 8;
+  ApprovalStatus status = 9;
+  google.protobuf.Timestamp decided_at = 10;
+  string decided_by = 11;
+  string decision_reason = 12;
+  google.protobuf.Timestamp expires_at = 13;
+}
+
+message AgentStep {
+  string id = 1;
+  string agent_run_id = 2;
+  int32 step_index = 3;
+  string kind = 4;            // llm_call / tool_call / approval / final
+  google.protobuf.Struct payload = 5;
+  int64 cost_cents = 6;
+  google.protobuf.Timestamp created_at = 7;
+}
+
+// ── Request / Response wrappers ────────────────────────────────────
+
+message CreateAgentRunRequest {
+  string tenant_id = 1;
+  string template_slug = 2;
+  google.protobuf.Struct initial_prompt = 3;
+  repeated string tool_whitelist = 4;     // optional override (subset of template's)
+  int32 timeout_seconds = 5;              // optional override
+  double max_cost_usd = 6;                 // optional override
+  string created_by = 7;
+}
+
+message CreateAgentRunResponse { AgentRun run = 1; }
+
+message GetAgentRunRequest { string run_id = 1; }
+message GetAgentRunResponse {
+  AgentRun run = 1;
+  repeated AgentStep recent_steps = 2;
+  repeated ApprovalRequest pending_approvals = 3;
+}
+
+message ListAgentRunsRequest {
+  string tenant_id = 1;
+  bool include_completed = 2;
+  int32 limit = 3;
+}
+message ListAgentRunsResponse { repeated AgentRun runs = 1; }
+
+message ApproveAgentStepRequest {
+  string approval_id = 1;
+  string reason = 2;
+}
+message ApproveAgentStepResponse {
+  string approval_token = 1;     // opaque (HMAC + nonce, server-signed)
+  google.protobuf.Timestamp expires_at = 2;
+}
+
+message RejectAgentStepRequest {
+  string approval_id = 1;
+  string reason = 2;
+}
+message RejectAgentStepResponse {}
+
+message PauseAgentRunRequest {
+  string run_id = 1;
+  string reason = 2;
+}
+message PauseAgentRunResponse {}
+
+message ResumeAgentRunRequest { string run_id = 1; }
+message ResumeAgentRunResponse {}
+
+message TerminateAgentRunRequest {
+  string run_id = 1;
+  string reason = 2;
+}
+message TerminateAgentRunResponse {}
+
+message UpsertTemplateRequest { AgentRunTemplate template = 1; }
+message UpsertTemplateResponse { AgentRunTemplate template = 1; }
+
+message ListTemplatesRequest { string tenant_id = 1; }
+message ListTemplatesResponse { repeated AgentRunTemplate templates = 1; }

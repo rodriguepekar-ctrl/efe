@@ -1,0 +1,26 @@
+// EFE M25 — Agent runtime gRPC service.
+syntax = "proto3";
+
+package efe.agent_runtime.v1;
+
+import "efe/agent_runtime/v1/messages.proto";
+
+option go_package = "github.com/efe-ai/efe/proto/efe/agent_runtime/v1;agent_runtime_v1";
+
+service AgentRuntimeService {
+  // ── Run lifecycle ───────────────────────────────────────────────
+  rpc CreateAgentRun (CreateAgentRunRequest) returns (CreateAgentRunResponse);
+  rpc GetAgentRun (GetAgentRunRequest) returns (GetAgentRunResponse);
+  rpc ListAgentRuns (ListAgentRunsRequest) returns (ListAgentRunsResponse);
+  rpc PauseAgentRun (PauseAgentRunRequest) returns (PauseAgentRunResponse);
+  rpc ResumeAgentRun (ResumeAgentRunRequest) returns (ResumeAgentRunResponse);
+  rpc TerminateAgentRun (TerminateAgentRunRequest) returns (TerminateAgentRunResponse);
+
+  // ── Approval workflow (Art. 14 oversight) ──────────────────────
+  rpc ApproveAgentStep (ApproveAgentStepRequest) returns (ApproveAgentStepResponse);
+  rpc RejectAgentStep (RejectAgentStepRequest) returns (RejectAgentStepResponse);
+
+  // ── Templates ───────────────────────────────────────────────────
+  rpc UpsertAgentRunTemplate (UpsertTemplateRequest) returns (UpsertTemplateResponse);
+  rpc ListAgentRunTemplates (ListTemplatesRequest) returns (ListTemplatesResponse);
+}

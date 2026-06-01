@@ -1,0 +1,152 @@
+// Sprint **D34** (M4 § 13) — Mode-2 service : anchors générées
+// dynamiquement par un LLM de routage à chaque requête.
+//
+// Architecture : `docs/EFE_SERVER_ARCHITECTURE.md` § 13.
+//
+// Diff with Mode-1 :
+//
+//   * Mode-1 takes a `SwarmSpec` already containing anchors compiled
+//     server-side from a registered catalog.
+//   * Mode-2 takes a raw `query_text` and a `llm_router_id`. The
+//     server calls the configured LLM router to generate `top_k`
+//     dynamic anchors, then runs the swarm against them.
+//
+// Cache : `Arc<DashMap<u64, RouterOutput>>` keyed on
+// `hash(query_text, top_k, router_id)`. Default TTL = 5 minutes.
+// SLO S-11 cache hit rate ≥ 60 % on the synthetic load fixture.
+//
+// SLO S-3 latency : p99 ≤ 1500 ms (incl. one LLM call).
+
+syntax = "proto3";
+package efe.v1.mode2;
+
+import "google/protobuf/empty.proto";
+import "efe/v1/types.proto";
+
+service Mode2Service {
+  // Unary execute — single anchor-generation + single swarm run.
+  rpc Execute(Mode2ExecuteRequest) returns (Mode2ExecuteResponse);
+
+  // Server-streaming execute — emits per-round updates + final
+  // verdict, same protocol as Mode-1.ExecuteStreaming.
+  rpc ExecuteStreaming(Mode2ExecuteRequest) returns (stream Mode2StreamChunk);
+
+  // Health check on the configured LLM routers (latency + 200-ok).
+  rpc RouterHealth(google.protobuf.Empty) returns (RouterHealthResponse);
+}
+
+// =====================================================================
+// Request / response
+// =====================================================================
+
+message Mode2ExecuteRequest {
+  // Free-form user query.
+  string query_text = 1;
+
+  // Router identifier registered server-side. Built-in :
+  //   * "mock" — deterministic SHA-256-seeded anchors (D34 default).
+  //   * "openai" — gpt-4o-mini routing (D35 follow-up).
+  //   * "anthropic" — claude-haiku routing (D36 follow-up).
+  string llm_router_id = 2;
+
+  // Number of dynamic anchors to generate. Server caps at 20.
+  // Default 5 when unset (handler maps 0 → 5).
+  uint32 top_k_anchors = 3;
+
+  // Tenant id ; MUST match JWT tenant_id claim.
+  string tenant_id = 4;
+
+  // Optional correlation id (generated server-side if empty).
+  string request_id = 5;
+
+  // Deterministic seed forwarded to the swarm controller. 0 = random.
+  uint64 seed = 6;
+
+  // Hard upper bound on fusion rounds. 0 = use server default.
+  uint32 max_rounds = 7;
+
+  // Bypass the anchor cache for this call (useful for cache-warmup
+  // benches and routing experiments).
+  bool bypass_cache = 8;
+}
+
+message Mode2ExecuteResponse {
+  // Same shape as Mode-1's verdict so downstream pipelines can be
+  // mode-agnostic.
+  Verdict verdict = 1;
+
+  // Router-specific metadata for observability.
+  RouterMetadata router = 2;
+
+  // Echo the request_id (server-assigned if it was empty in input).
+  string request_id = 3;
+
+  // Total wall time including the LLM call (ms).
+  float total_ms = 4;
+
+  // Confidence from the swarm (0.0..=1.0).
+  float confidence = 5;
+}
+
+message RouterMetadata {
+  string router_id = 1;
+  // Number of anchors actually returned by the router (may differ
+  // from the requested `top_k_anchors` if the LLM emitted fewer).
+  uint32 anchors_generated = 2;
+  // LLM call latency in ms (excludes swarm time).
+  uint32 latency_ms = 3;
+  // True when the result came from the in-process cache.
+  bool from_cache = 4;
+  // Provider-side correlation id (OpenAI request id, Anthropic
+  // request id, or server-synthesised for the mock router).
+  string llm_call_id = 5;
+}
+
+// =====================================================================
+// Streaming
+// =====================================================================
+
+message Mode2StreamChunk {
+  oneof payload {
+    // Emitted ONCE, before the swarm starts, after the router returns.
+    RouterMetadata router = 1;
+    // Per-round update (same shape as Mode-1).
+    Mode2RoundUpdate round_update = 2;
+    // Final verdict envelope.
+    Mode2FinalVerdict final = 3;
+    // Final error envelope.
+    Mode2StreamError error = 4;
+  }
+}
+
+message Mode2RoundUpdate {
+  uint32 round = 1;
+  float variance = 2;
+  float confidence_so_far = 3;
+  uint32 active_agents = 4;
+  float elapsed_ms = 5;
+}
+
+message Mode2FinalVerdict {
+  Mode2ExecuteResponse response = 1;
+}
+
+message Mode2StreamError {
+  uint32 code = 1;
+  string message = 2;
+  map<string, string> details = 3;
+}
+
+// =====================================================================
+// Health
+// =====================================================================
+
+message RouterHealthResponse {
+  message Entry {
+    string router_id = 1;
+    bool healthy = 2;
+    uint32 latency_ms = 3;
+    string error_message = 4;
+  }
+  repeated Entry routers = 1;
+}

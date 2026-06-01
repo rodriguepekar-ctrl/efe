@@ -1,0 +1,362 @@
+// Copyright (C) 2026 EFE.  UNLICENSED — see workspace LICENSE
+// + R5-B1 carve-out in docs/EFE_OPERATIONAL_PRODUCTION_ARCHITECTURE.md.
+//
+// Sprint A1 Phase 2 (PR #5) — Shared messages for the meta-swarm
+// gRPC surface : tensors, scenario configs, participant descriptors,
+// per-RPC request/response types.
+//
+// Stability promise :
+//   * Package name `efe.v1.meta_swarm` is FROZEN for the life of v1.
+//   * Field numbers 1-99 are FROZEN ; never re-used.
+//   * Field numbers >= 100 are RESERVED for v1 additions.
+//   * Enum values 0-99 are FROZEN.
+//   * Enum values >= 100 are RESERVED for v1 additions.
+//
+// See `crates/efe-meta-swarm-proto/README.md` for the full
+// allocation table + breaking-change protocol.
+
+syntax = "proto3";
+
+package efe.v1.meta_swarm;
+
+// =============================================================================
+//  TensorF32 — dense float32 tensor on the wire.
+// =============================================================================
+//
+// Single-precision floats are the Phase-2 default.  Rationale :
+//   * The bench scenario (`three_swarms_kovant`) operates in f32 in
+//     Phase-1 already ; round-trip via f32 preserves bit identity.
+//   * Halves bandwidth vs f64.  At 256 d × 4 bytes = 1 KiB per state
+//     (vs 2 KiB for f64).  Material at 47 iters × 3 participants ×
+//     100 rps.
+//   * Tenants requiring f64 will opt in via the (yet-to-be-added)
+//     `precision` field of `IterationConfig` in Phase 3 ; a separate
+//     `TensorF64` message will be added at field number >= 100 in
+//     `messages.proto` then.
+//
+// Layout :
+//   * `dim` is the logical dimension.
+//   * `data` is row-major, length == dim.  Length mismatch is
+//     rejected server-side with META_ERROR_DIM_MISMATCH.
+//
+// Wire size : ~ 5 bytes (varint dim + tag) + 4 × dim bytes (packed
+// f32) + ~ 5 bytes (data tag overhead).
+message TensorF32 {
+  uint32 dim          = 1;
+  repeated float data = 2 [packed = true];
+
+  // Reserved for Phase 3 :
+  //   - 10 : quantization (int8 packed)
+  //   - 11 : sparsity_indices
+  reserved 3 to 9, 10 to 99;
+}
+
+// =============================================================================
+//  Safety geometry — oneof dispatch in MetaSpaceConfig.
+// =============================================================================
+
+// `MetaSpaceConfig` describes the meta-space dimension + the safety
+// geometry the meta-consensus must respect.  Safety is enforced
+// server-side at every meta-step (cf. PR #1 `BoxSafety::contains` +
+// `MetaSwarm::safety_project`).
+message MetaSpaceConfig {
+  uint32 dim = 1;
+
+  // Exactly one of these MUST be set.  Server rejects with
+  // META_ERROR_INVALID_SAFETY otherwise.
+  oneof safety_geometry {
+    BoxSafety   box  = 2;
+    Polyhedron  poly = 3;
+    LearnedHull hull = 4;
+  }
+
+  reserved 5 to 99;
+}
+
+// Symmetric box safety :  ‖x‖∞ ≤ radius (per axis).  Phase-2 default.
+message BoxSafety {
+  // Symmetric radius applied to every axis.  Asymmetric boxes
+  // (different bound per axis) are a Phase 3 follow-up ; will be
+  // expressed via a future `repeated float per_axis_radius` at
+  // field number >= 100.
+  float radius = 1;
+
+  reserved 2 to 99;
+}
+
+// Half-space polytope : { x : A·x ≤ b }.
+//
+// Layout :
+//   * `a_flat` is the flattened constraint matrix, row-major, of
+//     length `dim_a × dim` where `dim` is read from
+//     `MetaSpaceConfig.dim`.
+//   * `b` is the right-hand side, length `dim_a`.
+//   * `dim_a` is the number of constraints.
+message Polyhedron {
+  repeated float a_flat = 1 [packed = true];
+  repeated float b      = 2 [packed = true];
+  uint32 dim_a          = 3;
+
+  reserved 4 to 99;
+}
+
+// Learned hull : a serialised neural distance function or similar.
+// Phase-2 placeholder ; not exercised by the soak (the soak uses
+// BoxSafety).
+message LearnedHull {
+  bytes  serialized_model = 1;  // bincode-encoded in Phase 2
+  string version          = 2;
+
+  reserved 3 to 99;
+}
+
+// =============================================================================
+//  Participant descriptor — capability handshake.
+// =============================================================================
+//
+// Returned by `MetaParticipantService.Capabilities`.  Allows the
+// controller to verify that every participant matches the manifest's
+// expectation before starting an Iterate.  Mismatches surface as
+// META_ERROR_DIM_MISMATCH or META_ERROR_KAPPA_OUT_OF_RANGE.
+message ParticipantDescriptor {
+  string id           = 1;   // unique within a MetaSwarm
+  uint32 dim          = 2;
+  float  kappa        = 3;   // contraction constant ; MUST be in (0, 1)
+  uint64 seed         = 4;
+  string build_sha    = 5;   // git short SHA of the participant binary
+  string blas_backend = 6;   // "none" | "openblas" | "mkl" | "metal" | ...
+  repeated string features = 7;  // e.g. ["determinism", "metrics", "trace"]
+
+  reserved 8 to 99;
+}
+
+// =============================================================================
+//  Iteration config — knobs the controller forwards from its manifest.
+// =============================================================================
+message IterationConfig {
+  uint32 max_iters      = 1;   // capped at 200 server-side
+  double tolerance      = 2;   // joint residual threshold
+  double alpha_default  = 3;   // step damping
+  double coupling_gamma = 4;   // meta-operator coupling
+
+  // If true, the server guarantees that two iterates from the same
+  // initial state produce bit-identical results.
+  bool deterministic = 5;
+
+  // Wall-time budget.  Server caps at 30000 (30 s) ; longer requests
+  // are rejected with DEADLINE_EXCEEDED.
+  uint32 max_wall_ms = 6;
+
+  // Reserved for Phase 3 :
+  //   - 10 : f64 precision opt-in
+  //   - 11 : per-step tracing override
+  reserved 7 to 9, 10 to 99;
+}
+
+// =============================================================================
+//  StopReason — why an Iterate terminated.
+// =============================================================================
+enum StopReason {
+  STOP_REASON_UNSPECIFIED      = 0;
+  STOP_REASON_CONVERGED        = 1;
+  STOP_REASON_MAX_ITERS        = 2;
+  STOP_REASON_SAFETY_FAIL      = 3;
+  STOP_REASON_PARTICIPANT_DOWN = 4;
+  STOP_REASON_DEADLINE         = 5;
+  STOP_REASON_CONFIG_RELOAD    = 6;
+
+  // Reserved for Phase 3 :
+  //   STOP_REASON_TENANT_QUOTA    = 10;
+  //   STOP_REASON_REGION_FAILOVER = 11;
+  reserved 7 to 99;
+}
+
+// =============================================================================
+//  Iterate request / response (MetaSwarmService).
+// =============================================================================
+message IterateRequest {
+  // Optional : if absent, the controller uses its persisted manifest.
+  // If present, MUST match the controller's expectation exactly ;
+  // a mismatch is META_ERROR_DIM_MISMATCH.
+  repeated ParticipantDescriptor expected_participants = 1;
+
+  MetaSpaceConfig meta      = 2;
+  IterationConfig iteration = 3;
+
+  // Optional : initial participant states (in the same order as
+  // `expected_participants`).  Absent ⇔ start from each participant's
+  // last state (or zero if Reset was just called).
+  repeated TensorF32 initial_states = 4;
+
+  // W3C TraceParent header.  If absent, the controller starts a fresh
+  // trace and returns its trace_id in IterateResponse.trace_id.
+  string traceparent = 5;
+
+  reserved 6 to 99;
+}
+
+message IterateResponse {
+  uint32     iterations           = 1;
+  double     final_residual       = 2;
+  TensorF32  meta_consensus       = 3;
+  repeated TensorF32 final_states = 4;
+  StopReason stop_reason          = 5;
+  uint64     wall_us              = 6;
+  string     trace_id             = 7;
+
+  reserved 8 to 99;
+}
+
+// Streaming chunk — one inner step per chunk.
+message IterateChunk {
+  uint32 step     = 1;
+  double residual = 2;
+  // Per-participant inner state norms — useful for the bench HTML
+  // (PR #21 + #24).
+  repeated float participant_norms = 3 [packed = true];
+
+  reserved 4 to 99;
+}
+
+// =============================================================================
+//  StepOnce request / response (MetaSwarmService).
+// =============================================================================
+message StepOnceRequest {
+  // No fields in v1.  Reserved for Phase 3 explicit-state-input.
+  reserved 1 to 99;
+}
+
+message StepOnceResponse {
+  TensorF32 meta_consensus = 1;
+  double    residual       = 2;
+  reserved 3 to 99;
+}
+
+// =============================================================================
+//  Reset request / response (used by both services).
+// =============================================================================
+message ResetRequest {
+  // Optional : per-participant initial states.  Empty ⇔ zero state.
+  repeated TensorF32 initial_states = 1;
+  reserved 2 to 99;
+}
+
+message ResetResponse {
+  uint64 reset_gen = 1;   // monotonic counter, incremented per reset
+  reserved 2 to 99;
+}
+
+message ResetParticipantRequest {
+  // Optional : initial state for this participant.  Empty ⇔ zero.
+  TensorF32 initial = 1;
+  reserved 2 to 99;
+}
+
+message ResetParticipantResponse {
+  uint64 reset_gen = 1;
+  reserved 2 to 99;
+}
+
+// =============================================================================
+//  Step request / response (MetaParticipantService).
+// =============================================================================
+message StepRequest {
+  TensorF32 pulled_from_meta = 1;
+  uint32    step_index       = 2;
+  reserved 3 to 99;
+}
+
+message StepResponse {
+  TensorF32 new_state      = 1;
+  double    local_residual = 2;
+  uint64    step_us        = 3;   // latency self-report
+  reserved 4 to 99;
+}
+
+// =============================================================================
+//  State / Capabilities (MetaParticipantService).
+// =============================================================================
+message StateRequest {
+  reserved 1 to 99;
+}
+
+message StateResponse {
+  TensorF32 current         = 1;
+  uint32    step_index_last = 2;
+  reserved 3 to 99;
+}
+
+message CapabilitiesRequest {
+  reserved 1 to 99;
+}
+
+message CapabilitiesResponse {
+  ParticipantDescriptor descriptor = 1;
+  reserved 2 to 99;
+}
+
+// =============================================================================
+//  ReloadConfig (MetaSwarmService).
+// =============================================================================
+message ReloadConfigRequest {
+  // If empty : re-read manifest from disk.
+  // If non-empty : apply inline (admin RPC).
+  optional MetaSpaceConfig new_meta = 1;
+  repeated ParticipantDescriptor new_participants = 2;
+
+  // If true (default) : wait up to 30 s for in-flight Iterate to drain.
+  // If false : abort in-flight Iterate with STOP_REASON_CONFIG_RELOAD.
+  bool drain_inflight = 3;
+
+  reserved 4 to 99;
+}
+
+message ReloadConfigResponse {
+  uint32 reload_gen       = 1;
+  repeated string applied_changes = 2;
+  uint64 reload_wall_us   = 3;
+  bool   inflight_aborted = 4;
+  reserved 5 to 99;
+}
+
+// =============================================================================
+//  Health (both services).
+// =============================================================================
+message HealthRequest {
+  reserved 1 to 99;
+}
+
+message HealthResponse {
+  enum Status {
+    STATUS_UNSPECIFIED = 0;
+    STATUS_SERVING     = 1;
+    STATUS_NOT_SERVING = 2;
+    STATUS_RELOADING   = 3;   // SIGHUP in flight
+
+    reserved 4 to 99;
+  }
+
+  Status status     = 1;
+  uint32 inflight   = 2;
+  uint32 reload_gen = 3;
+
+  reserved 4 to 99;
+}
+
+// =============================================================================
+//  Info (MetaSwarmService).
+// =============================================================================
+message InfoRequest {
+  reserved 1 to 99;
+}
+
+message InfoResponse {
+  string build_sha       = 1;
+  string proto_version   = 2;   // "v1" — frozen at v0.2.0 PR #5
+  repeated ParticipantDescriptor configured_participants = 3;
+  string leader_pod_name = 4;
+  uint64 uptime_s        = 5;
+  uint32 last_reload_gen = 6;
+
+  reserved 7 to 99;
+}

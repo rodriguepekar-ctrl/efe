@@ -1,0 +1,77 @@
+// Copyright (C) 2026 EFE.  UNLICENSED.
+//
+// Sprint A1 Phase 2 (PR #5) — MetaSwarmService : the coordinator-
+// facing gRPC surface.
+//
+// Implemented by `efe-meta-swarm-server` (controller binary, PR #6+).
+// Called by :
+//   * `efe-server`             (when EFE_META_SWARM_ENABLED=true, PR #11)
+//   * the public bench harness (PR #21)
+//   * the loadgen tool         (PR #20)
+//
+// All RPCs are mTLS-authenticated (PR #16) ; the caller's SAN MUST be
+// `efe-server.efe.svc.cluster.local` (or the local-dev equivalent) to
+// be authorised.  RPC-specific scope checks (e.g. `admin` for
+// ReloadConfig) are enforced server-side.
+
+syntax = "proto3";
+
+package efe.v1.meta_swarm;
+
+import "efe/v1/meta_swarm/messages.proto";
+
+service MetaSwarmService {
+  // Resolve a fixed-point of the joint contractive system.
+  //
+  // This is the workhorse RPC.  Maps directly to Phase-1
+  // `MetaSwarm::iterate()`.  Blocking : caller is expected to wait up
+  // to `iteration.max_wall_ms` (server-capped at 30 s).
+  //
+  // Concurrency : the server may run multiple concurrent Iterate
+  // calls up to `EFE_META_SWARM_MAX_INFLIGHT` (default 10).  Beyond
+  // that, returns RESOURCE_EXHAUSTED.
+  //
+  // Cancellation : if the client drops the RPC, the server cancels
+  // its participant calls within 100 ms.
+  //
+  // Idempotence : two calls with identical inputs (same manifest,
+  // same `expected_participants`, same `initial_states`, same
+  // `iteration.deterministic = true`) produce bit-identical responses.
+  // Determinism is verified by SLO-A2-GRPC-MULTIPROC-DETERMINISM.
+  rpc Iterate (IterateRequest) returns (IterateResponse);
+
+  // Streaming variant — emits one chunk per inner step.  Used by the
+  // public bench (PR #21 + #24) to capture the residual trajectory.
+  // Final chunk includes the IterateResponse fields via trailer.
+  //
+  // Not on the hot path ; do NOT use from `efe-server`.
+  rpc IterateStream (IterateRequest) returns (stream IterateChunk);
+
+  // One-shot evaluation of the meta-operator at the current state.
+  // Maps to `MetaSwarm::step_once()`.  Reserved for latency-sensitive
+  // Phase-3 paths ; Phase-2 callers prefer Iterate().
+  rpc StepOnce (StepOnceRequest) returns (StepOnceResponse);
+
+  // Reset all participants to their seed state (or to a provided
+  // initial set).  Maps to `MetaSwarm::reset()`.
+  //
+  // Drains in-flight Iterate calls first (server-side).
+  rpc Reset (ResetRequest) returns (ResetResponse);
+
+  // Hot-reload manifest + safety geometry.  Triggered by SIGHUP on
+  // the controller (request body empty ; controller re-reads the
+  // on-disk manifest), OR by an admin RPC (request body non-empty).
+  //
+  // Requires the caller's auth token to carry the `admin` scope.
+  //
+  // SLO : reload wall time ≤ 200 ms p99 (SLO-A2-RELOAD-P99).
+  rpc ReloadConfig (ReloadConfigRequest) returns (ReloadConfigResponse);
+
+  // Liveness + readiness probe.  Returns within 1 ms.  Safe to call
+  // at high frequency.  Used by the K8s lease leader election +
+  // Helm `helm test` connection probe.
+  rpc Health (HealthRequest) returns (HealthResponse);
+
+  // Build + topology info for the dashboard.  Cheap.  Read-only.
+  rpc Info (InfoRequest) returns (InfoResponse);
+}
