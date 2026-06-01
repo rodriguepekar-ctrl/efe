@@ -94,6 +94,34 @@ _(rolling — next release will land here)_
   (post-fix). Synthèse :
   [`docs/EFE_NANO_AGENTS_MAP.md`](docs/EFE_NANO_AGENTS_MAP.md) §11.
 
+#### Performance — levier latence L1 : seuil map-reduce relevé (suite H0.2)
+
+- **`SAFE_CHUNK_TOKENS` 300 → 512** (`compressor.rs`). Le 300 était une marge
+  **CPU** (à l'époque un appel sur ~300+ t timeoutait en CPU, d'où un chunking
+  précoce). Le spike H0.2 a montré que le mur latence n'est pas le débit GPU mais
+  le **nombre d'appels SLM en série** du map-reduce : sur GPU (Metal) un appel
+  finit en ~1,5-2 s à 300 t / ~2-3 s à 512 t, très loin du timeout per-call 5 s,
+  et le ctx-size compresseur (4096) contient largement 512 t. Effet : toute la
+  bande **300-512 t** passe de **3-4 appels série** à **un seul** `compress_once`.
+  Réversible via `EFE_COMPRESSOR_CHUNK_TOKENS=300` (parc CPU). 4 tests verrouillent
+  la nouvelle frontière de dispatch (`l1_*`).
+- **Mesuré keyless** (même binaire, env bascule le seuil ; bridge LLM mock + SLM
+  Metal réels ; prompt `varied_backend` = 383 t, 5 reps/condition) :
+
+  | métrique | seuil 300 (pré-L1) | seuil 512 (post-L1) | Δ |
+  |---|---|---|---|
+  | latence **compresseur** | 6523 ms ± 2572 | **1819 ms ± 624** | **−72 % (3,6×)** |
+  | latence SLM totale | 9972 ms ± 2980 | **5689 ms ± 1695** | **−43 %** |
+  | savings compression | +24 % | +24 % | **préservé** |
+
+  Sortie compressée **identique** (~290 t) → appel unique = même résultat que le
+  map-reduce, juste plus vite. Un échec compresseur isolé a dégradé proprement
+  vers le prompt brut (savings 0 %, **pas de garbage**). **Premier gain latence
+  franc du projet**, et il vient de l'architecture (moins d'appels série), comme
+  le diagnostic H0.2 l'annonçait. Ne contredit pas le positionnement H0.3
+  (optimiseur de coût) : L1 accélère l'étage SLM ; le Δlatence NETTE bout-en-bout
+  vs baseline LLM reste à re-mesurer avec un vrai LLM.
+
 ## [0.9.0] - 2026-05-12 — Sprint Φ-D-OPS (Operational unification)
 
 ### Added — 40 artefacts unifying 6 completion sprints

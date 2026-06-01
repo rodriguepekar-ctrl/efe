@@ -223,9 +223,22 @@ ne pas la reconfondre avec les nano-robots) :
   - **Latence** : **neutre à négative** aux vitesses CPU-SLM (l'overhead SLM
     amont dépasse le temps LLM gagné). Le « win latence » observé au run **pré-fix**
     était un **artefact** de réponses fausses & courtes.
-  - → Récupérer la latence exige des SLM sur **GPU** (roadmap H0.2, non fait).
+  - → **H0.2 (spike GPU, keyless, FAIT)** : le GPU est **nécessaire** (en CPU le
+    compresseur timeoute, 15-25 s) mais **PAS suffisant** pour renverser la
+    latence. Le mur n'est pas le débit GPU mais la **sérialisation** des appels
+    map-reduce du compresseur (N appels SLM en série + cold-start). Le vrai levier
+    est **architectural**, pas matériel.
+  - → **L1 (FAIT, mesuré keyless)** : seuil map-reduce `SAFE_CHUNK_TOKENS`
+    **300 → 512** (`compressor.rs`) → la bande 300-512 t passe de 3-4 appels série
+    à **un seul**. Mesure (prompt 383 t, 5 reps, SLM Metal réels, LLM mock) :
+    compresseur **6523 → 1819 ms (−72 %)**, SLM total **9972 → 5689 ms (−43 %)**,
+    **savings préservés** (+24 %, sortie identique ~290 t). **Premier gain latence
+    franc du projet.** ⚠ C'est la latence de l'**étage SLM** ; le Δlatence NETTE
+    bout-en-bout vs baseline LLM reste à re-mesurer (vrai LLM). Le positionnement
+    « optimiseur de coût » **tient** — L1 le complète, ne le contredit pas.
 - **Méthodo** : ces 4 bugs (cf. §8) n'étaient visibles qu'en **live + lecture des
-  réponses** ; le mock LLM (réponses canned) les masquait tous.
+  réponses** ; le mock LLM (réponses canned) les masquait tous. **L1 a été
+  validé par le même principe** : mesure live (bridge SLM réel), pas un unit-test.
 - **2 stubs pré-analyse** (`sentiment_classifier`, `summary_writer`) → upgrade
   modèle/LLM planifié (Sprint 14).
 - **`reformulator` / `filter`** : construits + testés mais hors pré-mâchage Q&A
@@ -255,7 +268,7 @@ cargo clippy -p efe-nano --lib
 # Santé pré-analyse (attendu : 80 passed)
 cargo test  -p efe-nano-preanalysis --lib
 
-# Santé robots pré-mâchage (attendu : 118 passed)
+# Santé robots pré-mâchage (attendu : 122 passed — 118 + 4 tests L1)
 cargo test  -p efe-nano-app-coordinator --lib
 
 # Santé aval (attendu : coordinator 341, bridge 27+19+20=66)
@@ -271,6 +284,19 @@ ls -1 crates | grep -i nano
 
 # Consommateurs de la pré-analyse (attendu : 4)
 grep -rl "efe-nano-preanalysis" crates --include=Cargo.toml | grep -v "efe-nano-preanalysis/Cargo"
+
+# L1 — seuil map-reduce (attendu : 512) + tests de frontière de dispatch
+grep -n "const SAFE_CHUNK_TOKENS" crates/efe-nano-app-coordinator/src/clients/compressor.rs
+cargo test -p efe-nano-app-coordinator --lib clients::compressor::chunking_tests::l1_
+
+# L1 — repro de la mesure keyless (même binaire, l'env bascule le seuil ;
+# bridge LLM mock + SLM Metal réels → coût LLM nul). Lancer 2 fois, comparer
+# `compressor_latency_ms` dans l'event SSE PRE_CHEWING_METRICS :
+#   pré-L1  : EFE_COMPRESSOR_CHUNK_TOKENS=300
+#   post-L1 : EFE_COMPRESSOR_CHUNK_TOKENS=512  (= défaut)
+# (SLM lancés via ./scripts/slm/start.sh ; un prompt de 300-512 t straddle la bande)
+EFE_PREVIEW_MOCK=1 EFE_LIVE_SLM=1 EFE_COMPRESSOR_CHUNK_TOKENS=512 \
+  EFE_PREVIEW_ADDR=127.0.0.1:8710 ./target/debug/efe-preview-server
 ```
 
 ## 13. Maintenance

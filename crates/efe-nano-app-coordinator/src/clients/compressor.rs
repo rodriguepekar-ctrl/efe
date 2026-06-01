@@ -239,17 +239,37 @@ fn dynamic_compressor_grammar(base: &str, target_words: u32) -> String {
     base.replace("char{1,500}", &format!("char{{1,{n}}}"))
 }
 
-/// Au-dessus de ce seuil (tokens estimés), `invoke` bascule en map-reduce.
-/// ~300 tokens = nettement sous le plafond fiable mesuré (~700 post-fix-prompt)
-/// → marge de sécurité contre dégénération/timeout. Override : env
-/// `EFE_COMPRESSOR_CHUNK_TOKENS`.
-const SAFE_CHUNK_TOKENS: usize = 300;
+/// Au-dessus de ce seuil (tokens estimés), `invoke` bascule en map-reduce
+/// (N appels SLM **séquentiels** via `compress_long`). En-dessous : **un seul**
+/// `compress_once`.
+///
+/// **L1 (levier latence, suite du spike H0.2) — relevé 300 → 512.** Le 300
+/// était une marge **CPU** : à l'époque, un appel sur ~300+ tokens timeoutait
+/// (per-call 5 s, `llama_server.rs`) sur le Llama-3.2-1B en CPU, donc on
+/// chunkait tôt pour rester fiable. Mesure H0.2 : sur GPU (Metal) un appel
+/// finit en ~1,5-2 s à 300 t et ~2-3 s à 512 t — très loin du timeout 5 s ; et
+/// le ctx-size compresseur (4096, `scripts/slm/lib_common.sh`) contient
+/// largement 512 t d'entrée + ~500 c de sortie + prompt système. Conséquence :
+/// toute la bande **300-512 t** (la majorité des prompts « redundant » une fois
+/// la question ré-injectée par R7) passe de **3-4 appels série** à **un seul**
+/// → gain latence direct, sans toucher l'infra (`--parallel`) ni le matériel.
+///
+/// 512 reste **sous** le plafond fiable mesuré (~700 t post-fix-prompt). Une
+/// dérive éventuelle (prompt borderline qui dégénère) dégrade proprement via le
+/// timeout + le fallback `truncate_chars` de `compress_long` — jamais de
+/// garbage propagé. Override : env `EFE_COMPRESSOR_CHUNK_TOKENS` (plancher 12) ;
+/// repasser à `300` restaure exactement le comportement pré-L1 (ex. parc CPU).
+const SAFE_CHUNK_TOKENS: usize = 512;
 /// Garde-fou : nombre max de passes de réduction hiérarchique (anti-boucle).
 /// Override : env `EFE_COMPRESSOR_MAX_REDUCE_PASSES`.
 const MAX_REDUCE_PASSES: usize = 4;
-/// Recouvrement entre chunks consécutifs (~10 % de `SAFE_CHUNK_TOKENS`) : évite
-/// de perdre un fait à cheval sur une frontière de chunk. Override : env
-/// `EFE_COMPRESSOR_CHUNK_OVERLAP_TOKENS`.
+/// Recouvrement entre chunks consécutifs (~30 tokens) : un fait à cheval sur
+/// une frontière apparaît dans les deux chunks et n'est pas perdu. C'est un
+/// plancher **absolu** (et non plus « ~10 % de `SAFE_CHUNK_TOKENS` » : depuis L1
+/// le seuil vaut 512, et un overlap fixe ~30 t suffit à couvrir une frontière
+/// tout en gardant le MAP léger — moins de tokens dupliqués re-compressés).
+/// N'affecte QUE les prompts > 512 t (les seuls qui chunkent encore). Override :
+/// env `EFE_COMPRESSOR_CHUNK_OVERLAP_TOKENS` (0 = aucun recouvrement).
 const CHUNK_OVERLAP_TOKENS: usize = 30;
 /// `CompressorInput.text` exige ≥ 50 chars : on ne produit pas de chunk plus court.
 const MIN_CHUNK_CHARS: usize = 50;
@@ -443,6 +463,74 @@ mod chunking_tests {
         assert_eq!(estimate_tokens("abcd"), 1);
         assert_eq!(estimate_tokens("abcde"), 2); // 5/4 → ceil 2
         assert_eq!(estimate_tokens(&"x".repeat(1200)), 300);
+    }
+
+    // ── L1 (levier latence) — seuil de bascule map-reduce relevé 300 → 512 ──
+    // Ces tests verrouillent la NOUVELLE frontière de dispatch (`invoke` :
+    // `estimate_tokens(text) > safe_chunk_tokens()`). Ils comparent à la
+    // CONSTANTE `SAFE_CHUNK_TOKENS` (et non à `safe_chunk_tokens()`, qui lit
+    // l'env) → immunes à un `EFE_COMPRESSOR_CHUNK_TOKENS` présent dans
+    // l'environnement de test et au parallélisme cargo. La mécanique d'override
+    // est déjà couverte par `env_usize_parses_with_default_and_floor`.
+
+    #[test]
+    fn l1_safe_chunk_threshold_default_is_512() {
+        // Le défaut DOIT être 512 (était 300, marge CPU). Régression-lock du
+        // changement L1 lui-même.
+        assert_eq!(SAFE_CHUNK_TOKENS, 512, "L1 : seuil map-reduce = 512 tokens");
+    }
+
+    #[test]
+    fn l1_midband_prompt_now_takes_single_call_path() {
+        // Prompt ~1700 chars (cf. `varied_backend` du harness éco H0.1) :
+        // estimate_tokens = ceil(1700/4) = 425 tokens.
+        //   AVANT L1 (seuil 300) : 425 > 300 → map-reduce (≈3 appels série).
+        //   APRÈS L1 (seuil 512) : 425 ≤ 512 → un seul `compress_once`.
+        let prompt = "x".repeat(1700);
+        let toks = estimate_tokens(&prompt);
+        assert_eq!(toks, 425, "modèle d'estimation chars/4");
+        assert!(toks > 300, "aurait map-reducé sous l'ancien seuil 300");
+        assert!(
+            toks <= SAFE_CHUNK_TOKENS,
+            "L1 : {toks} t ≤ {SAFE_CHUNK_TOKENS} → appel unique (plus de map-reduce)"
+        );
+    }
+
+    #[test]
+    fn l1_does_not_disable_chunking_for_genuinely_long_prompts() {
+        // L1 RELÈVE le seuil ; il ne SUPPRIME pas le map-reduce. Un prompt
+        // franchement long (> 512 t) doit encore franchir le seuil de bascule
+        // ET se découper en plusieurs chunks.
+        let prompt = "mot ".repeat(700); // 2800 chars, frontières de mots réelles
+        let toks = estimate_tokens(&prompt);
+        assert_eq!(toks, 700, "2800 chars / 4 = 700 tokens");
+        assert!(
+            toks > SAFE_CHUNK_TOKENS,
+            "{toks} t > {SAFE_CHUNK_TOKENS} → dispatch map-reduce conservé"
+        );
+        let chunks = split_into_chunks_overlap(&prompt, SAFE_CHUNK_TOKENS, 0);
+        assert!(
+            chunks.len() >= 2,
+            "un prompt > seuil se découpe en plusieurs chunks, got {}",
+            chunks.len()
+        );
+    }
+
+    #[test]
+    fn l1_threshold_boundary_is_inclusive_single_call() {
+        // Frontière exacte : `invoke` map-reduce SSI `tokens > seuil` (strict).
+        // Donc un prompt pile à 512 t reste en appel unique ; 513 t bascule.
+        let at = "z".repeat(SAFE_CHUNK_TOKENS * 4); // 2048 chars → 512 t pile
+        assert_eq!(estimate_tokens(&at), SAFE_CHUNK_TOKENS);
+        assert!(
+            !(estimate_tokens(&at) > SAFE_CHUNK_TOKENS),
+            "pile au seuil → appel unique (comparaison stricte `>`)"
+        );
+        let over = "z".repeat(SAFE_CHUNK_TOKENS * 4 + 4); // +1 token
+        assert!(
+            estimate_tokens(&over) > SAFE_CHUNK_TOKENS,
+            "un token au-dessus du seuil → bascule map-reduce"
+        );
     }
 
     #[test]
