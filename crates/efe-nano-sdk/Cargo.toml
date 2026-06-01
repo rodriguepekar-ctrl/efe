@@ -1,0 +1,37 @@
+[package]
+name = "efe-nano-sdk"
+version = "0.0.1"
+edition = { workspace = true }
+rust-version = { workspace = true }
+authors = { workspace = true }
+license = "MIT"
+repository = { workspace = true }
+description = "M50 — EFE Nano Agent Swarm SDK : public API + shared types + proc-macros for nano agent authoring."
+publish = false
+
+# Open source license : MIT (vs UNLICENSED for runtime).
+# Rationale : SDK is customer-facing and meant for adoption ;
+#             runtime `efe-nano` stays commercially licensed.
+# Cf. docs/decisions/D-M50-CRATES-001.md
+
+[lib]
+name = "efe_nano_sdk"
+path = "src/lib.rs"
+
+[dependencies]
+# Minimal dep footprint — customers shouldn't pull EFE backend transitive deps.
+serde            = { workspace = true }
+serde_json       = { workspace = true }
+thiserror        = { workspace = true }
+tracing          = { workspace = true }
+uuid             = { workspace = true }
+async-trait      = { workspace = true }
+# Per-crate dep (not in workspace dependencies yet) :
+semver           = { version = "1.0", features = ["serde"] }
+chrono           = { version = "0.4", default-features = false, features = ["serde", "clock"] }
+# **Sprint 11 — N19** : SHA-256 for `GoldSet::compute_canonical_hash`
+# (F6 protection — see types/gold.rs).
+sha2             = "0.10"
+
+[dev-dependencies]
+tokio = { workspace = true }
