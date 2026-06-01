@@ -97,10 +97,15 @@ Thumbs.db
 # Docs build
 docs/site/
 docs/_build/
-# Rapports générés : PDF binaires régénérables depuis le HTML source (qui, lui, est suivi)
+# Livrables binaires lourds hors historique de code (rendus PDF, decks).
+# Le SOURCE texte (.md d'architecture, HTML des rapports) reste suivi ; ces
+# binaires sont des rendus/livrables (investisseurs, marketing, compendiums)
+# régénérables ou stockés hors-repo. Forcer le suivi : `git add -f <fichier>`.
 docs/*.pdf
-# PDF généré à la racine par generate_mvp_submodules_pdf.py (régénérable)
-/EFE_MVP_Sous_Modules.pdf
+docs/**/*.pdf
+docs/**/*.pptx
+# PDF de livraison à la racine (compendium, roadmap, généré)
+/EFE_*.pdf
 
 # Logs
 *.log
