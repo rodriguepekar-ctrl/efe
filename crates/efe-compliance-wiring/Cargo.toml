@@ -1,0 +1,35 @@
+[package]
+name = "efe-compliance-wiring"
+version = "0.0.1"
+edition = { workspace = true }
+rust-version = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
+description = "M50 — Sprint 16 N24 : wires the real N18 Ed25519 SignatureVerifier + N19 GoldApi into the N23 NanoToSwarm adapter via the WiredComplianceRunner facade.  Flips the default DAG from `experimental_fast` (gates OFF) to `tier1_strict` (signature + gold + status, fail-closed)."
+publish = false
+
+[lib]
+name = "efe_compliance_wiring"
+path = "src/lib.rs"
+
+[dependencies]
+efe-nano-sdk           = { path = "../efe-nano-sdk", version = "0.0.1" }
+efe-nano-swarm-adapter = { path = "../efe-nano-swarm-adapter", version = "0.0.1" }
+efe-publisher-identity = { path = "../efe-publisher-identity", version = "0.0.1" }
+efe-gold-test-gate     = { path = "../efe-gold-test-gate", version = "0.0.1" }
+
+tokio       = { workspace = true, features = ["macros", "rt-multi-thread", "sync", "time"] }
+async-trait = { workspace = true }
+serde       = { workspace = true }
+serde_json  = { workspace = true }
+thiserror   = { workspace = true }
+uuid        = { workspace = true }
+tracing     = { workspace = true }
+chrono      = { version = "0.4", default-features = false, features = ["clock", "serde"] }
+dashmap     = "6.1"
+sha2        = "0.10"
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt-multi-thread", "test-util"] }
+efe-nano-preanalysis = { path = "../efe-nano-preanalysis", version = "0.0.1" }
