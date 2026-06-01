@@ -1,0 +1,64 @@
+---
+source: crates/efe-meta-swarm/tests/pin_snapshots.rs
+expression: s
+---
+{
+  "steps": [
+    {
+      "step": 0,
+      "residual": 1.0,
+      "meta_consensus": {
+        "data": [
+          0.5,
+          -0.5,
+          0.0
+        ],
+        "dim": 3
+      },
+      "participant_states": [
+        {
+          "data": [
+            1.0,
+            0.0
+          ],
+          "dim": 2
+        },
+        {
+          "data": [
+            0.0,
+            1.0
+          ],
+          "dim": 2
+        }
+      ]
+    },
+    {
+      "step": 1,
+      "residual": 0.5,
+      "meta_consensus": {
+        "data": [
+          0.5,
+          -0.5,
+          0.0
+        ],
+        "dim": 3
+      },
+      "participant_states": [
+        {
+          "data": [
+            1.0,
+            0.0
+          ],
+          "dim": 2
+        },
+        {
+          "data": [
+            0.0,
+            1.0
+          ],
+          "dim": 2
+        }
+      ]
+    }
+  ]
+}

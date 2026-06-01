@@ -1,0 +1,27 @@
+---
+source: crates/efe-meta-swarm/tests/pin_snapshots.rs
+expression: s
+---
+id: snapshot-test
+version: null
+meta_space:
+  dim: 64
+coupling:
+  gamma: 0.2
+  alpha_default: 0.5
+  max_iters: 500
+  tolerance: 0.001
+participants:
+- id: a
+  dim: 128
+  alpha: null
+  bundle: null
+  endpoint: null
+- id: b
+  dim: 128
+  alpha: null
+  bundle: null
+  endpoint: null
+meta_operator:
+  kind: uniform_weighted
+tenant_id: null

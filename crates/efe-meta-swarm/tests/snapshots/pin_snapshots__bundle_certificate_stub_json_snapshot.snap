@@ -1,0 +1,5 @@
+---
+source: crates/efe-meta-swarm/tests/pin_snapshots.rs
+expression: s
+---
+"Stub"
