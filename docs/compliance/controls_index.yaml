@@ -1,0 +1,175 @@
+# Sprint **Φ-D-COMPLIANCE Completion (D85)** — Inverse index : evidence → controls.
+# Cf. `docs/EFE_COMPLIANCE_COMPLETION_ARCHITECTURE.md` § 4.4 + § 5.
+
+version: v0.8.0
+generated_at: "2026-04-15T00:00:00Z"
+
+# Each evidence script maps to N controls across frameworks.
+# This file is the source of truth for SLO-COMP-EVIDENCE-COVERAGE.
+
+evidences:
+
+  comp_hmac_chain_evidence:
+    file: eval/scripts/comp_hmac_chain_evidence.py
+    doctrine: D-COMP-3
+    description: "HMAC chain integrity over audit_events (verify + replay)"
+    controls:
+      - GDPR-Art32         # security of processing
+      - ISO-A.8.15         # logging
+      - ISO-A.8.16         # monitoring activities
+      - ISO-A.8.34         # protection of information systems during audit testing
+      - SOC2-CC7.1         # detection of security events
+      - SOC2-CC7.2         # monitoring of security events
+      - AI-ACT-Art12       # record-keeping
+      - HIPAA-164.312.b    # audit controls
+      - CCPA-1798.100      # right to know
+
+  comp_tenant_isolation_evidence:
+    file: eval/scripts/comp_tenant_isolation_evidence.py
+    doctrine: D-COMP-7
+    description: "Strict tenant_id scoping across all RPCs + storage"
+    controls:
+      - GDPR-Art25         # data protection by design
+      - GDPR-Art32         # security
+      - ISO-A.5.15         # access control
+      - SOC2-CC6.1         # logical access
+      - SOC2-CC6.2         # access provisioning
+
+  comp_consent_granularity_evidence:
+    file: eval/scripts/comp_consent_granularity_evidence.py
+    doctrine: D-COMP-9
+    description: "4-axis consent (analytics / training / marketing / 3rd-party)"
+    controls:
+      - GDPR-Art6          # lawfulness
+      - GDPR-Art7          # conditions for consent
+      - GDPR-Art13         # information to be provided
+      - CCPA-1798.120      # right to opt-out
+      - AI-ACT-Art50       # transparency obligations
+
+  comp_encryption_at_rest_evidence:
+    file: eval/scripts/comp_encryption_at_rest_evidence.py
+    doctrine: transverse
+    description: "AES-256-GCM at rest for all tenant data"
+    controls:
+      - GDPR-Art32         # security
+      - ISO-A.8.24         # cryptography
+      - SOC2-CC6.7         # data transmission
+      - HIPAA-164.312.a.2.iv  # encryption
+
+  comp_data_residency_evidence:
+    file: eval/scripts/comp_data_residency_evidence.py
+    doctrine: D-COMP-7
+    description: "EU/US/APAC routing enforcement (= 0 cross-region leak)"
+    controls:
+      - GDPR-Art44         # general principle for transfers
+      - GDPR-Art46         # appropriate safeguards
+      - GDPR-Art47         # binding corporate rules
+      - SOC2-C1.1          # confidentiality
+
+  comp_subprocessor_inventory_evidence:
+    file: eval/scripts/comp_subprocessor_inventory_evidence.py
+    doctrine: D-COMP-6
+    description: "Sub-processor list ≤ 7 days fresh + diff vs trust center"
+    controls:
+      - GDPR-Art28         # processor obligations
+      - GDPR-Art30         # records of processing
+      - SOC2-CC9.2         # vendor management
+      - ISO-A.5.19         # information security in supplier relationships
+
+  comp_breach_72h_evidence:
+    file: eval/scripts/comp_breach_72h_evidence.py
+    doctrine: D-COMP-4
+    description: "DPO notification ≤ 72h after detection"
+    controls:
+      - GDPR-Art33         # notification to supervisory authority
+      - GDPR-Art34         # communication to data subject
+      - HIPAA-164.404      # breach notification
+
+  comp_breach_24h_containment_evidence:
+    file: eval/scripts/comp_breach_24h_containment_evidence.py
+    doctrine: D-COMP-4
+    description: "Containment action ≤ 24h after detection"
+    controls:
+      - ISO-A.5.24         # information security incident management planning
+      - ISO-A.5.25         # assessment + decision on information security events
+      - SOC2-CC7.4         # incident response
+
+  comp_erasure_30d_evidence:
+    file: eval/scripts/comp_erasure_30d_evidence.py
+    doctrine: D-COMP-5
+    description: "Right-to-erasure cascade ≤ 30 days, 0 PII residue"
+    controls:
+      - GDPR-Art17         # right to erasure
+      - CCPA-1798.105      # right to delete
+      - HIPAA-164.530.c    # safeguards
+
+  comp_portability_30d_evidence:
+    file: eval/scripts/comp_portability_30d_evidence.py
+    doctrine: D-COMP-5
+    description: "Right-to-portability export ≤ 30 days"
+    controls:
+      - GDPR-Art20         # right to data portability
+      - CCPA-1798.110      # right to know what is collected
+
+  comp_dpia_freshness_evidence:
+    file: eval/scripts/comp_dpia_freshness_evidence.py
+    doctrine: D-COMP-10
+    description: "DPIA ≤ 6 mois old per high-risk catalog"
+    controls:
+      - GDPR-Art35         # data protection impact assessment
+      - GDPR-Art36         # prior consultation
+      - AI-ACT-Art27       # fundamental rights impact assessment
+      - AI-ACT-Art9        # risk management system
+
+  comp_ropa_freshness_evidence:
+    file: eval/scripts/comp_ropa_freshness_evidence.py
+    doctrine: D-COMP-10
+    description: "ROPA ≤ 1 mois fresh per tenant"
+    controls:
+      - GDPR-Art30         # records of processing
+      - SOC2-CC2.1         # information to support functioning of internal control
+      - ISO-A.5.34         # privacy + protection of PII
+
+  comp_transparency_notice_evidence:
+    file: eval/scripts/comp_transparency_notice_evidence.py
+    doctrine: D-COMP-9
+    description: "Transparency notices ≤ 30 days fresh + policy version match"
+    controls:
+      - GDPR-Art12         # transparent information
+      - GDPR-Art13         # information to be provided when data collected
+      - GDPR-Art14         # information when data not obtained from subject
+      - AI-ACT-Art50       # transparency
+
+  comp_ai_act_risk_classification_evidence:
+    file: eval/scripts/comp_ai_act_risk_classification_evidence.py
+    doctrine: D-COMP-8
+    description: "Every catalog has ai_act_risk_level set + valid"
+    controls:
+      - AI-ACT-Art6        # classification rules
+      - AI-ACT-Art7        # amendment of Annex III
+      - AI-ACT-AnnexIII    # high-risk AI systems list
+      - AI-ACT-Art9        # risk management system
+      - AI-ACT-Art16       # obligations of providers
+
+  comp_ai_act_human_oversight_evidence:
+    file: eval/scripts/comp_ai_act_human_oversight_evidence.py
+    doctrine: D-COMP-8
+    description: "High-risk catalogs forced to Mode-3 (= human oversight)"
+    controls:
+      - AI-ACT-Art14       # human oversight
+      - AI-ACT-Art16.a     # provider obligation : risk management
+      - GDPR-Art22         # automated individual decision-making
+      - AI-ACT-Art29       # obligations of users of high-risk AI
+
+  comp_ai_act_dpo_signoff_evidence:
+    file: eval/scripts/comp_ai_act_dpo_signoff_evidence.py
+    doctrine: D-COMP-8
+    description: "High-risk catalogs have DPO sign-off ≤ 1 year"
+    controls:
+      - GDPR-Art37         # DPO designation
+      - GDPR-Art39         # DPO tasks
+      - AI-ACT-Art16.c     # conformity assessment
+      - AI-ACT-Art43       # conformity assessment procedure
+
+# Reverse mapping : control → list of evidences (computed at runtime
+# by comp_evidence_aggregator.py to detect orphan controls).

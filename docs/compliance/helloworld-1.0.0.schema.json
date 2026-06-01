@@ -1,0 +1,125 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://efe.ai/schemas/helloworld-1.0.0.json",
+  "title": "EFE Hello-World runbook outcome (D40)",
+  "description": "Sprint D40 — captured outcome of the Hello-World business workflow exercised by the quarterly DR drill. Validates that the restored cluster supports the full register-catalog → register-class → register-sentence → resolve-catalog → execute → assert-HMAC business path within the 60s SLO budget (D40-DR-2). The schema is versioned ; v1.0.0 is the GA baseline shipped with M7.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "tenant_id",
+    "catalog_name",
+    "final_version",
+    "class_name",
+    "sentence",
+    "anchors_compiled",
+    "execute",
+    "hmac_chain_post_execute_ok",
+    "all_steps_ok",
+    "elapsed_secs"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "1.0.0",
+      "description": "Pinned schema version. Bumped only on breaking changes."
+    },
+    "tenant_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256,
+      "description": "Drill-only synthetic tenant identifier (default `drill-helloworld-tenant`). MUST NOT collide with any production tenant id."
+    },
+    "catalog_name": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_-]{0,62}$",
+      "description": "Catalog name registered during step 1. Same lowercase regex enforced by efe.v1.catalog.RegisterCatalog."
+    },
+    "final_version": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Catalog version after step 3 (sentence registered). Expected to be 3 (v1=register, v2=class appended, v3=sentence anchors compiled)."
+    },
+    "class_name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "description": "Class name appended during step 2 (default `greeting`)."
+    },
+    "sentence": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1024,
+      "description": "Canonical sentence registered during step 3 (default `Hello, world!`)."
+    },
+    "anchors_compiled": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Number of anchor vectors compiled by the embedder during step 3. Zero is allowed only when the fallback Mock embedder is enabled."
+    },
+    "execute": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "request_id",
+        "verdict",
+        "confidence",
+        "total_ms",
+        "rounds_executed"
+      ],
+      "properties": {
+        "request_id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Server-assigned request id from efe.v1.SwarmService.Execute response."
+        },
+        "verdict": {
+          "type": "string",
+          "enum": [
+            "VERDICT_CONVERGED",
+            "VERDICT_CONTINUE",
+            "VERDICT_DIVERGENCE",
+            "VERDICT_MODE_COLLAPSE"
+          ],
+          "description": "Swarm verdict. Drill PASSES on CONVERGED or CONTINUE ; FAILS on DIVERGENCE or MODE_COLLAPSE (signals a backend regression post-restore)."
+        },
+        "confidence": {
+          "type": "number",
+          "minimum": 0.0,
+          "maximum": 1.0,
+          "description": "Final confidence score in [0, 1]. Drill assertions require ≥ 0.5 by default."
+        },
+        "total_ms": {
+          "type": "number",
+          "minimum": 0.0,
+          "maximum": 60000.0,
+          "description": "End-to-end Execute latency in milliseconds. Hard cap 60_000 ms ≡ 60 s SLO D40-DR-2."
+        },
+        "rounds_executed": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 64,
+          "description": "Number of fusion rounds executed by the swarm controller."
+        }
+      }
+    },
+    "hmac_chain_post_execute_ok": {
+      "type": "boolean",
+      "description": "True iff `efe-server admin verify-audit-chain --since=1m --full` returned a healthy chain after the Execute step. False = the restore broke the HMAC chain → critical regression."
+    },
+    "all_steps_ok": {
+      "type": "boolean",
+      "description": "True iff every Hello-World step (1–6) returned a successful exit code AND every assertion passed."
+    },
+    "elapsed_secs": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 60,
+      "description": "Wall-clock duration of the Hello-World workflow end-to-end in seconds. Hard cap 60 s ≡ SLO D40-DR-2."
+    },
+    "fallback_mock_enabled": {
+      "type": "boolean",
+      "description": "Optional diagnostic field. True iff EFE_HELLOWORLD_FALLBACK_MOCK was set ; the drill SHOULD refuse this in production runs (see B-2 directing principle)."
+    }
+  }
+}

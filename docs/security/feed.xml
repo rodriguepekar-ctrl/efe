@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  EFE Security Advisories — RSS feed.
+
+  This feed is the canonical, public source for EFE security events :
+  GA releases, CVE assessments, security fixes, and yanks.
+
+  Append entries via :
+    ./scripts/release/update-security-feed.sh <version>            (GA event)
+    ./scripts/release/append-security-rss.sh <version> <event> <reason>
+
+  Where <event> ∈ { ga | yank | cve | fix }.
+
+  The feed is served from https://efe.example.com/security/feed.xml.
+-->
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+    <title>EFE Security Advisories</title>
+    <link>https://efe.example.com/security</link>
+    <atom:link href="https://efe.example.com/security/feed.xml" rel="self" type="application/rss+xml" />
+    <description>Security advisories, CVE assessments, and release events for the EFE (Ephemeral Fluid Swarm) classification platform. Subscribe to receive yank notices, security fixes, and GA baseline assessments. All EFE artifacts are Sigstore-signed (Fulcio + Rekor) and SLSA-3 attested.</description>
+    <language>en</language>
+    <copyright>© EFE-AI Inc. — All rights reserved. Subscribers may freely redistribute this feed.</copyright>
+    <managingEditor>security@efe.example.com (EFE Security Team)</managingEditor>
+    <webMaster>web@efe.example.com (EFE Web Team)</webMaster>
+    <category>Security/Advisories</category>
+    <category>Software/Releases</category>
+    <generator>EFE release pipeline (release-v1-ga.yml)</generator>
+    <docs>https://www.rssboard.org/rss-specification</docs>
+    <ttl>60</ttl>
+    <pubDate>Fri, 09 May 2026 12:00:00 GMT</pubDate>
+    <lastBuildDate>Fri, 09 May 2026 12:00:00 GMT</lastBuildDate>
+
+    <item>
+      <title>EFE v1.0.0 General Availability</title>
+      <link>https://efe.example.com/security/v1.0.0</link>
+      <description><![CDATA[
+        EFE v1.0.0 ships today as the first General Availability release.
+        Security baseline :
+        - 0 known HIGH or CRITICAL CVEs at release time (Trivy, Grype scans clean).
+        - SLSA-3 provenance attestations on all artifacts.
+        - Sigstore (cosign + Fulcio + Rekor) keyless signatures on all artifacts.
+        - Distroless container base images.
+        - SBOM (CycloneDX 1.5) embedded in every Docker image.
+        - VEX feed published at https://efe.example.com/security/vex/feed.json.
+        Verify the release : https://github.com/efe-ai/efe/blob/v1.0.0/docs/release/VERIFY_RELEASE.md
+      ]]></description>
+      <pubDate>Fri, 09 May 2026 12:00:00 GMT</pubDate>
+      <guid isPermaLink="false">v1.0.0-ga</guid>
+      <category>release</category>
+    </item>
+
+  </channel>
+</rss>

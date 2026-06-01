@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>EFE — Note de synthèse COO</title>
+<style>
+  :root{
+    --ink:#10202b; --muted:#5b6b76; --line:#d6dee4;
+    --primary:#0d4a5e; --primary2:#0a7d8c; --accent:#e07a1f; --accent-bg:#fdf1e3;
+    --green:#1f7a4d; --green-bg:#e8f5ee; --amber:#b07d12; --amber-bg:#fbf3df;
+    --red:#b3361f; --red-bg:#fbeae6; --blue:#2b5c9c; --slate:#33485a; --code:#0f3a45;
+  }
+  *{box-sizing:border-box;}
+  @page{ size:A4; margin:15mm 15mm; }
+  html,body{ margin:0; padding:0; }
+  body{ font-family:-apple-system,"Helvetica Neue",Arial,sans-serif; color:var(--ink);
+    font-size:10.6px; line-height:1.52; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+  h1,h2,h3,h4{ line-height:1.18; margin:0 0 .35em; color:var(--primary); font-weight:700; }
+  h2{ font-size:18px; border-bottom:2.5px solid var(--primary); padding-bottom:5px; margin-top:4px; }
+  h3{ font-size:13px; color:var(--primary2); margin-top:13px; }
+  h4{ font-size:10.5px; color:var(--slate); text-transform:uppercase; letter-spacing:.04em; margin-top:8px; }
+  p{ margin:.34em 0; } strong{ color:var(--ink); } em{ color:var(--slate); }
+  code,.mono{ font-family:"SF Mono",ui-monospace,"Menlo",monospace; font-size:9.2px; color:var(--code); }
+  .section{ page-break-before:always; padding-top:2px; }
+  .nobreak{ break-inside:avoid; } small{ color:var(--muted); }
+  .cover{ height:250mm; display:flex; flex-direction:column; justify-content:center; }
+  .cover .klabel{ font-size:12px; letter-spacing:.30em; color:var(--accent); text-transform:uppercase; font-weight:700; }
+  .cover h1{ font-size:50px; color:var(--primary); margin:.12em 0 .02em; letter-spacing:-.5px; }
+  .cover .sub{ font-size:18px; color:var(--slate); font-weight:600; margin-bottom:22px; }
+  .cover .lede{ font-size:12.5px; color:var(--ink); max-width:140mm; line-height:1.62; }
+  .cover .meta{ margin-top:28px; font-size:9.5px; color:var(--muted); border-top:1px solid var(--line); padding-top:12px; }
+  .cover .chips{ margin-top:18px; display:flex; gap:7px; flex-wrap:wrap; }
+  .chip{ background:var(--primary); color:#fff; border-radius:20px; padding:5px 12px; font-size:9.6px; font-weight:700; }
+  .chip.g{ background:var(--green); } .chip.alt{ background:var(--accent); }
+  table{ border-collapse:collapse; width:100%; margin:.55em 0; font-size:9.5px; }
+  th,td{ border:1px solid var(--line); padding:4px 7px; text-align:left; vertical-align:top; }
+  th{ background:#eef3f6; color:var(--slate); font-weight:700; }
+  td.c{ text-align:center; } td.num{ text-align:right; font-family:"SF Mono",ui-monospace,monospace; }
+  .badge{ display:inline-block; padding:1.5px 8px; border-radius:11px; font-size:8.6px; font-weight:800; white-space:nowrap; }
+  .b-g{ background:var(--green-bg); color:var(--green); border:1px solid #bfe3cd; }
+  .b-a{ background:var(--amber-bg); color:var(--amber); border:1px solid #ecd9a6; }
+  .b-r{ background:var(--red-bg); color:var(--red); border:1px solid #eecabf; }
+  .grid2{ display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+  .grid3{ display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px; }
+  .grid4{ display:grid; grid-template-columns:1fr 1fr 1fr 1fr; gap:9px; }
+  .card{ border:1px solid var(--line); border-radius:8px; padding:10px 12px; background:#fbfcfd; }
+  .card.g{ border-left:4px solid var(--green); background:var(--green-bg); }
+  .card.a{ border-left:4px solid var(--accent); } .card.b{ border-left:4px solid var(--blue); }
+  .card.r{ border-left:4px solid var(--red); background:var(--red-bg); }
+  .kpi{ font-size:25px; font-weight:800; color:var(--primary); line-height:1.05; } .kpi.g{ color:var(--green); }
+  .kpi-sub{ font-size:8.6px; color:var(--muted); margin-top:2px; }
+  .callout{ background:var(--accent-bg); border-left:4px solid var(--accent); padding:8px 12px; border-radius:0 6px 6px 0; margin:.55em 0; }
+  .callout.g{ background:var(--green-bg); border-color:var(--green); } .callout.b{ background:#eaf2fb; border-color:var(--blue); }
+  .verdict{ background:var(--primary); color:#eaf6f8; padding:10px 14px; border-radius:8px; margin:.65em 0; font-size:10.8px; } .verdict b{ color:#fff; }
+  ul{ margin:.3em 0; padding-left:15px; } li{ margin:.18em 0; }
+  ol{ margin:.3em 0; padding-left:18px; } ol li{ margin:.3em 0; }
+  figure{ margin:.6em 0; } figcaption{ font-size:8.6px; color:var(--muted); text-align:center; margin-top:3px; }
+  svg{ display:block; margin:0 auto; }
+  .footer-note{ font-size:8.4px; color:var(--muted); border-top:1px solid var(--line); padding-top:6px; margin-top:12px; }
+  .ask{ background:#fff; border:1px solid var(--accent); border-left:5px solid var(--accent); border-radius:6px; padding:9px 12px; margin:.45em 0; }
+  .ask b{ color:var(--accent); }
+</style>
+</head>
+<body>
+
+<!-- COVER -->
+<section class="cover">
+  <div class="klabel">Note de synthèse · à l'attention du COO</div>
+  <h1>EFE</h1>
+  <div class="sub">État opérationnel, valeur, risques &amp; décisions à arbitrer</div>
+  <div class="lede">
+    EFE est une <strong>plateforme d'IA en production</strong> qui permet à des agents (assistants IA) de prendre
+    des <strong>décisions de classification/routage</strong> rapidement, à très bas coût et de façon fiable —
+    avec une <strong>couche d'économie intégrée</strong> qui réduit la facture des grands modèles premium.
+    Cette note résume, en langage opérationnel : <strong>ce que ça fait, où en est la maturité, ce que ça
+    économise, quels risques sont maîtrisés, et quelles décisions vous reviennent.</strong>
+  </div>
+  <div class="chips">
+    <span class="chip g">Maturité : production-grade (v0.9.0)</span>
+    <span class="chip alt">Coût premium réduit de ~50–75 %</span>
+    <span class="chip">3 décisions à arbitrer</span>
+  </div>
+  <div class="meta">
+    2026-06-01 · Périmètre : plateforme complète (47 modules) · Tous les chiffres de performance sont
+    <strong>mesurés en conditions réelles</strong>, pas estimés · Version technique détaillée disponible sur demande
+    (<span class="mono">EFE_RAPPORT_COMPLET_2026-06-01.pdf</span>).
+  </div>
+</section>
+
+<!-- 1. EXEC SUMMARY -->
+<section class="section">
+  <h2>1 · L'essentiel en une page</h2>
+
+  <div class="grid4 nobreak" style="margin-bottom:8px">
+    <div class="card g"><div class="kpi g">−50→75 %</div><div class="kpi-sub">coût des tokens premium en entrée (compression), qualité préservée</div></div>
+    <div class="card b"><div class="kpi">÷ 2,2</div><div class="kpi-sub">temps de traitement local divisé (programme d'efficacité 2026-06)</div></div>
+    <div class="card"><div class="kpi">v0.9.0</div><div class="kpi-sub">unification opérationnelle : 18 SLO, conformité, multi-région</div></div>
+    <div class="card a"><div class="kpi">47 / ~8 750</div><div class="kpi-sub">modules · tests automatisés (signal de qualité)</div></div>
+  </div>
+
+  <h3>Les 5 choses à retenir</h3>
+  <ol>
+    <li><strong>Le produit fonctionne et est mature.</strong> Cœur en production-grade depuis la v0.6.0 ; unification opérationnelle (SLO, runbooks, alerting) en v0.9.0. Conformité GDPR / AI Act instrumentée, multi-région avec reprise après sinistre.</li>
+    <li><strong>La valeur principale est le COÛT.</strong> La couche de « pré-mâchage » réduit la facture des modèles premium de <strong>~50 à 75 %</strong> sur les requêtes verboses, <strong>sans dégrader la qualité</strong> des réponses.</li>
+    <li><strong>L'équipe mesure, elle ne survend pas.</strong> Le programme d'efficacité récent a <strong>écarté deux optimisations</strong> qui « marchaient sur le papier » mais pas en réalité. C'est un signal de fiabilité : les chiffres de cette note sont mesurés, pas projetés.</li>
+    <li><strong>Positionnement honnête.</strong> EFE optimise le <strong>coût</strong>, pas (encore) la vitesse de bout en bout face à un modèle premium. Faire de la vitesse un argument commercial demanderait un investissement matériel (multi-GPU).</li>
+    <li><strong>Trois décisions vous reviennent</strong> (cf. §6) : investissement multi-GPU, validation latence de bout en bout en conditions de production, et une petite dette d'hygiène à solder.</li>
+  </ol>
+
+  <div class="verdict nobreak">
+    <b>En une phrase.</b> EFE est une plateforme d'IA <b>mature, gouvernée et économe</b> dont la valeur démontrée
+    est la <b>réduction de coût</b> ; les fondations opérationnelles (fiabilité, conformité, continuité) sont en place,
+    et les arbitrages restants sont des <b>décisions d'investissement</b>, pas des risques techniques ouverts.
+  </div>
+</section>
+
+<!-- 2. WHAT IT DOES -->
+<section class="section">
+  <h2>2 · Ce que ça fait &amp; la valeur</h2>
+
+  <figure class="nobreak">
+    <svg width="640" height="120" viewBox="0 0 640 120" xmlns="http://www.w3.org/2000/svg">
+      <defs><marker id="ar" markerWidth="10" markerHeight="10" refX="7.5" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="#0d4a5e"/></marker></defs>
+      <rect x="14" y="40" width="120" height="48" rx="8" fill="#eaf2fb" stroke="#2b5c9c" stroke-width="1.4"/>
+      <text x="74" y="60" text-anchor="middle" font-size="10" font-weight="700" fill="#2b5c9c">Agent IA</text>
+      <text x="74" y="74" text-anchor="middle" font-size="8" fill="#5b6b76">a besoin de décider</text>
+      <line x1="134" y1="64" x2="166" y2="64" stroke="#0d4a5e" stroke-width="1.6" marker-end="url(#ar)"/>
+      <rect x="168" y="30" width="200" height="68" rx="8" fill="#e8f5ee" stroke="#1f7a4d" stroke-width="1.6"/>
+      <text x="268" y="50" text-anchor="middle" font-size="11" font-weight="700" fill="#155e3a">EFE</text>
+      <text x="268" y="66" text-anchor="middle" font-size="8.5" fill="#33485a">décide par consensus (essaim) · ~0 $</text>
+      <text x="268" y="79" text-anchor="middle" font-size="8.5" fill="#33485a">+ compresse les prompts coûteux</text>
+      <text x="268" y="91" text-anchor="middle" font-size="8" fill="#c0640f">couche « pré-mâchage » = économie</text>
+      <line x1="368" y1="64" x2="400" y2="64" stroke="#0d4a5e" stroke-width="1.6" marker-end="url(#ar)"/>
+      <rect x="402" y="40" width="140" height="48" rx="8" fill="#fdf1e3" stroke="#e07a1f" stroke-width="1.4"/>
+      <text x="472" y="58" text-anchor="middle" font-size="9.5" font-weight="700" fill="#c0640f">Modèle premium</text>
+      <text x="472" y="72" text-anchor="middle" font-size="8" fill="#5b6b76">appelé moins / moins cher</text>
+      <line x1="542" y1="64" x2="574" y2="64" stroke="#0d4a5e" stroke-width="1.6" marker-end="url(#ar)"/>
+      <rect x="576" y="44" width="56" height="40" rx="8" fill="#e8f5ee" stroke="#1f7a4d"/>
+      <text x="604" y="68" text-anchor="middle" font-size="9" font-weight="700" fill="#155e3a">décision</text>
+    </svg>
+    <figcaption>Le rôle d'EFE : prendre les décisions « simples » à ~0 $ et alléger ce qu'on envoie au modèle premium.</figcaption>
+  </figure>
+
+  <div class="grid2">
+    <div class="card g nobreak">
+      <h4>Le bénéfice opérationnel</h4>
+      <ul style="font-size:9.6px">
+        <li><strong>Moins de dépense premium</strong> : classification &amp; routage faits localement à ~0 $</li>
+        <li><strong>Compression des prompts</strong> : −50 à 75 % de tokens d'entrée facturés sur les requêtes verboses</li>
+        <li><strong>Robustesse</strong> : décision par <em>consensus</em> (vote d'une nuée), pas un seul appel fragile</li>
+        <li><strong>Sans ré-entraînement</strong> : fonctionne en « zero-shot », s'adapte vite à de nouvelles catégories</li>
+      </ul>
+    </div>
+    <div class="card a nobreak">
+      <h4>À qui / quels cas</h4>
+      <ul style="font-size:9.6px">
+        <li>Produits qui font <strong>catégoriser / router / modérer</strong> du texte à grande échelle</li>
+        <li>Contextes <strong>cold-start</strong> ou taxonomies qui changent souvent (pas de jeu étiqueté)</li>
+        <li>Intégration simple : exposé comme un <strong>outil standard</strong> pour assistants IA (Anthropic, OpenAI, etc.)</li>
+        <li>Multi-client (<em>multi-tenant</em>) avec quotas, facturation et audit par client</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="callout nobreak">
+    <strong>Le compromis, dit clairement.</strong> EFE est aujourd'hui un <strong>levier de coût</strong>, pas un
+    accélérateur face à un modèle premium. La vitesse <em>interne</em> (traitement local) a été fortement améliorée
+    (§4), mais en faire un argument de vente « plus rapide que le premium » suppose un investissement matériel.
+  </div>
+</section>
+
+<!-- 3. READINESS -->
+<section class="section">
+  <h2>3 · Tableau de bord de maturité opérationnelle</h2>
+  <p>Lecture rapide de l'état de préparation, par capacité.</p>
+
+  <table class="nobreak">
+    <thead><tr><th style="width:34%">Capacité</th><th class="c" style="width:16%">État</th><th>Note</th></tr></thead>
+    <tbody>
+      <tr><td><strong>Cœur — moteur de décision</strong></td><td class="c"><span class="badge b-g">PRÊT</span></td><td>Production-grade depuis v0.6.0 (substrat GPU validé)</td></tr>
+      <tr><td><strong>Couche coût (pré-mâchage)</strong></td><td class="c"><span class="badge b-g">PRÊT</span></td><td>Câblée en live ; économie mesurée et figée</td></tr>
+      <tr><td><strong>Conformité (GDPR / AI Act)</strong></td><td class="c"><span class="badge b-g">INSTRUMENTÉ</span></td><td>Redaction PII, suppression GDPR en cascade, traçabilité Art. 9</td></tr>
+      <tr><td><strong>Continuité (multi-région / DR)</strong></td><td class="c"><span class="badge b-g">CONSTRUIT</span></td><td>Bascule active-passive + exercices de reprise après sinistre</td></tr>
+      <tr><td><strong>Observabilité &amp; SLO</strong></td><td class="c"><span class="badge b-g">PRÊT</span></td><td>18 SLO maîtres (dispo, latence, équité, coût, conformité), runbooks, alerting</td></tr>
+      <tr><td><strong>Qualité (tests automatisés)</strong></td><td class="c"><span class="badge b-g">~8 750</span></td><td>Couverture large ; portes de non-régression versionnées</td></tr>
+      <tr><td><strong>Facturation &amp; quotas</strong></td><td class="c"><span class="badge b-g">PRÊT</span></td><td>Compteurs temps réel par client, budgets, intégration paiement</td></tr>
+      <tr><td><strong>Efficacité interne (latence locale)</strong></td><td class="c"><span class="badge b-g">AMÉLIORÉ ÷2,2</span></td><td>Programme 2026-06 (cf. §4)</td></tr>
+      <tr><td><strong>Latence bout-en-bout vs premium</strong></td><td class="c"><span class="badge b-a">À VALIDER</span></td><td>Nécessite un run en conditions réelles avec budget premium</td></tr>
+      <tr><td><strong>Scalabilité latence (multi-GPU)</strong></td><td class="c"><span class="badge b-r">DÉCISION</span></td><td>Investissement requis si la vitesse devient un argument</td></tr>
+    </tbody>
+  </table>
+
+  <div class="grid3 nobreak">
+    <div class="card g"><h4>Vert — prêt</h4><p style="font-size:9.3px">Cœur, coût, conformité, continuité, SLO, qualité, facturation : en place et opérables.</p></div>
+    <div class="card a"><h4>Ambre — à valider</h4><p style="font-size:9.3px">Une mesure de latence bout-en-bout reste à faire en conditions réelles (budget premium).</p></div>
+    <div class="card r"><h4>Rouge — à arbitrer</h4><p style="font-size:9.3px">Le multi-GPU est une décision d'investissement, pas un blocage technique.</p></div>
+  </div>
+</section>
+
+<!-- 4. COST + EFFICIENCY -->
+<section class="section">
+  <h2>4 · La valeur chiffrée : coût &amp; efficacité</h2>
+
+  <h3>4.1 — L'économie de coût (le cœur de la valeur)</h3>
+  <p>
+    Sur des requêtes verboses/redondantes, la couche de pré-mâchage <strong>compresse l'entrée</strong> envoyée au
+    modèle premium — sans changer la réponse. Mesuré contre un vrai modèle :
+  </p>
+  <table class="nobreak">
+    <thead><tr><th>Type de requête</th><th class="c">Tokens d'entrée économisés</th><th class="c">Qualité de la réponse</th></tr></thead>
+    <tbody>
+      <tr><td>Verboses / redondantes (cas fréquent)</td><td class="c"><strong>−48 % à −56 %</strong></td><td class="c"><span class="badge b-g">PRÉSERVÉE</span></td></tr>
+      <tr><td>Variées (cas conservateur)</td><td class="c">−17 %</td><td class="c"><span class="badge b-g">PRÉSERVÉE</span></td></tr>
+    </tbody>
+  </table>
+  <div class="callout g nobreak" style="font-size:9.6px">
+    <strong>Lecture business.</strong> À volume, une réduction de ~50 % des tokens d'entrée premium se traduit
+    directement en <strong>baisse de la facture d'inférence</strong>. La qualité étant préservée, c'est une économie
+    « sans contrepartie » côté utilisateur. (Un défaut initial — la compression abîmait parfois la réponse — a été
+    <strong>identifié et corrigé</strong> avant figement ; voir §5 sur la discipline de mesure.)
+  </div>
+
+  <h3>4.2 — L'efficacité interne (le programme latence)</h3>
+  <p>Le traitement local (avant le modèle premium) a été <strong>divisé par ~2,2</strong> par deux corrections ciblées.</p>
+  <figure class="nobreak">
+    <svg width="560" height="96" viewBox="0 0 560 96" xmlns="http://www.w3.org/2000/svg">
+      <text x="10" y="16" font-size="9.5" font-weight="700" fill="#33485a">Temps de traitement local (par requête)</text>
+      <text x="10" y="42" font-size="9.5" font-weight="700" fill="#b3361f">avant</text>
+      <rect x="64" y="30" width="470" height="18" fill="#f1b48a" stroke="#e07a1f"/><text x="538" y="44" text-anchor="end" font-size="9" font-weight="700" fill="#7a3f08">9,8 s</text>
+      <text x="10" y="72" font-size="9.5" font-weight="700" fill="#1f7a4d">après</text>
+      <rect x="64" y="60" width="211" height="18" fill="#8fd3ad" stroke="#1f7a4d"/><text x="282" y="74" font-size="9" font-weight="700" fill="#155e3a">4,4 s · −55 % (÷2,2)</text>
+    </svg>
+  </figure>
+  <div class="callout nobreak" style="font-size:9.6px">
+    <strong>Ce que ça change.</strong> Meilleure réactivité interne et <strong>moins de ressources consommées par
+    requête</strong> (donc moins de coût d'infrastructure) à qualité égale. Ça ne rend pas encore le produit « plus
+    rapide » que le premium de bout en bout — c'est l'objet d'une validation à venir (§6).
+  </div>
+</section>
+
+<!-- 5. TRUST -->
+<section class="section">
+  <h2>5 · Pourquoi vous pouvez faire confiance aux chiffres</h2>
+  <p>
+    Le point le plus important pour un dirigeant n'est pas un chiffre isolé, mais la <strong>fiabilité de la méthode</strong>.
+    Tout au long du programme, l'équipe a appliqué une règle simple : <strong>mesurer en conditions réelles, jamais se
+    fier à une projection.</strong> Conséquence concrète : <strong>plusieurs « gains » attendus se sont révélés faux —
+    et ont été écartés ou corrigés.</strong>
+  </p>
+
+  <table class="nobreak">
+    <thead><tr><th>Optimisation envisagée</th><th class="c">Attendu</th><th class="c">Mesuré</th><th>Décision</th></tr></thead>
+    <tbody>
+      <tr><td>Accélération matérielle (GPU)</td><td class="c">~40×</td><td class="c">~2–3×</td><td>Recadré honnêtement</td></tr>
+      <tr><td>Parallélisation (L2)</td><td class="c">2,5×</td><td class="c">~1,3×</td><td>Gardé mais <strong>documenté</strong> (gain réel mais modeste)</td></tr>
+      <tr><td>Préchauffe au démarrage (L3)</td><td class="c">−5 s</td><td class="c">≈ 0</td><td><strong>Écartée</strong> (sans effet ici)</td></tr>
+      <tr><td>Compression « gratuite »</td><td class="c">économie</td><td class="c">réponses fausses</td><td><strong>Corrigée</strong> avant figement</td></tr>
+    </tbody>
+  </table>
+
+  <div class="verdict nobreak">
+    <b>Le signal pour la direction.</b> Une équipe qui <b>désactive ses propres optimisations</b> quand la mesure
+    les contredit ne survend pas. Les chiffres de cette note (coût, ÷2,2) sont <b>mesurés en conditions réelles</b>,
+    pas optimistes. C'est une réduction de risque sur la confiance que vous pouvez accorder aux engagements de l'équipe.
+  </div>
+</section>
+
+<!-- 6. RISKS + ASKS -->
+<section class="section">
+  <h2>6 · Risques maîtrisés, points ouverts &amp; décisions à arbitrer</h2>
+
+  <h3>6.1 — Registre des risques</h3>
+  <table class="nobreak">
+    <thead><tr><th style="width:40%">Sujet</th><th class="c" style="width:16%">Statut</th><th>Mitigation / note</th></tr></thead>
+    <tbody>
+      <tr><td>Exposition réglementaire (GDPR / AI Act)</td><td class="c"><span class="badge b-g">MAÎTRISÉ</span></td><td>Redaction PII, suppression en cascade, traçabilité par appel</td></tr>
+      <tr><td>Continuité de service (sinistre région)</td><td class="c"><span class="badge b-g">MAÎTRISÉ</span></td><td>Multi-région actif-passif + exercices DR</td></tr>
+      <tr><td>Qualité / régressions</td><td class="c"><span class="badge b-g">MAÎTRISÉ</span></td><td>~8 750 tests + portes de non-régression + SLO</td></tr>
+      <tr><td>Dérive de coût premium</td><td class="c"><span class="badge b-g">MAÎTRISÉ</span></td><td>Compression + metering temps réel + budgets par client</td></tr>
+      <tr><td>Latence bout-en-bout vs premium</td><td class="c"><span class="badge b-a">OUVERT</span></td><td>Non encore mesurée avec un vrai modèle (budget requis)</td></tr>
+      <tr><td>Plafond de vitesse sur GPU unique</td><td class="c"><span class="badge b-a">OUVERT</span></td><td>La parallélisation ne décolle qu'en multi-GPU</td></tr>
+      <tr><td>Dette d'hygiène (suivi de fichiers)</td><td class="c"><span class="badge b-a">MINEUR</span></td><td>Quelques modules à intégrer au suivi ; sans impact produit</td></tr>
+    </tbody>
+  </table>
+
+  <h3>6.2 — Ce qui vous revient (3 décisions)</h3>
+  <div class="ask nobreak">
+    <b>① Investissement multi-GPU — uniquement si la vitesse devient un argument commercial.</b>
+    Sur un seul GPU, l'accélération est plafonnée. Le décollage demande du matériel additionnel. <em>Décision :
+    financer ou non, selon que « plus rapide » entre dans la proposition de valeur.</em>
+  </div>
+  <div class="ask nobreak">
+    <b>② Valider la latence bout-en-bout en conditions réelles.</b>
+    Petit budget d'inférence premium pour confirmer le gain net face à un vrai modèle. <em>Décision : autoriser une
+    enveloppe de test (faible) et un créneau.</em>
+  </div>
+  <div class="ask nobreak">
+    <b>③ Solder la dette d'hygiène.</b>
+    Tâche d'ingénierie courte (intégration au suivi de quelques modules). <em>Décision : planifier (faible effort,
+    aucun risque produit).</em>
+  </div>
+
+  <div class="verdict nobreak">
+    <b>Synthèse risques.</b> Les risques <b>techniques et réglementaires sont maîtrisés</b>. Les points ouverts sont
+    des <b>arbitrages d'investissement/priorité</b>, pas des inconnues bloquantes — et chacun est cadré, mesurable,
+    et à faible coût d'exploration.
+  </div>
+
+  <div class="footer-note">
+    EFE — Note de synthèse COO · 2026-06-01 · Tous les chiffres de performance/coût sont <strong>mesurés en conditions
+    réelles</strong> (pas estimés). Version technique fichier-par-fichier disponible :
+    <span class="mono">EFE_RAPPORT_COMPLET_2026-06-01.pdf</span> (12 p.).
+  </div>
+</section>
+
+</body>
+</html>

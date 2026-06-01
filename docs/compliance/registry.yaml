@@ -1,0 +1,111 @@
+# Sprint **Φ-D-COMPLIANCE Completion (D85)** — Framework registry.
+# Cf. `docs/EFE_COMPLIANCE_COMPLETION_ARCHITECTURE.md` § 4.
+
+version: v0.8.0
+generated_at: "2026-04-15T00:00:00Z"
+generator: "Φ-D-COMPLIANCE D85"
+
+frameworks:
+  GDPR:
+    file: docs/compliance/gdpr.md
+    short_name: GDPR
+    long_name: "General Data Protection Regulation (EU 2016/679)"
+    region: EU
+    n_controls: 47
+    applicable: 47
+    not_applicable: 0
+    last_review: "2026-04-01"
+    next_review: "2027-04-01"
+    dpo_signoff: "alice.dupont@efe.ai"
+    enforcement_authority: "CNIL, ICO, AEPD, BfDI, …"
+    max_penalty: "4 % CA mondial ou 20 M€"
+
+  SOC2:
+    file: docs/compliance/soc2.md
+    short_name: SOC2
+    long_name: "SOC 2 Trust Services Criteria (AICPA TSP 2017)"
+    region: US
+    n_controls: 64
+    applicable: 58
+    not_applicable: 6
+    not_applicable_reason: "Physical security (CC6.4-CC6.6) marked N/A — fully cloud-hosted, no physical office"
+    last_review: "2026-04-01"
+    next_review: "2027-04-01"
+    enforcement_authority: "Independent CPA firm"
+    max_penalty: "Loss of attestation, customer trust"
+
+  ISO27001:
+    file: docs/compliance/iso27001.md
+    short_name: ISO27001
+    long_name: "ISO/IEC 27001:2022 Information Security Management"
+    region: global
+    n_controls: 93
+    applicable: 87
+    not_applicable: 6
+    not_applicable_reason: "A.7 Physical (most), A.5.31 legal-requirements-by-country (= US/EU only)"
+    last_review: "2026-04-01"
+    next_review: "2027-04-01"
+    enforcement_authority: "Accredited certification body"
+    max_penalty: "Loss of certification"
+
+  EU_AI_ACT:
+    file: docs/compliance/eu_ai_act.md
+    short_name: AI_ACT
+    long_name: "EU Artificial Intelligence Act (Regulation 2024/1689)"
+    region: EU
+    n_controls: 38
+    applicable: 38
+    not_applicable: 0
+    last_review: "2026-04-15"
+    next_review: "2026-10-15"
+    enforcement_authority: "EU AI Office + national bodies"
+    max_penalty: "35 M€ ou 7 % CA mondial (Art. 5 unacceptable risk)"
+
+  HIPAA_READY:
+    file: docs/compliance/hipaa_ready.md
+    short_name: HIPAA
+    long_name: "Health Insurance Portability and Accountability Act (US)"
+    region: US
+    n_controls: 18
+    applicable: 18
+    not_applicable: 0
+    scope: "Baseline only (= HIPAA-ready) ; full HIPAA mode requires dedicated sprint"
+    last_review: "2026-04-15"
+    next_review: "2027-04-15"
+    enforcement_authority: "HHS Office for Civil Rights"
+    max_penalty: "1.5 M$ per violation type / year"
+
+  CCPA:
+    file: docs/compliance/ccpa.md
+    short_name: CCPA
+    long_name: "California Consumer Privacy Act + CPRA (Cal. Civ. Code 1798.100+)"
+    region: US-CA
+    n_controls: 8
+    applicable: 8
+    not_applicable: 0
+    last_review: "2026-04-15"
+    next_review: "2027-04-15"
+    enforcement_authority: "California Privacy Protection Agency"
+    max_penalty: "7 500 $ par violation intentionnelle"
+
+totals:
+  total_controls: 268
+  total_applicable: 256
+  total_not_applicable: 12
+  total_n_frameworks: 6
+
+# Conformity assessment cadence (= D-COMP-10).
+conformity_assessment:
+  cadence: annual
+  last_complete: "2026-04-01"
+  next_due: "2027-04-01"
+  required_signoff:
+    - DPO
+    - Security_Lead
+    - CTO
+  artifacts:
+    - threat_model.md
+    - all_framework_mappings
+    - all_evidence_scripts
+    - registry.yaml
+    - controls_index.yaml

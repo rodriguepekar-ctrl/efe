@@ -1,0 +1,29 @@
+{
+  "@context": "https://openvex.dev/ns/v0.2.0",
+  "@id": "https://efe.example.com/security/vex/feed.json",
+  "author": "EFE Security Team",
+  "role": "Document Creator",
+  "timestamp": "2026-05-09T12:00:00Z",
+  "version": 1,
+  "_comment": "Live, append-only VEX feed. New statements (CVE assessments, yanks, fixes) are PREPENDED to the statements[] array by scripts/release/append-vex-yank.sh and the broader release pipeline. The per-release snapshot at v1.0.0.json is point-in-time ; this feed.json is the rolling state.",
+  "statements": [
+    {
+      "vulnerability": {
+        "name": "EFE-V1.0.0-GA-BASELINE",
+        "description": "EFE v1.0.0 GA baseline — no HIGH/CRITICAL CVEs affect this product set at release time."
+      },
+      "products": [
+        { "@id": "pkg:oci/efe-server@1.0.0?repository_url=ghcr.io/efe-ai" },
+        { "@id": "pkg:oci/mcp-server@1.0.0?repository_url=ghcr.io/efe-ai" },
+        { "@id": "pkg:oci/portal-admin@1.0.0?repository_url=ghcr.io/efe-ai" },
+        { "@id": "pkg:oci/efe-server-migrate@1.0.0?repository_url=ghcr.io/efe-ai" },
+        { "@id": "pkg:helm/efe-stack@1.0.0?repository_url=ghcr.io/efe-ai/charts" }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_present",
+      "impact_statement": "EFE v1.0.0 ships with a clean security baseline at GA release time. SLSA-3 provenance + Sigstore signatures on all artifacts.",
+      "action_statement": "Subscribe to https://efe.example.com/security/feed.xml for future advisories.",
+      "timestamp": "2026-05-09T12:00:00Z"
+    }
+  ]
+}
