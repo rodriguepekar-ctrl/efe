@@ -30,3 +30,12 @@ paths = [
   # pas une clé réelle embarquée.
   '''crates/efe-meta-swarm-server/src/tls/.*\.rs''',
 ]
+
+# Clés de TEST FACTICES : format valide (pour que les parsers les acceptent) mais
+# évidemment fausses — fixtures de tests d'auth (`...fake-but-valid-format`) et de
+# redaction de provenance (`...SHOULD-NOT-LEAK`). Allowlist par VALEUR (regex) →
+# couvre tout fichier les utilisant, sans masquer le reste du fichier. Aucun secret réel.
+regexes = [
+  '''sk-ant-fake-but-valid-format''',
+  '''sk-ant-SHOULD-[A-Za-z0-9-]+''',
+]
