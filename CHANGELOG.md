@@ -182,6 +182,25 @@ _(rolling — next release will land here)_
   réel (l'analyzer pesait ~2,5× le compresseur post-L1). Code en `d05c1a4` ; 3 tests
   `cb_*` (défaut max_tokens, couplage asset↔grammaire `{0,4}`, sortie 5-entités valide).
 
+#### Observability — H0·a : run vrai-LLM end-to-end → **positionnement révisé** (coût + latence)
+
+> A/B contrôlé contre un **vrai Claude** (`claude_claude-sonnet-4-6`), 2 bridges real-llm
+> (baseline `EFE_LIVE_SLM=0` brut vs chewed `EFE_LIVE_SLM=1`), 4 prompts × 3 reps, ~$0.17.
+> Rapport : [`docs/EFE_PRECHEWING_ECONOMICS_2026-06-01.md`](docs/EFE_PRECHEWING_ECONOMICS_2026-06-01.md).
+
+- **🎯 Le verdict latence BASCULE (révise H0.3).** Sur les prompts **verbeux/redondants**, le
+  chewed est **PLUS RAPIDE end-to-end** : latence NETTE **−5 à −8 s** (`syncasync` −6,8 s,
+  `rest_graphql` −5,0 s), et coût **+$0.008–0.011/req**. Sur les prompts courts/propres, neutre
+  (latence +3 à +6 s). Le gain **scale avec la redondance**.
+- **Mécanique révélée (lecture des réponses + décompo coût)** : ~**88 % de l'économie** vient de
+  la **réduction de SORTIE** (réponse correcte mais concise, ~2,5-2,8× moins de tokens out @ $15/Mtok),
+  pas de l'entrée compressée (~12 % @ $3/Mtok). La sortie coûte 5× et domine le temps.
+- **Correction (discipline H0.1)** : réponses chewed **justes & concises** (lues : sync/async via
+  code ; REST/GraphQL via endpoints) — **PAS** l'artefact pré-R7 (réponses fausses & courtes).
+  Brièveté = atout Q&A, compromis si exhaustivité requise. Positionnement actualisé : MAP §11.
+- **Débloque** : C-A (de-block analyzer) jugé **non nécessaire** (latence déjà négative sur les
+  gagnants, SLM 4,4 s déjà couvert) ; multi-GPU **priorité basse**.
+
 ## [0.9.0] - 2026-05-12 — Sprint Φ-D-OPS (Operational unification)
 
 ### Added — 40 artefacts unifying 6 completion sprints

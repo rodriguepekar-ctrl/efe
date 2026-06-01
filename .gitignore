@@ -1,0 +1,116 @@
+# Rust
+/target/
+/crates/*/target/
+**/*.rs.bk
+Cargo.lock.bak
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+build-release/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.mypy_cache/
+.ruff_cache/
+.hypothesis/
+
+# uv
+.venv/
+.venv-efe/
+.python-version
+
+# CUDA / CMake
+build/
+build-release/
+CMakeCache.txt
+CMakeFiles/
+*.o
+*.obj
+*.a
+*.so
+*.dll
+*.dylib
+
+# Secrets / env
+.env
+.env.local
+.env.*.local
+.env.*
+!.env.template
+.envrc.local
+
+# IDEs
+.idea/
+.vscode/*
+!.vscode/settings.json.template
+!.vscode/extensions.json
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docs build
+docs/site/
+docs/_build/
+# Rapports générés : PDF binaires régénérables depuis le HTML source (qui, lui, est suivi)
+docs/*.pdf
+
+# Logs
+*.log
+logs/
+
+# ML artifacts
+*.safetensors
+*.pt
+*.onnx
+wandb/
+mlruns/
+checkpoints/
+!configs/anchors/*.safetensors.placeholder
+
+# Phase 3 R2 — nano-robots Phase 1 runtime (cf. scripts/slm/)
+# Modèles GGUF locaux (4 fichiers, ~4.1 GB total)
+/models/
+*.gguf
+# PIDs des llama-server lancés via scripts/slm/start.sh
+/.llama_pids/
+*.pid
+# Logs des llama-server (déjà couverts par logs/ mais explicite)
+/logs/llama-server/
+
+# Misc
+*.tmp
+*.bak
+.ci-evidence/
+coverage/
+.cargo-ok
+
+# Round-5 DT-OPS-21 fix : Python proto stubs are generated at build
+# time from `protos/efe/v1/*.proto` (see `clients/python/Makefile`
+# target `proto`). Committing them caused silent drift between the
+# `.proto` source and the generated `.py` consumed by tests — code
+# review never saw the regeneration step. The next commit touching
+# these proto definitions should run `make -C clients/python proto`
+# and rely on this rule to keep the artifacts out of git.
+clients/python/efe_tool/_proto/efe/v1/*_pb2.py
+clients/python/efe_tool/_proto/efe/v1/*_pb2.pyi
+clients/python/efe_tool/_proto/efe/v1/*_pb2_grpc.py

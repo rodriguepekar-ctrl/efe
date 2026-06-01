@@ -1,15 +1,15 @@
 # EFE — Économie réelle du pré-mâchage (vrai LLM) · claude_claude-sonnet-4-6
 
-> Roadmap **H0.1**. A/B contrôlé (baseline brut vs chewed compressé) sur modèle épinglé, coût **calculé** depuis tokens × pricing (in $3.0/Mtok · out $15.0/Mtok). Généré : 2026-06-01T00:11:01.665240+00:00. Données brutes : le `.json` à côté.
+> Roadmap **H0.1**. A/B contrôlé (baseline brut vs chewed compressé) sur modèle épinglé, coût **calculé** depuis tokens × pricing (in $3.0/Mtok · out $15.0/Mtok). Généré : 2026-06-01T14:40:45.963694+00:00. Données brutes : le `.json` à côté.
 
 ## Verdict par prompt
 
 | Prompt | type | savings tokens | Δcoût (USD) | latence NETTE (ms) | overhead SLM (ms) | qualité (jaccard) | factuel base/chewed |
 |---|---|---|---|---|---|---|---|
-| fr_capital_1k | redundant | +48% (302→157 t) | +0.00050 ± 0.00003 | +8917 ± 741 | +8959 ± 441 | 0.44 ± 0.39 | 1.00/1.00 |
-| syncasync_1k5 | redundant | +50% (430→216 t) | +0.00711 ± 0.00110 | +1284 ± 6777 | +10509 ± 6760 | 0.25 ± 0.03 | 0.00/0.00 |
-| rest_graphql_2k5 | redundant | +56% (658→290 t) | +0.01012 ± 0.00025 | +13174 ± 694 | +24041 ± 757 | 0.24 ± 0.02 | 0.00/0.00 |
-| varied_backend | varied | +17% (383→316 t) | +0.00337 ± 0.00060 | +17410 ± 1783 | +20012 ± 2 | 0.20 ± 0.00 | 0.00/0.00 |
+| fr_capital_1k | redundant | +16% (302→254 t) | +0.00017 ± 0.00024 | +2809 ± 817 | +2965 ± 653 | 0.72 ± 0.39 | 1.00/1.00 |
+| syncasync_1k5 | redundant | +51% (430→212 t) | +0.00830 ± 0.00124 | -6846 ± 1566 | +2466 ± 42 | 0.25 ± 0.02 | 0.00/0.00 |
+| rest_graphql_2k5 | redundant | +64% (658→234 t) | +0.01059 ± 0.00041 | -5004 ± 1209 | +7215 ± 657 | 0.24 ± 0.01 | 0.00/0.00 |
+| varied_backend | varied | +16% (383→321 t) | +0.00122 ± 0.00133 | +6166 ± 1990 | +4953 ± 1201 | 0.26 ± 0.04 | 0.00/0.00 |
 
 ## Comment lire
 
@@ -25,38 +25,30 @@
 - **Répétitions à prompt identique** → le cache de prompt SLM (`cache_prompt=true`) peut accélérer les répétitions 2-3 → l'overhead SLM mesuré est plutôt un **plancher** (biais favorable au chewed, mais réaliste en prod).
 - **Coût SLM compute non monétisé** : supposé ≈ nul (self-hosted CPU/GPU local). Si SLM facturé, soustraire son coût du Δcoût.
 
-## ✅ Run POST-FIX R7 (préservation de la question) — la qualité est rétablie
+## Décision (H0.1 — VERDICT, post-R7 + post-campagne L1/C-B)
 
-Run du 2026-06-01 **après** le correctif R7 (`workflows::extract_questions` +
-ré-injection verbatim de la question dans `final_prompt_from_compression`). À
-comparer au run pré-fix `EFE_PRECHEWING_ECONOMICS_2026-05-31.md` (qualité
-détruite).
+> **Le pré-mâchage paie sur le COÛT dès ~430 t d'entrée redondante (−51 à −64 % tokens IN,
+> +$0.008–0.011/req) ; sur la LATENCE OUI sur les prompts redondants (chewed PLUS RAPIDE de
+> 5–8 s end-to-end), neutre-à-négatif sur les prompts courts/propres ; qualité PRÉSERVÉE SOUS
+> CONDITION (réponse correcte mais plus concise).**
 
-**Lecture des réponses chewed (la vraie preuve, pas le jaccard)** :
+**La vraie mécanique (révélée par la lecture des réponses + la décomposition du coût).** Le gain
+vient surtout de la **réduction de SORTIE**, pas de l'entrée compressée. Un prompt propre/condensé
+induit une réponse **correcte mais concise** (~2,5–2,8× moins de tokens de sortie). Sur
+`rest_graphql`, **88 % de l'économie** vient de la sortie (1000→362 t × $15/Mtok) vs 12 % de
+l'entrée (658→234 t × $3/Mtok). La sortie coûte 5× l'entrée et domine le temps → c'est là que
+vivent le coût ET la latence.
 
-| Prompt | chewed PRÉ-fix (faux) | **chewed POST-fix (correct)** |
-|---|---|---|
-| `fr_capital` | « Paris » ✅ | « Paris » ✅ |
-| `syncasync` | *« identifie ta question, sources fiables »* ❌ | **« Synchrone : le code s'exécute ligne par ligne… »** ✅ |
-| `rest_graphql` | *« sources officielles : HAS, INSERM »* ❌ | **« REST : plusieurs endpoints ; GraphQL : un seul endpoint… »** ✅ |
-| `varied_backend` | parle de cache ⚠️ | **« Pessimiste, dans ce cas précis… »** ✅ |
+**Lecture des réponses (la vraie preuve, pas le jaccard).** Les réponses chewed sont **sur le bon
+sujet et correctes** (sync/async expliqué via code ; REST/GraphQL via endpoints/over-fetching),
+simplement plus **courtes** que les baselines verbeuses (qui mirooirent la redondance du prompt
+brut). Le jaccard bas (~0,25) = **style différent**, pas une erreur. Ce n'est PAS l'artefact pré-R7
+(réponses fausses & courtes) : ici les réponses sont **justes** & courtes.
 
-Le jaccard (0.2–0.44) reste modéré **uniquement** car la réponse chewed est plus
-**concise** (`out_c` < `out_b`, ex. 420 vs 1000 t) — consigne BRÈVE, pas une
-régression. **La question survit, le LLM y répond.**
+**Positionnement (RÉVISE H0.3).** Sur les prompts **verbeux/redondants**, le pré-mâchage est un
+optimiseur de **COÛT + LATENCE** (via induction de brièveté correcte) ; sur les prompts déjà propres,
+il reste **neutre** (l'overhead SLM amont n'est pas couvert). La brièveté est un **atout pour du
+Q&A**, un **compromis si l'exhaustivité est requise** (décision produit).
 
-## Décision (H0.1, post-fix)
-
-> **Le pré-mâchage est un optimiseur de COÛT à CORRECTION PRÉSERVÉE.** Coût :
-> win partout (+$0.0005 à +$0.010/req ; plus modeste qu'au pré-fix car la
-> question ré-injectée rajoute des tokens). Latence : **neutre à négative** aux
-> vitesses CPU-SLM (le « win latence » du run pré-fix était un artefact de
-> réponses **fausses et courtes** ; une réponse correcte coûte plus de
-> génération). Qualité : **préservée** (toutes les réponses sur le bon sujet).
-
-**Implication positionnement (H0.3)** : vendre le pré-mâchage comme **réduction
-de coût** (tokens d'entrée premium), pas comme accélérateur — sauf à passer les
-SLM sur GPU (H0.2).
-
-⚠️ Prompts `redundant` = best-case savings / worst-case correction (c'est là que
-le bug R7 frappait le plus) ; `varied` borne le réalisme (cf. H1.1).
+⚠️ Rappel : ces prompts incluent des `redundant` (best-case compression → savings **optimistes**) ;
+les `varied` bornent le réalisme (cf. H1.1 — élargir le corpus).

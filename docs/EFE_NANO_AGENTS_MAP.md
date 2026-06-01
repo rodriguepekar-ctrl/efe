@@ -212,17 +212,23 @@ ne pas la reconfondre avec les nano-robots) :
 | `efe-nano-swarm-adapter` | pré-analyse |
 | Runtime `efe-nano` | les 20 nano-apps (starter pack) |
 
-## 11. Positionnement (FIGÉ — H0.1) & trous connus
+## 11. Positionnement (ACTUALISÉ — H0.1 run vrai-LLM end-to-end) & trous connus
 
-- **🎯 POSITIONNEMENT (mesuré vrai LLM, A/B vs claude-sonnet-4-6, post-fix R7 —
+- **🎯 POSITIONNEMENT (RÉVISÉ — mesuré vrai LLM, A/B end-to-end vs claude-sonnet-4-6,
+  post-R7 + post-campagne L1/C-B, 2026-06-01 —
   cf. [`EFE_PRECHEWING_ECONOMICS_2026-06-01.md`](EFE_PRECHEWING_ECONOMICS_2026-06-01.md))** :
-  le pré-mâchage est un **OPTIMISEUR DE COÛT à correction préservée**, **PAS** un
-  accélérateur.
-  - **Coût** : win (−tokens d'entrée premium ; +$0.0005–0.010/req sur ces prompts).
-  - **Correction** : préservée depuis `fc7bc95` (la question survit).
-  - **Latence** : **neutre à négative** aux vitesses CPU-SLM (l'overhead SLM
-    amont dépasse le temps LLM gagné). Le « win latence » observé au run **pré-fix**
-    était un **artefact** de réponses fausses & courtes.
+  sur les prompts **verbeux/redondants**, le pré-mâchage gagne sur **COÛT *ET* LATENCE** ; sur les
+  prompts déjà propres, il reste **neutre**. (⚠ Révise le « PAS un accélérateur » de H0.3.)
+  - **Mécanique clé (révélée par la lecture des réponses + décompo coût)** : le gain vient surtout
+    de la **réduction de SORTIE**, pas de l'entrée compressée. Un prompt propre induit une réponse
+    **correcte mais concise** (~2,5-2,8× moins de tokens out). Sur `rest_graphql`, **88 % de
+    l'économie** = la sortie (×$15/Mtok) vs 12 % l'entrée (×$3) → la sortie coûte 5× et domine le temps.
+  - **Coût** : win partout, **+$0.008–0.011/req** sur les redondants (in −51 à −64 %, out −~2,7×).
+  - **Latence NETTE** : **−5 à −8 s** (chewed PLUS RAPIDE) sur les redondants ; **+3 à +6 s** sur
+    courts/propres (overhead SLM non couvert). Le gain **scale avec la redondance** du prompt.
+  - **Correction** : préservée depuis `fc7bc95`. Réponses chewed **justes & concises** (lues :
+    sync/async via code, REST/GraphQL via endpoints) — **PAS** l'artefact pré-R7 (justes ≠ fausses).
+    Brièveté = **atout Q&A**, **compromis si exhaustivité requise** (décision produit).
   - → **H0.2 (spike GPU, keyless, FAIT)** : le GPU est **nécessaire** (en CPU le
     compresseur timeoute, 15-25 s) mais **PAS suffisant** pour renverser la
     latence. Le mur n'est pas le débit GPU mais la **sérialisation** des appels
@@ -234,8 +240,9 @@ ne pas la reconfondre avec les nano-robots) :
     compresseur **6523 → 1819 ms (−72 %)**, SLM total **9972 → 5689 ms (−43 %)**,
     **savings préservés** (+24 %, sortie identique ~290 t). **Premier gain latence
     franc du projet.** ⚠ C'est la latence de l'**étage SLM** ; le Δlatence NETTE
-    bout-en-bout vs baseline LLM reste à re-mesurer (vrai LLM). Le positionnement
-    « optimiseur de coût » **tient** — L1 le complète, ne le contredit pas.
+    bout-en-bout **a été mesuré (H0·a, vrai LLM)** → il **bascule négatif** (chewed plus
+    rapide) sur les prompts redondants. Le positionnement **évolue** : coût **+ latence** sur
+    les redondants (cf. bullet POSITIONNEMENT ci-dessus).
   - → **L2 (FAIT, mesuré keyless) — GARDÉ, mais ROI borné GPU.** MAP du
     compresseur parallélisé (`join_all` par fenêtres, `MAP_CONCURRENCY=4` +
     serveur `--parallel 4`/ctx 8192). Mesure (prompt 1922 t / ~4 chunks, même
