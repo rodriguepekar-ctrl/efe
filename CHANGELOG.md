@@ -57,6 +57,15 @@ _(rolling — next release will land here)_
   (entités → phéromones/UI, hors chemin critique), un excerpt suffit. Live : les
   3 tailles KO passent toutes `failed=[]`, et l'analyzer est **plus rapide**.
   (`6725336`)
+- **La question est préservée verbatim (bug de correction H0.1).** Le compresseur
+  1B extrayait le **remplissage dominant** et **larguait la question** → le LLM
+  premium répondait au bruit (il citait des autorités médicales HAS/INSERM pour
+  une question REST/GraphQL). On ré-injecte les phrases interrogatives du brut
+  VERBATIM dans le prompt final (`extract_questions` + section « Question » de
+  `final_prompt_from_compression`). **Prouvé live** : 4/4 réponses chewed à
+  nouveau sur le bon sujet (était 1/4). **Bug invisible au mock** (réponses
+  canned) et à nos fixes antérieurs (qui validaient le `savings_ratio`, jamais la
+  correction). (`fc7bc95`)
 
 #### Performance — pré-mâchage
 
@@ -67,12 +76,22 @@ _(rolling — next release will land here)_
   qu'avant). Savings : **+0.51 → +0.73** sur un prompt de 1415 car ; jusqu'à
   **+0.91** sur 8000 car. (`9a9634e`)
 
-#### Observability — caractérisation économique (live, read-only)
+#### Observability — économie réelle & positionnement (H0.1, figé)
 
-- **Sweep d'économie du pré-mâchage** : le levier est un optimiseur de **COÛT**
-  (−56% à −91% de tokens d'entrée, gate à ~250 t) mais **pas de latence** (+5 à
-  +19 s de SLM amont aux vitesses CPU). Décision de positionnement ouverte (cf.
-  roadmap H0). Détail dans
+- **Harnais A/B coût/latence/qualité contre un VRAI LLM** :
+  `scripts/bench/prechew_economics.py` (baseline brut vs chewed compressé, modèle
+  épinglé, coût calculé depuis tokens × pricing, qualité = jaccard + lecture des
+  réponses). Clés jamais touchées par le harnais. (`27381c1`)
+- **🎯 POSITIONNEMENT FIGÉ** (mesuré A/B vs `claude-sonnet-4-6`, post-fix
+  `fc7bc95`) : le pré-mâchage est un **optimiseur de COÛT à correction préservée**,
+  **pas un accélérateur**. Coût : win (−tokens premium). Correction : préservée.
+  Latence : **neutre à négative** aux vitesses CPU-SLM (le « win latence » du run
+  pré-fix était un artefact de réponses fausses & courtes) → récupérable seulement
+  sur **GPU** (H0.2). Rapports :
+  [`docs/EFE_PRECHEWING_ECONOMICS_2026-05-31.md`](docs/EFE_PRECHEWING_ECONOMICS_2026-05-31.md)
+  (pré-fix, qualité détruite) →
+  [`docs/EFE_PRECHEWING_ECONOMICS_2026-06-01.md`](docs/EFE_PRECHEWING_ECONOMICS_2026-06-01.md)
+  (post-fix). Synthèse :
   [`docs/EFE_NANO_AGENTS_MAP.md`](docs/EFE_NANO_AGENTS_MAP.md) §11.
 
 ## [0.9.0] - 2026-05-12 — Sprint Φ-D-OPS (Operational unification)

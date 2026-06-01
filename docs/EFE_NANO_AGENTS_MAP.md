@@ -180,12 +180,16 @@ ne pas la reconfondre avec les nano-robots) :
 4→11 tests chacune). Les « stubs » trouvés sont de l'**infra documentée**
 (VmPool→Firecracker, audit→HMAC), pas de la logique d'app manquante.
 
-**Les 3 bugs SLM corrigés cette session** (cf. CHANGELOG `[Unreleased]`) :
+**Les 4 bugs SLM corrigés cette session** (cf. CHANGELOG `[Unreleased]`) — tous
+**invisibles aux unit-tests**, trouvés en live :
 1. Compresseur qui **gonflait** les prompts (savings −0.71) → encadrement terse +
    gate tokens (`41d202b`).
 2. Compresseur qui **ne compressait pas** (cap grammaire fixe) → brièveté forcée
    par grammaire (`9a9634e`).
 3. Analyzer qui **échouait >1000 t** → entrée bornée (`6725336`).
+4. Compresseur qui **larguait la question** (extrait le filler dominant) → le LLM
+   premium répondait au bruit → ré-injection verbatim de la question (`fc7bc95`).
+   **Révélé uniquement par un VRAI LLM** (H0.1) ; le mock le cachait.
 
 ## 9. 🔑 Insight — où vit le risque
 
@@ -208,11 +212,20 @@ ne pas la reconfondre avec les nano-robots) :
 | `efe-nano-swarm-adapter` | pré-analyse |
 | Runtime `efe-nano` | les 20 nano-apps (starter pack) |
 
-## 11. Caveats & trous connus
+## 11. Positionnement (FIGÉ — H0.1) & trous connus
 
-- **Latence** (sweep d'économie, 2026-06-01) : le pré-mâchage est un optimiseur
-  de **COÛT** (−56% à −91% de tokens), **pas de latence** (+5 à +19 s de SLM
-  amont) aux vitesses CPU-SLM. Décision de positionnement à trancher (roadmap H0).
+- **🎯 POSITIONNEMENT (mesuré vrai LLM, A/B vs claude-sonnet-4-6, post-fix R7 —
+  cf. [`EFE_PRECHEWING_ECONOMICS_2026-06-01.md`](EFE_PRECHEWING_ECONOMICS_2026-06-01.md))** :
+  le pré-mâchage est un **OPTIMISEUR DE COÛT à correction préservée**, **PAS** un
+  accélérateur.
+  - **Coût** : win (−tokens d'entrée premium ; +$0.0005–0.010/req sur ces prompts).
+  - **Correction** : préservée depuis `fc7bc95` (la question survit).
+  - **Latence** : **neutre à négative** aux vitesses CPU-SLM (l'overhead SLM
+    amont dépasse le temps LLM gagné). Le « win latence » observé au run **pré-fix**
+    était un **artefact** de réponses fausses & courtes.
+  - → Récupérer la latence exige des SLM sur **GPU** (roadmap H0.2, non fait).
+- **Méthodo** : ces 4 bugs (cf. §8) n'étaient visibles qu'en **live + lecture des
+  réponses** ; le mock LLM (réponses canned) les masquait tous.
 - **2 stubs pré-analyse** (`sentiment_classifier`, `summary_writer`) → upgrade
   modèle/LLM planifié (Sprint 14).
 - **`reformulator` / `filter`** : construits + testés mais hors pré-mâchage Q&A
