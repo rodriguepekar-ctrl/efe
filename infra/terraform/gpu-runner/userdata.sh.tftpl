@@ -1,0 +1,44 @@
+#!/bin/bash
+# Sprint Φ-D-LATACT D90 — GPU runner bootstrap user-data.
+
+set -euxo pipefail
+
+# 1. Verify NVIDIA driver + CUDA.
+nvidia-smi
+nvcc --version
+
+# 2. Install Rust toolchain if not present (= AMI usually has it).
+if ! command -v cargo > /dev/null 2>&1; then
+    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+    source $HOME/.cargo/env
+fi
+
+# 3. Download + configure GitHub Actions runner.
+mkdir -p /opt/actions-runner
+cd /opt/actions-runner
+
+RUNNER_VERSION="2.319.1"
+curl -o actions-runner-linux-x64.tar.gz -L \
+    "https://github.com/actions/runner/releases/download/v$${RUNNER_VERSION}/actions-runner-linux-x64-$${RUNNER_VERSION}.tar.gz"
+tar xzf actions-runner-linux-x64.tar.gz
+
+./config.sh --unattended \
+    --url "https://github.com/${github_org}" \
+    --token "${github_token}" \
+    --name "${runner_name}" \
+    --labels "${runner_labels}" \
+    --work _work \
+    --replace
+
+# 4. Install as systemd service.
+sudo ./svc.sh install
+sudo ./svc.sh start
+
+# 5. Health check : runner registered with GitHub.
+sleep 10
+if systemctl is-active --quiet actions.runner.${github_org}.${runner_name}.service; then
+    echo "OK : runner registered + active"
+else
+    echo "FATAL : runner registration failed" >&2
+    exit 1
+fi
