@@ -90,6 +90,9 @@ CMakeFiles/
 # OS
 .DS_Store
 Thumbs.db
+# Fichiers de verrou temporaires MS Office / LibreOffice (jamais à suivre)
+~$*
+.~lock.*#
 
 # Docs build
 docs/site/
