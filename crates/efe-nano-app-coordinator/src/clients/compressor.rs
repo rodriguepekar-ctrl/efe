@@ -10,7 +10,7 @@ use super::{NanoRobotClient, RunMode};
 use crate::clients::analyzer::assets_dir;
 use crate::context::CallContext;
 use crate::error::{RobotError, RobotResult};
-use crate::types::compressor::{CompressorInput, CompressorOutput};
+use crate::types::compressor::{CompressionStyle, CompressorInput, CompressorOutput};
 
 /// Client pour le robot Compresseur.
 pub struct CompressorClient {
@@ -140,10 +140,39 @@ impl CompressorClient {
         Ok(output)
     }
 
+    /// **Un chunk → toujours une String** (jamais d'erreur), pour être appelé
+    /// concurremment dans le MAP (L2). Renvoie le résumé valide non-dégénéré,
+    /// sinon un extrait tronqué du brut (240 c) — exactement la logique de
+    /// fallback de la boucle MAP historique, isolée pour la parallélisation.
+    /// `must_preserve` vide : la préservation stricte est vérifiée sur le
+    /// résultat FINAL (un chunk intermédiaire ne porte pas toutes les entités).
+    async fn compress_chunk_or_fallback(
+        &self,
+        chunk: &str,
+        target_words: u32,
+        style: CompressionStyle,
+        ctx: &CallContext,
+    ) -> String {
+        let ci = CompressorInput {
+            text: chunk.to_string(),
+            target_words,
+            must_preserve: Vec::new(),
+            style,
+        };
+        match self.compress_once(&ci, ctx).await {
+            Ok(out) if !is_degenerate_summary(&out.summary) => out.summary,
+            // dégénéré OU échec (timeout/transport) → extrait tronqué du brut.
+            _ => truncate_chars(chunk, 240),
+        }
+    }
+
     /// **Map-reduce** pour input long (> [`SAFE_CHUNK_TOKENS`]).
     ///
     /// 1. **MAP** : découpe en morceaux que le 1B traite de façon fiable, et
-    ///    compresse chacun (séquentiel — llama-server `--parallel 1`).
+    ///    compresse chacun. **L2** : les chunks d'une même passe sont compressés
+    ///    en PARALLÈLE par fenêtres de [`MAP_CONCURRENCY`] (`join_all`), ce qui
+    ///    exige autant de slots `--parallel` côté llama-server compresseur
+    ///    (cf. `scripts/slm/lib_common.sh` : `ROBOT_PARALLEL`). Ordre préservé.
     /// 2. **REDUCE** : concatène ; si la concaténation dépasse encore le seuil,
     ///    on récurse (itératif, borné par [`MAX_REDUCE_PASSES`]).
     /// 3. **Resserrage final** → un `CompressorOutput` unique.
@@ -174,20 +203,27 @@ impl CompressorClient {
             let per_chunk_target =
                 ((input.target_words as usize) / chunks.len()).clamp(10, 500) as u32;
 
+            // ── MAP parallèle borné (L2) ──
+            // Les chunks sont indépendants → compressés en PARALLÈLE par fenêtres
+            // de `concurrency`. `chunks.chunks(C)` borne la concurrence à C sans
+            // Semaphore ; les fenêtres sont séquentielles et `join_all` conserve
+            // l'ordre d'entrée → `partials` reste dans l'ordre des chunks (la
+            // concaténation REDUCE en dépend). `concurrency` DOIT être ≤ aux slots
+            // `--parallel` du serveur, sinon l'excédent fait la queue (pas de
+            // gain). Chaque future est INFAILLIBLE (fallback truncate par chunk) →
+            // un chunk raté ne casse pas la vague.
+            let concurrency = map_concurrency();
             let mut partials: Vec<String> = Vec::with_capacity(chunks.len());
-            for chunk in &chunks {
-                let ci = CompressorInput {
-                    text: chunk.clone(),
-                    target_words: per_chunk_target,
-                    must_preserve: Vec::new(), // pas d'enforcement par-chunk
-                    style: input.style,
-                };
-                let partial = match self.compress_once(&ci, ctx).await {
-                    Ok(out) if !is_degenerate_summary(&out.summary) => out.summary,
-                    // dégénéré OU échec → extrait tronqué du brut.
-                    _ => truncate_chars(chunk, 240),
-                };
-                partials.push(partial);
+            for window in chunks.chunks(concurrency) {
+                let futs = window.iter().map(|chunk| {
+                    self.compress_chunk_or_fallback(
+                        chunk.as_str(),
+                        per_chunk_target,
+                        input.style,
+                        ctx,
+                    )
+                });
+                partials.extend(futures::future::join_all(futs).await);
             }
             current = partials.join(" ");
             passes += 1;
@@ -273,6 +309,26 @@ const MAX_REDUCE_PASSES: usize = 4;
 const CHUNK_OVERLAP_TOKENS: usize = 30;
 /// `CompressorInput.text` exige ≥ 50 chars : on ne produit pas de chunk plus court.
 const MIN_CHUNK_CHARS: usize = 50;
+/// **L2** — concurrence du MAP : nombre de chunks compressés **en parallèle**
+/// (`join_all` par fenêtres). DOIT être ≤ au nombre de slots `--parallel` du
+/// llama-server compresseur (cf. `scripts/slm/lib_common.sh` : `ROBOT_PARALLEL`),
+/// sinon les requêtes en excès font la queue côté serveur → aucun gain. Défaut 4
+/// = slots compresseur recommandés (ctx 8192 ⇒ 2048 t/slot, marge ~1,9× vs le
+/// ~1085 t/slot d'un chunk). `=1` → MAP redevient **séquentiel** (comportement
+/// pré-L2, utile sur un serveur mono-slot). Override : env
+/// `EFE_COMPRESSOR_MAP_CONCURRENCY` (plancher 1).
+///
+/// **⚠ ROI mesuré (keyless, 2026-06-01) — borné par le GPU, PAS linéaire.** Sur
+/// un prompt ~1922 t / ~4 chunks (Metal, M3 Pro), la latence compresseur passe
+/// de **10637 ms (série) → 8224 ms (parallèle 4)** = **~1,3×** (jusqu'à ~1,5× sur
+/// les reps propres). Le modèle naïf « 5 appels → 2 appels = 2,5× » est FAUX : les
+/// N slots `--parallel` partagent **un seul GPU**, donc `--cont-batching` BATCHE
+/// les requêtes (utilisation accrue) sans les exécuter sur du compute indépendant
+/// → speedup **sous-linéaire** (~1,4× d'efficacité batching). Cohérence : 1 vague
+/// MAP de 4 à 1,4× ≈ 2,9 temps-d'appel + 1 FINAL = 3,9 vs 5 = 1,28×. **Le ROI ne
+/// décolle qu'en MULTI-GPU** (une instance compresseur par GPU) ; sur GPU unique,
+/// L2 n'extrait que la marge de batching. Qualité préservée (savings identiques).
+const MAP_CONCURRENCY: usize = 4;
 
 /// Lit un `usize` depuis une variable d'env, avec défaut + plancher.
 fn env_usize(var: &str, default: usize, min: usize) -> usize {
@@ -294,6 +350,11 @@ fn max_reduce_passes() -> usize {
 /// Recouvrement inter-chunks (tokens), configurable via env (0 = pas d'overlap).
 fn chunk_overlap_tokens() -> usize {
     env_usize("EFE_COMPRESSOR_CHUNK_OVERLAP_TOKENS", CHUNK_OVERLAP_TOKENS, 0)
+}
+/// Concurrence du MAP (nb de chunks en parallèle), configurable via env. Plancher
+/// 1 (`=1` ⇒ MAP séquentiel = comportement pré-L2).
+fn map_concurrency() -> usize {
+    env_usize("EFE_COMPRESSOR_MAP_CONCURRENCY", MAP_CONCURRENCY, 1)
 }
 
 /// Estime le nombre de tokens (~chars/4, aligné sur `ChewingMetrics::estimate_tokens`).
@@ -660,5 +721,104 @@ mod chunking_tests {
         std::env::set_var(var, "3");
         assert_eq!(env_usize(var, 7, 5), 7, "sous le plancher → défaut");
         std::env::remove_var(var);
+    }
+
+    // ── L2 (levier latence) — MAP parallélisé (join_all par fenêtres) ──────
+
+    #[test]
+    fn l2_map_concurrency_default_is_four() {
+        // Défaut = 4 (= slots --parallel compresseur reco). La mécanique
+        // d'override env est couverte par env_usize_parses_with_default_and_floor.
+        assert_eq!(MAP_CONCURRENCY, 4, "L2 : concurrence MAP par défaut = 4");
+    }
+
+    #[tokio::test]
+    async fn l2_map_windows_preserve_order_under_reversed_completion() {
+        // Le pattern MAP (chunks(C) + join_all + extend) DOIT préserver l'ordre
+        // des chunks même quand les futures finissent dans le désordre (la
+        // concaténation REDUCE en dépend). Future factice : délai DÉCROISSANT avec
+        // l'index → dans chaque fenêtre, l'index le plus BAS finit en DERNIER.
+        async fn fake(i: usize, n: usize) -> usize {
+            let d = ((n - i) as u64) * 4; // i bas → délai haut → complétion tardive
+            tokio::time::sleep(std::time::Duration::from_millis(d)).await;
+            i
+        }
+        let items: Vec<usize> = (0..7).collect();
+        let concurrency = 3;
+        let mut out: Vec<usize> = Vec::new();
+        for window in items.chunks(concurrency) {
+            let futs = window.iter().map(|&i| fake(i, items.len()));
+            out.extend(futures::future::join_all(futs).await);
+        }
+        assert_eq!(out, items, "l'ordre des chunks survit au MAP parallèle");
+    }
+
+    /// **Preuve de parallélisme au wall-clock** (sans LLM) : un mock llama-server
+    /// répond à `POST /completion` avec un délai fixe ; le MAP de `compress_long`
+    /// lance les chunks d'une vague en `join_all`. En série, le temps serait
+    /// `(K+1)×délai` ; en parallèle, `~2×délai` (1 vague MAP + 1 resserrage).
+    #[tokio::test]
+    async fn l2_map_is_parallel_wallclock_via_mock_server() {
+        use validator::Validate as _;
+        use wiremock::matchers::{method, path};
+        use wiremock::{Mock, MockServer, ResponseTemplate};
+        const DELAY_MS: u64 = 200;
+
+        let server = MockServer::start().await;
+        // `content` = un CompressorOutput valide, non dégénéré (ASCII pur pour
+        // éviter tout souci d'échappement dans le JSON imbriqué).
+        let body = serde_json::json!({
+            "content": "{\"summary\":\"Resume partiel valide du chunk de test suffisamment long pour etre non vide.\",\"word_count\":13,\"preserved\":[],\"omitted_for_brevity\":[],\"compression_ratio\":3.0}",
+            "tokens_evaluated": 120,
+            "tokens_predicted": 16
+        });
+        Mock::given(method("POST"))
+            .and(path("/completion"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .set_body_json(body)
+                    .set_delay(std::time::Duration::from_millis(DELAY_MS)),
+            )
+            .mount(&server)
+            .await;
+
+        let inner = LlamaServerClient::from_assets(
+            "compressor",
+            "1.0.0",
+            server.uri(),
+            assets_dir().join("grammars/compressor_v1.gbnf"),
+            assets_dir().join("prompts/compressor.txt"),
+            512,
+            0.1,
+        )
+        .expect("client mock construit");
+        let client = CompressorClient::from_helper(inner);
+        let ctx = CallContext::mock();
+
+        // ~1500 mots (~6000 c) → 3-4 chunks, tous dans UNE fenêtre (≤ MAP_CONCURRENCY=4).
+        let input = CompressorInput {
+            text: "mot ".repeat(1500),
+            target_words: 80,
+            must_preserve: Vec::new(),
+            style: CompressionStyle::Extractive,
+        };
+
+        let t0 = std::time::Instant::now();
+        let out = client
+            .compress_long(&input, &ctx)
+            .await
+            .expect("compress_long ok");
+        let elapsed = t0.elapsed();
+
+        assert!(out.validate().is_ok(), "sortie schéma-valide");
+        assert!(!is_degenerate_summary(&out.summary), "sortie non dégénérée");
+
+        // SÉRIE : (K+1)×DELAY ≥ 4×DELAY (K≥3). PARALLÈLE : 1 vague MAP + FINAL
+        // ≈ 2×DELAY. Borne discriminante < 3×DELAY (parallèle ~400 ms passe ;
+        // série ≥ 800 ms échouerait).
+        assert!(
+            elapsed < std::time::Duration::from_millis(DELAY_MS * 3),
+            "MAP doit être parallèle (~2×{DELAY_MS}ms ; série serait ≥4×) : {elapsed:?}"
+        );
     }
 }

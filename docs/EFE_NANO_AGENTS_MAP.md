@@ -236,9 +236,21 @@ ne pas la reconfondre avec les nano-robots) :
     franc du projet.** ⚠ C'est la latence de l'**étage SLM** ; le Δlatence NETTE
     bout-en-bout vs baseline LLM reste à re-mesurer (vrai LLM). Le positionnement
     « optimiseur de coût » **tient** — L1 le complète, ne le contredit pas.
+  - → **L2 (FAIT, mesuré keyless) — GARDÉ, mais ROI borné GPU.** MAP du
+    compresseur parallélisé (`join_all` par fenêtres, `MAP_CONCURRENCY=4` +
+    serveur `--parallel 4`/ctx 8192). Mesure (prompt 1922 t / ~4 chunks, même
+    serveur, client `=1` vs `=4`) : compresseur **10637 → 8224 ms = ~1,3×**
+    (jusqu'à ~1,5× reps propres), savings **+76,7 % préservés**. ⚠ **Ma projection
+    (2,5×) était FAUSSE** : les N slots partagent **un seul GPU** → `--cont-batching`
+    batche (speedup **sous-linéaire** ~1,4×), pas du compute indépendant. **Le ROI
+    ne décolle qu'en MULTI-GPU** (1 instance compresseur/GPU). SLM total quasi
+    immobile (−1,4 %) car le cold-start analyzer domine → cf. L3. Code correct
+    (test wiremock prouve la concurrence) ; c'est le **plafond matériel**, pas un
+    bug. Réversible : `EFE_COMPRESSOR_MAP_CONCURRENCY=1` / `ROBOT_PARALLEL=(1 1 1 1)`.
 - **Méthodo** : ces 4 bugs (cf. §8) n'étaient visibles qu'en **live + lecture des
-  réponses** ; le mock LLM (réponses canned) les masquait tous. **L1 a été
-  validé par le même principe** : mesure live (bridge SLM réel), pas un unit-test.
+  réponses** ; le mock LLM (réponses canned) les masquait tous. **L1 ET L2 ont été
+  validés par le même principe** : mesure live (bridge SLM réel) — et la mesure L2
+  a **corrigé une projection optimiste** (2,5× → 1,3×), comme H0.1/H0.2.
 - **2 stubs pré-analyse** (`sentiment_classifier`, `summary_writer`) → upgrade
   modèle/LLM planifié (Sprint 14).
 - **`reformulator` / `filter`** : construits + testés mais hors pré-mâchage Q&A

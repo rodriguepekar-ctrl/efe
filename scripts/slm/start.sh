@@ -200,7 +200,7 @@ log_ok "Pre-flight passé. ${#to_start[@]} robot(s) à démarrer."
 #   --n-gpu-layers     offload GPU max (999 = toutes ; auto-fallback CPU)
 #   --threads          calculé selon le hardware
 #   --threads-batch    idem pour batch
-#   --parallel         1 slot suffit pour Phase 3 R2 (1 requête à la fois)
+#   --parallel         slots PAR ROBOT (L2 : robot_parallel) — compresseur=4 pour
 #   --cont-batching    continuous batching (efficace même à parallel=1)
 #   --metrics          expose /metrics Prometheus
 #   --no-warmup        accélère le startup (warmup à la 1ère requête)
@@ -225,7 +225,7 @@ log_ok "Pre-flight passé. ${#to_start[@]} robot(s) à démarrer."
 #   --n-gpu-layers     offload GPU max (999 = toutes ; auto-fallback CPU)
 #   --threads          calculé selon le hardware
 #   --threads-batch    idem pour batch
-#   --parallel         1 slot suffit pour Phase 3 R2 (1 requête à la fois)
+#   --parallel         slots PAR ROBOT (L2 : robot_parallel) — compresseur=4 pour
 #   --cont-batching    continuous batching (efficace même à parallel=1)
 #   --metrics          expose /metrics Prometheus
 #   --no-warmup        accélère le startup (warmup à la 1ère requête)
@@ -251,7 +251,7 @@ build_llama_args() {
         --n-gpu-layers   "${NGL_OVERRIDE}"
         --threads        "${EFE_SLM_THREADS_PER_ROBOT}"
         --threads-batch  "${EFE_SLM_THREADS_PER_ROBOT}"
-        --parallel       1
+        --parallel       "$(robot_parallel "$i")"
         --cont-batching
         --cache-reuse    256
         --metrics

@@ -122,6 +122,36 @@ _(rolling — next release will land here)_
   (optimiseur de coût) : L1 accélère l'étage SLM ; le Δlatence NETTE bout-en-bout
   vs baseline LLM reste à re-mesurer avec un vrai LLM.
 
+#### Performance — levier latence L2 : MAP du compresseur parallélisé (gardé, ROI borné GPU)
+
+- **MAP parallélisé** (`compressor.rs`) : la boucle `for chunk { compress_once().await }`
+  séquentielle devient un **`join_all` par fenêtres** de `MAP_CONCURRENCY` (défaut 4,
+  env `EFE_COMPRESSOR_MAP_CONCURRENCY`). Ordre des partiels préservé, fallback par
+  chunk inchangé. Infra par-robot (`scripts/slm` : `ROBOT_PARALLEL=(1 1 4 1)`,
+  compresseur ctx 4096 → **8192** pour 2048 t/slot). 3 tests `l2_*`, dont une **preuve
+  de parallélisme au wall-clock via wiremock** (mock délai 200 ms → MAP parallèle
+  ≈ 2×délai vs série ≥ 4×).
+- **Mesuré keyless** (même serveur `--parallel 4`, client `=1` série vs `=4` parallèle ;
+  prompt 1922 t / ~4 chunks ; SLM Metal réels) :
+
+  | métrique | série (pré-L2) | parallèle (L2) | Δ |
+  |---|---|---|---|
+  | latence **compresseur** | 10637 ms ± 1028 | **8224 ms ± 1299** | **~1,3×** (jusqu'à ~1,5× reps propres) |
+  | latence SLM totale | 13139 ms | 12956 ms | −1,4 % |
+  | savings compression | +76,7 % | +76,7 % | **préservé** |
+
+- **⚠ ROI borné par le GPU — projection corrigée par la mesure.** La projection
+  « 5 appels → 2 appels = 2,5× » était **fausse** : les N slots `--parallel` partagent
+  **un seul GPU**, donc `--cont-batching` BATCHE les requêtes (speedup **sous-linéaire**
+  ~1,4×) au lieu de les exécuter sur du compute indépendant. Cohérence : 1 vague MAP de
+  4 à 1,4× ≈ 2,9 temps-d'appel + 1 FINAL = 3,9 vs 5 = 1,28× (= mesuré). **Le ROI ne
+  décolle qu'en MULTI-GPU** (1 instance compresseur/GPU) ; sur GPU unique L2 n'extrait
+  que la marge de batching. **Décision : GARDÉ** (gain réel, gratuit, qualité préservée,
+  entièrement réversible via `EFE_COMPRESSOR_MAP_CONCURRENCY=1` / `ROBOT_PARALLEL=(1 1 1 1)`),
+  mais documenté comme **dépendant du multi-GPU**. Le code est correct (wiremock le
+  prouve) — c'est un **plafond matériel**, pas un bug. Même leçon que H0.1/H0.2 : seule
+  la mesure live corrige une projection optimiste.
+
 ## [0.9.0] - 2026-05-12 — Sprint Φ-D-OPS (Operational unification)
 
 ### Added — 40 artefacts unifying 6 completion sprints

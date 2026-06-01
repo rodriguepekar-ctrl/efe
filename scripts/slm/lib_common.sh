@@ -122,11 +122,23 @@ ROBOT_HF_URLS=(
     "https://huggingface.co/unsloth/Phi-4-mini-instruct-GGUF/resolve/main/Phi-4-mini-instruct-Q4_K_M.gguf"
 )
 ROBOT_SIZES_MB=(290 444 912 2500)
-ROBOT_CTX_SIZES=(2048 2048 4096 4096)
+# ROBOT_CTX_SIZES — compresseur 4096 → 8192 (L2) : avec --parallel 4 le KV cache
+# se divise par slot (8192/4 = 2048 t/slot), marge ~1,9× vs le ~1085 t/slot d'un
+# chunk MAP (système 398 t + chunk JSON ~560 t + sortie ~125 t).
+ROBOT_CTX_SIZES=(2048 2048 8192 4096)
+# ROBOT_PARALLEL — slots concurrents llama-server PAR ROBOT (L2). Seul le
+# compresseur en a besoin (MAP parallélisé, cf. compressor.rs `MAP_CONCURRENCY`) ;
+# les autres restent mono-slot. DOIT être ≥ EFE_COMPRESSOR_MAP_CONCURRENCY côté
+# client, sinon les requêtes en excès font la queue. (1 1 1 1) = pré-L2 (mono-slot).
+# ⚠ ROI borné GPU : sur UN GPU, >1 slot = batching cont-batching (speedup
+# SOUS-LINÉAIRE, ~1,3-1,5× mesuré), PAS de gain linéaire. Le ROI ne décolle qu'en
+# MULTI-GPU (1 instance compresseur par GPU). Monter ce chiffre sur un GPU unique
+# n'aide pas au-delà de la marge de batching — et coûte du KV/slot.
+ROBOT_PARALLEL=(1 1 4 1)
 
 # Sanity : tous les arrays doivent avoir 4 entrées.
 _NB_ROBOTS=4
-for _arr_name in ROBOT_NAMES ROBOT_PORTS ROBOT_MODEL_LABELS ROBOT_HF_URLS ROBOT_SIZES_MB ROBOT_CTX_SIZES; do
+for _arr_name in ROBOT_NAMES ROBOT_PORTS ROBOT_MODEL_LABELS ROBOT_HF_URLS ROBOT_SIZES_MB ROBOT_CTX_SIZES ROBOT_PARALLEL; do
     eval "_count=\${#${_arr_name}[@]}"
     if (( _count != _NB_ROBOTS )); then
         echo "ERREUR INTERNE : tableau ${_arr_name} a ${_count} entrées, ${_NB_ROBOTS} attendues." >&2
@@ -143,6 +155,7 @@ robot_label()       { echo "${ROBOT_MODEL_LABELS[$1]}"; }
 robot_hf_url()      { echo "${ROBOT_HF_URLS[$1]}"; }
 robot_size_mb()     { echo "${ROBOT_SIZES_MB[$1]}"; }
 robot_ctx_size()    { echo "${ROBOT_CTX_SIZES[$1]}"; }
+robot_parallel()    { echo "${ROBOT_PARALLEL[$1]}"; }
 robot_model_path()  { echo "${EFE_SLM_MODELS_DIR}/$(robot_name "$1").gguf"; }
 robot_pid_path()    { echo "${EFE_SLM_PIDS_DIR}/$(robot_name "$1").pid"; }
 robot_log_path()    { echo "${EFE_SLM_LOGS_DIR}/$(robot_name "$1").log"; }
