@@ -1,0 +1,38 @@
+[package]
+name = "efe-nano-swarm-adapter"
+version = "0.0.1"
+edition = { workspace = true }
+rust-version = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
+description = "M50 — Sprint 15 N23 : bidirectional adapter between the M50 NanoAgent catalogue and the N21 SwarmAgent runtime. Wraps any catalogue entry as a SwarmAgent (policy gates : signature, gold binding, idempotency, deterministic seed) and emits a nano_envelope_v1 audit event per dispatch."
+publish = false
+
+[lib]
+name = "efe_nano_swarm_adapter"
+path = "src/lib.rs"
+
+[dependencies]
+efe-nano-sdk           = { path = "../efe-nano-sdk", version = "0.0.1" }
+efe-blackboard         = { path = "../efe-blackboard", version = "0.0.1" }
+efe-swarm-orchestrator = { path = "../efe-swarm-orchestrator", version = "0.0.1" }
+
+tokio       = { workspace = true, features = ["macros", "rt-multi-thread", "sync", "time"] }
+async-trait = { workspace = true }
+serde       = { workspace = true }
+serde_json  = { workspace = true }
+thiserror   = { workspace = true }
+uuid        = { workspace = true }
+tracing     = { workspace = true }
+chrono      = { version = "0.4", default-features = false, features = ["clock", "serde"] }
+dashmap     = "6.1"
+sha2        = "0.10"
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt-multi-thread", "test-util"] }
+chrono = { version = "0.4", default-features = false, features = ["clock", "serde"] }
+# Test-only reverse dependency : audit_n23 needs the catalogue
+# back-fill from the preanalysis crate.  Cargo allows this since
+# the dependency is dev-only (no build cycle for the library).
+efe-nano-preanalysis = { path = "../efe-nano-preanalysis", version = "0.0.1" }
