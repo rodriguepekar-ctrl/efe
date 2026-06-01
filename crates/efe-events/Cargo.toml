@@ -1,0 +1,49 @@
+[package]
+name        = "efe-events"
+version     = { workspace = true }
+edition     = { workspace = true }
+rust-version = { workspace = true }
+authors     = { workspace = true }
+license     = { workspace = true }
+repository  = { workspace = true }
+description = "M28 — typed event envelope + NATS JetStream publisher / subscriber."
+
+[dependencies]
+tokio            = { workspace = true }
+tokio-stream     = { workspace = true }
+futures          = { workspace = true }
+tracing          = { workspace = true }
+serde            = { workspace = true }
+serde_json       = { workspace = true }
+thiserror        = { workspace = true }
+async-trait      = { workspace = true }
+
+# ULID for event IDs (sortable, monotonic-ish, 26-char base32).
+ulid             = { version = "1.1", features = ["serde"] }
+
+# Time + crypto for HMAC signing.
+chrono           = { version = "0.4", features = ["serde"] }
+
+# NATS JetStream Rust client.
+async-nats       = { version = "0.36", features = ["server_2_10"] }
+
+[dev-dependencies]
+tokio            = { workspace = true, features = ["test-util", "macros"] }
+anyhow           = { workspace = true }
+# Criterion powers the CB-01 reference benchmark
+# (benches/cb_01_event_append.rs).  Reference implementation for the
+# fourteen subsequent CB-NN bench files ; see catalogue § 4.1 +
+# STABILITY § 27.2.
+criterion        = { version = "0.5", default-features = false }
+
+[features]
+default = []
+# Enable when the test environment exposes EFE_NATS_TEST_URL.
+integration-tests = []
+
+# CB-01 reference benchmark.  Frozen under STABILITY § 27.2 ; the
+# bench's existence + structural shape are what the freeze test
+# `v1_7_section_27_3_cb_scripts_present_and_executable` asserts.
+[[bench]]
+name    = "cb_01_event_append"
+harness = false
