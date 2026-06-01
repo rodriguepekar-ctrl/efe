@@ -1,0 +1,128 @@
+# Sprint **Φ-C-SDK Completion (D30)** — contract test orchestration.
+#
+# Cf. docs/EFE_POLYGLOT_SDKS_COMPLETION_ARCHITECTURE.md § 5 + artefact #16.
+#
+# 1 backend (efe-server, optional in mock mode) + 4 runner containers.
+# Each runner reads /fixtures/quartet_fixtures.json, calls the SDK,
+# and writes /shared/out_<sdk>.json. The compare.py script then asserts
+# bit-identity across the 4 outputs.
+#
+# Usage :
+#   docker-compose up --abort-on-container-exit --exit-code-from runner-compare
+#
+# Mock mode (= local dev, no backend) :
+#   EFE_CONTRACT_MOCK=1 docker-compose up
+#
+# Live mode (= production-shaped contract test) requires the efe-server
+# image built from the Rust workspace.
+
+services:
+  # ───────────────────────────────────────────────────────────────────
+  # The 4 SDK runners — each writes its verdict file to /shared.
+  # In mock mode they don't depend on efe-server.
+  # ───────────────────────────────────────────────────────────────────
+
+  runner-py:
+    image: python:3.12-slim
+    working_dir: /work
+    environment:
+      EFE_CONTRACT_MOCK: ${EFE_CONTRACT_MOCK:-1}
+      EFE_HOST: efe-server:50051
+    volumes:
+      - ./fixtures:/fixtures:ro
+      - ./shared:/shared
+      - ./runners/py:/work:ro
+    command: >
+      bash -c "
+        pip install --quiet numpy &&
+        python /work/main.py
+          --fixtures /fixtures/quartet_fixtures.json
+          --out /shared/out_py.json
+      "
+
+  runner-go:
+    image: golang:1.22-alpine
+    working_dir: /work
+    environment:
+      EFE_CONTRACT_MOCK: ${EFE_CONTRACT_MOCK:-1}
+      EFE_HOST: efe-server:50051
+    volumes:
+      - ./fixtures:/fixtures:ro
+      - ./shared:/shared
+      - ./runners/go:/work:ro
+    command: >
+      sh -c "
+        cd /work &&
+        go build -o /tmp/runner-go . &&
+        /tmp/runner-go
+          -fixtures /fixtures/quartet_fixtures.json
+          -out /shared/out_go.json
+      "
+
+  runner-ts:
+    image: node:20-alpine
+    working_dir: /work
+    environment:
+      EFE_CONTRACT_MOCK: ${EFE_CONTRACT_MOCK:-1}
+      EFE_HOST: efe-server:50051
+      FIXTURES_PATH: /fixtures/quartet_fixtures.json
+      OUT_PATH: /shared/out_ts.json
+    volumes:
+      - ./fixtures:/fixtures:ro
+      - ./shared:/shared
+      - ./runners/ts:/work
+    command: >
+      sh -c "
+        cd /work &&
+        npm install --silent --no-audit --no-fund &&
+        npx tsx main.ts
+      "
+
+  runner-java:
+    image: eclipse-temurin:21-jdk
+    working_dir: /work
+    environment:
+      EFE_CONTRACT_MOCK: ${EFE_CONTRACT_MOCK:-1}
+      EFE_HOST: efe-server:50051
+      FIXTURES_PATH: /fixtures/quartet_fixtures.json
+      OUT_PATH: /shared/out_java.json
+    volumes:
+      - ./fixtures:/fixtures:ro
+      - ./shared:/shared
+      - ./runners/java:/work:ro
+    command: >
+      bash -c "
+        cp /work/Main.java /tmp/Main.java &&
+        cd /tmp &&
+        javac --release 21 Main.java &&
+        java Main
+      "
+
+  # ───────────────────────────────────────────────────────────────────
+  # The comparator — depends on all 4 runners completing successfully.
+  # Exits non-zero if bit-identity fails.
+  # ───────────────────────────────────────────────────────────────────
+
+  runner-compare:
+    image: python:3.12-slim
+    working_dir: /work
+    volumes:
+      - ./shared:/shared:ro
+      - ./compare.py:/work/compare.py:ro
+      - ./shared:/out
+    depends_on:
+      runner-py:
+        condition: service_completed_successfully
+      runner-go:
+        condition: service_completed_successfully
+      runner-ts:
+        condition: service_completed_successfully
+      runner-java:
+        condition: service_completed_successfully
+    command: >
+      python /work/compare.py
+        --go     /shared/out_go.json
+        --ts     /shared/out_ts.json
+        --java   /shared/out_java.json
+        --py     /shared/out_py.json
+        --out    /out/contract.json
