@@ -1,0 +1,152 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://efe.ai/schemas/mode3_session_state.json",
+  "title": "Mode-3 Session State",
+  "description": "Sprint Φ-D-MODE3 Completion — strict JSON schema for multi-turn session persisted state. Used by the Rust efe-server::mode3 module to serialize before encryption (AES-256-GCM per-tenant). Cf. docs/EFE_MODE3_MULTI_TURN_COMPLETION_ARCHITECTURE.md § E.",
+
+  "type": "object",
+  "required": ["session_id", "tenant_id", "consent", "turns", "schema_version"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "State schema version for migration"
+    },
+    "session_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "UUID v4 session identifier"
+    },
+    "tenant_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "pattern": "^[a-z0-9][a-z0-9-]*$"
+    },
+    "created_at_unix_micros": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Session creation timestamp"
+    },
+    "expires_at_unix_micros": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Hard expiry (= 24h post-creation)"
+    },
+    "consent": {
+      "type": "object",
+      "required": ["consent_hash", "consent_version", "timestamp_unix_micros"],
+      "additionalProperties": false,
+      "properties": {
+        "consent_hash": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$",
+          "description": "SHA-256 of consent_text + version"
+        },
+        "consent_version": {
+          "type": "string",
+          "pattern": "^v\\d+\\.\\d+$"
+        },
+        "timestamp_unix_micros": {"type": "integer", "minimum": 0},
+        "ip_address": {"type": "string"},
+        "user_agent": {"type": "string", "maxLength": 512}
+      }
+    },
+    "state": {
+      "type": "string",
+      "enum": ["INIT", "EVOLVING", "CONVERGED", "FALLBACK", "TERMINATED"]
+    },
+    "turns": {
+      "type": "array",
+      "minItems": 0,
+      "maxItems": 10,
+      "items": {
+        "type": "object",
+        "required": ["turn_index", "user_input", "anchor_vector", "convergence_score"],
+        "additionalProperties": false,
+        "properties": {
+          "turn_index": {"type": "integer", "minimum": 0, "maximum": 9},
+          "user_input": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4096
+          },
+          "anchor_vector": {
+            "type": "array",
+            "items": {"type": "number"},
+            "minItems": 384,
+            "maxItems": 384,
+            "description": "f32 anchor embedding, dim=384"
+          },
+          "convergence_score": {
+            "type": "number",
+            "minimum": -1.0,
+            "maximum": 1.0,
+            "description": "Cosine similarity vs previous turn's anchor"
+          },
+          "cost_usd_micros": {"type": "integer", "minimum": 0},
+          "latency_ms": {"type": "integer", "minimum": 0},
+          "provider_id": {"type": "string"},
+          "model_version": {"type": "string"}
+        }
+      }
+    },
+    "concept_stack": {
+      "type": "array",
+      "maxItems": 50,
+      "items": {
+        "type": "object",
+        "required": ["noun_phrase", "confidence", "source_turn"],
+        "additionalProperties": false,
+        "properties": {
+          "noun_phrase": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "confidence": {
+            "type": "number",
+            "minimum": 0.0,
+            "maximum": 1.0
+          },
+          "source_turn": {"type": "integer", "minimum": 0}
+        }
+      }
+    },
+    "summary_so_far": {
+      "type": "string",
+      "maxLength": 8192,
+      "description": "Compressed summary of older turns (= post-summarization)"
+    },
+    "convergence_status": {
+      "type": "string",
+      "enum": ["TooEarly", "StillEvolving", "Converged", "Oscillating", "FailedToConverge"]
+    },
+    "human_review": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": ["none", "pending", "in_review", "approved", "rejected"]
+        },
+        "trigger": {
+          "type": "string",
+          "enum": [
+            "low_confidence", "convergence_oscillating",
+            "high_cost_session", "gdpr_sensitive_class", "tenant_policy"
+          ]
+        },
+        "escalated_at_unix_micros": {"type": "integer"},
+        "reviewer_id": {"type": "string"},
+        "decided_at_unix_micros": {"type": "integer"}
+      }
+    },
+    "cost_total_usd_micros": {"type": "integer", "minimum": 0},
+    "fallback_reason": {
+      "type": "string",
+      "enum": ["", "convergence_failed", "consent_revoked", "cost_exhausted"]
+    }
+  }
+}
