@@ -244,9 +244,25 @@ ne pas la reconfondre avec les nano-robots) :
     (2,5×) était FAUSSE** : les N slots partagent **un seul GPU** → `--cont-batching`
     batche (speedup **sous-linéaire** ~1,4×), pas du compute indépendant. **Le ROI
     ne décolle qu'en MULTI-GPU** (1 instance compresseur/GPU). SLM total quasi
-    immobile (−1,4 %) car le cold-start analyzer domine → cf. L3. Code correct
-    (test wiremock prouve la concurrence) ; c'est le **plafond matériel**, pas un
-    bug. Réversible : `EFE_COMPRESSOR_MAP_CONCURRENCY=1` / `ROBOT_PARALLEL=(1 1 1 1)`.
+    immobile (−1,4 %) car l'**analyzer** domine l'étage SLM (inférence, PAS
+    cold-start → cf. C-B). Code correct (test wiremock prouve la concurrence) ;
+    c'est le **plafond matériel**, pas un bug. Réversible :
+    `EFE_COMPRESSOR_MAP_CONCURRENCY=1` / `ROBOT_PARALLEL=(1 1 1 1)`.
+  - → **L3 (FAIT, mesuré keyless) — NO-OP : le « cold-start ~5 s » était un
+    MISDIAGNOSTIC.** A/B boot froid (`EFE_SLM_WARMUP=0`) vs chaud (`=1`) : 1ère
+    requête **4808 vs 4851 ms** = Δ dans le bruit. Le ~4,7 s n'est pas une
+    compilation de shaders amortissable mais la **latence d'inférence steady-state
+    de l'analyzer** (lente à CHAQUE requête). Code warmup correct (chauffe au boot)
+    mais sans effet ici → **non commité** (start.sh), disposition à trancher. Aurait
+    pu aider sur un substrat à vrai cold-start (CUDA/serverless).
+  - → **C-B (FAIT, mesuré, commité `d05c1a4`) — le VRAI levier.** L'analyzer = 4,7 s
+    = **100 % décode** (682 t @ 179 tok/s) d'un output **non-gating** (entités →
+    blackboard write-only, 0 lecture aval) et **hallucinées**. Cap grammaire
+    `entities {0,19}→{0,4}` (+ schéma `maxItems 5` + `max_tokens 1024→512`). Mesuré :
+    décode **3809 → 1369 ms (−64 %)**, **254 t** (−63 % coût GPU), 5 entités, JSON
+    complet. Qualité réelle préservée. **Plus de gain que L1+L2 réunis** sur le
+    chemin critique réel. ⚠ `max_entities` n'atteint pas le modèle → la **grammaire**
+    est le seul cap.
 - **Méthodo** : ces 4 bugs (cf. §8) n'étaient visibles qu'en **live + lecture des
   réponses** ; le mock LLM (réponses canned) les masquait tous. **L1 ET L2 ont été
   validés par le même principe** : mesure live (bridge SLM réel) — et la mesure L2

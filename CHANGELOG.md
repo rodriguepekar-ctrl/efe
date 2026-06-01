@@ -152,6 +152,36 @@ _(rolling — next release will land here)_
   prouve) — c'est un **plafond matériel**, pas un bug. Même leçon que H0.1/H0.2 : seule
   la mesure live corrige une projection optimiste.
 
+#### Performance — levier latence C-B : right-size de l'analyzer (le VRAI goulot)
+
+> Diagnostic clé du chantier latence : ce n'est ni le compresseur (L1/L2) ni un
+> cold-start (L3, no-op), mais l'**analyzer** qui dominait l'étage SLM. Mesuré à
+> ~4,7 s sur le chemin critique = **100 % décode** (682 tokens @ 179 tok/s), pour
+> un output **non-gating** (entités → blackboard write-only + events UI ; **0
+> lecture** en aval) et de **qualité nulle** (entités hallucinées : `optimiste`=ORG,
+> doublons). Le 360M remplissait le tableau jusqu'à ~20 entrées.
+
+- **C-B borne le décodage au niveau de la grammaire** — le seul vrai levier, car
+  `max_entities` n'atteint jamais le modèle (le client n'envoie que `text`) :
+  - `analyzer_v1.gbnf` : `entities {0,19} → {0,4}` (≤5 entités). **LE** levier.
+  - `analyzer_v1.json` (schéma) : `maxItems 20 → 5` (survit à une régénération).
+  - `analyzer.rs` : `max_tokens 1024 → 512` (backstop d'hygiène) + env
+    `EFE_ANALYZER_MAX_OUTPUT_TOKENS`. La **grammaire**, pas ce plafond, est le cap réel.
+  - `mission_a/b` : `max_entities 20 → 5` (alignement d'intention, documenté non-liant).
+- **Mesuré** (direct `/completion`, même SLM Metal chaud) :
+
+  | métrique | AVANT | APRÈS | Δ |
+  |---|---|---|---|
+  | décode analyzer | 3809 ms | **1369 ms** | **−64 % (2,8×)** |
+  | tokens de sortie | 682 | **254** | **−63 %** (= coût GPU, aligné H0.3) |
+  | entités | ~20 (garbage) | **5** | — |
+  | JSON | complet | **complet** (non tronqué, 254 < backstop 512) |
+
+- **Qualité réelle préservée** : les entités larguées étaient du garbage jamais relu ;
+  le `one_line_summary` tient. **Plus de gain que L1+L2 réunis** sur le chemin critique
+  réel (l'analyzer pesait ~2,5× le compresseur post-L1). Code en `d05c1a4` ; 3 tests
+  `cb_*` (défaut max_tokens, couplage asset↔grammaire `{0,4}`, sortie 5-entités valide).
+
 ## [0.9.0] - 2026-05-12 — Sprint Φ-D-OPS (Operational unification)
 
 ### Added — 40 artefacts unifying 6 completion sprints
