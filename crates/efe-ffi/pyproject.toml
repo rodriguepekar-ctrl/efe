@@ -1,0 +1,115 @@
+# Sprint **D25 (Φ-C)** — maturin entry point for `efe-ffi`.
+#
+# Cf. `docs/EFE_FFI_ARCHITECTURE.md` § 10.2.
+#
+# Build via :
+#
+#   * `maturin develop` (dev mode — installs in active venv)
+#   * `maturin build --release` (production wheel)
+#   * `maturin build --release --target x86_64-unknown-linux-gnu --manylinux 2_17`
+#     (release manylinux)
+
+[build-system]
+requires = ["maturin>=1.7,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "efe"
+description = "EFE — Ephemeral Fluid Swarm. In-process Python bindings."
+authors = [
+    { name = "EFE Team", email = "support@efe.ai" },
+]
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "Proprietary" }
+keywords = ["efe", "swarm", "embedding", "classification", "rust", "pyo3"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Rust",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+
+# Runtime deps — kept minimal. numpy is the ONLY required runtime
+# dep (used for the zero-copy interop). Everything else lives in
+# the wheel binary itself.
+dependencies = [
+    "numpy>=1.24",
+]
+
+[project.optional-dependencies]
+test = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "pytest-benchmark>=4.0",
+    "hypothesis>=6.100",
+]
+typing = [
+    "mypy>=1.10",
+]
+dev = [
+    "efe[test,typing]",
+    "ruff>=0.5",
+]
+
+[project.urls]
+Repository = "https://github.com/efe-ai/efe"
+Documentation = "https://docs.efe.ai"
+Changelog = "https://github.com/efe-ai/efe/blob/main/CHANGELOG.md"
+
+# ---------------------------------------------------------------------
+# Maturin configuration.
+#
+# `module-name = "efe._native"` tells maturin to build the
+# extension as `efe._native` so Python users `import efe._native`.
+# The Python wrapper `python/efe/__init__.py` re-exports the
+# canonical surface so `import efe ; efe.classify_zero_copy(...)`
+# works directly.
+#
+# `python-source = "python"` means maturin includes
+# `python/efe/__init__.py` + `python/efe/_native.pyi` + `python/efe/py.typed`
+# inside the wheel as pure-Python files.
+#
+# `bindings = "pyo3"` + `manylinux = "2_17"` produce ABI3 wheels
+# compatible with manylinux 2014 (CentOS 7).
+# ---------------------------------------------------------------------
+[tool.maturin]
+module-name = "efe._native"
+python-source = "python"
+features = ["pyo3/extension-module"]
+strip = true
+bindings = "pyo3"
+manylinux = "2_17"
+include = [
+    { path = "README.md", format = "sdist" },
+]
+
+# ---------------------------------------------------------------------
+# pytest configuration — relative to the crate root.
+# ---------------------------------------------------------------------
+[tool.pytest.ini_options]
+testpaths = ["python/efe/tests"]
+asyncio_mode = "auto"
+addopts = [
+    "-ra",
+    "--strict-markers",
+]
+markers = [
+    "bench: benchmark tests (only run when explicitly selected)",
+    "gpu: tests requiring CUDA (skipped on CPU-only runners)",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+extend-include = ["python/efe/**/*.py", "python/efe/**/*.pyi"]
+
+[tool.mypy]
+python_version = "3.10"
+strict = true
+files = ["python/efe"]

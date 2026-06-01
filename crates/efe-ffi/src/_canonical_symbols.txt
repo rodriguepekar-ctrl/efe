@@ -1,0 +1,61 @@
+# EFE PyO3 FFI — Canonical Symbol Manifest
+#
+# Sprint **Φ-C-FFI Completion (D28)** — référencé par
+# `docs/EFE_PYO3_FFI_COMPLETION_ARCHITECTURE.md` § 10.3.
+#
+# Source de vérité pour la surface publique `efe._native` exposée
+# par le `#[pymodule] fn efe_native()` dans `src/lib.rs`.
+#
+# Toute modification de cette liste DOIT être accompagnée d'une mise
+# à jour synchrone de :
+#   1. `crates/efe-ffi/src/lib.rs` (`m.add_function!` / `m.add_class!`)
+#   2. `crates/efe-ffi/python/efe/_native.pyi` (déclarations de stubs)
+#   3. `crates/efe-ffi/python/efe/__init__.py` (re-exports `from efe._native import`)
+#
+# Le pin test `scripts/tests/test_efe_ffi_structure.py` enforce que
+# les 4 emplacements sont synchrones :
+#   - `CANONICAL_FUNCTIONS_PHI_C`
+#   - `CANONICAL_CLASSES_PHI_C`
+#   - `CANONICAL_EXCEPTIONS_PHI_C`
+# matchent ce manifeste.
+#
+# Format : un symbole par ligne, prefixé par `function:` ou `class:` ou
+# `exception:`. Lignes vides et `#` ignorées.
+#
+# Last freeze : 2026-05-13 (Φ-C-FFI go-live).
+
+# ─────────────────────────────────────────────────────────────────────
+# Top-level functions (exposées par `#[pyfunction]`).
+# ─────────────────────────────────────────────────────────────────────
+function:version
+function:load_bundle
+function:classify_zero_copy
+function:aclassify_zero_copy
+
+# ─────────────────────────────────────────────────────────────────────
+# Public classes (exposées par `#[pyclass]`).
+# ─────────────────────────────────────────────────────────────────────
+class:Verdict
+class:Bundle
+class:EpistemicLatentSpace
+class:EfeNativeClient
+class:SwarmController
+class:SwarmSpec
+class:SwarmSpecBuilder
+class:AlignmentCone
+
+# ─────────────────────────────────────────────────────────────────────
+# Exception hierarchy (registrée par `error::register_exceptions`).
+# Base class : `EfeError` (alias Python du Rust `EfeBaseError`).
+# Hierarchie : toutes les 9 sub-exceptions héritent de `EfeError`.
+# ─────────────────────────────────────────────────────────────────────
+exception:EfeError
+exception:BundleError
+exception:CatalogError
+exception:SwarmError
+exception:AlignmentBreach
+exception:NumericalError
+exception:ResourceExhausted
+exception:ConfigError
+exception:TimeoutError
+exception:FfiError
