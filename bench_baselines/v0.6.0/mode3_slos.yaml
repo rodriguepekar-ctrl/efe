@@ -1,0 +1,148 @@
+# Sprint **Φ-D-MODE3 Completion (D70-D74)** — Mode-3 multi-turn SLO baselines.
+#
+# Cf. `docs/EFE_MODE3_MULTI_TURN_COMPLETION_ARCHITECTURE.md` § 15.
+#
+# 18 SLOs opposables couvrant : convergence, recall delta, cost,
+# latency, human review, GDPR opt-in, audit chain, isolation, fallback,
+# context window, expiry, encryption, prompts, max turns, amortization,
+# convergence cosine, cache, replay.
+
+version: v0.6.0
+domain: mode3
+host_fingerprint_baseline: "PLACEHOLDER_compute_at_freeze"
+
+slos:
+  # ─────────────────────────────────────────────────────────────────
+  # Quality SLOs (= convergence + recall delta vs Mode-2)
+  # ─────────────────────────────────────────────────────────────────
+  - id: SLO-MODE3-CONVERGENCE-RATE
+    description: "Sessions converging in ≤ 5 turns (cosine ≥ 0.95 × 2)"
+    comparator: gte
+    threshold_ratio: 0.90
+    source_bench: convergence_bench
+
+  - id: SLO-MODE3-RECALL-DELTA-VS-M2
+    description: "Mode-3 multi-turn recall@1 beats Mode-2 single anchor by ≥ +5 %"
+    comparator: gte
+    threshold_ratio: 0.05
+    source_bench: recall_bench
+
+  # ─────────────────────────────────────────────────────────────────
+  # Cost SLOs
+  # ─────────────────────────────────────────────────────────────────
+  - id: SLO-MODE3-COST-PER-SESSION-P99
+    description: "p99 cost per session (USD)"
+    comparator: lte
+    threshold_ratio: 0.10
+    source_bench: cost_tracking
+
+  - id: SLO-MODE3-COST-PER-TURN-DECREASING
+    description: "Cost amortization : mean(turn_N≥3) ≤ mean(turn_1) - 10 %"
+    comparator: eq
+    threshold_pass_count: 1
+    expected_count: 1
+    source_bench: cost_amortization
+
+  # ─────────────────────────────────────────────────────────────────
+  # Latency SLOs
+  # ─────────────────────────────────────────────────────────────────
+  - id: SLO-MODE3-LATENCY-PER-TURN-P99
+    description: "p99 latency per turn (seconds)"
+    comparator: lte
+    threshold_seconds: 35.0
+    source_bench: latency_bench
+
+  - id: SLO-MODE3-HUMAN-REVIEW-LATENCY-P99
+    description: "p99 escalation → decided latency (seconds)"
+    comparator: lte
+    threshold_seconds: 330.0
+    source_bench: review_tracker
+
+  # ─────────────────────────────────────────────────────────────────
+  # GDPR + audit + isolation SLOs
+  # ─────────────────────────────────────────────────────────────────
+  - id: SLO-MODE3-GDPR-OPT-IN-COVERAGE
+    description: "100 % of sessions have opt-in tracked"
+    comparator: eq
+    threshold_pass_count: 1
+    expected_count: 1
+    source_bench: consent_replay
+
+  - id: SLO-MODE3-AUDIT-CHAIN-INTEGRITY
+    description: "HMAC chain replay validates 100 % of session attestations"
+    comparator: eq
+    threshold_pass_count: 1
+    expected_count: 1
+    source_bench: chain_replay
+
+  - id: SLO-MODE3-SESSION-ISOLATION
+    description: "Adversarial cross-session + cross-tenant test : 0 leak"
+    comparator: eq
+    threshold_pass_count: 1
+    expected_count: 1
+    source_bench: isolation_test
+
+  - id: SLO-MODE3-ENCRYPTION-AT-REST
+    description: "Adversarial decrypt with wrong tenant key MUST fail"
+    comparator: eq
+    threshold_pass_count: 1
+    expected_count: 1
+    source_bench: encryption_adversarial
+
+  # ─────────────────────────────────────────────────────────────────
+  # Functional SLOs
+  # ─────────────────────────────────────────────────────────────────
+  - id: SLO-MODE3-FALLBACK-WORKS
+    description: "All 3 fallback trigger reasons functional"
+    comparator: gte
+    threshold_pass_count: 3
+    expected_count: 3
+    source_bench: fallback_injection
+
+  - id: SLO-MODE3-CONTEXT-WINDOW-RESPECT
+    description: "100 % of LLM calls respect 8k token budget"
+    comparator: eq
+    threshold_pass_count: 1
+    expected_count: 1
+    source_bench: context_window_test
+
+  - id: SLO-MODE3-SESSION-EXPIRY
+    description: "Session TTL ≤ 24h enforced (purge audit)"
+    comparator: eq
+    threshold_pass_count: 1
+    expected_count: 1
+    source_bench: expiry_verifier
+
+  - id: SLO-MODE3-PROMPT-VERSIONING
+    description: "100 % of Mode-3 prompts semver-pinned"
+    comparator: eq
+    threshold_pass_count: 1
+    expected_count: 1
+    source_bench: prompt_audit
+
+  - id: SLO-MODE3-MAX-TURNS-ENFORCED
+    description: "Hard cap K=10 turns enforced on injection test"
+    comparator: eq
+    threshold_pass_count: 1
+    expected_count: 1
+    source_bench: max_turns_test
+
+  - id: SLO-MODE3-CONVERGENCE-COSINE
+    description: "Convergence detected at cosine_sim ≥ 0.95 for 2 turns"
+    comparator: eq
+    threshold_pass_count: 1
+    expected_count: 1
+    source_bench: convergence_cosine_test
+
+  - id: SLO-MODE3-CACHE-HIT-RATE
+    description: "Cache hit rate on warm workload"
+    comparator: gte
+    threshold_ratio: 0.60
+    source_bench: cache_stats
+
+  - id: SLO-MODE3-REPLAY
+    description: "Sessions replayable bit-identique on cached state"
+    comparator: eq
+    threshold_pass_count: 1
+    expected_count: 1
+    source_bench: deterministic_replay

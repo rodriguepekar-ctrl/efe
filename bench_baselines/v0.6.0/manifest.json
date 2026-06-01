@@ -1,0 +1,24 @@
+{
+  "chart_version": "0.6.0",
+  "harness_version": "0.1.0",
+  "loadgen_version": "0.1.0",
+  "git_commit": "PLACEHOLDER",
+  "created_at": "2026-05-16T00:00:00Z",
+  "cluster": {
+    "provisioner": "kind",
+    "k8s_version": "v1.30.0",
+    "node_class": "github-runner-2vcpu-7gb"
+  },
+  "scenarios": [
+    {"id": "S01_baseline_100qps_5min", "duration_s": 300.0, "verdict": "no-baseline"},
+    {"id": "S02_canary_1000qps_15min", "duration_s": 900.0, "verdict": "no-baseline"},
+    {"id": "S03_ramp_to_breakdown", "duration_s": 1200.0, "verdict": "no-baseline"},
+    {"id": "S04_chaos_participant_loss", "duration_s": 600.0, "verdict": "no-baseline"},
+    {"id": "S05_chaos_network_partition", "duration_s": 900.0, "verdict": "no-baseline"},
+    {"id": "S06_chaos_cert_expiry", "duration_s": 600.0, "verdict": "no-baseline"},
+    {"id": "S07_chaos_reload_storm", "duration_s": 900.0, "verdict": "no-baseline"},
+    {"id": "S08_multi_region_replay", "duration_s": 1200.0, "verdict": "no-baseline"},
+    {"id": "S09_soak_2h_stability", "duration_s": 7200.0, "verdict": "no-baseline"},
+    {"id": "S10_slo_validation_30min", "duration_s": 1800.0, "verdict": "no-baseline"}
+  ]
+}

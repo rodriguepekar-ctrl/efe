@@ -1,0 +1,70 @@
+{
+  "version": "1.0",
+  "timestamp": "PENDING_FIRST_REAL_RUN",
+  "git": {
+    "sha": "pending",
+    "branch": "main",
+    "dirty": false
+  },
+  "host": {
+    "os": "Darwin (Apple M3 Pro reference)",
+    "cpu": "Apple M3 Pro",
+    "ncpu": 11,
+    "ram_gb": 36
+  },
+  "toolchain": {
+    "rustc": "rustc 1.85.0",
+    "cargo": "cargo 1.85.0",
+    "blas_backend": "none",
+    "rustflags": ""
+  },
+  "_note": "PLACEHOLDER baseline for the v0.1.6 release (Sprint D6 — consensus pacing fix + accuracy SLO infrastructure). Ce sprint introduit : (a) `ControllerConfig.min_rounds` field (lib default 0, Mode-1 default 4) ; (b) `Mode1Config::default()` durci (6 thresholds consensus recalibrés) ; (c) `eval/scripts/run_eval.py --output-bench-format` qui émet le JSON consommé par `parse_criterion_report.py` ; (d) 5 nouveaux SLO `D6-*` (4 accuracy + 1 latence client) avec le nouveau comparator gte/lte. Le test pratique D6 a confirmé que le fix consensus marche (confidence varie post-fix, vs constante pré-fix) MAIS a aussi exposé hypothèse H3 (biais genesis/fusion structurel) que le sprint D7 doit adresser. L'accuracy est mesurée 25 % pré-D7 vs cible 75 % — `SLO-D6-ACC-1` FAIL est le gate qui empêchera D7 de régresser et qui PASS quand D7 livrera. Voir `docs/audits/d6_accuracy_validation.md`. Le job CI `bench-accuracy` est `continue-on-error: true` durant l'intervalle D6→D7, sera switchédé à fail-closed une fois D7 stable.",
+  "results": {},
+  "slo_compliance": {
+    "SLO-D6-ACC-1": {
+      "name": "Top-1 accuracy on golden support_triage",
+      "target_ns": 750000000,
+      "measured_ns": null,
+      "passed": null,
+      "skipped": true,
+      "comparator": "gte",
+      "note": "expected to FAIL until D7 — gate signals D7 progress"
+    },
+    "SLO-D6-ACC-2": {
+      "name": "Macro-F1 on golden support_triage",
+      "target_ns": 700000000,
+      "measured_ns": null,
+      "passed": null,
+      "skipped": true,
+      "comparator": "gte",
+      "note": "expected to FAIL until D7"
+    },
+    "SLO-D6-ACC-3": {
+      "name": "Mean confidence on correct predictions",
+      "target_ns": 650000000,
+      "measured_ns": null,
+      "passed": null,
+      "skipped": true,
+      "comparator": "gte",
+      "note": "expected to FAIL until D7"
+    },
+    "SLO-D6-ACC-4": {
+      "name": "False reject rate (lower is better)",
+      "target_ns": 250000000,
+      "measured_ns": null,
+      "passed": null,
+      "skipped": true,
+      "comparator": "lte",
+      "note": "awaiting first real bench run"
+    },
+    "SLO-D6-LAT-1": {
+      "name": "Eval p95 client-observed latency",
+      "target_ns": 1000000000,
+      "measured_ns": null,
+      "passed": null,
+      "skipped": true,
+      "comparator": "lte",
+      "note": "awaiting first real bench run"
+    }
+  }
+}

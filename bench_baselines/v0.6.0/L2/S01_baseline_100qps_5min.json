@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "scenario_id": "S01_baseline_100qps_5min",
+  "harness_version": "0.1.0",
+  "loadgen_version": "0.1.0",
+  "chart_version": "0.6.0",
+  "image_tag": "v0.6.1",
+  "git_commit": "PLACEHOLDER",
+  "run_id": "PLACEHOLDER",
+  "started_at": "2026-05-16T00:00:00Z",
+  "duration_s": 300.0,
+  "total_requests": 30000,
+  "metrics": {
+    "p50_ms": 8.0,
+    "p95_ms": 95.0,
+    "p99_ms": 450.0,
+    "error_rate": 0.001,
+    "throughput_qps": 100.0,
+    "recovery_time_s": null
+  },
+  "chaos_events": [],
+  "verdict": "pass"
+}

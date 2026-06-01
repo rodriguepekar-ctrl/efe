@@ -1,0 +1,57 @@
+{
+  "version": "1.0",
+  "timestamp": "PENDING_FIRST_REAL_RUN",
+  "git": {
+    "sha": "pending",
+    "branch": "main",
+    "dirty": false
+  },
+  "host": {
+    "os": "Darwin (Apple M3 Pro reference)",
+    "cpu": "Apple M3 Pro",
+    "ncpu": 11,
+    "ram_gb": 36
+  },
+  "toolchain": {
+    "rustc": "rustc 1.85.0",
+    "cargo": "cargo 1.85.0",
+    "blas_backend": "none",
+    "rustflags": ""
+  },
+  "_note": "PLACEHOLDER baseline for the v0.1.4 release. Sprint D4 introduces 4 new criterion groups under `server_rpc` measuring the production gRPC stack (loopback TCP + tonic codec + interceptors + bridge + backend) with 4 SLO targets `SLO-D4-1..3` + `SLO-D4-T1`. Indicative numbers from the M3 Pro reference run (`cargo bench -p efe-server --bench server_rpc -- --quick`): full_stack small ~180 ms, medium ~370 ms, large ~370 ms ; minimal_stack tracks within ±10 % (the Δ_interceptors is sub-millisecond and below the loopback noise floor) ; concurrent c8 small ~390 ms (8 RPCs/batch ⇒ ~20 req/s effective) ; codec small ~2.3 µs, medium ~5.8 µs, large ~11.6 µs. The high latencies vs D1's mock baselines are real: the v2 fixtures take 8 multi-rounds of fusion to converge through the `MvpCpuFusion` chain (cf. D3 chain at ~190 µs/round × 8 rounds ≈ ~1.5 ms — but with full backend overhead including stats and consensus, ~50 ms/round on medium). Until the first clean post-merge bench run on main, the `results` map is empty and the regression-detection step in `.github/workflows/bench.yml` short-circuits (`cand_val is None: continue`) for every D4 key.",
+  "results": {},
+  "slo_compliance": {
+    "SLO-D4-1": {
+      "name": "server rpc full stack small",
+      "target_ns": 500000000,
+      "measured_ns": null,
+      "passed": null,
+      "skipped": true,
+      "note": "awaiting first real bench run"
+    },
+    "SLO-D4-2": {
+      "name": "server rpc full stack medium",
+      "target_ns": 800000000,
+      "measured_ns": null,
+      "passed": null,
+      "skipped": true,
+      "note": "awaiting first real bench run"
+    },
+    "SLO-D4-3": {
+      "name": "server rpc full stack large",
+      "target_ns": 800000000,
+      "measured_ns": null,
+      "passed": null,
+      "skipped": true,
+      "note": "awaiting first real bench run"
+    },
+    "SLO-D4-T1": {
+      "name": "server rpc concurrent 8c-small",
+      "target_ns": 800000000,
+      "measured_ns": null,
+      "passed": null,
+      "skipped": true,
+      "note": "awaiting first real bench run"
+    }
+  }
+}

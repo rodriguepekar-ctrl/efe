@@ -1,0 +1,105 @@
+{
+  "version": "1.0",
+  "timestamp": "PENDING_FIRST_REAL_RUN",
+  "git": {
+    "sha": "pending",
+    "branch": "main",
+    "dirty": false
+  },
+  "host": {
+    "os": "Darwin (Apple M3 Pro reference)",
+    "cpu": "Apple M3 Pro",
+    "ncpu": 11,
+    "ram_gb": 36
+  },
+  "toolchain": {
+    "rustc": "rustc 1.85.0",
+    "cargo": "cargo 1.85.0",
+    "blas_backend": "none",
+    "rustflags": ""
+  },
+  "_note": "PLACEHOLDER baseline for the v0.1.2 release. Sprint D2 introduces 7 new criterion groups under `memory_real_arena` measuring the real `MemoryPool + Arena + HostBackend` infrastructure (10 new SLO targets `SLO-D2-1..10`). Indicative numbers from the M3 Pro reference run (`cargo bench -p efe-core --bench memory_real_arena -- --quick`): pool_acquire_warm ≈ 80 ns, arena_reset ≈ 1.8 ns, alloc f32(1) ≈ 20 ns, alloc f32(1k) ≈ 50 ns, alloc f32(1M) ≈ 24 µs (157 GiB/s !), pool_concurrent_acquire/c8 ≈ 10 µs, pool_acquire_cold/1MiB ≈ 5 µs, realistic_pattern small/medium/large ≈ 260 ns / 780 ns / 2.4 µs. All comfortably below their SLO targets (which are conservative 3-100× margins). Until the first clean post-merge bench run on main, the `results` map is empty and the regression-detection step in `.github/workflows/bench.yml` will short-circuit (`cand_val is None: continue`) for every D2 key. After the first real run on main, copy the consolidated report into this file via the freeze process documented in `bench_baselines/README.md`.",
+  "results": {},
+  "slo_compliance": {
+    "SLO-D2-1": {
+      "name": "pool acquire warm",
+      "target_ns": 1000,
+      "measured_ns": null,
+      "passed": null,
+      "skipped": true,
+      "note": "awaiting first real bench run"
+    },
+    "SLO-D2-2": {
+      "name": "pool acquire cold (1 MiB)",
+      "target_ns": 1000000,
+      "measured_ns": null,
+      "passed": null,
+      "skipped": true,
+      "note": "awaiting first real bench run"
+    },
+    "SLO-D2-3": {
+      "name": "pool concurrent acquire (8c)",
+      "target_ns": 50000,
+      "measured_ns": null,
+      "passed": null,
+      "skipped": true,
+      "note": "awaiting first real bench run"
+    },
+    "SLO-D2-4": {
+      "name": "arena alloc f32(1)",
+      "target_ns": 200,
+      "measured_ns": null,
+      "passed": null,
+      "skipped": true,
+      "note": "awaiting first real bench run"
+    },
+    "SLO-D2-5": {
+      "name": "arena alloc f32(1k)",
+      "target_ns": 2000,
+      "measured_ns": null,
+      "passed": null,
+      "skipped": true,
+      "note": "awaiting first real bench run"
+    },
+    "SLO-D2-6": {
+      "name": "arena alloc f32(1M)",
+      "target_ns": 2000000,
+      "measured_ns": null,
+      "passed": null,
+      "skipped": true,
+      "note": "awaiting first real bench run"
+    },
+    "SLO-D2-7": {
+      "name": "arena reset",
+      "target_ns": 50,
+      "measured_ns": null,
+      "passed": null,
+      "skipped": true,
+      "note": "awaiting first real bench run"
+    },
+    "SLO-D2-8": {
+      "name": "swarm alloc pattern small",
+      "target_ns": 5000,
+      "measured_ns": null,
+      "passed": null,
+      "skipped": true,
+      "note": "awaiting first real bench run"
+    },
+    "SLO-D2-9": {
+      "name": "swarm alloc pattern medium",
+      "target_ns": 30000,
+      "measured_ns": null,
+      "passed": null,
+      "skipped": true,
+      "note": "awaiting first real bench run"
+    },
+    "SLO-D2-10": {
+      "name": "swarm alloc pattern large",
+      "target_ns": 150000,
+      "measured_ns": null,
+      "passed": null,
+      "skipped": true,
+      "note": "awaiting first real bench run"
+    }
+  }
+}

@@ -1,0 +1,139 @@
+# Sprint **Φ-D-LATACT Completion (D90-D94)** — Latence P1 + Activation P2.
+# Cf. `docs/EFE_P1_LATENCE_P2_ACTIVATION_COMPLETION_ARCHITECTURE.md` § 12.
+
+version: "0.8.0"
+domain: latency_activation
+host_fingerprint_baseline: "PLACEHOLDER_compute_at_freeze"
+
+slos:
+  # ── P1 GPU activated (3) ─────────────────────────────────────────
+  - id: SLO-C-1
+    description: "Mode-1 GPU p99 latency"
+    comparator: lte
+    threshold_seconds: 0.200
+    status: ACTIVE
+    source_bench: p1_gpu_sustained_bench
+    host_fingerprint_required: true
+
+  - id: SLO-P1-BUDGET-5
+    description: "Kernel dissolution GPU p99"
+    comparator: lte
+    threshold_seconds: 0.080
+    status: ACTIVE
+    source_bench: p1_gpu_kernel_bench
+
+  - id: SLO-P1-BUDGET-7
+    description: "Fusion strategy GPU p99"
+    comparator: lte
+    threshold_seconds: 0.050
+    status: ACTIVE
+    source_bench: p1_gpu_fusion_bench
+
+  # ── P1 transversales nouvelles (2) ───────────────────────────────
+  - id: SLO-LATACT-TAIL-P9999
+    description: "Mode-1 GPU p99.99 ≤ 800 ms sustained 100k samples"
+    comparator: lte
+    threshold_seconds: 0.800
+    status: ACTIVE
+    source_bench: p1_tail_multi_regime_bench
+
+  - id: SLO-LATACT-BURN-4x3
+    description: "Burn-rate matrix 4 windows × 3 severities = 12 cells defined"
+    comparator: eq
+    threshold_pass_count: 1
+    expected_count: 1
+    status: ACTIVE
+    source_bench: p1_burn_4x3_coverage_audit
+
+  # ── P2 activated (12) ────────────────────────────────────────────
+  - id: SLO-P2-TTFC-1
+    description: "TTFC p90 POC ≤ 30 min"
+    comparator: lte
+    threshold_seconds: 1800.0
+    status: ACTIVE
+    source_bench: p2_portal_funnel_query
+
+  - id: SLO-P2-TTFC-2
+    description: "TTFC p90 Sandbox ≤ 5 min"
+    comparator: lte
+    threshold_seconds: 300.0
+    status: ACTIVE
+    source_bench: p2_portal_funnel_query
+
+  - id: SLO-P2-TTFC-3
+    description: "TTFC p90 Production ≤ 24h"
+    comparator: lte
+    threshold_seconds: 86400.0
+    status: ACTIVE
+    source_bench: p2_portal_funnel_query
+
+  - id: SLO-P2-AHA-1
+    description: "Aha p90 POC ≤ 35 min"
+    comparator: lte
+    threshold_seconds: 2100.0
+    status: ACTIVE
+    source_bench: p2_portal_funnel_query
+
+  - id: SLO-P2-AHA-2
+    description: "Aha p90 Sandbox ≤ 6 min"
+    comparator: lte
+    threshold_seconds: 360.0
+    status: ACTIVE
+    source_bench: p2_portal_funnel_query
+
+  - id: SLO-P2-CONV-1
+    description: "Conversion signup → first_classify ≥ 60 %"
+    comparator: gte
+    threshold_ratio: 0.60
+    status: ACTIVE
+    source_bench: p2_portal_funnel_query
+
+  - id: SLO-P2-CONV-2
+    description: "Conversion sandbox → POC ≥ 25 %"
+    comparator: gte
+    threshold_ratio: 0.25
+    status: ACTIVE
+    source_bench: p2_portal_funnel_query
+
+  - id: SLO-P2-ABANDON-1
+    description: "Abandon POC ≤ 25 %"
+    comparator: lte
+    threshold_ratio: 0.25
+    status: ACTIVE
+    source_bench: p2_portal_funnel_query
+
+  - id: SLO-P2-ABANDON-2
+    description: "Abandon Sandbox ≤ 40 %"
+    comparator: lte
+    threshold_ratio: 0.40
+    status: ACTIVE
+    source_bench: p2_portal_funnel_query
+
+  - id: SLO-P2-CLOUD-PARITY
+    description: "Variance TTFC across 3 clouds < 20 %"
+    comparator: lte
+    threshold_ratio: 0.20
+    status: ACTIVE
+    source_bench: p2_cloud_parity_bench
+
+  - id: SLO-P2-ROLLBACK
+    description: "Saga rollback p99 ≤ 10 min"
+    comparator: lte
+    threshold_seconds: 600.0
+    status: ACTIVE
+    source_bench: p2_saga_rollback_bench
+
+  - id: SLO-P2-DELETE-GDPR
+    description: "GDPR delete cascade ≤ 30 days p99"
+    comparator: lte
+    threshold_seconds: 2592000.0
+    status: ACTIVE
+    source_bench: comp_erasure_30d_evidence
+
+  # ── Meta (1) ─────────────────────────────────────────────────────
+  - id: SLO-LATACT-PENDING-AGE
+    description: "Aucun SLO PENDING > 90 jours"
+    comparator: lte
+    threshold_seconds: 7776000.0
+    status: ACTIVE
+    source_bench: registry_age_scan

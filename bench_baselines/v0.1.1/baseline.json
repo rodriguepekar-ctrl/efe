@@ -1,0 +1,57 @@
+{
+  "version": "1.0",
+  "timestamp": "PENDING_FIRST_REAL_RUN",
+  "git": {
+    "sha": "pending",
+    "branch": "main",
+    "dirty": false
+  },
+  "host": {
+    "os": "Darwin (Apple M3 Pro reference)",
+    "cpu": "Apple M3 Pro",
+    "ncpu": 11,
+    "ram_gb": 36
+  },
+  "toolchain": {
+    "rustc": "rustc 1.85.0",
+    "cargo": "cargo 1.85.0",
+    "blas_backend": "none",
+    "rustflags": ""
+  },
+  "_note": "PLACEHOLDER baseline for the v0.1.1 release (Sprint D1 \u2014 production-wired backend benches). Targets recalibrated post-D5 audit on the real M3 Pro multi-round path : measurements ~170/340/340 ms (small/medium/large) require \u00d72 margin caps at 400/700/700 ms. Until the first clean post-merge bench run on main, the `results` map is empty and the regression-detection step short-circuits (`cand_val is None: continue`) for every D1 key. After the first real run on main, copy the consolidated report here via the freeze process documented in `bench_baselines/README.md`.",
+  "results": {},
+  "slo_compliance": {
+    "SLO-RD1-1": {
+      "name": "real small latency p95 (naive)",
+      "target_ns": 400000000,
+      "measured_ns": null,
+      "passed": null,
+      "skipped": true,
+      "note": "awaiting first real bench run"
+    },
+    "SLO-RD1-2": {
+      "name": "real medium latency p95 (naive)",
+      "target_ns": 700000000,
+      "measured_ns": null,
+      "passed": null,
+      "skipped": true,
+      "note": "awaiting first real bench run"
+    },
+    "SLO-RD1-3": {
+      "name": "real large latency p95 (naive)",
+      "target_ns": 700000000,
+      "measured_ns": null,
+      "passed": null,
+      "skipped": true,
+      "note": "awaiting first real bench run"
+    },
+    "SLO-RD1-T1": {
+      "name": "real throughput p95 8c-small (naive)",
+      "target_ns": 700000000,
+      "measured_ns": null,
+      "passed": null,
+      "skipped": true,
+      "note": "awaiting first real bench run"
+    }
+  }
+}

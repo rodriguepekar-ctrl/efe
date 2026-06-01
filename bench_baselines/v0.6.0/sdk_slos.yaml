@@ -1,0 +1,153 @@
+# Sprint **Φ-C-SDK Polyglot Completion (D29-D34)** — SDK quartet SLO baselines.
+#
+# Cf. `docs/EFE_POLYGLOT_SDKS_COMPLETION_ARCHITECTURE.md` § 14.
+#
+# Consommé par `eval/scripts/check_slo.py`. Toute extension de field
+# doit avoir une branche d'évaluation dans le parser, sinon le SLO
+# serait silencieusement skippé (= pattern Φ-D.A1 anti-régression).
+#
+# Freeze : 2026-05-13 (= aligné avec Φ-C-FFI).
+
+version: v0.6.0
+domain: sdk
+description: |
+  EFE Polyglot SDK quartet (Python + Go + TS + Java) — Φ-C-SDK freeze.
+  15 SLOs couvrant : contract bit-identity cross-langue, latence
+  par SDK, doc coverage par SDK, taille de package, hash + version
+  sync, Sigstore + SBOM × 4.
+
+host_fingerprint_baseline: "PLACEHOLDER_compute_at_freeze"
+
+slos:
+  # ────────────────────────────────────────────────────────────────
+  # Surface 1 — Contract testing (= la promesse phare)
+  # ────────────────────────────────────────────────────────────────
+  - id: SLO-SDK-CONTRACT
+    description: "100 fixtures × 4 SDKs bit-identical (= 400 passes)"
+    comparator: eq
+    threshold_pass_count: 400
+    expected_count: 400
+    source_bench: contract
+    host_fingerprint_required: false
+    note: "Source of truth : sdk/contract-runner/compare.py output."
+
+  # ────────────────────────────────────────────────────────────────
+  # Surface 2 — Latency per SDK (gRPC over wire)
+  # ────────────────────────────────────────────────────────────────
+  - id: SLO-SDK-LATENCY-GO
+    description: "Go SDK p99 latency for classify (seconds)"
+    comparator: lte
+    threshold_seconds: 0.050
+    source_bench: bench_go
+    host_fingerprint_required: false
+    note: "PyO3 in-process p99 = 40 ms + gRPC overhead ≈ 10 ms."
+
+  - id: SLO-SDK-LATENCY-TS
+    description: "TS SDK p99 latency for classify (seconds)"
+    comparator: lte
+    threshold_seconds: 0.060
+    source_bench: bench_ts
+    host_fingerprint_required: false
+    note: "Node.js gRPC has ~ 20 ms baseline overhead."
+
+  - id: SLO-SDK-LATENCY-JAVA
+    description: "Java SDK p99 latency for classify (seconds)"
+    comparator: lte
+    threshold_seconds: 0.060
+    source_bench: bench_java
+    host_fingerprint_required: false
+    note: "JVM warmup absorbed by warmup phase ; steady-state ~ 50 ms."
+
+  # ────────────────────────────────────────────────────────────────
+  # Surface 3 — Doc coverage per SDK (= DX)
+  # ────────────────────────────────────────────────────────────────
+  - id: SLO-SDK-DOC-GO
+    description: "Go SDK public-symbol documentation coverage ratio"
+    comparator: gte
+    threshold_ratio: 0.90
+    source_bench: doc_coverage_go
+    host_fingerprint_required: false
+
+  - id: SLO-SDK-DOC-TS
+    description: "TS SDK exported-symbol documentation coverage ratio"
+    comparator: gte
+    threshold_ratio: 0.90
+    source_bench: doc_coverage_ts
+    host_fingerprint_required: false
+
+  - id: SLO-SDK-DOC-JAVA
+    description: "Java SDK public-symbol Javadoc coverage ratio"
+    comparator: gte
+    threshold_ratio: 0.90
+    source_bench: doc_coverage_java
+    host_fingerprint_required: false
+
+  # ────────────────────────────────────────────────────────────────
+  # Surface 4 — Package size budgets
+  # ────────────────────────────────────────────────────────────────
+  - id: SLO-SDK-SIZE-GO
+    description: "Go SDK compiled size budget (bytes)"
+    comparator: lte
+    threshold_bytes: 2097152   # 2 MiB
+    source_bench: size_go
+    host_fingerprint_required: false
+
+  - id: SLO-SDK-SIZE-TS
+    description: "TS SDK npm tarball size compressed (bytes)"
+    comparator: lte
+    threshold_bytes: 524288    # 500 KiB
+    source_bench: size_ts
+    host_fingerprint_required: false
+
+  - id: SLO-SDK-SIZE-JAVA
+    description: "Java SDK shaded jar size (bytes)"
+    comparator: lte
+    threshold_bytes: 5242880   # 5 MiB
+    source_bench: size_java
+    host_fingerprint_required: false
+
+  # ────────────────────────────────────────────────────────────────
+  # Surface 5 — Pinned invariants (= anti-drift cross-SDK)
+  # ────────────────────────────────────────────────────────────────
+  - id: SLO-SDK-PROTO-HASH
+    description: "protos/efe/v1/*.proto hash matches frozen baseline"
+    comparator: eq
+    threshold_pass_count: 1
+    expected_count: 1
+    source_bench: proto_hash
+    host_fingerprint_required: false
+    note: "Pin baseline : bench_baselines/v0.6.0/sdk_proto_hash.txt"
+
+  - id: SLO-SDK-VERSION-SYNC
+    description: "All 4 SDK manifests declare the same semver string"
+    comparator: eq
+    threshold_pass_count: 1
+    expected_count: 1
+    source_bench: version_sync
+    host_fingerprint_required: false
+
+  - id: SLO-SDK-API-SURFACE
+    description: "Isomorphic public surface across 4 SDKs (= same required methods)"
+    comparator: eq
+    threshold_pass_count: 1
+    expected_count: 1
+    source_bench: api_surface
+    host_fingerprint_required: false
+
+  # ────────────────────────────────────────────────────────────────
+  # Surface 6 — Compliance artifacts (= signed + SBOM)
+  # ────────────────────────────────────────────────────────────────
+  - id: SLO-SDK-SIGSTORE
+    description: "All 4 SDK artifacts have Sigstore signature + Rekor entry"
+    comparator: gte
+    threshold_count: 4
+    source_bench: publish
+    host_fingerprint_required: false
+    note: "Counter : 4 artifacts (PyPI wheels + Go module + npm tarball + Maven jar)."
+
+  - id: SLO-SDK-SBOM
+    description: "All 4 SDK artifacts have CycloneDX 1.5 SBOM"
+    comparator: gte
+    threshold_count: 4
+    source_bench: publish
+    host_fingerprint_required: false

@@ -1,0 +1,95 @@
+{
+  "version": "1.0",
+  "timestamp": "PENDING_FIRST_GREEN_RUN",
+  "git": {
+    "sha": "post-d11-implementation",
+    "branch": "main",
+    "dirty": false
+  },
+  "host": {
+    "os": "Linux (ubuntu-22.04 GitHub Actions runner)",
+    "cpu": "Intel Xeon (varying SKU per Actions assignment)",
+    "ncpu": 4,
+    "ram_gb": 16
+  },
+  "toolchain": {
+    "rustc": "rustc 1.85.0",
+    "cargo": "cargo 1.85.0",
+    "blas_backend": "none",
+    "rustflags": "--remap-path-prefix /app=."
+  },
+  "_note": "PLACEHOLDER baseline for the v0.1.11 release (Sprint D11 — per-tenant isolation, Phase 2 multi-tenant SaaS). The 7 D11-MT-* SLOs are SKIPPED until: (1) the Rust isolation harness lands (4 test files in `crates/efe-server/tests/d11_isolation_*.rs`) and (2) the Helm Tier 2 dual-render check has 3 consecutive green main runs from `.github/workflows/bench-isolation.yml`. The cost aggregator script (`scripts/billing/aggregate_usage.py`) is shipped + tested (20 unit tests). The 3 new Diataxis pages (howto/multi-tenant, explanation/security-model, reference/tenant-claims) are published and indexed in `docs/mkdocs.yml`. The Grafana dashboard JSON is committed under `deploy/observability/grafana/`. Helm Tier 2 templates (resourcequota, limitrange, networkpolicy-tenant) are opt-in via `tenant.namespace.isolated: true` ; default behavior unchanged for existing single-tenant deployments. RESERVED_PREFIXES extended to 9 namespaces (eval_accuracy, eval_latency, load_, soak::, docs::, dx::, isolation::, cost::, obs::) — pinned by `scripts/tests/test_d11_disjoint_keys.py`. The 26 SLOs from previous sprints (D4×3, D6×5, D7×4, D8×7, D9×5, D10×5, D11 yet to flip from SKIPPED) are unchanged. Architecture: `docs/bench/d11_per_tenant_isolation_architecture.md` (1 845 lines, 21 sections, 12 décisions, 10 risques, 12-vector HAZOP, plan 5 j wallclock).",
+  "results": {},
+  "slo_compliance": {
+    "SLO-D11-MT-1": {
+      "name": "Cross-tenant data leakage count",
+      "target_ns": 0,
+      "measured_ns": null,
+      "passed": null,
+      "skipped": true,
+      "comparator": "lte",
+      "display_as": "duration",
+      "note": "PENDING — measured by 30+ tests in crates/efe-server/tests/d11_isolation_*.rs"
+    },
+    "SLO-D11-MT-2": {
+      "name": "Rate limit disjointness ratio (per-tenant fairness)",
+      "target_ns": 990000000,
+      "measured_ns": null,
+      "passed": null,
+      "skipped": true,
+      "comparator": "gte",
+      "display_as": "ratio",
+      "note": "PENDING — bucket fairness measurement in d11_isolation_rate_limit.rs"
+    },
+    "SLO-D11-MT-3": {
+      "name": "Audit log tenant_id attribution coverage",
+      "target_ns": 1000000000,
+      "measured_ns": null,
+      "passed": null,
+      "skipped": true,
+      "comparator": "gte",
+      "display_as": "ratio",
+      "note": "PENDING — log capture invariant in d11_isolation_audit.rs"
+    },
+    "SLO-D11-MT-4": {
+      "name": "Business metrics tenant label coverage",
+      "target_ns": 1000000000,
+      "measured_ns": null,
+      "passed": null,
+      "skipped": true,
+      "comparator": "gte",
+      "display_as": "ratio",
+      "note": "PENDING — Prometheus scrape inventory in d11_isolation_metrics.rs"
+    },
+    "SLO-D11-MT-5": {
+      "name": "Cost aggregator drift vs Prometheus",
+      "target_ns": 10000000,
+      "measured_ns": null,
+      "passed": null,
+      "skipped": true,
+      "comparator": "lte",
+      "display_as": "ratio",
+      "note": "PENDING — drift = |aggregator_total - count_over_time_total| / count_over_time_total ; computed daily by the billing CronJob"
+    },
+    "SLO-D11-MT-6": {
+      "name": "Cost aggregator export wallclock (30d window)",
+      "target_ns": 60000000000,
+      "measured_ns": null,
+      "passed": null,
+      "skipped": true,
+      "comparator": "lte",
+      "display_as": "ratio",
+      "note": "PENDING — measured by the script's stdout final line `wrote ... (N tenants, X.YYs)`"
+    },
+    "SLO-D11-MT-7": {
+      "name": "Tenant cardinality (distinct tenant label values)",
+      "target_ns": 1000,
+      "measured_ns": null,
+      "passed": null,
+      "skipped": true,
+      "comparator": "lte",
+      "display_as": "duration",
+      "note": "PENDING — Prometheus query `count(count by (tenant) (efe_grpc_requests_total))` ; alert threshold 1000"
+    }
+  }
+}

@@ -1,0 +1,75 @@
+{
+  "version": "1.0",
+  "timestamp": "PENDING_FIRST_GREEN_RUN",
+  "git": {
+    "sha": "post-d10-implementation",
+    "branch": "main",
+    "dirty": false
+  },
+  "host": {
+    "os": "Linux (ubuntu-22.04 GitHub Actions runner)",
+    "cpu": "Intel Xeon (varying SKU per Actions assignment)",
+    "ncpu": 4,
+    "ram_gb": 16
+  },
+  "toolchain": {
+    "rustc": "rustc 1.85.0",
+    "cargo": "cargo 1.85.0",
+    "blas_backend": "none",
+    "rustflags": "--remap-path-prefix /app=."
+  },
+  "_note": "PLACEHOLDER baseline for the v0.1.10 release (Sprint D10 — SDK docs + quickstart + 4 examples for Pilot 1.0 DX). The MEASURED metrics for the 5 D10 SLOs are TBD: docs build (0 warnings, 0 broken links, ≥ 95% API coverage) is enforced by `.github/workflows/docs.yml` ; the DX wallclock budgets (D10-DX-1: quickstart ≤ 10 min ; D10-DX-2: example smoke aggregate ≤ 30 s) are measured respectively by 3 reviewers running `scripts/validate_quickstart.sh` and by `pytest examples/tests/`. Carry-over invariants from v0.1.9: the 21 SLOs already gated (D4 × 3, D6 × 5, D7 × 4, D8 × 7, D9 × 5) remain gated. The 5 new D10 SLOs occupy disjoint namespaces (`docs::*` and `dx::*`) — pinned in `scripts/tests/test_d10_disjoint_keys.py`. The SDK is published to PyPI via OIDC trusted publisher (no static token) and the docs are published to docs.efe.ai versioned via `mike` (URL pattern `docs.efe.ai/0.1.10/`). The architecture spec is in `docs/bench/d10_sdk_docs_examples_architecture.md` (2 124 lines). Primary partner-pilot persona target: 'application engineer with Python 3.10+, helm, kubectl, fresh cluster, 4 h budget' — D10 brings the activation friction from ~2 h pre-D10 to ~10 min post-D10 (cf. §3 of the architecture).",
+  "results": {},
+  "slo_compliance": {
+    "SLO-D10-DOC-1": {
+      "name": "Docs build strict — zero warnings",
+      "target_ns": 0,
+      "measured_ns": null,
+      "passed": null,
+      "skipped": true,
+      "comparator": "lte",
+      "display_as": "duration",
+      "note": "PENDING — measured by `mkdocs build --strict` step in docs.yml workflow (exit 0 ≡ 0 warnings)."
+    },
+    "SLO-D10-DOC-2": {
+      "name": "API reference symbol coverage",
+      "target_ns": 950000000,
+      "measured_ns": null,
+      "passed": null,
+      "skipped": true,
+      "comparator": "gte",
+      "display_as": "ratio",
+      "note": "PENDING — measured by test_d10_api_reference_coverage.py against the rendered `docs/site/reference/api.html`."
+    },
+    "SLO-D10-DOC-3": {
+      "name": "Markdown link checker — zero 404",
+      "target_ns": 0,
+      "measured_ns": null,
+      "passed": null,
+      "skipped": true,
+      "comparator": "lte",
+      "display_as": "duration",
+      "note": "PENDING — `linkchecker` step in docs.yml. Internal links only; external links checked nightly to avoid LinkedIn-style false positives."
+    },
+    "SLO-D10-DX-1": {
+      "name": "Quickstart wallclock (median 3 reviewers)",
+      "target_ns": 600000000000,
+      "measured_ns": null,
+      "passed": null,
+      "skipped": true,
+      "comparator": "lte",
+      "display_as": "ratio",
+      "note": "PENDING — manual measurement: 3 external reviewers run `scripts/validate_quickstart.sh` and report ELAPSED. Median across the 3 must be ≤ 600 s. Architecture §3 gives the budget breakdown."
+    },
+    "SLO-D10-DX-2": {
+      "name": "Example smoke aggregate runtime",
+      "target_ns": 30000000000,
+      "measured_ns": null,
+      "passed": null,
+      "skipped": true,
+      "comparator": "lte",
+      "display_as": "ratio",
+      "note": "PENDING — `pytest examples/tests/test_examples_smoke.py` aggregate wallclock from CI artefact. Fails if any single example exceeds 30 s OR aggregate exceeds 60 s."
+    }
+  }
+}

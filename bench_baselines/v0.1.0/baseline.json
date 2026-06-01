@@ -1,0 +1,155 @@
+{
+  "version": "1.0",
+  "timestamp": "20260425T085945Z",
+  "git": {
+    "sha": "nogit",
+    "branch": "detached",
+    "dirty": true
+  },
+  "host": {
+    "os": "Darwin 24.1.0",
+    "cpu": "Apple M3 Pro",
+    "ncpu": 11,
+    "ram_gb": 36
+  },
+  "toolchain": {
+    "rustc": "rustc 1.85.0 (4d91de4e4 2025-02-17)",
+    "cargo": "cargo 1.85.0 (d73d2caf9 2024-12-31)",
+    "blas_backend": "none",
+    "rustflags": ""
+  },
+  "results": {
+    "memory_e2e_large_alloc::count": {
+      "mean_ns": 3345.4856872558594,
+      "median_ns": 3345.4856872558594,
+      "std_dev_ns": 11.543008934070462,
+      "mad_ns": 12.101188389897288,
+      "approx_p95_ns": 3369.688064035654
+    },
+    "memory_e2e_large_heap::peak_kb": {
+      "mean_ns": 3347.7477416992188,
+      "median_ns": 3347.7477416992188,
+      "std_dev_ns": 11.854137644127457,
+      "mad_ns": 12.427362193920999,
+      "approx_p95_ns": 3372.6024660870607
+    },
+    "memory_e2e_medium_alloc::count": {
+      "mean_ns": 3048.3231563568115,
+      "median_ns": 3048.3231563568115,
+      "std_dev_ns": 28.325603481684777,
+      "mad_ns": 29.69533038977943,
+      "approx_p95_ns": 3107.7138171363704
+    },
+    "memory_e2e_medium_heap::peak_kb": {
+      "mean_ns": 2942.0172271728516,
+      "median_ns": 2942.0172271728516,
+      "std_dev_ns": 26.55588630974411,
+      "mad_ns": 27.840035897952475,
+      "approx_p95_ns": 2997.6972989687565
+    },
+    "memory_e2e_small_alloc::count": {
+      "mean_ns": 2735.8875274658203,
+      "median_ns": 2735.8875274658203,
+      "std_dev_ns": 28.212088868828204,
+      "mad_ns": 29.57632660809395,
+      "approx_p95_ns": 2795.040180682008
+    },
+    "memory_e2e_small_heap::peak_kb": {
+      "mean_ns": 2727.5384368896484,
+      "median_ns": 2727.5384368896484,
+      "std_dev_ns": 0.03148403301242593,
+      "mad_ns": 0.033006490502884844,
+      "approx_p95_ns": 2727.604449870654
+    },
+    "swarm_e2e_blas_vs_naive::medium_pure_rust": {
+      "mean_ns": 3423.2877197265625,
+      "median_ns": 3423.2877197265625,
+      "std_dev_ns": 5.04055268483516,
+      "mad_ns": 5.284296146419365,
+      "approx_p95_ns": 3433.8563120194012
+    },
+    "swarm_e2e_large_latency::execute": {
+      "mean_ns": 4153.862030029297,
+      "median_ns": 4153.862030029297,
+      "std_dev_ns": 9.627899296108312,
+      "mad_ns": 10.093470761967183,
+      "approx_p95_ns": 4174.048971553231
+    },
+    "swarm_e2e_medium_latency::execute": {
+      "mean_ns": 3602.1639099121094,
+      "median_ns": 3602.1639099121094,
+      "std_dev_ns": 14.085813947128873,
+      "mad_ns": 14.766954541300947,
+      "approx_p95_ns": 3631.6978189947113
+    },
+    "swarm_e2e_medium_throughput::Nc1": {
+      "mean_ns": 12417.694091796875,
+      "median_ns": 12417.694091796875,
+      "std_dev_ns": 52.394264670438766,
+      "mad_ns": 54.927867677179165,
+      "approx_p95_ns": 12527.549827151233
+    },
+    "swarm_e2e_medium_throughput::Nc16": {
+      "mean_ns": 52561.07568359375,
+      "median_ns": 52561.07568359375,
+      "std_dev_ns": 337.03788972839226,
+      "mad_ns": 353.33586081687827,
+      "approx_p95_ns": 53267.74740522751
+    },
+    "swarm_e2e_medium_throughput::Nc4": {
+      "mean_ns": 25225.794311523438,
+      "median_ns": 25225.794311523438,
+      "std_dev_ns": 137.8694221496842,
+      "mad_ns": 144.53630419666297,
+      "approx_p95_ns": 25514.866919916763
+    },
+    "swarm_e2e_small_latency::execute": {
+      "mean_ns": 2943.7084350585938,
+      "median_ns": 2943.7084350585938,
+      "std_dev_ns": 5.330922217539206,
+      "mad_ns": 5.588706932030618,
+      "approx_p95_ns": 2954.885848922655
+    },
+    "swarm_e2e_small_throughput::Nc1": {
+      "mean_ns": 11436.60986328125,
+      "median_ns": 11436.60986328125,
+      "std_dev_ns": 29.38360132133786,
+      "mad_ns": 30.804489296860993,
+      "approx_p95_ns": 11498.218841874972
+    },
+    "swarm_e2e_small_throughput::Nc16": {
+      "mean_ns": 48915.629150390625,
+      "median_ns": 48915.629150390625,
+      "std_dev_ns": 301.61936681117567,
+      "mad_ns": 316.20462226710515,
+      "approx_p95_ns": 49548.038394924835
+    },
+    "swarm_e2e_small_throughput::Nc4": {
+      "mean_ns": 24360.219360351562,
+      "median_ns": 24360.219360351562,
+      "std_dev_ns": 625.78207810996,
+      "mad_ns": 656.0427061507653,
+      "approx_p95_ns": 25672.304772653093
+    }
+  },
+  "slo_compliance": {
+    "SLO-1": {
+      "name": "small latency p95",
+      "target_ns": 50000000,
+      "measured_ns": 2954,
+      "passed": true
+    },
+    "SLO-2": {
+      "name": "medium latency p95",
+      "target_ns": 200000000,
+      "measured_ns": 3631,
+      "passed": true
+    },
+    "SLO-3": {
+      "name": "large latency p95",
+      "target_ns": 1000000000,
+      "measured_ns": 4174,
+      "passed": true
+    }
+  }
+}

@@ -1,0 +1,134 @@
+# Sprint **Φ-D-COMPLIANCE Completion (D85-D89)** — Compliance SLO baselines.
+# Cf. `docs/EFE_COMPLIANCE_COMPLETION_ARCHITECTURE.md` § 14.
+
+version: v0.8.0
+domain: compliance
+host_fingerprint_baseline: "PLACEHOLDER_compute_at_freeze"
+
+slos:
+  # ── Coverage (4) ─────────────────────────────────────────────────
+  - id: SLO-COMP-GDPR-CONTROLS
+    description: "100 % GDPR controls applicables mappés vers artefacts EFE"
+    comparator: eq
+    threshold_pass_count: 1
+    expected_count: 1
+    source_bench: comp_framework_mapping_audit
+
+  - id: SLO-COMP-SOC2-CONTROLS
+    description: "100 % SOC 2 TSC controls applicables mappés"
+    comparator: eq
+    threshold_pass_count: 1
+    expected_count: 1
+    source_bench: comp_framework_mapping_audit
+
+  - id: SLO-COMP-ISO27001-CONTROLS
+    description: "100 % ISO 27001 Annex A controls applicables mappés"
+    comparator: eq
+    threshold_pass_count: 1
+    expected_count: 1
+    source_bench: comp_framework_mapping_audit
+
+  - id: SLO-COMP-AI-ACT-CONTROLS
+    description: "100 % EU AI Act controls applicables mappés"
+    comparator: eq
+    threshold_pass_count: 1
+    expected_count: 1
+    source_bench: comp_framework_mapping_audit
+
+  # ── Evidence runtime (5) ─────────────────────────────────────────
+  - id: SLO-COMP-EVIDENCE-COVERAGE
+    description: "100 % controls applicables ont une evidence script"
+    comparator: eq
+    threshold_pass_count: 1
+    expected_count: 1
+    source_bench: comp_evidence_aggregator
+
+  - id: SLO-COMP-AUDIT-CHAIN-DAILY
+    description: "HMAC chain replay ≥ 1× / jour sans broken_links"
+    comparator: eq
+    threshold_pass_count: 1
+    expected_count: 1
+    source_bench: comp_audit_chain_daily
+
+  - id: SLO-COMP-DPIA-FRESHNESS
+    description: "Chaque catalog high-risk a un DPIA ≤ 6 mois"
+    comparator: eq
+    threshold_pass_count: 1
+    expected_count: 1
+    source_bench: comp_dpia_freshness_evidence
+
+  - id: SLO-COMP-ROPA-FRESHNESS
+    description: "Chaque tenant a un ROPA ≤ 1 mois"
+    comparator: eq
+    threshold_pass_count: 1
+    expected_count: 1
+    source_bench: comp_ropa_freshness_evidence
+
+  - id: SLO-COMP-SUBPROCESSOR-INVENTORY
+    description: "Sub-processor inventory ≤ 7 jours"
+    comparator: eq
+    threshold_pass_count: 1
+    expected_count: 1
+    source_bench: comp_subprocessor_inventory_evidence
+
+  # ── Breach + erasure (4) ─────────────────────────────────────────
+  - id: SLO-COMP-BREACH-NOTIFY-72H
+    description: "DPO notification ≤ 72h après détection (Art. 33 RGPD)"
+    comparator: lte
+    threshold_seconds: 259200.0
+    source_bench: comp_breach_72h_evidence
+
+  - id: SLO-COMP-BREACH-CONTAIN-24H
+    description: "Containment action ≤ 24h après détection"
+    comparator: lte
+    threshold_seconds: 86400.0
+    source_bench: comp_breach_24h_containment_evidence
+
+  - id: SLO-COMP-ERASURE-30D
+    description: "Erasure cascade ≤ 30 jours (Art. 17 RGPD)"
+    comparator: lte
+    threshold_seconds: 2592000.0
+    source_bench: comp_erasure_30d_evidence
+
+  - id: SLO-COMP-PORTABILITY-30D
+    description: "Portability export ≤ 30 jours (Art. 20 RGPD)"
+    comparator: lte
+    threshold_seconds: 2592000.0
+    source_bench: comp_portability_30d_evidence
+
+  # ── Residency + AI Act (3) ───────────────────────────────────────
+  - id: SLO-COMP-RESIDENCY-LEAK
+    description: "0 cross-region leaks détectés sur scénarios adversariaux"
+    comparator: eq
+    threshold_pass_count: 1
+    expected_count: 1
+    source_bench: comp_data_residency_evidence
+
+  - id: SLO-COMP-AI-ACT-HIGH-OVERSIGHT
+    description: "100 % high-risk catalogs forcent Mode-3 (= human oversight Art. 14)"
+    comparator: eq
+    threshold_pass_count: 1
+    expected_count: 1
+    source_bench: comp_ai_act_human_oversight_evidence
+
+  - id: SLO-COMP-AI-ACT-DPO-SIGNOFF
+    description: "100 % high-risk catalogs ont DPO sign-off ≤ 1 an"
+    comparator: eq
+    threshold_pass_count: 1
+    expected_count: 1
+    source_bench: comp_ai_act_dpo_signoff_evidence
+
+  # ── Consent + transparency (2) ───────────────────────────────────
+  - id: SLO-COMP-CONSENT-VERSION
+    description: "Consent records match policy version courante"
+    comparator: eq
+    threshold_pass_count: 1
+    expected_count: 1
+    source_bench: comp_consent_granularity_evidence
+
+  - id: SLO-COMP-TRANSPARENCY-NOTICE
+    description: "Transparency notices ≤ 30 jours OR policy-matched"
+    comparator: eq
+    threshold_pass_count: 1
+    expected_count: 1
+    source_bench: comp_transparency_notice_evidence

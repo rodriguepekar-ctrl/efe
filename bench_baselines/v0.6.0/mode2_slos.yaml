@@ -1,0 +1,162 @@
+# Sprint **Φ-D-MODE2 Completion (D65-D69)** — Mode-2 LLM-routed anchors SLO baselines.
+#
+# Cf. `docs/EFE_MODE2_ANCHORS_COMPLETION_ARCHITECTURE.md` § 16.
+#
+# 18 SLOs opposables couvrant : recall delta, cost, latency, fallback,
+# cache, circuit breaker, audit, tenant isolation, prompt versioning,
+# provider equivalence, availability, token tracking, budget hard-stop,
+# JSON schema, safety filter, audit chain integrity, fallback functional,
+# replay determinism.
+#
+# Freeze : 2026-05-13.
+
+version: v0.6.0
+domain: mode2
+description: |
+  EFE Mode-2 (LLM-routed dynamic anchors) SLO baselines — Φ-D-MODE2 freeze.
+
+host_fingerprint_baseline: "PLACEHOLDER_compute_at_freeze"
+
+slos:
+  # ─────────────────────────────────────────────────────────────────
+  # Quality SLOs (= recall + separation)
+  # ─────────────────────────────────────────────────────────────────
+  - id: SLO-MODE2-RECALL-DELTA
+    description: "Mode-2 recall@1 must improve over Mode-1 by ≥ 3 % aggregate (10 catalogs)"
+    comparator: gte
+    threshold_ratio: 0.03
+    source_bench: recall_bench
+    host_fingerprint_required: false
+    note: |
+      Aggregate = mean(recall_m2 - recall_m1) over the 10 bench catalogs.
+      Per-catalog regression > 5 % triggers individual investigation.
+
+  # ─────────────────────────────────────────────────────────────────
+  # Cost SLOs
+  # ─────────────────────────────────────────────────────────────────
+  - id: SLO-MODE2-COST-P99
+    description: "Cost per anchor p99 across 8 providers (USD)"
+    comparator: lte
+    threshold_ratio: 0.02
+    source_bench: cost_tracking
+
+  - id: SLO-MODE2-TOKEN-TRACK
+    description: "Token accounting drift vs provider billing must be ≤ 5 %"
+    comparator: eq
+    threshold_pass_count: 1
+    expected_count: 1
+    source_bench: token_reconciliation
+
+  - id: SLO-MODE2-BUDGET-HARD-STOP
+    description: "Hard-cap budget enforcement test passes (= reject above 100 %)"
+    comparator: eq
+    threshold_pass_count: 1
+    expected_count: 1
+    source_bench: budget_test
+
+  # ─────────────────────────────────────────────────────────────────
+  # Latency SLOs
+  # ─────────────────────────────────────────────────────────────────
+  - id: SLO-MODE2-ANCHOR-LATENCY-P99
+    description: "Anchor generation p99 latency (seconds, cold-path)"
+    comparator: lte
+    threshold_seconds: 30.0
+    source_bench: latency_bench
+
+  - id: SLO-MODE2-FALLBACK-LATENCY-P99
+    description: "Mode-2 → Mode-1 fallback latency p99 (seconds)"
+    comparator: lte
+    threshold_seconds: 5.0
+    source_bench: fallback_bench
+
+  - id: SLO-MODE2-CB-DETECTION
+    description: "Circuit breaker open detection latency p99 (seconds)"
+    comparator: lte
+    threshold_seconds: 30.0
+    source_bench: circuit_breaker_bench
+
+  # ─────────────────────────────────────────────────────────────────
+  # Resource / efficiency SLOs
+  # ─────────────────────────────────────────────────────────────────
+  - id: SLO-MODE2-CACHE-HIT-RATE
+    description: "Redis cache hit rate on steady-state workload"
+    comparator: gte
+    threshold_ratio: 0.70
+    source_bench: cache_stats
+
+  - id: SLO-MODE2-PROVIDER-AVAIL
+    description: "Per-provider 30-day rolling availability"
+    comparator: gte
+    threshold_ratio: 0.99
+    source_bench: availability_tracker
+
+  # ─────────────────────────────────────────────────────────────────
+  # Audit + security SLOs
+  # ─────────────────────────────────────────────────────────────────
+  - id: SLO-MODE2-AUDIT-COVERAGE
+    description: "100 % of LLM calls produce a Mode2Attestation"
+    comparator: eq
+    threshold_pass_count: 1
+    expected_count: 1
+    source_bench: audit_replay
+
+  - id: SLO-MODE2-AUDIT-CHAIN-INTEGRITY
+    description: "HMAC chain replay validates 100 % of attestations"
+    comparator: eq
+    threshold_pass_count: 1
+    expected_count: 1
+    source_bench: chain_replay
+
+  - id: SLO-MODE2-TENANT-ISOLATION
+    description: "Adversarial cross-tenant test : 0 leakage"
+    comparator: eq
+    threshold_pass_count: 1
+    expected_count: 1
+    source_bench: tenant_isolation_test
+
+  - id: SLO-MODE2-SAFETY-FILTER
+    description: "Adversarial prompt suite : 50/50 blocked"
+    comparator: eq
+    threshold_pass_count: 50
+    expected_count: 50
+    source_bench: safety_eval
+
+  # ─────────────────────────────────────────────────────────────────
+  # Schema / contract SLOs
+  # ─────────────────────────────────────────────────────────────────
+  - id: SLO-MODE2-PROMPT-VERSIONING
+    description: "100 % of production prompts are semver-pinned (not 'latest')"
+    comparator: eq
+    threshold_pass_count: 1
+    expected_count: 1
+    source_bench: prompt_audit
+
+  - id: SLO-MODE2-JSON-SCHEMA
+    description: "LLM responses match strict JSON schema (post-retry)"
+    comparator: gte
+    threshold_ratio: 1.00
+    source_bench: json_validation
+
+  - id: SLO-MODE2-PROVIDER-EQUIV
+    description: "Cross-provider equivalence on 10 catalogs × 8 providers = 80 pairs"
+    comparator: gte
+    threshold_pass_count: 80
+    expected_count: 80
+    source_bench: provider_equiv
+
+  # ─────────────────────────────────────────────────────────────────
+  # Functional SLOs
+  # ─────────────────────────────────────────────────────────────────
+  - id: SLO-MODE2-FALLBACK-WORKS
+    description: "All 5 fallback trigger reasons functional in injection test"
+    comparator: gte
+    threshold_pass_count: 5
+    expected_count: 5
+    source_bench: fallback_injection
+
+  - id: SLO-MODE2-REPLAY
+    description: "Deterministic re-run of cached responses yields bit-identical output"
+    comparator: eq
+    threshold_pass_count: 1
+    expected_count: 1
+    source_bench: deterministic_replay

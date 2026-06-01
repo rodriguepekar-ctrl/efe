@@ -1,0 +1,160 @@
+# Sprint **D19 (P2-Foundation)** — Baseline SLO definitions.
+#
+# Cf. `docs/EFE_P2_SELF_SERVICE_ARCHITECTURE.md` § 5.1 + Annexe A.
+#
+# ## Status v0.2.0
+#
+# v0.2.0 livre l'INFRASTRUCTURE P2 (instruments + DB schema +
+# state machine + alerts + dashboard) sans encore le portail
+# Next.js ni les modules Terraform 3-cloud. Les SLO actifs en v0.2.0
+# sont :
+#
+# - SLO-P2-TTFC-2 (sandbox 5 min) → PENDING_PORTAL (D20+)
+# - SLO-P2-TTFC-1 (POC 30 min) → PENDING_CLOUD_PARITY (D21-D22)
+# - SLO-P2-AHA-1/2 → PENDING_PORTAL
+# - SLO-P2-HUMAN-INTERVENTION → ACTIVE (telemetry seule suffit)
+# - SLO-P2-ROLLBACK → PENDING_SAGA (D20)
+# - SLO-P2-DELETE-GDPR → PENDING_DELETE (D20)
+# - SLO-P2-DOCS-DRIFT → ACTIVE (`test_doc_snippets.py`)
+# - SLO-P2-BURN → ACTIVE (alerts Prometheus)
+#
+# Au total v0.2.0 : 3 ACTIVE, 12 PENDING. La séquence ratchet-down
+# vers GA est documentée en § 12 du doc P2.
+
+version: "0.2.0"
+frozen_at: "PLACEHOLDER_v0.2.0_freeze_date"
+git_sha: "PLACEHOLDER_v0.2.0_git_sha"
+host_fingerprint_baseline: "PLACEHOLDER_compute_at_freeze"
+
+slos:
+  # ────────────────────────────────────────────────────────────
+  # Time-to-First-Classify (3 cibles)
+  # ────────────────────────────────────────────────────────────
+  - id: SLO-P2-TTFC-1
+    description: "T-T-First-Classify p90 (POC tenant)"
+    metric: |
+      SELECT percentile_cont(0.90) WITHIN GROUP (
+        ORDER BY duration_to_first_classify_seconds
+      )
+      FROM onboarding_sessions
+      WHERE plan_target = 'poc'
+        AND completed_at >= NOW() - INTERVAL '30 days'
+        AND first_classify_at IS NOT NULL
+    quantile: 0.90
+    comparator: lte
+    threshold_seconds: 1800        # 30 min
+    status: PENDING_CLOUD_PARITY
+    contract_clause: "SLA §3.2"
+    note: "Activable dès que les 3 clouds Terraform sont prêts (D22+)."
+
+  - id: SLO-P2-TTFC-2
+    description: "T-T-First-Classify p90 (Sandbox trial)"
+    quantile: 0.90
+    comparator: lte
+    threshold_seconds: 300         # 5 min
+    status: PENDING_PORTAL
+    note: "Requires portal Next.js + shared sandbox infra (D20+)."
+
+  - id: SLO-P2-TTFC-3
+    description: "T-T-First-Classify p90 (Production tenant)"
+    quantile: 0.90
+    comparator: lte
+    threshold_seconds: 86400       # 24 h
+    status: PENDING_PORTAL
+
+  # ────────────────────────────────────────────────────────────
+  # Time-to-Aha (= 1er classify correct)
+  # ────────────────────────────────────────────────────────────
+  - id: SLO-P2-AHA-1
+    description: "T-T-Aha p90 (POC)"
+    quantile: 0.90
+    comparator: lte
+    threshold_seconds: 2100        # ≈ POC + 5 min nudge
+    status: PENDING_PORTAL
+
+  - id: SLO-P2-AHA-2
+    description: "T-T-Aha p90 (Sandbox)"
+    quantile: 0.90
+    comparator: lte
+    threshold_seconds: 360         # ≈ Sandbox + 1 min
+    status: PENDING_PORTAL
+
+  # ────────────────────────────────────────────────────────────
+  # Conversion
+  # ────────────────────────────────────────────────────────────
+  - id: SLO-P2-CONV-1
+    description: "Conversion rate Sandbox → POC (90 j)"
+    comparator: gte
+    threshold_ratio: 0.10          # 10 %
+    status: PENDING_PORTAL
+
+  - id: SLO-P2-CONV-2
+    description: "Conversion rate signup → completion"
+    comparator: gte
+    threshold_ratio: 0.50          # 50 %
+    status: PENDING_PORTAL
+
+  # ────────────────────────────────────────────────────────────
+  # Abandons
+  # ────────────────────────────────────────────────────────────
+  - id: SLO-P2-ABANDON-1
+    description: "Abandon rate à l'étape provisioning (step 6)"
+    comparator: lte
+    threshold_ratio: 0.05          # 5 %
+    status: PENDING_CLOUD_PARITY
+
+  - id: SLO-P2-ABANDON-2
+    description: "Abandon rate à l'étape catalog seed (step 9)"
+    comparator: lte
+    threshold_ratio: 0.10          # 10 %
+    status: PENDING_PORTAL
+
+  # ────────────────────────────────────────────────────────────
+  # Cloud parity + Rollback + GDPR delete
+  # ────────────────────────────────────────────────────────────
+  - id: SLO-P2-CLOUD-PARITY
+    description: "Écart max p90 entre 3 clouds"
+    comparator: lte
+    threshold_ratio: 1.5           # max/min ≤ 1.5×
+    status: PENDING_CLOUD_PARITY
+
+  - id: SLO-P2-ROLLBACK
+    description: "Rollback success rate sur DELETE tenant"
+    comparator: gte
+    threshold_ratio: 1.0           # 100 %
+    status: PENDING_SAGA
+
+  - id: SLO-P2-DELETE-GDPR
+    description: "T-T-Delete (art.17) p99"
+    quantile: 0.99
+    comparator: lte
+    threshold_seconds: 900         # 15 min
+    status: PENDING_SAGA
+
+  # ────────────────────────────────────────────────────────────
+  # Méta-SLOs ACTIVE en v0.2.0
+  # ────────────────────────────────────────────────────────────
+  - id: SLO-P2-HUMAN-INTERVENTION
+    description: "% sessions ayant requis un appel SE ou ticket support"
+    comparator: lte
+    threshold_ratio: 0.05          # ≤ 5 %
+    status: ACTIVE
+    contract_clause: "P2-§1.1"
+    note: "Source : recording rule efe:p2_human_intervention_ratio:24h"
+
+  - id: SLO-P2-DOCS-DRIFT
+    description: "Drift entre doc quickstart snippets et code (nombre)"
+    comparator: eq
+    threshold_count: 0
+    status: ACTIVE
+    note: "Pin par scripts/tests/test_doc_snippets.py."
+
+  - id: SLO-P2-BURN
+    description: "Multi-window burn rate (1h/6h/24h)"
+    comparator: lte
+    thresholds:
+      fast_burn_1h: 14.4
+      slow_burn_6h: 6.0
+      ticket_24h: 1.0
+    status: ACTIVE
+    note: "Gated par Prometheus rules.p2/alerts.yaml."
