@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block tenant_task %}home{% endblock %}
+{% block body %}
+<div class="card">
+    <h2>Choose a task to label</h2>
+    <form method="get" action="" onsubmit="event.preventDefault();
+        const t = document.getElementById('t').value;
+        const k = document.getElementById('k').value;
+        const a = document.getElementById('a').value;
+        window.location.href = '/labeler/' + t + '/' + k + '?annotator_id=' + a;">
+        <label>Tenant <input id="t" value="acme"></label><br>
+        <label>Task <input id="k" value="support_routing"></label><br>
+        <label>Annotator id <input id="a" value="alice@acme"></label><br>
+        <button type="submit">Start</button>
+    </form>
+</div>
+{% endblock %}

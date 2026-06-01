@@ -1,0 +1,42 @@
+{% if next_sample_id or current_sample %}
+<div id="sample-card"
+     class="card"
+     data-session-id="{{ session_id }}"
+     data-sample-id="{{ next_sample_id or current_sample.id }}"
+     data-label-url="/labeler/{{ tenant }}/{{ task }}/label"
+     data-flag-url="/labeler/{{ tenant }}/{{ task }}/flag"
+     data-shown-at="{{ (now | default('0')) }}"
+     {% for i in range(class_set|length) %}
+       data-class{{ i + 1 }}="{{ class_set[i] }}"
+     {% endfor %}>
+    <p class="sample-text">
+        {% if current_sample %}
+            {{ current_sample.text }}
+        {% else %}
+            (sample_id: {{ next_sample_id }} — reload to fetch full text)
+        {% endif %}
+    </p>
+    {% if escalated %}
+        <p class="escalated">Disagreement captured — ref {{ escalation_ref }}</p>
+    {% endif %}
+    <form hx-post="/labeler/{{ tenant }}/{{ task }}/label"
+          hx-target="#sample-container" hx-swap="innerHTML">
+        <input type="hidden" name="session_id" value="{{ session_id }}">
+        <input type="hidden" name="sample_id"
+               value="{{ next_sample_id or current_sample.id }}">
+        <ul class="classes">
+            {% for cls in class_set %}
+                <li><button name="label" value="{{ cls }}">
+                    <span class="key">{{ loop.index }}</span>{{ cls }}
+                </button></li>
+            {% endfor %}
+        </ul>
+    </form>
+</div>
+{% else %}
+<div class="card">
+    <h3>Batch done 🎉</h3>
+    <p>No more samples in the current batch. Refresh the page to get a new
+       batch from the active-learning pool.</p>
+</div>
+{% endif %}

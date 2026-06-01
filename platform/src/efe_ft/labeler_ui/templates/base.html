@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="utf-8">
+    <title>EFE Labeler</title>
+    <script src="https://unpkg.com/htmx.org@1.9.12"
+            integrity="sha384-ujb1lZYygJmzgSwoxRggbCHcjc0rB2XoQrxeTUQyRjrOnlCoYta87iKBWq3EsdM2"
+            crossorigin="anonymous"></script>
+    <style>
+        * { box-sizing: border-box; }
+        body { font-family: system-ui, -apple-system, sans-serif;
+               margin: 0; padding: 0; color: #1c1c1c; background: #fafbfc; }
+        header { background: #0b3d91; color: #fff; padding: .75rem 1rem;
+                 display: flex; justify-content: space-between;
+                 align-items: center; }
+        header h1 { margin: 0; font-size: 1rem; font-weight: 600; }
+        main { max-width: 72rem; margin: 1rem auto; padding: 0 1rem; }
+        .card { background: #fff; border: 1px solid #b0b7c3;
+                border-radius: .5rem; padding: 1rem; margin-bottom: 1rem; }
+        .layout { display: grid; grid-template-columns: 1fr 20rem;
+                  gap: 1rem; }
+        .sample-text { font-size: 1.1rem; line-height: 1.5;
+                       background: #eef2f7; padding: 1rem; border-radius: .3rem; }
+        .classes { list-style: none; padding: 0; margin: 0; }
+        .classes li button { display: flex; width: 100%; text-align: left;
+                             background: #eef2f7; border: 1px solid #b0b7c3;
+                             border-radius: .3rem; padding: .5rem .75rem;
+                             margin: .25rem 0; font-size: .95rem;
+                             cursor: pointer; }
+        .classes li button:hover { background: #fff3bf; }
+        .key { display: inline-block; width: 1.5rem; height: 1.5rem;
+               line-height: 1.5rem; text-align: center; background: #0b3d91;
+               color: #fff; border-radius: .2rem; margin-right: .5rem;
+               font-weight: bold; }
+        .footer { font-size: .8rem; color: #5a5a5a; margin-top: 1rem; }
+        .neighbours { font-size: .85rem; color: #5a5a5a;
+                      background: #fff3bf; padding: .5rem;
+                      border-radius: .3rem; margin-top: .5rem; }
+        .neighbours ul { margin: .25rem 0; padding-left: 1.2rem; }
+        .stats { font-size: .85rem; }
+        .stats dt { font-weight: bold; }
+        .progress { height: .4rem; background: #b0b7c3; border-radius: .2rem;
+                    overflow: hidden; margin: .5rem 0; }
+        .progress > span { display: block; height: 100%;
+                           background: #2e8b57; }
+        .escalated { color: #e67e22; font-weight: bold; }
+        .resolved { color: #2e8b57; }
+        kbd { font-family: monospace; background: #1c1c1c; color: #fff;
+              padding: .1rem .3rem; border-radius: .2rem; font-size: .8rem; }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>EFE Labeler — {% block tenant_task %}{% endblock %}</h1>
+        <span style="font-size:.85rem">v{{ version | default('1.0.0') }}</span>
+    </header>
+    <main>
+        {% block body %}{% endblock %}
+    </main>
+    <script>
+    // Keyboard shortcuts: 1..8 → submit label, Space → skip, U → unclear, P → harmful
+    document.addEventListener('keydown', function (e) {
+        if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) return;
+        const card = document.getElementById('sample-card');
+        if (!card) return;
+        const sampleId = card.dataset.sampleId;
+        if (!sampleId) return;
+        const submit = function (label, url, extra = {}) {
+            const form = new FormData();
+            form.append('session_id', card.dataset.sessionId);
+            form.append('sample_id', sampleId);
+            for (const [k, v] of Object.entries(extra)) form.append(k, v);
+            if (label) form.append('label', label);
+            fetch(url, { method: 'POST', body: form })
+                .then(r => r.text())
+                .then(html => document.getElementById('sample-container').innerHTML = html);
+        };
+        const n = parseInt(e.key, 10);
+        if (!isNaN(n) && n >= 1 && n <= 8) {
+            const label = card.dataset['class' + n];
+            if (label) submit(label, card.dataset.labelUrl, { time_ms: Date.now() - (parseInt(card.dataset.shownAt) || 0) });
+        } else if (e.key === ' ') {
+            submit(null, card.dataset.flagUrl, { reason: 'skip' }); e.preventDefault();
+        } else if (e.key === 'u' || e.key === 'U') {
+            submit(null, card.dataset.flagUrl, { reason: 'unclear' });
+        } else if (e.key === 'p' || e.key === 'P') {
+            submit(null, card.dataset.flagUrl, { reason: 'harmful' });
+        }
+    });
+    </script>
+</body>
+</html>

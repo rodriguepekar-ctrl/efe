@@ -1,0 +1,9 @@
+<dl class="stats">
+    <dt>Annotator</dt><dd>{{ stats.annotator_id }}</dd>
+    <dt>Labels submitted</dt><dd>{{ stats.labels_submitted }}</dd>
+    <dt>Avg time / label</dt><dd>{{ '%.0f' | format(stats.avg_time_ms) }} ms</dd>
+    <dt>κ vs peers</dt><dd>{{ '%.2f' | format(stats.kappa_vs_peers) }}</dd>
+</dl>
+{% if stats.kappa_vs_peers < 0.7 and stats.labels_submitted > 50 %}
+<p style="color:#c0392b">⚠ κ low — please check the guidelines.</p>
+{% endif %}

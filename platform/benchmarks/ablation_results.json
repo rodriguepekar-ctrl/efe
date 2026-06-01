@@ -1,0 +1,3432 @@
+{
+  "dataset": {
+    "seed": 42,
+    "n_classes": 8,
+    "class_names": [
+      "billing",
+      "authentication",
+      "shipping",
+      "refund",
+      "technical_bug",
+      "account_management",
+      "complaint",
+      "general_inquiry"
+    ],
+    "n_easy_test": 167,
+    "n_easy_calibration": 83,
+    "n_hard": 250
+  },
+  "variants": {
+    "baseline": {
+      "slices": {
+        "easy": {
+          "name": "baseline",
+          "slice_label": "easy",
+          "n_queries": 167,
+          "accuracy": 1.0,
+          "macro_f1": 1.0,
+          "per_class_f1": {
+            "billing": 1.0,
+            "authentication": 1.0,
+            "shipping": 1.0,
+            "refund": 1.0,
+            "technical_bug": 1.0,
+            "account_management": 1.0,
+            "complaint": 1.0,
+            "general_inquiry": 1.0
+          },
+          "latency_us": {
+            "p50": 8.75,
+            "p95": 9.8,
+            "p99": 11.02,
+            "mean": 8.86
+          },
+          "ece": 0.2119,
+          "confusion": {
+            "billing": {
+              "billing": 21,
+              "authentication": 0,
+              "shipping": 0,
+              "refund": 0,
+              "technical_bug": 0,
+              "account_management": 0,
+              "complaint": 0,
+              "general_inquiry": 0
+            },
+            "authentication": {
+              "billing": 0,
+              "authentication": 21,
+              "shipping": 0,
+              "refund": 0,
+              "technical_bug": 0,
+              "account_management": 0,
+              "complaint": 0,
+              "general_inquiry": 0
+            },
+            "shipping": {
+              "billing": 0,
+              "authentication": 0,
+              "shipping": 20,
+              "refund": 0,
+              "technical_bug": 0,
+              "account_management": 0,
+              "complaint": 0,
+              "general_inquiry": 0
+            },
+            "refund": {
+              "billing": 0,
+              "authentication": 0,
+              "shipping": 0,
+              "refund": 21,
+              "technical_bug": 0,
+              "account_management": 0,
+              "complaint": 0,
+              "general_inquiry": 0
+            },
+            "technical_bug": {
+              "billing": 0,
+              "authentication": 0,
+              "shipping": 0,
+              "refund": 0,
+              "technical_bug": 21,
+              "account_management": 0,
+              "complaint": 0,
+              "general_inquiry": 0
+            },
+            "account_management": {
+              "billing": 0,
+              "authentication": 0,
+              "shipping": 0,
+              "refund": 0,
+              "technical_bug": 0,
+              "account_management": 21,
+              "complaint": 0,
+              "general_inquiry": 0
+            },
+            "complaint": {
+              "billing": 0,
+              "authentication": 0,
+              "shipping": 0,
+              "refund": 0,
+              "technical_bug": 0,
+              "account_management": 0,
+              "complaint": 21,
+              "general_inquiry": 0
+            },
+            "general_inquiry": {
+              "billing": 0,
+              "authentication": 0,
+              "shipping": 0,
+              "refund": 0,
+              "technical_bug": 0,
+              "account_management": 0,
+              "complaint": 0,
+              "general_inquiry": 21
+            }
+          },
+          "extras": {}
+        },
+        "hard": {
+          "name": "baseline",
+          "slice_label": "hard",
+          "n_queries": 250,
+          "accuracy": 0.564,
+          "macro_f1": 0.563,
+          "per_class_f1": {
+            "billing": 0.6207,
+            "authentication": 0.5902,
+            "shipping": 0.4407,
+            "refund": 0.6087,
+            "technical_bug": 0.5455,
+            "account_management": 0.5797,
+            "complaint": 0.5614,
+            "general_inquiry": 0.5574
+          },
+          "latency_us": {
+            "p50": 8.67,
+            "p95": 9.55,
+            "p99": 10.29,
+            "mean": 8.71
+          },
+          "ece": 0.2845,
+          "confusion": {
+            "billing": {
+              "billing": 18,
+              "authentication": 0,
+              "shipping": 1,
+              "refund": 12,
+              "technical_bug": 1,
+              "account_management": 0,
+              "complaint": 0,
+              "general_inquiry": 0
+            },
+            "authentication": {
+              "billing": 1,
+              "authentication": 18,
+              "shipping": 0,
+              "refund": 0,
+              "technical_bug": 0,
+              "account_management": 11,
+              "complaint": 0,
+              "general_inquiry": 2
+            },
+            "shipping": {
+              "billing": 1,
+              "authentication": 2,
+              "shipping": 13,
+              "refund": 2,
+              "technical_bug": 0,
+              "account_management": 3,
+              "complaint": 10,
+              "general_inquiry": 0
+            },
+            "refund": {
+              "billing": 6,
+              "authentication": 1,
+              "shipping": 0,
+              "refund": 21,
+              "technical_bug": 2,
+              "account_management": 1,
+              "complaint": 0,
+              "general_inquiry": 0
+            },
+            "technical_bug": {
+              "billing": 0,
+              "authentication": 0,
+              "shipping": 2,
+              "refund": 0,
+              "technical_bug": 18,
+              "account_management": 3,
+              "complaint": 0,
+              "general_inquiry": 8
+            },
+            "account_management": {
+              "billing": 0,
+              "authentication": 6,
+              "shipping": 0,
+              "refund": 1,
+              "technical_bug": 2,
+              "account_management": 20,
+              "complaint": 0,
+              "general_inquiry": 2
+            },
+            "complaint": {
+              "billing": 0,
+              "authentication": 0,
+              "shipping": 12,
+              "refund": 1,
+              "technical_bug": 1,
+              "account_management": 0,
+              "complaint": 16,
+              "general_inquiry": 1
+            },
+            "general_inquiry": {
+              "billing": 0,
+              "authentication": 2,
+              "shipping": 0,
+              "refund": 1,
+              "technical_bug": 11,
+              "account_management": 0,
+              "complaint": 0,
+              "general_inquiry": 17
+            }
+          },
+          "extras": {}
+        },
+        "all": {
+          "name": "baseline",
+          "slice_label": "all",
+          "n_queries": 417,
+          "accuracy": 0.7386,
+          "macro_f1": 0.7384,
+          "per_class_f1": {
+            "billing": 0.78,
+            "authentication": 0.7573,
+            "shipping": 0.6667,
+            "refund": 0.7568,
+            "technical_bug": 0.7222,
+            "account_management": 0.7387,
+            "complaint": 0.7475,
+            "general_inquiry": 0.7379
+          },
+          "latency_us": {
+            "p50": 8.71,
+            "p95": 9.72,
+            "p99": 10.53,
+            "mean": 8.77
+          },
+          "ece": 0.2554,
+          "confusion": {
+            "billing": {
+              "billing": 39,
+              "authentication": 0,
+              "shipping": 1,
+              "refund": 12,
+              "technical_bug": 1,
+              "account_management": 0,
+              "complaint": 0,
+              "general_inquiry": 0
+            },
+            "authentication": {
+              "billing": 1,
+              "authentication": 39,
+              "shipping": 0,
+              "refund": 0,
+              "technical_bug": 0,
+              "account_management": 11,
+              "complaint": 0,
+              "general_inquiry": 2
+            },
+            "shipping": {
+              "billing": 1,
+              "authentication": 2,
+              "shipping": 33,
+              "refund": 2,
+              "technical_bug": 0,
+              "account_management": 3,
+              "complaint": 10,
+              "general_inquiry": 0
+            },
+            "refund": {
+              "billing": 6,
+              "authentication": 1,
+              "shipping": 0,
+              "refund": 42,
+              "technical_bug": 2,
+              "account_management": 1,
+              "complaint": 0,
+              "general_inquiry": 0
+            },
+            "technical_bug": {
+              "billing": 0,
+              "authentication": 0,
+              "shipping": 2,
+              "refund": 0,
+              "technical_bug": 39,
+              "account_management": 3,
+              "complaint": 0,
+              "general_inquiry": 8
+            },
+            "account_management": {
+              "billing": 0,
+              "authentication": 6,
+              "shipping": 0,
+              "refund": 1,
+              "technical_bug": 2,
+              "account_management": 41,
+              "complaint": 0,
+              "general_inquiry": 2
+            },
+            "complaint": {
+              "billing": 0,
+              "authentication": 0,
+              "shipping": 12,
+              "refund": 1,
+              "technical_bug": 1,
+              "account_management": 0,
+              "complaint": 37,
+              "general_inquiry": 1
+            },
+            "general_inquiry": {
+              "billing": 0,
+              "authentication": 2,
+              "shipping": 0,
+              "refund": 1,
+              "technical_bug": 11,
+              "account_management": 0,
+              "complaint": 0,
+              "general_inquiry": 38
+            }
+          },
+          "extras": {}
+        }
+      },
+      "verdict_stats": {},
+      "wall_clock_seconds": 0.0044
+    },
+    "V1": {
+      "slices": {
+        "easy": {
+          "name": "V1",
+          "slice_label": "easy",
+          "n_queries": 167,
+          "accuracy": 1.0,
+          "macro_f1": 1.0,
+          "per_class_f1": {
+            "billing": 1.0,
+            "authentication": 1.0,
+            "shipping": 1.0,
+            "refund": 1.0,
+            "technical_bug": 1.0,
+            "account_management": 1.0,
+            "complaint": 1.0,
+            "general_inquiry": 1.0
+          },
+          "latency_us": {
+            "p50": 2338.67,
+            "p95": 3119.84,
+            "p99": 3311.73,
+            "mean": 2420.61
+          },
+          "ece": 0.0127,
+          "confusion": {
+            "billing": {
+              "billing": 21,
+              "authentication": 0,
+              "shipping": 0,
+              "refund": 0,
+              "technical_bug": 0,
+              "account_management": 0,
+              "complaint": 0,
+              "general_inquiry": 0
+            },
+            "authentication": {
+              "billing": 0,
+              "authentication": 21,
+              "shipping": 0,
+              "refund": 0,
+              "technical_bug": 0,
+              "account_management": 0,
+              "complaint": 0,
+              "general_inquiry": 0
+            },
+            "shipping": {
+              "billing": 0,
+              "authentication": 0,
+              "shipping": 20,
+              "refund": 0,
+              "technical_bug": 0,
+              "account_management": 0,
+              "complaint": 0,
+              "general_inquiry": 0
+            },
+            "refund": {
+              "billing": 0,
+              "authentication": 0,
+              "shipping": 0,
+              "refund": 21,
+              "technical_bug": 0,
+              "account_management": 0,
+              "complaint": 0,
+              "general_inquiry": 0
+            },
+            "technical_bug": {
+              "billing": 0,
+              "authentication": 0,
+              "shipping": 0,
+              "refund": 0,
+              "technical_bug": 21,
+              "account_management": 0,
+              "complaint": 0,
+              "general_inquiry": 0
+            },
+            "account_management": {
+              "billing": 0,
+              "authentication": 0,
+              "shipping": 0,
+              "refund": 0,
+              "technical_bug": 0,
+              "account_management": 21,
+              "complaint": 0,
+              "general_inquiry": 0
+            },
+            "complaint": {
+              "billing": 0,
+              "authentication": 0,
+              "shipping": 0,
+              "refund": 0,
+              "technical_bug": 0,
+              "account_management": 0,
+              "complaint": 21,
+              "general_inquiry": 0
+            },
+            "general_inquiry": {
+              "billing": 0,
+              "authentication": 0,
+              "shipping": 0,
+              "refund": 0,
+              "technical_bug": 0,
+              "account_management": 0,
+              "complaint": 0,
+              "general_inquiry": 21
+            }
+          },
+          "extras": {}
+        },
+        "hard": {
+          "name": "V1",
+          "slice_label": "hard",
+          "n_queries": 250,
+          "accuracy": 0.564,
+          "macro_f1": 0.5625,
+          "per_class_f1": {
+            "billing": 0.6102,
+            "authentication": 0.5902,
+            "shipping": 0.4483,
+            "refund": 0.6087,
+            "technical_bug": 0.5455,
+            "account_management": 0.5882,
+            "complaint": 0.5517,
+            "general_inquiry": 0.5574
+          },
+          "latency_us": {
+            "p50": 2253.98,
+            "p95": 2756.04,
+            "p99": 3159.44,
+            "mean": 2296.0
+          },
+          "ece": 0.1035,
+          "confusion": {
+            "billing": {
+              "billing": 18,
+              "authentication": 0,
+              "shipping": 1,
+              "refund": 12,
+              "technical_bug": 1,
+              "account_management": 0,
+              "complaint": 0,
+              "general_inquiry": 0
+            },
+            "authentication": {
+              "billing": 1,
+              "authentication": 18,
+              "shipping": 0,
+              "refund": 0,
+              "technical_bug": 0,
+              "account_management": 11,
+              "complaint": 0,
+              "general_inquiry": 2
+            },
+            "shipping": {
+              "billing": 1,
+              "authentication": 2,
+              "shipping": 13,
+              "refund": 2,
+              "technical_bug": 0,
+              "account_management": 2,
+              "complaint": 11,
+              "general_inquiry": 0
+            },
+            "refund": {
+              "billing": 6,
+              "authentication": 1,
+              "shipping": 0,
+              "refund": 21,
+              "technical_bug": 2,
+              "account_management": 1,
+              "complaint": 0,
+              "general_inquiry": 0
+            },
+            "technical_bug": {
+              "billing": 0,
+              "authentication": 0,
+              "shipping": 2,
+              "refund": 0,
+              "technical_bug": 18,
+              "account_management": 3,
+              "complaint": 0,
+              "general_inquiry": 8
+            },
+            "account_management": {
+              "billing": 0,
+              "authentication": 6,
+              "shipping": 0,
+              "refund": 1,
+              "technical_bug": 2,
+              "account_management": 20,
+              "complaint": 0,
+              "general_inquiry": 2
+            },
+            "complaint": {
+              "billing": 1,
+              "authentication": 0,
+              "shipping": 11,
+              "refund": 1,
+              "technical_bug": 1,
+              "account_management": 0,
+              "complaint": 16,
+              "general_inquiry": 1
+            },
+            "general_inquiry": {
+              "billing": 0,
+              "authentication": 2,
+              "shipping": 0,
+              "refund": 1,
+              "technical_bug": 11,
+              "account_management": 0,
+              "complaint": 0,
+              "general_inquiry": 17
+            }
+          },
+          "extras": {}
+        },
+        "all": {
+          "name": "V1",
+          "slice_label": "all",
+          "n_queries": 417,
+          "accuracy": 0.7386,
+          "macro_f1": 0.7382,
+          "per_class_f1": {
+            "billing": 0.7723,
+            "authentication": 0.7573,
+            "shipping": 0.6735,
+            "refund": 0.7568,
+            "technical_bug": 0.7222,
+            "account_management": 0.7455,
+            "complaint": 0.74,
+            "general_inquiry": 0.7379
+          },
+          "latency_us": {
+            "p50": 2284.75,
+            "p95": 2927.6,
+            "p99": 3240.52,
+            "mean": 2345.9
+          },
+          "ece": 0.0671,
+          "confusion": {
+            "billing": {
+              "billing": 39,
+              "authentication": 0,
+              "shipping": 1,
+              "refund": 12,
+              "technical_bug": 1,
+              "account_management": 0,
+              "complaint": 0,
+              "general_inquiry": 0
+            },
+            "authentication": {
+              "billing": 1,
+              "authentication": 39,
+              "shipping": 0,
+              "refund": 0,
+              "technical_bug": 0,
+              "account_management": 11,
+              "complaint": 0,
+              "general_inquiry": 2
+            },
+            "shipping": {
+              "billing": 1,
+              "authentication": 2,
+              "shipping": 33,
+              "refund": 2,
+              "technical_bug": 0,
+              "account_management": 2,
+              "complaint": 11,
+              "general_inquiry": 0
+            },
+            "refund": {
+              "billing": 6,
+              "authentication": 1,
+              "shipping": 0,
+              "refund": 42,
+              "technical_bug": 2,
+              "account_management": 1,
+              "complaint": 0,
+              "general_inquiry": 0
+            },
+            "technical_bug": {
+              "billing": 0,
+              "authentication": 0,
+              "shipping": 2,
+              "refund": 0,
+              "technical_bug": 39,
+              "account_management": 3,
+              "complaint": 0,
+              "general_inquiry": 8
+            },
+            "account_management": {
+              "billing": 0,
+              "authentication": 6,
+              "shipping": 0,
+              "refund": 1,
+              "technical_bug": 2,
+              "account_management": 41,
+              "complaint": 0,
+              "general_inquiry": 2
+            },
+            "complaint": {
+              "billing": 1,
+              "authentication": 0,
+              "shipping": 11,
+              "refund": 1,
+              "technical_bug": 1,
+              "account_management": 0,
+              "complaint": 37,
+              "general_inquiry": 1
+            },
+            "general_inquiry": {
+              "billing": 0,
+              "authentication": 2,
+              "shipping": 0,
+              "refund": 1,
+              "technical_bug": 11,
+              "account_management": 0,
+              "complaint": 0,
+              "general_inquiry": 38
+            }
+          },
+          "extras": {}
+        }
+      },
+      "verdict_stats": {
+        "CONVERGED": {
+          "n": 377,
+          "correct": 292
+        },
+        "CONTINUE": {
+          "n": 4,
+          "correct": 1
+        },
+        "DIVERGENCE": {
+          "n": 32,
+          "correct": 12
+        },
+        "MODE_COLLAPSE": {
+          "n": 4,
+          "correct": 3
+        }
+      },
+      "wall_clock_seconds": 1.0411
+    },
+    "V2_orthogonal": {
+      "slices": {
+        "easy": {
+          "name": "V2_orthogonal",
+          "slice_label": "easy",
+          "n_queries": 167,
+          "accuracy": 1.0,
+          "macro_f1": 1.0,
+          "per_class_f1": {
+            "billing": 1.0,
+            "authentication": 1.0,
+            "shipping": 1.0,
+            "refund": 1.0,
+            "technical_bug": 1.0,
+            "account_management": 1.0,
+            "complaint": 1.0,
+            "general_inquiry": 1.0
+          },
+          "latency_us": {
+            "p50": 27694.0,
+            "p95": 29354.91,
+            "p99": 32624.56,
+            "mean": 27926.81
+          },
+          "ece": 0.0131,
+          "confusion": {
+            "billing": {
+              "billing": 21,
+              "authentication": 0,
+              "shipping": 0,
+              "refund": 0,
+              "technical_bug": 0,
+              "account_management": 0,
+              "complaint": 0,
+              "general_inquiry": 0
+            },
+            "authentication": {
+              "billing": 0,
+              "authentication": 21,
+              "shipping": 0,
+              "refund": 0,
+              "technical_bug": 0,
+              "account_management": 0,
+              "complaint": 0,
+              "general_inquiry": 0
+            },
+            "shipping": {
+              "billing": 0,
+              "authentication": 0,
+              "shipping": 20,
+              "refund": 0,
+              "technical_bug": 0,
+              "account_management": 0,
+              "complaint": 0,
+              "general_inquiry": 0
+            },
+            "refund": {
+              "billing": 0,
+              "authentication": 0,
+              "shipping": 0,
+              "refund": 21,
+              "technical_bug": 0,
+              "account_management": 0,
+              "complaint": 0,
+              "general_inquiry": 0
+            },
+            "technical_bug": {
+              "billing": 0,
+              "authentication": 0,
+              "shipping": 0,
+              "refund": 0,
+              "technical_bug": 21,
+              "account_management": 0,
+              "complaint": 0,
+              "general_inquiry": 0
+            },
+            "account_management": {
+              "billing": 0,
+              "authentication": 0,
+              "shipping": 0,
+              "refund": 0,
+              "technical_bug": 0,
+              "account_management": 21,
+              "complaint": 0,
+              "general_inquiry": 0
+            },
+            "complaint": {
+              "billing": 0,
+              "authentication": 0,
+              "shipping": 0,
+              "refund": 0,
+              "technical_bug": 0,
+              "account_management": 0,
+              "complaint": 21,
+              "general_inquiry": 0
+            },
+            "general_inquiry": {
+              "billing": 0,
+              "authentication": 0,
+              "shipping": 0,
+              "refund": 0,
+              "technical_bug": 0,
+              "account_management": 0,
+              "complaint": 0,
+              "general_inquiry": 21
+            }
+          },
+          "extras": {}
+        },
+        "hard": {
+          "name": "V2_orthogonal",
+          "slice_label": "hard",
+          "n_queries": 250,
+          "accuracy": 0.556,
+          "macro_f1": 0.5539,
+          "per_class_f1": {
+            "billing": 0.6102,
+            "authentication": 0.5667,
+            "shipping": 0.4286,
+            "refund": 0.6,
+            "technical_bug": 0.5455,
+            "account_management": 0.5714,
+            "complaint": 0.5517,
+            "general_inquiry": 0.5574
+          },
+          "latency_us": {
+            "p50": 27615.38,
+            "p95": 29912.67,
+            "p99": 42165.31,
+            "mean": 28219.87
+          },
+          "ece": 0.0831,
+          "confusion": {
+            "billing": {
+              "billing": 18,
+              "authentication": 0,
+              "shipping": 0,
+              "refund": 13,
+              "technical_bug": 1,
+              "account_management": 0,
+              "complaint": 0,
+              "general_inquiry": 0
+            },
+            "authentication": {
+              "billing": 1,
+              "authentication": 17,
+              "shipping": 0,
+              "refund": 0,
+              "technical_bug": 0,
+              "account_management": 12,
+              "complaint": 0,
+              "general_inquiry": 2
+            },
+            "shipping": {
+              "billing": 1,
+              "authentication": 2,
+              "shipping": 12,
+              "refund": 2,
+              "technical_bug": 0,
+              "account_management": 3,
+              "complaint": 11,
+              "general_inquiry": 0
+            },
+            "refund": {
+              "billing": 6,
+              "authentication": 1,
+              "shipping": 0,
+              "refund": 21,
+              "technical_bug": 2,
+              "account_management": 1,
+              "complaint": 0,
+              "general_inquiry": 0
+            },
+            "technical_bug": {
+              "billing": 0,
+              "authentication": 0,
+              "shipping": 2,
+              "refund": 0,
+              "technical_bug": 18,
+              "account_management": 3,
+              "complaint": 0,
+              "general_inquiry": 8
+            },
+            "account_management": {
+              "billing": 0,
+              "authentication": 6,
+              "shipping": 0,
+              "refund": 1,
+              "technical_bug": 2,
+              "account_management": 20,
+              "complaint": 0,
+              "general_inquiry": 2
+            },
+            "complaint": {
+              "billing": 1,
+              "authentication": 0,
+              "shipping": 11,
+              "refund": 1,
+              "technical_bug": 1,
+              "account_management": 0,
+              "complaint": 16,
+              "general_inquiry": 1
+            },
+            "general_inquiry": {
+              "billing": 0,
+              "authentication": 2,
+              "shipping": 0,
+              "refund": 1,
+              "technical_bug": 11,
+              "account_management": 0,
+              "complaint": 0,
+              "general_inquiry": 17
+            }
+          },
+          "extras": {}
+        },
+        "all": {
+          "name": "V2_orthogonal",
+          "slice_label": "all",
+          "n_queries": 417,
+          "accuracy": 0.7338,
+          "macro_f1": 0.7333,
+          "per_class_f1": {
+            "billing": 0.7723,
+            "authentication": 0.7451,
+            "shipping": 0.6667,
+            "refund": 0.75,
+            "technical_bug": 0.7222,
+            "account_management": 0.7321,
+            "complaint": 0.74,
+            "general_inquiry": 0.7379
+          },
+          "latency_us": {
+            "p50": 27660.42,
+            "p95": 29444.66,
+            "p99": 36891.48,
+            "mean": 28102.51
+          },
+          "ece": 0.055,
+          "confusion": {
+            "billing": {
+              "billing": 39,
+              "authentication": 0,
+              "shipping": 0,
+              "refund": 13,
+              "technical_bug": 1,
+              "account_management": 0,
+              "complaint": 0,
+              "general_inquiry": 0
+            },
+            "authentication": {
+              "billing": 1,
+              "authentication": 38,
+              "shipping": 0,
+              "refund": 0,
+              "technical_bug": 0,
+              "account_management": 12,
+              "complaint": 0,
+              "general_inquiry": 2
+            },
+            "shipping": {
+              "billing": 1,
+              "authentication": 2,
+              "shipping": 32,
+              "refund": 2,
+              "technical_bug": 0,
+              "account_management": 3,
+              "complaint": 11,
+              "general_inquiry": 0
+            },
+            "refund": {
+              "billing": 6,
+              "authentication": 1,
+              "shipping": 0,
+              "refund": 42,
+              "technical_bug": 2,
+              "account_management": 1,
+              "complaint": 0,
+              "general_inquiry": 0
+            },
+            "technical_bug": {
+              "billing": 0,
+              "authentication": 0,
+              "shipping": 2,
+              "refund": 0,
+              "technical_bug": 39,
+              "account_management": 3,
+              "complaint": 0,
+              "general_inquiry": 8
+            },
+            "account_management": {
+              "billing": 0,
+              "authentication": 6,
+              "shipping": 0,
+              "refund": 1,
+              "technical_bug": 2,
+              "account_management": 41,
+              "complaint": 0,
+              "general_inquiry": 2
+            },
+            "complaint": {
+              "billing": 1,
+              "authentication": 0,
+              "shipping": 11,
+              "refund": 1,
+              "technical_bug": 1,
+              "account_management": 0,
+              "complaint": 37,
+              "general_inquiry": 1
+            },
+            "general_inquiry": {
+              "billing": 0,
+              "authentication": 2,
+              "shipping": 0,
+              "refund": 1,
+              "technical_bug": 11,
+              "account_management": 0,
+              "complaint": 0,
+              "general_inquiry": 38
+            }
+          },
+          "extras": {}
+        }
+      },
+      "verdict_stats": {
+        "CONVERGED": {
+          "n": 360,
+          "correct": 275
+        },
+        "CONTINUE": {
+          "n": 27,
+          "correct": 21
+        },
+        "DIVERGENCE": {
+          "n": 14,
+          "correct": 4
+        },
+        "MODE_COLLAPSE": {
+          "n": 16,
+          "correct": 6
+        }
+      },
+      "wall_clock_seconds": 11.724
+    },
+    "V3_topk": {
+      "slices": {
+        "easy": {
+          "name": "V3_topk",
+          "slice_label": "easy",
+          "n_queries": 167,
+          "accuracy": 1.0,
+          "macro_f1": 1.0,
+          "per_class_f1": {
+            "billing": 1.0,
+            "authentication": 1.0,
+            "shipping": 1.0,
+            "refund": 1.0,
+            "technical_bug": 1.0,
+            "account_management": 1.0,
+            "complaint": 1.0,
+            "general_inquiry": 1.0
+          },
+          "latency_us": {
+            "p50": 4157.0,
+            "p95": 4615.63,
+            "p99": 5136.3,
+            "mean": 4206.84
+          },
+          "ece": 0.0181,
+          "confusion": {
+            "billing": {
+              "billing": 21,
+              "authentication": 0,
+              "shipping": 0,
+              "refund": 0,
+              "technical_bug": 0,
+              "account_management": 0,
+              "complaint": 0,
+              "general_inquiry": 0
+            },
+            "authentication": {
+              "billing": 0,
+              "authentication": 21,
+              "shipping": 0,
+              "refund": 0,
+              "technical_bug": 0,
+              "account_management": 0,
+              "complaint": 0,
+              "general_inquiry": 0
+            },
+            "shipping": {
+              "billing": 0,
+              "authentication": 0,
+              "shipping": 20,
+              "refund": 0,
+              "technical_bug": 0,
+              "account_management": 0,
+              "complaint": 0,
+              "general_inquiry": 0
+            },
+            "refund": {
+              "billing": 0,
+              "authentication": 0,
+              "shipping": 0,
+              "refund": 21,
+              "technical_bug": 0,
+              "account_management": 0,
+              "complaint": 0,
+              "general_inquiry": 0
+            },
+            "technical_bug": {
+              "billing": 0,
+              "authentication": 0,
+              "shipping": 0,
+              "refund": 0,
+              "technical_bug": 21,
+              "account_management": 0,
+              "complaint": 0,
+              "general_inquiry": 0
+            },
+            "account_management": {
+              "billing": 0,
+              "authentication": 0,
+              "shipping": 0,
+              "refund": 0,
+              "technical_bug": 0,
+              "account_management": 21,
+              "complaint": 0,
+              "general_inquiry": 0
+            },
+            "complaint": {
+              "billing": 0,
+              "authentication": 0,
+              "shipping": 0,
+              "refund": 0,
+              "technical_bug": 0,
+              "account_management": 0,
+              "complaint": 21,
+              "general_inquiry": 0
+            },
+            "general_inquiry": {
+              "billing": 0,
+              "authentication": 0,
+              "shipping": 0,
+              "refund": 0,
+              "technical_bug": 0,
+              "account_management": 0,
+              "complaint": 0,
+              "general_inquiry": 21
+            }
+          },
+          "extras": {}
+        },
+        "hard": {
+          "name": "V3_topk",
+          "slice_label": "hard",
+          "n_queries": 250,
+          "accuracy": 0.548,
+          "macro_f1": 0.5475,
+          "per_class_f1": {
+            "billing": 0.5938,
+            "authentication": 0.5333,
+            "shipping": 0.4918,
+            "refund": 0.5846,
+            "technical_bug": 0.5455,
+            "account_management": 0.5373,
+            "complaint": 0.5517,
+            "general_inquiry": 0.5424
+          },
+          "latency_us": {
+            "p50": 4269.29,
+            "p95": 4811.7,
+            "p99": 5147.46,
+            "mean": 4301.94
+          },
+          "ece": 0.0919,
+          "confusion": {
+            "billing": {
+              "billing": 19,
+              "authentication": 0,
+              "shipping": 1,
+              "refund": 11,
+              "technical_bug": 1,
+              "account_management": 0,
+              "complaint": 0,
+              "general_inquiry": 0
+            },
+            "authentication": {
+              "billing": 1,
+              "authentication": 16,
+              "shipping": 0,
+              "refund": 0,
+              "technical_bug": 0,
+              "account_management": 13,
+              "complaint": 0,
+              "general_inquiry": 2
+            },
+            "shipping": {
+              "billing": 2,
+              "authentication": 1,
+              "shipping": 15,
+              "refund": 1,
+              "technical_bug": 0,
+              "account_management": 2,
+              "complaint": 9,
+              "general_inquiry": 1
+            },
+            "refund": {
+              "billing": 8,
+              "authentication": 1,
+              "shipping": 0,
+              "refund": 19,
+              "technical_bug": 3,
+              "account_management": 0,
+              "complaint": 0,
+              "general_inquiry": 0
+            },
+            "technical_bug": {
+              "billing": 0,
+              "authentication": 1,
+              "shipping": 2,
+              "refund": 0,
+              "technical_bug": 18,
+              "account_management": 3,
+              "complaint": 0,
+              "general_inquiry": 7
+            },
+            "account_management": {
+              "billing": 0,
+              "authentication": 7,
+              "shipping": 2,
+              "refund": 1,
+              "technical_bug": 1,
+              "account_management": 18,
+              "complaint": 1,
+              "general_inquiry": 1
+            },
+            "complaint": {
+              "billing": 2,
+              "authentication": 0,
+              "shipping": 10,
+              "refund": 1,
+              "technical_bug": 1,
+              "account_management": 0,
+              "complaint": 16,
+              "general_inquiry": 1
+            },
+            "general_inquiry": {
+              "billing": 0,
+              "authentication": 2,
+              "shipping": 0,
+              "refund": 1,
+              "technical_bug": 11,
+              "account_management": 0,
+              "complaint": 1,
+              "general_inquiry": 16
+            }
+          },
+          "extras": {}
+        },
+        "all": {
+          "name": "V3_topk",
+          "slice_label": "all",
+          "n_queries": 417,
+          "accuracy": 0.729,
+          "macro_f1": 0.7289,
+          "per_class_f1": {
+            "billing": 0.7547,
+            "authentication": 0.7255,
+            "shipping": 0.6931,
+            "refund": 0.7477,
+            "technical_bug": 0.7222,
+            "account_management": 0.7156,
+            "complaint": 0.74,
+            "general_inquiry": 0.7327
+          },
+          "latency_us": {
+            "p50": 4222.67,
+            "p95": 4744.92,
+            "p99": 5162.05,
+            "mean": 4263.86
+          },
+          "ece": 0.0624,
+          "confusion": {
+            "billing": {
+              "billing": 40,
+              "authentication": 0,
+              "shipping": 1,
+              "refund": 11,
+              "technical_bug": 1,
+              "account_management": 0,
+              "complaint": 0,
+              "general_inquiry": 0
+            },
+            "authentication": {
+              "billing": 1,
+              "authentication": 37,
+              "shipping": 0,
+              "refund": 0,
+              "technical_bug": 0,
+              "account_management": 13,
+              "complaint": 0,
+              "general_inquiry": 2
+            },
+            "shipping": {
+              "billing": 2,
+              "authentication": 1,
+              "shipping": 35,
+              "refund": 1,
+              "technical_bug": 0,
+              "account_management": 2,
+              "complaint": 9,
+              "general_inquiry": 1
+            },
+            "refund": {
+              "billing": 8,
+              "authentication": 1,
+              "shipping": 0,
+              "refund": 40,
+              "technical_bug": 3,
+              "account_management": 0,
+              "complaint": 0,
+              "general_inquiry": 0
+            },
+            "technical_bug": {
+              "billing": 0,
+              "authentication": 1,
+              "shipping": 2,
+              "refund": 0,
+              "technical_bug": 39,
+              "account_management": 3,
+              "complaint": 0,
+              "general_inquiry": 7
+            },
+            "account_management": {
+              "billing": 0,
+              "authentication": 7,
+              "shipping": 2,
+              "refund": 1,
+              "technical_bug": 1,
+              "account_management": 39,
+              "complaint": 1,
+              "general_inquiry": 1
+            },
+            "complaint": {
+              "billing": 2,
+              "authentication": 0,
+              "shipping": 10,
+              "refund": 1,
+              "technical_bug": 1,
+              "account_management": 0,
+              "complaint": 37,
+              "general_inquiry": 1
+            },
+            "general_inquiry": {
+              "billing": 0,
+              "authentication": 2,
+              "shipping": 0,
+              "refund": 1,
+              "technical_bug": 11,
+              "account_management": 0,
+              "complaint": 1,
+              "general_inquiry": 37
+            }
+          },
+          "extras": {}
+        }
+      },
+      "verdict_stats": {
+        "CONVERGED": {
+          "n": 385,
+          "correct": 293
+        },
+        "DIVERGENCE": {
+          "n": 25,
+          "correct": 9
+        },
+        "CONTINUE": {
+          "n": 3,
+          "correct": 1
+        },
+        "MODE_COLLAPSE": {
+          "n": 4,
+          "correct": 1
+        }
+      },
+      "wall_clock_seconds": 1.8674
+    },
+    "V4_mahalanobis": {
+      "slices": {
+        "easy": {
+          "name": "V4_mahalanobis",
+          "slice_label": "easy",
+          "n_queries": 167,
+          "accuracy": 1.0,
+          "macro_f1": 1.0,
+          "per_class_f1": {
+            "billing": 1.0,
+            "authentication": 1.0,
+            "shipping": 1.0,
+            "refund": 1.0,
+            "technical_bug": 1.0,
+            "account_management": 1.0,
+            "complaint": 1.0,
+            "general_inquiry": 1.0
+          },
+          "latency_us": {
+            "p50": 3147.63,
+            "p95": 3620.32,
+            "p99": 3961.93,
+            "mean": 3225.64
+          },
+          "ece": 0.3002,
+          "confusion": {
+            "billing": {
+              "billing": 21,
+              "authentication": 0,
+              "shipping": 0,
+              "refund": 0,
+              "technical_bug": 0,
+              "account_management": 0,
+              "complaint": 0,
+              "general_inquiry": 0
+            },
+            "authentication": {
+              "billing": 0,
+              "authentication": 21,
+              "shipping": 0,
+              "refund": 0,
+              "technical_bug": 0,
+              "account_management": 0,
+              "complaint": 0,
+              "general_inquiry": 0
+            },
+            "shipping": {
+              "billing": 0,
+              "authentication": 0,
+              "shipping": 20,
+              "refund": 0,
+              "technical_bug": 0,
+              "account_management": 0,
+              "complaint": 0,
+              "general_inquiry": 0
+            },
+            "refund": {
+              "billing": 0,
+              "authentication": 0,
+              "shipping": 0,
+              "refund": 21,
+              "technical_bug": 0,
+              "account_management": 0,
+              "complaint": 0,
+              "general_inquiry": 0
+            },
+            "technical_bug": {
+              "billing": 0,
+              "authentication": 0,
+              "shipping": 0,
+              "refund": 0,
+              "technical_bug": 21,
+              "account_management": 0,
+              "complaint": 0,
+              "general_inquiry": 0
+            },
+            "account_management": {
+              "billing": 0,
+              "authentication": 0,
+              "shipping": 0,
+              "refund": 0,
+              "technical_bug": 0,
+              "account_management": 21,
+              "complaint": 0,
+              "general_inquiry": 0
+            },
+            "complaint": {
+              "billing": 0,
+              "authentication": 0,
+              "shipping": 0,
+              "refund": 0,
+              "technical_bug": 0,
+              "account_management": 0,
+              "complaint": 21,
+              "general_inquiry": 0
+            },
+            "general_inquiry": {
+              "billing": 0,
+              "authentication": 0,
+              "shipping": 0,
+              "refund": 0,
+              "technical_bug": 0,
+              "account_management": 0,
+              "complaint": 0,
+              "general_inquiry": 21
+            }
+          },
+          "extras": {}
+        },
+        "hard": {
+          "name": "V4_mahalanobis",
+          "slice_label": "hard",
+          "n_queries": 250,
+          "accuracy": 0.576,
+          "macro_f1": 0.5763,
+          "per_class_f1": {
+            "billing": 0.5882,
+            "authentication": 0.5667,
+            "shipping": 0.5484,
+            "refund": 0.5714,
+            "technical_bug": 0.5625,
+            "account_management": 0.5397,
+            "complaint": 0.6,
+            "general_inquiry": 0.6333
+          },
+          "latency_us": {
+            "p50": 3234.71,
+            "p95": 3732.68,
+            "p99": 4065.78,
+            "mean": 3294.47
+          },
+          "ece": 0.1594,
+          "confusion": {
+            "billing": {
+              "billing": 20,
+              "authentication": 0,
+              "shipping": 1,
+              "refund": 10,
+              "technical_bug": 1,
+              "account_management": 0,
+              "complaint": 0,
+              "general_inquiry": 0
+            },
+            "authentication": {
+              "billing": 2,
+              "authentication": 17,
+              "shipping": 0,
+              "refund": 0,
+              "technical_bug": 0,
+              "account_management": 11,
+              "complaint": 0,
+              "general_inquiry": 2
+            },
+            "shipping": {
+              "billing": 2,
+              "authentication": 0,
+              "shipping": 17,
+              "refund": 1,
+              "technical_bug": 0,
+              "account_management": 2,
+              "complaint": 9,
+              "general_inquiry": 0
+            },
+            "refund": {
+              "billing": 9,
+              "authentication": 1,
+              "shipping": 0,
+              "refund": 18,
+              "technical_bug": 3,
+              "account_management": 0,
+              "complaint": 0,
+              "general_inquiry": 0
+            },
+            "technical_bug": {
+              "billing": 0,
+              "authentication": 1,
+              "shipping": 3,
+              "refund": 0,
+              "technical_bug": 18,
+              "account_management": 2,
+              "complaint": 1,
+              "general_inquiry": 6
+            },
+            "account_management": {
+              "billing": 1,
+              "authentication": 7,
+              "shipping": 2,
+              "refund": 1,
+              "technical_bug": 1,
+              "account_management": 17,
+              "complaint": 1,
+              "general_inquiry": 1
+            },
+            "complaint": {
+              "billing": 2,
+              "authentication": 0,
+              "shipping": 8,
+              "refund": 1,
+              "technical_bug": 1,
+              "account_management": 0,
+              "complaint": 18,
+              "general_inquiry": 1
+            },
+            "general_inquiry": {
+              "billing": 0,
+              "authentication": 2,
+              "shipping": 0,
+              "refund": 1,
+              "technical_bug": 9,
+              "account_management": 0,
+              "complaint": 0,
+              "general_inquiry": 19
+            }
+          },
+          "extras": {}
+        },
+        "all": {
+          "name": "V4_mahalanobis",
+          "slice_label": "all",
+          "n_queries": 417,
+          "accuracy": 0.7458,
+          "macro_f1": 0.7459,
+          "per_class_f1": {
+            "billing": 0.7455,
+            "authentication": 0.7451,
+            "shipping": 0.7255,
+            "refund": 0.7429,
+            "technical_bug": 0.7358,
+            "account_management": 0.7238,
+            "complaint": 0.7647,
+            "general_inquiry": 0.7843
+          },
+          "latency_us": {
+            "p50": 3198.04,
+            "p95": 3690.9,
+            "p99": 4070.22,
+            "mean": 3266.9
+          },
+          "ece": 0.2158,
+          "confusion": {
+            "billing": {
+              "billing": 41,
+              "authentication": 0,
+              "shipping": 1,
+              "refund": 10,
+              "technical_bug": 1,
+              "account_management": 0,
+              "complaint": 0,
+              "general_inquiry": 0
+            },
+            "authentication": {
+              "billing": 2,
+              "authentication": 38,
+              "shipping": 0,
+              "refund": 0,
+              "technical_bug": 0,
+              "account_management": 11,
+              "complaint": 0,
+              "general_inquiry": 2
+            },
+            "shipping": {
+              "billing": 2,
+              "authentication": 0,
+              "shipping": 37,
+              "refund": 1,
+              "technical_bug": 0,
+              "account_management": 2,
+              "complaint": 9,
+              "general_inquiry": 0
+            },
+            "refund": {
+              "billing": 9,
+              "authentication": 1,
+              "shipping": 0,
+              "refund": 39,
+              "technical_bug": 3,
+              "account_management": 0,
+              "complaint": 0,
+              "general_inquiry": 0
+            },
+            "technical_bug": {
+              "billing": 0,
+              "authentication": 1,
+              "shipping": 3,
+              "refund": 0,
+              "technical_bug": 39,
+              "account_management": 2,
+              "complaint": 1,
+              "general_inquiry": 6
+            },
+            "account_management": {
+              "billing": 1,
+              "authentication": 7,
+              "shipping": 2,
+              "refund": 1,
+              "technical_bug": 1,
+              "account_management": 38,
+              "complaint": 1,
+              "general_inquiry": 1
+            },
+            "complaint": {
+              "billing": 2,
+              "authentication": 0,
+              "shipping": 8,
+              "refund": 1,
+              "technical_bug": 1,
+              "account_management": 0,
+              "complaint": 39,
+              "general_inquiry": 1
+            },
+            "general_inquiry": {
+              "billing": 0,
+              "authentication": 2,
+              "shipping": 0,
+              "refund": 1,
+              "technical_bug": 9,
+              "account_management": 0,
+              "complaint": 0,
+              "general_inquiry": 40
+            }
+          },
+          "extras": {}
+        }
+      },
+      "verdict_stats": {
+        "CONTINUE": {
+          "n": 364,
+          "correct": 280
+        },
+        "CONVERGED": {
+          "n": 7,
+          "correct": 7
+        },
+        "MODE_COLLAPSE": {
+          "n": 46,
+          "correct": 24
+        }
+      },
+      "wall_clock_seconds": 1.4115
+    },
+    "V5_temperature": {
+      "slices": {
+        "easy": {
+          "name": "V5_temperature",
+          "slice_label": "easy",
+          "n_queries": 167,
+          "accuracy": 1.0,
+          "macro_f1": 1.0,
+          "per_class_f1": {
+            "billing": 1.0,
+            "authentication": 1.0,
+            "shipping": 1.0,
+            "refund": 1.0,
+            "technical_bug": 1.0,
+            "account_management": 1.0,
+            "complaint": 1.0,
+            "general_inquiry": 1.0
+          },
+          "latency_us": {
+            "p50": 2338.67,
+            "p95": 2938.09,
+            "p99": 3461.46,
+            "mean": 2405.97
+          },
+          "ece": 0.0,
+          "confusion": {
+            "billing": {
+              "billing": 21,
+              "authentication": 0,
+              "shipping": 0,
+              "refund": 0,
+              "technical_bug": 0,
+              "account_management": 0,
+              "complaint": 0,
+              "general_inquiry": 0
+            },
+            "authentication": {
+              "billing": 0,
+              "authentication": 21,
+              "shipping": 0,
+              "refund": 0,
+              "technical_bug": 0,
+              "account_management": 0,
+              "complaint": 0,
+              "general_inquiry": 0
+            },
+            "shipping": {
+              "billing": 0,
+              "authentication": 0,
+              "shipping": 20,
+              "refund": 0,
+              "technical_bug": 0,
+              "account_management": 0,
+              "complaint": 0,
+              "general_inquiry": 0
+            },
+            "refund": {
+              "billing": 0,
+              "authentication": 0,
+              "shipping": 0,
+              "refund": 21,
+              "technical_bug": 0,
+              "account_management": 0,
+              "complaint": 0,
+              "general_inquiry": 0
+            },
+            "technical_bug": {
+              "billing": 0,
+              "authentication": 0,
+              "shipping": 0,
+              "refund": 0,
+              "technical_bug": 21,
+              "account_management": 0,
+              "complaint": 0,
+              "general_inquiry": 0
+            },
+            "account_management": {
+              "billing": 0,
+              "authentication": 0,
+              "shipping": 0,
+              "refund": 0,
+              "technical_bug": 0,
+              "account_management": 21,
+              "complaint": 0,
+              "general_inquiry": 0
+            },
+            "complaint": {
+              "billing": 0,
+              "authentication": 0,
+              "shipping": 0,
+              "refund": 0,
+              "technical_bug": 0,
+              "account_management": 0,
+              "complaint": 21,
+              "general_inquiry": 0
+            },
+            "general_inquiry": {
+              "billing": 0,
+              "authentication": 0,
+              "shipping": 0,
+              "refund": 0,
+              "technical_bug": 0,
+              "account_management": 0,
+              "complaint": 0,
+              "general_inquiry": 21
+            }
+          },
+          "extras": {}
+        },
+        "hard": {
+          "name": "V5_temperature",
+          "slice_label": "hard",
+          "n_queries": 250,
+          "accuracy": 0.564,
+          "macro_f1": 0.5625,
+          "per_class_f1": {
+            "billing": 0.6102,
+            "authentication": 0.5902,
+            "shipping": 0.4483,
+            "refund": 0.6087,
+            "technical_bug": 0.5455,
+            "account_management": 0.5882,
+            "complaint": 0.5517,
+            "general_inquiry": 0.5574
+          },
+          "latency_us": {
+            "p50": 2257.73,
+            "p95": 2888.25,
+            "p99": 3156.29,
+            "mean": 2312.8
+          },
+          "ece": 0.4339,
+          "confusion": {
+            "billing": {
+              "billing": 18,
+              "authentication": 0,
+              "shipping": 1,
+              "refund": 12,
+              "technical_bug": 1,
+              "account_management": 0,
+              "complaint": 0,
+              "general_inquiry": 0
+            },
+            "authentication": {
+              "billing": 1,
+              "authentication": 18,
+              "shipping": 0,
+              "refund": 0,
+              "technical_bug": 0,
+              "account_management": 11,
+              "complaint": 0,
+              "general_inquiry": 2
+            },
+            "shipping": {
+              "billing": 1,
+              "authentication": 2,
+              "shipping": 13,
+              "refund": 2,
+              "technical_bug": 0,
+              "account_management": 2,
+              "complaint": 11,
+              "general_inquiry": 0
+            },
+            "refund": {
+              "billing": 6,
+              "authentication": 1,
+              "shipping": 0,
+              "refund": 21,
+              "technical_bug": 2,
+              "account_management": 1,
+              "complaint": 0,
+              "general_inquiry": 0
+            },
+            "technical_bug": {
+              "billing": 0,
+              "authentication": 0,
+              "shipping": 2,
+              "refund": 0,
+              "technical_bug": 18,
+              "account_management": 3,
+              "complaint": 0,
+              "general_inquiry": 8
+            },
+            "account_management": {
+              "billing": 0,
+              "authentication": 6,
+              "shipping": 0,
+              "refund": 1,
+              "technical_bug": 2,
+              "account_management": 20,
+              "complaint": 0,
+              "general_inquiry": 2
+            },
+            "complaint": {
+              "billing": 1,
+              "authentication": 0,
+              "shipping": 11,
+              "refund": 1,
+              "technical_bug": 1,
+              "account_management": 0,
+              "complaint": 16,
+              "general_inquiry": 1
+            },
+            "general_inquiry": {
+              "billing": 0,
+              "authentication": 2,
+              "shipping": 0,
+              "refund": 1,
+              "technical_bug": 11,
+              "account_management": 0,
+              "complaint": 0,
+              "general_inquiry": 17
+            }
+          },
+          "extras": {}
+        },
+        "all": {
+          "name": "V5_temperature",
+          "slice_label": "all",
+          "n_queries": 417,
+          "accuracy": 0.7386,
+          "macro_f1": 0.7382,
+          "per_class_f1": {
+            "billing": 0.7723,
+            "authentication": 0.7573,
+            "shipping": 0.6735,
+            "refund": 0.7568,
+            "technical_bug": 0.7222,
+            "account_management": 0.7455,
+            "complaint": 0.74,
+            "general_inquiry": 0.7379
+          },
+          "latency_us": {
+            "p50": 2265.54,
+            "p95": 2905.49,
+            "p99": 3192.4,
+            "mean": 2350.11
+          },
+          "ece": 0.2601,
+          "confusion": {
+            "billing": {
+              "billing": 39,
+              "authentication": 0,
+              "shipping": 1,
+              "refund": 12,
+              "technical_bug": 1,
+              "account_management": 0,
+              "complaint": 0,
+              "general_inquiry": 0
+            },
+            "authentication": {
+              "billing": 1,
+              "authentication": 39,
+              "shipping": 0,
+              "refund": 0,
+              "technical_bug": 0,
+              "account_management": 11,
+              "complaint": 0,
+              "general_inquiry": 2
+            },
+            "shipping": {
+              "billing": 1,
+              "authentication": 2,
+              "shipping": 33,
+              "refund": 2,
+              "technical_bug": 0,
+              "account_management": 2,
+              "complaint": 11,
+              "general_inquiry": 0
+            },
+            "refund": {
+              "billing": 6,
+              "authentication": 1,
+              "shipping": 0,
+              "refund": 42,
+              "technical_bug": 2,
+              "account_management": 1,
+              "complaint": 0,
+              "general_inquiry": 0
+            },
+            "technical_bug": {
+              "billing": 0,
+              "authentication": 0,
+              "shipping": 2,
+              "refund": 0,
+              "technical_bug": 39,
+              "account_management": 3,
+              "complaint": 0,
+              "general_inquiry": 8
+            },
+            "account_management": {
+              "billing": 0,
+              "authentication": 6,
+              "shipping": 0,
+              "refund": 1,
+              "technical_bug": 2,
+              "account_management": 41,
+              "complaint": 0,
+              "general_inquiry": 2
+            },
+            "complaint": {
+              "billing": 1,
+              "authentication": 0,
+              "shipping": 11,
+              "refund": 1,
+              "technical_bug": 1,
+              "account_management": 0,
+              "complaint": 37,
+              "general_inquiry": 1
+            },
+            "general_inquiry": {
+              "billing": 0,
+              "authentication": 2,
+              "shipping": 0,
+              "refund": 1,
+              "technical_bug": 11,
+              "account_management": 0,
+              "complaint": 0,
+              "general_inquiry": 38
+            }
+          },
+          "extras": {}
+        }
+      },
+      "verdict_stats": {
+        "CONVERGED": {
+          "n": 377,
+          "correct": 292
+        },
+        "CONTINUE": {
+          "n": 4,
+          "correct": 1
+        },
+        "DIVERGENCE": {
+          "n": 32,
+          "correct": 12
+        },
+        "MODE_COLLAPSE": {
+          "n": 4,
+          "correct": 3
+        }
+      },
+      "wall_clock_seconds": 1.051
+    },
+    "V6_hybrid": {
+      "slices": {
+        "easy": {
+          "name": "V6_hybrid",
+          "slice_label": "easy",
+          "n_queries": 167,
+          "accuracy": 1.0,
+          "macro_f1": 1.0,
+          "per_class_f1": {
+            "billing": 1.0,
+            "authentication": 1.0,
+            "shipping": 1.0,
+            "refund": 1.0,
+            "technical_bug": 1.0,
+            "account_management": 1.0,
+            "complaint": 1.0,
+            "general_inquiry": 1.0
+          },
+          "latency_us": {
+            "p50": 30332.33,
+            "p95": 31792.08,
+            "p99": 32573.12,
+            "mean": 30476.86
+          },
+          "ece": 0.0188,
+          "confusion": {
+            "billing": {
+              "billing": 21,
+              "authentication": 0,
+              "shipping": 0,
+              "refund": 0,
+              "technical_bug": 0,
+              "account_management": 0,
+              "complaint": 0,
+              "general_inquiry": 0
+            },
+            "authentication": {
+              "billing": 0,
+              "authentication": 21,
+              "shipping": 0,
+              "refund": 0,
+              "technical_bug": 0,
+              "account_management": 0,
+              "complaint": 0,
+              "general_inquiry": 0
+            },
+            "shipping": {
+              "billing": 0,
+              "authentication": 0,
+              "shipping": 20,
+              "refund": 0,
+              "technical_bug": 0,
+              "account_management": 0,
+              "complaint": 0,
+              "general_inquiry": 0
+            },
+            "refund": {
+              "billing": 0,
+              "authentication": 0,
+              "shipping": 0,
+              "refund": 21,
+              "technical_bug": 0,
+              "account_management": 0,
+              "complaint": 0,
+              "general_inquiry": 0
+            },
+            "technical_bug": {
+              "billing": 0,
+              "authentication": 0,
+              "shipping": 0,
+              "refund": 0,
+              "technical_bug": 21,
+              "account_management": 0,
+              "complaint": 0,
+              "general_inquiry": 0
+            },
+            "account_management": {
+              "billing": 0,
+              "authentication": 0,
+              "shipping": 0,
+              "refund": 0,
+              "technical_bug": 0,
+              "account_management": 21,
+              "complaint": 0,
+              "general_inquiry": 0
+            },
+            "complaint": {
+              "billing": 0,
+              "authentication": 0,
+              "shipping": 0,
+              "refund": 0,
+              "technical_bug": 0,
+              "account_management": 0,
+              "complaint": 21,
+              "general_inquiry": 0
+            },
+            "general_inquiry": {
+              "billing": 0,
+              "authentication": 0,
+              "shipping": 0,
+              "refund": 0,
+              "technical_bug": 0,
+              "account_management": 0,
+              "complaint": 0,
+              "general_inquiry": 21
+            }
+          },
+          "extras": {}
+        },
+        "hard": {
+          "name": "V6_hybrid",
+          "slice_label": "hard",
+          "n_queries": 250,
+          "accuracy": 0.564,
+          "macro_f1": 0.5649,
+          "per_class_f1": {
+            "billing": 0.623,
+            "authentication": 0.5763,
+            "shipping": 0.5397,
+            "refund": 0.5538,
+            "technical_bug": 0.5312,
+            "account_management": 0.5152,
+            "complaint": 0.5862,
+            "general_inquiry": 0.5938
+          },
+          "latency_us": {
+            "p50": 30385.21,
+            "p95": 34767.38,
+            "p99": 42648.01,
+            "mean": 31065.08
+          },
+          "ece": 0.0839,
+          "confusion": {
+            "billing": {
+              "billing": 19,
+              "authentication": 0,
+              "shipping": 0,
+              "refund": 12,
+              "technical_bug": 1,
+              "account_management": 0,
+              "complaint": 0,
+              "general_inquiry": 0
+            },
+            "authentication": {
+              "billing": 1,
+              "authentication": 17,
+              "shipping": 0,
+              "refund": 0,
+              "technical_bug": 0,
+              "account_management": 12,
+              "complaint": 0,
+              "general_inquiry": 2
+            },
+            "shipping": {
+              "billing": 2,
+              "authentication": 0,
+              "shipping": 17,
+              "refund": 1,
+              "technical_bug": 0,
+              "account_management": 2,
+              "complaint": 9,
+              "general_inquiry": 0
+            },
+            "refund": {
+              "billing": 7,
+              "authentication": 1,
+              "shipping": 0,
+              "refund": 18,
+              "technical_bug": 3,
+              "account_management": 0,
+              "complaint": 0,
+              "general_inquiry": 2
+            },
+            "technical_bug": {
+              "billing": 0,
+              "authentication": 0,
+              "shipping": 3,
+              "refund": 0,
+              "technical_bug": 17,
+              "account_management": 4,
+              "complaint": 0,
+              "general_inquiry": 7
+            },
+            "account_management": {
+              "billing": 0,
+              "authentication": 8,
+              "shipping": 1,
+              "refund": 1,
+              "technical_bug": 1,
+              "account_management": 17,
+              "complaint": 1,
+              "general_inquiry": 2
+            },
+            "complaint": {
+              "billing": 0,
+              "authentication": 0,
+              "shipping": 11,
+              "refund": 1,
+              "technical_bug": 1,
+              "account_management": 0,
+              "complaint": 17,
+              "general_inquiry": 1
+            },
+            "general_inquiry": {
+              "billing": 0,
+              "authentication": 1,
+              "shipping": 0,
+              "refund": 1,
+              "technical_bug": 10,
+              "account_management": 0,
+              "complaint": 0,
+              "general_inquiry": 19
+            }
+          },
+          "extras": {}
+        },
+        "all": {
+          "name": "V6_hybrid",
+          "slice_label": "all",
+          "n_queries": 417,
+          "accuracy": 0.7386,
+          "macro_f1": 0.739,
+          "per_class_f1": {
+            "billing": 0.7767,
+            "authentication": 0.7525,
+            "shipping": 0.7184,
+            "refund": 0.729,
+            "technical_bug": 0.717,
+            "account_management": 0.7037,
+            "complaint": 0.76,
+            "general_inquiry": 0.7547
+          },
+          "latency_us": {
+            "p50": 30372.38,
+            "p95": 32724.17,
+            "p99": 39592.31,
+            "mean": 30829.51
+          },
+          "ece": 0.0578,
+          "confusion": {
+            "billing": {
+              "billing": 40,
+              "authentication": 0,
+              "shipping": 0,
+              "refund": 12,
+              "technical_bug": 1,
+              "account_management": 0,
+              "complaint": 0,
+              "general_inquiry": 0
+            },
+            "authentication": {
+              "billing": 1,
+              "authentication": 38,
+              "shipping": 0,
+              "refund": 0,
+              "technical_bug": 0,
+              "account_management": 12,
+              "complaint": 0,
+              "general_inquiry": 2
+            },
+            "shipping": {
+              "billing": 2,
+              "authentication": 0,
+              "shipping": 37,
+              "refund": 1,
+              "technical_bug": 0,
+              "account_management": 2,
+              "complaint": 9,
+              "general_inquiry": 0
+            },
+            "refund": {
+              "billing": 7,
+              "authentication": 1,
+              "shipping": 0,
+              "refund": 39,
+              "technical_bug": 3,
+              "account_management": 0,
+              "complaint": 0,
+              "general_inquiry": 2
+            },
+            "technical_bug": {
+              "billing": 0,
+              "authentication": 0,
+              "shipping": 3,
+              "refund": 0,
+              "technical_bug": 38,
+              "account_management": 4,
+              "complaint": 0,
+              "general_inquiry": 7
+            },
+            "account_management": {
+              "billing": 0,
+              "authentication": 8,
+              "shipping": 1,
+              "refund": 1,
+              "technical_bug": 1,
+              "account_management": 38,
+              "complaint": 1,
+              "general_inquiry": 2
+            },
+            "complaint": {
+              "billing": 0,
+              "authentication": 0,
+              "shipping": 11,
+              "refund": 1,
+              "technical_bug": 1,
+              "account_management": 0,
+              "complaint": 38,
+              "general_inquiry": 1
+            },
+            "general_inquiry": {
+              "billing": 0,
+              "authentication": 1,
+              "shipping": 0,
+              "refund": 1,
+              "technical_bug": 10,
+              "account_management": 0,
+              "complaint": 0,
+              "general_inquiry": 40
+            }
+          },
+          "extras": {}
+        }
+      },
+      "verdict_stats": {
+        "CONVERGED": {
+          "n": 346,
+          "correct": 267
+        },
+        "CONTINUE": {
+          "n": 36,
+          "correct": 26
+        },
+        "MODE_COLLAPSE": {
+          "n": 29,
+          "correct": 12
+        },
+        "DIVERGENCE": {
+          "n": 6,
+          "correct": 3
+        }
+      },
+      "wall_clock_seconds": 12.8614
+    },
+    "V7_hybrid_calibrated": {
+      "slices": {
+        "easy": {
+          "name": "V7_hybrid_calibrated",
+          "slice_label": "easy",
+          "n_queries": 167,
+          "accuracy": 1.0,
+          "macro_f1": 1.0,
+          "per_class_f1": {
+            "billing": 1.0,
+            "authentication": 1.0,
+            "shipping": 1.0,
+            "refund": 1.0,
+            "technical_bug": 1.0,
+            "account_management": 1.0,
+            "complaint": 1.0,
+            "general_inquiry": 1.0
+          },
+          "latency_us": {
+            "p50": 30336.29,
+            "p95": 31896.77,
+            "p99": 35346.26,
+            "mean": 30562.48
+          },
+          "ece": 0.0,
+          "confusion": {
+            "billing": {
+              "billing": 21,
+              "authentication": 0,
+              "shipping": 0,
+              "refund": 0,
+              "technical_bug": 0,
+              "account_management": 0,
+              "complaint": 0,
+              "general_inquiry": 0
+            },
+            "authentication": {
+              "billing": 0,
+              "authentication": 21,
+              "shipping": 0,
+              "refund": 0,
+              "technical_bug": 0,
+              "account_management": 0,
+              "complaint": 0,
+              "general_inquiry": 0
+            },
+            "shipping": {
+              "billing": 0,
+              "authentication": 0,
+              "shipping": 20,
+              "refund": 0,
+              "technical_bug": 0,
+              "account_management": 0,
+              "complaint": 0,
+              "general_inquiry": 0
+            },
+            "refund": {
+              "billing": 0,
+              "authentication": 0,
+              "shipping": 0,
+              "refund": 21,
+              "technical_bug": 0,
+              "account_management": 0,
+              "complaint": 0,
+              "general_inquiry": 0
+            },
+            "technical_bug": {
+              "billing": 0,
+              "authentication": 0,
+              "shipping": 0,
+              "refund": 0,
+              "technical_bug": 21,
+              "account_management": 0,
+              "complaint": 0,
+              "general_inquiry": 0
+            },
+            "account_management": {
+              "billing": 0,
+              "authentication": 0,
+              "shipping": 0,
+              "refund": 0,
+              "technical_bug": 0,
+              "account_management": 21,
+              "complaint": 0,
+              "general_inquiry": 0
+            },
+            "complaint": {
+              "billing": 0,
+              "authentication": 0,
+              "shipping": 0,
+              "refund": 0,
+              "technical_bug": 0,
+              "account_management": 0,
+              "complaint": 21,
+              "general_inquiry": 0
+            },
+            "general_inquiry": {
+              "billing": 0,
+              "authentication": 0,
+              "shipping": 0,
+              "refund": 0,
+              "technical_bug": 0,
+              "account_management": 0,
+              "complaint": 0,
+              "general_inquiry": 21
+            }
+          },
+          "extras": {}
+        },
+        "hard": {
+          "name": "V7_hybrid_calibrated",
+          "slice_label": "hard",
+          "n_queries": 250,
+          "accuracy": 0.564,
+          "macro_f1": 0.5649,
+          "per_class_f1": {
+            "billing": 0.623,
+            "authentication": 0.5763,
+            "shipping": 0.5397,
+            "refund": 0.5538,
+            "technical_bug": 0.5312,
+            "account_management": 0.5152,
+            "complaint": 0.5862,
+            "general_inquiry": 0.5938
+          },
+          "latency_us": {
+            "p50": 30365.25,
+            "p95": 31872.61,
+            "p99": 32737.01,
+            "mean": 30516.7
+          },
+          "ece": 0.4352,
+          "confusion": {
+            "billing": {
+              "billing": 19,
+              "authentication": 0,
+              "shipping": 0,
+              "refund": 12,
+              "technical_bug": 1,
+              "account_management": 0,
+              "complaint": 0,
+              "general_inquiry": 0
+            },
+            "authentication": {
+              "billing": 1,
+              "authentication": 17,
+              "shipping": 0,
+              "refund": 0,
+              "technical_bug": 0,
+              "account_management": 12,
+              "complaint": 0,
+              "general_inquiry": 2
+            },
+            "shipping": {
+              "billing": 2,
+              "authentication": 0,
+              "shipping": 17,
+              "refund": 1,
+              "technical_bug": 0,
+              "account_management": 2,
+              "complaint": 9,
+              "general_inquiry": 0
+            },
+            "refund": {
+              "billing": 7,
+              "authentication": 1,
+              "shipping": 0,
+              "refund": 18,
+              "technical_bug": 3,
+              "account_management": 0,
+              "complaint": 0,
+              "general_inquiry": 2
+            },
+            "technical_bug": {
+              "billing": 0,
+              "authentication": 0,
+              "shipping": 3,
+              "refund": 0,
+              "technical_bug": 17,
+              "account_management": 4,
+              "complaint": 0,
+              "general_inquiry": 7
+            },
+            "account_management": {
+              "billing": 0,
+              "authentication": 8,
+              "shipping": 1,
+              "refund": 1,
+              "technical_bug": 1,
+              "account_management": 17,
+              "complaint": 1,
+              "general_inquiry": 2
+            },
+            "complaint": {
+              "billing": 0,
+              "authentication": 0,
+              "shipping": 11,
+              "refund": 1,
+              "technical_bug": 1,
+              "account_management": 0,
+              "complaint": 17,
+              "general_inquiry": 1
+            },
+            "general_inquiry": {
+              "billing": 0,
+              "authentication": 1,
+              "shipping": 0,
+              "refund": 1,
+              "technical_bug": 10,
+              "account_management": 0,
+              "complaint": 0,
+              "general_inquiry": 19
+            }
+          },
+          "extras": {}
+        },
+        "all": {
+          "name": "V7_hybrid_calibrated",
+          "slice_label": "all",
+          "n_queries": 417,
+          "accuracy": 0.7386,
+          "macro_f1": 0.739,
+          "per_class_f1": {
+            "billing": 0.7767,
+            "authentication": 0.7525,
+            "shipping": 0.7184,
+            "refund": 0.729,
+            "technical_bug": 0.717,
+            "account_management": 0.7037,
+            "complaint": 0.76,
+            "general_inquiry": 0.7547
+          },
+          "latency_us": {
+            "p50": 30348.25,
+            "p95": 31887.45,
+            "p99": 34625.95,
+            "mean": 30535.03
+          },
+          "ece": 0.2609,
+          "confusion": {
+            "billing": {
+              "billing": 40,
+              "authentication": 0,
+              "shipping": 0,
+              "refund": 12,
+              "technical_bug": 1,
+              "account_management": 0,
+              "complaint": 0,
+              "general_inquiry": 0
+            },
+            "authentication": {
+              "billing": 1,
+              "authentication": 38,
+              "shipping": 0,
+              "refund": 0,
+              "technical_bug": 0,
+              "account_management": 12,
+              "complaint": 0,
+              "general_inquiry": 2
+            },
+            "shipping": {
+              "billing": 2,
+              "authentication": 0,
+              "shipping": 37,
+              "refund": 1,
+              "technical_bug": 0,
+              "account_management": 2,
+              "complaint": 9,
+              "general_inquiry": 0
+            },
+            "refund": {
+              "billing": 7,
+              "authentication": 1,
+              "shipping": 0,
+              "refund": 39,
+              "technical_bug": 3,
+              "account_management": 0,
+              "complaint": 0,
+              "general_inquiry": 2
+            },
+            "technical_bug": {
+              "billing": 0,
+              "authentication": 0,
+              "shipping": 3,
+              "refund": 0,
+              "technical_bug": 38,
+              "account_management": 4,
+              "complaint": 0,
+              "general_inquiry": 7
+            },
+            "account_management": {
+              "billing": 0,
+              "authentication": 8,
+              "shipping": 1,
+              "refund": 1,
+              "technical_bug": 1,
+              "account_management": 38,
+              "complaint": 1,
+              "general_inquiry": 2
+            },
+            "complaint": {
+              "billing": 0,
+              "authentication": 0,
+              "shipping": 11,
+              "refund": 1,
+              "technical_bug": 1,
+              "account_management": 0,
+              "complaint": 38,
+              "general_inquiry": 1
+            },
+            "general_inquiry": {
+              "billing": 0,
+              "authentication": 1,
+              "shipping": 0,
+              "refund": 1,
+              "technical_bug": 10,
+              "account_management": 0,
+              "complaint": 0,
+              "general_inquiry": 40
+            }
+          },
+          "extras": {}
+        }
+      },
+      "verdict_stats": {
+        "CONVERGED": {
+          "n": 346,
+          "correct": 267
+        },
+        "CONTINUE": {
+          "n": 36,
+          "correct": 26
+        },
+        "MODE_COLLAPSE": {
+          "n": 29,
+          "correct": 12
+        },
+        "DIVERGENCE": {
+          "n": 6,
+          "correct": 3
+        }
+      },
+      "wall_clock_seconds": 12.7461
+    },
+    "V8_calibrated_mahalanobis": {
+      "slices": {
+        "easy": {
+          "name": "V8_calibrated_mahalanobis",
+          "slice_label": "easy",
+          "n_queries": 167,
+          "accuracy": 1.0,
+          "macro_f1": 1.0,
+          "per_class_f1": {
+            "billing": 1.0,
+            "authentication": 1.0,
+            "shipping": 1.0,
+            "refund": 1.0,
+            "technical_bug": 1.0,
+            "account_management": 1.0,
+            "complaint": 1.0,
+            "general_inquiry": 1.0
+          },
+          "latency_us": {
+            "p50": 6396.58,
+            "p95": 7045.64,
+            "p99": 7309.01,
+            "mean": 6426.42
+          },
+          "ece": 0.0,
+          "confusion": {
+            "billing": {
+              "billing": 21,
+              "authentication": 0,
+              "shipping": 0,
+              "refund": 0,
+              "technical_bug": 0,
+              "account_management": 0,
+              "complaint": 0,
+              "general_inquiry": 0
+            },
+            "authentication": {
+              "billing": 0,
+              "authentication": 21,
+              "shipping": 0,
+              "refund": 0,
+              "technical_bug": 0,
+              "account_management": 0,
+              "complaint": 0,
+              "general_inquiry": 0
+            },
+            "shipping": {
+              "billing": 0,
+              "authentication": 0,
+              "shipping": 20,
+              "refund": 0,
+              "technical_bug": 0,
+              "account_management": 0,
+              "complaint": 0,
+              "general_inquiry": 0
+            },
+            "refund": {
+              "billing": 0,
+              "authentication": 0,
+              "shipping": 0,
+              "refund": 21,
+              "technical_bug": 0,
+              "account_management": 0,
+              "complaint": 0,
+              "general_inquiry": 0
+            },
+            "technical_bug": {
+              "billing": 0,
+              "authentication": 0,
+              "shipping": 0,
+              "refund": 0,
+              "technical_bug": 21,
+              "account_management": 0,
+              "complaint": 0,
+              "general_inquiry": 0
+            },
+            "account_management": {
+              "billing": 0,
+              "authentication": 0,
+              "shipping": 0,
+              "refund": 0,
+              "technical_bug": 0,
+              "account_management": 21,
+              "complaint": 0,
+              "general_inquiry": 0
+            },
+            "complaint": {
+              "billing": 0,
+              "authentication": 0,
+              "shipping": 0,
+              "refund": 0,
+              "technical_bug": 0,
+              "account_management": 0,
+              "complaint": 21,
+              "general_inquiry": 0
+            },
+            "general_inquiry": {
+              "billing": 0,
+              "authentication": 0,
+              "shipping": 0,
+              "refund": 0,
+              "technical_bug": 0,
+              "account_management": 0,
+              "complaint": 0,
+              "general_inquiry": 21
+            }
+          },
+          "extras": {}
+        },
+        "hard": {
+          "name": "V8_calibrated_mahalanobis",
+          "slice_label": "hard",
+          "n_queries": 250,
+          "accuracy": 0.576,
+          "macro_f1": 0.5763,
+          "per_class_f1": {
+            "billing": 0.5882,
+            "authentication": 0.5667,
+            "shipping": 0.5484,
+            "refund": 0.5714,
+            "technical_bug": 0.5625,
+            "account_management": 0.5397,
+            "complaint": 0.6,
+            "general_inquiry": 0.6333
+          },
+          "latency_us": {
+            "p50": 6275.94,
+            "p95": 7008.5,
+            "p99": 7241.83,
+            "mean": 6374.66
+          },
+          "ece": 0.4219,
+          "confusion": {
+            "billing": {
+              "billing": 20,
+              "authentication": 0,
+              "shipping": 1,
+              "refund": 10,
+              "technical_bug": 1,
+              "account_management": 0,
+              "complaint": 0,
+              "general_inquiry": 0
+            },
+            "authentication": {
+              "billing": 2,
+              "authentication": 17,
+              "shipping": 0,
+              "refund": 0,
+              "technical_bug": 0,
+              "account_management": 11,
+              "complaint": 0,
+              "general_inquiry": 2
+            },
+            "shipping": {
+              "billing": 2,
+              "authentication": 0,
+              "shipping": 17,
+              "refund": 1,
+              "technical_bug": 0,
+              "account_management": 2,
+              "complaint": 9,
+              "general_inquiry": 0
+            },
+            "refund": {
+              "billing": 9,
+              "authentication": 1,
+              "shipping": 0,
+              "refund": 18,
+              "technical_bug": 3,
+              "account_management": 0,
+              "complaint": 0,
+              "general_inquiry": 0
+            },
+            "technical_bug": {
+              "billing": 0,
+              "authentication": 1,
+              "shipping": 3,
+              "refund": 0,
+              "technical_bug": 18,
+              "account_management": 2,
+              "complaint": 1,
+              "general_inquiry": 6
+            },
+            "account_management": {
+              "billing": 1,
+              "authentication": 7,
+              "shipping": 2,
+              "refund": 1,
+              "technical_bug": 1,
+              "account_management": 17,
+              "complaint": 1,
+              "general_inquiry": 1
+            },
+            "complaint": {
+              "billing": 2,
+              "authentication": 0,
+              "shipping": 8,
+              "refund": 1,
+              "technical_bug": 1,
+              "account_management": 0,
+              "complaint": 18,
+              "general_inquiry": 1
+            },
+            "general_inquiry": {
+              "billing": 0,
+              "authentication": 2,
+              "shipping": 0,
+              "refund": 1,
+              "technical_bug": 9,
+              "account_management": 0,
+              "complaint": 0,
+              "general_inquiry": 19
+            }
+          },
+          "extras": {}
+        },
+        "all": {
+          "name": "V8_calibrated_mahalanobis",
+          "slice_label": "all",
+          "n_queries": 417,
+          "accuracy": 0.7458,
+          "macro_f1": 0.7459,
+          "per_class_f1": {
+            "billing": 0.7455,
+            "authentication": 0.7451,
+            "shipping": 0.7255,
+            "refund": 0.7429,
+            "technical_bug": 0.7358,
+            "account_management": 0.7238,
+            "complaint": 0.7647,
+            "general_inquiry": 0.7843
+          },
+          "latency_us": {
+            "p50": 6311.79,
+            "p95": 7018.33,
+            "p99": 7289.92,
+            "mean": 6395.39
+          },
+          "ece": 0.2529,
+          "confusion": {
+            "billing": {
+              "billing": 41,
+              "authentication": 0,
+              "shipping": 1,
+              "refund": 10,
+              "technical_bug": 1,
+              "account_management": 0,
+              "complaint": 0,
+              "general_inquiry": 0
+            },
+            "authentication": {
+              "billing": 2,
+              "authentication": 38,
+              "shipping": 0,
+              "refund": 0,
+              "technical_bug": 0,
+              "account_management": 11,
+              "complaint": 0,
+              "general_inquiry": 2
+            },
+            "shipping": {
+              "billing": 2,
+              "authentication": 0,
+              "shipping": 37,
+              "refund": 1,
+              "technical_bug": 0,
+              "account_management": 2,
+              "complaint": 9,
+              "general_inquiry": 0
+            },
+            "refund": {
+              "billing": 9,
+              "authentication": 1,
+              "shipping": 0,
+              "refund": 39,
+              "technical_bug": 3,
+              "account_management": 0,
+              "complaint": 0,
+              "general_inquiry": 0
+            },
+            "technical_bug": {
+              "billing": 0,
+              "authentication": 1,
+              "shipping": 3,
+              "refund": 0,
+              "technical_bug": 39,
+              "account_management": 2,
+              "complaint": 1,
+              "general_inquiry": 6
+            },
+            "account_management": {
+              "billing": 1,
+              "authentication": 7,
+              "shipping": 2,
+              "refund": 1,
+              "technical_bug": 1,
+              "account_management": 38,
+              "complaint": 1,
+              "general_inquiry": 1
+            },
+            "complaint": {
+              "billing": 2,
+              "authentication": 0,
+              "shipping": 8,
+              "refund": 1,
+              "technical_bug": 1,
+              "account_management": 0,
+              "complaint": 39,
+              "general_inquiry": 1
+            },
+            "general_inquiry": {
+              "billing": 0,
+              "authentication": 2,
+              "shipping": 0,
+              "refund": 1,
+              "technical_bug": 9,
+              "account_management": 0,
+              "complaint": 0,
+              "general_inquiry": 40
+            }
+          },
+          "extras": {}
+        }
+      },
+      "verdict_stats": {
+        "CONVERGED": {
+          "n": 417,
+          "correct": 311
+        }
+      },
+      "wall_clock_seconds": 1.3475
+    },
+    "V9_ensemble": {
+      "slices": {
+        "easy": {
+          "name": "V9_ensemble",
+          "slice_label": "easy",
+          "n_queries": 167,
+          "accuracy": 1.0,
+          "macro_f1": 1.0,
+          "per_class_f1": {
+            "billing": 1.0,
+            "authentication": 1.0,
+            "shipping": 1.0,
+            "refund": 1.0,
+            "technical_bug": 1.0,
+            "account_management": 1.0,
+            "complaint": 1.0,
+            "general_inquiry": 1.0
+          },
+          "latency_us": {
+            "p50": 5820.54,
+            "p95": 6474.15,
+            "p99": 7413.4,
+            "mean": 5884.32
+          },
+          "ece": 0.0127,
+          "confusion": {
+            "billing": {
+              "billing": 21,
+              "authentication": 0,
+              "shipping": 0,
+              "refund": 0,
+              "technical_bug": 0,
+              "account_management": 0,
+              "complaint": 0,
+              "general_inquiry": 0
+            },
+            "authentication": {
+              "billing": 0,
+              "authentication": 21,
+              "shipping": 0,
+              "refund": 0,
+              "technical_bug": 0,
+              "account_management": 0,
+              "complaint": 0,
+              "general_inquiry": 0
+            },
+            "shipping": {
+              "billing": 0,
+              "authentication": 0,
+              "shipping": 20,
+              "refund": 0,
+              "technical_bug": 0,
+              "account_management": 0,
+              "complaint": 0,
+              "general_inquiry": 0
+            },
+            "refund": {
+              "billing": 0,
+              "authentication": 0,
+              "shipping": 0,
+              "refund": 21,
+              "technical_bug": 0,
+              "account_management": 0,
+              "complaint": 0,
+              "general_inquiry": 0
+            },
+            "technical_bug": {
+              "billing": 0,
+              "authentication": 0,
+              "shipping": 0,
+              "refund": 0,
+              "technical_bug": 21,
+              "account_management": 0,
+              "complaint": 0,
+              "general_inquiry": 0
+            },
+            "account_management": {
+              "billing": 0,
+              "authentication": 0,
+              "shipping": 0,
+              "refund": 0,
+              "technical_bug": 0,
+              "account_management": 21,
+              "complaint": 0,
+              "general_inquiry": 0
+            },
+            "complaint": {
+              "billing": 0,
+              "authentication": 0,
+              "shipping": 0,
+              "refund": 0,
+              "technical_bug": 0,
+              "account_management": 0,
+              "complaint": 21,
+              "general_inquiry": 0
+            },
+            "general_inquiry": {
+              "billing": 0,
+              "authentication": 0,
+              "shipping": 0,
+              "refund": 0,
+              "technical_bug": 0,
+              "account_management": 0,
+              "complaint": 0,
+              "general_inquiry": 21
+            }
+          },
+          "extras": {}
+        },
+        "hard": {
+          "name": "V9_ensemble",
+          "slice_label": "hard",
+          "n_queries": 250,
+          "accuracy": 0.56,
+          "macro_f1": 0.5602,
+          "per_class_f1": {
+            "billing": 0.5714,
+            "authentication": 0.5667,
+            "shipping": 0.4839,
+            "refund": 0.5882,
+            "technical_bug": 0.5538,
+            "account_management": 0.5312,
+            "complaint": 0.5763,
+            "general_inquiry": 0.6102
+          },
+          "latency_us": {
+            "p50": 5825.29,
+            "p95": 6541.87,
+            "p99": 7717.77,
+            "mean": 5884.63
+          },
+          "ece": 0.0887,
+          "confusion": {
+            "billing": {
+              "billing": 18,
+              "authentication": 0,
+              "shipping": 1,
+              "refund": 12,
+              "technical_bug": 1,
+              "account_management": 0,
+              "complaint": 0,
+              "general_inquiry": 0
+            },
+            "authentication": {
+              "billing": 2,
+              "authentication": 17,
+              "shipping": 0,
+              "refund": 0,
+              "technical_bug": 0,
+              "account_management": 11,
+              "complaint": 0,
+              "general_inquiry": 2
+            },
+            "shipping": {
+              "billing": 2,
+              "authentication": 1,
+              "shipping": 15,
+              "refund": 2,
+              "technical_bug": 0,
+              "account_management": 2,
+              "complaint": 9,
+              "general_inquiry": 0
+            },
+            "refund": {
+              "billing": 7,
+              "authentication": 1,
+              "shipping": 0,
+              "refund": 20,
+              "technical_bug": 3,
+              "account_management": 0,
+              "complaint": 0,
+              "general_inquiry": 0
+            },
+            "technical_bug": {
+              "billing": 0,
+              "authentication": 0,
+              "shipping": 3,
+              "refund": 0,
+              "technical_bug": 18,
+              "account_management": 3,
+              "complaint": 1,
+              "general_inquiry": 6
+            },
+            "account_management": {
+              "billing": 1,
+              "authentication": 7,
+              "shipping": 2,
+              "refund": 1,
+              "technical_bug": 1,
+              "account_management": 17,
+              "complaint": 1,
+              "general_inquiry": 1
+            },
+            "complaint": {
+              "billing": 1,
+              "authentication": 0,
+              "shipping": 10,
+              "refund": 1,
+              "technical_bug": 1,
+              "account_management": 0,
+              "complaint": 17,
+              "general_inquiry": 1
+            },
+            "general_inquiry": {
+              "billing": 0,
+              "authentication": 2,
+              "shipping": 0,
+              "refund": 1,
+              "technical_bug": 10,
+              "account_management": 0,
+              "complaint": 0,
+              "general_inquiry": 18
+            }
+          },
+          "extras": {}
+        },
+        "all": {
+          "name": "V9_ensemble",
+          "slice_label": "all",
+          "n_queries": 417,
+          "accuracy": 0.7362,
+          "macro_f1": 0.7363,
+          "per_class_f1": {
+            "billing": 0.7429,
+            "authentication": 0.7451,
+            "shipping": 0.6863,
+            "refund": 0.7455,
+            "technical_bug": 0.729,
+            "account_management": 0.717,
+            "complaint": 0.7525,
+            "general_inquiry": 0.7723
+          },
+          "latency_us": {
+            "p50": 5824.79,
+            "p95": 6508.03,
+            "p99": 7596.45,
+            "mean": 5884.51
+          },
+          "ece": 0.0582,
+          "confusion": {
+            "billing": {
+              "billing": 39,
+              "authentication": 0,
+              "shipping": 1,
+              "refund": 12,
+              "technical_bug": 1,
+              "account_management": 0,
+              "complaint": 0,
+              "general_inquiry": 0
+            },
+            "authentication": {
+              "billing": 2,
+              "authentication": 38,
+              "shipping": 0,
+              "refund": 0,
+              "technical_bug": 0,
+              "account_management": 11,
+              "complaint": 0,
+              "general_inquiry": 2
+            },
+            "shipping": {
+              "billing": 2,
+              "authentication": 1,
+              "shipping": 35,
+              "refund": 2,
+              "technical_bug": 0,
+              "account_management": 2,
+              "complaint": 9,
+              "general_inquiry": 0
+            },
+            "refund": {
+              "billing": 7,
+              "authentication": 1,
+              "shipping": 0,
+              "refund": 41,
+              "technical_bug": 3,
+              "account_management": 0,
+              "complaint": 0,
+              "general_inquiry": 0
+            },
+            "technical_bug": {
+              "billing": 0,
+              "authentication": 0,
+              "shipping": 3,
+              "refund": 0,
+              "technical_bug": 39,
+              "account_management": 3,
+              "complaint": 1,
+              "general_inquiry": 6
+            },
+            "account_management": {
+              "billing": 1,
+              "authentication": 7,
+              "shipping": 2,
+              "refund": 1,
+              "technical_bug": 1,
+              "account_management": 38,
+              "complaint": 1,
+              "general_inquiry": 1
+            },
+            "complaint": {
+              "billing": 1,
+              "authentication": 0,
+              "shipping": 10,
+              "refund": 1,
+              "technical_bug": 1,
+              "account_management": 0,
+              "complaint": 38,
+              "general_inquiry": 1
+            },
+            "general_inquiry": {
+              "billing": 0,
+              "authentication": 2,
+              "shipping": 0,
+              "refund": 1,
+              "technical_bug": 10,
+              "account_management": 0,
+              "complaint": 0,
+              "general_inquiry": 39
+            }
+          },
+          "extras": {}
+        }
+      },
+      "verdict_stats": {
+        "CONVERGED": {
+          "n": 390,
+          "correct": 300
+        },
+        "DIVERGENCE": {
+          "n": 27,
+          "correct": 7
+        }
+      },
+      "wall_clock_seconds": 2.4564
+    }
+  },
+  "wall_clock_seconds": {
+    "baseline": 0.004383249906823039,
+    "V1": 1.0411498749163002,
+    "V2_orthogonal": 11.723984875017777,
+    "V3_topk": 1.8673616249579936,
+    "V4_mahalanobis": 1.4115437499713153,
+    "V5_temperature": 1.0510044589173049,
+    "V6_hybrid": 12.861437583109364,
+    "V7_hybrid_calibrated": 12.746066708117723,
+    "V8_calibrated_mahalanobis": 1.347523916978389,
+    "V9_ensemble": 2.456431250087917
+  }
+}

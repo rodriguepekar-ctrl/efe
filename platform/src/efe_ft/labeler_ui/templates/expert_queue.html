@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block tenant_task %}expert — {{ tenant }} / {{ task }}{% endblock %}
+{% block body %}
+<div class="card">
+    <h2>Disagreements waiting adjudication ({{ items|length }})</h2>
+    {% if not items %}
+        <p>No pending escalations 🎉</p>
+    {% endif %}
+    <ul>
+    {% for item in items %}
+        <li class="card">
+            <p class="sample-text">{{ item.text_preview }}</p>
+            <p>Labels proposed:
+                {% for pair in item.labels_proposed %}
+                    <code>{{ pair[0] }} → {{ pair[1] }}</code>{% if not loop.last %}, {% endif %}
+                {% endfor %}
+            </p>
+            <form hx-post="/labeler/expert/resolve" hx-swap="outerHTML">
+                <input type="hidden" name="tenant" value="{{ tenant }}">
+                <input type="hidden" name="sample_id" value="{{ item.sample_id }}">
+                <label>Expert id <input name="expert_id" value="carol@acme"></label>
+                <label>Label
+                    <select name="label">
+                        {% for cls in class_set %}
+                            <option value="{{ cls }}">{{ cls }}</option>
+                        {% endfor %}
+                    </select>
+                </label>
+                <button type="submit">Resolve</button>
+            </form>
+        </li>
+    {% endfor %}
+    </ul>
+</div>
+{% endblock %}
