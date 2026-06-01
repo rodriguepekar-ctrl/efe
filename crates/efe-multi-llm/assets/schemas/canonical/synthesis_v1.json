@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://efe.local/canonical/synthesis_v1",
+  "title": "Synthesis v1.0.0",
+  "type": "object",
+  "required": ["summary"],
+  "properties": {
+    "summary": { "type": "string", "minLength": 1, "maxLength": 5000 },
+    "citations": {
+      "type": "array",
+      "maxItems": 20,
+      "items": {
+        "type": "object",
+        "required": ["llm_source", "snippet"],
+        "properties": {
+          "llm_source": {
+            "type": "string",
+            "enum": ["claude","gpt","gemini","drafter","unknown"]
+          },
+          "snippet": { "type": "string", "maxLength": 500 }
+        },
+        "additionalProperties": false
+      }
+    },
+    "uncertainty": { "type": "string", "maxLength": 1000 },
+    "sections": {
+      "type": "array",
+      "maxItems": 30,
+      "items": {
+        "type": "object",
+        "properties": {
+          "heading": { "type": "string", "maxLength": 200 },
+          "body": { "type": "string", "maxLength": 5000 }
+        }
+      }
+    }
+  },
+  "additionalProperties": false
+}

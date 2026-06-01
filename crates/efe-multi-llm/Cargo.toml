@@ -1,0 +1,110 @@
+[package]
+name        = "efe-multi-llm"
+version     = { workspace = true }
+edition     = { workspace = true }
+rust-version = { workspace = true }
+authors     = { workspace = true }
+license     = { workspace = true }
+repository  = { workspace = true }
+description = "Phase 3 — Coordination multi-LLM (Vote/Relay/Debate/Specialist/Cascade) via nano-robots."
+
+[features]
+default = []
+
+[dependencies]
+# Crate fr\u00e8res.
+efe-nano-app-coordinator = { path = "../efe-nano-app-coordinator" }
+efe-coordinator          = { path = "../efe-coordinator" }
+
+# Workspace-pinned.
+tokio       = { workspace = true, features = ["sync", "time", "rt-multi-thread", "macros"] }
+serde       = { workspace = true }
+serde_json  = { workspace = true }
+thiserror   = { workspace = true }
+async-trait = { workspace = true }
+tracing     = { workspace = true }
+futures     = { workspace = true }
+uuid        = { workspace = true }
+dashmap     = { workspace = true }
+anyhow      = { workspace = true }
+
+# Sp\u00e9cifiques.
+blake3      = "1.5"
+chrono      = { version = "0.4", features = ["serde"] }
+parking_lot = "0.12"
+jsonschema  = "0.18"
+
+[dev-dependencies]
+tokio       = { workspace = true, features = ["full", "test-util", "macros"] }
+proptest    = "1.5"
+serial_test = "3.1"
+criterion   = { version = "0.5", features = ["async_tokio", "html_reports"] }
+
+[lib]
+name = "efe_multi_llm"
+path = "src/lib.rs"
+
+[[test]]
+name = "canonical_schemas"
+path = "tests/canonical_schemas.rs"
+
+[[test]]
+name = "unit_vote_ext"
+path = "tests/unit_vote_ext.rs"
+
+[[test]]
+name = "unit_reformulator_ext"
+path = "tests/unit_reformulator_ext.rs"
+
+[[test]]
+name = "unit_budget"
+path = "tests/unit_budget.rs"
+
+[[test]]
+name = "unit_tenant"
+path = "tests/unit_tenant.rs"
+
+[[test]]
+name = "unit_cancellation"
+path = "tests/unit_cancellation.rs"
+
+[[test]]
+name = "unit_decompose"
+path = "tests/unit_decompose.rs"
+
+[[test]]
+name = "unit_aggregate"
+path = "tests/unit_aggregate.rs"
+
+[[test]]
+name = "workflow_vote_3llm"
+path = "tests/workflow_vote_3llm.rs"
+
+[[test]]
+name = "workflow_cascade"
+path = "tests/workflow_cascade.rs"
+
+[[test]]
+name = "workflow_relay"
+path = "tests/workflow_relay.rs"
+
+[[test]]
+name = "workflow_debate"
+path = "tests/workflow_debate.rs"
+
+[[test]]
+name = "workflow_specialist"
+path = "tests/workflow_specialist.rs"
+
+[[test]]
+name = "chaos_multi_llm"
+path = "tests/chaos_multi_llm.rs"
+
+[[test]]
+name = "invariants_phase3"
+path = "tests/invariants_phase3.rs"
+
+[[bench]]
+name    = "multi_llm_throughput"
+path    = "benches/multi_llm_throughput.rs"
+harness = false

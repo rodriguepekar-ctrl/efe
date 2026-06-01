@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://efe.local/canonical/code_v1",
+  "title": "Code v1.0.0",
+  "type": "object",
+  "required": ["language", "source"],
+  "properties": {
+    "language": {
+      "type": "string",
+      "enum": ["rust","python","typescript","go","java","cpp","sql","bash"]
+    },
+    "source": { "type": "string", "maxLength": 50000 },
+    "tests": {
+      "type": "array",
+      "maxItems": 20,
+      "items": {
+        "type": "object",
+        "required": ["name", "source"],
+        "properties": {
+          "name": { "type": "string", "maxLength": 100 },
+          "source": { "type": "string", "maxLength": 10000 }
+        },
+        "additionalProperties": false
+      }
+    },
+    "deps": {
+      "type": "array",
+      "maxItems": 30,
+      "items": {
+        "type": "object",
+        "required": ["name", "version"],
+        "properties": {
+          "name": { "type": "string" },
+          "version": { "type": "string" }
+        },
+        "additionalProperties": false
+      }
+    },
+    "complexity_estimate": {
+      "type": "string",
+      "enum": ["TRIVIAL","SIMPLE","MODERATE","COMPLEX","RESEARCH"]
+    }
+  },
+  "additionalProperties": false
+}

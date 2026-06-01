@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://efe.local/canonical/argument_v1",
+  "title": "Argument v1.0.0",
+  "type": "object",
+  "required": ["thesis", "reasoning", "stance"],
+  "properties": {
+    "thesis": { "type": "string", "minLength": 1, "maxLength": 500 },
+    "reasoning": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 10,
+      "items": { "type": "string", "maxLength": 1000 }
+    },
+    "sources": {
+      "type": "array",
+      "maxItems": 10,
+      "items": { "type": "string", "maxLength": 200 }
+    },
+    "addresses_counter": { "type": ["string", "null"], "maxLength": 1000 },
+    "stance": {
+      "type": "string",
+      "enum": ["PRO","CONTRA","NEUTRAL","REBUTTAL"]
+    }
+  },
+  "additionalProperties": false
+}

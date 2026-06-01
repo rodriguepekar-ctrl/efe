@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://efe.local/canonical/claim_v1",
+  "title": "Claim v1.0.0",
+  "type": "object",
+  "required": ["claim", "confidence"],
+  "properties": {
+    "claim": { "type": "string", "minLength": 1, "maxLength": 1000 },
+    "evidence": {
+      "type": "array",
+      "maxItems": 10,
+      "items": {
+        "type": "object",
+        "required": ["source", "excerpt"],
+        "properties": {
+          "source": { "type": "string", "maxLength": 200 },
+          "excerpt": { "type": "string", "maxLength": 500 }
+        },
+        "additionalProperties": false
+      }
+    },
+    "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+    "domain": { "type": "string", "maxLength": 100 }
+  },
+  "additionalProperties": false
+}
