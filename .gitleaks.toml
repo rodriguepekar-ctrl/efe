@@ -29,6 +29,10 @@ paths = [
   # Code TLS : littéraux « -----BEGIN … KEY----- » utilisés pour parser le PEM,
   # pas une clé réelle embarquée.
   '''crates/efe-meta-swarm-server/src/tls/.*\.rs''',
+
+  # Documentation : tableau d'EXEMPLES de redaction (clés factices `AKIA0123…`
+  # → `<REDACTED-…>`) — pédagogique, aucun secret réel.
+  '''docs/repl\.md''',
 ]
 
 # Clés de TEST FACTICES : format valide (pour que les parsers les acceptent) mais
