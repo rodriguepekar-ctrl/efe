@@ -1,0 +1,913 @@
+id: multi-turn-onboarding
+version: 1.0.0
+description: Software onboarding flow (7 stages)
+labels:
+- id: signup
+  description: Account creation
+- id: verification
+  description: Identity check
+- id: first-use
+  description: First feature use
+- id: integration
+  description: Connect external service
+- id: upgrade
+  description: Plan upgrade
+- id: offboarding
+  description: Account closure
+- id: other
+  description: Catch-all
+test_sessions:
+- id: session-multi-turn-onboarding-000
+  turns:
+  - turn-0-content-signup-4c1bd4
+  - turn-1-content-signup-1bd418
+  - turn-2-content-signup-d41825
+  - turn-3-content-signup-1825ed
+  - turn-4-content-signup-25ed10
+  - turn-5-content-signup-ed103c
+  expected_label: signup
+  expected_convergence_turn: 5
+- id: session-multi-turn-onboarding-001
+  turns:
+  - turn-0-content-signup-32c2cd
+  - turn-1-content-signup-c2cdc5
+  - turn-2-content-signup-cdc513
+  - turn-3-content-signup-c51330
+  - turn-4-content-signup-13303e
+  - turn-5-content-signup-303e59
+  expected_label: signup
+  expected_convergence_turn: 5
+- id: session-multi-turn-onboarding-002
+  turns:
+  - turn-0-content-signup-09f3b8
+  - turn-1-content-signup-f3b88a
+  - turn-2-content-signup-b88a2d
+  - turn-3-content-signup-8a2d22
+  - turn-4-content-signup-2d220e
+  - turn-5-content-signup-220e8f
+  expected_label: signup
+  expected_convergence_turn: 5
+- id: session-multi-turn-onboarding-003
+  turns:
+  - turn-0-content-signup-fb4a8f
+  - turn-1-content-signup-4a8f08
+  - turn-2-content-signup-8f0866
+  - turn-3-content-signup-0866d8
+  expected_label: signup
+  expected_convergence_turn: 4
+- id: session-multi-turn-onboarding-004
+  turns:
+  - turn-0-content-signup-3af1e1
+  - turn-1-content-signup-f1e151
+  - turn-2-content-signup-e1512d
+  - turn-3-content-signup-512dbc
+  expected_label: signup
+  expected_convergence_turn: 4
+- id: session-multi-turn-onboarding-005
+  turns:
+  - turn-0-content-signup-aa5fb2
+  - turn-1-content-signup-5fb243
+  - turn-2-content-signup-b243b0
+  - turn-3-content-signup-43b0a0
+  - turn-4-content-signup-b0a0b9
+  - turn-5-content-signup-a0b969
+  expected_label: signup
+  expected_convergence_turn: 5
+- id: session-multi-turn-onboarding-006
+  turns:
+  - turn-0-content-signup-24bb19
+  - turn-1-content-signup-bb191d
+  - turn-2-content-signup-191dd3
+  - turn-3-content-signup-1dd381
+  expected_label: signup
+  expected_convergence_turn: 4
+- id: session-multi-turn-onboarding-007
+  turns:
+  - turn-0-content-signup-edc3bc
+  - turn-1-content-signup-c3bcad
+  - turn-2-content-signup-bcadb0
+  - turn-3-content-signup-adb0bb
+  - turn-4-content-signup-b0bb57
+  - turn-5-content-signup-bb5794
+  expected_label: signup
+  expected_convergence_turn: 5
+- id: session-multi-turn-onboarding-008
+  turns:
+  - turn-0-content-signup-0f9711
+  - turn-1-content-signup-97110b
+  - turn-2-content-signup-110b4d
+  - turn-3-content-signup-0b4de0
+  expected_label: signup
+  expected_convergence_turn: 4
+- id: session-multi-turn-onboarding-009
+  turns:
+  - turn-0-content-signup-f8c863
+  - turn-1-content-signup-c863bb
+  - turn-2-content-signup-63bb3a
+  - turn-3-content-signup-bb3afe
+  - turn-4-content-signup-3afea8
+  expected_label: signup
+  expected_convergence_turn: 5
+- id: session-multi-turn-onboarding-010
+  turns:
+  - turn-0-content-signup-0cdf1e
+  - turn-1-content-signup-df1eb0
+  - turn-2-content-signup-1eb0fe
+  - turn-3-content-signup-b0fe42
+  - turn-4-content-signup-fe42a6
+  expected_label: signup
+  expected_convergence_turn: 5
+- id: session-multi-turn-onboarding-011
+  turns:
+  - turn-0-content-signup-53353b
+  - turn-1-content-signup-353ba3
+  - turn-2-content-signup-3ba31c
+  - turn-3-content-signup-a31c24
+  - turn-4-content-signup-1c241d
+  - turn-5-content-signup-241d22
+  expected_label: signup
+  expected_convergence_turn: 5
+- id: session-multi-turn-onboarding-012
+  turns:
+  - turn-0-content-signup-e2fc9d
+  - turn-1-content-signup-fc9d7f
+  - turn-2-content-signup-9d7f3d
+  - turn-3-content-signup-7f3d78
+  - turn-4-content-signup-3d782e
+  expected_label: signup
+  expected_convergence_turn: 5
+- id: session-multi-turn-onboarding-013
+  turns:
+  - turn-0-content-signup-b239a6
+  - turn-1-content-signup-39a6c8
+  - turn-2-content-signup-a6c865
+  - turn-3-content-signup-c86523
+  - turn-4-content-signup-6523a8
+  expected_label: signup
+  expected_convergence_turn: 5
+- id: session-multi-turn-onboarding-014
+  turns:
+  - turn-0-content-verification-ac191e
+  - turn-1-content-verification-191ea4
+  - turn-2-content-verification-1ea42b
+  - turn-3-content-verification-a42bff
+  - turn-4-content-verification-2bff7c
+  - turn-5-content-verification-ff7cde
+  expected_label: verification
+  expected_convergence_turn: 5
+- id: session-multi-turn-onboarding-015
+  turns:
+  - turn-0-content-verification-eefc43
+  - turn-1-content-verification-fc43b6
+  - turn-2-content-verification-43b69e
+  - turn-3-content-verification-b69ec2
+  expected_label: verification
+  expected_convergence_turn: 4
+- id: session-multi-turn-onboarding-016
+  turns:
+  - turn-0-content-verification-e30318
+  - turn-1-content-verification-0318a7
+  - turn-2-content-verification-18a723
+  - turn-3-content-verification-a72372
+  - turn-4-content-verification-2372e2
+  - turn-5-content-verification-72e2ec
+  expected_label: verification
+  expected_convergence_turn: 5
+- id: session-multi-turn-onboarding-017
+  turns:
+  - turn-0-content-verification-e26e1c
+  - turn-1-content-verification-6e1c10
+  - turn-2-content-verification-1c100c
+  - turn-3-content-verification-100cf2
+  - turn-4-content-verification-0cf263
+  - turn-5-content-verification-f26348
+  expected_label: verification
+  expected_convergence_turn: 5
+- id: session-multi-turn-onboarding-018
+  turns:
+  - turn-0-content-verification-979f4b
+  - turn-1-content-verification-9f4b6f
+  - turn-2-content-verification-4b6f24
+  - turn-3-content-verification-6f24b0
+  - turn-4-content-verification-24b006
+  - turn-5-content-verification-b006ed
+  expected_label: verification
+  expected_convergence_turn: 5
+- id: session-multi-turn-onboarding-019
+  turns:
+  - turn-0-content-verification-7f37cf
+  - turn-1-content-verification-37cf23
+  - turn-2-content-verification-cf2353
+  - turn-3-content-verification-235385
+  - turn-4-content-verification-5385bd
+  expected_label: verification
+  expected_convergence_turn: 5
+- id: session-multi-turn-onboarding-020
+  turns:
+  - turn-0-content-verification-8579ee
+  - turn-1-content-verification-79eed2
+  - turn-2-content-verification-eed2fa
+  - turn-3-content-verification-d2fa63
+  - turn-4-content-verification-fa63fa
+  - turn-5-content-verification-63fae2
+  expected_label: verification
+  expected_convergence_turn: 5
+- id: session-multi-turn-onboarding-021
+  turns:
+  - turn-0-content-verification-c90699
+  - turn-1-content-verification-069912
+  - turn-2-content-verification-9912d1
+  - turn-3-content-verification-12d1d8
+  - turn-4-content-verification-d1d822
+  expected_label: verification
+  expected_convergence_turn: 5
+- id: session-multi-turn-onboarding-022
+  turns:
+  - turn-0-content-verification-29ad5e
+  - turn-1-content-verification-ad5eb4
+  - turn-2-content-verification-5eb470
+  - turn-3-content-verification-b47090
+  - turn-4-content-verification-709062
+  - turn-5-content-verification-90622b
+  expected_label: verification
+  expected_convergence_turn: 5
+- id: session-multi-turn-onboarding-023
+  turns:
+  - turn-0-content-verification-e0a805
+  - turn-1-content-verification-a805c0
+  - turn-2-content-verification-05c09f
+  - turn-3-content-verification-c09f4c
+  - turn-4-content-verification-9f4cff
+  expected_label: verification
+  expected_convergence_turn: 5
+- id: session-multi-turn-onboarding-024
+  turns:
+  - turn-0-content-verification-2376e8
+  - turn-1-content-verification-76e886
+  - turn-2-content-verification-e88662
+  - turn-3-content-verification-866224
+  - turn-4-content-verification-6224f6
+  - turn-5-content-verification-24f6be
+  expected_label: verification
+  expected_convergence_turn: 5
+- id: session-multi-turn-onboarding-025
+  turns:
+  - turn-0-content-verification-37bcee
+  - turn-1-content-verification-bcee74
+  - turn-2-content-verification-ee744d
+  - turn-3-content-verification-744ddb
+  - turn-4-content-verification-4ddb5f
+  expected_label: verification
+  expected_convergence_turn: 5
+- id: session-multi-turn-onboarding-026
+  turns:
+  - turn-0-content-verification-63529e
+  - turn-1-content-verification-529e39
+  - turn-2-content-verification-9e3957
+  - turn-3-content-verification-39574a
+  - turn-4-content-verification-574aab
+  expected_label: verification
+  expected_convergence_turn: 5
+- id: session-multi-turn-onboarding-027
+  turns:
+  - turn-0-content-verification-0acb95
+  - turn-1-content-verification-cb958c
+  - turn-2-content-verification-958cf6
+  - turn-3-content-verification-8cf66c
+  - turn-4-content-verification-f66ca0
+  expected_label: verification
+  expected_convergence_turn: 5
+- id: session-multi-turn-onboarding-028
+  turns:
+  - turn-0-content-first-use-546f43
+  - turn-1-content-first-use-6f4384
+  - turn-2-content-first-use-4384b6
+  - turn-3-content-first-use-84b61a
+  - turn-4-content-first-use-b61aff
+  - turn-5-content-first-use-1affa3
+  expected_label: first-use
+  expected_convergence_turn: 5
+- id: session-multi-turn-onboarding-029
+  turns:
+  - turn-0-content-first-use-c6e95a
+  - turn-1-content-first-use-e95a79
+  - turn-2-content-first-use-5a7918
+  - turn-3-content-first-use-7918ed
+  expected_label: first-use
+  expected_convergence_turn: 4
+- id: session-multi-turn-onboarding-030
+  turns:
+  - turn-0-content-first-use-4ada8a
+  - turn-1-content-first-use-da8abe
+  - turn-2-content-first-use-8abeb7
+  - turn-3-content-first-use-beb759
+  expected_label: first-use
+  expected_convergence_turn: 4
+- id: session-multi-turn-onboarding-031
+  turns:
+  - turn-0-content-first-use-ab83b3
+  - turn-1-content-first-use-83b31d
+  - turn-2-content-first-use-b31dae
+  - turn-3-content-first-use-1dae8e
+  - turn-4-content-first-use-ae8ef3
+  expected_label: first-use
+  expected_convergence_turn: 5
+- id: session-multi-turn-onboarding-032
+  turns:
+  - turn-0-content-first-use-78b799
+  - turn-1-content-first-use-b7991d
+  - turn-2-content-first-use-991d7c
+  - turn-3-content-first-use-1d7c46
+  expected_label: first-use
+  expected_convergence_turn: 4
+- id: session-multi-turn-onboarding-033
+  turns:
+  - turn-0-content-first-use-c1f5aa
+  - turn-1-content-first-use-f5aa9a
+  - turn-2-content-first-use-aa9ab6
+  - turn-3-content-first-use-9ab664
+  expected_label: first-use
+  expected_convergence_turn: 4
+- id: session-multi-turn-onboarding-034
+  turns:
+  - turn-0-content-first-use-b8249b
+  - turn-1-content-first-use-249bba
+  - turn-2-content-first-use-9bba64
+  - turn-3-content-first-use-ba6436
+  - turn-4-content-first-use-64360d
+  - turn-5-content-first-use-360d98
+  expected_label: first-use
+  expected_convergence_turn: 5
+- id: session-multi-turn-onboarding-035
+  turns:
+  - turn-0-content-first-use-0c6405
+  - turn-1-content-first-use-64057f
+  - turn-2-content-first-use-057f9e
+  - turn-3-content-first-use-7f9ee6
+  expected_label: first-use
+  expected_convergence_turn: 4
+- id: session-multi-turn-onboarding-036
+  turns:
+  - turn-0-content-first-use-f5638f
+  - turn-1-content-first-use-638f26
+  - turn-2-content-first-use-8f2648
+  - turn-3-content-first-use-264854
+  - turn-4-content-first-use-485461
+  - turn-5-content-first-use-5461f6
+  expected_label: first-use
+  expected_convergence_turn: 5
+- id: session-multi-turn-onboarding-037
+  turns:
+  - turn-0-content-first-use-f93935
+  - turn-1-content-first-use-393508
+  - turn-2-content-first-use-3508c5
+  - turn-3-content-first-use-08c5a4
+  expected_label: first-use
+  expected_convergence_turn: 4
+- id: session-multi-turn-onboarding-038
+  turns:
+  - turn-0-content-first-use-984644
+  - turn-1-content-first-use-464415
+  - turn-2-content-first-use-44152f
+  - turn-3-content-first-use-152f37
+  - turn-4-content-first-use-2f37a0
+  - turn-5-content-first-use-37a091
+  expected_label: first-use
+  expected_convergence_turn: 5
+- id: session-multi-turn-onboarding-039
+  turns:
+  - turn-0-content-first-use-cb4346
+  - turn-1-content-first-use-43469e
+  - turn-2-content-first-use-469e49
+  - turn-3-content-first-use-9e4971
+  - turn-4-content-first-use-4971f4
+  expected_label: first-use
+  expected_convergence_turn: 5
+- id: session-multi-turn-onboarding-040
+  turns:
+  - turn-0-content-first-use-a5a361
+  - turn-1-content-first-use-a361ba
+  - turn-2-content-first-use-61bad5
+  - turn-3-content-first-use-bad53d
+  expected_label: first-use
+  expected_convergence_turn: 4
+- id: session-multi-turn-onboarding-041
+  turns:
+  - turn-0-content-first-use-e5b11d
+  - turn-1-content-first-use-b11d59
+  - turn-2-content-first-use-1d594c
+  - turn-3-content-first-use-594c58
+  - turn-4-content-first-use-4c5823
+  - turn-5-content-first-use-582319
+  expected_label: first-use
+  expected_convergence_turn: 5
+- id: session-multi-turn-onboarding-042
+  turns:
+  - turn-0-content-integration-f71050
+  - turn-1-content-integration-1050c9
+  - turn-2-content-integration-50c93e
+  - turn-3-content-integration-c93e2a
+  expected_label: integration
+  expected_convergence_turn: 4
+- id: session-multi-turn-onboarding-043
+  turns:
+  - turn-0-content-integration-92c8b5
+  - turn-1-content-integration-c8b59d
+  - turn-2-content-integration-b59dcc
+  - turn-3-content-integration-9dcc7e
+  - turn-4-content-integration-cc7e73
+  expected_label: integration
+  expected_convergence_turn: 5
+- id: session-multi-turn-onboarding-044
+  turns:
+  - turn-0-content-integration-dfb0a3
+  - turn-1-content-integration-b0a334
+  - turn-2-content-integration-a334b4
+  - turn-3-content-integration-34b4e8
+  - turn-4-content-integration-b4e8a6
+  - turn-5-content-integration-e8a660
+  expected_label: integration
+  expected_convergence_turn: 5
+- id: session-multi-turn-onboarding-045
+  turns:
+  - turn-0-content-integration-29c0aa
+  - turn-1-content-integration-c0aaa8
+  - turn-2-content-integration-aaa8d5
+  - turn-3-content-integration-a8d5fc
+  - turn-4-content-integration-d5fc31
+  expected_label: integration
+  expected_convergence_turn: 5
+- id: session-multi-turn-onboarding-046
+  turns:
+  - turn-0-content-integration-b89756
+  - turn-1-content-integration-9756d5
+  - turn-2-content-integration-56d529
+  - turn-3-content-integration-d52911
+  - turn-4-content-integration-2911fe
+  - turn-5-content-integration-11fe91
+  expected_label: integration
+  expected_convergence_turn: 5
+- id: session-multi-turn-onboarding-047
+  turns:
+  - turn-0-content-integration-f6d0cc
+  - turn-1-content-integration-d0cc95
+  - turn-2-content-integration-cc952e
+  - turn-3-content-integration-952e99
+  - turn-4-content-integration-2e999c
+  expected_label: integration
+  expected_convergence_turn: 5
+- id: session-multi-turn-onboarding-048
+  turns:
+  - turn-0-content-integration-39d7e5
+  - turn-1-content-integration-d7e56d
+  - turn-2-content-integration-e56d7d
+  - turn-3-content-integration-6d7d3e
+  - turn-4-content-integration-7d3e09
+  expected_label: integration
+  expected_convergence_turn: 5
+- id: session-multi-turn-onboarding-049
+  turns:
+  - turn-0-content-integration-bc6f57
+  - turn-1-content-integration-6f57c2
+  - turn-2-content-integration-57c29b
+  - turn-3-content-integration-c29bf1
+  - turn-4-content-integration-9bf162
+  - turn-5-content-integration-f16260
+  expected_label: integration
+  expected_convergence_turn: 5
+- id: session-multi-turn-onboarding-050
+  turns:
+  - turn-0-content-integration-9302ff
+  - turn-1-content-integration-02ff06
+  - turn-2-content-integration-ff061a
+  - turn-3-content-integration-061ace
+  - turn-4-content-integration-1ace7f
+  - turn-5-content-integration-ce7fb1
+  expected_label: integration
+  expected_convergence_turn: 5
+- id: session-multi-turn-onboarding-051
+  turns:
+  - turn-0-content-integration-3b53cb
+  - turn-1-content-integration-53cb73
+  - turn-2-content-integration-cb7302
+  - turn-3-content-integration-730288
+  expected_label: integration
+  expected_convergence_turn: 4
+- id: session-multi-turn-onboarding-052
+  turns:
+  - turn-0-content-integration-bc875e
+  - turn-1-content-integration-875e0a
+  - turn-2-content-integration-5e0a6e
+  - turn-3-content-integration-0a6ea7
+  - turn-4-content-integration-6ea76b
+  expected_label: integration
+  expected_convergence_turn: 5
+- id: session-multi-turn-onboarding-053
+  turns:
+  - turn-0-content-integration-056168
+  - turn-1-content-integration-6168dd
+  - turn-2-content-integration-68dd24
+  - turn-3-content-integration-dd243c
+  expected_label: integration
+  expected_convergence_turn: 4
+- id: session-multi-turn-onboarding-054
+  turns:
+  - turn-0-content-integration-4be73c
+  - turn-1-content-integration-e73cf0
+  - turn-2-content-integration-3cf0d4
+  - turn-3-content-integration-f0d4dc
+  - turn-4-content-integration-d4dcf1
+  expected_label: integration
+  expected_convergence_turn: 5
+- id: session-multi-turn-onboarding-055
+  turns:
+  - turn-0-content-integration-61c121
+  - turn-1-content-integration-c12158
+  - turn-2-content-integration-215824
+  - turn-3-content-integration-5824ad
+  - turn-4-content-integration-24adb6
+  - turn-5-content-integration-adb61c
+  expected_label: integration
+  expected_convergence_turn: 5
+- id: session-multi-turn-onboarding-056
+  turns:
+  - turn-0-content-upgrade-42d69a
+  - turn-1-content-upgrade-d69aa7
+  - turn-2-content-upgrade-9aa7f4
+  - turn-3-content-upgrade-a7f49e
+  - turn-4-content-upgrade-f49e72
+  - turn-5-content-upgrade-9e72b4
+  expected_label: upgrade
+  expected_convergence_turn: 5
+- id: session-multi-turn-onboarding-057
+  turns:
+  - turn-0-content-upgrade-bc7bb5
+  - turn-1-content-upgrade-7bb585
+  - turn-2-content-upgrade-b585fe
+  - turn-3-content-upgrade-85fe90
+  - turn-4-content-upgrade-fe9063
+  - turn-5-content-upgrade-9063c6
+  expected_label: upgrade
+  expected_convergence_turn: 5
+- id: session-multi-turn-onboarding-058
+  turns:
+  - turn-0-content-upgrade-7e1661
+  - turn-1-content-upgrade-16611c
+  - turn-2-content-upgrade-611c08
+  - turn-3-content-upgrade-1c08fd
+  expected_label: upgrade
+  expected_convergence_turn: 4
+- id: session-multi-turn-onboarding-059
+  turns:
+  - turn-0-content-upgrade-70d6f6
+  - turn-1-content-upgrade-d6f640
+  - turn-2-content-upgrade-f640a7
+  - turn-3-content-upgrade-40a71a
+  - turn-4-content-upgrade-a71aea
+  - turn-5-content-upgrade-1aeae1
+  expected_label: upgrade
+  expected_convergence_turn: 5
+- id: session-multi-turn-onboarding-060
+  turns:
+  - turn-0-content-upgrade-b1d5c2
+  - turn-1-content-upgrade-d5c204
+  - turn-2-content-upgrade-c20497
+  - turn-3-content-upgrade-049708
+  expected_label: upgrade
+  expected_convergence_turn: 4
+- id: session-multi-turn-onboarding-061
+  turns:
+  - turn-0-content-upgrade-776e28
+  - turn-1-content-upgrade-6e283e
+  - turn-2-content-upgrade-283ead
+  - turn-3-content-upgrade-3ead93
+  - turn-4-content-upgrade-ad9328
+  expected_label: upgrade
+  expected_convergence_turn: 5
+- id: session-multi-turn-onboarding-062
+  turns:
+  - turn-0-content-upgrade-2336bd
+  - turn-1-content-upgrade-36bd28
+  - turn-2-content-upgrade-bd286b
+  - turn-3-content-upgrade-286b8e
+  expected_label: upgrade
+  expected_convergence_turn: 4
+- id: session-multi-turn-onboarding-063
+  turns:
+  - turn-0-content-upgrade-8d6bb5
+  - turn-1-content-upgrade-6bb591
+  - turn-2-content-upgrade-b5910e
+  - turn-3-content-upgrade-910e7b
+  - turn-4-content-upgrade-0e7b74
+  - turn-5-content-upgrade-7b742c
+  expected_label: upgrade
+  expected_convergence_turn: 5
+- id: session-multi-turn-onboarding-064
+  turns:
+  - turn-0-content-upgrade-6c3619
+  - turn-1-content-upgrade-361982
+  - turn-2-content-upgrade-19829a
+  - turn-3-content-upgrade-829a32
+  - turn-4-content-upgrade-9a3271
+  - turn-5-content-upgrade-3271d4
+  expected_label: upgrade
+  expected_convergence_turn: 5
+- id: session-multi-turn-onboarding-065
+  turns:
+  - turn-0-content-upgrade-90683c
+  - turn-1-content-upgrade-683c30
+  - turn-2-content-upgrade-3c3037
+  - turn-3-content-upgrade-303727
+  - turn-4-content-upgrade-372701
+  expected_label: upgrade
+  expected_convergence_turn: 5
+- id: session-multi-turn-onboarding-066
+  turns:
+  - turn-0-content-upgrade-5503cc
+  - turn-1-content-upgrade-03cc0a
+  - turn-2-content-upgrade-cc0a24
+  - turn-3-content-upgrade-0a248f
+  expected_label: upgrade
+  expected_convergence_turn: 4
+- id: session-multi-turn-onboarding-067
+  turns:
+  - turn-0-content-upgrade-1cd6b6
+  - turn-1-content-upgrade-d6b611
+  - turn-2-content-upgrade-b611fb
+  - turn-3-content-upgrade-11fb58
+  expected_label: upgrade
+  expected_convergence_turn: 4
+- id: session-multi-turn-onboarding-068
+  turns:
+  - turn-0-content-upgrade-4cac73
+  - turn-1-content-upgrade-ac73b3
+  - turn-2-content-upgrade-73b35d
+  - turn-3-content-upgrade-b35d2e
+  expected_label: upgrade
+  expected_convergence_turn: 4
+- id: session-multi-turn-onboarding-069
+  turns:
+  - turn-0-content-upgrade-ced240
+  - turn-1-content-upgrade-d240f0
+  - turn-2-content-upgrade-40f027
+  - turn-3-content-upgrade-f027ac
+  expected_label: upgrade
+  expected_convergence_turn: 4
+- id: session-multi-turn-onboarding-070
+  turns:
+  - turn-0-content-offboarding-9db5b6
+  - turn-1-content-offboarding-b5b61f
+  - turn-2-content-offboarding-b61f75
+  - turn-3-content-offboarding-1f7537
+  - turn-4-content-offboarding-75378f
+  - turn-5-content-offboarding-378f02
+  expected_label: offboarding
+  expected_convergence_turn: 5
+- id: session-multi-turn-onboarding-071
+  turns:
+  - turn-0-content-offboarding-86ea9f
+  - turn-1-content-offboarding-ea9fec
+  - turn-2-content-offboarding-9fec7d
+  - turn-3-content-offboarding-ec7d74
+  - turn-4-content-offboarding-7d7458
+  - turn-5-content-offboarding-7458b8
+  expected_label: offboarding
+  expected_convergence_turn: 5
+- id: session-multi-turn-onboarding-072
+  turns:
+  - turn-0-content-offboarding-440a7f
+  - turn-1-content-offboarding-0a7faa
+  - turn-2-content-offboarding-7faa16
+  - turn-3-content-offboarding-aa169f
+  - turn-4-content-offboarding-169f17
+  expected_label: offboarding
+  expected_convergence_turn: 5
+- id: session-multi-turn-onboarding-073
+  turns:
+  - turn-0-content-offboarding-e28f68
+  - turn-1-content-offboarding-8f6858
+  - turn-2-content-offboarding-6858f8
+  - turn-3-content-offboarding-58f8a2
+  expected_label: offboarding
+  expected_convergence_turn: 4
+- id: session-multi-turn-onboarding-074
+  turns:
+  - turn-0-content-offboarding-440ad1
+  - turn-1-content-offboarding-0ad125
+  - turn-2-content-offboarding-d125b5
+  - turn-3-content-offboarding-25b56d
+  - turn-4-content-offboarding-b56ddb
+  expected_label: offboarding
+  expected_convergence_turn: 5
+- id: session-multi-turn-onboarding-075
+  turns:
+  - turn-0-content-offboarding-fc8dfa
+  - turn-1-content-offboarding-8dfa31
+  - turn-2-content-offboarding-fa31be
+  - turn-3-content-offboarding-31be07
+  - turn-4-content-offboarding-be0793
+  - turn-5-content-offboarding-079326
+  expected_label: offboarding
+  expected_convergence_turn: 5
+- id: session-multi-turn-onboarding-076
+  turns:
+  - turn-0-content-offboarding-174d62
+  - turn-1-content-offboarding-4d62d0
+  - turn-2-content-offboarding-62d054
+  - turn-3-content-offboarding-d05414
+  - turn-4-content-offboarding-541467
+  expected_label: offboarding
+  expected_convergence_turn: 5
+- id: session-multi-turn-onboarding-077
+  turns:
+  - turn-0-content-offboarding-18ba7d
+  - turn-1-content-offboarding-ba7d5d
+  - turn-2-content-offboarding-7d5de1
+  - turn-3-content-offboarding-5de124
+  expected_label: offboarding
+  expected_convergence_turn: 4
+- id: session-multi-turn-onboarding-078
+  turns:
+  - turn-0-content-offboarding-0cc398
+  - turn-1-content-offboarding-c39801
+  - turn-2-content-offboarding-9801c9
+  - turn-3-content-offboarding-01c943
+  expected_label: offboarding
+  expected_convergence_turn: 4
+- id: session-multi-turn-onboarding-079
+  turns:
+  - turn-0-content-offboarding-597f09
+  - turn-1-content-offboarding-7f094d
+  - turn-2-content-offboarding-094daa
+  - turn-3-content-offboarding-4daaf3
+  - turn-4-content-offboarding-aaf39c
+  expected_label: offboarding
+  expected_convergence_turn: 5
+- id: session-multi-turn-onboarding-080
+  turns:
+  - turn-0-content-offboarding-71076b
+  - turn-1-content-offboarding-076b77
+  - turn-2-content-offboarding-6b7720
+  - turn-3-content-offboarding-77204f
+  expected_label: offboarding
+  expected_convergence_turn: 4
+- id: session-multi-turn-onboarding-081
+  turns:
+  - turn-0-content-offboarding-c423cf
+  - turn-1-content-offboarding-23cfc0
+  - turn-2-content-offboarding-cfc042
+  - turn-3-content-offboarding-c042c4
+  - turn-4-content-offboarding-42c4d8
+  expected_label: offboarding
+  expected_convergence_turn: 5
+- id: session-multi-turn-onboarding-082
+  turns:
+  - turn-0-content-offboarding-454fef
+  - turn-1-content-offboarding-4fef43
+  - turn-2-content-offboarding-ef430c
+  - turn-3-content-offboarding-430cfb
+  - turn-4-content-offboarding-0cfb54
+  expected_label: offboarding
+  expected_convergence_turn: 5
+- id: session-multi-turn-onboarding-083
+  turns:
+  - turn-0-content-offboarding-0e9a7d
+  - turn-1-content-offboarding-9a7db5
+  - turn-2-content-offboarding-7db503
+  - turn-3-content-offboarding-b503dd
+  - turn-4-content-offboarding-03ddb7
+  expected_label: offboarding
+  expected_convergence_turn: 5
+- id: session-multi-turn-onboarding-084
+  turns:
+  - turn-0-content-other-844c09
+  - turn-1-content-other-4c09df
+  - turn-2-content-other-09df3d
+  - turn-3-content-other-df3db0
+  expected_label: other
+  expected_convergence_turn: 4
+- id: session-multi-turn-onboarding-085
+  turns:
+  - turn-0-content-other-39d065
+  - turn-1-content-other-d065c3
+  - turn-2-content-other-65c387
+  - turn-3-content-other-c387d9
+  - turn-4-content-other-87d933
+  expected_label: other
+  expected_convergence_turn: 5
+- id: session-multi-turn-onboarding-086
+  turns:
+  - turn-0-content-other-a62897
+  - turn-1-content-other-289779
+  - turn-2-content-other-977936
+  - turn-3-content-other-7936a8
+  - turn-4-content-other-36a894
+  - turn-5-content-other-a894b9
+  expected_label: other
+  expected_convergence_turn: 5
+- id: session-multi-turn-onboarding-087
+  turns:
+  - turn-0-content-other-b386e1
+  - turn-1-content-other-86e14d
+  - turn-2-content-other-e14d8f
+  - turn-3-content-other-4d8fa3
+  expected_label: other
+  expected_convergence_turn: 4
+- id: session-multi-turn-onboarding-088
+  turns:
+  - turn-0-content-other-f2a542
+  - turn-1-content-other-a5426c
+  - turn-2-content-other-426c5e
+  - turn-3-content-other-6c5e39
+  - turn-4-content-other-5e399c
+  expected_label: other
+  expected_convergence_turn: 5
+- id: session-multi-turn-onboarding-089
+  turns:
+  - turn-0-content-other-8ebd6a
+  - turn-1-content-other-bd6adb
+  - turn-2-content-other-6adb84
+  - turn-3-content-other-db84e2
+  - turn-4-content-other-84e28a
+  - turn-5-content-other-e28add
+  expected_label: other
+  expected_convergence_turn: 5
+- id: session-multi-turn-onboarding-090
+  turns:
+  - turn-0-content-other-059afd
+  - turn-1-content-other-9afd1b
+  - turn-2-content-other-fd1bc1
+  - turn-3-content-other-1bc104
+  expected_label: other
+  expected_convergence_turn: 4
+- id: session-multi-turn-onboarding-091
+  turns:
+  - turn-0-content-other-eeb5ee
+  - turn-1-content-other-b5ee5a
+  - turn-2-content-other-ee5a9a
+  - turn-3-content-other-5a9a50
+  - turn-4-content-other-9a50d1
+  - turn-5-content-other-50d123
+  expected_label: other
+  expected_convergence_turn: 5
+- id: session-multi-turn-onboarding-092
+  turns:
+  - turn-0-content-other-392e6e
+  - turn-1-content-other-2e6e55
+  - turn-2-content-other-6e55ea
+  - turn-3-content-other-55ea28
+  - turn-4-content-other-ea288f
+  - turn-5-content-other-288f47
+  expected_label: other
+  expected_convergence_turn: 5
+- id: session-multi-turn-onboarding-093
+  turns:
+  - turn-0-content-other-393bd5
+  - turn-1-content-other-3bd572
+  - turn-2-content-other-d572ce
+  - turn-3-content-other-72ce6a
+  - turn-4-content-other-ce6a3d
+  - turn-5-content-other-6a3ded
+  expected_label: other
+  expected_convergence_turn: 5
+- id: session-multi-turn-onboarding-094
+  turns:
+  - turn-0-content-other-b76a9c
+  - turn-1-content-other-6a9cf9
+  - turn-2-content-other-9cf9c9
+  - turn-3-content-other-f9c9f5
+  - turn-4-content-other-c9f504
+  - turn-5-content-other-f50483
+  expected_label: other
+  expected_convergence_turn: 5
+- id: session-multi-turn-onboarding-095
+  turns:
+  - turn-0-content-other-2d6a4d
+  - turn-1-content-other-6a4d0b
+  - turn-2-content-other-4d0b22
+  - turn-3-content-other-0b22d4
+  - turn-4-content-other-22d42d
+  expected_label: other
+  expected_convergence_turn: 5
+- id: session-multi-turn-onboarding-096
+  turns:
+  - turn-0-content-other-546de0
+  - turn-1-content-other-6de057
+  - turn-2-content-other-e057f9
+  - turn-3-content-other-57f988
+  - turn-4-content-other-f988fc
+  expected_label: other
+  expected_convergence_turn: 5
+- id: session-multi-turn-onboarding-097
+  turns:
+  - turn-0-content-other-31a420
+  - turn-1-content-other-a4201a
+  - turn-2-content-other-201a72
+  - turn-3-content-other-1a721c
+  expected_label: other
+  expected_convergence_turn: 4
+metadata:
+  total_sessions: 98
+  convergence_target_turns: 5
+  max_turns: 10
+  freeze_date: '2026-05-13'

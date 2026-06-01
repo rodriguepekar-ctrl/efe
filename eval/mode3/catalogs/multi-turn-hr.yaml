@@ -1,0 +1,885 @@
+id: multi-turn-hr
+version: 1.0.0
+description: HR self-service multi-turn (6 topics)
+labels:
+- id: payroll
+  description: Salary / benefits
+- id: leave
+  description: Vacation / sick days
+- id: performance
+  description: Reviews / goals
+- id: recruitment
+  description: Job postings
+- id: policy
+  description: Company policies
+- id: other
+  description: Catch-all
+test_sessions:
+- id: session-multi-turn-hr-000
+  turns:
+  - turn-0-content-payroll-271985
+  - turn-1-content-payroll-1985b6
+  - turn-2-content-payroll-85b6b8
+  - turn-3-content-payroll-b6b8ed
+  - turn-4-content-payroll-b8ed1b
+  - turn-5-content-payroll-ed1bca
+  expected_label: payroll
+  expected_convergence_turn: 5
+- id: session-multi-turn-hr-001
+  turns:
+  - turn-0-content-payroll-64c45c
+  - turn-1-content-payroll-c45c8f
+  - turn-2-content-payroll-5c8ffa
+  - turn-3-content-payroll-8ffa28
+  - turn-4-content-payroll-fa2860
+  - turn-5-content-payroll-2860d4
+  expected_label: payroll
+  expected_convergence_turn: 5
+- id: session-multi-turn-hr-002
+  turns:
+  - turn-0-content-payroll-8be478
+  - turn-1-content-payroll-e4783d
+  - turn-2-content-payroll-783dd5
+  - turn-3-content-payroll-3dd592
+  - turn-4-content-payroll-d592d6
+  - turn-5-content-payroll-92d604
+  expected_label: payroll
+  expected_convergence_turn: 5
+- id: session-multi-turn-hr-003
+  turns:
+  - turn-0-content-payroll-fa72fc
+  - turn-1-content-payroll-72fc8b
+  - turn-2-content-payroll-fc8bfe
+  - turn-3-content-payroll-8bfe73
+  expected_label: payroll
+  expected_convergence_turn: 4
+- id: session-multi-turn-hr-004
+  turns:
+  - turn-0-content-payroll-13ab24
+  - turn-1-content-payroll-ab2428
+  - turn-2-content-payroll-242881
+  - turn-3-content-payroll-28814d
+  - turn-4-content-payroll-814dd7
+  expected_label: payroll
+  expected_convergence_turn: 5
+- id: session-multi-turn-hr-005
+  turns:
+  - turn-0-content-payroll-a231c0
+  - turn-1-content-payroll-31c09e
+  - turn-2-content-payroll-c09e16
+  - turn-3-content-payroll-9e16fc
+  - turn-4-content-payroll-16fcbe
+  expected_label: payroll
+  expected_convergence_turn: 5
+- id: session-multi-turn-hr-006
+  turns:
+  - turn-0-content-payroll-b7d6b7
+  - turn-1-content-payroll-d6b7db
+  - turn-2-content-payroll-b7db06
+  - turn-3-content-payroll-db06a8
+  - turn-4-content-payroll-06a81e
+  expected_label: payroll
+  expected_convergence_turn: 5
+- id: session-multi-turn-hr-007
+  turns:
+  - turn-0-content-payroll-7bd8da
+  - turn-1-content-payroll-d8dadd
+  - turn-2-content-payroll-dadddf
+  - turn-3-content-payroll-dddf1c
+  - turn-4-content-payroll-df1cd4
+  expected_label: payroll
+  expected_convergence_turn: 5
+- id: session-multi-turn-hr-008
+  turns:
+  - turn-0-content-payroll-aa4ce2
+  - turn-1-content-payroll-4ce21a
+  - turn-2-content-payroll-e21a5e
+  - turn-3-content-payroll-1a5ed8
+  - turn-4-content-payroll-5ed88b
+  expected_label: payroll
+  expected_convergence_turn: 5
+- id: session-multi-turn-hr-009
+  turns:
+  - turn-0-content-payroll-7ea0d0
+  - turn-1-content-payroll-a0d010
+  - turn-2-content-payroll-d010c0
+  - turn-3-content-payroll-10c047
+  - turn-4-content-payroll-c047a2
+  expected_label: payroll
+  expected_convergence_turn: 5
+- id: session-multi-turn-hr-010
+  turns:
+  - turn-0-content-payroll-7bdd49
+  - turn-1-content-payroll-dd49be
+  - turn-2-content-payroll-49be9c
+  - turn-3-content-payroll-be9cc8
+  expected_label: payroll
+  expected_convergence_turn: 4
+- id: session-multi-turn-hr-011
+  turns:
+  - turn-0-content-payroll-79797d
+  - turn-1-content-payroll-797d99
+  - turn-2-content-payroll-7d99ff
+  - turn-3-content-payroll-99ffae
+  expected_label: payroll
+  expected_convergence_turn: 4
+- id: session-multi-turn-hr-012
+  turns:
+  - turn-0-content-payroll-137101
+  - turn-1-content-payroll-710181
+  - turn-2-content-payroll-01817a
+  - turn-3-content-payroll-817a60
+  - turn-4-content-payroll-7a60d8
+  - turn-5-content-payroll-60d81c
+  expected_label: payroll
+  expected_convergence_turn: 5
+- id: session-multi-turn-hr-013
+  turns:
+  - turn-0-content-payroll-6743e2
+  - turn-1-content-payroll-43e216
+  - turn-2-content-payroll-e2169a
+  - turn-3-content-payroll-169a63
+  expected_label: payroll
+  expected_convergence_turn: 4
+- id: session-multi-turn-hr-014
+  turns:
+  - turn-0-content-payroll-977b1e
+  - turn-1-content-payroll-7b1e8e
+  - turn-2-content-payroll-1e8e47
+  - turn-3-content-payroll-8e47d8
+  - turn-4-content-payroll-47d89c
+  - turn-5-content-payroll-d89ce1
+  expected_label: payroll
+  expected_convergence_turn: 5
+- id: session-multi-turn-hr-015
+  turns:
+  - turn-0-content-payroll-06d14f
+  - turn-1-content-payroll-d14f05
+  - turn-2-content-payroll-4f05fc
+  - turn-3-content-payroll-05fc2b
+  - turn-4-content-payroll-fc2b34
+  - turn-5-content-payroll-2b349c
+  expected_label: payroll
+  expected_convergence_turn: 5
+- id: session-multi-turn-hr-016
+  turns:
+  - turn-0-content-leave-c84260
+  - turn-1-content-leave-426019
+  - turn-2-content-leave-60192a
+  - turn-3-content-leave-192ae9
+  - turn-4-content-leave-2ae938
+  expected_label: leave
+  expected_convergence_turn: 5
+- id: session-multi-turn-hr-017
+  turns:
+  - turn-0-content-leave-8dbcff
+  - turn-1-content-leave-bcff18
+  - turn-2-content-leave-ff1876
+  - turn-3-content-leave-187618
+  expected_label: leave
+  expected_convergence_turn: 4
+- id: session-multi-turn-hr-018
+  turns:
+  - turn-0-content-leave-47761b
+  - turn-1-content-leave-761bd1
+  - turn-2-content-leave-1bd18d
+  - turn-3-content-leave-d18d2e
+  expected_label: leave
+  expected_convergence_turn: 4
+- id: session-multi-turn-hr-019
+  turns:
+  - turn-0-content-leave-fa8236
+  - turn-1-content-leave-8236cb
+  - turn-2-content-leave-36cbaf
+  - turn-3-content-leave-cbaf43
+  - turn-4-content-leave-af43cf
+  expected_label: leave
+  expected_convergence_turn: 5
+- id: session-multi-turn-hr-020
+  turns:
+  - turn-0-content-leave-fa2858
+  - turn-1-content-leave-2858e1
+  - turn-2-content-leave-58e1f3
+  - turn-3-content-leave-e1f3c5
+  expected_label: leave
+  expected_convergence_turn: 4
+- id: session-multi-turn-hr-021
+  turns:
+  - turn-0-content-leave-12fb6e
+  - turn-1-content-leave-fb6eaa
+  - turn-2-content-leave-6eaa6d
+  - turn-3-content-leave-aa6d0a
+  - turn-4-content-leave-6d0a34
+  expected_label: leave
+  expected_convergence_turn: 5
+- id: session-multi-turn-hr-022
+  turns:
+  - turn-0-content-leave-9689d6
+  - turn-1-content-leave-89d62a
+  - turn-2-content-leave-d62a6d
+  - turn-3-content-leave-2a6db3
+  - turn-4-content-leave-6db3ae
+  - turn-5-content-leave-b3aef1
+  expected_label: leave
+  expected_convergence_turn: 5
+- id: session-multi-turn-hr-023
+  turns:
+  - turn-0-content-leave-1a6dc9
+  - turn-1-content-leave-6dc9a5
+  - turn-2-content-leave-c9a5f0
+  - turn-3-content-leave-a5f0bc
+  expected_label: leave
+  expected_convergence_turn: 4
+- id: session-multi-turn-hr-024
+  turns:
+  - turn-0-content-leave-70e6f5
+  - turn-1-content-leave-e6f581
+  - turn-2-content-leave-f58138
+  - turn-3-content-leave-813804
+  - turn-4-content-leave-38049d
+  expected_label: leave
+  expected_convergence_turn: 5
+- id: session-multi-turn-hr-025
+  turns:
+  - turn-0-content-leave-77955c
+  - turn-1-content-leave-955cba
+  - turn-2-content-leave-5cba52
+  - turn-3-content-leave-ba525d
+  - turn-4-content-leave-525d15
+  expected_label: leave
+  expected_convergence_turn: 5
+- id: session-multi-turn-hr-026
+  turns:
+  - turn-0-content-leave-2fd0cf
+  - turn-1-content-leave-d0cff3
+  - turn-2-content-leave-cff364
+  - turn-3-content-leave-f364be
+  expected_label: leave
+  expected_convergence_turn: 4
+- id: session-multi-turn-hr-027
+  turns:
+  - turn-0-content-leave-9cb215
+  - turn-1-content-leave-b21577
+  - turn-2-content-leave-157708
+  - turn-3-content-leave-77089a
+  expected_label: leave
+  expected_convergence_turn: 4
+- id: session-multi-turn-hr-028
+  turns:
+  - turn-0-content-leave-561388
+  - turn-1-content-leave-1388bf
+  - turn-2-content-leave-88bf06
+  - turn-3-content-leave-bf0664
+  expected_label: leave
+  expected_convergence_turn: 4
+- id: session-multi-turn-hr-029
+  turns:
+  - turn-0-content-leave-d0d89f
+  - turn-1-content-leave-d89fc0
+  - turn-2-content-leave-9fc011
+  - turn-3-content-leave-c01169
+  - turn-4-content-leave-1169e4
+  expected_label: leave
+  expected_convergence_turn: 5
+- id: session-multi-turn-hr-030
+  turns:
+  - turn-0-content-leave-ae30fa
+  - turn-1-content-leave-30faa8
+  - turn-2-content-leave-faa812
+  - turn-3-content-leave-a81270
+  - turn-4-content-leave-12707d
+  - turn-5-content-leave-707d4c
+  expected_label: leave
+  expected_convergence_turn: 5
+- id: session-multi-turn-hr-031
+  turns:
+  - turn-0-content-leave-58a9c5
+  - turn-1-content-leave-a9c558
+  - turn-2-content-leave-c55802
+  - turn-3-content-leave-58023a
+  - turn-4-content-leave-023a9a
+  expected_label: leave
+  expected_convergence_turn: 5
+- id: session-multi-turn-hr-032
+  turns:
+  - turn-0-content-performance-07ac57
+  - turn-1-content-performance-ac57aa
+  - turn-2-content-performance-57aacd
+  - turn-3-content-performance-aacd11
+  - turn-4-content-performance-cd1148
+  - turn-5-content-performance-1148b5
+  expected_label: performance
+  expected_convergence_turn: 5
+- id: session-multi-turn-hr-033
+  turns:
+  - turn-0-content-performance-2c937b
+  - turn-1-content-performance-937b41
+  - turn-2-content-performance-7b417b
+  - turn-3-content-performance-417b73
+  expected_label: performance
+  expected_convergence_turn: 4
+- id: session-multi-turn-hr-034
+  turns:
+  - turn-0-content-performance-e17122
+  - turn-1-content-performance-71220c
+  - turn-2-content-performance-220cdc
+  - turn-3-content-performance-0cdc3b
+  - turn-4-content-performance-dc3bdb
+  - turn-5-content-performance-3bdb9d
+  expected_label: performance
+  expected_convergence_turn: 5
+- id: session-multi-turn-hr-035
+  turns:
+  - turn-0-content-performance-40c7a4
+  - turn-1-content-performance-c7a414
+  - turn-2-content-performance-a4143c
+  - turn-3-content-performance-143cff
+  - turn-4-content-performance-3cff44
+  - turn-5-content-performance-ff446c
+  expected_label: performance
+  expected_convergence_turn: 5
+- id: session-multi-turn-hr-036
+  turns:
+  - turn-0-content-performance-71896e
+  - turn-1-content-performance-896ef1
+  - turn-2-content-performance-6ef17b
+  - turn-3-content-performance-f17b65
+  expected_label: performance
+  expected_convergence_turn: 4
+- id: session-multi-turn-hr-037
+  turns:
+  - turn-0-content-performance-853850
+  - turn-1-content-performance-38500f
+  - turn-2-content-performance-500f93
+  - turn-3-content-performance-0f93d4
+  expected_label: performance
+  expected_convergence_turn: 4
+- id: session-multi-turn-hr-038
+  turns:
+  - turn-0-content-performance-a38707
+  - turn-1-content-performance-87078e
+  - turn-2-content-performance-078eb0
+  - turn-3-content-performance-8eb00d
+  expected_label: performance
+  expected_convergence_turn: 4
+- id: session-multi-turn-hr-039
+  turns:
+  - turn-0-content-performance-957b75
+  - turn-1-content-performance-7b750f
+  - turn-2-content-performance-750f0c
+  - turn-3-content-performance-0f0c19
+  - turn-4-content-performance-0c19c5
+  expected_label: performance
+  expected_convergence_turn: 5
+- id: session-multi-turn-hr-040
+  turns:
+  - turn-0-content-performance-4a6dd9
+  - turn-1-content-performance-6dd982
+  - turn-2-content-performance-d98210
+  - turn-3-content-performance-8210cc
+  - turn-4-content-performance-10cc73
+  expected_label: performance
+  expected_convergence_turn: 5
+- id: session-multi-turn-hr-041
+  turns:
+  - turn-0-content-performance-b983ca
+  - turn-1-content-performance-83ca8c
+  - turn-2-content-performance-ca8cfd
+  - turn-3-content-performance-8cfdb5
+  - turn-4-content-performance-fdb5f2
+  expected_label: performance
+  expected_convergence_turn: 5
+- id: session-multi-turn-hr-042
+  turns:
+  - turn-0-content-performance-d25e55
+  - turn-1-content-performance-5e553a
+  - turn-2-content-performance-553ad9
+  - turn-3-content-performance-3ad9d2
+  expected_label: performance
+  expected_convergence_turn: 4
+- id: session-multi-turn-hr-043
+  turns:
+  - turn-0-content-performance-ec54b5
+  - turn-1-content-performance-54b5ea
+  - turn-2-content-performance-b5ea6c
+  - turn-3-content-performance-ea6cd7
+  expected_label: performance
+  expected_convergence_turn: 4
+- id: session-multi-turn-hr-044
+  turns:
+  - turn-0-content-performance-7faa88
+  - turn-1-content-performance-aa880d
+  - turn-2-content-performance-880d97
+  - turn-3-content-performance-0d97d1
+  - turn-4-content-performance-97d1fa
+  expected_label: performance
+  expected_convergence_turn: 5
+- id: session-multi-turn-hr-045
+  turns:
+  - turn-0-content-performance-c62ebe
+  - turn-1-content-performance-2ebe9c
+  - turn-2-content-performance-be9cb2
+  - turn-3-content-performance-9cb2c1
+  - turn-4-content-performance-b2c1c8
+  expected_label: performance
+  expected_convergence_turn: 5
+- id: session-multi-turn-hr-046
+  turns:
+  - turn-0-content-performance-212b54
+  - turn-1-content-performance-2b54a8
+  - turn-2-content-performance-54a8c4
+  - turn-3-content-performance-a8c48b
+  expected_label: performance
+  expected_convergence_turn: 4
+- id: session-multi-turn-hr-047
+  turns:
+  - turn-0-content-performance-2de57f
+  - turn-1-content-performance-e57f8e
+  - turn-2-content-performance-7f8e2b
+  - turn-3-content-performance-8e2bc1
+  expected_label: performance
+  expected_convergence_turn: 4
+- id: session-multi-turn-hr-048
+  turns:
+  - turn-0-content-recruitment-099c1b
+  - turn-1-content-recruitment-9c1b39
+  - turn-2-content-recruitment-1b3960
+  - turn-3-content-recruitment-3960f8
+  - turn-4-content-recruitment-60f833
+  - turn-5-content-recruitment-f8332f
+  expected_label: recruitment
+  expected_convergence_turn: 5
+- id: session-multi-turn-hr-049
+  turns:
+  - turn-0-content-recruitment-6adbd0
+  - turn-1-content-recruitment-dbd0c2
+  - turn-2-content-recruitment-d0c26e
+  - turn-3-content-recruitment-c26e82
+  expected_label: recruitment
+  expected_convergence_turn: 4
+- id: session-multi-turn-hr-050
+  turns:
+  - turn-0-content-recruitment-000456
+  - turn-1-content-recruitment-0456df
+  - turn-2-content-recruitment-56df5a
+  - turn-3-content-recruitment-df5aae
+  - turn-4-content-recruitment-5aae0f
+  expected_label: recruitment
+  expected_convergence_turn: 5
+- id: session-multi-turn-hr-051
+  turns:
+  - turn-0-content-recruitment-b3840d
+  - turn-1-content-recruitment-840d77
+  - turn-2-content-recruitment-0d77ea
+  - turn-3-content-recruitment-77ead0
+  - turn-4-content-recruitment-ead0a3
+  - turn-5-content-recruitment-d0a35d
+  expected_label: recruitment
+  expected_convergence_turn: 5
+- id: session-multi-turn-hr-052
+  turns:
+  - turn-0-content-recruitment-2992e3
+  - turn-1-content-recruitment-92e3fc
+  - turn-2-content-recruitment-e3fc45
+  - turn-3-content-recruitment-fc4578
+  - turn-4-content-recruitment-45784b
+  - turn-5-content-recruitment-784b8c
+  expected_label: recruitment
+  expected_convergence_turn: 5
+- id: session-multi-turn-hr-053
+  turns:
+  - turn-0-content-recruitment-b3dd48
+  - turn-1-content-recruitment-dd4809
+  - turn-2-content-recruitment-4809e6
+  - turn-3-content-recruitment-09e6b5
+  - turn-4-content-recruitment-e6b5e3
+  - turn-5-content-recruitment-b5e301
+  expected_label: recruitment
+  expected_convergence_turn: 5
+- id: session-multi-turn-hr-054
+  turns:
+  - turn-0-content-recruitment-c755fe
+  - turn-1-content-recruitment-55fe7e
+  - turn-2-content-recruitment-fe7ea5
+  - turn-3-content-recruitment-7ea59f
+  - turn-4-content-recruitment-a59f82
+  expected_label: recruitment
+  expected_convergence_turn: 5
+- id: session-multi-turn-hr-055
+  turns:
+  - turn-0-content-recruitment-0155c7
+  - turn-1-content-recruitment-55c761
+  - turn-2-content-recruitment-c7615b
+  - turn-3-content-recruitment-615b53
+  - turn-4-content-recruitment-5b53c4
+  expected_label: recruitment
+  expected_convergence_turn: 5
+- id: session-multi-turn-hr-056
+  turns:
+  - turn-0-content-recruitment-83cebf
+  - turn-1-content-recruitment-cebf16
+  - turn-2-content-recruitment-bf1676
+  - turn-3-content-recruitment-1676bc
+  - turn-4-content-recruitment-76bcdb
+  expected_label: recruitment
+  expected_convergence_turn: 5
+- id: session-multi-turn-hr-057
+  turns:
+  - turn-0-content-recruitment-a90dc7
+  - turn-1-content-recruitment-0dc735
+  - turn-2-content-recruitment-c73518
+  - turn-3-content-recruitment-35184f
+  - turn-4-content-recruitment-184f95
+  expected_label: recruitment
+  expected_convergence_turn: 5
+- id: session-multi-turn-hr-058
+  turns:
+  - turn-0-content-recruitment-3d456d
+  - turn-1-content-recruitment-456dd0
+  - turn-2-content-recruitment-6dd014
+  - turn-3-content-recruitment-d01441
+  - turn-4-content-recruitment-144159
+  expected_label: recruitment
+  expected_convergence_turn: 5
+- id: session-multi-turn-hr-059
+  turns:
+  - turn-0-content-recruitment-3d0e3d
+  - turn-1-content-recruitment-0e3da3
+  - turn-2-content-recruitment-3da367
+  - turn-3-content-recruitment-a3674e
+  - turn-4-content-recruitment-674e01
+  expected_label: recruitment
+  expected_convergence_turn: 5
+- id: session-multi-turn-hr-060
+  turns:
+  - turn-0-content-recruitment-9909cc
+  - turn-1-content-recruitment-09cc8d
+  - turn-2-content-recruitment-cc8d2b
+  - turn-3-content-recruitment-8d2b17
+  - turn-4-content-recruitment-2b17e8
+  - turn-5-content-recruitment-17e85d
+  expected_label: recruitment
+  expected_convergence_turn: 5
+- id: session-multi-turn-hr-061
+  turns:
+  - turn-0-content-recruitment-ac4783
+  - turn-1-content-recruitment-4783d2
+  - turn-2-content-recruitment-83d275
+  - turn-3-content-recruitment-d275ba
+  expected_label: recruitment
+  expected_convergence_turn: 4
+- id: session-multi-turn-hr-062
+  turns:
+  - turn-0-content-recruitment-b701cd
+  - turn-1-content-recruitment-01cd50
+  - turn-2-content-recruitment-cd50d8
+  - turn-3-content-recruitment-50d851
+  - turn-4-content-recruitment-d851a6
+  expected_label: recruitment
+  expected_convergence_turn: 5
+- id: session-multi-turn-hr-063
+  turns:
+  - turn-0-content-recruitment-6f6564
+  - turn-1-content-recruitment-6564a6
+  - turn-2-content-recruitment-64a6bb
+  - turn-3-content-recruitment-a6bbb4
+  - turn-4-content-recruitment-bbb4a6
+  expected_label: recruitment
+  expected_convergence_turn: 5
+- id: session-multi-turn-hr-064
+  turns:
+  - turn-0-content-policy-2a221b
+  - turn-1-content-policy-221b58
+  - turn-2-content-policy-1b580c
+  - turn-3-content-policy-580cd5
+  - turn-4-content-policy-0cd52b
+  - turn-5-content-policy-d52b29
+  expected_label: policy
+  expected_convergence_turn: 5
+- id: session-multi-turn-hr-065
+  turns:
+  - turn-0-content-policy-655feb
+  - turn-1-content-policy-5feb6a
+  - turn-2-content-policy-eb6a1a
+  - turn-3-content-policy-6a1a7e
+  expected_label: policy
+  expected_convergence_turn: 4
+- id: session-multi-turn-hr-066
+  turns:
+  - turn-0-content-policy-a23fb3
+  - turn-1-content-policy-3fb353
+  - turn-2-content-policy-b353d6
+  - turn-3-content-policy-53d6f8
+  - turn-4-content-policy-d6f8a6
+  - turn-5-content-policy-f8a615
+  expected_label: policy
+  expected_convergence_turn: 5
+- id: session-multi-turn-hr-067
+  turns:
+  - turn-0-content-policy-f77066
+  - turn-1-content-policy-706612
+  - turn-2-content-policy-6612b5
+  - turn-3-content-policy-12b5cf
+  - turn-4-content-policy-b5cffa
+  expected_label: policy
+  expected_convergence_turn: 5
+- id: session-multi-turn-hr-068
+  turns:
+  - turn-0-content-policy-285e70
+  - turn-1-content-policy-5e7075
+  - turn-2-content-policy-707545
+  - turn-3-content-policy-7545c9
+  - turn-4-content-policy-45c9d2
+  - turn-5-content-policy-c9d269
+  expected_label: policy
+  expected_convergence_turn: 5
+- id: session-multi-turn-hr-069
+  turns:
+  - turn-0-content-policy-cb3a71
+  - turn-1-content-policy-3a7130
+  - turn-2-content-policy-713079
+  - turn-3-content-policy-3079b6
+  - turn-4-content-policy-79b687
+  expected_label: policy
+  expected_convergence_turn: 5
+- id: session-multi-turn-hr-070
+  turns:
+  - turn-0-content-policy-181fea
+  - turn-1-content-policy-1feaf8
+  - turn-2-content-policy-eaf838
+  - turn-3-content-policy-f8384e
+  - turn-4-content-policy-384e18
+  expected_label: policy
+  expected_convergence_turn: 5
+- id: session-multi-turn-hr-071
+  turns:
+  - turn-0-content-policy-356929
+  - turn-1-content-policy-692901
+  - turn-2-content-policy-2901c3
+  - turn-3-content-policy-01c301
+  - turn-4-content-policy-c30196
+  expected_label: policy
+  expected_convergence_turn: 5
+- id: session-multi-turn-hr-072
+  turns:
+  - turn-0-content-policy-bf8e0d
+  - turn-1-content-policy-8e0d7e
+  - turn-2-content-policy-0d7eb4
+  - turn-3-content-policy-7eb431
+  expected_label: policy
+  expected_convergence_turn: 4
+- id: session-multi-turn-hr-073
+  turns:
+  - turn-0-content-policy-a7da75
+  - turn-1-content-policy-da755d
+  - turn-2-content-policy-755d37
+  - turn-3-content-policy-5d3763
+  - turn-4-content-policy-376348
+  - turn-5-content-policy-634895
+  expected_label: policy
+  expected_convergence_turn: 5
+- id: session-multi-turn-hr-074
+  turns:
+  - turn-0-content-policy-77bfbe
+  - turn-1-content-policy-bfbef4
+  - turn-2-content-policy-bef4ee
+  - turn-3-content-policy-f4eee0
+  - turn-4-content-policy-eee04f
+  - turn-5-content-policy-e04f12
+  expected_label: policy
+  expected_convergence_turn: 5
+- id: session-multi-turn-hr-075
+  turns:
+  - turn-0-content-policy-66c7d4
+  - turn-1-content-policy-c7d400
+  - turn-2-content-policy-d400ec
+  - turn-3-content-policy-00ec86
+  expected_label: policy
+  expected_convergence_turn: 4
+- id: session-multi-turn-hr-076
+  turns:
+  - turn-0-content-policy-015fdb
+  - turn-1-content-policy-5fdbe1
+  - turn-2-content-policy-dbe160
+  - turn-3-content-policy-e16041
+  - turn-4-content-policy-60413c
+  - turn-5-content-policy-413c2d
+  expected_label: policy
+  expected_convergence_turn: 5
+- id: session-multi-turn-hr-077
+  turns:
+  - turn-0-content-policy-935e92
+  - turn-1-content-policy-5e923b
+  - turn-2-content-policy-923bf0
+  - turn-3-content-policy-3bf03f
+  - turn-4-content-policy-f03fdc
+  - turn-5-content-policy-3fdc6d
+  expected_label: policy
+  expected_convergence_turn: 5
+- id: session-multi-turn-hr-078
+  turns:
+  - turn-0-content-policy-65fc1e
+  - turn-1-content-policy-fc1e2d
+  - turn-2-content-policy-1e2dd6
+  - turn-3-content-policy-2dd650
+  - turn-4-content-policy-d6504d
+  - turn-5-content-policy-504d55
+  expected_label: policy
+  expected_convergence_turn: 5
+- id: session-multi-turn-hr-079
+  turns:
+  - turn-0-content-policy-e292f9
+  - turn-1-content-policy-92f946
+  - turn-2-content-policy-f9465d
+  - turn-3-content-policy-465da7
+  - turn-4-content-policy-5da74e
+  expected_label: policy
+  expected_convergence_turn: 5
+- id: session-multi-turn-hr-080
+  turns:
+  - turn-0-content-other-5f1fde
+  - turn-1-content-other-1fdeb9
+  - turn-2-content-other-deb983
+  - turn-3-content-other-b9834f
+  expected_label: other
+  expected_convergence_turn: 4
+- id: session-multi-turn-hr-081
+  turns:
+  - turn-0-content-other-5f1d9f
+  - turn-1-content-other-1d9fed
+  - turn-2-content-other-9fed28
+  - turn-3-content-other-ed28e5
+  expected_label: other
+  expected_convergence_turn: 4
+- id: session-multi-turn-hr-082
+  turns:
+  - turn-0-content-other-d64572
+  - turn-1-content-other-4572d6
+  - turn-2-content-other-72d6d5
+  - turn-3-content-other-d6d57b
+  - turn-4-content-other-d57b55
+  - turn-5-content-other-7b5536
+  expected_label: other
+  expected_convergence_turn: 5
+- id: session-multi-turn-hr-083
+  turns:
+  - turn-0-content-other-6236db
+  - turn-1-content-other-36db19
+  - turn-2-content-other-db19d7
+  - turn-3-content-other-19d726
+  expected_label: other
+  expected_convergence_turn: 4
+- id: session-multi-turn-hr-084
+  turns:
+  - turn-0-content-other-622778
+  - turn-1-content-other-277838
+  - turn-2-content-other-7838a8
+  - turn-3-content-other-38a840
+  - turn-4-content-other-a84093
+  expected_label: other
+  expected_convergence_turn: 5
+- id: session-multi-turn-hr-085
+  turns:
+  - turn-0-content-other-c3cd78
+  - turn-1-content-other-cd7898
+  - turn-2-content-other-789877
+  - turn-3-content-other-987708
+  - turn-4-content-other-7708d6
+  expected_label: other
+  expected_convergence_turn: 5
+- id: session-multi-turn-hr-086
+  turns:
+  - turn-0-content-other-a9227b
+  - turn-1-content-other-227b4b
+  - turn-2-content-other-7b4b3b
+  - turn-3-content-other-4b3b71
+  expected_label: other
+  expected_convergence_turn: 4
+- id: session-multi-turn-hr-087
+  turns:
+  - turn-0-content-other-edd396
+  - turn-1-content-other-d3963c
+  - turn-2-content-other-963cdf
+  - turn-3-content-other-3cdfbc
+  - turn-4-content-other-dfbcfd
+  - turn-5-content-other-bcfdbc
+  expected_label: other
+  expected_convergence_turn: 5
+- id: session-multi-turn-hr-088
+  turns:
+  - turn-0-content-other-b01105
+  - turn-1-content-other-1105a7
+  - turn-2-content-other-05a723
+  - turn-3-content-other-a72370
+  - turn-4-content-other-237018
+  - turn-5-content-other-701850
+  expected_label: other
+  expected_convergence_turn: 5
+- id: session-multi-turn-hr-089
+  turns:
+  - turn-0-content-other-a24be1
+  - turn-1-content-other-4be158
+  - turn-2-content-other-e1587b
+  - turn-3-content-other-587b5b
+  expected_label: other
+  expected_convergence_turn: 4
+- id: session-multi-turn-hr-090
+  turns:
+  - turn-0-content-other-29383e
+  - turn-1-content-other-383eae
+  - turn-2-content-other-3eae21
+  - turn-3-content-other-ae2154
+  expected_label: other
+  expected_convergence_turn: 4
+- id: session-multi-turn-hr-091
+  turns:
+  - turn-0-content-other-d0c8e5
+  - turn-1-content-other-c8e56b
+  - turn-2-content-other-e56b76
+  - turn-3-content-other-6b76fe
+  - turn-4-content-other-76fe2c
+  - turn-5-content-other-fe2c11
+  expected_label: other
+  expected_convergence_turn: 5
+- id: session-multi-turn-hr-092
+  turns:
+  - turn-0-content-other-a7feae
+  - turn-1-content-other-feae09
+  - turn-2-content-other-ae09c3
+  - turn-3-content-other-09c30f
+  - turn-4-content-other-c30f4d
+  - turn-5-content-other-0f4d0a
+  expected_label: other
+  expected_convergence_turn: 5
+- id: session-multi-turn-hr-093
+  turns:
+  - turn-0-content-other-192093
+  - turn-1-content-other-20938d
+  - turn-2-content-other-938d07
+  - turn-3-content-other-8d071e
+  - turn-4-content-other-071ed4
+  - turn-5-content-other-1ed49d
+  expected_label: other
+  expected_convergence_turn: 5
+- id: session-multi-turn-hr-094
+  turns:
+  - turn-0-content-other-85109b
+  - turn-1-content-other-109bc4
+  - turn-2-content-other-9bc433
+  - turn-3-content-other-c433b3
+  expected_label: other
+  expected_convergence_turn: 4
+- id: session-multi-turn-hr-095
+  turns:
+  - turn-0-content-other-d3afb9
+  - turn-1-content-other-afb979
+  - turn-2-content-other-b9794f
+  - turn-3-content-other-794f77
+  - turn-4-content-other-4f77f4
+  expected_label: other
+  expected_convergence_turn: 5
+metadata:
+  total_sessions: 96
+  convergence_target_turns: 5
+  max_turns: 10
+  freeze_date: '2026-05-13'

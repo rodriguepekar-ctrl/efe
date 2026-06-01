@@ -1,0 +1,30 @@
+{"id": "be001", "catalog": "support_triage", "text": "I was charged twice for the same order, please help.", "expected": "billing", "language": "en"}
+{"id": "be002", "catalog": "support_triage", "text": "Pourquoi ai-je été facturé alors que j'ai annulé mon abonnement ?", "expected": "billing", "language": "fr"}
+{"id": "be003", "catalog": "support_triage", "text": "How do I upgrade to the annual plan?", "expected": "billing", "language": "en"}
+{"id": "be004", "catalog": "support_triage", "text": "Can I switch my payment method from credit card to bank transfer?", "expected": "billing", "language": "en"}
+{"id": "be005", "catalog": "support_triage", "text": "Je voudrais une facture avec mon numéro de TVA pour ma comptabilité.", "expected": "billing", "language": "fr"}
+{"id": "be006", "catalog": "support_triage", "text": "When will I receive next month's invoice?", "expected": "billing", "language": "en"}
+{"id": "be007", "catalog": "support_triage", "text": "I cancelled last week but I'm still being charged the monthly fee.", "expected": "billing", "language": "en"}
+{"id": "be008", "catalog": "support_triage", "text": "Mon abonnement est censé être annulé mais je vois encore des prélèvements.", "expected": "billing", "language": "fr"}
+{"id": "be009", "catalog": "support_triage", "text": "Could you refund the duplicate charge from last Friday?", "expected": "billing", "language": "en"}
+{"id": "be010", "catalog": "support_triage", "text": "Comment télécharger toutes mes factures de l'année 2025 ?", "expected": "billing", "language": "fr"}
+{"id": "be011", "catalog": "support_triage", "text": "I need a receipt for my expense report.", "expected": "billing", "language": "en"}
+{"id": "be012", "catalog": "support_triage", "text": "My discount code didn't apply at checkout, can you refund the difference?", "expected": "billing", "language": "en"}
+{"id": "be013", "catalog": "support_triage", "text": "Can I downgrade from the team plan back to the personal plan?", "expected": "billing", "language": "en"}
+{"id": "be014", "catalog": "support_triage", "text": "Why was my last payment declined?", "expected": "billing", "language": "en"}
+{"id": "be015", "catalog": "support_triage", "text": "Pourriez-vous corriger l'adresse de facturation sur mes factures ?", "expected": "billing", "language": "fr"}
+{"id": "be016", "catalog": "support_triage", "text": "My card was charged 899 euros by a vendor I've never purchased from.", "expected": "fraud", "language": "en"}
+{"id": "be017", "catalog": "support_triage", "text": "Quelqu'un a utilisé ma carte sans autorisation, débit non reconnu.", "expected": "fraud", "language": "fr"}
+{"id": "be018", "catalog": "support_triage", "text": "Suspicious double charge from a merchant I have never used.", "expected": "fraud", "language": "en"}
+{"id": "be019", "catalog": "support_triage", "text": "Where do I find a record of my past invoices?", "expected": "question", "language": "en"}
+{"id": "be020", "catalog": "support_triage", "text": "Comment changer le moyen de paiement par défaut ?", "expected": "question", "language": "fr"}
+{"id": "be021", "catalog": "support_triage", "text": "How do I pause billing while I'm on holiday?", "expected": "question", "language": "en"}
+{"id": "be022", "catalog": "support_triage", "text": "The payment form never loads after I click 'Submit'.", "expected": "bug", "language": "en"}
+{"id": "be023", "catalog": "support_triage", "text": "Le bouton 'Payer' ne fait rien quand je clique dessus.", "expected": "bug", "language": "fr"}
+{"id": "be024", "catalog": "support_triage", "text": "Checkout page shows a 502 error after entering my card details.", "expected": "bug", "language": "en"}
+{"id": "be025", "catalog": "support_triage", "text": "I want to update the credit card on file before the next renewal.", "expected": "billing", "language": "en"}
+{"id": "be026", "catalog": "support_triage", "text": "Is there an enterprise plan with annual invoicing?", "expected": "billing", "language": "en"}
+{"id": "be027", "catalog": "support_triage", "text": "Pourquoi le montant facturé est différent du prix affiché sur le site ?", "expected": "billing", "language": "fr"}
+{"id": "be028", "catalog": "support_triage", "text": "Puis-je obtenir un remboursement partiel pour le mois de mars ?", "expected": "billing", "language": "fr"}
+{"id": "be029", "catalog": "support_triage", "text": "Charge from a country where I've never travelled, please freeze the card.", "expected": "fraud", "language": "en"}
+{"id": "be030", "catalog": "support_triage", "text": "Can I split the invoice between two payment methods?", "expected": "billing", "language": "en"}

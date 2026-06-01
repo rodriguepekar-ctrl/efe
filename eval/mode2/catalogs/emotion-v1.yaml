@@ -1,0 +1,233 @@
+id: emotion-v1
+version: 1.0.0
+description: Emotion detection — Plutchik wheel reduced to 6 classes
+labels:
+- id: joy
+  description: Happiness, satisfaction
+  examples:
+  - Example 1 for joy
+  - Example 2 for joy
+  - Example 3 for joy
+- id: sadness
+  description: Grief, disappointment
+  examples:
+  - Example 1 for sadness
+  - Example 2 for sadness
+  - Example 3 for sadness
+- id: anger
+  description: Frustration, hostility
+  examples:
+  - Example 1 for anger
+  - Example 2 for anger
+  - Example 3 for anger
+- id: fear
+  description: Anxiety, dread
+  examples:
+  - Example 1 for fear
+  - Example 2 for fear
+  - Example 3 for fear
+- id: surprise
+  description: Astonishment, unexpected
+  examples:
+  - Example 1 for surprise
+  - Example 2 for surprise
+  - Example 3 for surprise
+- id: neutral
+  description: Lack of marked emotion
+  examples:
+  - Example 1 for neutral
+  - Example 2 for neutral
+  - Example 3 for neutral
+test_set:
+- text: sample-joy-ea6fd8bcee22
+  expected_label: joy
+- text: sample-joy-441f1c12937c
+  expected_label: joy
+- text: sample-joy-ff671b00583f
+  expected_label: joy
+- text: sample-joy-024231a981d0
+  expected_label: joy
+- text: sample-joy-ee10debe3534
+  expected_label: joy
+- text: sample-joy-80496c784815
+  expected_label: joy
+- text: sample-joy-f50eb4794a14
+  expected_label: joy
+- text: sample-joy-0e699928e53c
+  expected_label: joy
+- text: sample-joy-76563ab6ecd8
+  expected_label: joy
+- text: sample-joy-3001da3c096f
+  expected_label: joy
+- text: sample-joy-71ea3d939ce9
+  expected_label: joy
+- text: sample-joy-ee44a94fcc00
+  expected_label: joy
+- text: sample-joy-5ce446452672
+  expected_label: joy
+- text: sample-joy-670abeccd57f
+  expected_label: joy
+- text: sample-joy-c66d18059b1f
+  expected_label: joy
+- text: sample-joy-ec504c4bf77c
+  expected_label: joy
+- text: sample-sadness-429781b62700
+  expected_label: sadness
+- text: sample-sadness-20e4d5e498cc
+  expected_label: sadness
+- text: sample-sadness-9ceb7842b221
+  expected_label: sadness
+- text: sample-sadness-6eb7772d5cab
+  expected_label: sadness
+- text: sample-sadness-df4907342785
+  expected_label: sadness
+- text: sample-sadness-fabc0dd1c021
+  expected_label: sadness
+- text: sample-sadness-4a2f0ad5d825
+  expected_label: sadness
+- text: sample-sadness-e06ad25156d4
+  expected_label: sadness
+- text: sample-sadness-1080a243e508
+  expected_label: sadness
+- text: sample-sadness-408091dcfa95
+  expected_label: sadness
+- text: sample-sadness-17b9d37cce8a
+  expected_label: sadness
+- text: sample-sadness-3957570ff9c7
+  expected_label: sadness
+- text: sample-sadness-b77f5be6cd51
+  expected_label: sadness
+- text: sample-sadness-aad8fcd1742d
+  expected_label: sadness
+- text: sample-sadness-cbc646152a33
+  expected_label: sadness
+- text: sample-sadness-b4d1fe19f01a
+  expected_label: sadness
+- text: sample-anger-7db9afccabe9
+  expected_label: anger
+- text: sample-anger-102608690d83
+  expected_label: anger
+- text: sample-anger-ee4ff2f89f10
+  expected_label: anger
+- text: sample-anger-99d068c99161
+  expected_label: anger
+- text: sample-anger-e38fa668f0d1
+  expected_label: anger
+- text: sample-anger-9f654d605e72
+  expected_label: anger
+- text: sample-anger-ac7a1ef3d4a6
+  expected_label: anger
+- text: sample-anger-66bab100c644
+  expected_label: anger
+- text: sample-anger-746fa841d856
+  expected_label: anger
+- text: sample-anger-eee1bfe3d9e7
+  expected_label: anger
+- text: sample-anger-3d5479328b9b
+  expected_label: anger
+- text: sample-anger-11acd0d4acd2
+  expected_label: anger
+- text: sample-anger-1fc7a98e35b4
+  expected_label: anger
+- text: sample-anger-bd237ebd1f39
+  expected_label: anger
+- text: sample-anger-2b748f9fa42a
+  expected_label: anger
+- text: sample-anger-313f42d2559c
+  expected_label: anger
+- text: sample-fear-93681e4b44f2
+  expected_label: fear
+- text: sample-fear-01c321cb8409
+  expected_label: fear
+- text: sample-fear-f9e235749713
+  expected_label: fear
+- text: sample-fear-b5a7cf10325e
+  expected_label: fear
+- text: sample-fear-df1f2b1607a6
+  expected_label: fear
+- text: sample-fear-da828db10936
+  expected_label: fear
+- text: sample-fear-4c7c2e9bcb2c
+  expected_label: fear
+- text: sample-fear-1dd62bd486de
+  expected_label: fear
+- text: sample-fear-ea404ba0427b
+  expected_label: fear
+- text: sample-fear-54d7473f2027
+  expected_label: fear
+- text: sample-fear-37295ad02fbd
+  expected_label: fear
+- text: sample-fear-527ba9cd8afd
+  expected_label: fear
+- text: sample-fear-b348ecaba4e2
+  expected_label: fear
+- text: sample-fear-4987cda7453c
+  expected_label: fear
+- text: sample-fear-57db6a286ef2
+  expected_label: fear
+- text: sample-fear-2968a34d75af
+  expected_label: fear
+- text: sample-surprise-88783f12ca24
+  expected_label: surprise
+- text: sample-surprise-f897f904cf49
+  expected_label: surprise
+- text: sample-surprise-7af1ceb3951a
+  expected_label: surprise
+- text: sample-surprise-4b1647a942dc
+  expected_label: surprise
+- text: sample-surprise-50eca9599da8
+  expected_label: surprise
+- text: sample-surprise-98d28e849205
+  expected_label: surprise
+- text: sample-surprise-fb932853354f
+  expected_label: surprise
+- text: sample-surprise-f34bf3694e3f
+  expected_label: surprise
+- text: sample-surprise-0fba365d3e7f
+  expected_label: surprise
+- text: sample-surprise-8ee07e2ad08e
+  expected_label: surprise
+- text: sample-surprise-6b4f8283dbf5
+  expected_label: surprise
+- text: sample-surprise-4524ddbb5f8b
+  expected_label: surprise
+- text: sample-surprise-8825f29ec4c0
+  expected_label: surprise
+- text: sample-surprise-2969f4ce260e
+  expected_label: surprise
+- text: sample-surprise-3fb5cd3b088b
+  expected_label: surprise
+- text: sample-surprise-7017250a288f
+  expected_label: surprise
+- text: sample-neutral-ea39d9f0feda
+  expected_label: neutral
+- text: sample-neutral-a75e06d8df1f
+  expected_label: neutral
+- text: sample-neutral-3dc5096b5bd2
+  expected_label: neutral
+- text: sample-neutral-0a8ff4ef46b3
+  expected_label: neutral
+- text: sample-neutral-bc120d843df2
+  expected_label: neutral
+- text: sample-neutral-71f06b1b2e0c
+  expected_label: neutral
+- text: sample-neutral-8de935a36810
+  expected_label: neutral
+- text: sample-neutral-b699f501cbb7
+  expected_label: neutral
+- text: sample-neutral-2c9bc7324c30
+  expected_label: neutral
+- text: sample-neutral-84ec46733ebe
+  expected_label: neutral
+- text: sample-neutral-675f2847e804
+  expected_label: neutral
+- text: sample-neutral-221fe16fce3d
+  expected_label: neutral
+- text: sample-neutral-0e9a9b97456b
+  expected_label: neutral
+- text: sample-neutral-f9359230175c
+  expected_label: neutral
+- text: sample-neutral-2d7345746cbb
+  expected_label: neutral
+- text: sample-neutral-e15b3ddb32e1
+  expected_label: neutral

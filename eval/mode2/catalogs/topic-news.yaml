@@ -1,0 +1,325 @@
+id: topic-news
+version: 1.0.0
+description: News article topic classification — 20 categories
+labels:
+- id: politics
+  description: Government, elections, policy
+  examples:
+  - Example 1 for politics
+  - Example 2 for politics
+  - Example 3 for politics
+- id: economy
+  description: Business, markets, finance
+  examples:
+  - Example 1 for economy
+  - Example 2 for economy
+  - Example 3 for economy
+- id: technology
+  description: Computing, internet, gadgets
+  examples:
+  - Example 1 for technology
+  - Example 2 for technology
+  - Example 3 for technology
+- id: science
+  description: Research, discovery
+  examples:
+  - Example 1 for science
+  - Example 2 for science
+  - Example 3 for science
+- id: health
+  description: Medicine, wellness
+  examples:
+  - Example 1 for health
+  - Example 2 for health
+  - Example 3 for health
+- id: sports
+  description: Athletics, competitions
+  examples:
+  - Example 1 for sports
+  - Example 2 for sports
+  - Example 3 for sports
+- id: entertainment
+  description: Film, TV, music, celebrities
+  examples:
+  - Example 1 for entertainment
+  - Example 2 for entertainment
+  - Example 3 for entertainment
+- id: crime
+  description: Law enforcement, court cases
+  examples:
+  - Example 1 for crime
+  - Example 2 for crime
+  - Example 3 for crime
+- id: environment
+  description: Climate, ecology
+  examples:
+  - Example 1 for environment
+  - Example 2 for environment
+  - Example 3 for environment
+- id: education
+  description: Schools, universities
+  examples:
+  - Example 1 for education
+  - Example 2 for education
+  - Example 3 for education
+- id: travel
+  description: Tourism, transportation
+  examples:
+  - Example 1 for travel
+  - Example 2 for travel
+  - Example 3 for travel
+- id: food
+  description: Cuisine, recipes, restaurants
+  examples:
+  - Example 1 for food
+  - Example 2 for food
+  - Example 3 for food
+- id: real-estate
+  description: Property, housing
+  examples:
+  - Example 1 for real-estate
+  - Example 2 for real-estate
+  - Example 3 for real-estate
+- id: automotive
+  description: Cars, vehicles
+  examples:
+  - Example 1 for automotive
+  - Example 2 for automotive
+  - Example 3 for automotive
+- id: fashion
+  description: Clothing, style
+  examples:
+  - Example 1 for fashion
+  - Example 2 for fashion
+  - Example 3 for fashion
+- id: religion
+  description: Faith, spirituality
+  examples:
+  - Example 1 for religion
+  - Example 2 for religion
+  - Example 3 for religion
+- id: opinion
+  description: Editorial, commentary
+  examples:
+  - Example 1 for opinion
+  - Example 2 for opinion
+  - Example 3 for opinion
+- id: obituary
+  description: Death notices
+  examples:
+  - Example 1 for obituary
+  - Example 2 for obituary
+  - Example 3 for obituary
+- id: local
+  description: Community news
+  examples:
+  - Example 1 for local
+  - Example 2 for local
+  - Example 3 for local
+- id: international
+  description: World news
+  examples:
+  - Example 1 for international
+  - Example 2 for international
+  - Example 3 for international
+test_set:
+- text: sample-politics-ab42648130cd
+  expected_label: politics
+- text: sample-politics-30eff2fc1970
+  expected_label: politics
+- text: sample-politics-a7cb0d3934a6
+  expected_label: politics
+- text: sample-politics-6f9a21aee60c
+  expected_label: politics
+- text: sample-politics-8f125b801111
+  expected_label: politics
+- text: sample-economy-d55422363bf3
+  expected_label: economy
+- text: sample-economy-adc1e64527c8
+  expected_label: economy
+- text: sample-economy-c50f7736cdcd
+  expected_label: economy
+- text: sample-economy-3c33aaf6b025
+  expected_label: economy
+- text: sample-economy-7205c8520c38
+  expected_label: economy
+- text: sample-technology-8f743df2493e
+  expected_label: technology
+- text: sample-technology-6b2f416c9058
+  expected_label: technology
+- text: sample-technology-2e26cc9f6a5f
+  expected_label: technology
+- text: sample-technology-2c500e46d3dc
+  expected_label: technology
+- text: sample-technology-11dde17eb357
+  expected_label: technology
+- text: sample-science-f3fc7e264631
+  expected_label: science
+- text: sample-science-b40f6ddd2454
+  expected_label: science
+- text: sample-science-c0fe577728b2
+  expected_label: science
+- text: sample-science-423d763a7fed
+  expected_label: science
+- text: sample-science-15bbe604e0f0
+  expected_label: science
+- text: sample-health-27ed622f81ed
+  expected_label: health
+- text: sample-health-e3fb61a7a6b4
+  expected_label: health
+- text: sample-health-c1680a4e0069
+  expected_label: health
+- text: sample-health-cfefc1a3947d
+  expected_label: health
+- text: sample-health-8f8858231aec
+  expected_label: health
+- text: sample-sports-777c47fa0bb7
+  expected_label: sports
+- text: sample-sports-5757a3657eea
+  expected_label: sports
+- text: sample-sports-515498566476
+  expected_label: sports
+- text: sample-sports-0f494b0a99f3
+  expected_label: sports
+- text: sample-sports-3a15de94a160
+  expected_label: sports
+- text: sample-entertainment-df4e6cd1010d
+  expected_label: entertainment
+- text: sample-entertainment-d26e302ee255
+  expected_label: entertainment
+- text: sample-entertainment-e19eef333271
+  expected_label: entertainment
+- text: sample-entertainment-46bff1f51193
+  expected_label: entertainment
+- text: sample-entertainment-9722da053b39
+  expected_label: entertainment
+- text: sample-crime-276e345f73a3
+  expected_label: crime
+- text: sample-crime-f76995705fd2
+  expected_label: crime
+- text: sample-crime-83e6f290d94c
+  expected_label: crime
+- text: sample-crime-456b5e816985
+  expected_label: crime
+- text: sample-crime-20ab21e5f04d
+  expected_label: crime
+- text: sample-environment-09f5ae593e34
+  expected_label: environment
+- text: sample-environment-c653aa8f276d
+  expected_label: environment
+- text: sample-environment-081cd4685a95
+  expected_label: environment
+- text: sample-environment-3031f41408cb
+  expected_label: environment
+- text: sample-environment-8be0d7631fdc
+  expected_label: environment
+- text: sample-education-41407778fd62
+  expected_label: education
+- text: sample-education-846a386d5349
+  expected_label: education
+- text: sample-education-672535349a88
+  expected_label: education
+- text: sample-education-05dfa9fc0faa
+  expected_label: education
+- text: sample-education-34977f367970
+  expected_label: education
+- text: sample-travel-686a8e8ab71c
+  expected_label: travel
+- text: sample-travel-b2188b7a5c36
+  expected_label: travel
+- text: sample-travel-4c6242983f94
+  expected_label: travel
+- text: sample-travel-9b29b9409ab6
+  expected_label: travel
+- text: sample-travel-2800b528c8f6
+  expected_label: travel
+- text: sample-food-0da3aa49cc92
+  expected_label: food
+- text: sample-food-fe0fede90722
+  expected_label: food
+- text: sample-food-60293be81954
+  expected_label: food
+- text: sample-food-146e59ddd916
+  expected_label: food
+- text: sample-food-9e094b8e2811
+  expected_label: food
+- text: sample-real-estate-c32fc2c583d1
+  expected_label: real-estate
+- text: sample-real-estate-eec5f0fcdf4c
+  expected_label: real-estate
+- text: sample-real-estate-71308c8f711d
+  expected_label: real-estate
+- text: sample-real-estate-3f46869fb98e
+  expected_label: real-estate
+- text: sample-real-estate-9098eed21bba
+  expected_label: real-estate
+- text: sample-automotive-f1b5e116b551
+  expected_label: automotive
+- text: sample-automotive-5d007d8bdfc0
+  expected_label: automotive
+- text: sample-automotive-955e1cba9ee7
+  expected_label: automotive
+- text: sample-automotive-c5a476f822de
+  expected_label: automotive
+- text: sample-automotive-f32e3438b304
+  expected_label: automotive
+- text: sample-fashion-e01d8baa3d86
+  expected_label: fashion
+- text: sample-fashion-b0864717adb5
+  expected_label: fashion
+- text: sample-fashion-8b07f2194cdc
+  expected_label: fashion
+- text: sample-fashion-bcf11b2572c9
+  expected_label: fashion
+- text: sample-fashion-b7a3a31cd218
+  expected_label: fashion
+- text: sample-religion-984ed9ef5f19
+  expected_label: religion
+- text: sample-religion-97bb630f034e
+  expected_label: religion
+- text: sample-religion-1d7dde13347f
+  expected_label: religion
+- text: sample-religion-f4fa5c0e60e1
+  expected_label: religion
+- text: sample-religion-717e2264b4a0
+  expected_label: religion
+- text: sample-opinion-667ab57f613f
+  expected_label: opinion
+- text: sample-opinion-5edc22b10d8c
+  expected_label: opinion
+- text: sample-opinion-9d2de4a23d0c
+  expected_label: opinion
+- text: sample-opinion-c65386615d65
+  expected_label: opinion
+- text: sample-opinion-18a0489b97ce
+  expected_label: opinion
+- text: sample-obituary-b8baf302580b
+  expected_label: obituary
+- text: sample-obituary-465c097c35be
+  expected_label: obituary
+- text: sample-obituary-57ad2b2d4f36
+  expected_label: obituary
+- text: sample-obituary-ee5b6cc982a3
+  expected_label: obituary
+- text: sample-obituary-1d95703034cd
+  expected_label: obituary
+- text: sample-local-523bc55d6d5e
+  expected_label: local
+- text: sample-local-96ea76b9f426
+  expected_label: local
+- text: sample-local-f141a67f93b9
+  expected_label: local
+- text: sample-local-39b43b680f9c
+  expected_label: local
+- text: sample-local-27499b29d70c
+  expected_label: local
+- text: sample-international-ee835328107f
+  expected_label: international
+- text: sample-international-53bd7a9c2929
+  expected_label: international
+- text: sample-international-3b58858d4399
+  expected_label: international
+- text: sample-international-d36c4898bca7
+  expected_label: international
+- text: sample-international-bfea843367e5
+  expected_label: international

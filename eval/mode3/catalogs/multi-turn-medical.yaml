@@ -1,0 +1,905 @@
+id: multi-turn-medical
+version: 1.0.0
+description: Medical triage multi-turn (4 risk levels)
+labels:
+- id: critical
+  description: Life-threatening, immediate action
+- id: urgent
+  description: Serious, prompt attention
+- id: routine
+  description: Standard care
+- id: informational
+  description: Inquiry, no clinical action
+test_sessions:
+- id: session-multi-turn-medical-000
+  turns:
+  - turn-0-content-critical-5472bd
+  - turn-1-content-critical-72bd17
+  - turn-2-content-critical-bd171a
+  - turn-3-content-critical-171aad
+  - turn-4-content-critical-1aad71
+  - turn-5-content-critical-ad71da
+  expected_label: critical
+  expected_convergence_turn: 5
+- id: session-multi-turn-medical-001
+  turns:
+  - turn-0-content-critical-7a04e0
+  - turn-1-content-critical-04e0aa
+  - turn-2-content-critical-e0aac8
+  - turn-3-content-critical-aac850
+  expected_label: critical
+  expected_convergence_turn: 4
+- id: session-multi-turn-medical-002
+  turns:
+  - turn-0-content-critical-c9e351
+  - turn-1-content-critical-e35125
+  - turn-2-content-critical-512553
+  - turn-3-content-critical-2553ee
+  - turn-4-content-critical-53ee87
+  expected_label: critical
+  expected_convergence_turn: 5
+- id: session-multi-turn-medical-003
+  turns:
+  - turn-0-content-critical-eb9930
+  - turn-1-content-critical-99309d
+  - turn-2-content-critical-309d66
+  - turn-3-content-critical-9d665a
+  - turn-4-content-critical-665af3
+  - turn-5-content-critical-5af3df
+  expected_label: critical
+  expected_convergence_turn: 5
+- id: session-multi-turn-medical-004
+  turns:
+  - turn-0-content-critical-2b91f0
+  - turn-1-content-critical-91f0df
+  - turn-2-content-critical-f0df55
+  - turn-3-content-critical-df55bb
+  expected_label: critical
+  expected_convergence_turn: 4
+- id: session-multi-turn-medical-005
+  turns:
+  - turn-0-content-critical-30668e
+  - turn-1-content-critical-668e88
+  - turn-2-content-critical-8e8837
+  - turn-3-content-critical-883788
+  - turn-4-content-critical-378872
+  - turn-5-content-critical-887240
+  expected_label: critical
+  expected_convergence_turn: 5
+- id: session-multi-turn-medical-006
+  turns:
+  - turn-0-content-critical-77fc35
+  - turn-1-content-critical-fc35a4
+  - turn-2-content-critical-35a48d
+  - turn-3-content-critical-a48d52
+  expected_label: critical
+  expected_convergence_turn: 4
+- id: session-multi-turn-medical-007
+  turns:
+  - turn-0-content-critical-763e9d
+  - turn-1-content-critical-3e9d45
+  - turn-2-content-critical-9d4547
+  - turn-3-content-critical-4547ef
+  - turn-4-content-critical-47ef27
+  - turn-5-content-critical-ef2775
+  expected_label: critical
+  expected_convergence_turn: 5
+- id: session-multi-turn-medical-008
+  turns:
+  - turn-0-content-critical-fc5608
+  - turn-1-content-critical-56089a
+  - turn-2-content-critical-089a73
+  - turn-3-content-critical-9a73df
+  - turn-4-content-critical-73dff1
+  - turn-5-content-critical-dff15a
+  expected_label: critical
+  expected_convergence_turn: 5
+- id: session-multi-turn-medical-009
+  turns:
+  - turn-0-content-critical-919cf2
+  - turn-1-content-critical-9cf2d9
+  - turn-2-content-critical-f2d988
+  - turn-3-content-critical-d98874
+  - turn-4-content-critical-8874d7
+  expected_label: critical
+  expected_convergence_turn: 5
+- id: session-multi-turn-medical-010
+  turns:
+  - turn-0-content-critical-8bfb13
+  - turn-1-content-critical-fb13a8
+  - turn-2-content-critical-13a8de
+  - turn-3-content-critical-a8de66
+  expected_label: critical
+  expected_convergence_turn: 4
+- id: session-multi-turn-medical-011
+  turns:
+  - turn-0-content-critical-ba3273
+  - turn-1-content-critical-3273a9
+  - turn-2-content-critical-73a939
+  - turn-3-content-critical-a93941
+  expected_label: critical
+  expected_convergence_turn: 4
+- id: session-multi-turn-medical-012
+  turns:
+  - turn-0-content-critical-fce1bf
+  - turn-1-content-critical-e1bfe1
+  - turn-2-content-critical-bfe139
+  - turn-3-content-critical-e13950
+  - turn-4-content-critical-395031
+  expected_label: critical
+  expected_convergence_turn: 5
+- id: session-multi-turn-medical-013
+  turns:
+  - turn-0-content-critical-b90da0
+  - turn-1-content-critical-0da049
+  - turn-2-content-critical-a0490d
+  - turn-3-content-critical-490dce
+  - turn-4-content-critical-0dcec1
+  expected_label: critical
+  expected_convergence_turn: 5
+- id: session-multi-turn-medical-014
+  turns:
+  - turn-0-content-critical-dbd299
+  - turn-1-content-critical-d2996b
+  - turn-2-content-critical-996bec
+  - turn-3-content-critical-6becfb
+  expected_label: critical
+  expected_convergence_turn: 4
+- id: session-multi-turn-medical-015
+  turns:
+  - turn-0-content-critical-7ce325
+  - turn-1-content-critical-e32535
+  - turn-2-content-critical-2535d4
+  - turn-3-content-critical-35d4a7
+  expected_label: critical
+  expected_convergence_turn: 4
+- id: session-multi-turn-medical-016
+  turns:
+  - turn-0-content-critical-91c3cf
+  - turn-1-content-critical-c3cf36
+  - turn-2-content-critical-cf367d
+  - turn-3-content-critical-367dc9
+  - turn-4-content-critical-7dc9b7
+  expected_label: critical
+  expected_convergence_turn: 5
+- id: session-multi-turn-medical-017
+  turns:
+  - turn-0-content-critical-2d9ac5
+  - turn-1-content-critical-9ac591
+  - turn-2-content-critical-c5918e
+  - turn-3-content-critical-918e6a
+  - turn-4-content-critical-8e6ad3
+  - turn-5-content-critical-6ad365
+  expected_label: critical
+  expected_convergence_turn: 5
+- id: session-multi-turn-medical-018
+  turns:
+  - turn-0-content-critical-f79e94
+  - turn-1-content-critical-9e944c
+  - turn-2-content-critical-944c92
+  - turn-3-content-critical-4c925f
+  - turn-4-content-critical-925fcc
+  - turn-5-content-critical-5fcc26
+  expected_label: critical
+  expected_convergence_turn: 5
+- id: session-multi-turn-medical-019
+  turns:
+  - turn-0-content-critical-46cbeb
+  - turn-1-content-critical-cbeb94
+  - turn-2-content-critical-eb94bc
+  - turn-3-content-critical-94bc8e
+  expected_label: critical
+  expected_convergence_turn: 4
+- id: session-multi-turn-medical-020
+  turns:
+  - turn-0-content-critical-b41063
+  - turn-1-content-critical-1063d1
+  - turn-2-content-critical-63d160
+  - turn-3-content-critical-d16018
+  - turn-4-content-critical-6018e3
+  expected_label: critical
+  expected_convergence_turn: 5
+- id: session-multi-turn-medical-021
+  turns:
+  - turn-0-content-critical-daf850
+  - turn-1-content-critical-f850dc
+  - turn-2-content-critical-50dc00
+  - turn-3-content-critical-dc0030
+  - turn-4-content-critical-003094
+  expected_label: critical
+  expected_convergence_turn: 5
+- id: session-multi-turn-medical-022
+  turns:
+  - turn-0-content-critical-a22cc1
+  - turn-1-content-critical-2cc124
+  - turn-2-content-critical-c124f7
+  - turn-3-content-critical-24f790
+  expected_label: critical
+  expected_convergence_turn: 4
+- id: session-multi-turn-medical-023
+  turns:
+  - turn-0-content-critical-481844
+  - turn-1-content-critical-184410
+  - turn-2-content-critical-4410e7
+  - turn-3-content-critical-10e784
+  expected_label: critical
+  expected_convergence_turn: 4
+- id: session-multi-turn-medical-024
+  turns:
+  - turn-0-content-critical-ad7496
+  - turn-1-content-critical-749695
+  - turn-2-content-critical-9695cc
+  - turn-3-content-critical-95ccd3
+  - turn-4-content-critical-ccd3a9
+  expected_label: critical
+  expected_convergence_turn: 5
+- id: session-multi-turn-medical-025
+  turns:
+  - turn-0-content-urgent-0136c1
+  - turn-1-content-urgent-36c104
+  - turn-2-content-urgent-c104ef
+  - turn-3-content-urgent-04efe4
+  - turn-4-content-urgent-efe426
+  - turn-5-content-urgent-e426a7
+  expected_label: urgent
+  expected_convergence_turn: 5
+- id: session-multi-turn-medical-026
+  turns:
+  - turn-0-content-urgent-a431b1
+  - turn-1-content-urgent-31b1b0
+  - turn-2-content-urgent-b1b0e8
+  - turn-3-content-urgent-b0e8da
+  - turn-4-content-urgent-e8da04
+  - turn-5-content-urgent-da040b
+  expected_label: urgent
+  expected_convergence_turn: 5
+- id: session-multi-turn-medical-027
+  turns:
+  - turn-0-content-urgent-66f907
+  - turn-1-content-urgent-f9075f
+  - turn-2-content-urgent-075f05
+  - turn-3-content-urgent-5f0581
+  - turn-4-content-urgent-058146
+  expected_label: urgent
+  expected_convergence_turn: 5
+- id: session-multi-turn-medical-028
+  turns:
+  - turn-0-content-urgent-604604
+  - turn-1-content-urgent-4604e5
+  - turn-2-content-urgent-04e534
+  - turn-3-content-urgent-e53423
+  expected_label: urgent
+  expected_convergence_turn: 4
+- id: session-multi-turn-medical-029
+  turns:
+  - turn-0-content-urgent-4ebc34
+  - turn-1-content-urgent-bc3468
+  - turn-2-content-urgent-34689c
+  - turn-3-content-urgent-689ccf
+  - turn-4-content-urgent-9ccf29
+  - turn-5-content-urgent-cf290d
+  expected_label: urgent
+  expected_convergence_turn: 5
+- id: session-multi-turn-medical-030
+  turns:
+  - turn-0-content-urgent-d4b78b
+  - turn-1-content-urgent-b78b8e
+  - turn-2-content-urgent-8b8eff
+  - turn-3-content-urgent-8effdf
+  - turn-4-content-urgent-ffdf6c
+  - turn-5-content-urgent-df6c7c
+  expected_label: urgent
+  expected_convergence_turn: 5
+- id: session-multi-turn-medical-031
+  turns:
+  - turn-0-content-urgent-0facb2
+  - turn-1-content-urgent-acb2dc
+  - turn-2-content-urgent-b2dc08
+  - turn-3-content-urgent-dc083b
+  expected_label: urgent
+  expected_convergence_turn: 4
+- id: session-multi-turn-medical-032
+  turns:
+  - turn-0-content-urgent-4f057b
+  - turn-1-content-urgent-057b4b
+  - turn-2-content-urgent-7b4be6
+  - turn-3-content-urgent-4be67e
+  - turn-4-content-urgent-e67e18
+  - turn-5-content-urgent-7e18e4
+  expected_label: urgent
+  expected_convergence_turn: 5
+- id: session-multi-turn-medical-033
+  turns:
+  - turn-0-content-urgent-ff8874
+  - turn-1-content-urgent-8874c5
+  - turn-2-content-urgent-74c5a9
+  - turn-3-content-urgent-c5a9a3
+  expected_label: urgent
+  expected_convergence_turn: 4
+- id: session-multi-turn-medical-034
+  turns:
+  - turn-0-content-urgent-8d2bf7
+  - turn-1-content-urgent-2bf784
+  - turn-2-content-urgent-f78471
+  - turn-3-content-urgent-8471ea
+  expected_label: urgent
+  expected_convergence_turn: 4
+- id: session-multi-turn-medical-035
+  turns:
+  - turn-0-content-urgent-dea0d3
+  - turn-1-content-urgent-a0d3a2
+  - turn-2-content-urgent-d3a202
+  - turn-3-content-urgent-a2024e
+  - turn-4-content-urgent-024e63
+  expected_label: urgent
+  expected_convergence_turn: 5
+- id: session-multi-turn-medical-036
+  turns:
+  - turn-0-content-urgent-1ebcf7
+  - turn-1-content-urgent-bcf734
+  - turn-2-content-urgent-f73454
+  - turn-3-content-urgent-3454f6
+  - turn-4-content-urgent-54f6c8
+  - turn-5-content-urgent-f6c8d4
+  expected_label: urgent
+  expected_convergence_turn: 5
+- id: session-multi-turn-medical-037
+  turns:
+  - turn-0-content-urgent-785050
+  - turn-1-content-urgent-505045
+  - turn-2-content-urgent-5045b8
+  - turn-3-content-urgent-45b81a
+  - turn-4-content-urgent-b81a32
+  expected_label: urgent
+  expected_convergence_turn: 5
+- id: session-multi-turn-medical-038
+  turns:
+  - turn-0-content-urgent-806014
+  - turn-1-content-urgent-601477
+  - turn-2-content-urgent-14772c
+  - turn-3-content-urgent-772c79
+  - turn-4-content-urgent-2c79be
+  expected_label: urgent
+  expected_convergence_turn: 5
+- id: session-multi-turn-medical-039
+  turns:
+  - turn-0-content-urgent-ac83c8
+  - turn-1-content-urgent-83c8b9
+  - turn-2-content-urgent-c8b933
+  - turn-3-content-urgent-b933de
+  expected_label: urgent
+  expected_convergence_turn: 4
+- id: session-multi-turn-medical-040
+  turns:
+  - turn-0-content-urgent-47f55c
+  - turn-1-content-urgent-f55cb4
+  - turn-2-content-urgent-5cb48c
+  - turn-3-content-urgent-b48c66
+  - turn-4-content-urgent-8c6692
+  expected_label: urgent
+  expected_convergence_turn: 5
+- id: session-multi-turn-medical-041
+  turns:
+  - turn-0-content-urgent-921df9
+  - turn-1-content-urgent-1df9c0
+  - turn-2-content-urgent-f9c0d1
+  - turn-3-content-urgent-c0d196
+  expected_label: urgent
+  expected_convergence_turn: 4
+- id: session-multi-turn-medical-042
+  turns:
+  - turn-0-content-urgent-0cc5a4
+  - turn-1-content-urgent-c5a44f
+  - turn-2-content-urgent-a44f13
+  - turn-3-content-urgent-4f135a
+  - turn-4-content-urgent-135abf
+  expected_label: urgent
+  expected_convergence_turn: 5
+- id: session-multi-turn-medical-043
+  turns:
+  - turn-0-content-urgent-782f8d
+  - turn-1-content-urgent-2f8d47
+  - turn-2-content-urgent-8d47c2
+  - turn-3-content-urgent-47c2fd
+  - turn-4-content-urgent-c2fdb2
+  expected_label: urgent
+  expected_convergence_turn: 5
+- id: session-multi-turn-medical-044
+  turns:
+  - turn-0-content-urgent-46f1f7
+  - turn-1-content-urgent-f1f7ca
+  - turn-2-content-urgent-f7ca28
+  - turn-3-content-urgent-ca2861
+  - turn-4-content-urgent-28611f
+  - turn-5-content-urgent-611f44
+  expected_label: urgent
+  expected_convergence_turn: 5
+- id: session-multi-turn-medical-045
+  turns:
+  - turn-0-content-urgent-9688b6
+  - turn-1-content-urgent-88b621
+  - turn-2-content-urgent-b6218c
+  - turn-3-content-urgent-218c5a
+  - turn-4-content-urgent-8c5a55
+  expected_label: urgent
+  expected_convergence_turn: 5
+- id: session-multi-turn-medical-046
+  turns:
+  - turn-0-content-urgent-005b87
+  - turn-1-content-urgent-5b87cd
+  - turn-2-content-urgent-87cd83
+  - turn-3-content-urgent-cd83c2
+  expected_label: urgent
+  expected_convergence_turn: 4
+- id: session-multi-turn-medical-047
+  turns:
+  - turn-0-content-urgent-444bcc
+  - turn-1-content-urgent-4bccca
+  - turn-2-content-urgent-cccaae
+  - turn-3-content-urgent-caaeab
+  expected_label: urgent
+  expected_convergence_turn: 4
+- id: session-multi-turn-medical-048
+  turns:
+  - turn-0-content-urgent-26f09c
+  - turn-1-content-urgent-f09c38
+  - turn-2-content-urgent-9c385d
+  - turn-3-content-urgent-385d78
+  expected_label: urgent
+  expected_convergence_turn: 4
+- id: session-multi-turn-medical-049
+  turns:
+  - turn-0-content-urgent-4da8f6
+  - turn-1-content-urgent-a8f627
+  - turn-2-content-urgent-f6278b
+  - turn-3-content-urgent-278b13
+  expected_label: urgent
+  expected_convergence_turn: 4
+- id: session-multi-turn-medical-050
+  turns:
+  - turn-0-content-routine-7cd43a
+  - turn-1-content-routine-d43a29
+  - turn-2-content-routine-3a2948
+  - turn-3-content-routine-2948b6
+  - turn-4-content-routine-48b6ad
+  expected_label: routine
+  expected_convergence_turn: 5
+- id: session-multi-turn-medical-051
+  turns:
+  - turn-0-content-routine-9de6f4
+  - turn-1-content-routine-e6f494
+  - turn-2-content-routine-f494b8
+  - turn-3-content-routine-94b8f7
+  - turn-4-content-routine-b8f7ce
+  - turn-5-content-routine-f7ce3b
+  expected_label: routine
+  expected_convergence_turn: 5
+- id: session-multi-turn-medical-052
+  turns:
+  - turn-0-content-routine-bec291
+  - turn-1-content-routine-c29105
+  - turn-2-content-routine-91055f
+  - turn-3-content-routine-055f6e
+  - turn-4-content-routine-5f6ed7
+  expected_label: routine
+  expected_convergence_turn: 5
+- id: session-multi-turn-medical-053
+  turns:
+  - turn-0-content-routine-92d423
+  - turn-1-content-routine-d4237d
+  - turn-2-content-routine-237dcf
+  - turn-3-content-routine-7dcf66
+  - turn-4-content-routine-cf66e6
+  - turn-5-content-routine-66e6ae
+  expected_label: routine
+  expected_convergence_turn: 5
+- id: session-multi-turn-medical-054
+  turns:
+  - turn-0-content-routine-14899e
+  - turn-1-content-routine-899e99
+  - turn-2-content-routine-9e9981
+  - turn-3-content-routine-998104
+  expected_label: routine
+  expected_convergence_turn: 4
+- id: session-multi-turn-medical-055
+  turns:
+  - turn-0-content-routine-e7c73f
+  - turn-1-content-routine-c73f52
+  - turn-2-content-routine-3f52c5
+  - turn-3-content-routine-52c558
+  - turn-4-content-routine-c55871
+  expected_label: routine
+  expected_convergence_turn: 5
+- id: session-multi-turn-medical-056
+  turns:
+  - turn-0-content-routine-772df1
+  - turn-1-content-routine-2df169
+  - turn-2-content-routine-f1695d
+  - turn-3-content-routine-695d45
+  - turn-4-content-routine-5d4558
+  expected_label: routine
+  expected_convergence_turn: 5
+- id: session-multi-turn-medical-057
+  turns:
+  - turn-0-content-routine-3ea8c5
+  - turn-1-content-routine-a8c53a
+  - turn-2-content-routine-c53a09
+  - turn-3-content-routine-3a09b3
+  expected_label: routine
+  expected_convergence_turn: 4
+- id: session-multi-turn-medical-058
+  turns:
+  - turn-0-content-routine-820cdb
+  - turn-1-content-routine-0cdb90
+  - turn-2-content-routine-db9036
+  - turn-3-content-routine-903610
+  - turn-4-content-routine-361050
+  expected_label: routine
+  expected_convergence_turn: 5
+- id: session-multi-turn-medical-059
+  turns:
+  - turn-0-content-routine-44217e
+  - turn-1-content-routine-217ebf
+  - turn-2-content-routine-7ebfb6
+  - turn-3-content-routine-bfb614
+  - turn-4-content-routine-b61463
+  expected_label: routine
+  expected_convergence_turn: 5
+- id: session-multi-turn-medical-060
+  turns:
+  - turn-0-content-routine-2f5aac
+  - turn-1-content-routine-5aac95
+  - turn-2-content-routine-ac95cc
+  - turn-3-content-routine-95ccd0
+  - turn-4-content-routine-ccd0af
+  expected_label: routine
+  expected_convergence_turn: 5
+- id: session-multi-turn-medical-061
+  turns:
+  - turn-0-content-routine-71d3da
+  - turn-1-content-routine-d3daf5
+  - turn-2-content-routine-daf5be
+  - turn-3-content-routine-f5be15
+  - turn-4-content-routine-be15d1
+  expected_label: routine
+  expected_convergence_turn: 5
+- id: session-multi-turn-medical-062
+  turns:
+  - turn-0-content-routine-e1fd84
+  - turn-1-content-routine-fd8470
+  - turn-2-content-routine-8470b1
+  - turn-3-content-routine-70b16b
+  - turn-4-content-routine-b16b4e
+  expected_label: routine
+  expected_convergence_turn: 5
+- id: session-multi-turn-medical-063
+  turns:
+  - turn-0-content-routine-823ae1
+  - turn-1-content-routine-3ae110
+  - turn-2-content-routine-e11042
+  - turn-3-content-routine-104205
+  expected_label: routine
+  expected_convergence_turn: 4
+- id: session-multi-turn-medical-064
+  turns:
+  - turn-0-content-routine-c88f5e
+  - turn-1-content-routine-8f5e5f
+  - turn-2-content-routine-5e5fcb
+  - turn-3-content-routine-5fcba2
+  - turn-4-content-routine-cba2bb
+  - turn-5-content-routine-a2bbf6
+  expected_label: routine
+  expected_convergence_turn: 5
+- id: session-multi-turn-medical-065
+  turns:
+  - turn-0-content-routine-c6577a
+  - turn-1-content-routine-577aee
+  - turn-2-content-routine-7aeeca
+  - turn-3-content-routine-eeca8d
+  - turn-4-content-routine-ca8df0
+  - turn-5-content-routine-8df00f
+  expected_label: routine
+  expected_convergence_turn: 5
+- id: session-multi-turn-medical-066
+  turns:
+  - turn-0-content-routine-bd91eb
+  - turn-1-content-routine-91eb87
+  - turn-2-content-routine-eb8734
+  - turn-3-content-routine-8734f4
+  expected_label: routine
+  expected_convergence_turn: 4
+- id: session-multi-turn-medical-067
+  turns:
+  - turn-0-content-routine-2bab6e
+  - turn-1-content-routine-ab6e7d
+  - turn-2-content-routine-6e7d24
+  - turn-3-content-routine-7d2494
+  - turn-4-content-routine-24941d
+  - turn-5-content-routine-941d93
+  expected_label: routine
+  expected_convergence_turn: 5
+- id: session-multi-turn-medical-068
+  turns:
+  - turn-0-content-routine-bffa56
+  - turn-1-content-routine-fa569d
+  - turn-2-content-routine-569d8b
+  - turn-3-content-routine-9d8b4a
+  expected_label: routine
+  expected_convergence_turn: 4
+- id: session-multi-turn-medical-069
+  turns:
+  - turn-0-content-routine-17b6aa
+  - turn-1-content-routine-b6aaa2
+  - turn-2-content-routine-aaa201
+  - turn-3-content-routine-a201df
+  - turn-4-content-routine-01df8b
+  expected_label: routine
+  expected_convergence_turn: 5
+- id: session-multi-turn-medical-070
+  turns:
+  - turn-0-content-routine-1ca7f6
+  - turn-1-content-routine-a7f6e5
+  - turn-2-content-routine-f6e53f
+  - turn-3-content-routine-e53f8b
+  - turn-4-content-routine-3f8b31
+  expected_label: routine
+  expected_convergence_turn: 5
+- id: session-multi-turn-medical-071
+  turns:
+  - turn-0-content-routine-4e33c8
+  - turn-1-content-routine-33c8ac
+  - turn-2-content-routine-c8ac15
+  - turn-3-content-routine-ac156f
+  expected_label: routine
+  expected_convergence_turn: 4
+- id: session-multi-turn-medical-072
+  turns:
+  - turn-0-content-routine-d1ae6f
+  - turn-1-content-routine-ae6f7c
+  - turn-2-content-routine-6f7c48
+  - turn-3-content-routine-7c4862
+  - turn-4-content-routine-48623d
+  expected_label: routine
+  expected_convergence_turn: 5
+- id: session-multi-turn-medical-073
+  turns:
+  - turn-0-content-routine-15594d
+  - turn-1-content-routine-594dac
+  - turn-2-content-routine-4dacff
+  - turn-3-content-routine-acffb0
+  expected_label: routine
+  expected_convergence_turn: 4
+- id: session-multi-turn-medical-074
+  turns:
+  - turn-0-content-routine-2cf2cd
+  - turn-1-content-routine-f2cdd1
+  - turn-2-content-routine-cdd1fb
+  - turn-3-content-routine-d1fbbb
+  - turn-4-content-routine-fbbbe6
+  expected_label: routine
+  expected_convergence_turn: 5
+- id: session-multi-turn-medical-075
+  turns:
+  - turn-0-content-informational-06dce3
+  - turn-1-content-informational-dce3b8
+  - turn-2-content-informational-e3b885
+  - turn-3-content-informational-b8856f
+  - turn-4-content-informational-856f9b
+  expected_label: informational
+  expected_convergence_turn: 5
+- id: session-multi-turn-medical-076
+  turns:
+  - turn-0-content-informational-0b1d00
+  - turn-1-content-informational-1d0021
+  - turn-2-content-informational-002151
+  - turn-3-content-informational-2151ba
+  expected_label: informational
+  expected_convergence_turn: 4
+- id: session-multi-turn-medical-077
+  turns:
+  - turn-0-content-informational-be6ee7
+  - turn-1-content-informational-6ee793
+  - turn-2-content-informational-e79361
+  - turn-3-content-informational-9361ed
+  - turn-4-content-informational-61ed07
+  expected_label: informational
+  expected_convergence_turn: 5
+- id: session-multi-turn-medical-078
+  turns:
+  - turn-0-content-informational-f65e09
+  - turn-1-content-informational-5e09d3
+  - turn-2-content-informational-09d314
+  - turn-3-content-informational-d31484
+  expected_label: informational
+  expected_convergence_turn: 4
+- id: session-multi-turn-medical-079
+  turns:
+  - turn-0-content-informational-bd8bc6
+  - turn-1-content-informational-8bc6fb
+  - turn-2-content-informational-c6fbdd
+  - turn-3-content-informational-fbdd1c
+  expected_label: informational
+  expected_convergence_turn: 4
+- id: session-multi-turn-medical-080
+  turns:
+  - turn-0-content-informational-d7308b
+  - turn-1-content-informational-308b0c
+  - turn-2-content-informational-8b0cb6
+  - turn-3-content-informational-0cb6d6
+  - turn-4-content-informational-b6d668
+  expected_label: informational
+  expected_convergence_turn: 5
+- id: session-multi-turn-medical-081
+  turns:
+  - turn-0-content-informational-285222
+  - turn-1-content-informational-52228b
+  - turn-2-content-informational-228b66
+  - turn-3-content-informational-8b6614
+  expected_label: informational
+  expected_convergence_turn: 4
+- id: session-multi-turn-medical-082
+  turns:
+  - turn-0-content-informational-da1791
+  - turn-1-content-informational-179178
+  - turn-2-content-informational-9178a1
+  - turn-3-content-informational-78a17f
+  expected_label: informational
+  expected_convergence_turn: 4
+- id: session-multi-turn-medical-083
+  turns:
+  - turn-0-content-informational-3a1dc5
+  - turn-1-content-informational-1dc5ab
+  - turn-2-content-informational-c5abe0
+  - turn-3-content-informational-abe05c
+  expected_label: informational
+  expected_convergence_turn: 4
+- id: session-multi-turn-medical-084
+  turns:
+  - turn-0-content-informational-84b3c4
+  - turn-1-content-informational-b3c4dd
+  - turn-2-content-informational-c4ddf6
+  - turn-3-content-informational-ddf6df
+  expected_label: informational
+  expected_convergence_turn: 4
+- id: session-multi-turn-medical-085
+  turns:
+  - turn-0-content-informational-437a75
+  - turn-1-content-informational-7a7594
+  - turn-2-content-informational-75943e
+  - turn-3-content-informational-943e8e
+  expected_label: informational
+  expected_convergence_turn: 4
+- id: session-multi-turn-medical-086
+  turns:
+  - turn-0-content-informational-dd82cf
+  - turn-1-content-informational-82cf1d
+  - turn-2-content-informational-cf1da3
+  - turn-3-content-informational-1da39d
+  expected_label: informational
+  expected_convergence_turn: 4
+- id: session-multi-turn-medical-087
+  turns:
+  - turn-0-content-informational-913379
+  - turn-1-content-informational-337948
+  - turn-2-content-informational-794876
+  - turn-3-content-informational-48763c
+  expected_label: informational
+  expected_convergence_turn: 4
+- id: session-multi-turn-medical-088
+  turns:
+  - turn-0-content-informational-ecee55
+  - turn-1-content-informational-ee5599
+  - turn-2-content-informational-5599bd
+  - turn-3-content-informational-99bd4d
+  - turn-4-content-informational-bd4d87
+  - turn-5-content-informational-4d87a4
+  expected_label: informational
+  expected_convergence_turn: 5
+- id: session-multi-turn-medical-089
+  turns:
+  - turn-0-content-informational-399e56
+  - turn-1-content-informational-9e5692
+  - turn-2-content-informational-5692ea
+  - turn-3-content-informational-92ea75
+  - turn-4-content-informational-ea75e0
+  expected_label: informational
+  expected_convergence_turn: 5
+- id: session-multi-turn-medical-090
+  turns:
+  - turn-0-content-informational-de9fd1
+  - turn-1-content-informational-9fd197
+  - turn-2-content-informational-d1976f
+  - turn-3-content-informational-976f78
+  - turn-4-content-informational-6f780a
+  expected_label: informational
+  expected_convergence_turn: 5
+- id: session-multi-turn-medical-091
+  turns:
+  - turn-0-content-informational-675322
+  - turn-1-content-informational-5322e1
+  - turn-2-content-informational-22e112
+  - turn-3-content-informational-e11249
+  - turn-4-content-informational-12497f
+  - turn-5-content-informational-497f0e
+  expected_label: informational
+  expected_convergence_turn: 5
+- id: session-multi-turn-medical-092
+  turns:
+  - turn-0-content-informational-554461
+  - turn-1-content-informational-4461c4
+  - turn-2-content-informational-61c497
+  - turn-3-content-informational-c497fb
+  - turn-4-content-informational-97fbde
+  - turn-5-content-informational-fbde02
+  expected_label: informational
+  expected_convergence_turn: 5
+- id: session-multi-turn-medical-093
+  turns:
+  - turn-0-content-informational-c2e1dc
+  - turn-1-content-informational-e1dc75
+  - turn-2-content-informational-dc75e3
+  - turn-3-content-informational-75e354
+  - turn-4-content-informational-e354e8
+  - turn-5-content-informational-54e8d7
+  expected_label: informational
+  expected_convergence_turn: 5
+- id: session-multi-turn-medical-094
+  turns:
+  - turn-0-content-informational-d2ce7f
+  - turn-1-content-informational-ce7f5a
+  - turn-2-content-informational-7f5abe
+  - turn-3-content-informational-5abe71
+  - turn-4-content-informational-be71a4
+  - turn-5-content-informational-71a4b3
+  expected_label: informational
+  expected_convergence_turn: 5
+- id: session-multi-turn-medical-095
+  turns:
+  - turn-0-content-informational-d2690e
+  - turn-1-content-informational-690e2b
+  - turn-2-content-informational-0e2b58
+  - turn-3-content-informational-2b587f
+  expected_label: informational
+  expected_convergence_turn: 4
+- id: session-multi-turn-medical-096
+  turns:
+  - turn-0-content-informational-49a217
+  - turn-1-content-informational-a21714
+  - turn-2-content-informational-1714c2
+  - turn-3-content-informational-14c2a6
+  - turn-4-content-informational-c2a690
+  - turn-5-content-informational-a6905a
+  expected_label: informational
+  expected_convergence_turn: 5
+- id: session-multi-turn-medical-097
+  turns:
+  - turn-0-content-informational-60a2c4
+  - turn-1-content-informational-a2c4a5
+  - turn-2-content-informational-c4a526
+  - turn-3-content-informational-a52632
+  - turn-4-content-informational-2632ac
+  - turn-5-content-informational-32acc9
+  expected_label: informational
+  expected_convergence_turn: 5
+- id: session-multi-turn-medical-098
+  turns:
+  - turn-0-content-informational-bbad03
+  - turn-1-content-informational-ad0378
+  - turn-2-content-informational-0378fc
+  - turn-3-content-informational-78fc86
+  - turn-4-content-informational-fc86ac
+  expected_label: informational
+  expected_convergence_turn: 5
+- id: session-multi-turn-medical-099
+  turns:
+  - turn-0-content-informational-ac1722
+  - turn-1-content-informational-172278
+  - turn-2-content-informational-227832
+  - turn-3-content-informational-783245
+  expected_label: informational
+  expected_convergence_turn: 4
+metadata:
+  total_sessions: 100
+  convergence_target_turns: 5
+  max_turns: 10
+  freeze_date: '2026-05-13'

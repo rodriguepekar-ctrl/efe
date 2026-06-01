@@ -1,0 +1,884 @@
+id: multi-turn-intent
+version: 1.0.0
+description: Intent classification multi-turn (8 intents)
+labels:
+- id: question
+  description: Information request
+- id: command
+  description: Direct imperative
+- id: complaint
+  description: Dissatisfaction
+- id: compliment
+  description: Appreciation
+- id: smalltalk
+  description: Casual filler
+- id: emergency
+  description: Urgent distress
+- id: clarification
+  description: Rephrase request
+- id: other
+  description: Catch-all
+test_sessions:
+- id: session-multi-turn-intent-000
+  turns:
+  - turn-0-content-question-3a8e2c
+  - turn-1-content-question-8e2cd1
+  - turn-2-content-question-2cd11f
+  - turn-3-content-question-d11fc0
+  expected_label: question
+  expected_convergence_turn: 4
+- id: session-multi-turn-intent-001
+  turns:
+  - turn-0-content-question-44e8cf
+  - turn-1-content-question-e8cf5c
+  - turn-2-content-question-cf5ce0
+  - turn-3-content-question-5ce042
+  - turn-4-content-question-e042e1
+  expected_label: question
+  expected_convergence_turn: 5
+- id: session-multi-turn-intent-002
+  turns:
+  - turn-0-content-question-6939ba
+  - turn-1-content-question-39ba76
+  - turn-2-content-question-ba7692
+  - turn-3-content-question-7692a4
+  expected_label: question
+  expected_convergence_turn: 4
+- id: session-multi-turn-intent-003
+  turns:
+  - turn-0-content-question-90ce8d
+  - turn-1-content-question-ce8dae
+  - turn-2-content-question-8daed7
+  - turn-3-content-question-aed7d0
+  - turn-4-content-question-d7d0f3
+  - turn-5-content-question-d0f31f
+  expected_label: question
+  expected_convergence_turn: 5
+- id: session-multi-turn-intent-004
+  turns:
+  - turn-0-content-question-d21229
+  - turn-1-content-question-122912
+  - turn-2-content-question-2912ba
+  - turn-3-content-question-12badd
+  - turn-4-content-question-badd51
+  expected_label: question
+  expected_convergence_turn: 5
+- id: session-multi-turn-intent-005
+  turns:
+  - turn-0-content-question-c5fdb6
+  - turn-1-content-question-fdb682
+  - turn-2-content-question-b682e0
+  - turn-3-content-question-82e099
+  expected_label: question
+  expected_convergence_turn: 4
+- id: session-multi-turn-intent-006
+  turns:
+  - turn-0-content-question-ebdf47
+  - turn-1-content-question-df4731
+  - turn-2-content-question-473147
+  - turn-3-content-question-3147b8
+  - turn-4-content-question-47b831
+  - turn-5-content-question-b831ff
+  expected_label: question
+  expected_convergence_turn: 5
+- id: session-multi-turn-intent-007
+  turns:
+  - turn-0-content-question-d96d64
+  - turn-1-content-question-6d64da
+  - turn-2-content-question-64daf0
+  - turn-3-content-question-daf083
+  - turn-4-content-question-f083cb
+  expected_label: question
+  expected_convergence_turn: 5
+- id: session-multi-turn-intent-008
+  turns:
+  - turn-0-content-question-5aa62a
+  - turn-1-content-question-a62a8a
+  - turn-2-content-question-2a8a85
+  - turn-3-content-question-8a85d8
+  expected_label: question
+  expected_convergence_turn: 4
+- id: session-multi-turn-intent-009
+  turns:
+  - turn-0-content-question-fd003d
+  - turn-1-content-question-003d1b
+  - turn-2-content-question-3d1b51
+  - turn-3-content-question-1b51e2
+  - turn-4-content-question-51e2de
+  expected_label: question
+  expected_convergence_turn: 5
+- id: session-multi-turn-intent-010
+  turns:
+  - turn-0-content-question-dca6a2
+  - turn-1-content-question-a6a21d
+  - turn-2-content-question-a21de2
+  - turn-3-content-question-1de2b5
+  - turn-4-content-question-e2b51c
+  expected_label: question
+  expected_convergence_turn: 5
+- id: session-multi-turn-intent-011
+  turns:
+  - turn-0-content-question-9cb43a
+  - turn-1-content-question-b43a5a
+  - turn-2-content-question-3a5a8f
+  - turn-3-content-question-5a8f1e
+  expected_label: question
+  expected_convergence_turn: 4
+- id: session-multi-turn-intent-012
+  turns:
+  - turn-0-content-command-eff02b
+  - turn-1-content-command-f02b65
+  - turn-2-content-command-2b65f1
+  - turn-3-content-command-65f10a
+  - turn-4-content-command-f10afc
+  expected_label: command
+  expected_convergence_turn: 5
+- id: session-multi-turn-intent-013
+  turns:
+  - turn-0-content-command-8c780d
+  - turn-1-content-command-780d3a
+  - turn-2-content-command-0d3a5f
+  - turn-3-content-command-3a5f7a
+  expected_label: command
+  expected_convergence_turn: 4
+- id: session-multi-turn-intent-014
+  turns:
+  - turn-0-content-command-d96268
+  - turn-1-content-command-62686c
+  - turn-2-content-command-686c6a
+  - turn-3-content-command-6c6a03
+  expected_label: command
+  expected_convergence_turn: 4
+- id: session-multi-turn-intent-015
+  turns:
+  - turn-0-content-command-6aefd9
+  - turn-1-content-command-efd9f2
+  - turn-2-content-command-d9f239
+  - turn-3-content-command-f23986
+  - turn-4-content-command-3986b0
+  expected_label: command
+  expected_convergence_turn: 5
+- id: session-multi-turn-intent-016
+  turns:
+  - turn-0-content-command-336789
+  - turn-1-content-command-6789a0
+  - turn-2-content-command-89a060
+  - turn-3-content-command-a06043
+  - turn-4-content-command-6043eb
+  expected_label: command
+  expected_convergence_turn: 5
+- id: session-multi-turn-intent-017
+  turns:
+  - turn-0-content-command-e65cef
+  - turn-1-content-command-5cef54
+  - turn-2-content-command-ef5486
+  - turn-3-content-command-548659
+  - turn-4-content-command-86591d
+  expected_label: command
+  expected_convergence_turn: 5
+- id: session-multi-turn-intent-018
+  turns:
+  - turn-0-content-command-22fc0d
+  - turn-1-content-command-fc0d1a
+  - turn-2-content-command-0d1abc
+  - turn-3-content-command-1abc87
+  - turn-4-content-command-bc87ce
+  expected_label: command
+  expected_convergence_turn: 5
+- id: session-multi-turn-intent-019
+  turns:
+  - turn-0-content-command-e90272
+  - turn-1-content-command-02722d
+  - turn-2-content-command-722d84
+  - turn-3-content-command-2d8450
+  - turn-4-content-command-8450eb
+  - turn-5-content-command-50ebd6
+  expected_label: command
+  expected_convergence_turn: 5
+- id: session-multi-turn-intent-020
+  turns:
+  - turn-0-content-command-6eed7d
+  - turn-1-content-command-ed7de2
+  - turn-2-content-command-7de298
+  - turn-3-content-command-e29894
+  - turn-4-content-command-989430
+  - turn-5-content-command-9430b2
+  expected_label: command
+  expected_convergence_turn: 5
+- id: session-multi-turn-intent-021
+  turns:
+  - turn-0-content-command-264152
+  - turn-1-content-command-4152a2
+  - turn-2-content-command-52a2eb
+  - turn-3-content-command-a2ebe8
+  - turn-4-content-command-ebe81f
+  expected_label: command
+  expected_convergence_turn: 5
+- id: session-multi-turn-intent-022
+  turns:
+  - turn-0-content-command-03e7a7
+  - turn-1-content-command-e7a750
+  - turn-2-content-command-a7507e
+  - turn-3-content-command-507e29
+  - turn-4-content-command-7e2962
+  expected_label: command
+  expected_convergence_turn: 5
+- id: session-multi-turn-intent-023
+  turns:
+  - turn-0-content-command-52795d
+  - turn-1-content-command-795da8
+  - turn-2-content-command-5da8e5
+  - turn-3-content-command-a8e549
+  - turn-4-content-command-e54928
+  - turn-5-content-command-492839
+  expected_label: command
+  expected_convergence_turn: 5
+- id: session-multi-turn-intent-024
+  turns:
+  - turn-0-content-complaint-4c47ce
+  - turn-1-content-complaint-47ce72
+  - turn-2-content-complaint-ce72ca
+  - turn-3-content-complaint-72ca2f
+  - turn-4-content-complaint-ca2fb8
+  - turn-5-content-complaint-2fb88d
+  expected_label: complaint
+  expected_convergence_turn: 5
+- id: session-multi-turn-intent-025
+  turns:
+  - turn-0-content-complaint-b317b7
+  - turn-1-content-complaint-17b7f6
+  - turn-2-content-complaint-b7f61a
+  - turn-3-content-complaint-f61abd
+  - turn-4-content-complaint-1abd4b
+  - turn-5-content-complaint-bd4bf2
+  expected_label: complaint
+  expected_convergence_turn: 5
+- id: session-multi-turn-intent-026
+  turns:
+  - turn-0-content-complaint-be161a
+  - turn-1-content-complaint-161a4d
+  - turn-2-content-complaint-1a4d8e
+  - turn-3-content-complaint-4d8ec2
+  - turn-4-content-complaint-8ec29d
+  - turn-5-content-complaint-c29df5
+  expected_label: complaint
+  expected_convergence_turn: 5
+- id: session-multi-turn-intent-027
+  turns:
+  - turn-0-content-complaint-3db5f2
+  - turn-1-content-complaint-b5f247
+  - turn-2-content-complaint-f247e0
+  - turn-3-content-complaint-47e0b6
+  expected_label: complaint
+  expected_convergence_turn: 4
+- id: session-multi-turn-intent-028
+  turns:
+  - turn-0-content-complaint-917be0
+  - turn-1-content-complaint-7be09b
+  - turn-2-content-complaint-e09bbf
+  - turn-3-content-complaint-9bbf1f
+  expected_label: complaint
+  expected_convergence_turn: 4
+- id: session-multi-turn-intent-029
+  turns:
+  - turn-0-content-complaint-dc5511
+  - turn-1-content-complaint-5511a1
+  - turn-2-content-complaint-11a1bb
+  - turn-3-content-complaint-a1bbbb
+  - turn-4-content-complaint-bbbb70
+  - turn-5-content-complaint-bb70e2
+  expected_label: complaint
+  expected_convergence_turn: 5
+- id: session-multi-turn-intent-030
+  turns:
+  - turn-0-content-complaint-d78fe9
+  - turn-1-content-complaint-8fe95b
+  - turn-2-content-complaint-e95b64
+  - turn-3-content-complaint-5b64a8
+  - turn-4-content-complaint-64a8bf
+  expected_label: complaint
+  expected_convergence_turn: 5
+- id: session-multi-turn-intent-031
+  turns:
+  - turn-0-content-complaint-47e4cb
+  - turn-1-content-complaint-e4cb1a
+  - turn-2-content-complaint-cb1ab3
+  - turn-3-content-complaint-1ab379
+  expected_label: complaint
+  expected_convergence_turn: 4
+- id: session-multi-turn-intent-032
+  turns:
+  - turn-0-content-complaint-ad77cc
+  - turn-1-content-complaint-77cc67
+  - turn-2-content-complaint-cc672e
+  - turn-3-content-complaint-672e97
+  - turn-4-content-complaint-2e9768
+  expected_label: complaint
+  expected_convergence_turn: 5
+- id: session-multi-turn-intent-033
+  turns:
+  - turn-0-content-complaint-7fd2c2
+  - turn-1-content-complaint-d2c2bf
+  - turn-2-content-complaint-c2bf85
+  - turn-3-content-complaint-bf853c
+  - turn-4-content-complaint-853c98
+  - turn-5-content-complaint-3c9878
+  expected_label: complaint
+  expected_convergence_turn: 5
+- id: session-multi-turn-intent-034
+  turns:
+  - turn-0-content-complaint-317c4f
+  - turn-1-content-complaint-7c4fa5
+  - turn-2-content-complaint-4fa56d
+  - turn-3-content-complaint-a56d99
+  expected_label: complaint
+  expected_convergence_turn: 4
+- id: session-multi-turn-intent-035
+  turns:
+  - turn-0-content-complaint-4bc6c1
+  - turn-1-content-complaint-c6c1b3
+  - turn-2-content-complaint-c1b362
+  - turn-3-content-complaint-b36218
+  expected_label: complaint
+  expected_convergence_turn: 4
+- id: session-multi-turn-intent-036
+  turns:
+  - turn-0-content-compliment-bbb1a2
+  - turn-1-content-compliment-b1a2c2
+  - turn-2-content-compliment-a2c2fd
+  - turn-3-content-compliment-c2fd1e
+  expected_label: compliment
+  expected_convergence_turn: 4
+- id: session-multi-turn-intent-037
+  turns:
+  - turn-0-content-compliment-c50a25
+  - turn-1-content-compliment-0a25f7
+  - turn-2-content-compliment-25f748
+  - turn-3-content-compliment-f748c8
+  expected_label: compliment
+  expected_convergence_turn: 4
+- id: session-multi-turn-intent-038
+  turns:
+  - turn-0-content-compliment-dfa827
+  - turn-1-content-compliment-a827d9
+  - turn-2-content-compliment-27d941
+  - turn-3-content-compliment-d94179
+  expected_label: compliment
+  expected_convergence_turn: 4
+- id: session-multi-turn-intent-039
+  turns:
+  - turn-0-content-compliment-50eca4
+  - turn-1-content-compliment-eca4f6
+  - turn-2-content-compliment-a4f6b9
+  - turn-3-content-compliment-f6b9cf
+  - turn-4-content-compliment-b9cf7e
+  - turn-5-content-compliment-cf7efe
+  expected_label: compliment
+  expected_convergence_turn: 5
+- id: session-multi-turn-intent-040
+  turns:
+  - turn-0-content-compliment-0e5511
+  - turn-1-content-compliment-5511a3
+  - turn-2-content-compliment-11a3e5
+  - turn-3-content-compliment-a3e54a
+  - turn-4-content-compliment-e54ad1
+  - turn-5-content-compliment-4ad179
+  expected_label: compliment
+  expected_convergence_turn: 5
+- id: session-multi-turn-intent-041
+  turns:
+  - turn-0-content-compliment-8d06f2
+  - turn-1-content-compliment-06f299
+  - turn-2-content-compliment-f29996
+  - turn-3-content-compliment-99964c
+  - turn-4-content-compliment-964cd1
+  expected_label: compliment
+  expected_convergence_turn: 5
+- id: session-multi-turn-intent-042
+  turns:
+  - turn-0-content-compliment-da664e
+  - turn-1-content-compliment-664eb5
+  - turn-2-content-compliment-4eb5bc
+  - turn-3-content-compliment-b5bc85
+  - turn-4-content-compliment-bc852e
+  - turn-5-content-compliment-852e9a
+  expected_label: compliment
+  expected_convergence_turn: 5
+- id: session-multi-turn-intent-043
+  turns:
+  - turn-0-content-compliment-75abb3
+  - turn-1-content-compliment-abb33f
+  - turn-2-content-compliment-b33ff6
+  - turn-3-content-compliment-3ff6f4
+  expected_label: compliment
+  expected_convergence_turn: 4
+- id: session-multi-turn-intent-044
+  turns:
+  - turn-0-content-compliment-4c4932
+  - turn-1-content-compliment-49326f
+  - turn-2-content-compliment-326f19
+  - turn-3-content-compliment-6f19cf
+  - turn-4-content-compliment-19cf63
+  expected_label: compliment
+  expected_convergence_turn: 5
+- id: session-multi-turn-intent-045
+  turns:
+  - turn-0-content-compliment-5f284e
+  - turn-1-content-compliment-284e6a
+  - turn-2-content-compliment-4e6ab0
+  - turn-3-content-compliment-6ab0b3
+  - turn-4-content-compliment-b0b314
+  - turn-5-content-compliment-b31400
+  expected_label: compliment
+  expected_convergence_turn: 5
+- id: session-multi-turn-intent-046
+  turns:
+  - turn-0-content-compliment-619d95
+  - turn-1-content-compliment-9d959a
+  - turn-2-content-compliment-959a14
+  - turn-3-content-compliment-9a14cd
+  - turn-4-content-compliment-14cd90
+  - turn-5-content-compliment-cd90ea
+  expected_label: compliment
+  expected_convergence_turn: 5
+- id: session-multi-turn-intent-047
+  turns:
+  - turn-0-content-compliment-d3b69d
+  - turn-1-content-compliment-b69d32
+  - turn-2-content-compliment-9d322d
+  - turn-3-content-compliment-322d30
+  expected_label: compliment
+  expected_convergence_turn: 4
+- id: session-multi-turn-intent-048
+  turns:
+  - turn-0-content-smalltalk-c08e26
+  - turn-1-content-smalltalk-8e26f9
+  - turn-2-content-smalltalk-26f929
+  - turn-3-content-smalltalk-f92950
+  - turn-4-content-smalltalk-2950b7
+  expected_label: smalltalk
+  expected_convergence_turn: 5
+- id: session-multi-turn-intent-049
+  turns:
+  - turn-0-content-smalltalk-1ce7bc
+  - turn-1-content-smalltalk-e7bcce
+  - turn-2-content-smalltalk-bcce43
+  - turn-3-content-smalltalk-ce433a
+  expected_label: smalltalk
+  expected_convergence_turn: 4
+- id: session-multi-turn-intent-050
+  turns:
+  - turn-0-content-smalltalk-ecfab5
+  - turn-1-content-smalltalk-fab58f
+  - turn-2-content-smalltalk-b58f61
+  - turn-3-content-smalltalk-8f61eb
+  - turn-4-content-smalltalk-61eb09
+  expected_label: smalltalk
+  expected_convergence_turn: 5
+- id: session-multi-turn-intent-051
+  turns:
+  - turn-0-content-smalltalk-e71e08
+  - turn-1-content-smalltalk-1e08ea
+  - turn-2-content-smalltalk-08eaa2
+  - turn-3-content-smalltalk-eaa280
+  - turn-4-content-smalltalk-a2802c
+  - turn-5-content-smalltalk-802c60
+  expected_label: smalltalk
+  expected_convergence_turn: 5
+- id: session-multi-turn-intent-052
+  turns:
+  - turn-0-content-smalltalk-0f4177
+  - turn-1-content-smalltalk-417724
+  - turn-2-content-smalltalk-7724fc
+  - turn-3-content-smalltalk-24fcb1
+  - turn-4-content-smalltalk-fcb1fd
+  expected_label: smalltalk
+  expected_convergence_turn: 5
+- id: session-multi-turn-intent-053
+  turns:
+  - turn-0-content-smalltalk-26d124
+  - turn-1-content-smalltalk-d1245b
+  - turn-2-content-smalltalk-245bd0
+  - turn-3-content-smalltalk-5bd029
+  expected_label: smalltalk
+  expected_convergence_turn: 4
+- id: session-multi-turn-intent-054
+  turns:
+  - turn-0-content-smalltalk-2803a6
+  - turn-1-content-smalltalk-03a6aa
+  - turn-2-content-smalltalk-a6aa2a
+  - turn-3-content-smalltalk-aa2a32
+  - turn-4-content-smalltalk-2a3285
+  expected_label: smalltalk
+  expected_convergence_turn: 5
+- id: session-multi-turn-intent-055
+  turns:
+  - turn-0-content-smalltalk-2db72f
+  - turn-1-content-smalltalk-b72fa3
+  - turn-2-content-smalltalk-2fa3c4
+  - turn-3-content-smalltalk-a3c40f
+  - turn-4-content-smalltalk-c40f80
+  expected_label: smalltalk
+  expected_convergence_turn: 5
+- id: session-multi-turn-intent-056
+  turns:
+  - turn-0-content-smalltalk-80cecd
+  - turn-1-content-smalltalk-cecdbb
+  - turn-2-content-smalltalk-cdbbb1
+  - turn-3-content-smalltalk-bbb188
+  expected_label: smalltalk
+  expected_convergence_turn: 4
+- id: session-multi-turn-intent-057
+  turns:
+  - turn-0-content-smalltalk-15079c
+  - turn-1-content-smalltalk-079c6f
+  - turn-2-content-smalltalk-9c6f4f
+  - turn-3-content-smalltalk-6f4fd6
+  expected_label: smalltalk
+  expected_convergence_turn: 4
+- id: session-multi-turn-intent-058
+  turns:
+  - turn-0-content-smalltalk-780f28
+  - turn-1-content-smalltalk-0f284d
+  - turn-2-content-smalltalk-284dd2
+  - turn-3-content-smalltalk-4dd2ec
+  - turn-4-content-smalltalk-d2ecef
+  - turn-5-content-smalltalk-ecef9e
+  expected_label: smalltalk
+  expected_convergence_turn: 5
+- id: session-multi-turn-intent-059
+  turns:
+  - turn-0-content-smalltalk-344d49
+  - turn-1-content-smalltalk-4d4957
+  - turn-2-content-smalltalk-4957d5
+  - turn-3-content-smalltalk-57d5ca
+  - turn-4-content-smalltalk-d5ca2c
+  expected_label: smalltalk
+  expected_convergence_turn: 5
+- id: session-multi-turn-intent-060
+  turns:
+  - turn-0-content-emergency-9e2dc0
+  - turn-1-content-emergency-2dc08e
+  - turn-2-content-emergency-c08ef7
+  - turn-3-content-emergency-8ef736
+  - turn-4-content-emergency-f73660
+  - turn-5-content-emergency-366066
+  expected_label: emergency
+  expected_convergence_turn: 5
+- id: session-multi-turn-intent-061
+  turns:
+  - turn-0-content-emergency-7c175d
+  - turn-1-content-emergency-175d3c
+  - turn-2-content-emergency-5d3cb6
+  - turn-3-content-emergency-3cb6f7
+  expected_label: emergency
+  expected_convergence_turn: 4
+- id: session-multi-turn-intent-062
+  turns:
+  - turn-0-content-emergency-8e193a
+  - turn-1-content-emergency-193a68
+  - turn-2-content-emergency-3a6883
+  - turn-3-content-emergency-68839f
+  expected_label: emergency
+  expected_convergence_turn: 4
+- id: session-multi-turn-intent-063
+  turns:
+  - turn-0-content-emergency-cb17e4
+  - turn-1-content-emergency-17e4de
+  - turn-2-content-emergency-e4deb0
+  - turn-3-content-emergency-deb037
+  expected_label: emergency
+  expected_convergence_turn: 4
+- id: session-multi-turn-intent-064
+  turns:
+  - turn-0-content-emergency-f65dad
+  - turn-1-content-emergency-5dad2d
+  - turn-2-content-emergency-ad2d9b
+  - turn-3-content-emergency-2d9b2a
+  - turn-4-content-emergency-9b2a5b
+  expected_label: emergency
+  expected_convergence_turn: 5
+- id: session-multi-turn-intent-065
+  turns:
+  - turn-0-content-emergency-9e3081
+  - turn-1-content-emergency-3081f1
+  - turn-2-content-emergency-81f1de
+  - turn-3-content-emergency-f1de8e
+  - turn-4-content-emergency-de8e70
+  - turn-5-content-emergency-8e709e
+  expected_label: emergency
+  expected_convergence_turn: 5
+- id: session-multi-turn-intent-066
+  turns:
+  - turn-0-content-emergency-6ff4d5
+  - turn-1-content-emergency-f4d5c1
+  - turn-2-content-emergency-d5c111
+  - turn-3-content-emergency-c1116d
+  expected_label: emergency
+  expected_convergence_turn: 4
+- id: session-multi-turn-intent-067
+  turns:
+  - turn-0-content-emergency-690e20
+  - turn-1-content-emergency-0e200f
+  - turn-2-content-emergency-200f4d
+  - turn-3-content-emergency-0f4db4
+  expected_label: emergency
+  expected_convergence_turn: 4
+- id: session-multi-turn-intent-068
+  turns:
+  - turn-0-content-emergency-04d3a8
+  - turn-1-content-emergency-d3a8d9
+  - turn-2-content-emergency-a8d959
+  - turn-3-content-emergency-d95909
+  - turn-4-content-emergency-59099f
+  - turn-5-content-emergency-099fc9
+  expected_label: emergency
+  expected_convergence_turn: 5
+- id: session-multi-turn-intent-069
+  turns:
+  - turn-0-content-emergency-e5330c
+  - turn-1-content-emergency-330ca1
+  - turn-2-content-emergency-0ca1bd
+  - turn-3-content-emergency-a1bda7
+  expected_label: emergency
+  expected_convergence_turn: 4
+- id: session-multi-turn-intent-070
+  turns:
+  - turn-0-content-emergency-07d64f
+  - turn-1-content-emergency-d64fdf
+  - turn-2-content-emergency-4fdfbc
+  - turn-3-content-emergency-dfbc0b
+  - turn-4-content-emergency-bc0b21
+  expected_label: emergency
+  expected_convergence_turn: 5
+- id: session-multi-turn-intent-071
+  turns:
+  - turn-0-content-emergency-cceb94
+  - turn-1-content-emergency-eb941e
+  - turn-2-content-emergency-941e03
+  - turn-3-content-emergency-1e03ea
+  - turn-4-content-emergency-03ea60
+  expected_label: emergency
+  expected_convergence_turn: 5
+- id: session-multi-turn-intent-072
+  turns:
+  - turn-0-content-clarification-e1f496
+  - turn-1-content-clarification-f4963f
+  - turn-2-content-clarification-963fbb
+  - turn-3-content-clarification-3fbbdc
+  expected_label: clarification
+  expected_convergence_turn: 4
+- id: session-multi-turn-intent-073
+  turns:
+  - turn-0-content-clarification-41c8c9
+  - turn-1-content-clarification-c8c9fd
+  - turn-2-content-clarification-c9fd62
+  - turn-3-content-clarification-fd6261
+  - turn-4-content-clarification-6261c7
+  - turn-5-content-clarification-61c73b
+  expected_label: clarification
+  expected_convergence_turn: 5
+- id: session-multi-turn-intent-074
+  turns:
+  - turn-0-content-clarification-75f30c
+  - turn-1-content-clarification-f30c99
+  - turn-2-content-clarification-0c998b
+  - turn-3-content-clarification-998b11
+  - turn-4-content-clarification-8b1113
+  expected_label: clarification
+  expected_convergence_turn: 5
+- id: session-multi-turn-intent-075
+  turns:
+  - turn-0-content-clarification-005817
+  - turn-1-content-clarification-58179c
+  - turn-2-content-clarification-179c63
+  - turn-3-content-clarification-9c6326
+  - turn-4-content-clarification-632642
+  expected_label: clarification
+  expected_convergence_turn: 5
+- id: session-multi-turn-intent-076
+  turns:
+  - turn-0-content-clarification-9750a0
+  - turn-1-content-clarification-50a01a
+  - turn-2-content-clarification-a01a2b
+  - turn-3-content-clarification-1a2b43
+  - turn-4-content-clarification-2b43fb
+  - turn-5-content-clarification-43fbc0
+  expected_label: clarification
+  expected_convergence_turn: 5
+- id: session-multi-turn-intent-077
+  turns:
+  - turn-0-content-clarification-e3ee76
+  - turn-1-content-clarification-ee7615
+  - turn-2-content-clarification-7615c0
+  - turn-3-content-clarification-15c04f
+  expected_label: clarification
+  expected_convergence_turn: 4
+- id: session-multi-turn-intent-078
+  turns:
+  - turn-0-content-clarification-8c8fb5
+  - turn-1-content-clarification-8fb5a9
+  - turn-2-content-clarification-b5a9f6
+  - turn-3-content-clarification-a9f6c2
+  - turn-4-content-clarification-f6c25b
+  - turn-5-content-clarification-c25bfc
+  expected_label: clarification
+  expected_convergence_turn: 5
+- id: session-multi-turn-intent-079
+  turns:
+  - turn-0-content-clarification-183f22
+  - turn-1-content-clarification-3f22a2
+  - turn-2-content-clarification-22a222
+  - turn-3-content-clarification-a222a4
+  - turn-4-content-clarification-22a47a
+  expected_label: clarification
+  expected_convergence_turn: 5
+- id: session-multi-turn-intent-080
+  turns:
+  - turn-0-content-clarification-c79e5d
+  - turn-1-content-clarification-9e5d5a
+  - turn-2-content-clarification-5d5a56
+  - turn-3-content-clarification-5a5619
+  - turn-4-content-clarification-561930
+  - turn-5-content-clarification-193012
+  expected_label: clarification
+  expected_convergence_turn: 5
+- id: session-multi-turn-intent-081
+  turns:
+  - turn-0-content-clarification-6065f3
+  - turn-1-content-clarification-65f356
+  - turn-2-content-clarification-f35624
+  - turn-3-content-clarification-5624fc
+  expected_label: clarification
+  expected_convergence_turn: 4
+- id: session-multi-turn-intent-082
+  turns:
+  - turn-0-content-clarification-b59dcd
+  - turn-1-content-clarification-9dcd5e
+  - turn-2-content-clarification-cd5e18
+  - turn-3-content-clarification-5e1877
+  - turn-4-content-clarification-187777
+  - turn-5-content-clarification-77773e
+  expected_label: clarification
+  expected_convergence_turn: 5
+- id: session-multi-turn-intent-083
+  turns:
+  - turn-0-content-clarification-1a60a3
+  - turn-1-content-clarification-60a3ea
+  - turn-2-content-clarification-a3ea53
+  - turn-3-content-clarification-ea53a0
+  - turn-4-content-clarification-53a010
+  - turn-5-content-clarification-a01010
+  expected_label: clarification
+  expected_convergence_turn: 5
+- id: session-multi-turn-intent-084
+  turns:
+  - turn-0-content-other-824b7d
+  - turn-1-content-other-4b7dcd
+  - turn-2-content-other-7dcd5c
+  - turn-3-content-other-cd5c00
+  expected_label: other
+  expected_convergence_turn: 4
+- id: session-multi-turn-intent-085
+  turns:
+  - turn-0-content-other-fac078
+  - turn-1-content-other-c07884
+  - turn-2-content-other-7884ea
+  - turn-3-content-other-84eaae
+  expected_label: other
+  expected_convergence_turn: 4
+- id: session-multi-turn-intent-086
+  turns:
+  - turn-0-content-other-52ffea
+  - turn-1-content-other-ffea08
+  - turn-2-content-other-ea082b
+  - turn-3-content-other-082b74
+  - turn-4-content-other-2b74df
+  - turn-5-content-other-74df38
+  expected_label: other
+  expected_convergence_turn: 5
+- id: session-multi-turn-intent-087
+  turns:
+  - turn-0-content-other-5a734a
+  - turn-1-content-other-734a27
+  - turn-2-content-other-4a273d
+  - turn-3-content-other-273d3f
+  - turn-4-content-other-3d3f15
+  - turn-5-content-other-3f15b0
+  expected_label: other
+  expected_convergence_turn: 5
+- id: session-multi-turn-intent-088
+  turns:
+  - turn-0-content-other-2fc99e
+  - turn-1-content-other-c99eba
+  - turn-2-content-other-9eba28
+  - turn-3-content-other-ba2812
+  expected_label: other
+  expected_convergence_turn: 4
+- id: session-multi-turn-intent-089
+  turns:
+  - turn-0-content-other-b835e4
+  - turn-1-content-other-35e436
+  - turn-2-content-other-e436e1
+  - turn-3-content-other-36e15f
+  - turn-4-content-other-e15f34
+  - turn-5-content-other-5f34e8
+  expected_label: other
+  expected_convergence_turn: 5
+- id: session-multi-turn-intent-090
+  turns:
+  - turn-0-content-other-3a4d24
+  - turn-1-content-other-4d2413
+  - turn-2-content-other-241385
+  - turn-3-content-other-13852b
+  - turn-4-content-other-852b15
+  expected_label: other
+  expected_convergence_turn: 5
+- id: session-multi-turn-intent-091
+  turns:
+  - turn-0-content-other-ade91b
+  - turn-1-content-other-e91bc9
+  - turn-2-content-other-1bc9f0
+  - turn-3-content-other-c9f037
+  - turn-4-content-other-f037e9
+  expected_label: other
+  expected_convergence_turn: 5
+- id: session-multi-turn-intent-092
+  turns:
+  - turn-0-content-other-129597
+  - turn-1-content-other-959722
+  - turn-2-content-other-9722eb
+  - turn-3-content-other-22eba8
+  - turn-4-content-other-eba867
+  - turn-5-content-other-a867f6
+  expected_label: other
+  expected_convergence_turn: 5
+- id: session-multi-turn-intent-093
+  turns:
+  - turn-0-content-other-5db4a6
+  - turn-1-content-other-b4a687
+  - turn-2-content-other-a687f2
+  - turn-3-content-other-87f2af
+  expected_label: other
+  expected_convergence_turn: 4
+- id: session-multi-turn-intent-094
+  turns:
+  - turn-0-content-other-142b57
+  - turn-1-content-other-2b57b1
+  - turn-2-content-other-57b1f9
+  - turn-3-content-other-b1f95a
+  expected_label: other
+  expected_convergence_turn: 4
+- id: session-multi-turn-intent-095
+  turns:
+  - turn-0-content-other-d3875e
+  - turn-1-content-other-875ead
+  - turn-2-content-other-5eada5
+  - turn-3-content-other-ada50b
+  expected_label: other
+  expected_convergence_turn: 4
+metadata:
+  total_sessions: 96
+  convergence_target_turns: 5
+  max_turns: 10
+  freeze_date: '2026-05-13'

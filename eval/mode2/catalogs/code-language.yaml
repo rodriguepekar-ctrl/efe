@@ -1,0 +1,505 @@
+id: code-language
+version: 1.0.0
+description: Programming language detection — 50 languages
+labels:
+- id: python
+  description: Python code
+  examples:
+  - Example 1 for python
+  - Example 2 for python
+  - Example 3 for python
+- id: javascript
+  description: JavaScript / Node.js
+  examples:
+  - Example 1 for javascript
+  - Example 2 for javascript
+  - Example 3 for javascript
+- id: typescript
+  description: TypeScript
+  examples:
+  - Example 1 for typescript
+  - Example 2 for typescript
+  - Example 3 for typescript
+- id: rust
+  description: Rust
+  examples:
+  - Example 1 for rust
+  - Example 2 for rust
+  - Example 3 for rust
+- id: go
+  description: Go (golang)
+  examples:
+  - Example 1 for go
+  - Example 2 for go
+  - Example 3 for go
+- id: java
+  description: Java
+  examples:
+  - Example 1 for java
+  - Example 2 for java
+  - Example 3 for java
+- id: kotlin
+  description: Kotlin
+  examples:
+  - Example 1 for kotlin
+  - Example 2 for kotlin
+  - Example 3 for kotlin
+- id: swift
+  description: Swift
+  examples:
+  - Example 1 for swift
+  - Example 2 for swift
+  - Example 3 for swift
+- id: cpp
+  description: C++
+  examples:
+  - Example 1 for cpp
+  - Example 2 for cpp
+  - Example 3 for cpp
+- id: c
+  description: C
+  examples:
+  - Example 1 for c
+  - Example 2 for c
+  - Example 3 for c
+- id: csharp
+  description: C#
+  examples:
+  - Example 1 for csharp
+  - Example 2 for csharp
+  - Example 3 for csharp
+- id: ruby
+  description: Ruby
+  examples:
+  - Example 1 for ruby
+  - Example 2 for ruby
+  - Example 3 for ruby
+- id: php
+  description: PHP
+  examples:
+  - Example 1 for php
+  - Example 2 for php
+  - Example 3 for php
+- id: perl
+  description: Perl
+  examples:
+  - Example 1 for perl
+  - Example 2 for perl
+  - Example 3 for perl
+- id: scala
+  description: Scala
+  examples:
+  - Example 1 for scala
+  - Example 2 for scala
+  - Example 3 for scala
+- id: haskell
+  description: Haskell
+  examples:
+  - Example 1 for haskell
+  - Example 2 for haskell
+  - Example 3 for haskell
+- id: ocaml
+  description: OCaml
+  examples:
+  - Example 1 for ocaml
+  - Example 2 for ocaml
+  - Example 3 for ocaml
+- id: erlang
+  description: Erlang
+  examples:
+  - Example 1 for erlang
+  - Example 2 for erlang
+  - Example 3 for erlang
+- id: elixir
+  description: Elixir
+  examples:
+  - Example 1 for elixir
+  - Example 2 for elixir
+  - Example 3 for elixir
+- id: clojure
+  description: Clojure
+  examples:
+  - Example 1 for clojure
+  - Example 2 for clojure
+  - Example 3 for clojure
+- id: lua
+  description: Lua
+  examples:
+  - Example 1 for lua
+  - Example 2 for lua
+  - Example 3 for lua
+- id: r
+  description: R statistical
+  examples:
+  - Example 1 for r
+  - Example 2 for r
+  - Example 3 for r
+- id: matlab
+  description: MATLAB
+  examples:
+  - Example 1 for matlab
+  - Example 2 for matlab
+  - Example 3 for matlab
+- id: julia
+  description: Julia
+  examples:
+  - Example 1 for julia
+  - Example 2 for julia
+  - Example 3 for julia
+- id: fortran
+  description: Fortran
+  examples:
+  - Example 1 for fortran
+  - Example 2 for fortran
+  - Example 3 for fortran
+- id: cobol
+  description: COBOL
+  examples:
+  - Example 1 for cobol
+  - Example 2 for cobol
+  - Example 3 for cobol
+- id: pascal
+  description: Pascal
+  examples:
+  - Example 1 for pascal
+  - Example 2 for pascal
+  - Example 3 for pascal
+- id: assembly
+  description: Assembly
+  examples:
+  - Example 1 for assembly
+  - Example 2 for assembly
+  - Example 3 for assembly
+- id: shell
+  description: Bash / shell
+  examples:
+  - Example 1 for shell
+  - Example 2 for shell
+  - Example 3 for shell
+- id: powershell
+  description: PowerShell
+  examples:
+  - Example 1 for powershell
+  - Example 2 for powershell
+  - Example 3 for powershell
+- id: sql
+  description: SQL
+  examples:
+  - Example 1 for sql
+  - Example 2 for sql
+  - Example 3 for sql
+- id: graphql
+  description: GraphQL
+  examples:
+  - Example 1 for graphql
+  - Example 2 for graphql
+  - Example 3 for graphql
+- id: html
+  description: HTML
+  examples:
+  - Example 1 for html
+  - Example 2 for html
+  - Example 3 for html
+- id: css
+  description: CSS / SCSS
+  examples:
+  - Example 1 for css
+  - Example 2 for css
+  - Example 3 for css
+- id: yaml
+  description: YAML
+  examples:
+  - Example 1 for yaml
+  - Example 2 for yaml
+  - Example 3 for yaml
+- id: toml
+  description: TOML
+  examples:
+  - Example 1 for toml
+  - Example 2 for toml
+  - Example 3 for toml
+- id: json
+  description: JSON
+  examples:
+  - Example 1 for json
+  - Example 2 for json
+  - Example 3 for json
+- id: xml
+  description: XML
+  examples:
+  - Example 1 for xml
+  - Example 2 for xml
+  - Example 3 for xml
+- id: markdown
+  description: Markdown
+  examples:
+  - Example 1 for markdown
+  - Example 2 for markdown
+  - Example 3 for markdown
+- id: latex
+  description: LaTeX
+  examples:
+  - Example 1 for latex
+  - Example 2 for latex
+  - Example 3 for latex
+- id: dockerfile
+  description: Dockerfile
+  examples:
+  - Example 1 for dockerfile
+  - Example 2 for dockerfile
+  - Example 3 for dockerfile
+- id: makefile
+  description: Makefile
+  examples:
+  - Example 1 for makefile
+  - Example 2 for makefile
+  - Example 3 for makefile
+- id: terraform
+  description: Terraform HCL
+  examples:
+  - Example 1 for terraform
+  - Example 2 for terraform
+  - Example 3 for terraform
+- id: groovy
+  description: Groovy
+  examples:
+  - Example 1 for groovy
+  - Example 2 for groovy
+  - Example 3 for groovy
+- id: dart
+  description: Dart
+  examples:
+  - Example 1 for dart
+  - Example 2 for dart
+  - Example 3 for dart
+- id: zig
+  description: Zig
+  examples:
+  - Example 1 for zig
+  - Example 2 for zig
+  - Example 3 for zig
+- id: nim
+  description: Nim
+  examples:
+  - Example 1 for nim
+  - Example 2 for nim
+  - Example 3 for nim
+- id: crystal
+  description: Crystal
+  examples:
+  - Example 1 for crystal
+  - Example 2 for crystal
+  - Example 3 for crystal
+- id: v
+  description: V language
+  examples:
+  - Example 1 for v
+  - Example 2 for v
+  - Example 3 for v
+- id: other
+  description: Unknown / other
+  examples:
+  - Example 1 for other
+  - Example 2 for other
+  - Example 3 for other
+test_set:
+- text: sample-python-be62ba62b43f
+  expected_label: python
+- text: sample-python-2bb27527af8a
+  expected_label: python
+- text: sample-javascript-2e0e34043961
+  expected_label: javascript
+- text: sample-javascript-d9c7f5a8c38e
+  expected_label: javascript
+- text: sample-typescript-65109a6f3680
+  expected_label: typescript
+- text: sample-typescript-839246594eb4
+  expected_label: typescript
+- text: sample-rust-8bae7a1adec4
+  expected_label: rust
+- text: sample-rust-14d6f72fabe1
+  expected_label: rust
+- text: sample-go-3e29259ad2f0
+  expected_label: go
+- text: sample-go-734ebce1089f
+  expected_label: go
+- text: sample-java-f0e5ea7d93cd
+  expected_label: java
+- text: sample-java-3fb0b2f66d7c
+  expected_label: java
+- text: sample-kotlin-2f7f5716f689
+  expected_label: kotlin
+- text: sample-kotlin-2e1587ba7fb2
+  expected_label: kotlin
+- text: sample-swift-6b3111ef1f7c
+  expected_label: swift
+- text: sample-swift-25a884c6ce43
+  expected_label: swift
+- text: sample-cpp-b9f5d0d37da9
+  expected_label: cpp
+- text: sample-cpp-acc437f3743f
+  expected_label: cpp
+- text: sample-c-8dbb2a534ef4
+  expected_label: c
+- text: sample-c-ab4718f9fda8
+  expected_label: c
+- text: sample-csharp-598e31721f1e
+  expected_label: csharp
+- text: sample-csharp-8ec7d10884b5
+  expected_label: csharp
+- text: sample-ruby-13dfaf4971ef
+  expected_label: ruby
+- text: sample-ruby-6e06efd51a22
+  expected_label: ruby
+- text: sample-php-ecd33669c4c5
+  expected_label: php
+- text: sample-php-7c34a1eeb523
+  expected_label: php
+- text: sample-perl-d6ac46725a78
+  expected_label: perl
+- text: sample-perl-6dba5eb40139
+  expected_label: perl
+- text: sample-scala-ae646c6e8bfb
+  expected_label: scala
+- text: sample-scala-ca9e3c1cfc2e
+  expected_label: scala
+- text: sample-haskell-75e39a1ef5fe
+  expected_label: haskell
+- text: sample-haskell-ea98c166e4e5
+  expected_label: haskell
+- text: sample-ocaml-b722608b9bda
+  expected_label: ocaml
+- text: sample-ocaml-15a5dda67f90
+  expected_label: ocaml
+- text: sample-erlang-ef60f61e712c
+  expected_label: erlang
+- text: sample-erlang-e587d06e81b2
+  expected_label: erlang
+- text: sample-elixir-9597564ee90b
+  expected_label: elixir
+- text: sample-elixir-ce46ab88e23f
+  expected_label: elixir
+- text: sample-clojure-c7b5bfbfc28f
+  expected_label: clojure
+- text: sample-clojure-fc6e06efb800
+  expected_label: clojure
+- text: sample-lua-50aefc02d2f3
+  expected_label: lua
+- text: sample-lua-a5236a3bebf7
+  expected_label: lua
+- text: sample-r-596647af8e51
+  expected_label: r
+- text: sample-r-a11b72a14434
+  expected_label: r
+- text: sample-matlab-576d910ee041
+  expected_label: matlab
+- text: sample-matlab-bcf8e79ea6ae
+  expected_label: matlab
+- text: sample-julia-2010f33cd6cd
+  expected_label: julia
+- text: sample-julia-743127328567
+  expected_label: julia
+- text: sample-fortran-e569acbf704a
+  expected_label: fortran
+- text: sample-fortran-e6d3db03620f
+  expected_label: fortran
+- text: sample-cobol-a49a0d13ef2b
+  expected_label: cobol
+- text: sample-cobol-e12e9c48d9f5
+  expected_label: cobol
+- text: sample-pascal-3c3140d6326b
+  expected_label: pascal
+- text: sample-pascal-e49af3291d6a
+  expected_label: pascal
+- text: sample-assembly-3935fe0202c0
+  expected_label: assembly
+- text: sample-assembly-d88cae5eeeb1
+  expected_label: assembly
+- text: sample-shell-f3475d7ff98a
+  expected_label: shell
+- text: sample-shell-9cd89b080afe
+  expected_label: shell
+- text: sample-powershell-d9630a1b91e4
+  expected_label: powershell
+- text: sample-powershell-a4e009b01915
+  expected_label: powershell
+- text: sample-sql-874bd7d905ba
+  expected_label: sql
+- text: sample-sql-0ccebfdde1a4
+  expected_label: sql
+- text: sample-graphql-f04dcf57b7ce
+  expected_label: graphql
+- text: sample-graphql-9569d9daee3e
+  expected_label: graphql
+- text: sample-html-9402d6f66582
+  expected_label: html
+- text: sample-html-01b126f5d332
+  expected_label: html
+- text: sample-css-4888bb472fb8
+  expected_label: css
+- text: sample-css-1886ffbe334a
+  expected_label: css
+- text: sample-yaml-cf2e00065dfd
+  expected_label: yaml
+- text: sample-yaml-b16014d2287d
+  expected_label: yaml
+- text: sample-toml-afcf5d70115f
+  expected_label: toml
+- text: sample-toml-c0a3ede947e8
+  expected_label: toml
+- text: sample-json-b0e66b8c8644
+  expected_label: json
+- text: sample-json-fa40e855f0f0
+  expected_label: json
+- text: sample-xml-bd40d0b404bb
+  expected_label: xml
+- text: sample-xml-95a77d4307c5
+  expected_label: xml
+- text: sample-markdown-781afc5b6e34
+  expected_label: markdown
+- text: sample-markdown-b6d37b60b35c
+  expected_label: markdown
+- text: sample-latex-a9ad502d7cab
+  expected_label: latex
+- text: sample-latex-e8f2c71b4571
+  expected_label: latex
+- text: sample-dockerfile-ebc2d21d19b7
+  expected_label: dockerfile
+- text: sample-dockerfile-cc784ef8b81f
+  expected_label: dockerfile
+- text: sample-makefile-282dd1f0b436
+  expected_label: makefile
+- text: sample-makefile-bf0d7775cc41
+  expected_label: makefile
+- text: sample-terraform-51301a9319fe
+  expected_label: terraform
+- text: sample-terraform-958fb20cb986
+  expected_label: terraform
+- text: sample-groovy-9be6d1b6be83
+  expected_label: groovy
+- text: sample-groovy-47d6d3f51695
+  expected_label: groovy
+- text: sample-dart-c3d40bf1f774
+  expected_label: dart
+- text: sample-dart-99e29392eac8
+  expected_label: dart
+- text: sample-zig-4881332281b1
+  expected_label: zig
+- text: sample-zig-9e7d9bb9c900
+  expected_label: zig
+- text: sample-nim-e241aa4b3428
+  expected_label: nim
+- text: sample-nim-ba9f8c085d96
+  expected_label: nim
+- text: sample-crystal-e880ce2d2565
+  expected_label: crystal
+- text: sample-crystal-84da4f550dd0
+  expected_label: crystal
+- text: sample-v-4b0112450579
+  expected_label: v
+- text: sample-v-fc0e8c48f574
+  expected_label: v
+- text: sample-other-23a9a2e0cd9c
+  expected_label: other
+- text: sample-other-4bcea7949e29
+  expected_label: other

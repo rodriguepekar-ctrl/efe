@@ -1,0 +1,243 @@
+id: compliance-aml
+version: 1.0.0
+description: AML compliance flag — 7 risk indicators
+labels:
+- id: structuring
+  description: Multiple sub-threshold transactions
+  examples:
+  - Example 1 for structuring
+  - Example 2 for structuring
+  - Example 3 for structuring
+- id: layering
+  description: Complex chain to obscure origin
+  examples:
+  - Example 1 for layering
+  - Example 2 for layering
+  - Example 3 for layering
+- id: integration
+  description: Reintroduction into legitimate economy
+  examples:
+  - Example 1 for integration
+  - Example 2 for integration
+  - Example 3 for integration
+- id: placement
+  description: Initial cash injection
+  examples:
+  - Example 1 for placement
+  - Example 2 for placement
+  - Example 3 for placement
+- id: trade-based
+  description: Trade-based money laundering
+  examples:
+  - Example 1 for trade-based
+  - Example 2 for trade-based
+  - Example 3 for trade-based
+- id: kyc-flag
+  description: Know-your-customer red flag
+  examples:
+  - Example 1 for kyc-flag
+  - Example 2 for kyc-flag
+  - Example 3 for kyc-flag
+- id: clean
+  description: No AML indicator detected
+  examples:
+  - Example 1 for clean
+  - Example 2 for clean
+  - Example 3 for clean
+test_set:
+- text: sample-structuring-b37e3445bc52
+  expected_label: structuring
+- text: sample-structuring-59cbd3bc1d90
+  expected_label: structuring
+- text: sample-structuring-b5a1ea7470c5
+  expected_label: structuring
+- text: sample-structuring-923f68534755
+  expected_label: structuring
+- text: sample-structuring-42463632caf3
+  expected_label: structuring
+- text: sample-structuring-e9d18ed0c6ae
+  expected_label: structuring
+- text: sample-structuring-92c4c57f6422
+  expected_label: structuring
+- text: sample-structuring-98975e9d92a1
+  expected_label: structuring
+- text: sample-structuring-5eff96d12990
+  expected_label: structuring
+- text: sample-structuring-2fa54f9b7389
+  expected_label: structuring
+- text: sample-structuring-6b5624c91e60
+  expected_label: structuring
+- text: sample-structuring-db58a55f0e3e
+  expected_label: structuring
+- text: sample-structuring-fe221790cd5e
+  expected_label: structuring
+- text: sample-structuring-268de130da50
+  expected_label: structuring
+- text: sample-layering-fc599e9eb3b9
+  expected_label: layering
+- text: sample-layering-c7d0037fe28d
+  expected_label: layering
+- text: sample-layering-94827dd59396
+  expected_label: layering
+- text: sample-layering-ce502e0bc6da
+  expected_label: layering
+- text: sample-layering-0388c7631892
+  expected_label: layering
+- text: sample-layering-350385623cad
+  expected_label: layering
+- text: sample-layering-e00324a9717c
+  expected_label: layering
+- text: sample-layering-1e36f8152c27
+  expected_label: layering
+- text: sample-layering-eb5a044d84cc
+  expected_label: layering
+- text: sample-layering-7eb1244592d9
+  expected_label: layering
+- text: sample-layering-502811b0bc7d
+  expected_label: layering
+- text: sample-layering-24d9aa9bfdda
+  expected_label: layering
+- text: sample-layering-43bf9306325e
+  expected_label: layering
+- text: sample-layering-6f29abb34861
+  expected_label: layering
+- text: sample-integration-a84c32050518
+  expected_label: integration
+- text: sample-integration-dde2175ba11b
+  expected_label: integration
+- text: sample-integration-06492f2322ac
+  expected_label: integration
+- text: sample-integration-708161936996
+  expected_label: integration
+- text: sample-integration-8cc5bfb54e28
+  expected_label: integration
+- text: sample-integration-93fd74d45b9b
+  expected_label: integration
+- text: sample-integration-6b03d0893848
+  expected_label: integration
+- text: sample-integration-fca20cf9ad5c
+  expected_label: integration
+- text: sample-integration-73bd6c425132
+  expected_label: integration
+- text: sample-integration-5b4abe31cda7
+  expected_label: integration
+- text: sample-integration-5fdaf631425e
+  expected_label: integration
+- text: sample-integration-a5382bc4f9f7
+  expected_label: integration
+- text: sample-integration-a48482108626
+  expected_label: integration
+- text: sample-integration-001cf9658c86
+  expected_label: integration
+- text: sample-placement-b1ddd662d6cc
+  expected_label: placement
+- text: sample-placement-ac9e90ada363
+  expected_label: placement
+- text: sample-placement-bcb5ed34f872
+  expected_label: placement
+- text: sample-placement-0a3d1f130c98
+  expected_label: placement
+- text: sample-placement-db45563a244e
+  expected_label: placement
+- text: sample-placement-1aa28d446102
+  expected_label: placement
+- text: sample-placement-41914530fcda
+  expected_label: placement
+- text: sample-placement-6843869df138
+  expected_label: placement
+- text: sample-placement-cd8b80fb9d2a
+  expected_label: placement
+- text: sample-placement-10f312323135
+  expected_label: placement
+- text: sample-placement-22e9005000a0
+  expected_label: placement
+- text: sample-placement-37247fc30110
+  expected_label: placement
+- text: sample-placement-88908e1c13f2
+  expected_label: placement
+- text: sample-placement-466568d47e75
+  expected_label: placement
+- text: sample-trade-based-82e69e33b990
+  expected_label: trade-based
+- text: sample-trade-based-76f42c86589c
+  expected_label: trade-based
+- text: sample-trade-based-b6088dcafc1a
+  expected_label: trade-based
+- text: sample-trade-based-72e391d01a5d
+  expected_label: trade-based
+- text: sample-trade-based-fa882ff092f4
+  expected_label: trade-based
+- text: sample-trade-based-048a9e998101
+  expected_label: trade-based
+- text: sample-trade-based-4d2c82cae852
+  expected_label: trade-based
+- text: sample-trade-based-4d885028bc74
+  expected_label: trade-based
+- text: sample-trade-based-d37f6b2246f2
+  expected_label: trade-based
+- text: sample-trade-based-4a6704349df1
+  expected_label: trade-based
+- text: sample-trade-based-c41f2f7aa678
+  expected_label: trade-based
+- text: sample-trade-based-6a30f1ea71da
+  expected_label: trade-based
+- text: sample-trade-based-2098ef1f1aad
+  expected_label: trade-based
+- text: sample-trade-based-27288ea875fd
+  expected_label: trade-based
+- text: sample-kyc-flag-6345f33ff642
+  expected_label: kyc-flag
+- text: sample-kyc-flag-0e2721a679be
+  expected_label: kyc-flag
+- text: sample-kyc-flag-7f0de3e87c34
+  expected_label: kyc-flag
+- text: sample-kyc-flag-025bbf875c3a
+  expected_label: kyc-flag
+- text: sample-kyc-flag-6afa7c43cb7f
+  expected_label: kyc-flag
+- text: sample-kyc-flag-a53e3b77d7c5
+  expected_label: kyc-flag
+- text: sample-kyc-flag-769355c28cbb
+  expected_label: kyc-flag
+- text: sample-kyc-flag-d1b4932dd998
+  expected_label: kyc-flag
+- text: sample-kyc-flag-0dbeeefebe1b
+  expected_label: kyc-flag
+- text: sample-kyc-flag-b8d46109ae6b
+  expected_label: kyc-flag
+- text: sample-kyc-flag-e4a52cdd6227
+  expected_label: kyc-flag
+- text: sample-kyc-flag-df2c27bd9cc6
+  expected_label: kyc-flag
+- text: sample-kyc-flag-214a99a8db7e
+  expected_label: kyc-flag
+- text: sample-kyc-flag-655884d9c559
+  expected_label: kyc-flag
+- text: sample-clean-c01585f8d752
+  expected_label: clean
+- text: sample-clean-93f4026fa2fa
+  expected_label: clean
+- text: sample-clean-95891e7d8cc1
+  expected_label: clean
+- text: sample-clean-df605b8999a1
+  expected_label: clean
+- text: sample-clean-c8272ccea4f9
+  expected_label: clean
+- text: sample-clean-5f0491bbc798
+  expected_label: clean
+- text: sample-clean-b11ba5e63c0c
+  expected_label: clean
+- text: sample-clean-10c6f9d410bf
+  expected_label: clean
+- text: sample-clean-16ce6012719d
+  expected_label: clean
+- text: sample-clean-bc333d1ad853
+  expected_label: clean
+- text: sample-clean-4ac92439e06b
+  expected_label: clean
+- text: sample-clean-c53efa031934
+  expected_label: clean
+- text: sample-clean-9ba16e41b6a6
+  expected_label: clean
+- text: sample-clean-45e265d91d0b
+  expected_label: clean
