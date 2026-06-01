@@ -1,0 +1,35 @@
+[package]
+name = "efe-multi-region"
+version = "0.0.1"
+edition = { workspace = true }
+rust-version = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
+description = "M50 — Sprint 9 N16 : multi-region replay coordinator, chain shipment, JWT auth, and multi-region replay engine."
+publish = false
+
+[lib]
+name = "efe_multi_region"
+path = "src/lib.rs"
+
+[dependencies]
+efe-nano-sdk = { path = "../efe-nano-sdk", version = "0.0.1" }
+efe-nano     = { path = "../efe-nano",     version = "0.0.1" }
+
+tokio        = { workspace = true }
+async-trait  = { workspace = true }
+serde        = { workspace = true }
+serde_json   = { workspace = true }
+thiserror    = { workspace = true }
+uuid         = { workspace = true }
+tracing      = { workspace = true }
+
+dashmap      = "6.1"
+sha2         = "0.10"
+hmac         = "0.12"
+base64       = "0.22"
+chrono       = { version = "0.4", features = ["serde"] }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt-multi-thread", "test-util"] }
