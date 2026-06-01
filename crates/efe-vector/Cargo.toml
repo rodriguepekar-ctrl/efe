@@ -1,0 +1,51 @@
+[package]
+name        = "efe-vector"
+version     = { workspace = true }
+edition     = { workspace = true }
+rust-version = { workspace = true }
+authors     = { workspace = true }
+license     = { workspace = true }
+repository  = { workspace = true }
+description = "M32 — Vector index plane : distance metrics + flat + HNSW + quantization + collection persistence."
+
+[dependencies]
+tokio            = { workspace = true }
+tracing          = { workspace = true }
+serde            = { workspace = true }
+serde_json       = { workspace = true }
+thiserror        = { workspace = true }
+async-trait      = { workspace = true }
+futures          = { workspace = true }
+once_cell        = "1.20"
+chrono           = { version = "0.4", default-features = false, features = ["clock", "serde"] }
+parking_lot      = "0.12"
+uuid             = { workspace = true }
+bincode          = { workspace = true }
+
+# Metrics.
+prometheus       = { version = "0.13", default-features = false, features = ["process"] }
+
+[dev-dependencies]
+tokio            = { workspace = true, features = ["test-util", "macros"] }
+anyhow           = { workspace = true }
+criterion        = { version = "0.5", default-features = false, features = [
+    "plotters", "cargo_bench_support",
+] }
+rand             = "0.8"
+
+[features]
+default = []
+
+[[bench]]
+name = "distance"
+harness = false
+
+[[bench]]
+name = "flat_search"
+harness = false
+
+# M32 perf rewrite (V1-V6) — proves the chunked distance kernels +
+# BM25 inverted index + HNSW pre-alloc + u64 hamming gains.
+[[bench]]
+name = "perf_v1_v6"
+harness = false
