@@ -1,0 +1,614 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://efe.example.com/schemas/efe-meta-swarm.json",
+  "title": "efe-meta-swarm sub-chart values",
+  "description": "Phase-2 PR #13 — JSON Schema validation for the efe-meta-swarm Helm sub-chart values. Catches operator typos before any K8s API call.",
+  "type": "object",
+  "required": ["enabled"],
+  "additionalProperties": true,
+  "properties": {
+    "enabled": {
+      "type": "boolean",
+      "description": "Master switch ; when false the sub-chart renders zero resources."
+    },
+    "nameOverride":     { "type": "string" },
+    "fullnameOverride": { "type": "string" },
+
+    "image": {
+      "type": "object",
+      "required": ["repository", "tag", "pullPolicy"],
+      "additionalProperties": false,
+      "properties": {
+        "repository": {
+          "type": "string",
+          "minLength": 1
+        },
+        "tag": {
+          "type": "string",
+          "description": "Pin a specific image tag (no :latest policy ; AD17). When the sub-chart is disabled the empty default is acceptable ; the `_helpers.tpl::image` template fails at render-time if `enabled: true` and tag is empty."
+        },
+        "pullPolicy": {
+          "type": "string",
+          "enum": ["Always", "IfNotPresent", "Never"]
+        }
+      }
+    },
+
+    "global": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "tenant":            { "type": "string" },
+        "imagePullSecrets":  { "type": "array",  "items": { "type": "object" } },
+        "commonLabels": {
+          "type": "object",
+          "description": "PR #14 — umbrella-wide labels propagated to every resource via _helpers.tpl labels block.",
+          "additionalProperties": { "type": "string" }
+        }
+      }
+    },
+
+    "manifest": {
+      "type": "object",
+      "required": ["version", "meta", "iteration"],
+      "additionalProperties": false,
+      "properties": {
+        "version": {
+          "type": "string",
+          "pattern": "^v[0-9]+\\.[0-9]+\\.[0-9]+(?:-[A-Za-z0-9.]+)?$"
+        },
+        "meta": {
+          "type": "object",
+          "required": ["dim", "safety"],
+          "additionalProperties": false,
+          "properties": {
+            "dim": { "type": "integer", "minimum": 1, "maximum": 8192 },
+            "safety": {
+              "type": "object",
+              "required": ["kind"],
+              "additionalProperties": true,
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "enum": ["box", "poly", "hull"]
+                },
+                "radius": {
+                  "type": "number",
+                  "exclusiveMinimum": 0
+                },
+                "poly": {
+                  "type": "object",
+                  "required": ["dim_a", "a_flat", "b"],
+                  "additionalProperties": false,
+                  "properties": {
+                    "dim_a":  { "type": "integer", "minimum": 1 },
+                    "a_flat": { "type": "array", "items": { "type": "number" }, "minItems": 1 },
+                    "b":      { "type": "array", "items": { "type": "number" }, "minItems": 1 }
+                  }
+                },
+                "hull": {
+                  "type": "object",
+                  "required": ["version", "serialized_model_path"],
+                  "additionalProperties": false,
+                  "properties": {
+                    "version":               { "type": "string", "minLength": 1 },
+                    "serialized_model_path": { "type": "string", "minLength": 1 }
+                  }
+                }
+              },
+              "allOf": [
+                {
+                  "if":   { "properties": { "kind": { "const": "box" } }, "required": ["kind"] },
+                  "then": { "required": ["radius"] }
+                },
+                {
+                  "if":   { "properties": { "kind": { "const": "poly" } }, "required": ["kind"] },
+                  "then": { "required": ["poly"] }
+                },
+                {
+                  "if":   { "properties": { "kind": { "const": "hull" } }, "required": ["kind"] },
+                  "then": { "required": ["hull"] }
+                }
+              ]
+            }
+          }
+        },
+        "iteration": {
+          "type": "object",
+          "required": [
+            "max_iters",
+            "tolerance",
+            "alpha_default",
+            "coupling_gamma",
+            "deterministic",
+            "max_wall_ms"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "max_iters":      { "type": "integer", "minimum": 1, "maximum": 200 },
+            "tolerance":      { "type": "number",  "exclusiveMinimum": 0 },
+            "alpha_default":  { "type": "number",  "minimum": 0, "exclusiveMaximum": 1 },
+            "coupling_gamma": { "type": "number",  "minimum": 0, "exclusiveMaximum": 1 },
+            "deterministic":  { "type": "boolean" },
+            "max_wall_ms":    { "type": "integer", "minimum": 1, "maximum": 30000 }
+          }
+        }
+      }
+    },
+
+    "controller": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "replicaCount": {
+          "type": "integer",
+          "const": 1,
+          "description": "Phase-2 single-controller lock ; multi-controller HA in PR #17"
+        },
+        "service": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "type":         { "type": "string", "enum": ["ClusterIP", "NodePort", "LoadBalancer"] },
+            "grpcPort":     { "type": "integer", "minimum": 1, "maximum": 65535 },
+            "metricsPort":  { "type": "integer", "minimum": 1, "maximum": 65535 },
+            "appProtocol":  { "type": "string" }
+          }
+        },
+        "config": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "maxInflight":          { "type": "integer", "minimum": 1, "maximum": 1024 },
+            "defaultMaxWallMs":     { "type": "integer", "minimum": 1, "maximum": 30000 },
+            "workerThreads":        { "type": "integer", "minimum": 1, "maximum": 64 },
+            "drainTimeoutSeconds":  { "type": "integer", "minimum": 1, "maximum": 600 },
+            "discovery":            { "type": "string", "enum": ["static-localhost", "k8s-dns"] },
+            "reflectionEnabled":    { "type": "boolean" },
+            "tlsRequired":          { "type": "boolean" }
+          }
+        },
+        "resources":       { "type": "object" },
+        "securityContext": { "type": "object" },
+        "podDisruptionBudget": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled":         { "type": "boolean" },
+            "maxUnavailable":  { "oneOf": [{ "type": "integer", "minimum": 0 }, { "type": "string" }] }
+          }
+        },
+        "hpa": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "PR #14 — HPA placeholder (AD14 / AD31).  Phase-2 lock : min=max=1.",
+          "properties": {
+            "enabled":              { "type": "boolean" },
+            "targetCPUUtilization": { "type": "integer", "minimum": 10, "maximum": 100 }
+          }
+        },
+        "nodeSelector":   { "type": "object" },
+        "tolerations":    { "type": "array" },
+        "affinity":       { "type": "object" },
+        "livenessProbe":  { "type": "object" },
+        "readinessProbe": { "type": "object" },
+        "extraEnv": {
+          "type": "array",
+          "description": "Operator-supplied extra env vars on the controller container. Each item MUST be a valid K8s EnvVar (name + value or valueFrom).",
+          "items": {
+            "type": "object",
+            "required": ["name"],
+            "properties": {
+              "name":      { "type": "string", "minLength": 1 },
+              "value":     { "type": "string" },
+              "valueFrom": { "type": "object" }
+            }
+          }
+        }
+      }
+    },
+
+    "participants": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 64,
+      "items": {
+        "type": "object",
+        "required": ["id", "dim", "kappa", "seed", "service"],
+        "additionalProperties": true,
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9-]{0,62}$",
+            "description": "DNS-compliant ; Service name + label value"
+          },
+          "dim":          { "type": "integer", "minimum": 1, "maximum": 8192 },
+          "kappa":        { "type": "number",  "exclusiveMinimum": 0, "exclusiveMaximum": 1 },
+          "seed":         { "type": "integer", "minimum": 0 },
+          "blasBackend":  { "type": "string", "enum": ["none", "openblas", "mkl", "accelerate"] },
+          "replicaCount": {
+            "type": "integer",
+            "const": 1,
+            "description": "Phase-2 single-replica per participant ; sharded participants in Phase 3"
+          },
+          "service": {
+            "type": "object",
+            "required": ["grpcPort", "metricsPort"],
+            "additionalProperties": false,
+            "properties": {
+              "grpcPort":    { "type": "integer", "minimum": 1, "maximum": 65535 },
+              "metricsPort": { "type": "integer", "minimum": 1, "maximum": 65535 }
+            }
+          },
+          "resources":    { "type": "object" },
+          "nodeSelector": { "type": "object" },
+          "tolerations":  { "type": "array"  },
+          "affinity":     { "type": "object" },
+          "extraEnv": {
+            "type": "array",
+            "description": "Operator-supplied extra env vars on the participant container. Each item MUST be a valid K8s EnvVar.",
+            "items": {
+              "type": "object",
+              "required": ["name"],
+              "properties": {
+                "name":      { "type": "string", "minLength": 1 },
+                "value":     { "type": "string" },
+                "valueFrom": { "type": "object" }
+              }
+            }
+          }
+        }
+      }
+    },
+
+    "serviceAccount": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "create":          { "type": "boolean" },
+        "annotations":     { "type": "object"  },
+        "controllerName":  { "type": "string"  }
+      }
+    },
+
+    "networkPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled":                       { "type": "boolean" },
+        "ingressNamespaceSelector":      { "type": "object"  },
+        "prometheusNamespaceSelector":   { "type": "object"  },
+        "hookEgressCidrs": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "pattern": "^(([0-9]{1,3}\\.){3}[0-9]{1,3})/([0-9]|[12][0-9]|3[0-2])$"
+          },
+          "description": "CIDR blocks for hook Job egress to the K8s API server (Service ClusterIP is on the service CIDR, not pod network). Default permits any non-link-local IPv4 ; tighten to your cluster's service CIDR for production lockdown."
+        }
+      }
+    },
+
+    "metrics": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "serviceMonitor": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled":        { "type": "boolean" },
+            "interval":       { "type": "string", "pattern": "^[0-9]+(ms|s|m|h)$" },
+            "scrapeTimeout":  { "type": "string", "pattern": "^[0-9]+(ms|s|m|h)$" },
+            "labels":         { "type": "object" }
+          }
+        }
+      }
+    },
+
+    "podAnnotations": { "type": "object" },
+
+    "tests": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled":         { "type": "boolean" },
+        "grpcurlImage":    { "type": "string", "minLength": 1 },
+        "timeoutSeconds":  { "type": "integer", "minimum": 5, "maximum": 300 }
+      }
+    },
+
+    "priorityClass": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "PR #14 — PriorityClass for controller (AD13).",
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "value":   { "type": "integer", "minimum": -2147483648, "maximum": 1000000000 }
+      }
+    },
+
+    "hooks": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "PR #14 — Helm pre/post-upgrade hooks (AD2-AD25).",
+      "properties": {
+        "enabled":  { "type": "boolean" },
+        "image":    { "type": "string", "minLength": 1 },
+        "preUpgrade": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "snapshotEnabled": { "type": "boolean" },
+            "backupRingSize":  { "type": "integer", "minimum": 1, "maximum": 20 }
+          }
+        },
+        "postUpgrade": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "sighupEnabled":  { "type": "boolean" },
+            "serial":         { "type": "boolean" },
+            "ignoreFailures": { "type": "boolean" }
+          }
+        }
+      }
+    },
+
+    "bundle": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "PR #14 — bundle weight-loader sidecar (AD7-AD9).",
+      "properties": {
+        "endpointUrl":              { "type": "string", "format": "uri" },
+        "endpointPort":             { "type": "integer", "minimum": 1, "maximum": 65535 },
+        "endpointNamespaceSelector":{ "type": "object" },
+        "pollIntervalSeconds":      { "type": "integer", "minimum": 5, "maximum": 3600 },
+        "sidecar": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled":            { "type": "boolean" },
+            "image":              { "type": "string", "minLength": 1 },
+            "resources":          { "type": "object" },
+            "weightsSizeLimit":   { "type": "string", "pattern": "^[0-9]+(Mi|Gi)$" }
+          }
+        }
+      }
+    },
+
+    "alerts": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "PR #14 — PrometheusRule alerts (AD10 / AD29) ; PR #17 — 5 new operational alerts + thresholds.",
+      "properties": {
+        "enabled":         { "type": "boolean" },
+        "runbookBaseUrl":  { "type": "string", "format": "uri" },
+        "severity": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "ReloadFailureRate":      { "enum": ["info","warning","critical"] },
+            "ReloadLatencyP99High":   { "enum": ["info","warning","critical"] },
+            "ReloadingStuck":         { "enum": ["info","warning","critical"] },
+            "ControllerDown":         { "enum": ["info","warning","critical"] },
+            "ParticipantDown":        { "enum": ["info","warning","critical"] },
+            "ReloadGenNotAdvancing":  { "enum": ["info","warning","critical"] }
+          }
+        },
+        "thresholds": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "PR #17 § 26 — alert thresholds (AC29 / AC30).",
+          "properties": {
+            "iterateP99HighSeconds":   { "type": "number", "minimum": 0.1,  "maximum": 60     },
+            "iterateErrorRatePct":     { "type": "number", "minimum": 0.01, "maximum": 100    },
+            "stepErrorRatePct":        { "type": "number", "minimum": 0.01, "maximum": 100    },
+            "safetyViolationRatePerS": { "type": "number", "minimum": 0.001,"maximum": 1000   }
+          }
+        },
+        "prometheusSelector": {
+          "type": "string",
+          "pattern": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$",
+          "description": "PR #17 — kube-prometheus-stack RuleSelector match label value."
+        },
+        "grafanaBaseUrl": {
+          "type": "string",
+          "format": "uri",
+          "description": "PR #19 — Grafana base URL embedded in alert `dashboard_url` annotations."
+        },
+        "pr19": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "PR #19 — 10 alerts + 6 recording rules + 4 SLOs + Alertmanager routing.",
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "slo": {
+              "type": "object",
+              "additionalProperties": false,
+              "description": "PR #19 § 32 — SLO targets (STABILITY_CONTRACT v1.1 committed defaults).",
+              "properties": {
+                "iterateAvailabilityTarget": { "type": "number", "minimum": 0.9,   "maximum": 1.0,  "description": "Fraction (e.g. 0.999). Lowering is a STABILITY_CONTRACT break." },
+                "iterateLatencyP95Target":    { "type": "number", "minimum": 0.05,  "maximum": 60.0, "description": "Seconds. p95 must be ≤ this." },
+                "manifestReloadP95Target":    { "type": "number", "minimum": 0.05,  "maximum": 30.0, "description": "Seconds. Manifest reload p95 ≤ this." },
+                "otelDropRateTarget":         { "type": "number", "minimum": 0.001, "maximum": 0.5,  "description": "Fraction. OTel pipeline drop rate ≤ this (30-day window)." }
+              }
+            },
+            "alertmanager": {
+              "type": "object",
+              "additionalProperties": false,
+              "description": "PR #19 § 33 — Alertmanager routing CRD additions.",
+              "properties": {
+                "enabled": { "type": "boolean" },
+                "mode":    { "enum": ["alertmanagerconfig", "raw-fragment"] },
+                "selectorLabel": { "type": "string", "pattern": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$" },
+                "pagerduty": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "secretName":   { "type": "string", "minLength": 1 },
+                    "routingKeyKey":{ "type": "string", "minLength": 1 }
+                  }
+                },
+                "slack": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "secretName": { "type": "string", "minLength": 1 },
+                    "urlKey":     { "type": "string", "minLength": 1 },
+                    "channel":    { "type": "string", "pattern": "^#[a-z0-9-]+$" }
+                  }
+                },
+                "audit": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "lokiUrl": { "type": "string", "format": "uri" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+
+    "dashboard": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "PR #14 — Grafana dashboard ConfigMap auto-import. PR #19 adds the `pr19` 9-dashboard pack.",
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "pr19": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "PR #19 § 34 — 9-dashboard pack discovered by Grafana sidecar.",
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "datasources": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "prometheusUid": { "type": "string", "pattern": "^[a-zA-Z0-9_-]+$" },
+                "tempoUid":      { "type": "string", "pattern": "^[a-zA-Z0-9_-]+$" }
+              }
+            }
+          }
+        }
+      }
+    },
+
+    "tracing": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "PR #18 — OpenTelemetry distributed tracing.",
+      "properties": {
+        "otel": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled":     { "type": "boolean" },
+            "endpoint":    { "type": "string", "format": "uri" },
+            "protocol":    { "enum": ["grpc", "http/protobuf"] },
+            "timeout":     { "type": "string", "pattern": "^[0-9]+(s|ms)$" },
+            "samplerArg":  { "type": "string", "pattern": "^(0(\\.[0-9]+)?|1(\\.0+)?)$" },
+            "deploymentEnvironment": { "enum": ["dev", "staging", "prod", "canary"] },
+            "serviceName": { "type": "string", "pattern": "^[a-z0-9][a-z0-9.-]{0,127}$|^$" },
+            "tls": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "enabled":             { "type": "boolean" },
+                "caBundleConfigMap":   { "type": "string" }
+              }
+            },
+            "batch": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "maxExportBatchSize":     { "type": "integer", "minimum": 64,  "maximum": 65536 },
+                "maxExportTimeoutSeconds":{ "type": "integer", "minimum": 1,   "maximum": 60 },
+                "scheduledDelaySeconds":  { "type": "integer", "minimum": 1,   "maximum": 60 },
+                "maxQueueSize":           { "type": "integer", "minimum": 128, "maximum": 131072 }
+              }
+            }
+          }
+        }
+      }
+    },
+
+    "tls": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "PR #14 — TLS bootstrap stubs ; PR #16 — binary-side wiring (mTLS, cipher policy, hot reload).",
+      "properties": {
+        "enabled":            { "type": "boolean" },
+        "mutual":             { "type": "boolean", "description": "PR #16 AD8 — mutual TLS opt-in." },
+        "minProtocolVersion": { "enum": ["1.2", "1.3"], "description": "PR #16 AD6 — minimum protocol version." },
+        "legacyRsa":          { "type": "boolean", "description": "PR #16 AD4 — opt-in RSA-2048 keys." },
+        "additionalSans":     {
+          "type": "array",
+          "items": { "type": "string", "format": "hostname" },
+          "description": "PR #16 § 10 — extra DNS SANs added to every issued cert."
+        },
+        "caBundleConfigMap":  { "type": "string", "description": "PR #16 — name of a ConfigMap with extra CA roots." },
+        "waitForCertTimeoutSeconds": {
+          "type": "integer",
+          "minimum": 60,
+          "maximum": 1800,
+          "description": "PR #16 § 12.4 — wait-for-cert Helm hook timeout in seconds."
+        },
+        "certManager": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled":       { "type": "boolean" },
+            "clusterIssuer": { "type": "boolean", "description": "PR #16 AD14 — use ClusterIssuer instead of Issuer." },
+            "issuerType":    { "enum": ["selfSigned", "ca"] },
+            "caSecretName":  { "type": "string" },
+            "privateKey": {
+              "type": "object",
+              "additionalProperties": false,
+              "description": "PR #16 AD3 / AD4 — cert-manager privateKey block.",
+              "required": ["algorithm", "size"],
+              "properties": {
+                "algorithm":      { "enum": ["ECDSA", "RSA"] },
+                "size":           { "enum": [256, 2048, 4096] },
+                "rotationPolicy": { "enum": ["Always", "Never"] }
+              },
+              "allOf": [
+                {
+                  "if":   { "properties": { "algorithm": { "const": "ECDSA" } }, "required": ["algorithm"] },
+                  "then": { "properties": { "size": { "const": 256 } } }
+                },
+                {
+                  "if":   { "properties": { "algorithm": { "const": "RSA" } }, "required": ["algorithm"] },
+                  "then": { "properties": { "size": { "enum": [2048, 4096] } } }
+                }
+              ]
+            },
+            "duration":    { "type": "string", "pattern": "^[0-9]+h$" },
+            "renewBefore": { "type": "string", "pattern": "^[0-9]+h$" }
+          }
+        },
+        "rotation": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "PR #16 § 21 — alerting thresholds for cert lifecycle.",
+          "properties": {
+            "alertExpiringHours":       { "type": "integer", "minimum": 24,  "maximum": 720 },
+            "alertStuckHours":          { "type": "integer", "minimum": 720, "maximum": 8760 },
+            "alertHandshakeFailurePct": { "type": "number",  "minimum": 0.01,"maximum": 100.0 }
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if":   { "properties": { "enabled": { "const": true } }, "required": ["enabled"] },
+          "then": { "required": ["certManager"] }
+        }
+      ]
+    }
+  }
+}

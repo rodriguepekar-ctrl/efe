@@ -1,0 +1,73 @@
+# Values overrides for k3d local development.
+# Reduces resource requests + retention to fit on a 16 GB laptop.
+
+global:
+  tenant: local
+  environment: dev
+  storageClass: local-path
+
+efe-server:
+  replicas: 1
+  resources:
+    requests: { cpu: 100m, memory: 256Mi }
+    limits:   { cpu: 1, memory: 1Gi }
+  autoscaling:
+    enabled: false
+  podDisruptionBudget:
+    enabled: false
+  topologySpreadConstraints:
+    enabled: false
+  byok:
+    backend: env
+
+mcp-server:
+  replicas: 1
+  resources:
+    requests: { cpu: 100m, memory: 128Mi }
+    limits:   { cpu: 500m, memory: 512Mi }
+  autoscaling:
+    enabled: false
+  podDisruptionBudget:
+    enabled: false
+
+portal-admin:
+  enabled: false
+
+postgres-operator:
+  cluster:
+    instances:
+      - name: instance1
+        replicas: 1
+        dataVolumeClaimSpec:
+          accessModes: [ReadWriteOnce]
+          resources:
+            requests:
+              storage: 10Gi
+        resources:
+          requests:
+            cpu: 200m
+            memory: 512Mi
+          limits:
+            cpu: 1
+            memory: 2Gi
+
+redis-stack:
+  storage: 5Gi
+  resources:
+    requests: { cpu: 100m, memory: 256Mi }
+    limits:   { cpu: 500m, memory: 1Gi }
+
+observability:
+  enabled: false                       # opt-in for local dev (heavy)
+  prometheus:
+    retention: 1d
+    persistentVolumeSize: 5Gi
+  loki:
+    retention: 1d
+    persistentVolumeSize: 5Gi
+  tempo:
+    samplingRate: 1.0
+    retention: 1d
+
+ingress:
+  enabled: false                       # use kubectl port-forward locally

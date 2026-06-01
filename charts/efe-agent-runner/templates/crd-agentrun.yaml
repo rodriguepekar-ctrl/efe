@@ -1,0 +1,104 @@
+{{- if .Values.crds.install -}}
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: agentruns.efe.ai
+  labels:
+    {{- include "efe-agent-runner.labels" . | nindent 4 }}
+spec:
+  group: efe.ai
+  scope: Namespaced
+  names:
+    kind: AgentRun
+    listKind: AgentRunList
+    plural: agentruns
+    singular: agentrun
+    shortNames: [ar, agrun]
+    categories: [efe, ai]
+  versions:
+    - name: v1
+      served: true
+      storage: true
+      additionalPrinterColumns:
+        - name: Tenant
+          type: string
+          jsonPath: .spec.tenantId
+        - name: Profile
+          type: string
+          jsonPath: .spec.profile
+        - name: Status
+          type: string
+          jsonPath: .status.phase
+        - name: Cost (cents)
+          type: integer
+          jsonPath: .status.currentCostCents
+        - name: Step
+          type: integer
+          jsonPath: .status.currentStep
+        - name: Age
+          type: date
+          jsonPath: .metadata.creationTimestamp
+      schema:
+        openAPIV3Schema:
+          type: object
+          required: [spec]
+          properties:
+            spec:
+              type: object
+              required: [tenantId, templateSlug]
+              properties:
+                tenantId:
+                  type: string
+                  pattern: '^[a-z0-9_-]{1,64}$'
+                templateSlug:
+                  type: string
+                  pattern: '^[A-Za-z0-9_-]{1,64}$'
+                profile:
+                  type: string
+                  enum: [research_lite, catalog_curator, triage_agent]
+                provider:
+                  type: string
+                model:
+                  type: string
+                toolWhitelist:
+                  type: array
+                  items: {type: string}
+                timeoutSeconds:
+                  type: integer
+                  minimum: 60
+                  maximum: 14400
+                maxCostUsd:
+                  type: number
+                  minimum: 0.01
+                initialPromptJson:
+                  type: object
+                  x-kubernetes-preserve-unknown-fields: true
+                createdBy:
+                  type: string
+            status:
+              type: object
+              properties:
+                phase:
+                  type: string
+                  enum:
+                    [PENDING, PROVISIONING, RUNNING, AWAITING_APPROVAL, PAUSED,
+                     RESUMING, COMPLETED, FAILED, TERMINATED, TIMED_OUT, COST_CAPPED]
+                vmId: {type: string}
+                currentStep: {type: integer}
+                currentCostCents: {type: integer}
+                lastTransitionTime: {type: string, format: date-time}
+                failureReason: {type: string}
+                conditions:
+                  type: array
+                  items:
+                    type: object
+                    required: [type, status]
+                    properties:
+                      type: {type: string}
+                      status: {type: string, enum: ["True", "False", "Unknown"]}
+                      reason: {type: string}
+                      message: {type: string}
+                      lastTransitionTime: {type: string, format: date-time}
+      subresources:
+        status: {}
+{{- end -}}

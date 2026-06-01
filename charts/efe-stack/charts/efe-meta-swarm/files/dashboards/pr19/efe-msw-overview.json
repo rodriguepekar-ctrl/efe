@@ -1,0 +1,937 @@
+{
+  "__inputs": [],
+  "__elements": {},
+  "__requires": [
+    {
+      "type": "grafana",
+      "id": "grafana",
+      "name": "Grafana",
+      "version": "10.2.0"
+    },
+    {
+      "type": "datasource",
+      "id": "prometheus",
+      "name": "Prometheus",
+      "version": "1.0.0"
+    }
+  ],
+  "uid": "efe-msw-overview",
+  "title": "EFE Meta-Swarm \u2014 Overview & SLO",
+  "description": "Top-level health + SLO burn \u2014 the dashboard the on-call SRE lands on when paged. Answers the 9 golden questions (PR #19 \u00a7 5.2).",
+  "tags": [
+    "efe",
+    "meta-swarm",
+    "pr19",
+    "overview",
+    "slo",
+    "sre"
+  ],
+  "editable": false,
+  "graphTooltip": 1,
+  "timezone": "utc",
+  "schemaVersion": 39,
+  "version": 2,
+  "refresh": "30s",
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "timepicker": {
+    "refresh_intervals": [
+      "30s",
+      "1m",
+      "5m",
+      "15m",
+      "30m",
+      "1h"
+    ]
+  },
+  "fiscalYearStartMonth": 0,
+  "weekStart": "monday",
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "name": "Annotations & Alerts",
+        "datasource": {
+          "type": "grafana",
+          "uid": "-- Grafana --"
+        },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "type": "dashboard"
+      },
+      {
+        "name": "Manifest reloads",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${prometheus_ds}"
+        },
+        "enable": true,
+        "iconColor": "#5794F2",
+        "expr": "changes(efe_meta_swarm_reload_gen{cluster=~\"$cluster\", env=~\"$env\"}[5m]) > 0",
+        "step": "30s",
+        "tagKeys": "trigger",
+        "titleFormat": "Reload (gen={{value}})"
+      },
+      {
+        "name": "Deployments",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${prometheus_ds}"
+        },
+        "enable": true,
+        "iconColor": "#73BF69",
+        "expr": "changes(efe_meta_swarm_build_info{cluster=~\"$cluster\", env=~\"$env\"}[5m]) > 0",
+        "step": "30s",
+        "tagKeys": "version,git_sha",
+        "titleFormat": "Deploy {{git_sha}}"
+      },
+      {
+        "name": "TLS cert reloads",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${prometheus_ds}"
+        },
+        "enable": true,
+        "iconColor": "#FF780A",
+        "expr": "changes(efe_meta_swarm_tls_reload_at_seconds[5m]) > 0",
+        "step": "30s",
+        "tagKeys": "role",
+        "titleFormat": "TLS reload ({{role}})"
+      }
+    ]
+  },
+  "templating": {
+    "list": [
+      {
+        "name": "prometheus_ds",
+        "type": "datasource",
+        "label": "Prometheus",
+        "query": "prometheus",
+        "current": {
+          "text": "Prometheus",
+          "value": "Prometheus"
+        },
+        "hide": 0,
+        "skipUrlSync": false
+      },
+      {
+        "name": "cluster",
+        "type": "query",
+        "label": "Cluster",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${prometheus_ds}"
+        },
+        "query": "label_values(efe_meta_swarm_build_info, cluster)",
+        "refresh": 1,
+        "includeAll": true,
+        "multi": false,
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
+        "sort": 1
+      },
+      {
+        "name": "env",
+        "type": "query",
+        "label": "Environment",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${prometheus_ds}"
+        },
+        "query": "label_values(efe_meta_swarm_build_info{cluster=~\"$cluster\"}, env)",
+        "refresh": 1,
+        "includeAll": true,
+        "multi": false,
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
+        "sort": 1
+      },
+      {
+        "name": "runbook_base",
+        "type": "constant",
+        "query": "https://efe.example.com/runbook/meta-swarm",
+        "current": {
+          "text": "https://efe.example.com/runbook/meta-swarm",
+          "value": "https://efe.example.com/runbook/meta-swarm"
+        },
+        "hide": 2,
+        "skipUrlSync": true,
+        "label": "runbook base URL"
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Controller status",
+      "description": "1 = up, 0 = down. PR #19 Q1.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${prometheus_ds}"
+      },
+      "targets": [
+        {
+          "expr": "max(up{job=~\".*efe-meta-swarm.*controller.*\", cluster=~\"$cluster\", env=~\"$env\"})",
+          "legendFormat": "controller",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "DOWN",
+                  "color": "red"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "1": {
+                  "text": "UP",
+                  "color": "green"
+                }
+              }
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
+            ]
+          }
+        }
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "textMode": "value_and_name",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 4,
+        "h": 4
+      },
+      "links": [
+        {
+          "title": "Open runbook RB_PR19_MSW5",
+          "url": "${runbook_base}/RB_PR19_MSW5.md",
+          "targetBlank": true
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Healthy participants",
+      "description": "Percent of configured participants reachable (PR #19 Q4).",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${prometheus_ds}"
+      },
+      "targets": [
+        {
+          "expr": "100 * sum(efe_meta_swarm_participant_up{cluster=~\"$cluster\", env=~\"$env\"} == 1) / clamp_min(sum(efe_meta_swarm_participants_configured{cluster=~\"$cluster\", env=~\"$env\"}), 1)",
+          "legendFormat": "% up",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 80
+              },
+              {
+                "color": "green",
+                "value": 95
+              }
+            ]
+          }
+        }
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
+      },
+      "gridPos": {
+        "x": 4,
+        "y": 0,
+        "w": 4,
+        "h": 4
+      },
+      "links": [
+        {
+          "title": "Drill into D3 (Participant)",
+          "url": "/d/efe-msw-participant",
+          "targetBlank": false
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Iterate success rate (5m)",
+      "description": "Fraction of iterate calls completing with result=ok over last 5m (PR #19 Q2).",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${prometheus_ds}"
+      },
+      "targets": [
+        {
+          "expr": "100 * sum(efe_msw:iterate_total:rate5m{result=\"ok\"}) / clamp_min(sum(efe_msw:iterate_total:rate5m), 0.001)",
+          "legendFormat": "% ok",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 95
+              },
+              {
+                "color": "green",
+                "value": 99
+              }
+            ]
+          }
+        }
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
+      },
+      "gridPos": {
+        "x": 8,
+        "y": 0,
+        "w": 4,
+        "h": 4
+      },
+      "links": [
+        {
+          "title": "Drill into D2 (Iterate)",
+          "url": "/d/efe-msw-iterate",
+          "targetBlank": false
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Manifest reload gen",
+      "description": "Current monotonic generation counter (PR #19 Q6). Bumps on every successful reload.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${prometheus_ds}"
+      },
+      "targets": [
+        {
+          "expr": "max(efe_meta_swarm_reload_gen{cluster=~\"$cluster\", env=~\"$env\"})",
+          "legendFormat": "gen",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          }
+        }
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 0,
+        "w": 4,
+        "h": 4
+      },
+      "links": [
+        {
+          "title": "Drill into D4 (Reload)",
+          "url": "/d/efe-msw-reload",
+          "targetBlank": false
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "gauge",
+      "title": "SLO budget remaining (30d availability)",
+      "description": "Iterate availability SLO 99.9 %. Budget = 0.1 % of all calls per 30 days. Red < 10 % remaining (PR #19 Q7).",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${prometheus_ds}"
+      },
+      "targets": [
+        {
+          "expr": "100 * (1 - clamp_max((sum(rate(efe_meta_swarm_iterate_total{result=\"error\",cluster=~\"$cluster\",env=~\"$env\"}[30d])) / clamp_min(sum(rate(efe_meta_swarm_iterate_total{cluster=~\"$cluster\",env=~\"$env\"}[30d])), 0.001)) / 0.001, 1))",
+          "legendFormat": "% budget left",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 10
+              },
+              {
+                "color": "yellow",
+                "value": 25
+              },
+              {
+                "color": "green",
+                "value": 50
+              }
+            ]
+          }
+        }
+      },
+      "options": {
+        "showThresholdLabels": false,
+        "showThresholdMarkers": true,
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
+      },
+      "gridPos": {
+        "x": 16,
+        "y": 0,
+        "w": 4,
+        "h": 4
+      }
+    },
+    {
+      "id": 6,
+      "type": "alertlist",
+      "title": "Active alerts",
+      "description": "All meta-swarm service alerts currently firing.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${prometheus_ds}"
+      },
+      "options": {
+        "showOptions": "current",
+        "maxItems": 20,
+        "sortOrder": 1,
+        "dashboardAlerts": false,
+        "alertName": "",
+        "dashboardTitle": "",
+        "folderId": null,
+        "tags": [
+          "meta-swarm"
+        ],
+        "stateFilter": {
+          "firing": true,
+          "pending": true,
+          "no_data": false,
+          "normal": false
+        }
+      },
+      "gridPos": {
+        "x": 20,
+        "y": 0,
+        "w": 4,
+        "h": 4
+      }
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Iterate throughput (by result)",
+      "description": "Stacked iterate rate split by result (ok / error / deadline / canceled / throttled).",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${prometheus_ds}"
+      },
+      "targets": [
+        {
+          "expr": "sum by (result) (efe_msw:iterate_total:rate5m)",
+          "legendFormat": "{{result}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "fillOpacity": 30,
+            "stacking": {
+              "mode": "normal",
+              "group": "A"
+            },
+            "showPoints": "never",
+            "spanNulls": true
+          },
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "ok"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "green"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "error"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "red"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "deadline"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "orange"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "sum"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 4,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "Iterate latency p50 / p95 / p99",
+      "description": "p50 / p95 / p99 over 5m windows. Click any exemplar dot to open the trace in Tempo (D9).",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${prometheus_ds}"
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum by (le) (rate(efe_meta_swarm_iterate_duration_seconds_bucket{cluster=~\"$cluster\",env=~\"$env\"}[5m])))",
+          "legendFormat": "p50",
+          "refId": "A"
+        },
+        {
+          "expr": "max(efe_msw:iterate_duration:p95_5m)",
+          "legendFormat": "p95",
+          "refId": "B"
+        },
+        {
+          "expr": "max(efe_msw:iterate_duration:p99_5m)",
+          "legendFormat": "p99",
+          "refId": "C",
+          "exemplar": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "fillOpacity": 5,
+            "showPoints": "never",
+            "spanNulls": true
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 5
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "p99"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "red"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "p95"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "orange"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "p50"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "green"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 4,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "id": 9,
+      "type": "timeseries",
+      "title": "SLO burn rate \u2014 availability (1h window)",
+      "description": "Burn rate vs 30-day budget. Bands : 1\u00d7 = on-target, 6\u00d7 = warning, 14.4\u00d7 = critical.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${prometheus_ds}"
+      },
+      "targets": [
+        {
+          "expr": "(sum(rate(efe_meta_swarm_iterate_total{result=\"error\",cluster=~\"$cluster\",env=~\"$env\"}[1h])) / clamp_min(sum(rate(efe_meta_swarm_iterate_total{cluster=~\"$cluster\",env=~\"$env\"}[1h])), 0.001)) / 0.001",
+          "legendFormat": "burn \u00d7 budget",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "fillOpacity": 10,
+            "thresholdsStyle": {
+              "mode": "dashed"
+            },
+            "showPoints": "never",
+            "spanNulls": true
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 6
+              },
+              {
+                "color": "red",
+                "value": 14.4
+              }
+            ]
+          }
+        }
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 12,
+        "w": 12,
+        "h": 6
+      }
+    },
+    {
+      "id": 10,
+      "type": "timeseries",
+      "title": "SLO compliance \u2014 latency (% calls \u2264 1s)",
+      "description": "Iterate latency SLO target : 95 % of calls \u2264 1 s. The blue line tracks compliance over rolling 5m windows.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${prometheus_ds}"
+      },
+      "targets": [
+        {
+          "expr": "100 * (sum(rate(efe_meta_swarm_iterate_duration_seconds_bucket{le=\"1.0\",cluster=~\"$cluster\",env=~\"$env\"}[5m])) / clamp_min(sum(rate(efe_meta_swarm_iterate_duration_seconds_count{cluster=~\"$cluster\",env=~\"$env\"}[5m])), 0.001))",
+          "legendFormat": "% \u2264 1s",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "fillOpacity": 10,
+            "showPoints": "never"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 90
+              },
+              {
+                "color": "green",
+                "value": 95
+              }
+            ]
+          }
+        }
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 12,
+        "w": 12,
+        "h": 6
+      }
+    },
+    {
+      "id": 11,
+      "type": "table",
+      "title": "Build info",
+      "description": "Currently running version + git SHA + build date. Updated automatically on deploy.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${prometheus_ds}"
+      },
+      "targets": [
+        {
+          "expr": "efe_meta_swarm_build_info{cluster=~\"$cluster\", env=~\"$env\"}",
+          "format": "table",
+          "instant": true,
+          "refId": "A"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "__name__": true,
+              "Value": true,
+              "job": true,
+              "instance": true
+            },
+            "renameByName": {
+              "version": "Version",
+              "git_sha": "Git SHA",
+              "profile": "Profile",
+              "rustc_version": "Rustc",
+              "build_date": "Build date"
+            }
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "left"
+          }
+        }
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 18,
+        "w": 24,
+        "h": 4
+      }
+    },
+    {
+      "id": 12,
+      "type": "text",
+      "title": "Operator references",
+      "options": {
+        "mode": "markdown",
+        "content": "## Documentation & dashboards\n\n- **Drill-downs** : [Iterate](/d/efe-msw-iterate) \u00b7 [Participant](/d/efe-msw-participant) \u00b7 [Reload](/d/efe-msw-reload) \u00b7 [OTel](/d/efe-msw-otel) \u00b7 [TLS](/d/efe-msw-tls) \u00b7 [Safety](/d/efe-msw-safety) \u00b7 [Runtime](/d/efe-msw-runtime) \u00b7 [Traces](/d/efe-msw-traces)\n- **Runbooks** : [RB_PR19_MSW1](${runbook_base}/RB_PR19_MSW1.md) \u2013 [RB_PR19_MSW10](${runbook_base}/RB_PR19_MSW10.md)\n- **Architecture** : `docs/EFE_A1_PHASE2_PR19_ARCHITECTURE.md`\n- **SLO contract** : `docs/slo.md` (4 meta-swarm SLOs since v1.1)\n- **Stability contract** : `docs/STABILITY_CONTRACT.md` v1.1\n"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 22,
+        "w": 24,
+        "h": 4
+      }
+    }
+  ]
+}

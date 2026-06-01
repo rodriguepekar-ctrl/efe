@@ -1,0 +1,161 @@
+{{- /*
+PR #20 § 19 — Kubernetes Job (or CronJob when schedule is set).
+
+The Job uses `completionMode: Indexed` for multi-pod parallelism with
+deterministic per-pod sub-seeds.  Each pod reads
+`JOB_COMPLETION_INDEX` from the Downward API and the binary derives
+its sub-seed from that ordinal (AD8).
+*/ -}}
+{{- if .Values.enabled }}
+{{- $isCron := ne (default "" .Values.job.schedule) "" }}
+{{- if $isCron }}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "efe-loadgen.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "efe-loadgen.labels" . | nindent 4 }}
+spec:
+  schedule: {{ .Values.job.schedule | quote }}
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 1
+  jobTemplate:
+    spec:
+{{- else }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "efe-loadgen.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "efe-loadgen.labels" . | nindent 4 }}
+spec:
+{{- end }}
+      parallelism: {{ .Values.job.parallelism }}
+      completions:  {{ .Values.job.completions }}
+      completionMode: Indexed
+      backoffLimit: {{ .Values.job.backoffLimit }}
+      activeDeadlineSeconds: {{ .Values.job.activeDeadlineSeconds }}
+      ttlSecondsAfterFinished: {{ .Values.job.ttlSecondsAfterFinished }}
+      template:
+        metadata:
+          labels:
+            {{- include "efe-loadgen.selectorLabels" . | nindent 12 }}
+            app.kubernetes.io/component: loadgen
+        spec:
+          serviceAccountName: {{ include "efe-loadgen.serviceAccountName" . }}
+          restartPolicy: Never
+          securityContext:
+            {{- toYaml .Values.podSecurityContext | nindent 12 }}
+          {{- with .Values.image.imagePullSecrets }}
+          imagePullSecrets:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          containers:
+            - name: loadgen
+              image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+              imagePullPolicy: {{ .Values.image.pullPolicy }}
+              args:
+                - run
+                {{- if or .Values.profile.inline .Values.profile.configMap.name }}
+                - --profile
+                - /etc/profile/profile.yaml
+                {{- end }}
+                {{- if not (or .Values.profile.inline .Values.profile.configMap.name) }}
+                - --target
+                - {{ .Values.target.endpoint }}
+                {{- end }}
+                - --mode
+                - {{ .Values.mode | default "dev" }}
+                {{- if eq .Values.mode "production" }}
+                - --confirm-prod
+                {{- end }}
+                {{- if .Values.tls.enabled }}
+                - --tls-cert
+                - /etc/efe/tls/tls.crt
+                - --tls-key
+                - /etc/efe/tls/tls.key
+                - --tls-ca
+                - /etc/efe/tls/ca.crt
+                {{- if .Values.tls.expectedSan }}
+                - --expected-san
+                - {{ .Values.tls.expectedSan | quote }}
+                {{- end }}
+                {{- end }}
+                {{- if .Values.otel.enabled }}
+                - --otel-endpoint
+                - {{ .Values.otel.endpoint }}
+                - --otel-sampler
+                - {{ .Values.otel.samplerArg | quote }}
+                {{- end }}
+                {{- range .Values.extraArgs }}
+                - {{ . | quote }}
+                {{- end }}
+              env:
+                - name: POD_ORDINAL
+                  valueFrom:
+                    fieldRef:
+                      fieldPath: metadata.annotations['batch.kubernetes.io/job-completion-index']
+                - name: POD_NAME
+                  valueFrom:
+                    fieldRef:
+                      fieldPath: metadata.name
+                - name: PARALLELISM
+                  value: {{ .Values.job.parallelism | quote }}
+                - name: EFE_LOADGEN_PROM_LISTEN
+                  value: "0.0.0.0:{{ .Values.prometheus.port }}"
+                {{- range .Values.extraEnv }}
+                - {{ toYaml . | nindent 18 }}
+                {{- end }}
+              ports:
+                - name: metrics
+                  containerPort: {{ .Values.prometheus.port }}
+                  protocol: TCP
+              resources:
+                {{- toYaml .Values.resources | nindent 16 }}
+              securityContext:
+                {{- toYaml .Values.containerSecurityContext | nindent 16 }}
+              volumeMounts:
+                {{- if or .Values.profile.inline .Values.profile.configMap.name }}
+                - name: profile
+                  mountPath: /etc/profile
+                  readOnly: true
+                {{- end }}
+                {{- if .Values.tls.enabled }}
+                - name: tls
+                  mountPath: /etc/efe/tls
+                  readOnly: true
+                {{- end }}
+                - name: results
+                  mountPath: /var/run/loadgen
+                # readOnlyRootFilesystem=true forces writable mounts for
+                # any tmp / cache the binary may need.
+                - name: tmp
+                  mountPath: /tmp
+          volumes:
+            {{- if .Values.profile.inline }}
+            - name: profile
+              configMap:
+                name: {{ include "efe-loadgen.fullname" . }}-profile
+            {{- else if .Values.profile.configMap.name }}
+            - name: profile
+              configMap:
+                name: {{ .Values.profile.configMap.name }}
+                items:
+                  - key: {{ .Values.profile.configMap.key | quote }}
+                    path: profile.yaml
+            {{- end }}
+            {{- if .Values.tls.enabled }}
+            - name: tls
+              secret:
+                secretName: {{ .Values.tls.secretName | quote }}
+            {{- end }}
+            - name: results
+              emptyDir: {}
+            - name: tmp
+              emptyDir: {}
+{{- if $isCron }}
+{{- end }}
+{{- end }}

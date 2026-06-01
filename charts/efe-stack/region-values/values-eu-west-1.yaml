@@ -1,0 +1,57 @@
+# M30 — eu-west-1 (Ireland) — ACTIVE region overlay.
+#
+# Apply with :
+#   helm upgrade --install efe ./charts/efe-stack \
+#     -f charts/efe-stack/values.yaml \
+#     -f charts/efe-stack/region-values/values-eu-west-1.yaml \
+#     -n efe-system
+
+global:
+  region:
+    name: eu-west-1
+    role: active
+    peerBaseUrls:
+      eu-west-3: "https://efe-eu-west-3.efe.internal"
+  cloudProvider: aws
+  imagePullPolicy: IfNotPresent
+
+efe-server:
+  enabled: true
+  env:
+    EFE_REGION: eu-west-1
+    EFE_REGION_ROLE: active
+    EFE_REGION_PEER_BASE_URLS: "eu-west-3=https://efe-eu-west-3.efe.internal"
+    EFE_PG_ENDPOINT: "efe-pg-primary.eu-west-1.rds.amazonaws.com:5432"
+    EFE_REDIS_ENDPOINT: "efe-redis.eu-west-1.amazonaws.com:6379"
+    EFE_NATS_ENDPOINT: "efe-nats.efe-system.svc.cluster.local:4222"
+    EFE_TRITON_BASE_URL: "http://efe-triton.efe-system.svc.cluster.local:8000"
+    EFE_AWS_KMS_KEY_ID: "alias/efe-audit-key-multi-region"
+  replicas: 3
+
+efe-triton:
+  enabled: true
+  triton:
+    replicas: 2
+
+efe-pii:
+  enabled: true
+
+efe-nats:
+  enabled: true
+  mode: active
+
+efe-edge:
+  enabled: true
+  cloudflared:
+    enabled: true
+    tunnelToken:
+      secretName: efe-cloudflared-token-eu-west-1
+
+redis-stack:
+  enabled: true
+  region: eu-west-1
+
+postgres-operator:
+  enabled: true
+  primary: true
+  region: eu-west-1

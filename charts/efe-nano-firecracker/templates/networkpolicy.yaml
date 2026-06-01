@@ -1,0 +1,65 @@
+# Sprint 8 — N11 : NetworkPolicy locking down the DaemonSet pods.
+#
+# Ingress  : allow scrape from Prometheus (metrics port) + gRPC from
+#            efe-server pods.
+# Egress   : allow DNS, OTel collector, M21 LLM router service.
+#            DENY everything else — VMs have no internet access by design
+#            (Mode C goes through the host-side LLM router proxy).
+
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "efe-nano-firecracker.fullname" . }}
+  labels:
+    {{- include "efe-nano-firecracker.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "efe-nano-firecracker.selectorLabels" . | nindent 6 }}
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # Prometheus scraping.
+    - ports:
+        - port: {{ .Values.metrics.port }}
+          protocol: TCP
+      from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+    # gRPC from efe-server pods.
+    - ports:
+        - port: 50051
+          protocol: TCP
+      from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: efe-server
+  egress:
+    # DNS.
+    - ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+      to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+    # OTel collector.
+    - ports:
+        - port: 4317
+          protocol: TCP
+      to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: otel-collector
+    # M21 LLM router service.
+    - ports:
+        - port: 8080
+          protocol: TCP
+      to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: efe-llm-router

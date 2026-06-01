@@ -1,0 +1,68 @@
+{{- if and .Values.enabled .Values.networkPolicy.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "efe-nats.fullname" . }}
+  labels:
+    {{- include "efe-nats.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "efe-nats.selectorLabels" . | nindent 6 }}
+  policyTypes: [Ingress, Egress]
+  ingress:
+    # Client port — efe-server, efe-batch-worker, efe-cdc-publisher.
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Values.networkPolicy.upstreamNamespace }}
+      ports:
+        - protocol: TCP
+          port: {{ .Values.nats.service.clientPort }}
+    # Cluster bus — other NATS pods.
+    - from:
+        - podSelector:
+            matchLabels:
+              {{- include "efe-nats.selectorLabels" . | nindent 14 }}
+      ports:
+        - protocol: TCP
+          port: {{ .Values.nats.service.clusterPort }}
+    # Prometheus scrape.
+    - from:
+        - namespaceSelector: {}
+          podSelector:
+            matchLabels:
+              prometheus: kube-prometheus
+      ports:
+        - protocol: TCP
+          port: {{ .Values.nats.service.monitoringPort }}
+  egress:
+    # Cluster bus
+    - to:
+        - podSelector:
+            matchLabels:
+              {{- include "efe-nats.selectorLabels" . | nindent 14 }}
+      ports:
+        - protocol: TCP
+          port: {{ .Values.nats.service.clusterPort }}
+    # DNS
+    - ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+{{- end }}
+{{- if .Values.enabled }}
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "efe-nats.fullname" . }}
+  labels:
+    {{- include "efe-nats.labels" . | nindent 4 }}
+spec:
+  minAvailable: 2          # Raft quorum requires 2 of 3
+  selector:
+    matchLabels:
+      {{- include "efe-nats.selectorLabels" . | nindent 6 }}
+{{- end }}

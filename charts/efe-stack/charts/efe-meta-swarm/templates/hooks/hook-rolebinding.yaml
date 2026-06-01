@@ -1,0 +1,20 @@
+{{- if and .Values.enabled .Values.hooks.enabled }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "efe-meta-swarm.hookServiceAccountName" . }}
+  labels:
+    {{- include "efe-meta-swarm.hookLabels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "-18"
+    "helm.sh/hook-delete-policy": before-hook-creation
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "efe-meta-swarm.hookServiceAccountName" . }}
+    namespace: {{ .Release.Namespace }}
+roleRef:
+  kind: Role
+  name: {{ include "efe-meta-swarm.hookServiceAccountName" . }}
+  apiGroup: rbac.authorization.k8s.io
+{{- end }}

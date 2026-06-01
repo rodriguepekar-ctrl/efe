@@ -1,0 +1,645 @@
+{
+  "__inputs": [],
+  "__requires": [
+    {
+      "type": "grafana",
+      "id": "grafana",
+      "name": "Grafana",
+      "version": "10.2.0"
+    },
+    {
+      "type": "datasource",
+      "id": "prometheus",
+      "name": "Prometheus",
+      "version": "1.0.0"
+    },
+    {
+      "type": "datasource",
+      "id": "tempo",
+      "name": "Tempo",
+      "version": "1.0.0"
+    }
+  ],
+  "uid": "efe-msw-iterate",
+  "title": "EFE Meta-Swarm \u2014 Iterate Performance",
+  "description": "Iterate latency, throughput, convergence + stop-reason distribution. Use during canary roll-out to compare manifest versions.",
+  "tags": [
+    "efe",
+    "meta-swarm",
+    "pr19",
+    "iterate"
+  ],
+  "editable": false,
+  "graphTooltip": 1,
+  "timezone": "utc",
+  "schemaVersion": 39,
+  "version": 2,
+  "refresh": "30s",
+  "time": {
+    "from": "now-1h",
+    "to": "now"
+  },
+  "timepicker": {
+    "refresh_intervals": [
+      "30s",
+      "1m",
+      "5m",
+      "15m",
+      "30m"
+    ]
+  },
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "name": "Annotations & Alerts",
+        "datasource": {
+          "type": "grafana",
+          "uid": "-- Grafana --"
+        },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "type": "dashboard"
+      },
+      {
+        "name": "Manifest reloads",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${prometheus_ds}"
+        },
+        "enable": true,
+        "iconColor": "#5794F2",
+        "expr": "changes(efe_meta_swarm_reload_gen{cluster=~\"$cluster\", env=~\"$env\"}[5m]) > 0",
+        "tagKeys": "trigger",
+        "titleFormat": "Reload (gen={{value}})"
+      },
+      {
+        "name": "Deployments",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${prometheus_ds}"
+        },
+        "enable": true,
+        "iconColor": "#73BF69",
+        "expr": "changes(efe_meta_swarm_build_info{cluster=~\"$cluster\", env=~\"$env\"}[5m]) > 0",
+        "tagKeys": "version,git_sha",
+        "titleFormat": "Deploy {{git_sha}}"
+      }
+    ]
+  },
+  "templating": {
+    "list": [
+      {
+        "name": "prometheus_ds",
+        "type": "datasource",
+        "label": "Prometheus",
+        "query": "prometheus",
+        "current": {
+          "text": "Prometheus",
+          "value": "Prometheus"
+        }
+      },
+      {
+        "name": "cluster",
+        "type": "query",
+        "label": "Cluster",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${prometheus_ds}"
+        },
+        "query": "label_values(efe_meta_swarm_build_info, cluster)",
+        "refresh": 1,
+        "includeAll": true,
+        "multi": false,
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        }
+      },
+      {
+        "name": "env",
+        "type": "query",
+        "label": "Environment",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${prometheus_ds}"
+        },
+        "query": "label_values(efe_meta_swarm_build_info{cluster=~\"$cluster\"}, env)",
+        "refresh": 1,
+        "includeAll": true,
+        "multi": false,
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        }
+      },
+      {
+        "name": "manifest_version",
+        "type": "query",
+        "label": "Manifest version",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${prometheus_ds}"
+        },
+        "query": "label_values(efe_meta_swarm_iterate_total{cluster=~\"$cluster\",env=~\"$env\"}, manifest_version)",
+        "refresh": 2,
+        "includeAll": true,
+        "multi": true,
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
+        "sort": 1
+      },
+      {
+        "name": "runbook_base",
+        "type": "constant",
+        "query": "https://efe.example.com/runbook/meta-swarm",
+        "current": {
+          "text": "https://efe.example.com/runbook/meta-swarm",
+          "value": "https://efe.example.com/runbook/meta-swarm"
+        },
+        "hide": 2,
+        "skipUrlSync": true,
+        "label": "runbook base URL"
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "timeseries",
+      "title": "Iterate p50 / p95 / p99 \u2014 by manifest version",
+      "description": "Per-manifest-version latency tracking. During a canary roll-out, two series should appear ; the canary's curve must remain within 10 % of the stable curve.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${prometheus_ds}"
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum by (manifest_version, le) (rate(efe_meta_swarm_iterate_duration_seconds_bucket{cluster=~\"$cluster\",env=~\"$env\",manifest_version=~\"$manifest_version\"}[5m])))",
+          "legendFormat": "p50 / {{manifest_version}}",
+          "refId": "A"
+        },
+        {
+          "expr": "efe_msw:iterate_duration:p95_5m{manifest_version=~\"$manifest_version\"}",
+          "legendFormat": "p95 / {{manifest_version}}",
+          "refId": "B"
+        },
+        {
+          "expr": "efe_msw:iterate_duration:p99_5m{manifest_version=~\"$manifest_version\"}",
+          "legendFormat": "p99 / {{manifest_version}}",
+          "refId": "C",
+          "exemplar": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 5,
+            "lineInterpolation": "linear",
+            "showPoints": "never",
+            "spanNulls": true
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 5
+              }
+            ]
+          }
+        }
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 8
+      }
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "Iterate throughput by result (stacked)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${prometheus_ds}"
+      },
+      "targets": [
+        {
+          "expr": "sum by (result) (efe_msw:iterate_total:rate5m)",
+          "legendFormat": "{{result}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 30,
+            "stacking": {
+              "mode": "normal",
+              "group": "A"
+            },
+            "showPoints": "never"
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "ok"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "green"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "error"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "red"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "deadline"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "orange"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "sum"
+          ]
+        }
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 8,
+        "w": 12,
+        "h": 6
+      }
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "Iterate inflight",
+      "description": "Saturation indicator. Persistent >= controller-replica count suggests router stickiness or hot-spotting.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${prometheus_ds}"
+      },
+      "targets": [
+        {
+          "expr": "sum(efe_meta_swarm_iterate_inflight{cluster=~\"$cluster\",env=~\"$env\"})",
+          "legendFormat": "inflight (sum)",
+          "refId": "A"
+        },
+        {
+          "expr": "max(efe_meta_swarm_iterate_inflight{cluster=~\"$cluster\",env=~\"$env\"})",
+          "legendFormat": "inflight (max replica)",
+          "refId": "B"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "stepAfter",
+            "fillOpacity": 10
+          }
+        }
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 8,
+        "w": 12,
+        "h": 6
+      }
+    },
+    {
+      "id": 4,
+      "type": "piechart",
+      "title": "Stop-reason distribution (last 1h)",
+      "description": "Closed taxonomy (STABILITY_CONTRACT v1.1) : converged / max_iters_reached / cancelled / error / participant_down / unknown.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${prometheus_ds}"
+      },
+      "targets": [
+        {
+          "expr": "sum by (failure_reason) (increase(efe_meta_swarm_iterate_total{cluster=~\"$cluster\",env=~\"$env\"}[1h]))",
+          "legendFormat": "{{failure_reason}}",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "pieType": "pie",
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "values": [
+            "value",
+            "percent"
+          ]
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            }
+          }
+        }
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 14,
+        "w": 8,
+        "h": 8
+      }
+    },
+    {
+      "id": 5,
+      "type": "heatmap",
+      "title": "Iteration count distribution",
+      "description": "How many inner iterations each iterate call takes. Drift to higher buckets \u21d2 algorithm needs more rounds to converge.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${prometheus_ds}"
+      },
+      "targets": [
+        {
+          "expr": "sum by (le) (rate(efe_meta_swarm_iterate_iterations_bucket{cluster=~\"$cluster\",env=~\"$env\"}[5m]))",
+          "format": "heatmap",
+          "legendFormat": "{{le}}",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "calculate": false,
+        "cellGap": 1,
+        "color": {
+          "mode": "scheme",
+          "scheme": "Spectral"
+        },
+        "tooltip": {
+          "show": true,
+          "yHistogram": false
+        }
+      },
+      "gridPos": {
+        "x": 8,
+        "y": 14,
+        "w": 8,
+        "h": 8
+      }
+    },
+    {
+      "id": 6,
+      "type": "heatmap",
+      "title": "Convergence error distribution",
+      "description": "Final residual when iterate terminates. Long tail \u21d2 algorithm struggles ; bimodal \u21d2 two distinct convergence regimes.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${prometheus_ds}"
+      },
+      "targets": [
+        {
+          "expr": "sum by (le) (rate(efe_meta_swarm_iterate_convergence_error_bucket{cluster=~\"$cluster\",env=~\"$env\"}[5m]))",
+          "format": "heatmap",
+          "legendFormat": "{{le}}",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "calculate": false,
+        "cellGap": 1,
+        "color": {
+          "mode": "scheme",
+          "scheme": "Viridis"
+        }
+      },
+      "gridPos": {
+        "x": 16,
+        "y": 14,
+        "w": 8,
+        "h": 8
+      }
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Iterate failures by failure_reason",
+      "description": "Stacked failure-rate timeseries. Drives the primary alert A1 diagnosis path.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${prometheus_ds}"
+      },
+      "targets": [
+        {
+          "expr": "sum by (failure_reason) (rate(efe_meta_swarm_iterate_total{result=\"error\",cluster=~\"$cluster\",env=~\"$env\"}[5m]))",
+          "legendFormat": "{{failure_reason}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 30,
+            "stacking": {
+              "mode": "normal",
+              "group": "A"
+            },
+            "showPoints": "never"
+          }
+        }
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 22,
+        "w": 12,
+        "h": 6
+      }
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "p99 with exemplars (click dot \u2192 Tempo)",
+      "description": "Slow-iterate exemplars carry trace_id. PR #18 wires exemplars at the histogram observation site ; clicking opens the offending trace in Tempo (D9).",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${prometheus_ds}"
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(efe_meta_swarm_iterate_duration_seconds_bucket{cluster=~\"$cluster\",env=~\"$env\"}[5m])))",
+          "legendFormat": "p99 (overall)",
+          "refId": "A",
+          "exemplar": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 5,
+            "showPoints": "never"
+          }
+        }
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 22,
+        "w": 12,
+        "h": 6
+      }
+    },
+    {
+      "id": 9,
+      "type": "heatmap",
+      "title": "Iterate latency heatmap (all manifest versions)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${prometheus_ds}"
+      },
+      "targets": [
+        {
+          "expr": "sum by (le) (rate(efe_meta_swarm_iterate_duration_seconds_bucket{cluster=~\"$cluster\",env=~\"$env\"}[5m]))",
+          "format": "heatmap",
+          "legendFormat": "{{le}}",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "calculate": false,
+        "cellGap": 1,
+        "color": {
+          "mode": "scheme",
+          "scheme": "Turbo"
+        },
+        "yAxis": {
+          "unit": "s"
+        }
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 28,
+        "w": 24,
+        "h": 8
+      }
+    },
+    {
+      "id": 10,
+      "type": "text",
+      "title": "Drill-down references",
+      "options": {
+        "mode": "markdown",
+        "content": "**Pivot from this dashboard** :\n- failure_reason = `safety_violation` \u2192 [D7 Safety](/d/efe-msw-safety)\n- failure_reason = `participant_down` \u2192 [D3 Participant](/d/efe-msw-participant)\n- failure_reason = `deadline_exceeded` \u2192 [D8 Runtime](/d/efe-msw-runtime)\n- failure_reason = `internal` \u2192 [D9 Trace explorer](/d/efe-msw-traces)\n\n**Recording rules consumed** : `efe_msw:iterate_total:rate5m` \u00b7 `efe_msw:iterate_duration:p95_5m` \u00b7 `efe_msw:iterate_duration:p99_5m`\n\n**Linked alerts** : [A1 IterateFailureRateHigh](${runbook_base}/RB_PR19_MSW1.md) \u00b7 [A2 IterateLatencyP99Critical](${runbook_base}/RB_PR19_MSW2.md) \u00b7 [A9 SLOBudgetBurnFast14x](${runbook_base}/RB_PR19_MSW9.md)\n"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 36,
+        "w": 24,
+        "h": 4
+      }
+    }
+  ]
+}

@@ -1,0 +1,129 @@
+# efe-meta-swarm — PROD flavor.
+# Full hardening ; alerts critical ; hooks fail-fast ; PriorityClass.
+# Cf. `docs/EFE_A1_PHASE2_PR14_ARCHITECTURE.md` § 7.3.
+
+enabled: true
+
+image:
+  tag: "0.3.0"                    # pinned ; no :latest
+  pullPolicy: IfNotPresent
+
+manifest:
+  meta:
+    dim: 32                       # production dimension
+    safety:
+      kind: box
+      radius: 100.0
+  iteration:
+    max_iters: 100
+    tolerance: 1.0e-5             # tighter for prod
+    alpha_default: 0.5
+    coupling_gamma: 0.2
+    deterministic: true
+    max_wall_ms: 20000
+
+controller:
+  config:
+    maxInflight: 20
+  resources:
+    requests: {cpu: 1,   memory: 1Gi}
+    limits:   {cpu: 4,   memory: 4Gi}
+  podDisruptionBudget:
+    enabled: true
+    maxUnavailable: 0
+  nodeSelector:
+    workload: meta-swarm
+  tolerations:
+    - key: workload
+      operator: Equal
+      value: meta-swarm
+      effect: NoSchedule
+
+priorityClass:
+  enabled: true
+  value: 100000
+
+participants:
+  - id: supplier-scoring
+    dim: 32
+    kappa: 0.6
+    seed: 11
+    service: {grpcPort: 50091, metricsPort: 9101}
+    resources:
+      requests: {cpu: 1,   memory: 1Gi}
+      limits:   {cpu: 2,   memory: 2Gi}
+    nodeSelector:
+      workload: meta-swarm
+    tolerations:
+      - {key: workload, operator: Equal, value: meta-swarm, effect: NoSchedule}
+  - id: contract-risk
+    dim: 32
+    kappa: 0.7
+    seed: 22
+    service: {grpcPort: 50092, metricsPort: 9102}
+    resources:
+      requests: {cpu: 1,   memory: 1Gi}
+      limits:   {cpu: 2,   memory: 2Gi}
+    nodeSelector:
+      workload: meta-swarm
+    tolerations:
+      - {key: workload, operator: Equal, value: meta-swarm, effect: NoSchedule}
+  - id: spend-categorization
+    dim: 32
+    kappa: 0.5
+    seed: 33
+    service: {grpcPort: 50093, metricsPort: 9103}
+    resources:
+      requests: {cpu: 1,   memory: 1Gi}
+      limits:   {cpu: 2,   memory: 2Gi}
+    nodeSelector:
+      workload: meta-swarm
+    tolerations:
+      - {key: workload, operator: Equal, value: meta-swarm, effect: NoSchedule}
+
+networkPolicy:
+  enabled: true
+  ingressNamespaceSelector:
+    matchLabels:
+      kubernetes.io/metadata.name: efe-prod
+  prometheusNamespaceSelector:
+    matchLabels:
+      kubernetes.io/metadata.name: monitoring
+
+metrics:
+  serviceMonitor:
+    enabled: true
+    interval: 30s
+    labels:
+      prometheus: efe-prod
+
+alerts:
+  enabled: true
+  severity:
+    ReloadFailureRate: critical
+    ReloadLatencyP99High: warning
+    ReloadingStuck: critical
+    ControllerDown: critical
+    ParticipantDown: warning
+    ReloadGenNotAdvancing: info
+  runbookBaseUrl: "https://efe.example.com/runbook/meta-swarm"
+
+dashboard:
+  enabled: true
+
+hooks:
+  enabled: true
+  preUpgrade:
+    snapshotEnabled: true
+    backupRingSize: 5
+  postUpgrade:
+    sighupEnabled: true
+    serial: true                  # one pod at a time in prod
+    ignoreFailures: false         # prod : fail-fast on SIGHUP failure
+
+bundle:
+  sidecar:
+    enabled: false                # PR #15+ will flip
+
+tls:
+  enabled: false                  # PR #16 will flip ; certs via cert-manager

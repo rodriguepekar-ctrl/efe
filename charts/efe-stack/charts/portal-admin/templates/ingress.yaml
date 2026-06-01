@@ -1,0 +1,40 @@
+{{- if and .Values.enabled .Values.ingress.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "portal-admin.fullname" . }}
+  labels:
+    {{- include "portal-admin.labels" . | nindent 4 }}
+  annotations:
+    {{- if eq .Values.ingress.tls.issuerRef.kind "ClusterIssuer" }}
+    cert-manager.io/cluster-issuer: {{ .Values.ingress.tls.issuerRef.name | quote }}
+    {{- else }}
+    cert-manager.io/issuer: {{ .Values.ingress.tls.issuerRef.name | quote }}
+    {{- end }}
+    nginx.ingress.kubernetes.io/proxy-body-size: 10m
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "60"
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      add_header X-Frame-Options "DENY" always;
+      add_header X-Content-Type-Options "nosniff" always;
+      add_header Strict-Transport-Security "max-age=63072000; includeSubDomains; preload" always;
+      add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+spec:
+  ingressClassName: {{ .Values.ingress.className | default "nginx" }}
+  {{- if .Values.ingress.tls.enabled }}
+  tls:
+    - hosts:
+        - {{ include "portal-admin.host" . }}
+      secretName: {{ include "portal-admin.fullname" . }}-tls
+  {{- end }}
+  rules:
+    - host: {{ include "portal-admin.host" . }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "portal-admin.fullname" . }}
+                port:
+                  number: {{ .Values.service.httpPort | default 3000 }}
+{{- end }}

@@ -1,0 +1,29 @@
+{{- if .Values.enabled }}
+{{- range $p := .Values.participants }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "efe-meta-swarm.participantName" (list $ $p.id) }}
+  labels:
+    {{- include "efe-meta-swarm.labels" $ | nindent 4 }}
+    app.kubernetes.io/component: participant
+    efe.io/meta-swarm-role: participant
+    efe.io/participant-id: {{ $p.id | quote }}
+spec:
+  type: ClusterIP
+  ports:
+    - name: grpc
+      port: {{ $p.service.grpcPort }}
+      targetPort: grpc
+      protocol: TCP
+      appProtocol: grpc
+    - name: metrics
+      port: {{ $p.service.metricsPort }}
+      targetPort: metrics
+      protocol: TCP
+  selector:
+    {{- include "efe-meta-swarm.selectorLabels" $ | nindent 4 }}
+    efe.io/participant-id: {{ $p.id | quote }}
+{{- end }}
+{{- end }}

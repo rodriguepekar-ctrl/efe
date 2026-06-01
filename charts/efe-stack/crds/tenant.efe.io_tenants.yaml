@@ -1,0 +1,129 @@
+# Sprint Φ-D-OPS (D96) — Tenant CRD.
+#
+# Declarative representation of an EFE tenant. GitOps-managed ;
+# reconciled by the tenant controller (= `efe-server` extension).
+#
+# Cf. `docs/EFE_OPERATIONAL_PRODUCTION_ARCHITECTURE.md` § 7.
+
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: tenants.efe.io
+spec:
+  group: efe.io
+  names:
+    kind: Tenant
+    plural: tenants
+    singular: tenant
+    shortNames: [tn]
+    categories: [efe]
+  scope: Namespaced
+  versions:
+    - name: v1
+      served: true
+      storage: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          required: [spec]
+          properties:
+            spec:
+              type: object
+              required: [slug, plan, dataResidency]
+              properties:
+                slug:
+                  type: string
+                  pattern: "^[a-z0-9-]{3,32}$"
+                  description: |
+                    Tenant slug. Lowercase, 3–32 chars, hyphens permitted but
+                    not leading/trailing. Maps 1:1 to the SQL `tenants.slug`.
+                plan:
+                  type: string
+                  enum: [trial, growth, enterprise]
+                maxRps:
+                  type: integer
+                  minimum: 1
+                  maximum: 50000
+                  default: 100
+                maxTokensPerDay:
+                  type: integer
+                  minimum: 1
+                  default: 100000
+                dataResidency:
+                  type: string
+                  enum: [EU_ONLY, US_ONLY, any]
+                contactEmail:
+                  type: string
+                  format: email
+                modes:
+                  type: object
+                  properties:
+                    mode1: {type: boolean, default: true}
+                    mode2: {type: boolean, default: false}
+                    mode3: {type: boolean, default: false}
+                compliance:
+                  type: object
+                  properties:
+                    aiActArt14: {type: boolean, default: false}
+                    gdprArt22: {type: boolean, default: false}
+                    signedBy: {type: string, format: email}
+                    dpoContact: {type: string, format: email}
+                    attestedAt: {type: string, format: date-time}
+                budget:
+                  type: object
+                  properties:
+                    monthlyUsd: {type: number, minimum: 0}
+                    overrunThreshold: {type: number, default: 1.10}
+            status:
+              type: object
+              properties:
+                lifecycleState:
+                  type: string
+                  enum:
+                    - signup_intent
+                    - provisioning_pg
+                    - provisioning_redis
+                    - migrating_schema
+                    - seeding_fixtures
+                    - compliance_pending
+                    - active
+                    - throttled
+                    - suspended
+                    - erasure_pending
+                    - erasure_in_progress
+                    - erased
+                lifecycleEnteredAt:
+                  type: string
+                  format: date-time
+                lifecycleAttempts:
+                  type: integer
+                lastError:
+                  type: string
+                conditions:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      type:    {type: string}
+                      status:  {type: string, enum: [True, False, Unknown]}
+                      reason:  {type: string}
+                      message: {type: string}
+                      lastTransitionTime: {type: string, format: date-time}
+      additionalPrinterColumns:
+        - name: Plan
+          type: string
+          jsonPath: .spec.plan
+        - name: Residency
+          type: string
+          jsonPath: .spec.dataResidency
+        - name: State
+          type: string
+          jsonPath: .status.lifecycleState
+        - name: MaxRPS
+          type: integer
+          jsonPath: .spec.maxRps
+        - name: Age
+          type: date
+          jsonPath: .metadata.creationTimestamp
+      subresources:
+        status: {}

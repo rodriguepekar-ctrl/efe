@@ -1,0 +1,50 @@
+enabled: true
+replicas: 2
+
+image:
+  repository: mcp-server
+  tag: ""
+  pullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP
+  # Φ-D-OPS post-audit round-2 fix B5' : mcp-server Dockerfile
+  # `EXPOSE 8800` (matches the M16 architecture doc and the
+  # `efe-mcp-server.py` runtime port 8800) was misaligned with the
+  # pre-fix Helm default `httpPort: 8080`. Service+readiness probe+
+  # NetworkPolicy now use 8800 to match the container.
+  httpPort: 8800
+  metricsPort: 9091
+
+resources:
+  requests:
+    cpu: 200m
+    memory: 512Mi
+  limits:
+    cpu: 1
+    memory: 2Gi
+
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 8
+  targetCPUUtilizationPercentage: 70
+
+profile: agent-native-deploy           # core|advanced|agent-native|agent-native-deploy|experimental
+
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+
+serviceAccount:
+  create: true
+  annotations: {}
+
+networkPolicy:
+  enabled: true
+
+global:
+  imageRegistry: ghcr.io/efe-ai
+  imagePullSecrets: []
+  tenant: ""
+  environment: prod

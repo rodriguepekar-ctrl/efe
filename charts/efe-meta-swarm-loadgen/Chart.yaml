@@ -1,0 +1,38 @@
+apiVersion: v2
+name: efe-meta-swarm-loadgen
+description: |
+  PR #20 — production-grade L2 meta-swarm load generator.
+
+  Ships the `efe-meta-swarm-loadgen` binary as a Kubernetes Job
+  (or CronJob) with mTLS, OTel propagation, self-instrumentation
+  metrics, NetworkPolicy egress lockdown, and minimal RBAC.
+
+  Standalone chart — NOT a sub-chart of `efe-meta-swarm` since
+  loadgen pods are operationally separable (they may run in a
+  different namespace from controllers, or against a remote cluster).
+
+  Reference : docs/EFE_A1_PHASE2_PR20_ARCHITECTURE.md
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+kubeVersion: ">=1.28.0-0"
+home: https://efe.example.com/meta-swarm
+sources:
+  - https://github.com/efe-ai/efe/tree/main/tools/loadgen
+maintainers:
+  - name: EFE Performance Team
+    email: perf@efe.example.com
+keywords:
+  - loadgen
+  - meta-swarm
+  - phase-2
+  - slo
+  - grpc
+  - burn-rate
+  - chaos-bench
+icon: https://efe.example.com/static/loadgen.png
+annotations:
+  artifacthub.io/license: UNLICENSED
+  artifacthub.io/changes: |
+    - kind: added
+      description: PR #20 — initial release. 5 traffic patterns × 4 workload shapes × 3 rate controllers × 5 termination policies. mTLS matches PR #16. OTel propagation matches PR #18. 5 STABLE Prometheus self-metrics (STABILITY_CONTRACT v1.2).

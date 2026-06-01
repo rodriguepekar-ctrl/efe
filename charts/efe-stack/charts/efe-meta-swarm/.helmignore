@@ -1,0 +1,35 @@
+# Patterns to ignore when packaging the chart (`helm package`).
+# Default Helm exclusions + PR #13 specific additions.
+
+# OS / Editor cruft.
+.DS_Store
+.git/
+.gitignore
+.idea/
+.vscode/
+*.swp
+*.tmp
+*.bak
+
+# Local helm scratchpads.
+*.tgz
+
+# PR #13 — `tests/golden/` and `tests/scenarios/` are CI-only
+# artifacts (regression-snapshot diff + values overrides for
+# `helm template`).  They are NOT consumed by helm-unittest
+# (only `tests/*_test.yaml` is).  Excluding them shrinks the
+# packaged tarball by ~ 50 KB and prevents operators from
+# accidentally believing they are runtime resources.
+tests/golden/
+tests/scenarios/
+
+# PR #14 — `examples/` ships operator-facing overlays in the repo
+# but the packaged chart doesn't need them (operators consume them
+# via `helm template -f` against the source tree).  Shrinks the
+# tarball further.
+examples/
+
+# Documentation kept at chart root for `artifacthub.io` rendering,
+# but architectural docs live in the repo's `docs/` ; don't ship
+# repo-level docs inside the chart.
+docs/

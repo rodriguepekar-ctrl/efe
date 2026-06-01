@@ -1,0 +1,157 @@
+# PR #13 — helm-unittest assertions for the controller resources.
+# Cf. `docs/EFE_A1_PHASE2_PR13_ARCHITECTURE.md` § 36 (AC1-AC30).
+suite: efe-meta-swarm controller
+
+templates:
+  - controller-deployment.yaml
+  - controller-service.yaml
+  - controller-serviceaccount.yaml
+  - pdb-controller.yaml
+
+tests:
+  # ─── disabled : zero resources ────────────────────────────────
+  - it: AC13 — disabled produces zero controller resources
+    set:
+      enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  # ─── enabled : each of the 4 templates produces exactly 1 doc ──
+  # helm-unittest iterates over the `templates:` array and asserts
+  # per-template ; with `count: 1` we verify each renders one
+  # resource (no duplicates, no nil-render).
+  - it: AC14 — each controller template renders exactly one document when enabled
+    set:
+      enabled: true
+      image:
+        tag: "test"
+    asserts:
+      - hasDocuments:
+          count: 1
+
+  # ─── AD4 invariant : no `checksum/config` ─────────────────────
+  - it: AC18 — Deployment pod template has no checksum/config annotation
+    template: controller-deployment.yaml
+    set:
+      enabled: true
+      image:
+        tag: "test"
+    asserts:
+      - notExists:
+          path: spec.template.metadata.annotations["checksum/config"]
+
+  # ─── AD8 / AD9 hardening ──────────────────────────────────────
+  - it: AC19 — seccompProfile RuntimeDefault on pod
+    template: controller-deployment.yaml
+    set:
+      enabled: true
+      image:
+        tag: "test"
+    asserts:
+      - equal:
+          path: spec.template.spec.securityContext.seccompProfile.type
+          value: RuntimeDefault
+
+  - it: AC20 — runAsUser 65532 on pod
+    template: controller-deployment.yaml
+    set:
+      enabled: true
+      image:
+        tag: "test"
+    asserts:
+      - equal:
+          path: spec.template.spec.securityContext.runAsUser
+          value: 65532
+
+  - it: AC21 — automountServiceAccountToken false
+    template: controller-deployment.yaml
+    set:
+      enabled: true
+      image:
+        tag: "test"
+    asserts:
+      - equal:
+          path: spec.template.spec.automountServiceAccountToken
+          value: false
+
+  # ─── AC15 : participants env var correct ──────────────────────
+  - it: AC15 — EFE_META_SWARM_PARTICIPANTS env var lists every participant
+    template: controller-deployment.yaml
+    set:
+      enabled: true
+      image:
+        tag: "test"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: EFE_META_SWARM_PARTICIPANTS
+          any: true
+
+  # ─── AC16 : manifest mount path ───────────────────────────────
+  - it: AC16 — controller mounts ConfigMap at /etc/efe-meta-swarm
+    template: controller-deployment.yaml
+    set:
+      enabled: true
+      image:
+        tag: "test"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: manifest
+            mountPath: /etc/efe-meta-swarm
+            readOnly: true
+          any: true
+
+  # ─── AC17 : manifest env var path ─────────────────────────────
+  - it: AC17 — EFE_META_SWARM_MANIFEST points at the mounted file
+    template: controller-deployment.yaml
+    set:
+      enabled: true
+      image:
+        tag: "test"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: EFE_META_SWARM_MANIFEST
+            value: /etc/efe-meta-swarm/manifest.yaml
+          any: true
+
+  # ─── AC22 : PDB maxUnavailable: 0 ─────────────────────────────
+  - it: AC22 — PodDisruptionBudget maxUnavailable is 0
+    template: pdb-controller.yaml
+    set:
+      enabled: true
+      image:
+        tag: "test"
+    asserts:
+      - equal:
+          path: spec.maxUnavailable
+          value: 0
+
+  # ─── AD17 : empty image.tag fails fast ────────────────────────
+  - it: AD17 — empty image.tag triggers fail() in helpers
+    template: controller-deployment.yaml
+    set:
+      enabled: true
+    asserts:
+      - failedTemplate:
+          errorMessage: "efe-meta-swarm: .Values.image.tag MUST be set (no :latest policy ; AD17). See README.md / runbook."
+
+  # ─── Service appProtocol grpc (AD19) ──────────────────────────
+  - it: AD19 — Service appProtocol on gRPC port is "grpc"
+    template: controller-service.yaml
+    set:
+      enabled: true
+      image:
+        tag: "test"
+    asserts:
+      - contains:
+          path: spec.ports
+          content:
+            name: grpc
+            appProtocol: grpc
+          any: true

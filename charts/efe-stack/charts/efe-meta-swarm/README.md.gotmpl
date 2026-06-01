@@ -1,0 +1,245 @@
+{{ template "chart.header" . }}
+
+{{ template "chart.deprecationWarning" . }}
+
+{{ template "chart.badgesSection" . }}
+
+{{ template "chart.description" . }}
+
+{{ template "chart.homepageLine" . }}
+
+{{ template "chart.maintainersSection" . }}
+
+{{ template "chart.sourcesSection" . }}
+
+{{ template "chart.requirementsSection" . }}
+
+---
+
+## Overview
+
+This is the production-grade Helm sub-chart for the EFE Phase-2 meta-swarm
+(controller + N participants).  Disabled by default ; set
+`efe-meta-swarm.enabled=true` on the umbrella `efe-stack` chart to bring up
+1 controller + N participants (default = 3 Kovant scenarios).
+
+PR #14 layered on top of PR #13's skeleton :
+  - multi-environment values flavors (`examples/values-{dev,staging,prod,canary}.yaml`)
+  - Helm pre-upgrade snapshot hook + post-upgrade SIGHUP-all hook
+  - PrometheusRule alerts (6 alerts across 3 groups)
+  - Grafana dashboard ConfigMap (sidecar auto-import via `grafana_dashboard: "1"` label)
+  - controller PriorityClass + HPA Phase-2 placeholder (`min=max=1`)
+  - bundle weight-loader sidecar (Phase-2 `pause:3.9` placeholder ; PR #15+ swaps for real binary)
+  - cert-manager TLS bootstrap stubs (Issuer + per-pod Certificate)
+  - per-tenant label propagation + multi-tenant slices
+
+PR #15 added the `helm-meta-swarm-lint` workflow with 14 stages of automated
+correctness checks ; see `docs/EFE_A1_PHASE2_PR15_ARCHITECTURE.md`.
+
+PR #16 — production-grade mutual TLS (rustls, cert-manager, inotify rotation,
+4 TLS metrics + 3 alerts).
+
+PR #17 — 14 operational Prometheus metrics + 5 PrometheusRule alerts +
+cardinality circuit-breaker + PII redaction.  STABILITY_CONTRACT v1.0.
+
+PR #18 — 8 OpenTelemetry span types, W3C trace context propagation,
+OTLP/gRPC exporter, 3 exporter health metrics, 3 PrometheusRule alerts.
+
+PR #19 — 9 Grafana dashboards, 10 PrometheusRule alerts, 6 recording rules,
+4 SLOs, Alertmanager routing CRD with 3-branch fan-out (PagerDuty / Slack /
+Loki audit), 10 operator runbooks.  STABILITY_CONTRACT v1.1 (Dashboard UID /
+Alert name / Recording rule name / SLO target tiers).
+
+---
+
+## PR #19 surface — Grafana dashboards + Prometheus alerts + SLOs
+
+| Surface | Files / template | Default knob |
+|---|---|---|
+| **9 dashboards** (sidecar-discovered) | `files/dashboards/pr19/*.json` → `templates/pr19-dashboards-configmap.yaml` | `dashboard.enabled=true` + `dashboard.pr19.enabled=true` |
+| **10 alerts + 6 recording rules** | `templates/pr19-prometheusrule.yaml` | `alerts.enabled=true` + `alerts.pr19.enabled=true` |
+| **Alertmanager routing** (CRD) | `templates/pr19-alertmanager-routing-configmap.yaml` | `alerts.pr19.alertmanager.enabled=true` |
+
+### Dashboards UIDs (STABILITY_CONTRACT v1.1 — frozen for 6 minor versions)
+
+| UID | Audience | Default range |
+|---|---|---|
+| `efe-msw-overview` | On-call SRE | 6h |
+| `efe-msw-iterate` | Dev, SRE | 1h |
+| `efe-msw-participant` | Dev, SRE | 1h |
+| `efe-msw-reload` | SRE, dev | 24h |
+| `efe-msw-otel` | SRE | 1h |
+| `efe-msw-tls` | SRE, security | 24h |
+| `efe-msw-safety` | SRE, dev, compliance | 24h |
+| `efe-msw-runtime` | SRE | 1h |
+| `efe-msw-traces` | Dev | 15m |
+
+### Alerts (STABILITY_CONTRACT v1.1 — frozen alert names + runbook IDs)
+
+| Alert | Severity | Runbook | SLO |
+|---|---|---|---|
+| `IterateFailureRateHigh`     | critical | [MSW1](../../../../docs/runbooks/RB_PR19_MSW1.md)  | — (symptom) |
+| `IterateLatencyP99Critical`  | critical | [MSW2](../../../../docs/runbooks/RB_PR19_MSW2.md)  | iterate-latency-p95 |
+| `ParticipantDown`            | warning  | [MSW3](../../../../docs/runbooks/RB_PR19_MSW3.md)  | — |
+| `TLSCertExpiringSoon`        | warning  | [MSW4](../../../../docs/runbooks/RB_PR19_MSW4.md)  | — |
+| `ControllerNotServing`       | critical | [MSW5](../../../../docs/runbooks/RB_PR19_MSW5.md)  | — (platform) |
+| `OTelExporterFailing`        | warning  | [MSW6](../../../../docs/runbooks/RB_PR19_MSW6.md)  | otel-drop-rate |
+| `SafetyViolationSpike`       | warning  | [MSW7](../../../../docs/runbooks/RB_PR19_MSW7.md)  | — |
+| `ManifestReloadFailureSpike` | warning  | [MSW8](../../../../docs/runbooks/RB_PR19_MSW8.md)  | manifest-reload-latency |
+| `SLOBudgetBurnFast14x`       | critical | [MSW9](../../../../docs/runbooks/RB_PR19_MSW9.md)  | iterate-availability |
+| `SLOBudgetBurnSlow6x`        | warning  | [MSW10](../../../../docs/runbooks/RB_PR19_MSW10.md) | iterate-availability |
+
+### SLOs (STABILITY_CONTRACT v1.1 — relaxing a target is a contract break)
+
+| SLO id | Default target | Operator override |
+|---|---|---|
+| `iterate-availability`         | 99.9 %    | `alerts.pr19.slo.iterateAvailabilityTarget` |
+| `iterate-latency-p95`          | ≤ 1.0 s   | `alerts.pr19.slo.iterateLatencyP95Target` |
+| `manifest-reload-latency-p95`  | ≤ 0.5 s   | `alerts.pr19.slo.manifestReloadP95Target` |
+| `otel-drop-rate`               | ≤ 1.0 %   | `alerts.pr19.slo.otelDropRateTarget` |
+
+### Enabling the PR #19 surface
+
+```bash
+helm upgrade efe-meta-swarm ./charts/efe-stack/charts/efe-meta-swarm \
+    --set enabled=true \
+    --set alerts.enabled=true \
+    --set alerts.pr19.enabled=true \
+    --set alerts.pr19.alertmanager.enabled=true \
+    --set dashboard.enabled=true \
+    --set dashboard.pr19.enabled=true \
+    --set image.tag=0.6.1
+```
+
+Or in `values.yaml` (recommended for prod) :
+
+```yaml
+alerts:
+  enabled: true
+  pr19:
+    enabled: true
+    slo:
+      iterateAvailabilityTarget: 0.999    # 99.9 %
+      iterateLatencyP95Target:   1.0      # seconds
+      manifestReloadP95Target:   0.5      # seconds
+      otelDropRateTarget:        0.01     # 1 %
+    alertmanager:
+      enabled: true
+      mode: alertmanagerconfig
+      pagerduty: { secretName: alertmanager-pagerduty-meta-swarm, routingKeyKey: routing-key }
+      slack:     { secretName: alertmanager-slack-meta-swarm, urlKey: webhook-url, channel: "#meta-swarm-alerts" }
+      audit:     { lokiUrl: "http://loki-gateway.monitoring.svc:3100/audit/alerts" }
+dashboard:
+  enabled: true
+  pr19:
+    enabled: true
+    datasources:
+      prometheusUid: prometheus
+      tempoUid:      tempo-efe
+```
+
+### Selective rollout
+
+Each surface is independently togglable :
+
+```bash
+# Dashboards only (no alerts)
+helm upgrade ... --set dashboard.pr19.enabled=true --set alerts.pr19.enabled=false
+
+# Alerts only (no dashboards)
+helm upgrade ... --set alerts.pr19.enabled=true --set dashboard.pr19.enabled=false
+
+# Disable just the SLO burn alerts (keep cause/symptom alerts)
+helm upgrade ... --set alerts.pr19.enabled=true \
+    --set alerts.pr19.slo.iterateAvailabilityTarget=0.0  # disables burn math
+```
+
+### External dependencies
+
+- Prometheus must enable exemplar storage for D2 P8 / D3 P5 click-to-trace
+  to work (cluster-side : `--enable-feature=exemplar-storage` on the
+  Prometheus binary, default in kube-prometheus-stack 0.55+).
+- A Tempo datasource must exist in Grafana with UID `tempo-efe` (override
+  via `dashboard.pr19.datasources.tempoUid` if your cluster uses a
+  different UID).
+- A PagerDuty + Slack Secret must pre-exist in the cluster Alertmanager
+  namespace (see `alerts.pr19.alertmanager.{pagerduty,slack}.secretName`).
+
+---
+
+## Quick start
+
+```bash
+# 1. Disabled-by-default render (zero K8s objects) :
+helm template tst ./charts/efe-stack/charts/efe-meta-swarm
+
+# 2. Default 3-participant Kovant scenario :
+helm install tst ./charts/efe-stack/charts/efe-meta-swarm \
+    --namespace efe --create-namespace \
+    --set enabled=true \
+    --set image.tag=0.3.0
+
+# 3. Production overlay (PriorityClass + alerts + dashboard + hooks + NetworkPolicy) :
+helm install tst ./charts/efe-stack/charts/efe-meta-swarm \
+    --namespace efe --create-namespace \
+    -f ./charts/efe-stack/charts/efe-meta-swarm/examples/values-prod.yaml \
+    --set image.tag=0.3.0
+```
+
+## SIGHUP-driven reload (PR #12)
+
+```bash
+# Edit manifest, then rerun helm upgrade.  The post-upgrade hook
+# delivers SIGHUP automatically (if hooks.enabled : true).
+helm upgrade tst ./charts/efe-stack/charts/efe-meta-swarm \
+    -f my-values.yaml
+```
+
+If you need to trigger SIGHUP manually (operator runbook §41 of PR #13) :
+
+```bash
+kubectl -n efe exec deploy/tst-efe-meta-swarm-controller -- kill -HUP 1
+for p in supplier-scoring contract-risk spend-categorization ; do
+    kubectl -n efe exec "deploy/tst-efe-meta-swarm-participant-${p}" -- kill -HUP 1
+done
+```
+
+---
+
+{{ template "chart.valuesHeader" . }}
+
+{{ template "chart.valuesTable" . }}
+
+---
+
+## Architecture references
+
+| PR | Doc | Scope |
+|---|---|---|
+| #11 | `docs/EFE_A1_PHASE2_PR11_ARCHITECTURE.md` | efe-server flag plumbing |
+| #12 | `docs/EFE_A1_PHASE2_PR12_ARCHITECTURE.md` | SIGHUP + ReloadConfig semantics |
+| #13 | `docs/EFE_A1_PHASE2_PR13_ARCHITECTURE.md` | Initial sub-chart skeleton |
+| #14 | `docs/EFE_A1_PHASE2_PR14_ARCHITECTURE.md` | Production-grade Helm values + templates |
+| #15 | `docs/EFE_A1_PHASE2_PR15_ARCHITECTURE.md` | `helm-meta-swarm-lint` CI workflow |
+| #16 | `docs/EFE_A1_PHASE2_PR16_ARCHITECTURE.md` | Mutual TLS + cert-manager + rustls |
+| #17 | `docs/EFE_A1_PHASE2_PR17_ARCHITECTURE.md` | 14 Prometheus metrics + STABILITY_CONTRACT v1.0 |
+| #18 | `docs/EFE_A1_PHASE2_PR18_ARCHITECTURE.md` | 8 OTel span types + W3C trace context + OTLP exporter |
+| #19 | `docs/EFE_A1_PHASE2_PR19_ARCHITECTURE.md` | 9 dashboards + 10 alerts + 4 SLOs + STABILITY_CONTRACT v1.1 |
+
+## Local-dev tooling
+
+```bash
+# Regenerate this README from values.yaml + Chart.yaml :
+make helm-docs
+
+# Run the full PR #15 lint suite locally (mirrors CI Job 02-12) :
+pre-commit run --all-files
+helm lint charts/efe-stack/charts/efe-meta-swarm --strict
+helm template tst charts/efe-stack/charts/efe-meta-swarm | \
+    conftest test --policy policies/rego/efe --data policies/rego/efe/data -
+
+# Run the helm-unittest assertions (93 across 11 suites) :
+helm unittest charts/efe-stack/charts/efe-meta-swarm --strict
+```
+
+{{ template "helm-docs.versionFooter" . }}

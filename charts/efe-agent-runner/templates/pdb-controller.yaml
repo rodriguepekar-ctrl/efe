@@ -1,0 +1,22 @@
+{{- if and .Values.admissionWebhook.enabled (gt (int .Values.controller.replicas) 1) }}
+# D93 — PodDisruptionBudget for the controller deployment.
+# With `failurePolicy: Fail` on the admission webhook AND a multi-
+# replica deployment, voluntary disruptions (node drain, cluster
+# autoscale, version rollouts) could evict ALL controllers
+# simultaneously → admission would fail-closed → cluster-wide
+# AgentRun CR creation freeze. PDB enforces ≥ 1 controller always up.
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "efe-agent-runner.fullname" . }}-controller
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "efe-agent-runner.labels" . | nindent 4 }}
+    app.kubernetes.io/component: controller
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      {{- include "efe-agent-runner.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: controller
+{{- end }}

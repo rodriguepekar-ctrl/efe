@@ -1,0 +1,131 @@
+# efe-server sub-chart values.
+# These are merged with the umbrella values (under key `efe-server`).
+
+enabled: true
+replicas: 3
+
+image:
+  repository: efe-server
+  tag: ""
+  pullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP
+  grpcPort: 50051
+  metricsPort: 9090
+  healthPort: 8081
+  # D93 — M26 agent REST gateway. Opt-in via `agentRestGateway.enabled`.
+  # Port chosen distinct from `healthPort` (8081) to avoid a bind collision
+  # inside the pod. See ADR-D93-003.
+  agentRestPort: 8088
+
+# D93 — M26 REST gateway (/v1/agent/*). Default OFF for backward compat ;
+# enable per-cluster once `efe-agent-runner` chart is also installed and
+# the tenant_feature schema has been migrated through 0017–0020.
+#
+# When enabled, the efe-server pod runs an additional axum listener
+# alongside the gRPC server (in-process AgentRuntimeService via the
+# PgTenantFlagsProvider). The Service exposes the listener as the
+# `agent-rest` port ; the Deployment adds the `EFE_AGENT_REST_*` env
+# vars and the container port.
+#
+# DSN : reuses the same `EFE_DATABASE_URL` Secret (the agent_run /
+# tenant_feature / agent_audit tables live in the same operational DB).
+# Override `databaseUrlEnv` if you keep them in a separate cluster.
+agentRestGateway:
+  enabled: false
+  databaseUrlEnv: EFE_DATABASE_URL   # name of the env var to forward as EFE_AGENT_RUNTIME_DATABASE_URL
+
+# M27 Commercial Edge bootstrap inside efe-server pods.
+# When `enabled: true`, the pod reads Redis cache + DbContext config at
+# boot, registers Prometheus metrics, and the deployment exposes the
+# backpressure + tenant_quota middleware tunables via env. The Tower
+# layers themselves are applied in the operator binary's main.rs (see
+# `bootstrap_m27_edge` in `crates/efe-server/src/main.rs`).
+m27Edge:
+  enabled: false
+  redis:
+    # Override only if pointing to an external Redis. If empty, the env
+    # var `EFE_REDIS_URL` falls through to the value set by the efe-edge
+    # sub-chart Service DNS.
+    urlOverride: ""
+  hmacKeySecret:
+    # 32+ random bytes. Production : created out-of-band by SRE.
+    name: efe-cache-hmac-key
+    key: key
+  # If your PG has a read-replica with a distinct DSN, point here.
+  # Leave null to disable RO routing (efe-server uses RW for everything).
+  databaseRoUrlSecret:
+    name: efe-pg-replica-dsn
+    key: dsn
+  backpressure:
+    enabled: true
+    maxInflight: 1000
+    p99BudgetMs: 500
+    p99WindowS: 30
+    shedPercent: 10
+  tenantQuota:
+    enabled: true
+    cacheTtlS: 30
+  # Runtime toggle — set to true during high replica lag incidents
+  # (see RB_M27_REPLICA_LAG). Picked up by efe-server within 30s.
+  fallbackRoToRw: false
+
+resources:
+  requests:
+    cpu: 500m
+    memory: 1Gi
+  limits:
+    cpu: 2
+    memory: 4Gi
+
+autoscaling:
+  enabled: true
+  minReplicas: 3
+  maxReplicas: 12
+  targetCPUUtilizationPercentage: 70
+  targetClassifyRPS: 200
+
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 2
+
+topologySpreadConstraints:
+  enabled: true
+  topologyKey: topology.kubernetes.io/zone
+
+networkPolicy:
+  enabled: true
+
+byok:
+  backend: env
+  awsKmsKeyId: ""
+
+serviceAccount:
+  create: true
+  annotations: {}
+
+envOverrides: []
+
+auditHmacSecretRef:
+  name: efe-audit-hmac
+  key: seed
+
+features:
+  m20HelperToolsEnabled: false
+  m21Mode2Enabled: false
+  m22Mode3Enabled: false
+  d8AdminEnabled: false
+
+# Reference to umbrella global (re-injected by helm template via parent merge).
+global:
+  imageRegistry: ghcr.io/efe-ai
+  imagePullSecrets: []
+  domain: efe.example.com
+  tenant: ""
+  environment: prod
+  externalPostgres:
+    enabled: false
+    secretRef:
+      name: efe-postgres-external
+      key: connection_string

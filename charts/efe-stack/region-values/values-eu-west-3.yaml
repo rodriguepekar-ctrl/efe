@@ -1,0 +1,66 @@
+# M30 — eu-west-3 (Paris) — PASSIVE region overlay.
+#
+# Same workloads as eu-west-1, but :
+#   - role = passive (no write traffic)
+#   - PG is a cross-region read replica (managed by AWS RDS)
+#   - NATS is a JetStream mirror
+#   - Cloudflare Geosteer routes 0 % unless eu-west-1 is degraded.
+#
+# Apply with :
+#   helm upgrade --install efe ./charts/efe-stack \
+#     -f charts/efe-stack/values.yaml \
+#     -f charts/efe-stack/region-values/values-eu-west-3.yaml \
+#     -n efe-system
+
+global:
+  region:
+    name: eu-west-3
+    role: passive
+    peerBaseUrls:
+      eu-west-1: "https://efe-eu-west-1.efe.internal"
+  cloudProvider: aws
+  imagePullPolicy: IfNotPresent
+
+efe-server:
+  enabled: true
+  env:
+    EFE_REGION: eu-west-3
+    EFE_REGION_ROLE: passive
+    EFE_REGION_PEER_BASE_URLS: "eu-west-1=https://efe-eu-west-1.efe.internal"
+    EFE_PG_ENDPOINT: "efe-pg-replica.eu-west-3.rds.amazonaws.com:5432"
+    EFE_REDIS_ENDPOINT: "efe-redis.eu-west-3.amazonaws.com:6379"
+    EFE_NATS_ENDPOINT: "efe-nats.efe-system.svc.cluster.local:4222"
+    EFE_TRITON_BASE_URL: "http://efe-triton.efe-system.svc.cluster.local:8000"
+    EFE_AWS_KMS_KEY_ID: "alias/efe-audit-key-multi-region"
+    # Passive read-only flag : write-RPC handlers refuse with 503 and a
+    # `Retry-Region: eu-west-1` header so smart SDKs can transparently
+    # re-route. Cloudflare Geosteer normally prevents writes from
+    # reaching here at all.
+    EFE_READ_ONLY: "true"
+  replicas: 2
+
+efe-triton:
+  enabled: true
+  triton:
+    replicas: 1   # Cold-start optimization : 1 replica until promoted
+
+efe-pii:
+  enabled: true
+
+efe-nats:
+  enabled: true
+  mode: mirror   # Read-only mirror of eu-west-1 stream
+
+efe-edge:
+  enabled: true
+  cloudflared:
+    enabled: true
+    tunnelToken:
+      secretName: efe-cloudflared-token-eu-west-3
+
+redis-stack:
+  enabled: true
+  region: eu-west-3
+
+postgres-operator:
+  enabled: false   # AWS RDS cross-region read replica managed externally

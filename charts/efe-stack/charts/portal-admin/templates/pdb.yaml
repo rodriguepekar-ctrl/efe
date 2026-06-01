@@ -1,0 +1,21 @@
+{{- /*
+Round-5 DT-OPS-20 fix : portal-admin runs `replicas: 3` by default but
+had no PodDisruptionBudget. A `kubectl drain` (node upgrade, cluster
+maintenance) could evict all three pods simultaneously and break the
+admin surface during the window. `minAvailable: 1` keeps at least one
+pod serving during voluntary disruptions ; can be raised to 2 in
+production via the chart values.
+*/ -}}
+{{- if and .Values.enabled .Values.podDisruptionBudget.enabled }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "portal-admin.fullname" . }}
+  labels:
+    {{- include "portal-admin.labels" . | nindent 4 }}
+spec:
+  minAvailable: {{ .Values.podDisruptionBudget.minAvailable | default 1 }}
+  selector:
+    matchLabels:
+      {{- include "portal-admin.selectorLabels" . | nindent 6 }}
+{{- end }}

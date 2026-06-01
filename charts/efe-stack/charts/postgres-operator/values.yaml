@@ -1,0 +1,42 @@
+enabled: true
+
+cluster:
+  enabled: true
+  name: efe-postgres
+  postgresVersion: 16
+  instances:
+    - name: instance1
+      replicas: 3
+      dataVolumeClaimSpec:
+        accessModes: [ReadWriteOnce]
+        resources:
+          requests:
+            storage: 100Gi
+        storageClassName: ""
+      resources:
+        requests:
+          cpu: 500m
+          memory: 2Gi
+        limits:
+          cpu: 4
+          memory: 16Gi
+
+backup:
+  pgbackrest:
+    repos:
+      - name: repo1
+        s3:
+          bucket: ""
+          endpoint: s3.amazonaws.com
+          region: ""
+        schedules:
+          full: "0 1 * * 0"
+          differential: "0 1 * * 1-6"
+          incremental: "0 */4 * * *"
+
+monitoring:
+  enabled: true
+
+global:
+  storageClass: gp3
+  imageRegistry: registry.developers.crunchydata.com/crunchydata

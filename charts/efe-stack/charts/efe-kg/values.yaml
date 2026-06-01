@@ -1,0 +1,47 @@
+enabled: false
+
+# NER extractor sidecar.
+nerExtractor:
+  replicas: 2
+  image:
+    repository: efe-ai/efe-ner-extractor
+    tag: "2.8.0"
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    port: 8080
+  resources:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+    limits:
+      cpu: 2
+      memory: 4Gi
+  # Languages to load.
+  languages: ["en", "fr"]
+  # NER model name (fine-tuned bert-base-cased multilingual variant
+  # available in the model bundle).
+  modelName: "efe-ner-bert-multilingual"
+
+# Snapshot CronJob — serializes the per-tenant graphs to S3.
+snapshotCron:
+  enabled: true
+  schedule: "30 */6 * * *"
+  image:
+    repository: efe-ai/efe-kg-snapshotter
+    tag: "2.8.0"
+
+# S3 bucket.
+snapshotBucket:
+  name: efe-kg-snapshots
+  region: eu-west-1
+  prefix: kg
+
+networkPolicy:
+  enabled: true
+  upstreamNamespace: efe-system
+  prometheusNamespace: monitoring
+
+serviceMonitor:
+  enabled: true
+  interval: 30s

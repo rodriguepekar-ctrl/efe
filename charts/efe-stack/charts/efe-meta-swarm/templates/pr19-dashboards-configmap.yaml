@@ -1,0 +1,63 @@
+{{- /*
+PR #19 § 34 — dashboard ConfigMap fan-out.
+
+Renders ONE ConfigMap PER dashboard under
+`files/dashboards/pr19/*.json`, each carrying the
+`grafana_dashboard=1` label so the cluster Grafana sidecar
+auto-imports them.  Distinct ConfigMaps (vs one mega-ConfigMap)
+because :
+  - K8s caps a single ConfigMap at 1 MiB ; our 9 dashboards
+    aggregated come in at ~ 280 KiB ; safe but tight.
+  - Sidecar polling reloads the whole map on edit — fan-out
+    means a one-panel tweak to D3 doesn't churn the other 8.
+  - Annotations such as `grafana_folder: efe-meta-swarm`
+    propagate per-ConfigMap.
+
+Rendering gate :
+  `.Values.enabled`                     — sub-chart on
+  `.Values.dashboard.enabled`           — main dashboard knob (legacy)
+  `.Values.dashboard.pr19.enabled`      — PR #19 dashboard pack (default true)
+
+Operators may disable the PR #19 pack alone via
+`.Values.dashboard.pr19.enabled=false` without affecting the
+existing PR #14/PR #17 dashboard.
+
+Files iterated  : `{{ .Files.Glob "files/dashboards/pr19/*.json" }}`
+Datasource UIDs : injected at render time via `tpl` (AD23/AD24).
+*/ -}}
+{{- if and .Values.enabled .Values.dashboard.enabled .Values.dashboard.pr19.enabled }}
+{{- $promUid    := .Values.dashboard.pr19.datasources.prometheusUid | default "prometheus" -}}
+{{- $tempoUid   := .Values.dashboard.pr19.datasources.tempoUid       | default "tempo-efe"  -}}
+{{- $runbookUrl := .Values.alerts.runbookBaseUrl                     | default "https://docs.efe.internal/runbooks" -}}
+{{- range $path, $_ := .Files.Glob "files/dashboards/pr19/*.json" }}
+{{- $base := trimSuffix ".json" (base $path) }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "efe-meta-swarm.fullname" $ }}-dash-{{ $base }}
+  labels:
+    {{- include "efe-meta-swarm.labels" $ | nindent 4 }}
+    # AD4 — sidecar auto-discovery marker
+    grafana_dashboard: "1"
+    # AD37 — PR-tagged for filtering / cleanup
+    efe.pr: "19"
+    efe.dashboard.uid: {{ $base | quote }}
+  annotations:
+    # AD30 — folder hint for the Grafana sidecar
+    grafana_folder: "efe-meta-swarm"
+    # AD7 — stability tier for external consumers
+    efe.stability_contract.tier: "Dashboard UID"
+    efe.stability_contract.version: "1.1"
+data:
+  {{ $base }}.json: |
+{{ tpl ($.Files.Get $path) (dict
+      "Values"   $.Values
+      "Release"  $.Release
+      "Chart"    $.Chart
+      "promUid"  $promUid
+      "tempoUid" $tempoUid
+      "runbook_base" $runbookUrl
+    ) | indent 4 }}
+{{- end }}
+{{- end }}

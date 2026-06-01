@@ -1,0 +1,20 @@
+apiVersion: v2
+name: efe-kg
+description: |
+  M33 — Knowledge Graph + GraphRAG. Hosts :
+    - NER extractor sidecar (Python + transformers, fine-tuned
+      for EN + FR on 6 entity kinds)
+    - kg-snapshot CronJob (every 6h)
+    - kg-replay Job (one-shot on pod restart)
+  Cf. `docs/EFE_M33_KNOWLEDGE_GRAPH_GRAPHRAG_ARCHITECTURE.md`.
+type: application
+version: 0.1.0
+appVersion: "2.8.0"
+keywords:
+  - efe
+  - knowledge-graph
+  - graphrag
+  - ner
+maintainers:
+  - name: EFE Engineering
+    email: eng@efe.ai

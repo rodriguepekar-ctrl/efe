@@ -1,0 +1,81 @@
+# PR #13 — helm-unittest assertions for the manifest ConfigMap.
+#
+# Picked up automatically by `charts/efe-stack/.github/workflows/helm-stack-test.yml`
+# (the umbrella CI's `helm unittest` loop over every sub-chart's
+# `tests/` directory).  These tests are complementary to the
+# golden-snapshot diff in `helm-meta-swarm.yml`.
+#
+# Cf. `docs/EFE_A1_PHASE2_PR13_ARCHITECTURE.md` § 26 + § 35.
+suite: efe-meta-swarm configmap-manifest
+
+templates:
+  - configmap-manifest.yaml
+
+tests:
+  - it: should render zero resources when disabled
+    set:
+      enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should render exactly one ConfigMap when enabled
+    set:
+      enabled: true
+      image:
+        tag: "test"
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: ConfigMap
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-efe-meta-swarm-manifest
+
+  - it: should embed the manifest schema version label
+    set:
+      enabled: true
+      image:
+        tag: "test"
+    asserts:
+      - equal:
+          path: metadata.annotations["efe.io/manifest-schema-version"]
+          value: v0.2.0
+
+  - it: should embed every participant id in the rendered manifest.yaml
+    set:
+      enabled: true
+      image:
+        tag: "test"
+    asserts:
+      - matchRegex:
+          path: data["manifest.yaml"]
+          pattern: "id: supplier-scoring"
+      - matchRegex:
+          path: data["manifest.yaml"]
+          pattern: "id: contract-risk"
+      - matchRegex:
+          path: data["manifest.yaml"]
+          pattern: "id: spend-categorization"
+
+  - it: should respect a custom iteration block override
+    set:
+      enabled: true
+      image:
+        tag: "test"
+      manifest:
+        iteration:
+          max_iters: 200
+          tolerance: 1.0e-6
+          alpha_default: 0.7
+          coupling_gamma: 0.25
+          deterministic: true
+          max_wall_ms: 25000
+    asserts:
+      - matchRegex:
+          path: data["manifest.yaml"]
+          pattern: "max_iters:      200"
+      - matchRegex:
+          path: data["manifest.yaml"]
+          pattern: "alpha_default:  0.7"

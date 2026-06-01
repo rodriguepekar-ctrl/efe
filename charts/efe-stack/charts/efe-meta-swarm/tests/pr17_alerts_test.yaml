@@ -1,0 +1,149 @@
+# PR #17 § 20 — helm-unittest assertions for the 5 new operational alerts.
+#
+# Covers :
+#   AC23 — All 5 alerts render when `alerts.enabled+meta-swarm.enabled`.
+#   AC29 / AC30 — Schema rejects invalid thresholds.
+#
+suite: efe-meta-swarm PR #17 PrometheusRule alerts
+
+templates:
+  - pr17-prometheusrule.yaml
+
+tests:
+  - it: PrometheusRule NOT rendered when alerts.enabled=false
+    set:
+      enabled: true
+      image:
+        tag: "test"
+      alerts:
+        enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: PrometheusRule NOT rendered when sub-chart enabled=false
+    set:
+      enabled: false
+      image:
+        tag: "test"
+      alerts:
+        enabled: true
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: AC23 — 5 alerts render with default thresholds
+    set:
+      enabled: true
+      image:
+        tag: "test"
+      alerts:
+        enabled: true
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: PrometheusRule
+      - equal:
+          path: apiVersion
+          value: monitoring.coreos.com/v1
+      - lengthEqual:
+          path: spec.groups[0].rules
+          count: 5
+      - equal:
+          path: spec.groups[0].rules[0].alert
+          value: MetaSwarmIterateDurationP99High
+      - equal:
+          path: spec.groups[0].rules[1].alert
+          value: MetaSwarmIterateErrorRateHigh
+      - equal:
+          path: spec.groups[0].rules[2].alert
+          value: MetaSwarmStepErrorRateHigh
+      - equal:
+          path: spec.groups[0].rules[3].alert
+          value: MetaSwarmParticipantDown
+      - equal:
+          path: spec.groups[0].rules[4].alert
+          value: MetaSwarmSafetyViolationsSpike
+
+  - it: Severity labels match architecture (warn/critical/warn/critical/warn)
+    set:
+      enabled: true
+      image:
+        tag: "test"
+      alerts:
+        enabled: true
+    asserts:
+      - equal:
+          path: spec.groups[0].rules[0].labels.severity
+          value: warning
+      - equal:
+          path: spec.groups[0].rules[1].labels.severity
+          value: critical
+      - equal:
+          path: spec.groups[0].rules[2].labels.severity
+          value: warning
+      - equal:
+          path: spec.groups[0].rules[3].labels.severity
+          value: critical
+      - equal:
+          path: spec.groups[0].rules[4].labels.severity
+          value: warning
+
+  - it: Configured iterateP99HighSeconds threshold appears in PromQL
+    set:
+      enabled: true
+      image:
+        tag: "test"
+      alerts:
+        enabled: true
+        thresholds:
+          iterateP99HighSeconds: 2.5
+    asserts:
+      - matchRegex:
+          path: spec.groups[0].rules[0].expr
+          pattern: "> 2.5"
+
+  - it: Configured iterateErrorRatePct threshold appears in PromQL
+    set:
+      enabled: true
+      image:
+        tag: "test"
+      alerts:
+        enabled: true
+        thresholds:
+          iterateErrorRatePct: 0.5
+    asserts:
+      - matchRegex:
+          path: spec.groups[0].rules[1].expr
+          pattern: "> 0.5 / 100"
+
+  - it: Configured safetyViolationRatePerS threshold appears in PromQL
+    set:
+      enabled: true
+      image:
+        tag: "test"
+      alerts:
+        enabled: true
+        thresholds:
+          safetyViolationRatePerS: 0.1
+    asserts:
+      - matchRegex:
+          path: spec.groups[0].rules[4].expr
+          pattern: "> 0.1"
+
+  - it: Every alert has a non-empty runbook_url annotation
+    set:
+      enabled: true
+      image:
+        tag: "test"
+      alerts:
+        enabled: true
+        runbookBaseUrl: "https://runbooks.example.com/meta-swarm"
+    asserts:
+      - matchRegex:
+          path: spec.groups[0].rules[0].annotations.runbook_url
+          pattern: "^https://"
+      - matchRegex:
+          path: spec.groups[0].rules[3].annotations.runbook_url
+          pattern: "participant-down"

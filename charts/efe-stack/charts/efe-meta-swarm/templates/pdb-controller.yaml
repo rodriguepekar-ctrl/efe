@@ -1,0 +1,16 @@
+{{- if and .Values.enabled .Values.controller.podDisruptionBudget.enabled }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  # PR #14 audit pass — trunc-safe helper.
+  name: {{ include "efe-meta-swarm.controllerPdbName" . }}
+  labels:
+    {{- include "efe-meta-swarm.labels" . | nindent 4 }}
+    app.kubernetes.io/component: controller
+spec:
+  maxUnavailable: {{ .Values.controller.podDisruptionBudget.maxUnavailable }}
+  selector:
+    matchLabels:
+      {{- include "efe-meta-swarm.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: controller
+{{- end }}

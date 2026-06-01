@@ -1,0 +1,82 @@
+# efe-meta-swarm — DEV flavor (local laptop K8s).
+# Optimised for fast iteration ; observability + hardening relaxed.
+# Cf. `docs/EFE_A1_PHASE2_PR14_ARCHITECTURE.md` § 7.1.
+
+enabled: true
+
+image:
+  tag: "0.3.0-snapshot"
+  pullPolicy: Always              # local rebuilds need pulls
+
+manifest:
+  meta:
+    dim: 8                        # smaller for fast convergence
+    safety:
+      kind: box
+      radius: 100.0
+  iteration:
+    max_iters: 50                 # fast convergence in dev
+    tolerance: 1.0e-3             # looser for speed
+    alpha_default: 0.5
+    coupling_gamma: 0.2
+    deterministic: true
+    max_wall_ms: 5000
+
+controller:
+  config:
+    reflectionEnabled: true       # `grpcurl list` works
+    maxInflight: 5
+  resources:
+    requests: {cpu: 100m, memory: 128Mi}
+    limits:   {cpu: 500m, memory: 512Mi}
+
+participants:
+  - id: supplier-scoring
+    dim: 4
+    kappa: 0.6
+    seed: 11
+    service: {grpcPort: 50091, metricsPort: 9101}
+    resources:
+      requests: {cpu: 50m, memory: 64Mi}
+      limits:   {cpu: 200m, memory: 256Mi}
+  - id: contract-risk
+    dim: 4
+    kappa: 0.7
+    seed: 22
+    service: {grpcPort: 50092, metricsPort: 9102}
+    resources:
+      requests: {cpu: 50m, memory: 64Mi}
+      limits:   {cpu: 200m, memory: 256Mi}
+  - id: spend-categorization
+    dim: 4
+    kappa: 0.5
+    seed: 33
+    service: {grpcPort: 50093, metricsPort: 9103}
+    resources:
+      requests: {cpu: 50m, memory: 64Mi}
+      limits:   {cpu: 200m, memory: 256Mi}
+
+networkPolicy:
+  enabled: false                  # most dev clusters lack policy CNI
+
+metrics:
+  serviceMonitor:
+    enabled: false                # likely no prometheus-operator
+
+alerts:
+  enabled: false
+dashboard:
+  enabled: false
+
+hooks:
+  enabled: false                  # manual SIGHUP is the dev workflow
+
+bundle:
+  sidecar:
+    enabled: false
+
+tls:
+  enabled: false
+
+priorityClass:
+  enabled: false

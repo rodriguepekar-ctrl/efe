@@ -1,0 +1,44 @@
+{{- /*
+PR #20 § 24.1 — Kubernetes RBAC.  Namespace-scoped Role only (AD14).
+Loadgen never needs cluster-wide read or any write verbs.
+*/ -}}
+{{- if and .Values.enabled .Values.rbac.create }}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ include "efe-loadgen.serviceAccountName" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "efe-loadgen.labels" . | nindent 4 }}
+  annotations:
+    {{- toYaml (default (dict) .Values.serviceAccount.annotations) | nindent 4 }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "efe-loadgen.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "efe-loadgen.labels" . | nindent 4 }}
+rules:
+  # T79 mitigation : minimum-privilege.  No ClusterRole, no write verbs.
+  - apiGroups: [""]
+    resources: ["services", "endpoints"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "efe-loadgen.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "efe-loadgen.labels" . | nindent 4 }}
+roleRef:
+  kind: Role
+  name: {{ include "efe-loadgen.fullname" . }}
+  apiGroup: rbac.authorization.k8s.io
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "efe-loadgen.serviceAccountName" . }}
+    namespace: {{ .Release.Namespace }}
+{{- end }}

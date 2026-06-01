@@ -1,0 +1,160 @@
+{{- if and .Values.enabled .Values.redis.enabled }}
+# Redis Cluster : 6-node statefulset (3 master + 3 replica). The cluster
+# initialization (cluster meet + slot assignment) is done by an init
+# Job on first install (out of scope for this template — see
+# scripts/m27/redis-cluster-init.sh in the architecture annexes).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "efe-edge.fullname" . }}-redis
+  labels:
+    {{- include "efe-edge.labels" . | nindent 4 }}
+data:
+  redis.conf: |
+    # M27 Redis Cluster config.
+    bind 0.0.0.0
+    protected-mode no
+    port 6379
+    cluster-enabled {{ .Values.redis.config.clusterEnabled | quote }}
+    cluster-config-file /data/nodes.conf
+    cluster-node-timeout {{ .Values.redis.config.clusterNodeTimeout }}
+    cluster-require-full-coverage yes
+    maxmemory {{ .Values.redis.config.maxmemory | quote }}
+    maxmemory-policy {{ .Values.redis.config.maxmemoryPolicy }}
+    appendonly {{ .Values.redis.config.appendonly | quote }}
+    appendfsync {{ .Values.redis.config.appendfsync }}
+    save 900 1
+    save 300 10
+    save 60 10000
+    requirepass ${REDIS_PASSWORD}
+    masterauth ${REDIS_PASSWORD}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "efe-edge.fullname" . }}-redis
+  labels:
+    {{- include "efe-edge.labels" . | nindent 4 }}
+spec:
+  clusterIP: None         # headless — DNS round-robins to each node
+  ports:
+    - name: tcp-client
+      port: 6379
+      targetPort: 6379
+    - name: tcp-gossip
+      port: 16379
+      targetPort: 16379
+  selector:
+    {{- include "efe-edge.redis.selectorLabels" . | nindent 4 }}
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "efe-edge.fullname" . }}-redis
+  labels:
+    {{- include "efe-edge.labels" . | nindent 4 }}
+spec:
+  serviceName: {{ include "efe-edge.fullname" . }}-redis
+  replicas: {{ .Values.redis.replicas }}
+  selector:
+    matchLabels:
+      {{- include "efe-edge.redis.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "efe-edge.redis.selectorLabels" . | nindent 8 }}
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/redis-cluster.yaml") . | sha256sum }}
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999
+        runAsGroup: 999
+        fsGroup: 999
+        seccompProfile:
+          type: RuntimeDefault
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    {{- include "efe-edge.redis.selectorLabels" . | nindent 20 }}
+                topologyKey: topology.kubernetes.io/zone
+      containers:
+        - name: redis
+          image: "{{ .Values.redis.image.repository }}:{{ .Values.redis.image.tag }}"
+          imagePullPolicy: {{ .Values.redis.image.pullPolicy }}
+          command:
+            - /bin/sh
+            - -c
+            - |
+              set -e
+              envsubst < /etc/redis-config/redis.conf > /tmp/redis.conf
+              exec redis-server /tmp/redis.conf
+          env:
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.redis.auth.passwordSecret }}
+                  key: {{ .Values.redis.auth.passwordKey }}
+          ports:
+            - name: client
+              containerPort: 6379
+              protocol: TCP
+            - name: gossip
+              containerPort: 16379
+              protocol: TCP
+          livenessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - "redis-cli -a ${REDIS_PASSWORD} ping"
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 5
+          readinessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - "redis-cli -a ${REDIS_PASSWORD} ping"
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 2
+            failureThreshold: 3
+          resources:
+            {{- toYaml .Values.redis.resources | nindent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false  # AOF needs writable /data
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: config
+              mountPath: /etc/redis-config
+              readOnly: true
+            - name: data
+              mountPath: /data
+      volumes:
+        - name: config
+          configMap:
+            name: {{ include "efe-edge.fullname" . }}-redis
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+        labels:
+          {{- include "efe-edge.labels" . | nindent 10 }}
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        {{- if .Values.redis.persistence.storageClass }}
+        storageClassName: {{ .Values.redis.persistence.storageClass }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.redis.persistence.size }}
+{{- end }}

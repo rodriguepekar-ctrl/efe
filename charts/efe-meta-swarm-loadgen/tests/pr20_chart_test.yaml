@@ -1,0 +1,259 @@
+# PR #20 helm-unittest — verify the loadgen chart renders correctly
+# under various value combinations.
+#
+# Covered :
+#   * Master `enabled=false` ⇒ zero documents (AC32).
+#   * Default enabled=true ⇒ Job + RBAC + Service + ServiceMonitor + NetworkPolicy.
+#   * `tls.enabled=true` ⇒ TLS volume mount + CLI args present.
+#   * `mode=production` ⇒ `--confirm-prod` injected (AC10).
+#   * RBAC is namespace-scoped (Role only, no ClusterRole — AC18).
+#   * PodSecurityContext per AD35 (AC19).
+#   * NetworkPolicy egress restricted to controllers + collector (AC20).
+#   * Profile inline ConfigMap emitted only when `profile.inline` set.
+suite: efe-meta-swarm-loadgen chart
+
+templates:
+  - job.yaml
+  - rbac.yaml
+  - service-metrics.yaml
+  - servicemonitor.yaml
+  - networkpolicy.yaml
+  - configmap-profile.yaml
+  - NOTES.txt
+
+tests:
+
+  - it: chart disabled by default renders zero documents
+    set:
+      enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: enabled chart renders job + rbac + service + sm + np
+    set:
+      enabled: true
+      image:
+        repository: ghcr.io/efe-ai/efe-meta-swarm-loadgen
+        tag: "ci-test"
+    asserts:
+      - hasDocuments:
+          count: 5     # job + ServiceAccount+Role+RoleBinding (=3) + Service + ServiceMonitor + NetworkPolicy
+        template: job.yaml
+      - hasDocuments:
+          count: 3
+        template: rbac.yaml
+
+  - it: Job renders with correct image + indexed completion (AC21)
+    template: job.yaml
+    set:
+      enabled: true
+      image: { tag: "ci-test" }
+      job: { parallelism: 4, completions: 4 }
+    asserts:
+      - isKind:
+          of: Job
+      - equal:
+          path: spec.parallelism
+          value: 4
+      - equal:
+          path: spec.completionMode
+          value: Indexed
+      - matchRegex:
+          path: spec.template.spec.containers[0].image
+          pattern: "^ghcr\\.io/.+:ci-test$"
+
+  - it: production mode injects --confirm-prod arg (AC10)
+    template: job.yaml
+    set:
+      enabled: true
+      image: { tag: "ci-test" }
+      mode: production
+      confirmProd: true
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --confirm-prod
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: production
+
+  - it: PodSecurityContext nonroot + readonly rootfs + drop ALL (AC19)
+    template: job.yaml
+    set:
+      enabled: true
+      image: { tag: "ci-test" }
+    asserts:
+      - equal:
+          path: spec.template.spec.securityContext.runAsNonRoot
+          value: true
+      - equal:
+          path: spec.template.spec.securityContext.runAsUser
+          value: 65532
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.readOnlyRootFilesystem
+          value: true
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.allowPrivilegeEscalation
+          value: false
+      - contains:
+          path: spec.template.spec.containers[0].securityContext.capabilities.drop
+          content: ALL
+
+  - it: TLS enabled mounts the secret + injects CLI flags
+    template: job.yaml
+    set:
+      enabled: true
+      image: { tag: "ci-test" }
+      tls:
+        enabled: true
+        secretName: efe-meta-swarm-loadgen-tls
+        expectedSan: ctrl.efe.svc
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --tls-cert
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --expected-san
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: tls
+            mountPath: /etc/efe/tls
+            readOnly: true
+
+  - it: ServiceAccount + Role + RoleBinding present (AC18 namespace-scoped)
+    template: rbac.yaml
+    set:
+      enabled: true
+      image: { tag: "ci-test" }
+    asserts:
+      - hasDocuments:
+          count: 3
+      - isKind:
+          of: ServiceAccount
+        documentIndex: 0
+      - isKind:
+          of: Role
+        documentIndex: 1
+      - isKind:
+          of: RoleBinding
+        documentIndex: 2
+
+  - it: Role is NAMESPACE-SCOPED (no ClusterRole — AC18 + T79)
+    template: rbac.yaml
+    set:
+      enabled: true
+      image: { tag: "ci-test" }
+    asserts:
+      - isKind:
+          of: Role
+        documentIndex: 1
+      - notExists:
+          path: spec.cluster   # ClusterRoles don't render
+        documentIndex: 1
+
+  - it: Role grants ONLY read verbs on services/endpoints (T79)
+    template: rbac.yaml
+    set:
+      enabled: true
+      image: { tag: "ci-test" }
+    asserts:
+      - lengthEqual:
+          path: rules
+          count: 1
+        documentIndex: 1
+      - equal:
+          path: rules[0].verbs
+          value:
+            - get
+            - list
+            - watch
+        documentIndex: 1
+      - notContains:
+          path: rules[0].verbs
+          content: create
+        documentIndex: 1
+      - notContains:
+          path: rules[0].verbs
+          content: delete
+        documentIndex: 1
+      - notContains:
+          path: rules[0].verbs
+          content: update
+        documentIndex: 1
+      - notContains:
+          path: rules[0].verbs
+          content: patch
+        documentIndex: 1
+
+  - it: NetworkPolicy egress restricted (AC20)
+    template: networkpolicy.yaml
+    set:
+      enabled: true
+      image: { tag: "ci-test" }
+    asserts:
+      - isKind:
+          of: NetworkPolicy
+      - contains:
+          path: spec.policyTypes
+          content: Egress
+      - contains:
+          path: spec.policyTypes
+          content: Ingress
+
+  - it: Profile inline ConfigMap renders only when profile.inline set
+    template: configmap-profile.yaml
+    set:
+      enabled: true
+      image: { tag: "ci-test" }
+      profile:
+        inline: |
+          version: 1
+          name: smoke
+          target: {endpoints: [{url: "grpc://x:50051"}]}
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: ConfigMap
+
+  - it: Profile inline ConfigMap omitted when no inline content
+    template: configmap-profile.yaml
+    set:
+      enabled: true
+      image: { tag: "ci-test" }
+      profile: { inline: "" }
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: ServiceMonitor present + scrapes metrics port (AC13)
+    template: servicemonitor.yaml
+    set:
+      enabled: true
+      image: { tag: "ci-test" }
+      prometheus:
+        enabled: true
+        port: 9095
+        serviceMonitor: { enabled: true, interval: 15s }
+    asserts:
+      - isKind:
+          of: ServiceMonitor
+      - equal:
+          path: spec.endpoints[0].port
+          value: metrics
+      - equal:
+          path: spec.endpoints[0].interval
+          value: 15s
+
+  - it: efe.pr label tagged on every object (provenance)
+    template: job.yaml
+    set:
+      enabled: true
+      image: { tag: "ci-test" }
+    asserts:
+      - equal:
+          path: metadata.labels.efe\.pr
+          value: "20"

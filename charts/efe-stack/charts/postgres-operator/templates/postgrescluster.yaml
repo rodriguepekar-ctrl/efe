@@ -1,0 +1,78 @@
+{{- if and .Values.enabled .Values.cluster.enabled }}
+apiVersion: postgres-operator.crunchydata.com/v1beta1
+kind: PostgresCluster
+metadata:
+  name: {{ .Values.cluster.name | default "efe-postgres" }}
+  labels:
+    {{- include "postgres-operator.labels" . | nindent 4 }}
+spec:
+  postgresVersion: {{ .Values.cluster.postgresVersion | default 16 }}
+
+  instances:
+    {{- range .Values.cluster.instances }}
+    - name: {{ .name }}
+      replicas: {{ .replicas | default 3 }}
+      dataVolumeClaimSpec:
+        accessModes:
+          {{- toYaml .dataVolumeClaimSpec.accessModes | nindent 10 }}
+        resources:
+          requests:
+            storage: {{ .dataVolumeClaimSpec.resources.requests.storage | default "100Gi" }}
+        storageClassName: {{ .dataVolumeClaimSpec.storageClassName | default $.Values.global.storageClass }}
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchLabels:
+                  postgres-operator.crunchydata.com/cluster: {{ $.Values.cluster.name }}
+              topologyKey: topology.kubernetes.io/zone
+      resources:
+        {{- toYaml .resources | nindent 8 }}
+    {{- end }}
+
+  backups:
+    pgbackrest:
+      repos:
+        {{- range .Values.backup.pgbackrest.repos }}
+        - name: {{ .name }}
+          {{- if .s3.bucket }}
+          s3:
+            bucket: {{ .s3.bucket | quote }}
+            endpoint: {{ .s3.endpoint | quote }}
+            region: {{ .s3.region | quote }}
+          {{- else }}
+          # When bucket is empty (e.g. local dev), use a PVC-backed repo.
+          volume:
+            volumeClaimSpec:
+              accessModes: [ReadWriteOnce]
+              resources:
+                requests:
+                  storage: 50Gi
+          {{- end }}
+          {{- with .schedules }}
+          schedules:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+        {{- end }}
+
+  users:
+    - name: efe
+      databases:
+        - efe
+      options: "SUPERUSER"
+    - name: efe_app
+      databases:
+        - efe
+      options: ""
+
+  {{- if .Values.monitoring.enabled }}
+  monitoring:
+    pgmonitor:
+      exporter:
+        image: {{ printf "%s/crunchy-postgres-exporter:ubi8-5.5.0-0" .Values.global.imageRegistry }}
+        resources:
+          requests:
+            cpu: 50m
+            memory: 128Mi
+  {{- end }}
+{{- end }}

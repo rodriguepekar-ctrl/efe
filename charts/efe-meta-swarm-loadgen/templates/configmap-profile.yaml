@@ -1,0 +1,16 @@
+{{- /*
+PR #20 — workload profile ConfigMap.
+Renders only when `profile.inline` is set ; operators using a pre-
+existing ConfigMap reference it via `profile.configMap.name`.
+*/ -}}
+{{- if and .Values.enabled .Values.profile.inline }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "efe-loadgen.fullname" . }}-profile
+  labels:
+    {{- include "efe-loadgen.labels" . | nindent 4 }}
+data:
+  profile.yaml: |
+{{ .Values.profile.inline | indent 4 }}
+{{- end }}

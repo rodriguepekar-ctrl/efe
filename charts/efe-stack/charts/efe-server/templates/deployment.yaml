@@ -1,0 +1,247 @@
+{{- if .Values.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "efe-server.fullname" . }}
+  labels:
+    {{- include "efe-server.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicas | default 3 }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      {{- include "efe-server.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "efe-server.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: backend
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "{{ .Values.service.metricsPort | default 9090 }}"
+        prometheus.io/path: "/metrics"
+        # Force pod restart on configmap change.
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+    spec:
+      serviceAccountName: {{ include "efe-server.serviceAccountName" . }}
+      {{- with .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      automountServiceAccountToken: true
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        fsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: efe-server
+          image: {{ include "efe-server.image" . | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy | default "IfNotPresent" }}
+          ports:
+            - name: grpc
+              containerPort: {{ .Values.service.grpcPort | default 50051 }}
+              protocol: TCP
+            - name: metrics
+              containerPort: {{ .Values.service.metricsPort | default 9090 }}
+              protocol: TCP
+            - name: health
+              containerPort: {{ .Values.service.healthPort | default 8081 }}
+              protocol: TCP
+            {{- if .Values.agentRestGateway.enabled }}
+            # D93 — M26 REST gateway on dedicated port (default 8088).
+            - name: agent-rest
+              containerPort: {{ .Values.service.agentRestPort | default 8088 }}
+              protocol: TCP
+            {{- end }}
+          envFrom:
+            - configMapRef:
+                name: {{ include "efe-server.fullname" . }}
+          env:
+            - name: EFE_DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "efe-server.dbSecretName" . }}
+                  key: {{ include "efe-server.dbSecretKey" . }}
+            - name: EFE_REDIS_URL
+              valueFrom:
+                secretKeyRef:
+                  name: efe-redis-auth
+                  key: connection_string
+                  optional: true
+            - name: EFE_AUDIT_HMAC_SEED
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.auditHmacSecretRef.name }}
+                  key: {{ .Values.auditHmacSecretRef.key }}
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            {{- if .Values.agentRestGateway.enabled }}
+            # D93 — opt-in M26 REST gateway. Activates the in-process
+            # AgentRuntimeService + axum listener inside this pod ;
+            # safe because the gateway calls the typed service via the
+            # adapter, no extra mesh hop. See ADR-D93-003.
+            - name: EFE_AGENT_REST_ENABLED
+              value: "true"
+            - name: EFE_AGENT_REST_ADDR
+              value: "0.0.0.0:{{ .Values.service.agentRestPort | default 8088 }}"
+            # The agent service shares the operational DB with the
+            # classifier ; forward whichever Secret already holds the DSN.
+            - name: EFE_AGENT_RUNTIME_DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "efe-server.dbSecretName" . }}
+                  key: {{ include "efe-server.dbSecretKey" . }}
+            {{- end }}
+            {{- if .Values.m27Edge.enabled }}
+            # M27 Commercial Edge — Redis cache + backpressure + tenant
+            # quota + DbContext ro/rw split. See
+            # `docs/EFE_M27_COMMERCIAL_EDGE_ARCHITECTURE.md`.
+            - name: EFE_M27_EDGE_ENABLED
+              value: "true"
+            {{- if .Values.m27Edge.redis.urlOverride }}
+            - name: EFE_REDIS_URL
+              value: {{ .Values.m27Edge.redis.urlOverride | quote }}
+            {{- end }}
+            - name: EFE_CACHE_HMAC_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.m27Edge.hmacKeySecret.name }}
+                  key: {{ .Values.m27Edge.hmacKeySecret.key }}
+            # Read replica DSN. Optional ; if missing efe-server falls
+            # back to writing pool for reads too.
+            {{- if .Values.m27Edge.databaseRoUrlSecret }}
+            - name: EFE_DATABASE_RO_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.m27Edge.databaseRoUrlSecret.name }}
+                  key: {{ .Values.m27Edge.databaseRoUrlSecret.key }}
+                  optional: true
+            {{- end }}
+            # Backpressure tuning. Default-on with conservative values.
+            - name: EFE_BACKPRESSURE_ENABLED
+              value: {{ .Values.m27Edge.backpressure.enabled | quote }}
+            - name: EFE_BACKPRESSURE_MAX_INFLIGHT
+              value: {{ .Values.m27Edge.backpressure.maxInflight | quote }}
+            - name: EFE_BACKPRESSURE_P99_BUDGET_MS
+              value: {{ .Values.m27Edge.backpressure.p99BudgetMs | quote }}
+            - name: EFE_BACKPRESSURE_P99_WINDOW_S
+              value: {{ .Values.m27Edge.backpressure.p99WindowS | quote }}
+            - name: EFE_BACKPRESSURE_SHED_PERCENT
+              value: {{ .Values.m27Edge.backpressure.shedPercent | quote }}
+            # Tenant quota middleware.
+            - name: EFE_TENANT_QUOTA_ENABLED
+              value: {{ .Values.m27Edge.tenantQuota.enabled | quote }}
+            - name: EFE_TENANT_QUOTA_CACHE_TTL_S
+              value: {{ .Values.m27Edge.tenantQuota.cacheTtlS | quote }}
+            # Runtime fallback toggle (replica lag mitigation, see RB_M27_REPLICA_LAG).
+            - name: EFE_FALLBACK_RO_TO_RW
+              value: {{ .Values.m27Edge.fallbackRoToRw | quote }}
+            {{- end }}
+            {{- /*
+              A1 PR #11 + PR #13 — Phase-2 meta-swarm wiring.
+
+              Helm 3 does NOT propagate sibling sub-chart values
+              across sub-charts (only `global:` propagates).  So we
+              read the wiring from `.Values.global.metaSwarm` —
+              populated by the umbrella's `values.yaml` block when
+              the operator enables the `efe-meta-swarm` sibling.
+
+              Cf. `docs/EFE_A1_PHASE2_PR11_ARCHITECTURE.md` (env-var contract)
+              and `docs/EFE_A1_PHASE2_PR13_ARCHITECTURE.md` § 7.4 (hook).
+
+              Backward compat : a standalone `helm template efe-server
+              --set efe-meta-swarm.enabled=true` (CI / tests, not
+              umbrella) also activates the block because we OR with
+              the local `efe-meta-swarm.enabled` if present.  Operators
+              in production set `global.metaSwarm.enabled=true`
+              alongside `efe-meta-swarm.enabled=true` ; both flags
+              are documented in the umbrella values.yaml.
+            */}}
+            {{- $globalMeta := default (dict) (.Values.global.metaSwarm | default (dict)) }}
+            {{- $localMeta := default (dict) (index .Values "efe-meta-swarm") }}
+            {{- $metaEnabled := or $globalMeta.enabled $localMeta.enabled }}
+            {{- if $metaEnabled }}
+            {{- /* Prefer global wiring ; fall back to local efeServerWiring (legacy standalone). */}}
+            {{- $wiring := $globalMeta }}
+            {{- if not $globalMeta.controllerServiceName }}
+            {{- $wiring = default $globalMeta (default (dict) $localMeta.efeServerWiring) }}
+            {{- end }}
+            - name: EFE_META_SWARM_ENABLED
+              value: "true"
+            - name: EFE_META_SWARM_CONTROLLER_ENDPOINT
+              {{- $svcName := default (printf "%s-efe-meta-swarm-controller" .Release.Name) $wiring.controllerServiceName }}
+              {{- $port := int (default 50080 $wiring.controllerServicePort) }}
+              value: "http://{{ $svcName }}.{{ .Release.Namespace }}.svc:{{ $port }}"
+            - name: EFE_META_SWARM_CONNECT_TIMEOUT_MS
+              value: {{ default 3500 $wiring.connectTimeoutMs | quote }}
+            - name: EFE_META_SWARM_CALL_TIMEOUT_MS
+              value: {{ default 15000 $wiring.callTimeoutMs | quote }}
+            - name: EFE_META_SWARM_HEALTH_PROBE_AT_STARTUP
+              value: {{ default true $wiring.healthProbeAtStartup | quote }}
+            {{- end }}
+            {{- with .Values.envOverrides }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: health
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            failureThreshold: 3
+            timeoutSeconds: 2
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: health
+            initialDelaySeconds: 5
+            periodSeconds: 2
+            failureThreshold: 3
+            timeoutSeconds: 1
+          startupProbe:
+            httpGet:
+              path: /healthz
+              port: health
+            failureThreshold: 30
+            periodSeconds: 2
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            - name: cache
+              mountPath: /var/cache/efe
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        - name: cache
+          emptyDir:
+            sizeLimit: 1Gi
+      {{- if .Values.topologySpreadConstraints.enabled }}
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: {{ .Values.topologySpreadConstraints.topologyKey }}
+          whenUnsatisfiable: DoNotSchedule
+          labelSelector:
+            matchLabels:
+              {{- include "efe-server.selectorLabels" . | nindent 14 }}
+      {{- end }}
+{{- end }}

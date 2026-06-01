@@ -1,0 +1,55 @@
+suite: redis-stack statefulset tests
+templates:
+  - statefulset.yaml
+release:
+  name: test
+  namespace: efe-test
+chart:
+  appVersion: 7.4-v0
+tests:
+  - it: renders a StatefulSet
+    asserts:
+      - isKind:
+          of: StatefulSet
+      - equal:
+          path: spec.replicas
+          value: 1
+      - equal:
+          path: spec.serviceName
+          value: test-redis-stack-headless
+
+  - it: enforces nonroot security context (uid=999)
+    asserts:
+      - equal:
+          path: spec.template.spec.securityContext.runAsUser
+          value: 999
+
+  - it: includes redis-exporter sidecar by default
+    asserts:
+      - lengthEqual:
+          path: spec.template.spec.containers
+          count: 2
+      - equal:
+          path: spec.template.spec.containers[1].name
+          value: redis-exporter
+
+  - it: skips when enabled=false
+    set:
+      enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: respects storage size override
+    set:
+      storage: 100Gi
+    asserts:
+      - equal:
+          path: spec.volumeClaimTemplates[0].spec.resources.requests.storage
+          value: 100Gi
+
+  - it: applies maxmemory-policy noeviction
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].env[1].value
+          pattern: "maxmemory-policy noeviction"

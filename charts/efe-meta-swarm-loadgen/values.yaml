@@ -1,0 +1,146 @@
+# ─────────────────────────────────────────────────────────────────
+# efe-meta-swarm-loadgen Helm values.
+#
+# Reference : docs/EFE_A1_PHASE2_PR20_ARCHITECTURE.md § 38.
+# ─────────────────────────────────────────────────────────────────
+
+# Master switch.  When false, the chart renders zero objects.
+enabled: false
+
+# Optional name overrides.
+nameOverride: ""
+fullnameOverride: ""
+
+image:
+  repository: ghcr.io/efe-ai/efe-meta-swarm-loadgen
+  tag: "0.1.0"
+  pullPolicy: IfNotPresent
+  imagePullSecrets: []
+
+# ─────────────────────────────────────────────────────────────────
+# Profile — the workload YAML loaded by the binary at startup.
+# Either inline (recommended for ad-hoc runs) OR ConfigMap reference.
+# ─────────────────────────────────────────────────────────────────
+profile:
+  # Inline YAML (use --set-file profile.inline=path/to/profile.yaml).
+  inline: ""
+  configMap:
+    name: ""
+    key: "profile.yaml"
+
+# ─────────────────────────────────────────────────────────────────
+# Kubernetes Job tuning.
+# ─────────────────────────────────────────────────────────────────
+job:
+  # CronJob-style or one-shot Job.  One-shot is the default.
+  schedule: ""           # set to a cron expr to emit a CronJob
+  parallelism: 1
+  completions: 1
+  backoffLimit: 3
+  # T78 mitigation — pods can't run past activeDeadlineSeconds.
+  activeDeadlineSeconds: 14400   # 4 hours
+  # Cleanup window post-Complete.
+  ttlSecondsAfterFinished: 86400
+
+# ─────────────────────────────────────────────────────────────────
+# Pod-level security context (AD35).
+# ─────────────────────────────────────────────────────────────────
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 65532
+  runAsGroup: 65532
+  fsGroup: 65532
+  seccompProfile:
+    type: RuntimeDefault
+
+containerSecurityContext:
+  readOnlyRootFilesystem: true
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+      - ALL
+
+resources:
+  requests:
+    cpu: "500m"
+    memory: "256Mi"
+  limits:
+    cpu: "2"
+    memory: "1Gi"
+
+# ─────────────────────────────────────────────────────────────────
+# Targeting.
+# ─────────────────────────────────────────────────────────────────
+target:
+  endpoint: "grpc://efe-meta-swarm-controller.efe.svc:50051"
+  port: 50051
+  role: controller
+
+# ─────────────────────────────────────────────────────────────────
+# mTLS — matches PR #16 cert format.
+# ─────────────────────────────────────────────────────────────────
+tls:
+  enabled: false
+  # cert-manager Secret name (or operator-provided).
+  secretName: "efe-meta-swarm-loadgen-tls"
+  # CA bundle Secret name (typically the cluster CA).
+  caCertSecretName: "efe-meta-swarm-ca"
+  expectedSan: ""
+
+# ─────────────────────────────────────────────────────────────────
+# Observability.
+# ─────────────────────────────────────────────────────────────────
+prometheus:
+  enabled: true
+  port: 9095
+  serviceMonitor:
+    enabled: true
+    interval: 15s
+    scrapeTimeout: 10s
+    additionalLabels: {}
+
+otel:
+  enabled: true
+  endpoint: "http://otel-collector.observability.svc:4317"
+  samplerArg: "1.0"
+
+# ─────────────────────────────────────────────────────────────────
+# RBAC — namespace-scoped only.  Closed surface (AD14, T79/T85).
+# ─────────────────────────────────────────────────────────────────
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+
+rbac:
+  create: true
+
+# ─────────────────────────────────────────────────────────────────
+# NetworkPolicy.
+# ─────────────────────────────────────────────────────────────────
+networkPolicy:
+  enabled: true
+  allowedControllerSelector:
+    matchLabels:
+      app.kubernetes.io/name: efe-meta-swarm
+      app.kubernetes.io/component: controller
+  allowedCollectorSelector:
+    matchLabels:
+      app.kubernetes.io/name: otel-collector
+  allowedParticipantSelector:
+    matchLabels:
+      app.kubernetes.io/name: efe-meta-swarm
+      app.kubernetes.io/component: participant
+  allowPrometheusScrape: true
+
+# ─────────────────────────────────────────────────────────────────
+# Run-mode + safety bracket.
+# ─────────────────────────────────────────────────────────────────
+mode: dev               # dev | staging | production
+confirmProd: false      # required when mode == production
+
+# Extra environment variables injected into the pod.
+extraEnv: []
+
+# Extra CLI args passed to the binary (after `run`).
+extraArgs: []

@@ -1,0 +1,24 @@
+apiVersion: v2
+name: efe-nano-firecracker
+description: |
+  Sprint 8 — N11 : Firecracker microVM pool DaemonSet for EFE Nano.
+
+  Deploys EFE Nano with the Firecracker VM backend enabled
+  (EFE_NANO_VM_BACKEND=firecracker).  Targets nodes with KVM-capable
+  CPUs and /dev/kvm exposed.
+
+type: application
+version: 0.1.0
+appVersion: "0.8.0"
+icon: https://efe.ai/logo.svg
+maintainers:
+  - name: EFE Platform Team
+    email: platform@efe.ai
+keywords:
+  - efe
+  - nano-agent
+  - firecracker
+  - microvm
+sources:
+  - https://github.com/efe-ai/efe
+home: https://efe.ai

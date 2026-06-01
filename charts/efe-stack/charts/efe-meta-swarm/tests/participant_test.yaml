@@ -1,0 +1,102 @@
+# PR #13 — helm-unittest assertions for participant resources.
+suite: efe-meta-swarm participants
+
+templates:
+  - participant-deployment.yaml
+  - participant-service.yaml
+  - participant-serviceaccount.yaml
+
+tests:
+  - it: AC13 — disabled produces zero participant resources
+    set:
+      enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: AC14 — kovant default has 3 participant docs per template
+    set:
+      enabled: true
+      image:
+        tag: "test"
+    asserts:
+      - hasDocuments:
+          count: 3
+
+  - it: AC18 — Participant Deployment has no checksum/config annotation
+    template: participant-deployment.yaml
+    set:
+      enabled: true
+      image:
+        tag: "test"
+    documentIndex: 0
+    asserts:
+      - notExists:
+          path: spec.template.metadata.annotations["checksum/config"]
+
+  - it: AC25 — participants list renders custom dim/kappa/seed
+    template: participant-deployment.yaml
+    set:
+      enabled: true
+      image:
+        tag: "test"
+      participants:
+        - id: single-p
+          dim: 32
+          kappa: 0.55
+          seed: 7
+          replicaCount: 1
+          service:
+            grpcPort: 50091
+            metricsPort: 9101
+          resources:
+            requests: {cpu: 100m, memory: 128Mi}
+            limits:   {cpu: 500m, memory: 512Mi}
+    documentIndex: 0
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: EFE_META_SWARM_PARTICIPANT_ID
+            value: single-p
+          any: true
+      - equal:
+          path: metadata.labels["efe.io/participant-id"]
+          value: single-p
+
+  - it: AC19/AC20 — every participant pod has the hardening template applied
+    template: participant-deployment.yaml
+    set:
+      enabled: true
+      image:
+        tag: "test"
+    documentIndex: 0
+    asserts:
+      - equal:
+          path: spec.template.spec.securityContext.seccompProfile.type
+          value: RuntimeDefault
+      - equal:
+          path: spec.template.spec.securityContext.runAsUser
+          value: 65532
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.readOnlyRootFilesystem
+          value: true
+      - contains:
+          path: spec.template.spec.containers[0].securityContext.capabilities.drop
+          content: ALL
+
+  - it: AC16 — participant mounts the shared manifest ConfigMap
+    template: participant-deployment.yaml
+    set:
+      enabled: true
+      image:
+        tag: "test"
+    documentIndex: 0
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: manifest
+            mountPath: /etc/efe-meta-swarm
+            readOnly: true
+          any: true

@@ -1,0 +1,36 @@
+{{- /*
+PR #20 — ServiceMonitor for kube-prometheus-stack.  Discovers the
+loadgen self-metrics via the metrics service.
+*/ -}}
+{{- if and .Values.enabled .Values.prometheus.enabled .Values.prometheus.serviceMonitor.enabled }}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ include "efe-loadgen.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "efe-loadgen.labels" . | nindent 4 }}
+    prometheus: efe
+    {{- with .Values.prometheus.serviceMonitor.additionalLabels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  namespaceSelector:
+    matchNames:
+      - {{ .Release.Namespace }}
+  selector:
+    matchLabels:
+      {{- include "efe-loadgen.selectorLabels" . | nindent 6 }}
+  endpoints:
+    - port: metrics
+      interval: {{ .Values.prometheus.serviceMonitor.interval | default "15s" }}
+      scrapeTimeout: {{ .Values.prometheus.serviceMonitor.scrapeTimeout | default "10s" }}
+      path: /metrics
+      relabelings:
+        # AD15 + STABILITY_CONTRACT v1.2 § 9.10 — relabel `service`
+        # to a stable value distinguishing loadgen self-metrics from
+        # the server-side scrape.
+        - sourceLabels: [__meta_kubernetes_pod_label_app_kubernetes_io_name]
+          targetLabel: service
+          replacement: efe-meta-swarm-loadgen
+{{- end }}

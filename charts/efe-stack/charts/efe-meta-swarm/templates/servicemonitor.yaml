@@ -1,0 +1,55 @@
+{{- if and .Values.enabled .Values.metrics.serviceMonitor.enabled }}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ include "efe-meta-swarm.fullname" . }}
+  labels:
+    {{- include "efe-meta-swarm.labels" . | nindent 4 }}
+    {{- with .Values.metrics.serviceMonitor.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "efe-meta-swarm.selectorLabels" . | nindent 6 }}
+  namespaceSelector:
+    matchNames:
+      - {{ .Release.Namespace }}
+  endpoints:
+    - port: metrics
+      path: /metrics
+      interval: {{ .Values.metrics.serviceMonitor.interval | default "30s" }}
+      scrapeTimeout: {{ .Values.metrics.serviceMonitor.scrapeTimeout | default "10s" }}
+      honorLabels: true
+      relabelings:
+        - sourceLabels: [__meta_kubernetes_pod_label_efe_io_meta_swarm_role]
+          targetLabel: role
+        - sourceLabels: [__meta_kubernetes_pod_label_efe_io_participant_id]
+          targetLabel: participant_id
+        - sourceLabels: [__meta_kubernetes_pod_label_app_kubernetes_io_component]
+          targetLabel: component
+        # PR #17 § 21 — scrape jitter (T51 mitigation).
+        # `hashmod 15` spreads the per-pod scrape offset over the
+        # 15-second scrape window, preventing fleet-wide
+        # synchronisation that would pile up against Prometheus.  The
+        # modulus is the scrape interval in seconds.
+        - sourceLabels: [__meta_kubernetes_pod_name]
+          modulus: 15
+          targetLabel: __tmp_scrape_offset
+          action: hashmod
+      # PR #17 AD21 — metric-level relabelings : drop the host-pod
+      # meta-labels that Prometheus auto-attaches.  These labels are
+      # useful per-pod but multiply cardinality across the fleet when
+      # the same metric is queried with cross-pod aggregation.  We
+      # keep `pod` (for SRE troubleshooting) but drop `container` and
+      # `endpoint` (Prometheus's defaults that aren't meaningful for
+      # meta-swarm's gRPC server).
+      metricRelabelings:
+        - sourceLabels: [container]
+          regex: "(controller|participant)"
+          action: keep
+        - regex: "endpoint"
+          action: labeldrop
+        # Operators that need to debug a specific Pod can still query
+        # by `pod=...` ; we don't drop it.
+{{- end }}

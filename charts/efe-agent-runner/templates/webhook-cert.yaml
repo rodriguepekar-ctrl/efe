@@ -1,0 +1,51 @@
+{{- if and .Values.admissionWebhook.enabled .Values.admissionWebhook.certManager.enabled }}
+{{- if .Values.admissionWebhook.certManager.bootstrap }}
+# D93 — bootstrap mode : provision a self-signed Issuer in the release
+# namespace and use it instead of the cluster-level CA. Useful for k3d
+# / local dev / fresh clusters with no CA Issuer yet. Production
+# deployments should set `bootstrap: false` and reference a real
+# ClusterIssuer via `issuerRef`.
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: {{ include "efe-agent-runner.fullname" . }}-selfsigned
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "efe-agent-runner.labels" . | nindent 4 }}
+spec:
+  selfSigned: {}
+---
+{{- end }}
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: {{ include "efe-agent-runner.fullname" . }}-webhook-cert
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "efe-agent-runner.labels" . | nindent 4 }}
+spec:
+  secretName: {{ include "efe-agent-runner.fullname" . }}-webhook-tls
+  issuerRef:
+    {{- if .Values.admissionWebhook.certManager.bootstrap }}
+    name: {{ include "efe-agent-runner.fullname" . }}-selfsigned
+    kind: Issuer
+    {{- else }}
+    name: {{ .Values.admissionWebhook.certManager.issuerRef }}
+    kind: ClusterIssuer
+    {{- end }}
+  duration: 2160h
+  renewBefore: 720h
+  dnsNames:
+    - {{ include "efe-agent-runner.fullname" . }}-webhook
+    - {{ include "efe-agent-runner.fullname" . }}-webhook.{{ .Release.Namespace }}
+    - {{ include "efe-agent-runner.fullname" . }}-webhook.{{ .Release.Namespace }}.svc
+    - {{ include "efe-agent-runner.fullname" . }}-webhook.{{ .Release.Namespace }}.svc.cluster.local
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+    rotationPolicy: Always
+  usages:
+    - server auth
+    - digital signature
+    - key encipherment
+{{- end }}

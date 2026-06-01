@@ -1,0 +1,115 @@
+{{- if .Values.vsockRelayer.enabled }}
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: {{ include "efe-agent-runner.fullname" . }}-vsock-relayer
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "efe-agent-runner.labels" . | nindent 4 }}
+    app.kubernetes.io/component: vsock-relayer
+spec:
+  selector:
+    matchLabels:
+      {{- include "efe-agent-runner.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: vsock-relayer
+  template:
+    metadata:
+      labels:
+        {{- include "efe-agent-runner.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: vsock-relayer
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: {{ include "efe-agent-runner.fullname" . }}-vsock-relayer
+      hostPID: false
+      hostNetwork: false
+      tolerations:
+        - operator: Exists
+      nodeSelector:
+        {{- if .Values.kvm.required }}
+        efe.ai/kvm-available: "true"
+        {{- end }}
+      containers:
+        - name: relayer
+          image: "{{ .Values.vsockRelayer.image.repository }}:{{ .Values.vsockRelayer.image.tag }}"
+          imagePullPolicy: {{ .Values.vsockRelayer.image.pullPolicy | default "IfNotPresent" }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              add: ["NET_BIND_SERVICE"]
+              drop: ["ALL"]
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 65532
+            seccompProfile:
+              type: RuntimeDefault
+          env:
+            - name: EFE_LLM_ROUTER_URL
+              value: {{ .Values.vsockRelayer.llmRouterUrl | quote }}
+            - name: EFE_MCP_SERVER_URL
+              value: {{ .Values.vsockRelayer.mcpServerUrl | quote }}
+            - name: EFE_LLM_CLIENT_TLS_DIR
+              value: /var/run/tls/llm-client
+            - name: EFE_MCP_CLIENT_TLS_DIR
+              value: /var/run/tls/mcp-client
+            - name: EFE_RELAY_CA_BUNDLE
+              value: /etc/ssl/certs/efe-ca-bundle.pem
+            - name: EFE_RELAY_JWT_PUBLIC_KEY_PATH
+              value: /var/run/relay-jwt/pub.pem
+            - name: EFE_RELAY_AUDIT_ENDPOINT
+              value: {{ .Values.vsockRelayer.auditEndpoint | quote }}
+            - name: EFE_RELAY_HEALTH_ADDR
+              value: "0.0.0.0:8080"
+          ports:
+            - name: health
+              containerPort: 8080
+              protocol: TCP
+          volumeMounts:
+            - name: vsock-dev
+              mountPath: /dev/vsock
+            - name: llm-client-tls
+              mountPath: /var/run/tls/llm-client
+              readOnly: true
+            - name: mcp-client-tls
+              mountPath: /var/run/tls/mcp-client
+              readOnly: true
+            - name: ca-bundle
+              mountPath: /etc/ssl/certs/efe-ca-bundle.pem
+              subPath: ca-bundle.pem
+              readOnly: true
+            - name: jwt-pub
+              mountPath: /var/run/relay-jwt
+              readOnly: true
+          resources:
+            {{- toYaml .Values.vsockRelayer.resources | nindent 12 }}
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: health
+            periodSeconds: 30
+            timeoutSeconds: 5
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: health
+            periodSeconds: 10
+      volumes:
+        - name: vsock-dev
+          hostPath:
+            path: /dev/vsock
+            type: CharDevice
+        - name: llm-client-tls
+          secret:
+            secretName: {{ .Values.vsockRelayer.tls.llmClientSecret }}
+        - name: mcp-client-tls
+          secret:
+            secretName: {{ .Values.vsockRelayer.tls.mcpClientSecret }}
+        - name: ca-bundle
+          configMap:
+            name: {{ .Values.vsockRelayer.caBundleConfigMap }}
+        - name: jwt-pub
+          secret:
+            secretName: {{ .Values.vsockRelayer.jwtPubSecret }}
+{{- end }}

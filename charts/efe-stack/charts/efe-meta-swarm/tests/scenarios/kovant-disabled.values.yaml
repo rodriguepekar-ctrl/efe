@@ -1,0 +1,3 @@
+# PR #13 — kovant-disabled scenario : `enabled: false` (the default).
+# Expected render : zero resources (only NOTES.txt printed).
+enabled: false

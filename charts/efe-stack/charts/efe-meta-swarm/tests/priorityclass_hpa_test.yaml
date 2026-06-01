@@ -1,0 +1,127 @@
+# PR #14 — helm-unittest assertions for PriorityClass + HPA placeholder.
+# Covers AC19, AC20, AC21.
+suite: efe-meta-swarm priorityClass + HPA
+
+templates:
+  - priorityclass-controller.yaml
+  - hpa-controller.yaml
+  - controller-deployment.yaml
+
+tests:
+  - it: priorityClass + HPA both off by default — 0 documents from these templates
+    templates:
+      - priorityclass-controller.yaml
+      - hpa-controller.yaml
+    set:
+      enabled: true
+      image:
+        tag: "test"
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: AC19 — PriorityClass rendered with value 100000 (default)
+    template: priorityclass-controller.yaml
+    set:
+      enabled: true
+      image:
+        tag: "test"
+      priorityClass:
+        enabled: true
+    asserts:
+      - isKind:
+          of: PriorityClass
+      - equal:
+          path: value
+          value: 100000
+      - equal:
+          path: globalDefault
+          value: false
+
+  - it: AC19 — PriorityClass value is overridable
+    template: priorityclass-controller.yaml
+    set:
+      enabled: true
+      image:
+        tag: "test"
+      priorityClass:
+        enabled: true
+        value: 50000
+    asserts:
+      - equal:
+          path: value
+          value: 50000
+
+  - it: AC20 — Controller Deployment references the PriorityClass when enabled
+    template: controller-deployment.yaml
+    set:
+      enabled: true
+      image:
+        tag: "test"
+      priorityClass:
+        enabled: true
+    asserts:
+      - equal:
+          path: spec.template.spec.priorityClassName
+          value: RELEASE-NAME-efe-meta-swarm-controller-priority
+
+  - it: AC20 — Controller Deployment does NOT reference PriorityClass when disabled
+    template: controller-deployment.yaml
+    set:
+      enabled: true
+      image:
+        tag: "test"
+    asserts:
+      - notExists:
+          path: spec.template.spec.priorityClassName
+
+  - it: AC21 — HPA renders with min=max=1 (Phase-2 lock)
+    template: hpa-controller.yaml
+    set:
+      enabled: true
+      image:
+        tag: "test"
+      controller:
+        hpa:
+          enabled: true
+    asserts:
+      - isKind:
+          of: HorizontalPodAutoscaler
+      - equal:
+          path: spec.minReplicas
+          value: 1
+      - equal:
+          path: spec.maxReplicas
+          value: 1
+      - equal:
+          path: spec.scaleTargetRef.name
+          value: RELEASE-NAME-efe-meta-swarm-controller
+
+  - it: AC21 — HPA targetCPUUtilization configurable (default 70)
+    template: hpa-controller.yaml
+    set:
+      enabled: true
+      image:
+        tag: "test"
+      controller:
+        hpa:
+          enabled: true
+    asserts:
+      - equal:
+          path: spec.metrics[0].resource.target.averageUtilization
+          value: 70
+
+  - it: AC21 — HPA targetCPUUtilization overridable
+    template: hpa-controller.yaml
+    set:
+      enabled: true
+      image:
+        tag: "test"
+      controller:
+        hpa:
+          enabled: true
+          targetCPUUtilization: 85
+    asserts:
+      - equal:
+          path: spec.metrics[0].resource.target.averageUtilization
+          value: 85

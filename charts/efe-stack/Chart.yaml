@@ -1,0 +1,106 @@
+apiVersion: v2
+name: efe-stack
+description: EFE — multi-tenant semantic classification stack (Sprint GLOSS-B)
+type: application
+version: 1.0.0
+appVersion: "2.2.0"
+kubeVersion: ">=1.28.0-0"
+home: https://efe.example.com
+sources:
+  - https://github.com/efe-ai/efe
+maintainers:
+  - name: EFE Core Team
+    email: ops@efe.example.com
+keywords:
+  - classification
+  - llm
+  - mlops
+  - gdpr
+  - ai-act
+  - mode-3
+  - byok
+icon: https://efe.example.com/static/logo.png
+annotations:
+  artifacthub.io/license: UNLICENSED
+  artifacthub.io/operator: "false"
+  artifacthub.io/changes: |
+    - kind: added
+      description: Sprint GLOSS-B initial release (umbrella + 6 sub-charts)
+
+# Sub-charts are vendored in `charts/` ; the dependencies block below
+# is required by helm lint even when sub-charts are local. Versions
+# match each sub-chart's own Chart.yaml.
+dependencies:
+  - name: efe-server
+    version: "1.0.0"
+    repository: ""
+    condition: efe-server.enabled
+  - name: mcp-server
+    version: "1.0.0"
+    repository: ""
+    condition: mcp-server.enabled
+  - name: portal-admin
+    version: "0.1.0"
+    repository: ""
+    condition: portal-admin.enabled
+  - name: postgres-operator
+    version: "1.0.0"
+    repository: ""
+    condition: postgres-operator.enabled
+  - name: redis-stack
+    version: "1.0.0"
+    repository: ""
+    condition: redis-stack.enabled
+  - name: observability
+    version: "1.0.0"
+    repository: ""
+    condition: observability.enabled
+  # M27 Commercial Edge — Envoy + ratelimit + Redis Cluster + PgBouncer.
+  # Cf. `docs/EFE_M27_COMMERCIAL_EDGE_ARCHITECTURE.md`.
+  - name: efe-edge
+    version: "0.1.0"
+    repository: ""
+    condition: efe-edge.enabled
+  # M28 Streaming + Events — NATS JetStream cluster (3 nodes).
+  # Cf. `docs/EFE_M28_STREAMING_EVENTS_ARCHITECTURE.md`.
+  - name: efe-nats
+    version: "0.1.0"
+    repository: ""
+    condition: efe-nats.enabled
+  # M29 Data rights — Presidio sidecar for PII detection.
+  # Cf. `docs/EFE_M29_DATA_RIGHTS_ARCHITECTURE.md`.
+  - name: efe-pii
+    version: "0.1.0"
+    repository: ""
+    condition: efe-pii.enabled
+  # M30 Multi-modal — NVIDIA Triton Inference Server on GPU node pool.
+  # Cf. `docs/EFE_M30_MULTIMODAL_ARCHITECTURE.md`.
+  - name: efe-triton
+    version: "0.1.0"
+    repository: ""
+    condition: efe-triton.enabled
+  # M31 FinOps + Stripe Billing — webhook receiver + rollup / invoicer
+  # CronJobs. Cf. `docs/EFE_M31_FINOPS_BILLING_ARCHITECTURE.md`.
+  - name: efe-stripe
+    version: "0.1.0"
+    repository: ""
+    condition: efe-stripe.enabled
+  # M32 Vector Search — snapshot cron + replay job + optional pgvector
+  # init container. Cf. `docs/EFE_M32_VECTOR_SEARCH_ARCHITECTURE.md`.
+  - name: efe-vector
+    version: "0.1.0"
+    repository: ""
+    condition: efe-vector.enabled
+  # M33 Knowledge Graph + GraphRAG — NER extractor sidecar + snapshot
+  # CronJob. Cf. `docs/EFE_M33_KNOWLEDGE_GRAPH_GRAPHRAG_ARCHITECTURE.md`.
+  - name: efe-kg
+    version: "0.1.0"
+    repository: ""
+    condition: efe-kg.enabled
+  # A1 Phase-2 meta-swarm controller + N participants.  Disabled by
+  # default so pre-Phase-2 deployments stay untouched.  Cf.
+  # `docs/EFE_A1_PHASE2_PR13_ARCHITECTURE.md`.
+  - name: efe-meta-swarm
+    version: "0.2.0"
+    repository: ""
+    condition: efe-meta-swarm.enabled

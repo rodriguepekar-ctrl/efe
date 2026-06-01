@@ -1,0 +1,37 @@
+suite: efe-server service tests
+templates:
+  - service.yaml
+release:
+  name: test
+  namespace: efe-test
+chart:
+  appVersion: 1.6.0
+tests:
+  - it: exposes 3 ports (grpc + metrics + health)
+    set:
+      global.tenant: acme
+    asserts:
+      - isKind:
+          of: Service
+      - equal:
+          path: spec.type
+          value: ClusterIP
+      - lengthEqual:
+          path: spec.ports
+          count: 3
+      - contains:
+          path: spec.ports
+          content:
+            name: grpc
+            port: 50051
+            targetPort: grpc
+            protocol: TCP
+            appProtocol: grpc
+
+  - it: skips when enabled=false
+    set:
+      global.tenant: acme
+      enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0

@@ -1,0 +1,75 @@
+{{- if .Values.migrations.enabled }}
+{{- $sa := printf "%s-migrate" (include "efe-stack.fullname" .) -}}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ $sa }}
+  labels:
+    {{- include "efe-stack.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "5"
+    "helm.sh/hook-delete-policy": before-hook-creation
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "efe-stack.fullname" . }}-migrate
+  labels:
+    {{- include "efe-stack.labels" . | nindent 4 }}
+    component: migrate
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "10"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: {{ .Values.migrations.backoffLimit | default 5 }}
+  ttlSecondsAfterFinished: 86400
+  template:
+    metadata:
+      labels:
+        {{- include "efe-stack.selectorLabels" . | nindent 8 }}
+        component: migrate
+    spec:
+      restartPolicy: OnFailure
+      serviceAccountName: {{ $sa }}
+      {{- with .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        fsGroup: 65532
+      containers:
+        - name: migrate
+          image: "{{ .Values.global.imageRegistry }}/{{ .Values.migrations.image.repository }}:{{ .Values.migrations.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: IfNotPresent
+          command: ["/usr/local/bin/sqlx"]
+          args: ["migrate", "run"]
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  {{- if .Values.global.externalPostgres.enabled }}
+                  name: {{ .Values.global.externalPostgres.secretRef.name }}
+                  key: {{ .Values.global.externalPostgres.secretRef.key }}
+                  {{- else }}
+                  name: efe-postgres-pguser-efe
+                  key: uri
+                  {{- end }}
+          resources:
+            {{- toYaml .Values.migrations.resources | nindent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
+{{- end }}

@@ -1,0 +1,25 @@
+enabled: false
+
+presidio:
+  replicas: 2
+  image:
+    repository: mcr.microsoft.com/presidio-analyzer
+    tag: "latest"
+    pullPolicy: IfNotPresent
+  resources:
+    requests:
+      cpu: 200m
+      memory: 512Mi
+    limits:
+      cpu: 1
+      memory: 2Gi
+  # Languages to load (model files baked into image).
+  languages: ["en", "fr"]
+  service:
+    type: ClusterIP
+    port: 3000
+
+# NetworkPolicy : restrict ingress to efe-server.
+networkPolicy:
+  enabled: true
+  upstreamNamespace: efe-system

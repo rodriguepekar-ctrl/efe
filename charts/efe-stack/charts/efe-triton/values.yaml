@@ -1,0 +1,74 @@
+enabled: false
+
+# Triton Inference Server container.
+triton:
+  replicas: 2
+  image:
+    repository: nvcr.io/nvidia/tritonserver
+    tag: "24.10-py3"
+    pullPolicy: IfNotPresent
+  resources:
+    requests:
+      cpu: "2"
+      memory: "8Gi"
+      nvidia.com/gpu: "1"
+    limits:
+      cpu: "8"
+      memory: "32Gi"
+      nvidia.com/gpu: "1"
+  # MIG profile applied via the NVIDIA GPU operator. The 1g.10gb
+  # profile splits an A100 into 7 isolated logical GPUs ; we use 1
+  # of those per Triton replica.
+  migProfile: "1g.10gb"
+  nodeSelector:
+    accelerator: "nvidia-a100"
+    mig.enabled: "true"
+  tolerations:
+    - key: "nvidia.com/gpu"
+      operator: "Exists"
+      effect: "NoSchedule"
+  service:
+    type: ClusterIP
+    httpPort: 8000
+    grpcPort: 8001
+    metricsPort: 8002
+  # Model repository : we serve the models from a R/O PVC backed by a
+  # CSI driver that mounts the version-pinned model bundles uploaded
+  # by the `efe-model-publish` GitHub Action.
+  modelRepoPvc:
+    claimName: triton-model-repo
+    size: 50Gi
+    storageClass: efs-sc
+  # Per-model concurrency caps. Triton's model-config sets per-
+  # instance batch + queue depth ; these limits gate scale-out.
+  models:
+    siglip:
+      name: siglip_base_patch16_224
+      instances: 2
+      maxBatchSize: 8
+    whisper:
+      name: whisper_tiny_encoder
+      instances: 1
+      maxBatchSize: 4
+
+# Horizontal pod autoscaler keyed on GPU utilization.
+hpa:
+  enabled: true
+  minReplicas: 1
+  maxReplicas: 6
+  # Trigger scale-up when GPU duty cycle > 70 % sustained 3 min.
+  gpuDutyCycleTarget: 70
+
+# Network policy : ingress from efe-server (regular traffic) +
+# Prometheus operator's namespace (metrics scrape).
+networkPolicy:
+  enabled: true
+  upstreamNamespace: efe-system
+  # M30 audit fix : metrics scrape needs ingress from the monitoring
+  # namespace. Override here if your Prometheus lives elsewhere.
+  prometheusNamespace: monitoring
+
+# Prometheus scrape.
+serviceMonitor:
+  enabled: true
+  interval: 30s

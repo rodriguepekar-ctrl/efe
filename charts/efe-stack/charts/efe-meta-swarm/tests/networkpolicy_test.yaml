@@ -1,0 +1,170 @@
+# PR #14 — helm-unittest assertions for NetworkPolicy refinements.
+# Covers AC29 (hook-egress) + bundle-egress.
+suite: efe-meta-swarm NetworkPolicy
+
+templates:
+  - networkpolicy.yaml
+
+tests:
+  - it: NetworkPolicy disabled by default — 0 documents
+    set:
+      enabled: true
+      image:
+        tag: "test"
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: PR #13 baseline — 5 policies when networkPolicy.enabled (deny + 3 allow + test-egress)
+    set:
+      enabled: true
+      image:
+        tag: "test"
+      networkPolicy:
+        enabled: true
+    asserts:
+      - hasDocuments:
+          count: 5
+
+  - it: AC29 — hook-egress NetworkPolicy renders when hooks + networkPolicy both enabled
+    set:
+      enabled: true
+      image:
+        tag: "test"
+      networkPolicy:
+        enabled: true
+      hooks:
+        enabled: true
+    documentSelector:
+      path: metadata.name
+      value: RELEASE-NAME-efe-meta-swarm-hook-egress
+    asserts:
+      - isKind:
+          of: NetworkPolicy
+      - equal:
+          path: spec.podSelector.matchLabels["app.kubernetes.io/component"]
+          value: hook
+      - contains:
+          path: spec.policyTypes
+          content: Egress
+          any: true
+
+  - it: AC29 — hook-egress allows API server (port 443) + DNS (port 53)
+    set:
+      enabled: true
+      image:
+        tag: "test"
+      networkPolicy:
+        enabled: true
+      hooks:
+        enabled: true
+    documentSelector:
+      path: metadata.name
+      value: RELEASE-NAME-efe-meta-swarm-hook-egress
+    asserts:
+      # API server egress (port 443).
+      - contains:
+          path: spec.egress[0].ports
+          content:
+            protocol: TCP
+            port: 443
+          any: true
+      # DNS UDP/TCP 53.
+      - contains:
+          path: spec.egress[1].ports
+          content:
+            protocol: UDP
+            port: 53
+          any: true
+
+  - it: bundle-egress NetworkPolicy renders when bundle.sidecar + networkPolicy both enabled
+    set:
+      enabled: true
+      image:
+        tag: "test"
+      networkPolicy:
+        enabled: true
+      bundle:
+        sidecar:
+          enabled: true
+    documentSelector:
+      path: metadata.name
+      value: RELEASE-NAME-efe-meta-swarm-bundle-egress
+    asserts:
+      - isKind:
+          of: NetworkPolicy
+      - equal:
+          path: spec.podSelector.matchLabels["app.kubernetes.io/component"]
+          value: participant
+
+  - it: hook-egress NOT rendered when hooks disabled
+    set:
+      enabled: true
+      image:
+        tag: "test"
+      networkPolicy:
+        enabled: true
+    asserts:
+      # 5 docs (PR #13 baseline) ; no hook-egress.
+      - hasDocuments:
+          count: 5
+
+  # ───────────────────────────────────────────────────────────────────
+  # PR #14 audit pass — regression guard for the API server egress
+  # bug.  Original template used `namespaceSelector: kubernetes.io/
+  # metadata.name=default` which matches pods in the default namespace
+  # but does NOT match the K8s API server's Service ClusterIP (the API
+  # server lives on the service CIDR, not in any pod's namespace).
+  # Result : hook Jobs were silently blocked under deny-by-default
+  # NetworkPolicy.  Fix : `ipBlock`-based egress.
+  # ───────────────────────────────────────────────────────────────────
+
+  - it: AC29 (audit) — hook-egress API server rule uses ipBlock (NOT namespaceSelector)
+    set:
+      enabled: true
+      image:
+        tag: "test"
+      networkPolicy:
+        enabled: true
+      hooks:
+        enabled: true
+    documentSelector:
+      path: metadata.name
+      value: RELEASE-NAME-efe-meta-swarm-hook-egress
+    asserts:
+      # The API server egress rule (index 0) MUST contain an ipBlock,
+      # not a namespaceSelector.  This guards against the original bug
+      # where namespaceSelector:default never matched the API server VIP.
+      - exists:
+          path: spec.egress[0].to[0].ipBlock
+      - notExists:
+          path: spec.egress[0].to[0].namespaceSelector
+      # Default ipBlock cidr value from values.yaml.
+      - equal:
+          path: spec.egress[0].to[0].ipBlock.cidr
+          value: "0.0.0.0/0"
+      # `except:` list must exclude link-local IMDS endpoints.
+      - contains:
+          path: spec.egress[0].to[0].ipBlock.except
+          content: 169.254.169.254/32
+          any: true
+
+  - it: AC29 (audit) — hook-egress hookEgressCidrs is operator-overridable
+    set:
+      enabled: true
+      image:
+        tag: "test"
+      networkPolicy:
+        enabled: true
+        # Production override : tighten to actual EKS service CIDR.
+        hookEgressCidrs:
+          - "172.20.0.0/16"
+      hooks:
+        enabled: true
+    documentSelector:
+      path: metadata.name
+      value: RELEASE-NAME-efe-meta-swarm-hook-egress
+    asserts:
+      - equal:
+          path: spec.egress[0].to[0].ipBlock.cidr
+          value: "172.20.0.0/16"

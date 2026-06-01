@@ -1,0 +1,5 @@
+# PR #13 — kovant-3p scenario : the default 3-participant scenario
+# with `enabled: true` + a pinned image tag.
+enabled: true
+image:
+  tag: "0.2.0-snapshot"

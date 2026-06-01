@@ -1,0 +1,167 @@
+{{- if and .Values.enabled .Values.grafana.enabled }}
+{{- if .Values.grafana.dashboards.efeOverview }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: efe-dashboard-overview
+  labels:
+    {{- include "observability.labels" . | nindent 4 }}
+    grafana_dashboard: "1"
+  annotations:
+    grafana_folder: "EFE"
+data:
+  efe-overview.json: |-
+    {
+      "title": "EFE Overview",
+      "uid": "efe-overview",
+      "schemaVersion": 38,
+      "version": 1,
+      "panels": [
+        {
+          "id": 1,
+          "title": "Classify RPS (per-mode)",
+          "type": "timeseries",
+          "datasource": "Prometheus",
+          "gridPos": {"x":0,"y":0,"w":12,"h":8},
+          "targets": [
+            {"expr": "sum(rate(efe_classify_total[1m])) by (mode)"}
+          ]
+        },
+        {
+          "id": 2,
+          "title": "p99 Latency (ms)",
+          "type": "timeseries",
+          "datasource": "Prometheus",
+          "gridPos": {"x":12,"y":0,"w":12,"h":8},
+          "targets": [
+            {"expr": "histogram_quantile(0.99, sum(rate(efe_classify_duration_ms_bucket[5m])) by (le))"}
+          ]
+        },
+        {
+          "id": 3,
+          "title": "Error rate",
+          "type": "timeseries",
+          "datasource": "Prometheus",
+          "gridPos": {"x":0,"y":8,"w":12,"h":8},
+          "targets": [
+            {"expr": "sum(rate(efe_classify_errors_total[1m])) / sum(rate(efe_classify_total[1m]))"}
+          ]
+        },
+        {
+          "id": 4,
+          "title": "Cost today (USD per tenant)",
+          "type": "stat",
+          "datasource": "Prometheus",
+          "gridPos": {"x":12,"y":8,"w":12,"h":8},
+          "targets": [
+            {"expr": "sum(efe_cost_today_usd) by (tenant)"}
+          ]
+        }
+      ]
+    }
+{{- end }}
+{{- if .Values.grafana.dashboards.efeMode3 }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: efe-dashboard-mode3
+  labels:
+    {{- include "observability.labels" . | nindent 4 }}
+    grafana_dashboard: "1"
+  annotations:
+    grafana_folder: "EFE"
+data:
+  efe-mode3.json: |-
+    {
+      "title": "EFE Mode-3 Multi-Turn",
+      "uid": "efe-mode3",
+      "schemaVersion": 38,
+      "version": 1,
+      "panels": [
+        {
+          "id": 1,
+          "title": "Convergence rate (last 1h)",
+          "type": "stat",
+          "datasource": "Prometheus",
+          "gridPos": {"x":0,"y":0,"w":8,"h":4},
+          "targets": [
+            {"expr": "sum(rate(efe_mode3_calls_total{converged=\"true\"}[1h])) / sum(rate(efe_mode3_calls_total[1h]))"}
+          ]
+        },
+        {
+          "id": 2,
+          "title": "Turn distribution",
+          "type": "histogram",
+          "datasource": "Prometheus",
+          "gridPos": {"x":8,"y":0,"w":16,"h":8},
+          "targets": [
+            {"expr": "sum(rate(efe_mode3_turns_total[1h])) by (turns)"}
+          ]
+        },
+        {
+          "id": 3,
+          "title": "Pending review queue depth",
+          "type": "stat",
+          "datasource": "Prometheus",
+          "gridPos": {"x":0,"y":4,"w":8,"h":4},
+          "targets": [
+            {"expr": "efe_mode3_review_queue_pending"}
+          ]
+        }
+      ]
+    }
+{{- end }}
+{{- if .Values.grafana.dashboards.efeCompliance }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: efe-dashboard-compliance
+  labels:
+    {{- include "observability.labels" . | nindent 4 }}
+    grafana_dashboard: "1"
+  annotations:
+    grafana_folder: "EFE"
+data:
+  efe-compliance.json: |-
+    {
+      "title": "EFE Compliance",
+      "uid": "efe-compliance",
+      "schemaVersion": 38,
+      "version": 1,
+      "panels": [
+        {
+          "id": 1,
+          "title": "HMAC chain status",
+          "type": "stat",
+          "datasource": "Prometheus",
+          "gridPos": {"x":0,"y":0,"w":8,"h":4},
+          "targets": [
+            {"expr": "efe_audit_chain_verify_failure_total == 0"}
+          ]
+        },
+        {
+          "id": 2,
+          "title": "Tenants with active AI Act Art. 14 ack",
+          "type": "stat",
+          "datasource": "Prometheus",
+          "gridPos": {"x":8,"y":0,"w":8,"h":4},
+          "targets": [
+            {"expr": "count(efe_tenant_compliance{ai_act_art14=\"true\"})"}
+          ]
+        },
+        {
+          "id": 3,
+          "title": "Key rotation events (last 30d)",
+          "type": "stat",
+          "datasource": "Prometheus",
+          "gridPos": {"x":16,"y":0,"w":8,"h":4},
+          "targets": [
+            {"expr": "increase(efe_byok_rotation_total[30d])"}
+          ]
+        }
+      ]
+    }
+{{- end }}
+{{- end }}

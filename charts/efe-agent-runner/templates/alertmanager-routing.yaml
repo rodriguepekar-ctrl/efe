@@ -1,0 +1,84 @@
+{{- if .Values.alertmanager.enabled }}
+apiVersion: monitoring.coreos.com/v1alpha1
+kind: AlertmanagerConfig
+metadata:
+  name: {{ include "efe-agent-runner.fullname" . }}-routing
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "efe-agent-runner.labels" . | nindent 4 }}
+spec:
+  route:
+    receiver: efe-agent-default
+    groupBy: ["alertname", "tenant"]
+    groupWait: 30s
+    groupInterval: 5m
+    repeatInterval: 4h
+    routes:
+      # P0 — phone + SMS via PagerDuty.
+      - matchers:
+          - name: severity
+            value: P0
+        receiver: efe-agent-pagerduty-p0
+        repeatInterval: 1m
+        continue: false
+      # P1 — push via PagerDuty (no phone unless escalated).
+      - matchers:
+          - name: severity
+            value: P1
+        receiver: efe-agent-pagerduty-p1
+        repeatInterval: 5m
+      # P2 — Slack + business-hours rotation.
+      - matchers:
+          - name: severity
+            value: P2
+        receiver: efe-agent-pagerduty-p2
+        repeatInterval: 15m
+      # P3 — Slack only.
+      - matchers:
+          - name: severity
+            value: P3
+        receiver: efe-agent-slack-p3
+        repeatInterval: 24h
+
+  receivers:
+    - name: efe-agent-default
+      slackConfigs:
+        - apiURL:
+            key: webhook_url
+            name: {{ .Values.alertmanager.slackWebhookSecret }}
+          channel: "#efe-agent-runtime-alerts"
+          sendResolved: true
+          title: "{{`{{ .GroupLabels.alertname }}`}}"
+
+    - name: efe-agent-pagerduty-p0
+      pagerdutyConfigs:
+        - serviceKey:
+            key: routing_key_p0
+            name: {{ .Values.alertmanager.pagerdutySecret }}
+          severity: critical
+          sendResolved: true
+
+    - name: efe-agent-pagerduty-p1
+      pagerdutyConfigs:
+        - serviceKey:
+            key: routing_key_p1
+            name: {{ .Values.alertmanager.pagerdutySecret }}
+          severity: error
+          sendResolved: true
+
+    - name: efe-agent-pagerduty-p2
+      pagerdutyConfigs:
+        - serviceKey:
+            key: routing_key_p2
+            name: {{ .Values.alertmanager.pagerdutySecret }}
+          severity: warning
+          sendResolved: true
+
+    - name: efe-agent-slack-p3
+      slackConfigs:
+        - apiURL:
+            key: webhook_url
+            name: {{ .Values.alertmanager.slackWebhookSecret }}
+          channel: "#efe-agent-runtime-info"
+          sendResolved: false
+{{- end }}

@@ -1,0 +1,129 @@
+{{- if and .Values.enabled .Values.crons.rollupHour.enabled }}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "efe-stripe.fullname" . }}-rollup-hour
+  labels:
+    {{- include "efe-stripe.labels" . | nindent 4 }}
+spec:
+  schedule: {{ .Values.crons.rollupHour.schedule | quote }}
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      template:
+        metadata:
+          labels:
+            {{- include "efe-stripe.selectorLabels" . | nindent 12 }}
+            component: rollup-hour
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: rollup
+              image: "{{ .Values.crons.rollupHour.image.repository }}:{{ .Values.crons.rollupHour.image.tag }}"
+              imagePullPolicy: IfNotPresent
+              args: ["--period", "hour"]
+              env:
+                - name: EFE_REGION
+                  valueFrom:
+                    configMapKeyRef:
+                      name: efe-region-config
+                      key: region
+{{- end }}
+{{- if and .Values.enabled .Values.crons.rollupDay.enabled }}
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "efe-stripe.fullname" . }}-rollup-day
+  labels:
+    {{- include "efe-stripe.labels" . | nindent 4 }}
+spec:
+  schedule: {{ .Values.crons.rollupDay.schedule | quote }}
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      template:
+        metadata:
+          labels:
+            {{- include "efe-stripe.selectorLabels" . | nindent 12 }}
+            component: rollup-day
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: rollup
+              image: "{{ .Values.crons.rollupDay.image.repository }}:{{ .Values.crons.rollupDay.image.tag }}"
+              imagePullPolicy: IfNotPresent
+              args: ["--period", "day"]
+{{- end }}
+{{- if and .Values.enabled .Values.crons.invoicer.enabled }}
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "efe-stripe.fullname" . }}-invoicer
+  labels:
+    {{- include "efe-stripe.labels" . | nindent 4 }}
+spec:
+  schedule: {{ .Values.crons.invoicer.schedule | quote }}
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 12   # one year of monthly runs
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 1   # invoices are sensitive — fail loud
+      template:
+        metadata:
+          labels:
+            {{- include "efe-stripe.selectorLabels" . | nindent 12 }}
+            component: invoicer
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: invoicer
+              image: "{{ .Values.crons.invoicer.image.repository }}:{{ .Values.crons.invoicer.image.tag }}"
+              imagePullPolicy: IfNotPresent
+              env:
+                - name: EFE_STRIPE_API_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ .Values.secrets.name }}
+                      key: {{ .Values.secrets.apiKey.secretKey }}
+{{- end }}
+{{- if and .Values.enabled .Values.crons.reconciler.enabled }}
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "efe-stripe.fullname" . }}-reconciler
+  labels:
+    {{- include "efe-stripe.labels" . | nindent 4 }}
+spec:
+  schedule: {{ .Values.crons.reconciler.schedule | quote }}
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      backoffLimit: 3
+      template:
+        metadata:
+          labels:
+            {{- include "efe-stripe.selectorLabels" . | nindent 12 }}
+            component: reconciler
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: reconciler
+              image: "{{ .Values.crons.reconciler.image.repository }}:{{ .Values.crons.reconciler.image.tag }}"
+              imagePullPolicy: IfNotPresent
+              env:
+                - name: EFE_STRIPE_API_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ .Values.secrets.name }}
+                      key: {{ .Values.secrets.apiKey.secretKey }}
+{{- end }}

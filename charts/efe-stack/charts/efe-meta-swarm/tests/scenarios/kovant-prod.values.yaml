@@ -1,0 +1,31 @@
+# PR #14 — kovant-prod scenario : full prod-grade rendering.
+# Tests : hooks + alerts + dashboard + priorityClass + networkPolicy
+#         + serviceMonitor + (no TLS / no sidecar — PR #15/#16).
+enabled: true
+image:
+  tag: "0.3.0"
+networkPolicy:
+  enabled: true
+metrics:
+  serviceMonitor:
+    enabled: true
+alerts:
+  enabled: true
+  severity:
+    ReloadFailureRate: critical
+    ReloadLatencyP99High: warning
+    ReloadingStuck: critical
+    ControllerDown: critical
+    ParticipantDown: warning
+    ReloadGenNotAdvancing: info
+dashboard:
+  enabled: true
+hooks:
+  enabled: true
+  postUpgrade:
+    ignoreFailures: false
+priorityClass:
+  enabled: true
+controller:
+  hpa:
+    enabled: false      # Phase-2 lock

@@ -1,0 +1,22 @@
+{{- if and .Values.enabled .Values.priorityClass.enabled }}
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  # PR #14 audit pass — trunc-safe helper, MUST match the controller
+  # Deployment's spec.priorityClassName.
+  name: {{ include "efe-meta-swarm.controllerPriorityClassName" . }}
+  labels:
+    {{- include "efe-meta-swarm.labels" . | nindent 4 }}
+    app.kubernetes.io/component: controller
+# PR #14 audit pass — `| default 100000` would silently override an
+# explicit `priorityClass.value: 0` (valid K8s integer, equivalent to
+# baseline priority).  values.yaml already provides the 100000 default
+# via Helm's deep-merge ; the schema validates the range.
+value: {{ .Values.priorityClass.value }}
+globalDefault: false
+description: |
+  PR #14 — Priority class for the EFE meta-swarm controller pod.
+  Higher than default user workloads (1000) so the controller
+  survives resource pressure ; lower than system-cluster-critical
+  (2000000000) so it yields to kubelet / kube-proxy.
+{{- end }}

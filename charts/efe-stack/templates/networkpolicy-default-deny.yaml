@@ -1,0 +1,13 @@
+{{- if .Values.networkPolicy.defaultDeny }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "efe-stack.fullname" . }}-default-deny
+  labels:
+    {{- include "efe-stack.labels" . | nindent 4 }}
+spec:
+  podSelector: {}                      # match every pod in namespace
+  policyTypes: [Ingress, Egress]
+  # Empty ingress + egress = deny-all baseline.
+  # Sub-chart NetworkPolicies grant explicit allowances on top.
+{{- end }}

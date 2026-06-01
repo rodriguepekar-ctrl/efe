@@ -1,0 +1,92 @@
+{{- if and .Values.enabled .Values.tests.enabled }}
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ include "efe-meta-swarm.fullname" . }}-test-connection
+  labels:
+    {{- include "efe-meta-swarm.labels" . | nindent 4 }}
+    app.kubernetes.io/component: test
+  annotations:
+    "helm.sh/hook": test
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  restartPolicy: Never
+  activeDeadlineSeconds: {{ .Values.tests.timeoutSeconds }}
+  serviceAccountName: default
+  automountServiceAccountToken: false
+  enableServiceLinks: false
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 65532
+    runAsGroup: 65532
+    seccompProfile:
+      type: RuntimeDefault
+  containers:
+    - name: probe
+      image: {{ .Values.tests.grpcurlImage | quote }}
+      imagePullPolicy: IfNotPresent
+      securityContext:
+        allowPrivilegeEscalation: false
+        capabilities:
+          drop: ["ALL"]
+        readOnlyRootFilesystem: true
+        runAsNonRoot: true
+        runAsUser: 65532
+      resources:
+        requests:
+          cpu: 50m
+          memory: 32Mi
+        limits:
+          cpu: 200m
+          memory: 128Mi
+      command:
+        - sh
+        - -c
+        - |
+          set -eu
+          HOST="{{ include "efe-meta-swarm.controllerName" . }}.{{ .Release.Namespace }}.svc"
+          PORT="{{ .Values.controller.service.grpcPort }}"
+          DEADLINE_S={{ sub (int .Values.tests.timeoutSeconds) 5 }}
+
+          echo "── PR #13 helm-test : probing ${HOST}:${PORT} ──"
+
+          # Stage 1 — TCP reach.  Always-on probe ; works without
+          # gRPC reflection.  This is the load-bearing assertion :
+          # the controller process is bound + accepting connections.
+          # Image `fullstorydev/grpcurl` is built on a base that ships
+          # busybox-ish tooling ; we use grpcurl's own `dial` step.
+          end=$(( $(date +%s) + DEADLINE_S ))
+          while [ "$(date +%s)" -lt "$end" ] ; do
+            # grpcurl with `list` does a connect + (optional) reflection
+            # query.  If reflection is OFF the command exits with a
+            # specific error message but the TCP dial succeeded ; we
+            # treat ANY response from the server (including the
+            # "reflection is not supported" error) as proof the
+            # controller is alive.
+            out=$(grpcurl -plaintext -connect-timeout 5s "${HOST}:${PORT}" list 2>&1 || true)
+            if echo "$out" | grep -q "efe.v1.meta_swarm.MetaSwarmService" ; then
+              echo "✓ Stage 1 (TCP + reflection) : controller reachable, reflection ON"
+              echo "$out"
+              # Stage 2 — Health RPC (only meaningful when reflection on).
+              echo "── Stage 2 : grpcurl Health ──"
+              grpcurl -plaintext -d '{}' "${HOST}:${PORT}" \
+                efe.v1.meta_swarm.MetaSwarmService/Health
+              echo "✓ Stage 2 (Health RPC) : status returned"
+              exit 0
+            fi
+            if echo "$out" | grep -qi "reflection" ; then
+              # Reflection is OFF but the server responded → TCP + gRPC
+              # handshake succeeded → controller is alive.  This is the
+              # production-equivalent assertion (reflection is opt-in).
+              echo "✓ Stage 1 (TCP + gRPC handshake) : controller reachable"
+              echo "  reflection disabled (production default) ; ${HOST}:${PORT} responded with :"
+              echo "$out" | head -3
+              exit 0
+            fi
+            echo "  (waiting for controller : $(date +%s) / $end)"
+            sleep 2
+          done
+
+          echo "✗ controller did not respond within ${DEADLINE_S}s"
+          exit 1
+{{- end }}

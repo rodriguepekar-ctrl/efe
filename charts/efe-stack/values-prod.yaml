@@ -1,0 +1,63 @@
+# Values overrides for production cloud deployment.
+# Assumes external RDS (provisioned via Terraform) + ElastiCache.
+
+global:
+  tenant: ""                           # MUST be set
+  environment: prod
+  storageClass: gp3
+  externalPostgres:
+    enabled: true
+    secretRef:
+      name: efe-postgres-external
+      key: connection_string
+
+efe-server:
+  replicas: 6
+  resources:
+    requests: { cpu: 1, memory: 2Gi }
+    limits:   { cpu: 4, memory: 8Gi }
+  autoscaling:
+    enabled: true
+    minReplicas: 6
+    maxReplicas: 24
+  byok:
+    backend: aws-kms
+    awsKmsKeyId: ""                    # populate from Terraform output
+  serviceAccount:
+    annotations:
+      eks.amazonaws.com/role-arn: ""   # populate from Terraform output
+  features:
+    m21Mode2Enabled: true
+    d8AdminEnabled: true
+
+mcp-server:
+  replicas: 4
+  profile: agent-native-deploy
+
+portal-admin:
+  enabled: false                       # gated until Sprint C
+
+postgres-operator:
+  enabled: false                       # external RDS
+
+redis-stack:
+  enabled: false                       # external ElastiCache
+
+externalRedis:
+  enabled: true
+  host: ""                             # populate from Terraform output
+  authTokenSecretRef:
+    name: efe-redis-external-auth
+    key: token
+
+observability:
+  enabled: true
+  prometheus:
+    retention: 30d
+    persistentVolumeSize: 200Gi
+  loki:
+    retention: 30d
+    persistentVolumeSize: 500Gi
+
+ingress:
+  enabled: true

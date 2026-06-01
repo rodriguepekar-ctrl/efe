@@ -1,0 +1,16 @@
+apiVersion: v2
+name: observability
+description: EFE observability stack (Prometheus rules + Grafana dashboards + Loki + Tempo)
+type: application
+version: 1.0.0
+appVersion: "1.0.0"
+kubeVersion: ">=1.28.0-0"
+keywords:
+  - observability
+  - prometheus
+  - grafana
+  - loki
+  - tempo
+maintainers:
+  - name: EFE Core Team
+    email: ops@efe.example.com

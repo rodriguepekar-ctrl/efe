@@ -1,0 +1,77 @@
+# PR #14 — helm-unittest assertions for the bundle sidecar.
+suite: efe-meta-swarm bundle sidecar
+
+templates:
+  - participant-deployment.yaml
+
+tests:
+  - it: AC22 — sidecar absent when bundle.sidecar.enabled = false (default)
+    set:
+      enabled: true
+      image:
+        tag: "test"
+    documentIndex: 0
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers
+          content:
+            name: bundle-loader
+
+  - it: AC22 — sidecar container injected when enabled
+    set:
+      enabled: true
+      image:
+        tag: "test"
+      bundle:
+        sidecar:
+          enabled: true
+    documentIndex: 0
+    asserts:
+      - contains:
+          path: spec.template.spec.containers
+          content:
+            name: bundle-loader
+          any: true
+
+  - it: AC23 — shareProcessNamespace true when sidecar enabled
+    set:
+      enabled: true
+      image:
+        tag: "test"
+      bundle:
+        sidecar:
+          enabled: true
+    documentIndex: 0
+    asserts:
+      - equal:
+          path: spec.template.spec.shareProcessNamespace
+          value: true
+
+  - it: AC24 — weights emptyDir Memory volume when sidecar enabled
+    set:
+      enabled: true
+      image:
+        tag: "test"
+      bundle:
+        sidecar:
+          enabled: true
+    documentIndex: 0
+    asserts:
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: weights
+            emptyDir:
+              medium: Memory
+              sizeLimit: 256Mi
+          any: true
+
+  - it: shareProcessNamespace NOT set when sidecar disabled
+    set:
+      enabled: true
+      image:
+        tag: "test"
+    documentIndex: 0
+    asserts:
+      - notExists:
+          path: spec.template.spec.shareProcessNamespace

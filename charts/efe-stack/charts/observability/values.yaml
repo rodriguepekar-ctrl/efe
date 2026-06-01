@@ -1,0 +1,43 @@
+enabled: true
+
+prometheus:
+  enabled: true
+  retention: 30d
+  persistentVolumeSize: 100Gi
+  storageClass: ""
+  scrapeInterval: 15s
+  alertRules:
+    enabled: true
+
+grafana:
+  enabled: true
+  adminPasswordSecretRef:
+    name: efe-grafana-admin
+    key: admin-password
+  dashboards:
+    efeOverview: true
+    efeMode3: true
+    efeCompliance: true
+
+loki:
+  enabled: true
+  retention: 30d
+  persistentVolumeSize: 200Gi
+
+tempo:
+  enabled: true
+  samplingRate: 0.01
+  retention: 7d
+
+alertmanager:
+  enabled: true
+  receivers:
+    slack:
+      enabled: false
+      webhookSecretRef: ""
+    pagerduty:
+      enabled: false
+      serviceKeySecretRef: ""
+
+global:
+  storageClass: gp3

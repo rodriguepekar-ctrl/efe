@@ -1,0 +1,38 @@
+# Default-deny ingress + egress for the agent-runtime namespace.
+# Per-run NetworkPolicies (rendered by the controller) ADD specific
+# egress allowances on top of this baseline.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: efe-agent-runtime-default-deny
+  labels:
+    {{- include "efe-agent-runner.labels" . | nindent 4 }}
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+    - Egress
+  # Allow nothing by default.
+  ingress: []
+  egress: []
+---
+# Allow only intra-namespace metrics scraping by Prometheus.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: efe-agent-runtime-metrics-scrape
+  labels:
+    {{- include "efe-agent-runner.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: efe-agent-runner
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+      ports:
+        - protocol: TCP
+          port: 9091

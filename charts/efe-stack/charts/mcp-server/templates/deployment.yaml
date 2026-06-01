@@ -1,0 +1,109 @@
+{{- if .Values.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "mcp-server.fullname" . }}
+  labels:
+    {{- include "mcp-server.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicas | default 2 }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      {{- include "mcp-server.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "mcp-server.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: tooling
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "{{ .Values.service.metricsPort | default 9091 }}"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: {{ include "mcp-server.serviceAccountName" . }}
+      {{- with .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      automountServiceAccountToken: true
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+        fsGroup: 65534
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: mcp-server
+          image: {{ include "mcp-server.image" . | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy | default "IfNotPresent" }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.service.httpPort | default 8800 }}
+              protocol: TCP
+            - name: metrics
+              containerPort: {{ .Values.service.metricsPort | default 9091 }}
+              protocol: TCP
+          env:
+            - name: EFE_MCP_TOOL_PROFILE
+              value: {{ .Values.profile | default "agent-native" | quote }}
+            - name: EFE_BACKEND_GRPC_URL
+              value: "http://{{ .Release.Name }}-efe-server.{{ .Release.Namespace }}.svc.cluster.local:50051"
+            - name: EFE_TENANT_SLUG
+              value: {{ .Values.global.tenant | quote }}
+            # Inherit feature flags from efe-server (cohérence forte).
+            - name: EFE_FEATURE_M20_HELPER_TOOLS_ENABLED
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ .Release.Name }}-efe-server
+                  key: EFE_FEATURE_M20_HELPER_TOOLS_ENABLED
+                  optional: true
+            - name: EFE_FEATURE_M21_MODE2_ENABLED
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ .Release.Name }}-efe-server
+                  key: EFE_FEATURE_M21_MODE2_ENABLED
+                  optional: true
+            - name: EFE_FEATURE_M22_MODE3_ENABLED
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ .Release.Name }}-efe-server
+                  key: EFE_FEATURE_M22_MODE3_ENABLED
+                  optional: true
+            - name: EFE_FEATURE_D8_ADMIN_ENABLED
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ .Release.Name }}-efe-server
+                  key: EFE_FEATURE_D8_ADMIN_ENABLED
+                  optional: true
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            initialDelaySeconds: 3
+            periodSeconds: 5
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
+{{- end }}

@@ -1,0 +1,89 @@
+{{- if and .Values.enabled .Values.hooks.enabled .Values.hooks.postUpgrade.sighupEnabled }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "efe-meta-swarm.hookName" (list . "post-upgrade-sighup") }}
+  labels:
+    {{- include "efe-meta-swarm.hookLabels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": post-upgrade,post-install
+    "helm.sh/hook-weight": "10"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: 2
+  ttlSecondsAfterFinished: 300
+  template:
+    metadata:
+      labels:
+        {{- include "efe-meta-swarm.hookLabels" . | nindent 8 }}
+    spec:
+      restartPolicy: Never
+      serviceAccountName: {{ include "efe-meta-swarm.hookServiceAccountName" . }}
+      automountServiceAccountToken: true
+      enableServiceLinks: false
+      securityContext:
+        {{- include "efe-meta-swarm.commonPodSecurityContext" . | nindent 8 }}
+      containers:
+        - name: sighup
+          image: {{ .Values.hooks.image | quote }}
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            {{- include "efe-meta-swarm.commonContainerSecurityContext" . | nindent 12 }}
+          resources:
+            requests: {cpu: 50m, memory: 64Mi}
+            limits:   {cpu: 200m, memory: 256Mi}
+          env:
+            - name: NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: CONTROLLER_DEPLOY
+              value: {{ include "efe-meta-swarm.controllerName" . }}
+            # PR #14 audit fix — DO NOT use `| default true` on a
+            # boolean : Helm/Sprig treats `false` as an empty value, so
+            # `| default true` silently rewrites an explicit
+            # `hooks.postUpgrade.ignoreFailures: false` (prod fail-fast
+            # mode) back to `true`.  We use `ternary` against the merged
+            # value, which preserves the explicit `false` from the
+            # operator's values file.  values.yaml carries the
+            # `ignoreFailures: true` default so the merged value is
+            # always a boolean.
+            - name: IGNORE_FAIL
+              value: {{ ternary "true" "false" .Values.hooks.postUpgrade.ignoreFailures | quote }}
+          command:
+            - sh
+            - -c
+            - |
+              set -eu
+
+              echo "── PR #14 post-upgrade SIGHUP-all ──"
+              echo "namespace=$NAMESPACE  controller=$CONTROLLER_DEPLOY  ignoreFail=$IGNORE_FAIL"
+
+              sighup_pod() {
+                local deploy="$1"
+                echo "Waiting for $deploy rollout..."
+                kubectl -n "$NAMESPACE" rollout status \
+                  "deploy/$deploy" --timeout=120s
+                echo "SIGHUP $deploy ..."
+                if ! kubectl -n "$NAMESPACE" exec "deploy/$deploy" -- kill -HUP 1 ; then
+                  if [ "$IGNORE_FAIL" = "true" ] ; then
+                    echo "⚠ $deploy SIGHUP failed ; continuing (ignoreFailures=true)"
+                    return 0
+                  else
+                    echo "✗ $deploy SIGHUP failed (ignoreFailures=false)"
+                    return 1
+                  fi
+                fi
+                echo "✓ $deploy SIGHUP delivered"
+              }
+
+              # 1) Controller.
+              sighup_pod "$CONTROLLER_DEPLOY"
+
+              # 2) Every participant.
+              {{- range $p := .Values.participants }}
+              sighup_pod "{{ include "efe-meta-swarm.participantName" (list $ $p.id) }}"
+              {{- end }}
+
+              echo "✓ SIGHUP-all complete"
+{{- end }}

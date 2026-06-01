@@ -1,0 +1,495 @@
+# PR #14 — helm-unittest assertions for TLS bootstrap stubs.
+# Covers :
+#   AC25 — Issuer rendered when cert-manager enabled
+#   AC26 — Certificate × 4 (controller + 3 participants)
+#   AC27 — Controller + participant Deployments mount the TLS Secret +
+#          set EFE_META_SWARM_TLS_* env vars at the canonical paths
+#   AC28 — Schema rejects invalid issuerType (selfSigned | ca only)
+suite: efe-meta-swarm TLS
+
+templates:
+  - tls-issuer.yaml
+  - tls-certificate.yaml
+  - controller-deployment.yaml
+  - participant-deployment.yaml
+
+tests:
+  # ───────────────────────────────────────────────────────────────────
+  # § 1. tls-issuer.yaml / tls-certificate.yaml — cert-manager surface.
+  # ───────────────────────────────────────────────────────────────────
+
+  - it: TLS disabled by default — Issuer + Certificate render 0 documents
+    templates:
+      - tls-issuer.yaml
+      - tls-certificate.yaml
+    set:
+      enabled: true
+      image:
+        tag: "test"
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: AC25 — Issuer rendered when tls.certManager.enabled (selfSigned)
+    template: tls-issuer.yaml
+    set:
+      enabled: true
+      image:
+        tag: "test"
+      tls:
+        enabled: true
+        certManager:
+          enabled: true
+          issuerType: selfSigned
+    asserts:
+      - isKind:
+          of: Issuer
+      - equal:
+          path: apiVersion
+          value: cert-manager.io/v1
+      - exists:
+          path: spec.selfSigned
+
+  - it: AC26 — Certificate × 4 rendered (controller + 3 participants)
+    template: tls-certificate.yaml
+    set:
+      enabled: true
+      image:
+        tag: "test"
+      tls:
+        enabled: true
+        certManager:
+          enabled: true
+          issuerType: selfSigned
+    asserts:
+      - hasDocuments:
+          count: 4
+
+  - it: AC26 — Controller Certificate has the canonical secretName + DNS names
+    template: tls-certificate.yaml
+    documentSelector:
+      path: metadata.name
+      value: RELEASE-NAME-efe-meta-swarm-controller-tls
+    set:
+      enabled: true
+      image:
+        tag: "test"
+      tls:
+        enabled: true
+        certManager:
+          enabled: true
+          issuerType: selfSigned
+    asserts:
+      - isKind:
+          of: Certificate
+      - equal:
+          path: spec.secretName
+          value: RELEASE-NAME-efe-meta-swarm-controller-tls
+      - contains:
+          path: spec.dnsNames
+          content: RELEASE-NAME-efe-meta-swarm-controller.NAMESPACE.svc
+          any: true
+      - equal:
+          path: spec.issuerRef.name
+          value: RELEASE-NAME-efe-meta-swarm-issuer
+      - equal:
+          path: spec.issuerRef.kind
+          value: Issuer
+
+  - it: AC28 — Issuer fails for invalid issuerType (schema rejection)
+    template: tls-issuer.yaml
+    set:
+      enabled: true
+      image:
+        tag: "test"
+      tls:
+        enabled: true
+        certManager:
+          enabled: true
+          issuerType: vault            # not selfSigned / ca → schema rejects
+    asserts:
+      - failedTemplate: {}
+
+  # ───────────────────────────────────────────────────────────────────
+  # § 2. AC27 — Controller Deployment TLS wiring.
+  # ───────────────────────────────────────────────────────────────────
+
+  - it: AC27 — Controller Deployment mounts TLS Secret at /etc/efe-meta-swarm/tls
+    template: controller-deployment.yaml
+    set:
+      enabled: true
+      image:
+        tag: "test"
+      tls:
+        enabled: true
+        certManager:
+          enabled: true
+          issuerType: selfSigned
+    asserts:
+      # Controller container has the `tls` volumeMount, read-only, at the canonical path.
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: tls
+            mountPath: /etc/efe-meta-swarm/tls
+            readOnly: true
+          any: true
+      # Pod has a `tls` volume sourced from the controller's cert-manager Secret.
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: tls
+            secret:
+              secretName: RELEASE-NAME-efe-meta-swarm-controller-tls
+              optional: false
+          any: true
+
+  - it: AC27 — Controller Deployment sets EFE_META_SWARM_TLS_* env vars when tls.enabled
+    template: controller-deployment.yaml
+    set:
+      enabled: true
+      image:
+        tag: "test"
+      tls:
+        enabled: true
+        certManager:
+          enabled: true
+          issuerType: selfSigned
+    asserts:
+      # TLS_REQUIRED auto-flipped to "true" by `or .Values.tls.enabled ...`.
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: EFE_META_SWARM_TLS_REQUIRED
+            value: "true"
+          any: true
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: EFE_META_SWARM_TLS_CERT
+            value: /etc/efe-meta-swarm/tls/tls.crt
+          any: true
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: EFE_META_SWARM_TLS_KEY
+            value: /etc/efe-meta-swarm/tls/tls.key
+          any: true
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: EFE_META_SWARM_TLS_CA
+            value: /etc/efe-meta-swarm/tls/ca.crt
+          any: true
+
+  - it: AC27 — Controller Deployment has NO TLS mount / env when tls disabled
+    template: controller-deployment.yaml
+    set:
+      enabled: true
+      image:
+        tag: "test"
+    asserts:
+      # Only the `manifest` volumeMount (no `tls`).
+      - lengthEqual:
+          path: spec.template.spec.containers[0].volumeMounts
+          count: 1
+      - equal:
+          path: spec.template.spec.containers[0].volumeMounts[0].name
+          value: manifest
+      # Only one volume (manifest) ; no `tls` secret reference.
+      - lengthEqual:
+          path: spec.template.spec.volumes
+          count: 1
+      - equal:
+          path: spec.template.spec.volumes[0].name
+          value: manifest
+      # TLS_REQUIRED still emitted, but with the legacy default "false".
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: EFE_META_SWARM_TLS_REQUIRED
+            value: "false"
+          any: true
+      # No EFE_META_SWARM_TLS_CERT / _KEY / _CA env vars at all.
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: EFE_META_SWARM_TLS_CERT
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: EFE_META_SWARM_TLS_KEY
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: EFE_META_SWARM_TLS_CA
+
+  # ───────────────────────────────────────────────────────────────────
+  # § 3. AC27 — Participant Deployment TLS wiring.
+  # `participant-deployment.yaml` renders one Deployment per participant
+  # (3 by default).  Each must mount its own Secret + set env vars.
+  # ───────────────────────────────────────────────────────────────────
+
+  - it: AC27 — Participant Deployment (supplier-scoring) mounts its own TLS Secret
+    template: participant-deployment.yaml
+    documentSelector:
+      path: metadata.name
+      value: RELEASE-NAME-efe-meta-swarm-participant-supplier-scoring
+    set:
+      enabled: true
+      image:
+        tag: "test"
+      tls:
+        enabled: true
+        certManager:
+          enabled: true
+          issuerType: selfSigned
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: tls
+            mountPath: /etc/efe-meta-swarm/tls
+            readOnly: true
+          any: true
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: tls
+            secret:
+              secretName: RELEASE-NAME-efe-meta-swarm-participant-supplier-scoring-tls
+              optional: false
+          any: true
+      # Participant env vars (note : EFE_META_SWARM_TLS_REQUIRED is "true"
+      # literal — participants don't have the controller's `or` fallback).
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: EFE_META_SWARM_TLS_REQUIRED
+            value: "true"
+          any: true
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: EFE_META_SWARM_TLS_CERT
+            value: /etc/efe-meta-swarm/tls/tls.crt
+          any: true
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: EFE_META_SWARM_TLS_KEY
+            value: /etc/efe-meta-swarm/tls/tls.key
+          any: true
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: EFE_META_SWARM_TLS_CA
+            value: /etc/efe-meta-swarm/tls/ca.crt
+          any: true
+
+  - it: AC27 — Participant Deployment (contract-risk) gets the right per-id Secret
+    template: participant-deployment.yaml
+    documentSelector:
+      path: metadata.name
+      value: RELEASE-NAME-efe-meta-swarm-participant-contract-risk
+    set:
+      enabled: true
+      image:
+        tag: "test"
+      tls:
+        enabled: true
+        certManager:
+          enabled: true
+          issuerType: selfSigned
+    asserts:
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: tls
+            secret:
+              secretName: RELEASE-NAME-efe-meta-swarm-participant-contract-risk-tls
+              optional: false
+          any: true
+
+  - it: AC27 — Participant Deployment has NO TLS mount / env when tls disabled
+    template: participant-deployment.yaml
+    documentSelector:
+      path: metadata.name
+      value: RELEASE-NAME-efe-meta-swarm-participant-supplier-scoring
+    set:
+      enabled: true
+      image:
+        tag: "test"
+    asserts:
+      - lengthEqual:
+          path: spec.template.spec.containers[0].volumeMounts
+          count: 1
+      - equal:
+          path: spec.template.spec.containers[0].volumeMounts[0].name
+          value: manifest
+      - lengthEqual:
+          path: spec.template.spec.volumes
+          count: 1
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: EFE_META_SWARM_TLS_REQUIRED
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: EFE_META_SWARM_TLS_CERT
+
+  # ───────────────────────────────────────────────────────────────────
+  # § 4. PR #16 — ClusterIssuer + mutual TLS knobs.
+  # ───────────────────────────────────────────────────────────────────
+
+  - it: AC27 — ClusterIssuer rendered when tls.certManager.clusterIssuer=true
+    templates:
+      - tls-issuer.yaml
+      - tls-clusterissuer.yaml
+    set:
+      enabled: true
+      image:
+        tag: "test"
+      tls:
+        enabled: true
+        certManager:
+          enabled: true
+          clusterIssuer: true
+          issuerType: selfSigned
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: ClusterIssuer
+      - exists:
+          path: spec.selfSigned
+
+  - it: PR #16 — Issuer (namespaced) rendered when clusterIssuer=false
+    templates:
+      - tls-issuer.yaml
+      - tls-clusterissuer.yaml
+    set:
+      enabled: true
+      image:
+        tag: "test"
+      tls:
+        enabled: true
+        certManager:
+          enabled: true
+          clusterIssuer: false
+          issuerType: selfSigned
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: Issuer
+
+  - it: AC28 — Certificate privateKey honours `algorithm` + `size` from values
+    template: tls-certificate.yaml
+    documentSelector:
+      path: metadata.name
+      value: RELEASE-NAME-efe-meta-swarm-controller-tls
+    set:
+      enabled: true
+      image:
+        tag: "test"
+      tls:
+        enabled: true
+        certManager:
+          enabled: true
+          issuerType: selfSigned
+          privateKey:
+            algorithm: RSA
+            size: 4096
+            rotationPolicy: Always
+    asserts:
+      - equal:
+          path: spec.privateKey.algorithm
+          value: RSA
+      - equal:
+          path: spec.privateKey.size
+          value: 4096
+      - equal:
+          path: spec.privateKey.rotationPolicy
+          value: Always
+
+  - it: PR #16 — additionalSans extends the Cert DNS names list
+    template: tls-certificate.yaml
+    documentSelector:
+      path: metadata.name
+      value: RELEASE-NAME-efe-meta-swarm-controller-tls
+    set:
+      enabled: true
+      image:
+        tag: "test"
+      tls:
+        enabled: true
+        additionalSans:
+          - controller.efe.external.example.com
+          - controller.internal.efe.example.com
+        certManager:
+          enabled: true
+          issuerType: selfSigned
+    asserts:
+      - contains:
+          path: spec.dnsNames
+          content: "controller.efe.external.example.com"
+      - contains:
+          path: spec.dnsNames
+          content: "controller.internal.efe.example.com"
+
+  - it: PR #16 — mutual TLS sets the controller's ALLOWED_PEER_SANS env var
+    template: controller-deployment.yaml
+    set:
+      enabled: true
+      image:
+        tag: "test"
+      tls:
+        enabled: true
+        mutual: true
+        certManager:
+          enabled: true
+          issuerType: selfSigned
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: EFE_META_SWARM_TLS_MUTUAL
+            value: "true"
+          any: true
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: EFE_META_SWARM_TLS_MIN_PROTOCOL
+            value: "1.3"
+          any: true
+
+  - it: PR #16 — participant mutual TLS sets ALLOWED_PEER_SANS to controller SAN
+    template: participant-deployment.yaml
+    documentSelector:
+      path: metadata.name
+      value: RELEASE-NAME-efe-meta-swarm-participant-supplier-scoring
+    set:
+      enabled: true
+      image:
+        tag: "test"
+      tls:
+        enabled: true
+        mutual: true
+        certManager:
+          enabled: true
+          issuerType: selfSigned
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: EFE_META_SWARM_TLS_MUTUAL
+            value: "true"
+          any: true
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: EFE_META_SWARM_TLS_MIN_PROTOCOL
+            value: "1.3"
+          any: true

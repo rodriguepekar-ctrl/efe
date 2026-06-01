@@ -1,0 +1,199 @@
+{{- if .Values.enabled }}
+# NATS server cluster — JetStream-enabled 3-node Raft cluster.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "efe-nats.fullname" . }}
+  labels:
+    {{- include "efe-nats.labels" . | nindent 4 }}
+data:
+  nats.conf: |
+    server_name: $POD_NAME
+    listen: 0.0.0.0:{{ .Values.nats.service.clientPort }}
+    http: 0.0.0.0:{{ .Values.nats.service.monitoringPort }}
+
+    cluster {
+      name: efe-nats-cluster
+      listen: 0.0.0.0:{{ .Values.nats.service.clusterPort }}
+      routes: [
+        nats://{{ include "efe-nats.fullname" . }}-0.{{ include "efe-nats.fullname" . }}-headless:{{ .Values.nats.service.clusterPort }},
+        nats://{{ include "efe-nats.fullname" . }}-1.{{ include "efe-nats.fullname" . }}-headless:{{ .Values.nats.service.clusterPort }},
+        nats://{{ include "efe-nats.fullname" . }}-2.{{ include "efe-nats.fullname" . }}-headless:{{ .Values.nats.service.clusterPort }}
+      ]
+    }
+
+    jetstream {
+      store_dir: "/data/jetstream"
+      max_memory_store: {{ .Values.nats.jetstream.maxMemoryStore | quote }}
+      max_file_store: {{ .Values.nats.jetstream.maxFileStore | quote }}
+    }
+
+    {{- if .Values.auth.enabled }}
+    # Decentralized JWT auth ; the issuer + per-pod creds come from
+    # the Secret. Production : use `nsc` to generate ; CI : dev mode.
+    operator: "/etc/nats-auth/operator.jwt"
+    resolver: {
+      type: full
+      dir: "/data/resolver"
+      allow_delete: false
+      interval: "2m"
+    }
+    {{- end }}
+
+    pid_file: "/data/nats.pid"
+    write_deadline: "10s"
+    max_payload: 1MB
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "efe-nats.fullname" . }}-headless
+  labels:
+    {{- include "efe-nats.labels" . | nindent 4 }}
+spec:
+  clusterIP: None
+  ports:
+    - name: client
+      port: {{ .Values.nats.service.clientPort }}
+      targetPort: client
+    - name: cluster
+      port: {{ .Values.nats.service.clusterPort }}
+      targetPort: cluster
+    - name: monitoring
+      port: {{ .Values.nats.service.monitoringPort }}
+      targetPort: monitoring
+  selector:
+    {{- include "efe-nats.selectorLabels" . | nindent 4 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "efe-nats.fullname" . }}
+  labels:
+    {{- include "efe-nats.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.nats.service.type }}
+  ports:
+    - name: client
+      port: {{ .Values.nats.service.clientPort }}
+      targetPort: client
+      appProtocol: tcp
+    - name: monitoring
+      port: {{ .Values.nats.service.monitoringPort }}
+      targetPort: monitoring
+      appProtocol: http
+  selector:
+    {{- include "efe-nats.selectorLabels" . | nindent 4 }}
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "efe-nats.fullname" . }}
+  labels:
+    {{- include "efe-nats.labels" . | nindent 4 }}
+spec:
+  serviceName: {{ include "efe-nats.fullname" . }}-headless
+  replicas: {{ .Values.nats.replicas }}
+  podManagementPolicy: Parallel
+  selector:
+    matchLabels:
+      {{- include "efe-nats.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "efe-nats.selectorLabels" . | nindent 8 }}
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/nats.yaml") . | sha256sum }}
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "{{ .Values.nats.service.monitoringPort }}"
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    {{- include "efe-nats.selectorLabels" . | nindent 20 }}
+                topologyKey: topology.kubernetes.io/zone
+      containers:
+        - name: nats
+          image: "{{ .Values.nats.image.repository }}:{{ .Values.nats.image.tag }}"
+          imagePullPolicy: {{ .Values.nats.image.pullPolicy }}
+          command: ["nats-server"]
+          args: ["-c", "/etc/nats-config/nats.conf"]
+          env:
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+          ports:
+            - name: client
+              containerPort: {{ .Values.nats.service.clientPort }}
+            - name: cluster
+              containerPort: {{ .Values.nats.service.clusterPort }}
+            - name: monitoring
+              containerPort: {{ .Values.nats.service.monitoringPort }}
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: monitoring
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /healthz?js-server-only=true
+              port: monitoring
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 2
+            failureThreshold: 2
+          resources:
+            {{- toYaml .Values.nats.resources | nindent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: config
+              mountPath: /etc/nats-config
+              readOnly: true
+            - name: data
+              mountPath: /data
+            {{- if .Values.auth.enabled }}
+            - name: auth
+              mountPath: /etc/nats-auth
+              readOnly: true
+            {{- end }}
+      volumes:
+        - name: config
+          configMap:
+            name: {{ include "efe-nats.fullname" . }}
+        {{- if .Values.auth.enabled }}
+        - name: auth
+          secret:
+            secretName: {{ .Values.auth.secretName }}
+        {{- end }}
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        {{- if .Values.nats.persistence.storageClass }}
+        storageClassName: {{ .Values.nats.persistence.storageClass }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.nats.persistence.size }}
+{{- end }}

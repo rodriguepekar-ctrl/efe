@@ -1,0 +1,450 @@
+# PR #14 — helm-unittest assertions for `values.schema.json` rejection paths.
+#
+# These tests guarantee that the JSON Schema catches operator typos
+# BEFORE any K8s API call.  Each case sets a deliberately invalid value
+# and asserts `failedTemplate: {}` (schema validation aborts render).
+#
+# Covers AC7 / AC8 / AC9 / AC10 / AC30 (defence-in-depth).
+suite: efe-meta-swarm schema rejection
+
+# Schema validation fires before ANY template renders, so we point at
+# a single small template — the rejection happens at parse time
+# regardless of which template is selected.
+templates:
+  - configmap-manifest.yaml
+
+tests:
+  # ───────────────────────────────────────────────────────────────────
+  # AC7 — alerts.severity enum.  Only info | warning | critical accepted.
+  # ───────────────────────────────────────────────────────────────────
+  - it: AC7 — alerts.severity rejects unknown level
+    set:
+      enabled: true
+      image:
+        tag: "test"
+      alerts:
+        enabled: true
+        severity:
+          ReloadFailureRate: emergency       # not in enum
+    asserts:
+      - failedTemplate: {}
+
+  - it: AC7 — alerts.severity accepts each valid enum value
+    set:
+      enabled: true
+      image:
+        tag: "test"
+      alerts:
+        enabled: true
+        severity:
+          ReloadFailureRate: info
+          ReloadLatencyP99High: warning
+          ReloadingStuck: critical
+          ControllerDown: critical
+          ParticipantDown: warning
+          ReloadGenNotAdvancing: info
+    asserts:
+      - hasDocuments:
+          count: 1                            # render succeeds
+
+  # ───────────────────────────────────────────────────────────────────
+  # AC8 — hooks.preUpgrade.backupRingSize bounds [1, 20].
+  # ───────────────────────────────────────────────────────────────────
+  - it: AC8 — backupRingSize > 20 rejected
+    set:
+      enabled: true
+      image:
+        tag: "test"
+      hooks:
+        enabled: true
+        preUpgrade:
+          backupRingSize: 25                  # > 20
+    asserts:
+      - failedTemplate: {}
+
+  - it: AC8 — backupRingSize < 1 rejected
+    set:
+      enabled: true
+      image:
+        tag: "test"
+      hooks:
+        enabled: true
+        preUpgrade:
+          backupRingSize: 0                   # < 1
+    asserts:
+      - failedTemplate: {}
+
+  - it: AC8 — backupRingSize = 5 accepted
+    set:
+      enabled: true
+      image:
+        tag: "test"
+      hooks:
+        enabled: true
+        preUpgrade:
+          backupRingSize: 5
+    asserts:
+      - hasDocuments:
+          count: 1
+
+  # ───────────────────────────────────────────────────────────────────
+  # AC9 — bundle.pollIntervalSeconds bounds [5, 3600].
+  # ───────────────────────────────────────────────────────────────────
+  - it: AC9 — pollIntervalSeconds < 5 rejected
+    set:
+      enabled: true
+      image:
+        tag: "test"
+      bundle:
+        pollIntervalSeconds: 3                # < 5
+    asserts:
+      - failedTemplate: {}
+
+  - it: AC9 — pollIntervalSeconds > 3600 rejected
+    set:
+      enabled: true
+      image:
+        tag: "test"
+      bundle:
+        pollIntervalSeconds: 5000             # > 3600
+    asserts:
+      - failedTemplate: {}
+
+  # ───────────────────────────────────────────────────────────────────
+  # AC10 — tls.certManager.issuerType enum (selfSigned | ca).
+  # ───────────────────────────────────────────────────────────────────
+  - it: AC10 — tls.certManager.issuerType rejects "vault"
+    set:
+      enabled: true
+      image:
+        tag: "test"
+      tls:
+        enabled: true
+        certManager:
+          enabled: true
+          issuerType: vault                   # not selfSigned / ca
+    asserts:
+      - failedTemplate: {}
+
+  - it: AC10 — tls.certManager.issuerType accepts "ca"
+    set:
+      enabled: true
+      image:
+        tag: "test"
+      tls:
+        enabled: true
+        certManager:
+          enabled: true
+          issuerType: ca
+          caSecretName: my-ca-secret
+    asserts:
+      - hasDocuments:
+          count: 1
+
+  # ───────────────────────────────────────────────────────────────────
+  # AC30 — defence-in-depth on neighbouring schema constraints.
+  # ───────────────────────────────────────────────────────────────────
+  - it: AC30 — controller.replicaCount must be 1 (Phase-2 lock)
+    set:
+      enabled: true
+      image:
+        tag: "test"
+      controller:
+        replicaCount: 3                       # const: 1
+    asserts:
+      - failedTemplate: {}
+
+  - it: AC30 — participants.id must be DNS-compliant
+    set:
+      enabled: true
+      image:
+        tag: "test"
+      participants:
+        - id: "Bad_ID"                        # pattern violation (underscore + caps)
+          dim: 8
+          kappa: 0.5
+          seed: 1
+          service:
+            grpcPort: 50091
+            metricsPort: 9101
+    asserts:
+      - failedTemplate: {}
+
+  - it: AC30 — participants.kappa must be in (0, 1)
+    set:
+      enabled: true
+      image:
+        tag: "test"
+      participants:
+        - id: bad-kappa
+          dim: 8
+          kappa: 1.0                          # exclusiveMaximum: 1
+          seed: 1
+          service:
+            grpcPort: 50091
+            metricsPort: 9101
+    asserts:
+      - failedTemplate: {}
+
+  - it: AC30 — bundle.sidecar.weightsSizeLimit pattern (Mi|Gi)
+    set:
+      enabled: true
+      image:
+        tag: "test"
+      bundle:
+        sidecar:
+          enabled: true
+          weightsSizeLimit: "256MB"           # not Mi|Gi
+    asserts:
+      - failedTemplate: {}
+
+  - it: AC30 — controller.hpa.targetCPUUtilization bounds [10, 100]
+    set:
+      enabled: true
+      image:
+        tag: "test"
+      controller:
+        hpa:
+          enabled: true
+          targetCPUUtilization: 5             # < 10
+    asserts:
+      - failedTemplate: {}
+
+  - it: AC30 — manifest.iteration.alpha_default in [0, 1)
+    set:
+      enabled: true
+      image:
+        tag: "test"
+      manifest:
+        version: "v0.2.0"
+        meta:
+          dim: 16
+          safety:
+            kind: box
+            radius: 50.0
+        iteration:
+          max_iters: 100
+          tolerance: 1.0e-4
+          alpha_default: 1.5                  # >= 1 → rejected
+          coupling_gamma: 0.2
+          deterministic: true
+          max_wall_ms: 15000
+    asserts:
+      - failedTemplate: {}
+
+  # ───────────────────────────────────────────────────────────────────
+  # § PR #16 — TLS schema rejections (AC29 / AC30).
+  # ───────────────────────────────────────────────────────────────────
+
+  - it: AC30 — tls.minProtocolVersion="1.0" → rejected
+    set:
+      enabled: true
+      image:
+        tag: "test"
+      tls:
+        enabled: true
+        minProtocolVersion: "1.0"           # not in enum [1.2, 1.3]
+        certManager:
+          enabled: true
+          issuerType: selfSigned
+    asserts:
+      - failedTemplate: {}
+
+  - it: AC30 — tls.minProtocolVersion="1.1" → rejected
+    set:
+      enabled: true
+      image:
+        tag: "test"
+      tls:
+        enabled: true
+        minProtocolVersion: "1.1"
+        certManager:
+          enabled: true
+          issuerType: selfSigned
+    asserts:
+      - failedTemplate: {}
+
+  - it: AC29 — tls.certManager.privateKey.algorithm="DSA" → rejected
+    set:
+      enabled: true
+      image:
+        tag: "test"
+      tls:
+        enabled: true
+        certManager:
+          enabled: true
+          issuerType: selfSigned
+          privateKey:
+            algorithm: DSA                    # not in enum [ECDSA, RSA]
+            size: 2048
+    asserts:
+      - failedTemplate: {}
+
+  - it: AC29 — tls.certManager.privateKey.size=1024 → rejected
+    set:
+      enabled: true
+      image:
+        tag: "test"
+      tls:
+        enabled: true
+        certManager:
+          enabled: true
+          issuerType: selfSigned
+          privateKey:
+            algorithm: RSA
+            size: 1024                        # not in enum [256, 2048, 4096]
+    asserts:
+      - failedTemplate: {}
+
+  - it: AC29 — ECDSA + size=2048 → rejected (cross-field rule)
+    set:
+      enabled: true
+      image:
+        tag: "test"
+      tls:
+        enabled: true
+        certManager:
+          enabled: true
+          issuerType: selfSigned
+          privateKey:
+            algorithm: ECDSA
+            size: 2048                        # ECDSA must have size=256
+    asserts:
+      - failedTemplate: {}
+
+  - it: AC29 — RSA + size=256 → rejected (cross-field rule)
+    set:
+      enabled: true
+      image:
+        tag: "test"
+      tls:
+        enabled: true
+        certManager:
+          enabled: true
+          issuerType: selfSigned
+          privateKey:
+            algorithm: RSA
+            size: 256                         # RSA must have size in {2048, 4096}
+    asserts:
+      - failedTemplate: {}
+
+  - it: AC29 — tls.waitForCertTimeoutSeconds=10 → rejected (< 60)
+    set:
+      enabled: true
+      image:
+        tag: "test"
+      tls:
+        enabled: true
+        waitForCertTimeoutSeconds: 10
+        certManager:
+          enabled: true
+          issuerType: selfSigned
+    asserts:
+      - failedTemplate: {}
+
+  - it: AC29 — tls.waitForCertTimeoutSeconds=3600 → rejected (> 1800)
+    set:
+      enabled: true
+      image:
+        tag: "test"
+      tls:
+        enabled: true
+        waitForCertTimeoutSeconds: 3600
+        certManager:
+          enabled: true
+          issuerType: selfSigned
+    asserts:
+      - failedTemplate: {}
+
+  - it: PR #16 — tls.certManager.duration="bogus" → rejected (regex)
+    set:
+      enabled: true
+      image:
+        tag: "test"
+      tls:
+        enabled: true
+        certManager:
+          enabled: true
+          issuerType: selfSigned
+          duration: "30d"                     # must match ^[0-9]+h$
+    asserts:
+      - failedTemplate: {}
+
+  - it: PR #16 — tls.rotation.alertHandshakeFailurePct=0 → rejected (< 0.01)
+    set:
+      enabled: true
+      image:
+        tag: "test"
+      tls:
+        enabled: true
+        certManager:
+          enabled: true
+          issuerType: selfSigned
+        rotation:
+          alertHandshakeFailurePct: 0
+    asserts:
+      - failedTemplate: {}
+
+  # ───────────────────────────────────────────────────────────────────
+  # § PR #17 — alert-threshold schema rejections (AC29 / AC30).
+  # ───────────────────────────────────────────────────────────────────
+
+  - it: AC29 — iterateP99HighSeconds=0.05 → rejected (< 0.1)
+    set:
+      enabled: true
+      image:
+        tag: "test"
+      alerts:
+        enabled: true
+        thresholds:
+          iterateP99HighSeconds: 0.05
+    asserts:
+      - failedTemplate: {}
+
+  - it: AC29 — iterateP99HighSeconds=120 → rejected (> 60)
+    set:
+      enabled: true
+      image:
+        tag: "test"
+      alerts:
+        enabled: true
+        thresholds:
+          iterateP99HighSeconds: 120
+    asserts:
+      - failedTemplate: {}
+
+  - it: AC30 — iterateErrorRatePct=0 → rejected (< 0.01)
+    set:
+      enabled: true
+      image:
+        tag: "test"
+      alerts:
+        enabled: true
+        thresholds:
+          iterateErrorRatePct: 0
+    asserts:
+      - failedTemplate: {}
+
+  - it: AC30 — stepErrorRatePct=150 → rejected (> 100)
+    set:
+      enabled: true
+      image:
+        tag: "test"
+      alerts:
+        enabled: true
+        thresholds:
+          stepErrorRatePct: 150
+    asserts:
+      - failedTemplate: {}
+
+  - it: AC29 — safetyViolationRatePerS=0 → rejected (< 0.001)
+    set:
+      enabled: true
+      image:
+        tag: "test"
+      alerts:
+        enabled: true
+        thresholds:
+          safetyViolationRatePerS: 0
+    asserts:
+      - failedTemplate: {}

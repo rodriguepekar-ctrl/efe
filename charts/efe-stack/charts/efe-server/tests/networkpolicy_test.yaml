@@ -1,0 +1,38 @@
+suite: efe-server networkpolicy tests
+templates:
+  - networkpolicy.yaml
+release:
+  name: test
+  namespace: efe-test
+chart:
+  appVersion: 1.6.0
+tests:
+  - it: emits a NetworkPolicy when enabled
+    set:
+      global.tenant: acme
+      networkPolicy.enabled: true
+    asserts:
+      - isKind:
+          of: NetworkPolicy
+      - contains:
+          path: spec.policyTypes
+          content: Ingress
+      - contains:
+          path: spec.policyTypes
+          content: Egress
+
+  - it: skips when networkPolicy.enabled=false
+    set:
+      global.tenant: acme
+      networkPolicy.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: blocks intranet egress except whitelisted CIDRs
+    set:
+      global.tenant: acme
+    asserts:
+      - matchRegex:
+          path: spec.egress[2].to[0].ipBlock.except[0]
+          pattern: "169.254.0.0/16"

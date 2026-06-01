@@ -1,0 +1,89 @@
+{{- if .Values.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "portal-admin.fullname" . }}
+  labels:
+    {{- include "portal-admin.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicas | default 3 }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      {{- include "portal-admin.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "portal-admin.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: ui
+    spec:
+      {{- with .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: portal-admin
+          image: {{ include "portal-admin.image" . | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy | default "IfNotPresent" }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.service.httpPort | default 3000 }}
+              protocol: TCP
+          env:
+            - name: NEXTAUTH_URL
+              value: "https://{{ include "portal-admin.host" . }}"
+            - name: OIDC_ISSUER
+              value: {{ .Values.sso.issuer | quote }}
+            - name: OIDC_CLIENT_ID
+              value: {{ .Values.sso.clientId | quote }}
+            - name: OIDC_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.sso.clientSecretRef.name }}
+                  key: {{ .Values.sso.clientSecretRef.key }}
+            - name: EFE_BACKEND_GRPC_URL
+              value: "http://{{ .Release.Name }}-efe-server.{{ .Release.Namespace }}.svc.cluster.local:50051"
+            - name: EFE_MCP_HTTP_URL
+              value: "http://{{ .Release.Name }}-mcp-server.{{ .Release.Namespace }}.svc.cluster.local:8080"
+          livenessProbe:
+            httpGet:
+              path: /api/healthz
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /api/readyz
+              port: http
+            initialDelaySeconds: 3
+            periodSeconds: 5
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            - name: cache
+              mountPath: /app/.next/cache
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        - name: cache
+          emptyDir:
+            sizeLimit: 500Mi
+{{- end }}

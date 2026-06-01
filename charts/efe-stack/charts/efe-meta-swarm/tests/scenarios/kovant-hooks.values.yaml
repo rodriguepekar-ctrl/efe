@@ -1,0 +1,14 @@
+# PR #14 — kovant-hooks scenario : Helm hooks + RBAC only.
+# Minimal isolation : tests the hook Jobs without other PR #14 surface.
+enabled: true
+image:
+  tag: "0.3.0"
+hooks:
+  enabled: true
+  preUpgrade:
+    snapshotEnabled: true
+    backupRingSize: 5
+  postUpgrade:
+    sighupEnabled: true
+    serial: true
+    ignoreFailures: true

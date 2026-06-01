@@ -1,0 +1,202 @@
+{{- if .Values.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "efe-meta-swarm.controllerName" . }}
+  labels:
+    {{- include "efe-meta-swarm.labels" . | nindent 4 }}
+    app.kubernetes.io/component: controller
+    efe.io/meta-swarm-role: controller
+spec:
+  replicas: {{ .Values.controller.replicaCount | default 1 }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 0
+      maxUnavailable: 1            # single-replica Deployment ; rolling restart drops the controller briefly (PR12-R7 — documented in runbook)
+  selector:
+    matchLabels:
+      {{- include "efe-meta-swarm.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: controller
+  template:
+    metadata:
+      labels:
+        {{- include "efe-meta-swarm.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: controller
+        efe.io/meta-swarm-role: controller
+      annotations:
+        # PR #13 AD4 : NO `checksum/config` ; reload is SIGHUP-driven.
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "{{ .Values.controller.service.metricsPort }}"
+        prometheus.io/path: "/metrics"
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      serviceAccountName: {{ include "efe-meta-swarm.controllerServiceAccountName" . }}
+      automountServiceAccountToken: false
+      # PR #13 hardening — disable the automatic injection of
+      # `<SVC_NAME>_SERVICE_HOST/_PORT` env vars from every Service
+      # in the namespace.  Both security (smaller attack surface)
+      # and hygiene (env vars stay predictable).
+      enableServiceLinks: false
+      # PR #14 — high priority so the controller survives resource
+      # pressure ; default user pods (1000) get evicted first.
+      # PR #14 audit pass — go through the trunc-safe helper to match
+      # the PriorityClass cluster-scoped name.
+      {{- if .Values.priorityClass.enabled }}
+      priorityClassName: {{ include "efe-meta-swarm.controllerPriorityClassName" . }}
+      {{- end }}
+      {{- with .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        {{- include "efe-meta-swarm.commonPodSecurityContext" . | nindent 8 }}
+      containers:
+        - name: controller
+          image: {{ include "efe-meta-swarm.image" . | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args: ["controller"]
+          ports:
+            - name: grpc
+              containerPort: {{ .Values.controller.service.grpcPort }}
+              protocol: TCP
+            - name: metrics
+              containerPort: {{ .Values.controller.service.metricsPort }}
+              protocol: TCP
+          env:
+            - name: EFE_META_SWARM_CONTROLLER_ADDR
+              value: "0.0.0.0:{{ .Values.controller.service.grpcPort }}"
+            - name: EFE_META_SWARM_CONTROLLER_METRICS
+              value: "0.0.0.0:{{ .Values.controller.service.metricsPort }}"
+            - name: EFE_META_SWARM_MANIFEST
+              value: /etc/efe-meta-swarm/manifest.yaml
+            - name: EFE_META_SWARM_PARTICIPANTS
+              value: {{ include "efe-meta-swarm.participantsEnv" . | quote }}
+            - name: EFE_META_SWARM_DISCOVERY
+              value: {{ .Values.controller.config.discovery | quote }}
+            - name: EFE_META_SWARM_MAX_INFLIGHT
+              value: {{ .Values.controller.config.maxInflight | quote }}
+            - name: EFE_META_SWARM_DEFAULT_MAX_WALL_MS
+              value: {{ .Values.controller.config.defaultMaxWallMs | quote }}
+            - name: EFE_META_SWARM_WORKER_THREADS
+              value: {{ .Values.controller.config.workerThreads | quote }}
+            - name: EFE_META_SWARM_RELOAD_DRAIN_TIMEOUT_S
+              value: {{ .Values.controller.config.drainTimeoutSeconds | quote }}
+            - name: EFE_META_SWARM_REFLECTION
+              value: {{ .Values.controller.config.reflectionEnabled | quote }}
+            - name: EFE_META_SWARM_TLS_REQUIRED
+              # PR #14 — when `tls.enabled: true`, the chart-side
+              # cert-manager Certificate provisioning forces TLS on
+              # the binary side regardless of the legacy
+              # `controller.config.tlsRequired` knob.  PR #16 wires
+              # the binary's tonic-tls integration.
+              value: {{ or .Values.tls.enabled .Values.controller.config.tlsRequired | quote }}
+            {{- if .Values.tls.enabled }}
+            - name: EFE_META_SWARM_TLS_CERT
+              value: /etc/efe-meta-swarm/tls/tls.crt
+            - name: EFE_META_SWARM_TLS_KEY
+              value: /etc/efe-meta-swarm/tls/tls.key
+            - name: EFE_META_SWARM_TLS_CA
+              value: /etc/efe-meta-swarm/tls/ca.crt
+            # PR #16 — mutual TLS knobs (AD8 / AD6 / AD11).
+            # PR #14 audit pattern : NEVER use `| default true` on a
+            # boolean (it silently rewrites explicit `false`).  The
+            # `ternary` form below renders explicit "true"/"false"
+            # without relying on Sprig's zero-value semantics.
+            - name: EFE_META_SWARM_TLS_MUTUAL
+              value: {{ ternary "true" "false" (.Values.tls.mutual | default false) | quote }}
+            - name: EFE_META_SWARM_TLS_MIN_PROTOCOL
+              value: {{ .Values.tls.minProtocolVersion | default "1.3" | quote }}
+            {{- if .Values.tls.mutual }}
+            # When `mutual: true`, the controller MUST validate every
+            # incoming participant cert SAN against this allowlist.
+            # Pre-computed in `_helpers.tpl` to avoid embedding Go
+            # template logic inside a YAML folded scalar.
+            - name: EFE_META_SWARM_TLS_ALLOWED_PEER_SANS
+              value: {{ include "efe-meta-swarm.controllerAllowedParticipantSans" . | quote }}
+            {{- end }}
+            {{- end }}
+            {{- if and .Values.tracing.otel.enabled }}
+            # PR #18 § 25.2 — explicit OTEL_SERVICE_NAME for the
+            # controller binary.  The otel-env ConfigMap doesn't carry
+            # this (it would need a per-role copy ; AD22).
+            - name: OTEL_SERVICE_NAME
+              value: "efe-meta-swarm-controller"
+            # PR #18 K8s semantic conventions resource attributes —
+            # pod / node / namespace come from the Downward API and
+            # surface as `OTEL_RESOURCE_ATTRIBUTES` (semicolon-
+            # separated, per OTel spec).
+            - name: OTEL_RESOURCE_ATTRIBUTES_NS
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: OTEL_RESOURCE_ATTRIBUTES_POD
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: OTEL_RESOURCE_ATTRIBUTES_NODE
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+            - name: OTEL_RESOURCE_ATTRIBUTES
+              value: "k8s.namespace.name=$(OTEL_RESOURCE_ATTRIBUTES_NS);k8s.pod.name=$(OTEL_RESOURCE_ATTRIBUTES_POD);k8s.node.name=$(OTEL_RESOURCE_ATTRIBUTES_NODE)"
+            {{- end }}
+            {{- with .Values.controller.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          {{- if .Values.tracing.otel.enabled }}
+          # PR #18 § 25.2 — consume the otel-env ConfigMap so the
+          # controller binary picks up `OTEL_EXPORTER_OTLP_*`,
+          # `OTEL_TRACES_SAMPLER*`, `OTEL_DEPLOYMENT_ENVIRONMENT`.
+          envFrom:
+            - configMapRef:
+                name: {{ include "efe-meta-swarm.fullname" . }}-otel-env
+          {{- end }}
+          resources:
+            {{- toYaml .Values.controller.resources | nindent 12 }}
+          securityContext:
+            {{- toYaml .Values.controller.securityContext | nindent 12 }}
+          livenessProbe:
+            {{- toYaml .Values.controller.livenessProbe | nindent 12 }}
+          readinessProbe:
+            {{- toYaml .Values.controller.readinessProbe | nindent 12 }}
+          volumeMounts:
+            - name: manifest
+              mountPath: /etc/efe-meta-swarm
+              readOnly: true
+            {{- if .Values.tls.enabled }}
+            # PR #14 — TLS Secret mounted at the path matching
+            # PR #6's `EFE_META_SWARM_TLS_CERT/_KEY/_CA` env vars.
+            # PR #16 wires the binary's tonic-tls integration.
+            - name: tls
+              mountPath: /etc/efe-meta-swarm/tls
+              readOnly: true
+            {{- end }}
+      volumes:
+        - name: manifest
+          configMap:
+            name: {{ include "efe-meta-swarm.fullname" . }}-manifest
+        {{- if .Values.tls.enabled }}
+        # PR #14 audit pass — trunc-safe helper ; MUST match the
+        # Certificate.spec.secretName in tls-certificate.yaml.
+        - name: tls
+          secret:
+            secretName: {{ include "efe-meta-swarm.controllerTlsSecretName" . }}
+            optional: false
+        {{- end }}
+      {{- with .Values.controller.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.controller.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.controller.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      terminationGracePeriodSeconds: {{ add (int .Values.controller.config.drainTimeoutSeconds) 5 }}
+{{- end }}

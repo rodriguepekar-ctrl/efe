@@ -1,0 +1,175 @@
+# efe-edge sub-chart values. Merged under `efe-edge` key in the
+# umbrella `charts/efe-stack/values.yaml`.
+
+enabled: false  # opt-in : flip to true when the cluster is M27-ready.
+
+# ── Envoy ─────────────────────────────────────────────────────────────
+envoy:
+  replicas: 3
+  image:
+    repository: envoyproxy/envoy
+    tag: "v1.32-latest"
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    port: 8443
+    adminPort: 9901
+  resources:
+    requests:
+      cpu: 200m
+      memory: 256Mi
+    limits:
+      cpu: 1
+      memory: 1Gi
+  hpa:
+    enabled: true
+    minReplicas: 3
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 60
+  pdb:
+    enabled: true
+    minAvailable: 2
+  # OIDC issuer for jwt_authn. Override per environment.
+  oidc:
+    issuer: "https://oidc.efe.ai"
+    audiences: ["efe-classification", "efe-agent-runtime"]
+    jwksUri: "https://oidc.efe.ai/.well-known/jwks.json"
+  # Upstream cluster targets. Override to point at the in-cluster
+  # efe-server service.
+  upstream:
+    grpcCluster: "efe-server.efe-system.svc.cluster.local"
+    grpcPort: 50051
+    restCluster: "efe-server.efe-system.svc.cluster.local"
+    restPort: 8080
+    agentRestCluster: "efe-server.efe-system.svc.cluster.local"
+    agentRestPort: 8088
+
+# ── Lyft ratelimit-service ───────────────────────────────────────────
+ratelimit:
+  enabled: true
+  replicas: 3
+  image:
+    repository: envoyproxy/ratelimit
+    tag: "latest"
+    pullPolicy: IfNotPresent
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  defaultDescriptor:
+    domain: efe_edge
+    descriptors:
+      - key: generic_key
+        value: classify_per_tenant
+        descriptors:
+          - key: tenant
+            rate_limit:
+              unit: minute
+              requests_per_unit: 1000
+      - key: generic_key
+        value: classify_anonymous
+        rate_limit:
+          unit: minute
+          requests_per_unit: 60
+
+# ── Redis Cluster ─────────────────────────────────────────────────────
+redis:
+  enabled: true
+  replicas: 6  # 3 master + 3 replica
+  image:
+    repository: redis
+    tag: "7.2-alpine"
+    pullPolicy: IfNotPresent
+  persistence:
+    enabled: true
+    size: 8Gi
+    storageClass: ""
+  resources:
+    requests:
+      cpu: 200m
+      memory: 1Gi
+    limits:
+      cpu: 1
+      memory: 4Gi
+  auth:
+    # password is in a Secret (default name efe-redis-auth). Override
+    # `passwordSecret` to use a pre-existing Secret.
+    enabled: true
+    passwordSecret: efe-redis-auth
+    passwordKey: password
+  config:
+    maxmemoryPolicy: allkeys-lru
+    maxmemory: "3gb"
+    appendonly: "yes"
+    appendfsync: everysec
+    clusterEnabled: true
+    clusterNodeTimeout: 15000
+
+# ── PgBouncer ─────────────────────────────────────────────────────────
+pgbouncer:
+  enabled: true
+  replicas: 2
+  image:
+    repository: edoburu/pgbouncer
+    tag: "1.23.1"
+    pullPolicy: IfNotPresent
+  resources:
+    requests:
+      cpu: 100m
+      memory: 64Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+  config:
+    poolMode: transaction
+    poolSize: 50
+    reservePoolSize: 5
+    reservePoolTimeout: 5
+    maxClientConn: 5000
+    queryTimeout: 60
+    queryWaitTimeout: 30
+    serverIdleTimeout: 600
+    serverLifetime: 1800
+    serverResetQuery: "DISCARD ALL"
+  upstream:
+    # The actual PG host (managed service in prod). Override here.
+    host: "pg-primary.efe-system.svc.cluster.local"
+    port: 5432
+    database: efe
+    readReplicaHost: "pg-replica.efe-system.svc.cluster.local"
+    readReplicaPort: 5432
+  # The PG password is mounted from a Secret. By convention shared with
+  # efe-server's auth (configurable below).
+  auth:
+    userlistSecret: efe-pgbouncer-userlist
+    userlistKey: userlist.txt
+
+# ── Cloudflared (Argo Tunnel daemon) ─────────────────────────────────
+# Connects to the Cloudflare edge and routes inbound traffic to Envoy.
+# 2 replicas for HA (each opens an independent connection to CF).
+cloudflared:
+  enabled: true
+  replicas: 2
+  image:
+    repository: cloudflare/cloudflared
+    tag: "2025.1.0"
+    pullPolicy: IfNotPresent
+  # Tunnel UUID from `terraform/cloudflare/outputs.tf` :: tunnel_id.
+  # Override per environment (one tunnel per region for M30 multi-region).
+  tunnelId: "00000000-0000-0000-0000-000000000000"
+  # Public hostname routed by this tunnel. Matches the CF DNS record.
+  publicHostname: "api.efe.ai"
+  # Secret containing the tunnel credentials JSON (downloaded from CF
+  # API or set by Terraform tunnel resource).
+  credentialsSecret: efe-cloudflared-credentials
+
+# ── NetworkPolicy ────────────────────────────────────────────────────
+networkPolicy:
+  enabled: true
+  # Namespace running cloudflared (defaults to release namespace) :
+  edgeNamespace: efe-edge
+  # Namespace containing efe-server :
+  upstreamNamespace: efe-system

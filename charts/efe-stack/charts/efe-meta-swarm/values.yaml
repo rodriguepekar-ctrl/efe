@@ -1,0 +1,564 @@
+# ─────────────────────────────────────────────────────────────────────
+# efe-meta-swarm — Phase-2 sub-chart values.
+#
+# This file is merged into the umbrella `efe-stack` values under key
+# `efe-meta-swarm:`.  Every field is **typed and validated** by
+# `values.schema.json` — `helm install --dry-run` will reject
+# malformed configs before any K8s API call.
+#
+# Cf. `docs/EFE_A1_PHASE2_PR13_ARCHITECTURE.md`.
+# ─────────────────────────────────────────────────────────────────────
+
+# Master switch.  When `false` (default), this sub-chart renders zero
+# resources.  When `true`, the chart provisions 1 controller + N
+# participants + the manifest ConfigMap + optional NetworkPolicy /
+# ServiceMonitor.
+enabled: false
+
+# Optional name / fullname overrides — operators rarely set these ;
+# they exist for forward-compat with the standard Helm conventions.
+nameOverride: ""
+fullnameOverride: ""
+
+# Note : cross-chart wiring (efe-server → controller endpoint) is
+# now configured through the umbrella's `global.metaSwarm` block,
+# NOT this sub-chart's own values (Helm 3 doesn't propagate sibling
+# sub-chart values).  See `charts/efe-stack/values.yaml` § global.
+
+# ─────────────────────────────────────────────────────────────────────
+# Image — both binaries (controller + participant) ship in one image.
+# Operators MUST pin the tag explicitly (values.schema.json rejects
+# the empty string).  No `:latest` policy (PR #13 AD17).
+# ─────────────────────────────────────────────────────────────────────
+image:
+  repository: ghcr.io/efe-ai/efe-meta-swarm-server
+  tag: ""                          # REQUIRED — operator override per release
+  pullPolicy: IfNotPresent
+  # imagePullSecrets are inherited from the umbrella `global.imagePullSecrets`.
+
+# Umbrella globals consumed by `_helpers.tpl`.  Defaults make the
+# sub-chart standalone-installable without the umbrella.
+global:
+  tenant: default
+  imagePullSecrets: []
+
+# ─────────────────────────────────────────────────────────────────────
+# Manifest — the YAML that the controller + every participant reads
+# at boot AND on SIGHUP (PR #12).  Rendered as a single ConfigMap.
+# Operators edit values here ; running pods pick it up via
+# `kubectl exec ... -- kill -HUP 1` (cf. runbook).
+# ─────────────────────────────────────────────────────────────────────
+manifest:
+  version: "v0.2.0"
+  meta:
+    dim: 16
+    safety:
+      kind: box                    # box | poly | hull
+      radius: 50.0                 # Box only
+      # poly:                      # Poly only
+      #   dim_a: 2
+      #   a_flat: [1.0, 0.0, 0.0, 1.0, 1.0, 1.0, 0.0, 0.0]
+      #   b: [1.0, 1.0]
+      # hull:                      # Hull only (Phase-3 placeholder)
+      #   version: "v1"
+      #   serialized_model_path: "/etc/efe-meta-swarm/hull.bin"
+  iteration:
+    max_iters: 100
+    tolerance: 1.0e-4
+    alpha_default: 0.5
+    coupling_gamma: 0.2
+    deterministic: true
+    max_wall_ms: 15000
+
+# ─────────────────────────────────────────────────────────────────────
+# Controller — single Deployment, replicas=1.  Phase-2 does NOT
+# replicate the controller (no leader election yet — PR #17 follow-up).
+# ─────────────────────────────────────────────────────────────────────
+controller:
+  replicaCount: 1                  # locked at 1 in values.schema.json (Phase 2)
+
+  service:
+    type: ClusterIP
+    grpcPort: 50080
+    metricsPort: 9091
+    appProtocol: grpc
+
+  config:
+    maxInflight: 10
+    defaultMaxWallMs: 15000
+    workerThreads: 2
+    drainTimeoutSeconds: 30
+    discovery: static-localhost    # PR #6 modes : static-localhost | k8s-dns
+    reflectionEnabled: false
+    tlsRequired: false
+
+  resources:
+    requests:
+      cpu: 500m
+      memory: 512Mi
+    limits:
+      cpu: 2
+      memory: 2Gi
+
+  securityContext:
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop: ["ALL"]
+    readOnlyRootFilesystem: true
+    runAsNonRoot: true
+    runAsUser: 65532
+
+  podDisruptionBudget:
+    enabled: true
+    maxUnavailable: 0
+
+  # PR #14 — HPA placeholder.  Phase-2 lock : min=max=1 ; PR #17
+  # leader election flips this to N > 1.  Off by default.
+  hpa:
+    enabled: false
+    targetCPUUtilization: 70
+
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
+  livenessProbe:
+    tcpSocket:
+      port: 50080
+    initialDelaySeconds: 10
+    periodSeconds: 10
+    timeoutSeconds: 3
+    failureThreshold: 3
+  readinessProbe:
+    tcpSocket:
+      port: 50080
+    initialDelaySeconds: 5
+    periodSeconds: 5
+    timeoutSeconds: 3
+    failureThreshold: 3
+
+  extraEnv: []
+
+# ─────────────────────────────────────────────────────────────────────
+# Participants — list of distinct binaries, one Deployment + Service
+# each.  Default : 3-participant Kovant scenario.  Each entry's
+# `id` MUST match an entry in the manifest's logical participants set
+# (cross-reference enforced at runtime by `validate_manifest`).
+# ─────────────────────────────────────────────────────────────────────
+participants:
+  - id: supplier-scoring
+    dim: 8
+    kappa: 0.6
+    seed: 11
+    blasBackend: none
+    replicaCount: 1
+    service:
+      grpcPort: 50091
+      metricsPort: 9101
+    resources:
+      requests: {cpu: 200m, memory: 256Mi}
+      limits:   {cpu: 1,    memory: 1Gi}
+    nodeSelector: {}
+    tolerations: []
+    affinity: {}
+    extraEnv: []
+
+  - id: contract-risk
+    dim: 8
+    kappa: 0.7
+    seed: 22
+    blasBackend: none
+    replicaCount: 1
+    service: {grpcPort: 50092, metricsPort: 9102}
+    resources:
+      requests: {cpu: 200m, memory: 256Mi}
+      limits:   {cpu: 1,    memory: 1Gi}
+    nodeSelector: {}
+    tolerations: []
+    affinity: {}
+    extraEnv: []
+
+  - id: spend-categorization
+    dim: 8
+    kappa: 0.5
+    seed: 33
+    blasBackend: none
+    replicaCount: 1
+    service: {grpcPort: 50093, metricsPort: 9103}
+    resources:
+      requests: {cpu: 200m, memory: 256Mi}
+      limits:   {cpu: 1,    memory: 1Gi}
+    nodeSelector: {}
+    tolerations: []
+    affinity: {}
+    extraEnv: []
+
+# ─────────────────────────────────────────────────────────────────────
+# ServiceAccount — one SA per role.  Phase-2 RBAC : zero permissions
+# (no K8s API access from the binaries).  PR #16 may grant
+# `secrets:get` for cert-manager-issued TLS material.
+# ─────────────────────────────────────────────────────────────────────
+serviceAccount:
+  create: true
+  annotations: {}
+  controllerName: ""               # default : <fullname>-controller
+  # Participant SA names are derived from the participant id.
+
+# ─────────────────────────────────────────────────────────────────────
+# NetworkPolicy — deny-by-default east-west traffic.  Opt-in (AD14).
+# ─────────────────────────────────────────────────────────────────────
+networkPolicy:
+  enabled: false
+  ingressNamespaceSelector:
+    matchLabels:
+      kubernetes.io/metadata.name: efe
+  prometheusNamespaceSelector:
+    matchLabels:
+      kubernetes.io/metadata.name: monitoring
+  # PR #14 audit pass — egress CIDRs for hook Jobs to reach the K8s
+  # API server.  `namespaceSelector` does NOT match Service ClusterIPs ;
+  # the API server is on the cluster's service CIDR (a VIP), not a pod
+  # network.  Default permits any non-link-local IPv4 ; production
+  # operators should tighten this to the cluster's actual service CIDR
+  # (e.g. `["10.96.0.0/12"]` on kubeadm-default or `["172.20.0.0/16"]`
+  # on EKS).  The except: list inside each rule already excludes
+  # link-local IMDS endpoints.
+  hookEgressCidrs:
+    - "0.0.0.0/0"
+
+# ─────────────────────────────────────────────────────────────────────
+# Prometheus ServiceMonitor — Prometheus-Operator integration.
+# Opt-in (requires `monitoring.coreos.com/v1` CRDs).
+# ─────────────────────────────────────────────────────────────────────
+metrics:
+  serviceMonitor:
+    enabled: false
+    interval: 30s
+    scrapeTimeout: 10s
+    labels: {}
+
+# Pod-level annotations propagated to every pod (controller + participants).
+podAnnotations: {}
+
+# ─────────────────────────────────────────────────────────────────────
+# Helm test connection probe (`helm test`).  Renders a Pod that runs
+# grpcurl against MetaSwarmService::Health.
+# ─────────────────────────────────────────────────────────────────────
+tests:
+  enabled: true
+  grpcurlImage: "fullstorydev/grpcurl:v1.9.1"
+  timeoutSeconds: 30
+
+# ═════════════════════════════════════════════════════════════════════
+# PR #14 ADDITIONS — production-grade Helm values + templates.
+# All OFF by default ; flip per-environment via examples/values-*.yaml.
+# Cf. `docs/EFE_A1_PHASE2_PR14_ARCHITECTURE.md`.
+# ═════════════════════════════════════════════════════════════════════
+
+# ─────────────────────────────────────────────────────────────────────
+# PriorityClass for the controller (AD13).  Higher than default user
+# pods (1000) ; below system-cluster-critical (2 000 000 000).
+# ─────────────────────────────────────────────────────────────────────
+priorityClass:
+  enabled: false
+  value: 100000
+
+# ─────────────────────────────────────────────────────────────────────
+# HorizontalPodAutoscaler for the controller (AD14).
+# Phase-2 lock : min=max=1 ; structural placeholder for PR #17.
+# ─────────────────────────────────────────────────────────────────────
+# Extends controller block (already defined above).
+# controller.hpa is set via the schema ; defaults below.
+
+# ─────────────────────────────────────────────────────────────────────
+# Helm hooks (AD2-AD6 / AD18-AD25).  Pre-upgrade snapshot + post-upgrade
+# SIGHUP-all.  Requires hooks SA + Role (least-privilege).
+# ─────────────────────────────────────────────────────────────────────
+hooks:
+  enabled: false
+  image: "bitnami/kubectl:1.28"
+  preUpgrade:
+    snapshotEnabled: true
+    backupRingSize: 5            # 5 last reloads kept
+  postUpgrade:
+    sighupEnabled: true
+    serial: true                 # one pod at a time
+    ignoreFailures: true         # dev/staging-friendly default ; flip in prod
+
+# ─────────────────────────────────────────────────────────────────────
+# Bundle weight-loader sidecar (AD7-AD9).  Phase-2 ships a `pause`
+# placeholder ; PR #15 swaps for the real polling binary.
+# ─────────────────────────────────────────────────────────────────────
+bundle:
+  endpointUrl: "https://bundles.efe.example.com"   # PR #15 target
+  endpointPort: 443
+  endpointNamespaceSelector:
+    matchLabels:
+      kubernetes.io/metadata.name: efe-bundles
+  pollIntervalSeconds: 60
+  sidecar:
+    enabled: false
+    image: "gcr.io/google-containers/pause:3.9"
+    weightsSizeLimit: "256Mi"
+    resources:
+      requests: {cpu: 100m, memory: 128Mi}
+      limits:   {cpu: 250m, memory: 256Mi}
+
+# ─────────────────────────────────────────────────────────────────────
+# PrometheusRule alerts (AD10 / AD29).  6 alerts over the PR #11/#12
+# metric surface.
+# ─────────────────────────────────────────────────────────────────────
+alerts:
+  enabled: false
+  runbookBaseUrl: "https://efe.example.com/runbook/meta-swarm"
+  severity:
+    ReloadFailureRate: warning
+    ReloadLatencyP99High: warning
+    ReloadingStuck: critical
+    ControllerDown: critical
+    ParticipantDown: warning
+    ReloadGenNotAdvancing: info
+
+  # PR #17 — alert thresholds for the 5 new operational alerts.
+  # Schema-gated (see values.schema.json).  Operators tuning these
+  # SHOULD justify in the values.yaml comment ; the Rego rule
+  # `policies/rego/efe/alert_threshold_sanity.rego` lints any
+  # threshold that's been moved beyond the SLO budget.
+  thresholds:
+    # MetaSwarmIterateDurationP99High — p99 latency ceiling, seconds.
+    iterateP99HighSeconds: 5.0
+    # MetaSwarmIterateErrorRateHigh — fraction of Iterate calls that
+    # may fail before paging.  Expressed as a percentage : 0.1 = 0.1 %.
+    iterateErrorRatePct: 0.1
+    # MetaSwarmStepErrorRateHigh — same shape, per-participant.
+    stepErrorRatePct: 0.5
+    # MetaSwarmSafetyViolationsSpike — rate per second.  Phase 2's
+    # contractive algorithm makes this nominally 0 ; > 0.01 / s = > 36 / hour.
+    safetyViolationRatePerS: 0.01
+
+  # PR #17 ServiceMonitor / PrometheusRule label selector — `prometheus`
+  # is the kube-prometheus-stack default RuleSelector match.  Operators
+  # running multi-Prometheus (Thanos receiver vs raw Prom) may override.
+  prometheusSelector: efe
+
+  # Grafana base URL — embedded in `dashboard_url` alert annotations
+  # so PagerDuty / Slack messages link back to the right Grafana origin.
+  grafanaBaseUrl: "https://grafana.efe.internal"
+
+  # ─────────────────────────────────────────────────────────────────
+  # PR #19 § 32 + § 33 — SLO targets + Alertmanager routing.
+  #
+  # The 10 PR #19 alerts + 6 recording rules + Alertmanager routing
+  # are gated by `alerts.pr19.enabled` (default true when alerts are
+  # globally on).  STABILITY_CONTRACT v1.1 commits the default SLO
+  # targets below ; lowering (relaxing) a target is a contract break.
+  # ─────────────────────────────────────────────────────────────────
+  pr19:
+    # Master switch for the PR #19 alert pack.  When false, the
+    # `pr19-prometheusrule.yaml` template renders zero documents.
+    enabled: true
+
+    # The 4 SLO targets — see docs/slo.md § 2 (PR #19 additions).
+    slo:
+      # SLO 1 — iterate availability (fraction of result=ok calls,
+      # 30-day window).  Default 99.9 % ⇒ error budget = 0.001.
+      iterateAvailabilityTarget: 0.999
+      # SLO 2 — iterate latency p95 ≤ this many seconds.
+      iterateLatencyP95Target: 1.0
+      # SLO 3 — manifest reload p95 ≤ this many seconds.
+      manifestReloadP95Target: 0.5
+      # SLO 4 — OTel exporter drop rate ≤ this fraction (30-day window).
+      otelDropRateTarget: 0.01
+
+    # Alertmanager routing additions (PR #19 § 33).
+    alertmanager:
+      # `alertmanagerconfig` (recommended) emits an AlertmanagerConfig
+      # CRD scoped to the meta-swarm namespace.  `raw-fragment` emits
+      # a plain ConfigMap that operators paste into the cluster
+      # Alertmanager Secret.
+      enabled: true
+      mode: alertmanagerconfig
+      # Label selector matching the cluster Alertmanager CRD selector.
+      selectorLabel: efe
+
+      # PagerDuty integration — secret name + key referencing the
+      # cluster's existing Alertmanager PagerDuty integration secret.
+      pagerduty:
+        secretName: alertmanager-pagerduty-meta-swarm
+        routingKeyKey: routing-key
+
+      # Slack integration — secret name + key + channel.
+      slack:
+        secretName: alertmanager-slack-meta-swarm
+        urlKey: webhook-url
+        channel: "#meta-swarm-alerts"
+
+      # Compliance-audit Loki webhook (AD31 — every alert audit-forked).
+      audit:
+        lokiUrl: "http://loki-gateway.monitoring.svc:3100/audit/alerts"
+
+# ─────────────────────────────────────────────────────────────────────
+# PR #18 — OpenTelemetry distributed-tracing surface.
+#
+# When `tracing.otel.enabled: true`, the controller + participant
+# binaries push their 8 EFE-specific spans (iterate, connect_*, inner_loop,
+# safety_check, step, step.local, manifest.reload, shutdown.drain) to
+# the configured OTLP/gRPC collector.  When `enabled: false` (default),
+# the binaries skip OTel SDK init entirely ; spans still emit to stdout
+# via tracing_subscriber but never leave the pod.
+#
+# Reference : docs/EFE_A1_PHASE2_PR18_ARCHITECTURE.md § 25.
+# ─────────────────────────────────────────────────────────────────────
+tracing:
+  otel:
+    enabled: false
+
+    # ── OTel-spec env vars (rendered into the ConfigMap) ──
+    # Collector OTLP/gRPC endpoint.  Defaults to the in-cluster
+    # collector Service ; operators with an external backend (Tempo,
+    # Honeycomb, Lightstep, Datadog) override this URL.
+    endpoint: "http://otel-collector.observability.svc:4317"
+
+    # Protocol : `grpc` (default, our tonic 0.12 stack) or `http/protobuf`.
+    # Phase 2 only ships `grpc` ; HTTP/protobuf is a Phase 3 follow-up.
+    protocol: "grpc"
+
+    # Per-export timeout (seconds + `s` or milliseconds + `ms` suffix).
+    timeout: "10s"
+
+    # Trace sampler argument (rate-based, parent-respecting).  Schema-
+    # gated to `^(0(\\.[0-9]+)?|1(\\.0+)?)$` (range [0.0, 1.0]).
+    # Default 0.01 = 1% sample rate (prod ; staging/dev override to higher).
+    samplerArg: "0.01"
+
+    # `deployment.environment` resource attribute.  Enum-gated to
+    # {dev, staging, prod, canary}.
+    deploymentEnvironment: "prod"
+
+    # Service name override.  Defaults to `efe-meta-swarm-controller`
+    # / `efe-meta-swarm-participant` per the binary role.
+    serviceName: ""
+
+    # OTLP-side TLS (for cross-cluster collectors).  In-cluster
+    # collectors typically use plain-text (AD27).
+    tls:
+      enabled: false
+      # Path to CA bundle ConfigMap when tls.enabled=true.
+      caBundleConfigMap: ""
+
+    # Batch processor knobs (AD9).
+    batch:
+      maxExportBatchSize: 1024
+      maxExportTimeoutSeconds: 5
+      scheduledDelaySeconds: 5
+      maxQueueSize: 8192
+
+# ─────────────────────────────────────────────────────────────────────
+# Grafana dashboard (AD11 / AD12).  Auto-imported by the Grafana
+# sidecar when the `grafana_dashboard: "1"` label is set.
+#
+# PR #19 § 34 adds the `pr19` sub-section : 9 new dashboards fanned out
+# as one ConfigMap each (efe-msw-overview, efe-msw-iterate, …).  The
+# pre-existing single dashboard (PR #14 + PR #17 merged) remains
+# unchanged ; the two packs coexist in the same Grafana folder.
+# ─────────────────────────────────────────────────────────────────────
+dashboard:
+  enabled: false
+
+  # PR #19 dashboard pack.  Renders only when `dashboard.enabled=true`
+  # AND `dashboard.pr19.enabled=true` (default true).
+  pr19:
+    enabled: true
+    # Datasource UIDs injected into the dashboard JSON via `tpl` at
+    # render time (AD23 / AD24).  STABILITY_CONTRACT v1.1 commits
+    # `tempo-efe` as the Tempo UID.
+    datasources:
+      prometheusUid: "prometheus"
+      tempoUid:      "tempo-efe"
+
+# ─────────────────────────────────────────────────────────────────────
+# TLS bootstrap (PR #14 stubs + PR #16 binary-side wiring).
+#
+# When `tls.enabled: true`, the chart provisions cert-manager
+# Issuer + Certificate per role ; deployments mount the issued
+# Secret at `/etc/efe-meta-swarm/tls/`.  PR #16 wires the binary side
+# (rustls + tonic-tls + inotify watcher + atomic reload).
+#
+# Reference : docs/EFE_A1_PHASE2_PR16_ARCHITECTURE.md § 13.
+# ─────────────────────────────────────────────────────────────────────
+tls:
+  enabled: false
+
+  # ── PR #16 — mutual TLS opt-in (AD8) ──────────────────────────────
+  # When false, the server accepts plain (non-mTLS) inbound traffic ;
+  # client connections from helm-test probes work without a cert.
+  # When true, both ends MUST present a cert ; SANs are strictly
+  # checked against the namespace-local allowlist.
+  mutual: false
+
+  # ── PR #16 — minimum protocol version (AD6) ───────────────────────
+  # Enum : "1.2" | "1.3".  Default 1.3 (no downgrade).  "1.2" is a
+  # deliberately-friction-laden opt-in for legacy peers — operators
+  # MUST justify the choice in the values.yaml comment ; the Rego rule
+  # `policies/rego/efe/tls_protocol_version.rego` enforces this on CI.
+  minProtocolVersion: "1.3"
+
+  # ── PR #16 — RSA-2048 keys opt-in (AD4) ───────────────────────────
+  # Default ECDSA-P256 (faster, smaller, NIST + EU AI Act compliant).
+  # Set true ONLY when peers don't support ECDSA.
+  legacyRsa: false
+
+  # ── PR #16 — extra DNS SANs in the issued cert (§ 10.1) ──────────
+  # The chart always inserts the standard 2-SAN list (Service FQDN +
+  # cluster.local).  This list extends it.  IP SANs are rejected by
+  # the chart side ; wildcards are rejected by the schema.
+  additionalSans: []
+
+  # ── PR #16 — extra trust roots via operator-provided ConfigMap ───
+  # Mounted at `/etc/efe-meta-swarm/tls/extra-ca.crt`.  Use cases :
+  # cross-cluster federation, BYO PKI override.
+  caBundleConfigMap: ""
+
+  # ── PR #16 — wait-for-cert Helm hook timeout (§ 12.4) ────────────
+  # The hook polls Certificate.status.conditions[Ready=true] every 5s
+  # before letting the controller/participant Deployments roll.  60 s
+  # ≤ value ≤ 1800 s (enforced by values.schema.json).
+  waitForCertTimeoutSeconds: 300
+
+  certManager:
+    enabled: false
+    # ── PR #16 — ClusterIssuer opt-in (AD14) ─────────────────────────
+    # When true, render a cert-manager `ClusterIssuer` instead of a
+    # namespace-scoped `Issuer`.  Needed for cross-namespace deploys
+    # that share a CA.
+    clusterIssuer: false
+    issuerType: selfSigned       # selfSigned | ca
+    caSecretName: ""             # only used when issuerType=ca
+
+    # ── PR #16 — private-key algorithm + size (AD3 / AD4) ────────────
+    # Schema rule (values.schema.json) enforces :
+    #   algorithm=ECDSA → size=256
+    #   algorithm=RSA   → size ∈ {2048, 4096}
+    privateKey:
+      algorithm: ECDSA           # ECDSA | RSA
+      size: 256                  # 256 for ECDSA ; 2048|4096 for RSA
+      rotationPolicy: Always     # Always | Never
+
+    # ── PR #16 — cert duration + renewBefore window (AD5) ────────────
+    # Strings must match the regex `^[0-9]+h$` (hours-only).
+    duration: 720h               # 30 days
+    renewBefore: 168h            # renew 7 days before expiry
+
+  # ── PR #16 — rotation observability alerting (AD27) ──────────────
+  rotation:
+    # Alert when ≤ `alertExpiringHours` of validity remain.  cert-
+    # manager should have rotated by then ; if this alert fires,
+    # cert-manager is stuck.
+    alertExpiringHours: 168       # 7 days
+    # Alert if no successful reload has been observed in
+    # `alertStuckHours`.  cert-manager rotates at ~ 23-day cadence ;
+    # a 45-day gap is a hard incident.
+    alertStuckHours: 1080         # 45 days
+    # Alert if handshake failure rate exceeds this percentage over a
+    # 5-minute window.
+    alertHandshakeFailurePct: 1.0

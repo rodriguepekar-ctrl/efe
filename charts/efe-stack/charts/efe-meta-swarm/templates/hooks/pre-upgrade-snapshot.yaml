@@ -1,0 +1,123 @@
+{{- if and .Values.enabled .Values.hooks.enabled .Values.hooks.preUpgrade.snapshotEnabled }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "efe-meta-swarm.hookName" (list . "pre-upgrade-snapshot") }}
+  labels:
+    {{- include "efe-meta-swarm.hookLabels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": pre-upgrade
+    "helm.sh/hook-weight": "-10"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: 1
+  ttlSecondsAfterFinished: 300
+  template:
+    metadata:
+      labels:
+        {{- include "efe-meta-swarm.hookLabels" . | nindent 8 }}
+    spec:
+      restartPolicy: Never
+      serviceAccountName: {{ include "efe-meta-swarm.hookServiceAccountName" . }}
+      # PR #14 — hook pods need K8s API access ; SA token mounted only
+      # on the hook Job pods, NOT on runtime pods (those keep
+      # `automountServiceAccountToken: false`).
+      automountServiceAccountToken: true
+      enableServiceLinks: false
+      securityContext:
+        {{- include "efe-meta-swarm.commonPodSecurityContext" . | nindent 8 }}
+      containers:
+        - name: snapshot
+          image: {{ .Values.hooks.image | quote }}
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            {{- include "efe-meta-swarm.commonContainerSecurityContext" . | nindent 12 }}
+          resources:
+            requests: {cpu: 50m, memory: 64Mi}
+            limits:   {cpu: 200m, memory: 256Mi}
+          env:
+            - name: NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: LIVE_CM
+              value: {{ include "efe-meta-swarm.fullname" . }}-manifest
+            - name: BACKUP_CM_PREFIX
+              value: {{ include "efe-meta-swarm.fullname" . }}-manifest-backup
+            - name: RING_SIZE
+              value: {{ .Values.hooks.preUpgrade.backupRingSize | default 5 | quote }}
+          # PR #14 audit fix — `readOnlyRootFilesystem: true` (from
+          # commonContainerSecurityContext) makes /tmp RO too.  Mount
+          # an emptyDir at /tmp so the snapshot script can write its
+          # working files.  Without this the Job fails at
+          # `kubectl get cm ... > /tmp/...` with EROFS.
+          volumeMounts:
+            - name: workdir
+              mountPath: /tmp
+          command:
+            - sh
+            - -c
+            - |
+              set -eu
+
+              echo "── PR #14 pre-upgrade snapshot ──"
+              echo "namespace=$NAMESPACE  live=$LIVE_CM  ringSize=$RING_SIZE"
+
+              # If the live CM doesn't exist yet (first install OR
+              # out-of-band delete), skip cleanly.  Helm fires the
+              # pre-upgrade hook on rollback too — same behaviour.
+              if ! kubectl -n "$NAMESPACE" get cm "$LIVE_CM" >/dev/null 2>&1 ; then
+                echo "live ConfigMap not found — nothing to snapshot ; exit 0"
+                exit 0
+              fi
+
+              # Compute next backup index from the live CM's annotation
+              # `efe.io/backup-next-index` (default 0), bounded by ringSize.
+              NEXT_IDX=$(kubectl -n "$NAMESPACE" get cm "$LIVE_CM" \
+                -o jsonpath='{.metadata.annotations.efe\.io/backup-next-index}' 2>/dev/null || echo "0")
+              NEXT_IDX=${NEXT_IDX:-0}
+              BACKUP_CM="${BACKUP_CM_PREFIX}-${NEXT_IDX}"
+
+              echo "snapshot : $LIVE_CM → $BACKUP_CM"
+
+              # PR #14 audit fix — Reconstruct the backup CM FROM SCRATCH
+              # via `kubectl create --dry-run=client -o yaml | kubectl apply`.
+              # This is safer than `sed`-ing the original JSON :
+              #   - no stale `uid` / `resourceVersion` / `managedFields`
+              #     that would trip up subsequent updates of the same
+              #     backup index (ring wrap-around).
+              #   - kubectl create generates a minimal, clean object.
+              # We extract just `data.manifest\.yaml` (the only data
+              # key the chart populates).
+              kubectl -n "$NAMESPACE" get cm "$LIVE_CM" \
+                -o jsonpath='{.data.manifest\.yaml}' \
+                > /tmp/manifest.yaml
+
+              kubectl -n "$NAMESPACE" create configmap "$BACKUP_CM" \
+                --from-file=manifest.yaml=/tmp/manifest.yaml \
+                --dry-run=client -o yaml \
+                | kubectl -n "$NAMESPACE" apply -f -
+
+              # Audit metadata : labels + annotations on the backup.
+              kubectl -n "$NAMESPACE" label cm "$BACKUP_CM" \
+                "efe.io/manifest-state=backup" \
+                "app.kubernetes.io/managed-by=Helm" \
+                --overwrite
+              kubectl -n "$NAMESPACE" annotate cm "$BACKUP_CM" \
+                "efe.io/manifest-state=backup" \
+                "efe.io/backup-index=${NEXT_IDX}" \
+                "efe.io/backup-taken-at=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+                --overwrite
+
+              # Bump the index annotation on the live CM (rotates the ring).
+              NEW_NEXT_IDX=$(( (NEXT_IDX + 1) % RING_SIZE ))
+              kubectl -n "$NAMESPACE" annotate cm "$LIVE_CM" \
+                "efe.io/backup-next-index=$NEW_NEXT_IDX" --overwrite
+
+              echo "✓ snapshot complete : backup-${NEXT_IDX} created ; next index = ${NEW_NEXT_IDX}"
+      volumes:
+        - name: workdir
+          emptyDir:
+            medium: Memory
+            sizeLimit: 16Mi
+{{- end }}

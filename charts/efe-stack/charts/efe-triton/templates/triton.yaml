@@ -1,0 +1,217 @@
+{{- if .Values.enabled }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ .Values.triton.modelRepoPvc.claimName }}
+  labels:
+    {{- include "efe-triton.labels" . | nindent 4 }}
+spec:
+  accessModes: ["ReadOnlyMany"]
+  storageClassName: {{ .Values.triton.modelRepoPvc.storageClass }}
+  resources:
+    requests:
+      storage: {{ .Values.triton.modelRepoPvc.size }}
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "efe-triton.fullname" . }}
+  labels:
+    {{- include "efe-triton.labels" . | nindent 4 }}
+spec:
+  serviceName: {{ include "efe-triton.fullname" . }}
+  replicas: {{ .Values.triton.replicas }}
+  podManagementPolicy: Parallel
+  selector:
+    matchLabels:
+      {{- include "efe-triton.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "efe-triton.selectorLabels" . | nindent 8 }}
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "{{ .Values.triton.service.metricsPort }}"
+        prometheus.io/path: "/metrics"
+        nvidia.com/mig.profile: "{{ .Values.triton.migProfile }}"
+    spec:
+      automountServiceAccountToken: false
+      nodeSelector:
+        {{- toYaml .Values.triton.nodeSelector | nindent 8 }}
+      tolerations:
+        {{- toYaml .Values.triton.tolerations | nindent 8 }}
+      securityContext:
+        runAsNonRoot: false   # NVIDIA driver requires root for now
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: triton
+          image: "{{ .Values.triton.image.repository }}:{{ .Values.triton.image.tag }}"
+          imagePullPolicy: {{ .Values.triton.image.pullPolicy }}
+          args:
+            - "tritonserver"
+            - "--model-repository=/models"
+            - "--http-port={{ .Values.triton.service.httpPort }}"
+            - "--grpc-port={{ .Values.triton.service.grpcPort }}"
+            - "--metrics-port={{ .Values.triton.service.metricsPort }}"
+            - "--model-control-mode=explicit"
+            - "--load-model={{ .Values.triton.models.siglip.name }}"
+            - "--load-model={{ .Values.triton.models.whisper.name }}"
+            - "--allow-cpu-metrics=false"
+            - "--strict-readiness=true"
+          ports:
+            - name: http
+              containerPort: {{ .Values.triton.service.httpPort }}
+              protocol: TCP
+            - name: grpc
+              containerPort: {{ .Values.triton.service.grpcPort }}
+              protocol: TCP
+            - name: metrics
+              containerPort: {{ .Values.triton.service.metricsPort }}
+              protocol: TCP
+          volumeMounts:
+            - name: model-repo
+              mountPath: /models
+              readOnly: true
+          livenessProbe:
+            httpGet:
+              path: /v2/health/live
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 15
+            timeoutSeconds: 5
+          readinessProbe:
+            httpGet:
+              path: /v2/health/ready
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          resources:
+            {{- toYaml .Values.triton.resources | nindent 12 }}
+      volumes:
+        - name: model-repo
+          persistentVolumeClaim:
+            claimName: {{ .Values.triton.modelRepoPvc.claimName }}
+            readOnly: true
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "efe-triton.fullname" . }}
+  labels:
+    {{- include "efe-triton.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.triton.service.type }}
+  ports:
+    - name: http
+      port: {{ .Values.triton.service.httpPort }}
+      targetPort: http
+      appProtocol: http
+    - name: grpc
+      port: {{ .Values.triton.service.grpcPort }}
+      targetPort: grpc
+      appProtocol: grpc
+    - name: metrics
+      port: {{ .Values.triton.service.metricsPort }}
+      targetPort: metrics
+      appProtocol: http
+  selector:
+    {{- include "efe-triton.selectorLabels" . | nindent 4 }}
+{{- end }}
+{{- if and .Values.enabled .Values.hpa.enabled }}
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ include "efe-triton.fullname" . }}
+  labels:
+    {{- include "efe-triton.labels" . | nindent 4 }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: StatefulSet
+    name: {{ include "efe-triton.fullname" . }}
+  minReplicas: {{ .Values.hpa.minReplicas }}
+  maxReplicas: {{ .Values.hpa.maxReplicas }}
+  metrics:
+    - type: Pods
+      pods:
+        metric:
+          name: nvidia_gpu_duty_cycle
+        target:
+          type: AverageValue
+          averageValue: "{{ .Values.hpa.gpuDutyCycleTarget }}"
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 180
+      policies:
+        - type: Pods
+          value: 1
+          periodSeconds: 60
+    scaleDown:
+      stabilizationWindowSeconds: 600
+      policies:
+        - type: Pods
+          value: 1
+          periodSeconds: 300
+{{- end }}
+{{- if and .Values.enabled .Values.networkPolicy.enabled }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "efe-triton.fullname" . }}
+  labels:
+    {{- include "efe-triton.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "efe-triton.selectorLabels" . | nindent 6 }}
+  policyTypes: [Ingress, Egress]
+  ingress:
+    # Application traffic from efe-server (vision / audio inference).
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Values.networkPolicy.upstreamNamespace }}
+      ports:
+        - protocol: TCP
+          port: {{ .Values.triton.service.httpPort }}
+        - protocol: TCP
+          port: {{ .Values.triton.service.grpcPort }}
+    # M30 audit fix : Prometheus scrape needs ingress to the metrics
+    # port. Without this rule the dashboards + alerts dry up silently.
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Values.networkPolicy.prometheusNamespace }}
+      ports:
+        - protocol: TCP
+          port: {{ .Values.triton.service.metricsPort }}
+  egress:
+    # DNS + model PVC are local — no egress to internet.
+    - ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+{{- end }}
+{{- if and .Values.enabled .Values.serviceMonitor.enabled }}
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ include "efe-triton.fullname" . }}
+  labels:
+    {{- include "efe-triton.labels" . | nindent 4 }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "efe-triton.selectorLabels" . | nindent 6 }}
+  endpoints:
+    - port: metrics
+      interval: {{ .Values.serviceMonitor.interval }}
+      path: /metrics
+{{- end }}

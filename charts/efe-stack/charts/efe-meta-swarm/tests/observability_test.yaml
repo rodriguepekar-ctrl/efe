@@ -1,0 +1,148 @@
+# PR #14 — helm-unittest assertions for PrometheusRule + Grafana dashboard.
+suite: efe-meta-swarm observability
+
+templates:
+  - prometheusrule.yaml
+  - grafana-dashboard.yaml
+
+tests:
+  - it: alerts disabled by default — no PrometheusRule
+    template: prometheusrule.yaml
+    set:
+      enabled: true
+      image:
+        tag: "test"
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: alerts enabled — PrometheusRule with 3 groups
+    template: prometheusrule.yaml
+    set:
+      enabled: true
+      image:
+        tag: "test"
+      alerts:
+        enabled: true
+    asserts:
+      - isKind:
+          of: PrometheusRule
+      - equal:
+          path: spec.groups[0].name
+          value: efe-meta-swarm.reload
+      - equal:
+          path: spec.groups[1].name
+          value: efe-meta-swarm.availability
+      - equal:
+          path: spec.groups[2].name
+          value: efe-meta-swarm.reload-freshness
+
+  - it: AC15 — all 6 alerts present
+    template: prometheusrule.yaml
+    set:
+      enabled: true
+      image:
+        tag: "test"
+      alerts:
+        enabled: true
+    asserts:
+      - matchRegex:
+          path: spec.groups[0].rules[0].alert
+          pattern: MetaSwarmReloadFailureRate
+      - matchRegex:
+          path: spec.groups[0].rules[1].alert
+          pattern: MetaSwarmReloadLatencyP99High
+      - matchRegex:
+          path: spec.groups[0].rules[2].alert
+          pattern: MetaSwarmReloadingStuck
+      - matchRegex:
+          path: spec.groups[1].rules[0].alert
+          pattern: MetaSwarmControllerDown
+      - matchRegex:
+          path: spec.groups[1].rules[1].alert
+          pattern: MetaSwarmParticipantDown
+      - matchRegex:
+          path: spec.groups[2].rules[0].alert
+          pattern: MetaSwarmReloadGenNotAdvancing
+
+  - it: AC17 — Grafana ConfigMap has grafana_dashboard label when dashboard enabled
+    template: grafana-dashboard.yaml
+    set:
+      enabled: true
+      image:
+        tag: "test"
+      dashboard:
+        enabled: true
+    asserts:
+      - isKind:
+          of: ConfigMap
+      - equal:
+          path: metadata.labels["grafana_dashboard"]
+          value: "1"
+      - equal:
+          path: metadata.annotations["grafana_folder"]
+          value: efe-meta-swarm
+
+  # ───────────────────────────────────────────────────────────────────
+  # AC16 — every alert MUST carry a `runbook_url` annotation pointing
+  # at the operator runbook.  Without this, on-call gets paged with no
+  # link to mitigation steps.  Audit pass : explicit per-alert check.
+  # ───────────────────────────────────────────────────────────────────
+
+  - it: AC16 — every alert sets annotations.runbook_url
+    template: prometheusrule.yaml
+    set:
+      enabled: true
+      image:
+        tag: "test"
+      alerts:
+        enabled: true
+        runbookBaseUrl: "https://runbook.example.com/meta-swarm"
+    asserts:
+      # Group 0 (reload).
+      - matchRegex:
+          path: spec.groups[0].rules[0].annotations.runbook_url
+          pattern: "^https://runbook.example.com/meta-swarm#reload-failures$"
+      - matchRegex:
+          path: spec.groups[0].rules[1].annotations.runbook_url
+          pattern: "^https://runbook.example.com/meta-swarm#reload-latency$"
+      - matchRegex:
+          path: spec.groups[0].rules[2].annotations.runbook_url
+          pattern: "^https://runbook.example.com/meta-swarm#reloading-stuck$"
+      # Group 1 (availability).
+      - matchRegex:
+          path: spec.groups[1].rules[0].annotations.runbook_url
+          pattern: "^https://runbook.example.com/meta-swarm#controller-down$"
+      - matchRegex:
+          path: spec.groups[1].rules[1].annotations.runbook_url
+          pattern: "^https://runbook.example.com/meta-swarm#participant-down$"
+      # Group 2 (freshness).
+      - matchRegex:
+          path: spec.groups[2].rules[0].annotations.runbook_url
+          pattern: "^https://runbook.example.com/meta-swarm#reload-gen-stale$"
+
+  - it: AC16 — operator-defined severities propagate to every rule
+    template: prometheusrule.yaml
+    set:
+      enabled: true
+      image:
+        tag: "test"
+      alerts:
+        enabled: true
+        severity:
+          ReloadFailureRate: critical
+          ReloadLatencyP99High: critical
+          ReloadingStuck: critical
+          ControllerDown: critical
+          ParticipantDown: critical
+          ReloadGenNotAdvancing: critical
+    asserts:
+      - equal:
+          path: spec.groups[0].rules[0].labels.severity
+          value: critical
+      - equal:
+          path: spec.groups[1].rules[0].labels.severity
+          value: critical
+      - equal:
+          path: spec.groups[2].rules[0].labels.severity
+          value: critical

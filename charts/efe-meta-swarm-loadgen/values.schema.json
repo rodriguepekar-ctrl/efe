@@ -1,0 +1,130 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema",
+  "title": "efe-meta-swarm-loadgen values",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "enabled": { "type": "boolean" },
+    "nameOverride": { "type": "string" },
+    "fullnameOverride": { "type": "string" },
+    "image": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "repository": { "type": "string", "minLength": 1 },
+        "tag":        { "type": "string", "minLength": 1 },
+        "pullPolicy": { "enum": ["Always", "IfNotPresent", "Never"] },
+        "imagePullSecrets": { "type": "array" }
+      },
+      "required": ["repository", "tag"]
+    },
+    "profile": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "inline":    { "type": "string" },
+        "configMap": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "name": { "type": "string" },
+            "key":  { "type": "string" }
+          }
+        }
+      }
+    },
+    "job": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "schedule":                { "type": "string" },
+        "parallelism":             { "type": "integer", "minimum": 1, "maximum": 100 },
+        "completions":             { "type": "integer", "minimum": 1, "maximum": 100 },
+        "backoffLimit":            { "type": "integer", "minimum": 0, "maximum": 10  },
+        "activeDeadlineSeconds":   { "type": "integer", "minimum": 60, "maximum": 86400 },
+        "ttlSecondsAfterFinished": { "type": "integer", "minimum": 0,  "maximum": 604800 }
+      }
+    },
+    "podSecurityContext": { "type": "object" },
+    "containerSecurityContext": { "type": "object" },
+    "resources": { "type": "object" },
+    "target": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "endpoint": { "type": "string", "pattern": "^grpc(s)?://[^@]+:[0-9]+$" },
+        "port":     { "type": "integer", "minimum": 1, "maximum": 65535 },
+        "role":     { "enum": ["controller", "participant"] }
+      }
+    },
+    "tls": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled":           { "type": "boolean" },
+        "secretName":        { "type": "string" },
+        "caCertSecretName":  { "type": "string" },
+        "expectedSan":       { "type": "string" }
+      }
+    },
+    "prometheus": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "port":    { "type": "integer", "minimum": 1, "maximum": 65535 },
+        "serviceMonitor": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled":          { "type": "boolean" },
+            "interval":         { "type": "string" },
+            "scrapeTimeout":    { "type": "string" },
+            "additionalLabels": { "type": "object" }
+          }
+        }
+      }
+    },
+    "otel": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled":    { "type": "boolean" },
+        "endpoint":   { "type": "string" },
+        "samplerArg": { "type": "string", "pattern": "^(0(\\.[0-9]+)?|1(\\.0+)?)$" }
+      }
+    },
+    "serviceAccount": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "create":      { "type": "boolean" },
+        "name":        { "type": "string" },
+        "annotations": { "type": "object" }
+      }
+    },
+    "rbac": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "create": { "type": "boolean" }
+      }
+    },
+    "networkPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled":                       { "type": "boolean" },
+        "allowedControllerSelector":     { "type": "object" },
+        "allowedCollectorSelector":      { "type": "object" },
+        "allowedParticipantSelector":    { "type": "object" },
+        "allowPrometheusScrape":         { "type": "boolean" }
+      }
+    },
+    "mode":        { "enum": ["dev", "staging", "production"] },
+    "confirmProd": { "type": "boolean" },
+    "extraEnv":    { "type": "array" },
+    "extraArgs":   { "type": "array" }
+  },
+  "required": ["enabled", "image"]
+}

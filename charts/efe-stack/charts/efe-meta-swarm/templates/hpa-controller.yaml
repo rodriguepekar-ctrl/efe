@@ -1,0 +1,30 @@
+{{- if and .Values.enabled .Values.controller.hpa.enabled }}
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ include "efe-meta-swarm.controllerName" . }}
+  labels:
+    {{- include "efe-meta-swarm.labels" . | nindent 4 }}
+    app.kubernetes.io/component: controller
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "efe-meta-swarm.controllerName" . }}
+  # PR #14 AD31 — Phase-2 lock : min=max=1 (single controller).
+  # PR #17 leader-election will flip the bounds to N > 1.  Shipping
+  # the template now lets PR #17 be a values change, not a new template.
+  minReplicas: 1
+  maxReplicas: 1
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          # PR #14 audit pass — drop `| default 70` ; values.yaml provides
+          # the default + schema enforces [10, 100].  `| default 70` would
+          # mask an explicit `targetCPUUtilization: 0` typo (Sprig treats
+          # zero as empty), which the schema would otherwise catch.
+          averageUtilization: {{ .Values.controller.hpa.targetCPUUtilization }}
+{{- end }}

@@ -1,0 +1,33 @@
+{{- /*
+PR #18 § 25.2 — OpenTelemetry env-var ConfigMap.
+
+Renders ONLY when `tracing.otel.enabled=true`.  Maps the Helm
+values' `tracing.otel.*` knobs to canonical OTel-spec env vars
+(`OTEL_EXPORTER_OTLP_*`, `OTEL_TRACES_SAMPLER_*`, etc.).  Both
+controller + participant Deployments consume this ConfigMap via
+`envFrom: configMapRef`.
+
+Default state (`enabled=false`) : the ConfigMap doesn't render ;
+the binaries' `init_otel_or_disabled` returns a no-op guard ;
+spans still emit to stdout via tracing_subscriber.
+*/ -}}
+{{- if and .Values.enabled .Values.tracing.otel.enabled }}
+{{- $otel := .Values.tracing.otel -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "efe-meta-swarm.fullname" . }}-otel-env
+  labels:
+    {{- include "efe-meta-swarm.labels" . | nindent 4 }}
+data:
+  # PR #18 § 17.2 — OTel-spec env vars.
+  OTEL_EXPORTER_OTLP_ENDPOINT: {{ $otel.endpoint | quote }}
+  OTEL_EXPORTER_OTLP_PROTOCOL: {{ $otel.protocol | default "grpc" | quote }}
+  OTEL_EXPORTER_OTLP_TIMEOUT: {{ regexReplaceAll "([0-9]+)s$" ($otel.timeout | default "10s") "${1}000" | quote }}
+  OTEL_TRACES_SAMPLER: "parentbased_traceidratio"
+  OTEL_TRACES_SAMPLER_ARG: {{ $otel.samplerArg | default "0.01" | quote }}
+  OTEL_DEPLOYMENT_ENVIRONMENT: {{ $otel.deploymentEnvironment | default "prod" | quote }}
+  # `service.name` is filled per-Deployment by an explicit `env:` entry
+  # so the controller / participant binaries get distinct names without
+  # this ConfigMap needing a per-role copy.
+{{- end }}

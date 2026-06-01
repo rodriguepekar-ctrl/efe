@@ -1,0 +1,23 @@
+{{- /*
+PR #14 — namespace-scoped cert-manager Issuer.
+PR #16 — schema gate `tls.certManager.clusterIssuer` switches to
+ClusterIssuer instead (see tls-clusterissuer.yaml).  This template
+only renders when `clusterIssuer=false` (the default).
+*/ -}}
+{{- if and .Values.enabled .Values.tls.enabled .Values.tls.certManager.enabled (not .Values.tls.certManager.clusterIssuer) }}
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: {{ include "efe-meta-swarm.fullname" . }}-issuer
+  labels:
+    {{- include "efe-meta-swarm.labels" . | nindent 4 }}
+spec:
+  {{- if eq .Values.tls.certManager.issuerType "selfSigned" }}
+  selfSigned: {}
+  {{- else if eq .Values.tls.certManager.issuerType "ca" }}
+  ca:
+    secretName: {{ required "tls.certManager.caSecretName must be set when issuerType=ca" .Values.tls.certManager.caSecretName }}
+  {{- else }}
+  {{- fail (printf "efe-meta-swarm: tls.certManager.issuerType=%q is not supported (use selfSigned or ca)" .Values.tls.certManager.issuerType) }}
+  {{- end }}
+{{- end }}

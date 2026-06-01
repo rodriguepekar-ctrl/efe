@@ -1,0 +1,476 @@
+{{- /*
+PR #19 § 21 + § 7 + § 30/31 — the consolidated PrometheusRule CRD
+shipping the 10 PR-#19 alerts + 6 recording rules + 4 SLO definitions.
+
+Architecture reference  : `docs/EFE_A1_PHASE2_PR19_ARCHITECTURE.md`
+                          §  7 (recording rules)
+                          § 21 (alert catalogue + severity model)
+                          § 22-31 (per-alert specifications)
+                          § 32 (SLO definitions)
+                          § 33 (Alertmanager routing)
+
+This template intentionally lumps ALL PR #19 rules into a single
+PrometheusRule CRD so kube-prometheus-stack reload picks them up
+atomically (a partial roll-out where the recording rules exist but
+the alerts that depend on them don't is incoherent).
+
+Two-window burn-rate alerts (A9 + A10) follow the Google SRE
+Workbook ch. 5 pattern : alert fires only when BOTH the short
+window and the long window exceed the multiplier, suppressing
+single-window blips.
+
+Operators who want stricter local SLO targets override via
+`.Values.alerts.slo.*` — the chart templates them into the YAML
+at install time.  STABILITY_CONTRACT v1.1 (§ 37) commits the
+default targets ; relaxing them is a contract break.
+
+Rendering gate :
+   `.Values.enabled`               — sub-chart is on
+   `.Values.alerts.enabled`        — alerts feature flag (default true)
+
+DO NOT edit alert names without bumping STABILITY_CONTRACT — they
+are referenced by PagerDuty service rules + Slack triage filters +
+external compliance audit lookups.
+*/ -}}
+{{- if and .Values.enabled .Values.alerts.enabled .Values.alerts.pr19.enabled }}
+{{- $slo := .Values.alerts.pr19.slo -}}
+{{- /* SLO target shortcuts — defaults committed in STABILITY_CONTRACT v1.1.
+       Targets are expressed as either "fraction" (0..1) or "seconds".  */ -}}
+{{- $availTarget   := $slo.iterateAvailabilityTarget | default 0.999 -}}
+{{- $latP95Target  := $slo.iterateLatencyP95Target   | default 1.0   -}}
+{{- $reloadTarget  := $slo.manifestReloadP95Target   | default 0.5   -}}
+{{- $otelTarget    := $slo.otelDropRateTarget        | default 0.01  -}}
+{{- /* Burn-rate multipliers — closed taxonomy, do not parameterise. */ -}}
+{{- $fastBurn := 14.4 -}}
+{{- $slowBurn := 6 -}}
+{{- /*
+       Error budget = 1 - availability target. CRITICAL : must use Sprig
+       `subf` (float) — `sub` would do integer arithmetic and truncate
+       0.999 to 0, producing budget = 1 (entire range), making the burn
+       alerts inert.  Audit-pass G1 fix.
+
+       The result is interpolated as a literal string into the PromQL
+       expression — Prometheus evaluates the multiplication scalar at
+       alert evaluation time.
+    */ -}}
+{{- $errBudget := subf 1.0 $availTarget -}}
+{{- $fastThreshold := mulf $fastBurn $errBudget -}}
+{{- $slowThreshold := mulf $slowBurn $errBudget -}}
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: {{ include "efe-meta-swarm.fullname" . }}-pr19
+  labels:
+    {{- include "efe-meta-swarm.labels" . | nindent 4 }}
+    # AD5 — kube-prometheus-stack RuleSelector matcher
+    prometheus: {{ .Values.alerts.prometheusSelector | default "efe" | quote }}
+    role: alert-rules
+    # AD37 — PR-tagged so operators can filter by deliverable in Grafana
+    efe.pr: "19"
+  annotations:
+    # AD7 — STABILITY_CONTRACT references
+    efe.stability_contract.version: "1.1"
+    efe.runbook_base_url: {{ .Values.alerts.runbookBaseUrl | quote }}
+spec:
+  groups:
+    # ───────────────────────────────────────────────────────────────
+    # GROUP 1 — Recording rules (§ 7)
+    # 6 pre-aggregations for the SLO burn-rate alerts + dashboards.
+    # Evaluation cadence 30s ⇒ matches dashboard refresh (AD27).
+    # All rules emit ≤ 6 series cardinality (after sum-by collapse).
+    # ───────────────────────────────────────────────────────────────
+    - name: efe-meta-swarm.recording
+      interval: 30s
+      rules:
+        # R1 — Iterate total rate (5m window). Used by A1 + D1 + D2.
+        - record: efe_msw:iterate_total:rate5m
+          expr: |
+            sum by (result) (rate(efe_meta_swarm_iterate_total[5m]))
+          labels:
+            owner: meta-swarm-sre
+
+        # R2 — Iterate total rate (30m). Used by A9 fast-burn short window.
+        - record: efe_msw:iterate_total:rate30m
+          expr: |
+            sum by (result) (rate(efe_meta_swarm_iterate_total[30m]))
+
+        # R3 — Iterate total rate (1h). Used by A9 long + A10 short window.
+        - record: efe_msw:iterate_total:rate1h
+          expr: |
+            sum by (result) (rate(efe_meta_swarm_iterate_total[1h]))
+
+        # R4 — Iterate total rate (6h). Used by A10 slow-burn long window.
+        - record: efe_msw:iterate_total:rate6h
+          expr: |
+            sum by (result) (rate(efe_meta_swarm_iterate_total[6h]))
+
+        # R5 — Iterate p95 latency by manifest_version (5m window).
+        - record: efe_msw:iterate_duration:p95_5m
+          expr: |
+            histogram_quantile(
+              0.95,
+              sum by (manifest_version, le) (
+                rate(efe_meta_swarm_iterate_duration_seconds_bucket[5m])
+              )
+            )
+
+        # R6 — Iterate p99 latency by manifest_version (5m window).
+        - record: efe_msw:iterate_duration:p99_5m
+          expr: |
+            histogram_quantile(
+              0.99,
+              sum by (manifest_version, le) (
+                rate(efe_meta_swarm_iterate_duration_seconds_bucket[5m])
+              )
+            )
+
+    # ───────────────────────────────────────────────────────────────
+    # GROUP 2 — Symptom alerts (§ 22-23, § 30-31)
+    # Page-worthy. User-visible impact. Suppress on inhibition rules
+    # only when a higher-priority root-cause alert is firing (A5).
+    # ───────────────────────────────────────────────────────────────
+    - name: efe-meta-swarm.symptoms
+      interval: 30s
+      rules:
+
+        # ───── A1 — IterateFailureRateHigh ─────
+        # Threshold : > 5 % error rate over 5m sustained.
+        # Severity  : critical (page).
+        # Inhibited : by A5 + A9 (same cluster, env, service).
+        # Doc       : architecture § 22.
+        - alert: IterateFailureRateHigh
+          expr: |
+            (
+              sum(rate(efe_meta_swarm_iterate_total{result="error"}[5m]))
+              /
+              clamp_min(sum(rate(efe_meta_swarm_iterate_total[5m])), 1)
+            ) > 0.05
+          for: 5m
+          keep_firing_for: 5m
+          labels:
+            service: meta-swarm
+            team: meta-swarm-sre
+            severity: critical
+            runbook_id: MSW1
+            component: meta-swarm
+          annotations:
+            summary: "Meta-swarm iterate failure rate > 5% over 5m"
+            description: |
+              The iterate RPC is failing for more than 5% of requests over
+              the last 5 minutes. Top failure reasons :
+              {{`{{ range query "topk(3, sum by (failure_reason) (rate(efe_meta_swarm_iterate_total{result=\"error\"}[5m])))" }}`}}
+                - {{`{{ .Labels.failure_reason }}`}} : {{`{{ .Value | humanize }}`}} req/s
+              {{`{{ end }}`}}
+              Open D2 (Iterate Performance) → P7 panel to drill into the
+              dominant reason.  If `failure_reason=safety_violation` is
+              dominant, open D7 (Safety) as well.
+            runbook_url: "{{ .Values.alerts.runbookBaseUrl }}/RB_PR19_MSW1.md"
+            dashboard_url: "{{ .Values.alerts.grafanaBaseUrl }}/d/efe-msw-iterate"
+
+        # ───── A2 — IterateLatencyP99Critical ─────
+        - alert: IterateLatencyP99Critical
+          expr: |
+            max(efe_msw:iterate_duration:p99_5m) > 5
+          for: 5m
+          keep_firing_for: 5m
+          labels:
+            service: meta-swarm
+            team: meta-swarm-sre
+            severity: critical
+            runbook_id: MSW2
+            component: meta-swarm
+          annotations:
+            summary: "Iterate p99 latency > 5s sustained for 5m"
+            description: |
+              p99 iterate latency = {{`{{ $value | humanizeDuration }}`}}.
+              Pivot to D2 P8 (slow-iterate exemplars) and click any
+              exemplar dot to open the offending trace in Tempo (D9).
+              Cross-reference D3 (Participant) for per-participant
+              step latency — a single slow participant typically
+              dominates the controller p99.
+            runbook_url: "{{ .Values.alerts.runbookBaseUrl }}/RB_PR19_MSW2.md"
+            dashboard_url: "{{ .Values.alerts.grafanaBaseUrl }}/d/efe-msw-iterate"
+
+        # ───── A9 — SLOBudgetBurnFast14x (Google SRE 2-window fast-burn) ─────
+        # Math : burn_rate = current_error_rate / error_budget
+        #        with error_budget = 1 - availability_target
+        #        e.g. target 99.9 % → budget 0.001 → 14.4× = 1.44 %
+        # Fires when BOTH 5m AND 1h windows exceed 14.4× sustained 5m.
+        # At 14.4× sustained, the 30-day budget is exhausted in ~ 2 days.
+        - alert: SLOBudgetBurnFast14x
+          expr: |
+            (
+              (
+                sum(rate(efe_meta_swarm_iterate_total{result="error"}[5m]))
+                /
+                clamp_min(sum(rate(efe_meta_swarm_iterate_total[5m])), 1)
+              ) > {{ $fastThreshold }}
+              and
+              (
+                sum(rate(efe_meta_swarm_iterate_total{result="error"}[1h]))
+                /
+                clamp_min(sum(rate(efe_meta_swarm_iterate_total[1h])), 1)
+              ) > {{ $fastThreshold }}
+            )
+          for: 5m
+          keep_firing_for: 5m
+          labels:
+            service: meta-swarm
+            team: meta-swarm-sre
+            severity: critical
+            runbook_id: MSW9
+            slo_id: iterate-availability
+            burn_rate: "fast"
+            component: meta-swarm
+          annotations:
+            summary: "Fast burn (14.4×) of iterate availability SLO — budget exhausts in ~ 2 days"
+            description: |
+              Both the 5m and 1h windows show the error rate consuming
+              the 30-day error budget at {{ $fastBurn }}× the allowed
+              rate.  At sustained burn, the monthly budget exhausts in
+              ~ 2 days.
+
+              Current 5m error rate : {{`{{ with query "sum(rate(efe_meta_swarm_iterate_total{result=\"error\"}[5m])) / clamp_min(sum(rate(efe_meta_swarm_iterate_total[5m])), 1)" }}{{ . | first | value | humanizePercentage }}{{ end }}`}}
+              Allowed (budget {{ $errBudget }}, fast-burn multiplier {{ $fastBurn }}) : {{ $fastThreshold }}
+            runbook_url: "{{ .Values.alerts.runbookBaseUrl }}/RB_PR19_MSW9.md"
+            dashboard_url: "{{ .Values.alerts.grafanaBaseUrl }}/d/efe-msw-overview"
+
+        # ───── A10 — SLOBudgetBurnSlow6x (Google SRE slow-burn) ─────
+        # Fires when BOTH 1h AND 6h windows exceed 6× sustained 30m.
+        # At 6× sustained, the 30-day budget is exhausted in ~ 5 days.
+        - alert: SLOBudgetBurnSlow6x
+          expr: |
+            (
+              (
+                sum(rate(efe_meta_swarm_iterate_total{result="error"}[1h]))
+                /
+                clamp_min(sum(rate(efe_meta_swarm_iterate_total[1h])), 1)
+              ) > {{ $slowThreshold }}
+              and
+              (
+                sum(rate(efe_meta_swarm_iterate_total{result="error"}[6h]))
+                /
+                clamp_min(sum(rate(efe_meta_swarm_iterate_total[6h])), 1)
+              ) > {{ $slowThreshold }}
+            )
+          for: 30m
+          keep_firing_for: 15m
+          labels:
+            service: meta-swarm
+            team: meta-swarm-sre
+            severity: warning
+            runbook_id: MSW10
+            slo_id: iterate-availability
+            burn_rate: "slow"
+            component: meta-swarm
+          annotations:
+            summary: "Slow burn (6×) of iterate availability SLO — budget exhausts in ~ 5 days"
+            description: |
+              The 1h and 6h windows both show sustained burn at
+              {{ $slowBurn }}× — not paging-worthy in isolation, but
+              the budget will be exhausted within a working week if
+              left unattended.  Investigate during business hours.
+            runbook_url: "{{ .Values.alerts.runbookBaseUrl }}/RB_PR19_MSW10.md"
+            dashboard_url: "{{ .Values.alerts.grafanaBaseUrl }}/d/efe-msw-overview"
+
+    # ───────────────────────────────────────────────────────────────
+    # GROUP 3 — Cause alerts (§ 24-29)
+    # Ticket-worthy. Investigative. Inhibited by A5 when the
+    # controller is fully down (every cause is a downstream symptom).
+    # ───────────────────────────────────────────────────────────────
+    - name: efe-meta-swarm.causes
+      interval: 30s
+      rules:
+
+        # ───── A3 — ParticipantDown ─────
+        - alert: ParticipantDown
+          expr: |
+            efe_meta_swarm_participant_up == 0
+          for: 2m
+          keep_firing_for: 2m
+          labels:
+            service: meta-swarm
+            team: meta-swarm-sre
+            severity: warning
+            runbook_id: MSW3
+            component: meta-swarm
+          annotations:
+            summary: "Participant {{`{{ $labels.participant_id }}`}} unreachable for ≥ 2m"
+            description: |
+              The controller cannot reach participant
+              `{{`{{ $labels.participant_id }}`}}` for the last 2 minutes.
+
+              Phase-2 meta-swarm tolerates losing one participant for
+              minutes (algorithm gracefully degrades but stays correct).
+              Multi-participant loss is captured by A1.
+
+              Pivot to D3 (Participant Drill-down) with var-participant_id
+              = {{`{{ $labels.participant_id }}`}} for diagnostic context.
+            runbook_url: "{{ .Values.alerts.runbookBaseUrl }}/RB_PR19_MSW3.md"
+            dashboard_url: "{{ .Values.alerts.grafanaBaseUrl }}/d/efe-msw-participant?var-participant_id={{`{{ $labels.participant_id }}`}}"
+
+        # ───── A4 — TLSCertExpiringSoon ─────
+        # Threshold : less than 7 days until expiry. Sustained 1h
+        # to suppress race conditions during cert rotation.
+        - alert: TLSCertExpiringSoon
+          expr: |
+            (efe_meta_swarm_tls_cert_expiry_seconds - time()) < (7 * 86400)
+          for: 1h
+          keep_firing_for: 1h
+          labels:
+            service: meta-swarm
+            team: meta-swarm-sre
+            severity: warning
+            runbook_id: MSW4
+            component: meta-swarm
+          annotations:
+            summary: "TLS cert {{`{{ $labels.cert_name }}`}} expires in < 7 days"
+            description: |
+              Subject CN  : {{`{{ $labels.subject_cn }}`}}
+              Cert name   : {{`{{ $labels.cert_name }}`}}
+              Time left   : {{`{{ $value | humanizeDuration }}`}}
+
+              cert-manager is configured to auto-renew at 2/3 of the
+              cert lifetime — this alert firing typically means the
+              renewal process is stuck.  Check `kubectl describe
+              certificate {{`{{ $labels.cert_name }}`}} -n efe` for the
+              `Ready` condition.
+            runbook_url: "{{ .Values.alerts.runbookBaseUrl }}/RB_PR19_MSW4.md"
+            dashboard_url: "{{ .Values.alerts.grafanaBaseUrl }}/d/efe-msw-tls"
+
+        # ───── A6 — OTelExporterFailing ─────
+        # Distinct from the existing MetaSwarmOtelDropRateHigh (PR #18 §
+        # 25.4) — A6's threshold is 10% over 10m (operational severity)
+        # vs PR #18's 1% over 5m (audit-grade SLO).  We keep both ; A6
+        # triggers a ticket, the PR #18 one is silenced when A6 fires
+        # via Alertmanager inhibition (§ 33.3).
+        - alert: OTelExporterFailing
+          expr: |
+            (
+              sum(rate(efe_meta_swarm_otel_dropped_spans_total[10m]))
+              /
+              clamp_min(
+                sum(rate(efe_meta_swarm_otel_exported_spans_total[10m]))
+                + sum(rate(efe_meta_swarm_otel_dropped_spans_total[10m])),
+                1
+              )
+            ) > 0.10
+          for: 10m
+          keep_firing_for: 10m
+          labels:
+            service: meta-swarm
+            team: meta-swarm-sre
+            severity: warning
+            runbook_id: MSW6
+            component: meta-swarm
+          annotations:
+            summary: "OTel exporter dropping > 10% of spans for 10m"
+            description: |
+              The OpenTelemetry SDK is dropping more than 10% of spans
+              at the BatchSpanProcessor → exporter seam.
+
+              Top drop reasons :
+              {{`{{ range query "topk(3, sum by (reason) (rate(efe_meta_swarm_otel_dropped_spans_total[10m])))" }}`}}
+                - {{`{{ .Labels.reason }}`}} : {{`{{ .Value | humanize }}`}} spans/s
+              {{`{{ end }}`}}
+
+              Trace-based debugging becomes unreliable above 10% drop
+              rate — sampled exemplars in D2 P8 lose their reproducibility.
+            runbook_url: "{{ .Values.alerts.runbookBaseUrl }}/RB_PR19_MSW6.md"
+            dashboard_url: "{{ .Values.alerts.grafanaBaseUrl }}/d/efe-msw-otel"
+
+        # ───── A7 — SafetyViolationSpike ─────
+        - alert: SafetyViolationSpike
+          expr: |
+            sum(rate(efe_meta_swarm_safety_violations_total[5m])) > 0.1
+          for: 5m
+          keep_firing_for: 5m
+          labels:
+            service: meta-swarm
+            team: meta-swarm-sre
+            severity: warning
+            runbook_id: MSW7
+            component: meta-swarm
+          annotations:
+            summary: "Safety violation rate > 0.1/s for 5m"
+            description: |
+              Total violation rate over the last 5m :
+              {{`{{ with query "sum(rate(efe_meta_swarm_safety_violations_total[5m]))" }}{{ . | first | value | printf "%.3f" }}{{ end }}`}}
+              violations/s.
+
+              Top offenders :
+              {{`{{ range query "topk(3, sum by (participant_id, kind) (rate(efe_meta_swarm_safety_violations_total[5m])))" }}`}}
+                - {{`{{ .Labels.participant_id }}`}} / {{`{{ .Labels.kind }}`}} : {{`{{ .Value | humanize }}`}}/s
+              {{`{{ end }}`}}
+
+              A fast-learning participant crossing the manifest's
+              safety boundary repeatedly is the typical cause.  Open
+              D7 (Safety) for the heatmap by-participant view.
+            runbook_url: "{{ .Values.alerts.runbookBaseUrl }}/RB_PR19_MSW7.md"
+            dashboard_url: "{{ .Values.alerts.grafanaBaseUrl }}/d/efe-msw-safety"
+
+        # ───── A8 — ManifestReloadFailureSpike ─────
+        - alert: ManifestReloadFailureSpike
+          expr: |
+            sum(increase(efe_meta_swarm_manifest_reload_total{result="error"}[1h])) >= 3
+          for: 10m
+          keep_firing_for: 10m
+          labels:
+            service: meta-swarm
+            team: meta-swarm-sre
+            severity: warning
+            runbook_id: MSW8
+            component: meta-swarm
+          annotations:
+            summary: "≥ 3 manifest reload failures in last 1h"
+            description: |
+              Last hour reload failures :
+              {{`{{ range query "topk(3, sum by (trigger) (increase(efe_meta_swarm_manifest_reload_total{result=\"error\"}[1h])))" }}`}}
+                - trigger={{`{{ .Labels.trigger }}`}} : {{`{{ .Value | humanize }}`}} failures
+              {{`{{ end }}`}}
+
+              Frequent reload failures suggest either a manifest
+              file/configmap that fails validation repeatedly, or a
+              SIGHUP storm (controller flapping).  Inspect D4
+              (Manifest Reload Audit).
+            runbook_url: "{{ .Values.alerts.runbookBaseUrl }}/RB_PR19_MSW8.md"
+            dashboard_url: "{{ .Values.alerts.grafanaBaseUrl }}/d/efe-msw-reload"
+
+    # ───────────────────────────────────────────────────────────────
+    # GROUP 4 — Platform alerts (§ 26)
+    # The single critical "system is broken" alert.  Inhibits all
+    # downstream symptom + cause alerts via Alertmanager § 33.3.
+    # ───────────────────────────────────────────────────────────────
+    - name: efe-meta-swarm.platform
+      interval: 30s
+      rules:
+
+        # ───── A5 — ControllerNotServing ─────
+        # When the controller pod is unreachable, every iterate call
+        # downstream fails trivially.  Page immediately.
+        - alert: ControllerNotServing
+          expr: |
+            up{job=~".*efe-meta-swarm.*controller.*"} == 0
+          for: 1m
+          keep_firing_for: 30s
+          labels:
+            service: meta-swarm
+            team: meta-swarm-sre
+            severity: critical
+            runbook_id: MSW5
+            component: meta-swarm
+          annotations:
+            summary: "Meta-swarm controller {{`{{ $labels.instance }}`}} is DOWN"
+            description: |
+              Controller pod `{{`{{ $labels.instance }}`}}` has been
+              unreachable to Prometheus for ≥ 1 minute.
+
+              Every iterate call will fail.  Check :
+                kubectl -n {{ .Release.Namespace }} get pods -l app.kubernetes.io/component=controller
+                kubectl -n {{ .Release.Namespace }} logs -l app.kubernetes.io/component=controller --tail=200
+
+              Open D8 (Runtime) → P4 (Pod restarts) to identify a
+              crash loop.
+            runbook_url: "{{ .Values.alerts.runbookBaseUrl }}/RB_PR19_MSW5.md"
+            dashboard_url: "{{ .Values.alerts.grafanaBaseUrl }}/d/efe-msw-runtime"
+{{- end }}

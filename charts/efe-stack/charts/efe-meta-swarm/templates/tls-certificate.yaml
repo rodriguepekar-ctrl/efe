@@ -1,0 +1,78 @@
+{{- /*
+PR #14 — controller + participant Certificate resources.
+PR #16 — extended with :
+  * `tls.certManager.privateKey.*` to drive algorithm + size + rotation
+  * `tls.certManager.duration` + `renewBefore` overrides (default 720h
+    / 168h preserved when unset)
+  * `tls.additionalSans` extension to the default 2-SAN list
+  * `tls.certManager.clusterIssuer` flag flipping `issuerRef.kind`
+*/ -}}
+{{- if and .Values.enabled .Values.tls.enabled .Values.tls.certManager.enabled }}
+{{- $issuerKind := ternary "ClusterIssuer" "Issuer" .Values.tls.certManager.clusterIssuer -}}
+{{- $pk        := .Values.tls.certManager.privateKey | default dict -}}
+{{- $algorithm := $pk.algorithm    | default "ECDSA" -}}
+{{- $keySize   := $pk.size         | default 256 -}}
+{{- $rotation  := $pk.rotationPolicy | default "Always" -}}
+{{- $duration  := .Values.tls.certManager.duration    | default "720h" -}}
+{{- $renew     := .Values.tls.certManager.renewBefore | default "168h" -}}
+# Controller Certificate.
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  # PR #14 audit pass — go through the trunc-safe helper so the Cert
+  # name AND the Secret name (below) stay within DNS-63 even for long
+  # release-name + chart-name combinations.
+  name: {{ include "efe-meta-swarm.controllerTlsSecretName" . }}
+  labels:
+    {{- include "efe-meta-swarm.labels" . | nindent 4 }}
+    app.kubernetes.io/component: controller
+spec:
+  secretName: {{ include "efe-meta-swarm.controllerTlsSecretName" . }}
+  duration: {{ $duration }}
+  renewBefore: {{ $renew }}
+  privateKey:
+    algorithm: {{ $algorithm }}
+    size: {{ $keySize }}
+    rotationPolicy: {{ $rotation }}
+  dnsNames:
+    - {{ include "efe-meta-swarm.controllerName" . }}.{{ .Release.Namespace }}.svc
+    - {{ include "efe-meta-swarm.controllerName" . }}.{{ .Release.Namespace }}.svc.cluster.local
+    {{- range $san := .Values.tls.additionalSans }}
+    - {{ $san | quote }}
+    {{- end }}
+  issuerRef:
+    name: {{ include "efe-meta-swarm.fullname" . }}-issuer
+    kind: {{ $issuerKind }}
+
+{{- range $p := .Values.participants }}
+---
+# Participant Certificate : {{ $p.id }}
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  # PR #14 audit pass — trunc-safe helper (same constraint as
+  # the controller Certificate above).
+  name: {{ include "efe-meta-swarm.participantTlsSecretName" (list $ $p.id) }}
+  labels:
+    {{- include "efe-meta-swarm.labels" $ | nindent 4 }}
+    app.kubernetes.io/component: participant
+    efe.io/participant-id: {{ $p.id | quote }}
+spec:
+  secretName: {{ include "efe-meta-swarm.participantTlsSecretName" (list $ $p.id) }}
+  duration: {{ $duration }}
+  renewBefore: {{ $renew }}
+  privateKey:
+    algorithm: {{ $algorithm }}
+    size: {{ $keySize }}
+    rotationPolicy: {{ $rotation }}
+  dnsNames:
+    - {{ include "efe-meta-swarm.participantName" (list $ $p.id) }}.{{ $.Release.Namespace }}.svc
+    - {{ include "efe-meta-swarm.participantName" (list $ $p.id) }}.{{ $.Release.Namespace }}.svc.cluster.local
+    {{- range $san := $.Values.tls.additionalSans }}
+    - {{ $san | quote }}
+    {{- end }}
+  issuerRef:
+    name: {{ include "efe-meta-swarm.fullname" $ }}-issuer
+    kind: {{ $issuerKind }}
+{{- end }}
+{{- end }}

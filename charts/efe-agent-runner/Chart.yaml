@@ -1,0 +1,31 @@
+apiVersion: v2
+name: efe-agent-runner
+description: |
+  EFE M25 — Agent runtime EXPERIMENTAL.
+  In-cluster Firecracker microVM sandbox for LLM-driven autonomous agents.
+  Hard-isolated per-tenant, tool-whitelisted, step-approved, cost-capped, DPIA-gated.
+
+  ⚠️ EXPERIMENTAL : single design-partner pilot. Sunset clause if < 2 tenants at 12 months.
+  ⚠️ Default OFF. Requires `EFE_FEATURE_AGENT_RUNTIME_ENABLED=true` AND M21 LLMRouter ON.
+
+type: application
+version: 0.3.0           # M26 chart version
+appVersion: "2.1.0"      # EFE 2.1 (M26)
+kubeVersion: ">= 1.28.0-0"
+home: https://github.com/efe-ai/efe
+sources:
+  - https://github.com/efe-ai/efe
+maintainers:
+  - name: EFE Engineering
+    email: eng@efe.example.com
+keywords:
+  - efe
+  - agent
+  - llm
+  - firecracker
+  - sandbox
+annotations:
+  artifacthub.io/license: Apache-2.0
+  artifacthub.io/changes: |
+    - kind: added
+      description: Initial release of efe-agent-runner Helm chart (M25)
