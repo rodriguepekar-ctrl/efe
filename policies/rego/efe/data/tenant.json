@@ -1,0 +1,15 @@
+{
+  "_comment": "PR #15 — Rego data for tenant_label.rego. Future evolution : restrict `efe.io/tenant` to an allowlist (today the rule only enforces non-empty). Listed here for reference ; not consumed by the current Rego.",
+  "_reviewer": "sre",
+  "_last_review": "2026-05-14",
+  "_re_review_by": "2026-11-14",
+
+  "known_tenants": [
+    "default",
+    "kovant",
+    "kovant-prod",
+    "kovant-staging",
+    "kovant-canary",
+    "kovant-dev"
+  ]
+}

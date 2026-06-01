@@ -1,0 +1,15 @@
+{
+  "_comment": "PR #15 — Rego data for sa_token.rego. Operator-tunable list of pods that are EXEMPT from the `automountServiceAccountToken: false` rule. The hook Jobs from PR #14 legitimately mount the SA token (they call the K8s API via kubectl). All other pods must keep token-mount OFF.",
+  "_reviewer": "sre + sec",
+  "_last_review": "2026-05-14",
+  "_re_review_by": "2026-11-14",
+
+  "hook_patterns": [
+    "^.*-efe-meta-swarm-hook-pre-upgrade-snapshot$",
+    "^.*-efe-meta-swarm-hook-post-upgrade-sighup$"
+  ],
+
+  "exempt_names": [
+    "_placeholder_for_exact_name_matches_"
+  ]
+}
