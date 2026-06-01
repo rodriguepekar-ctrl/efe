@@ -1,0 +1,407 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="EFE Playground — try the Ephemeral Fluid Swarm semantic classifier locally">
+    <title>EFE Playground — Try EFE 1.0 GA</title>
+    <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+    <header class="topbar">
+        <div class="brand">
+            <span class="logo">⚡</span>
+            <span class="brand-text">EFE Playground <span class="version-badge">1.0 GA</span></span>
+        </div>
+        <div class="topbar-right">
+            <span id="embedder-info" class="info-pill">Connecting...</span>
+            <span id="tenant-pill" class="info-pill tenant-pill">Not signed in</span>
+        </div>
+    </header>
+
+    <main class="main">
+        <!-- Sidebar navigation -->
+        <nav class="sidebar">
+            <button class="nav-item active" data-view="overview">
+                <span class="nav-icon">🏠</span> Overview
+            </button>
+            <button class="nav-item" data-view="auth">
+                <span class="nav-icon">🔐</span> Sign in
+            </button>
+            <button class="nav-item" data-view="catalogs">
+                <span class="nav-icon">📚</span> Catalogs
+            </button>
+            <button class="nav-item" data-view="classify">
+                <span class="nav-icon">🎯</span> Classify
+            </button>
+            <button class="nav-item" data-view="encode">
+                <span class="nav-icon">🧬</span> Encode
+            </button>
+            <button class="nav-item" data-view="samples">
+                <span class="nav-icon">📦</span> Samples
+            </button>
+            <button class="nav-item" data-view="audit">
+                <span class="nav-icon">🔍</span> Audit log
+            </button>
+            <button class="nav-item" data-view="dashboard">
+                <span class="nav-icon">📊</span> Dashboard
+            </button>
+            <button class="nav-item" data-view="tutorials">
+                <span class="nav-icon">📖</span> Tutorials
+            </button>
+            <div class="sidebar-footer">
+                <a href="https://github.com/efe-project/efe" target="_blank" rel="noopener">GitHub</a>
+                <a href="/docs/RELEASE_NOTES_1.0.md" target="_blank">1.0 GA Notes</a>
+            </div>
+        </nav>
+
+        <!-- Content panel -->
+        <section class="content">
+            <!-- Overview view -->
+            <article class="view active" id="view-overview">
+                <h1>Welcome to EFE Playground</h1>
+                <p class="lede">
+                    Try the Ephemeral Fluid Swarm semantic classifier locally. Build catalogs,
+                    classify text, inspect embeddings, watch the audit log — all in your browser.
+                </p>
+
+                <div class="card-grid">
+                    <div class="card card-action" data-target="auth">
+                        <div class="card-icon">🔐</div>
+                        <h3>1. Sign in as a demo tenant</h3>
+                        <p>Pick a pre-configured tenant (acme / beta-corp / demo-fr) and get a token.</p>
+                    </div>
+                    <div class="card card-action" data-target="samples">
+                        <div class="card-icon">📦</div>
+                        <h3>2. Load a sample catalog</h3>
+                        <p>4 ready-to-use catalogs : support routing, content moderation, intent recognition, multilingual.</p>
+                    </div>
+                    <div class="card card-action" data-target="classify">
+                        <div class="card-icon">🎯</div>
+                        <h3>3. Classify text</h3>
+                        <p>Paste any sentence and see top-K class predictions with confidence scores.</p>
+                    </div>
+                    <div class="card card-action" data-target="dashboard">
+                        <div class="card-icon">📊</div>
+                        <h3>4. Watch metrics live</h3>
+                        <p>Tenant activity, embedding distribution, audit chain integrity in real time.</p>
+                    </div>
+                </div>
+
+                <h2>What is EFE ?</h2>
+                <p>
+                    EFE is a multi-tenant semantic classification gRPC service. Operators define
+                    a <em>catalog</em> (set of classes with example sentences) ; EFE returns top-K class
+                    predictions for any input text via embedding-based nearest-cluster matching.
+                </p>
+
+                <div class="callout callout-info">
+                    <strong>📡 Backend status</strong> : <span id="overview-backend-status">checking...</span>
+                </div>
+
+                <h2>Architecture (in this playground)</h2>
+                <pre class="code-block">
+Browser (this UI)
+    │
+    │ HTTP REST
+    ▼
+Flask backend (Python)
+    ├── Embedder    : sentence-transformers OR hash-fallback
+    ├── Catalog     : per-tenant in-memory + versioning
+    ├── Audit       : HMAC-SHA-256 chained tamper-evident
+    └── Auth        : mock OIDC (demo tokens)</pre>
+
+                <h2>Production EFE (the real thing)</h2>
+                <p>
+                    The full EFE 1.0 GA stack runs on Kubernetes via the Helm chart M12 with :
+                    Postgres backend (D14), OIDC authentication (D15), bundle-based embedder (D16/M13),
+                    multi-replica HA (D18), backup + DR drill (D17/D40), 32 runbooks, SOC 2 + ISO 27001
+                    + GDPR + AI Act + NIST compliance docs.
+                </p>
+                <p>
+                    See <code>docs/EFE_HELM_CHART_EXTENSION_ARCHITECTURE.md</code> + <code>docs/RELEASE_NOTES_1.0.md</code>
+                    for production deployment.
+                </p>
+            </article>
+
+            <!-- Auth view -->
+            <article class="view" id="view-auth">
+                <h1>Sign in as demo tenant</h1>
+                <p class="lede">
+                    The playground ships 3 pre-configured demo tenants. Pick one and get a Bearer token.
+                </p>
+
+                <div id="tenants-grid" class="card-grid">
+                    <div class="loading">Loading tenants...</div>
+                </div>
+
+                <div class="callout callout-warn">
+                    <strong>⚠ Playground tokens are NOT cryptographically signed.</strong>
+                    Production EFE uses real OIDC issuers (Auth0 / Keycloak / Azure AD) with JWT signing.
+                    See <code>docs/bench/d15_onboarding_idp_architecture.md</code>.
+                </div>
+
+                <div id="auth-result" class="hidden">
+                    <h2>Authenticated</h2>
+                    <div class="kv-grid">
+                        <div><strong>Tenant ID</strong></div><div id="auth-tenant-id"></div>
+                        <div><strong>Role</strong></div><div id="auth-role"></div>
+                        <div><strong>Actor</strong></div><div id="auth-actor"></div>
+                        <div><strong>Token (truncated)</strong></div><div id="auth-token"></div>
+                    </div>
+                    <button class="btn btn-secondary" id="auth-signout">Sign out</button>
+                </div>
+            </article>
+
+            <!-- Catalogs view -->
+            <article class="view" id="view-catalogs">
+                <h1>Catalogs</h1>
+                <p class="lede">
+                    Catalogs are tenant-owned sets of classes. Each class has example sentences ;
+                    EFE computes a centroid (L2-normalized mean embedding) per class and matches
+                    inputs via cosine similarity.
+                </p>
+
+                <div class="auth-required hidden">
+                    <div class="callout callout-warn">
+                        Please <a href="#" data-target="auth">sign in</a> first to manage catalogs.
+                    </div>
+                </div>
+
+                <div class="auth-content">
+                    <div class="toolbar">
+                        <button class="btn btn-primary" id="catalog-new-btn">＋ New catalog</button>
+                        <button class="btn btn-secondary" id="catalog-refresh-btn">🔄 Refresh</button>
+                    </div>
+
+                    <div id="catalog-list">
+                        <div class="loading">Loading catalogs...</div>
+                    </div>
+
+                    <!-- Catalog editor (modal-style) -->
+                    <div id="catalog-editor" class="editor hidden">
+                        <h2 id="catalog-editor-title">New catalog</h2>
+                        <div class="form-row">
+                            <label>Catalog name</label>
+                            <input type="text" id="catalog-edit-name" placeholder="e.g., support-routing">
+                        </div>
+                        <div id="catalog-classes-list">
+                            <!-- Classes added dynamically -->
+                        </div>
+                        <button class="btn btn-tertiary" id="catalog-add-class-btn">＋ Add class</button>
+                        <div class="toolbar">
+                            <button class="btn btn-primary" id="catalog-save-btn">💾 Register catalog</button>
+                            <button class="btn btn-secondary" id="catalog-cancel-btn">Cancel</button>
+                        </div>
+                        <pre id="catalog-result" class="result-block hidden"></pre>
+                    </div>
+                </div>
+            </article>
+
+            <!-- Classify view -->
+            <article class="view" id="view-classify">
+                <h1>Classify</h1>
+                <p class="lede">
+                    Send any text input and get top-K class predictions from a registered catalog.
+                </p>
+
+                <div class="auth-required hidden">
+                    <div class="callout callout-warn">
+                        Please <a href="#" data-target="auth">sign in</a> first.
+                    </div>
+                </div>
+
+                <div class="auth-content">
+                    <div class="form-row">
+                        <label>Catalog</label>
+                        <select id="classify-catalog">
+                            <option>(loading...)</option>
+                        </select>
+                    </div>
+                    <div class="form-row">
+                        <label>Text input</label>
+                        <textarea id="classify-text" rows="4" placeholder="Type or paste any text — EFE will classify it against the chosen catalog..."></textarea>
+                    </div>
+                    <div class="form-row">
+                        <label>Top-K results</label>
+                        <input type="number" id="classify-top-k" value="3" min="1" max="20">
+                    </div>
+                    <div class="toolbar">
+                        <button class="btn btn-primary" id="classify-btn">🎯 Classify</button>
+                        <button class="btn btn-secondary" id="classify-clear-btn">Clear</button>
+                    </div>
+
+                    <div id="classify-results" class="hidden">
+                        <h2>Results</h2>
+                        <div id="classify-bars"></div>
+                        <pre id="classify-raw" class="result-block"></pre>
+                    </div>
+                </div>
+            </article>
+
+            <!-- Encode view -->
+            <article class="view" id="view-encode">
+                <h1>Encode</h1>
+                <p class="lede">
+                    Generate a 384-dim embedding for any input text. Useful for debugging
+                    + understanding what EFE "sees" before classification.
+                </p>
+
+                <div class="auth-required hidden">
+                    <div class="callout callout-warn">
+                        Please <a href="#" data-target="auth">sign in</a> first.
+                    </div>
+                </div>
+
+                <div class="auth-content">
+                    <div class="form-row">
+                        <label>Text</label>
+                        <textarea id="encode-text" rows="3" placeholder="Type any text..."></textarea>
+                    </div>
+                    <button class="btn btn-primary" id="encode-btn">🧬 Encode</button>
+
+                    <div id="encode-result" class="hidden">
+                        <h2>Embedding</h2>
+                        <div class="kv-grid">
+                            <div><strong>Dim</strong></div><div id="encode-dim"></div>
+                            <div><strong>L2 Norm</strong></div><div id="encode-norm"></div>
+                            <div><strong>Backend</strong></div><div id="encode-backend"></div>
+                        </div>
+                        <h3>First 32 components (visualization)</h3>
+                        <div id="encode-vector-bars"></div>
+                        <details>
+                            <summary>Full 384-dim vector (JSON)</summary>
+                            <pre id="encode-raw" class="result-block"></pre>
+                        </details>
+                    </div>
+                </div>
+            </article>
+
+            <!-- Samples view -->
+            <article class="view" id="view-samples">
+                <h1>Pre-built samples</h1>
+                <p class="lede">
+                    Load ready-to-use catalogs to skip the manual setup.
+                </p>
+
+                <div class="auth-required hidden">
+                    <div class="callout callout-warn">
+                        Please <a href="#" data-target="auth">sign in</a> first to load samples.
+                    </div>
+                </div>
+
+                <div class="auth-content">
+                    <div id="samples-grid" class="card-grid">
+                        <div class="loading">Loading samples...</div>
+                    </div>
+                </div>
+            </article>
+
+            <!-- Audit view -->
+            <article class="view" id="view-audit">
+                <h1>Audit log</h1>
+                <p class="lede">
+                    HMAC-chained tamper-evident log mirroring D14-bis production architecture.
+                    Every classify / register / delete action recorded.
+                </p>
+
+                <div class="auth-required hidden">
+                    <div class="callout callout-warn">
+                        Please <a href="#" data-target="auth">sign in</a> first.
+                    </div>
+                </div>
+
+                <div class="auth-content">
+                    <div class="toolbar">
+                        <button class="btn btn-primary" id="audit-refresh-btn">🔄 Refresh</button>
+                        <button class="btn btn-secondary" id="audit-verify-btn">🔒 Verify chain integrity</button>
+                    </div>
+                    <div id="audit-integrity" class="callout hidden"></div>
+                    <div id="audit-list">
+                        <div class="loading">Loading audit log...</div>
+                    </div>
+                </div>
+            </article>
+
+            <!-- Dashboard view -->
+            <article class="view" id="view-dashboard">
+                <h1>Dashboard</h1>
+                <p class="lede">
+                    Live metrics : tenant activity, top classes, embedding distribution, integrity status.
+                </p>
+
+                <div class="auth-required hidden">
+                    <div class="callout callout-warn">
+                        Please <a href="#" data-target="auth">sign in</a> first.
+                    </div>
+                </div>
+
+                <div class="auth-content">
+                    <div class="toolbar">
+                        <button class="btn btn-primary" id="dashboard-refresh-btn">🔄 Refresh</button>
+                        <span id="dashboard-last-updated" class="info-pill"></span>
+                    </div>
+                    <div class="dashboard-grid">
+                        <div class="dashboard-tile">
+                            <div class="tile-label">Total catalogs</div>
+                            <div class="tile-value" id="metric-catalogs">—</div>
+                        </div>
+                        <div class="dashboard-tile">
+                            <div class="tile-label">Total audit events</div>
+                            <div class="tile-value" id="metric-events">—</div>
+                        </div>
+                        <div class="dashboard-tile">
+                            <div class="tile-label">Chain integrity</div>
+                            <div class="tile-value" id="metric-integrity">—</div>
+                        </div>
+                        <div class="dashboard-tile">
+                            <div class="tile-label">Backend</div>
+                            <div class="tile-value" id="metric-backend">—</div>
+                        </div>
+                    </div>
+                    <h2>Action breakdown</h2>
+                    <div id="action-breakdown"></div>
+                    <h2>Recent activity</h2>
+                    <div id="recent-activity"></div>
+                </div>
+            </article>
+
+            <!-- Tutorials view -->
+            <article class="view" id="view-tutorials">
+                <h1>Tutorials</h1>
+                <p class="lede">
+                    Step-by-step walkthroughs for common EFE patterns.
+                </p>
+                <div class="card-grid">
+                    <a class="card" href="/tutorials/00_introduction.md" target="_blank">
+                        <h3>00. Introduction</h3>
+                        <p>What is EFE ? When to use it ?</p>
+                    </a>
+                    <a class="card" href="/tutorials/01_first_catalog.md" target="_blank">
+                        <h3>01. Your first catalog</h3>
+                        <p>Build a support-ticket router in 5 minutes.</p>
+                    </a>
+                    <a class="card" href="/tutorials/02_multi_tenant.md" target="_blank">
+                        <h3>02. Multi-tenant isolation</h3>
+                        <p>Switch between acme + beta-corp + demo-fr to see D11 zero-trust.</p>
+                    </a>
+                    <a class="card" href="/tutorials/03_drift_detection.md" target="_blank">
+                        <h3>03. Drift detection</h3>
+                        <p>How to spot when your catalog needs re-fitting.</p>
+                    </a>
+                    <a class="card" href="/tutorials/04_production_deploy.md" target="_blank">
+                        <h3>04. Production deployment</h3>
+                        <p>From playground to real K8s cluster via Helm chart M12.</p>
+                    </a>
+                </div>
+            </article>
+        </section>
+    </main>
+
+    <!-- Toast notifications -->
+    <div id="toast-container"></div>
+
+    <script src="/api.js"></script>
+    <script src="/app.js"></script>
+</body>
+</html>

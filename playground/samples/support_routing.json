@@ -1,0 +1,78 @@
+{
+  "name": "support-routing",
+  "description": "Customer-support ticket routing — auto-classify incoming tickets to billing / tech / sales / cancellation queues.",
+  "language": "en",
+  "use_case": "Reduce time-to-first-response by routing tickets to the right team automatically.",
+  "classes": [
+    {
+      "name": "billing",
+      "examples": [
+        "I was charged twice this month for the subscription",
+        "Where can I find my invoice from last month?",
+        "My credit card was rejected during checkout",
+        "How do I update my payment method?",
+        "I need a refund for an unused subscription period",
+        "The recurring payment failed and my account is suspended",
+        "Why did the price increase without notice?",
+        "I want to switch from monthly to annual billing"
+      ],
+      "confidence_threshold": 0.4
+    },
+    {
+      "name": "technical",
+      "examples": [
+        "The application crashes when I try to upload a file",
+        "I'm getting a 500 error on the dashboard page",
+        "Two-factor authentication isn't sending me a code",
+        "The mobile app freezes on the login screen",
+        "API requests are returning 429 rate limit errors",
+        "I cannot log in from the corporate VPN",
+        "The export feature is missing some rows",
+        "Webhook deliveries are timing out"
+      ],
+      "confidence_threshold": 0.4
+    },
+    {
+      "name": "sales-inquiry",
+      "examples": [
+        "Can you tell me about the enterprise pricing tier?",
+        "I'd like to schedule a demo of the platform",
+        "Do you offer volume discounts for 100+ seats?",
+        "What's included in the enterprise plan?",
+        "I'm comparing your product with a competitor",
+        "Can you send me a custom quote?",
+        "Is there a free trial available for the team plan?",
+        "I want to speak with an account executive"
+      ],
+      "confidence_threshold": 0.4
+    },
+    {
+      "name": "cancellation",
+      "examples": [
+        "I want to cancel my subscription",
+        "How do I close my account?",
+        "Please remove all my data per GDPR",
+        "I'd like to downgrade to the free tier",
+        "Stop the auto-renewal at the end of the billing cycle",
+        "I no longer need this service, please cancel",
+        "How do I delete my workspace?",
+        "Process my account termination immediately"
+      ],
+      "confidence_threshold": 0.45
+    },
+    {
+      "name": "feature-request",
+      "examples": [
+        "Could you add support for Excel exports?",
+        "It would be great to have dark mode",
+        "Please add an integration with Slack",
+        "We need SAML SSO for our enterprise team",
+        "Can you support custom webhooks for events?",
+        "I'd like to suggest a roadmap idea",
+        "An API for bulk operations would help us a lot",
+        "Please add multi-language support"
+      ],
+      "confidence_threshold": 0.4
+    }
+  ]
+}

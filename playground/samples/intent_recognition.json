@@ -1,0 +1,92 @@
+{
+  "name": "intent-recognition",
+  "description": "Conversational assistant intent detection — classify user utterances to actionable intents.",
+  "language": "en",
+  "use_case": "Backend for chatbots, voice assistants, IVR systems.",
+  "classes": [
+    {
+      "name": "greeting",
+      "examples": [
+        "Hello",
+        "Hi there",
+        "Good morning",
+        "Hey what's up",
+        "Greetings",
+        "Howdy",
+        "Hi",
+        "Good afternoon"
+      ],
+      "confidence_threshold": 0.4
+    },
+    {
+      "name": "weather",
+      "examples": [
+        "What's the weather like today",
+        "Will it rain tomorrow in Paris",
+        "How hot is it outside right now",
+        "Is it snowing in Quebec",
+        "Tell me the forecast for next week",
+        "Do I need an umbrella today",
+        "What's the temperature in Tokyo",
+        "Is it sunny in San Francisco"
+      ],
+      "confidence_threshold": 0.4
+    },
+    {
+      "name": "set-reminder",
+      "examples": [
+        "Remind me to call mom at 5 pm",
+        "Set a reminder for the meeting tomorrow",
+        "Don't forget to take the medicine in 2 hours",
+        "Wake me up at 7 am",
+        "Remind me about the dentist appointment Friday",
+        "Set an alarm for 8 in the morning",
+        "Notify me when the laundry is done",
+        "Tell me when it's time to leave for the airport"
+      ],
+      "confidence_threshold": 0.4
+    },
+    {
+      "name": "play-music",
+      "examples": [
+        "Play some jazz music",
+        "Put on the latest Taylor Swift album",
+        "Shuffle my workout playlist",
+        "Play classical music for studying",
+        "Resume the song from where I left off",
+        "Play something relaxing",
+        "I want to hear pop hits from the 2000s",
+        "Stream lo-fi hip hop"
+      ],
+      "confidence_threshold": 0.4
+    },
+    {
+      "name": "navigation",
+      "examples": [
+        "How do I get to the nearest gas station",
+        "Directions to Times Square please",
+        "What's the fastest route home",
+        "Avoid tolls on the way to the airport",
+        "Take me to a coffee shop nearby",
+        "How long is the drive to Boston",
+        "Find a route avoiding highways",
+        "Show me restaurants on my way"
+      ],
+      "confidence_threshold": 0.4
+    },
+    {
+      "name": "goodbye",
+      "examples": [
+        "Goodbye",
+        "Bye",
+        "See you later",
+        "That's all thanks",
+        "Talk to you soon",
+        "Take care",
+        "Have a good one",
+        "Catch you later"
+      ],
+      "confidence_threshold": 0.4
+    }
+  ]
+}
