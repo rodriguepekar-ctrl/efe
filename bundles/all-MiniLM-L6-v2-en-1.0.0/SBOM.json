@@ -1,0 +1,108 @@
+{
+  "annotations": [
+    {
+      "annotator": {
+        "organization": {
+          "name": "EFE Project"
+        }
+      },
+      "bom-ref": "bundle/all-MiniLM-L6-v2-en@1.0.0",
+      "subjects": [
+        "bundle/all-MiniLM-L6-v2-en@1.0.0"
+      ],
+      "text": "Manifest SHA-256: 7a0e393dc77186cf17f143067a9b29c08186e3a1f4a5a52c3ccec26346a2373e",
+      "timestamp": "2026-01-01T00:00:00Z"
+    }
+  ],
+  "bomFormat": "CycloneDX",
+  "components": [
+    {
+      "bom-ref": "sentence-transformers/all-MiniLM-L6-v2@1.0.0",
+      "description": "Sentence transformer for English semantic similarity. Distilled MiniLM-L6 architecture, 384-dim output. Real bundle pinned at HF revision e4ce9877...",
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0"
+          }
+        }
+      ],
+      "name": "all-MiniLM-L6-v2",
+      "properties": [
+        {
+          "name": "ml.model.architecture",
+          "value": "MiniLM-L6"
+        },
+        {
+          "name": "ml.model.parameters",
+          "value": "~22M"
+        },
+        {
+          "name": "ml.model.framework",
+          "value": "onnx"
+        },
+        {
+          "name": "ml.model.quantization",
+          "value": "int8-dynamic"
+        },
+        {
+          "name": "efe.bundle.id",
+          "value": "sentence-transformers/all-MiniLM-L6-v2@1.0.0/onnx/384"
+        },
+        {
+          "name": "efe.bundle.is_dev_placeholder",
+          "value": "true"
+        }
+      ],
+      "publisher": "sentence-transformers (UKPLab)",
+      "purl": "pkg:huggingface/sentence-transformers/all-MiniLM-L6-v2@dev-placeholder",
+      "type": "machine-learning-model",
+      "version": "1.0.0"
+    },
+    {
+      "bom-ref": "all-MiniLM-L6-v2/tokenizer",
+      "description": "WordPiece tokenizer (BERT-style, vocab ~30k).",
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0"
+          }
+        }
+      ],
+      "name": "all-MiniLM-L6-v2-tokenizer",
+      "properties": [
+        {
+          "name": "nlp.tokenizer.algorithm",
+          "value": "wordpiece"
+        },
+        {
+          "name": "nlp.tokenizer.vocab_size",
+          "value": "30522"
+        }
+      ],
+      "publisher": "sentence-transformers (UKPLab)",
+      "type": "data",
+      "version": "1.0.0"
+    }
+  ],
+  "metadata": {
+    "component": {
+      "bom-ref": "bundle/all-MiniLM-L6-v2-en@1.0.0",
+      "description": "EFE M13 D20 sample embedder bundle (dev placeholder).",
+      "name": "all-MiniLM-L6-v2-en",
+      "type": "application",
+      "version": "1.0.0"
+    },
+    "timestamp": "2026-01-01T00:00:00Z",
+    "tools": [
+      {
+        "name": "bootstrap_dev_bundles.py",
+        "vendor": "EFE Project",
+        "version": "1.0.0"
+      }
+    ]
+  },
+  "serialNumber": "urn:uuid:00000000-0000-0000-0000-d20-sample-bundle",
+  "specVersion": "1.5",
+  "version": 1,
+  "vulnerabilities": []
+}

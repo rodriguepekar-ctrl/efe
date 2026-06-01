@@ -1,0 +1,34 @@
+{
+  "_dev_placeholder": true,
+  "_note": "XLM-R based multilingual tokenizer. Real vocab has 250 002 entries.",
+  "added_tokens": [],
+  "model": {
+    "type": "Unigram",
+    "unk_id": 0,
+    "vocab": [
+      [
+        "<unk>",
+        0.0
+      ],
+      [
+        "<s>",
+        0.0
+      ],
+      [
+        "</s>",
+        0.0
+      ],
+      [
+        "<pad>",
+        0.0
+      ],
+      [
+        "_dev_placeholder",
+        0.0
+      ]
+    ]
+  },
+  "padding": null,
+  "truncation": null,
+  "version": "1.0"
+}

@@ -1,0 +1,116 @@
+{
+  "annotations": [
+    {
+      "annotator": {
+        "organization": {
+          "name": "EFE Project"
+        }
+      },
+      "bom-ref": "bundle/paraphrase-multilingual-MiniLM-L12-v2@1.0.0",
+      "subjects": [
+        "bundle/paraphrase-multilingual-MiniLM-L12-v2@1.0.0"
+      ],
+      "text": "Manifest SHA-256: bc333c27706f3532dbda52f55d79e241787d7255baa20e66f9027542f94daa30",
+      "timestamp": "2026-01-01T00:00:00Z"
+    }
+  ],
+  "bomFormat": "CycloneDX",
+  "components": [
+    {
+      "bom-ref": "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2@1.0.0",
+      "description": "Sentence transformer for multilingual paraphrase similarity. Distilled from XLM-R, 12-layer MiniLM, 384-dim output. Supports 50+ direct languages, 100+ via cross-lingual transfer.",
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0"
+          }
+        }
+      ],
+      "name": "paraphrase-multilingual-MiniLM-L12-v2",
+      "properties": [
+        {
+          "name": "ml.model.architecture",
+          "value": "MiniLM-L12"
+        },
+        {
+          "name": "ml.model.parameters",
+          "value": "~118M"
+        },
+        {
+          "name": "ml.model.framework",
+          "value": "onnx"
+        },
+        {
+          "name": "ml.model.quantization",
+          "value": "fp16"
+        },
+        {
+          "name": "ml.model.training_data",
+          "value": "ParallelCorpora 50+ languages"
+        },
+        {
+          "name": "efe.bundle.id",
+          "value": "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2@1.0.0/onnx/384"
+        },
+        {
+          "name": "efe.bundle.is_dev_placeholder",
+          "value": "true"
+        }
+      ],
+      "publisher": "sentence-transformers (UKPLab)",
+      "purl": "pkg:huggingface/sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2@dev-placeholder",
+      "type": "machine-learning-model",
+      "version": "1.0.0"
+    },
+    {
+      "bom-ref": "paraphrase-multilingual-MiniLM-L12-v2/tokenizer",
+      "description": "XLM-R-based sentencepiece tokenizer, vocab 250 002.",
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0"
+          }
+        }
+      ],
+      "name": "paraphrase-multilingual-MiniLM-L12-v2-tokenizer",
+      "properties": [
+        {
+          "name": "nlp.tokenizer.algorithm",
+          "value": "sentencepiece-bpe"
+        },
+        {
+          "name": "nlp.tokenizer.vocab_size",
+          "value": "250002"
+        },
+        {
+          "name": "nlp.tokenizer.subword_model_path",
+          "value": "tokenizer/sentencepiece.bpe.model"
+        }
+      ],
+      "publisher": "sentence-transformers (UKPLab)",
+      "type": "data",
+      "version": "1.0.0"
+    }
+  ],
+  "metadata": {
+    "component": {
+      "bom-ref": "bundle/paraphrase-multilingual-MiniLM-L12-v2@1.0.0",
+      "description": "EFE M13 D26 production multilingual embedder bundle (dev placeholder).",
+      "name": "paraphrase-multilingual-MiniLM-L12-v2",
+      "type": "application",
+      "version": "1.0.0"
+    },
+    "timestamp": "2026-01-01T00:00:00Z",
+    "tools": [
+      {
+        "name": "bootstrap_dev_bundles.py",
+        "vendor": "EFE Project",
+        "version": "1.0.0"
+      }
+    ]
+  },
+  "serialNumber": "urn:uuid:00000000-0000-0000-0000-d26-prod-bundle",
+  "specVersion": "1.5",
+  "version": 1,
+  "vulnerabilities": []
+}

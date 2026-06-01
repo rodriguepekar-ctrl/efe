@@ -1,0 +1,6 @@
+{
+  "_dev_placeholder": true,
+  "do_lower_case": true,
+  "model_max_length": 256,
+  "tokenizer_class": "BertTokenizerFast"
+}
