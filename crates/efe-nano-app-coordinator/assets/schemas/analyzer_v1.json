@@ -9,7 +9,7 @@
   "properties": {
     "entities": {
       "type": "array",
-      "maxItems": 20,
+      "maxItems": 5,
       "items": {
         "type": "object",
         "additionalProperties": false,

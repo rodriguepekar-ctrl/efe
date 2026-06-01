@@ -189,7 +189,10 @@ pub async fn run_mission_a_with_swarm_id(
                 let started_node = Instant::now();
                 let input = AnalyzerInput {
                     text: req.user_text.clone(),
-                    max_entities: 20,
+                    // C-B : ≤5 entités. NB : ce hint n'atteint PAS le modèle (le
+                    // client n'envoie que `text`) — le cap RÉEL est la grammaire
+                    // analyzer_v1.gbnf (`entity){0,4}`). Aligné pour l'intention.
+                    max_entities: 5,
                     source_agent: None,
                 };
                 let res = analyzer.invoke(input, &ctx).await;

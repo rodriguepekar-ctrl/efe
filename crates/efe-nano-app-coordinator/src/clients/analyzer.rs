@@ -32,7 +32,7 @@ impl AnalyzerClient {
                 endpoint,
                 grammar,
                 prompt,
-                /* max_tokens */ 1024,
+                /* max_tokens */ analyzer_max_output_tokens(),
                 /* temperature */ 0.1,
             )?,
         })
@@ -131,6 +131,24 @@ fn safe_analyzer_chars() -> usize {
     toks.saturating_mul(4)
 }
 
+/// **C-B** — plafond de tokens de **SORTIE** (`n_predict`) de l'analyzer. **À ne
+/// PAS confondre** avec `EFE_ANALYZER_MAX_TOKENS`, qui borne l'**ENTRÉE**. Le vrai
+/// cap du nombre d'entités (donc de la longueur de sortie) est la **grammaire**
+/// (`analyzer_v1.gbnf` : `entity){0,4}`) : le décodage s'arrête à la complétion du
+/// JSON. Ce plafond n'est qu'un **backstop d'hygiène** (évite un décodage emballé
+/// si le modèle refuse l'EOS) + un knob de tuning. **1024 → 512** : largement
+/// au-dessus d'une sortie complète à 5 entités (~215-300 t), bien sous l'ancien
+/// plafond. Override : `EFE_ANALYZER_MAX_OUTPUT_TOKENS` (plancher 64).
+const ANALYZER_MAX_OUTPUT_TOKENS: u32 = 512;
+
+fn analyzer_max_output_tokens() -> u32 {
+    std::env::var("EFE_ANALYZER_MAX_OUTPUT_TOKENS")
+        .ok()
+        .and_then(|s| s.parse::<u32>().ok())
+        .filter(|&n| n >= 64)
+        .unwrap_or(ANALYZER_MAX_OUTPUT_TOKENS)
+}
+
 /// Borne le `text` de l'entrée analyzer à [`safe_analyzer_chars`] (troncature de
 /// TÊTE sur frontière de codepoint — jamais au milieu d'un caractère). No-op si
 /// déjà sous la limite. L'analyzer étant observationnel (entités), un excerpt de
@@ -225,5 +243,32 @@ mod tests {
         assert_eq!(client.id(), "analyzer");
         assert_eq!(client.schema_version(), "1.0.0");
         assert_eq!(client.run_mode(), RunMode::B);
+    }
+
+    // ── C-B (right-size analyzer) ──────────────────────────────────────────
+
+    #[test]
+    fn cb_analyzer_max_output_tokens_default_is_512() {
+        // Plafond de SORTIE 1024 → 512 (backstop ; le vrai cap = grammaire). On
+        // asserte la CONSTANTE (immune à l'env) puis le défaut de la fonction.
+        assert_eq!(ANALYZER_MAX_OUTPUT_TOKENS, 512);
+        std::env::remove_var("EFE_ANALYZER_MAX_OUTPUT_TOKENS");
+        assert_eq!(analyzer_max_output_tokens(), 512);
+    }
+
+    /// La grammaire d'asset borne les entités à 5 (`{0,4}`), pas 20 — garde-fou de
+    /// couplage asset↔intention (anti-régression si on régénère depuis le schéma).
+    #[test]
+    fn cb_grammar_asset_caps_entities_at_five() {
+        let gbnf = std::fs::read_to_string(assets_dir().join("grammars/analyzer_v1.gbnf"))
+            .expect("grammar analyzer lisible");
+        assert!(
+            gbnf.contains("entity){0,4}"),
+            "analyzer_v1.gbnf doit borner entities à {{0,4}} (C-B right-size)"
+        );
+        assert!(
+            !gbnf.contains("entity){0,19}"),
+            "l'ancien cap {{0,19}} (20 entités) ne doit plus exister"
+        );
     }
 }

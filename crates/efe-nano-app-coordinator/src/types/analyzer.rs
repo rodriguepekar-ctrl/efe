@@ -223,6 +223,34 @@ mod tests {
         assert_eq!(out.entities[0].kind, EntityKind::Org);
     }
 
+    /// C-B (right-size) — un AnalyzerOutput à **5 entités** (le nouveau cap imposé
+    /// par la grammaire `analyzer_v1.gbnf` : `entity){0,4}`) valide de bout en bout
+    /// (schéma + sémantique). Non-régression : le right-size produit une sortie
+    /// pleinement valide, **non tronquée** — le cap 5 reste ≤ au validateur (20).
+    #[test]
+    fn cb_five_entity_output_is_valid() {
+        let entities: Vec<Entity> = (0..5u32)
+            .map(|i| Entity {
+                text: format!("E{i}"),
+                kind: EntityKind::Other,
+                start_char: i * 2,
+                end_char: i * 2 + 1,
+                confidence: 0.9,
+            })
+            .collect();
+        let out = AnalyzerOutput {
+            entities,
+            intent: IntentClass::Analytical,
+            sentiment: 0.0,
+            language: IsoLang::Fr,
+            one_line_summary: "Résumé bref".into(),
+            confidence: 0.8,
+        };
+        assert_eq!(out.entities.len(), 5);
+        assert!(out.validate().is_ok(), "5 entités ≤ cap validateur (20) → valide");
+        assert!(out.validate_semantics().is_ok(), "offsets cohérents → sémantique OK");
+    }
+
     #[test]
     fn semantic_validation_catches_inverted_offsets() {
         let out = AnalyzerOutput {
