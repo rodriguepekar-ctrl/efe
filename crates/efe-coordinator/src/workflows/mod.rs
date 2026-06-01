@@ -54,18 +54,83 @@ pub(crate) fn final_prompt_from_compression(
     if degenerate {
         return (raw_user_text.to_string(), true);
     }
-    // **R5 — préambule TERSE (~50 t, contre ~140 t auparavant).** Le surcoût
-    // d'encadrement était la 1re cause d'annulation des savings (un préambule de
-    // 140 t ajouté à chaque appel dépasse à lui seul la plupart des prompts). On
-    // condense en gardant les 4 garde-fous essentiels validés en live : réponse
-    // DIRECTE, BRÈVE (une phrase), ne pas signaler un texte « incomplet », et ne
-    // jamais demander de clarification.
-    let framed = format!(
-        "Demande condensée par un pré-traitement (question possiblement \
-         implicite). Réponds DIRECTEMENT en une phrase BRÈVE, sans signaler que \
-         le texte serait incomplet et sans demander de clarification :\n\n{s}"
-    );
+    // **R7 — PRÉSERVER LA QUESTION (bug révélé en live, H0.1).** Le compresseur
+    // 1B largue parfois la question : sur un prompt à fort remplissage, il
+    // extrait le bruit dominant (« j'ai lu des choses contradictoires sur des
+    // forums… ») et JETTE la vraie demande, malgré l'instruction de son prompt.
+    // Le LLM répond alors au bruit (sur un prompt REST/GraphQL il citait des
+    // autorités médicales). Correctif : on ré-injecte les phrases interrogatives
+    // du BRUT, VERBATIM, dans le prompt final → le LLM voit toujours la vraie
+    // question, quoi que le compresseur ait fait du contexte.
+    //
+    // **R5 — préambule TERSE** (les 4 garde-fous validés en live : réponse
+    // DIRECTE, BRÈVE, ne pas signaler « incomplet », jamais de clarification).
+    let question = extract_questions(raw_user_text);
+    let framed = if question.is_empty() {
+        // Pas de question explicite (`?`) → requête impérative : comportement R5.
+        format!(
+            "Demande condensée par un pré-traitement (question possiblement \
+             implicite). Réponds DIRECTEMENT en une phrase BRÈVE, sans signaler \
+             que le texte serait incomplet et sans demander de clarification :\
+             \n\n{s}"
+        )
+    } else {
+        // Contexte compressé + QUESTION verbatim : le LLM répond à la question.
+        format!(
+            "Contexte condensé par un pré-traitement (possiblement incomplet). \
+             Réponds DIRECTEMENT et de façon BRÈVE à la QUESTION ci-dessous, en \
+             t'appuyant sur ce contexte, sans signaler qu'il serait incomplet et \
+             sans demander de clarification :\n\n\
+             --- Contexte condensé ---\n{s}\n\n\
+             --- Question ---\n{question}"
+        )
+    };
     (framed, false)
+}
+
+/// **R7** — Plafond (caractères) des questions ré-injectées verbatim. Borne le
+/// cas pathologique d'un prompt ≈ uniquement des questions (où il n'y a de toute
+/// façon rien à compresser).
+const MAX_QUESTION_CHARS: usize = 600;
+
+/// **R7** — Extrait les phrases **interrogatives** (se terminant par `?`) du
+/// texte brut, concaténées, pour ré-injection verbatim. Logique pure.
+///
+/// - Découpe en phrases sur `. ! ? \n` ; garde celles finissant par `?`.
+/// - Préfère les **dernières** questions (la vraie demande est typiquement en
+///   fin), bornées à [`MAX_QUESTION_CHARS`] (questions entières préservées).
+/// - Aucune question (`?` absent → requête impérative) → `""` (le caller bascule
+///   sur le préambule R5 historique).
+pub(crate) fn extract_questions(text: &str) -> String {
+    let chars: Vec<char> = text.chars().collect();
+    let mut questions: Vec<String> = Vec::new();
+    let mut start = 0usize;
+    for (i, &c) in chars.iter().enumerate() {
+        match c {
+            '?' => {
+                let q: String = chars[start..=i].iter().collect::<String>().trim().to_string();
+                if q.chars().count() > 1 {
+                    questions.push(q);
+                }
+                start = i + 1;
+            }
+            '.' | '!' | '\n' => start = i + 1,
+            _ => {}
+        }
+    }
+    // Garde les dernières questions entières dans le budget.
+    let mut kept: Vec<String> = Vec::new();
+    let mut budget = MAX_QUESTION_CHARS;
+    for q in questions.into_iter().rev() {
+        let n = q.chars().count();
+        if !kept.is_empty() && n > budget {
+            break;
+        }
+        budget = budget.saturating_sub(n + 1);
+        kept.push(q);
+    }
+    kept.reverse();
+    kept.join(" ")
 }
 
 /// **Levier 1** — cible de compression proportionnelle à la longueur d'entrée.
@@ -217,13 +282,16 @@ mod tests {
 
     use crate::metrics::ChewingMetrics;
 
-    /// **Corr.1 — lock anti-régression du préambule.** L'ancien encadrement
-    /// faisait ~140 t et annulait les savings. Pour un résumé d'1 caractère, le
-    /// prompt encadré total doit rester terse (≤ 70 t). Si quelqu'un rallonge le
-    /// préambule, ce test casse.
+    /// **Corr.1 — lock anti-régression du préambule (branche SANS question).**
+    /// L'ancien encadrement faisait ~140 t. Pour un résumé d'1 caractère sur une
+    /// requête impérative (pas de `?` → branche R5 terse), l'encadrement total
+    /// doit rester ≤ 70 t. (La branche-question, plus riche, est bornée par
+    /// `question_branch_overhead_is_modest`.)
     #[test]
     fn framing_overhead_stays_terse() {
-        let (framed, fell_back) = final_prompt_from_compression("x", RAW);
+        // Pas de `?` → branche impérative R5 (la plus terse).
+        let raw_no_q = "Traite ce texte sans interrogation, juste du contenu brut.";
+        let (framed, fell_back) = final_prompt_from_compression("x", raw_no_q);
         assert!(!fell_back);
         let overhead = ChewingMetrics::estimate_tokens(&framed);
         assert!(overhead <= 70, "préambule trop long: {overhead} t (doit rester terse)");
@@ -241,21 +309,74 @@ mod tests {
         assert!(should_compress(&"x".repeat(4000)));
     }
 
-    /// **Corr.1 × Corr.2 — INVARIANT cardinal** : le plancher dépasse STRICTEMENT
-    /// le coût max du prompt encadré (préambule + résumé cappé à 500 car). Donc
-    /// dès que le compresseur tourne (`raw ≥ COMPRESS_MIN_TOKENS`), le final est
-    /// forcément plus court que le brut ⇒ savings JAMAIS négatifs. Ce test relie
-    /// les deux corrections : si l'une régresse (préambule rallongé OU plancher
-    /// abaissé), il casse.
+    /// **Corr.1 × Corr.2 — INVARIANT du CONTEXTE encadré** : le plancher dépasse
+    /// STRICTEMENT le coût max de l'encadrement du contexte (préambule + résumé
+    /// cappé à 500 car, **hors question**). Donc la partie CONTEXTE du final est
+    /// toujours plus courte que le brut.
+    ///
+    /// **Nuance R7** : depuis la préservation de la question, le final = contexte
+    /// encadré **+ question verbatim**. La garantie « savings ≥ 0 » n'est donc
+    /// plus stricte sur un prompt ≈ uniquement des questions (où il n'y a de toute
+    /// façon rien à compresser, et où préserver la question est l'objectif). Pour
+    /// le cas réel (contexte compressible + petite question), savings positifs. Le
+    /// test borne la partie compressée — la question est valeur ajoutée assumée
+    /// (des savings sur une réponse fausse ne valent rien).
     #[test]
     fn compress_gate_guarantees_non_negative_savings() {
-        // Résumé de taille MAX autorisée par la grammaire (500 car), encadré.
+        // Contexte sans question → mesure le coût d'encadrement pur (préambule +
+        // résumé MAX 500 car), borné par le plancher.
         let (framed_max, _) = final_prompt_from_compression(&"x".repeat(500), "");
         let framed_max_tokens = ChewingMetrics::estimate_tokens(&framed_max);
         assert!(
             COMPRESS_MIN_TOKENS > framed_max_tokens,
-            "plancher ({COMPRESS_MIN_TOKENS} t) doit dépasser le coût max du prompt \
-             encadré ({framed_max_tokens} t) → savings ≥ 0 garantis"
+            "plancher ({COMPRESS_MIN_TOKENS} t) doit dépasser le coût max de \
+             l'encadrement du contexte ({framed_max_tokens} t)"
         );
+    }
+
+    // ── R7 — préservation de la question (bug H0.1 : le 1B largue la question) ──
+
+    /// `extract_questions` ne garde QUE les phrases interrogatives (finissant par
+    /// `?`), dans l'ordre ; aucune `?` → vide (requête impérative).
+    #[test]
+    fn extract_questions_keeps_only_interrogatives() {
+        assert_eq!(extract_questions("Pas de question ici. Juste du texte."), "");
+        assert_eq!(
+            extract_questions("Blabla. Quelle heure est-il ? Encore du blabla."),
+            "Quelle heure est-il ?"
+        );
+        // Multi-questions : les deux gardées, dans l'ordre.
+        assert_eq!(extract_questions("Contexte. Qui ? Pourquoi ?"), "Qui ? Pourquoi ?");
+        // Vide / sans `?` → vide.
+        assert_eq!(extract_questions(""), "");
+    }
+
+    /// **LOCK DU BUG H0.1.** Même si le résumé est du FILLER (le compresseur a
+    /// largué la question), la question du brut doit apparaître VERBATIM dans le
+    /// prompt final → le LLM répond à la question, pas au bruit. Sans ce
+    /// correctif, le prompt compressé faisait répondre Claude sur le remplissage
+    /// (citant des autorités médicales pour une question REST/GraphQL).
+    #[test]
+    fn question_survives_filler_summary() {
+        let filler_summary = "L'utilisateur a lu des choses contradictoires sur des forums.";
+        let raw = "Blabla redondant. Encore du blabla filler. \
+                   Quelle est la différence entre synchrone et asynchrone ?";
+        let (prompt, fell_back) = final_prompt_from_compression(filler_summary, raw);
+        assert!(!fell_back, "résumé non dégénéré → pas de fallback");
+        assert!(
+            prompt.contains("Quelle est la différence entre synchrone et asynchrone ?"),
+            "la question du brut doit survivre verbatim malgré un résumé qui l'a perdue"
+        );
+        // Le contexte compressé reste présent aussi.
+        assert!(prompt.contains(filler_summary), "le contexte condensé reste inclus");
+    }
+
+    /// La branche-question reste raisonnable : préambule + marqueurs + 1 char +
+    /// petite question ≤ ~90 t (lock anti-bloat des marqueurs Contexte/Question).
+    #[test]
+    fn question_branch_overhead_is_modest() {
+        let (framed, _) = final_prompt_from_compression("x", "Contexte bref. Quoi ?");
+        let t = ChewingMetrics::estimate_tokens(&framed);
+        assert!(t <= 90, "overhead branche-question trop gros: {t} t");
     }
 }

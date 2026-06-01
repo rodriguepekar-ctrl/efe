@@ -1,0 +1,389 @@
+{
+  "generated_utc": "2026-06-01T00:11:01.665240+00:00",
+  "model": "claude_claude-sonnet-4-6",
+  "price_in_usd_mtok": 3.0,
+  "price_out_usd_mtok": 15.0,
+  "baseline_url": "http://127.0.0.1:8700",
+  "chewed_url": "http://127.0.0.1:8701",
+  "repeats": 3,
+  "rows": [
+    {
+      "id": "fr_capital_1k",
+      "kind": "redundant",
+      "chars": 1205,
+      "n": 3,
+      "in_raw": 302,
+      "in_comp": 157,
+      "savings_ratio": 0.48123620309050774,
+      "dcost_usd": [
+        0.0004960000000000001,
+        3.252691193458121e-05
+      ],
+      "net_latency_ms": [
+        8916.666666666666,
+        741.3691538108543
+      ],
+      "slm_lat_ms": [
+        8959.0,
+        440.8839605459317
+      ],
+      "jaccard": [
+        0.4444444444444444,
+        0.3928371006591931
+      ],
+      "kw_b": [
+        1.0,
+        0.0
+      ],
+      "kw_c": [
+        1.0,
+        0.0
+      ],
+      "reps": [
+        {
+          "in_raw": 302,
+          "in_comp": 159,
+          "out_b": 12,
+          "out_c": 6,
+          "cost_b": 0.0010860000000000002,
+          "cost_c": 0.000567,
+          "dcost": 0.0005190000000000001,
+          "llm_lat_b": 1746,
+          "llm_lat_c": 1261,
+          "slm_lat_c": 8355,
+          "net_latency_ms": 7870,
+          "jaccard": 0.16666666666666666,
+          "kw_b": 1.0,
+          "kw_c": 1.0,
+          "answer_b": "La capitale de la France est **Paris**.",
+          "answer_c": "**Paris.**",
+          "failed_c": []
+        },
+        {
+          "in_raw": 302,
+          "in_comp": 159,
+          "out_b": 12,
+          "out_c": 6,
+          "cost_b": 0.0010860000000000002,
+          "cost_c": 0.000567,
+          "dcost": 0.0005190000000000001,
+          "llm_lat_b": 1192,
+          "llm_lat_c": 1184,
+          "slm_lat_c": 9395,
+          "net_latency_ms": 9387,
+          "jaccard": 0.16666666666666666,
+          "kw_b": 1.0,
+          "kw_c": 1.0,
+          "answer_b": "**La capitale de la France est Paris.**",
+          "answer_c": "**Paris.**",
+          "failed_c": []
+        },
+        {
+          "in_raw": 302,
+          "in_comp": 152,
+          "out_b": 12,
+          "out_c": 12,
+          "cost_b": 0.0010860000000000002,
+          "cost_c": 0.0006360000000000001,
+          "dcost": 0.0004500000000000001,
+          "llm_lat_b": 1214,
+          "llm_lat_c": 1580,
+          "slm_lat_c": 9127,
+          "net_latency_ms": 9493,
+          "jaccard": 1.0,
+          "kw_b": 1.0,
+          "kw_c": 1.0,
+          "answer_b": "**La capitale de la France est Paris.**",
+          "answer_c": "La capitale de la France est **Paris**.",
+          "failed_c": []
+        }
+      ]
+    },
+    {
+      "id": "syncasync_1k5",
+      "kind": "redundant",
+      "chars": 1718,
+      "n": 3,
+      "in_raw": 430,
+      "in_comp": 216,
+      "savings_ratio": 0.4976744186046511,
+      "dcost_usd": [
+        0.007107,
+        0.001099261570328009
+      ],
+      "net_latency_ms": [
+        1284.0,
+        6777.45365163053
+      ],
+      "slm_lat_ms": [
+        10508.666666666666,
+        6760.375548411164
+      ],
+      "jaccard": [
+        0.2504123572461257,
+        0.029397695606741353
+      ],
+      "kw_b": [
+        0.0,
+        0.0
+      ],
+      "kw_c": [
+        0.0,
+        0.0
+      ],
+      "reps": [
+        {
+          "in_raw": 430,
+          "in_comp": 210,
+          "out_b": 723,
+          "out_c": 396,
+          "cost_b": 0.012135,
+          "cost_c": 0.00657,
+          "dcost": 0.005565,
+          "llm_lat_b": 18041,
+          "llm_lat_c": 8283,
+          "slm_lat_c": 6355,
+          "net_latency_ms": -3403,
+          "jaccard": 0.2850467289719626,
+          "kw_b": null,
+          "kw_c": null,
+          "answer_b": "# Synchrone vs Asynchrone : l'essentiel clairement\n\nJe vais ignorer la répétition de ton intro et aller droit au but.\n\n---\n\n## L'idée centrale en une image\n\n**Synchrone** = tu commandes un café au comptoir, tu **restes planté là** à attendre qu'il soit prêt, puis tu repars.\n\n**Asynchrone** = tu commandes, on te donne un **numéro**, tu vas t'asseoir faire autre chose, et on t'appelle quand c'est prêt.\n\n---\n\n## Ce qui se passe concrètement dans le code\n\n### Synchrone\n```python\ndonnées = lire_fichier(\"data.csv\")   # ⏸️ tout s'arrête ici\nrésultat = traiter(données)           # s'exécute seulement après\nafficher(résultat)\n```\nLe programme **bloque** pendant `lire_fichier`. Rien d'autre ne tourne.\n\n### Asynchrone\n```python\nasync def main():\n    données = await lire_fichier(\"data.csv\")  # ⏩ on \"rend la main\" pendant l'attente\n    résultat = traiter(données)\n    afficher(résultat)\n```\nPendant que le fichier se lit, **d'autres tâches peuvent s'exécuter**.\n\n---\n\n## Quand choisir quoi ?\n\n| Situation | Synchrone ✅ | Asynchrone ✅ |\n|---|---|---|\n| Calculs purs (math, algo) | ✅ | ❌ inutile |\n| Lecture/écriture fichiers | ✅ si ponctuel | ✅ si fréquent |\n| Appels réseau / API | ❌ bloquant | ✅ indispensable |\n| Serveur web (multi-users) | ❌ catastrophique | ✅ indispensable |\n| Script simple one-shot | ✅ plus simple | ❌ surcharge inutile |\n\n---\n\n## La règle pratique\n\n> **L'asynchrone sert uniquement quand tu **attends** quelque chose d'externe** (réseau, disque, base de données).\n\nSi ton programme passe son temps à **calculer** (CPU), l'asynchrone n'apporte rien — il faut alors regarder le **parallélisme** (threads, multiprocessing).\n\n---\n\n## Le piège fréquent\n\nBeaucoup de gens pensent que asynchrone = plus rapide. **C'est faux.**\n\n- Une seule tâche asynchrone est même **légèrement plus lente** qu'une synchrone\n- Le gain vient quand tu as **beaucoup d'attentes simultanées** à gérer\n\n---\n\nTu travailles dans quel langage / contexte ? Je peux être plus précis.",
+          "answer_c": "## Synchrone vs Asynchrone\n\n### Synchrone\nLe code s'exécute **ligne par ligne, dans l'ordre**. Chaque opération attend que la précédente soit terminée avant de continuer.\n\n```python\nrésultat = lire_fichier()   # on attend ici...\nprint(résultat)              # puis on continue\n```\n➡ Simple, prévisible, mais **bloquant**.\n\n---\n\n### Asynchrone\nOn **lance une opération et on continue** sans attendre sa réponse. On y revient quand le résultat est prêt.\n\n```python\nrésultat = await lire_fichier()  # on lance, on n'attend pas\n# d'autres tâches peuvent tourner entre-temps\n```\n➡ Plus complexe, mais **non-bloquant**.\n\n---\n\n### Quand choisir quoi ?\n\n| Situation | Choix |\n|---|---|\n| Scripts simples, calculs CPU | **Synchrone** |\n| Attente réseau (API, BDD) | **Asynchrone** |\n| Lecture/écriture de fichiers lourds | **Asynchrone** |\n| Logique métier séquentielle | **Synchrone** |\n| Serveur gérant beaucoup de requêtes | **Asynchrone** |\n\n---\n\n### La règle simple\n> **Si ton programme passe du temps à *attendre* quelque chose** (réseau, disque, API…), l'asynchrone évite de bloquer tout le reste pendant ce temps. Sinon, le synchrone suffit largement.",
+          "failed_c": []
+        },
+        {
+          "in_raw": 430,
+          "in_comp": 212,
+          "out_b": 880,
+          "out_c": 387,
+          "cost_b": 0.01449,
+          "cost_c": 0.006441,
+          "dcost": 0.008049,
+          "llm_lat_b": 17795,
+          "llm_lat_c": 9054,
+          "slm_lat_c": 5128,
+          "net_latency_ms": -3613,
+          "jaccard": 0.25301204819277107,
+          "kw_b": null,
+          "kw_c": null,
+          "answer_b": "# Synchrone vs Asynchrone : la différence concrète\n\nJe vais ignorer la répétition de ton intro et aller droit au but.\n\n---\n\n## L'image mentale de base\n\n**Synchrone = tu commandes un café au comptoir et tu RESTES là à attendre qu'il soit prêt.** Personne derrière toi ne peut commander.\n\n**Asynchrone = tu commandes, on te donne un numéro, tu t'assoies. Le barista sert les autres pendant que ton café se prépare.**\n\n---\n\n## Ce que ça signifie en code\n\n### Synchrone\n```python\ndonnées = lire_fichier(\"gros_fichier.csv\")  # ← tout s'arrête ici\nprint(\"j'arrive seulement quand c'est fini\")\ntraiter(données)\n```\n> Le programme **bloque** et attend. Rien d'autre ne se passe.\n\n### Asynchrone\n```javascript\nconst données = await lireFichier(\"gros_fichier.csv\")  // ← on attend SANS bloquer\n// pendant ce temps, d'autres tâches peuvent tourner\ntraiter(données)\n```\n> Le programme **délègue** l'attente et continue à faire autre chose.\n\n---\n\n## La distinction clé à retenir\n\nL'asynchrone est utile **uniquement quand ton programme attend quelque chose d'externe** :\n\n| Type d'attente | Exemple concret |\n|---|---|\n| Réseau | appel API, requête HTTP |\n| Disque | lecture/écriture de fichiers |\n| Base de données | requête SQL |\n| Utilisateur | input, clic |\n\n> ⚠️ Si ton programme **calcule** intensément (IA, cryptographie, rendu 3D), l'asynchrone **ne sert à rien** — c'est le CPU qui bosse, pas une attente externe.\n\n---\n\n## Quand choisir quoi\n\n```\nTon programme attend des ressources externes ?\n│\n├── OUI → Asynchrone\n│         └── Surtout si tu gères plusieurs requêtes simultanées\n│             (serveur web, app mobile, scraping...)\n│\n└── NON → Synchrone\n          └── Script simple, calcul pur, logique linéaire\n              → plus lisible, plus simple à déboguer\n```\n\n---\n\n## Le piège fréquent\n\nBeaucoup de gens pensent que **asynchrone = plus rapide**. C'est faux.\n\n- Un seul utilisateur qui lit un fichier → synchrone aussi rapide\n- **1000 utilisateurs simultanés** qui lisent des fichiers → asynchrone **nettement** plus efficace\n\nLa vraie question c'est : **est-ce que j'ai besoin de gérer de la concurrence ?**\n\n---\n\n## En résumé brutal\n\n| | Synchrone | Asynchrone |\n|---|---|---|\n| **Lisibilité** | ✅ Simple | ⚠️ Plus complexe |\n| **Débogage** | ✅ Facile | ❌ Moins intuitif |\n| **Performance I/O** | ❌ Bloque | ✅ Efficace |\n| **Quand l'utiliser** | Scripts, calculs | Serveurs, APIs, I/O |\n\n---\n\nSi tu as un cas concret en tête (un projet, un langage particulier), dis-le moi — c'est là que ça devient vraiment utile d'affiner.",
+          "answer_c": "## Synchrone vs Asynchrone\n\n### Synchrone\nLe code s'exécute **ligne par ligne**, chaque opération attend que la précédente soit terminée.\n\n```python\ndonnées = lire_fichier()   # on attend ici...\ntraiter(données)           # puis on continue\n```\n➡ Simple, prévisible, mais **bloquant**\n\n---\n\n### Asynchrone\nOn **lance une opération** et on continue à faire autre chose en attendant le résultat.\n\n```python\ndonnées = await lire_fichier()   # on \"rend la main\" pendant l'attente\ntraiter(données)\n```\n➡ Plus complexe, mais **non-bloquant**\n\n---\n\n### Quand choisir quoi ?\n\n| Situation | Préférer |\n|---|---|\n| Script simple, calculs CPU | **Synchrone** |\n| Attentes réseau/fichiers (I/O) | **Asynchrone** |\n| Serveur gérant beaucoup de requêtes | **Asynchrone** |\n| Code lisibilité prioritaire | **Synchrone** |\n\n---\n\n### Analogie rapide\n- **Synchrone** : tu appelles un restaurant, tu restes en attente jusqu'à ce qu'on décroche\n- **Asynchrone** : tu laisses un message et tu continues ta journée, on te rappelle\n\n**Règle simple** : dès que ton programme *attend* quelque chose d'externe (API, base de données, fichier), l'asynchrone évite de geler tout le reste.",
+          "failed_c": []
+        },
+        {
+          "in_raw": 430,
+          "in_comp": 226,
+          "out_b": 889,
+          "out_c": 416,
+          "cost_b": 0.014624999999999999,
+          "cost_c": 0.006918,
+          "dcost": 0.0077069999999999994,
+          "llm_lat_b": 18042,
+          "llm_lat_c": 8867,
+          "slm_lat_c": 20043,
+          "net_latency_ms": 10868,
+          "jaccard": 0.2131782945736434,
+          "kw_b": null,
+          "kw_c": null,
+          "answer_b": "# Synchrone vs Asynchrone : la différence concrète\n\nTa question est répétée plusieurs fois dans ton message, mais elle est bonne — allons droit au but.\n\n---\n\n## L'image mentale de base\n\n**Synchrone** = tu commandes un café au comptoir, tu **restes planté là** à attendre qu'il soit prêt, puis tu repars.\n\n**Asynchrone** = tu commandes, on te donne un **numéro**, tu vas t'asseoir faire autre chose, on t'appelle quand c'est prêt.\n\n---\n\n## Ce que ça donne en code\n\n### Synchrone\n```python\ndonnées = lire_fichier(\"gros_fichier.csv\")  # ← le programme BLOQUE ici\ntraiter(données)                             # ← s'exécute seulement après\n```\nLe programme **attend**, il ne fait rien d'autre pendant ce temps.\n\n### Asynchrone\n```python\nasync def main():\n    données = await lire_fichier(\"gros_fichier.csv\")  # ← \"je reviendrai\"\n    traiter(données)                                    # ← s'exécute après\n    # MAIS pendant l'attente, d'autres tâches peuvent tourner\n```\n\n---\n\n## La vraie distinction à comprendre : **qui attend quoi ?**\n\n| Situation | Ce qui se passe |\n|---|---|\n| Calcul CPU intensif | Le processeur **travaille vraiment** → synchrone souvent suffisant |\n| Lecture fichier / BDD / API | Le processeur **attend une réponse externe** → l'asynchrone brille |\n\n> 💡 L'asynchrone est utile quand **ton programme passe son temps à attendre**, pas à calculer.\n\n---\n\n## Quand choisir quoi\n\n### ✅ Reste en synchrone si :\n- Script simple, usage personnel\n- Calculs lourds (machine learning, traitement d'image)\n- Une seule tâche à la fois, logique linéaire\n- Tu débutes — **la lisibilité compte**\n\n### ✅ Passe en asynchrone si :\n- Tu fais **beaucoup de requêtes réseau** (API, BDD)\n- Tu construis un **serveur web** qui gère des milliers d'utilisateurs\n- Tu veux faire **plusieurs choses en parallèle** sans créer des dizaines de threads\n\n---\n\n## L'erreur classique à éviter\n\nBeaucoup de gens pensent que asynchrone = plus rapide **tout le temps**.\n\n**Non.** Si tu fais un seul appel réseau, le gain est négligeable.  \nL'asynchrone devient puissant quand tu fais **50 appels en même temps** plutôt que l'un après l'autre.\n\n```python\n# Synchrone : 50 × 1 seconde = 50 secondes\nfor url in liste_urls:\n    résultat = requests.get(url)\n\n# Asynchrone : ~1 seconde pour les 50\nrésultats = await asyncio.gather(*[fetch(url) for url in liste_urls])\n```\n\n---\n\n## En résumé en une phrase\n\n> **Synchrone = simple et lisible, suffisant dans la majorité des cas. Asynchrone = indispensable quand ton programme passe son temps à attendre des ressources externes et doit gérer plusieurs opérations simultanément.**\n\n---\n\nSi tu veux, dis-moi dans quel contexte tu travailles (langage, type de projet) et je peux être encore plus concret.",
+          "answer_c": "## Synchrone vs Asynchrone\n\n### Synchrone\nLe code s'exécute **ligne par ligne, en attendant** que chaque opération soit terminée avant de passer à la suivante.\n\n```python\nrésultat = lire_fichier()  # on ATTEND ici\nprint(résultat)            # s'exécute après\n```\n➡ Simple, prévisible, mais **bloquant**.\n\n---\n\n### Asynchrone\nOn **lance une opération et on continue** sans attendre. On revient récupérer le résultat quand il est prêt.\n\n```python\nrésultat = await lire_fichier()  # on lance et on libère le fil\nprint(résultat)\n```\n➡ Plus complexe, mais **non-bloquant**.\n\n---\n\n### Quand choisir quoi ?\n\n| Situation | Recommandation |\n|---|---|\n| Calculs intensifs (CPU) | **Synchrone** (ou multi-threading) |\n| Lecture/écriture fichiers | **Asynchrone** |\n| Requêtes réseau / API | **Asynchrone** |\n| Script simple, linéaire | **Synchrone** |\n| Serveur gérant 1000 connexions | **Asynchrone** |\n\n---\n\n### Règle simple\n> **Si ton programme *attend* beaucoup** (réseau, disque, I/O) → asynchrone.\n> **Si ton programme *calcule* beaucoup** → synchrone suffit (l'asynchrone n'aide pas).\n\nL'asynchrone brille quand le goulot d'étranglement est l'**attente**, pas le CPU.",
+          "failed_c": [
+            "analyzer"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "rest_graphql_2k5",
+      "kind": "redundant",
+      "chars": 2632,
+      "n": 3,
+      "in_raw": 658,
+      "in_comp": 290,
+      "savings_ratio": 0.5592705167173253,
+      "dcost_usd": [
+        0.010124,
+        0.00024657656011875897
+      ],
+      "net_latency_ms": [
+        13174.0,
+        694.1195862385674
+      ],
+      "slm_lat_ms": [
+        24040.666666666668,
+        757.0135768634243
+      ],
+      "jaccard": [
+        0.2394742028399616,
+        0.020431622601434888
+      ],
+      "kw_b": [
+        0.0,
+        0.0
+      ],
+      "kw_c": [
+        0.0,
+        0.0
+      ],
+      "reps": [
+        {
+          "in_raw": 658,
+          "in_comp": 290,
+          "out_b": 1000,
+          "out_c": 420,
+          "cost_b": 0.016974,
+          "cost_c": 0.00717,
+          "dcost": 0.009804,
+          "llm_lat_b": 19192,
+          "llm_lat_c": 8844,
+          "slm_lat_c": 23928,
+          "net_latency_ms": 13580,
+          "jaccard": 0.21454545454545454,
+          "kw_b": null,
+          "kw_c": null,
+          "answer_b": "# REST vs GraphQL : les différences fondamentales\n\nJe note que ta question a été répétée de nombreuses fois — probablement un bug de copier-coller. Pas de souci, voilà une réponse claire pour t'aider à t'y retrouver.\n\n---\n\n## Le problème que GraphQL cherche à résoudre\n\nPour comprendre la différence, il faut partir d'un problème concret.\n\nImagine une app qui affiche un profil utilisateur avec ses posts et ses followers.\n\n**Avec REST**, tu fais souvent :\n```\nGET /users/42          → données de l'utilisateur\nGET /users/42/posts    → ses posts\nGET /users/42/followers → ses followers\n```\n→ **3 requêtes**, et chacune ramène probablement des champs dont tu n'as pas besoin.\n\n**Avec GraphQL**, une seule requête :\n```graphql\nquery {\n  user(id: 42) {\n    name\n    posts { title }\n    followers { name }\n  }\n}\n```\n→ **1 requête**, exactement les champs demandés.\n\n---\n\n## Les différences fondamentales\n\n### 1. Structure des endpoints\n\n| | REST | GraphQL |\n|---|---|---|\n| Endpoints | Multiples (`/users`, `/posts`…) | **Un seul** (`/graphql`) |\n| Verbes HTTP | GET, POST, PUT, DELETE | Principalement **POST** |\n| Versioning | `/v1/`, `/v2/`… | Évolue sans versioning |\n\n### 2. Sur-fetching et sous-fetching\n\nC'est **le problème central** que GraphQL résout.\n\n**Sur-fetching (REST)** — tu reçois trop :\n```json\nGET /users/42\n→ { id, name, email, address, phone, \n    created_at, avatar, preferences... }\n// Tu voulais juste name et email\n```\n\n**Sous-fetching (REST)** — tu reçois trop peu :\n```\n// Pour afficher une commande complète :\nGET /orders/1        → order\nGET /users/42        → customer\nGET /products/7      → product\nGET /products/7/reviews → reviews\n// 4 requêtes pour 1 écran\n```\n\n**GraphQL règle les deux** : tu déclares exactement ce que tu veux.\n\n### 3. Typage et schéma\n\nGraphQL impose un **contrat explicite** entre client et serveur :\n\n```graphql\ntype User {\n  id: ID!\n  name: String!\n  email: String!\n  posts: [Post!]!\n}\n\ntype Post {\n  id: ID!\n  title: String!\n  author: User!\n}\n```\n\n- Le schéma est **auto-documenté**\n- Les erreurs de type sont détectées **avant l'exécution**\n- Les outils (introspection, autocomplétion) sont très puissants\n\nREST n'impose rien nativement — OpenAPI/Swagger existent mais sont optionnels.\n\n### 4. Modifications de données\n\n```graphql\n# GraphQL : Mutation\nmutation {\n  createPost(title: \"Hello\", authorId: 42) {\n    id\n    title\n    author { name }  # tu choisis ce que tu récupères en retour\n  }\n}\n```\n\n```\n# REST\nPOST /posts\nBody: { title: \"Hello\", authorId: 42 }\n→ retourne ce que le serveur a décidé de retourner\n```\n\n### 5. Temps réel\n\n```graphql\n# GraphQL : Subscriptions (natif)\nsubscription {\n  messageAdded(channelId: 5) {\n    content\n    author { name }\n  }\n}\n```\n\nREST n'a pas d'équivalent natif — on utilise du polling ou des WebSockets séparés.\n\n---\n\n## Quand choisir REST ?\n\n✅ **API publique** consommée par des tiers\n> REST est plus universel, mieux comp",
+          "answer_c": "## REST vs GraphQL : différences fondamentales\n\n### Structure des requêtes\n- **REST** : plusieurs endpoints fixes (`/users`, `/posts`, `/comments`)\n- **GraphQL** : **un seul endpoint**, tu décris exactement ce que tu veux dans ta requête\n\n### Données reçues\n- **REST** : tu reçois ce que le serveur décide de renvoyer (souvent trop ou pas assez)\n- **GraphQL** : tu reçois **exactement** les champs demandés, ni plus ni moins\n\n### Problèmes classiques de REST que GraphQL résout\n- **Over-fetching** : recevoir 30 champs quand t'en as besoin de 3\n- **Under-fetching** : devoir faire 3 appels pour assembler une donnée complète\n\n---\n\n## Quand choisir quoi ?\n\n| Situation | Choix recommandé |\n|---|---|\n| API publique simple, bien définie | **REST** |\n| Équipes front/back séparées avec besoins variés | **GraphQL** |\n| Application mobile (économie de bande passante) | **GraphQL** |\n| Équipe petite, rapidité de mise en place | **REST** |\n| Données très interconnectées (type réseau social) | **GraphQL** |\n| Caching HTTP natif important | **REST** |\n\n---\n\n### En résumé\n- **REST** = simple, éprouvé, universel\n- **GraphQL** = flexible, puissant, mais **plus complexe à mettre en place**\n\nLe choix dépend surtout de la **complexité de tes données** et du **nombre de clients différents** qui consomment ton API.",
+          "failed_c": []
+        },
+        {
+          "in_raw": 658,
+          "in_comp": 290,
+          "out_b": 1000,
+          "out_c": 396,
+          "cost_b": 0.016974,
+          "cost_c": 0.00681,
+          "dcost": 0.010164,
+          "llm_lat_b": 19709,
+          "llm_lat_c": 8435,
+          "slm_lat_c": 25019,
+          "net_latency_ms": 13745,
+          "jaccard": 0.2392857142857143,
+          "kw_b": null,
+          "kw_c": null,
+          "answer_b": "# REST vs GraphQL : les différences fondamentales\n\nJe note que ta question était répétée de nombreuses fois — probablement un bug de copier-coller, pas de souci !\n\n---\n\n## Le problème que GraphQL cherche à résoudre\n\nPour comprendre la différence, il faut partir d'un problème concret.\n\n**Imagine une app mobile qui affiche un profil utilisateur.**\n\nAvec REST, tu as souvent ces endpoints :\n```\nGET /users/42          → toutes les infos user\nGET /users/42/posts    → tous ses posts\nGET /users/42/friends  → tous ses amis\n```\n\n**Problèmes typiques :**\n- **Over-fetching** : tu reçois 30 champs alors que tu en veux 3\n- **Under-fetching** : tu dois faire 3 requêtes pour afficher un seul écran\n- **N+1 requêtes** : pour afficher 10 users avec leurs posts → 11 requêtes\n\n---\n\n## La différence fondamentale\n\n### REST — *le serveur décide ce qu'il renvoie*\n\n```\nGET /users/42\n→ {\n    id, nom, email, age, adresse, téléphone,\n    date_inscription, avatar, préférences, ...\n  }\n```\nLa structure est **fixe**, définie côté serveur.\n\n---\n\n### GraphQL — *le client décide ce qu'il veut*\n\n```graphql\nquery {\n  user(id: 42) {\n    nom\n    avatar\n    posts(limit: 3) {\n      titre\n    }\n  }\n}\n```\n**Une seule requête**, tu reçois **exactement** ce que tu as demandé.\n\n---\n\n## Tableau comparatif honnête\n\n| Critère | REST | GraphQL |\n|---|---|---|\n| **Endpoints** | Multiples (`/users`, `/posts`…) | Un seul (`/graphql`) |\n| **Flexibilité données** | Faible (fixé serveur) | Forte (choisi client) |\n| **Nombre de requêtes** | Souvent plusieurs | Généralement une |\n| **Cache HTTP** | ✅ Natif et simple | ⚠️ Complexe à mettre en place |\n| **Courbe d'apprentissage** | Faible | Modérée |\n| **Typage / Schéma** | Optionnel (OpenAPI) | ✅ Natif et obligatoire |\n| **Gestion des erreurs** | Codes HTTP standards | Toujours 200, erreurs dans le body |\n| **Upload de fichiers** | Simple | Complexe |\n| **Tooling / Écosystème** | Très mature | Mature mais plus jeune |\n\n---\n\n## Quand choisir REST ?\n\n**✅ Choisis REST si :**\n\n- **API publique** destinée à des tiers — les codes HTTP sont universellement compris\n- **Ressources simples et stables** — CRUD classique sans relations complexes\n- **Cache important** — CDN, cache HTTP natif (`ETag`, `Cache-Control`)\n- **Équipe peu familière** avec GraphQL — la courbe d'apprentissage compte\n- **Microservices** communiquant entre eux — REST est plus léger\n- **Fichiers / uploads** — REST gère ça nativement\n\n```\nExemples typiques :\n→ API paiement (Stripe)\n→ API météo\n→ Webhook\n→ Service interne simple\n```\n\n---\n\n## Quand choisir GraphQL ?\n\n**✅ Choisis GraphQL si :**\n\n- **Plusieurs clients aux besoins différents** — mobile veut peu de données, web en veut plus\n- **Données très imbriquées / relationnelles** — graphe de relations complexe\n- **Développement frontend rapide** — les devs front sont autonomes, ils ne dépendent plus du back pour chaque nouveau besoin\n- **Application temps réel** — GraphQL Subscriptions est él",
+          "answer_c": "## REST vs GraphQL : différences fondamentales\n\n### Structure des requêtes\n- **REST** : plusieurs endpoints fixes (`/users`, `/posts`, `/comments`)\n- **GraphQL** : **un seul endpoint**, tu décris exactement ce que tu veux dans ta requête\n\n### Données récupérées\n- **REST** : tu reçois ce que le serveur décide de t'envoyer (souvent trop ou pas assez)\n- **GraphQL** : tu demandes **précisément** les champs dont tu as besoin → pas de sur-fetch ni de sous-fetch\n\n### Évolution de l'API\n- **REST** : nécessite souvent du versioning (`/v1/`, `/v2/`)\n- **GraphQL** : on ajoute des champs sans casser l'existant, **pas de versioning**\n\n---\n\n## Quand choisir quoi ?\n\n### Choisis **REST** si :\n- API simple avec des ressources bien définies\n- Équipe peu familière avec GraphQL\n- Tu as besoin du **cache HTTP natif** (CDN, navigateur)\n- API publique consommée par des tiers\n\n### Choisis **GraphQL** si :\n- **Plusieurs clients** (mobile, web) avec des besoins différents\n- Données très **relationnelles et imbriquées**\n- Tu veux éviter les multiples appels en cascade\n- Frontend piloté par les besoins (ex: React + Apollo)\n\n---\n\n**Règle simple** : REST pour la simplicité et les APIs publiques, GraphQL quand le frontend a des besoins flexibles et variés.",
+          "failed_c": [
+            "analyzer"
+          ]
+        },
+        {
+          "in_raw": 658,
+          "in_comp": 290,
+          "out_b": 1000,
+          "out_c": 380,
+          "cost_b": 0.016974,
+          "cost_c": 0.00657,
+          "dcost": 0.010404,
+          "llm_lat_b": 18853,
+          "llm_lat_c": 7875,
+          "slm_lat_c": 23175,
+          "net_latency_ms": 12197,
+          "jaccard": 0.26459143968871596,
+          "kw_b": null,
+          "kw_c": null,
+          "answer_b": "# REST vs GraphQL : les différences fondamentales\n\nJe note que ta question a été répétée de nombreuses fois — probablement un bug de copier-coller. Pas de problème, voilà une réponse claire.\n\n---\n\n## Le problème que GraphQL cherche à résoudre\n\nPour comprendre la différence, il faut d'abord comprendre **le problème concret** que GraphQL adresse.\n\nAvec REST, tu as des **endpoints fixes** qui retournent des données prédéfinies.\n\n---\n\n## Les différences fondamentales\n\n### 1. Structure des requêtes\n\n**REST** — le serveur décide ce que tu reçois :\n```\nGET /users/42\n→ { id, nom, email, age, adresse, téléphone, préférences... }\n```\nTu reçois **tout**, même ce dont tu n'as pas besoin.\n\n**GraphQL** — le client décide ce qu'il veut :\n```graphql\nquery {\n  user(id: 42) {\n    nom\n    email\n  }\n}\n→ { nom, email }  # exactement ça, rien d'autre\n```\n\n---\n\n### 2. Nombre de requêtes nécessaires\n\nC'est là que la différence est la plus visible.\n\n**Scénario concret** : afficher un profil utilisateur avec ses posts et les commentaires de chaque post.\n\n**Avec REST** (problème du N+1) :\n```\nGET /users/42              → 1 requête\nGET /users/42/posts        → 1 requête\nGET /posts/1/comments      → 1 requête\nGET /posts/2/comments      → 1 requête\nGET /posts/3/comments      → 1 requête\n                    TOTAL  → 5 requêtes\n```\n\n**Avec GraphQL** :\n```graphql\nquery {\n  user(id: 42) {\n    nom\n    posts {\n      titre\n      commentaires {\n        contenu\n      }\n    }\n  }\n}\n                    TOTAL → 1 requête\n```\n\n---\n\n### 3. Versioning\n\n| | REST | GraphQL |\n|---|---|---|\n| Évolution de l'API | `/v1/users`, `/v2/users` | Pas de versioning — on étend le schéma |\n| Rétrocompatibilité | Gérer plusieurs versions en parallèle | Déprécier des champs progressivement |\n\n---\n\n### 4. Typage et documentation\n\n**REST** : documentation souvent externe (Swagger/OpenAPI), pas toujours à jour.\n\n**GraphQL** : le schéma **est** la documentation, introspectable en temps réel.\n```graphql\n# Le schéma définit exactement ce qui existe\ntype User {\n  id: ID!\n  nom: String!\n  email: String!\n  posts: [Post!]!\n}\n```\nTu peux explorer l'API avec GraphiQL sans aucune doc externe.\n\n---\n\n### 5. Gestion des erreurs\n\n**REST** : les codes HTTP font le travail\n```\n200 OK / 404 Not Found / 500 Server Error\n```\n\n**GraphQL** : toujours `200 OK`, les erreurs sont dans le corps\n```json\n{\n  \"data\": { \"user\": null },\n  \"errors\": [{ \"message\": \"User not found\" }]\n}\n```\n> ⚠️ Ce point déroute souvent au début — un `200` peut cacher une erreur.\n\n---\n\n## Quand choisir quoi\n\n### Choisis **REST** si :\n\n- **API publique** consommée par des tiers → REST est universel, tout le monde sait l'utiliser\n- **Ressources simples et stables** → CRUD basique sur des entités bien définies\n- **Cache HTTP natif** → REST bénéficie du cache navigateur/CDN naturellement (GraphQL non, tout passe en POST)\n- **Équipe peu familière** avec GraphQL → la courbe d'apprentiss",
+          "answer_c": "## REST vs GraphQL : différences fondamentales\n\n### Structure des requêtes\n- **REST** : plusieurs endpoints fixes (`/users`, `/posts`, `/comments`), chaque ressource a sa propre URL\n- **GraphQL** : **un seul endpoint**, le client décrit exactement les données qu'il veut\n\n### Over/Under-fetching\n- **REST** : tu reçois souvent **trop ou pas assez** de données (structure figée côté serveur)\n- **GraphQL** : tu reçois **exactement ce que tu demandes**, ni plus ni moins\n\n### Versioning\n- **REST** : nécessite souvent `/v1/`, `/v2/`...\n- **GraphQL** : évolution du schéma sans versioning, via dépréciations\n\n---\n\n## Quand choisir quoi ?\n\n### ✅ Choisis REST si :\n- API simple et ressources bien définies\n- Équipe peu familière avec GraphQL\n- Besoin de **cache HTTP natif** (CDN, etc.)\n- API publique consommée par des tiers\n\n### ✅ Choisis GraphQL si :\n- **Plusieurs clients** (mobile, web) avec des besoins différents\n- Données **fortement interconnectées** (graphe de relations)\n- Tu veux réduire le nombre de requêtes réseau\n- Frontend piloté par des besoins changeants\n\n---\n\n**Règle simple** : REST pour la simplicité et les cas standards, GraphQL quand la flexibilité des données devient un vrai problème.",
+          "failed_c": []
+        }
+      ]
+    },
+    {
+      "id": "varied_backend",
+      "kind": "varied",
+      "chars": 1530,
+      "n": 3,
+      "in_raw": 383,
+      "in_comp": 316,
+      "savings_ratio": 0.17493472584856395,
+      "dcost_usd": [
+        0.0033710000000000007,
+        0.000595021008032489
+      ],
+      "net_latency_ms": [
+        17410.333333333332,
+        1782.581336776031
+      ],
+      "slm_lat_ms": [
+        20012.333333333332,
+        2.494438257849294
+      ],
+      "jaccard": [
+        0.20410417374218173,
+        0.0030260105409623977
+      ],
+      "kw_b": [
+        0.0,
+        0.0
+      ],
+      "kw_c": [
+        0.0,
+        0.0
+      ],
+      "reps": [
+        {
+          "in_raw": 383,
+          "in_comp": 316,
+          "out_b": 1000,
+          "out_c": 780,
+          "cost_b": 0.016149,
+          "cost_c": 0.012648,
+          "dcost": 0.0035010000000000006,
+          "llm_lat_b": 19916,
+          "llm_lat_c": 15861,
+          "slm_lat_c": 20013,
+          "net_latency_ms": 15958,
+          "jaccard": 0.20380434782608695,
+          "kw_b": null,
+          "kw_c": null,
+          "answer_b": "# Verrouillage pessimiste vs optimiste pour la réservation de créneaux\n\n## TL;DR\n\n**Commencez par le verrouillage pessimiste sur la ligne créneau**, puis introduisez de l'optimiste là où la contention est statistiquement faible. Voici pourquoi, et comment articuler les deux.\n\n---\n\n## 1. Analyser d'abord la nature de la contention\n\nAvant de choisir, posez la bonne question : **combien de requêtes concurrentes visent le même créneau au même instant ?**\n\n```\nScénario A — créneau populaire (cours de yoga 9h lundi)\n  10 utilisateurs cliquent \"réserver\" dans la même seconde\n  → contention HAUTE → pessimiste gagne\n\nScénario B — créneau quelconque (salle B, jeudi 14h)\n  1 utilisateur toutes les 30 secondes\n  → contention BASSE → optimiste gagne\n```\n\nLe problème : **vous ne savez pas à l'avance quel créneau sera populaire**, et un créneau peut passer de B à A en quelques secondes lors d'un pic. C'est ce qui rend le choix non trivial.\n\n---\n\n## 2. Verrouillage pessimiste : mécanique et coûts réels\n\n### Ce que ça fait concrètement (PostgreSQL)\n\n```sql\n-- Transaction de réservation\nBEGIN;\n\n-- 1. Verrouillage exclusif sur la ligne créneau\n--    Les autres transactions attendent ici\nSELECT id, status, capacity, booked_count\nFROM   slots\nWHERE  id = $slot_id\nFOR UPDATE;           -- verrou exclusif\n-- ou FOR UPDATE NOWAIT  → échoue immédiatement si verrouillé\n-- ou FOR UPDATE SKIP LOCKED → ignore les lignes verrouillées (file de travail)\n\n-- 2. Vérification métier dans la transaction\n-- (le résultat est garanti cohérent car personne d'autre ne peut modifier)\n-- capacity = 1 (créneau unique) → status doit être 'available'\n\n-- 3. Écriture atomique\nINSERT INTO bookings (slot_id, user_id, status, created_at)\nVALUES ($slot_id, $user_id, 'confirmed', NOW());\n\nUPDATE slots SET status = 'booked' WHERE id = $slot_id;\n\n-- 4. (Paiement, notifications → hors transaction ou saga)\n\nCOMMIT;\n```\n\n### Avantages\n\n- **Zéro retry applicatif** : un seul gagnant entre dans la section critique\n- **Logique métier simple** : pas de gestion de version, pas de boucle\n- **Prévisible** : le temps de réponse est borné par la durée de la transaction critique, pas par N retries\n\n### Coûts et pièges\n\n```\nPiège 1 — Deadlock\n  T1 verrouille slot_A puis veut slot_B\n  T2 verrouille slot_B puis veut slot_A\n  → PostgreSQL détecte et tue l'une des deux\n\n  Mitigation : toujours acquérir les verrous dans le même ordre\n               ORDER BY slot_id ASC dans les requêtes multi-créneaux\n\nPiège 2 — Transaction longue\n  Si vous appelez le PSP (Stripe, etc.) DANS la transaction\n  → verrou tenu pendant 2-5 secondes → contention explosive\n\n  Mitigation : sortir le paiement de la transaction (saga, voir §5)\n\nPiège 3 — Lock wait timeout\n  Avec FOR UPDATE (sans NOWAIT), un utilisateur attend indéfiniment\n  → fixer lock_timeout = '2s' au niveau session\n\n  SET LOCAL lock_timeout = '2000ms';\n```\n\n---\n\n## 3. Verrouillage optimiste : mécanique et coûts réels\n\n### Ce que ça fait concrètement\n\n```",
+          "answer_c": "## Verrouillage pessimiste vs optimiste pour la réservation de créneaux\n\n### Réponse directe : **Pessimiste**, dans ce cas précis\n\nSous **forte concurrence sur un créneau unique** (ex: le dernier slot du lundi matin), le verrouillage optimiste devient contre-productif :\n\n- Le taux de collision est élevé → beaucoup de retries → latence perçue dégradée\n- L'optimiste brille quand les conflits sont **rares** ; ici c'est l'inverse\n\n```sql\n-- Pessimiste : SELECT FOR UPDATE\nBEGIN;\nSELECT * FROM slots WHERE slot_id = $1 AND status = 'available' FOR UPDATE;\n-- Si disponible, on réserve ; sinon on rollback immédiatement\nUPDATE slots SET status = 'booked', user_id = $2 WHERE slot_id = $1;\nCOMMIT;\n```\n\nLe verrou est court (µs à ms), le risque de deadlock est faible sur un seul enregistrement.\n\n---\n\n## Cache en mémoire vs Vue matérialisée\n\n| Critère | Cache + invalidation | Vue matérialisée |\n|---|---|---|\n| Cohérence | Forte (invalidation immédiate) | Éventuellement cohérente |\n| Complexité | Faible | Moyenne |\n| Pics de trafic | **Risque de cache stampede** | Stable |\n| Cas d'usage | Données peu modifiées | Agrégats lourds |\n\n**Recommandation** : Cache Redis avec **invalidation à l'écriture** suffit si vous gérez le stampede (mutex/lock sur le recalcul, ou probabilistic early expiration). La vue matérialisée n'est utile que pour des **agrégats complexes** (ex: calendrier mensuel de disponibilités calculé sur des milliers de slots).\n\n```python\n# Anti-stampede : lock Redis sur le recalcul\nif not cache.get(key):\n    with redis.lock(f\"rebuild:{key}\", timeout=2):\n        if not cache.get(key):  # double-check\n            data = db.query(...)\n            cache.set(key, data, ttl=30)\n```\n\n---\n\n## Métriques d'observabilité prioritaires\n\n**Détecter la dégradation avant les utilisateurs :**\n\n1. **p99 latence** sur `/availability` et `/book` — plus parlant que la moyenne\n2. **Taux de retry/rollback** sur les transactions de réservation → signal de contention\n3. **Cache hit ratio** — une chute brutale = stampede ou invalidation excessive\n4. **Queue depth** sur les workers si async — signe de saturation en amont des pics\n5. **Lock wait time** PostgreSQL (`pg_stat_activity` + `pg_locks`) — détecte la contention avant timeout\n\n> **Règle pratique** : alerter sur le p99 > 500ms et le taux d'erreur 5xx > 0,5% avec une fenêtre glissante de 2 minutes — suffisamment court pour anticiper un pic lundi matin.",
+          "failed_c": [
+            "analyzer"
+          ]
+        },
+        {
+          "in_raw": 383,
+          "in_comp": 316,
+          "out_b": 1000,
+          "out_c": 745,
+          "cost_b": 0.016149,
+          "cost_c": 0.012123,
+          "dcost": 0.004026,
+          "llm_lat_b": 19397,
+          "llm_lat_c": 15734,
+          "slm_lat_c": 20015,
+          "net_latency_ms": 16352,
+          "jaccard": 0.20795107033639143,
+          "kw_b": null,
+          "kw_c": null,
+          "answer_b": "# Verrouillage pessimiste vs optimiste pour la réservation de créneaux\n\n## Réponse directe : **ça dépend du taux de collision réel**, mais voici comment trancher\n\n---\n\n## 1. Modéliser le problème avant de choisir\n\nAvant toute décision, posez-vous cette question fondamentale :\n\n> **Combien de requêtes simultanées ciblent le même créneau au même instant ?**\n\n```\nTaux de collision = (requêtes concurrentes sur un créneau) / (créneaux disponibles)\n\nExemple lundi matin :\n- 500 requêtes/minute\n- 200 créneaux disponibles\n→ collision ≈ 2,5 req/créneau/minute → FAIBLE\n→ Optimiste gagne\n\nContre-exemple (flash sale, créneau unique très demandé) :\n- 500 requêtes/minute\n- 1 seul créneau \"star\"\n→ collision = 500 req/créneau/minute → FORTE\n→ Pessimiste ou file FIFO gagne\n```\n\n---\n\n## 2. Verrouillage pessimiste — analyse complète\n\n### Mécanique\n\n```sql\nBEGIN;\n\n-- Verrouille la ligne jusqu'au COMMIT, bloque les autres transactions\nSELECT id, status, version\nFROM slots\nWHERE id = $slot_id\n  AND status = 'available'\nFOR UPDATE;           -- verrou exclusif niveau ligne\n\n-- Si la ligne existe et est disponible :\nUPDATE slots SET status = 'booked', booked_by = $user_id\nWHERE id = $slot_id;\n\nINSERT INTO bookings (slot_id, user_id, created_at)\nVALUES ($slot_id, $user_id, NOW());\n\nCOMMIT;\n```\n\n### Forces\n\n| Avantage | Détail |\n|---|---|\n| **Zéro retry applicatif** | Le second arrivant attend, puis lit l'état réel |\n| **Logique simple** | Pas de gestion d'exception de version |\n| **Idéal créneaux rares** | Quand la contention est structurellement forte |\n\n### Faiblesses critiques\n\n```\nThread A  ──[LOCK slot_42]──────────────────[paiement 800ms]──[COMMIT]──▶\nThread B  ──────────────────[attend...]──────────────────────[voit: booked]──▶\nThread C  ──────────────────[attend...]──────────────────────[voit: booked]──▶\n\nProblème : si le paiement est DANS la transaction,\ntous les threads B, C, D... bloquent pendant 800ms+\n→ connexions DB épuisées sous charge\n→ cascade de timeouts\n```\n\n**Règle absolue si pessimiste** : ne jamais inclure un appel réseau externe (paiement, notif) dans la transaction verrouillée.\n\n---\n\n## 3. Verrouillage optimiste — analyse complète\n\n### Mécanique\n\n```sql\n-- Lecture sans verrou\nSELECT id, status, version\nFROM slots\nWHERE id = $slot_id;\n-- → retourne version = 7, status = 'available'\n\n-- Tentative d'écriture conditionnelle\nUPDATE slots\nSET    status  = 'booked',\n       booked_by = $user_id,\n       version = version + 1\nWHERE  id      = $slot_id\n  AND  status  = 'available'\n  AND  version = 7;          -- ← la condition clé\n\n-- rows_affected = 1 → succès, on continue\n-- rows_affected = 0 → collision, on retry (ou on abandonne)\n```\n\n### Gestion du retry côté application\n\n```python\nMAX_RETRIES = 3\nBACKOFF_BASE_MS = 50\n\ndef reserve_slot(slot_id: int, user_id: int) -> Booking:\n    for attempt in range(MAX_RETRIES):",
+          "answer_c": "## Verrouillage pessimiste vs optimiste pour la réservation de créneau\n\n### Réponse directe : **Pessimiste**\n\nPour un créneau **unique** sous **forte concurrence**, le verrouillage pessimiste est le bon choix.\n\n**Pourquoi :**\n\n```sql\n-- Pessimiste : SELECT FOR UPDATE\nBEGIN;\nSELECT * FROM slots WHERE id = $1 AND status = 'available' FOR UPDATE;\n-- Le slot est verrouillé, les autres transactions attendent\nUPDATE slots SET status = 'booked', user_id = $2 WHERE id = $1;\nCOMMIT;\n```\n\n- La contention est **réelle** (plusieurs users visent le même slot) → les conflits ne sont pas rares\n- Avec l'optimiste, tu aurais des **rollbacks en cascade** sous pic, ce qui aggrave la charge au pire moment\n- Le `FOR UPDATE` tient quelques ms → le coût du verrou est négligeable vs le coût des retries\n\n**L'optimiste serait préférable si** les conflits étaient rares (ex: réservation de ressources différentes la plupart du temps).\n\n---\n\n## Cache mémoire vs Vue matérialisée pour les disponibilités\n\n**Cache en mémoire avec invalidation à l'écriture** suffit **si** :\n- Ton cache est **partagé** (Redis, pas in-process) → sinon invalidation incohérente sur plusieurs instances\n- Le ratio lecture/écriture est élevé (typiquement vrai sauf pendant les pics de réservation)\n\n**Vue matérialisée périodique** si :\n- Les écritures sont très fréquentes et groupées (le rafraîchissement toutes les 5-10s évite le cache stampede)\n- Tu veux une **vue agrégée** (nb de slots dispo par jour) plutôt que slot par slot\n\n**Recommandation pragmatique :**\n```\nRedis (TTL court ~5s) + invalidation à l'écriture\n         +\nVue matérialisée pour les écrans de calendrier/agrégats\n```\n\n---\n\n## Métriques d'observabilité prioritaires\n\n| Métrique | Seuil d'alerte | Pourquoi |\n|---|---|---|\n| **Taux de conflits / retries** sur les réservations | > 5% | Détecte la contention avant timeout |\n| **Latence p99** des endpoints `/slots` et `/book` | > 500ms | Ressenti utilisateur |\n| **Cache hit rate** | < 80% | Indique un storm de lectures DB |\n| **Lock wait time** (pg `lock_timeout`) | > 200ms | Contention DB naissante |\n| **Queue depth** si async | croissance continue | Saturation en amont |\n\n> **Astuce** : alerter sur la **dérivée** (taux de dégradation) plutôt que sur le seuil absolu pour anticiper de 2-3 minutes.",
+          "failed_c": [
+            "analyzer"
+          ]
+        },
+        {
+          "in_raw": 383,
+          "in_comp": 316,
+          "out_b": 1000,
+          "out_c": 841,
+          "cost_b": 0.016149,
+          "cost_c": 0.013562999999999999,
+          "dcost": 0.0025860000000000015,
+          "llm_lat_b": 19017,
+          "llm_lat_c": 18929,
+          "slm_lat_c": 20009,
+          "net_latency_ms": 19921,
+          "jaccard": 0.20055710306406685,
+          "kw_b": null,
+          "kw_c": null,
+          "answer_b": "# Verrouillage pessimiste vs optimiste pour la réservation de créneaux\n\n## TL;DR\n\n**Choisissez le verrouillage pessimiste (`SELECT FOR UPDATE`) pour ce cas précis**, mais la réponse mérite une démonstration chiffrée et une architecture complète, car les deux approches ont des domaines de validité distincts.\n\n---\n\n## 1. Analyse du problème concret\n\n### Ce qui se passe sans protection\n\n```\nT=0ms  Utilisateur A lit le créneau #42 → statut: DISPONIBLE\nT=0ms  Utilisateur B lit le créneau #42 → statut: DISPONIBLE\nT=10ms Utilisateur A réserve → UPDATE slots SET status='BOOKED' WHERE id=42\nT=12ms Utilisateur B réserve → UPDATE slots SET status='BOOKED' WHERE id=42\n       ↑ Double réservation silencieuse\n```\n\nLe problème n'est pas théorique : c'est une **race condition classique read-modify-write**.\n\n---\n\n## 2. Verrouillage optimiste — quand ça marche, et pourquoi ça casse ici\n\n### Mécanique\n\n```sql\n-- Lecture avec version\nSELECT id, status, version FROM slots WHERE id = 42;\n-- → version = 7\n\n-- Écriture conditionnelle\nUPDATE slots\nSET    status = 'BOOKED', version = 8\nWHERE  id = 42\n  AND  version = 7   -- ← garde-fou\n  AND  status  = 'DISPONIBLE';\n\n-- Si rows_affected = 0 → conflit → retry applicatif\n```\n\n### Le problème sous forte concurrence sur un créneau unique\n\n```\nConcurrence : 50 utilisateurs veulent le même créneau au même moment\n              (scenario réaliste lundi 9h00 pour un cours de sport populaire)\n\nRésultat optimiste :\n  - 1 transaction réussit\n  - 49 transactions échouent → retry\n  - Les 49 retries arrivent → 1 réussit, 48 échouent → retry\n  - ...\n  → Avalanche de retries, latence explosive, CPU saturé\n  → Thundering herd sur un point chaud unique\n```\n\n**L'optimiste est excellent quand les conflits sont rares.** Sur un créneau unique très demandé, les conflits sont la règle, pas l'exception.\n\n---\n\n## 3. Verrouillage pessimiste — implémentation correcte\n\n### Transaction complète\n\n```sql\nBEGIN;\n\n-- Verrouille exactement la ligne du créneau, pas la table\n-- NOWAIT : échoue immédiatement si déjà verrouillé (pas de file d'attente infinie)\nSELECT id, status, resource_id, starts_at, ends_at\nFROM   slots\nWHERE  id = $1\nFOR UPDATE NOWAIT;          -- ← clé de l'approche\n\n-- Vérification métier DANS la transaction\n-- (le statut peut avoir changé entre la lecture applicative et ici)\nDO $$\nBEGIN\n  IF (SELECT status FROM slots WHERE id = $1) != 'AVAILABLE' THEN\n    RAISE EXCEPTION 'SLOT_UNAVAILABLE';\n  END IF;\nEND $$;\n\n-- Création de la réservation\nINSERT INTO bookings (slot_id, user_id, status, created_at)\nVALUES ($1, $2, 'CONFIRMED', NOW())\nRETURNING id;\n\n-- Mise à jour du créneau\nUPDATE slots\nSET    status = 'BOOKED', booked_by = $2, booked_at = NOW()\nWHERE  id = $1;\n\nCOMMIT;\n-- Le verrou est libéré ici, immédiatement\n```\n\n### Pourquoi `NOWAIT` plutôt que l'attente par défaut\n\n```\nSans NOWAIT :                    Avec NOWAIT :\n  T=0   A prend le verrou          T=0   A prend le",
+          "answer_c": "## Verrouillage pour réservation de créneau sous forte concurrence\n\n**→ Verrouillage pessimiste (SELECT FOR UPDATE)**\n\n### Pourquoi pessimiste ici ?\n\nPour un créneau **unique et indivisible**, le verrouillage optimiste est contre-indiqué :\n\n- Sous forte concurrence, le taux de collision est élevé → **retry storms** : 10 utilisateurs tentent simultanément, 9 échouent et relancent, amplifiant la charge\n- Le rollback + retry a un coût réel (réseau, CPU, transactions avortées)\n- Le pessimiste sérialise proprement : le second attendant libère le lock en ~ms, **une seule tentative suffit**\n\n```sql\nBEGIN;\nSELECT id, statut FROM creneaux\nWHERE id = $1 AND statut = 'libre'\nFOR UPDATE NOWAIT;          -- échoue immédiatement si déjà locké\n                             -- évite l'attente infinie\n\nUPDATE creneaux SET statut = 'réservé', user_id = $2\nWHERE id = $1;\n\nINSERT INTO reservations (...) VALUES (...);\nCOMMIT;\n```\n\n> `NOWAIT` ou `SKIP LOCKED` selon le besoin : NOWAIT renvoie une erreur immédiate (UX claire), SKIP LOCKED pour des queues de traitement.\n\n---\n\n## Cache vs Vue matérialisée pour les disponibilités\n\n| Critère | Cache mémoire (Redis) + invalidation | Vue matérialisée périodique |\n|---|---|---|\n| Fraîcheur | Immédiate après écriture | Décalage (1–5 min) |\n| Complexité | Moyenne (invalidation ciblée) | Faible |\n| Pics de trafic | ✅ Absorbe très bien | ✅ Aussi |\n| Risque | Cache stampede au pic | Données périmées visibles |\n\n**Recommandation concrète :**\n- **Cache Redis avec invalidation à l'écriture** suffit si vous invalidez **par créneau/jour** (granularité fine)\n- Protégez le cache stampede avec un **mutex/lock de reconstruction** (pattern \"cache aside\" + Redlock)\n- La vue matérialisée est un complément utile pour les **pages de recherche large** (calendrier mensuel), pas pour la réservation elle-même\n\n---\n\n## Métriques d'observabilité prioritaires\n\n**Détection précoce, dans cet ordre :**\n\n1. **Taux de conflits de lock** (`deadlocks/s`, `lock wait time p99`) — premier signal d'une surcharge transactionnelle\n2. **Latence p95/p99 de l'endpoint de réservation** — seuil d'alerte à 500ms\n3. **Taux d'erreur 409/503** — conflits exposés aux utilisateurs\n4. **Cache hit ratio** (Redis) — chute → surcharge DB imminente\n5. **Queue depth** si vous avez une file d'attente de réservations\n6. **Connexions DB actives / pool saturation** — souvent le vrai goulot\n\n> Instrumentez avec un **histogram** sur la durée de transaction (pas juste la moyenne), et alertez sur p99 > seuil, pas sur la moyenne qui masque les pics.",
+          "failed_c": [
+            "analyzer"
+          ]
+        }
+      ]
+    }
+  ]
+}
