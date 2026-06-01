@@ -1,0 +1,32 @@
+# EFE — configuration gitleaks
+#
+# Étend les règles PAR DÉFAUT de gitleaks (`useDefault = true`) et ajoute une
+# allowlist pour des FAUX POSITIFS connus. AUCUN secret réel n'est allowlisté ici :
+#   - une fixture de clé de TEST throwaway (test unitaire OIDC) ;
+#   - du code qui contient des PATTERNS de secrets PAR NATURE (redacteur, parsing PEM).
+#
+# Découvert automatiquement par `gitleaks/gitleaks-action@v2` (CI) et le hook
+# `gitleaks` de pre-commit. `useDefault = true` PRÉSERVE toutes les règles de
+# détection standards — on ne fait qu'ajouter des exceptions ciblées.
+
+title = "EFE gitleaks"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Faux positifs connus : fixtures de test + code redaction/TLS (aucun secret réel)"
+paths = [
+  # Clé RSA-2048 de TEST throwaway (test unitaire OIDC, chargée par include_str!
+  # compile-time dans crates/efe-server/src/auth/oidc.rs). Ne signe rien en prod.
+  # Détail : crates/efe-server/src/auth/test_keys/README.md
+  '''crates/efe-server/src/auth/test_keys/.*''',
+
+  # Le module de redaction CONTIENT les patterns (sk-, AKIA, ghp_, …) qu'il masque
+  # — par nature il déclenche les détecteurs.
+  '''smoke/runner/src/redact\.rs''',
+
+  # Code TLS : littéraux « -----BEGIN … KEY----- » utilisés pour parser le PEM,
+  # pas une clé réelle embarquée.
+  '''crates/efe-meta-swarm-server/src/tls/.*\.rs''',
+]

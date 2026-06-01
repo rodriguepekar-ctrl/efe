@@ -87,6 +87,8 @@ docs/site/
 docs/_build/
 # Rapports générés : PDF binaires régénérables depuis le HTML source (qui, lui, est suivi)
 docs/*.pdf
+# PDF généré à la racine par generate_mvp_submodules_pdf.py (régénérable)
+/EFE_MVP_Sous_Modules.pdf
 
 # Logs
 *.log
