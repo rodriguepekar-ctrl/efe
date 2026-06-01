@@ -1,0 +1,90 @@
+# PR #15 — yamllint configuration.
+# Cf. docs/EFE_A1_PHASE2_PR15_ARCHITECTURE.md § 27.
+#
+# Scope : every YAML in the repo EXCEPT :
+#   - rendered helm template output (tests/golden/*.yaml — that's
+#     K8s-specific YAML, not author-written)
+#   - the Grafana dashboard JSON (which is valid JSON, not YAML)
+#
+# Locally :  yamllint -c .yamllint <path>
+# In CI :    pre-commit run yamllint --all-files (Job 02 / style)
+
+extends: default
+
+rules:
+  # 120 chars matches our Rust + Python convention.  120 is comfortable
+  # on a modern wide-screen ; tighter than the K8s convention but
+  # generous enough that Helm template lines almost never split.
+  line-length:
+    max: 120
+    level: warning              # warning, not error : Helm `command: |`
+                                # blocks legitimately exceed 120 in bash
+                                # one-liners.
+    allow-non-breakable-words: true
+    allow-non-breakable-inline-mappings: true
+
+  # 2-space indentation, K8s standard.
+  indentation:
+    spaces: 2
+    indent-sequences: consistent
+    check-multi-line-strings: false   # Helm template multi-line strings
+                                       # can mix indent levels legitimately
+
+  comments:
+    min-spaces-from-content: 1
+    require-starting-space: true
+  comments-indentation: enable
+
+  # Helm templates don't open with `---` ; they may have multiple
+  # documents but the first one doesn't need a leading separator.
+  document-start:
+    present: false
+
+  # Helm templates use `on:`, `yes:`, `no:` legitimately as keys in
+  # GitHub Actions / cron expressions ; don't lint them as truthy.
+  truthy:
+    allowed-values: ['true', 'false']
+    check-keys: false
+
+  # K8s manifests routinely declare keys in non-alphabetical order
+  # (apiVersion → kind → metadata → spec is THE convention).
+  key-ordering: disable
+
+  # YAML anchors / aliases are legitimate in chart-testing.yaml.
+  anchors: enable
+
+  # Trailing whitespace is caught by pre-commit-hooks' separate rule ;
+  # disable here to avoid double-reporting.
+  trailing-spaces: disable
+
+  # Empty lines between blocks : 1 max.  Helm templates use blank lines
+  # for readability, but more than 1 in a row is usually a bug.
+  empty-lines:
+    max: 1
+    max-start: 0
+    max-end: 1
+
+  # Inline braces / brackets : K8s sub-objects like `{cpu: 100m}` are
+  # used heavily ; allow them.
+  braces:
+    forbid: false
+    min-spaces-inside: 0
+    max-spaces-inside: 1
+  brackets:
+    forbid: false
+    min-spaces-inside: 0
+    max-spaces-inside: 1
+
+# Exclusions — see top-of-file rationale.
+ignore: |
+  charts/efe-stack/charts/efe-meta-swarm/files/*.json
+  charts/efe-stack/charts/efe-meta-swarm/tests/golden/*.yaml
+  charts/efe-stack/charts/efe-meta-swarm/tests/__snapshot__/
+  # Vendored upstream charts.
+  charts/efe-stack/charts/*/charts/
+  # Generated SDK clients.
+  sdks/*/generated/
+  # Node modules + Python venvs.
+  node_modules/
+  .venv/
+  venv/

@@ -1,0 +1,94 @@
+# PR #15 — Polaris severity-tier configuration.
+# Cf. docs/EFE_A1_PHASE2_PR15_ARCHITECTURE.md § 22.
+#
+# Severity tiers :
+#   danger  : blocks merge (Job 11 fails)
+#   warning : annotates the PR, does NOT block
+#   ignore  : tracked as a metric, no PR signal
+#
+# AD14 — tier choices match CIS K8s benchmark v1.8 hot-spots.
+# Adjustments to tiers require an SRE+sec review + a doc update here.
+#
+# Locally : polaris audit --audit-path <rendered.yaml> --config polaris.yaml
+# In CI :   Job 11 / Polaris (severity-tiered)
+
+# ─── Security checks ────────────────────────────────────────────────
+checks:
+  # Privilege / capabilities — these are non-negotiable for our chart.
+  runAsRootAllowed:                     danger
+  runAsPrivileged:                      danger
+  notReadOnlyRootFilesystem:            danger
+  privilegeEscalationAllowed:           danger
+  dangerousCapabilities:                danger
+  insecureCapabilities:                 danger
+  # Add-on : we drop ALL capabilities (per common*ContainerSecurityContext).
+  # If a future template forgets to drop, this fires.
+  hostIPCSet:                           danger
+  hostPIDSet:                           danger
+  hostNetworkSet:                       danger
+  hostPortSet:                          danger
+  # Lifecycle / probes.
+  readinessProbeMissing:                danger
+  livenessProbeMissing:                 danger
+  # Image pinning — :latest is forbidden by AD17 (PR #13).
+  tagNotSpecified:                      danger
+  pullPolicyNotAlways:                  warning      # IfNotPresent is fine
+                                                      # for pinned tags ; we
+                                                      # use IfNotPresent.
+
+  # Resource hygiene.
+  cpuRequestsMissing:                   warning
+  cpuLimitsMissing:                     warning
+  memoryRequestsMissing:                warning
+  memoryLimitsMissing:                  warning
+
+  # Networking.
+  hostAliasesSet:                       warning
+
+  # Newer Polaris checks we want to track but not gate on yet :
+  missingNetworkPolicy:                 ignore       # we have NetworkPolicy
+                                                      # under a values gate
+                                                      # (networkPolicy.enabled),
+                                                      # so the absence in
+                                                      # "default" scenario is
+                                                      # legitimate.
+  missingPodDisruptionBudget:           ignore       # PDB is gated by values
+
+# ─── Exemptions ─────────────────────────────────────────────────────
+# Per-resource / per-container overrides.  Format :
+#   exemptions:
+#     - controllerNames:                 # name regex (anchor-less)
+#         - "^my-deploy$"
+#       rules:
+#         - cpuLimitsMissing
+#
+# Use sparingly ; every exemption is reviewed by SRE.
+exemptions:
+  # The helm-test connection-test Pod is short-lived and probes a
+  # service ; it doesn't need its own livenessProbe.  And it CAN run
+  # without readinessProbe because it's a Pod (not a Service backend).
+  - controllerNames:
+      - "^.+-efe-meta-swarm-test-connection$"
+    rules:
+      - readinessProbeMissing
+      - livenessProbeMissing
+      - cpuLimitsMissing       # very low-budget test Pod
+      - memoryLimitsMissing
+
+  # Hook Jobs are pre/post-upgrade ; they don't have liveness/readiness.
+  - controllerNames:
+      - "^.+-efe-meta-swarm-hook-pre-upgrade-snapshot$"
+      - "^.+-efe-meta-swarm-hook-post-upgrade-sighup$"
+    rules:
+      - readinessProbeMissing
+      - livenessProbeMissing
+
+  # Bundle sidecar (Phase-2 pause:3.9 placeholder).  PR #15+ swaps the
+  # image for the real polling binary which WILL have probes.
+  - controllerNames:
+      - "^.+-efe-meta-swarm-participant-.+$"
+    containerNames:
+      - "bundle-loader"
+    rules:
+      - readinessProbeMissing
+      - livenessProbeMissing

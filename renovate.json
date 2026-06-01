@@ -1,0 +1,145 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:base",
+    ":dependencyDashboard",
+    ":semanticCommits",
+    "group:allNonMajor"
+  ],
+
+  "_comment_": "PR #15 — Renovate config for the helm-meta-swarm-lint workflow tool versions + the helm-meta-swarm chart bumps.  Cf. docs/EFE_A1_PHASE2_PR15_ARCHITECTURE.md § 29.",
+
+  "labels": ["dependencies", "renovate"],
+  "reviewers": ["team:efe-platform-sre"],
+  "schedule": ["before 4am on monday"],
+  "timezone": "Europe/Paris",
+  "rangeStrategy": "pin",
+  "packageRules": [
+    {
+      "_comment_": "PR #15 — helm-meta-swarm-lint workflow tool versions.  Manual review on bump (no automerge) ; flows through the lint workflow itself for self-validation.",
+      "matchManagers": ["github-actions", "regex"],
+      "matchFileNames": [
+        ".github/workflows/helm-meta-swarm-lint.yml"
+      ],
+      "groupName": "helm-meta-swarm-lint tool versions",
+      "automerge": false,
+      "reviewers": ["team:efe-platform-sre", "team:efe-security"]
+    },
+    {
+      "_comment_": "PR #14 — helm-meta-swarm integration workflow tool versions.",
+      "matchManagers": ["github-actions", "regex"],
+      "matchFileNames": [
+        ".github/workflows/helm-meta-swarm.yml"
+      ],
+      "groupName": "helm-meta-swarm integration tool versions",
+      "automerge": false
+    },
+    {
+      "matchPackagePatterns": ["^aquasecurity/trivy-action$", "^helm/chart-testing-action$", "^github/codeql-action$"],
+      "groupName": "github actions — lint suite",
+      "automerge": false
+    },
+    {
+      "_comment_": "Helm sub-chart appVersion bumps : never automerge, always require operator review.",
+      "matchFileNames": ["charts/efe-stack/charts/efe-meta-swarm/Chart.yaml"],
+      "automerge": false,
+      "reviewers": ["team:efe-platform-sre"]
+    }
+  ],
+
+  "regexManagers": [
+    {
+      "_comment_": "Track every `*_VERSION: \"...\"` env-var in the helm-meta-swarm-lint.yml workflow.  Renovate matches the pattern and looks up the latest GitHub release of the corresponding tool.",
+      "fileMatch": [".github/workflows/helm-meta-swarm-lint.yml"],
+      "matchStrings": [
+        "HELM_VERSION:\\s+\"(?<currentValue>v[0-9.]+)\""
+      ],
+      "depNameTemplate": "helm/helm",
+      "datasourceTemplate": "github-releases",
+      "extractVersionTemplate": "^(?<version>v[0-9.]+)$"
+    },
+    {
+      "fileMatch": [".github/workflows/helm-meta-swarm-lint.yml"],
+      "matchStrings": [
+        "KUBECONFORM_VERSION:\\s+\"(?<currentValue>v[0-9.]+)\""
+      ],
+      "depNameTemplate": "yannh/kubeconform",
+      "datasourceTemplate": "github-releases"
+    },
+    {
+      "fileMatch": [".github/workflows/helm-meta-swarm-lint.yml"],
+      "matchStrings": [
+        "CHART_TESTING_VER:\\s+\"(?<currentValue>v[0-9.]+)\""
+      ],
+      "depNameTemplate": "helm/chart-testing",
+      "datasourceTemplate": "github-releases"
+    },
+    {
+      "fileMatch": [".github/workflows/helm-meta-swarm-lint.yml"],
+      "matchStrings": [
+        "CONFTEST_VERSION:\\s+\"(?<currentValue>v[0-9.]+)\""
+      ],
+      "depNameTemplate": "open-policy-agent/conftest",
+      "datasourceTemplate": "github-releases"
+    },
+    {
+      "fileMatch": [".github/workflows/helm-meta-swarm-lint.yml"],
+      "matchStrings": [
+        "TRIVY_VERSION:\\s+\"(?<currentValue>v[0-9.]+)\""
+      ],
+      "depNameTemplate": "aquasecurity/trivy",
+      "datasourceTemplate": "github-releases"
+    },
+    {
+      "fileMatch": [".github/workflows/helm-meta-swarm-lint.yml"],
+      "matchStrings": [
+        "CHECKOV_VERSION:\\s+\"(?<currentValue>[0-9.]+)\""
+      ],
+      "depNameTemplate": "checkov",
+      "datasourceTemplate": "pypi"
+    },
+    {
+      "fileMatch": [".github/workflows/helm-meta-swarm-lint.yml"],
+      "matchStrings": [
+        "POLARIS_VERSION:\\s+\"(?<currentValue>[0-9.]+)\""
+      ],
+      "depNameTemplate": "FairwindsOps/polaris",
+      "datasourceTemplate": "github-releases",
+      "extractVersionTemplate": "^(?<version>[0-9.]+)$"
+    },
+    {
+      "fileMatch": [".github/workflows/helm-meta-swarm-lint.yml"],
+      "matchStrings": [
+        "HELM_DOCS_VERSION:\\s+\"(?<currentValue>v[0-9.]+)\""
+      ],
+      "depNameTemplate": "norwoodj/helm-docs",
+      "datasourceTemplate": "github-releases"
+    },
+    {
+      "fileMatch": [".github/workflows/helm-meta-swarm-lint.yml"],
+      "matchStrings": [
+        "AH_VERSION:\\s+\"(?<currentValue>v[0-9.]+)\""
+      ],
+      "depNameTemplate": "artifacthub/hub",
+      "datasourceTemplate": "github-releases"
+    },
+    {
+      "fileMatch": [".github/workflows/helm-meta-swarm-lint.yml"],
+      "matchStrings": [
+        "SYFT_VERSION:\\s+\"(?<currentValue>v[0-9.]+)\""
+      ],
+      "depNameTemplate": "anchore/syft",
+      "datasourceTemplate": "github-releases"
+    },
+    {
+      "fileMatch": [".github/workflows/helm-meta-swarm-lint.yml"],
+      "matchStrings": [
+        "AJV_VERSION:\\s+\"(?<currentValue>[0-9.]+)\""
+      ],
+      "depNameTemplate": "ajv-cli",
+      "datasourceTemplate": "npm"
+    }
+  ],
+
+  "ignoreDeps": []
+}

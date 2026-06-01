@@ -1,0 +1,33 @@
+# PR #15 — Trivy IaC scan false-positive allowlist.
+# Cf. docs/EFE_A1_PHASE2_PR15_ARCHITECTURE.md § 20.
+#
+# Format : one finding ID per line.  Comment block above each entry
+# documents (a) the finding, (b) why it's a false-positive or accepted
+# risk, (c) who signed-off, (d) review date.
+#
+# Renovate-tracked : every line MUST be reviewed at the next quarterly
+# SRE+sec audit.  Entries older than 6 months without a review date
+# update are auto-removed by `make trivyignore-prune`.
+
+# ─── KSV017 — Privileged container ──────────────────────────────────
+# Not present in our chart.  Listed here pre-emptively so a future
+# false-positive (Polaris vs Trivy disagree) doesn't break CI.
+# Reviewer : sre + sec
+# Last review : 2026-05-14
+# Re-review by : 2026-11-14
+# (commented out — only uncomment when actually needed)
+# AVD-KSV-0017
+
+# ─── KSV014 — Root filesystem write access ──────────────────────────
+# We DELIBERATELY set readOnlyRootFilesystem: true (PR #13 AD8).  Trivy
+# sometimes flags helm-hooks Jobs that mount emptyDir at /tmp as
+# "potentially writable" — but emptyDir-Memory at /tmp is the SUPPORTED
+# pattern (see PR #14 audit pass C1).  Polaris is happy ; Trivy is
+# noisy.  This is a known Trivy quirk for emptyDir-Memory mounts.
+# Reviewer : sre
+# Last review : 2026-05-14
+# Re-review by : 2026-11-14
+# AVD-KSV-0014:charts/efe-stack/charts/efe-meta-swarm/templates/hooks/pre-upgrade-snapshot.yaml
+
+# ─── KSV121 — hostAliases ──────────────────────────────────────────
+# (placeholder — no current entry)

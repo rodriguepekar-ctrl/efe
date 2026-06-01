@@ -1,0 +1,14 @@
+# Sprint D24 (Φ-B) — pnpm monorepo workspaces.
+#
+# Cf. docs/EFE_TYPESCRIPT_SDK_EXTENSION_ARCHITECTURE.md §6.5.
+#
+# Adding the @efe/sdk + its 3 framework example sub-packages here so
+# `pnpm install` from the repo root resolves the local workspace
+# references (e.g. examples/react/package.json `@efe/sdk: workspace:*`)
+# without publishing.
+
+packages:
+  - 'clients/typescript/@efe/sdk'
+  - 'clients/typescript/@efe/sdk/examples/*'
+  # Sprint GLOSS-C — Next.js 14 portal admin.
+  - 'apps/portal-admin'

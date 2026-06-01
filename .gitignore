@@ -35,6 +35,20 @@ htmlcov/
 .venv-efe/
 .python-version
 
+# Node / TypeScript (Phase 0 — ≥6 sous-systèmes : portal, apps/portal-admin,
+# preview-lab, clients/typescript, deploy/sdks/typescript, sdk/*/runners/ts).
+# Mesuré : ~24k fichiers untracked = artefacts régénérables (node_modules + .next).
+# Réinstallables depuis package.json / lockfile → JAMAIS suivis.
+node_modules/
+.next/
+.turbo/
+.vercel/
+*.tsbuildinfo
+.eslintcache
+.npm/
+.pnpm-store/
+# (build/ · dist/ · coverage/ · .env.local déjà couverts plus haut/bas)
+
 # CUDA / CMake
 build/
 build-release/

@@ -1,0 +1,130 @@
+default_language_version:
+  python: python3.12
+
+default_stages: [pre-commit]
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: trailing-whitespace
+        exclude: '\.md$'
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-toml
+      - id: check-json
+      - id: check-added-large-files
+        args: ['--maxkb=500']
+      - id: check-merge-conflict
+      - id: detect-private-key
+      - id: mixed-line-ending
+        args: ['--fix=lf']
+
+  - repo: https://github.com/doublify/pre-commit-rust
+    rev: v1.0
+    hooks:
+      - id: fmt
+      - id: clippy
+        args: ['--workspace', '--', '-D', 'warnings']
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.5.0
+    hooks:
+      - id: ruff
+        args: [--fix, --exit-non-zero-on-fix]
+      - id: ruff-format
+
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.10.0
+    hooks:
+      - id: mypy
+        additional_dependencies: [types-all]
+        args: ['--config-file=mypy.ini']
+        files: ^python/efe/
+
+  - repo: https://github.com/tamasfe/taplo-pre-commit
+    rev: 0.9.3
+    hooks:
+      - id: taplo-format
+      - id: taplo-lint
+
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.18.4
+    hooks:
+      - id: gitleaks
+
+  # ─── PR #15 : helm-meta-swarm-lint hooks ──────────────────────────
+  # Mirror Job 02 / Job 06 / Job 08 of helm-meta-swarm-lint.yml.
+  # Running these locally surfaces lint failures before CI.
+
+  - repo: https://github.com/adrienverge/yamllint
+    rev: v1.35.1
+    hooks:
+      - id: yamllint
+        args: ['-c=.yamllint', '--strict']
+        files: '\.(yml|yaml)$'
+
+  - repo: https://github.com/koalaman/shellcheck-precommit
+    rev: v0.10.0
+    hooks:
+      - id: shellcheck
+        args: ['-S', 'warning']
+        # Lint hand-written .sh files.  Helm hook scripts are extracted
+        # + linted separately by the `shellcheck-helm-hooks` local hook
+        # below.
+        files: '\.(sh|bash)$'
+
+  - repo: https://github.com/norwoodj/helm-docs
+    rev: v1.12.0
+    hooks:
+      - id: helm-docs
+        args:
+          - --chart-search-root=charts/efe-stack/charts/efe-meta-swarm
+          - --template-files=README.md.gotmpl
+          - --output-file=README.md
+        # Run when values.yaml, Chart.yaml, or README template changes.
+        files: 'charts/efe-stack/charts/efe-meta-swarm/(values\.yaml|Chart\.yaml|README\.md\.gotmpl)$'
+
+  - repo: local
+    hooks:
+      # Extract `command: ['sh', '-c', '<script>']` blocks from Helm
+      # hook templates and shellcheck them.  Catches bugs that can't
+      # be linted directly on the template (Helm directives interfere).
+      - id: shellcheck-helm-hooks
+        name: shellcheck on Helm hook scripts
+        language: script
+        entry: scripts/lint-helm-hook-scripts.sh
+        files: 'charts/efe-stack/charts/efe-meta-swarm/templates/hooks/.*\.yaml$'
+
+      # PR #15 Job 08 mirror : run the EFE Rego policies against the
+      # rendered chart.  Slow (~ 10s) ; only fires on chart changes.
+      - id: conftest-efe-policies
+        name: Conftest against EFE Rego policies
+        language: system
+        # PR #15 audit pass — `--all-namespaces` is REQUIRED so
+        # Conftest collects denies from every `package efe.<rule>`.
+        entry: bash -c '
+          set -euo pipefail ;
+          if ! command -v helm >/dev/null ||
+             ! command -v conftest >/dev/null ; then
+              echo "ℹ️  helm or conftest missing — skipping conftest hook" >&2 ;
+              exit 0 ;
+          fi ;
+          tmp=$(mktemp) ;
+          helm template tst charts/efe-stack/charts/efe-meta-swarm \
+              --namespace efe \
+              -f charts/efe-stack/charts/efe-meta-swarm/tests/scenarios/kovant-3p.values.yaml \
+              > "$tmp" ;
+          conftest test --all-namespaces \
+              --policy policies/rego/efe \
+              --data policies/rego/efe/data \
+              --no-color "$tmp" ;
+        '
+        files: '(charts/efe-stack/charts/efe-meta-swarm|policies/rego/efe)/'
+        pass_filenames: false
+
+      - id: conventional-commits
+        name: Conventional Commits check
+        entry: scripts/check-commit-msg.sh
+        language: script
+        stages: [commit-msg]

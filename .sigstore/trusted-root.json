@@ -1,0 +1,7 @@
+{
+  "_comment": "Pinned TUF trusted root for offline verification. Refresh quarterly via `cosign initialize` from the public Sigstore TUF repository. The full TUF root is several KB ; the production file should be fetched at release time from https://tuf-repo-cdn.sigstore.dev/root.json and replace this stub.",
+  "_pinned_at": "2026-05-09T00:00:00Z",
+  "_source": "https://tuf-repo-cdn.sigstore.dev/root.json",
+  "_action": "Run `cosign initialize --mirror https://tuf-repo-cdn.sigstore.dev --root <root-bytes>` to refresh.",
+  "_warning": "Do NOT use this stub in production. Replace at release prep time."
+}

@@ -1,0 +1,27 @@
+# Symlink-equivalent file pointing to the canonical policy.
+# Tenants/users can fetch this file as :
+#   curl -fsSL https://raw.githubusercontent.com/efe-ai/efe/main/.sigstore/policy.yaml
+# and apply it directly with `kubectl apply -f`.
+
+# This is a copy of tools/sigstore/cosign-policy.yaml ; the canonical
+# version lives under tools/ for source-of-truth, while this top-level
+# .sigstore/ directory is for ease-of-discovery by external consumers.
+
+apiVersion: policy.sigstore.dev/v1beta1
+kind: ClusterImagePolicy
+metadata:
+  name: efe-image-policy
+  annotations:
+    canonical: "tools/sigstore/cosign-policy.yaml"
+spec:
+  images:
+    - glob: "ghcr.io/efe-ai/**"
+  authorities:
+    - name: efe-release-pipeline
+      keyless:
+        url: https://fulcio.sigstore.dev
+        identities:
+          - issuer: https://token.actions.githubusercontent.com
+            subjectRegExp: "^https://github\\.com/efe-ai/efe/\\.github/workflows/release-v1-ga\\.yml@refs/tags/v[0-9]+\\.[0-9]+\\.[0-9]+(-[A-Za-z0-9.\\-]+)?$"
+      ctlog:
+        url: https://rekor.sigstore.dev

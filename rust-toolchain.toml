@@ -1,0 +1,11 @@
+[toolchain]
+# D93 — bumped from 1.85 → 1.88 because `time 0.3.47` (transitive via
+# `jsonwebtoken 9.3.1 → simple_asn1 0.6.4`) requires rustc ≥ 1.88.
+# Cannot downgrade `time` because `simple_asn1` locks `^0.3.47`.
+# Cannot replace `jsonwebtoken` (used for OIDC validation in efe-server).
+#
+# See `docs/docs/adr/ADR-D93-001-rustc-1.88-bump.md` for the full decision record.
+# Keep in sync with Cargo.toml `rust-version`.
+channel = "1.88"
+components = ["rustfmt", "clippy", "rust-src", "rust-analyzer"]
+profile = "default"

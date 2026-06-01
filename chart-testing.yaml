@@ -1,0 +1,51 @@
+# PR #15 — chart-testing (ct) configuration.
+# Cf. docs/EFE_A1_PHASE2_PR15_ARCHITECTURE.md § 15.
+#
+# `ct lint` is the gate for : chart structure, dependency check,
+# README presence, maintainer presence, semver bump on every PR.
+#
+# Locally :  ct lint --config chart-testing.yaml --target-branch main
+# In CI :    Job 04 / chart-testing
+
+# Scope the lint to the meta-swarm sub-chart.  The umbrella `efe-stack`
+# chart and its other sub-charts have their OWN lint workflow ; we
+# don't want cross-chart noise.
+chart-dirs:
+  - charts/efe-stack/charts
+
+# No external repos.  All sub-charts are vendored locally (cf.
+# `charts/efe-stack/Chart.yaml` `dependencies:` with empty `repository`).
+chart-repos: []
+
+# Target branch for diff-based detection.  ct uses this to decide
+# WHICH charts to lint : only those whose files changed.  When the
+# diff is empty (no chart files changed), ct exits 0 silently.
+target-branch: main
+
+# Charts whose Chart.yaml.version field MUST bump on every PR that
+# touches their files.  Enforced by `ct lint`.  This is the
+# AD11-mandated semver discipline.
+check-version-increment: true
+
+# Validate against the upstream Helm chart spec.  Catches typos like
+# `appVersion: 0.3.0` (missing quotes — must be a string).
+validate-chart-schema: true
+
+# Require Chart.yaml.maintainers to be non-empty.  Already enforced
+# in PR #13 ; this is defence-in-depth.
+validate-maintainers: true
+
+# Don't validate the README ; we use helm-docs for that (Job 06).
+# ct's README validation is overly strict (wants an `## Installing` section).
+validate-readme: false
+
+# Print debug-level output only when --debug is passed.
+debug: false
+
+# When `helm install` would be invoked (`ct install`), kindly use
+# kind-config.yaml.  We DO NOT run `ct install` in CI — too slow.
+# But operators running `ct install` locally can rely on this.
+kind-config: ""                   # operator-supplied at the CLI
+
+# Exclude these directories from the chart discovery sweep.
+excluded-charts: []

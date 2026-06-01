@@ -1,0 +1,19 @@
+line-length = 100
+target-version = "py312"
+extend-exclude = ["docs/", "build/", "dist/"]
+
+[lint]
+select = [
+    "E", "F", "W", "I", "N", "UP", "B", "A", "C4", "T20",
+    "RET", "SIM", "ARG", "PTH", "PL", "RUF",
+]
+ignore = ["PLR2004", "PLR0913"]
+
+[lint.per-file-ignores]
+"tests/**" = ["PLR2004", "S101", "ARG"]
+"**/__init__.py" = ["F401"]
+
+[format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "lf"

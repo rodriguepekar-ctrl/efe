@@ -1,0 +1,49 @@
+# Paths excluded from the docker build context.
+#
+# Keeps `docker build .` fast and reproducible: anything that changes
+# between two local invocations (editor swapfiles, target/, etc.)
+# would otherwise invalidate the cache of every FROM layer downstream.
+
+# Build outputs
+target/
+build/
+build-release/
+dist/
+*.o
+*.so
+*.dylib
+*.rlib
+
+# OS / editor noise
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Version control
+.git/
+.gitignore
+.github/
+
+# Docs & architecture that are not needed in the image
+*.pdf
+M*_ARCHITECTURE.md
+
+# CI & local envs
+.env
+.env.template
+.envrc
+.direnv/
+.cache/
+.pre-commit-config.yaml
+ci/
+
+# Python artifacts (uv-managed)
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/

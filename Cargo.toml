@@ -1,0 +1,267 @@
+[workspace]
+resolver = "2"
+members = [
+    # Phase 4 — Preview Lab : bridge HTTP/SSE devant efe-coordinator.
+    # Cf. docs/architecture/EFE_A1_PHASE4_PREVIEW_LAB_SSE_ARCHITECTURE.md.
+    "crates/efe-preview-server",
+    "crates/efe-core",
+    "crates/efe-kernels",
+    "crates/efe-ffi",
+    "crates/efe-server",
+    "crates/efe-telemetry",
+    # PR #20 — production-grade L2 meta-swarm load generator.
+    # See docs/EFE_A1_PHASE2_PR20_ARCHITECTURE.md.  Distinct from k6
+    # (deploy/load-tests/k6) which covers L1 SwarmService.  Operator
+    # utility under tools/ rather than crates/ (AD2).
+    "tools/loadgen",
+    # PR #21 — public-bench harness : reproducible cross-version
+    # benchmark + chaos orchestrator.  See
+    # docs/EFE_A1_PHASE2_PR21_ARCHITECTURE.md.  Top-level `bench/`
+    # cohabits with `bench_baselines/` (existing v0.x.y store).  The
+    # binary `efe-bench-harness` consumes `efe-meta-swarm-loadgen`
+    # (PR #20) as a library + chaos-mesh CRDs (PR #21 § 17).
+    "bench/harness",
+    # PR #23 § 10 — cluster-provisioner extracted from PR #21
+    # `bench/harness/src/cluster/` to be shared by smoke + bench.
+    # Trait surface frozen in STABILITY_CONTRACT v1.5 § 23.6.
+    "crates/efe-cluster-provisioner",
+    # PR #23 — 9 smoke checks (every-PR merge gate).
+    # Frozen contracts in STABILITY_CONTRACT v1.5 § 23.  See
+    # docs/EFE_A1_PHASE2_PR23_ARCHITECTURE.md.
+    "smoke/runner",
+    # PR #22 — 4 SLOs + multi-tier rollup compute pipeline.
+    # `efe-slo-rollup` crate at `slos/rollup/`.  Frozen contracts in
+    # STABILITY_CONTRACT v1.4 § 22.  See
+    # docs/EFE_A1_PHASE2_PR22_ARCHITECTURE.md.  Consumes : PR #17
+    # metrics (Prom source) ; PR #19 recording rules + dashboards ;
+    # PR #20 loadgen (feature-gated `slo-source`) ; PR #21 bench
+    # baseline JSONs (read-only sidecar SLI cells).
+    "slos/rollup",
+    # Sprint D17 — Backup + Disaster Recovery orchestrator + CLI.
+    # Cf. `docs/bench/d17_backup_dr_architecture.md`.
+    "crates/efe-backup",
+    # Sprint D18 — Multi-réplica + bench D12 ; bench harness crate.
+    # Cf. `docs/bench/d18_multi_replica_bench_d12_architecture.md`.
+    "crates/efe-bench",
+    # Sprint M21 — Mode-2 LLM-routed anchors :
+    # `efe-prompts` = versioned prompt templates + A/B test framework.
+    # `efe-llm-router` = microservice abstraction multi-provider +
+    #   cost governance + caching + circuit breaker.
+    # Cf. `docs/EFE_M21_MODE2_LLM_ROUTED_ANCHORS_ARCHITECTURE.md`.
+    "crates/efe-prompts",
+    "crates/efe-llm-router",
+    # Sprint GLOSS Sprint A (D8) — efe-admin CLI for tenant onboarding
+    # self-service. Statically-compiled Rust binary; calls mcp-server
+    # m23_* tools. Cf. `docs/EFE_GO_LIVE_ONBOARDING_ARCHITECTURE.md`.
+    "crates/efe-admin",
+    # Sprint Φ-D-LATACT D93 — Saga orchestrator (distributed transaction
+    # state machine) for P2 self-service tenant deploy + GDPR delete cascade.
+    # Cf. `docs/EFE_P1_LATENCE_P2_ACTIVATION_COMPLETION_ARCHITECTURE.md` § 9.
+    "crates/efe-saga",
+    # Sprint M23 — LLM-assisted taxonomy curation (5 mcp tools, canary
+    # rollout engine, HMAC audit chain extension).
+    # Cf. `docs/EFE_M23_TAXONOMY_CURATION_ARCHITECTURE.md`.
+    "crates/efe-curation",
+    # Sprint M24 — Active learning loop (closed-loop ML : production →
+    # uncertainty sampling → LLM oracle → gold dataset → centroid retune
+    # → eval + canary → promotion). Hard deps : M21 + M23.
+    # Cf. `docs/EFE_M24_ACTIVE_LEARNING_ARCHITECTURE.md`.
+    "crates/efe-active-learning",
+    # Sprint M25 — Agent runtime EXPERIMENTAL (in-cluster Firecracker
+    # microVM sandbox + tool whitelist + step approval + DPIA + AI Act
+    # Art. 9 compliance). EFE 2.0 (semver MAJOR). Hard deps : M21.
+    # Helm chart shipped SEPARATELY (`charts/efe-agent-runner`).
+    # Cf. `docs/EFE_M25_AGENT_RUNTIME_ARCHITECTURE.md`.
+    "crates/efe-agent-runner",
+    # Sprint M27 — Commercial Edge :
+    # `efe-cache` = Redis-backed cache plane (embedding cache + LLM
+    # response cache + tenant quota counters). Shared between
+    # efe-server and efe-llm-router.
+    # Cf. `docs/EFE_M27_COMMERCIAL_EDGE_ARCHITECTURE.md`.
+    "crates/efe-cache",
+    # Sprint M28 — Streaming + Events + Webhooks :
+    # `efe-events` = typed event envelope + NATS JetStream pub/sub.
+    # Cf. `docs/EFE_M28_STREAMING_EVENTS_ARCHITECTURE.md`.
+    "crates/efe-events",
+    # Sprint M29 — Data rights + customer compliance :
+    # `efe-pii` = PII detection + canonicalize + circuit breaker +
+    # redactor + per-tenant policy.
+    # Cf. `docs/EFE_M29_DATA_RIGHTS_ARCHITECTURE.md`.
+    "crates/efe-pii",
+    # Sprint M30 — Multi-modal + GPU + Multi-region :
+    # `efe-multimodal` = vision (SigLIP) + audio (Whisper) + long-
+    # context chunker + late fusion + Triton HTTP client.
+    # Cf. `docs/EFE_M30_MULTIMODAL_ARCHITECTURE.md`.
+    "crates/efe-multimodal",
+    # Sprint M30 — Multi-region active-passive :
+    # `efe-region` = region awareness + cross-region health +
+    # failover orchestration + DR drill harness.
+    # Cf. `docs/EFE_M30_MULTIMODAL_ARCHITECTURE.md` (§ 9 - § 14).
+    "crates/efe-region",
+    # Sprint M31 — FinOps + Cost Governance + Stripe Billing :
+    # `efe-metering` = per-tenant Redis-backed real-time meters.
+    # `efe-billing`  = Stripe client + invoice builder + budgets.
+    # Cf. `docs/EFE_M31_FINOPS_BILLING_ARCHITECTURE.md`.
+    "crates/efe-metering",
+    "crates/efe-billing",
+    # Sprint M32 — Vector Search + Hybrid Retrieval :
+    # `efe-vector`    = distance + flat + HNSW + quantization +
+    #                   collection persistence.
+    # `efe-retrieval` = BM25 sparse + RRF + hybrid fusion.
+    # Cf. `docs/EFE_M32_VECTOR_SEARCH_ARCHITECTURE.md`.
+    "crates/efe-vector",
+    "crates/efe-retrieval",
+    # Sprint M33 — Knowledge Graph + GraphRAG :
+    # `efe-kg`       = entity + relation + graph + traversal.
+    # `efe-graphrag` = multi-hop planner + fusion with M32 vector.
+    # Cf. `docs/EFE_M33_KNOWLEDGE_GRAPH_GRAPHRAG_ARCHITECTURE.md`.
+    "crates/efe-kg",
+    "crates/efe-graphrag",
+    # Sprint A1 — Phase 1 — Hierarchical (meta-)swarm coordination
+    # (mai-juillet 2026).  Adds the meta-swarm crate as a *workspace
+    # member only* ;  `efe-server` does NOT depend on it in Phase 1, so
+    # the production binary remains byte-identical to the pre-A1 release.
+    # Activation is opt-in at four levels (cluster / tenant / request /
+    # session).  See :
+    #   * docs/EFE_A1_HIERARCHICAL_SWARMS_ARCHITECTURE.md
+    #   * docs/EFE_A1_PHASE1_ARCHITECTURE.md
+    #   * docs/EFE_A1_ROADMAP_USER_ACTIVATABLE.md
+    "crates/efe-meta-swarm",
+    # Sprint A1 Phase 2 — PR #5 — gRPC transport.
+    # `efe-meta-swarm-proto` = Protocol Buffers + tonic-generated
+    # client/server stubs for the meta-swarm gRPC surface.  Wire-
+    # protocol-only crate ; no business logic.  Consumed by the
+    # upcoming `efe-meta-swarm-server` (PR #6+) and by
+    # `efe-server` once the EFE_META_SWARM_ENABLED flag is wired
+    # (PR #11).  See `docs/EFE_A1_PHASE2_PR05_ARCHITECTURE.md`.
+    "crates/efe-meta-swarm-proto",
+    # Sprint A1 Phase 2 — PR #6 — gRPC binaries.
+    # `efe-meta-swarm-server` ships two thin Tonic-based servers
+    # (`controller`, `participant`) that wrap the Phase-1
+    # `efe-meta-swarm` algorithms behind the wire surface defined
+    # in `efe-meta-swarm-proto`.  PR #6 ships scaffold only ;
+    # PRs #8, #9 wire real business logic.
+    # See `docs/EFE_A1_PHASE2_PR06_ARCHITECTURE.md`.
+    "crates/efe-meta-swarm-server",
+    # Sprint M50 — Nano Agent Swarm (EFE Agentic).
+    # 2 crates : `efe-nano-sdk` (public, MIT) + `efe-nano` (runtime,
+    # commercial).  Sprint 0 (2026-06) ships scaffold only ; full
+    # implementation lands Sprints 1-13.  Architecture frozen in
+    # `docs/architecture/EFE_M50_AGENTIC_ARCHITECTURE.md`.
+    # Additive STRICT : no existing crate is modified.
+    "crates/efe-nano-sdk",
+    "crates/efe-nano",
+    # Sprint 8 — N11 days 13-15 : guest-side inference daemon.
+    # Statically-linked musl binary, ships inside the Firecracker rootfs.
+    # See `crates/efe-nano/src/runtime/pool/firecracker/` for the host
+    # side and `docs/architecture/EFE_M50_N11_FIRECRACKER_POOL_ARCHITECTURE.md`
+    # for the design.
+    "crates/efe-nano-inference-daemon",
+    # Sprint 9 — N16 days 26-30 : multi-region replay coordinator + chain
+    # shipment + JWT auth + multi-region engine.  Single crate consolidates
+    # the three Sprint 9 logical components.  See
+    # `docs/architecture/EFE_M50_N16_MULTI_REGION_REPLAY_ARCHITECTURE.md`.
+    "crates/efe-multi-region",
+    # Sprint 9 — N17 days 31-35 : LLM provenance — per-call forensic record
+    # for every Mode C invocation.  Ships ModelRegistry, ProvenanceStore,
+    # ProvenanceCollector, ProvenanceCollectingLlmClient wrapper, and 12
+    # Prometheus surfaces.  See
+    # `docs/architecture/EFE_M50_N17_LLM_PROVENANCE_ARCHITECTURE.md`.
+    "crates/efe-llm-provenance",
+    # Sprint 10 — N18 days 36-40 : Publisher identity — Ed25519 signatures,
+    # KYC tier ladder, revocation cascade, sanctions screening hook, publish
+    # ledger HMAC-chained.  See
+    # `docs/architecture/EFE_M50_N18_PUBLISHER_IDENTITY_ARCHITECTURE.md`.
+    "crates/efe-publisher-identity",
+    # Sprint 11 — N19 days 41-45 : Gold-test gate TIER-1 — GoldSet immutable,
+    # operator-approved, HMAC-chained GoldRunLedger, hermetic Firecracker
+    # runner, three first-class assertion strategies (StrictEquality, Numeric
+    # Tolerance, SemanticSimilarity), 30-day drift sweep, emergency bypass.
+    # See `docs/architecture/EFE_M50_N19_GOLD_TEST_GATE_TIER_1_ARCHITECTURE.md`.
+    "crates/efe-gold-test-gate",
+    # Sprint 13 — N21 days 51-55 : Swarm orchestration + agentic bridge.
+    # Three crates for pre-analysis DAG → Claude tool-use feeding.
+    # See `docs/architecture/EFE_M50_N21_SWARM_ORCHESTRATION_AGENTIC_BRIDGE_ARCHITECTURE.md`.
+    "crates/efe-blackboard",
+    "crates/efe-swarm-orchestrator",
+    "crates/efe-agentic-bridge",
+    # Sprint 13 N21 § G11 : six reference pre-analysis agents.
+    "crates/efe-nano-preanalysis",
+    # Sprint 14 — N22 days 56-60 : HTTP gateway exposing all subsystems.
+    # See `docs/architecture/EFE_M50_N22_HTTP_GATEWAY_EXPOSURE_ARCHITECTURE.md`.
+    "crates/efe-gateway",
+    # Sprint 15 — N23 days 71-75 : NanoAgent ↔ SwarmAgent bidirectional
+    # adapter + efe-nano reuse.
+    # See `docs/architecture/EFE_M50_N23_NANO_SWARM_ADAPTER_ARCHITECTURE.md`.
+    "crates/efe-nano-swarm-adapter",
+    # Sprint 16 — N24 days 76-80 : Wired compliance runner — flips the
+    # default DAG from `experimental_fast` (gates OFF) to `tier1_strict`
+    # by injecting the real Ed25519 verifier + gold API into the N23
+    # adapter's policy. See
+    # `docs/architecture/EFE_M50_N24_WIRED_COMPLIANCE_RUNNER_ARCHITECTURE.md`.
+    "crates/efe-compliance-wiring",
+    # Phase 1 (S&S app) — JSON Grammar enforcement + Rust clients for 6 nano-robots SLM.
+    # Foundation déterministe pour Scout & Synthesize.  Cf.
+    # `EFE_PROJET/03_a_construire/PHASE_1_JSON_GRAMMAR.pdf` (25 pages).
+    "crates/efe-nano-app-coordinator",
+    # Phase 2 (S&S app) — Coordinator : DAG orchestrator + stigmergic blackboard
+    # + EventBus (InMemory/NATS) + MultiLlmBridge + VoteEngine (Symphony) +
+    # Speculator (Speculative RAG) + SSE streaming.  Cf.
+    # `EFE_PROJET/03_a_construire/PHASE_2_COORDINATOR.pdf` (26 pages).
+    "crates/efe-coordinator",
+    # Phase 3 (S&S app) — Coordination multi-LLM : 5 workflows (Vote/Relay/
+    # Debate/Specialist/Cascade) + 5 canonical schemas + reformulator étendu
+    # + Borda/Condorcet + BudgetTracker + tenant isolation + 8 SSE events.
+    # Cf. `EFE_PROJET/03_a_construire/PHASE_3_MULTI_LLM.pdf` (22 pages).
+    "crates/efe-multi-llm",
+]
+
+[workspace.package]
+version = "0.0.1"
+edition = "2021"
+# D93 — rustc bumped to 1.88 because `time 0.3.47` (transitive via
+# jsonwebtoken → simple_asn1) requires it. See ADR-D93-001.
+rust-version = "1.88"
+authors = ["EFE Team <eng@efe.ai>"]
+license = "UNLICENSED"
+repository = "https://github.com/efe-ai/efe"
+
+[workspace.dependencies]
+tokio = { version = "1.39", features = ["full"] }
+tonic = { version = "0.12", features = ["transport"] }
+tonic-build = "0.12"
+tonic-health = "0.12"
+tonic-reflection = "0.12"
+prost = "0.13"
+prost-types = "0.13"
+tower = { version = "0.5", features = ["util"] }
+thiserror = "1.0"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+uuid = { version = "1.10", features = ["v4", "v7", "serde"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+anyhow = "1.0"
+bincode = "1.3"
+futures = "0.3"
+async-trait = "0.1"
+jsonwebtoken = "9.3"
+dashmap = "6.1"
+tokio-stream = "0.1"
+http = "1.1"
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+panic = "abort"
+strip = "symbols"
+
+[profile.dev]
+opt-level = 0
+debug = true
+
+[profile.bench]
+inherits = "release"
+debug = true
+lto = false
