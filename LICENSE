@@ -1,0 +1,64 @@
+Copyright (c) 2026 EFE Team. All rights reserved.
+
+================================================================================
+DUAL-LICENSE NOTICE — read this preamble before § 1 (Proprietary terms)
+================================================================================
+
+The EFE repository ships under two licenses, applied per-directory :
+
+  ┌─────────────────────────────────────────┬─────────────────────────────────┐
+  │ Path                                    │ License                         │
+  ├─────────────────────────────────────────┼─────────────────────────────────┤
+  │ /clients/python/**                      │ Apache License 2.0              │
+  │ /clients/typescript/**                  │ Apache License 2.0              │
+  │ /clients/java/**                        │ Apache License 2.0              │
+  │ /clients/go/**                          │ Apache License 2.0              │
+  │ Everything else (server, ops, models)   │ EFE Proprietary (see § 1 below) │
+  └─────────────────────────────────────────┴─────────────────────────────────┘
+
+Each `/clients/<lang>/.../LICENSE` file contains the full Apache-2.0 text
+applicable to that SDK's published artifact (PyPI wheel, npm package,
+Maven jar, Go module). Each accompanying `NOTICE` file contains the
+attribution required by Apache-2.0 § 4(d).
+
+The carve-out is intentional and reflects EFE's commercial model :
+client SDKs are open-source so customers can audit, vendor, and fork
+them ; the server, model bundles, operator tooling, helm charts and
+proto definitions are proprietary EFE intellectual property.
+
+Boundary rule : if a file lives under `/clients/<lang>/` AND its
+package manifest (`pyproject.toml`, `package.json`, `pom.xml`, `go.mod`)
+declares `Apache-2.0`, it is Apache-2.0. Everything else is proprietary
+per § 1.
+
+Proto definitions under `/protos/efe/` are dual-licensed by reference :
+when consumed from a `/clients/<lang>/` build (the SDK proto codegen),
+the generated stubs inherit Apache-2.0 ; when consumed from the server
+build, they remain proprietary. The `.proto` source files themselves
+are proprietary — you cannot fork them and redistribute outside the
+SDK-codegen path without an explicit license from EFE.
+
+For dual-license questions : legal@efe.ai
+
+================================================================================
+§ 1. PROPRIETARY LICENSE (applies to everything OUTSIDE /clients/<lang>/)
+================================================================================
+
+This software and associated documentation files (the "Software") are
+proprietary to EFE Team. No part of the Software may be copied, modified,
+distributed, or used in any form without the express written permission
+of EFE Team.
+
+Unauthorized use, reproduction, or distribution of this Software, or any
+portion of it, may result in severe civil and criminal penalties, and
+will be prosecuted to the maximum extent possible under the law.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+For licensing inquiries : legal@efe.ai
