@@ -1,0 +1,97 @@
+[package]
+name = "efe-bench"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Sprint D18 — bench harness for D12 catalog operations + Execute throughput. Sprint D29/D31/D38 — TonicBenchClient + multi-GPU sharding + Mode-3 workloads (M6 extension)."
+
+build = "build.rs"
+
+[lints.rust]
+missing_docs = "warn"
+unused_must_use = "deny"
+
+[lints.clippy]
+unwrap_used = "deny"
+expect_used = "deny"
+todo = "deny"
+unimplemented = "deny"
+
+[features]
+# **Sprint D29 (Φ-D)** — `tonic` feature gates the real gRPC client.
+# Default OFF so Mac/Windows CI without `protoc` stays green ; the
+# bench harness keeps shipping `MockBenchClient` even when the
+# Tonic stack isn't compiled in. Enable explicitly via
+# `cargo build -p efe-bench --features tonic` or set
+# `default = ["tonic"]` once the Tier-2 runner has `protoc`.
+default = []
+tonic = [
+    "dep:tonic",
+    "dep:prost",
+    "dep:prost-types",
+    "dep:tokio-stream",
+    "dep:http",
+]
+
+[dependencies]
+tokio = { workspace = true }
+thiserror = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+uuid = { workspace = true }
+tracing = { workspace = true }
+anyhow = { workspace = true }
+async-trait = { workspace = true }
+chrono = { version = "0.4", features = ["serde"] }
+sha2 = "0.10"
+hex = "0.4"
+
+# ---------------------------------------------------------------------
+# Sprint **D29 (Φ-D)** — gRPC stack for the real `TonicBenchClient`.
+#
+# All four crates live behind the `tonic` feature flag so the bench
+# harness can still build on a Mac/Windows CI runner that has no
+# `protoc` installed (the build script is also gated). When the
+# feature is OFF (default), `client::tonic_client` does not exist
+# and `--allow-mock` is the only operating mode.
+# ---------------------------------------------------------------------
+# Sprint **D29 (Φ-D)** — the `tls` feature on tonic enables
+# `Endpoint::tls_config(...)` + `ClientTlsConfig`. We keep the
+# default features (transport, codegen) explicit in the workspace
+# and add `tls` here so the bench client can issue mTLS calls
+# against a staging cluster behind a reverse-proxy.
+tonic = { version = "0.12", optional = true, default-features = false, features = ["transport", "codegen", "prost", "tls", "tls-roots"] }
+prost = { workspace = true, optional = true }
+prost-types = { workspace = true, optional = true }
+tokio-stream = { workspace = true, optional = true }
+http = { workspace = true, optional = true }
+
+[dependencies.clap]
+version = "4.5"
+features = ["derive", "env"]
+
+[dependencies.tracing-subscriber]
+workspace = true
+
+[build-dependencies]
+# **Sprint D29 (Φ-D)** — same vendored `protoc` as `efe-server` so
+# the bench crate can compile its proto subset without requiring a
+# system-wide install. Gated via `cfg(feature = "tonic")` inside
+# `build.rs` ; not pulled when the tonic feature is OFF.
+tonic-build = { workspace = true }
+protoc-bin-vendored = "3.1"
+
+[dev-dependencies]
+tempfile = "3"
+tokio = { workspace = true, features = ["test-util"] }
+
+# ----------------------------------------------------------------------
+# Binary : `efe-bench` CLI
+# ----------------------------------------------------------------------
+
+[[bin]]
+name = "efe-bench"
+path = "src/bin/efe_bench.rs"
