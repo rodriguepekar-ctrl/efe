@@ -1,0 +1,26 @@
+[package]
+name = "efe-prompts"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "M21 — Versioned prompt templates + A/B test framework for EFE LLMRouter"
+
+[dependencies]
+serde            = { workspace = true }
+serde_json       = { workspace = true }
+serde_yaml       = "0.9"
+thiserror        = { workspace = true }
+tracing          = { workspace = true }
+sha2             = "0.10"
+parking_lot      = "0.12"
+
+[dev-dependencies]
+tokio            = { workspace = true }
+proptest         = "1.5"
+tempfile         = "3.10"
+
+[features]
+default = []
