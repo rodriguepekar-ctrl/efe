@@ -1,0 +1,88 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "efe-mcp-server"
+version = "0.1.0"
+description = "EFE MCP Server — exposes EFE classify/catalog/audit RPCs as Model Context Protocol tools"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "Apache-2.0" }
+authors = [{ name = "EFE Maintainers" }]
+keywords = ["efe", "mcp", "model-context-protocol", "llm", "classification"]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: Apache Software License",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: Software Development :: Libraries",
+]
+
+dependencies = [
+  # Core MCP SDK ; pin major version to insulate against protocol breakage.
+  "mcp>=1.0,<2.0",
+  # HTTP client for REST backend (playground + cloud).
+  "httpx>=0.27,<0.29",
+  # JSON Schema validation for tool input.
+  "jsonschema>=4.21,<5.0",
+  # CLI entry-point.
+  "click>=8.1,<9.0",
+  # Structured logging.
+  "structlog>=24.1,<26.0",
+]
+
+[project.optional-dependencies]
+grpc = [
+  # Production gRPC backend (ALPN + mTLS to EFE 1.0 GA cluster).
+  "grpcio>=1.62,<2.0",
+  "grpcio-tools>=1.62,<2.0",
+  "protobuf>=4.25,<6.0",
+]
+bundle = [
+  # M18 D47 — Ed25519 verification + OCI client. Pure-Python, never
+  # invokes cosign/oras CLIs. Already commonly installed.
+  "cryptography>=41.0,<46.0",
+  # YAML for Helm values generation (D49) — safe_dump only.
+  "PyYAML>=6.0,<7.0",
+]
+test = [
+  "pytest>=8.0,<9.0",
+  "pytest-asyncio>=0.23,<2.0",
+  "pytest-cov>=5.0,<7.0",
+  "respx>=0.21,<0.25",
+  # Crypto + YAML required to exercise bundle paths in unit tests.
+  "cryptography>=41.0,<46.0",
+  "PyYAML>=6.0,<7.0",
+]
+
+[project.scripts]
+efe-mcp-server = "mcp_server.efe_mcp_server:main"
+
+[project.urls]
+Homepage = "https://github.com/efe-project/efe"
+Documentation = "https://github.com/efe-project/efe/blob/main/docs/EFE_MCP_SERVER_EXTENSION_ARCHITECTURE.md"
+Issues = "https://github.com/efe-project/efe/issues"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["mcp_server*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+addopts = "-q --strict-markers"
+asyncio_mode = "auto"
+markers = [
+  "integration: end-to-end tests requiring a running EFE backend (skipped in unit CI)",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP"]
