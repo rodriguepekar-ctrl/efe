@@ -287,3 +287,20 @@ slm-smoke:
 # Smoke version : télécharge les modèles avant + garde UP en fin
 slm-smoke-keep:
     ./scripts/slm/e2e_smoke.sh --download --keep-running
+
+# ─────────────────────────────────────────────────────────────────────────
+# PoC Scout & Synthesize — démo une-commande (cf. SCOPE.md / README_POC.md)
+# ─────────────────────────────────────────────────────────────────────────
+
+# Démarre le PoC complet (SLM + bridge + UI) → http://localhost:8700.
+# Flags forwardés : `just poc-up --real`, `just poc-up --no-slm`, etc.
+poc-up *ARGS:
+    ./poc.sh up {{ARGS}}
+
+# Arrêt propre du PoC (bridge + SLM).
+poc-down:
+    ./poc.sh down
+
+# Santé des processus du PoC.
+poc-status:
+    ./poc.sh status

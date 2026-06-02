@@ -106,6 +106,39 @@ async fn t1_post_mission_a_streams_sse_contract() {
 }
 
 #[tokio::test]
+async fn poc_mission_a_emits_pre_chewing_metrics() {
+    // **PoC — contrat télémétrique de la démo.** Tout flux Mission A DOIT émettre
+    // `PRE_CHEWING_METRICS` : c'est la donnée que l'UI affiche live (tokens
+    // entrée/sortie, ratio de compression). `bridge.rs` verrouillait la séquence
+    // SWARM_STARTED…SWARM_FINISHED mais PAS l'émission de cet event dans un flux
+    // réel (seul le SCHÉMA le déclarait, cf. t3). En mock (sans SLM) l'event est
+    // publié inconditionnellement (`mission_a.rs`), avec `input_tokens_raw > 0` et
+    // `compressed ≤ raw`. En keyless + SLM réel, `compressed < raw` (compression
+    // effective) — non vérifiable ici sans llama-server.
+    let app = build_app(mock_state());
+    let (status, events) = sse_events(
+        app,
+        "/v1/missions/a",
+        r#"{"user_text":"Quelle est la capitale de la France ?"}"#,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+
+    let pcm = events
+        .iter()
+        .find(|e| e["type"] == "PRE_CHEWING_METRICS")
+        .expect("PRE_CHEWING_METRICS émis dans tout flux Mission A");
+    let raw = pcm["metrics"]["input_tokens_raw"]
+        .as_u64()
+        .expect("metrics.input_tokens_raw présent (u64)");
+    assert!(raw > 0, "input_tokens_raw > 0 (le prompt a une taille)");
+    let comp = pcm["metrics"]["input_tokens_compressed"]
+        .as_u64()
+        .expect("metrics.input_tokens_compressed présent (u64)");
+    assert!(comp <= raw, "invariant : compressed ({comp}) ≤ raw ({raw})");
+}
+
+#[tokio::test]
 async fn mission_a_reliably_reaches_swarm_finished() {
     // Smoke déterministe du chemin de streaming lib : 8 runs de Mission A
     // doivent TOUS aller de SWARM_STARTED jusqu'à SWARM_FINISHED. Ne couvre PAS
