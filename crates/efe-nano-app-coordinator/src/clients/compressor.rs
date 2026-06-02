@@ -19,6 +19,16 @@ pub struct CompressorClient {
 
 impl CompressorClient {
     /// Construit avec les assets canoniques.
+    ///
+    /// **Correctif A (H1.1) — `temperature` = [`compressor_temperature`] (défaut
+    /// 0.0, greedy/déterministe).** La campagne H1.1 a montré qu'à `temperature
+    /// 0.2` SANS `seed` dans la requête `/completion` (`llama_server.rs` n'en
+    /// envoie pas → llama-server tire un seed aléatoire par appel), la compression
+    /// était NON DÉTERMINISTE : sur entrée identique, le 1B produisait tantôt un
+    /// résumé valide (gros gain), tantôt son placeholder de template → fallback
+    /// brut (`final_prompt_from_compression`) ≈ 33 % de no-op gaspillés. Le greedy
+    /// supprime cette variance d'échantillonnage. Override A/B : env
+    /// `EFE_COMPRESSOR_TEMPERATURE` (ex. `0.2` = comportement pré-correctif).
     pub fn from_assets(endpoint: impl Into<String>) -> RobotResult<Self> {
         let assets = assets_dir();
         Ok(Self {
@@ -29,7 +39,7 @@ impl CompressorClient {
                 assets.join("grammars/compressor_v1.gbnf"),
                 assets.join("prompts/compressor.txt"),
                 /* max_tokens */ 1536,
-                /* temperature */ 0.2,
+                /* temperature */ compressor_temperature(),
             )?,
         })
     }
@@ -330,6 +340,33 @@ const MIN_CHUNK_CHARS: usize = 50;
 /// L2 n'extrait que la marge de batching. Qualité préservée (savings identiques).
 const MAP_CONCURRENCY: usize = 4;
 
+/// **Correctif A (H1.1) — Température du compresseur : 0.0 = décodage GREEDY
+/// (argmax) → DÉTERMINISTE.**
+///
+/// La campagne H1.1 (A/B vrai LLM, corpus stratifié) a révélé un compresseur NON
+/// DÉTERMINISTE : à `temperature 0.2` ET sans `seed` dans la requête
+/// `/completion` (`llama_server.rs` n'envoie pas de seed → llama-server en tire un
+/// aléatoire par appel), le Llama-3.2-1B produisait, pour une ENTRÉE IDENTIQUE,
+/// tantôt un résumé valide (compression réelle, gros gain coût/latence), tantôt
+/// son placeholder de template (`<the compressed text>`) → le coordinateur le
+/// détecte dégénéré et RETOMBE sur le prompt brut (`final_prompt_from_compression`
+/// dans `efe-coordinator`). Mesuré : **~33 % des compressions** (7/21 sur la
+/// famille « propre/long » F2) basculaient ainsi en no-op — ~2-4 s de compresseur
+/// payés pour rien, et un résultat IRREPRODUCTIBLE rep-à-rep.
+///
+/// `temperature = 0.0` force le décodage **greedy** (argmax) : la sortie devient
+/// fonction déterministe (modèle + entrée), supprimant la variance
+/// d'échantillonnage où naît le placeholder. La grammaire GBNF borne toujours la
+/// sortie et le fallback dégénéré reste en place (sûreté). NB : sous
+/// `--cont-batching` multi-slots (L2), une micro-variance flottante GPU peut
+/// subsister sur de quasi-égalités de logits — négligeable devant l'échantillonnage
+/// supprimé.
+///
+/// Override A/B (sans recompiler) : env `EFE_COMPRESSOR_TEMPERATURE`. Ex.
+/// `EFE_COMPRESSOR_TEMPERATURE=0.2` restaure exactement le comportement
+/// pré-correctif (pour re-mesurer le delta de non-déterminisme).
+const COMPRESSOR_TEMPERATURE: f32 = 0.0;
+
 /// Lit un `usize` depuis une variable d'env, avec défaut + plancher.
 fn env_usize(var: &str, default: usize, min: usize) -> usize {
     std::env::var(var)
@@ -355,6 +392,24 @@ fn chunk_overlap_tokens() -> usize {
 /// 1 (`=1` ⇒ MAP séquentiel = comportement pré-L2).
 fn map_concurrency() -> usize {
     env_usize("EFE_COMPRESSOR_MAP_CONCURRENCY", MAP_CONCURRENCY, 1)
+}
+
+/// Lit un `f32` depuis une variable d'env, avec défaut + bornes `[min, max]`
+/// (absent, non parsable, non fini, ou hors bornes → défaut). Miroir flottant de
+/// [`env_usize`].
+fn env_f32(var: &str, default: f32, min: f32, max: f32) -> f32 {
+    std::env::var(var)
+        .ok()
+        .and_then(|s| s.parse::<f32>().ok())
+        .filter(|&v| v.is_finite() && v >= min && v <= max)
+        .unwrap_or(default)
+}
+
+/// Température du compresseur (Correctif A), configurable via env pour l'A/B.
+/// Bornée `[0.0, 2.0]` (plage llama-server) ; défaut [`COMPRESSOR_TEMPERATURE`]
+/// (0.0 = greedy déterministe).
+fn compressor_temperature() -> f32 {
+    env_f32("EFE_COMPRESSOR_TEMPERATURE", COMPRESSOR_TEMPERATURE, 0.0, 2.0)
 }
 
 /// Estime le nombre de tokens (~chars/4, aligné sur `ChewingMetrics::estimate_tokens`).
@@ -720,6 +775,41 @@ mod chunking_tests {
         assert_eq!(env_usize(var, 7, 1), 7, "invalide → défaut");
         std::env::set_var(var, "3");
         assert_eq!(env_usize(var, 7, 5), 7, "sous le plancher → défaut");
+        std::env::remove_var(var);
+    }
+
+    // ── Correctif A (H1.1) — température compresseur greedy (déterminisme) ──
+
+    #[test]
+    fn correctif_a_compressor_temperature_default_is_zero() {
+        // Le défaut DOIT être 0.0 (greedy → déterministe). Régression-lock du
+        // correctif A lui-même. Comparé à la CONSTANTE (pas à `compressor_temperature()`
+        // qui lit l'env) → immune à un EFE_COMPRESSOR_TEMPERATURE present dans l'env
+        // de test et au parallélisme cargo. `to_bits` = égalité bit-exacte (évite
+        // clippy::float_cmp).
+        assert_eq!(
+            COMPRESSOR_TEMPERATURE.to_bits(),
+            0.0_f32.to_bits(),
+            "Correctif A : température compresseur = 0.0 (greedy déterministe)"
+        );
+    }
+
+    #[test]
+    fn env_f32_parses_with_default_and_bounds() {
+        let var = "EFE_TEST_ONLY_F32_XYZ"; // nom unique → aucun code prod ne le lit
+        let approx = |a: f32, b: f32| (a - b).abs() < 1e-6;
+        std::env::remove_var(var);
+        assert!(approx(env_f32(var, 0.0, 0.0, 2.0), 0.0), "absent → défaut");
+        std::env::set_var(var, "0.2");
+        assert!(approx(env_f32(var, 0.0, 0.0, 2.0), 0.2), "override valide");
+        std::env::set_var(var, "abc");
+        assert!(approx(env_f32(var, 0.0, 0.0, 2.0), 0.0), "non parsable → défaut");
+        std::env::set_var(var, "5.0");
+        assert!(approx(env_f32(var, 0.0, 0.0, 2.0), 0.0), "hors borne haute → défaut");
+        std::env::set_var(var, "-1.0");
+        assert!(approx(env_f32(var, 0.0, 0.0, 2.0), 0.0), "hors borne basse → défaut");
+        std::env::set_var(var, "nan");
+        assert!(approx(env_f32(var, 0.0, 0.0, 2.0), 0.0), "NaN/non fini → défaut");
         std::env::remove_var(var);
     }
 
