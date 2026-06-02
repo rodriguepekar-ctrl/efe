@@ -130,6 +130,10 @@ checkpoints/
 # Logs des llama-server (déjà couverts par logs/ mais explicite)
 /logs/llama-server/
 
+# PoC (cf. poc.sh) — PIDs du bridge + logs runtime (régénérables)
+/.poc_pids/
+/logs/poc/
+
 # Misc
 *.tmp
 *.bak

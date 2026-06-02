@@ -248,8 +248,7 @@ class MissionResult:
     error: str = ""
 
 
-def run_mission(url: str, prompt: str, model, max_output: int,
-                timeout: int = 120) -> MissionResult:
+def run_mission(url: str, prompt: str, model, timeout: int = 120) -> MissionResult:
     # `model=None` → on n'epingle pas : le bridge utilise son `default_llms`
     # (l'unique provider configure). Sinon on epingle l'id provider exact.
     dto: dict = {"user_text": prompt}
@@ -346,12 +345,12 @@ _JUDGE_TMPL = (
 
 
 def run_judge(judge_url: str, question: str, answer_b: str, answer_c: str,
-              model, max_output: int = 120) -> dict | None:
+              model) -> dict | None:
     """Juge la reponse chewed (B) via le bridge baseline (brut, non chewe).
     Retourne {"correct": 1-5, "complete": 1-5} ou None si parsing impossible."""
     prompt = _JUDGE_TMPL.format(
         q=question[:2000], a=answer_b[:2000], b=answer_c[:2000])
-    r = run_mission(judge_url, prompt, model, max_output)
+    r = run_mission(judge_url, prompt, model)
     if not r.ok or not r.answer:
         return None
     m = re.search(r"\{[^{}]*\}", r.answer)
@@ -371,11 +370,11 @@ def run_judge(judge_url: str, question: str, answer_b: str, answer_c: str,
 # ─────────────────────────────────────────────────────────────────────────
 # Orchestration A/B
 # ─────────────────────────────────────────────────────────────────────────
-def post_with_backoff(url, prompt, model, max_output, pace, attempts=4):
+def post_with_backoff(url, prompt, model, pace, attempts=4):
     delay = 2.0
     r = MissionResult(ok=False, error="non execute")
     for i in range(attempts):
-        r = run_mission(url, prompt, model, max_output)
+        r = run_mission(url, prompt, model)
         if r.ok and not r.error:
             time.sleep(pace)
             return r
@@ -477,7 +476,6 @@ def main() -> int:
     ap.add_argument("--price-in", type=float, help="Override prix input $/Mtok")
     ap.add_argument("--price-out", type=float, help="Override prix output $/Mtok")
     ap.add_argument("--repeats", type=int, default=3, help="Repetitions par (prompt×condition)")
-    ap.add_argument("--max-output-tokens", type=int, default=400)
     ap.add_argument("--pace", type=float, default=1.0, help="Pause (s) entre appels")
     # M4 — juge LLM optionnel.
     ap.add_argument("--judge", action="store_true",
@@ -567,7 +565,7 @@ def main() -> int:
             return 2
 
     # ── Smoke 1 appel : detecte le provider reel (ou un repli mock) ──
-    smoke = run_mission(args.chewed_url, "Test.", args.model, 16)
+    smoke = run_mission(args.chewed_url, "Test.", args.model)
     if not smoke.ok or not smoke.provider:
         print(f"❌ Smoke KO sur {args.chewed_url} : {smoke.error or 'pas de provider'}.",
               file=sys.stderr)
@@ -586,10 +584,8 @@ def main() -> int:
         print(f"\n▶ {p.id} [{FAMILY_LABEL.get(p.family, p.family)}] ({len(p.text)} car)")
         reps = []
         for k in range(args.repeats):
-            b = post_with_backoff(args.baseline_url, p.text, args.model,
-                                  args.max_output_tokens, args.pace)
-            c = post_with_backoff(args.chewed_url, p.text, args.model,
-                                  args.max_output_tokens, args.pace)
+            b = post_with_backoff(args.baseline_url, p.text, args.model, args.pace)
+            c = post_with_backoff(args.chewed_url, p.text, args.model, args.pace)
             if not (b.ok and c.ok):
                 print(f"   rep {k}: ECHEC (baseline={b.error or 'ok'} chewed={c.error or 'ok'})")
                 continue

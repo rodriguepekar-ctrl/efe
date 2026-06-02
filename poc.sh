@@ -58,7 +58,6 @@ POC_SAVINGS_REPORT="${POC_SAVINGS_REPORT:-}"
 POC_BRIDGE_HEALTH_TIMEOUT="${POC_BRIDGE_HEALTH_TIMEOUT:-30}"
 
 BRIDGE_PORT="${POC_BRIDGE_ADDR##*:}"
-BRIDGE_HOST="${POC_BRIDGE_ADDR%:*}"
 
 # ── Helpers ─────────────────────────────────────────────────────────────────
 

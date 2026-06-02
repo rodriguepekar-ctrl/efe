@@ -18,6 +18,7 @@
 | `preview-lab/` | UI Next.js (export statique servi par le bridge) |
 | `scripts/slm/` | Cycle de vie des 4 llama-server (`:8090-8093`) |
 | `poc.sh` + `poc.env` | Orchestrateur une-commande + config unique |
+| `scripts/poc/demo.py` | Driver headless des 3 scénarios (`./poc.sh demo`) |
 
 ## Hors PoC (présent au dépôt, **gelé** — pas dans la démo)
 
