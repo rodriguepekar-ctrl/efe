@@ -1,0 +1,218 @@
+{
+  "version": "v1",
+  "description": "EFE — corpus economique stratifie du pre-machage (roadmap H1.1). Quatre familles testant chacune une hypothese economique distincte. Consomme par scripts/bench/prechew_economics.py via --corpus.",
+  "gate_tokens_approx": 250,
+  "calibration_note": "Le gate de compression observe (run H1.a 2026-06-02) se situe entre ~215 tokens (NON compresse) et ~302 tokens (compresse), soit ~1200 caracteres. F1/F2/F4 sont calibres AU-DESSUS (>=1200 car) pour DECLENCHER la compression ; F3 reste DELIBEREMENT sous le gate (NO-OP attendu).",
+  "families": {
+    "redundant_verbose": "Question simple/moyenne noyee dans du remplissage bavard. Best-case compression : la sortie devient concise (le vrai levier). Verdict attendu : CHEWER.",
+    "clean_concise_long": "Question LONGUE et dense, bien ecrite, ZERO redondance, au-dessus du gate. Cas ou chewer doit etre NEUTRE (compresseur trouve peu a retirer, overhead non couvert). Preuve de non-nuisance. Verdict attendu : NE PAS chewer.",
+    "short_below_gate": "Sous le gate de compression (~250 tokens). Le gate protege : NO-OP. Verdict attendu : BYPASS (overhead analyzer seul).",
+    "long_technical_multipart": "Long, dense, multi-questions reelles, au-dessus du gate. Cas realiste cher : gain modere, risque qualite. Verdict attendu : CONDITIONNEL."
+  },
+  "conventions": {
+    "pad_to": "Si present avec 'question', le loader prefixe la question de remplissage redondant (_FILLER) jusqu'a ~N caracteres, et 'core' = la question nue (pour le juge).",
+    "text": "Sinon, 'text' est envoye tel quel aux deux bridges ; 'core' (optionnel) = la question essentielle pour le juge, defaut = text.",
+    "expect": "Concepts MUST-APPEAR (sous-chaines, casse ignoree) pour la rubric de qualite deterministe. Liste vide = pas de rubric (None), le juge LLM prend le relais."
+  },
+  "prompts": [
+    {
+      "id": "f1_capital",
+      "family": "redundant_verbose",
+      "pad_to": 1100,
+      "question": "Bref, ma question : quelle est la capitale de la France ? Reponds en une phrase.",
+      "expect": ["paris"],
+      "notes": "best-case factuel court (sortie minuscule -> latence peut perdre malgre out_red)"
+    },
+    {
+      "id": "f1_syncasync",
+      "family": "redundant_verbose",
+      "pad_to": 1500,
+      "question": "Bref, ma vraie question : quelle est la difference concrete entre la programmation synchrone et asynchrone, et quand preferer l'une a l'autre ?",
+      "expect": ["asynchron", "synchron"],
+      "notes": "best-case conceptuel"
+    },
+    {
+      "id": "f1_rest_graphql",
+      "family": "redundant_verbose",
+      "pad_to": 2500,
+      "question": "Au final ma question : quelles sont les differences fondamentales entre une API REST et une API GraphQL, et dans quels cas choisir l'une plutot que l'autre ?",
+      "expect": ["graphql", "rest"],
+      "notes": "best-case fort padding"
+    },
+    {
+      "id": "f1_http_https",
+      "family": "redundant_verbose",
+      "pad_to": 1200,
+      "question": "Au fond, ma question : quelle est la difference entre HTTP et HTTPS ?",
+      "expect": ["tls", "chiffr"],
+      "notes": "best-case factuel"
+    },
+    {
+      "id": "f1_git_rebase_merge",
+      "family": "redundant_verbose",
+      "pad_to": 1600,
+      "question": "Ma question concrete : quelle est la difference entre git merge et git rebase, et quand utiliser l'un ou l'autre ?",
+      "expect": ["rebase", "merge"],
+      "notes": "best-case outillage"
+    },
+    {
+      "id": "f1_sql_nosql",
+      "family": "redundant_verbose",
+      "pad_to": 2000,
+      "question": "Donc ma question : quand choisir une base SQL plutot qu'une base NoSQL, et quels sont les compromis ?",
+      "expect": ["sql", "nosql"],
+      "notes": "best-case decision"
+    },
+    {
+      "id": "f1_tcp_udp",
+      "family": "redundant_verbose",
+      "pad_to": 1400,
+      "question": "Bref : quelle est la difference entre les protocoles TCP et UDP, et quand utiliser chacun ?",
+      "expect": ["tcp", "udp"],
+      "notes": "best-case reseau"
+    },
+
+    {
+      "id": "f2_idempotency",
+      "family": "clean_concise_long",
+      "text": "Je dois rendre robuste l'endpoint de creation de paiement d'une API : le client mobile, sur reseau instable, renvoie parfois la meme requete apres un timeout alors que le premier appel a deja abouti cote serveur, ce qui risque un double-debit. Je veux concevoir un mecanisme de cle d'idempotence complet. Le client genere un identifiant unique par tentative logique de paiement et le place dans un en-tete dedie. Cote serveur, je dois decider : a quel moment exact persister la cle par rapport a l'execution effective du debit, pour qu'une panne entre les deux ne laisse ni un debit sans cle enregistree ni une cle sans debit ; comment memoriser non seulement la cle mais aussi la reponse complete (code HTTP, corps, identifiant de transaction) afin de la rejouer a l'identique sur un renvoi ; quelle duree de retention adopter avant purge, en tenant compte des rejeux tardifs et de la taille du stockage ; et surtout comment traiter le cas ou deux requetes portant la meme cle arrivent en parallele sur deux instances differentes, sans verrou distribue qui effondrerait le debit. Detaille la conception de bout en bout, l'ordre des operations transactionnelles, et le comportement precis attendu pour chaque scenario de defaillance : timeout apres debit, crash avant ecriture de la reponse, et deux requetes concurrentes portant la meme cle.",
+      "expect": ["idempot", "rejeu"],
+      "notes": "long, dense, incompressible (au-dessus du gate)"
+    },
+    {
+      "id": "f2_cap_theorem",
+      "family": "clean_concise_long",
+      "text": "Je dois expliquer a mon equipe les consequences concretes du theoreme CAP sur l'architecture d'un service de panier d'achat distribue sur plusieurs noeuds, et je veux une analyse precise plutot que l'enonce habituel. En presence d'une partition reseau entre deux groupes de noeuds, le systeme doit trancher entre continuer a accepter les ecritures au risque de servir des etats divergents, ou refuser les ecritures pour preserver une vue coherente au prix de l'indisponibilite. Je voudrais comprendre, pour chacune de ces deux postures, ce que voit reellement l'utilisateur final : un article ajoute au panier qui disparait apres la bascule, un panier momentanement en lecture seule, ou un message d'erreur explicite. Je veux aussi saisir pourquoi la combinaison coherence-et-disponibilite-sans-tolerance-aux-partitions n'a aucun sens des qu'on a plusieurs machines reliees par un reseau faillible, et comment la coherence a terme se positionne dans ce cadre comme un compromis operationnel plutot que comme une troisieme option magique. Explique ces compromis en partant du panier d'achat concret, decris les anomalies observables dans chaque cas, indique comment un mecanisme de reconciliation rattrape les divergences apres la fin de la partition, et precise quelle posture tu recommanderais pour ce service precis et pourquoi.",
+      "expect": ["partition", "coher", "disponib"],
+      "notes": "long, dense theorique"
+    },
+    {
+      "id": "f2_index_btree",
+      "family": "clean_concise_long",
+      "text": "Je dois choisir et justifier la strategie d'indexation d'une table relationnelle volumineuse qui sert a la fois des recherches par egalite stricte sur un identifiant, des recherches par plage sur une date, des tris ORDER BY sur cette meme date, et des recherches par prefixe sur un nom. Je veux une comparaison rigoureuse entre un index B-tree et un index hash pour couvrir ces acces. Pour le B-tree, je voudrais comprendre comment sa structure ordonnee permet a la fois l'egalite, la plage et le tri sans operation de tri supplementaire, comment un index composite gere l'ordre des colonnes et quelles requetes il accelere selon ce prefixe de colonnes, et pourquoi la recherche par prefixe de chaine fonctionne alors que la recherche par suffixe ne peut pas l'utiliser. Pour l'index hash, je veux saisir pourquoi il excelle sur l'egalite pure mais s'effondre totalement sur les plages et les tris, et quel cout memoire il implique. Je veux aussi comprendre l'impact sur les ecritures : maintien de l'ordre, eclatement de pages, fragmentation et amplification des mises a jour sous fort taux d'insertion. Au final, indique precisement quel type d'index ou quelle combinaison d'index tu poserais sur cette table compte tenu de ces quatre motifs d'acces, et le raisonnement complet derriere ce choix.",
+      "expect": ["b-tree", "hash", "plage"],
+      "notes": "long, dense comparatif"
+    },
+    {
+      "id": "f2_oauth_pkce",
+      "family": "clean_concise_long",
+      "text": "Je dois implementer l'authentification d'une application mobile native contre notre serveur d'autorisation et je veux comprendre en profondeur le flux OAuth2 Authorization Code avec PKCE avant de coder. Le contexte : une application installee, sans secret client fiable car decompilable, qui doit obtenir un jeton d'acces sans jamais exposer d'identifiants permanents. Je voudrais suivre la sequence complete : generation d'un code_verifier aleatoire cote client, derivation du code_challenge par hachage, envoi du challenge a l'etape d'autorisation, retour du code d'autorisation sur une redirection vers l'application, puis echange de ce code contre un jeton en presentant le verifier original. Je veux surtout comprendre precisement contre quelle attaque PKCE protege : l'interception du code d'autorisation par une application malveillante enregistree sur le meme schema de redirection, et pourquoi le lien cryptographique entre le challenge et le verifier rend ce code intercepte inutilisable par l'attaquant. Detaille chaque echange entre le client, le serveur d'autorisation et l'API de ressources, ce qui transite a chaque etape, ce qui doit imperativement rester secret cote client, et pourquoi le secret client classique des applications serveur est inadapte au contexte mobile.",
+      "expect": ["pkce", "autoris"],
+      "notes": "long, dense securite"
+    },
+    {
+      "id": "f2_gc_generational",
+      "family": "clean_concise_long",
+      "text": "Je veux comprendre en detail le fonctionnement d'un ramasse-miettes generationnel pour regler le comportement memoire d'un service a forte allocation. Le point de depart est l'hypothese generationnelle selon laquelle la grande majorite des objets meurent jeunes, peu de temps apres leur allocation. Je voudrais comprendre comment cette observation conduit a partitionner le tas en une jeune generation collectee frequemment et une ancienne generation collectee rarement, pourquoi les collectes mineures sur la jeune generation sont rapides parce qu'elles ne parcourent qu'une petite zone contenant peu de survivants, et comment les objets qui survivent a plusieurs collectes sont progressivement promus vers l'ancienne generation. Je veux aussi saisir le cout de ces promotions et le probleme des references inter-generationnelles, ou un objet ancien pointe vers un objet jeune, et comment la barriere d'ecriture combinee a une table des cartes permet de tracer ces references sans rescanner integralement l'ancienne generation a chaque collecte mineure. Explique l'ensemble du mecanisme, les compromis de dimensionnement entre la taille de la jeune generation et la frequence des collectes, et l'effet concret sur la duree et la repartition des pauses observables par l'application.",
+      "expect": ["generation", "promotion"],
+      "notes": "long, dense runtime"
+    },
+    {
+      "id": "f2_vector_hnsw",
+      "family": "clean_concise_long",
+      "text": "Je dois choisir et regler un index pour de la recherche de similarite sur plusieurs millions de vecteurs d'embeddings, et je veux comprendre en profondeur le fonctionnement d'un index HNSW avant de fixer ses parametres. Je voudrais saisir comment la structure en graphe de navigation hierarchique organise les vecteurs sur plusieurs couches, la couche superieure agissant comme un reseau d'autoroutes de longue portee et les couches inferieures affinant progressivement le voisinage local, et comment une recherche descend de couche en couche en suivant a chaque niveau le voisin le plus proche de la cible. Je veux comprendre precisement le role des deux parametres cles : le nombre de connexions par noeud, qui gouverne la densite du graphe et donc la qualite du rappel au prix de la memoire et du temps de construction, et le parametre d'exploration a la recherche, qui regle la largeur du faisceau explore et donc le compromis direct entre rappel et latence. Je veux enfin comprendre pourquoi cette approche atteint une complexite sous-lineaire la ou une recherche exhaustive serait lineaire en nombre de vecteurs, et ce que cela coute en memoire et en temps d'insertion. Explique le mecanisme complet et indique comment tu reglerais ces parametres pour privilegier un rappel eleve sous une contrainte de latence stricte.",
+      "expect": ["hnsw", "graphe", "similar"],
+      "notes": "long, dense recherche vectorielle"
+    },
+    {
+      "id": "f2_rate_limit",
+      "family": "clean_concise_long",
+      "text": "Je dois concevoir la limitation de debit de notre passerelle d'API et je veux comparer rigoureusement les algorithmes token bucket et leaky bucket avant de trancher. Le besoin : autoriser des rafales courtes legitimes, par exemple un client qui synchronise plusieurs ressources d'un coup au reveil de l'application, tout en bornant le debit moyen sur la duree et en protegeant le backend d'une surcharge. Pour le token bucket, je voudrais comprendre comment le seau se remplit a taux constant jusqu'a une capacite maximale, comment chaque requete consomme un jeton, et pourquoi cette capacite accumulee pendant les periodes calmes permet d'absorber une rafale tant que des jetons restent disponibles. Pour le leaky bucket, je veux saisir comment il impose au contraire un debit de sortie parfaitement regulier en faisant fuir les requetes a taux fixe, et pourquoi il lisse les rafales au prix d'une latence d'attente ou d'un rejet quand la file est pleine. Je veux aussi comparer l'etat a maintenir par client, le comportement exact aux limites, et l'interaction avec plusieurs instances de passerelle partageant un compteur central. Au final, indique lequel des deux tu choisirais pour autoriser des pics courts tout en garantissant un debit moyen borne, et le raisonnement complet derriere ce choix.",
+      "expect": ["bucket", "debit"],
+      "notes": "long, dense algorithmique"
+    },
+
+    {
+      "id": "f3_pi",
+      "family": "short_below_gate",
+      "text": "Quelle est la valeur de pi avec cinq decimales ?",
+      "expect": ["3.14159"],
+      "notes": "sous-gate factuel"
+    },
+    {
+      "id": "f3_reverse_list",
+      "family": "short_below_gate",
+      "text": "En Python, comment inverser une liste ?",
+      "expect": ["revers"],
+      "notes": "sous-gate code court"
+    },
+    {
+      "id": "f3_json_def",
+      "family": "short_below_gate",
+      "text": "Qu'est-ce que le format JSON, en une phrase ?",
+      "expect": [],
+      "notes": "sous-gate definition ouverte (juge)"
+    },
+    {
+      "id": "f3_http_404",
+      "family": "short_below_gate",
+      "text": "Que signifie le code HTTP 404 ?",
+      "expect": ["trouv"],
+      "notes": "sous-gate factuel"
+    },
+    {
+      "id": "f3_bash_pwd",
+      "family": "short_below_gate",
+      "text": "Quelle commande affiche le repertoire courant dans un shell Unix ?",
+      "expect": ["pwd"],
+      "notes": "sous-gate factuel"
+    },
+
+    {
+      "id": "f4_booking_backend",
+      "family": "long_technical_multipart",
+      "text": "Je concois le backend d'une application de reservation de creneaux. Les utilisateurs recherchent des disponibilites, reservent, modifient et annulent ; le trafic est tres inegal, avec des pics le lundi matin et le vendredi soir, et des creux la nuit. Le modele de donnees couvre les utilisateurs, les ressources reservables, les creneaux horaires, les reservations, les paiements et les notifications. Cote coherence, je redoute les doubles reservations sur un meme creneau sous forte concurrence : faut-il un verrouillage pessimiste au niveau de la ligne creneau, ou une approche optimiste avec un numero de version et un retry applicatif ? Pour les paiements, le client peut renvoyer la meme requete apres un timeout reseau ; comment garantir l'idempotence sans double-debit ? Les notifications ne doivent pas ralentir la confirmation : vaut-il mieux les sortir du chemin critique via une file de messages ? Pour la lecture des disponibilites a fort trafic, un cache en memoire avec invalidation a l'ecriture tient-il la charge, ou faut-il precalculer une vue materialisee ? Ma question la plus concrete : entre verrouillage pessimiste et optimiste pour reserver un creneau unique sous forte concurrence, lequel choisir, et pourquoi ?",
+      "core": "Entre verrouillage pessimiste et verrouillage optimiste pour reserver un creneau unique sous forte concurrence, lequel choisir et pourquoi ?",
+      "expect": ["verrouillage", "concurrence"],
+      "notes": "realiste, repris de H0.a varied_backend (au-dessus du gate)"
+    },
+    {
+      "id": "f4_event_sourcing",
+      "family": "long_technical_multipart",
+      "text": "Je concois un systeme de gestion de commandes en event sourcing et je veux verrouiller l'architecture avant de coder. Les commandes traversent plusieurs etats (creee, payee, expediee, livree, annulee) et je dois pouvoir rejouer integralement l'historique. Premierement, comment structurer les evenements et le store d'evenements pour garantir un ordre total par agregat sous ecritures concurrentes, en utilisant un numero de version par agregat et une ecriture conditionnelle qui rejette les conflits ? Deuxiemement, comment construire des projections de lecture denormalisees, les maintenir a jour au fil des evenements, et surtout les reconstruire entierement apres un changement de schema sans interrompre le service, par exemple via une reconstruction en parallele puis une bascule atomique ? Troisiemement, comment gerer les snapshots periodiques pour eviter de rejouer des dizaines de milliers d'evenements a chaque chargement d'un agregat ancien, et a quelle frequence les prendre ? Quatriemement, quelle strategie pour les evenements de compensation lorsqu'une annulation survient apres expedition, sachant qu'on ne peut pas reecrire le passe ? Ma question prioritaire, pour commencer : entre stocker l'etat courant materialise en plus du journal d'evenements, ou le deriver systematiquement par rejeu a chaque chargement, que choisir et selon quels criteres de performance et de coherence ?",
+      "core": "En event sourcing, entre stocker l'etat courant materialise en plus des evenements ou le deriver par rejeu, que choisir et selon quels criteres ?",
+      "expect": ["evenement", "projection"],
+      "notes": "realiste architecture (recalibre au-dessus du gate)"
+    },
+    {
+      "id": "f4_k8s_scaling",
+      "family": "long_technical_multipart",
+      "text": "Je deploie un service a trafic tres variable sur Kubernetes et je veux une mise a l'echelle robuste qui ne s'emballe pas. D'abord, comment combiner proprement le Horizontal Pod Autoscaler pilote par des metriques personnalisees comme la latence au 95e percentile et la profondeur de la file de travail, avec le Cluster Autoscaler qui ajoute ou retire des noeuds, sans que les deux boucles de regulation entrent en resonance ? Ensuite, comment dimensionner les requests et limits CPU et memoire pour eviter a la fois l'eviction sous pression memoire et le throttling CPU, tout en conservant une densite de pods correcte par noeud ? Puis, quelle strategie de readiness et liveness probes, de preStop hooks et de PodDisruptionBudget adopter pour absorber un pic sans coupure pendant un rollout simultane ? Enfin, comment traiter les demarrages a froid quand un nouveau pod met du temps a devenir pret alors que la rafale est deja la, par exemple avec une capacite tampon pre-provisionnee ou un pool de pods en surnombre ? Ma question centrale : comment eviter le phenomene d'oscillation, ce cycle de montee puis descente en boucle qui gaspille des ressources et perturbe le service, tout en restant assez reactif pour encaisser les pics du lundi matin ?",
+      "core": "Sur Kubernetes, comment eviter l'oscillation de l'autoscaling tout en restant assez reactif pour encaisser les pics de trafic ?",
+      "expect": ["autoscal", "oscill"],
+      "notes": "realiste infra (recalibre au-dessus du gate)"
+    },
+    {
+      "id": "f4_search_arch",
+      "family": "long_technical_multipart",
+      "text": "Je construis l'infrastructure de recherche d'un catalogue de plusieurs millions de produits et je veux arreter une architecture solide. Premierement, comment structurer l'index inverse et le decouper en shards pour que la latence de requete reste basse a ce volume, et selon quel critere router une requete entrante vers les shards reellement pertinents plutot que d'interroger tout le cluster a chaque fois ? Deuxiemement, quelle architecture de classement en deux phases adopter, avec une premiere passe de recuperation rapide d'un large ensemble de candidats puis une seconde passe de re-scoring fin et plus couteux sur un sous-ensemble reduit, et a quel etage injecter la personnalisation par utilisateur ? Troisiemement, comment indexer en quasi temps reel les changements frequents de stock et de prix sans reconstruire l'index complet, par exemple via des segments incrementaux fusionnes en arriere-plan ? Quatriemement, comment gerer la tolerance aux fautes et renvoyer des resultats partiels acceptables si un shard devient indisponible en pleine requete ? Ma question la plus concrete, pour trancher d'abord : entre un sharding par document et un sharding par terme, lequel choisir pour ce catalogue et pour quelles raisons de latence et de charge ?",
+      "core": "Pour un index de recherche de plusieurs millions de produits, entre sharding par document et sharding par terme, lequel choisir et pourquoi ?",
+      "expect": ["shard", "index"],
+      "notes": "realiste recherche (recalibre au-dessus du gate)"
+    },
+    {
+      "id": "f4_ml_pipeline",
+      "family": "long_technical_multipart",
+      "text": "Je mets en production un pipeline d'apprentissage automatique pour de la recommandation et je veux securiser sa fiabilite avant le lancement. D'abord, comment organiser un feature store coherent partage entre l'entrainement hors ligne et le service en ligne, de sorte que la meme logique de calcul des caracteristiques s'applique des deux cotes et qu'on evite le train/serving skew qui degrade silencieusement les predictions ? Ensuite, quelle strategie adopter entre un entrainement incremental continu et un re-entrainement complet periodique face a la derive des donnees, et comment detecter cette derive a temps via le suivi des distributions d'entree et des metriques de performance en ligne ? Puis, comment servir le modele avec une latence basse en mettant en cache les embeddings et en regroupant les requetes en lots, tout en permettant des tests A/B propres entre plusieurs versions du modele ? Enfin, comment tracer la lignee complete des donnees et des modeles pour garantir la reproductibilite exacte d'une prediction donnee et pouvoir auditer a posteriori quelle version de donnees, de code et d'hyperparametres l'a produite ? Ma question prioritaire : comment garantir concretement que les caracteristiques calculees a l'entrainement sont strictement identiques a celles servies en ligne ?",
+      "core": "Dans un pipeline ML, comment garantir que les features calculees a l'entrainement sont identiques a celles servies en ligne (eviter le train/serving skew) ?",
+      "expect": ["feature", "skew"],
+      "notes": "realiste ML (recalibre au-dessus du gate)"
+    },
+    {
+      "id": "f4_multiregion",
+      "family": "long_technical_multipart",
+      "text": "Je dois rendre notre base de donnees active-active sur plusieurs regions pour la resilience et pour rapprocher les donnees des utilisateurs, et je veux comprendre les compromis avant de m'engager. Premierement, quel modele de coherence adopter entre coherence forte, coherence causale et coherence a terme, et quelles consequences concretes chacun a-t-il pour un utilisateur qui ecrit dans une region puis lit immediatement depuis une autre, par exemple voir ou non sa propre modification recente ? Deuxiemement, comment gerer les conflits d'ecriture concurrente sur la meme donnee depuis deux regions, en comparant les horloges vectorielles, la strategie last-write-wins fondee sur un horodatage, et les types de donnees repliquees sans conflit, avec leurs compromis respectifs de simplicite et de perte potentielle d'ecriture ? Troisiemement, comment router le trafic et basculer lors d'une panne regionale sans perdre d'ecritures ni traiter deux fois la meme operation ? Quatriemement, comment borner et surveiller la latence de replication inter-region ? Ma question centrale : pour un panier d'achat partage et modifiable depuis plusieurs regions, quel mecanisme de resolution de conflits choisir, et pourquoi ?",
+      "core": "Pour une base active-active multi-region et un panier d'achat partage, quel mecanisme de resolution de conflits d'ecriture choisir et pourquoi ?",
+      "expect": ["region", "conflit"],
+      "notes": "realiste distribue (recalibre au-dessus du gate)"
+    },
+    {
+      "id": "f4_streaming",
+      "family": "long_technical_multipart",
+      "text": "Je concois une plateforme d'analytique en temps reel sur un flux d'evenements a tres fort debit et je veux fixer l'architecture de traitement. D'abord, comment structurer les topics et leur partitionnement dans le bus de messages pour garantir l'ordre la ou il est indispensable, par exemple par cle metier, tout en parallelisant le traitement sur l'ensemble des partitions ? Ensuite, comment implementer des agregations fenetrees, a la fois des fenetres glissantes et des fenetres de session, en gerant correctement les evenements arrivant en retard grace a des filigranes qui bornent l'attente avant de clore et d'emettre une fenetre ? Puis, comment obtenir une semantique exactly-once de bout en bout entre la consommation depuis le bus, le traitement avec etat, et l'ecriture dans le puits de donnees, en s'appuyant sur des commits transactionnels ou une ecriture idempotente cote puits ? Enfin, comment rejouer un flux historique pour recalculer une metrique apres correction d'un bug de calcul, sans perturber le flux temps reel en cours ? Ma question la plus concrete : pour un comptage de revenus ou chaque evenement compte, entre at-least-once avec deduplication en aval et exactly-once natif, quel compromis retenir et pourquoi ?",
+      "core": "Pour un comptage de revenus en streaming temps reel, entre at-least-once avec deduplication et exactly-once natif, quel compromis choisir et pourquoi ?",
+      "expect": ["once", "fenetr"],
+      "notes": "realiste streaming (recalibre au-dessus du gate)"
+    }
+  ]
+}

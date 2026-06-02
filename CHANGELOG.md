@@ -14,6 +14,48 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 _(rolling — next release will land here)_
 
+### Session 2026-06 — H1.1 : économie stratifiée + Correctif A (déterminisme compresseur)
+
+> Suite de H0.1 : mesure A/B vrai-LLM sur un **corpus stratifié par famille** de
+> prompt, décomposition coût entrée/**sortie**, qualité honnête (rubric + LLM-juge).
+> A révélé un **non-déterminisme** du compresseur, corrigé (Correctif A). Pas de
+> bench baseline frozen ; preuves = rapports `docs/EFE_PRECHEWING_ECONOMICS_H1a_*`
+> + les locks de tests.
+
+#### Added — outillage de mesure H1.1
+
+- **Corpus économique stratifié** `scripts/bench/corpus/prechew_corpus_v1.json` :
+  26 prompts, 4 familles (F1 redondant, F2 propre/long, F3 court sous-gate, F4
+  long multipart), calibrées de part et d'autre du gate de compression (~250 t).
+- **Harness `scripts/bench/prechew_economics.py` étendu** (rétro-compatible H0.1) :
+  loader de corpus externe (`--corpus`), **décomposition du coût entrée vs SORTIE**
+  (`part_sortie`), **rollup par famille**, qualité = rubric `expect` + **LLM-juge**
+  optionnel (`--judge`, jaccard rétrogradé à « divergence de style »), filtre
+  `--families` (re-run ciblé), génération d'une **règle de routage** par famille.
+
+#### Fixed — Correctif A : non-déterminisme du compresseur
+
+- **Compresseur passé en décodage GREEDY déterministe** (`temperature 0.2 → 0.0`,
+  `crates/efe-nano-app-coordinator/src/clients/compressor.rs`). **Diagnostic** : à
+  `temperature 0.2` SANS `seed` dans la requête `/completion`, le Llama-3.2-1B
+  produisait, sur **entrée identique**, tantôt un résumé valide (gros gain
+  coût/latence), tantôt son placeholder de template → fallback brut
+  (`final_prompt_from_compression`). Mesuré **~33 % de no-op** (7/21 sur F2) :
+  ~2-4 s de compresseur payés pour rien, résultat **irreproductible** rep-à-rep.
+  Le greedy supprime la variance d'échantillonnage à la racine.
+- **Override A/B** : env `EFE_COMPRESSOR_TEMPERATURE` (défaut 0.0 ; `=0.2` restaure
+  le comportement pré-correctif sans recompiler). Helper `env_f32` + constante
+  `COMPRESSOR_TEMPERATURE`, verrouillés par les tests
+  `correctif_a_compressor_temperature_default_is_zero` et
+  `env_f32_parses_with_default_and_bounds`.
+
+#### Findings — verdict économique par famille
+
+- **Le pré-mâchage échange de la complétude contre coût+latence.** Gagnant quand
+  une réponse brève correcte suffit (F1 : CHEWER, −$0,007/req, ~−3,6 s) ; sur les
+  prompts détaillés (F2/F4) le LLM-juge montre justesse ~4/5 mais **complétude
+  ~2/5** → NE PAS chewer si l'exhaustivité est requise. F3 (sous-gate) : BYPASS.
+
 ### Session 2026-06 — Pré-mâchage live (Phase 5) + durcissement de la frontière SLM
 
 > Câblage du pré-mâchage SLM en direct dans le Preview Lab, puis diagnostic +
