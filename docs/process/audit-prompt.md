@@ -317,5 +317,90 @@ re-examen complet de I-stream — le process change n'a pas pris.
 - SOT pattern (I.2 complément) : [`docs/process/sot-pattern.md`](sot-pattern.md)
 - Budget tracker (I.6 complément) : [`docs/process/audit-budget-tracker.md`](audit-budget-tracker.md)
 - Bypass log : [`docs/process/i1-bypass-log.md`](i1-bypass-log.md)
+
+---
+
+## 9. Post-merge monitoring rituals (S9-S12 model)
+
+**Statut** : ajouté 2026-08-07 suite au PR #27 closure ceremony, qui
+a inauguré la discipline formalisée de la surveillance post-merge sur
+4 semaines.  Les futures PRs Phase-3 qui closent un G-XX de niveau
+"propriété forte non-régressable" doivent appliquer ce modèle.
+
+### 9.1 Pourquoi une surveillance post-merge
+
+Le merge du PR (S4) **n'est pas** la fermeture du gap.  Il marque
+seulement le passage du code de "draft" à "main".  Le gap n'est
+**verified closed** qu'après une fenêtre de surveillance qui prouve :
+
+1. **Aucune régression** détectée par la CI nightly.
+2. **Aucun cas-limite** non couvert qui aurait survécu aux 6 passes
+   d'audit S3 (improbable mais possible).
+3. **Le surface end-to-end** (production NDJSON, quarterly publish
+   pipeline, downstream consumers) fonctionne comme attendu.
+
+PR #24 avait fermé G.9 sans monitoring formel.  PR #25 a découvert,
+3 semaines plus tard, que G.9 avait une régression cachée (cf
+`docs/lessons/PR-25-lessons.md` § 4 "did not work").  La discipline
+S9-S12 prévient ce mode d'échec.
+
+### 9.2 Cadence canonique (4 semaines)
+
+| Semaine | Phase | Particularité |
+|---------|-------|---------------|
+| S9      | Premier post-merge week | Quiet week ; aucun touch du code scope-PR |
+| S10     | Surveillance mid-window | Risque "surveillance fatigue trap" surveille ́ explicitement |
+| S11     | Quarterly publish dry-run | **PIVOT** — end-to-end validation sur le surface public |
+| S12     | Closure week | Triple sign-off + master gap tracker update |
+
+### 9.3 Quatre axes de surveillance (AD-S9-S12-1)
+
+Chaque weekly report (`PR-NN-monitoring-week-K.md`) doit couvrir les
+4 axes :
+
+1. **CI nightly job status** — table journalière 5 jours × 1 run.
+2. **Pinning test 5x ritual** — table journalière 5 jours × 5 runs.
+3. **Quarterly publish status** — "Not applicable" sauf S11.
+4. **Backfill long-term spot-check** — 1 case canonique par semaine,
+   rotation case_a → case_b → case_c → case_d (AD-S9-S12-6 §c).
+
+### 9.4 Audit prompt à lire chaque Lundi 09:00 UTC
+
+Le bench-infra lead (ou délégué) doit **re-lire** cette section § 9
+au début de chaque semaine de surveillance.  La discipline I.1
+(audit-prompt-read attestation) s'applique : chaque weekly report
+doit contenir une ligne `**Audit prompt read** : YYYY-MM-DD HH:MM UTC`.
+
+### 9.5 Closure ceremony (S12 Vendredi)
+
+Séquence de 7 actions exécutées en 3h (14:00 → 17:00 UTC) :
+
+1. Pre-flight test re-run (workspace + 7 PR-scope suites).
+2. Cumulative tally review (4-week aggregate).
+3. Master gap tracker update (`docs/gaps/master_tracker.md`).
+4. Lessons file finalisation (sections 1 + 10).
+5. Roadmap archival.
+6. Final pinning canary 5x.
+7. Triple sign-off + audit-trail row population (STABILITY).
+
+### 9.6 Sortie de surveillance (lights-out)
+
+À la closure ceremony, transition documentée :
+- Daily pinning ritual → weekly canary (Vendredi 09:15 UTC).
+- Active monitoring report → CI-only with on-call rotation.
+
+### 9.7 Référence canonique PR
+
+Le PR #27 G.11 closure a inauguré ce modèle.  Le monitoring chain
+artefacts servent de template :
+
+- 4 weekly reports : `docs/lessons/monitoring/PR-27-monitoring-week-{9..12}.md`
+- Dry-run report : `docs/lessons/monitoring/PR-27-quarterly-dry-run-2026-07-31.md`
+- Closure : `docs/lessons/monitoring/PR-27-closure-2026-08-07.md`
+- Meta-test : `bench/harness/tests/s9_s12_monitoring_chain_integrity.rs`
+
+Toute PR Phase-3 future qui clos un gap de classe "propriété forte
+non-régressable" doit produire un ensemble équivalent (avec
+adaptations mineures aux specificités du gap).
 - Architecture PR #25 : [`docs/architecture/EFE_A1_PHASE3_PR25_ARCHITECTURE.md`](../architecture/EFE_A1_PHASE3_PR25_ARCHITECTURE.md)
 - STABILITY_CONTRACT v1.7 § 25 : [`docs/STABILITY_CONTRACT.md`](../STABILITY_CONTRACT.md)

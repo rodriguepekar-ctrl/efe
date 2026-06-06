@@ -1903,7 +1903,9 @@ version = "0.0.1"
 dependencies = [
  "async-trait",
  "dashmap 6.1.0",
+ "efe-nano",
  "efe-nano-sdk",
+ "reqwest 0.12.28",
  "serde",
  "serde_json",
  "thiserror 1.0.69",

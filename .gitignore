@@ -151,3 +151,9 @@ coverage/
 clients/python/efe_tool/_proto/efe/v1/*_pb2.py
 clients/python/efe_tool/_proto/efe/v1/*_pb2.pyi
 clients/python/efe_tool/_proto/efe/v1/*_pb2_grpc.py
+
+# ── Backup/copie GitHub : exclusions (volumineux · généré · duplicata) ──
+# Duplicata complet du repo (restauration), avec son propre .git — pas du source.
+/efe-restored/
+# Matrice RouterBench générée (8.4 Mo) — régénérable via convert_routerbench.py.
+/scripts/routing/routerbench_matrix.json

@@ -1,7 +1,7 @@
 # EFE-A1 Phase 2 — Roadmap refresh (post PR #24)
 
 **Status** : LIVE
-**Date** : 2026-05-16 (post 10-pass audit of PR #24)
+**Date** : 2026-05-16 (post 10-pass audit of PR #24) ; last archive update 2026-08-07 (PR #27 closure)
 **Owner** : `@efe-ai/engineering-leadership`
 **Companion docs** :
 - Lessons : [`docs/lessons/pr24-lessons-learned.md`](../lessons/pr24-lessons-learned.md)
@@ -9,6 +9,25 @@
 - Master runbook : [`docs/runbooks/bench-publish-incident-response.md`](../runbooks/bench-publish-incident-response.md)
 - Quarterly drill : [`docs/drills/drill-quarterly-revocation.md`](../drills/drill-quarterly-revocation.md)
 - Defacement drill : [`docs/drills/drill-defacement-response.md`](../drills/drill-defacement-response.md)
+
+---
+
+## 0bis. Archive log (latest closures appended at top)
+
+| Gap   | PR    | Closed     | Closure provenance                                                     |
+|-------|-------|------------|------------------------------------------------------------------------|
+| G.11  | PR #27| 2026-08-07 | `docs/lessons/monitoring/PR-27-closure-2026-08-07.md` (triple sign-off) ; master tracker `docs/gaps/master_tracker.md` |
+| G.15  | PR #26| 2026-05-17 | `docs/lessons/PR-26-lessons.md`                                        |
+| G.14  | PR #26| 2026-05-06 | `docs/lessons/PR-26-lessons.md`                                        |
+| G.13  | PR #26| 2026-05-06 | `docs/lessons/PR-26-lessons.md`                                        |
+| G.12  | PR #25| 2026-04-22 | `docs/lessons/PR-25-lessons.md`                                        |
+| G.10  | PR #25| 2026-04-08 | `docs/lessons/PR-25-lessons.md`                                        |
+
+> PR #27's closure (G.11) is the **only G-stream item still open** at
+> the start of Phase 3 ; with its 2026-08-07 closure, all 6 G-stream
+> items from the PR #24 audit are now closed and verified.  Phase 3
+> G-stream is **complete** ; remaining work transitions to the
+> H-stream (new capabilities) and the I-stream (process invariants).
 
 ---
 
@@ -88,7 +107,7 @@ fix lands, making progress visible.
 | ID | Title | Owner candidate | Estimate | Test that pins the gap |
 |---|---|---|---|---|
 | **G.10** | History ingestion : populate `/api/history.json` from a 30-day side store | release-eng | 5 weeks | `current_json_ignores_unknown_field_ad16` (D-W) |
-| **G.11** | Tolerance_used population : aggregator re-runs compare against baseline | bench-platform | 3 weeks | `d_az_tolerance_used_currently_always_empty_pinned` |
+| **G.11** | Tolerance_used population : aggregator re-runs compare against baseline | bench-platform | ~~3 weeks~~ **12 weeks actual (S1-S12)** | `g11_round_trip` + 4 freeze tests in `stability_contract_v17` + 14 S3 chain + 12 S9-S12 chain — **[closed, verified 2026-08-07]** via PR #27 ; see `docs/gaps/master_tracker.md` and `docs/lessons/monitoring/PR-27-closure-2026-08-07.md` |
 | **G.12** | Offline Rekor inclusion proof verifier | security-eng | 4 weeks | (new — Phase-3 test) |
 | **G.13** | Unicode-aware PDF (Type0 CIDFont) | report-eng | 6 weeks | `d_al_escape_strips_non_ascii_to_question_mark` |
 | **G.14** | `recovery_time_s` populated by loadgen extension | loadgen-team | 4 weeks | `d_ba_recovery_time_s_field_present_but_unpopulated_in_aggregator` |
@@ -212,7 +231,7 @@ The 3-month slip is because :
 | Team | FTE | Primary G-stream items | Secondary |
 |---|---|---|---|
 | release-eng | 2.0 | G.10, G.15 | Drills, runbooks |
-| bench-platform | 1.5 | G.11, H.1, H.2 | — |
+| bench-platform | 1.5 | ~~G.11~~ **[G.11 closed 2026-08-07]**, H.1, H.2 | — |
 | security-eng | 1.0 | G.12 | I.5 enforcement |
 | report-eng | 1.5 | G.13, H.3 | — |
 | loadgen-team | 1.0 | G.14, H.4, H.5 | — |

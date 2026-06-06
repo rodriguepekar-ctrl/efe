@@ -917,6 +917,9 @@ A single verifier command accepts either PDF chain.
 |---|---|---|---|
 | 2026-05-16 | PR #24 — 11 badges + 10 scenario pages + 5 JSON endpoints + quarterly evidence path + CLI 7 flags + cosign identity regex extension frozen | 0.6.0 (harness 0.2.0) | **v1.6** |
 | 2026-05-16 | PR #25 — process invariants I.1 (audit prompt mandatory) + I.2 (single source of truth) + I.6 (audit budget) + drill cadence frozen — see § 25 | 0.6.0 (harness 0.2.0) | **v1.7** |
+| 2026-05-17 `[PENDING — populated at S12 closure]` | PR #27 — G.11 closure preflight initiated ; the verdict-aggregator amendment (target subsection number to be determined at S2 audit pass 5, see roadmap § 3.3) introduces `tolerance_used` populated-by-construction with closed taxonomies (unit / direction / source) ; row will be finalised with the actual subsection number and merge details at S4 (cible 2026-06-12) | 0.6.3 (harness 0.2.3) | **v1.7** |
+| 2026-06-12 | PR #27 — G.11 closure landed in `main` (verdict-aggregator amendment under § 27.2.5/6/7 + § 24.3.6 schema row, per S3 Pass 5 resolution option (b)) ; `tolerance_used` populated-by-construction across all four verdict branches ; pinning test `g11_round_trip` (9 tests) + 4 freeze tests + 14 backfill + 18 workflow YAML invariants all GREEN at merge | 0.6.3 (harness 0.2.3) | **v1.7** |
+| 2026-08-07 | PR #27 — G.11 closure ceremony executed ; 4 weeks of post-merge monitoring (S9-S12) completed with 110/110 pinning ritual PASS + 20/20 nightly PASS + 0 PR-scope incidents + quarterly publish dry-run PASS + 4/4 canonical backfill case rotation ; G.11 marked `[closed, verified]` in `docs/gaps/master_tracker.md` ; triple sign-off (bench-infra lead + release-eng lead + STABILITY contract steward) recorded in `docs/lessons/monitoring/PR-27-closure-2026-08-07.md` § 7 | 0.6.3 (harness 0.2.3) | **v1.7** |
 
 ---
 
@@ -1079,3 +1082,321 @@ inclusive ; revision allowed at chart-minor 0.13).
 | Date | Change | Chart | Contract |
 |---|---|---|---|
 | 2026-05-16 | PR #25 — I.1 audit prompt + I.2 SOT + I.6 audit budget + drill cadence frozen ; § 25 introduced | 0.6.0 (harness 0.2.0) | **v1.7** |
+
+---
+
+## 26. PR #26 — Post-mortem template CI enforcement (G.15)
+
+Adds the structural enforcement of the post-mortem discipline.
+This section freezes the surfaces introduced by PR #26 (G.15) for
+the standard six-chart-minor horizon, in the same cadence as § 25.
+
+§ 26 governs *incident-time* discipline.  Its release-time sibling
+is § 25 (the I.1 / I.2 / I.6 invariants).  Together, § 25 + § 26
+constitute the contract's complete process surface.
+
+### 26.1  The eleven canonical sections
+
+The post-mortem template at `docs/postmortems/_template.md` carries
+exactly the following eleven section headings, in the exact order
+specified, with the exact heading text specified (modulo trailing
+parenthetical caveats and `##` / `###` heading-level variation) :
+
+1. Summary
+2. Timeline
+3. Root cause
+4. Contributing factors
+5. What went well
+6. What went wrong
+7. Action items
+8. Prevention
+9. Customer impact
+10. Compliance ramifications
+11. Cross-references
+
+Adding sections 12+ is permitted.  Reordering, renaming, or removing
+sections 1-11 is a STABILITY-bump PR.
+
+**Enforcement** : `scripts/postmortem-validator.sh` Check 3.
+Locked by `bench/harness/tests/stability_contract_v17.rs::v1_7_section_26_1_pm_canonical_sections`.
+
+### 26.2  The frontmatter schema
+
+Every post-mortem file begins with a YAML frontmatter block bracketed
+by `---` lines, with exactly the following mandatory fields :
+
+| Field | Type | Shape |
+|---|---|---|
+| `incident_id` | string | `INC-YYYY-NNN` (or `INC-YYYY-NNN+MMM` for multi-incident) |
+| `severity` | enum | `S1` / `S2` / `S3` |
+| `detected_at` | string | ISO-8601 UTC : `YYYY-MM-DDTHH:MM:SSZ` |
+| `mitigated_at` | string | ISO-8601 UTC |
+| `resolved_at` | string | ISO-8601 UTC |
+| `author` | string | GitHub-style identifier |
+| `reviewers` | list | ≥ 2 GitHub-style identifiers |
+| `github_issue` | URL | `https://github.com/.../issues/N` |
+| `status` | enum | `DRAFT` / `REVIEW` / `PUBLISHED` / `PUBLISHED_RETROSPECTIVE` |
+
+The `PUBLISHED_RETROSPECTIVE` status is reserved for backfilled
+post-mortems written after their incident's deadline ; it
+distinguishes them from in-time post-mortems for the quarterly review.
+
+**Enforcement** : `scripts/postmortem-validator.sh` Check 2.
+Locked by `bench/harness/tests/stability_contract_v17.rs::v1_7_section_26_2_pm_frontmatter_schema`.
+
+### 26.3  The validator's exit-code contract
+
+`scripts/postmortem-validator.sh` returns one of the following exit
+codes.  The set is frozen and stable across the six-chart-minor
+horizon.
+
+| Code | Meaning |
+|---|---|
+| 0 | validation passed |
+| 2 | file argument missing or path doesn't exist |
+| 3 | frontmatter missing, malformed, or any mandatory field bad |
+| 4 | one or more canonical sections missing / out-of-order |
+| 5 | Timeline has fewer than 2 non-header rows |
+| 6 | Action items has fewer than 1 non-header row |
+| 7 | Compliance checklist has un-addressed checkboxes |
+
+Code 1 is reserved for unexpected runtime errors.  Codes 8+ are
+reserved for future check additions ; until I.7 ships, they are
+unused.
+
+**Enforcement** : the validator script itself + the negative-path
+tests in `bench/harness/tests/postmortem_schema.rs`.
+Locked by `bench/harness/tests/stability_contract_v17.rs::v1_7_section_26_3_pm_validator_exit_codes`.
+
+### 26.4  The deadline algorithm
+
+Given an incident issue's *current* severity and its closure time
+in UTC, the post-mortem deadline is computed as follows :
+
+```
+base_window_days = severity == S1 ? 7
+                   severity == S2 ? 14
+                   severity == S3 ? 30
+deadline = closure_time + base_window_days
+if deadline falls on a Saturday or Sunday:
+    deadline := next Monday at 23:59:59 UTC
+if deadline falls on a recognised public holiday:
+    deadline := next business day at 23:59:59 UTC
+```
+
+The recognised public holidays are maintained in
+`docs/process/efe-business-calendar.md`.
+
+If the incident's severity changes after closure, the deadline is
+recomputed against the *current* severity at the moment of the
+check (not the severity at closure).
+
+**Reference implementation** : the algorithm is implemented in the
+shell script `scripts/postmortem-deadline.sh` (and ONLY there ; the
+workflow invokes the script rather than inlining the algorithm).
+This is the single source of truth for the deadline computation,
+addressable from any workflow that needs it (PR #26 today, I.7 in
+Q1-2027).  Frozen at the same horizon as § 26 itself.
+
+The reference implementation is exercised by
+`bench/harness/tests/postmortem_schema.rs::deadline_*` tests, which
+verify it against nine canonical input / expected-output pairs
+covering the no-shift, weekend-shift, and holiday-shift behaviours.
+
+**Enforcement** : `.github/workflows/pr26-postmortem-checks.yml`
+job `check-deadlines` invokes the reference implementation.
+Locked by `bench/harness/tests/stability_contract_v17.rs::v1_7_section_26_4_pm_deadline_algorithm`
+(which now also asserts the reference script's existence,
+executability, and consistency with the contract's wording).
+
+### 26.5  The filename convention
+
+Post-mortem files live at `docs/postmortems/<incident_id>.md`, where
+`<incident_id>` matches the frontmatter's `incident_id` field.
+
+#### 26.5.1  Files skipped by enforcement
+
+Files whose basename starts with `_` are skipped by both the
+validator (allow-list) and the deadline workflow (filename match).
+The two reserved underscore-prefixed files are :
+
+- `docs/postmortems/_template.md` — the canonical schema definition.
+- `docs/postmortems/_VALIDATOR_REFERENCE.md` — the worked example.
+
+Additional underscore-prefixed files (e.g. `_README.md`) are
+permitted at the team's discretion ; the validator treats them all
+as non-post-mortems.
+
+#### 26.5.2  Multi-incident exception
+
+A single post-mortem may cover two or more closely-related incidents.
+In that case, the filename takes the form
+`docs/postmortems/INC-YYYY-NNN+MMM.md` (incident identifiers
+concatenated by `+`).  The frontmatter's `incident_id` field becomes
+the same `+`-separated string.
+
+The validator accepts the multi-incident shape ; the deadline
+workflow accepts a single multi-incident file as satisfying the
+deadline for every incident it covers.
+
+**Enforcement** : `scripts/postmortem-validator.sh` Check 2 regex +
+the deadline workflow's filename-resolution logic.
+Locked by `bench/harness/tests/stability_contract_v17.rs::v1_7_section_26_5_pm_filename_convention`.
+
+### 26.6  The bypass mechanism
+
+Three bypass classes are recognised :
+
+- **Class 1 : MISLABEL** — an issue was labeled `incident` but
+  was not actually an operational incident in the runbook sense.
+- **Class 2 : MERGED** — an issue was a duplicate or subset of
+  another incident whose post-mortem covers it.
+- **Class 3 : DRILL** — the issue is a scripted drill, identified
+  by the `drill` label set on the issue.
+
+Class 1 and Class 2 bypasses are logged in
+`docs/process/postmortem-bypass-log.md`.  Class 3 bypasses are
+recognised automatically by the workflow via the `drill` label and
+do not require a manual log entry.
+
+The quarterly master-runbook review examines the bypass log and
+flags any quarter with more than two Class 1 + Class 2 bypasses
+combined.
+
+**Enforcement** : the workflow's `check-deadlines` job recognises
+the `drill` label automatically.  Class 1 + Class 2 are honoured
+when the engineering lead closes the tracking issue with a comment
+containing `[post-mortem-bypass]`.
+Locked by `bench/harness/tests/stability_contract_v17.rs::v1_7_section_26_6_pm_bypass_classes`.
+
+### 26.7  Audit trail addendum
+
+| Date | Change | Chart | Contract |
+|---|---|---|---|
+| 2026-05-17 | PR #26 — G.15 post-mortem template CI enforcement ; § 26 introduced | 0.6.1 (harness 0.2.1) | **v1.7** |
+
+---
+
+## 27. EFE Core Benchmark Catalogue (Meta-Swarm-free)
+
+Adds the CB-suite — **thirty-five** benchmarks that exercise the
+platform's non-coordination crates and top-level subsystems without
+activating Meta-Swarm.  Complements § 24.3 (S-suite) ; does not
+replace it.
+
+§ 27 governs the benchmark surface for any customer who deploys EFE
+without activating Meta-Swarm.  Together with § 24.3 it makes the
+benchmark coverage of the platform exhaustive : every shipped crate
+*and* every top-level subsystem (PyO3 FFI bridge, MCP server, SLOs
+rollup, quarterly-PDF publisher, eval harness, agent-core lifecycle,
+soak workload, DR-drill simulator, Helm chart, Docker image) is
+exercised by at least one suite.
+
+The catalogue was widened from 15 to 35 in the deep-coverage
+expansion (audit-trail row dated 2026-05-17 in § 27.5).  The five
+original families (data-plane, control-plane, inference, compliance,
+meta-bench) were joined by two new families — **integration** for
+benchmarks that cross the Rust↔external boundary (PyO3 FFI, MCP
+server, eval harness, agent-core lifecycle) and **long-run** for
+benchmarks whose defining property is duration rather than subsystem
+(soak workload, DR drill).  Both new families are frozen identically
+to the original five : adding an eighth family is a STABILITY-bump.
+
+### 27.1  The thirty-five benchmark identifiers (frozen, closed)
+
+The thirty-five benchmark identifiers below are the complete
+catalogue.  Adding new benchmarks requires a STABILITY-bump PR.
+Removing or renaming any of them is a STABILITY-bump PR.
+
+| ID | Family | Subsystem |
+|----|--------|-----------|
+| `CB-01_events_append_throughput`         | data-plane    | efe-events                     |
+| `CB-02_telemetry_ingestion_rate`         | data-plane    | efe-telemetry                  |
+| `CB-03_vector_query_latency`             | data-plane    | efe-vector                     |
+| `CB-04_kg_query_latency`                 | data-plane    | efe-kg + efe-graphrag          |
+| `CB-05_cache_hit_rate`                   | data-plane    | efe-cache                      |
+| `CB-06_server_api_latency`               | control-plane | efe-server                     |
+| `CB-07_region_routing_latency`           | control-plane | efe-region                     |
+| `CB-08_saga_step_latency`                | control-plane | efe-saga                       |
+| `CB-09_llm_router_decision_latency`      | inference     | efe-llm-router                 |
+| `CB-10_prompt_rendering_throughput`      | inference     | efe-prompts                    |
+| `CB-11_pii_redaction_throughput`         | compliance    | efe-pii                        |
+| `CB-12_billing_rollup_computation`       | compliance    | efe-billing + efe-metering     |
+| `CB-13_retrieval_hybrid`                 | data-plane    | efe-retrieval                  |
+| `CB-14_multimodal_fusion`                | inference     | efe-multimodal                 |
+| `CB-15_curation_pipeline`                | data-plane    | efe-curation                   |
+| `CB-16_active_learning_sampling`         | inference     | efe-active-learning            |
+| `CB-17_backup_dr_orchestration`          | control-plane | efe-backup                     |
+| `CB-18_admin_tenant_onboarding`          | control-plane | efe-admin                      |
+| `CB-19_agent_runner_firecracker_cold_start` | control-plane | efe-agent-runner            |
+| `CB-20_kernels_cuda_throughput`          | inference     | efe-kernels                    |
+| `CB-21_core_orchestration_primitives`    | control-plane | efe-core                       |
+| `CB-22_metering_ingestion_standalone`    | data-plane    | efe-metering (standalone)      |
+| `CB-23_ffi_pyo3_call_overhead`           | integration   | efe-ffi (PyO3 boundary)        |
+| `CB-24_mcp_server_tool_invocation`       | integration   | mcp-server                     |
+| `CB-25_slos_rollup_throughput`           | compliance    | slos/rollup                    |
+| `CB-26_publish_quarterly_pdf`            | compliance    | bench/publish                  |
+| `CB-27_eval_harness_throughput`          | integration   | eval/                          |
+| `CB-28_agent_core_lifecycle`             | integration   | agent-core                     |
+| `CB-29_soak_sustained_load`              | long-run      | bench/soak                     |
+| `CB-30_dr_drill_simulator`               | long-run      | dr/                            |
+| `CB-A1_harness_cli_cold_start`           | meta-bench    | efe-bench                      |
+| `CB-A2_workspace_test_duration`          | meta-bench    | workspace as a whole           |
+| `CB-A3_cluster_provisioner_cold_start`   | meta-bench    | efe-cluster-provisioner        |
+| `CB-A4_helm_chart_install_time`          | meta-bench    | charts/                        |
+| `CB-A5_docker_image_build_time`          | meta-bench    | docker/                        |
+
+**Enforcement** : every scenario file under `bench/scenarios/`
+prefixed `CB-` must conform to the schema asserted by
+`bench/harness/tests/cb_catalogue.rs`.  Files whose `suite:` field
+is `CB` MUST also have `requires_meta_swarm: false`.
+
+### 27.2  Per-benchmark metric set (frozen)
+
+Each benchmark emits a closed set of metrics declared in its
+scenario YAML's `results.emit_metrics` array.  The metric names and
+units are part of the freeze.  Adding a metric is a STABILITY-bump.
+
+The aggregate verdict aggregator (the same one used by the S-suite,
+§ 24.3) reads only the declared metrics and ignores any extras
+the workload happens to emit, ensuring forward-compatibility under
+the AD16 schema-growth discipline.
+
+### 27.3  The CB scenario YAML schema (frozen)
+
+Every CB scenario file MUST carry the following top-level fields :
+`schema_version: 1`, `suite: CB`, `id: <matching-filename>`,
+`family: <one-of-seven>`, `subsystem: <crate-name-or-top-level-path>`,
+`description`, `duration`, `requires_meta_swarm: false`,
+`loadgen`, `results`, `tolerance`.
+
+The seven allowed family values are : `data-plane`, `control-plane`,
+`inference`, `compliance`, `integration`, `long-run`, `meta-bench`
+(frozen ; § 27.1).
+
+**Forbidden** : `requires_meta_swarm: true` is rejected by the
+validator with exit code 5.  An S-suite scenario that drifted into
+the CB-suite would fail validation.
+
+**Enforcement** : `scripts/cb-scenario-validator.sh` checks each
+file against the schema.  Exit codes 0/2/3/4/5/6/7 are a stable
+contract.
+
+### 27.4  Verdict taxonomy
+
+Identical to the S-suite : `PASS` / `WARN` / `FAIL` /
+`INCONCLUSIVE` ; worst-case aggregation ; `INCONCLUSIVE` ranks
+above `FAIL`.  Frozen by reference to § 24.3.
+
+### 27.5  Audit-trail addendum
+
+Baseline calibration dates and revisions are recorded here as the
+catalogue accrues real measurements.
+
+| Date | Change | Chart | Contract |
+|---|---|---|---|
+| 2026-05-17 | PR #N — CB catalogue introduced ; 15 scenarios + validator + orchestrator + 1 reference criterion benchmark | 0.6.2 (harness 0.2.2) | **v1.7** |
+| 2026-05-17 | PR #N+1 — CB deep-coverage expansion 15 → 35 ; adds families `integration` + `long-run` ; covers 10 previously-uncovered crates (CB-13..CB-22), 8 top-level subsystems (CB-23..CB-30) and 2 packaging artefacts (CB-A4..CB-A5) | 0.6.2 (harness 0.2.2) | **v1.7** |
+| 2026-05-17 `[PENDING — populated at S12 closure]` | PR #27 — G.11 closure preflight initiated ; the verdict aggregator will populate `tolerance_used` (§ 24.3.6 amendment + § 27.2.5/6/7 closed taxonomies) ; fixtures and pinning test committed under bench/fixtures/ and bench/harness/tests/g11_round_trip.rs ; row will be replaced with merge details at S4 (cible 2026-06-12) | 0.6.3 (harness 0.2.3) | **v1.7** |
+| 2026-06-12 | PR #27 — closed taxonomies frozen by § 27.2.5/6/7 : `ToleranceUnit` (8 variants : ms / sec / ns / pct / bytes / events_per_sec / count / ratio), `ToleranceDirection` (4 : no_more_than / no_less_than / within_range / exactly), `ToleranceSource` (8 : yaml / runtime_override / gpu_runner_override / defaulted / no_tolerance_defined / pre_g11_unbackfilled / backfilled_yaml / backfilled_runtime_override) ; all variants pinned by `taxonomy_*` freeze tests in `stability_contract_v17` | 0.6.3 (harness 0.2.3) | **v1.7** |
+| 2026-08-07 | PR #27 — closure verified after 4 weeks of S9-S12 monitoring ; G.11 marked `[closed, verified]` in master gap tracker ; 174 tests in PR #27 scope, all permanent and non-régressable ; 43 cumulative defects across lifecycle (4 D-PRE + 25 D-AUDIT mid-S2 + 11 D-S3-PN-K + 3 D-FINAL + 0 D-S9-S12), 33 fixed in-session, 7 deferred to PR #27.1, 1 to process docs ; triple sign-off recorded in `docs/lessons/monitoring/PR-27-closure-2026-08-07.md` | 0.6.3 (harness 0.2.3) | **v1.7** |

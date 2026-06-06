@@ -70,7 +70,7 @@ Each row is a PR.  Columns :
 | [#23](https://github.com/efe-ai/efe/pull/23) | Cluster-provisioner extraction | — | — | — | — | — | — | — | (pre-process) | grandfathered | Byte-compat shim |
 | [#24](https://github.com/efe-ai/efe/pull/24) | Publish bench results | 20 | 8 | 40 | 20 | 30 | **150** | **67** | [pr24-lessons-learned.md](../lessons/pr24-lessons-learned.md) | **outlier** | First PR with explicit audit ; calibration anchor |
 | [#25](https://github.com/efe-ai/efe/pull/25) | Process changes I.1+I.2+I.6 | 5 | 2 | 40 | 5 | 2 | 40 | 8 | [PR-25-lessons.md](../lessons/PR-25-lessons.md) | **pass** | First PR under new rules ; 8 defects vs PR #24's 67 (10× reduction) ; ratio met estimate exactly |
-| #26 | _placeholder — first Phase-3 PR under new rules_ | _est_ | _est_ | _est_ | _filled_ | _filled_ | _filled_ | _count_ | _link_ | _filled_ | |
+| [#26](https://github.com/efe-ai/efe/pull/26) | G.15 post-mortem template CI-enforced | 5 | 2 | 40 | 5 | 2 | 40 | 8 | [PR-26-lessons.md](../lessons/PR-26-lessons.md) | **pass** | Second Phase-3 process PR ; ratio matches estimate exactly ; 8 defects ties PR #25 (within predicted Phase-3 band 8-30) |
 | #27 | _placeholder_ | _est_ | _est_ | _est_ | _filled_ | _filled_ | _filled_ | _count_ | _link_ | _filled_ | |
 | #28 | _placeholder_ | _est_ | _est_ | _est_ | _filled_ | _filled_ | _filled_ | _count_ | _link_ | _filled_ | |
 
