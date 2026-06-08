@@ -8,6 +8,9 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use crate::catalog;
+use crate::consensus::{
+    ConsistencyJudge, GroundednessJudge, Judge, KeywordOverlapJudge, LengthBandJudge, VerifierJudge,
+};
 use crate::traits::{Decomposer, Generator, Merger, Stage, Verifier};
 
 /// Registry d'agents par rôle (noms snake_case).
@@ -18,6 +21,7 @@ pub struct AgentFleet {
     stages: BTreeMap<String, Arc<dyn Stage>>,
     decomposers: BTreeMap<String, Arc<dyn Decomposer>>,
     mergers: BTreeMap<String, Arc<dyn Merger>>,
+    judges: BTreeMap<String, Arc<dyn Judge>>,
 }
 
 impl std::fmt::Debug for AgentFleet {
@@ -28,6 +32,7 @@ impl std::fmt::Debug for AgentFleet {
             .field("stages", &self.stages.len())
             .field("decomposers", &self.decomposers.len())
             .field("mergers", &self.mergers.len())
+            .field("judges", &self.judges.len())
             .field("total", &self.len())
             .finish()
     }
@@ -59,6 +64,10 @@ impl AgentFleet {
         self.mergers.insert(name.into(), a);
         self
     }
+    pub fn register_judge(&mut self, name: impl Into<String>, a: Arc<dyn Judge>) -> &mut Self {
+        self.judges.insert(name.into(), a);
+        self
+    }
 
     // ── consultation ────────────────────────────────────────────────────────────
     pub fn generator(&self, name: &str) -> Option<Arc<dyn Generator>> {
@@ -76,6 +85,9 @@ impl AgentFleet {
     pub fn merger(&self, name: &str) -> Option<Arc<dyn Merger>> {
         self.mergers.get(name).cloned()
     }
+    pub fn judge(&self, name: &str) -> Option<Arc<dyn Judge>> {
+        self.judges.get(name).cloned()
+    }
 
     /// Nombre total d'agents (tous rôles).
     pub fn len(&self) -> usize {
@@ -84,6 +96,7 @@ impl AgentFleet {
             + self.stages.len()
             + self.decomposers.len()
             + self.mergers.len()
+            + self.judges.len()
     }
     pub fn is_empty(&self) -> bool {
         self.len() == 0
@@ -98,6 +111,7 @@ impl AgentFleet {
             .chain(self.stages.keys())
             .chain(self.decomposers.keys())
             .chain(self.mergers.keys())
+            .chain(self.judges.keys())
             .cloned()
             .collect();
         v.sort();
@@ -146,6 +160,15 @@ impl AgentFleet {
         // générateurs (2)
         f.register_generator("echo_generator", Arc::new(catalog::EchoGenerator))
             .register_generator("const_generator", Arc::new(catalog::ConstGenerator { value: serde_json::Value::Null }));
+        // juges Mode A (8) — 4 critères orthogonaux + 4 vérificateurs-juges du catalogue.
+        f.register_judge("length_band", Arc::new(LengthBandJudge { ideal: 64 }))
+            .register_judge("keyword_overlap", Arc::new(KeywordOverlapJudge))
+            .register_judge("groundedness", Arc::new(GroundednessJudge { source_field: "source".into() }))
+            .register_judge("consistency", Arc::new(ConsistencyJudge))
+            .register_judge("j_non_empty", Arc::new(VerifierJudge::new("j_non_empty", Arc::new(catalog::NonEmptyText))))
+            .register_judge("j_is_object", Arc::new(VerifierJudge::new("j_is_object", Arc::new(catalog::IsObject))))
+            .register_judge("j_keyword", Arc::new(VerifierJudge::new("j_keyword", Arc::new(catalog::KeywordPresent { keyword: "the".into() }))))
+            .register_judge("j_length", Arc::new(VerifierJudge::new("j_length", Arc::new(catalog::LengthBounded { min: 0, max: 1_000_000 }))));
         f
     }
 }
@@ -156,11 +179,14 @@ mod tests {
     use serde_json::json;
 
     #[test]
-    fn standard_fleet_has_all_catalog_agents() {
+    fn standard_fleet_has_catalog_plus_judges() {
         let f = AgentFleet::standard();
-        assert_eq!(f.len(), catalog::MODE_A_AGENT_COUNT, "la flotte standard = tout le catalogue");
-        assert_eq!(f.len(), 34);
-        assert_eq!(f.names().len(), 34);
+        // 34 agents du catalogue + 8 juges Mode A.
+        assert_eq!(f.len(), catalog::MODE_A_AGENT_COUNT + 8);
+        assert_eq!(f.len(), 42);
+        assert_eq!(f.names().len(), 42);
+        assert!(f.judge("consistency").is_some(), "juge Mode A présent");
+        assert!(f.stage("uppercase").is_some(), "agent catalogue présent");
     }
 
     #[tokio::test]

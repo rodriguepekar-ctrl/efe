@@ -23,6 +23,7 @@
 #![warn(rust_2018_idioms)]
 
 pub mod catalog;
+pub mod consensus;
 pub mod fleet;
 pub mod generate_verify;
 pub mod hierarchical;
@@ -30,6 +31,9 @@ pub mod pipeline;
 pub mod topology;
 pub mod traits;
 
+pub use consensus::{
+    AggOutcome, Aggregator, Ballot, BordaConsensus, CondorcetConsensus, Judge, MajorityVote,
+};
 pub use fleet::AgentFleet;
 pub use generate_verify::{GenerateVerify, GvResult};
 pub use hierarchical::{FnSolver, GvSolver, HierResult, HierSolver, Hierarchical};

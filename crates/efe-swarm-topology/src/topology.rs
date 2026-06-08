@@ -228,7 +228,8 @@ mod tests {
     #[test]
     fn swarm_context_exposes_standard_fleet() {
         let ctx = SwarmContext::standard();
-        assert_eq!(ctx.fleet.len(), 34);
+        assert_eq!(ctx.fleet.len(), 42); // 34 catalogue + 8 juges
         assert!(ctx.fleet.stage("uppercase").is_some());
+        assert!(ctx.fleet.judge("consistency").is_some());
     }
 }
