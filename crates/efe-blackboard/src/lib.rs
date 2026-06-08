@@ -18,14 +18,33 @@
 pub mod blackboard;
 pub mod error;
 pub mod eventbus;
+pub mod metrics;
 pub mod observer;
+pub mod reliable;
+pub mod replay;
+pub mod sink;
 pub mod snapshot;
+pub mod streaming;
+pub mod topic_router;
+pub mod work_queue;
 
-pub use blackboard::{Blackboard, BlackboardValue, BlackboardWrite};
+pub use blackboard::{Blackboard, BlackboardValue, BlackboardWrite, DEFAULT_RECENT_HISTORY};
 pub use error::{BlackboardError, EventBusError};
 pub use eventbus::{EventBus, EventBusSubscription, SwarmEvent};
+pub use metrics::{LatencyHistogram, MetricsObserver, MetricsSnapshot, SubstrateMetrics};
 pub use observer::{BlackboardObserver, ObserverRegistration};
+pub use reliable::{ReliableItem, ReliableReader, ReliableTopic};
+pub use replay::EventLog;
+pub use sink::{CapturingSink, ChannelSink, CountingSink, NoopSink, WriteSink};
 pub use snapshot::BlackboardSnapshot;
+pub use streaming::{
+    AgentCtx, AgentHandler, AgentReport, QuiescenceTracker, StreamingSwarm, SwarmReport,
+};
+pub use topic_router::{MergedSubscription, TopicRouter};
+pub use work_queue::{
+    shard_owner, shard_topic, shard_topic_for_item, ClaimModel, ClaimOutcome, WorkQueue,
+    WorkQueueStats,
+};
 
 /// **N21** : Crate semver.
 pub const CRATE_VERSION: &str = env!("CARGO_PKG_VERSION");

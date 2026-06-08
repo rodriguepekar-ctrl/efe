@@ -6,13 +6,14 @@
 
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
-use std::time::SystemTime;
+use std::time::{Duration, SystemTime};
 
 use efe_nano_sdk::{AgentId, SwarmId};
 use serde::{Deserialize, Serialize};
 use tokio::sync::broadcast;
 
 use crate::error::EventBusError;
+use crate::metrics::SubstrateMetrics;
 
 /// **N21 + I4** : default channel capacity (per architecture § 7.2).
 pub const DEFAULT_EVENTBUS_CAPACITY: usize = 256;
@@ -37,6 +38,8 @@ pub struct EventBus {
     capacity: usize,
     published_total: Arc<AtomicU64>,
     dropped_total: Arc<AtomicU64>,
+    /// **WS5** : registre de métriques optionnel (publish / drop / propagation).
+    metrics: Option<Arc<SubstrateMetrics>>,
 }
 
 impl std::fmt::Debug for EventBus {
@@ -79,7 +82,16 @@ impl EventBus {
             capacity,
             published_total: Arc::new(AtomicU64::new(0)),
             dropped_total: Arc::new(AtomicU64::new(0)),
+            metrics: None,
         }
+    }
+
+    /// **WS5** : construit avec un registre de métriques branché (publish, drop,
+    /// latence de propagation inter-agent mesurée à la réception).
+    pub fn with_metrics(capacity: usize, metrics: Arc<SubstrateMetrics>) -> Self {
+        let mut bus = Self::with_capacity(capacity);
+        bus.metrics = Some(metrics);
+        bus
     }
 
     pub fn capacity(&self) -> usize {
@@ -114,6 +126,9 @@ impl EventBus {
     pub fn publish(&self, event: SwarmEvent) -> Result<usize, EventBusError> {
         let result = self.tx.send(event);
         self.published_total.fetch_add(1, Ordering::Relaxed);
+        if let Some(m) = &self.metrics {
+            m.record_event_published();
+        }
         match result {
             Ok(receiver_count) => Ok(receiver_count),
             Err(_) => {
@@ -132,6 +147,7 @@ impl EventBus {
         EventBusSubscription {
             rx: self.tx.subscribe(),
             dropped_total: self.dropped_total.clone(),
+            metrics: self.metrics.clone(),
         }
     }
 }
@@ -145,6 +161,8 @@ impl EventBus {
 pub struct EventBusSubscription {
     rx: broadcast::Receiver<SwarmEvent>,
     dropped_total: Arc<AtomicU64>,
+    /// **WS5** : métriques optionnelles (latence de propagation + drops).
+    metrics: Option<Arc<SubstrateMetrics>>,
 }
 
 impl std::fmt::Debug for EventBusSubscription {
@@ -154,17 +172,36 @@ impl std::fmt::Debug for EventBusSubscription {
 }
 
 impl EventBusSubscription {
+    /// **WS1** : construit une souscription à partir de parts brutes — utilisé
+    /// par [`crate::TopicRouter`] pour réutiliser la mécanique recv/propagation.
+    pub(crate) fn from_parts(
+        rx: broadcast::Receiver<SwarmEvent>,
+        dropped_total: Arc<AtomicU64>,
+        metrics: Option<Arc<SubstrateMetrics>>,
+    ) -> Self {
+        Self {
+            rx,
+            dropped_total,
+            metrics,
+        }
+    }
+
     /// **N21** : Receive the next event.  Returns `None` if the bus
     /// has been dropped (channel closed).  On `RecvError::Lagged`,
     /// ticks the drop counter and recurses for the next event.
     pub async fn recv(&mut self) -> Option<SwarmEvent> {
         loop {
             match self.rx.recv().await {
-                Ok(e) => return Some(e),
+                Ok(e) => {
+                    self.record_propagation(&e);
+                    return Some(e);
+                }
                 Err(broadcast::error::RecvError::Closed) => return None,
                 Err(broadcast::error::RecvError::Lagged(n)) => {
-                    self.dropped_total
-                        .fetch_add(n, Ordering::Relaxed);
+                    self.dropped_total.fetch_add(n, Ordering::Relaxed);
+                    if let Some(m) = &self.metrics {
+                        m.record_event_dropped(n);
+                    }
                     // Loop and try again ; the receiver is now caught
                     // up to the latest available event.
                     continue;
@@ -173,14 +210,30 @@ impl EventBusSubscription {
         }
     }
 
+    /// **WS5** : latence de propagation inter-agent = `now − published_at`.
+    fn record_propagation(&self, e: &SwarmEvent) {
+        if let Some(m) = &self.metrics {
+            let lat = SystemTime::now()
+                .duration_since(e.published_at)
+                .unwrap_or(Duration::ZERO);
+            m.record_propagation(lat);
+        }
+    }
+
     /// **N21** : Non-blocking receive — returns immediately.
     pub fn try_recv(&mut self) -> Option<SwarmEvent> {
         match self.rx.try_recv() {
-            Ok(e) => Some(e),
+            Ok(e) => {
+                self.record_propagation(&e);
+                Some(e)
+            }
             Err(broadcast::error::TryRecvError::Empty) => None,
             Err(broadcast::error::TryRecvError::Closed) => None,
             Err(broadcast::error::TryRecvError::Lagged(n)) => {
                 self.dropped_total.fetch_add(n, Ordering::Relaxed);
+                if let Some(m) = &self.metrics {
+                    m.record_event_dropped(n);
+                }
                 None
             }
         }

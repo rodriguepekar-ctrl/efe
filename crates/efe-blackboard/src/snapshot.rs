@@ -49,6 +49,17 @@ impl BlackboardSnapshot {
     pub fn iter(&self) -> impl Iterator<Item = (&String, &BlackboardValue)> {
         self.fields.iter()
     }
+
+    /// **WS6** : carte pointeur → valeur (sans métadonnées version/agent/horodatage),
+    /// triée. Sert à comparer le DÉTERMINISME de l'état final entre deux runs : les
+    /// métadonnées (`written_at`, `written_by`) varient, mais l'état métier (les
+    /// valeurs sur clés distinctes) doit être identique.
+    pub fn value_map(&self) -> BTreeMap<String, serde_json::Value> {
+        self.fields
+            .iter()
+            .map(|(k, v)| (k.clone(), v.value.clone()))
+            .collect()
+    }
 }
 
 #[cfg(test)]

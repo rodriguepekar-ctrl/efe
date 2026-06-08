@@ -4,9 +4,9 @@
 //!
 //! Architecture § 7.2 + ADR-2 + I3 + I17.
 
-use std::collections::BTreeMap;
-use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::Mutex;
+use std::collections::{BTreeMap, VecDeque};
+use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
+use std::sync::{Arc, Mutex, RwLock};
 use std::time::SystemTime;
 
 use dashmap::DashMap;
@@ -14,7 +14,15 @@ use efe_nano_sdk::{AgentId, SwarmId};
 use serde::{Deserialize, Serialize};
 
 use crate::error::BlackboardError;
+use crate::metrics::SubstrateMetrics;
+use crate::observer::BlackboardObserver;
+use crate::sink::WriteSink;
 use crate::snapshot::BlackboardSnapshot;
+
+/// **WS3** : capacité par défaut du ring d'historique récent (nombre d'écritures).
+/// Les compteurs EXACTS (`write_count`, `writes_by_agent`) ne sont PAS bornés ;
+/// seul l'historique détaillé récent l'est, pour borner la mémoire (corrige F4).
+pub const DEFAULT_RECENT_HISTORY: usize = 8192;
 
 /// **N21** : a single versioned blackboard cell.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -51,9 +59,28 @@ pub struct BlackboardWrite {
 pub struct Blackboard {
     fields: DashMap<String, BlackboardValue>,
     swarm_id: SwarmId,
-    write_history: Mutex<Vec<BlackboardWrite>>,
+    /// **WS3** : ring BORNÉ des N dernières écritures (debug). Remplace l'ancien
+    /// `Mutex<Vec<…>>` non borné (corrige F4 : croissance mémoire).
+    recent: Mutex<VecDeque<BlackboardWrite>>,
+    recent_cap: usize,
+    /// **WS3** : compteur EXACT d'écritures (jamais borné, O(1)).
+    writes_total: AtomicU64,
+    /// **WS3** : compteur EXACT par agent (O(1), remplace le scan O(historique)).
+    writes_per_agent: DashMap<AgentId, AtomicU64>,
+    /// **WS3** : écritures rejetées pour dépassement de cap.
+    rejections_total: AtomicU64,
     total_bytes: AtomicUsize,
     max_bytes: usize,
+    /// **WS3** : caps par namespace (prefixe → octets max), triés longest-first.
+    namespace_caps: Vec<(String, usize)>,
+    /// **WS3** : octets cumulés par namespace (suivi seulement si caps configurés).
+    ns_bytes: DashMap<String, AtomicUsize>,
+    /// **WS3** : exutoire d'historique (provenance / journal de replay).
+    sink: RwLock<Option<Arc<dyn WriteSink>>>,
+    /// **WS5** : registre de métriques (optionnel).
+    metrics: RwLock<Option<Arc<SubstrateMetrics>>>,
+    /// **WS5** : observateurs — le hook est désormais CÂBLÉ dans write/write_if.
+    observers: RwLock<Vec<Arc<dyn BlackboardObserver>>>,
 }
 
 impl std::fmt::Debug for Blackboard {
@@ -73,14 +100,46 @@ impl Blackboard {
         Self::with_cap(swarm_id, crate::MAX_BLACKBOARD_BYTES)
     }
 
-    /// **N21 — test helper** : custom cap.
+    /// **N21 — test helper** : custom cap global.
     pub fn with_cap(swarm_id: SwarmId, max_bytes: usize) -> Self {
+        Self::build(swarm_id, max_bytes, DEFAULT_RECENT_HISTORY, Vec::new())
+    }
+
+    /// **WS3** : construit avec des caps PAR NAMESPACE (en plus du cap global).
+    /// `caps` = liste (prefixe, octets_max) ; le cap global s'applique toujours
+    /// au total. Permet ex. `/cand/* = 4 Mo`, `/ctrl/* = 64 Ko` (corrige F5).
+    pub fn with_namespaces(swarm_id: SwarmId, max_bytes: usize, caps: Vec<(String, usize)>) -> Self {
+        Self::build(swarm_id, max_bytes, DEFAULT_RECENT_HISTORY, caps)
+    }
+
+    /// **WS3** : variante avec capacité d'historique récent explicite.
+    pub fn with_recent_cap(swarm_id: SwarmId, max_bytes: usize, recent_cap: usize) -> Self {
+        Self::build(swarm_id, max_bytes, recent_cap, Vec::new())
+    }
+
+    fn build(
+        swarm_id: SwarmId,
+        max_bytes: usize,
+        recent_cap: usize,
+        mut caps: Vec<(String, usize)>,
+    ) -> Self {
+        // longest-prefix-first → le 1er prefixe qui matche est le plus spécifique.
+        caps.sort_by(|a, b| b.0.len().cmp(&a.0.len()));
         Self {
             fields: DashMap::new(),
             swarm_id,
-            write_history: Mutex::new(Vec::new()),
+            recent: Mutex::new(VecDeque::new()),
+            recent_cap,
+            writes_total: AtomicU64::new(0),
+            writes_per_agent: DashMap::new(),
+            rejections_total: AtomicU64::new(0),
             total_bytes: AtomicUsize::new(0),
             max_bytes,
+            namespace_caps: caps,
+            ns_bytes: DashMap::new(),
+            sink: RwLock::new(None),
+            metrics: RwLock::new(None),
+            observers: RwLock::new(Vec::new()),
         }
     }
 
@@ -133,11 +192,14 @@ impl Blackboard {
             .saturating_sub(old_bytes)
             .saturating_add(new_bytes);
         if new_total > self.max_bytes {
+            self.note_rejection();
             return Err(BlackboardError::SizeLimitExceeded {
                 current: new_total,
                 max: self.max_bytes,
             });
         }
+        // **WS3** : cap par namespace (en plus du cap global).
+        let ns_applied = self.check_namespace_cap(pointer, old_bytes, new_bytes)?;
 
         let new_version = old_version + 1;
         let bv = BlackboardValue {
@@ -148,18 +210,19 @@ impl Blackboard {
         };
         self.fields.insert(pointer.to_string(), bv);
         self.total_bytes.store(new_total, Ordering::Release);
+        self.commit_namespace(ns_applied);
 
-        // Audit log : push to the history vec.  Lock is short-lived
-        // (no .await inside — I17).
-        if let Ok(mut h) = self.write_history.lock() {
-            h.push(BlackboardWrite {
+        // **WS3/WS5** : compteurs O(1) + ring borné + sink + métriques + observers.
+        self.record_write(
+            BlackboardWrite {
                 pointer: pointer.to_string(),
                 version: new_version,
                 agent_id,
                 at: SystemTime::now(),
                 bytes: new_bytes,
-            });
-        }
+            },
+            new_total,
+        );
         Ok(new_version)
     }
 
@@ -180,6 +243,7 @@ impl Blackboard {
         agent_id: AgentId,
     ) -> Result<u64, BlackboardError> {
         validate_pointer(pointer)?;
+        self.note_cas_attempt(); // **WS5** : chaque write_if = une tentative CAS.
         let new_bytes = serialised_size(&value);
 
         // Hold the shard lock for the entire compare + swap.
@@ -192,6 +256,7 @@ impl Blackboard {
         };
 
         if old_version != expected_version {
+            self.note_conflict();
             return Err(BlackboardError::Conflict {
                 pointer: pointer.to_string(),
                 expected_version,
@@ -199,17 +264,21 @@ impl Blackboard {
             });
         }
 
-        // Size check.
+        // Size check (global).
         let cur_total = self.total_bytes.load(Ordering::Acquire);
         let new_total = cur_total
             .saturating_sub(old_bytes)
             .saturating_add(new_bytes);
         if new_total > self.max_bytes {
+            self.note_rejection();
             return Err(BlackboardError::SizeLimitExceeded {
                 current: new_total,
                 max: self.max_bytes,
             });
         }
+        // **WS3** : cap par namespace (ns_bytes est une DashMap distincte de
+        // `fields` → pas de réentrance sur le shard tenu par `entry`).
+        let ns_applied = self.check_namespace_cap(pointer, old_bytes, new_bytes)?;
 
         let new_version = old_version + 1;
         let bv = BlackboardValue {
@@ -226,18 +295,21 @@ impl Blackboard {
                 v.insert(bv);
             }
         }
+        // `entry` (et donc la garde du shard `fields`) est relâchée ICI ; les
+        // hooks ci-dessous ne risquent aucune réentrance sur le même shard.
         self.total_bytes.store(new_total, Ordering::Release);
+        self.commit_namespace(ns_applied);
 
-        // Audit log : short-lived lock (I17).
-        if let Ok(mut h) = self.write_history.lock() {
-            h.push(BlackboardWrite {
+        self.record_write(
+            BlackboardWrite {
                 pointer: pointer.to_string(),
                 version: new_version,
                 agent_id,
                 at: SystemTime::now(),
                 bytes: new_bytes,
-            });
-        }
+            },
+            new_total,
+        );
         Ok(new_version)
     }
 
@@ -266,28 +338,226 @@ impl Blackboard {
         }
     }
 
-    /// **N21** : Read the full audit log of writes (cloned).
+    /// **WS3** : historique RÉCENT borné (les N dernières écritures), ordre
+    /// d'insertion. Pour l'historique complet, brancher un [`WriteSink`].
     pub fn write_history(&self) -> Vec<BlackboardWrite> {
-        self.write_history
+        self.recent
             .lock()
-            .map(|h| h.clone())
+            .map(|h| h.iter().cloned().collect())
             .unwrap_or_default()
     }
 
-    /// **N21** : Cumulative number of writes since construction.
+    /// **WS3** : nombre EXACT d'écritures (atomique, jamais borné) — O(1).
     pub fn write_count(&self) -> usize {
-        self.write_history
-            .lock()
-            .map(|h| h.len())
+        self.writes_total.load(Ordering::Relaxed) as usize
+    }
+
+    /// **WS3** : nombre EXACT d'écritures par agent — O(1) (DashMap atomique).
+    pub fn writes_by_agent(&self, agent_id: &AgentId) -> usize {
+        self.writes_per_agent
+            .get(agent_id)
+            .map(|a| a.load(Ordering::Relaxed) as usize)
             .unwrap_or(0)
     }
 
-    /// **N21** : Per-agent write count (handy for the SwarmReport).
-    pub fn writes_by_agent(&self, agent_id: &AgentId) -> usize {
-        self.write_history
-            .lock()
-            .map(|h| h.iter().filter(|w| &w.agent_id == agent_id).count())
+    /// **WS3** : écritures rejetées (dépassement de cap global ou namespace).
+    pub fn rejections(&self) -> u64 {
+        self.rejections_total.load(Ordering::Relaxed)
+    }
+
+    /// **WS3** : taille courante du ring d'historique récent.
+    pub fn recent_len(&self) -> usize {
+        self.recent.lock().map(|h| h.len()).unwrap_or(0)
+    }
+
+    /// **WS3** : octets cumulés d'un namespace (0 si non suivi).
+    pub fn namespace_bytes(&self, prefix: &str) -> usize {
+        self.ns_bytes
+            .get(prefix)
+            .map(|a| a.load(Ordering::Relaxed))
             .unwrap_or(0)
+    }
+
+    // ── WS3/WS5 : branchements (seams) ─────────────────────────────────────────
+
+    /// **WS3** : branche un exutoire d'historique (provenance / journal).
+    pub fn set_write_sink(&self, sink: Arc<dyn WriteSink>) {
+        if let Ok(mut s) = self.sink.write() {
+            *s = Some(sink);
+        }
+    }
+
+    /// **WS5** : branche le registre de métriques du substrat.
+    pub fn set_metrics(&self, metrics: Arc<SubstrateMetrics>) {
+        if let Ok(mut m) = self.metrics.write() {
+            *m = Some(metrics);
+        }
+    }
+
+    /// **WS5** : enregistre un observateur (appelé à CHAQUE écriture committée).
+    pub fn register_observer(&self, observer: Arc<dyn BlackboardObserver>) {
+        if let Ok(mut o) = self.observers.write() {
+            o.push(observer);
+        }
+    }
+
+    // ── WS3 : éviction par namespace / epoch ───────────────────────────────────
+
+    /// **WS3** : supprime toutes les cellules dont la clé commence par `prefix`,
+    /// décrémente `total_bytes` et remet à zéro les compteurs de namespace
+    /// concernés. Sert à réinitialiser les namespaces transients entre runs.
+    pub fn evict_namespace(&self, prefix: &str) {
+        let keys: Vec<String> = self
+            .fields
+            .iter()
+            .filter(|e| e.key().starts_with(prefix))
+            .map(|e| e.key().clone())
+            .collect();
+        let mut removed = 0usize;
+        for k in keys {
+            if let Some((_, v)) = self.fields.remove(&k) {
+                removed = removed.saturating_add(serialised_size(&v.value));
+            }
+        }
+        // total_bytes -= removed (pattern load/store, cohérent avec write).
+        let cur = self.total_bytes.load(Ordering::Acquire);
+        self.total_bytes
+            .store(cur.saturating_sub(removed), Ordering::Release);
+        // remet à zéro les ns_bytes des namespaces couverts.
+        for (p, _) in &self.namespace_caps {
+            if p.starts_with(prefix) || prefix.starts_with(p.as_str()) {
+                if let Some(a) = self.ns_bytes.get(p) {
+                    a.store(0, Ordering::Release);
+                }
+            }
+        }
+        if let Ok(m) = self.metrics.read() {
+            if let Some(m) = m.as_ref() {
+                m.set_bb_bytes(self.total_bytes.load(Ordering::Relaxed));
+            }
+        }
+    }
+
+    /// **WS3** : ouvre une nouvelle « epoch » en évinçant des namespaces
+    /// transients (ex. `["/cand/", "/claim/"]`) — purge entre deux runs d'essaim.
+    pub fn new_epoch(&self, transient_prefixes: &[&str]) {
+        for p in transient_prefixes {
+            self.evict_namespace(p);
+        }
+    }
+
+    // ── Privés ─────────────────────────────────────────────────────────────────
+
+    /// Chemin commun post-commit : compteurs O(1), ring borné, sink, métriques,
+    /// observers. Appelé HORS de toute garde de shard `fields`.
+    fn record_write(&self, w: BlackboardWrite, new_total: usize) {
+        self.writes_total.fetch_add(1, Ordering::Relaxed);
+        self.writes_per_agent
+            .entry(w.agent_id.clone())
+            .or_default()
+            .fetch_add(1, Ordering::Relaxed);
+        // ring borné (corrige F4 : mémoire bornée).
+        if self.recent_cap > 0 {
+            if let Ok(mut r) = self.recent.lock() {
+                while r.len() >= self.recent_cap {
+                    r.pop_front();
+                }
+                r.push_back(w.clone());
+            }
+        }
+        // sink (streaming historique complet hors chemin chaud).
+        if let Ok(s) = self.sink.read() {
+            if let Some(s) = s.as_ref() {
+                s.on_write(&w);
+            }
+        }
+        // métriques (WS5).
+        if let Ok(m) = self.metrics.read() {
+            if let Some(m) = m.as_ref() {
+                m.record_bb_write();
+                m.set_bb_bytes(new_total);
+            }
+        }
+        // observers (hook désormais CÂBLÉ).
+        if let Ok(obs) = self.observers.read() {
+            for o in obs.iter() {
+                o.on_write(&w);
+            }
+        }
+    }
+
+    fn note_rejection(&self) {
+        self.rejections_total.fetch_add(1, Ordering::Relaxed);
+        if let Ok(m) = self.metrics.read() {
+            if let Some(m) = m.as_ref() {
+                m.record_bb_rejection();
+            }
+        }
+    }
+
+    fn note_conflict(&self) {
+        if let Ok(m) = self.metrics.read() {
+            if let Some(m) = m.as_ref() {
+                m.record_bb_conflict();
+            }
+        }
+    }
+
+    fn note_cas_attempt(&self) {
+        if let Ok(m) = self.metrics.read() {
+            if let Some(m) = m.as_ref() {
+                m.record_bb_cas_attempt();
+            }
+        }
+    }
+
+    /// Index du namespace le plus spécifique couvrant `pointer` (caps triés
+    /// longest-first → première correspondance = la plus longue).
+    fn ns_match(&self, pointer: &str) -> Option<usize> {
+        self.namespace_caps
+            .iter()
+            .position(|(p, _)| pointer.starts_with(p.as_str()))
+    }
+
+    /// Vérifie le cap du namespace ; renvoie `Some((idx, projeté))` à committer,
+    /// `None` si aucun namespace, `Err` si dépassé.
+    fn check_namespace_cap(
+        &self,
+        pointer: &str,
+        old_bytes: usize,
+        new_bytes: usize,
+    ) -> Result<Option<(usize, usize)>, BlackboardError> {
+        if self.namespace_caps.is_empty() {
+            return Ok(None);
+        }
+        let Some(idx) = self.ns_match(pointer) else {
+            return Ok(None);
+        };
+        let (prefix, cap) = &self.namespace_caps[idx];
+        let cur = self
+            .ns_bytes
+            .get(prefix)
+            .map(|a| a.load(Ordering::Acquire))
+            .unwrap_or(0);
+        let projected = cur.saturating_sub(old_bytes).saturating_add(new_bytes);
+        if projected > *cap {
+            self.note_rejection();
+            return Err(BlackboardError::SizeLimitExceeded {
+                current: projected,
+                max: *cap,
+            });
+        }
+        Ok(Some((idx, projected)))
+    }
+
+    fn commit_namespace(&self, applied: Option<(usize, usize)>) {
+        if let Some((idx, projected)) = applied {
+            let prefix = &self.namespace_caps[idx].0;
+            self.ns_bytes
+                .entry(prefix.clone())
+                .or_default()
+                .store(projected, Ordering::Release);
+        }
     }
 }
 
