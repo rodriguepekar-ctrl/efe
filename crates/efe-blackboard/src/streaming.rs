@@ -24,8 +24,8 @@ use std::time::{Duration, Instant, SystemTime};
 
 use efe_nano_sdk::AgentId;
 use serde_json::Value;
-use tokio::sync::Notify;
-use tokio::task::JoinHandle;
+use tokio::sync::{Notify, Semaphore};
+use tokio::task::{JoinHandle, JoinSet};
 
 use crate::blackboard::Blackboard;
 use crate::eventbus::SwarmEvent;
@@ -159,9 +159,18 @@ impl AgentCtx {
     }
 }
 
-/// Handler d'agent streaming : appelé pour chaque événement reçu ; peut émettre
-/// via le `AgentCtx`. Synchrone (agents type Mode A) — suffisant pour WS2.
+/// Handler d'agent streaming SYNCHRONE (agents type Mode A — pur Rust).
 pub type AgentHandler = Arc<dyn Fn(&AgentCtx, &SwarmEvent) + Send + Sync + 'static>;
+
+/// Future boxée renvoyée par un handler ASYNCHRONE.
+pub type BoxedHandlerFuture =
+    std::pin::Pin<Box<dyn std::future::Future<Output = ()> + Send + 'static>>;
+
+/// **Phase 2** : handler d'agent ASYNCHRONE (agents Mode C — appels `LlmClient`).
+/// Reçoit un `Arc<AgentCtx>` (clonable dans le future) + l'événement possédé.
+/// Ex. : `Arc::new(|ctx, ev| Box::pin(async move { /* appel SLM */ ctx.emit(...) }))`.
+pub type AsyncAgentHandler =
+    Arc<dyn Fn(Arc<AgentCtx>, SwarmEvent) -> BoxedHandlerFuture + Send + Sync + 'static>;
 
 /// Rapport par agent.
 #[derive(Debug, Clone)]
@@ -239,6 +248,59 @@ impl StreamingSwarm {
                 ctx.tracker.on_done(); // l'événement courant est consommé APRÈS d'éventuels émis
                 processed += 1;
             }
+            AgentReport {
+                agent: ctx.id.clone(),
+                processed,
+                emitted: ctx.emitted.load(Ordering::Relaxed),
+            }
+        });
+        self.handles.push(handle);
+    }
+
+    /// **Phase 2** : enregistre un agent ASYNCHRONE (Mode C — appels `LlmClient`).
+    /// `max_concurrency` borne le nombre d'appels en vol par cet agent
+    /// (backpressure : les appels SLM lents ne saturent pas). La quiescence reste
+    /// correcte : `on_done` est appelé à la FIN du handler (après d'éventuels émis).
+    pub fn async_agent(
+        &mut self,
+        id: AgentId,
+        input_topic: &str,
+        max_concurrency: usize,
+        handler: AsyncAgentHandler,
+    ) {
+        let mut sub = self.router.subscribe(input_topic);
+        let ctx = Arc::new(AgentCtx {
+            id: id.clone(),
+            router: Arc::downgrade(&self.router),
+            bb: self.bb.clone(),
+            tracker: self.tracker.clone(),
+            emitted: AtomicU64::new(0),
+        });
+        let sem = Arc::new(Semaphore::new(max_concurrency.max(1)));
+        let handle = tokio::spawn(async move {
+            let mut set: JoinSet<()> = JoinSet::new();
+            let mut processed = 0u64;
+            while let Some(ev) = sub.recv().await {
+                // Backpressure : borne la concurrence des handlers (appels SLM lents).
+                let permit = sem
+                    .clone()
+                    .acquire_owned()
+                    .await
+                    .expect("semaphore non fermé");
+                let ctx_h = ctx.clone();
+                let handler_h = handler.clone();
+                set.spawn(async move {
+                    handler_h(ctx_h.clone(), ev).await;
+                    // l'événement courant est consommé APRÈS d'éventuels émis (crédit sûr).
+                    ctx_h.tracker.on_done();
+                    drop(permit);
+                });
+                processed += 1;
+                // récolte les handlers terminés pour borner le JoinSet.
+                while set.try_join_next().is_some() {}
+            }
+            // draine les handlers restants (cas timeout / fermeture).
+            while set.join_next().await.is_some() {}
             AgentReport {
                 agent: ctx.id.clone(),
                 processed,
@@ -427,6 +489,88 @@ mod tests {
         // 1 source + 5 enfants = 6 produits/consommés.
         assert_eq!(report.produced, 6);
         assert_eq!(report.consumed, 6);
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn async_agent_pipeline_reaches_quiescence() {
+        let bb = Arc::new(Blackboard::new(SwarmId::new()));
+        let router = Arc::new(TopicRouter::new(512));
+        let mut swarm = StreamingSwarm::new(bb.clone(), router);
+
+        // agent ASYNC (simule un appel SLM avec un await) → émet "out".
+        swarm.async_agent(
+            AgentId::new("async_gen").unwrap(),
+            "in",
+            8,
+            Arc::new(|ctx, ev| {
+                Box::pin(async move {
+                    tokio::task::yield_now().await; // simule le travail async (appel SLM)
+                    let i = ev.payload.get("i").and_then(|v| v.as_i64()).unwrap_or(0);
+                    ctx.emit("out", serde_json::json!({ "i": i }));
+                })
+            }),
+        );
+        // sink sync.
+        swarm.agent(
+            AgentId::new("sink").unwrap(),
+            "out",
+            Arc::new(|ctx, ev| {
+                let i = ev.payload.get("i").and_then(|v| v.as_i64()).unwrap_or(0);
+                let _ = ctx.blackboard().write(&format!("/o/{i}"), serde_json::json!(i), ctx.agent_id().clone());
+            }),
+        );
+
+        for i in 0..40 {
+            swarm.inject("in", serde_json::json!({ "i": i }));
+        }
+        let report = swarm.run_until_quiescent(Duration::from_secs(5)).await;
+        assert!(report.quiesced, "quiescence avec handlers async");
+        assert_eq!(report.produced, 80, "40 in + 40 out");
+        assert_eq!(report.consumed, 80);
+        assert_eq!(bb.snapshot().value_map().keys().filter(|k| k.starts_with("/o/")).count(), 40);
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn async_agent_concurrency_is_bounded() {
+        use std::sync::atomic::AtomicI64;
+        let bb = Arc::new(Blackboard::new(SwarmId::new()));
+        let router = Arc::new(TopicRouter::new(512));
+        let mut swarm = StreamingSwarm::new(bb, router);
+
+        // mesure la concurrence MAX observée ; doit rester ≤ max_concurrency.
+        let live = Arc::new(AtomicI64::new(0));
+        let peak = Arc::new(AtomicI64::new(0));
+        let live2 = live.clone();
+        let peak2 = peak.clone();
+        let max_conc = 4usize;
+        swarm.async_agent(
+            AgentId::new("bounded").unwrap(),
+            "in",
+            max_conc,
+            Arc::new(move |_ctx, _ev| {
+                let live = live2.clone();
+                let peak = peak2.clone();
+                Box::pin(async move {
+                    let n = live.fetch_add(1, Ordering::AcqRel) + 1;
+                    peak.fetch_max(n, Ordering::AcqRel);
+                    tokio::task::yield_now().await;
+                    tokio::task::yield_now().await;
+                    live.fetch_sub(1, Ordering::AcqRel);
+                })
+            }),
+        );
+        for i in 0..50 {
+            swarm.inject("in", serde_json::json!({ "i": i }));
+        }
+        let report = swarm.run_until_quiescent(Duration::from_secs(5)).await;
+        assert!(report.quiesced);
+        assert_eq!(report.consumed, 50);
+        assert!(
+            peak.load(Ordering::Acquire) <= max_conc as i64,
+            "concurrence bornée : pic {} <= {}",
+            peak.load(Ordering::Acquire),
+            max_conc
+        );
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

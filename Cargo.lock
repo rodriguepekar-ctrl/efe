@@ -2885,6 +2885,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "efe-swarm-topology"
+version = "0.0.1"
+dependencies = [
+ "async-trait",
+ "efe-blackboard",
+ "efe-nano",
+ "efe-nano-sdk",
+ "serde_json",
+ "tokio",
+]
+
+[[package]]
 name = "efe-telemetry"
 version = "0.0.1"
 dependencies = [

@@ -183,6 +183,9 @@ members = [
     # Three crates for pre-analysis DAG → Claude tool-use feeding.
     # See `docs/architecture/EFE_M50_N21_SWARM_ORCHESTRATION_AGENTIC_BRIDGE_ARCHITECTURE.md`.
     "crates/efe-blackboard",
+    # Phase 2 — couche topologie : T1 Generate-Verify + T2 Pipeline, composées
+    # sur le substrat efe-blackboard. Cf. ADR-SWARM-002.
+    "crates/efe-swarm-topology",
     "crates/efe-swarm-orchestrator",
     "crates/efe-agentic-bridge",
     # Sprint 13 N21 § G11 : six reference pre-analysis agents.

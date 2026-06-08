@@ -38,7 +38,8 @@ pub use replay::EventLog;
 pub use sink::{CapturingSink, ChannelSink, CountingSink, NoopSink, WriteSink};
 pub use snapshot::BlackboardSnapshot;
 pub use streaming::{
-    AgentCtx, AgentHandler, AgentReport, QuiescenceTracker, StreamingSwarm, SwarmReport,
+    AgentCtx, AgentHandler, AgentReport, AsyncAgentHandler, BoxedHandlerFuture, QuiescenceTracker,
+    StreamingSwarm, SwarmReport,
 };
 pub use topic_router::{MergedSubscription, TopicRouter};
 pub use work_queue::{

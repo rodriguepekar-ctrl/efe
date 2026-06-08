@@ -1,0 +1,27 @@
+[package]
+name = "efe-swarm-topology"
+version = "0.0.1"
+edition = { workspace = true }
+rust-version = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
+description = "Phase 2 — couche topologie : T1 Generate-Verify + T2 Pipeline composées sur le substrat efe-blackboard (WS1-WS6)."
+publish = false
+
+[lib]
+name = "efe_swarm_topology"
+path = "src/lib.rs"
+
+[dependencies]
+efe-blackboard = { path = "../efe-blackboard", version = "0.0.1" }
+efe-nano-sdk = { path = "../efe-nano-sdk", version = "0.0.1" }
+
+tokio       = { workspace = true, features = ["sync", "rt"] }
+async-trait = { workspace = true }
+serde_json  = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+# Exemples uniquement : générateurs Mode C adossés au trait LlmClient (keyless builtin).
+efe-nano = { path = "../efe-nano", version = "0.0.1" }
