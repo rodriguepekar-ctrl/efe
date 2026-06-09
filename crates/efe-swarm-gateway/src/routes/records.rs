@@ -8,26 +8,34 @@ use efe_swarm_provenance::AgentCallRecord;
 use uuid::Uuid;
 
 use crate::auth::Caller;
-use crate::dto::StoredRunView;
+use crate::dto::RunStatusView;
 use crate::error::GatewayError;
 use crate::state::SwarmGatewayState;
 
-/// Vue résumée d'un run stocké (sortie + topologie + root + métadonnées).
+/// Statut/résumé d'un run : **terminé** (dans le store) **ou en cours** (job live encore
+/// actif). 404 si inconnu pour ce tenant.
 pub async fn get_run(
     State(s): State<SwarmGatewayState>,
     caller: Caller,
     Path(id): Path<Uuid>,
-) -> Result<Json<StoredRunView>, GatewayError> {
+) -> Result<Json<RunStatusView>, GatewayError> {
     caller.require_any_role(&["viewer", "operator", "admin", "auditor"])?;
-    let stored = s.store.get(id, &caller.tenant).await?.ok_or(GatewayError::NotFound)?;
-    Ok(Json(StoredRunView {
-        run_id: id,
-        output: stored.output.clone(),
-        topology: stored.topology.clone(),
-        root: stored.root.clone(),
-        records: stored.records.len(),
-        created_at_unix: stored.created_at_unix(),
-    }))
+    if let Some(stored) = s.store.get(id, &caller.tenant).await? {
+        return Ok(Json(RunStatusView::Finished {
+            run_id: id,
+            output: stored.output.clone(),
+            topology: stored.topology.clone(),
+            root: stored.root.clone(),
+            records: stored.records.len(),
+            created_at_unix: stored.created_at_unix(),
+        }));
+    }
+    // Pas encore persisté : un job live est-il en cours pour ce tenant ?
+    let tid = s.tenant_id(&caller.tenant)?;
+    if s.dashboards.get(id, &tid).is_some() {
+        return Ok(Json(RunStatusView::Running { run_id: id, events: format!("/v1/swarm/runs/{id}/events") }));
+    }
+    Err(GatewayError::NotFound)
 }
 
 /// **Export hors-ligne** : les `AgentCallRecord` bruts. Un tiers les re-prouve avec sa

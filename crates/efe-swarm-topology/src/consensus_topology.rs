@@ -19,7 +19,7 @@ use std::sync::Arc;
 use std::time::{Instant, SystemTime};
 
 use async_trait::async_trait;
-use efe_blackboard::{Blackboard, SwarmEvent, TopicRouter, WriteSink};
+use efe_blackboard::{Blackboard, EventSink, SwarmEvent, TopicRouter, WriteSink};
 use efe_nano_sdk::{AgentId, SwarmId};
 use serde_json::{json, Value};
 use tokio::sync::Semaphore;
@@ -144,10 +144,14 @@ impl ConsensusTopology {
         candidates: &[Value],
         bb: &Arc<Blackboard>,
         swarm_id: SwarmId,
+        event_tap: Option<Arc<dyn EventSink>>,
     ) -> (Vec<Ballot>, usize) {
         let jn = self.judges.len();
         let cap = (jn * 4).max(256);
         let router = Arc::new(TopicRouter::new(cap));
+        if let Some(es) = event_tap {
+            router.set_event_sink(es); // Inc.3 : observe les ballots publiés (ballot.<j>).
+        }
         for j in 0..jn {
             let _ = router.subscribe(&format!("ballot.{j}"));
         }
@@ -249,7 +253,7 @@ impl Topology for ConsensusTopology {
 
         // 3. phase juges sur le substrat — UNIQUEMENT si nécessaire.
         let (ballots, bus_count) = if judges_needed && !self.judges.is_empty() {
-            self.run_judges(task, &candidates, &bb, swarm_id).await
+            self.run_judges(task, &candidates, &bb, swarm_id, ctx.event_tap.clone()).await
         } else {
             (Vec::new(), 0)
         };
@@ -258,6 +262,23 @@ impl Topology for ConsensusTopology {
         // 4. agrégation.
         let agg = aggregator_for(pattern);
         let outcome = agg.aggregate(task, &candidates, &ballots);
+
+        // Inc.3 : l'agrégateur annonce son verdict à l'observateur (topic réservé) — pattern
+        // + confiance, non dérivables des seuls ballots. Coût nul si aucun tap n'est branché.
+        if let Some(tap) = &ctx.event_tap {
+            tap.on_event(&SwarmEvent {
+                swarm_id,
+                published_by: AgentId::new("aggregator").expect("agent id valide"),
+                topic: "consensus.decided".to_string(),
+                payload: json!({
+                    "pattern": format!("{pattern:?}"),
+                    "confidence": outcome.confidence,
+                    "judges_used": judges_run,
+                    "winner": outcome.selected.clone(),
+                }),
+                published_at: SystemTime::now(),
+            });
+        }
 
         TopologyOutput {
             output: outcome.selected,

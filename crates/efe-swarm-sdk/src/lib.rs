@@ -48,6 +48,7 @@ mod llm;
 mod resolver;
 pub mod budget;
 pub mod client;
+pub mod observer;
 pub mod result;
 pub mod sdk;
 pub mod spec;
@@ -55,16 +56,17 @@ pub mod spec;
 pub use budget::{Budget, OnExceed};
 pub use client::ClientMode;
 pub use budget::BudgetSnapshot;
+pub use observer::{AgentCall, SwarmObserver};
 pub use result::{Accounting, ProvenanceSummary, QualitySummary, RunOutcome, SwarmError, SwarmRun};
 pub use sdk::{Swarm, SwarmBuilder};
 pub use spec::TopologySpec;
 
 // Réexports pratiques (la passerelle HTTP s'appuie dessus pour persister + re-prouver).
 pub use efe_swarm_provenance::{
-    verify_swarm, AgentCallRecord, HmacKeySource, ProvenanceMetrics, SealedProvenance,
-    SwarmProvenanceReport,
+    verify_swarm, AgentCallRecord, AgentKind, AgentRole, HmacKeySource, ProvenanceMetrics,
+    SealedProvenance, SwarmProvenanceReport,
 };
-pub use efe_blackboard::SubstrateMetrics;
+pub use efe_blackboard::{BlackboardWrite, EventSink, SubstrateMetrics, SwarmEvent, WriteSink};
 pub use efe_swarm_topology::Pattern;
 
 /// Version du crate (semver).

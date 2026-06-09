@@ -127,6 +127,10 @@ impl BudgetGuard {
     pub fn max_cents(&self) -> u32 {
         self.max_cents
     }
+    /// Prix facturé par appel (cents) — pour attribuer le coût d'un appel à un observateur.
+    pub fn price_cents(&self) -> u32 {
+        self.price_cents
+    }
     pub fn snapshot(&self) -> BudgetSnapshot {
         let spent = self.spent_cents();
         BudgetSnapshot {

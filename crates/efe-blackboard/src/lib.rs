@@ -35,7 +35,7 @@ pub use metrics::{LatencyHistogram, MetricsObserver, MetricsSnapshot, SubstrateM
 pub use observer::{BlackboardObserver, ObserverRegistration};
 pub use reliable::{ReliableItem, ReliableReader, ReliableTopic};
 pub use replay::EventLog;
-pub use sink::{CapturingSink, ChannelSink, CountingSink, NoopSink, WriteSink};
+pub use sink::{CapturingSink, ChannelSink, CountingSink, EventSink, NoopSink, WriteSink};
 pub use snapshot::BlackboardSnapshot;
 pub use streaming::{
     AgentCtx, AgentHandler, AgentReport, AsyncAgentHandler, BoxedHandlerFuture, QuiescenceTracker,

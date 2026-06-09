@@ -11,7 +11,7 @@
 //! propagation comptés exactement comme pour l'EventBus.
 
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 
 use dashmap::DashMap;
 use tokio::sync::{broadcast, mpsc};
@@ -19,6 +19,7 @@ use tokio::task::JoinHandle;
 
 use crate::eventbus::{EventBusSubscription, SwarmEvent};
 use crate::metrics::SubstrateMetrics;
+use crate::sink::EventSink;
 
 /// **WS1** : routeur d'événements par topic — un canal broadcast par topic.
 pub struct TopicRouter {
@@ -27,6 +28,9 @@ pub struct TopicRouter {
     published_total: Arc<AtomicU64>,
     dropped_total: Arc<AtomicU64>,
     metrics: Option<Arc<SubstrateMetrics>>,
+    /// **Phase 5 Inc.3** : tap d'observation au seam `publish` (fiable, non racé). Reçoit
+    /// chaque message **avant** diffusion → trafic inter-agent du dashboard live.
+    event_sink: RwLock<Option<Arc<dyn EventSink>>>,
 }
 
 impl std::fmt::Debug for TopicRouter {
@@ -49,6 +53,16 @@ impl TopicRouter {
             published_total: Arc::new(AtomicU64::new(0)),
             dropped_total: Arc::new(AtomicU64::new(0)),
             metrics: None,
+            event_sink: RwLock::new(None),
+        }
+    }
+
+    /// **Phase 5 Inc.3** : branche un tap d'observation des publications (dashboard live).
+    /// Idempotent (remplace le tap courant). N'altère **pas** le routage : observe puis
+    /// diffuse.
+    pub fn set_event_sink(&self, sink: Arc<dyn EventSink>) {
+        if let Ok(mut g) = self.event_sink.write() {
+            *g = Some(sink);
         }
     }
 
@@ -74,6 +88,12 @@ impl TopicRouter {
     /// nombre d'abonnés du topic l'ayant reçu (0 si aucun).
     pub fn publish(&self, ev: SwarmEvent) -> usize {
         let sender = self.channel(&ev.topic);
+        // Inc.3 : tap d'observation AVANT diffusion (seam fiable, non racé).
+        if let Ok(g) = self.event_sink.read() {
+            if let Some(es) = g.as_ref() {
+                es.on_event(&ev);
+            }
+        }
         let n = sender.send(ev).unwrap_or(0);
         self.published_total.fetch_add(1, Ordering::Relaxed);
         if let Some(m) = &self.metrics {

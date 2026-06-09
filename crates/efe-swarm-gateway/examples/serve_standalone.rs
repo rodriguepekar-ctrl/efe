@@ -20,10 +20,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let listener = tokio::net::TcpListener::bind(&addr).await?;
     println!("efe-swarm-gateway en écoute sur http://{addr}");
-    println!("  POST   http://{addr}/v1/swarm/run");
-    println!("  GET    http://{addr}/v1/swarm/verify/:id   (le moat : re-preuve)");
-    println!("  GET    http://{addr}/v1/swarm/runs/:id/records   (export hors-ligne)");
+    println!("  POST   http://{addr}/v1/swarm/run                  (sync ; ?stream=true = job live)");
+    println!("  GET    http://{addr}/v1/swarm/verify/:id           (le moat : re-preuve)");
+    println!("  GET    http://{addr}/v1/swarm/runs/:id/records      (export hors-ligne)");
+    println!("  GET    http://{addr}/v1/swarm/runs/:id/events       (SSE : dashboard live)");
+    println!("  GET    http://{addr}/dashboard                     (UI live 4 panneaux)");
     println!("  GET    http://{addr}/metrics");
+    println!();
+    println!("→ ouvre http://{addr}/dashboard puis clique « Lancer un run démo ».");
 
     axum::serve(listener, app).await?;
     Ok(())

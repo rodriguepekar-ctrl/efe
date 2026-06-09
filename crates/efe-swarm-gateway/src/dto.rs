@@ -214,16 +214,40 @@ pub struct VerifyResponse {
     pub first_break: Option<Uuid>,
 }
 
-/// Vue résumée d'un run stocké (`GET /v1/swarm/runs/:id`).
+/// Vue d'un run (`GET /v1/swarm/runs/:id`) — **terminé** (dans le store) **ou en cours**
+/// (un job live encore en exécution). Tagué par `status`.
 #[derive(Debug, Clone, Serialize)]
-pub struct StoredRunView {
+#[serde(tag = "status", rename_all = "snake_case")]
+pub enum RunStatusView {
+    /// Run terminé et persisté (records re-vérifiables via `verify/:id`).
+    Finished {
+        run_id: Uuid,
+        output: Value,
+        topology: String,
+        root: Option<String>,
+        records: usize,
+        /// Date de création (epoch, secondes).
+        created_at_unix: u64,
+    },
+    /// Job live encore en cours — suivez le flux SSE `events`.
+    Running { run_id: Uuid, events: String },
+}
+
+/// Paramètres de requête de `POST /v1/swarm/run` (`?stream=true` → mode **job** live).
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct RunParams {
+    /// `true` ⇒ exécution **asynchrone** observée (dashboard live) : réponse 202 immédiate.
+    #[serde(default)]
+    pub stream: bool,
+}
+
+/// Réponse 202 d'un **job** live (`POST /v1/swarm/run?stream=true`).
+#[derive(Debug, Clone, Serialize)]
+pub struct JobAccepted {
     pub run_id: Uuid,
-    pub output: Value,
-    pub topology: String,
-    pub root: Option<String>,
-    pub records: usize,
-    /// Date de création (epoch, secondes).
-    pub created_at_unix: u64,
+    pub status: &'static str,
+    /// URL du flux SSE des événements live.
+    pub events: String,
 }
 
 #[cfg(test)]

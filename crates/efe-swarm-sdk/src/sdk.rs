@@ -14,6 +14,7 @@ use crate::agents::Meter;
 use crate::budget::{Budget, BudgetGuard, OnExceed};
 use crate::client::ClientMode;
 use crate::llm::OllamaBackend;
+use crate::observer::{SwarmObserver, TeeSink};
 use crate::resolver::Resolver;
 use crate::result::{Accounting, ProvenanceSummary, RunOutcome, SwarmError, SwarmRun};
 use crate::spec::TopologySpec;
@@ -30,6 +31,8 @@ pub struct Swarm {
     metrics: Option<Arc<ProvenanceMetrics>>,
     /// Métriques de substrat partagées (Blackboard/EventBus des topologies) — pour `/metrics`.
     substrate_metrics: Option<Arc<SubstrateMetrics>>,
+    /// Observateur de cycle de vie (dashboard live, Inc.3) — `None` ⇒ comportement Inc.1/2.
+    observer: Option<Arc<dyn SwarmObserver>>,
 }
 
 impl Swarm {
@@ -105,17 +108,30 @@ impl Swarm {
         let swarm_id = SwarmId::new();
         let recorder = Arc::new(ProvenanceRecorder::new(swarm_id, self.tenant));
         let guard = Arc::new(BudgetGuard::new(budget.max_cents, price));
-        let meter = Meter { rec: recorder.clone(), guard: guard.clone(), kind };
-        let sink: Arc<dyn WriteSink> = Arc::new(ProvenanceSink::new(recorder.clone()));
+        let meter = Meter { rec: recorder.clone(), guard: guard.clone(), kind, observer: self.observer.clone() };
+
+        // Inc.3 : si un observateur fournit un exutoire, on TEE provenance + observateur
+        // (la provenance reste byte-identique) ; sinon, provenance seule (Inc.1/2 inchangé).
+        let prov_sink: Arc<dyn WriteSink> = Arc::new(ProvenanceSink::new(recorder.clone()));
+        let sink: Arc<dyn WriteSink> = match self.observer.as_ref().and_then(|o| o.write_sink()) {
+            Some(dash) => Arc::new(TeeSink(vec![prov_sink, dash])),
+            None => prov_sink,
+        };
         let mut ctx = SwarmContext::new(self.fleet.clone()).with_write_sink(sink);
         if let Some(sm) = &self.substrate_metrics {
             ctx = ctx.with_substrate_metrics(sm.clone());
+        }
+        if let Some(tap) = self.observer.as_ref().and_then(|o| o.event_tap()) {
+            ctx = ctx.with_event_tap(tap); // Inc.3 : trafic inter-agent → dashboard
         }
 
         // 3. assemble la topologie (agents flotte OU LLM, enveloppés) + exécute.
         let resolver = Resolver { fleet: &self.fleet, backend, meter };
         let topo = spec.resolve(&resolver)?;
         let topo_name = topo.name().to_string();
+        if let Some(o) = &self.observer {
+            o.on_run_start(&topo_name, &self.mode.label(), budget.max_cents, self.assumed_subtasks);
+        }
         let out = topo.run(&task, &ctx).await;
 
         // 3. budget POST-VOL (politique Error : échec si épuisé en cours).
@@ -140,6 +156,9 @@ impl Swarm {
                 verified: report.ok(),
                 root: report.root_hex(),
             };
+            if let Some(o) = &self.observer {
+                o.on_seal(sealed.len(), report.traced_pct, summary.root.as_deref(), report.ok());
+            }
             (summary, Some(sealed))
         } else {
             (ProvenanceSummary::disabled(), None)
@@ -158,6 +177,9 @@ impl Swarm {
             quality: out.quality.into(),
             budget_stopped: budget.on_exceed == OnExceed::Stop && guard.exhausted(),
         };
+        if let Some(o) = &self.observer {
+            o.on_finish(&run);
+        }
         Ok(RunOutcome { run, sealed })
     }
 }
@@ -172,6 +194,7 @@ pub struct SwarmBuilder {
     fleet: Option<Arc<AgentFleet>>,
     metrics: Option<Arc<ProvenanceMetrics>>,
     substrate_metrics: Option<Arc<SubstrateMetrics>>,
+    observer: Option<Arc<dyn SwarmObserver>>,
 }
 
 impl Default for SwarmBuilder {
@@ -185,6 +208,7 @@ impl Default for SwarmBuilder {
             fleet: None,
             metrics: None,
             substrate_metrics: None,
+            observer: None,
         }
     }
 }
@@ -233,6 +257,14 @@ impl SwarmBuilder {
         self
     }
 
+    /// **Phase 5 Inc.3** : branche un observateur de cycle de vie (dashboard live, journal…).
+    /// Tee l'exutoire de provenance + tap d'événements + notifications appel/seal/finish.
+    /// **Non-breaking** : sans observateur, le run est inchangé.
+    pub fn with_observer(mut self, observer: Arc<dyn SwarmObserver>) -> Self {
+        self.observer = Some(observer);
+        self
+    }
+
     /// Construit le `Swarm` (dérive la clé de provenance par tenant).
     pub fn build(self) -> Result<Swarm, SwarmError> {
         let key = self.key_source.derive(self.tenant).map_err(|e| SwarmError::KeyError(e.to_string()))?;
@@ -245,6 +277,7 @@ impl SwarmBuilder {
             assumed_subtasks: self.assumed_subtasks,
             metrics: self.metrics,
             substrate_metrics: self.substrate_metrics,
+            observer: self.observer,
         })
     }
 }

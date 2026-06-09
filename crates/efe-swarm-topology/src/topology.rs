@@ -10,7 +10,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use async_trait::async_trait;
-use efe_blackboard::{SubstrateMetrics, WriteSink};
+use efe_blackboard::{EventSink, SubstrateMetrics, WriteSink};
 use serde_json::Value;
 
 use crate::fleet::AgentFleet;
@@ -53,6 +53,10 @@ pub struct SwarmContext {
     /// → `swarm_blackboard_writes_total`, `swarm_events_published_total`, … agrégés sur
     /// tous les runs (exposés par la passerelle HTTP en `/metrics`). `None` ⇒ coût nul.
     pub substrate_metrics: Option<Arc<SubstrateMetrics>>,
+    /// **Dashboard live (Phase 5 Inc.3)** : tap d'observation des **messages de bus**,
+    /// branché par chaque topologie (T2 Pipeline, T-Consensus) sur son `TopicRouter` interne
+    /// (au seam `publish`, fiable). `None` ⇒ coût nul. Le trafic inter-agent du dashboard.
+    pub event_tap: Option<Arc<dyn EventSink>>,
 }
 
 impl std::fmt::Debug for SwarmContext {
@@ -61,17 +65,23 @@ impl std::fmt::Debug for SwarmContext {
             .field("fleet", &self.fleet)
             .field("instrumented", &self.write_sink.is_some())
             .field("metered", &self.substrate_metrics.is_some())
+            .field("tapped", &self.event_tap.is_some())
             .finish()
     }
 }
 
 impl SwarmContext {
     pub fn new(fleet: Arc<AgentFleet>) -> Self {
-        Self { fleet, write_sink: None, substrate_metrics: None }
+        Self { fleet, write_sink: None, substrate_metrics: None, event_tap: None }
     }
     /// Contexte avec la flotte standard (tout le catalogue Mode A).
     pub fn standard() -> Self {
-        Self { fleet: Arc::new(AgentFleet::standard()), write_sink: None, substrate_metrics: None }
+        Self {
+            fleet: Arc::new(AgentFleet::standard()),
+            write_sink: None,
+            substrate_metrics: None,
+            event_tap: None,
+        }
     }
     /// **Phase 4** : branche un exutoire de provenance partagé par toutes les topologies.
     pub fn with_write_sink(mut self, sink: Arc<dyn WriteSink>) -> Self {
@@ -83,6 +93,12 @@ impl SwarmContext {
     /// événements de l'essaim sont comptés (pour `/metrics`).
     pub fn with_substrate_metrics(mut self, metrics: Arc<SubstrateMetrics>) -> Self {
         self.substrate_metrics = Some(metrics);
+        self
+    }
+    /// **Phase 5 Inc.3** : branche un tap d'événements de bus (dashboard live). Chaque
+    /// topologie l'attache à son `TopicRouter` (`set_event_sink`) → trafic inter-agent observé.
+    pub fn with_event_tap(mut self, tap: Arc<dyn EventSink>) -> Self {
+        self.event_tap = Some(tap);
         self
     }
 }
@@ -147,6 +163,7 @@ impl Topology for PipelineTopology {
                 self.timeout,
                 ctx.write_sink.clone(),
                 ctx.substrate_metrics.clone(),
+                ctx.event_tap.clone(),
             )
             .await;
         let produced = outs.len();

@@ -2877,20 +2877,38 @@ dependencies = [
 ]
 
 [[package]]
+name = "efe-swarm-dashboard"
+version = "0.0.1"
+dependencies = [
+ "dashmap 6.1.0",
+ "efe-blackboard",
+ "efe-nano-sdk",
+ "efe-swarm-sdk",
+ "serde",
+ "serde_json",
+ "tokio",
+ "uuid",
+]
+
+[[package]]
 name = "efe-swarm-gateway"
 version = "0.0.1"
 dependencies = [
+ "async-stream",
  "async-trait",
  "axum",
  "efe-blackboard",
  "efe-nano-sdk",
+ "efe-swarm-dashboard",
  "efe-swarm-provenance",
  "efe-swarm-sdk",
  "efe-swarm-topology",
+ "futures",
  "http-body-util",
  "serde",
  "serde_json",
  "tokio",
+ "tokio-stream",
  "tower 0.5.3",
  "uuid",
 ]

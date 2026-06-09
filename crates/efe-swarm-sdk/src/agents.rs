@@ -17,6 +17,7 @@ use efe_swarm_topology::{Decomposer, Generator, Judge, Merger, Solver, Stage};
 use serde_json::{json, Value};
 
 use crate::budget::BudgetGuard;
+use crate::observer::{AgentCall, SwarmObserver};
 
 /// Contexte partagé par les décorateurs d'un run.
 #[derive(Clone)]
@@ -24,6 +25,8 @@ pub(crate) struct Meter {
     pub rec: Arc<ProvenanceRecorder>,
     pub guard: Arc<BudgetGuard>,
     pub kind: AgentKind,
+    /// Observateur de cycle de vie (dashboard live, Inc.3) — `None` ⇒ aucun coût.
+    pub observer: Option<Arc<dyn SwarmObserver>>,
 }
 
 impl Meter {
@@ -36,6 +39,18 @@ impl Meter {
             cap = cap.with_variant(v);
         }
         self.rec.capture(cap);
+        // Inc.3 : notifie l'observateur (appel facturé) — sortie + coût + budget courant.
+        if let Some(o) = &self.observer {
+            o.on_agent_call(AgentCall {
+                agent_id: id.as_str(),
+                role,
+                kind: self.kind,
+                variant,
+                output,
+                cost_cents: self.guard.price_cents(),
+                budget: &self.guard.snapshot(),
+            });
+        }
     }
 }
 

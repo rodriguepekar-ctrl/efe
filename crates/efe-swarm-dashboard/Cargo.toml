@@ -1,0 +1,28 @@
+[package]
+name = "efe-swarm-dashboard"
+version = "0.0.1"
+edition = { workspace = true }
+rust-version = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
+description = "Phase 5 Inc.3 — cœur du dashboard live : DashboardBus (ring de rejeu + broadcast) sur les seams substrat (WriteSink/EventSink) + SwarmObserver. Sans HTTP — testable seul."
+publish = false
+
+[lib]
+name = "efe_swarm_dashboard"
+path = "src/lib.rs"
+
+[dependencies]
+efe-swarm-sdk = { path = "../efe-swarm-sdk", version = "0.0.1" }   # SwarmObserver, AgentCall, types
+efe-blackboard = { path = "../efe-blackboard", version = "0.0.1" } # WriteSink, EventSink, BlackboardWrite, SwarmEvent
+efe-nano-sdk   = { path = "../efe-nano-sdk", version = "0.0.1" }   # TenantId
+
+tokio      = { workspace = true, features = ["sync", "rt"] }
+serde      = { workspace = true }
+serde_json = { workspace = true }
+uuid       = { workspace = true }
+dashmap    = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }

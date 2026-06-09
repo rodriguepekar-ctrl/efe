@@ -8,12 +8,16 @@ use std::sync::Arc;
 
 use efe_blackboard::SubstrateMetrics;
 use efe_nano_sdk::TenantId;
+use efe_swarm_dashboard::{DashboardMetrics, DashboardRegistry};
 use efe_swarm_provenance::ProvenanceMetrics;
-use efe_swarm_sdk::{ClientMode, HmacKeySource, Swarm};
+use efe_swarm_sdk::{ClientMode, HmacKeySource, Swarm, SwarmObserver};
 use efe_swarm_topology::AgentFleet;
 
 use crate::error::GatewayError;
 use crate::store::{InMemoryRunStore, RunStore};
+
+/// Plafond de runs live simultanés conservés dans le registre (drop-oldest au-delà).
+const DASHBOARD_REGISTRY_CAP: usize = 256;
 
 /// État de la passerelle (clonable : tout est `Arc` ou `Clone` bon marché).
 #[derive(Clone)]
@@ -28,6 +32,10 @@ pub struct SwarmGatewayState {
     pub prov_metrics: Arc<ProvenanceMetrics>,
     /// Métriques de substrat (Blackboard/EventBus) — exposées en `/metrics`.
     pub substrate_metrics: Arc<SubstrateMetrics>,
+    /// **Inc.3** : registre des bus de dashboard live (par run, tenant-scopé, borné).
+    pub dashboards: Arc<DashboardRegistry>,
+    /// **Inc.3** : métriques du dashboard (events émis/perdus) — exposées en `/metrics`.
+    pub dash_metrics: Arc<DashboardMetrics>,
 }
 
 impl SwarmGatewayState {
@@ -40,7 +48,15 @@ impl SwarmGatewayState {
         prov_metrics: Arc<ProvenanceMetrics>,
         substrate_metrics: Arc<SubstrateMetrics>,
     ) -> Self {
-        Self { fleet, keys, store, prov_metrics, substrate_metrics }
+        Self {
+            fleet,
+            keys,
+            store,
+            prov_metrics,
+            substrate_metrics,
+            dashboards: Arc::new(DashboardRegistry::new(DASHBOARD_REGISTRY_CAP)),
+            dash_metrics: DashboardMetrics::new(),
+        }
     }
 
     /// État **dev/standalone** : flotte standard, clé de test, store en mémoire, métriques
@@ -52,6 +68,8 @@ impl SwarmGatewayState {
             store: Arc::new(InMemoryRunStore::new()),
             prov_metrics: ProvenanceMetrics::new(),
             substrate_metrics: Arc::new(SubstrateMetrics::default()),
+            dashboards: Arc::new(DashboardRegistry::new(DASHBOARD_REGISTRY_CAP)),
+            dash_metrics: DashboardMetrics::new(),
         }
     }
 
@@ -76,6 +94,27 @@ impl SwarmGatewayState {
             .mode(mode)
             .with_metrics(self.prov_metrics.clone())
             .with_substrate_metrics(self.substrate_metrics.clone())
+            .build()
+            .map_err(GatewayError::from)
+    }
+
+    /// **Inc.3** : comme [`Self::swarm_for`], mais **observé** (dashboard live) — l'observateur
+    /// tee le `WriteSink`, branche le tap d'événements et émet le cycle de vie.
+    pub fn swarm_for_observed(
+        &self,
+        tenant: &str,
+        mode: ClientMode,
+        observer: Arc<dyn SwarmObserver>,
+    ) -> Result<Swarm, GatewayError> {
+        let tid = self.tenant_id(tenant)?;
+        Swarm::builder()
+            .fleet(self.fleet.clone())
+            .tenant(tid)
+            .key_source(self.keys.clone())
+            .mode(mode)
+            .with_metrics(self.prov_metrics.clone())
+            .with_substrate_metrics(self.substrate_metrics.clone())
+            .with_observer(observer)
             .build()
             .map_err(GatewayError::from)
     }

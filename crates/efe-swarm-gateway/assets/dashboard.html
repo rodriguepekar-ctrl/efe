@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<!-- SPDX-License-Identifier: UNLICENSED -->
+<!-- EFE — Phase 5 Inc.3 : dashboard live, UI vanilla (zéro framework, zéro CDN, offline). -->
+<html lang="fr">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>EFE · Essaim live</title>
+<style>
+  :root { --bg:#0b0e14; --panel:#131722; --ink:#e6e6e6; --muted:#8b93a7; --ok:#3fb950;
+          --bad:#f85149; --cand:#58a6ff; --ballot:#d29922; --out:#a371f7; --line:#222838; }
+  * { box-sizing:border-box; }
+  body { margin:0; font:13px/1.45 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+         background:var(--bg); color:var(--ink); }
+  header { display:flex; gap:.6rem; align-items:center; padding:.6rem .9rem;
+           border-bottom:1px solid var(--line); background:var(--panel); flex-wrap:wrap; }
+  header h1 { font-size:14px; margin:0 1rem 0 0; letter-spacing:.5px; }
+  header .sp { flex:1; }
+  input, button { font:inherit; color:var(--ink); background:#0d1117; border:1px solid var(--line);
+                  border-radius:6px; padding:.35rem .6rem; }
+  button { cursor:pointer; } button:hover { border-color:#3a4b66; }
+  #status { padding:.2rem .5rem; border-radius:6px; border:1px solid var(--line); color:var(--muted); }
+  #status.live { color:var(--ok); border-color:var(--ok); }
+  #status.done { color:var(--muted); }
+  #status.err  { color:var(--bad); border-color:var(--bad); }
+  .grid { display:grid; grid-template-columns:1fr 1fr; grid-template-rows:1fr 1fr; gap:.6rem;
+          padding:.6rem; height:calc(100vh - 56px); }
+  .panel { background:var(--panel); border:1px solid var(--line); border-radius:10px;
+           display:flex; flex-direction:column; min-height:0; }
+  .panel h2 { font-size:12px; margin:0; padding:.5rem .7rem; border-bottom:1px solid var(--line);
+              color:var(--muted); text-transform:uppercase; letter-spacing:.8px;
+              display:flex; justify-content:space-between; }
+  .panel .body { padding:.5rem .7rem; overflow:auto; flex:1; min-height:0; }
+  canvas { width:100%; height:100%; display:block; }
+  .kv { display:flex; justify-content:space-between; padding:.15rem 0; border-bottom:1px dotted #1d2433; }
+  .kv b { color:var(--ink); font-weight:600; }
+  .badge { padding:.05rem .45rem; border-radius:5px; font-size:11px; }
+  .badge.ok { background:rgba(63,185,80,.15); color:var(--ok); }
+  .badge.bad { background:rgba(248,81,73,.15); color:var(--bad); }
+  .bar { height:10px; background:#0d1117; border-radius:6px; overflow:hidden; border:1px solid var(--line); }
+  .bar > span { display:block; height:100%; background:var(--cand); transition:width .2s; }
+  .bar.budget > span { background:var(--out); }
+  .bar.budget.warn > span { background:var(--bad); }
+  table { width:100%; border-collapse:collapse; }
+  td, th { text-align:left; padding:.15rem .3rem; border-bottom:1px dotted #1d2433; }
+  th { color:var(--muted); font-weight:500; }
+  .cand { color:var(--cand); } .ballot { color:var(--ballot); } .out { color:var(--out); }
+  .mono { font-variant-numeric:tabular-nums; }
+  .root { word-break:break-all; color:var(--muted); font-size:11px; }
+  .pill { display:inline-block; min-width:1.6rem; text-align:center; }
+  small { color:var(--muted); }
+</style>
+</head>
+<body>
+<header>
+  <h1>EFE · essaim live</h1>
+  <input id="run" placeholder="run_id (vide = firehose tenant)" size="30" />
+  <input id="tenant" placeholder="tenant (def: system)" size="16" />
+  <button id="connect">Connecter</button>
+  <button id="demo">Lancer un run démo (keyless)</button>
+  <span class="sp"></span>
+  <span id="status">déconnecté</span>
+</header>
+
+<div class="grid">
+  <!-- PANNEAU 1 : trafic inter-agent -->
+  <section class="panel">
+    <h2><span>1 · trafic inter-agent</span><span id="trafficCount" class="mono">0 w · 0 msg</span></h2>
+    <div class="body" style="padding:0"><canvas id="traffic"></canvas></div>
+  </section>
+
+  <!-- PANNEAU 2 : consensus -->
+  <section class="panel">
+    <h2><span>2 · consensus</span><span id="consInfo" class="mono"></span></h2>
+    <div class="body">
+      <div><small>candidats</small><div id="cands"></div></div>
+      <div style="margin-top:.5rem"><small>ballots (juge × score)</small>
+        <table id="ballots"><thead><tr><th>juge</th></tr></thead><tbody></tbody></table></div>
+      <div style="margin-top:.5rem"><small>résultat</small> <span id="winner" class="cand"></span></div>
+    </div>
+  </section>
+
+  <!-- PANNEAU 3 : provenance -->
+  <section class="panel">
+    <h2><span>3 · provenance</span><span id="provBadge"></span></h2>
+    <div class="body">
+      <div class="kv"><span>records</span><b id="pRecords" class="mono">0</b></div>
+      <div class="kv"><span>traced_pct</span><b id="pTraced" class="mono">—</b></div>
+      <div class="bar"><span id="pTracedBar" style="width:0%"></span></div>
+      <div class="kv"><span>chain_breaks</span><b id="pBreaks" class="mono">0</b></div>
+      <div style="margin-top:.4rem"><small>provenance_root</small><div id="pRoot" class="root">—</div></div>
+    </div>
+  </section>
+
+  <!-- PANNEAU 4 : budget -->
+  <section class="panel">
+    <h2><span>4 · budget</span><span id="bInfo" class="mono"></span></h2>
+    <div class="body">
+      <div class="kv"><span>dépensé / plafond</span><b id="bSpent" class="mono">0 / 0</b></div>
+      <div class="bar budget" id="bBarWrap"><span id="bBar" style="width:0%"></span></div>
+      <table style="margin-top:.5rem"><thead><tr><th>agent</th><th style="text-align:right">cents</th></tr></thead>
+        <tbody id="bRows"></tbody></table>
+    </div>
+  </section>
+</div>
+
+<script>
+"use strict";
+// ── état ──────────────────────────────────────────────────────────────────────
+let es = null;
+const agents = new Map();       // id → {x,y,vx,vy,heat}
+const edges = [];               // {from,to,kind,life}
+let writes = 0, msgs = 0;
+const cands = new Map();        // variant → preview
+const ballots = new Map();      // judge → scores[]
+let candCount = 0;
+
+const $ = (id) => document.getElementById(id);
+function setStatus(t, cls) { const s = $("status"); s.textContent = t; s.className = cls || ""; }
+
+// ── connexion SSE ─────────────────────────────────────────────────────────────
+function connect() {
+  if (es) { es.close(); es = null; }
+  reset();
+  const run = $("run").value.trim();
+  const url = run ? `/v1/swarm/runs/${encodeURIComponent(run)}/events` : `/v1/swarm/events`;
+  es = new EventSource(url);
+  es.onopen = () => setStatus("● live", "live");
+  es.onerror = () => setStatus("● interrompu", "err");
+  for (const k of ["run_started","run_finished","run_failed","agent_write","agent_message",
+                   "agent_call","candidate","ballot","decided","sealed","budget_tick","metrics_tick"]) {
+    es.addEventListener(k, (e) => handle(JSON.parse(e.data)));
+  }
+}
+
+function reset() {
+  agents.clear(); edges.length = 0; writes = 0; msgs = 0; cands.clear(); ballots.clear(); candCount = 0;
+  $("cands").innerHTML = ""; $("ballots").querySelector("tbody").innerHTML = "";
+  $("winner").textContent = ""; $("bRows").innerHTML = ""; $("consInfo").textContent = "";
+  $("pRecords").textContent = "0"; $("pTraced").textContent = "—"; $("pTracedBar").style.width = "0%";
+  $("pBreaks").textContent = "0"; $("pRoot").textContent = "—"; $("provBadge").innerHTML = "";
+  $("bSpent").textContent = "0 / 0"; $("bBar").style.width = "0%";
+}
+
+function agent(id) {
+  if (!agents.has(id)) {
+    const c = document.getElementById("traffic");
+    agents.set(id, { x: Math.random()*c.width, y: Math.random()*c.height,
+                     vx: 0, vy: 0, heat: 1, id });
+  }
+  const a = agents.get(id); a.heat = 1; return a;
+}
+function pushEdge(from, to, kind) { edges.push({ from, to, kind, life: 1 }); if (edges.length > 400) edges.shift(); }
+
+// ── handlers d'événements ───────────────────────────────────────────────────────
+function handle(ev) {
+  switch (ev.kind) {
+    case "run_started":
+      setStatus("● live · " + ev.topology, "live");
+      $("consInfo").textContent = ev.mode; break;
+    case "agent_write": {
+      writes++;
+      const a = agent(ev.agent_id), cell = agent("◆ " + (ev.lane || "cell"));
+      pushEdge(a.id, cell.id, ev.lane);
+      if (ev.lane === "candidate") { const v = (ev.pointer.match(/(\d+)/)||[])[1]; }
+      break;
+    }
+    case "agent_message": { msgs++; const f = agent(ev.from), t = agent("# " + ev.topic); pushEdge(f.id, t.id, "msg"); break; }
+    case "agent_call": agent(ev.agent_id); break;
+    case "candidate": {
+      cands.set(ev.variant, ev.value_preview); renderCands(); break;
+    }
+    case "ballot": { ballots.set(ev.judge, ev.scores); renderBallots(); break; }
+    case "decided":
+      $("winner").textContent = ev.winner_preview;
+      $("consInfo").textContent = `${ev.pattern} · conf ${(ev.confidence*100).toFixed(0)}% · ${ev.judges_used} juges`;
+      break;
+    case "sealed":
+      $("pRecords").textContent = ev.records;
+      $("pTraced").textContent = (ev.traced_pct*100).toFixed(1) + "%";
+      $("pTracedBar").style.width = (ev.traced_pct*100).toFixed(1) + "%";
+      $("pRoot").textContent = ev.root || "—";
+      $("provBadge").innerHTML = ev.verified
+        ? '<span class="badge ok">verified</span>' : '<span class="badge bad">non vérifié</span>';
+      break;
+    case "budget_tick": renderBudget(ev); break;
+    case "metrics_tick":
+      $("pTraced").textContent = (ev.traced_ratio*100).toFixed(1) + "%";
+      $("pTracedBar").style.width = (ev.traced_ratio*100).toFixed(1) + "%";
+      $("pBreaks").textContent = ev.chain_breaks;
+      $("trafficCount").textContent = `${writes} w · ${msgs} msg`; break;
+    case "run_finished":
+      $("winner").textContent = ev.output_preview;
+      $("provBadge").innerHTML = ev.verified
+        ? '<span class="badge ok">verified</span>' : '<span class="badge bad">non vérifié</span>';
+      setStatus("● terminé", "done"); break;
+    case "run_failed": setStatus("● échec : " + ev.message, "err"); break;
+  }
+  $("trafficCount").textContent = `${writes} w · ${msgs} msg`;
+}
+
+function renderCands() {
+  candCount = cands.size;
+  $("consInfo").textContent = `${cands.size} cand · ${ballots.size} juges`;
+  $("cands").innerHTML = [...cands.entries()].sort((a,b)=>a[0]-b[0])
+    .map(([v,p]) => `<div class="kv"><span class="cand pill">#${v}</span><b>${esc(p)}</b></div>`).join("");
+}
+function renderBallots() {
+  $("consInfo").textContent = `${cands.size} cand · ${ballots.size} juges`;
+  const tb = $("ballots").querySelector("tbody");
+  tb.innerHTML = [...ballots.entries()].map(([j, sc]) =>
+    `<tr><td class="ballot">${esc(j)}</td>` +
+    sc.map(s => `<td class="mono" style="background:rgba(88,166,255,${Math.max(0,Math.min(1,s)).toFixed(2)})">${(+s).toFixed(2)}</td>`).join("") +
+    `</tr>`).join("");
+}
+function renderBudget(ev) {
+  const cap = ev.max_cents >= 4294967295 ? "∞" : ev.max_cents;
+  $("bSpent").textContent = `${ev.spent_cents} / ${cap}`;
+  const pct = (ev.max_cents > 0 && ev.max_cents < 4294967295) ? Math.min(100, ev.spent_cents/ev.max_cents*100) : 2;
+  $("bBar").style.width = pct.toFixed(1) + "%";
+  $("bBarWrap").className = "bar budget" + (ev.exhausted ? " warn" : "");
+  $("bInfo").textContent = ev.exhausted ? "épuisé" : "";
+  const rows = Object.entries(ev.per_agent || {}).sort((a,b)=>b[1]-a[1]).slice(0,8);
+  $("bRows").innerHTML = rows.map(([a,c]) => `<tr><td>${esc(a)}</td><td style="text-align:right" class="mono">${c}</td></tr>`).join("");
+}
+function esc(s) { return String(s).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])); }
+
+// ── canvas trafic (les petits agents passent l'info en parallèle) ──────────────
+const cv = $("traffic"), cx = cv.getContext("2d");
+function resize() { cv.width = cv.clientWidth * devicePixelRatio; cv.height = cv.clientHeight * devicePixelRatio; }
+window.addEventListener("resize", resize); resize();
+const laneColor = { candidate:"#58a6ff", ballot:"#d29922", output:"#a371f7", msg:"#3fb950", other:"#8b93a7" };
+
+function draw() {
+  cx.clearRect(0,0,cv.width,cv.height);
+  // disposition en cercle, légère animation.
+  const list = [...agents.values()]; const n = list.length || 1;
+  const cxm = cv.width/2, cym = cv.height/2, R = Math.min(cv.width,cv.height)*0.36;
+  list.forEach((a,i) => { const ang = i/n*Math.PI*2 - Math.PI/2;
+    a.tx = cxm + Math.cos(ang)*R; a.ty = cym + Math.sin(ang)*R;
+    a.x += (a.tx-a.x)*0.12; a.y += (a.ty-a.y)*0.12; a.heat *= 0.96; });
+  // arêtes (messages) qui s'estompent.
+  for (let k = edges.length-1; k >= 0; k--) {
+    const e = edges[k]; e.life *= 0.94; if (e.life < 0.04) { edges.splice(k,1); continue; }
+    const f = agents.get(e.from), t = agents.get(e.to); if (!f || !t) continue;
+    cx.strokeStyle = laneColor[e.kind] || laneColor.other; cx.globalAlpha = e.life;
+    cx.lineWidth = 1.5*devicePixelRatio; cx.beginPath(); cx.moveTo(f.x,f.y); cx.lineTo(t.x,t.y); cx.stroke();
+  }
+  cx.globalAlpha = 1;
+  // nœuds (agents).
+  for (const a of agents.values()) {
+    const r = (5 + a.heat*6)*devicePixelRatio;
+    cx.fillStyle = a.id.startsWith("◆") ? "#a371f7" : a.id.startsWith("#") ? "#3fb950" : "#58a6ff";
+    cx.globalAlpha = 0.35 + a.heat*0.65; cx.beginPath(); cx.arc(a.x,a.y,r,0,Math.PI*2); cx.fill();
+    cx.globalAlpha = 1; cx.fillStyle = "#8b93a7"; cx.font = `${10*devicePixelRatio}px monospace`;
+    cx.fillText(a.id.slice(0,16), a.x+r+2, a.y+3);
+  }
+  requestAnimationFrame(draw);
+}
+draw();
+
+// ── démo : lance un run keyless en mode job, puis se connecte ────────────────────
+async function demo() {
+  setStatus("démarrage…", "");
+  const tenant = $("tenant").value.trim() || "system";
+  const body = { task:{text:"The court ruled the clause unenforceable.", expected:"legal"},
+    topology:{kind:"consensus", generator:"echo_generator",
+      judges:["consistency","length_band","j_non_empty"], k:5, pattern:"borda"},
+    budget:{max_cents:1000}, mode:"keyless" };
+  const r = await fetch("/v1/swarm/run?stream=true", { method:"POST",
+    headers:{ "content-type":"application/json", "x-efe-tenant":tenant, "x-efe-roles":"operator" },
+    body: JSON.stringify(body) });
+  if (!r.ok) { setStatus("échec POST " + r.status, "err"); return; }
+  const j = await r.json(); $("run").value = j.run_id; connect();
+}
+
+$("connect").onclick = connect;
+$("demo").onclick = demo;
+// auto-connecte si ?run= en query.
+const q = new URLSearchParams(location.search);
+if (q.get("run")) { $("run").value = q.get("run"); connect(); }
+if (q.get("tenant")) { $("tenant").value = q.get("tenant"); }
+</script>
+</body>
+</html>

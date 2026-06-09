@@ -22,18 +22,22 @@ tamper-testkit = []
 efe-swarm-sdk        = { path = "../efe-swarm-sdk", version = "0.0.1" }
 efe-swarm-provenance = { path = "../efe-swarm-provenance", version = "0.0.1" }  # verify_swarm + AgentCallRecord + métriques
 efe-swarm-topology   = { path = "../efe-swarm-topology", version = "0.0.1" }    # AgentFleet (flotte partagée)
+efe-swarm-dashboard  = { path = "../efe-swarm-dashboard", version = "0.0.1" }   # DashboardBus + observer (Inc.3)
 efe-blackboard       = { path = "../efe-blackboard", version = "0.0.1" }        # SubstrateMetrics (/metrics)
 efe-nano-sdk         = { path = "../efe-nano-sdk", version = "0.0.1" }          # TenantId
 
-axum        = { version = "0.7", default-features = false, features = ["json", "tokio", "http1"] }
-tokio       = { workspace = true, features = ["sync", "rt"] }
-serde       = { workspace = true }
-serde_json  = { workspace = true }
-async-trait = { workspace = true }
-uuid        = { workspace = true }
+axum         = { version = "0.7", default-features = false, features = ["json", "tokio", "http1", "query"] }
+tokio        = { workspace = true, features = ["sync", "rt", "time"] }
+tokio-stream = { workspace = true }             # BroadcastStream (SSE)
+async-stream = "0.3"                            # stream! (SSE)
+futures      = { workspace = true }             # Stream combinators (firehose)
+serde        = { workspace = true }
+serde_json   = { workspace = true }
+async-trait  = { workspace = true }
+uuid         = { workspace = true }
 
 [dev-dependencies]
-tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread", "time"] }
 tower = { workspace = true }                    # ServiceExt::oneshot (tests axum)
 http-body-util = "0.1"                          # collecte du corps de réponse dans les tests
-axum = { version = "0.7", default-features = false, features = ["json", "tokio", "http1"] }
+axum = { version = "0.7", default-features = false, features = ["json", "tokio", "http1", "query"] }

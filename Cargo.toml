@@ -197,6 +197,10 @@ members = [
     # (le moat exposé) + /metrics. axum 0.7, mergeable (.nest) ou standalone. Cf.
     # docs/architecture/EFE_SWARM_PHASE5_INC2_HTTP_GATEWAY_ARCHITECTURE.md.
     "crates/efe-swarm-gateway",
+    # Phase 5 Inc.3 — dashboard live : DashboardBus sur les seams substrat
+    # (WriteSink/EventSink/métriques) → SSE + UI vanilla 4 panneaux. Cf.
+    # docs/architecture/EFE_SWARM_PHASE5_INC3_DASHBOARD_LIVE_ARCHITECTURE.md.
+    "crates/efe-swarm-dashboard",
     "crates/efe-swarm-orchestrator",
     "crates/efe-agentic-bridge",
     # Sprint 13 N21 § G11 : six reference pre-analysis agents.

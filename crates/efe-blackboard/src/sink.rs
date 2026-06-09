@@ -13,6 +13,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 
 use crate::blackboard::BlackboardWrite;
+use crate::eventbus::SwarmEvent;
 
 /// Exutoire d'historique : reçoit chaque écriture committée.
 ///
@@ -22,6 +23,17 @@ pub trait WriteSink: Send + Sync + 'static {
     fn on_write(&self, write: &BlackboardWrite);
     /// Optionnel : vidange (no-op par défaut).
     fn flush(&self) {}
+}
+
+/// Exutoire d'**événements** : reçoit chaque message publié sur le bus, au seam
+/// `publish` (**pas** `subscribe` — donc fiable, sans course aux topics existants).
+///
+/// Pendant exact de [`WriteSink`] pour le bus : c'est le seam d'observation du **trafic
+/// inter-agent** (Phase 5 Inc.3 — dashboard live). **Contrat identique** : `on_event` est
+/// appelé synchroniquement depuis la tâche publiante ; il DOIT être rapide, non bloquant,
+/// et ne pas paniquer (cf. un tap lossy via `try_send`).
+pub trait EventSink: Send + Sync + 'static {
+    fn on_event(&self, event: &SwarmEvent);
 }
 
 /// Sink no-op (défaut implicite quand aucun sink n'est branché).

@@ -52,8 +52,8 @@ use axum::Router;
 
 pub use auth::Caller;
 pub use dto::{
-    BudgetDto, ModeDto, OnExceedDto, PatternDto, RunRequest, RunResponse, StoredRunView,
-    TopologyDto, VerifyResponse,
+    BudgetDto, JobAccepted, ModeDto, OnExceedDto, PatternDto, RunParams, RunRequest, RunResponse,
+    RunStatusView, TopologyDto, VerifyResponse,
 };
 pub use error::GatewayError;
 pub use state::SwarmGatewayState;
@@ -62,12 +62,13 @@ pub use store::{InMemoryRunStore, RunStore, StoredRun};
 /// Version du crate (semver).
 pub const CRATE_VERSION: &str = env!("CARGO_PKG_VERSION");
 
-/// **App standalone complète** : `/v1/swarm/*` + `/metrics` (état appliqué).
+/// **App standalone complète** : `/v1/swarm/*` + `/metrics` + `/dashboard` (UI live).
 /// Pour un déploiement souverain : `axum::serve(listener, router(state))`.
 pub fn router(state: SwarmGatewayState) -> Router {
     Router::new()
         .nest("/v1/swarm", routes::routes())
         .route("/metrics", get(routes::metrics::metrics))
+        .route("/dashboard", get(routes::dashboard::dashboard))
         .with_state(state)
 }
 
@@ -330,5 +331,122 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+    }
+
+    // ── Inc.3 — dashboard live ────────────────────────────────────────────────
+
+    async fn collect_text(resp: axum::response::Response) -> String {
+        let bytes = tokio::time::timeout(std::time::Duration::from_secs(10), resp.into_body().collect())
+            .await
+            .expect("SSE doit se terminer au terminal")
+            .unwrap()
+            .to_bytes();
+        String::from_utf8_lossy(&bytes).to_string()
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn job_streams_live_events_then_persists_and_verifies() {
+        let (app, _s) = app();
+        // 1. POST ?stream=true → 202 job.
+        let resp = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/v1/swarm/run?stream=true")
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        json!({
+                            "task": { "text": "hello", "expected": "hello" },
+                            "topology": { "kind": "consensus", "generator": "echo_generator",
+                                          "judges": ["consistency", "length_band", "j_non_empty"], "k": 5 }
+                        })
+                        .to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::ACCEPTED);
+        let job = body_json(resp).await;
+        assert_eq!(job["status"], "running");
+        let run_id = job["run_id"].as_str().unwrap().to_string();
+
+        // 2. GET …/events : rejeu + live → se termine au `run_finished`.
+        let resp = app
+            .clone()
+            .oneshot(Request::builder().uri(format!("/v1/swarm/runs/{run_id}/events")).body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let sse = collect_text(resp).await;
+        // chaque famille de panneau est présente dans le flux live (frames `event: <kind>`).
+        for needle in ["event: run_started", "event: agent_write", "event: candidate", "event: ballot",
+                       "event: decided", "event: budget_tick", "event: sealed", "event: run_finished"] {
+            assert!(sse.contains(needle), "le flux SSE doit contenir {needle}\n---\n{sse}");
+        }
+
+        // 3. le job a persisté les records → /runs/:id Finished, puis verify re-prouve.
+        let mut finished = false;
+        for _ in 0..100 {
+            let resp = app
+                .clone()
+                .oneshot(Request::builder().uri(format!("/v1/swarm/runs/{run_id}")).body(Body::empty()).unwrap())
+                .await
+                .unwrap();
+            if resp.status() == StatusCode::OK {
+                if body_json(resp).await["status"] == "finished" {
+                    finished = true;
+                    break;
+                }
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        }
+        assert!(finished, "le job persiste le run");
+
+        let resp = app
+            .clone()
+            .oneshot(Request::builder().uri(format!("/v1/swarm/verify/{run_id}")).body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        assert!(body_json(resp).await["verified"].as_bool().unwrap(), "run live re-prouvé (le moat)");
+
+        // 4. /metrics expose les surfaces du dashboard, réellement alimentées par le job.
+        let resp = app
+            .oneshot(Request::builder().uri("/metrics").body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        let txt = collect_text(resp).await;
+        let emitted = txt
+            .lines()
+            .find_map(|l| l.strip_prefix("efe_swarm_dash_events_emitted_total "))
+            .and_then(|v| v.trim().parse::<u64>().ok())
+            .expect("métrique efe_swarm_dash_events_emitted_total présente");
+        assert!(emitted > 0, "le dashboard a diffusé des events (emitted={emitted})");
+        assert!(txt.contains("efe_swarm_dash_active_runs"));
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn dashboard_html_is_served() {
+        let (app, _s) = app();
+        let resp = app
+            .oneshot(Request::builder().uri("/dashboard").body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let html = collect_text(resp).await;
+        assert!(html.contains("essaim live"));
+        assert!(html.contains("EventSource"), "UI vanilla : SSE natif");
+        assert!(html.contains("4 · budget"));
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn events_of_unknown_run_is_404() {
+        let (app, _s) = app();
+        let resp = app
+            .oneshot(Request::builder().uri(format!("/v1/swarm/runs/{}/events", Uuid::new_v4())).body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::NOT_FOUND);
     }
 }

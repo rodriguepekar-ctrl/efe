@@ -10,7 +10,8 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use efe_blackboard::{
-    AgentCtx, Blackboard, StreamingSwarm, SubstrateMetrics, SwarmEvent, TopicRouter, WriteSink,
+    AgentCtx, Blackboard, EventSink, StreamingSwarm, SubstrateMetrics, SwarmEvent, TopicRouter,
+    WriteSink,
 };
 use efe_nano_sdk::{AgentId, SwarmId};
 use serde_json::Value;
@@ -80,18 +81,20 @@ impl Pipeline {
         timeout: Duration,
         write_sink: Option<Arc<dyn WriteSink>>,
     ) -> Vec<Value> {
-        self.run_batch_instrumented(inputs, timeout, write_sink, None).await
+        self.run_batch_instrumented(inputs, timeout, write_sink, None, None).await
     }
 
     /// Idem [`Self::run_batch_with_sink`] en branchant **aussi** un registre de métriques
-    /// de substrat (Phase 5 Inc.2) sur le Blackboard interne → `swarm_blackboard_*` /
-    /// `swarm_events_*` comptés. Les deux hooks sont optionnels (coût nul si `None`).
+    /// de substrat (Phase 5 Inc.2) sur le Blackboard interne ET un tap d'événements de bus
+    /// (Phase 5 Inc.3) sur le `TopicRouter` → `swarm_blackboard_*` / `swarm_events_*` comptés
+    /// + trafic inter-agent observé. Tous les hooks sont optionnels (coût nul si `None`).
     pub async fn run_batch_instrumented(
         &self,
         inputs: Vec<Value>,
         timeout: Duration,
         write_sink: Option<Arc<dyn WriteSink>>,
         metrics: Option<Arc<SubstrateMetrics>>,
+        event_sink: Option<Arc<dyn EventSink>>,
     ) -> Vec<Value> {
         if self.stages.is_empty() {
             return inputs;
@@ -105,6 +108,9 @@ impl Pipeline {
         }
         let cap = (inputs.len() * self.stages.len() * 4).max(1024);
         let router = Arc::new(TopicRouter::new(cap));
+        if let Some(es) = event_sink {
+            router.set_event_sink(es); // Inc.3 : observe les messages inter-étages.
+        }
         let mut swarm = StreamingSwarm::new(bb.clone(), router);
         let out_seq = Arc::new(AtomicU64::new(0));
         let n = self.stages.len();
