@@ -19,6 +19,19 @@ use crate::auth::Caller;
 use crate::error::GatewayError;
 use crate::state::SwarmGatewayState;
 
+/// Plafond d'abonnés SSE simultanés **par tenant** (parade anti-DoS, §10).
+const MAX_SSE_SUBSCRIBERS_PER_TENANT: usize = 64;
+
+/// Refuse la connexion si le tenant a déjà saturé son quota d'abonnés SSE.
+fn guard_subscriber_quota(s: &SwarmGatewayState, tid: &efe_nano_sdk::TenantId) -> Result<(), GatewayError> {
+    if s.dashboards.subscribers_for(tid) >= MAX_SSE_SUBSCRIBERS_PER_TENANT {
+        return Err(GatewayError::TooManyRequests(format!(
+            "quota d'abonnés SSE atteint pour ce tenant (max {MAX_SSE_SUBSCRIBERS_PER_TENANT})"
+        )));
+    }
+    Ok(())
+}
+
 /// Une enveloppe → une frame SSE (`event: <kind>` + `data: <json>`).
 fn frame(env: &DashboardEnvelope) -> Event {
     Event::default()
@@ -35,6 +48,7 @@ pub async fn run_events(
 ) -> Result<Sse<impl Stream<Item = Result<Event, Infallible>>>, GatewayError> {
     caller.require_any_role(&["viewer", "operator", "admin", "auditor"])?;
     let tid = s.tenant_id(&caller.tenant)?;
+    guard_subscriber_quota(&s, &tid)?;
     let bus = s.dashboards.get(id, &tid).ok_or(GatewayError::NotFound)?;
 
     // S'abonner AVANT de prendre le snapshot du ring → aucun trou ; on dédoublonne par `seq`.
@@ -80,6 +94,7 @@ pub async fn tenant_events(
 ) -> Result<Sse<impl Stream<Item = Result<Event, Infallible>>>, GatewayError> {
     caller.require_any_role(&["viewer", "operator", "admin", "auditor"])?;
     let tid = s.tenant_id(&caller.tenant)?;
+    guard_subscriber_quota(&s, &tid)?;
     let buses = s.dashboards.active_for(&tid);
 
     let (tx, mut rx) = tokio::sync::mpsc::channel::<DashboardEnvelope>(2048);

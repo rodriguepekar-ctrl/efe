@@ -65,7 +65,8 @@ pub enum DashboardEvent {
 
     // ── PANNEAU 1 : trafic inter-agent (seams WriteSink + EventSink + Meter) ──
     AgentWrite { pointer: String, version: u64, agent_id: String, bytes: usize, lane: Lane },
-    AgentMessage { topic: String, from: String, bytes: usize },
+    /// Message inter-agent (bus). `latency_ms` = latence de propagation publish→observation.
+    AgentMessage { topic: String, from: String, bytes: usize, latency_ms: Option<f64> },
     AgentCall { agent_id: String, role: String, agent_kind: String, cost_cents: u32 },
 
     // ── PANNEAU 2 : consensus (dérivé des appels Meter générateur/juge) ───────

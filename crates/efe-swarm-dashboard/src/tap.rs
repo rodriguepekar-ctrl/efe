@@ -8,6 +8,7 @@
 //!   provenance).
 
 use std::sync::Arc;
+use std::time::SystemTime;
 
 use efe_blackboard::{BlackboardWrite, EventSink, SwarmEvent, WriteSink};
 use efe_swarm_sdk::{AgentCall, AgentRole, SwarmObserver, SwarmRun};
@@ -53,10 +54,15 @@ impl EventSink for DashEventTap {
             });
             return;
         }
+        let latency_ms = SystemTime::now()
+            .duration_since(ev.published_at)
+            .ok()
+            .map(|d| d.as_secs_f64() * 1000.0);
         self.bus.emit(DashboardEvent::AgentMessage {
             topic: ev.topic.clone(),
             from: ev.published_by.as_str().to_string(),
             bytes: ev.payload.to_string().len(),
+            latency_ms,
         });
     }
 }

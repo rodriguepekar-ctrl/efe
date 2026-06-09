@@ -24,6 +24,8 @@ pub enum GatewayError {
     BadRequest(String),
     /// 402 — budget : estimation > plafond, ou épuisé en cours (politique `Error`).
     Budget(String),
+    /// 429 — trop d'abonnés SSE pour ce tenant (parade anti-DoS).
+    TooManyRequests(String),
     /// 501 — fonctionnalité non câblée en Inc.2 (ex. routeur `Network`).
     NotImplemented(String),
     /// 500 — erreur interne (dérivation de clé, persistance…).
@@ -38,6 +40,7 @@ impl GatewayError {
             GatewayError::NotFound => (StatusCode::NOT_FOUND, "not_found", "run introuvable".into()),
             GatewayError::BadRequest(m) => (StatusCode::BAD_REQUEST, "bad_request", m.clone()),
             GatewayError::Budget(m) => (StatusCode::PAYMENT_REQUIRED, "budget", m.clone()),
+            GatewayError::TooManyRequests(m) => (StatusCode::TOO_MANY_REQUESTS, "too_many_requests", m.clone()),
             GatewayError::NotImplemented(m) => (StatusCode::NOT_IMPLEMENTED, "not_implemented", m.clone()),
             GatewayError::Internal(m) => (StatusCode::INTERNAL_SERVER_ERROR, "internal", m.clone()),
         }
