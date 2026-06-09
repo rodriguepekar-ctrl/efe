@@ -2914,6 +2914,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "efe-swarm-sdk"
+version = "0.0.1"
+dependencies = [
+ "async-trait",
+ "efe-blackboard",
+ "efe-nano-sdk",
+ "efe-swarm-provenance",
+ "efe-swarm-topology",
+ "serde",
+ "serde_json",
+ "tokio",
+]
+
+[[package]]
 name = "efe-swarm-topology"
 version = "0.0.1"
 dependencies = [

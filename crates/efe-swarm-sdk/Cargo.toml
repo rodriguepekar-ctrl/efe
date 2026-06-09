@@ -1,0 +1,29 @@
+[package]
+name = "efe-swarm-sdk"
+version = "0.0.1"
+edition = { workspace = true }
+rust-version = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
+description = "Phase 5 — SDK unifié : swarm.run(task, topology, budget). TopologySpec (T1/T2/T3/Consensus/Auto), ClientMode (Keyless/Self-host/Network), budget plafonné, provenance auto-câblée (provenance_root re-vérifiable)."
+publish = false
+
+[lib]
+name = "efe_swarm_sdk"
+path = "src/lib.rs"
+
+[dependencies]
+efe-swarm-topology   = { path = "../efe-swarm-topology", version = "0.0.1" }
+efe-swarm-provenance = { path = "../efe-swarm-provenance", version = "0.0.1" }
+efe-blackboard       = { path = "../efe-blackboard", version = "0.0.1" }  # WriteSink (cast du sink)
+efe-nano-sdk         = { path = "../efe-nano-sdk", version = "0.0.1" }
+
+serde       = { workspace = true }
+serde_json  = { workspace = true }
+async-trait = { workspace = true }
+tokio       = { workspace = true, features = ["sync", "rt"] }
+
+[dev-dependencies]
+serde_json = { workspace = true }
+tokio      = { workspace = true, features = ["macros", "rt-multi-thread"] }
