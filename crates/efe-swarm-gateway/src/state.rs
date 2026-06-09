@@ -94,6 +94,7 @@ impl SwarmGatewayState {
             .mode(mode)
             .with_metrics(self.prov_metrics.clone())
             .with_substrate_metrics(self.substrate_metrics.clone())
+            .require_healthy_backend(true) // serveur souverain : échec rapide si backend self-host mort (no-op keyless)
             .build()
             .map_err(GatewayError::from)
     }
@@ -115,6 +116,7 @@ impl SwarmGatewayState {
             .with_metrics(self.prov_metrics.clone())
             .with_substrate_metrics(self.substrate_metrics.clone())
             .with_observer(observer)
+            .require_healthy_backend(true) // serveur souverain : échec rapide si backend self-host mort
             .build()
             .map_err(GatewayError::from)
     }
