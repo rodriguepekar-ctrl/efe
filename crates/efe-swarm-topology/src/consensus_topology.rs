@@ -210,14 +210,15 @@ impl Topology for ConsensusTopology {
         "T-consensus"
     }
 
-    async fn run(&self, task: &Value, _ctx: &SwarmContext) -> TopologyOutput {
+    async fn run(&self, task: &Value, ctx: &SwarmContext) -> TopologyOutput {
         let t0 = Instant::now();
         let swarm_id = SwarmId::new();
         let bb = Arc::new(Blackboard::new(swarm_id));
-        // Phase 4 : branche l'exutoire de provenance (s'il y en a un) → ancrage 100 %
-        // des écritures `/cand/*` + `/ballot/*` (seam A), sans couplage à la provenance.
-        if let Some(sink) = &self.write_sink {
-            bb.set_write_sink(sink.clone());
+        // Phase 4 : branche l'exutoire de provenance → ancrage 100 % des écritures
+        // `/cand/*` + `/ballot/*` (seam A). Hook LOCAL prioritaire, sinon celui du
+        // contexte (provenance UNIFORME via l'interface §3). Sans couplage provenance.
+        if let Some(sink) = self.write_sink.clone().or_else(|| ctx.write_sink.clone()) {
+            bb.set_write_sink(sink);
         }
 
         // 1. génération + écriture des candidats au Blackboard (vérité durable).

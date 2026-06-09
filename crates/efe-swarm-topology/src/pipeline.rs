@@ -9,7 +9,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
-use efe_blackboard::{AgentCtx, Blackboard, StreamingSwarm, SwarmEvent, TopicRouter};
+use efe_blackboard::{AgentCtx, Blackboard, StreamingSwarm, SwarmEvent, TopicRouter, WriteSink};
 use efe_nano_sdk::{AgentId, SwarmId};
 use serde_json::Value;
 
@@ -66,10 +66,25 @@ impl Pipeline {
     /// Exécute un BATCH d'items à travers le pipeline streaming. Renvoie tous les
     /// items produits par le DERNIER étage (ordre non garanti — flux concurrent).
     pub async fn run_batch(&self, inputs: Vec<Value>, timeout: Duration) -> Vec<Value> {
+        self.run_batch_with_sink(inputs, timeout, None).await
+    }
+
+    /// Idem [`Self::run_batch`] en branchant un **exutoire de provenance** (Phase 4) sur
+    /// le Blackboard interne → ancrage des écritures de sortie (`/out/*`, seam A). `None`
+    /// ⇒ comportement identique à `run_batch` (coût nul).
+    pub async fn run_batch_with_sink(
+        &self,
+        inputs: Vec<Value>,
+        timeout: Duration,
+        write_sink: Option<Arc<dyn WriteSink>>,
+    ) -> Vec<Value> {
         if self.stages.is_empty() {
             return inputs;
         }
         let bb = Arc::new(Blackboard::with_recent_cap(SwarmId::new(), 256_000_000, 4096));
+        if let Some(sink) = write_sink {
+            bb.set_write_sink(sink);
+        }
         let cap = (inputs.len() * self.stages.len() * 4).max(1024);
         let router = Arc::new(TopicRouter::new(cap));
         let mut swarm = StreamingSwarm::new(bb.clone(), router);

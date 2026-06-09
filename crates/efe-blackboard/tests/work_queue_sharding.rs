@@ -12,7 +12,7 @@
 use std::sync::Arc;
 
 use efe_blackboard::{
-    shard_topic, shard_topic_for_item, Blackboard, ClaimModel, ClaimOutcome, SwarmEvent,
+    shard_topic, shard_topic_for_item, Blackboard, ClaimModel, SwarmEvent,
     TopicRouter, WorkQueue, WorkQueueStats,
 };
 use efe_nano_sdk::{AgentId, SwarmId};

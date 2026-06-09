@@ -10,6 +10,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use async_trait::async_trait;
+use efe_blackboard::WriteSink;
 use serde_json::Value;
 
 use crate::fleet::AgentFleet;
@@ -37,25 +38,39 @@ pub struct TopologyOutput {
     pub quality: QualitySignals,
 }
 
-/// Contexte partagé injecté aux topologies (services : flotte d'agents).
+/// Contexte partagé injecté aux topologies (services : flotte d'agents + provenance).
 #[derive(Clone)]
 pub struct SwarmContext {
     pub fleet: Arc<AgentFleet>,
+    /// **Phase 4 — provenance UNIFORME (§3)** : exutoire d'écritures optionnel, branché
+    /// par CHAQUE topologie à blackboard (T2 Pipeline, T-Consensus) sur son substrat
+    /// interne. Un seul `with_write_sink` sur le contexte instrumente toute la couche
+    /// via l'interface unifiée [`Topology`] — sans que les topologies connaissent la
+    /// provenance (type `efe_blackboard::WriteSink`, aucun couplage).
+    pub write_sink: Option<Arc<dyn WriteSink>>,
 }
 
 impl std::fmt::Debug for SwarmContext {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("SwarmContext").field("fleet", &self.fleet).finish()
+        f.debug_struct("SwarmContext")
+            .field("fleet", &self.fleet)
+            .field("instrumented", &self.write_sink.is_some())
+            .finish()
     }
 }
 
 impl SwarmContext {
     pub fn new(fleet: Arc<AgentFleet>) -> Self {
-        Self { fleet }
+        Self { fleet, write_sink: None }
     }
     /// Contexte avec la flotte standard (tout le catalogue Mode A).
     pub fn standard() -> Self {
-        Self { fleet: Arc::new(AgentFleet::standard()) }
+        Self { fleet: Arc::new(AgentFleet::standard()), write_sink: None }
+    }
+    /// **Phase 4** : branche un exutoire de provenance partagé par toutes les topologies.
+    pub fn with_write_sink(mut self, sink: Arc<dyn WriteSink>) -> Self {
+        self.write_sink = Some(sink);
+        self
     }
 }
 
@@ -108,9 +123,14 @@ impl Topology for PipelineTopology {
     fn name(&self) -> &str {
         "T2:pipeline"
     }
-    async fn run(&self, task: &Value, _ctx: &SwarmContext) -> TopologyOutput {
+    async fn run(&self, task: &Value, ctx: &SwarmContext) -> TopologyOutput {
         let t0 = Instant::now();
-        let outs = self.pipeline.run_batch(vec![task.clone()], self.timeout).await;
+        // Phase 4 : branche l'exutoire de provenance du contexte (s'il y en a un) sur le
+        // substrat interne du pipeline → ancrage des écritures `/out/*` (seam A uniforme).
+        let outs = self
+            .pipeline
+            .run_batch_with_sink(vec![task.clone()], self.timeout, ctx.write_sink.clone())
+            .await;
         let produced = outs.len();
         TopologyOutput {
             output: outs.into_iter().next().unwrap_or(Value::Null),
