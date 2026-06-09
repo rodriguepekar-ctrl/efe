@@ -193,6 +193,10 @@ members = [
     # Phase 5 — SDK unifié : swarm.run(task, topology, budget). Cf.
     # docs/architecture/EFE_SWARM_PHASE5_PRODUCTIZATION_ARCHITECTURE.md.
     "crates/efe-swarm-sdk",
+    # Phase 5 Inc.2 — passerelle HTTP : POST /v1/swarm/run + GET /v1/swarm/verify/:id
+    # (le moat exposé) + /metrics. axum 0.7, mergeable (.nest) ou standalone. Cf.
+    # docs/architecture/EFE_SWARM_PHASE5_INC2_HTTP_GATEWAY_ARCHITECTURE.md.
+    "crates/efe-swarm-gateway",
     "crates/efe-swarm-orchestrator",
     "crates/efe-agentic-bridge",
     # Sprint 13 N21 § G11 : six reference pre-analysis agents.

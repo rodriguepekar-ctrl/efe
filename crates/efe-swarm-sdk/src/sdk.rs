@@ -5,7 +5,9 @@ use std::sync::Arc;
 
 use efe_blackboard::WriteSink;
 use efe_nano_sdk::{SwarmId, TenantId};
-use efe_swarm_provenance::{verify_swarm, AgentKind, HmacKeySource, ProvenanceRecorder, ProvenanceSink};
+use efe_swarm_provenance::{
+    verify_swarm, AgentKind, HmacKeySource, ProvenanceMetrics, ProvenanceRecorder, ProvenanceSink,
+};
 use efe_swarm_topology::{AgentFleet, SwarmContext};
 
 use crate::agents::Meter;
@@ -13,7 +15,7 @@ use crate::budget::{Budget, BudgetGuard, OnExceed};
 use crate::client::ClientMode;
 use crate::llm::OllamaBackend;
 use crate::resolver::Resolver;
-use crate::result::{Accounting, ProvenanceSummary, SwarmError, SwarmRun};
+use crate::result::{Accounting, ProvenanceSummary, RunOutcome, SwarmError, SwarmRun};
 use crate::spec::TopologySpec;
 
 /// L'essaim productisé. Construit via [`Swarm::builder`] ou [`Swarm::keyless`].
@@ -24,6 +26,8 @@ pub struct Swarm {
     key: Vec<u8>, // clé de provenance pré-dérivée (HKDF par tenant)
     provenance: bool,
     assumed_subtasks: usize,
+    /// Métriques de provenance partagées (alimentées par chaque run) — pour `/metrics`.
+    metrics: Option<Arc<ProvenanceMetrics>>,
 }
 
 impl Swarm {
@@ -46,13 +50,26 @@ impl Swarm {
 
     /// **`swarm.run(task, topology, budget)`** — exécute un essaim, plafonné en coût et
     /// **auto-tracé** : renvoie la sortie, le coût exact, et un `provenance_root`
-    /// re-vérifiable par un tiers.
+    /// re-vérifiable par un tiers. C'est le wrapper Inc.1 (il jette la `SealedProvenance`).
     pub async fn run(
         &self,
         task: serde_json::Value,
         topology: TopologySpec,
         budget: Budget,
     ) -> Result<SwarmRun, SwarmError> {
+        self.run_traced(task, topology, budget).await.map(|o| o.run)
+    }
+
+    /// **`swarm.run_traced(...)`** — identique à [`Swarm::run`], mais **expose la
+    /// provenance scellée** ([`RunOutcome::sealed`]) : les `AgentCallRecord` bruts que la
+    /// passerelle HTTP persiste pour servir `GET /v1/swarm/verify/:id` (le *moat* en HTTP).
+    /// `run()` n'est qu'un wrapper qui jette `sealed`.
+    pub async fn run_traced(
+        &self,
+        task: serde_json::Value,
+        topology: TopologySpec,
+        budget: Budget,
+    ) -> Result<RunOutcome, SwarmError> {
         // ClientMode::Network nécessite la passerelle serveur (clés) → pas d'in-process.
         if matches!(self.mode, ClientMode::Network { .. }) {
             return Err(SwarmError::NetworkRequiresGateway);
@@ -101,22 +118,29 @@ impl Swarm {
             return Err(SwarmError::BudgetExceeded { spent_cents: guard.spent_cents(), max_cents: guard.max_cents() });
         }
 
-        // 4. scelle la provenance + re-prouve (verify_swarm) → provenance_root.
-        let provenance = if self.provenance {
+        // 4. scelle la provenance + re-prouve (verify_swarm) → provenance_root. La
+        //    `SealedProvenance` est conservée (records bruts) pour la persistance HTTP ;
+        //    les métriques partagées (si présentes) sont alimentées ici → `/metrics`.
+        let (provenance, sealed) = if self.provenance {
             let sealed = recorder.seal_with_key(self.key.clone());
             let report = verify_swarm(&sealed.records, &self.key);
-            ProvenanceSummary {
+            if let Some(m) = &self.metrics {
+                m.observe_sealed(&sealed);
+                m.observe_verify(&report);
+            }
+            let summary = ProvenanceSummary {
                 enabled: true,
                 records: sealed.len(),
                 traced_pct: report.traced_pct,
                 verified: report.ok(),
                 root: report.root_hex(),
-            }
+            };
+            (summary, Some(sealed))
         } else {
-            ProvenanceSummary::disabled()
+            (ProvenanceSummary::disabled(), None)
         };
 
-        Ok(SwarmRun {
+        let run = SwarmRun {
             output: out.output,
             topology: topo_name,
             accounting: Accounting {
@@ -128,7 +152,8 @@ impl Swarm {
             provenance,
             quality: out.quality.into(),
             budget_stopped: budget.on_exceed == OnExceed::Stop && guard.exhausted(),
-        })
+        };
+        Ok(RunOutcome { run, sealed })
     }
 }
 
@@ -140,6 +165,7 @@ pub struct SwarmBuilder {
     provenance: bool,
     assumed_subtasks: usize,
     fleet: Option<Arc<AgentFleet>>,
+    metrics: Option<Arc<ProvenanceMetrics>>,
 }
 
 impl Default for SwarmBuilder {
@@ -151,6 +177,7 @@ impl Default for SwarmBuilder {
             provenance: true,
             assumed_subtasks: 8,
             fleet: None,
+            metrics: None,
         }
     }
 }
@@ -183,6 +210,14 @@ impl SwarmBuilder {
         self
     }
 
+    /// Registre de métriques de provenance **partagé** : chaque run l'alimente
+    /// (`observe_sealed`/`observe_verify`). La passerelle HTTP l'expose en `/metrics`
+    /// (agrégé sur tous les runs d'un tenant).
+    pub fn with_metrics(mut self, metrics: Arc<ProvenanceMetrics>) -> Self {
+        self.metrics = Some(metrics);
+        self
+    }
+
     /// Construit le `Swarm` (dérive la clé de provenance par tenant).
     pub fn build(self) -> Result<Swarm, SwarmError> {
         let key = self.key_source.derive(self.tenant).map_err(|e| SwarmError::KeyError(e.to_string()))?;
@@ -193,6 +228,7 @@ impl SwarmBuilder {
             key,
             provenance: self.provenance,
             assumed_subtasks: self.assumed_subtasks,
+            metrics: self.metrics,
         })
     }
 }
@@ -330,5 +366,46 @@ mod tests {
         let swarm = Swarm::builder().mode(ClientMode::Network { provider: "anthropic".into() }).build().unwrap();
         let err = swarm.run(json!({ "text": "x" }), TopologySpec::Auto, Budget::unlimited()).await;
         assert!(matches!(err, Err(SwarmError::NetworkRequiresGateway)), "Network → passerelle serveur (clés)");
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn run_traced_exposes_sealed_records_matching_summary() {
+        // Inc.2 : run_traced expose les AgentCallRecord bruts (la preuve persistable).
+        let swarm = Swarm::keyless();
+        let outcome = swarm
+            .run_traced(
+                json!({ "text": "hello", "expected": "hello" }),
+                TopologySpec::consensus("echo_generator", &["consistency", "length_band", "j_non_empty"], 5),
+                Budget::cents(1000),
+            )
+            .await
+            .unwrap();
+        // les records existent et leur compte == le résumé.
+        let sealed = outcome.sealed.as_ref().expect("provenance activée → records scellés");
+        assert!(!sealed.records.is_empty());
+        assert_eq!(sealed.len(), outcome.run.provenance.records);
+        assert_eq!(outcome.records().len(), sealed.len());
+        // un tiers re-prouve depuis les SEULS records + une clé tenant.
+        let key = HmacKeySource::test_key().derive(TenantId::system()).unwrap();
+        let report = verify_swarm(outcome.records(), &key);
+        assert!(report.ok(), "records bruts re-prouvés indépendamment");
+        assert_eq!(report.root_hex(), outcome.run.provenance.root);
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn with_metrics_accumulates_across_runs() {
+        // Inc.2 : un registre partagé agrège la provenance de TOUS les runs (→ /metrics).
+        let metrics = ProvenanceMetrics::new();
+        let swarm = Swarm::builder().with_metrics(metrics.clone()).build().unwrap();
+        for _ in 0..3 {
+            swarm
+                .run(json!({ "text": "x", "expected": "x" }), TopologySpec::Auto, Budget::cents(100))
+                .await
+                .unwrap();
+        }
+        let snap = metrics.snapshot();
+        assert!(snap.records_total >= 3, "records agrégés sur les 3 runs");
+        assert_eq!(snap.chain_breaks_total, 0, "runs sains → aucune rupture");
+        assert!(metrics.render_prometheus().contains("efe_swarm_prov_records_total"));
     }
 }

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: UNLICENSED
 //! Résultat & erreurs du SDK.
 
+use efe_swarm_provenance::SealedProvenance;
 use efe_swarm_topology::QualitySignals;
 use serde::Serialize;
 use serde_json::Value;
@@ -72,6 +73,32 @@ impl SwarmRun {
     /// Le run est-il intègre ET dans le budget (pas d'arrêt prématuré) ?
     pub fn is_clean(&self) -> bool {
         (!self.provenance.enabled || self.provenance.verified) && !self.budget_stopped
+    }
+}
+
+/// Résultat **tracé** d'un run : le [`SwarmRun`] (résumé sérialisable) **plus** la
+/// provenance scellée ([`SealedProvenance`]) — les `AgentCallRecord` bruts (l'évidence
+/// re-vérifiable par `verify_swarm`).
+///
+/// [`crate::Swarm::run`] (Inc.1) jette `sealed` et ne renvoie que le résumé ;
+/// [`crate::Swarm::run_traced`] (Inc.2) l'**expose** pour que la passerelle HTTP
+/// persiste les records et serve `GET /v1/swarm/verify/:id` (le *moat* exposé).
+///
+/// N'est volontairement **pas** `Serialize` : `SealedProvenance` porte les records bruts
+/// (sérialisés à part par la passerelle) ; le résumé sérialisable est `self.run`.
+#[derive(Debug, Clone)]
+pub struct RunOutcome {
+    /// Le résumé public du run (sortie + coût + budget + preuve + qualité).
+    pub run: SwarmRun,
+    /// Provenance scellée (records chaînés + `provenance_root`) — `None` si la provenance
+    /// est désactivée sur le `Swarm`.
+    pub sealed: Option<SealedProvenance>,
+}
+
+impl RunOutcome {
+    /// Les `AgentCallRecord` bruts à persister (vide si provenance désactivée).
+    pub fn records(&self) -> &[efe_swarm_provenance::AgentCallRecord] {
+        self.sealed.as_ref().map(|s| s.records.as_slice()).unwrap_or(&[])
     }
 }
 

@@ -1,0 +1,39 @@
+[package]
+name = "efe-swarm-gateway"
+version = "0.0.1"
+edition = { workspace = true }
+rust-version = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
+description = "Phase 5 Inc.2 — passerelle HTTP du SDK essaim : POST /v1/swarm/run + GET /v1/swarm/verify/:id (le moat exposé : re-preuve indépendante) + /metrics. axum 0.7, mergeable (.nest) ou standalone."
+publish = false
+
+[lib]
+name = "efe_swarm_gateway"
+path = "src/lib.rs"
+
+[features]
+# Expose `InMemoryRunStore::tamper_first_output` hors `#[cfg(test)]` pour permettre
+# un test de falsification depuis un harnais externe. OFF par défaut (jamais en prod).
+tamper-testkit = []
+
+[dependencies]
+efe-swarm-sdk        = { path = "../efe-swarm-sdk", version = "0.0.1" }
+efe-swarm-provenance = { path = "../efe-swarm-provenance", version = "0.0.1" }  # verify_swarm + AgentCallRecord + métriques
+efe-swarm-topology   = { path = "../efe-swarm-topology", version = "0.0.1" }    # AgentFleet (flotte partagée)
+efe-blackboard       = { path = "../efe-blackboard", version = "0.0.1" }        # SubstrateMetrics (/metrics)
+efe-nano-sdk         = { path = "../efe-nano-sdk", version = "0.0.1" }          # TenantId
+
+axum        = { version = "0.7", default-features = false, features = ["json", "tokio", "http1"] }
+tokio       = { workspace = true, features = ["sync", "rt"] }
+serde       = { workspace = true }
+serde_json  = { workspace = true }
+async-trait = { workspace = true }
+uuid        = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+tower = { workspace = true }                    # ServiceExt::oneshot (tests axum)
+http-body-util = "0.1"                          # collecte du corps de réponse dans les tests
+axum = { version = "0.7", default-features = false, features = ["json", "tokio", "http1"] }

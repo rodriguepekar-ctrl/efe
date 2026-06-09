@@ -2877,6 +2877,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "efe-swarm-gateway"
+version = "0.0.1"
+dependencies = [
+ "async-trait",
+ "axum",
+ "efe-blackboard",
+ "efe-nano-sdk",
+ "efe-swarm-provenance",
+ "efe-swarm-sdk",
+ "efe-swarm-topology",
+ "http-body-util",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tower 0.5.3",
+ "uuid",
+]
+
+[[package]]
 name = "efe-swarm-orchestrator"
 version = "0.0.1"
 dependencies = [
