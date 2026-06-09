@@ -1,0 +1,56 @@
+{
+  "_real": true,
+  "backend": "ollama",
+  "endpoint": "http://127.0.0.1:11434",
+  "model": "gemma3:12b",
+  "provenance": {
+    "anchored_ratio": 0.35714285714285715,
+    "anchored_writes": 6,
+    "captured_calls": 14,
+    "chain_intact": true,
+    "content_intact": true,
+    "dag_consistent": true,
+    "records": 14,
+    "root": "bd9cc5ebb89683b0449a69bf3ee7e0a1cabb85ae9dce36d5e028cada589f6989",
+    "verify_ok": true
+  },
+  "runs": [
+    {
+      "agent_calls": 3,
+      "ms": 1113,
+      "output": {
+        "value": "legal"
+      },
+      "phase": "T1 classify",
+      "topology": "T1:generate-verify"
+    },
+    {
+      "agent_calls": 2,
+      "ms": 1666,
+      "output": {
+        "text": "AI"
+      },
+      "phase": "T2 transform",
+      "topology": "T2:pipeline"
+    },
+    {
+      "agent_calls": 4,
+      "ms": 7378,
+      "output": {
+        "text": "While AI offers the potential to improve diagnostic accuracy and accelerate treatment planning, a key risk lies in the possibility of biased algorithms leading to inequitable patient care."
+      },
+      "phase": "T3 reason",
+      "topology": "T3:hierarchical"
+    },
+    {
+      "agent_calls": 5,
+      "ms": 3605,
+      "output": {
+        "value": "health"
+      },
+      "phase": "T-Consensus",
+      "topology": "T-consensus"
+    }
+  ],
+  "verdict": "REAL all-phases: 4 topologies (T1/T2/T3/T-Consensus) ran with real Ollama agents; whole run sealed + verify_swarm=true"
+}
