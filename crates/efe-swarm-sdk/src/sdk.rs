@@ -59,8 +59,8 @@ impl Swarm {
         }
         let price = budget.price_per_call_cents.unwrap_or_else(|| self.mode.price_per_call_cents());
 
-        // 0. concrétise Auto + applique la politique de PRÉ-VOL.
-        let spec = topology.concretize(&task);
+        // 0. concrétise Auto (selon tâche + mode) + applique la politique de PRÉ-VOL.
+        let spec = topology.concretize(&task, &self.mode);
         let spec = match budget.on_exceed {
             OnExceed::Degrade => spec.degraded_to_fit(budget.max_cents, price, self.assumed_subtasks),
             OnExceed::Error => {
@@ -126,7 +126,7 @@ impl Swarm {
             },
             budget: guard.snapshot(),
             provenance,
-            quality: out.quality,
+            quality: out.quality.into(),
             budget_stopped: budget.on_exceed == OnExceed::Stop && guard.exhausted(),
         })
     }

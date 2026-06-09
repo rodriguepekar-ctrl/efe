@@ -55,7 +55,7 @@ pub mod spec;
 pub use budget::{Budget, OnExceed};
 pub use client::ClientMode;
 pub use budget::BudgetSnapshot;
-pub use result::{Accounting, ProvenanceSummary, SwarmError, SwarmRun};
+pub use result::{Accounting, ProvenanceSummary, QualitySummary, SwarmError, SwarmRun};
 pub use sdk::{Swarm, SwarmBuilder};
 pub use spec::TopologySpec;
 

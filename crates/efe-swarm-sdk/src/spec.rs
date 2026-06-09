@@ -11,6 +11,7 @@ use efe_swarm_topology::{
 };
 use serde_json::Value;
 
+use crate::client::ClientMode;
 use crate::resolver::Resolver;
 use crate::result::SwarmError;
 
@@ -41,13 +42,31 @@ impl TopologySpec {
         }
     }
 
-    /// Concrétise `Auto` selon la tâche (sinon renvoie `self`). Reflète H-SWARM : la
-    /// valeur est dans la zone **vérifiable**.
-    pub(crate) fn concretize(self, task: &Value) -> TopologySpec {
+    /// Concrétise `Auto` selon la tâche **ET le mode**. Reflète H-SWARM (la valeur est
+    /// dans la zone vérifiable) :
+    /// - **Keyless** (Mode A déterministe) : T1 Generate-Verify avec des agents de la
+    ///   flotte par nom (vérificateur déterministe a-posteriori).
+    /// - **Self-host** (Mode C LLM) : un consensus N-juges robuste, avec des **instructions**
+    ///   en langage naturel (les noms de flotte n'ont pas de sens comme prompts LLM).
+    pub(crate) fn concretize(self, task: &Value, mode: &ClientMode) -> TopologySpec {
         match self {
             TopologySpec::Auto => {
-                let verifier = if task.get("expected").is_some() { "equals_expected" } else { "non_empty_text" };
-                TopologySpec::GenerateVerify { generator: "echo_generator".into(), verifier: verifier.into(), k: 3 }
+                if matches!(mode, ClientMode::Keyless) {
+                    let verifier = if task.get("expected").is_some() { "equals_expected" } else { "non_empty_text" };
+                    TopologySpec::GenerateVerify { generator: "echo_generator".into(), verifier: verifier.into(), k: 3 }
+                } else {
+                    // Self-host : instructions LLM + consensus (les juges rendent le run robuste).
+                    TopologySpec::Consensus {
+                        generator: "Answer the task with a single short result, no preamble.".into(),
+                        judges: vec![
+                            "Judge how well the proposed answer fits the task.".into(),
+                            "Assess the relevance and correctness of the answer.".into(),
+                        ],
+                        k: 3,
+                        pattern: Pattern::Borda,
+                        escalate: false,
+                    }
+                }
             }
             other => other,
         }
@@ -133,6 +152,44 @@ impl TopologySpec {
                 Ok(Box::new(topo))
             }
             TopologySpec::Auto => unreachable!("Auto doit être concrétisé avant resolve"),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn auto_is_mode_aware() {
+        let task = json!({ "text": "x", "expected": "x" });
+        // Keyless : flotte Mode A déterministe → T1.
+        match TopologySpec::Auto.concretize(&task, &ClientMode::Keyless) {
+            TopologySpec::GenerateVerify { generator, verifier, .. } => {
+                assert_eq!(generator, "echo_generator");
+                assert_eq!(verifier, "equals_expected"); // vérifiable
+            }
+            other => panic!("Keyless Auto attendu T1, eu {other:?}"),
+        }
+        // Self-host : instructions LLM + consensus (pas de noms de flotte).
+        let sh = ClientMode::SelfHost { endpoint: "x".into(), model: "m".into() };
+        match TopologySpec::Auto.concretize(&task, &sh) {
+            TopologySpec::Consensus { generator, judges, k, .. } => {
+                assert!(generator.contains(' '), "instruction LLM, pas un nom de flotte");
+                assert_eq!(judges.len(), 2);
+                assert_eq!(k, 3);
+            }
+            other => panic!("Self-host Auto attendu Consensus, eu {other:?}"),
+        }
+    }
+
+    #[test]
+    fn non_auto_specs_pass_through_concretize() {
+        let spec = TopologySpec::Pipeline { stages: vec!["uppercase".into()] };
+        match spec.concretize(&json!({}), &ClientMode::Keyless) {
+            TopologySpec::Pipeline { stages } => assert_eq!(stages, vec!["uppercase".to_string()]),
+            other => panic!("attendu Pipeline inchangé, eu {other:?}"),
         }
     }
 }

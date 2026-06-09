@@ -7,6 +7,21 @@ use serde_json::Value;
 
 use crate::budget::BudgetSnapshot;
 
+/// Signaux de qualité **sérialisables** (miroir de `QualitySignals`, qui ne dérive pas
+/// `Serialize` côté topologie).
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+pub struct QualitySummary {
+    pub candidates: usize,
+    pub verified: usize,
+    pub subtasks: usize,
+}
+
+impl From<QualitySignals> for QualitySummary {
+    fn from(q: QualitySignals) -> Self {
+        Self { candidates: q.candidates, verified: q.verified, subtasks: q.subtasks }
+    }
+}
+
 /// Comptabilité d'un run (issue de `TopologyOutput`).
 #[derive(Debug, Clone, Serialize)]
 pub struct Accounting {
@@ -48,8 +63,7 @@ pub struct SwarmRun {
     /// Preuve re-vérifiable du run.
     pub provenance: ProvenanceSummary,
     /// Signaux de qualité (candidats, vérifiés, sous-tâches).
-    #[serde(skip)]
-    pub quality: QualitySignals,
+    pub quality: QualitySummary,
     /// Le budget a-t-il été épuisé en cours de run (politique `Stop`) → résultat partiel.
     pub budget_stopped: bool,
 }
