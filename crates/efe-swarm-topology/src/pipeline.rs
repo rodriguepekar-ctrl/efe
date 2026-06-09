@@ -9,7 +9,9 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
-use efe_blackboard::{AgentCtx, Blackboard, StreamingSwarm, SwarmEvent, TopicRouter, WriteSink};
+use efe_blackboard::{
+    AgentCtx, Blackboard, StreamingSwarm, SubstrateMetrics, SwarmEvent, TopicRouter, WriteSink,
+};
 use efe_nano_sdk::{AgentId, SwarmId};
 use serde_json::Value;
 
@@ -78,12 +80,28 @@ impl Pipeline {
         timeout: Duration,
         write_sink: Option<Arc<dyn WriteSink>>,
     ) -> Vec<Value> {
+        self.run_batch_instrumented(inputs, timeout, write_sink, None).await
+    }
+
+    /// Idem [`Self::run_batch_with_sink`] en branchant **aussi** un registre de métriques
+    /// de substrat (Phase 5 Inc.2) sur le Blackboard interne → `swarm_blackboard_*` /
+    /// `swarm_events_*` comptés. Les deux hooks sont optionnels (coût nul si `None`).
+    pub async fn run_batch_instrumented(
+        &self,
+        inputs: Vec<Value>,
+        timeout: Duration,
+        write_sink: Option<Arc<dyn WriteSink>>,
+        metrics: Option<Arc<SubstrateMetrics>>,
+    ) -> Vec<Value> {
         if self.stages.is_empty() {
             return inputs;
         }
         let bb = Arc::new(Blackboard::with_recent_cap(SwarmId::new(), 256_000_000, 4096));
         if let Some(sink) = write_sink {
             bb.set_write_sink(sink);
+        }
+        if let Some(m) = metrics {
+            bb.set_metrics(m);
         }
         let cap = (inputs.len() * self.stages.len() * 4).max(1024);
         let router = Arc::new(TopicRouter::new(cap));

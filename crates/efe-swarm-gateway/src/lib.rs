@@ -252,12 +252,17 @@ mod tests {
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-    async fn metrics_endpoint_exposes_prometheus() {
+    async fn metrics_endpoint_exposes_real_provenance_and_substrate() {
         let (app, _s) = app();
-        // un run pour alimenter les compteurs.
+        // un consensus keyless : exerce le SUBSTRAT (écrit /cand/* + /ballot/* sur le
+        // Blackboard interne) ET la provenance → les deux familles de métriques bougent.
         let _ = app
             .clone()
-            .oneshot(post_run(json!({ "task": { "text": "x", "expected": "x" }, "topology": { "kind": "auto" } })))
+            .oneshot(post_run(json!({
+                "task": { "text": "hello", "expected": "hello" },
+                "topology": { "kind": "consensus", "generator": "echo_generator",
+                              "judges": ["consistency", "length_band", "j_non_empty"], "k": 5 }
+            })))
             .await
             .unwrap();
         let resp = app
@@ -267,8 +272,54 @@ mod tests {
         assert_eq!(resp.status(), StatusCode::OK);
         let bytes = resp.into_body().collect().await.unwrap().to_bytes();
         let txt = String::from_utf8(bytes.to_vec()).unwrap();
+        // provenance (réelle).
         assert!(txt.contains("efe_swarm_prov_records_total"));
-        assert!(txt.contains("# TYPE"));
+        assert!(txt.contains("# TYPE efe_swarm_prov_traced_ratio gauge"));
+        // substrat (réel, PAS un placeholder mort) : les écritures Blackboard ont été comptées.
+        let writes = txt
+            .lines()
+            .find_map(|l| l.strip_prefix("swarm_blackboard_writes_total "))
+            .and_then(|v| v.trim().parse::<u64>().ok())
+            .expect("métrique swarm_blackboard_writes_total présente");
+        assert!(writes > 0, "le substrat est réellement alimenté (writes={writes})");
+    }
+
+    /// **E2E self-host RÉEL** (Ollama local, keyless). Ignoré par défaut (CI sans modèle) ;
+    /// `ollama serve` + `gemma3:12b` requis. La passerelle exécute un consensus LLM par
+    /// HTTP, persiste les records, puis re-prouve via `verify/:id`.
+    /// Lancer : `cargo test -p efe-swarm-gateway --lib -- --ignored selfhost_e2e_real`.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    #[ignore = "nécessite un Ollama local (ollama serve + gemma3:12b)"]
+    async fn selfhost_e2e_real() {
+        let endpoint =
+            std::env::var("EFE_OLLAMA_ENDPOINT").unwrap_or_else(|_| "http://127.0.0.1:11434".into());
+        let model = std::env::var("EFE_OLLAMA_MODEL").unwrap_or_else(|_| "gemma3:12b".into());
+        let (app, _s) = app();
+        let resp = app
+            .clone()
+            .oneshot(post_run(json!({
+                "task": { "text": "The court ruled the clause unenforceable.", "expected": "legal" },
+                "topology": { "kind": "consensus",
+                              "generator": "Classify the topic in one word from {technology,finance,health,legal}.",
+                              "judges": ["Judge how well the label fits the task.",
+                                         "Assess the relevance and correctness of the answer."],
+                              "k": 3, "pattern": "borda" },
+                "budget": { "max_cents": 1000 },
+                "mode": { "self_host": { "endpoint": endpoint, "model": model } }
+            })))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let run = body_json(resp).await;
+        let run_id = run["run_id"].as_str().unwrap().to_string();
+        assert!(run["run"]["provenance"]["verified"].as_bool().unwrap());
+
+        // re-preuve indépendante d'un run LLM réel.
+        let resp = app
+            .oneshot(Request::builder().uri(format!("/v1/swarm/verify/{run_id}")).body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        assert!(body_json(resp).await["verified"].as_bool().unwrap(), "run self-host re-prouvé");
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]

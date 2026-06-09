@@ -75,6 +75,7 @@ impl SwarmGatewayState {
             .key_source(self.keys.clone())
             .mode(mode)
             .with_metrics(self.prov_metrics.clone())
+            .with_substrate_metrics(self.substrate_metrics.clone())
             .build()
             .map_err(GatewayError::from)
     }

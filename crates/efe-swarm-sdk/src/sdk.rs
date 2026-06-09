@@ -3,7 +3,7 @@
 
 use std::sync::Arc;
 
-use efe_blackboard::WriteSink;
+use efe_blackboard::{SubstrateMetrics, WriteSink};
 use efe_nano_sdk::{SwarmId, TenantId};
 use efe_swarm_provenance::{
     verify_swarm, AgentKind, HmacKeySource, ProvenanceMetrics, ProvenanceRecorder, ProvenanceSink,
@@ -28,6 +28,8 @@ pub struct Swarm {
     assumed_subtasks: usize,
     /// Métriques de provenance partagées (alimentées par chaque run) — pour `/metrics`.
     metrics: Option<Arc<ProvenanceMetrics>>,
+    /// Métriques de substrat partagées (Blackboard/EventBus des topologies) — pour `/metrics`.
+    substrate_metrics: Option<Arc<SubstrateMetrics>>,
 }
 
 impl Swarm {
@@ -105,7 +107,10 @@ impl Swarm {
         let guard = Arc::new(BudgetGuard::new(budget.max_cents, price));
         let meter = Meter { rec: recorder.clone(), guard: guard.clone(), kind };
         let sink: Arc<dyn WriteSink> = Arc::new(ProvenanceSink::new(recorder.clone()));
-        let ctx = SwarmContext::new(self.fleet.clone()).with_write_sink(sink);
+        let mut ctx = SwarmContext::new(self.fleet.clone()).with_write_sink(sink);
+        if let Some(sm) = &self.substrate_metrics {
+            ctx = ctx.with_substrate_metrics(sm.clone());
+        }
 
         // 3. assemble la topologie (agents flotte OU LLM, enveloppés) + exécute.
         let resolver = Resolver { fleet: &self.fleet, backend, meter };
@@ -166,6 +171,7 @@ pub struct SwarmBuilder {
     assumed_subtasks: usize,
     fleet: Option<Arc<AgentFleet>>,
     metrics: Option<Arc<ProvenanceMetrics>>,
+    substrate_metrics: Option<Arc<SubstrateMetrics>>,
 }
 
 impl Default for SwarmBuilder {
@@ -178,6 +184,7 @@ impl Default for SwarmBuilder {
             assumed_subtasks: 8,
             fleet: None,
             metrics: None,
+            substrate_metrics: None,
         }
     }
 }
@@ -218,6 +225,14 @@ impl SwarmBuilder {
         self
     }
 
+    /// Registre de métriques de **substrat** partagé (Blackboard/EventBus des topologies
+    /// T2/T-Consensus) : chaque run l'alimente → `swarm_blackboard_*`, exposé par la
+    /// passerelle en `/metrics`.
+    pub fn with_substrate_metrics(mut self, metrics: Arc<SubstrateMetrics>) -> Self {
+        self.substrate_metrics = Some(metrics);
+        self
+    }
+
     /// Construit le `Swarm` (dérive la clé de provenance par tenant).
     pub fn build(self) -> Result<Swarm, SwarmError> {
         let key = self.key_source.derive(self.tenant).map_err(|e| SwarmError::KeyError(e.to_string()))?;
@@ -229,6 +244,7 @@ impl SwarmBuilder {
             provenance: self.provenance,
             assumed_subtasks: self.assumed_subtasks,
             metrics: self.metrics,
+            substrate_metrics: self.substrate_metrics,
         })
     }
 }

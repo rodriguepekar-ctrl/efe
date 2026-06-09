@@ -220,6 +220,11 @@ impl Topology for ConsensusTopology {
         if let Some(sink) = self.write_sink.clone().or_else(|| ctx.write_sink.clone()) {
             bb.set_write_sink(sink);
         }
+        // Phase 5 Inc.2 : compte les écritures de substrat (`/cand/*`, `/ballot/*`) dans le
+        // registre partagé du contexte → `swarm_blackboard_writes_total` (pour `/metrics`).
+        if let Some(metrics) = ctx.substrate_metrics.clone() {
+            bb.set_metrics(metrics);
+        }
 
         // 1. génération + écriture des candidats au Blackboard (vérité durable).
         let candidates = self.generate(task, &bb).await;

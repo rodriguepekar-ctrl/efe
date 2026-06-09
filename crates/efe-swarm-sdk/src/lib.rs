@@ -64,6 +64,7 @@ pub use efe_swarm_provenance::{
     verify_swarm, AgentCallRecord, HmacKeySource, ProvenanceMetrics, SealedProvenance,
     SwarmProvenanceReport,
 };
+pub use efe_blackboard::SubstrateMetrics;
 pub use efe_swarm_topology::Pattern;
 
 /// Version du crate (semver).

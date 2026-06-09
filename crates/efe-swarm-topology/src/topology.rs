@@ -10,7 +10,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use async_trait::async_trait;
-use efe_blackboard::WriteSink;
+use efe_blackboard::{SubstrateMetrics, WriteSink};
 use serde_json::Value;
 
 use crate::fleet::AgentFleet;
@@ -48,6 +48,11 @@ pub struct SwarmContext {
     /// via l'interface unifiée [`Topology`] — sans que les topologies connaissent la
     /// provenance (type `efe_blackboard::WriteSink`, aucun couplage).
     pub write_sink: Option<Arc<dyn WriteSink>>,
+    /// **Observabilité (Phase 5 Inc.2)** : registre de métriques de substrat **partagé**,
+    /// branché par chaque topologie sur son Blackboard interne (T2 Pipeline, T-Consensus)
+    /// → `swarm_blackboard_writes_total`, `swarm_events_published_total`, … agrégés sur
+    /// tous les runs (exposés par la passerelle HTTP en `/metrics`). `None` ⇒ coût nul.
+    pub substrate_metrics: Option<Arc<SubstrateMetrics>>,
 }
 
 impl std::fmt::Debug for SwarmContext {
@@ -55,21 +60,29 @@ impl std::fmt::Debug for SwarmContext {
         f.debug_struct("SwarmContext")
             .field("fleet", &self.fleet)
             .field("instrumented", &self.write_sink.is_some())
+            .field("metered", &self.substrate_metrics.is_some())
             .finish()
     }
 }
 
 impl SwarmContext {
     pub fn new(fleet: Arc<AgentFleet>) -> Self {
-        Self { fleet, write_sink: None }
+        Self { fleet, write_sink: None, substrate_metrics: None }
     }
     /// Contexte avec la flotte standard (tout le catalogue Mode A).
     pub fn standard() -> Self {
-        Self { fleet: Arc::new(AgentFleet::standard()), write_sink: None }
+        Self { fleet: Arc::new(AgentFleet::standard()), write_sink: None, substrate_metrics: None }
     }
     /// **Phase 4** : branche un exutoire de provenance partagé par toutes les topologies.
     pub fn with_write_sink(mut self, sink: Arc<dyn WriteSink>) -> Self {
         self.write_sink = Some(sink);
+        self
+    }
+    /// **Phase 5 Inc.2** : branche un registre de métriques de substrat partagé. Chaque
+    /// topologie l'attache à son Blackboard interne (`set_metrics`) → les écritures /
+    /// événements de l'essaim sont comptés (pour `/metrics`).
+    pub fn with_substrate_metrics(mut self, metrics: Arc<SubstrateMetrics>) -> Self {
+        self.substrate_metrics = Some(metrics);
         self
     }
 }
@@ -129,7 +142,12 @@ impl Topology for PipelineTopology {
         // substrat interne du pipeline → ancrage des écritures `/out/*` (seam A uniforme).
         let outs = self
             .pipeline
-            .run_batch_with_sink(vec![task.clone()], self.timeout, ctx.write_sink.clone())
+            .run_batch_instrumented(
+                vec![task.clone()],
+                self.timeout,
+                ctx.write_sink.clone(),
+                ctx.substrate_metrics.clone(),
+            )
             .await;
         let produced = outs.len();
         TopologyOutput {
