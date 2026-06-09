@@ -26,6 +26,8 @@ pub enum GatewayError {
     Budget(String),
     /// 429 — trop d'abonnés SSE pour ce tenant (parade anti-DoS).
     TooManyRequests(String),
+    /// 503 — backend self-host injoignable (health-check).
+    Unavailable(String),
     /// 501 — fonctionnalité non câblée en Inc.2 (ex. routeur `Network`).
     NotImplemented(String),
     /// 500 — erreur interne (dérivation de clé, persistance…).
@@ -41,6 +43,7 @@ impl GatewayError {
             GatewayError::BadRequest(m) => (StatusCode::BAD_REQUEST, "bad_request", m.clone()),
             GatewayError::Budget(m) => (StatusCode::PAYMENT_REQUIRED, "budget", m.clone()),
             GatewayError::TooManyRequests(m) => (StatusCode::TOO_MANY_REQUESTS, "too_many_requests", m.clone()),
+            GatewayError::Unavailable(m) => (StatusCode::SERVICE_UNAVAILABLE, "unavailable", m.clone()),
             GatewayError::NotImplemented(m) => (StatusCode::NOT_IMPLEMENTED, "not_implemented", m.clone()),
             GatewayError::Internal(m) => (StatusCode::INTERNAL_SERVER_ERROR, "internal", m.clone()),
         }
@@ -70,6 +73,8 @@ impl From<SwarmError> for GatewayError {
             SwarmError::UnknownAgent { .. } | SwarmError::EmptySpec(_) => GatewayError::BadRequest(e.to_string()),
             // Garde-fou souveraineté : endpoint self-host non-local refusé → requête invalide.
             SwarmError::RemoteBackendDenied { .. } => GatewayError::BadRequest(e.to_string()),
+            // Backend local injoignable (health-check) → 503.
+            SwarmError::BackendUnavailable { .. } => GatewayError::Unavailable(e.to_string()),
             SwarmError::BudgetTooLow { .. } | SwarmError::BudgetExceeded { .. } => GatewayError::Budget(e.to_string()),
             SwarmError::KeyError(_) => GatewayError::Internal(e.to_string()),
             // En Inc.2 le routeur frontière n'est pas câblé : la passerelle, qui détiendrait

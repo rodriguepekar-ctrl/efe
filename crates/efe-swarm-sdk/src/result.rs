@@ -135,6 +135,9 @@ pub enum SwarmError {
     /// (egress interdit par défaut). Utilisez un endpoint `127.0.0.1`/`localhost`, ou
     /// activez explicitement `SwarmBuilder::allow_remote_backend(true)`.
     RemoteBackendDenied { endpoint: String },
+    /// **Health-check (S.a)** : le backend self-host est **injoignable** (sonde au démarrage,
+    /// activée par `require_healthy_backend(true)`). Échec rapide plutôt que N timeouts.
+    BackendUnavailable { endpoint: String },
 }
 
 impl std::fmt::Display for SwarmError {
@@ -154,6 +157,9 @@ impl std::fmt::Display for SwarmError {
             }
             SwarmError::RemoteBackendDenied { endpoint } => {
                 write!(f, "backend self-host non-local refusé (souveraineté/egress) : « {endpoint} » ; utilisez 127.0.0.1/localhost ou allow_remote_backend(true)")
+            }
+            SwarmError::BackendUnavailable { endpoint } => {
+                write!(f, "backend self-host injoignable (health-check) : « {endpoint} » ; démarrez le modèle local (ex. `ollama serve`)")
             }
         }
     }

@@ -36,6 +36,9 @@ pub struct Swarm {
     /// **Garde-fou souveraineté (G2)** : autorise un backend self-host **non-local**
     /// (egress). `false` par défaut — un endpoint non-`127.0.0.1`/`localhost` est refusé.
     allow_remote_backend: bool,
+    /// **Health-check (S.a)** : sonde le backend self-host au démarrage (échec rapide si
+    /// injoignable). `false` par défaut (compatibilité).
+    require_healthy_backend: bool,
 }
 
 impl Swarm {
@@ -108,6 +111,14 @@ impl Swarm {
             }
             ClientMode::Network { .. } => unreachable!("écarté en tête de run"),
         };
+        // Health-check (S.a) : sonde rapide du backend local — échec net plutôt que N timeouts.
+        if self.require_healthy_backend {
+            if let Some(b) = &backend {
+                if !b.health().await {
+                    return Err(SwarmError::BackendUnavailable { endpoint: b.descriptor().endpoint });
+                }
+            }
+        }
         // Forensique : descripteur du backend local (pont N17) — capté AVANT le move.
         let backend_info = backend.as_ref().map(|b| {
             let d = b.descriptor();
@@ -207,6 +218,7 @@ pub struct SwarmBuilder {
     substrate_metrics: Option<Arc<SubstrateMetrics>>,
     observer: Option<Arc<dyn SwarmObserver>>,
     allow_remote_backend: bool,
+    require_healthy_backend: bool,
 }
 
 impl Default for SwarmBuilder {
@@ -222,6 +234,7 @@ impl Default for SwarmBuilder {
             substrate_metrics: None,
             observer: None,
             allow_remote_backend: false, // souverain par défaut : egress interdit
+            require_healthy_backend: false,
         }
     }
 }
@@ -286,6 +299,13 @@ impl SwarmBuilder {
         self
     }
 
+    /// **Health-check (S.a)** : sonde le backend self-host au démarrage du run ; renvoie
+    /// `SwarmError::BackendUnavailable` s'il est injoignable (échec rapide). `false` par défaut.
+    pub fn require_healthy_backend(mut self, require: bool) -> Self {
+        self.require_healthy_backend = require;
+        self
+    }
+
     /// Construit le `Swarm` (dérive la clé de provenance par tenant).
     pub fn build(self) -> Result<Swarm, SwarmError> {
         let key = self.key_source.derive(self.tenant).map_err(|e| SwarmError::KeyError(e.to_string()))?;
@@ -300,6 +320,7 @@ impl SwarmBuilder {
             substrate_metrics: self.substrate_metrics,
             observer: self.observer,
             allow_remote_backend: self.allow_remote_backend,
+            require_healthy_backend: self.require_healthy_backend,
         })
     }
 }
@@ -443,6 +464,19 @@ mod tests {
             .unwrap();
         let err = swarm.run(json!({ "text": "x", "expected": "x" }), TopologySpec::Auto, Budget::unlimited()).await;
         assert!(matches!(err, Err(SwarmError::RemoteBackendDenied { .. })), "egress refusé par défaut (souverain)");
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn require_healthy_backend_errors_on_dead_local_endpoint() {
+        // Health-check (S.a) : endpoint LOCAL (passe le garde-fou egress) mais MORT (port 1,
+        // connexion refusée instantanément) → BackendUnavailable, sans réseau externe.
+        let swarm = Swarm::builder()
+            .mode(ClientMode::SelfHost { endpoint: "http://127.0.0.1:1".into(), model: "m".into() })
+            .require_healthy_backend(true)
+            .build()
+            .unwrap();
+        let err = swarm.run(json!({ "text": "x", "expected": "x" }), TopologySpec::Auto, Budget::unlimited()).await;
+        assert!(matches!(err, Err(SwarmError::BackendUnavailable { .. })), "health-check : échec rapide si injoignable");
     }
 
     #[test]

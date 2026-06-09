@@ -71,6 +71,23 @@ pub(crate) trait LocalBackend: Send + Sync {
     async fn complete(&self, prompt: &str, params: SamplingParams) -> Option<String>;
     /// Descripteur (moteur + modèle + endpoint) — forensique, jamais une clé.
     fn descriptor(&self) -> BackendDescriptor;
+    /// **Health-check (S.a)** : le backend répond-il ? Sonde **rapide** (TCP/HTTP, `--max-time`
+    /// court) de l'endpoint. Défaut : reachability via `curl`. Échec rapide plutôt que N timeouts.
+    async fn health(&self) -> bool {
+        let endpoint = self.descriptor().endpoint;
+        tokio::task::spawn_blocking(move || health_probe(&endpoint)).await.unwrap_or(false)
+    }
+}
+
+/// Sonde de joignabilité (connexion établie = sain ; aucun secret transmis). Bloquant.
+pub(crate) fn health_probe(endpoint: &str) -> bool {
+    Command::new("curl")
+        .args(["-s", "-o", "/dev/null", "--max-time", "3", endpoint])
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .map(|s| s.success())
+        .unwrap_or(false)
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
