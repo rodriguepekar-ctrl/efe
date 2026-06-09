@@ -11,6 +11,8 @@ use efe_swarm_topology::{AgentFleet, SwarmContext};
 use crate::agents::Meter;
 use crate::budget::{Budget, BudgetGuard, OnExceed};
 use crate::client::ClientMode;
+use crate::llm::OllamaBackend;
+use crate::resolver::Resolver;
 use crate::result::{Accounting, ProvenanceSummary, SwarmError, SwarmRun};
 use crate::spec::TopologySpec;
 
@@ -51,6 +53,10 @@ impl Swarm {
         topology: TopologySpec,
         budget: Budget,
     ) -> Result<SwarmRun, SwarmError> {
+        // ClientMode::Network nécessite la passerelle serveur (clés) → pas d'in-process.
+        if matches!(self.mode, ClientMode::Network { .. }) {
+            return Err(SwarmError::NetworkRequiresGateway);
+        }
         let price = budget.price_per_call_cents.unwrap_or_else(|| self.mode.price_per_call_cents());
 
         // 0. concrétise Auto + applique la politique de PRÉ-VOL.
@@ -67,16 +73,26 @@ impl Swarm {
             OnExceed::Stop => spec,
         };
 
-        // 1. provenance + budget : recorder, sink (→ contexte), garde de budget.
+        // 1. mode → backend d'agents + nature (Mode A flotte / Mode C self-host).
+        let (backend, kind) = match &self.mode {
+            ClientMode::Keyless => (None, AgentKind::ModeA),
+            ClientMode::SelfHost { endpoint, model } => {
+                (Some(OllamaBackend::new(endpoint.clone(), model.clone())), AgentKind::ModeC)
+            }
+            ClientMode::Network { .. } => unreachable!("écarté en tête de run"),
+        };
+
+        // 2. provenance + budget : recorder, sink (→ contexte), garde de budget.
         let swarm_id = SwarmId::new();
         let recorder = Arc::new(ProvenanceRecorder::new(swarm_id, self.tenant));
         let guard = Arc::new(BudgetGuard::new(budget.max_cents, price));
-        let meter = Meter { rec: recorder.clone(), guard: guard.clone(), kind: AgentKind::ModeA };
+        let meter = Meter { rec: recorder.clone(), guard: guard.clone(), kind };
         let sink: Arc<dyn WriteSink> = Arc::new(ProvenanceSink::new(recorder.clone()));
         let ctx = SwarmContext::new(self.fleet.clone()).with_write_sink(sink);
 
-        // 2. assemble la topologie (agents enveloppés) + exécute.
-        let topo = spec.resolve(&self.fleet, &meter)?;
+        // 3. assemble la topologie (agents flotte OU LLM, enveloppés) + exécute.
+        let resolver = Resolver { fleet: &self.fleet, backend, meter };
+        let topo = spec.resolve(&resolver)?;
         let topo_name = topo.name().to_string();
         let out = topo.run(&task, &ctx).await;
 
@@ -297,11 +313,22 @@ mod tests {
         assert!(matches!(err, Err(SwarmError::UnknownAgent { role: "generator", .. })));
     }
 
-    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-    async fn self_host_mode_is_keyless_and_free() {
-        let swarm = Swarm::builder().mode(ClientMode::SelfHost { endpoint: "http://127.0.0.1:11434".into(), model: "gemma3:12b".into() }).build().unwrap();
+    #[test]
+    fn self_host_mode_builds_keyless() {
+        // build seul (pas de run : SelfHost ferait de VRAIS appels Ollama — cf. l'exemple
+        // selfhost_ollama). On vérifie : keyless + prix local nul.
+        let swarm = Swarm::builder()
+            .mode(ClientMode::SelfHost { endpoint: "http://127.0.0.1:11434".into(), model: "gemma3:12b".into() })
+            .build()
+            .unwrap();
         assert!(swarm.mode().is_keyless());
-        let run = swarm.run(json!({ "text": "x" }), TopologySpec::Auto, Budget::cents(50)).await.unwrap();
-        assert_eq!(run.budget.spent_cents, 0, "self-host local = gratuit");
+        assert_eq!(swarm.mode().price_per_call_cents(), 0, "self-host local = gratuit");
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn network_mode_requires_gateway() {
+        let swarm = Swarm::builder().mode(ClientMode::Network { provider: "anthropic".into() }).build().unwrap();
+        let err = swarm.run(json!({ "text": "x" }), TopologySpec::Auto, Budget::unlimited()).await;
+        assert!(matches!(err, Err(SwarmError::NetworkRequiresGateway)), "Network → passerelle serveur (clés)");
     }
 }

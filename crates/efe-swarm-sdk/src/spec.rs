@@ -6,16 +6,12 @@
 use std::sync::Arc;
 
 use efe_swarm_topology::{
-    AgentFleet, ConsensusTopology, GenerateVerify, GvTopology, HierTopology, Hierarchical, Pattern,
-    Pipeline, PipelineTopology, Topology,
+    ConsensusTopology, GenerateVerify, GvTopology, HierTopology, Hierarchical, Pattern, Pipeline,
+    PipelineTopology, Topology,
 };
-use efe_nano_sdk::AgentId;
 use serde_json::Value;
 
-use crate::agents::{
-    meter_decomposer, meter_gen, meter_judge, meter_merger, meter_solver, meter_stage, Meter,
-    StageSolver,
-};
+use crate::resolver::Resolver;
 use crate::result::SwarmError;
 
 /// Spécification d'une topologie + ses agents (résolus depuis la flotte).
@@ -96,14 +92,13 @@ impl TopologySpec {
     /// enveloppé par le métrage (budget + provenance). Les `agent_id` des
     /// générateurs/juges du consensus matchent les écritures internes
     /// (`/cand/*`, `/ballot/*`) pour l'ancrage.
-    pub(crate) fn resolve(self, fleet: &AgentFleet, meter: &Meter) -> Result<Box<dyn Topology>, SwarmError> {
+    pub(crate) fn resolve(self, r: &Resolver<'_>) -> Result<Box<dyn Topology>, SwarmError> {
         match self {
             TopologySpec::GenerateVerify { generator, verifier, k } => {
-                let g = fleet.generator(&generator).ok_or(SwarmError::UnknownAgent { role: "generator", name: generator })?;
-                let v = fleet.verifier(&verifier).ok_or(SwarmError::UnknownAgent { role: "verifier", name: verifier })?;
                 let k = k.max(1);
-                let gen = meter_gen(g, meter.clone(), aid("t1_generator"));
-                Ok(Box::new(GvTopology { gv: GenerateVerify::new(k, k.min(8)), gen, ver: v }))
+                let gen = r.generator(&generator, "t1_generator")?;
+                let ver = r.verifier(&verifier)?; // toujours déterministe (a-posteriori)
+                Ok(Box::new(GvTopology { gv: GenerateVerify::new(k, k.min(8)), gen, ver }))
             }
             TopologySpec::Pipeline { stages } => {
                 if stages.is_empty() {
@@ -111,33 +106,25 @@ impl TopologySpec {
                 }
                 let mut pipe = Pipeline::new();
                 for (i, name) in stages.iter().enumerate() {
-                    let s = fleet.stage(name).ok_or(SwarmError::UnknownAgent { role: "stage", name: name.clone() })?;
-                    pipe = pipe.stage(name.clone(), meter_stage(s, meter.clone(), aid(&format!("t2_stage_{i}"))));
+                    pipe = pipe.stage(name.clone(), r.stage(name, &format!("t2_stage_{i}"))?);
                 }
                 Ok(Box::new(PipelineTopology::new(pipe)))
             }
             TopologySpec::Hierarchical { decomposer, solver, merger } => {
-                let d = fleet.decomposer(&decomposer).ok_or(SwarmError::UnknownAgent { role: "decomposer", name: decomposer })?;
-                // pas de rôle solver dans la flotte → on adapte une STAGE en solver.
-                let s = fleet.stage(&solver).ok_or(SwarmError::UnknownAgent { role: "solver(stage)", name: solver })?;
-                let m = fleet.merger(&merger).ok_or(SwarmError::UnknownAgent { role: "merger", name: merger })?;
-                let dec = meter_decomposer(d, meter.clone(), aid("t3_decomposer"));
-                let solv = meter_solver(Arc::new(StageSolver(s)), meter.clone(), aid("t3_solver"));
-                let mer = meter_merger(m, meter.clone(), aid("t3_merger"));
+                let dec = r.decomposer(&decomposer, "t3_decomposer")?;
+                let solv = r.solver(&solver, "t3_solver")?; // flotte : stage adaptée ; self-host : LLM
+                let mer = r.merger(&merger, "t3_merger")?;
                 Ok(Box::new(HierTopology::new(Arc::new(Hierarchical::new(dec, solv, mer)), 3.0)))
             }
             TopologySpec::Consensus { generator, judges, k, pattern, escalate } => {
                 if judges.is_empty() {
                     return Err(SwarmError::EmptySpec("consensus sans juge"));
                 }
-                let g = fleet.generator(&generator).ok_or(SwarmError::UnknownAgent { role: "generator", name: generator })?;
-                // agent_id "generator" → matche /cand/* écrit par ConsensusTopology (ancrage).
-                let gen = meter_gen(g, meter.clone(), aid("generator"));
+                // agent_id "generator" / "judge_{i:03}" → matchent /cand/* + /ballot/* (ancrage).
+                let gen = r.generator(&generator, "generator")?;
                 let mut jv = Vec::with_capacity(judges.len());
                 for (i, name) in judges.iter().enumerate() {
-                    let j = fleet.judge(name).ok_or(SwarmError::UnknownAgent { role: "judge", name: name.clone() })?;
-                    // agent_id "judge_{i:03}" → matche /ballot/{i} (ancrage).
-                    jv.push(meter_judge(j, meter.clone(), aid(&format!("judge_{i:03}"))));
+                    jv.push(r.judge(name, &format!("judge_{i:03}"))?);
                 }
                 let mut topo = ConsensusTopology::new(gen, k.max(1), jv).with_pattern(pattern);
                 if escalate {
@@ -148,8 +135,4 @@ impl TopologySpec {
             TopologySpec::Auto => unreachable!("Auto doit être concrétisé avant resolve"),
         }
     }
-}
-
-fn aid(s: &str) -> AgentId {
-    AgentId::new(s).expect("agent id SDK valide")
 }

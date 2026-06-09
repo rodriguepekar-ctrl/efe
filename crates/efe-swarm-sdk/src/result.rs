@@ -74,6 +74,9 @@ pub enum SwarmError {
     BudgetExceeded { spent_cents: u32, max_cents: u32 },
     /// Échec de dérivation de la clé de provenance.
     KeyError(String),
+    /// `ClientMode::Network` nécessite la **passerelle serveur** (clés server-side) — non
+    /// exécutable en in-process. Utilisez `Keyless` ou `SelfHost`.
+    NetworkRequiresGateway,
 }
 
 impl std::fmt::Display for SwarmError {
@@ -88,6 +91,9 @@ impl std::fmt::Display for SwarmError {
                 write!(f, "budget dépassé : {spent_cents}¢ dépensés / plafond {max_cents}¢")
             }
             SwarmError::KeyError(e) => write!(f, "clé de provenance : {e}"),
+            SwarmError::NetworkRequiresGateway => {
+                write!(f, "ClientMode::Network nécessite la passerelle serveur (clés server-side) ; utilisez Keyless ou SelfHost en in-process")
+            }
         }
     }
 }

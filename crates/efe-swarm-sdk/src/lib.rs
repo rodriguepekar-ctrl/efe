@@ -44,6 +44,8 @@
 #![warn(rust_2018_idioms)]
 
 mod agents;
+mod llm;
+mod resolver;
 pub mod budget;
 pub mod client;
 pub mod result;
