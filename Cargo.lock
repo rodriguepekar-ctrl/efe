@@ -1795,6 +1795,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "efe-audit-core"
+version = "0.0.1"
+dependencies = [
+ "efe-nano-sdk",
+ "hkdf",
+ "hmac",
+ "sha2",
+ "thiserror 1.0.69",
+ "uuid",
+]
+
+[[package]]
 name = "efe-backup"
 version = "0.0.1"
 dependencies = [
@@ -2882,6 +2894,23 @@ dependencies = [
  "tracing",
  "uuid",
  "wiremock 0.6.5",
+]
+
+[[package]]
+name = "efe-swarm-provenance"
+version = "0.0.1"
+dependencies = [
+ "async-trait",
+ "blake3",
+ "efe-audit-core",
+ "efe-blackboard",
+ "efe-nano-sdk",
+ "efe-swarm-topology",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tokio",
+ "uuid",
 ]
 
 [[package]]

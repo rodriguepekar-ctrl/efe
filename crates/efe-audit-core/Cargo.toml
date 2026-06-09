@@ -1,0 +1,24 @@
+[package]
+name = "efe-audit-core"
+version = "0.0.1"
+edition = { workspace = true }
+rust-version = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
+description = "Phase 4 — primitives d'audit PARTAGÉES : HMAC chaîné (HMAC-SHA256) + dérivation de clés par tenant (HKDF-SHA256), byte-identiques à efe-nano::audit (cross-vérifiable)."
+publish = false
+
+[lib]
+name = "efe_audit_core"
+path = "src/lib.rs"
+
+[dependencies]
+efe-nano-sdk = { path = "../efe-nano-sdk", version = "0.0.1" }
+
+uuid      = { workspace = true }
+thiserror = { workspace = true }
+
+hkdf = "0.12"  # HKDF-SHA256 dérivation par tenant (RFC 5869) — identique efe-nano
+hmac = "0.12"  # HMAC-SHA256 chaîne d'audit — identique efe-nano
+sha2 = "0.10"  # SHA-256

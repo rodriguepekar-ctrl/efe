@@ -19,7 +19,7 @@ use std::sync::Arc;
 use std::time::{Instant, SystemTime};
 
 use async_trait::async_trait;
-use efe_blackboard::{Blackboard, SwarmEvent, TopicRouter};
+use efe_blackboard::{Blackboard, SwarmEvent, TopicRouter, WriteSink};
 use efe_nano_sdk::{AgentId, SwarmId};
 use serde_json::{json, Value};
 use tokio::sync::Semaphore;
@@ -53,6 +53,11 @@ pub struct ConsensusTopology {
     judges: Vec<Arc<dyn Judge>>,
     policy: AggregatorPolicy,
     max_concurrency: usize,
+    /// **Phase 4 — provenance** : exutoire d'écritures optionnel, branché sur le
+    /// Blackboard interne du run. Permet à la provenance par-agent d'ancrer 100 % des
+    /// écritures (`/cand/*`, `/ballot/*`) **sans** que la topologie connaisse la
+    /// provenance (type `efe_blackboard::WriteSink` — aucun couplage, aucun cycle).
+    write_sink: Option<Arc<dyn WriteSink>>,
 }
 
 impl std::fmt::Debug for ConsensusTopology {
@@ -61,6 +66,7 @@ impl std::fmt::Debug for ConsensusTopology {
             .field("k", &self.k)
             .field("judges", &self.judges.len())
             .field("policy", &self.policy)
+            .field("instrumented", &self.write_sink.is_some())
             .finish()
     }
 }
@@ -74,7 +80,15 @@ impl ConsensusTopology {
             judges,
             policy: AggregatorPolicy::Adaptive(PatternSelector::default()),
             max_concurrency: 8,
+            write_sink: None,
         }
+    }
+
+    /// **Phase 4** : branche un exutoire d'écritures (ex. `ProvenanceSink`) sur le
+    /// Blackboard interne du run → ancrage 100 % des écritures pour la provenance.
+    pub fn with_write_sink(mut self, sink: Arc<dyn WriteSink>) -> Self {
+        self.write_sink = Some(sink);
+        self
     }
     pub fn with_pattern(mut self, p: Pattern) -> Self {
         self.policy = AggregatorPolicy::Fixed(p);
@@ -200,6 +214,11 @@ impl Topology for ConsensusTopology {
         let t0 = Instant::now();
         let swarm_id = SwarmId::new();
         let bb = Arc::new(Blackboard::new(swarm_id));
+        // Phase 4 : branche l'exutoire de provenance (s'il y en a un) → ancrage 100 %
+        // des écritures `/cand/*` + `/ballot/*` (seam A), sans couplage à la provenance.
+        if let Some(sink) = &self.write_sink {
+            bb.set_write_sink(sink.clone());
+        }
 
         // 1. génération + écriture des candidats au Blackboard (vérité durable).
         let candidates = self.generate(task, &bb).await;

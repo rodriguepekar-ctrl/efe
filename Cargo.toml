@@ -186,6 +186,10 @@ members = [
     # Phase 2 — couche topologie : T1 Generate-Verify + T2 Pipeline, composées
     # sur le substrat efe-blackboard. Cf. ADR-SWARM-002.
     "crates/efe-swarm-topology",
+    # Phase 4 — provenance par-agent (le moat). Cf.
+    # docs/architecture/EFE_SWARM_PHASE4_PROVENANCE_ARCHITECTURE.md.
+    "crates/efe-audit-core",      # socle crypto partagé (HMAC chaîné + HKDF par tenant)
+    "crates/efe-swarm-provenance", # l'atome AgentCallRecord + la chaîne HMAC par-swarm
     "crates/efe-swarm-orchestrator",
     "crates/efe-agentic-bridge",
     # Sprint 13 N21 § G11 : six reference pre-analysis agents.

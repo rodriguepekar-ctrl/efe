@@ -1,0 +1,32 @@
+[package]
+name = "efe-swarm-provenance"
+version = "0.0.1"
+edition = { workspace = true }
+rust-version = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
+description = "Phase 4 — provenance par-agent : l'atome AgentCallRecord (« qui a dit quoi, quand, à partir de quoi »), hashé canoniquement (BLAKE3 + SHA-256 aligné efe-nano)."
+publish = false
+
+[lib]
+name = "efe_swarm_provenance"
+path = "src/lib.rs"
+
+[dependencies]
+efe-nano-sdk      = { path = "../efe-nano-sdk", version = "0.0.1" }
+efe-audit-core    = { path = "../efe-audit-core", version = "0.0.1" }    # HMAC chaîné + HKDF par tenant
+efe-blackboard    = { path = "../efe-blackboard", version = "0.0.1" }    # seam WriteSink (Inc.3)
+efe-swarm-topology = { path = "../efe-swarm-topology", version = "0.0.1" } # traits d'agent à décorer (Inc.3)
+
+serde       = { workspace = true }
+serde_json  = { workspace = true }
+uuid        = { workspace = true }
+async-trait = { workspace = true }  # impl async des traits d'agent (décorateur)
+
+blake3 = "1.5"   # input/output content hashes (aligné efe-llm-provenance N17)
+sha2   = "0.10"  # payload_hash SHA-256 (aligné la chaîne HMAC efe-nano::audit)
+
+[dev-dependencies]
+serde_json = { workspace = true }
+tokio      = { workspace = true, features = ["macros", "rt-multi-thread"] }

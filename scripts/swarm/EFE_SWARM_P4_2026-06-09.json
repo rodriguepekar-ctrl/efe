@@ -1,0 +1,40 @@
+{
+  "_note": "Agents simulés ; crypto (BLAKE3+SHA256+HMAC+HKDF) + ConsensusTopology RÉELLES.",
+  "budgets": {
+    "bytes_per_record": 2048.0,
+    "overhead_us_per_agent": 100.0
+  },
+  "bytes_per_record": 815.2316666666667,
+  "deterministic": true,
+  "falsification_detected": true,
+  "j": 5,
+  "k": 7,
+  "latency_us": {
+    "_caveat": "relatif surévalué (agents simulés ≈ travail nul) ; l'ABSOLU/agent est la mesure réelle",
+    "bare": [
+      82.23965,
+      5.959796076838535
+    ],
+    "overhead_per_agent": 24.339404583333334,
+    "overhead_per_run": 292.072855,
+    "prov": [
+      374.312505,
+      13.794405063284728
+    ],
+    "relative_pct": 355.1484654907943
+  },
+  "metrics": {
+    "anchored_records": 2400,
+    "anchored_writes": 2400,
+    "captured_calls": 2400,
+    "chain_breaks_total": 0,
+    "mean_bytes": 815.2316666666667,
+    "mean_overhead_ns": 292072.0,
+    "records_total": 2400,
+    "traced_ratio": 1.0
+  },
+  "runs": 200,
+  "traced_pct": 1.0,
+  "verdict": "GO — provenance par-agent : 100 % tracé, déterministe, re-prouvée ; overhead 24.34 µs/agent (< 100 µs) et 815 o/record (< 2048). Le moat paie son coût.",
+  "verify_ok": true
+}
