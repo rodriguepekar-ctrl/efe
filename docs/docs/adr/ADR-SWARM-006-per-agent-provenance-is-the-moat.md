@@ -82,8 +82,25 @@ les seuls enregistrements + la clé tenant (serveur). **Ce que les providers ne 
   instrumentation `ConsensusTopology` + métriques Prometheus + ce gate.
 
 ### Négatives
-- L'overhead absolu (24 µs/agent) reste à confirmer sur un **backend réel** (run llama) où le bruit
-  d'ordonnancement diffère — mais il est dominé par tout travail d'agent réel.
+- ~~L'overhead absolu reste à confirmer sur un backend réel.~~ **CONFIRMÉ en RÉEL (2026-06-09).**
+
+## Confirmation RÉELLE (Ollama `gemma3:12b`, local/keyless — `examples/swarm_llama.rs`)
+
+La `ConsensusTopology` (K=3 + J=3) **instrumentée**, rejouée avec des **agents LLM réels** :
+
+| métrique | valeur |
+|---|---|
+| latence/run (agents réels) | **4 240 ms** |
+| scellement provenance/run | **148 µs** |
+| **overhead provenance / latence LLM** | **0,0035 %** |
+| tracé 100 % · `verify_swarm` ok | **oui / oui** |
+| accuracy consensus | **3/3** |
+
+→ La thèse est **confirmée hors simulation** : la provenance par-agent (≈150 µs) est **noyée** dans la
+latence d'un agent réel (4,2 s) — **0,0035 %**. Le caveat « relatif surévalué par les agents
+simulés » du Lot P4 est ainsi levé : sur agents réels, l'overhead est **indétectable**. Le moat paie
+son coût **en conditions réelles**. (Et le juge réel atteint **v=1,0** — cf. ADR-SWARM-004.)
+Résultats : `scripts/swarm/EFE_SWARM_LLAMA_2026-06-09.json`.
 
 ## Références
 - `crates/efe-swarm-provenance/` — atome/chaîne/seams/rejeu/pont/`verify_swarm`/métriques.

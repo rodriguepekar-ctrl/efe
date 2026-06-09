@@ -1,0 +1,28 @@
+{
+  "_real": true,
+  "backend": "ollama",
+  "endpoint": "http://127.0.0.1:11434",
+  "judge_v": {
+    "correct_higher": 12,
+    "gate_adr_swarm_004": true,
+    "mean_correct": 0.9166666666666666,
+    "mean_lure": 0.1416666666666667,
+    "n": 12,
+    "sigma": 0.0,
+    "v": 1.0
+  },
+  "model": "gemma3:12b",
+  "p4_replay_real": {
+    "consensus_accuracy": 1.0,
+    "j": 3,
+    "k": 3,
+    "mean_run_ms": 4239.500458666666,
+    "mean_seal_us": 147.63899999999998,
+    "overhead_pct": 0.003482462177782918,
+    "records_per_run": 6,
+    "tasks": 3,
+    "traced_100": true,
+    "verify_ok": true
+  },
+  "verdict": "REAL run Ollama/gemma3:12b — juge v=1.00 (GO); provenance sur agents réels GO (overhead 0.0035% vs latence LLM)"
+}

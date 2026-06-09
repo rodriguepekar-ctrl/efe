@@ -76,10 +76,23 @@ décorrélés — l'hypothèse §0 « les juges ajoutent un signal indépendant 
 - **Corrélation des juges** : Lot S3 suppose des erreurs de juges décorrélées. Des juges corrélés
   abaissent le gain effectif (à mesurer/exploiter : critères orthogonaux, personas variés).
 
-## Question ouverte (le dernier gate)
-**Des juges RÉELS (Mode C / LLM-juge, ou les critères Mode A sur de vraies sorties) atteignent-ils
-v ≥ ~0,7 sur des tâches non-vérifiables ?** À mesurer avec un backend réel (juges `LlmClient` +
-llama) — l'outillage (`consensus`, `lot_s3`, juges Mode A) est prêt.
+## Question ouverte (le dernier gate) — **RÉSOLUE en RÉEL (2026-06-09)**
+**Des juges RÉELS (Mode C / LLM-juge) atteignent-ils v ≥ ~0,7 sur des tâches non-vérifiables ?**
+
+→ **OUI, largement.** Mesuré sur backend **RÉEL** (Ollama `gemma3:12b`, local/keyless,
+`examples/swarm_llama.rs`) : un juge LLM note la pertinence de candidats vs leurres sur 12 tâches de
+classification non-triviale →
+
+| métrique | valeur |
+|---|---|
+| **v = P(juge note correct > leurre)** | **1,00 ± 0,00** (12/12) |
+| score moyen correct / leurre | 0,92 / 0,14 |
+| gate v ≥ 0,70 | **✓ ATTEINT** (marge énorme) |
+
+Et la `ConsensusTopology` (K=3 générateurs Ollama + J=3 juges Ollama) **rejouée en réel** classe
+correctement **3/3** tâches. **Le consensus N-juges crack le non-vérifiable — confirmé hors
+simulation.** Le pari de Phase 3 (« le levier est la qualité des juges v ») est validé : un SLM de
+12 Mds de paramètres suffit à v=1,0 sur cette famille. Résultats : `scripts/swarm/EFE_SWARM_LLAMA_2026-06-09.json`.
 
 ## Références
 - `crates/efe-swarm-topology/examples/lot_s3.rs` — gate (math réelle + candidats/juges simulés)
