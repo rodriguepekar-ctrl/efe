@@ -11,8 +11,8 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use efe_swarm_topology::{
-    AgentFleet, Decomposer, GenerateVerify, Generator, GvSolver, GvTopology, HierTopology,
-    Hierarchical, Pipeline, PipelineTopology, SwarmContext, Topology,
+    AgentFleet, ConsensusTopology, Decomposer, GenerateVerify, Generator, GvSolver, GvTopology,
+    HierTopology, Hierarchical, Pattern, Pipeline, PipelineTopology, SwarmContext, Topology,
 };
 use serde_json::{json, Value};
 
@@ -96,9 +96,15 @@ async fn main() {
         merger,
     ));
     let t3: Box<dyn Topology> = Box::new(HierTopology::new(h, 3.0));
+    // T-Consensus = K générateurs + juges + Borda (Phase 3). Le panel de juges est
+    // monté PAR NOM depuis la flotte (doctrine §3) : 5× le juge discriminant
+    // `j_equals_expected` — AUCUN agent construit à la main.
+    let judges = ctx.fleet.judge_panel(&["j_equals_expected"; 5]);
+    let t_cons: Box<dyn Topology> =
+        Box::new(ConsensusTopology::new(gen.clone(), 7, judges).with_pattern(Pattern::Borda));
 
-    // ── Boucle UNIFORME sur les topologies (classification : T1 vs T3) ──────────
-    let topos: Vec<Box<dyn Topology>> = vec![t1, t3];
+    // ── Boucle UNIFORME sur les topologies (classification : T1 vs T3 vs T-Consensus) ──
+    let topos: Vec<Box<dyn Topology>> = vec![t1, t3, t_cons];
     println!("\n Classification ({N} tâches, difficulté 0.7) :");
     println!(" {:<20} {:>8} {:>10} {:>10}", "topologie", "acc", "coût/moy", "agents/moy");
     println!(" {}", "─".repeat(52));

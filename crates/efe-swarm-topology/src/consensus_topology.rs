@@ -26,7 +26,7 @@ use tokio::sync::Semaphore;
 use tokio::task::JoinSet;
 
 use crate::consensus::selector::{aggregator_for, Pattern, PatternSelector};
-use crate::consensus::{Ballot, Judge};
+use crate::consensus::{Aggregator, Ballot, Judge, MajorityVote};
 use crate::topology::{QualitySignals, SwarmContext, Topology, TopologyOutput};
 use crate::traits::Generator;
 
@@ -35,8 +35,15 @@ use crate::traits::Generator;
 pub enum AggregatorPolicy {
     /// Pattern imposé.
     Fixed(Pattern),
-    /// Choisi selon l'accord des candidats.
+    /// Choisi selon l'accord des candidats (avant de voir les ballots).
     Adaptive(PatternSelector),
+    /// **Escalade pilotée par la CONFIANCE** (§5) : tente d'abord le Vote (GRATUIT,
+    /// sans juges) ; si sa confiance ≥ seuil → terminé (juges ÉCONOMISÉS) ; sinon
+    /// escalade vers un pattern plus cher (Borda/Condorcet → appelle les juges).
+    Escalating {
+        vote_confidence_threshold: f64,
+        escalate_to: Pattern,
+    },
 }
 
 /// **T-Consensus** : K générateurs + J juges + agrégation de consensus, sur le substrat.
@@ -77,6 +84,12 @@ impl ConsensusTopology {
         self.policy = AggregatorPolicy::Adaptive(s);
         self
     }
+    /// Escalade pilotée par la confiance : Vote d'abord, juges seulement si le vote
+    /// est peu confiant.
+    pub fn with_escalation(mut self, vote_confidence_threshold: f64, escalate_to: Pattern) -> Self {
+        self.policy = AggregatorPolicy::Escalating { vote_confidence_threshold, escalate_to };
+        self
+    }
     pub fn with_concurrency(mut self, c: usize) -> Self {
         self.max_concurrency = c.max(1);
         self
@@ -107,33 +120,26 @@ impl ConsensusTopology {
         }
         cands
     }
-}
 
-#[async_trait]
-impl Topology for ConsensusTopology {
-    fn name(&self) -> &str {
-        "T-consensus"
-    }
-
-    async fn run(&self, task: &Value, _ctx: &SwarmContext) -> TopologyOutput {
-        let t0 = Instant::now();
-        let swarm_id = SwarmId::new();
-        let bb = Arc::new(Blackboard::new(swarm_id));
+    /// Phase JUGES sur le substrat : juges-agents (∥, bornés) écrivent `/ballot/<j>`
+    /// + publient sur `ballot.<j>` ; collecte via subscribe_prefix (bus = indice) +
+    /// réconciliation depuis le Blackboard (vérité). Renvoie (ballots, #reçus via bus).
+    async fn run_judges(
+        &self,
+        task: &Value,
+        candidates: &[Value],
+        bb: &Arc<Blackboard>,
+        swarm_id: SwarmId,
+    ) -> (Vec<Ballot>, usize) {
         let jn = self.judges.len();
-        let cap = ((self.k + jn) * 4).max(256);
+        let cap = (jn * 4).max(256);
         let router = Arc::new(TopicRouter::new(cap));
-
-        // 1. génération + écriture des candidats (vérité).
-        let candidates = self.generate(task, &bb).await;
-
-        // 2. pré-crée les topics juges puis subscribe_prefix (collecte multi-topics).
         for j in 0..jn {
             let _ = router.subscribe(&format!("ballot.{j}"));
         }
         let mut merged = router.subscribe_prefix("ballot.");
 
-        // 3. juges-agents (∥, bornés) : assess → /ballot/<j> + publient sur "ballot.<j>".
-        let cands = Arc::new(candidates.clone());
+        let cands = Arc::new(candidates.to_vec());
         let sem = Arc::new(Semaphore::new(self.max_concurrency));
         let mut handles = Vec::with_capacity(jn);
         for (j, judge) in self.judges.iter().enumerate() {
@@ -162,14 +168,13 @@ impl Topology for ConsensusTopology {
             let _ = h.await;
         }
 
-        // 4. bus = indice : draine les notifs (subscribe_prefix) — passage d'infos.
-        drop(router);
+        drop(router); // bus = indice : draine puis ferme.
         let mut bus_count = 0usize;
         while merged.recv().await.is_some() {
             bus_count += 1;
         }
 
-        // 5. Blackboard = vérité : reconstruit les ballots (exhaustif, reliable).
+        // Blackboard = vérité : reconstruit tous les ballots (exhaustif).
         let snap = bb.snapshot();
         let mut ballots = Vec::with_capacity(jn);
         for j in 0..jn {
@@ -181,24 +186,64 @@ impl Topology for ConsensusTopology {
                 }
             }
         }
+        (ballots, bus_count)
+    }
+}
 
-        // 6. agrégation (pattern fixe ou adaptatif selon l'accord des candidats).
-        let pattern = match &self.policy {
-            AggregatorPolicy::Fixed(p) => *p,
-            AggregatorPolicy::Adaptive(s) => s.select(&candidates),
+#[async_trait]
+impl Topology for ConsensusTopology {
+    fn name(&self) -> &str {
+        "T-consensus"
+    }
+
+    async fn run(&self, task: &Value, _ctx: &SwarmContext) -> TopologyOutput {
+        let t0 = Instant::now();
+        let swarm_id = SwarmId::new();
+        let bb = Arc::new(Blackboard::new(swarm_id));
+
+        // 1. génération + écriture des candidats au Blackboard (vérité durable).
+        let candidates = self.generate(task, &bb).await;
+
+        // 2. décide le pattern + si les juges sont nécessaires (escalade incluse).
+        let (pattern, judges_needed) = match &self.policy {
+            AggregatorPolicy::Fixed(p) => (*p, *p != Pattern::Vote),
+            AggregatorPolicy::Adaptive(s) => {
+                let p = s.select(&candidates);
+                (p, p != Pattern::Vote)
+            }
+            AggregatorPolicy::Escalating { vote_confidence_threshold, escalate_to } => {
+                // tente le Vote (GRATUIT) ; escalade seulement si peu confiant.
+                let vote = MajorityVote.aggregate(task, &candidates, &[]);
+                if vote.confidence >= *vote_confidence_threshold {
+                    (Pattern::Vote, false) // confiant → juges ÉCONOMISÉS
+                } else {
+                    (*escalate_to, true) // escalade → on paie les juges
+                }
+            }
         };
+
+        // 3. phase juges sur le substrat — UNIQUEMENT si nécessaire.
+        let (ballots, bus_count) = if judges_needed && !self.judges.is_empty() {
+            self.run_judges(task, &candidates, &bb, swarm_id).await
+        } else {
+            (Vec::new(), 0)
+        };
+        let judges_run = ballots.len();
+
+        // 4. agrégation.
         let agg = aggregator_for(pattern);
         let outcome = agg.aggregate(task, &candidates, &ballots);
 
         TopologyOutput {
             output: outcome.selected,
-            agents_used: self.k + jn,
-            cost_units: self.k as f64, // K générations ; juges Mode A gratuits
+            agents_used: self.k + judges_run,
+            // coût = K générations + appels JUGES réellement effectués (récompense l'escalade).
+            cost_units: self.k as f64 + judges_run as f64,
             elapsed_ms: t0.elapsed().as_millis() as u64,
             quality: QualitySignals {
                 candidates: candidates.len(),
-                verified: bus_count, // ballots reçus via le bus (démonstration du passage d'infos)
-                subtasks: ballots.len(),
+                verified: bus_count,
+                subtasks: judges_run,
             },
         }
     }
@@ -278,5 +323,35 @@ mod tests {
         assert_eq!(topo.name(), "T-consensus");
         assert!(out.cost_units > 0.0);
         assert_eq!(out.output, json!({ "value": "a" }));
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn escalation_skips_judges_when_vote_is_confident() {
+        // candidats UNANIMES → vote très confiant → escalade NON déclenchée → 0 juge.
+        let topo = ConsensusTopology::new(
+            Arc::new(TestGen { expected: json!("u"), correct_variants: (0..7).collect() }),
+            7,
+            discerning_judges(5),
+        )
+        .with_escalation(0.5, Pattern::Borda);
+        let out = topo.run(&json!({ "expected": "u" }), &SwarmContext::standard()).await;
+        assert_eq!(out.output, json!({ "value": "u" }));
+        assert_eq!(out.quality.subtasks, 0, "vote confiant → juges économisés");
+        assert_eq!(out.cost_units, 7.0, "coût = K seulement (pas d'appel juge)");
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn escalation_runs_judges_when_vote_is_uncertain() {
+        // leurre majoritaire (3 corrects, 4 leurres) → vote peu confiant → ESCALADE.
+        let topo = ConsensusTopology::new(
+            Arc::new(TestGen { expected: json!("e"), correct_variants: vec![0, 1, 2] }),
+            7,
+            discerning_judges(5),
+        )
+        .with_escalation(0.5, Pattern::Borda);
+        let out = topo.run(&json!({ "expected": "e" }), &SwarmContext::standard()).await;
+        assert_eq!(out.quality.subtasks, 5, "vote incertain → escalade, 5 juges appelés");
+        assert_eq!(out.output, json!({ "value": "e" }), "Borda extrait le correct");
+        assert_eq!(out.cost_units, 7.0 + 5.0, "coût = K + appels juges");
     }
 }

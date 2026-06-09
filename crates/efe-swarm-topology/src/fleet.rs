@@ -89,6 +89,15 @@ impl AgentFleet {
         self.judges.get(name).cloned()
     }
 
+    /// **Assemble un PANEL de juges PAR NOM** (doctrine §3) — chaque nom présent est
+    /// résolu ; les noms inconnus sont ignorés silencieusement. Les répétitions sont
+    /// honorées (`["j_equals_expected"; 5]` → 5 `Arc` vers le même juge), ce qui permet
+    /// à une [`crate::consensus_topology::ConsensusTopology`] d'être **entièrement**
+    /// montée depuis la flotte sans construire un seul agent à la main.
+    pub fn judge_panel(&self, names: &[&str]) -> Vec<Arc<dyn Judge>> {
+        names.iter().filter_map(|n| self.judge(n)).collect()
+    }
+
     /// Nombre total d'agents (tous rôles).
     pub fn len(&self) -> usize {
         self.generators.len()
@@ -160,7 +169,9 @@ impl AgentFleet {
         // générateurs (2)
         f.register_generator("echo_generator", Arc::new(catalog::EchoGenerator))
             .register_generator("const_generator", Arc::new(catalog::ConstGenerator { value: serde_json::Value::Null }));
-        // juges Mode A (8) — 4 critères orthogonaux + 4 vérificateurs-juges du catalogue.
+        // juges Mode A (9) — 4 critères orthogonaux + 5 vérificateurs-juges du catalogue.
+        // `j_equals_expected` est le juge DISCRIMINANT (correct == attendu) : c'est lui que
+        // la vitrine consensus monte PAR NOM (doctrine §3) au lieu de le bâtir à la main.
         f.register_judge("length_band", Arc::new(LengthBandJudge { ideal: 64 }))
             .register_judge("keyword_overlap", Arc::new(KeywordOverlapJudge))
             .register_judge("groundedness", Arc::new(GroundednessJudge { source_field: "source".into() }))
@@ -168,7 +179,8 @@ impl AgentFleet {
             .register_judge("j_non_empty", Arc::new(VerifierJudge::new("j_non_empty", Arc::new(catalog::NonEmptyText))))
             .register_judge("j_is_object", Arc::new(VerifierJudge::new("j_is_object", Arc::new(catalog::IsObject))))
             .register_judge("j_keyword", Arc::new(VerifierJudge::new("j_keyword", Arc::new(catalog::KeywordPresent { keyword: "the".into() }))))
-            .register_judge("j_length", Arc::new(VerifierJudge::new("j_length", Arc::new(catalog::LengthBounded { min: 0, max: 1_000_000 }))));
+            .register_judge("j_length", Arc::new(VerifierJudge::new("j_length", Arc::new(catalog::LengthBounded { min: 0, max: 1_000_000 }))))
+            .register_judge("j_equals_expected", Arc::new(VerifierJudge::new("j_equals_expected", Arc::new(catalog::EqualsExpected))));
         f
     }
 }
@@ -181,12 +193,24 @@ mod tests {
     #[test]
     fn standard_fleet_has_catalog_plus_judges() {
         let f = AgentFleet::standard();
-        // 34 agents du catalogue + 8 juges Mode A.
-        assert_eq!(f.len(), catalog::MODE_A_AGENT_COUNT + 8);
-        assert_eq!(f.len(), 42);
-        assert_eq!(f.names().len(), 42);
+        // 34 agents du catalogue + 9 juges Mode A.
+        assert_eq!(f.len(), catalog::MODE_A_AGENT_COUNT + 9);
+        assert_eq!(f.len(), 43);
+        assert_eq!(f.names().len(), 43);
         assert!(f.judge("consistency").is_some(), "juge Mode A présent");
+        assert!(f.judge("j_equals_expected").is_some(), "juge discriminant présent (§3)");
         assert!(f.stage("uppercase").is_some(), "agent catalogue présent");
+    }
+
+    #[test]
+    fn judge_panel_assembles_by_name_with_repeats_and_skips_unknown() {
+        let f = AgentFleet::standard();
+        // 5 copies du juge discriminant, montées PAR NOM (doctrine §3).
+        let panel = f.judge_panel(&["j_equals_expected"; 5]);
+        assert_eq!(panel.len(), 5, "répétitions honorées");
+        // un nom inconnu est ignoré silencieusement (pas de panique).
+        let mixed = f.judge_panel(&["consistency", "does_not_exist", "length_band"]);
+        assert_eq!(mixed.len(), 2, "noms inconnus ignorés");
     }
 
     #[tokio::test]
