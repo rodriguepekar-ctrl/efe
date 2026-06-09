@@ -1,0 +1,59 @@
+{
+  "arms": [
+    {
+      "arm": "keyless (Mode A déterministe)",
+      "budget_within_cap": true,
+      "mean_latency_ms": 0.413,
+      "real": true,
+      "runs": 50,
+      "tamper_detected": 1.0,
+      "traced_pct": 1.0,
+      "verify_ok": 1.0
+    },
+    {
+      "arm": "self-host:gemma3:12b",
+      "budget_within_cap": true,
+      "mean_latency_ms": 6729.788,
+      "real": true,
+      "runs": 5,
+      "tamper_detected": 1.0,
+      "traced_pct": 1.0,
+      "verify_ok": 1.0
+    },
+    {
+      "arm": "self-host:qwen3-coder:30b",
+      "budget_within_cap": true,
+      "mean_latency_ms": 31799.979,
+      "real": true,
+      "runs": 5,
+      "tamper_detected": 1.0,
+      "traced_pct": 1.0,
+      "verify_ok": 1.0
+    },
+    {
+      "arm": "self-host:qwen3-vl:30b",
+      "budget_within_cap": true,
+      "mean_latency_ms": 54620.758,
+      "real": true,
+      "runs": 5,
+      "tamper_detected": 1.0,
+      "traced_pct": 1.0,
+      "verify_ok": 1.0
+    }
+  ],
+  "criteres": {
+    "budget": "<= plafond (I13)",
+    "tamper_detected": "== 1.0",
+    "traced_pct": "== 1.0",
+    "verify_ok": "== 1.0"
+  },
+  "date": "2026-06-10",
+  "garde_fous_structurels": {
+    "egress_deny": true,
+    "health_check_fail_fast": true,
+    "keyless": true
+  },
+  "lot": "P5",
+  "title": "Self-host keyless multi-modèles — garde-fous + vérifiabilité",
+  "verdict": "GO"
+}
