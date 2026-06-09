@@ -11,9 +11,9 @@ use efe_swarm_provenance::{
 use efe_swarm_topology::{AgentFleet, SwarmContext};
 
 use crate::agents::Meter;
+use crate::backend::{build_local_backend, LocalBackend};
 use crate::budget::{Budget, BudgetGuard, OnExceed};
 use crate::client::ClientMode;
-use crate::llm::OllamaBackend;
 use crate::observer::{SwarmObserver, TeeSink};
 use crate::resolver::Resolver;
 use crate::result::{Accounting, ProvenanceSummary, RunOutcome, SwarmError, SwarmRun};
@@ -33,6 +33,9 @@ pub struct Swarm {
     substrate_metrics: Option<Arc<SubstrateMetrics>>,
     /// Observateur de cycle de vie (dashboard live, Inc.3) — `None` ⇒ comportement Inc.1/2.
     observer: Option<Arc<dyn SwarmObserver>>,
+    /// **Garde-fou souveraineté (G2)** : autorise un backend self-host **non-local**
+    /// (egress). `false` par défaut — un endpoint non-`127.0.0.1`/`localhost` est refusé.
+    allow_remote_backend: bool,
 }
 
 impl Swarm {
@@ -95,14 +98,21 @@ impl Swarm {
             OnExceed::Stop => spec,
         };
 
-        // 1. mode → backend d'agents + nature (Mode A flotte / Mode C self-host).
-        let (backend, kind) = match &self.mode {
+        // 1. mode → backend d'agents + nature (Mode A flotte / Mode C self-host). En
+        //    self-host, le garde-fou souveraineté (G2) REFUSE un endpoint non-local par
+        //    défaut (egress interdit) ; le backend est enveloppé d'un circuit-breaker (G3).
+        let (backend, kind): (Option<Arc<dyn LocalBackend>>, AgentKind) = match &self.mode {
             ClientMode::Keyless => (None, AgentKind::ModeA),
             ClientMode::SelfHost { endpoint, model } => {
-                (Some(OllamaBackend::new(endpoint.clone(), model.clone())), AgentKind::ModeC)
+                (Some(build_local_backend(endpoint, model, self.allow_remote_backend)?), AgentKind::ModeC)
             }
             ClientMode::Network { .. } => unreachable!("écarté en tête de run"),
         };
+        // Forensique : descripteur du backend local (pont N17) — capté AVANT le move.
+        let backend_info = backend.as_ref().map(|b| {
+            let d = b.descriptor();
+            crate::result::BackendInfo { engine: d.kind.as_str().to_string(), model: d.model, endpoint: d.endpoint }
+        });
 
         // 2. provenance + budget : recorder, sink (→ contexte), garde de budget.
         let swarm_id = SwarmId::new();
@@ -176,6 +186,7 @@ impl Swarm {
             provenance,
             quality: out.quality.into(),
             budget_stopped: budget.on_exceed == OnExceed::Stop && guard.exhausted(),
+            backend: backend_info,
         };
         if let Some(o) = &self.observer {
             o.on_finish(&run);
@@ -195,6 +206,7 @@ pub struct SwarmBuilder {
     metrics: Option<Arc<ProvenanceMetrics>>,
     substrate_metrics: Option<Arc<SubstrateMetrics>>,
     observer: Option<Arc<dyn SwarmObserver>>,
+    allow_remote_backend: bool,
 }
 
 impl Default for SwarmBuilder {
@@ -209,6 +221,7 @@ impl Default for SwarmBuilder {
             metrics: None,
             substrate_metrics: None,
             observer: None,
+            allow_remote_backend: false, // souverain par défaut : egress interdit
         }
     }
 }
@@ -265,6 +278,14 @@ impl SwarmBuilder {
         self
     }
 
+    /// **Garde-fou souveraineté (G2)** : autorise un backend self-host **non-local** (egress).
+    /// Par défaut `false` — seul `127.0.0.1`/`localhost`/`::1` est accepté (souverain). À
+    /// n'activer **qu'explicitement**, pour un backend LAN de confiance.
+    pub fn allow_remote_backend(mut self, allow: bool) -> Self {
+        self.allow_remote_backend = allow;
+        self
+    }
+
     /// Construit le `Swarm` (dérive la clé de provenance par tenant).
     pub fn build(self) -> Result<Swarm, SwarmError> {
         let key = self.key_source.derive(self.tenant).map_err(|e| SwarmError::KeyError(e.to_string()))?;
@@ -278,6 +299,7 @@ impl SwarmBuilder {
             metrics: self.metrics,
             substrate_metrics: self.substrate_metrics,
             observer: self.observer,
+            allow_remote_backend: self.allow_remote_backend,
         })
     }
 }
@@ -301,6 +323,7 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(run.topology, "T-consensus");
+        assert!(run.backend.is_none(), "keyless Mode A : aucun backend local");
         // provenance auto : chaque run renvoie un root re-vérifiable.
         assert!(run.provenance.enabled);
         assert!(run.provenance.verified, "verify_swarm a re-prouvé le run");
@@ -408,6 +431,28 @@ mod tests {
             .unwrap();
         assert!(swarm.mode().is_keyless());
         assert_eq!(swarm.mode().price_per_call_cents(), 0, "self-host local = gratuit");
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn self_host_remote_endpoint_is_denied_by_default() {
+        // Garde-fou souveraineté (G2) : un backend self-host non-local est REFUSÉ avant tout
+        // appel réseau (le garde-fou mord avant la résolution des agents) → egress=0.
+        let swarm = Swarm::builder()
+            .mode(ClientMode::SelfHost { endpoint: "http://example.com:11434".into(), model: "gemma3:12b".into() })
+            .build()
+            .unwrap();
+        let err = swarm.run(json!({ "text": "x", "expected": "x" }), TopologySpec::Auto, Budget::unlimited()).await;
+        assert!(matches!(err, Err(SwarmError::RemoteBackendDenied { .. })), "egress refusé par défaut (souverain)");
+    }
+
+    #[test]
+    fn allow_remote_backend_is_opt_in_and_off_by_default() {
+        // build seul (pas de run) : on vérifie que le flag existe et est opt-in.
+        let _ = Swarm::builder()
+            .mode(ClientMode::SelfHost { endpoint: "http://10.0.0.5:11434".into(), model: "m".into() })
+            .allow_remote_backend(true)
+            .build()
+            .unwrap();
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]

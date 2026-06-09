@@ -44,6 +44,7 @@
 #![warn(rust_2018_idioms)]
 
 mod agents;
+mod backend;
 mod llm;
 mod resolver;
 pub mod budget;
@@ -57,7 +58,9 @@ pub use budget::{Budget, OnExceed};
 pub use client::ClientMode;
 pub use budget::BudgetSnapshot;
 pub use observer::{AgentCall, SwarmObserver};
-pub use result::{Accounting, ProvenanceSummary, QualitySummary, RunOutcome, SwarmError, SwarmRun};
+pub use result::{
+    Accounting, BackendInfo, ProvenanceSummary, QualitySummary, RunOutcome, SwarmError, SwarmRun,
+};
 pub use sdk::{Swarm, SwarmBuilder};
 pub use spec::TopologySpec;
 

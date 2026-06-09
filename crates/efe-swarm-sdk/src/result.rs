@@ -32,6 +32,17 @@ pub struct Accounting {
     pub elapsed_ms: u64,
 }
 
+/// Descripteur **forensique** du backend local d'un run self-host (alimente le pont N17 :
+/// *quel moteur, quel modèle, où*). Aucune clé — l'endpoint est local. `None` en keyless.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct BackendInfo {
+    /// Moteur local : `ollama` ou `openai_local` (llama.cpp/vLLM/TGI/LM Studio).
+    pub engine: String,
+    pub model: String,
+    /// Endpoint local (souverain — jamais un secret).
+    pub endpoint: String,
+}
+
 /// Résumé de provenance d'un run (le différenciateur produit).
 #[derive(Debug, Clone, Serialize)]
 pub struct ProvenanceSummary {
@@ -67,6 +78,8 @@ pub struct SwarmRun {
     pub quality: QualitySummary,
     /// Le budget a-t-il été épuisé en cours de run (politique `Stop`) → résultat partiel.
     pub budget_stopped: bool,
+    /// Backend local du run self-host (forensique, pont N17). `None` en keyless (Mode A).
+    pub backend: Option<BackendInfo>,
 }
 
 impl SwarmRun {
@@ -118,6 +131,10 @@ pub enum SwarmError {
     /// `ClientMode::Network` nécessite la **passerelle serveur** (clés server-side) — non
     /// exécutable en in-process. Utilisez `Keyless` ou `SelfHost`.
     NetworkRequiresGateway,
+    /// **Garde-fou souveraineté (G2)** : un backend self-host **non-local** a été refusé
+    /// (egress interdit par défaut). Utilisez un endpoint `127.0.0.1`/`localhost`, ou
+    /// activez explicitement `SwarmBuilder::allow_remote_backend(true)`.
+    RemoteBackendDenied { endpoint: String },
 }
 
 impl std::fmt::Display for SwarmError {
@@ -134,6 +151,9 @@ impl std::fmt::Display for SwarmError {
             SwarmError::KeyError(e) => write!(f, "clé de provenance : {e}"),
             SwarmError::NetworkRequiresGateway => {
                 write!(f, "ClientMode::Network nécessite la passerelle serveur (clés server-side) ; utilisez Keyless ou SelfHost en in-process")
+            }
+            SwarmError::RemoteBackendDenied { endpoint } => {
+                write!(f, "backend self-host non-local refusé (souveraineté/egress) : « {endpoint} » ; utilisez 127.0.0.1/localhost ou allow_remote_backend(true)")
             }
         }
     }

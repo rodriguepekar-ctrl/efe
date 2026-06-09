@@ -68,6 +68,8 @@ impl From<SwarmError> for GatewayError {
     fn from(e: SwarmError) -> Self {
         match e {
             SwarmError::UnknownAgent { .. } | SwarmError::EmptySpec(_) => GatewayError::BadRequest(e.to_string()),
+            // Garde-fou souveraineté : endpoint self-host non-local refusé → requête invalide.
+            SwarmError::RemoteBackendDenied { .. } => GatewayError::BadRequest(e.to_string()),
             SwarmError::BudgetTooLow { .. } | SwarmError::BudgetExceeded { .. } => GatewayError::Budget(e.to_string()),
             SwarmError::KeyError(_) => GatewayError::Internal(e.to_string()),
             // En Inc.2 le routeur frontière n'est pas câblé : la passerelle, qui détiendrait

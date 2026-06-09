@@ -15,13 +15,15 @@ use crate::agents::{
     meter_decomposer, meter_gen, meter_judge, meter_merger, meter_solver, meter_stage, Meter,
     StageSolver,
 };
-use crate::llm::{llm_decomposer, llm_gen, llm_judge, llm_merger, llm_solver, llm_stage, OllamaBackend};
+use crate::backend::LocalBackend;
+use crate::llm::{llm_decomposer, llm_gen, llm_judge, llm_merger, llm_solver, llm_stage};
 use crate::result::SwarmError;
 
 pub(crate) struct Resolver<'a> {
     pub fleet: &'a AgentFleet,
-    /// `Some` ⇒ self-host : on construit des agents LLM (nom = instruction).
-    pub backend: Option<Arc<OllamaBackend>>,
+    /// `Some` ⇒ self-host : on construit des agents LLM (nom = instruction). Backend local
+    /// keyless (Ollama ou OpenAI-compatible local), enveloppé d'un circuit-breaker.
+    pub backend: Option<Arc<dyn LocalBackend>>,
     pub meter: Meter,
 }
 
