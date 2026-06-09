@@ -24,6 +24,7 @@
 
 pub mod catalog;
 pub mod consensus;
+pub mod consensus_topology;
 pub mod fleet;
 pub mod generate_verify;
 pub mod hierarchical;
@@ -32,8 +33,10 @@ pub mod topology;
 pub mod traits;
 
 pub use consensus::{
-    AggOutcome, Aggregator, Ballot, BordaConsensus, CondorcetConsensus, Judge, MajorityVote,
+    aggregator_for, agreement, AggOutcome, Aggregator, Ballot, BordaConsensus, CondorcetConsensus,
+    Judge, MajorityVote, Pattern, PatternSelector,
 };
+pub use consensus_topology::{AggregatorPolicy, ConsensusTopology};
 pub use fleet::AgentFleet;
 pub use generate_verify::{GenerateVerify, GvResult};
 pub use hierarchical::{FnSolver, GvSolver, HierResult, HierSolver, Hierarchical};

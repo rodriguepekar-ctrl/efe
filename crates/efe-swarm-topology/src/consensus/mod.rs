@@ -21,6 +21,7 @@ pub mod borda;
 pub mod condorcet;
 pub mod judges;
 pub mod rank;
+pub mod selector;
 pub mod vote;
 
 pub use borda::BordaConsensus;
@@ -28,6 +29,7 @@ pub use condorcet::CondorcetConsensus;
 pub use judges::{
     ConsistencyJudge, GroundednessJudge, KeywordOverlapJudge, LengthBandJudge, VerifierJudge,
 };
+pub use selector::{aggregator_for, agreement, Pattern, PatternSelector};
 pub use vote::MajorityVote;
 
 /// Un « votant » : évalue l'ensemble des candidats → un score par candidat (≥ = meilleur).
