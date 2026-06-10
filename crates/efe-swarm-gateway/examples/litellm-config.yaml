@@ -1,0 +1,27 @@
+# SPDX-License-Identifier: UNLICENSED
+# Routeur frontière OpenAI-compat (LiteLLM) pour le mode **Network réel** du swarm-gateway.
+#
+# Rôle (Inc.4.b) : le gateway parle OpenAI-compat (`/v1/chat/completions`) à CE routeur, qui
+# détient les clés provider et les injecte vers Anthropic/OpenAI/… Le gateway n'a JAMAIS de clé.
+#
+# AUCUN SECRET ICI : `os.environ/VAR` lit la clé depuis l'env du process LiteLLM (ton terminal).
+#
+# `model_name` DOIT matcher ce que le gateway envoie (table provider→modèle, RouterMap) :
+#   provider "anthropic" → "anthropic/claude-3-5-sonnet-latest"
+#   provider "openai"    → "openai/gpt-4o"
+# Si l'alias de modèle est refusé par le provider, remplace SEULEMENT `litellm_params.model`
+# par un snapshot courant ; garde `model_name` stable (sinon, surcharge EFE_SWARM_ROUTER_MODELS).
+
+model_list:
+  - model_name: anthropic/claude-3-5-sonnet-latest
+    litellm_params:
+      model: anthropic/claude-3-5-sonnet-latest
+      api_key: os.environ/ANTHROPIC_API_KEY
+
+  - model_name: openai/gpt-4o
+    litellm_params:
+      model: openai/gpt-4o
+      api_key: os.environ/OPENAI_API_KEY
+
+# Pas de `general_settings.master_key` : le gateway appelle SANS en-tête d'auth (souverain ;
+# l'auth gateway↔routeur est infra/mTLS, pas une clé applicative).
