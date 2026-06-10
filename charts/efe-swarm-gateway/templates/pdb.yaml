@@ -1,0 +1,13 @@
+{{- if .Values.podDisruptionBudget.enabled -}}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "efe-swarm-gateway.fullname" . }}
+  labels:
+    {{- include "efe-swarm-gateway.labels" . | nindent 4 }}
+spec:
+  minAvailable: {{ .Values.podDisruptionBudget.minAvailable }}
+  selector:
+    matchLabels:
+      {{- include "efe-swarm-gateway.selectorLabels" . | nindent 6 }}
+{{- end }}

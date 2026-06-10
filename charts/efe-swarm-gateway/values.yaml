@@ -1,0 +1,176 @@
+# SPDX-License-Identifier: UNLICENSED
+# efe-swarm-gateway — déploiement SOUVERAIN (self-host keyless + egress=deny).
+# Valeurs par défaut : sécurisées et souveraines. Surchargez avec -f / --set.
+
+# ── Image de la passerelle ──────────────────────────────────────────────────────
+image:
+  repository: ghcr.io/efe-ai/efe-swarm-gateway
+  tag: ""                 # défaut : .Chart.AppVersion
+  pullPolicy: IfNotPresent
+imagePullSecrets: []
+
+nameOverride: ""
+fullnameOverride: ""
+
+replicaCount: 1           # 1 par défaut (un store Ollama par pod). RWX requis si > 1.
+
+# ── Réseau interne ──────────────────────────────────────────────────────────────
+gateway:
+  # La passerelle bind 0.0.0.0:port DANS le pod ; l'accès externe passe par le Service +
+  # la NetworkPolicy d'ingress. Elle appelle Ollama sur 127.0.0.1 (même pod = souverain).
+  port: 8080
+  logLevel: info
+  extraEnv: []            # [{ name: X, value: "y" }]
+
+# ── Provenance : clé HKDF (server-side, JAMAIS une clé provider) ─────────────────
+hkdf:
+  # La passerelle dérive une clé HKDF PAR TENANT pour SIGNER la chaîne de provenance.
+  # Elle n'authentifie aucun provider. Source : un Secret (généré ici si absent, ou fourni).
+  enabled: true
+  # Nom de la variable d'env que le binaire prod (HmacKeySource::EnvHkdf) lit.
+  envName: EFE_HKDF_MASTER_KEY
+  existingSecret: ""      # si défini, on lit la clé de ce Secret existant (recommandé prod/Vault)
+  existingSecretKey: master
+  # Si existingSecret vide : on génère une clé aléatoire au 1er install (conservée aux upgrades).
+  # ⚠️ Pour la prod, préférez Vault/externalSecrets et existingSecret.
+
+# ── Auth OIDC (optionnelle ; clés publiques server-side, jamais de secret saisi ici) ──
+oidc:
+  enabled: false
+  issuerUrlEnv: EFE_OIDC_ISSUER_URL
+  publicKeyEnv: EFE_OIDC_PUBLIC_KEY_PEM
+  issuerUrl: ""
+  existingSecret: ""      # Secret portant la clé publique PEM (jamais une clé privée)
+  existingSecretKey: public-key-pem
+
+# ── Mode Network (frontière) — OPT-IN, NON souverain ────────────────────────────
+# Si activé : la passerelle route ClientMode::Network vers ce routeur server-side
+# (efe-llm-router), qui détient les clés provider. Active aussi l'egress vers le routeur.
+router:
+  enabled: false
+  endpointEnv: EFE_SWARM_ROUTER_ENDPOINT
+  endpoint: ""            # ex. http://efe-llm-router.efe.svc.cluster.local:8080/v1 (URL, pas un secret)
+  # CIDR/namespace du routeur, à autoriser en egress (sinon deny-all bloque l'appel).
+  egressToNamespace: ""   # ex. "efe-routing"
+  egressPorts: [8080]
+
+# ── Sidecar Ollama (modèle LOCAL, souverain) ────────────────────────────────────
+ollama:
+  enabled: true
+  image:
+    repository: ollama/ollama
+    tag: "0.3.14"
+    pullPolicy: IfNotPresent
+  # Ollama écoute dans le pod ; le gateway l'atteint sur 127.0.0.1 (netns partagé).
+  host: "0.0.0.0:11434"
+  models:
+    - gemma3:12b          # modèles attendus (pré-provisionnés ; cf. provision ci-dessous)
+  resources:
+    requests: { cpu: "2", memory: 8Gi }
+    limits: { cpu: "8", memory: 16Gi }
+  gpu:
+    enabled: false
+    resourceName: nvidia.com/gpu
+    count: 1
+  persistence:
+    enabled: true         # store de modèles persistant (/root/.ollama) — air-gap
+    size: 50Gi
+    storageClass: ""
+    accessMode: ReadWriteOnce
+    existingClaim: ""
+  # Provisioning des modèles : Job pre-install qui `ollama pull` (NÉCESSITE un egress
+  # TEMPORAIRE). En air-gap strict : désactivez et pré-chargez le PVC hors-bande.
+  provision:
+    enabled: false
+    # NetworkPolicy dédiée autorisant l'egress du Job de provisioning (séparée du runtime).
+    allowEgress: true
+    backoffLimit: 2
+
+# ── NetworkPolicy — LE CŒUR : egress=deny (souveraineté à la couche cluster) ─────
+networkPolicy:
+  enabled: true
+  # Egress : DENY ALL par défaut (souverain). Les toggles ci-dessous ouvrent le strict
+  # minimum si réellement nécessaire.
+  egress:
+    denyAll: true         # base souveraine : aucun egress
+    allowDns: true        # autorise la résolution DNS du cluster (UDP/TCP 53 → kube-system)
+    dnsNamespaceSelector:
+      kubernetes.io/metadata.name: kube-system
+    # egress supplémentaires explicites (ex. Vault) — vide par défaut.
+    extra: []             # [{ to: [...], ports: [...] }]
+  ingress:
+    # Sources autorisées à atteindre la passerelle (port gateway.port).
+    # Vide → on autorise depuis tout le namespace courant (resserrez en prod).
+    fromNamespaceSelectors: []   # [{ kubernetes.io/metadata.name: ingress-nginx }]
+    fromPodSelectors: []         # [{ app: my-client }]
+    allowSameNamespace: true
+
+# ── Service ─────────────────────────────────────────────────────────────────────
+service:
+  type: ClusterIP
+  port: 8080
+  annotations: {}
+
+# ── Ingress (optionnel) ─────────────────────────────────────────────────────────
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts:
+    - host: swarm.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+
+# ── ServiceMonitor (Prometheus Operator, optionnel) ─────────────────────────────
+serviceMonitor:
+  enabled: false
+  interval: 30s
+  scrapeTimeout: 10s
+  labels: {}
+
+# ── PodDisruptionBudget (optionnel) ─────────────────────────────────────────────
+podDisruptionBudget:
+  enabled: false
+  minAvailable: 1
+
+# ── Sécurité (durcie par défaut) ────────────────────────────────────────────────
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 65532
+  runAsGroup: 65532
+  fsGroup: 65532
+  seccompProfile:
+    type: RuntimeDefault
+
+gatewaySecurityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  runAsNonRoot: true
+  capabilities:
+    drop: ["ALL"]
+
+# Ollama a besoin d'écrire son store de modèles ; on durcit ce qu'on peut.
+ollamaSecurityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop: ["ALL"]
+
+resources:
+  requests: { cpu: "100m", memory: 128Mi }
+  limits: { cpu: "1", memory: 512Mi }
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
+topologySpreadConstraints: []
+
+# Annotations/labels de pod supplémentaires.
+podAnnotations: {}
+podLabels: {}

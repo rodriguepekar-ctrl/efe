@@ -1,0 +1,19 @@
+{{- if and .Values.ollama.enabled .Values.ollama.persistence.enabled (not .Values.ollama.persistence.existingClaim) -}}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "efe-swarm-gateway.fullname" . }}-ollama-models
+  labels:
+    {{- include "efe-swarm-gateway.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/resource-policy": keep   # conserver les modèles (air-gap : coûteux à re-provisionner)
+spec:
+  accessModes:
+    - {{ .Values.ollama.persistence.accessMode }}
+  resources:
+    requests:
+      storage: {{ .Values.ollama.persistence.size }}
+  {{- if .Values.ollama.persistence.storageClass }}
+  storageClassName: {{ .Values.ollama.persistence.storageClass | quote }}
+  {{- end }}
+{{- end }}

@@ -1,0 +1,11 @@
+# SPDX-License-Identifier: UNLICENSED
+.DS_Store
+.git/
+.gitignore
+*.tmp
+*.bak
+*.swp
+*.orig
+.idea/
+.vscode/
+ci/

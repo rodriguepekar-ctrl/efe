@@ -1,0 +1,22 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "efe-swarm-gateway.fullname" . }}-config
+  labels:
+    {{- include "efe-swarm-gateway.labels" . | nindent 4 }}
+data:
+  # La passerelle bind toutes les interfaces DANS le pod ; l'exposition est contrôlée par
+  # le Service + la NetworkPolicy d'ingress.
+  EFE_SWARM_GATEWAY_ADDR: {{ printf "0.0.0.0:%d" (int .Values.gateway.port) | quote }}
+  RUST_LOG: {{ .Values.gateway.logLevel | quote }}
+  {{- if and .Values.ollama.enabled }}
+  # Endpoint Ollama LOCAL (même pod, boucle locale = souverain, zéro egress).
+  EFE_SWARM_SELFHOST_ENDPOINT: "http://127.0.0.1:11434"
+  {{- end }}
+  {{- if .Values.router.enabled }}
+  # Mode Network (frontière) : URL NON-secrète du routeur server-side (clés DANS le routeur).
+  {{ .Values.router.endpointEnv }}: {{ .Values.router.endpoint | quote }}
+  {{- end }}
+  {{- if .Values.oidc.enabled }}
+  {{ .Values.oidc.issuerUrlEnv }}: {{ .Values.oidc.issuerUrl | quote }}
+  {{- end }}
