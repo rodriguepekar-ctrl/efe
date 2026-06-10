@@ -15,7 +15,14 @@ use efe_swarm_gateway::{router, SwarmGatewayState};
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let addr = std::env::var("EFE_SWARM_GATEWAY_ADDR").unwrap_or_else(|_| "127.0.0.1:8080".to_string());
 
-    let state = SwarmGatewayState::in_memory();
+    // Inc.4 : le binaire (server-side) lit l'URL du routeur frontière depuis l'env — une URL
+    // NON-SECRÈTE ; les clés provider vivent DANS le routeur (efe-llm-router, env/Vault).
+    // Absent ⇒ `ClientMode::Network` renvoie 501 (déploiement souverain par défaut).
+    let mut state = SwarmGatewayState::in_memory();
+    if let Ok(router_ep) = std::env::var("EFE_SWARM_ROUTER_ENDPOINT") {
+        state = state.with_router_endpoint(router_ep);
+        println!("→ routeur frontière câblé (Network activé) — clés détenues server-side par le routeur.");
+    }
     let app = router(state);
 
     let listener = tokio::net::TcpListener::bind(&addr).await?;

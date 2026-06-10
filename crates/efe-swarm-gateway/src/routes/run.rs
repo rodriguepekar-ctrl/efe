@@ -35,6 +35,9 @@ pub async fn run(
 ) -> Result<Response, GatewayError> {
     caller.require_any_role(&["operator", "admin"])?;
     let (task, spec, budget, mode) = req.into_parts()?;
+    // Inc.4 : résout le mode (Network → routeur server-side, sinon souverain). 501 si Network
+    // demandé sans routeur câblé. `allow_remote` n'est vrai que pour le routeur Network.
+    let (mode, allow_remote) = s.resolve_mode(mode)?;
 
     if params.stream {
         // ── Mode JOB live (Inc.3) ────────────────────────────────────────────
@@ -44,7 +47,7 @@ pub async fn run(
         s.dashboards.insert(bus.clone());
 
         let observer = Arc::new(DashboardObserver::new(bus.clone()));
-        let swarm = s.swarm_for_observed(&caller.tenant, mode, observer)?;
+        let swarm = s.swarm_for_observed(&caller.tenant, mode, observer, allow_remote)?;
 
         let state = s.clone();
         let tenant = caller.tenant.clone();
@@ -68,7 +71,7 @@ pub async fn run(
     }
 
     // ── Mode SYNC (Inc.2, inchangé) ──────────────────────────────────────────
-    let swarm = s.swarm_for(&caller.tenant, mode)?;
+    let swarm = s.swarm_for(&caller.tenant, mode, allow_remote)?;
     let outcome = swarm.run_traced(task, spec, budget).await?;
     let run_id = Uuid::new_v4();
     s.store.put(run_id, &caller.tenant, &outcome).await?;

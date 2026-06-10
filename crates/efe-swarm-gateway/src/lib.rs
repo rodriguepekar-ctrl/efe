@@ -324,6 +324,21 @@ mod tests {
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn network_mode_without_router_is_501() {
+        // Inc.4 : Network demandé mais aucun routeur câblé (déploiement souverain) → 501.
+        let (app, _s) = app();
+        let resp = app
+            .oneshot(post_run(json!({
+                "task": { "text": "x" },
+                "topology": { "kind": "auto" },
+                "mode": { "network": { "provider": "anthropic" } }
+            })))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::NOT_IMPLEMENTED);
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     async fn bad_topology_is_400() {
         let (app, _s) = app();
         let resp = app
