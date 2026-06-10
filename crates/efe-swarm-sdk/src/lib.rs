@@ -46,6 +46,7 @@
 mod agents;
 mod backend;
 mod llm;
+mod n17;
 mod resolver;
 pub mod budget;
 pub mod client;
@@ -57,18 +58,21 @@ pub mod spec;
 pub use budget::{Budget, OnExceed};
 pub use client::ClientMode;
 pub use budget::BudgetSnapshot;
+pub use n17::LlmProvenanceCollector;
 pub use observer::{AgentCall, SwarmObserver};
 pub use result::{
-    Accounting, BackendInfo, ProvenanceSummary, QualitySummary, RunOutcome, SwarmError, SwarmRun,
+    Accounting, BackendInfo, N17Summary, ProvenanceSummary, QualitySummary, RunOutcome, SwarmError,
+    SwarmRun,
 };
 pub use sdk::{Swarm, SwarmBuilder};
 pub use spec::TopologySpec;
 
 // Réexports pratiques (la passerelle HTTP s'appuie dessus pour persister + re-prouver).
 pub use efe_swarm_provenance::{
-    verify_swarm, AgentCallRecord, AgentKind, AgentRole, HmacKeySource, ProvenanceMetrics,
-    SealedProvenance, SwarmProvenanceReport,
+    verify_bridge, verify_swarm, AgentCallRecord, AgentKind, AgentRole, BridgeReport, HmacKeySource,
+    LlmResolver, MapResolver, ProvenanceMetrics, SealedProvenance, SwarmProvenanceReport,
 };
+pub use efe_nano_sdk::LlmProvenanceRecord;
 pub use efe_blackboard::{BlackboardWrite, EventSink, SubstrateMetrics, SwarmEvent, WriteSink};
 pub use efe_swarm_topology::Pattern;
 

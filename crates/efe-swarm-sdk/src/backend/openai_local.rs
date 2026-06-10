@@ -6,11 +6,13 @@
 //! jamais de secret.
 
 use std::sync::Arc;
+use std::time::Instant;
 
 use async_trait::async_trait;
 use serde_json::json;
 
 use super::{curl_json, BackendDescriptor, BackendKind, LocalBackend, SamplingParams};
+use crate::n17::{push_pending, PendingLlmCall};
 
 const MAX_TIME_S: u32 = 120;
 
@@ -49,16 +51,29 @@ impl LocalBackend for OpenAiLocalBackend {
             "seed": p.seed,
             "stream": false
         });
-        let resp = tokio::task::spawn_blocking(move || curl_json(&url, &body, MAX_TIME_S))
-            .await
-            .ok()
-            .flatten()?;
-        resp.get("choices")
-            .and_then(|c| c.get(0))
-            .and_then(|c| c.get("message"))
-            .and_then(|m| m.get("content"))
-            .and_then(|v| v.as_str())
-            .map(|s| s.trim().to_string())
+        let t0 = Instant::now();
+        let resp = tokio::task::spawn_blocking(move || curl_json(&url, &body, MAX_TIME_S)).await.ok().flatten();
+        let latency_ms = t0.elapsed().as_millis() as u64;
+        let response = resp.and_then(|r| {
+            r.get("choices")
+                .and_then(|c| c.get(0))
+                .and_then(|c| c.get("message"))
+                .and_then(|m| m.get("content"))
+                .and_then(|v| v.as_str())
+                .map(|s| s.trim().to_string())
+        });
+        // Pont N17 par-appel : pousse la forensique (no-op hors d'un scope Mode C).
+        push_pending(PendingLlmCall {
+            engine: BackendKind::OpenAiLocal.as_str().to_string(),
+            model: self.model.clone(),
+            temperature: p.temperature,
+            max_tokens: p.max_tokens,
+            seed: p.seed,
+            prompt: prompt.to_string(),
+            response: response.clone(),
+            latency_ms,
+        });
+        response
     }
 
     fn descriptor(&self) -> BackendDescriptor {

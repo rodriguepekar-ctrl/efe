@@ -13,6 +13,7 @@ use efe_swarm_topology::{AgentFleet, SwarmContext};
 use crate::agents::Meter;
 use crate::backend::{build_local_backend, LocalBackend};
 use crate::budget::{Budget, BudgetGuard, OnExceed};
+use crate::n17::LlmProvenanceCollector;
 use crate::client::ClientMode;
 use crate::observer::{SwarmObserver, TeeSink};
 use crate::resolver::Resolver;
@@ -129,7 +130,18 @@ impl Swarm {
         let swarm_id = SwarmId::new();
         let recorder = Arc::new(ProvenanceRecorder::new(swarm_id, self.tenant));
         let guard = Arc::new(BudgetGuard::new(budget.max_cents, price));
-        let meter = Meter { rec: recorder.clone(), guard: guard.clone(), kind, observer: self.observer.clone() };
+        // Pont N17 par-appel : un collecteur de `LlmProvenanceRecord` pour les runs Mode C
+        // (self-host). Mode A (keyless) ⇒ aucun appel LLM, aucun collecteur.
+        let n17 = matches!(kind, AgentKind::ModeC).then(LlmProvenanceCollector::new);
+        let meter = Meter {
+            rec: recorder.clone(),
+            guard: guard.clone(),
+            kind,
+            observer: self.observer.clone(),
+            n17: n17.clone(),
+            swarm_id,
+            tenant: self.tenant,
+        };
 
         // Inc.3 : si un observateur fournit un exutoire, on TEE provenance + observateur
         // (la provenance reste byte-identique) ; sinon, provenance seule (Inc.1/2 inchangé).
@@ -160,10 +172,13 @@ impl Swarm {
             return Err(SwarmError::BudgetExceeded { spent_cents: guard.spent_cents(), max_cents: guard.max_cents() });
         }
 
+        // Pont N17 par-appel : les `LlmProvenanceRecord` forensiques collectés (Mode C).
+        let llm_records = n17.as_ref().map(|c| c.records()).unwrap_or_default();
+
         // 4. scelle la provenance + re-prouve (verify_swarm) → provenance_root. La
         //    `SealedProvenance` est conservée (records bruts) pour la persistance HTTP ;
         //    les métriques partagées (si présentes) sont alimentées ici → `/metrics`.
-        let (provenance, sealed) = if self.provenance {
+        let (provenance, sealed, n17_summary) = if self.provenance {
             let sealed = recorder.seal_with_key(self.key.clone());
             let report = verify_swarm(&sealed.records, &self.key);
             if let Some(m) = &self.metrics {
@@ -180,9 +195,11 @@ impl Swarm {
             if let Some(o) = &self.observer {
                 o.on_seal(sealed.len(), report.traced_pct, summary.root.as_deref(), report.ok());
             }
-            (summary, Some(sealed))
+            // N17 : vérifie le pont (chaque record Mode C lié à un LlmProvenanceRecord cohérent).
+            let n17_summary = build_n17_summary(&sealed.records, &llm_records);
+            (summary, Some(sealed), n17_summary)
         } else {
-            (ProvenanceSummary::disabled(), None)
+            (ProvenanceSummary::disabled(), None, None)
         };
 
         let run = SwarmRun {
@@ -198,12 +215,36 @@ impl Swarm {
             quality: out.quality.into(),
             budget_stopped: budget.on_exceed == OnExceed::Stop && guard.exhausted(),
             backend: backend_info,
+            n17: n17_summary,
         };
         if let Some(o) = &self.observer {
             o.on_finish(&run);
         }
-        Ok(RunOutcome { run, sealed })
+        Ok(RunOutcome { run, sealed, llm_records })
     }
+}
+
+/// Vérifie le **pont N17** sur un run : chaque `AgentCallRecord` Mode C doit référencer un
+/// `LlmProvenanceRecord` cohérent (même tenant, même swarm). Renvoie `None` pour un run
+/// keyless (Mode A — aucun appel LLM, aucun pont attendu).
+fn build_n17_summary(
+    records: &[efe_swarm_provenance::AgentCallRecord],
+    llm_records: &[efe_nano_sdk::LlmProvenanceRecord],
+) -> Option<crate::result::N17Summary> {
+    let mode_c = records.iter().filter(|r| matches!(r.agent_kind, AgentKind::ModeC)).count();
+    if mode_c == 0 && llm_records.is_empty() {
+        return None; // run keyless : pas de pont N17
+    }
+    let resolver = efe_swarm_provenance::MapResolver::from_records(llm_records.iter());
+    let bridge = efe_swarm_provenance::verify_bridge(records, &resolver);
+    Some(crate::result::N17Summary {
+        calls: llm_records.len(),
+        mode_c_records: bridge.consistent + bridge.unlinked + bridge.broken,
+        consistent: bridge.consistent,
+        unlinked: bridge.unlinked,
+        broken: bridge.broken,
+        all_consistent: bridge.all_mode_c_consistent(),
+    })
 }
 
 /// Constructeur de [`Swarm`].
@@ -345,6 +386,7 @@ mod tests {
             .unwrap();
         assert_eq!(run.topology, "T-consensus");
         assert!(run.backend.is_none(), "keyless Mode A : aucun backend local");
+        assert!(run.n17.is_none(), "keyless Mode A : aucun appel LLM → aucun pont N17");
         // provenance auto : chaque run renvoie un root re-vérifiable.
         assert!(run.provenance.enabled);
         assert!(run.provenance.verified, "verify_swarm a re-prouvé le run");
@@ -487,6 +529,41 @@ mod tests {
             .allow_remote_backend(true)
             .build()
             .unwrap();
+    }
+
+    /// **Pont N17 par-appel RÉEL** (Ollama local). Ignoré par défaut (CI sans modèle).
+    /// Lancer : `cargo test -p efe-swarm-sdk --lib -- --ignored n17_real`.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    #[ignore = "nécessite un Ollama local (ollama serve + gemma3:12b)"]
+    async fn n17_per_call_bridge_links_real_self_host_calls() {
+        let swarm = Swarm::builder()
+            .mode(ClientMode::SelfHost { endpoint: "http://127.0.0.1:11434".into(), model: "gemma3:12b".into() })
+            .build()
+            .unwrap();
+        let outcome = swarm
+            .run_traced(
+                json!({ "text": "The court ruled the clause unenforceable.", "expected": "legal" }),
+                TopologySpec::Consensus {
+                    generator: "Classify the topic in one word from {technology,finance,health,legal}.".into(),
+                    judges: vec!["Judge how well the label fits.".into()],
+                    k: 3,
+                    pattern: Pattern::Borda,
+                    escalate: false,
+                },
+                Budget::cents(1000),
+            )
+            .await
+            .unwrap();
+
+        // chaque appel LLM a un record forensique ; le pont est cohérent.
+        assert!(!outcome.llm_records.is_empty(), "des LlmProvenanceRecord par-appel");
+        let n17 = outcome.run.n17.as_ref().expect("résumé N17 présent (Mode C)");
+        assert!(n17.calls >= 4, "≥ 3 générateurs + ≥ 1 juge → ≥ 4 appels LLM");
+        assert!(n17.all_consistent, "tous les Mode C liés à un N17 cohérent : {n17:?}");
+        assert_eq!(n17.unlinked, 0);
+        assert_eq!(n17.broken, 0);
+        // le forensique porte le vrai modèle.
+        assert!(outcome.llm_records.iter().all(|r| r.model_identity.model_id == "gemma3:12b"));
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]

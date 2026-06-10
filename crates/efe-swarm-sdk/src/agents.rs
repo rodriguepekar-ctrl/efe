@@ -1,22 +1,24 @@
 // SPDX-License-Identifier: UNLICENSED
-//! Décorateurs SDK **unifiés** : budget (facture) + provenance (capture) sur des agents
-//! type-effacés (`Arc<dyn Trait>`) issus de la flotte.
+//! Décorateurs SDK **unifiés** : budget (facture) + provenance (capture) + **pont N17
+//! par-appel** sur des agents type-effacés (`Arc<dyn Trait>`) issus de la flotte.
 //!
-//! Pour chaque appel : on **facture** le budget ; si débité, on exécute l'agent et on
-//! **capture** l'appel (entrée→sortie) dans le `ProvenanceRecorder` ; sinon on renvoie un
-//! **sentinel neutre** (la topologie dégrade sans dépenser). On câble aussi le sink de
-//! provenance via `SwarmContext` (Phase 4) — donc les topologies à blackboard (T2,
-//! T-Consensus) sont en plus **ancrées** (seam A).
+//! Pour chaque appel : on **facture** le budget ; si débité, on exécute l'agent **dans un
+//! scope N17** (qui collecte chaque appel LLM Mode C), on **capture** l'appel
+//! (entrée→sortie) dans le `ProvenanceRecorder` en **liant** le `llm_provenance_id` au
+//! record N17 forensique ; sinon on renvoie un **sentinel neutre** (la topologie dégrade
+//! sans dépenser). On câble aussi le sink de provenance via `SwarmContext` (Phase 4).
 
-use std::sync::Arc;
+use std::future::Future;
+use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
-use efe_nano_sdk::AgentId;
+use efe_nano_sdk::{AgentId, ProvenanceId, SwarmId, TenantId};
 use efe_swarm_provenance::{AgentKind, AgentRole, CallCapture, ProvenanceRecorder};
 use efe_swarm_topology::{Decomposer, Generator, Judge, Merger, Solver, Stage};
 use serde_json::{json, Value};
 
 use crate::budget::BudgetGuard;
+use crate::n17::LlmProvenanceCollector;
 use crate::observer::{AgentCall, SwarmObserver};
 
 /// Contexte partagé par les décorateurs d'un run.
@@ -27,16 +29,57 @@ pub(crate) struct Meter {
     pub kind: AgentKind,
     /// Observateur de cycle de vie (dashboard live, Inc.3) — `None` ⇒ aucun coût.
     pub observer: Option<Arc<dyn SwarmObserver>>,
+    /// **Pont N17 par-appel** : collecteur des `LlmProvenanceRecord` (Mode C). `None` en
+    /// keyless (Mode A) ⇒ aucun scope, aucun lien.
+    pub n17: Option<Arc<LlmProvenanceCollector>>,
+    pub swarm_id: SwarmId,
+    pub tenant: TenantId,
 }
 
 impl Meter {
     fn charge(&self, id: &AgentId) -> bool {
         self.guard.charge(id.as_str())
     }
-    fn capture(&self, id: &AgentId, role: AgentRole, variant: Option<u64>, input: &Value, output: &Value) {
+
+    /// Exécute l'appel d'agent **dans un scope N17** (Mode C) ; renvoie la sortie + le
+    /// `ProvenanceId` du **premier** appel LLM (le lien). Mode A : aucun scope, lien `None`.
+    async fn run_agent<F, T>(&self, id: &AgentId, role: AgentRole, fut: F) -> (T, Option<ProvenanceId>)
+    where
+        F: Future<Output = T>,
+    {
+        match &self.n17 {
+            None => (fut.await, None),
+            Some(collector) => {
+                let sink = Arc::new(Mutex::new(Vec::new()));
+                let out = crate::n17::scoped(sink.clone(), fut).await;
+                let calls = std::mem::take(&mut *sink.lock().expect("n17 sink lock"));
+                let mut first = None;
+                for call in calls {
+                    let pid = collector.assemble(self.swarm_id, self.tenant, id, role, call);
+                    if first.is_none() {
+                        first = Some(pid);
+                    }
+                }
+                (out, first)
+            }
+        }
+    }
+
+    fn capture(
+        &self,
+        id: &AgentId,
+        role: AgentRole,
+        variant: Option<u64>,
+        input: &Value,
+        output: &Value,
+        llm_id: Option<ProvenanceId>,
+    ) {
         let mut cap = CallCapture::new(id.clone(), role, self.kind, input, output);
         if let Some(v) = variant {
             cap = cap.with_variant(v);
+        }
+        if let Some(lid) = llm_id {
+            cap = cap.with_llm_provenance(lid); // ← le pont N17 par-appel
         }
         self.rec.capture(cap);
         // Inc.3 : notifie l'observateur (appel facturé) — sortie + coût + budget courant.
@@ -68,8 +111,8 @@ impl Generator for MeteredGen {
         if !self.meter.charge(&self.id) {
             return Value::Null; // budget épuisé → sentinel
         }
-        let out = self.inner.generate(task, variant).await;
-        self.meter.capture(&self.id, AgentRole::Generator, Some(variant as u64), task, &out);
+        let (out, llm) = self.meter.run_agent(&self.id, AgentRole::Generator, self.inner.generate(task, variant)).await;
+        self.meter.capture(&self.id, AgentRole::Generator, Some(variant as u64), task, &out, llm);
         out
     }
 }
@@ -91,8 +134,8 @@ impl Stage for MeteredStage {
         if !self.meter.charge(&self.id) {
             return vec![input.clone()]; // pass-through (préserve le flux sans dépenser)
         }
-        let out = self.inner.process(input).await;
-        self.meter.capture(&self.id, AgentRole::Stage, None, input, &json!(out));
+        let (out, llm) = self.meter.run_agent(&self.id, AgentRole::Stage, self.inner.process(input)).await;
+        self.meter.capture(&self.id, AgentRole::Stage, None, input, &json!(out), llm);
         out
     }
 }
@@ -114,8 +157,8 @@ impl Decomposer for MeteredDecomposer {
         if !self.meter.charge(&self.id) {
             return vec![task.clone()]; // pas de décomposition
         }
-        let out = self.inner.decompose(task).await;
-        self.meter.capture(&self.id, AgentRole::Decomposer, None, task, &json!(out));
+        let (out, llm) = self.meter.run_agent(&self.id, AgentRole::Decomposer, self.inner.decompose(task)).await;
+        self.meter.capture(&self.id, AgentRole::Decomposer, None, task, &json!(out), llm);
         out
     }
 }
@@ -146,8 +189,8 @@ impl Solver for MeteredSolver {
         if !self.meter.charge(&self.id) {
             return Value::Null;
         }
-        let out = self.inner.solve(subtask).await;
-        self.meter.capture(&self.id, AgentRole::Solver, None, subtask, &out);
+        let (out, llm) = self.meter.run_agent(&self.id, AgentRole::Solver, self.inner.solve(subtask)).await;
+        self.meter.capture(&self.id, AgentRole::Solver, None, subtask, &out, llm);
         out
     }
 }
@@ -170,8 +213,8 @@ impl Merger for MeteredMerger {
             return Value::Null;
         }
         let input = json!({ "task": task, "results": results });
-        let out = self.inner.merge(task, results).await;
-        self.meter.capture(&self.id, AgentRole::Merger, None, &input, &out);
+        let (out, llm) = self.meter.run_agent(&self.id, AgentRole::Merger, self.inner.merge(task, results)).await;
+        self.meter.capture(&self.id, AgentRole::Merger, None, &input, &out, llm);
         out
     }
 }
@@ -193,9 +236,11 @@ impl Judge for MeteredJudge {
         if !self.meter.charge(&self.id) {
             return vec![0.0; candidates.len()]; // ballot neutre
         }
-        let scores = self.inner.assess(task, candidates).await;
+        // Un juge fait N appels LLM (un par candidat) ; le scope les collecte TOUS, le record
+        // d'essaim se lie au premier (les N forensiques sont dans le collecteur).
+        let (scores, llm) = self.meter.run_agent(&self.id, AgentRole::Judge, self.inner.assess(task, candidates)).await;
         let input = json!({ "task": task, "candidates": candidates });
-        self.meter.capture(&self.id, AgentRole::Judge, None, &input, &json!(scores));
+        self.meter.capture(&self.id, AgentRole::Judge, None, &input, &json!(scores), llm);
         scores
     }
     fn name(&self) -> &str {

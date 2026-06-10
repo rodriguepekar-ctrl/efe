@@ -43,6 +43,25 @@ pub struct BackendInfo {
     pub endpoint: String,
 }
 
+/// Résumé du **pont N17 par-appel** : chaque appel d'agent Mode C a produit un
+/// `LlmProvenanceRecord` forensique (modèle/params/hashs), référencé par l'`AgentCallRecord`
+/// via `llm_provenance_id`. `None` pour un run keyless (Mode A — aucun appel LLM).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct N17Summary {
+    /// Nombre d'appels LLM forensiquement enregistrés (records N17).
+    pub calls: usize,
+    /// Nombre d'`AgentCallRecord` Mode C (ceux qui doivent porter un lien).
+    pub mode_c_records: usize,
+    /// Mode C **liés et cohérents** (N17 existe, même tenant, même swarm).
+    pub consistent: usize,
+    /// Mode C **sans** lien (lacunes).
+    pub unlinked: usize,
+    /// Liens **rompus** (pointeur pendant / incohérence d'isolation).
+    pub broken: usize,
+    /// Tous les Mode C sont liés et cohérents (aucune lacune, aucune rupture).
+    pub all_consistent: bool,
+}
+
 /// Résumé de provenance d'un run (le différenciateur produit).
 #[derive(Debug, Clone, Serialize)]
 pub struct ProvenanceSummary {
@@ -80,6 +99,9 @@ pub struct SwarmRun {
     pub budget_stopped: bool,
     /// Backend local du run self-host (forensique, pont N17). `None` en keyless (Mode A).
     pub backend: Option<BackendInfo>,
+    /// Résumé du pont N17 par-appel (records LLM forensiques + cohérence des liens). `None`
+    /// en keyless (Mode A).
+    pub n17: Option<N17Summary>,
 }
 
 impl SwarmRun {
@@ -106,6 +128,9 @@ pub struct RunOutcome {
     /// Provenance scellée (records chaînés + `provenance_root`) — `None` si la provenance
     /// est désactivée sur le `Swarm`.
     pub sealed: Option<SealedProvenance>,
+    /// **Pont N17 par-appel** : les `LlmProvenanceRecord` forensiques (un par appel LLM
+    /// Mode C). Vide en keyless. Sérialisables (serde) → persistables/exportables.
+    pub llm_records: Vec<efe_nano_sdk::LlmProvenanceRecord>,
 }
 
 impl RunOutcome {
