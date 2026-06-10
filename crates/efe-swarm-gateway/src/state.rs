@@ -41,6 +41,10 @@ pub struct SwarmGatewayState {
     /// La passerelle parle au routeur **sans clé applicative** (auth = infra : mTLS/NetworkPolicy) ;
     /// le routeur ajoute la clé provider **server-side**. **Aucune clé manipulée ici.**
     pub router_endpoint: Option<String>,
+    /// **Prod (feature `oidc`)** : vérificateur de JWT OIDC (clé PUBLIQUE server-side).
+    /// `None` ⇒ repli sur l'extracteur d'en-têtes dev. Jamais une clé privée.
+    #[cfg(feature = "oidc")]
+    pub oidc: Option<Arc<crate::oidc::OidcVerifier>>,
 }
 
 impl SwarmGatewayState {
@@ -62,6 +66,8 @@ impl SwarmGatewayState {
             dashboards: Arc::new(DashboardRegistry::new(DASHBOARD_REGISTRY_CAP)),
             dash_metrics: DashboardMetrics::new(),
             router_endpoint: None,
+            #[cfg(feature = "oidc")]
+            oidc: None,
         }
     }
 
@@ -77,7 +83,23 @@ impl SwarmGatewayState {
             dashboards: Arc::new(DashboardRegistry::new(DASHBOARD_REGISTRY_CAP)),
             dash_metrics: DashboardMetrics::new(),
             router_endpoint: None,
+            #[cfg(feature = "oidc")]
+            oidc: None,
         }
+    }
+
+    /// **Inc.2.d (feature `oidc`)** : branche un vérificateur OIDC (clé publique server-side).
+    /// L'auth `Caller` valide alors un JWT ES256 au lieu des en-têtes dev.
+    #[cfg(feature = "oidc")]
+    pub fn with_oidc(mut self, verifier: Arc<crate::oidc::OidcVerifier>) -> Self {
+        self.oidc = Some(verifier);
+        self
+    }
+
+    /// Remplace le store des runs (ex. `PgRunStore` en prod via la feature `postgres`).
+    pub fn with_store(mut self, store: Arc<dyn RunStore>) -> Self {
+        self.store = store;
+        self
     }
 
     /// **Inc.4** : câble le routeur frontière (`ClientMode::Network`). L'`endpoint` est une

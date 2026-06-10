@@ -11,6 +11,7 @@
 
 use axum::extract::FromRequestParts;
 use axum::http::request::Parts;
+use axum::http::HeaderMap;
 use efe_nano_sdk::TenantId;
 
 use crate::error::GatewayError;
@@ -38,27 +39,51 @@ impl Caller {
     }
 }
 
+/// Extraction **dev/standalone** : tenant + rôles depuis les en-têtes (`x-efe-*`).
+pub(crate) fn dev_caller_from_headers(headers: &HeaderMap) -> Caller {
+    let tenant = headers
+        .get(HEADER_TENANT)
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| TenantId::system().to_string());
+    let roles = headers
+        .get(HEADER_ROLES)
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.split(',').map(|r| r.trim().to_string()).filter(|r| !r.is_empty()).collect())
+        .unwrap_or_default();
+    Caller { tenant, roles }
+}
+
+/// **Dev/standalone** (sans la feature `oidc`) : extracteur générique par en-têtes.
+#[cfg(not(feature = "oidc"))]
 #[async_trait::async_trait]
 impl<S: Send + Sync> FromRequestParts<S> for Caller {
     type Rejection = GatewayError;
-
     async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
-        let tenant = parts
-            .headers
-            .get(HEADER_TENANT)
-            .and_then(|v| v.to_str().ok())
-            .map(|s| s.trim().to_string())
-            .filter(|s| !s.is_empty())
-            .unwrap_or_else(|| TenantId::system().to_string());
+        Ok(dev_caller_from_headers(&parts.headers))
+    }
+}
 
-        let roles = parts
-            .headers
-            .get(HEADER_ROLES)
-            .and_then(|v| v.to_str().ok())
-            .map(|s| s.split(',').map(|r| r.trim().to_string()).filter(|r| !r.is_empty()).collect())
-            .unwrap_or_default();
-
-        Ok(Caller { tenant, roles })
+/// **Prod** (feature `oidc`) : valide un JWT OIDC ES256 (clé publique server-side dans
+/// l'état). Si OIDC non configuré (état sans vérificateur), repli sur les en-têtes (dev).
+/// Même type `Caller` → les handlers ne changent pas.
+#[cfg(feature = "oidc")]
+#[async_trait::async_trait]
+impl FromRequestParts<crate::state::SwarmGatewayState> for Caller {
+    type Rejection = GatewayError;
+    async fn from_request_parts(
+        parts: &mut Parts,
+        state: &crate::state::SwarmGatewayState,
+    ) -> Result<Self, Self::Rejection> {
+        match &state.oidc {
+            Some(verifier) => {
+                let token = crate::oidc::parse_bearer(&parts.headers)
+                    .ok_or_else(|| GatewayError::Unauthenticated("jeton Bearer manquant".into()))?;
+                verifier.verify(&token)
+            }
+            None => Ok(dev_caller_from_headers(&parts.headers)),
+        }
     }
 }
 

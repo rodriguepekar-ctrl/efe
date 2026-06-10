@@ -23,6 +23,24 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         state = state.with_router_endpoint(router_ep);
         println!("→ routeur frontière câblé (Network activé) — clés détenues server-side par le routeur.");
     }
+
+    // Prod (feature `postgres`) : persistance durable des records si DATABASE_URL est défini.
+    #[cfg(feature = "postgres")]
+    if let Ok(url) = std::env::var("DATABASE_URL") {
+        let pg = efe_swarm_gateway::PgRunStore::connect(&url).await?;
+        pg.migrate().await?;
+        state = state.with_store(std::sync::Arc::new(pg));
+        println!("→ PgRunStore câblé (persistance durable, write-once).");
+    }
+
+    // Prod (feature `oidc`) : auth JWT OIDC ES256 si EFE_OIDC_PUBLIC_KEY_PEM est défini
+    // (clé PUBLIQUE server-side ; jamais une clé privée).
+    #[cfg(feature = "oidc")]
+    if let Some(verifier) = efe_swarm_gateway::OidcVerifier::from_env()? {
+        state = state.with_oidc(std::sync::Arc::new(verifier));
+        println!("→ auth OIDC activée (JWT ES256, clé publique server-side).");
+    }
+
     let app = router(state);
 
     let listener = tokio::net::TcpListener::bind(&addr).await?;

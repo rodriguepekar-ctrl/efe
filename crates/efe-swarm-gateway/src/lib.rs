@@ -43,9 +43,13 @@
 mod auth;
 mod dto;
 mod error;
+#[cfg(feature = "oidc")]
+mod oidc;
 mod routes;
 mod state;
 mod store;
+#[cfg(feature = "postgres")]
+mod store_pg;
 
 use axum::routing::get;
 use axum::Router;
@@ -58,6 +62,10 @@ pub use dto::{
 pub use error::GatewayError;
 pub use state::SwarmGatewayState;
 pub use store::{InMemoryRunStore, RunStore, StoredRun};
+#[cfg(feature = "oidc")]
+pub use oidc::OidcVerifier;
+#[cfg(feature = "postgres")]
+pub use store_pg::PgRunStore;
 
 /// Version du crate (semver).
 pub const CRATE_VERSION: &str = env!("CARGO_PKG_VERSION");
