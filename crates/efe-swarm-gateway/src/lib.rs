@@ -337,6 +337,50 @@ mod tests {
         assert!(body_json(resp).await["verified"].as_bool().unwrap(), "run self-host re-prouvé");
     }
 
+    /// **Cost-governance Network RÉEL** (Inc.4.b) : on pointe le routeur Network sur l'endpoint
+    /// **OpenAI-compat d'Ollama** (`/v1`) — un vrai backend frontière, localement. Prouve que le
+    /// tarif Network est **bien facturé** (`spent_cents > 0`, multiple du tarif) après le correctif :
+    /// sans lui, la traduction `Network → SelfHost` facturerait 0¢. Re-preuve incluse.
+    /// Lancer : `cargo test -p efe-swarm-gateway --lib -- --ignored network_budget_charges_real`.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    #[ignore = "nécessite un Ollama local (ollama serve + un modèle OpenAI-compat)"]
+    async fn network_budget_charges_real_via_ollama_openai_endpoint() {
+        let endpoint = std::env::var("EFE_OLLAMA_ENDPOINT").unwrap_or_else(|_| "http://127.0.0.1:11434".into());
+        let model = std::env::var("EFE_OLLAMA_MODEL").unwrap_or_else(|_| "gemma3:12b".into());
+        let router_v1 = format!("{}/v1", endpoint.trim_end_matches('/'));
+        // Le « routeur Network » = l'endpoint OpenAI-compat d'Ollama ; provider "ollama" → modèle réel.
+        let state = SwarmGatewayState::in_memory()
+            .with_router_endpoint(router_v1)
+            .with_router_models(RouterMap::empty().with("ollama", model));
+        let app = router(state);
+
+        let resp = app
+            .clone()
+            .oneshot(post_run(json!({
+                "task": { "text": "The court ruled the clause unenforceable.", "expected": "legal" },
+                "topology": { "kind": "consensus",
+                              "generator": "Classify the topic in one word from {technology,finance,health,legal}.",
+                              "judges": ["Judge how well the label fits the text."],
+                              "k": 3, "pattern": "borda" },
+                "budget": { "max_cents": 100000 },
+                "mode": { "network": { "provider": "ollama" } }
+            })))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let run = body_json(resp).await;
+
+        // Le correctif : le tarif Network est facturé (≠ 0¢), multiple du tarif par appel.
+        let spent = run["run"]["budget"]["spent_cents"].as_u64().unwrap();
+        let net_price =
+            efe_swarm_sdk::ClientMode::Network { provider: "x".into() }.price_per_call_cents() as u64;
+        assert!(spent > 0, "Network DOIT facturer (spent_cents > 0), eu {spent}");
+        assert_eq!(spent % net_price, 0, "spent_cents multiple du tarif Network ({net_price}¢)");
+        // le run reste re-prouvable, et le backend reflète le routage OpenAI-compat.
+        assert!(run["run"]["provenance"]["verified"].as_bool().unwrap());
+        assert_eq!(run["run"]["backend"]["engine"].as_str().unwrap(), "openai_local");
+    }
+
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     async fn network_mode_without_router_is_501() {
         // Inc.4 : Network demandé mais aucun routeur câblé (déploiement souverain) → 501.

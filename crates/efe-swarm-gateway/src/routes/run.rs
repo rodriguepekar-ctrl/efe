@@ -34,10 +34,15 @@ pub async fn run(
     Json(req): Json<RunRequest>,
 ) -> Result<Response, GatewayError> {
     caller.require_any_role(&["operator", "admin"])?;
-    let (task, spec, budget, mode) = req.into_parts()?;
+    let (task, spec, mut budget, mode) = req.into_parts()?;
     // Inc.4 : résout le mode (Network → routeur server-side, sinon souverain). 501 si Network
     // demandé sans routeur câblé. `allow_remote` n'est vrai que pour le routeur Network.
-    let (mode, allow_remote) = s.resolve_mode(mode)?;
+    let (mode, allow_remote, price_override) = s.resolve_mode(mode)?;
+    // Inc.4.b : préserve le tarif Network à travers la traduction → SelfHost (sinon la
+    // gouvernance de budget facturerait 0¢/appel). On respecte un tarif explicite du client.
+    if let Some(price) = price_override {
+        budget.price_per_call_cents.get_or_insert(price);
+    }
 
     if params.stream {
         // ── Mode JOB live (Inc.3) ────────────────────────────────────────────

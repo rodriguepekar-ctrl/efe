@@ -200,21 +200,30 @@ impl SwarmGatewayState {
     ///   manipulée ici** : la passerelle ne connaît que l'URL (non-secrète) du routeur ; les clés
     ///   provider vivent **dans le routeur** (`efe-llm-router`, env/Vault).
     ///
-    /// Renvoie `(mode_exécutable, allow_remote_backend)`.
-    pub fn resolve_mode(&self, mode: ClientMode) -> Result<(ClientMode, bool), GatewayError> {
+    /// Renvoie `(mode_exécutable, allow_remote_backend, tarif_à_appliquer_cents)`.
+    ///
+    /// **Inc.4.b (cost-governance)** : le 3ᵉ champ est un **tarif par appel à forcer**. La
+    /// traduction `Network → SelfHost` ferait tomber le prix à **0¢** (self-host = gratuit),
+    /// vidant la gouvernance de budget de son mordant (`spent_cents` resterait à 0). On renvoie
+    /// donc `Some(tarif_Network)` pour le mode `Network` afin de **préserver** le tarif à travers
+    /// la traduction ; `None` pour les modes souverains (leur tarif intrinsèque suffit). Le coût
+    /// **réel** reste chez le provider (via le routeur) ; ce tarif est l'unité de **gouvernance**.
+    pub fn resolve_mode(&self, mode: ClientMode) -> Result<(ClientMode, bool, Option<u32>), GatewayError> {
         match mode {
             ClientMode::Network { provider } => match &self.router_endpoint {
                 // Inc.4.b : la **famille** (`provider`) est traduite en **modèle concret**
                 // attendu par le routeur via la table provider→modèle (passthrough si déjà qualifié).
                 Some(endpoint) => {
                     let model = self.router_map.resolve(&provider);
-                    Ok((ClientMode::SelfHost { endpoint: endpoint.clone(), model }, true))
+                    // Préserve le tarif Network (sinon la traduction → SelfHost le mettrait à 0¢).
+                    let network_price = ClientMode::Network { provider }.price_per_call_cents();
+                    Ok((ClientMode::SelfHost { endpoint: endpoint.clone(), model }, true, Some(network_price)))
                 }
                 None => Err(GatewayError::NotImplemented(
                     "ClientMode::Network non câblé sur ce déploiement (routeur frontière absent ; définissez EFE_SWARM_ROUTER_ENDPOINT côté serveur)".into(),
                 )),
             },
-            other => Ok((other, false)), // keyless / self-host : souverain (egress refusé)
+            other => Ok((other, false, None)), // keyless / self-host : tarif intrinsèque du mode
         }
     }
 
@@ -284,9 +293,10 @@ mod tests {
     #[test]
     fn resolve_mode_keeps_sovereign_modes_unchanged() {
         let s = SwarmGatewayState::in_memory();
-        assert_eq!(s.resolve_mode(ClientMode::Keyless).unwrap(), (ClientMode::Keyless, false));
+        // souverains : pas de surcharge de tarif (None → tarif intrinsèque du mode).
+        assert_eq!(s.resolve_mode(ClientMode::Keyless).unwrap(), (ClientMode::Keyless, false, None));
         let sh = ClientMode::SelfHost { endpoint: "http://127.0.0.1:11434".into(), model: "gemma3:12b".into() };
-        assert_eq!(s.resolve_mode(sh.clone()).unwrap(), (sh, false), "self-host : souverain (egress refusé)");
+        assert_eq!(s.resolve_mode(sh.clone()).unwrap(), (sh, false, None), "self-host : souverain (egress refusé)");
     }
 
     #[test]
@@ -302,8 +312,11 @@ mod tests {
         // egress autorisé (Network fait de l'egress par conception). AUCUNE clé ici.
         // Inc.4.b : la famille `anthropic` est traduite en modèle concret (table par défaut).
         let s = SwarmGatewayState::in_memory().with_router_endpoint("http://efe-llm-router:8080/v1");
-        let (mode, allow_remote) = s.resolve_mode(ClientMode::Network { provider: "anthropic".into() }).unwrap();
+        let (mode, allow_remote, price) = s.resolve_mode(ClientMode::Network { provider: "anthropic".into() }).unwrap();
         assert!(allow_remote, "Network → egress autorisé (vers le routeur)");
+        // Inc.4.b : le tarif Network survit à la traduction → SelfHost (sinon budget = 0¢).
+        assert_eq!(price, Some(ClientMode::Network { provider: "x".into() }.price_per_call_cents()),
+                   "tarif Network préservé pour la gouvernance de budget");
         match mode {
             ClientMode::SelfHost { endpoint, model } => {
                 assert_eq!(endpoint, "http://efe-llm-router:8080/v1");
@@ -320,10 +333,34 @@ mod tests {
             .with_router_endpoint("http://efe-llm-router:8080/v1")
             .with_router_models(RouterMap::empty().with("openai", "openai/gpt-4o-mini"));
         // famille mappée explicitement.
-        let (m1, _) = s.resolve_mode(ClientMode::Network { provider: "openai".into() }).unwrap();
+        let (m1, _, _) = s.resolve_mode(ClientMode::Network { provider: "openai".into() }).unwrap();
         assert!(matches!(m1, ClientMode::SelfHost { ref model, .. } if model == "openai/gpt-4o-mini"));
         // modèle déjà qualifié (`family:model`) → passthrough intact.
-        let (m2, _) = s.resolve_mode(ClientMode::Network { provider: "anthropic:claude-3-opus".into() }).unwrap();
+        let (m2, _, _) = s.resolve_mode(ClientMode::Network { provider: "anthropic:claude-3-opus".into() }).unwrap();
         assert!(matches!(m2, ClientMode::SelfHost { ref model, .. } if model == "anthropic:claude-3-opus"));
+    }
+
+    #[test]
+    fn network_budget_uses_network_tariff_and_respects_client_override() {
+        // Inc.4.b (cost-governance) : reproduit le câblage de `routes::run` — le tarif renvoyé
+        // par `resolve_mode` est injecté au budget (sinon Network facturerait 0¢/appel).
+        use efe_swarm_sdk::Budget;
+        let s = SwarmGatewayState::in_memory().with_router_endpoint("http://efe-llm-router:8080/v1");
+        let net_price = ClientMode::Network { provider: "x".into() }.price_per_call_cents();
+
+        // (a) sans tarif client : le tarif Network est appliqué.
+        let mut budget = Budget::cents(1000); // price_per_call_cents = None
+        let (_m, _a, price_override) = s.resolve_mode(ClientMode::Network { provider: "anthropic".into() }).unwrap();
+        if let Some(p) = price_override { budget.price_per_call_cents.get_or_insert(p); }
+        assert_eq!(budget.price_per_call_cents, Some(net_price), "Network → budget facture au tarif Network (≠ 0¢)");
+
+        // (b) tarif explicite du client : respecté (jamais écrasé).
+        let mut budget2 = Budget::cents(1000).with_price_per_call(2);
+        if let Some(p) = price_override { budget2.price_per_call_cents.get_or_insert(p); }
+        assert_eq!(budget2.price_per_call_cents, Some(2), "tarif explicite du client préservé");
+
+        // (c) modes souverains : aucune surcharge → tarif intrinsèque du mode.
+        let (_m, _a, none_price) = s.resolve_mode(ClientMode::Keyless).unwrap();
+        assert_eq!(none_price, None, "keyless/self-host : pas de surcharge de tarif");
     }
 }
