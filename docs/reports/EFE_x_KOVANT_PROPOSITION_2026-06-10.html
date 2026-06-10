@@ -1,0 +1,540 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>EFE × Kovant — Implémenter le substrat vérifiable &amp; souverain</title>
+<style>
+  :root{
+    --ink:#0b1220; --muted:#475569; --soft:#64748b; --line:#e2e8f0; --line2:#cbd5e1;
+    --navy:#0f2a4a; --navy-d:#0a1f38; --teal:#0d9488; --teal-d:#0f766e; --indigo:#4f46e5; --indigo-d:#4338ca;
+    --ok:#16a34a; --warn:#d97706; --bad:#dc2626; --amber:#ca8a04; --sky:#0284c7;
+    --bg-tint:#f8fafc; --bg-card:#f1f5f9; --code-bg:#0b1220; --code-fg:#e2e8f0; --gold:#b8860b;
+  }
+  *{box-sizing:border-box;}
+  html{font-size:11.2px;}
+  body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,Helvetica,Arial,sans-serif;
+    color:var(--ink);margin:0;line-height:1.5;background:#fff;-webkit-font-smoothing:antialiased;}
+  .wrap{max-width:185mm;margin:0 auto;padding:0 2mm;}
+  h1,h2,h3,h4{line-height:1.18;font-weight:700;}
+  h2{font-size:1.5rem;margin:0 0 .5rem;padding-bottom:.35rem;border-bottom:3px solid var(--navy);color:var(--navy);}
+  h2 .num{color:var(--teal);font-variant-numeric:tabular-nums;}
+  h3{font-size:1.15rem;margin:1rem 0 .35rem;color:var(--navy-d);}
+  h4{font-size:1rem;margin:.8rem 0 .25rem;color:var(--teal-d);}
+  p{margin:.4rem 0;}
+  code{font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace;font-size:.86em;background:var(--bg-card);padding:.06em .35em;border-radius:4px;color:#0f2a4a;}
+  .muted{color:var(--muted);} .small{font-size:.85rem;}
+  section{break-inside:avoid;} .page{break-before:page;} h2{break-after:avoid;}
+  table{border-collapse:collapse;width:100%;margin:.6rem 0;font-size:.83rem;}
+  th,td{border:1px solid var(--line);padding:.32rem .5rem;text-align:left;vertical-align:top;}
+  th{background:var(--navy);color:#fff;font-weight:700;}
+  tbody tr:nth-child(even){background:var(--bg-tint);}
+  .tag{display:inline-block;font-size:.72rem;font-weight:700;padding:.08em .5em;border-radius:20px;vertical-align:middle;}
+  .t-ok{background:#dcfce7;color:#166534;} .t-info{background:#e0e7ff;color:#3730a3;}
+  .t-teal{background:#ccfbf1;color:#115e59;} .t-amber{background:#fef3c7;color:#92400e;} .t-gap{background:#fee2e2;color:#991b1b;}
+  pre{background:var(--code-bg);color:var(--code-fg);padding:.7rem .9rem;border-radius:8px;overflow:auto;
+    font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace;font-size:.76rem;line-height:1.45;margin:.5rem 0;}
+  pre code{background:none;color:inherit;padding:0;}
+  .callout{border-left:4px solid var(--teal);background:#f0fdfa;padding:.55rem .8rem;border-radius:0 8px 8px 0;margin:.6rem 0;}
+  .callout.navy{border-color:var(--navy);background:#eff4fa;}
+  .callout.amber{border-color:var(--amber);background:#fffbeb;}
+  .callout.gap{border-color:var(--bad);background:#fef2f2;}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:.8rem;}
+  .grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:.7rem;}
+  .card{border:1px solid var(--line);border-radius:10px;padding:.65rem .8rem;background:#fff;}
+  .card.hl{border-color:var(--teal);background:#f0fdfa;}
+  .fig{margin:.7rem 0 1rem;text-align:center;break-inside:avoid;}
+  .fig svg{max-width:100%;height:auto;border:1px solid var(--line);border-radius:10px;background:#fff;}
+  .fig .cap{font-size:.8rem;color:var(--muted);margin-top:.3rem;font-style:italic;}
+  .kpi{display:flex;gap:.6rem;flex-wrap:wrap;margin:.6rem 0;}
+  .kpi .k{flex:1 1 110px;border:1px solid var(--line);border-radius:10px;padding:.55rem .7rem;background:var(--bg-tint);}
+  .kpi .k .v{font-size:1.45rem;font-weight:800;color:var(--navy);font-variant-numeric:tabular-nums;line-height:1;}
+  .kpi .k .l{font-size:.74rem;color:var(--muted);margin-top:.2rem;}
+  ul,ol{margin:.35rem 0 .35rem 1.1rem;padding:0;} li{margin:.2rem 0;}
+  svg text{font-family:-apple-system,"Segoe UI",Inter,sans-serif;}
+  .cover{height:262mm;display:flex;flex-direction:column;justify-content:center;position:relative;padding:0 6mm;
+    background:linear-gradient(180deg,#fff 60%, #f0fdfa 100%);}
+  .cover .eyebrow{color:var(--teal);font-weight:800;letter-spacing:.26em;font-size:.92rem;text-transform:uppercase;}
+  .cover h1{font-size:2.9rem;margin:.4rem 0 .2rem;letter-spacing:-.01em;color:var(--navy);}
+  .cover .sub{font-size:1.3rem;color:var(--muted);font-weight:500;margin-bottom:1.3rem;}
+  .cover .tagline{font-size:1.12rem;max-width:158mm;border-left:4px solid var(--teal);padding-left:1rem;font-style:italic;}
+  .cover .meta{position:absolute;bottom:6mm;left:6mm;right:6mm;display:flex;justify-content:space-between;
+    border-top:1px solid var(--line);padding-top:.7rem;font-size:.82rem;color:var(--soft);}
+  .cover .pills{margin:1.2rem 0;} .cover .pills .tag{font-size:.8rem;margin-right:.4rem;}
+  .lede{font-size:1.05rem;color:#1e293b;}
+  .mono{font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace;}
+  hr{border:none;border-top:1px solid var(--line);margin:1rem 0;}
+  .quote{font-style:italic;color:var(--navy-d);border-left:3px solid var(--line2);padding-left:.7rem;}
+  .toc{columns:2;column-gap:2.4rem;font-size:.92rem;}
+  .toc div{break-inside:avoid;margin:.16rem 0;} .toc .n{color:var(--teal);font-weight:700;display:inline-block;width:1.6em;}
+  .disc{font-size:.78rem;color:var(--soft);}
+</style>
+</head>
+<body>
+
+<!-- ===== COUVERTURE ===== -->
+<div class="wrap">
+<div class="cover">
+  <div class="eyebrow">Proposition technique &amp; partenariat · Confidentiel</div>
+  <h1>EFE × Kovant</h1>
+  <div class="sub">Le substrat <b>vérifiable</b> &amp; <b>souverain</b> sous vos agentic workforces.</div>
+  <div class="tagline">
+    Kovant déploie des <b>swarms d'agents à petits modèles (SLM)</b>, « chacun bon à une fonction », sous
+    <b>oversight humain</b> et « pleine auditabilité ». EFE est exactement ce substrat — <b>plus</b> les trois
+    choses que vos supports publics n'adressent pas encore : la <b>vérifiabilité cryptographique</b>, la
+    <b>souveraineté des données</b> (on-prem / résidence EU), et la <b>gouvernance de budget</b>. Voici comment
+    l'implémenter chez vous — en <b>semaines, pas en mois</b>.
+  </div>
+  <div class="pills">
+    <span class="tag t-teal">swarm de nano-agents</span>
+    <span class="tag t-info">self-host SLM (egress=0)</span>
+    <span class="tag t-ok">audit → preuve re-vérifiable</span>
+    <span class="tag t-amber">~700 tests · 3 modèles réels</span>
+  </div>
+  <div class="meta">
+    <span><b>Pour :</b> Kovant AB (Stockholm) — Mission Control · Agent Runtime · Integration Hub</span>
+    <span><b>De :</b> EFE — Essaim Fluide Éphémère · 2026-06-10</span>
+  </div>
+</div>
+</div>
+
+<!-- ===== SOMMAIRE + RÉSUMÉ ===== -->
+<div class="wrap page">
+  <h2><span class="num">§0</span> &nbsp;Résumé exécutif</h2>
+  <p class="lede">Votre différenciateur — <b>des swarms de SLM spécialisés, gouvernés et auditables</b> — est aussi
+  votre risque : « auditable » reste une <b>affirmation</b> tant qu'un client ou un régulateur ne peut pas le
+  <b>re-prouver</b> lui-même, et « entreprise » exige une <b>résidence des données</b> que vos pages publiques
+  ne promettent pas encore. EFE transforme ces deux faiblesses en <b>moats</b>.</p>
+
+  <div class="grid3">
+    <div class="card hl"><h4 style="margin-top:0">✅ Vérifiable</h4><p class="small">Chaque décision d'agent
+      devient une <b>preuve cryptographique</b> re-vérifiable hors-ligne par votre client — votre « system of
+      record » passe d'un <i>journal</i> à une <i>preuve</i>.</p></div>
+    <div class="card hl"><h4 style="margin-top:0">🔒 Souverain</h4><p class="small">Vos SLM tournent dans le
+      <b>tenant Azure/AWS du client</b>, <code>egress=deny</code>, air-gappable — résidence EU/GDPR par
+      construction. Aucune clé dans le runtime.</p></div>
+    <div class="card hl"><h4 style="margin-top:0">💸 Gouverné</h4><p class="small">Budget <b>atomique</b> qui ne
+      dépasse jamais le plafond (invariant testé sous concurrence) — le P&amp;L que veut Ali, garde-fou par
+      design.</p></div>
+  </div>
+
+  <div class="callout navy">
+    <b>La thèse en une phrase :</b> EFE n'est pas un concurrent de Kovant — c'est le <b>moteur d'essaim
+    vérifiable et souverain</b> qui se glisse <b>sous</b> votre Agent Runtime et <b>alimente</b> Mission Control.
+    Vous gardez vos 12 Foundation Agents, vos Blueprints, votre Integration Hub. EFE rend leur exécution
+    <b>prouvable</b> et <b>localisable</b> — sans rip-and-replace.
+  </div>
+
+  <h3 style="margin-top:1rem">Sommaire</h3>
+  <div class="toc">
+    <div><span class="n">1</span>Ce que nous avons compris de Kovant</div>
+    <div><span class="n">2</span>Les 3 lacunes que vos buyers exigeront</div>
+    <div><span class="n">3</span>EFE = le substrat manquant</div>
+    <div><span class="n">4</span>Cartographie : EFE ↔ vos 3 couches</div>
+    <div><span class="n">5</span>Comment l'implémenter (architecture)</div>
+    <div><span class="n">6</span>Cas d'usage : procurement prouvé</div>
+    <div><span class="n">7</span>Déploiement souverain (tenant client)</div>
+    <div><span class="n">8</span>Plan de déploiement par phases</div>
+    <div><span class="n">9</span>Preuves &amp; résultats</div>
+    <div><span class="n">10</span>Objections anticipées</div>
+    <div><span class="n">11</span>Modèle d'engagement &amp; next steps</div>
+  </div>
+</div>
+
+<!-- ===== 1. CE QU'ON A COMPRIS ===== -->
+<div class="wrap page">
+  <h2><span class="num">§1</span> &nbsp;Ce que nous avons compris de Kovant</h2>
+  <p class="small muted">(Sources publiques : kovant.com, SiliconANGLE, Tech.eu, TechFundingNews — nov. 2025.)</p>
+  <table>
+    <thead><tr><th>Dimension</th><th>Kovant</th></tr></thead>
+    <tbody>
+      <tr><td>Positionnement</td><td>« The operating system for an AI workforce » — managed agentic workforces (industriels)</td></tr>
+      <tr><td>Architecture produit</td><td><b>Mission Control</b> (gouvernance, audit trails, oversight) · <b>Agent Runtime</b> (model-agnostic, human-in-the-loop) · <b>Integration Hub</b> (SAP, Salesforce, Databricks, Snowflake, Azure/AWS)</td></tr>
+      <tr><td>Thèse technique</td><td>« entire swarms of agents based on <b>small language models</b> » — chaque SLM « good at one particular function » → réduit les hallucinations</td></tr>
+      <tr><td>12 Foundation Agents</td><td>se combinent en équipes cross-fonctionnelles qui « plan, communicate, execute under human oversight »</td></tr>
+      <tr><td>Cas d'usage</td><td>procurement, inventory, supply chain, customer success, marketing, <b>compliance</b></td></tr>
+      <tr><td>Promesse fondateur</td><td>Ali Sarrafi : « real P&amp;L impact… achieved in <b>weeks, not months</b> »</td></tr>
+      <tr><td>Garde-fous revendiqués</td><td>« clearly defined guardrails, making them <b>compliant</b>, ensuring <b>full auditability</b> »</td></tr>
+    </tbody>
+  </table>
+
+  <div class="callout">
+    <b>Pourquoi ce fit est rare.</b> Votre thèse fondatrice — <i>beaucoup de petits modèles spécialisés en
+    essaim, gouvernés et auditables</i> — est, mot pour mot, l'architecture qu'EFE implémente et teste depuis
+    sa conception. Nous ne vous vendons pas un pivot ; nous vous donnons un <b>raccourci de 6–12 mois</b> sur la
+    partie la plus dure (le substrat vérifiable et souverain) pour tenir votre « weeks, not months ».
+  </div>
+</div>
+
+<!-- ===== 2. LES 3 LACUNES ===== -->
+<div class="wrap page">
+  <h2><span class="num">§2</span> &nbsp;Les 3 lacunes que vos buyers industriels exigeront</h2>
+  <p>Vos cibles sont des <b>entreprises industrielles</b> (SAP-shops, données sensibles, achats &amp; compliance).
+  Trois exigences reviendront en due-diligence sécurité — et vos supports publics ne les adressent pas
+  <b>encore</b> :</p>
+
+  <div class="grid3">
+    <div class="card"><span class="tag t-gap">Lacune 1</span><h4 style="margin:.3rem 0">Preuve, pas journal</h4>
+      <p class="small">Vos « audit trails » tracent « every decision, approval, handoff ». Mais un journal est
+      <b>falsifiable</b> et exige de <b>vous faire confiance</b>. Un acheteur régulé veut <b>re-prouver
+      lui-même</b>, hors-ligne.</p></div>
+    <div class="card"><span class="tag t-gap">Lacune 2</span><h4 style="margin:.3rem 0">Résidence des données</h4>
+      <p class="small">Aucune mention d'<b>on-prem</b> ni de <b>résidence EU</b> sur vos pages. Pour des données
+      d'achats/fournisseurs/contrats, le DPO du client bloquera tout egress de PII vers des API tierces.</p></div>
+    <div class="card"><span class="tag t-gap">Lacune 3</span><h4 style="margin:.3rem 0">Coût borné &amp; prévisible</h4>
+      <p class="small">Des swarms = beaucoup d'appels. Sans <b>plafond dur</b> par mission, le P&amp;L dérape —
+      l'opposé de la promesse « real P&amp;L impact ».</p></div>
+  </div>
+
+  <div class="callout gap">
+    <b>Le risque concurrentiel.</b> Les grands (Microsoft, Salesforce, ServiceNow) vont copier « agentic
+    workforce ». Votre défense durable n'est pas « plus d'agents » — c'est <b>la preuve</b> (qu'aucun
+    hyperscaler ne donne, car elle implique de renoncer au lock-in) et la <b>souveraineté</b> (qu'un éditeur
+    EU peut revendiquer crédiblement). EFE arme exactement ces deux moats.
+  </div>
+</div>
+
+<!-- ===== 3. EFE = SUBSTRAT MANQUANT ===== -->
+<div class="wrap page">
+  <h2><span class="num">§3</span> &nbsp;EFE = le substrat manquant</h2>
+  <p>EFE (« Essaim Fluide Éphémère ») est un moteur Rust de <b>nano-agents en parallèle</b> dont <b>chaque
+  échange d'information est tracé cryptographiquement</b>, conçu <b>keyless &amp; souverain</b>.</p>
+
+  <div class="fig">
+  <svg viewBox="0 0 900 300" role="img" aria-label="Alignement Kovant / EFE / lacunes comblées">
+    <defs><marker id="a" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="#475569"/></marker></defs>
+    <!-- Kovant thesis -->
+    <rect x="20" y="40" width="250" height="220" rx="12" fill="#eff4fa" stroke="#0f2a4a"/>
+    <text x="145" y="64" text-anchor="middle" font-size="13" font-weight="700" fill="#0f2a4a">Thèse Kovant</text>
+    <g font-size="9.5" fill="#0a1f38">
+      <text x="40" y="92">• swarms de SLM spécialisés</text>
+      <text x="40" y="114">• 1 modèle = 1 fonction</text>
+      <text x="40" y="136">• équipes cross-fonctionnelles</text>
+      <text x="40" y="158">• human-in-the-loop</text>
+      <text x="40" y="180">• « full auditability »</text>
+      <text x="40" y="202">• « compliant »</text>
+      <text x="40" y="224">• model-agnostic runtime</text>
+      <text x="40" y="246">• weeks, not months</text>
+    </g>
+    <!-- EFE delivers -->
+    <rect x="325" y="40" width="250" height="220" rx="12" fill="#f0fdfa" stroke="#0d9488"/>
+    <text x="450" y="64" text-anchor="middle" font-size="13" font-weight="700" fill="#115e59">EFE livre</text>
+    <g font-size="9.5" fill="#0f766e">
+      <text x="345" y="92">✓ flotte de nano-agents //</text>
+      <text x="345" y="114">✓ agents 3–8 LoC, ≤2 params</text>
+      <text x="345" y="136">✓ topologies composables (T1-3, vote)</text>
+      <text x="345" y="158">✓ confiance + budget + escalade</text>
+      <text x="345" y="180">✓ provenance par-agent + N17</text>
+      <text x="345" y="202">✓ PII opt-in (détection locale)</text>
+      <text x="345" y="224">✓ 3 modes (keyless/self-host/réseau)</text>
+      <text x="345" y="246">✓ lib + gateway = sidecar drop-in</text>
+    </g>
+    <line x1="270" y1="150" x2="325" y2="150" stroke="#475569" stroke-width="2" marker-end="url(#a)"/>
+    <!-- gaps filled -->
+    <rect x="630" y="40" width="250" height="220" rx="12" fill="#fef2f2" stroke="#dc2626"/>
+    <text x="755" y="64" text-anchor="middle" font-size="13" font-weight="700" fill="#991b1b">+ comble vos 3 lacunes</text>
+    <g font-size="10" fill="#b91c1c">
+      <text x="650" y="98" font-weight="700">1 · Preuve re-vérifiable</text>
+      <text x="650" y="116" font-size="9">verify_swarm hors-ligne, root</text>
+      <text x="650" y="150" font-weight="700">2 · Résidence des données</text>
+      <text x="650" y="168" font-size="9">self-host SLM, egress=deny, EU</text>
+      <text x="650" y="202" font-weight="700">3 · Budget borné (I13)</text>
+      <text x="650" y="220" font-size="9">plafond jamais dépassé</text>
+    </g>
+    <line x1="575" y1="150" x2="630" y2="150" stroke="#475569" stroke-width="2" marker-end="url(#a)"/>
+  </svg>
+  <div class="cap">Figure 1 — Votre thèse, livrée par EFE, plus les trois exigences que vos buyers industriels poseront. EFE est l'intersection que vous n'avez pas encore à construire.</div>
+  </div>
+</div>
+
+<!-- ===== 4. CARTOGRAPHIE ===== -->
+<div class="wrap page">
+  <h2><span class="num">§4</span> &nbsp;Cartographie : EFE ↔ vos trois couches</h2>
+  <table>
+    <thead><tr><th>Couche Kovant</th><th>Brique EFE qui la renforce</th><th>Gain</th></tr></thead>
+    <tbody>
+      <tr><td><b>Mission Control</b><br><span class="small muted">gouvernance, audit, oversight</span></td>
+          <td><code>GET /verify/:id</code> · <code>/metrics</code> · dashboard live SSE · provenance_root</td>
+          <td>l'audit devient <b>preuve</b> ; un onglet « Re-prouver » exportable au client/régulateur</td></tr>
+      <tr><td><b>Agent Runtime</b><br><span class="small muted">model-agnostic, human-in-the-loop</span></td>
+          <td>SDK <code>Swarm::run</code> · 3 modes · pont N17 par-appel · budget I13 · circuit-breaker + retries</td>
+          <td>chaque pas d'agent <b>capté</b> (modèle, params, hash prompt/réponse) ; coût <b>borné</b></td></tr>
+      <tr><td><b>Integration Hub</b><br><span class="small muted">SAP, Salesforce, Azure/AWS</span></td>
+          <td>EFE <b>n'remplace pas</b> le Hub ; il s'exécute <b>à côté</b>, dans le tenant, et trace les appels</td>
+          <td>aucune ré-écriture des intégrations ; EFE consomme les entrées que le Hub fournit</td></tr>
+      <tr><td><b>12 Foundation Agents</b><br><span class="small muted">→ équipes</span></td>
+          <td>topologies EFE (T1 generate-verify, T3 superviseur-de-superviseurs, Consensus N-juges)</td>
+          <td>une équipe d'agents = une <b>topologie composée</b>, traçable de bout en bout</td></tr>
+      <tr><td><b>SLM swarms</b></td>
+          <td>mode <b>self-host keyless</b> : Ollama/vLLM/llama.cpp sur <code>127.0.0.1</code></td>
+          <td>vos SLM tournent <b>local</b>, sans clé, sans egress — la souveraineté par défaut</td></tr>
+      <tr><td><b>SDK : LangChain/CrewAI/ADK</b></td>
+          <td>EFE <b>enveloppe</b> n'importe quel backend (seam de capture) — pas de conflit de framework</td>
+          <td>vos agents existants restent ; EFE ajoute la couche preuve par-dessus</td></tr>
+    </tbody>
+  </table>
+  <p class="disc">⚠️ Honnêteté d'ingénieur : les lignes ci-dessus combinent du <b>livré-et-testé</b> côté EFE
+  (SDK, modes, provenance, verify, budget, self-host, dashboard) et de l'<b>intégration à réaliser</b> avec vos
+  couches (adaptateurs Mission Control / Runtime). La §8 sépare clairement les deux.</p>
+</div>
+
+<!-- ===== 5. COMMENT L'IMPLÉMENTER ===== -->
+<div class="wrap page">
+  <h2><span class="num">§5</span> &nbsp;Comment l'implémenter — architecture d'intégration</h2>
+  <p>EFE se glisse <b>sous</b> l'Agent Runtime comme couche d'exécution+preuve, et <b>publie</b> vers Mission
+  Control. Une exécution de Foundation Agent = un <b>run d'essaim EFE</b> scellé.</p>
+
+  <div class="fig">
+  <svg viewBox="0 0 900 380" role="img" aria-label="EFE intégré dans Kovant">
+    <defs><marker id="b" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="#475569"/></marker>
+      <marker id="bt" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="#0d9488"/></marker></defs>
+    <!-- Mission Control -->
+    <rect x="40" y="24" width="820" height="64" rx="10" fill="#0f2a4a"/>
+    <text x="60" y="48" fill="#fff" font-size="13" font-weight="700">Mission Control (Kovant)</text>
+    <text x="60" y="68" fill="#9fb3cc" font-size="10">déploiement de rôles · monitoring · gestion d'exceptions · audit trails · oversight</text>
+    <rect x="600" y="34" width="244" height="44" rx="8" fill="#0d9488"/>
+    <text x="722" y="52" fill="#fff" font-size="10" text-anchor="middle" font-weight="700">+ onglet « Preuve » (EFE)</text>
+    <text x="722" y="68" fill="#cffafe" font-size="9" text-anchor="middle">/verify/:id · /metrics · dashboard SSE</text>
+
+    <!-- Agent Runtime with EFE inside -->
+    <rect x="40" y="108" width="820" height="170" rx="10" fill="#eff4fa" stroke="#0f2a4a" stroke-width="1.5"/>
+    <text x="60" y="130" fill="#0f2a4a" font-size="12.5" font-weight="700">Agent Runtime (Kovant) — model-agnostic, human-in-the-loop</text>
+
+    <rect x="60" y="142" width="300" height="120" rx="9" fill="#fff" stroke="#0f2a4a"/>
+    <text x="210" y="162" text-anchor="middle" font-size="10.5" font-weight="700" fill="#0f2a4a">Foundation Agent (ex: Procurement)</text>
+    <text x="210" y="180" text-anchor="middle" font-size="9" fill="#475569">Blueprint : mission, règles, handoffs</text>
+    <text x="210" y="196" text-anchor="middle" font-size="9" fill="#475569">+ vos SLM spécialisés</text>
+    <line x1="210" y1="204" x2="210" y2="222" stroke="#475569" marker-end="url(#b)"/>
+    <rect x="90" y="224" width="240" height="30" rx="7" fill="#ccfbf1" stroke="#0d9488"/>
+    <text x="210" y="244" text-anchor="middle" font-size="9.5" fill="#115e59" font-weight="700">EFE SDK — Swarm::run(task, topo, budget)</text>
+
+    <rect x="390" y="142" width="450" height="120" rx="9" fill="#f0fdfa" stroke="#0d9488"/>
+    <text x="410" y="162" fill="#115e59" font-size="11" font-weight="700">EFE — moteur d'essaim vérifiable</text>
+    <g font-size="9" fill="#0f766e">
+      <text x="410" y="182">• nano-agents // (K gen, J juges) — Blackboard + bus</text>
+      <text x="410" y="200">• 3 modes : keyless (ancres) · self-host (vos SLM) · réseau</text>
+      <text x="410" y="218">• pont N17 : chaque appel SLM → record forensique</text>
+      <text x="410" y="236">• budget I13 (plafond dur) · circuit-breaker · retries</text>
+      <text x="410" y="254">• scelle la provenance → provenance_root</text>
+    </g>
+    <line x1="330" y1="239" x2="390" y2="200" stroke="#0d9488" stroke-width="2" marker-end="url(#bt)"/>
+    <line x1="615" y1="142" x2="722" y2="88" stroke="#0d9488" stroke-width="2" marker-end="url(#bt)"/>
+    <text x="690" y="120" font-size="8.5" fill="#0f766e">records + root → Mission Control</text>
+
+    <!-- Integration Hub + tenant -->
+    <rect x="40" y="298" width="500" height="64" rx="10" fill="#eff4fa" stroke="#0f2a4a"/>
+    <text x="60" y="320" fill="#0f2a4a" font-size="12" font-weight="700">Integration Hub (Kovant)</text>
+    <text x="60" y="340" fill="#475569" font-size="9.5">SAP · Salesforce · Databricks · Snowflake · SharePoint — inchangé</text>
+    <line x1="290" y1="262" x2="290" y2="298" stroke="#475569" marker-end="url(#b)"/>
+    <text x="300" y="284" font-size="8" fill="#64748b">entrées (emails, PDF, ERP)</text>
+
+    <rect x="560" y="298" width="300" height="64" rx="10" fill="#e0f2fe" stroke="#0284c7"/>
+    <text x="580" y="320" fill="#075985" font-size="12" font-weight="700">SLM sidecar (tenant client)</text>
+    <text x="580" y="340" fill="#0369a1" font-size="9.5">Ollama/vLLM sur 127.0.0.1 · egress=deny · EU</text>
+    <line x1="615" y1="262" x2="690" y2="298" stroke="#0d9488" stroke-dasharray="3 2" marker-end="url(#bt)"/>
+  </svg>
+  <div class="cap">Figure 2 — EFE comme couche d'exécution+preuve <b>dans</b> l'Agent Runtime. Le Foundation Agent appelle <code>Swarm::run</code> ; EFE exécute l'essaim (vos SLM en self-host), scelle la provenance, et publie records+root vers Mission Control. L'Integration Hub est inchangé.</div>
+  </div>
+
+  <h4>Le seam d'intégration concret</h4>
+  <pre><code>// Côté Agent Runtime (Rust via SDK, ou HTTP via la gateway) :
+let outcome = swarm
+    .mode(SelfHost { endpoint: "http://127.0.0.1:11434", model: "votre-slm" }) // souverain
+    .run_traced(task, Topology::Consensus { k: 3, judges, .. }, Budget::cents(plafond))
+    .await?;
+
+// outcome.run.provenance.root        → poussé dans Mission Control (preuve)
+// outcome.run.n17                    → « what every digital worker did and why »
+// GET /v1/swarm/verify/{run_id}      → le client/régulateur re-prouve, hors-ligne</code></pre>
+</div>
+
+<!-- ===== 6. CAS D'USAGE ===== -->
+<div class="wrap page">
+  <h2><span class="num">§6</span> &nbsp;Cas d'usage : un sourcing procurement <span style="color:var(--teal)">prouvé</span></h2>
+  <p>Votre exemple phare (« transformer un mois de procurement en 1–2 jours autonomes »). Voici le même
+  processus, rendu <b>vérifiable</b> et <b>souverain</b> par EFE.</p>
+
+  <div class="fig">
+  <svg viewBox="0 0 900 250" role="img" aria-label="Procurement prouvé">
+    <defs><marker id="c" markerWidth="8" markerHeight="8" refX="6" refY="2.5" orient="auto"><path d="M0,0 L6,2.5 L0,5 Z" fill="#475569"/></marker></defs>
+    <rect x="20" y="100" width="120" height="50" rx="9" fill="#0f2a4a"/><text x="80" y="122" fill="#fff" font-size="10" text-anchor="middle" font-weight="700">RFQ + offres</text><text x="80" y="138" fill="#9fb3cc" font-size="8" text-anchor="middle">PDF, emails (Hub)</text>
+    <rect x="180" y="40" width="150" height="40" rx="8" fill="#fae8ff" stroke="#c026d3"/><text x="255" y="60" fill="#86198f" font-size="9" text-anchor="middle" font-weight="700">redaction PII (local)</text><text x="255" y="73" fill="#a21caf" font-size="8" text-anchor="middle">G9 · avant tout traitement</text>
+    <rect x="180" y="100" width="150" height="50" rx="8" fill="#ccfbf1" stroke="#0d9488"/><text x="255" y="120" fill="#115e59" font-size="9" text-anchor="middle" font-weight="700">K extracteurs SLM //</text><text x="255" y="135" fill="#0f766e" font-size="8" text-anchor="middle">prix · délais · risque · conformité</text>
+    <rect x="370" y="100" width="150" height="50" rx="8" fill="#fef9c3" stroke="#ca8a04"/><text x="445" y="120" fill="#854d0e" font-size="9" text-anchor="middle" font-weight="700">J juges // (scoring)</text><text x="445" y="135" fill="#a16207" font-size="8" text-anchor="middle">pondèrent les critères</text>
+    <rect x="560" y="100" width="150" height="50" rx="8" fill="#dcfce7" stroke="#16a34a"/><text x="635" y="120" fill="#166534" font-size="9" text-anchor="middle" font-weight="700">vote (Borda)</text><text x="635" y="135" fill="#15803d" font-size="8" text-anchor="middle">recommandation + confiance</text>
+    <rect x="745" y="92" width="135" height="66" rx="9" fill="#0f2a4a"/><text x="812" y="114" fill="#fff" font-size="9.5" text-anchor="middle" font-weight="700">human-in-loop</text><text x="812" y="130" fill="#9fb3cc" font-size="8" text-anchor="middle">approuve si conf &lt; seuil</text><text x="812" y="144" fill="#9fb3cc" font-size="8" text-anchor="middle">(escalade)</text>
+    <line x1="140" y1="120" x2="180" y2="120" stroke="#475569" marker-end="url(#c)"/>
+    <line x1="140" y1="115" x2="180" y2="62" stroke="#475569" marker-end="url(#c)"/>
+    <line x1="330" y1="125" x2="370" y2="125" stroke="#475569" marker-end="url(#c)"/>
+    <line x1="520" y1="125" x2="560" y2="125" stroke="#475569" marker-end="url(#c)"/>
+    <line x1="710" y1="125" x2="745" y2="125" stroke="#475569" marker-end="url(#c)"/>
+    <rect x="180" y="185" width="530" height="42" rx="9" fill="#f0fdfa" stroke="#0d9488"/>
+    <text x="445" y="205" fill="#115e59" font-size="10" text-anchor="middle" font-weight="700">chaque flèche = une écriture tracée → provenance_root</text>
+    <text x="445" y="220" fill="#0f766e" font-size="8.5" text-anchor="middle">le fournisseur évincé peut re-prouver que la décision était fondée — sans vous croire</text>
+    <line x1="445" y1="150" x2="445" y2="185" stroke="#0d9488" stroke-dasharray="3 2" marker-end="url(#c)"/>
+  </svg>
+  <div class="cap">Figure 3 — Sourcing autonome, prouvé. La PII est caviardée <b>localement</b> avant traitement ; les SLM tournent self-host ; la décision finale porte une <b>confiance</b> (escalade humaine sous seuil) et un <b>root re-vérifiable</b> — décisif en cas de contestation fournisseur ou d'audit achats.</div>
+  </div>
+
+  <div class="callout">
+    <b>La valeur business :</b> dans le procurement régulé, une décision contestée coûte cher. EFE transforme
+    « l'IA a choisi ce fournisseur » en « <b>voici la preuve, re-vérifiable, que ce choix respecte les règles et
+    le budget</b> » — un argument d'achat décisif que vos concurrents ne peuvent pas répliquer sans renoncer à
+    leur lock-in.
+  </div>
+</div>
+
+<!-- ===== 7. DÉPLOIEMENT ===== -->
+<div class="wrap page">
+  <h2><span class="num">§7</span> &nbsp;Déploiement souverain (dans le tenant du client)</h2>
+  <p>EFE se déploie via un <b>chart Helm</b> dans le tenant Azure/AWS du client — exactement les environnements
+  que votre Integration Hub cible déjà. Les données et les SLM <b>ne sortent jamais</b>.</p>
+
+  <div class="fig">
+  <svg viewBox="0 0 900 280" role="img" aria-label="Déploiement souverain tenant client">
+    <defs><marker id="d" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="#475569"/></marker></defs>
+    <rect x="30" y="30" width="600" height="230" rx="14" fill="#f0fdfa" stroke="#0d9488" stroke-width="1.5"/>
+    <text x="50" y="56" fill="#115e59" font-size="13" font-weight="700">Tenant client (Azure / AWS) — egress = DENY</text>
+    <rect x="60" y="76" width="250" height="80" rx="10" fill="#ccfbf1" stroke="#0d9488"/>
+    <text x="185" y="100" text-anchor="middle" font-size="11" font-weight="700" fill="#115e59">EFE gateway (souverain)</text>
+    <text x="185" y="118" text-anchor="middle" font-size="9" fill="#0f766e">/run · /verify · /metrics · dashboard</text>
+    <text x="185" y="134" text-anchor="middle" font-size="9" fill="#0f766e">provenance signée (HKDF server-side)</text>
+    <rect x="340" y="76" width="260" height="80" rx="10" fill="#e0f2fe" stroke="#0284c7"/>
+    <text x="470" y="100" text-anchor="middle" font-size="11" font-weight="700" fill="#075985">SLM sidecar (vos modèles)</text>
+    <text x="470" y="118" text-anchor="middle" font-size="9" fill="#0369a1">Ollama/vLLM · 127.0.0.1 · pré-provisionné</text>
+    <text x="470" y="134" text-anchor="middle" font-size="9" fill="#0369a1">aucun pull réseau (air-gap)</text>
+    <line x1="310" y1="116" x2="340" y2="116" stroke="#475569" marker-end="url(#d)"/>
+    <rect x="60" y="176" width="540" height="64" rx="10" fill="#eef2ff" stroke="#4f46e5"/>
+    <text x="80" y="198" fill="#3730a3" font-size="10.5" font-weight="700">Secret HKDF (signe la provenance) · NetworkPolicy egress=deny · PVC modèles</text>
+    <text x="80" y="218" fill="#4338ca" font-size="9.5">PgRunStore (records durables, write-once) · OIDC (auth, clé publique) · PII opt-in</text>
+    <text x="80" y="234" fill="#4338ca" font-size="9.5">⇒ résidence des données EU/GDPR par construction · aucune clé provider dans le runtime</text>
+
+    <rect x="670" y="90" width="200" height="100" rx="12" fill="#dcfce7" stroke="#16a34a"/>
+    <text x="770" y="116" text-anchor="middle" font-size="12" font-weight="700" fill="#166534">Client / Régulateur</text>
+    <text x="770" y="138" text-anchor="middle" font-size="9.5" fill="#15803d">exporte les records</text>
+    <text x="770" y="156" text-anchor="middle" font-size="9.5" fill="#15803d">re-prouve HORS-LIGNE</text>
+    <text x="770" y="174" text-anchor="middle" font-size="9.5" fill="#15803d">avec sa propre clé</text>
+    <line x1="630" y1="140" x2="670" y2="140" stroke="#16a34a" stroke-dasharray="4 3" marker-end="url(#d)"/>
+    <text x="650" y="132" font-size="8" fill="#16a34a">seule la PREUVE</text>
+    <text x="650" y="200" font-size="8" fill="#16a34a">sort (pas les données)</text>
+  </svg>
+  <div class="cap">Figure 4 — Déploiement dans le tenant du client. C'est la réponse directe aux Lacunes 1 &amp; 2 : la donnée reste, seule la preuve circule, et elle se re-vérifie sans clé ni réseau. Mode <b>réseau</b> disponible pour l'escalade frontière (clés dans un routeur du tenant, jamais dans le runtime).</div>
+  </div>
+</div>
+
+<!-- ===== 8. PLAN PAR PHASES ===== -->
+<div class="wrap page">
+  <h2><span class="num">§8</span> &nbsp;Plan de déploiement par phases (« weeks, not months »)</h2>
+  <table>
+    <thead><tr><th>Phase</th><th>Durée</th><th>Livrable</th><th>Côté EFE</th><th>Côté Kovant</th></tr></thead>
+    <tbody>
+      <tr><td><b>0 · Pilote « proof »</b></td><td>~2 sem.</td><td>1 Foundation Agent (procurement) exécuté en essaim EFE, avec <code>/verify</code> démontré à un design partner</td><td><span class="tag t-ok">prêt</span> SDK + gateway + self-host</td><td>1 blueprint + 1 SLM + données de test</td></tr>
+      <tr><td><b>1 · Couche preuve</b></td><td>~3–4 sem.</td><td>provenance + N17 sous chaque pas d'agent ; onglet « Preuve » dans Mission Control</td><td>seam de capture (livré) + adaptateur events→MC</td><td>UI Mission Control consomme /metrics + /verify</td></tr>
+      <tr><td><b>2 · Souveraineté</b></td><td>~3 sem.</td><td>SLM self-host dans le tenant client, egress=deny, PII redaction, PgRunStore</td><td><span class="tag t-ok">prêt</span> chart Helm + sidecar + features</td><td>provisioning tenant + politique réseau</td></tr>
+      <tr><td><b>3 · Échelle + réseau</b></td><td>~3 sem.</td><td>escalade frontière via routeur (clés tenant), budget par mission, multi-agent teams (T3)</td><td><span class="tag t-ok">prêt</span> mode réseau + budget I13</td><td>routeur dans le tenant + Blueprints d'équipes</td></tr>
+    </tbody>
+  </table>
+
+  <div class="callout navy">
+    <b>Chemin critique court.</b> Le plus dur — le moteur d'essaim, la provenance, le verify, le self-host, le
+    budget — est <b>déjà livré et testé</b> côté EFE (§9). L'effort d'intégration porte surtout sur les
+    <b>adaptateurs</b> vers Mission Control et le provisioning tenant. D'où la faisabilité « weeks, not months »
+    que promet Ali.
+  </div>
+
+  <div class="fig">
+  <svg viewBox="0 0 900 110" role="img" aria-label="Timeline">
+    <line x1="40" y1="55" x2="860" y2="55" stroke="#cbd5e1" stroke-width="2"/>
+    <g font-size="9.5" text-anchor="middle">
+      <circle cx="130" cy="55" r="8" fill="#0d9488"/><text x="130" y="35" font-weight="700" fill="#0f2a4a">P0</text><text x="130" y="80" fill="#475569">pilote (S2)</text>
+      <circle cx="360" cy="55" r="8" fill="#0d9488"/><text x="360" y="35" font-weight="700" fill="#0f2a4a">P1</text><text x="360" y="80" fill="#475569">preuve (S6)</text>
+      <circle cx="590" cy="55" r="8" fill="#0d9488"/><text x="590" y="35" font-weight="700" fill="#0f2a4a">P2</text><text x="590" y="80" fill="#475569">souveraineté (S9)</text>
+      <circle cx="820" cy="55" r="8" fill="#16a34a"/><text x="820" y="35" font-weight="700" fill="#0f2a4a">P3</text><text x="820" y="80" fill="#475569">échelle (S12)</text>
+    </g>
+  </svg>
+  <div class="cap">Figure 5 — ~12 semaines du pilote à l'échelle, le gros du substrat étant déjà livré.</div>
+  </div>
+</div>
+
+<!-- ===== 9. PREUVES ===== -->
+<div class="wrap page">
+  <h2><span class="num">§9</span> &nbsp;Preuves &amp; résultats (EFE, état réel)</h2>
+  <p>Ce n'est pas un slideware : EFE est un monorepo Rust de ~30 k lignes, testé en réel.</p>
+  <div class="kpi">
+    <div class="k"><div class="v">~700</div><div class="l">tests verts (stack complète, 0 warning)</div></div>
+    <div class="k"><div class="v">3 / 3</div><div class="l">modes livrés (keyless · self-host · réseau)</div></div>
+    <div class="k"><div class="v">3</div><div class="l">modèles locaux réels prouvés (gemma3, qwen3×2)</div></div>
+    <div class="k"><div class="v">100 %</div><div class="l">runs re-prouvés · falsifications détectées</div></div>
+    <div class="k"><div class="v">12</div><div class="l">décisions d'architecture (ADR) documentées</div></div>
+  </div>
+  <table>
+    <thead><tr><th>Validation réelle</th><th>Résultat</th></tr></thead>
+    <tbody>
+      <tr><td>Campagne multi-modèles (consensus K gen + juges + Borda)</td><td>GO — 100 % verify / traced / tamper sur 3 SLM locaux</td></tr>
+      <tr><td>E2E self-host (qwen3-coder) → verify hors-ligne</td><td>✓ run re-prouvé en ~12 s</td></tr>
+      <tr><td>Réseau réel (Claude via routeur, clés server-side)</td><td>✓ provenance vérifiée, clé jamais exposée</td></tr>
+      <tr><td>Budget I13 sous concurrence (8 threads × 1000)</td><td>✓ plafond jamais dépassé</td></tr>
+      <tr><td>Garde-fous souveraineté (egress=0, no-key) en CI</td><td>✓ assertés</td></tr>
+    </tbody>
+  </table>
+  <p class="disc">Tous chiffres issus d'exécutions réelles sur machine de dev (macOS, Apple Silicon, 2026-06-10).
+  Rapports techniques détaillés disponibles : « le moat / productisation » (18 p.) et « la mécanique de
+  l'essaim » (10 p.).</p>
+</div>
+
+<!-- ===== 10. OBJECTIONS ===== -->
+<div class="wrap page">
+  <h2><span class="num">§10</span> &nbsp;Objections anticipées</h2>
+  <table>
+    <thead><tr><th>Objection</th><th>Réponse</th></tr></thead>
+    <tbody>
+      <tr><td>« On a déjà un runtime model-agnostic. »</td><td>EFE ne le remplace pas : il s'y <b>insère</b> comme couche preuve+souveraineté. Vous gagnez le verify et le self-host sans refondre le runtime.</td></tr>
+      <tr><td>« Rust, alors que notre stack est Python (LangChain/CrewAI/ADK). »</td><td>EFE expose une <b>gateway HTTP</b> (OpenAI-compat côté réseau) — intégration par API, pas par langage. Le seam capture n'importe quel backend.</td></tr>
+      <tr><td>« La reproductibilité d'un LLM est un mythe. »</td><td>D'accord — EFE ne promet <b>jamais</b> le rejeu bit-à-bit d'un LLM. Il promet la <b>re-preuve forensique</b> (tamper-evidence). Les ancres déterministes, elles, sont reproductibles.</td></tr>
+      <tr><td>« Encore une dépendance. »</td><td>EFE est <b>keyless</b> et <b>sans dépendance réseau</b> dans son cœur (vérifié en CI). Déployé dans <b>votre</b> tenant, il n'ajoute pas de surface d'attaque externe.</td></tr>
+      <tr><td>« Le coût d'intégration ? »</td><td>Le substrat dur est livré (§9). L'effort = adaptateurs Mission Control + provisioning. Pilote en ~2 semaines.</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ===== 11. ENGAGEMENT ===== -->
+<div class="wrap page">
+  <h2><span class="num">§11</span> &nbsp;Modèle d'engagement &amp; prochaines étapes</h2>
+  <div class="grid2">
+    <div class="card hl"><h4 style="margin-top:0">Étape immédiate — atelier technique (90 min)</h4>
+      <ul class="small">
+        <li>démo live : run d'essaim self-host → <code>/verify</code> re-prouvé hors-ligne</li>
+        <li>mapping de <b>un</b> de vos Foundation Agents sur une topologie EFE</li>
+        <li>cadrage du pilote P0 (blueprint, SLM, design partner)</li>
+      </ul>
+    </div>
+    <div class="card"><h4 style="margin-top:0">Pilote P0 (~2 semaines)</h4>
+      <ul class="small">
+        <li>1 processus (procurement sourcing) exécuté en essaim EFE</li>
+        <li>preuve démontrée à un client/régulateur</li>
+        <li>critère de succès : décision <b>re-vérifiée</b> + budget tenu + données <b>non sorties</b></li>
+      </ul>
+    </div>
+  </div>
+
+  <h3>Pourquoi maintenant</h3>
+  <p>Vous êtes pre-seed, votre architecture « novel swarm/SLM » est jeune, et vos buyers industriels vont
+  exiger preuve + souveraineté. EFE vous donne ces deux moats <b>aujourd'hui</b>, testés, plutôt que dans 6–12
+  mois de R&amp;D interne — pour tenir la promesse d'Ali : <i>« real P&amp;L impact, in weeks, not months. »</i></p>
+
+  <div class="callout navy">
+    <b>L'offre, en une ligne :</b> vous gardez votre produit, votre marque, vos agents — EFE devient le
+    <b>socle vérifiable et souverain</b> qui rend votre « full auditability » <i>littéralement vraie</i> et votre
+    « enterprise-grade » <i>défendable en due-diligence</i>.
+  </div>
+
+  <hr>
+  <p class="disc">Document préparé à partir de sources publiques (kovant.com, SiliconANGLE, Tech.eu,
+  TechFundingNews, ArcticStartup — novembre 2025) et de l'état réel du projet EFE au 2026-06-10
+  (<span class="mono">main @ 4c811ba</span>). Les correspondances « livré » vs « à intégrer » sont explicitées au §8.
+  Ce document est une proposition technique, non un engagement contractuel.</p>
+  <p class="small" style="text-align:center;color:var(--navy);font-weight:700;margin-top:.6rem">
+    EFE × Kovant — Souverain · Local · Vérifiable. Le socle de confiance de l'agentic workforce.</p>
+</div>
+
+</body>
+</html>
