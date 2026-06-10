@@ -14,6 +14,7 @@ use efe_swarm_sdk::{ClientMode, HmacKeySource, Swarm, SwarmObserver};
 use efe_swarm_topology::AgentFleet;
 
 use crate::error::GatewayError;
+use crate::router_map::RouterMap;
 use crate::store::{InMemoryRunStore, RunStore};
 
 /// Plafond de runs live simultanés conservés dans le registre (drop-oldest au-delà).
@@ -41,6 +42,10 @@ pub struct SwarmGatewayState {
     /// La passerelle parle au routeur **sans clé applicative** (auth = infra : mTLS/NetworkPolicy) ;
     /// le routeur ajoute la clé provider **server-side**. **Aucune clé manipulée ici.**
     pub router_endpoint: Option<String>,
+    /// **Inc.4.b** : table de routage **provider→modèle** du mode `Network`. Traduit la
+    /// famille (`"anthropic"`) en identifiant de modèle concret (`"anthropic/claude-…"`)
+    /// attendu par le routeur. **Aucun secret** (noms de modèles = politique de routage).
+    pub router_map: RouterMap,
     /// **Prod (feature `oidc`)** : vérificateur de JWT OIDC (clé PUBLIQUE server-side).
     /// `None` ⇒ repli sur l'extracteur d'en-têtes dev. Jamais une clé privée.
     #[cfg(feature = "oidc")]
@@ -70,6 +75,7 @@ impl SwarmGatewayState {
             dashboards: Arc::new(DashboardRegistry::new(DASHBOARD_REGISTRY_CAP)),
             dash_metrics: DashboardMetrics::new(),
             router_endpoint: None,
+            router_map: RouterMap::default(),
             #[cfg(feature = "oidc")]
             oidc: None,
             #[cfg(feature = "pii")]
@@ -89,6 +95,7 @@ impl SwarmGatewayState {
             dashboards: Arc::new(DashboardRegistry::new(DASHBOARD_REGISTRY_CAP)),
             dash_metrics: DashboardMetrics::new(),
             router_endpoint: None,
+            router_map: RouterMap::default(),
             #[cfg(feature = "oidc")]
             oidc: None,
             #[cfg(feature = "pii")]
@@ -158,6 +165,14 @@ impl SwarmGatewayState {
         self
     }
 
+    /// **Inc.4.b** : remplace la table de routage **provider→modèle** du mode `Network`
+    /// (par défaut : `RouterMap::default()`). À alimenter depuis l'env **côté binaire**
+    /// (ex. `EFE_SWARM_ROUTER_MODELS="anthropic=…,openai=…"`). **Aucun secret.**
+    pub fn with_router_models(mut self, map: RouterMap) -> Self {
+        self.router_map = map;
+        self
+    }
+
     /// Résout un tenant de fil (chaîne) en [`TenantId`]. `"system"` est accepté comme alias
     /// du tenant système ; sinon un UUID est requis.
     pub fn tenant_id(&self, tenant: &str) -> Result<TenantId, GatewayError> {
@@ -179,7 +194,12 @@ impl SwarmGatewayState {
     pub fn resolve_mode(&self, mode: ClientMode) -> Result<(ClientMode, bool), GatewayError> {
         match mode {
             ClientMode::Network { provider } => match &self.router_endpoint {
-                Some(endpoint) => Ok((ClientMode::SelfHost { endpoint: endpoint.clone(), model: provider }, true)),
+                // Inc.4.b : la **famille** (`provider`) est traduite en **modèle concret**
+                // attendu par le routeur via la table provider→modèle (passthrough si déjà qualifié).
+                Some(endpoint) => {
+                    let model = self.router_map.resolve(&provider);
+                    Ok((ClientMode::SelfHost { endpoint: endpoint.clone(), model }, true))
+                }
                 None => Err(GatewayError::NotImplemented(
                     "ClientMode::Network non câblé sur ce déploiement (routeur frontière absent ; définissez EFE_SWARM_ROUTER_ENDPOINT côté serveur)".into(),
                 )),
@@ -270,15 +290,30 @@ mod tests {
     fn resolve_mode_network_with_router_routes_to_self_host() {
         // Inc.4 : routeur câblé (URL non-secrète) → Network devient SelfHost-vers-routeur,
         // egress autorisé (Network fait de l'egress par conception). AUCUNE clé ici.
+        // Inc.4.b : la famille `anthropic` est traduite en modèle concret (table par défaut).
         let s = SwarmGatewayState::in_memory().with_router_endpoint("http://efe-llm-router:8080/v1");
         let (mode, allow_remote) = s.resolve_mode(ClientMode::Network { provider: "anthropic".into() }).unwrap();
         assert!(allow_remote, "Network → egress autorisé (vers le routeur)");
         match mode {
             ClientMode::SelfHost { endpoint, model } => {
                 assert_eq!(endpoint, "http://efe-llm-router:8080/v1");
-                assert_eq!(model, "anthropic", "le provider devient le modèle routé");
+                assert_eq!(model, "anthropic/claude-3-5-sonnet-latest", "famille → modèle concret routé");
             }
             other => panic!("attendu SelfHost-vers-routeur, eu {other:?}"),
         }
+    }
+
+    #[test]
+    fn resolve_mode_network_applies_model_map_and_passthrough() {
+        // Inc.4.b : table surchargée (famille connue) + passthrough d'un modèle déjà qualifié.
+        let s = SwarmGatewayState::in_memory()
+            .with_router_endpoint("http://efe-llm-router:8080/v1")
+            .with_router_models(RouterMap::empty().with("openai", "openai/gpt-4o-mini"));
+        // famille mappée explicitement.
+        let (m1, _) = s.resolve_mode(ClientMode::Network { provider: "openai".into() }).unwrap();
+        assert!(matches!(m1, ClientMode::SelfHost { ref model, .. } if model == "openai/gpt-4o-mini"));
+        // modèle déjà qualifié (`family:model`) → passthrough intact.
+        let (m2, _) = s.resolve_mode(ClientMode::Network { provider: "anthropic:claude-3-opus".into() }).unwrap();
+        assert!(matches!(m2, ClientMode::SelfHost { ref model, .. } if model == "anthropic:claude-3-opus"));
     }
 }

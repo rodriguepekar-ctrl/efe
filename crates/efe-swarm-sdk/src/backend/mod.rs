@@ -20,11 +20,12 @@ use std::io::Write as _;
 use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use async_trait::async_trait;
 use serde_json::Value;
 
+use crate::n17::{push_pending, scoped, PendingLlmCall};
 use crate::result::SwarmError;
 
 pub(crate) use ollama::OllamaBackend;
@@ -148,7 +149,12 @@ pub(crate) fn is_local_endpoint(endpoint: &str) -> bool {
 /// - Endpoint non-local + `allow_remote == false` ⇒ [`SwarmError::RemoteBackendDenied`].
 /// - Sélection du moteur : `model` préfixé `openai:` **ou** endpoint contenant `/v1`
 ///   ⇒ OpenAI-compatible local ; sinon Ollama.
-/// - Le backend est enveloppé d'un [`Breaker`] (circuit-breaker).
+/// - **Inc.4.b** : sur le chemin **routeur Network** (`allow_remote == true`, egress assumé),
+///   le backend est enveloppé d'un [`Retrier`] (re-tentatives par-appel à back-off exponentiel
+///   + jitter) **sous** le [`Breaker`]. Le self-host **souverain** (loopback) reste **inchangé**
+///   (Breaker seul) : sur boucle locale, un échec est franc et rapide, le breaker suffit.
+/// - L'empilement final est `Breaker(Retrier(moteur))` : le breaker ne compte qu'**une**
+///   défaillance par appel logique (après épuisement des re-tentatives).
 pub(crate) fn build_local_backend(
     endpoint: &str,
     model: &str,
@@ -164,7 +170,118 @@ pub(crate) fn build_local_backend(
     } else {
         OllamaBackend::new(endpoint.to_string(), model.to_string())
     };
-    Ok(Breaker::wrap(inner, DEFAULT_BREAKER_THRESHOLD, DEFAULT_BREAKER_COOLDOWN))
+    // Routeur Network (egress) : re-tentatives transitoires par-appel. Souverain local : non.
+    let resilient = if allow_remote {
+        Retrier::wrap(inner, NETWORK_RETRY_ATTEMPTS, NETWORK_RETRY_BASE_DELAY, NETWORK_RETRY_MAX_DELAY)
+    } else {
+        inner
+    };
+    Ok(Breaker::wrap(resilient, DEFAULT_BREAKER_THRESHOLD, DEFAULT_BREAKER_COOLDOWN))
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Retrier (Inc.4.b) : re-tentatives par-appel — chemin routeur Network (egress)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Nombre **total** de tentatives par appel (1 essai initial + N-1 re-tentatives).
+const NETWORK_RETRY_ATTEMPTS: u32 = 3;
+/// Délai de base du back-off exponentiel (doublé à chaque re-tentative).
+const NETWORK_RETRY_BASE_DELAY: Duration = Duration::from_millis(200);
+/// Plafond du délai (le back-off n'attend jamais plus que ça entre deux essais).
+const NETWORK_RETRY_MAX_DELAY: Duration = Duration::from_secs(5);
+
+/// Entropie bon marché (nanos d'horloge) pour le jitter — **best-effort**, sans dép `rand`.
+fn jitter_nanos() -> u64 {
+    SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.subsec_nanos() as u64).unwrap_or(0)
+}
+
+/// Enveloppe un [`LocalBackend`] de **re-tentatives par-appel** à back-off exponentiel +
+/// jitter — pour le chemin **routeur Network** (frontière distante, hoquets transitoires).
+///
+/// **Correction N17 (le point délicat)** : le backend feuille pousse **une** [`PendingLlmCall`]
+/// par `complete()`. Si le Retrier laissait fuiter chaque tentative dans le puits du `Meter`,
+/// l'`AgentCallRecord` se lierait à la **première tentative (échouée)** et le pont N17
+/// compterait des appels fantômes. Le Retrier exécute donc chaque tentative dans un **puits
+/// imbriqué** (task-local) qu'il **draine** ; il ne **ré-émet qu'UN seul** record final vers
+/// le puits parent — celui de l'issue retenue — en y inscrivant `retry_count`.
+///
+/// Limite assumée (honnête) : la couche `curl` keyless ne **distingue pas** un 4xx
+/// (non-retryable) d'un 5xx/timeout (transitoire) — elle renvoie `None` dans les deux cas.
+/// Les re-tentatives sont donc **transitoires-par-défaut** ; pas de variante `NonRetryable`
+/// détectée ici. (Évolution possible : surfacer `%{http_code}` depuis `curl`.)
+pub(crate) struct Retrier {
+    inner: Arc<dyn LocalBackend>,
+    attempts: u32,
+    base_delay: Duration,
+    max_delay: Duration,
+}
+
+impl Retrier {
+    pub fn new(inner: Arc<dyn LocalBackend>, attempts: u32, base_delay: Duration, max_delay: Duration) -> Self {
+        Self { inner, attempts: attempts.max(1), base_delay, max_delay }
+    }
+    pub fn wrap(inner: Arc<dyn LocalBackend>, attempts: u32, base_delay: Duration, max_delay: Duration) -> Arc<dyn LocalBackend> {
+        Arc::new(Self::new(inner, attempts, base_delay, max_delay))
+    }
+
+    /// Back-off **exponentiel plafonné + jitter** (equal-jitter : moitié fixe, moitié aléatoire)
+    /// avant la re-tentative `attempt_index` (0-based). Borné par `max_delay`.
+    fn backoff_delay(&self, attempt_index: u32) -> Duration {
+        let shift = attempt_index.min(16);
+        let factor = 1u64 << shift;
+        let base_ms = self.base_delay.as_millis() as u64;
+        let exp_ms = base_ms.saturating_mul(factor);
+        let cap_ms = (self.max_delay.as_millis() as u64).max(1);
+        let capped = exp_ms.min(cap_ms).max(1);
+        let half = capped / 2;
+        let jitter = if half > 0 { jitter_nanos() % half } else { 0 };
+        Duration::from_millis(half + jitter)
+    }
+}
+
+#[async_trait]
+impl LocalBackend for Retrier {
+    async fn complete(&self, prompt: &str, params: SamplingParams) -> Option<String> {
+        let mut last_call: Option<PendingLlmCall> = None;
+        for attempt in 0..self.attempts {
+            // Puits IMBRIQUÉ : capte la forensique de CETTE tentative sans polluer le parent.
+            let sink = Arc::new(Mutex::new(Vec::<PendingLlmCall>::new()));
+            let out = scoped(sink.clone(), self.inner.complete(prompt, params)).await;
+            let mut captured = sink.lock().ok().and_then(|mut v| v.pop());
+            if let Some(c) = captured.as_mut() {
+                c.retry_count = attempt;
+            }
+            match out {
+                Some(s) => {
+                    // Succès : n'émettre QU'UN record final (lien N17 correct).
+                    if let Some(c) = captured {
+                        push_pending(c);
+                    }
+                    return Some(s);
+                }
+                None => {
+                    last_call = captured;
+                    if attempt + 1 < self.attempts {
+                        tokio::time::sleep(self.backoff_delay(attempt)).await;
+                    }
+                }
+            }
+        }
+        // Épuisé : un seul record final (échec), `retry_count = attempts - 1`.
+        if let Some(mut c) = last_call {
+            c.retry_count = self.attempts.saturating_sub(1);
+            push_pending(c);
+        }
+        None
+    }
+
+    fn descriptor(&self) -> BackendDescriptor {
+        self.inner.descriptor()
+    }
+
+    async fn health(&self) -> bool {
+        self.inner.health().await
+    }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -319,5 +436,88 @@ mod tests {
         assert_eq!(breaker.complete("x", params()).await.as_deref(), Some("ok"));
         assert_eq!(breaker.complete("x", params()).await.as_deref(), Some("ok"));
         assert_eq!(mock.calls.load(Ordering::Relaxed), 2);
+    }
+
+    // ── Retrier (Inc.4.b) : mock qui simule un backend feuille (pousse 1 PendingLlmCall) ──
+    struct Recovering {
+        fail_until: u32, // nombre d'échecs initiaux avant succès
+        calls: AtomicU32,
+    }
+    #[async_trait]
+    impl LocalBackend for Recovering {
+        async fn complete(&self, _p: &str, s: SamplingParams) -> Option<String> {
+            let n = self.calls.fetch_add(1, Ordering::Relaxed);
+            let response = if n >= self.fail_until { Some("ok".to_string()) } else { None };
+            // simule le backend feuille : pousse la forensique par-appel (retry_count brut = 0).
+            push_pending(PendingLlmCall {
+                engine: BackendKind::OpenAiLocal.as_str().to_string(),
+                model: "router-model".into(),
+                temperature: s.temperature,
+                max_tokens: s.max_tokens,
+                seed: s.seed,
+                prompt: "x".into(),
+                response: response.clone(),
+                latency_ms: 1,
+                retry_count: 0,
+            });
+            response
+        }
+        fn descriptor(&self) -> BackendDescriptor {
+            BackendDescriptor { kind: BackendKind::OpenAiLocal, model: "router-model".into(), endpoint: "http://router/v1".into() }
+        }
+    }
+    fn fast_retrier(inner: Arc<dyn LocalBackend>, attempts: u32) -> Retrier {
+        // délais minuscules : tests rapides (le back-off n'est pas l'objet du test).
+        Retrier::new(inner, attempts, Duration::from_millis(1), Duration::from_millis(4))
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn retrier_emits_single_record_with_retry_count_on_eventual_success() {
+        let mock = Arc::new(Recovering { fail_until: 2, calls: AtomicU32::new(0) });
+        let retrier = fast_retrier(mock.clone(), 3);
+        let sink = Arc::new(Mutex::new(Vec::new()));
+        let out = scoped(sink.clone(), retrier.complete("x", params())).await;
+        assert_eq!(out.as_deref(), Some("ok"));
+        assert_eq!(mock.calls.load(Ordering::Relaxed), 3, "2 échecs + 1 succès");
+        let calls = std::mem::take(&mut *sink.lock().unwrap());
+        assert_eq!(calls.len(), 1, "UN seul record final (le pont N17 ne voit pas les tentatives)");
+        assert_eq!(calls[0].retry_count, 2, "2 re-tentatives consommées");
+        assert!(calls[0].response.is_some());
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn retrier_exhausts_and_emits_single_errored_record() {
+        let mock = Arc::new(Recovering { fail_until: 99, calls: AtomicU32::new(0) });
+        let retrier = fast_retrier(mock.clone(), 3);
+        let sink = Arc::new(Mutex::new(Vec::new()));
+        let out = scoped(sink.clone(), retrier.complete("x", params())).await;
+        assert!(out.is_none(), "toutes les tentatives échouent");
+        assert_eq!(mock.calls.load(Ordering::Relaxed), 3, "épuise exactement les 3 tentatives");
+        let calls = std::mem::take(&mut *sink.lock().unwrap());
+        assert_eq!(calls.len(), 1, "un seul record final, même en échec");
+        assert_eq!(calls[0].retry_count, 2);
+        assert!(calls[0].response.is_none());
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn retrier_first_try_success_is_no_retry() {
+        let mock = Arc::new(Recovering { fail_until: 0, calls: AtomicU32::new(0) });
+        let retrier = fast_retrier(mock.clone(), 3);
+        let sink = Arc::new(Mutex::new(Vec::new()));
+        let out = scoped(sink.clone(), retrier.complete("x", params())).await;
+        assert_eq!(out.as_deref(), Some("ok"));
+        assert_eq!(mock.calls.load(Ordering::Relaxed), 1, "succès immédiat : aucune re-tentative");
+        let calls = std::mem::take(&mut *sink.lock().unwrap());
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].retry_count, 0, "premier coup → NoRetry");
+    }
+
+    #[test]
+    fn build_remote_wraps_retrier_and_delegates_descriptor() {
+        // allow_remote=true (routeur Network) : Breaker(Retrier(OpenAiLocal)). Le descripteur
+        // doit traverser les deux enveloppes intactes (forensique N17 fidèle).
+        let b = build_local_backend("http://router.internal:8080/v1", "anthropic/claude-3-5-sonnet", true).unwrap();
+        assert_eq!(b.descriptor().kind, BackendKind::OpenAiLocal);
+        assert_eq!(b.descriptor().model, "anthropic/claude-3-5-sonnet");
     }
 }

@@ -22,6 +22,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     if let Ok(router_ep) = std::env::var("EFE_SWARM_ROUTER_ENDPOINT") {
         state = state.with_router_endpoint(router_ep);
         println!("→ routeur frontière câblé (Network activé) — clés détenues server-side par le routeur.");
+        // Inc.4.b : table de routage provider→modèle (non-secrète). Surcharge la table par
+        // défaut depuis l'env si fournie (`famille=modèle,famille=modèle`).
+        if let Ok(models) = std::env::var("EFE_SWARM_ROUTER_MODELS") {
+            state = state.with_router_models(efe_swarm_gateway::RouterMap::from_env_str(&models));
+            println!("→ mapping provider→modèle surchargé depuis EFE_SWARM_ROUTER_MODELS.");
+        }
     }
 
     // Prod (feature `postgres`) : persistance durable des records si DATABASE_URL est défini.

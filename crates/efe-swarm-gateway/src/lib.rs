@@ -47,6 +47,7 @@ mod error;
 mod oidc;
 #[cfg(feature = "pii")]
 mod pii;
+mod router_map;
 mod routes;
 mod state;
 mod store;
@@ -62,6 +63,7 @@ pub use dto::{
     RunStatusView, TopologyDto, VerifyResponse,
 };
 pub use error::GatewayError;
+pub use router_map::RouterMap;
 pub use state::SwarmGatewayState;
 pub use store::{InMemoryRunStore, RunStore, StoredRun};
 #[cfg(feature = "oidc")]

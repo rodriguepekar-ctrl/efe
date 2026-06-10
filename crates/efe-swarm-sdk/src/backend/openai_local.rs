@@ -72,6 +72,7 @@ impl LocalBackend for OpenAiLocalBackend {
             prompt: prompt.to_string(),
             response: response.clone(),
             latency_ms,
+            retry_count: 0, // self-host local nu : le Retrier (routeur Network) écrasera si besoin.
         });
         response
     }

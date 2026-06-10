@@ -39,6 +39,10 @@ pub(crate) struct PendingLlmCall {
     pub prompt: String,
     pub response: Option<String>,
     pub latency_ms: u64,
+    /// **Inc.4.b** : nombre de **re-tentatives** consommées avant cet appel final (0 = succès
+    /// du premier coup). Renseigné par le `Retrier` (chemin routeur Network) ; 0 pour le
+    /// self-host local nu. Alimente `retry_count`/`retry_outcome` du record N17.
+    pub retry_count: u32,
 }
 
 tokio::task_local! {
@@ -97,6 +101,13 @@ impl LlmProvenanceCollector {
         let ok = call.response.as_ref().map(|r| !r.is_empty()).unwrap_or(false);
         let user_prompt_hash = blake3_bytes(call.prompt.as_bytes());
         let output_hash = call.response.as_ref().map(|r| blake3_bytes(r.as_bytes()));
+        // Inc.4.b : télémétrie de re-tentative (chemin routeur Network). `retry_count == 0`
+        // ⇒ premier essai (NoRetry) ; > 0 ⇒ N re-tentatives, l'issue dépend du succès final.
+        let retry_outcome = match (call.retry_count, ok) {
+            (0, _) => RetryOutcome::NoRetry,
+            (_, true) => RetryOutcome::RetriedSucceeded,
+            (_, false) => RetryOutcome::RetriedExhausted,
+        };
 
         let record = LlmProvenanceRecord {
             // identité
@@ -157,8 +168,8 @@ impl LlmProvenanceCollector {
             cache_hit: None,
             recorded_at: SystemTime::now(),
             streaming_mode: false,
-            retry_count: 0,
-            retry_outcome: RetryOutcome::NoRetry,
+            retry_count: call.retry_count.min(u8::MAX as u32) as u8,
+            retry_outcome,
             time_to_first_token_ms: None,
         };
         self.records.lock().expect("n17 collector lock").push(record);
@@ -194,6 +205,7 @@ mod tests {
             prompt: prompt.into(),
             response: resp.map(String::from),
             latency_ms: 1234,
+            retry_count: 0,
         }
     }
 
@@ -214,6 +226,29 @@ mod tests {
         assert_eq!(r.user_prompt_hash, blake3_bytes(b"classify this"));
         assert_eq!(r.output_hash, Some(blake3_bytes(b"legal")));
         assert!(matches!(r.completeness, Completeness::Complete));
+    }
+
+    #[test]
+    fn retry_count_drives_retry_outcome() {
+        let c = LlmProvenanceCollector::default();
+        let aid = AgentId::new("generator").unwrap();
+        // 0 re-tentative → NoRetry.
+        c.assemble(SwarmId::new(), TenantId::system(), &aid, AgentRole::Generator, call("p", Some("ok")));
+        // 2 re-tentatives, succès final → RetriedSucceeded.
+        let mut won = call("p", Some("ok"));
+        won.retry_count = 2;
+        c.assemble(SwarmId::new(), TenantId::system(), &aid, AgentRole::Generator, won);
+        // 2 re-tentatives, échec final → RetriedExhausted.
+        let mut lost = call("p", None);
+        lost.retry_count = 2;
+        c.assemble(SwarmId::new(), TenantId::system(), &aid, AgentRole::Generator, lost);
+        let r = c.records();
+        assert_eq!(r[0].retry_count, 0);
+        assert!(matches!(r[0].retry_outcome, RetryOutcome::NoRetry));
+        assert_eq!(r[1].retry_count, 2);
+        assert!(matches!(r[1].retry_outcome, RetryOutcome::RetriedSucceeded));
+        assert_eq!(r[2].retry_count, 2);
+        assert!(matches!(r[2].retry_outcome, RetryOutcome::RetriedExhausted));
     }
 
     #[test]
