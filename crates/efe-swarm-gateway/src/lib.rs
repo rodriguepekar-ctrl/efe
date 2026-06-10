@@ -45,6 +45,8 @@ mod dto;
 mod error;
 #[cfg(feature = "oidc")]
 mod oidc;
+#[cfg(feature = "pii")]
+mod pii;
 mod routes;
 mod state;
 mod store;
@@ -64,6 +66,8 @@ pub use state::SwarmGatewayState;
 pub use store::{InMemoryRunStore, RunStore, StoredRun};
 #[cfg(feature = "oidc")]
 pub use oidc::OidcVerifier;
+#[cfg(feature = "pii")]
+pub use pii::{GatewayRedactor, PiiConfig, PolicyKind};
 #[cfg(feature = "postgres")]
 pub use store_pg::PgRunStore;
 

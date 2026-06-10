@@ -42,7 +42,7 @@ pub use bus::{DashboardBus, DashboardEnvelope};
 pub use event::{preview, DashboardEvent, Lane};
 pub use metrics::DashboardMetrics;
 pub use registry::DashboardRegistry;
-pub use tap::{DashboardObserver, DECIDED_TOPIC};
+pub use tap::{DashboardObserver, PreviewRedactor, DECIDED_TOPIC};
 
 /// Version du crate (semver).
 pub const CRATE_VERSION: &str = env!("CARGO_PKG_VERSION");

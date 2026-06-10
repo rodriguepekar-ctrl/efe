@@ -41,6 +41,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("→ auth OIDC activée (JWT ES256, clé publique server-side).");
     }
 
+    // G9 (feature `pii`) : politique PII par défaut depuis l'env (off/detect/redact/strict).
+    // Détection LOCALE (souverain). Off par défaut.
+    #[cfg(feature = "pii")]
+    if let Ok(p) = std::env::var("EFE_PII_DEFAULT_POLICY") {
+        if let Ok(policy) = p.parse::<efe_swarm_gateway::PolicyKind>() {
+            state = state.with_pii(efe_swarm_gateway::PiiConfig::new(policy));
+            println!("→ PII opt-in : politique par défaut = {}", policy.as_str());
+        }
+    }
+
     let app = router(state);
 
     let listener = tokio::net::TcpListener::bind(&addr).await?;

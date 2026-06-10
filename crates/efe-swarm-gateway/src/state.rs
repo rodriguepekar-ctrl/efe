@@ -8,7 +8,7 @@ use std::sync::Arc;
 
 use efe_blackboard::SubstrateMetrics;
 use efe_nano_sdk::TenantId;
-use efe_swarm_dashboard::{DashboardMetrics, DashboardRegistry};
+use efe_swarm_dashboard::{DashboardBus, DashboardMetrics, DashboardObserver, DashboardRegistry};
 use efe_swarm_provenance::ProvenanceMetrics;
 use efe_swarm_sdk::{ClientMode, HmacKeySource, Swarm, SwarmObserver};
 use efe_swarm_topology::AgentFleet;
@@ -45,6 +45,10 @@ pub struct SwarmGatewayState {
     /// `None` ⇒ repli sur l'extracteur d'en-têtes dev. Jamais une clé privée.
     #[cfg(feature = "oidc")]
     pub oidc: Option<Arc<crate::oidc::OidcVerifier>>,
+    /// **G9 (feature `pii`)** : politique PII par tenant (défaut `Off`). Caviarde sorties +
+    /// previews. Détection LOCALE (souverain).
+    #[cfg(feature = "pii")]
+    pub pii: crate::pii::PiiConfig,
 }
 
 impl SwarmGatewayState {
@@ -68,6 +72,8 @@ impl SwarmGatewayState {
             router_endpoint: None,
             #[cfg(feature = "oidc")]
             oidc: None,
+            #[cfg(feature = "pii")]
+            pii: crate::pii::PiiConfig::default(),
         }
     }
 
@@ -85,7 +91,48 @@ impl SwarmGatewayState {
             router_endpoint: None,
             #[cfg(feature = "oidc")]
             oidc: None,
+            #[cfg(feature = "pii")]
+            pii: crate::pii::PiiConfig::default(),
         }
+    }
+
+    /// **G9 (feature `pii`)** : branche une politique PII par tenant (caviardage souverain).
+    #[cfg(feature = "pii")]
+    pub fn with_pii(mut self, config: crate::pii::PiiConfig) -> Self {
+        self.pii = config;
+        self
+    }
+
+    /// Caviarde la sortie d'un run selon la politique PII du tenant (no-op sans feature `pii`
+    /// ou politique `Off`). Ne touche QUE la présentation — records/hashs intacts.
+    pub fn redact_output(&self, tenant: &str, run: &mut efe_swarm_sdk::SwarmRun) {
+        #[cfg(feature = "pii")]
+        {
+            let policy = self.pii.policy_for(tenant);
+            run.output = crate::pii::redact_json(&run.output, policy);
+        }
+        #[cfg(not(feature = "pii"))]
+        {
+            let _ = (tenant, run);
+        }
+    }
+
+    /// Crée l'observateur dashboard d'un run, avec un **redactor PII** des previews si le
+    /// tenant l'active (feature `pii`). Sans la feature : observateur nu.
+    pub fn dashboard_observer(&self, tenant: &str, bus: Arc<DashboardBus>) -> Arc<dyn SwarmObserver> {
+        let observer = DashboardObserver::new(bus);
+        #[cfg(feature = "pii")]
+        let observer = {
+            let policy = self.pii.policy_for(tenant);
+            if matches!(policy, crate::pii::PolicyKind::Redact | crate::pii::PolicyKind::Strict) {
+                observer.with_redactor(Arc::new(crate::pii::GatewayRedactor::new(policy)))
+            } else {
+                observer
+            }
+        };
+        #[cfg(not(feature = "pii"))]
+        let _ = tenant;
+        Arc::new(observer)
     }
 
     /// **Inc.2.d (feature `oidc`)** : branche un vérificateur OIDC (clé publique server-side).

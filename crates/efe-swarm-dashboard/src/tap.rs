@@ -13,6 +13,8 @@ use std::time::SystemTime;
 use efe_blackboard::{BlackboardWrite, EventSink, SwarmEvent, WriteSink};
 use efe_swarm_sdk::{AgentCall, AgentRole, SwarmObserver, SwarmRun};
 
+use serde_json::Value;
+
 use crate::bus::DashboardBus;
 use crate::event::{preview, DashboardEvent, Lane};
 
@@ -20,6 +22,22 @@ use crate::event::{preview, DashboardEvent, Lane};
 /// (pattern + confiance). Le tap le traduit en [`DashboardEvent::Decided`] plutôt qu'en
 /// `AgentMessage`. Émis par `efe-swarm-topology::ConsensusTopology` quand un tap est présent.
 pub const DECIDED_TOPIC: &str = "consensus.decided";
+
+/// **G9 — PII opt-in** : caviarde un aperçu textuel avant diffusion (previews du dashboard
+/// live). Le dashboard reste **léger** (trait générique) ; la passerelle injecte une
+/// implémentation `efe-pii` **locale** (sans réseau) quand un tenant l'active. Défaut : aucun.
+pub trait PreviewRedactor: Send + Sync {
+    fn redact(&self, text: &str) -> String;
+}
+
+/// Aperçu tronqué + caviardé (si un redactor est branché).
+fn redacted_preview(redactor: &Option<Arc<dyn PreviewRedactor>>, value: &Value) -> String {
+    let p = preview(value);
+    match redactor {
+        Some(r) => r.redact(&p),
+        None => p,
+    }
+}
 
 /// Tap d'écritures (`WriteSink`) → `AgentWrite`.
 struct DashWriteSink {
@@ -40,6 +58,7 @@ impl WriteSink for DashWriteSink {
 /// Tap d'événements de bus (`EventSink`) → `AgentMessage`.
 struct DashEventTap {
     bus: Arc<DashboardBus>,
+    redactor: Option<Arc<dyn PreviewRedactor>>,
 }
 impl EventSink for DashEventTap {
     fn on_event(&self, ev: &SwarmEvent) {
@@ -50,7 +69,7 @@ impl EventSink for DashEventTap {
                 pattern: p.get("pattern").and_then(|v| v.as_str()).unwrap_or("?").to_string(),
                 confidence: p.get("confidence").and_then(|v| v.as_f64()).unwrap_or(0.0),
                 judges_used: p.get("judges_used").and_then(|v| v.as_u64()).unwrap_or(0) as usize,
-                winner_preview: preview(p.get("winner").unwrap_or(&serde_json::Value::Null)),
+                winner_preview: redacted_preview(&self.redactor, p.get("winner").unwrap_or(&Value::Null)),
             });
             return;
         }
@@ -72,11 +91,19 @@ impl EventSink for DashEventTap {
 /// Branché via `SwarmBuilder::with_observer(Arc::new(DashboardObserver::new(bus)))`.
 pub struct DashboardObserver {
     bus: Arc<DashboardBus>,
+    redactor: Option<Arc<dyn PreviewRedactor>>,
 }
 
 impl DashboardObserver {
     pub fn new(bus: Arc<DashboardBus>) -> Self {
-        Self { bus }
+        Self { bus, redactor: None }
+    }
+
+    /// **G9** : caviarde les previews (candidats, verdict, sortie) via un redactor — la
+    /// passerelle injecte un `efe-pii` **local** quand un tenant l'active. Défaut : aucun.
+    pub fn with_redactor(mut self, redactor: Arc<dyn PreviewRedactor>) -> Self {
+        self.redactor = Some(redactor);
+        self
     }
 }
 
@@ -86,7 +113,7 @@ impl SwarmObserver for DashboardObserver {
     }
 
     fn event_tap(&self) -> Option<Arc<dyn EventSink>> {
-        Some(Arc::new(DashEventTap { bus: self.bus.clone() }))
+        Some(Arc::new(DashEventTap { bus: self.bus.clone(), redactor: self.redactor.clone() }))
     }
 
     fn on_run_start(&self, topology: &str, mode: &str, budget_cap_cents: u32, assumed_agents: usize) {
@@ -110,7 +137,7 @@ impl SwarmObserver for DashboardObserver {
         match call.role {
             AgentRole::Generator => self.bus.emit(DashboardEvent::Candidate {
                 variant: call.variant.unwrap_or(0) as usize,
-                value_preview: preview(call.output),
+                value_preview: redacted_preview(&self.redactor, call.output),
             }),
             AgentRole::Judge => {
                 let scores = call
@@ -145,7 +172,7 @@ impl SwarmObserver for DashboardObserver {
         self.bus.emit(DashboardEvent::RunFinished {
             elapsed_ms: run.accounting.elapsed_ms,
             agents_used: run.accounting.agents_used,
-            output_preview: preview(&run.output),
+            output_preview: redacted_preview(&self.redactor, &run.output),
             verified: run.provenance.verified,
             root: run.provenance.root.clone(),
         });
@@ -158,6 +185,38 @@ mod tests {
     use efe_swarm_sdk::{Budget, Swarm, TopologySpec};
     use serde_json::json;
     use uuid::Uuid;
+
+    /// G9 : un redactor branché caviarde les previews (candidats + sortie).
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn redactor_scrubs_previews() {
+        struct Mask;
+        impl PreviewRedactor for Mask {
+            fn redact(&self, _t: &str) -> String {
+                "[REDACTED]".into()
+            }
+        }
+        let bus = DashboardBus::new(efe_nano_sdk::TenantId::system(), Uuid::from_u128(9), 8192);
+        let swarm = Swarm::builder()
+            .with_observer(Arc::new(DashboardObserver::new(bus.clone()).with_redactor(Arc::new(Mask))))
+            .build()
+            .unwrap();
+        swarm
+            .run(json!({ "text": "hello", "expected": "hello" }), TopologySpec::consensus("echo_generator", &["consistency"], 3), Budget::cents(1000))
+            .await
+            .unwrap();
+        // tout preview (candidat / sortie) est caviardé ; aucun ne fuit le texte brut.
+        let previews: Vec<String> = bus
+            .replay()
+            .into_iter()
+            .filter_map(|e| match e.event {
+                DashboardEvent::Candidate { value_preview, .. } => Some(value_preview),
+                DashboardEvent::RunFinished { output_preview, .. } => Some(output_preview),
+                _ => None,
+            })
+            .collect();
+        assert!(!previews.is_empty());
+        assert!(previews.iter().all(|p| p == "[REDACTED]"), "tous les previews caviardés : {previews:?}");
+    }
 
     /// Un run keyless réel, observé : le bus reçoit la séquence attendue.
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]

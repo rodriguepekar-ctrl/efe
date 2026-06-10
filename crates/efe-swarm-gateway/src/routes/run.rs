@@ -13,7 +13,7 @@ use axum::extract::{Query, State};
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use axum::Json;
-use efe_swarm_dashboard::{DashboardBus, DashboardEvent, DashboardObserver};
+use efe_swarm_dashboard::{DashboardBus, DashboardEvent};
 use tokio::task::JoinHandle;
 use uuid::Uuid;
 
@@ -46,7 +46,8 @@ pub async fn run(
         let bus = DashboardBus::new_metered(tid, run_id, RING_CAP, Some(s.dash_metrics.clone()));
         s.dashboards.insert(bus.clone());
 
-        let observer = Arc::new(DashboardObserver::new(bus.clone()));
+        // G9 : observateur avec redactor PII des previews si le tenant l'active.
+        let observer = s.dashboard_observer(&caller.tenant, bus.clone());
         let swarm = s.swarm_for_observed(&caller.tenant, mode, observer, allow_remote)?;
 
         let state = s.clone();
@@ -54,7 +55,9 @@ pub async fn run(
         tokio::spawn(async move {
             let ticker = spawn_metrics_ticker(state.clone(), bus.clone());
             match swarm.run_traced(task, spec, budget).await {
-                Ok(outcome) => {
+                Ok(mut outcome) => {
+                    // G9 : caviarde la sortie au repos selon la politique du tenant (records intacts).
+                    state.redact_output(&tenant, &mut outcome.run);
                     // persiste la PREUVE (records) — re-vérifiable via verify/:id.
                     let _ = state.store.put(run_id, &tenant, &outcome).await;
                     // (l'observateur a déjà émis `run_finished`.)
@@ -72,7 +75,9 @@ pub async fn run(
 
     // ── Mode SYNC (Inc.2, inchangé) ──────────────────────────────────────────
     let swarm = s.swarm_for(&caller.tenant, mode, allow_remote)?;
-    let outcome = swarm.run_traced(task, spec, budget).await?;
+    let mut outcome = swarm.run_traced(task, spec, budget).await?;
+    // G9 : caviarde la sortie selon la politique PII du tenant (réponse + au repos).
+    s.redact_output(&caller.tenant, &mut outcome.run);
     let run_id = Uuid::new_v4();
     s.store.put(run_id, &caller.tenant, &outcome).await?;
     Ok((StatusCode::OK, Json(RunResponse { run_id, run: outcome.run })).into_response())

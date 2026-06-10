@@ -23,6 +23,9 @@ postgres = ["dep:sqlx"]
 # `OidcVerifier` (prod) : auth `Caller` via JWT OIDC ES256 (clé PUBLIQUE server-side ;
 # aucune clé manipulée). Remplace l'extracteur d'en-têtes dev.
 oidc = ["dep:jsonwebtoken"]
+# PII opt-in par tenant (G9) : caviarde sorties + previews. Détection LOCALE (regex, sans
+# réseau → souverain) + le redactor `efe-pii`. OFF par défaut (Off = no-op).
+pii = ["dep:efe-pii", "dep:regex"]
 
 [dependencies]
 efe-swarm-sdk        = { path = "../efe-swarm-sdk", version = "0.0.1" }
@@ -45,6 +48,8 @@ uuid         = { workspace = true }
 # Prod (feature-gated) — la passerelle légère/dev reste inchangée par défaut.
 sqlx = { version = "0.7", default-features = false, features = ["runtime-tokio", "tls-rustls", "postgres", "json", "uuid"], optional = true }
 jsonwebtoken = { workspace = true, optional = true }
+efe-pii = { path = "../efe-pii", version = "0.0.1", optional = true }   # redactor (pur, local) + PolicyKind
+regex   = { version = "1", optional = true }                            # détecteur PII LOCAL (souverain)
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["macros", "rt-multi-thread", "time"] }
