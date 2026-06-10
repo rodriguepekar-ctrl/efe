@@ -96,8 +96,10 @@ pub use replay::{
 pub use sink::ProvenanceSink;
 pub use verify::{verify_swarm, SwarmProvenanceReport};
 
-// Réexport du socle crypto partagé (pratique pour l'appelant).
-pub use efe_audit_core::{chain_hmac, AuditKeyError, HmacKeySource};
+// Réexport du socle crypto partagé (pratique pour l'appelant). `MASTER_ENV` = nom de la
+// variable d'env du master HKDF (server-side) — utilisé par le binaire prod pour choisir
+// `EnvHkdf` vs la clé de test, sans jamais lire la VALEUR du master.
+pub use efe_audit_core::{chain_hmac, AuditKeyError, HmacKeySource, MASTER_ENV};
 
 /// Version du crate (semver).
 pub const CRATE_VERSION: &str = env!("CARGO_PKG_VERSION");

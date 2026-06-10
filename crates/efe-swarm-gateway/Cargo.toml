@@ -13,6 +13,12 @@ publish = false
 name = "efe_swarm_gateway"
 path = "src/lib.rs"
 
+# Binaire **production** : sélectionne `EnvHkdf` (master server-side), bind 0.0.0.0,
+# arrêt gracieux SIGTERM/Ctrl-C, câble store/oidc/pii/router depuis l'env.
+[[bin]]
+name = "efe-swarm-gateway"
+path = "src/main.rs"
+
 [features]
 default = []
 # Expose `InMemoryRunStore::tamper_first_output` hors `#[cfg(test)]` pour permettre
@@ -36,7 +42,7 @@ efe-blackboard       = { path = "../efe-blackboard", version = "0.0.1" }        
 efe-nano-sdk         = { path = "../efe-nano-sdk", version = "0.0.1" }          # TenantId
 
 axum         = { version = "0.7", default-features = false, features = ["json", "tokio", "http1", "query"] }
-tokio        = { workspace = true, features = ["sync", "rt", "time"] }
+tokio        = { workspace = true, features = ["sync", "rt", "rt-multi-thread", "macros", "net", "signal", "time"] }
 tokio-stream = { workspace = true }             # BroadcastStream (SSE)
 async-stream = "0.3"                            # stream! (SSE)
 futures      = { workspace = true }             # Stream combinators (firehose)

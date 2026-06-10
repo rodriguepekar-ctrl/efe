@@ -156,6 +156,16 @@ impl SwarmGatewayState {
         self
     }
 
+    /// **Prod** : remplace la source de clé de **provenance**. En production, le binaire
+    /// injecte `HmacKeySource::EnvHkdf` (master HKDF lu **server-side** via
+    /// `EFE_NANO_AUDIT_HMAC_MASTER`) ; sans ça, le repli `test_key()` signerait avec un
+    /// master **public** → la re-preuve (`verify`) serait **forgeable**. Cette clé **signe**
+    /// la chaîne ; elle n'est **jamais** transmise ni une clé d'auth provider.
+    pub fn with_keys(mut self, keys: HmacKeySource) -> Self {
+        self.keys = keys;
+        self
+    }
+
     /// **Inc.4** : câble le routeur frontière (`ClientMode::Network`). L'`endpoint` est une
     /// **URL non-secrète** (le routeur server-side détient les clés). À lire depuis l'env
     /// **côté binaire** (ex. `EFE_SWARM_ROUTER_ENDPOINT`), jamais ici dans la lib.
