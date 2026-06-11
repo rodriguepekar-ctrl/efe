@@ -1,0 +1,896 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>EFE — Architecture &amp; Fonctionnement</title>
+<style>
+  :root{--ink:#0f172a;--muted:#475569;--soft:#64748b;--line:#e2e8f0;--teal:#0d9488;--teal-d:#0f766e;
+    --indigo:#4f46e5;--indigo-d:#4338ca;--ok:#16a34a;--warn:#d97706;--bad:#dc2626;--bg-tint:#f8fafc;--bg-card:#f1f5f9;--code-bg:#0f172a;--code-fg:#e2e8f0;}
+  *{box-sizing:border-box;}
+  html{font-size:11.2px;}
+  body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,Helvetica,Arial,sans-serif;color:var(--ink);margin:0;line-height:1.52;background:#fff;-webkit-font-smoothing:antialiased;}
+  .wrap{max-width:185mm;margin:0 auto;padding:0 2mm;}
+  h1,h2,h3,h4{line-height:1.18;font-weight:700;color:var(--ink);}
+  h2{font-size:1.5rem;margin:0 0 .5rem;padding-bottom:.35rem;border-bottom:3px solid var(--teal);}
+  h2 .num{color:var(--teal);font-variant-numeric:tabular-nums;}
+  h3{font-size:1.16rem;margin:1.05rem 0 .3rem;color:var(--indigo-d);}
+  h4{font-size:.99rem;margin:.75rem 0 .2rem;color:var(--teal-d);}
+  p{margin:.42rem 0;} a{color:var(--indigo);text-decoration:none;}
+  code{font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace;font-size:.85em;background:var(--bg-card);padding:.05em .35em;border-radius:4px;color:#0b3b36;}
+  .muted{color:var(--muted);} .small{font-size:.85rem;}
+  section{break-inside:avoid;} .page{break-before:page;} h2{break-after:avoid;}
+  table{border-collapse:collapse;width:100%;margin:.55rem 0;font-size:.83rem;}
+  th,td{border:1px solid var(--line);padding:.3rem .5rem;text-align:left;vertical-align:top;}
+  th{background:var(--bg-card);font-weight:700;} tbody tr:nth-child(even){background:var(--bg-tint);}
+  .tag{display:inline-block;font-size:.72rem;font-weight:700;padding:.08em .5em;border-radius:20px;}
+  .t-ok{background:#dcfce7;color:#166534;} .t-info{background:#e0e7ff;color:#3730a3;} .t-teal{background:#ccfbf1;color:#115e59;} .t-warn{background:#fef3c7;color:#92400e;}
+  pre{background:var(--code-bg);color:var(--code-fg);padding:.7rem .9rem;border-radius:8px;overflow:auto;font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace;font-size:.75rem;line-height:1.45;margin:.5rem 0;}
+  pre code{background:none;color:inherit;padding:0;}
+  .callout{border-left:4px solid var(--teal);background:var(--bg-tint);padding:.55rem .8rem;border-radius:0 8px 8px 0;margin:.6rem 0;}
+  .callout.key{border-color:var(--indigo);background:#eef2ff;} .callout.warn{border-color:var(--warn);background:#fffbeb;}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:.8rem;} .grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:.7rem;}
+  .card{border:1px solid var(--line);border-radius:10px;padding:.65rem .8rem;background:#fff;}
+  .fig{margin:.7rem 0 1rem;text-align:center;break-inside:avoid;}
+  .fig svg{max-width:100%;height:auto;border:1px solid var(--line);border-radius:10px;background:#fff;}
+  .fig .cap{font-size:.78rem;color:var(--muted);margin-top:.3rem;font-style:italic;}
+  ul,ol{margin:.35rem 0 .35rem 1.1rem;padding:0;} li{margin:.18rem 0;}
+  svg text{font-family:-apple-system,"Segoe UI",Inter,sans-serif;}
+  .cover{height:267mm;display:flex;flex-direction:column;justify-content:center;position:relative;padding:0 6mm;}
+  .cover .eyebrow{color:var(--teal);font-weight:800;letter-spacing:.3em;font-size:.92rem;text-transform:uppercase;}
+  .cover h1{font-size:3.2rem;margin:.4rem 0 .2rem;letter-spacing:-.01em;}
+  .cover .sub{font-size:1.4rem;color:var(--muted);font-weight:500;margin-bottom:1.4rem;}
+  .cover .tagline{font-size:1.1rem;color:var(--ink);max-width:152mm;border-left:4px solid var(--teal);padding-left:1rem;font-style:italic;}
+  .cover .meta{position:absolute;bottom:6mm;left:6mm;right:6mm;display:flex;justify-content:space-between;border-top:1px solid var(--line);padding-top:.7rem;font-size:.85rem;color:var(--soft);}
+  .cover .pills{margin:1.2rem 0;} .cover .pills .tag{font-size:.82rem;margin-right:.4rem;}
+  .toc{columns:2;column-gap:2.2rem;font-size:.9rem;} .toc div{break-inside:avoid;margin:.14rem 0;}
+  .toc .n{color:var(--teal);font-weight:700;display:inline-block;width:1.7em;}
+  .lede{font-size:1.04rem;color:#1e293b;} .mono{font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace;}
+  hr{border:none;border-top:1px solid var(--line);margin:1rem 0;}
+  .filemap{font-size:.8rem;} .filemap td:first-child{font-family:"SF Mono",ui-monospace,monospace;color:#0b3b36;white-space:nowrap;}
+</style>
+</head>
+<body>
+
+<!-- COVER -->
+<div class="wrap"><div class="cover">
+  <div class="eyebrow">Document d'architecture &amp; de fonctionnement</div>
+  <h1>EFE — Essaim Fluide Éphémère</h1>
+  <div class="sub">Comment ça marche, vraiment : des nano-agents parallèles qui se passent l'information.</div>
+  <div class="tagline">Ce document explique l'<b>architecture</b> (les pièces et pourquoi elles existent) et le
+   <b>fonctionnement</b> (ce qui se passe, dans l'ordre, quand on lance un run) — <b>ancré ligne à ligne dans
+   le code réel</b>, pas dans une intention.</div>
+  <div class="pills">
+    <span class="tag t-teal">43 nano-agents</span>
+    <span class="tag t-ok">4 topologies parallèles</span>
+    <span class="tag t-info">substrat CAS + bus</span>
+    <span class="tag t-ok">provenance vérifiable</span>
+  </div>
+  <div class="meta">
+    <span><b>Portée :</b> stack essaim (10 crates Rust, ~30 k LoC)</span>
+    <span><b>Réf. :</b> <span class="mono">main</span> · 2026-06-11</span>
+  </div>
+</div></div>
+
+<!-- TOC -->
+<div class="wrap page">
+  <h2><span class="num">§0</span> &nbsp;Plan du document</h2>
+  <div class="toc">
+    <div><span class="n">1</span>Carte du système (couches)</div>
+    <div><span class="n">2</span>Le modèle conceptuel &amp; le cycle d'un run</div>
+    <div><span class="n">3</span>Le substrat de communication</div>
+    <div><span class="n">4</span>Les nano-agents (traits &amp; flotte)</div>
+    <div><span class="n">5</span>Les quatre topologies parallèles</div>
+    <div><span class="n">6</span>Le SDK : orchestration d'un run</div>
+    <div><span class="n">7</span>La provenance (le moat)</div>
+    <div><span class="n">8</span>Le pont N17 (forensique par-appel)</div>
+    <div><span class="n">9</span>Les backends locaux &amp; la résilience</div>
+    <div><span class="n">10</span>La passerelle HTTP &amp; le mode Network</div>
+    <div><span class="n">11</span>Déploiement souverain</div>
+    <div><span class="n">A</span>Annexes : flotte, carte des fichiers</div>
+  </div>
+  <p class="muted small" style="margin-top:.8rem">Convention : les noms entre <code>code</code> sont des
+  symboles réels (structs, traits, fonctions) ; les chemins <code class="mono">crate/fichier.rs</code>
+  localisent l'implémentation. Les diagrammes décrivent le flux d'exécution effectif.</p>
+</div>
+
+<!-- §1 CARTE -->
+<div class="wrap page">
+  <h2><span class="num">§1</span> &nbsp;Carte du système</h2>
+  <p class="lede">EFE est un monorepo Rust organisé en <b>couches strictes</b> : chaque couche ne dépend que
+  des couches inférieures (aucun cycle). C'est ce qui permet de garder le SDK <b>léger</b> et la passerelle
+  de dev <b>sans dépendance prod</b>.</p>
+  <div class="fig">
+  <svg viewBox="0 0 900 410" role="img" aria-label="Couches">
+    <defs><marker id="ar" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="#475569"/></marker>
+      <linearGradient id="gP" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#0d9488"/><stop offset="1" stop-color="#0f766e"/></linearGradient></defs>
+    <rect x="40" y="16" width="820" height="54" rx="10" fill="url(#gP)"/>
+    <text x="60" y="38" fill="#fff" font-size="13.5" font-weight="700">Exposition · efe-swarm-gateway</text>
+    <text x="60" y="58" fill="#d1fae5" font-size="9.5">HTTP : POST /run · GET /verify/:id · /records · /metrics · /dashboard (SSE) · binaire prod</text>
+    <rect x="40" y="82" width="400" height="46" rx="10" fill="#eef2ff" stroke="#4f46e5"/>
+    <text x="60" y="101" fill="#3730a3" font-size="11.5" font-weight="700">efe-swarm-dashboard</text><text x="60" y="118" fill="#4338ca" font-size="9">observabilité live (bus → SSE)</text>
+    <rect x="460" y="82" width="400" height="46" rx="10" fill="#f5f3ff" stroke="#7c3aed"/>
+    <text x="480" y="101" fill="#5b21b6" font-size="11.5" font-weight="700">routeur frontière (server-side)</text><text x="480" y="118" fill="#6d28d9" font-size="9">détient les clés provider (Network)</text>
+    <rect x="40" y="140" width="820" height="48" rx="10" fill="#ccfbf1" stroke="#0d9488"/>
+    <text x="60" y="160" fill="#115e59" font-size="12.5" font-weight="700">Orchestration · efe-swarm-sdk</text><text x="60" y="178" fill="#0f766e" font-size="9.5">Swarm::run · ClientMode · Resolver · Meter (budget+provenance+N17) · backends locaux</text>
+    <rect x="40" y="200" width="405" height="46" rx="10" fill="#fef9c3" stroke="#ca8a04"/>
+    <text x="60" y="219" fill="#854d0e" font-size="11.5" font-weight="700">Preuve · efe-swarm-provenance</text><text x="60" y="236" fill="#a16207" font-size="9">AgentCallRecord · verify_swarm · pont N17</text>
+    <rect x="455" y="200" width="405" height="46" rx="10" fill="#ffedd5" stroke="#ea580c"/>
+    <text x="475" y="219" fill="#9a3412" font-size="11.5" font-weight="700">Calcul · efe-swarm-topology</text><text x="475" y="236" fill="#c2410c" font-size="9">43 nano-agents · T1/T2/T3/Consensus · SwarmContext</text>
+    <rect x="40" y="258" width="265" height="52" rx="10" fill="#e2e8f0" stroke="#64748b"/>
+    <text x="58" y="278" fill="#334155" font-size="11.5" font-weight="700">efe-blackboard</text><text x="58" y="296" fill="#475569" font-size="8.5">substrat : CAS · TopicRouter · sinks · métriques</text>
+    <rect x="315" y="258" width="250" height="52" rx="10" fill="#e2e8f0" stroke="#64748b"/>
+    <text x="333" y="278" fill="#334155" font-size="11.5" font-weight="700">efe-audit-core</text><text x="333" y="296" fill="#475569" font-size="8.5">HKDF/tenant · HmacKeySource</text>
+    <rect x="575" y="258" width="285" height="52" rx="10" fill="#e2e8f0" stroke="#64748b"/>
+    <text x="593" y="278" fill="#334155" font-size="11.5" font-weight="700">efe-nano-sdk</text><text x="593" y="296" fill="#475569" font-size="8.5">types : TenantId · LlmProvenanceRecord · blake3</text>
+    <rect x="40" y="322" width="820" height="34" rx="10" fill="#fae8ff" stroke="#c026d3"/>
+    <text x="60" y="344" fill="#86198f" font-size="10.5" font-weight="700">efe-pii (feature)</text><text x="170" y="344" fill="#a21caf" font-size="9">détection LOCALE → caviarde la présentation ; records intacts</text>
+    <line x1="450" y1="140" x2="450" y2="128" stroke="#475569" marker-end="url(#ar)"/>
+    <line x1="240" y1="200" x2="240" y2="188" stroke="#475569" marker-end="url(#ar)"/>
+    <line x1="650" y1="200" x2="650" y2="188" stroke="#475569" marker-end="url(#ar)"/>
+    <line x1="447" y1="258" x2="447" y2="246" stroke="#475569" marker-end="url(#ar)"/>
+    <line x1="450" y1="82" x2="450" y2="70" stroke="#475569" marker-end="url(#ar)"/>
+  </svg>
+  <div class="cap">Figure 1 — Les couches. La règle « le haut dépend du bas » est ce qui garantit l'absence de cycle et la légèreté du SDK (zéro réseau/TLS).</div>
+  </div>
+  <table>
+    <thead><tr><th>Couche</th><th>Responsabilité unique</th></tr></thead>
+    <tbody>
+      <tr><td><b>nano-sdk / audit-core</b></td><td>les <i>types</i> et la <i>crypto</i> de base (identités, hashs blake3, dérivation de clé HKDF).</td></tr>
+      <tr><td><b>blackboard</b></td><td>le <i>substrat</i> : où et comment les agents se passent l'information.</td></tr>
+      <tr><td><b>topology</b></td><td>les <i>nano-agents</i> et les <i>patterns</i> qui les orchestrent en parallèle.</td></tr>
+      <tr><td><b>provenance</b></td><td>la <i>preuve</i> : sceller chaque pas, re-vérifier l'ensemble.</td></tr>
+      <tr><td><b>sdk</b></td><td>l'<i>orchestration</i> : assembler tâche + topologie + budget + mode en un run tracé.</td></tr>
+      <tr><td><b>gateway / dashboard</b></td><td>l'<i>exposition</i> : HTTP, re-preuve, observabilité live.</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- §2 MODELE + CYCLE -->
+<div class="wrap page">
+  <h2><span class="num">§2</span> &nbsp;Le modèle conceptuel &amp; le cycle d'un run</h2>
+  <p>Cinq idées suffisent à tout comprendre. <b>(1) Nano-agents</b> : beaucoup de petits agents déterministes,
+  mono-fonction, sans poids. <b>(2) Substrat</b> : un Blackboard (vérité) + un bus (indice) où ils s'échangent
+  l'information. <b>(3) Topologies</b> : 4 façons de les orchestrer en parallèle. <b>(4) Modes</b> : la même
+  topologie peut faire tourner des agents déterministes (Mode A) ou de vrais LLM (Mode C/Network). <b>(5)
+  Provenance</b> : chaque pas est scellé → un tiers re-prouve le run hors-ligne.</p>
+
+  <h3>Le cycle complet d'un run (ce qui se passe, dans l'ordre)</h3>
+  <div class="fig">
+  <svg viewBox="0 0 900 470" role="img" aria-label="Cycle d'un run">
+    <defs><marker id="c1" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="#475569"/></marker></defs>
+    <rect x="330" y="14" width="240" height="34" rx="8" fill="#0f172a"/><text x="450" y="36" text-anchor="middle" fill="#fff" font-size="10.5" font-weight="700">POST /v1/swarm/run (task, topo, budget, mode)</text>
+    <rect x="300" y="64" width="300" height="34" rx="8" fill="#ccfbf1" stroke="#0d9488"/><text x="450" y="80" text-anchor="middle" fill="#115e59" font-size="10" font-weight="700">gateway : auth (RBAC) + resolve_mode</text><text x="450" y="92" text-anchor="middle" fill="#0f766e" font-size="8">→ (mode exécutable, allow_remote, tarif)</text>
+    <rect x="300" y="114" width="300" height="34" rx="8" fill="#ccfbf1" stroke="#0d9488"/><text x="450" y="130" text-anchor="middle" fill="#115e59" font-size="10" font-weight="700">Swarm::run_traced</text><text x="450" y="142" text-anchor="middle" fill="#0f766e" font-size="8">budget (pré-vol) · backend (self-host) · Meter</text>
+    <rect x="300" y="164" width="300" height="34" rx="8" fill="#fff" stroke="#0d9488"/><text x="450" y="180" text-anchor="middle" fill="#115e59" font-size="10" font-weight="700">topology.concretize + resolve (Resolver)</text><text x="450" y="192" text-anchor="middle" fill="#0f766e" font-size="8">nom → flotte (Mode A) OU instruction (Mode C) · meter_*</text>
+    <rect x="120" y="218" width="660" height="86" rx="10" fill="#fffbeb" stroke="#ca8a04"/>
+    <text x="450" y="237" text-anchor="middle" fill="#854d0e" font-size="10.5" font-weight="700">EXÉCUTION PARALLÈLE sur le substrat (topo.run)</text>
+    <rect x="140" y="246" width="150" height="46" rx="7" fill="#fef9c3"/><text x="215" y="265" text-anchor="middle" font-size="8.5" fill="#713f12">K générateurs ∥</text><text x="215" y="280" text-anchor="middle" font-size="8" fill="#a16207">JoinSet+Semaphore → /cand/*</text>
+    <rect x="310" y="246" width="150" height="46" rx="7" fill="#e0f2fe"/><text x="385" y="265" text-anchor="middle" font-size="8.5" fill="#075985">J juges ∥</text><text x="385" y="280" text-anchor="middle" font-size="8" fill="#0369a1">spawn → /ballot/* + bus</text>
+    <rect x="480" y="246" width="130" height="46" rx="7" fill="#fde68a"/><text x="545" y="265" text-anchor="middle" font-size="8.5" fill="#854d0e">agrégateur</text><text x="545" y="280" text-anchor="middle" font-size="8" fill="#a16207">Borda + confiance</text>
+    <rect x="628" y="246" width="135" height="46" rx="7" fill="#dcfce7"/><text x="695" y="262" text-anchor="middle" font-size="8" fill="#166534">chaque pas →</text><text x="695" y="276" text-anchor="middle" font-size="8" fill="#15803d">Meter : budget+prov+N17</text>
+    <rect x="280" y="322" width="340" height="34" rx="8" fill="#fef9c3" stroke="#ca8a04"/><text x="450" y="338" text-anchor="middle" fill="#854d0e" font-size="10" font-weight="700">recorder.seal_with_key → provenance_root</text><text x="450" y="350" text-anchor="middle" fill="#a16207" font-size="8">verify_swarm (re-prouve immédiatement) + N17 bridge</text>
+    <rect x="300" y="372" width="300" height="32" rx="8" fill="#eef2ff" stroke="#4f46e5"/><text x="450" y="392" text-anchor="middle" fill="#3730a3" font-size="10" font-weight="700">store.put(records) → réponse {run_id, run}</text>
+    <rect x="300" y="420" width="300" height="34" rx="8" fill="#dcfce7" stroke="#16a34a"/><text x="450" y="436" text-anchor="middle" fill="#166534" font-size="10" font-weight="700">+ tard : GET /verify/:id (hors-ligne)</text><text x="450" y="448" text-anchor="middle" fill="#15803d" font-size="8">re-preuve indépendante depuis les records</text>
+    <line x1="450" y1="48" x2="450" y2="64" stroke="#475569" marker-end="url(#c1)"/>
+    <line x1="450" y1="98" x2="450" y2="114" stroke="#475569" marker-end="url(#c1)"/>
+    <line x1="450" y1="148" x2="450" y2="164" stroke="#475569" marker-end="url(#c1)"/>
+    <line x1="450" y1="198" x2="450" y2="218" stroke="#475569" marker-end="url(#c1)"/>
+    <line x1="450" y1="304" x2="450" y2="322" stroke="#475569" marker-end="url(#c1)"/>
+    <line x1="450" y1="356" x2="450" y2="372" stroke="#475569" marker-end="url(#c1)"/>
+    <line x1="450" y1="404" x2="450" y2="420" stroke="#475569" marker-end="url(#c1)"/>
+  </svg>
+  <div class="cap">Figure 2 — Le cycle de bout en bout (<code>routes/run.rs</code> → <code>sdk.rs::run_traced</code> → <code>topology</code> → <code>provenance</code> → <code>store</code>). C'est la colonne vertébrale ; les sections suivantes zooment sur chaque étage.</div>
+  </div>
+  <p>À retenir : l'<b>orchestration</b> (qui décide quoi exécuter) est séparée de l'<b>exécution</b> (les agents
+  sur le substrat), elle-même séparée de la <b>preuve</b> (le scellement). Ces trois plans ne se connaissent
+  que par des <i>interfaces minces</i> (un trait <code>Topology</code>, un trait <code>WriteSink</code>), ce
+  qui rend chaque étage remplaçable sans toucher aux autres.</p>
+
+  <h3>Un exemple concret, du début à la fin</h3>
+  <p>Pour ancrer les idées, suivons une vraie requête. On envoie à la passerelle :</p>
+  <pre><code>{ "task": { "text": "The court ruled the clause unenforceable.", "expected": "legal" },
+  "topology": { "kind": "consensus", "generator": "echo_generator",
+                "judges": ["consistency","length_band","j_non_empty"], "k": 5, "pattern": "borda" },
+  "budget": { "max_cents": 1000 }, "mode": "keyless" }</code></pre>
+  <p>Voici ce qui se déroule, dans l'ordre, avec les valeurs réelles :</p>
+  <ol>
+    <li>La passerelle vérifie le rôle (RBAC), puis <code>resolve_mode("keyless")</code> → mode inchangé,
+      <code>allow_remote = false</code>, pas de surcharge de tarif. Le prix par appel sera 1 ¢ (tarif Keyless).</li>
+    <li><code>Swarm::run_traced</code> démarre. Budget pré-vol : 5 générateurs + 3 juges = <b>8 appels</b> ×
+      1 ¢ = 8 ¢, bien sous le plafond de 1000 → on exécute.</li>
+    <li>Mode Keyless → pas de backend, <code>AgentKind::ModeA</code>. Le <code>Resolver</code> récupère
+      <code>echo_generator</code> et les 3 juges <b>depuis la flotte</b> (nano-agents). Chacun est enveloppé
+      par le <code>Meter</code>.</li>
+    <li>La topologie consensus s'exécute : 5 candidats générés en parallèle → écrits en <code>/cand/0…4</code> ;
+      les 3 juges lisent et écrivent <code>/ballot/0…2</code> ; Borda agrège. <b>8 écritures</b> au Blackboard
+      → <b>8 <code>AgentCallRecord</code></b> capturés, <b>8 ¢</b> facturés.</li>
+    <li>Scellement : la chaîne HMAC produit un <code>provenance_root</code> de 64 hex ;
+      <code>verify_swarm</code> le re-prouve immédiatement (<code>verified = true</code>).</li>
+    <li>La passerelle persiste les 8 records et renvoie <code>{ run_id, run }</code> avec
+      <code>budget.spent_cents = 8</code>, <code>provenance.records = 8</code>, le root, et le résultat.</li>
+  </ol>
+  <p>Ce run est exactement celui qu'on voit dans le dashboard live (panneau Provenance : « records 8,
+  traced_pct 100 %, VERIFIED » ; panneau Budget : « 8 / 1000 »). Chaque cent dépensé correspond à un record
+  tracé — c'est la cohérence vérifiable de bout en bout, en un seul exemple.</p>
+</div>
+<!-- §3 SUBSTRAT -->
+<div class="wrap page">
+  <h2><span class="num">§3</span> &nbsp;Le substrat de communication <span class="small muted">(crate efe-blackboard)</span></h2>
+  <p class="lede">Le substrat est la réponse à « comment des dizaines d'agents se passent l'information en
+  parallèle sans se corrompre ». Il a deux organes complémentaires (Keystone WS1) : un <b>Blackboard</b>
+  (la vérité durable, exhaustive) et un <b>TopicRouter</b> (l'indice live, pub/sub).</p>
+
+  <div class="fig">
+  <svg viewBox="0 0 900 320" role="img" aria-label="Substrat">
+    <defs><marker id="s1" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="#475569"/></marker></defs>
+    <rect x="30" y="40" width="150" height="160" rx="9" fill="#f0fdfa" stroke="#0d9488"/>
+    <text x="105" y="60" text-anchor="middle" font-size="10.5" font-weight="700" fill="#115e59">agents ∥</text>
+    <g font-size="8.5" fill="#0f766e"><rect x="44" y="72" width="122" height="22" rx="5" fill="#ccfbf1"/><text x="105" y="87" text-anchor="middle">generator×K</text>
+      <rect x="44" y="100" width="122" height="22" rx="5" fill="#e0f2fe"/><text x="105" y="115" text-anchor="middle" fill="#075985">judge×J</text></g>
+    <text x="105" y="150" text-anchor="middle" font-size="8" fill="#64748b">write(pointer, value, agent_id)</text>
+    <text x="105" y="164" text-anchor="middle" font-size="8" fill="#64748b">write_if(...) = CAS</text>
+    <text x="105" y="184" text-anchor="middle" font-size="8" fill="#4f46e5">publish(topic, event)</text>
+
+    <rect x="240" y="20" width="330" height="150" rx="11" fill="#fffbeb" stroke="#ca8a04" stroke-width="1.5"/>
+    <text x="405" y="40" text-anchor="middle" font-size="11.5" font-weight="700" fill="#854d0e">Blackboard — VÉRITÉ</text>
+    <text x="405" y="55" text-anchor="middle" font-size="8.5" fill="#a16207">DashMap&lt;String, BlackboardValue&gt; (shardé)</text>
+    <g font-size="8" fill="#713f12"><rect x="256" y="64" width="298" height="18" rx="4" fill="#fef9c3"/><text x="264" y="77">/cand/0 → {value, version, written_by, at}</text>
+      <rect x="256" y="86" width="298" height="18" rx="4" fill="#fef9c3"/><text x="264" y="99">/cand/1 … (vérité durable, par-clé)</text>
+      <rect x="256" y="108" width="298" height="18" rx="4" fill="#fde68a"/><text x="264" y="121">/ballot/0 → {judge, scores[]}</text></g>
+    <text x="405" y="142" text-anchor="middle" font-size="8" fill="#a16207">versioning/champ · CAS write_if · ring 8192 · caps octets (G8)</text>
+    <text x="405" y="156" text-anchor="middle" font-size="8" fill="#a16207">snapshot() → reconstruit l'ensemble EXHAUSTIF</text>
+
+    <rect x="240" y="186" width="330" height="110" rx="11" fill="#eef2ff" stroke="#4f46e5" stroke-width="1.5"/>
+    <text x="405" y="206" text-anchor="middle" font-size="11.5" font-weight="700" fill="#3730a3">TopicRouter — INDICE</text>
+    <text x="405" y="221" text-anchor="middle" font-size="8.5" fill="#4338ca">DashMap&lt;topic, broadcast::Sender&gt;</text>
+    <g font-size="8" fill="#3730a3"><rect x="256" y="230" width="298" height="18" rx="4" fill="#e0e7ff"/><text x="264" y="243">publish("ballot.0") → N abonnés (peut perdre)</text>
+      <rect x="256" y="252" width="298" height="18" rx="4" fill="#e0e7ff"/><text x="264" y="265">subscribe_prefix("ballot.") → flux mergé</text></g>
+    <text x="405" y="286" text-anchor="middle" font-size="8" fill="#4338ca">live ; jamais la source de vérité</text>
+
+    <line x1="180" y1="110" x2="240" y2="90" stroke="#475569" marker-end="url(#s1)"/>
+    <line x1="180" y1="170" x2="240" y2="240" stroke="#4f46e5" marker-end="url(#s1)"/>
+    <rect x="630" y="40" width="240" height="56" rx="9" fill="#dcfce7" stroke="#16a34a"/><text x="750" y="62" text-anchor="middle" font-size="10" font-weight="700" fill="#166534">WriteSink.on_write</text><text x="750" y="80" text-anchor="middle" font-size="8.5" fill="#15803d">→ provenance (100% des écritures)</text>
+    <rect x="630" y="120" width="240" height="56" rx="9" fill="#f5f3ff" stroke="#7c3aed"/><text x="750" y="142" text-anchor="middle" font-size="10" font-weight="700" fill="#5b21b6">EventSink.on_event</text><text x="750" y="160" text-anchor="middle" font-size="8.5" fill="#6d28d9">→ dashboard (au publish)</text>
+    <rect x="630" y="206" width="240" height="76" rx="9" fill="#0f766e"/><text x="750" y="228" text-anchor="middle" font-size="10.5" font-weight="700" fill="#fff">Agrégateur</text><text x="750" y="246" text-anchor="middle" font-size="8.5" fill="#99f6e4">lit snapshot() = TOUS les ballots</text><text x="750" y="262" text-anchor="middle" font-size="8.5" fill="#99f6e4">→ gagnant + confiance</text>
+    <line x1="570" y1="95" x2="630" y2="68" stroke="#16a34a" marker-end="url(#s1)"/>
+    <line x1="570" y1="240" x2="630" y2="148" stroke="#7c3aed" marker-end="url(#s1)"/>
+    <line x1="570" y1="120" x2="630" y2="240" stroke="#475569" marker-end="url(#s1)"/>
+  </svg>
+  <div class="cap">Figure 3 — Le substrat. <code>blackboard.rs</code> (Blackboard), <code>topic_router.rs</code> (bus), <code>sink.rs</code> (seams), <code>metrics.rs</code> (compteurs).</div>
+  </div>
+
+  <h3>Le Blackboard : un magasin clé-valeur versionné, conçu pour le parallélisme</h3>
+  <p>Structure réelle (<code>blackboard.rs</code>) : <code>fields: DashMap&lt;String, BlackboardValue&gt;</code>
+  où la clé est un <b>JSON-pointer</b> (<code>/cand/0</code>, <code>/ballot/2</code>) et la valeur porte
+  <code>{ value, version, written_by, written_at }</code>. Deux propriétés rendent le parallélisme massif
+  viable :</p>
+  <ul>
+    <li><b>Sharding (<code>DashMap</code>).</b> La map est découpée en shards verrouillés indépendamment.
+      Quand 7 générateurs écrivent <code>/cand/0…6</code>, leurs clés tombent dans des shards différents →
+      <b>aucune attente mutuelle</b>. Un <code>Mutex</code> global aurait sérialisé tout le monde — le sharding
+      est <i>la</i> raison technique pour laquelle « beaucoup d'agents en parallèle » fonctionne.</li>
+    <li><b>CAS (<code>write_if(pointer, value, expected_version)</code>).</b> Quand deux agents visent la
+      <i>même</i> clé, l'écriture n'est acceptée que si la version stockée est encore celle qu'on a lue.
+      Exemple concret : A et B lisent <code>/x</code> v3 ; A écrit → v4 ; B tente « si v3 » → <b>refusé</b>,
+      <code>bb_conflicts_total++</code>. Pas de perte silencieuse : on gagne, ou on est explicitement recalé.</li>
+  </ul>
+  <p><b>Bornes (garde-fou G8).</b> L'historique détaillé est un <i>ring</i> borné (<code>DEFAULT_RECENT_HISTORY
+  = 8192</code>) ; les compteurs exacts (<code>writes_total</code>, par agent) sont des atomiques O(1) ; un
+  cap d'octets global (<code>MAX_BLACKBOARD_BYTES</code>) + des caps par namespace empêchent un essaim de
+  saturer la mémoire (écritures en excès → <code>rejections_total</code>).</p>
+
+  <h3>Le bus, et la règle d'or « bus = indice, Blackboard = vérité »</h3>
+  <p>Le <code>TopicRouter</code> (<code>topic_router.rs</code>) est un <code>broadcast::channel</code> par
+  topic. Pourquoi ne pas tout faire au bus ? Parce qu'un canal broadcast <b>peut perdre</b> des messages (si
+  un abonné est lent, l'événement est <i>dropped</i> → <code>ev_dropped_total</code>). Or l'agrégateur de
+  consensus <b>doit voir TOUS les ballots</b> (S1). Solution : le bus sert d'<b>indice</b> (« un ballot vient
+  d'arriver »), mais la décision lit la <b>vérité</b> au Blackboard via <code>snapshot()</code>, exhaustif.
+  Le live peut être imparfait sans jamais fausser le verdict.</p>
+
+  <h3>Les deux seams : observer sans coupler</h3>
+  <p>Tout passe par deux callbacks (<code>sink.rs</code>) : <code>WriteSink::on_write(&amp;BlackboardWrite)</code>
+  à chaque écriture committée, et <code>EventSink::on_event(&amp;SwarmEvent)</code> à chaque <code>publish</code>.
+  La couche provenance branche son sink sur le premier (elle ancre 100 % des écritures pour la preuve) ; le
+  dashboard branche le sien sur le second. <b>La topologie ignore complètement ces consommateurs</b> — elle ne
+  dépend que du type <code>efe_blackboard::WriteSink</code> (pas de cycle, pas de couplage). Règle d'or : ces
+  callbacks doivent être <b>rapides et non-bloquants</b> (variantes <i>lossy</i> via <code>try_send</code>),
+  car ils s'exécutent sur le chemin chaud des agents.</p>
+
+  <h3>Pourquoi des clés JSON-pointer (et pas un simple <code>HashMap&lt;String,String&gt;</code>)</h3>
+  <p>Les clés sont des chemins (<code>/cand/0</code>, <code>/ballot/2</code>) pour deux raisons. D'abord, elles
+  donnent une <b>structure</b> : on peut adresser un <i>namespace</i> entier (<code>/cand/*</code>) — utile
+  pour les caps par namespace (« les candidats peuvent peser jusqu'à X, les contrôles jusqu'à Y ») et pour la
+  réconciliation (« relis tous les <code>/ballot/*</code> »). Ensuite, les valeurs sont des
+  <code>serde_json::Value</code> arbitraires, donc un agent peut écrire un objet riche
+  (<code>{judge, scores[]}</code>) et un autre n'en lire qu'un champ. C'est un petit « système de fichiers en
+  mémoire » par run, pas un cache plat.</p>
+
+  <h3>Le <code>snapshot()</code> : pourquoi c'est lui qui décide</h3>
+  <p>À la fin de la phase de jugement, l'agrégateur n'écoute <b>pas</b> le bus pour décider — il appelle
+  <code>bb.snapshot()</code>, qui renvoie une vue cohérente de <b>tous</b> les champs présents. Il reconstruit
+  alors les ballots en lisant <code>/ballot/0…J</code>. Pourquoi ce détour ? Parce que c'est la seule façon
+  d'être <b>certain</b> de n'en rater aucun : un juge a peut-être fini avant que son message bus ne soit
+  consommé, ou son message a pu être <i>dropped</i> ; mais son écriture, elle, est dans le Blackboard. Le
+  snapshot transforme « ce que j'ai entendu passer » (faillible) en « ce qui est réellement là » (exact).</p>
+
+  <h3>Lire les métriques de substrat (ce qu'elles racontent)</h3>
+  <p>Le <code>SubstrateMetrics</code> (exposé en <code>/metrics</code>) est un tableau de bord de santé de
+  l'essaim :</p>
+  <ul>
+    <li><code>bb_writes_total</code> — volume d'information échangée (devrait ≈ K + J par run consensus).</li>
+    <li><code>bb_cas_attempts_total</code> / <code>bb_conflicts_total</code> — pression de concurrence : si
+      les conflits montent, deux agents se disputent souvent la même cellule (signal de contention).</li>
+    <li><code>bb_rejections_total</code> — écritures refusées pour dépassement de cap (un essaim qui pousse
+      trop de données ; garde-fou G8 actif).</li>
+    <li><code>ev_published_total</code> / <code>ev_dropped_total</code> — trafic bus et pertes
+      d'<i>observation</i> (rappel : une perte ici n'affecte que le live, jamais l'audit).</li>
+  </ul>
+  <p>Un histogramme de latence (buckets + quantiles) complète le tableau : on voit la distribution des durées
+  d'écriture, pas seulement une moyenne trompeuse.</p>
+</div>
+
+<!-- §4 NANO-AGENTS -->
+<div class="wrap page">
+  <h2><span class="num">§4</span> &nbsp;Les nano-agents <span class="small muted">(crate efe-swarm-topology)</span></h2>
+  <p class="lede">Un nano-agent est une <b>struct Rust mono-fonction, déterministe, sans poids</b>. Il
+  implémente l'un des 6 traits ci-dessous. Leur petitesse est ce qui autorise à en lancer beaucoup, en
+  parallèle, pour presque rien.</p>
+
+  <h3>Les 6 contrats (traits, <code>traits.rs</code> + <code>consensus/</code>)</h3>
+  <pre><code>trait Generator { async fn generate(&self, task, variant: usize) -> Value; }  // variant = DIVERSITÉ
+trait Verifier  { fn score(&self, task, candidate) -> f64;  fn passes(...) -> bool; } // a-posteriori
+trait Stage     { async fn process(&self, input) -> Vec&lt;Value&gt;; }   // 1→1, 1→N (fan-out), 1→0 (filtre)
+trait Decomposer{ async fn decompose(&self, task) -> Vec&lt;Value&gt;; }  // T3 : tâche → sous-tâches
+trait Solver    { async fn solve(&self, subtask) -> Value; }         // T3 : RÉCURSIF (peut être un essaim)
+trait Merger    { async fn merge(&self, task, results) -> Value; }   // T3 : agrège
+trait Judge     { async fn assess(&self, task, candidates) -> Vec&lt;f64&gt;; } // consensus : note K candidats</code></pre>
+
+  <h3>À quel point c'est « nano » : un agent réel, en entier</h3>
+  <p>Voici <code>Uppercase</code>, tel qu'il est dans <code>catalog.rs</code> — l'agent complet tient en une
+  ligne de logique :</p>
+  <pre><code>pub struct Uppercase;
+impl Stage for Uppercase {
+    async fn process(&self, input: &Value) -> Vec&lt;Value&gt; {
+        vec![json!({ "text": text_of(input).to_uppercase(), "idx": idx_of(input) })]
+    }
+}</code></pre>
+  <p>Pas de modèle, pas de poids, pas d'état : du Rust pur. <code>EchoGenerator</code> renvoie l'entrée,
+  <code>WordSplit</code> découpe en mots, <code>NonEmptyText</code> score 1.0 si non-vide. C'est cette
+  trivialité individuelle qui rend l'<b>essaim</b> bon marché — la valeur naît du <b>nombre</b>, de la
+  <b>diversité</b> et de la <b>sélection</b>, pas d'un agent isolé.</p>
+
+  <h3>La flotte : un registre interrogeable par nom (<code>fleet.rs</code>)</h3>
+  <p><code>AgentFleet</code> est un registre (<code>BTreeMap&lt;String, Arc&lt;dyn Trait&gt;&gt;</code> par
+  rôle). <code>AgentFleet::standard()</code> enregistre les <b>43</b> agents intégrés. On les monte <b>par
+  nom</b>, répétitions comprises : <code>judge_panel(&["j_equals_expected"; 5])</code> donne un panel de 5
+  juges identiques — une topologie consensus peut donc être assemblée <b>entièrement depuis la flotte</b>
+  sans construire un seul agent à la main.</p>
+  <table>
+    <thead><tr><th>Rôle</th><th>#</th><th>Exemples (noms réels)</th></tr></thead>
+    <tbody>
+      <tr><td>Décomposeurs</td><td>7</td><td>word_split · sentence_split · char_chunk · json_array_split</td></tr>
+      <tr><td>Transformations (Stage)</td><td>10</td><td>trim · lowercase · uppercase · normalize_whitespace · word_count</td></tr>
+      <tr><td>Vérificateurs</td><td>8</td><td>non_empty_text · is_object · equals_expected · length_bounded</td></tr>
+      <tr><td>Agrégateurs (Merger)</td><td>7</td><td>join_lines · majority_value · sum_values · max_by_score_field</td></tr>
+      <tr><td>Générateurs</td><td>2</td><td>echo_generator · const_generator</td></tr>
+      <tr><td>Juges</td><td>9</td><td>consistency · length_band · keyword_overlap · j_equals_expected</td></tr>
+      <tr><th>Total</th><th>43</th><th>34 catalogue + 9 juges (<code>MODE_A_AGENT_COUNT = 34</code>)</th></tr>
+    </tbody>
+  </table>
+
+  <h3>Pourquoi « nano » et « déterministe » sont des choix, pas des limites</h3>
+  <p>On pourrait penser que des agents si simples sont un pis-aller. C'est l'inverse : ce sont des propriétés
+  recherchées.</p>
+  <ul>
+    <li><b>Petit → nombreux → bon marché.</b> Un agent qui coûte presque rien peut être lancé par dizaines en
+      parallèle. La puissance vient de l'<b>essaim</b> (diversité + sélection), pas d'un cerveau unique.</li>
+    <li><b>Déterministe → reproductible → preuve solide.</b> Un nano-agent Mode A redonne <i>exactement</i> la
+      même sortie pour la même entrée. C'est ce qui fait du Mode A l'<b>ancre</b> : le <code>provenance_root</code>
+      d'un run keyless est rejouable bit-à-bit (ADR-007). Un LLM, lui, ne l'est pas — d'où la nuance « on
+      prouve l'intégrité, pas le rejeu ».</li>
+    <li><b>Sans poids → sans réseau → souverain.</b> Pas de modèle à charger, pas d'API à appeler : ça tourne
+      <b>air-gap</b> par construction, et c'est aussi le squelette de test/CI (rapide, gratuit, hermétique).</li>
+    <li><b>Composable.</b> Les 6 traits sont volontairement minuscules (une méthode chacun), donc un agent
+      écrit une fois sert dans T1, T2, T3 ou Consensus sans adaptation.</li>
+  </ul>
+
+  <h3>Vérificateur vs Juge : deux façons de « noter », pour deux familles de tâches</h3>
+  <p>La distinction est au cœur du pari produit (ADR-001/002).</p>
+  <div class="grid2">
+    <div class="card"><h4 style="margin-top:0">Verifier (T1) — tâches <b>vérifiables</b></h4><p class="small">
+      <code>score</code> + <code>passes</code> sur <b>un</b> candidat. Pour une tâche dont on peut <i>checker</i>
+      la réponse (un calcul, un format, une égalité), le vérificateur est <b>déterministe</b> et atteint le
+      « OR » : il sait dire vrai/faux. C'est lui qui extrait le bon candidat même minoritaire.</p></div>
+    <div class="card"><h4 style="margin-top:0">Juge (Consensus) — tâches <b>non vérifiables</b></h4><p class="small">
+      <code>assess(task, candidates)</code> → un score par candidat. Quand il n'y a pas de vérité mécanique
+      (qualité d'un résumé, pertinence d'un label), on s'appuie sur un <b>panel</b> de juges et on agrège leurs
+      classements (Borda/Condorcet) — la précision n'est plus 1, mais le consensus discrimine.</p></div>
+  </div>
+  <p class="small muted">Détail important : même en self-host (Mode C), le <b>vérificateur de T1 reste
+  déterministe</b> (pris dans la flotte), jamais un LLM — c'est l'ancre a-posteriori qui garde la sélection
+  honnête.</p>
+</div>
+<!-- §5 TOPOLOGIES -->
+<div class="wrap page">
+  <h2><span class="num">§5</span> &nbsp;Les quatre topologies parallèles</h2>
+  <p>Les 43 nano-agents se recombinent en 4 patterns, tous derrière une interface unique
+  (<code>trait Topology { async fn run(task, ctx) -> TopologyOutput }</code>, object-safe — donc un
+  <code>Vec&lt;Box&lt;dyn Topology&gt;&gt;</code> exécute n'importe lequel uniformément). Le
+  <code>SwarmContext</code> leur injecte la flotte + 3 seams (provenance, métriques, dashboard).</p>
+
+  <div class="fig">
+  <svg viewBox="0 0 900 250" role="img" aria-label="Quatre topologies">
+    <defs><marker id="tp" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#475569"/></marker></defs>
+    <rect x="20" y="18" width="420" height="100" rx="10" fill="#f0fdfa" stroke="#0d9488"/>
+    <text x="34" y="37" font-size="11.5" font-weight="700" fill="#115e59">T1 · Generate-Verify</text>
+    <text x="34" y="52" font-size="8.5" fill="#0f766e">K générateurs ∥ (JoinSet+Semaphore) → vérificateur a-posteriori</text>
+    <rect x="40" y="62" width="56" height="18" rx="4" fill="#ccfbf1"/><text x="68" y="75" text-anchor="middle" font-size="8" fill="#115e59">gen×K</text>
+    <rect x="120" y="62" width="80" height="18" rx="4" fill="#fff" stroke="#0d9488"/><text x="160" y="75" text-anchor="middle" font-size="8" fill="#115e59">candidats</text>
+    <rect x="224" y="58" width="100" height="26" rx="5" fill="#0f766e"/><text x="274" y="75" text-anchor="middle" font-size="8" fill="#fff">Verifier.score</text>
+    <line x1="96" y1="71" x2="120" y2="71" stroke="#475569" marker-end="url(#tp)"/><line x1="200" y1="71" x2="224" y2="71" stroke="#475569" marker-end="url(#tp)"/>
+    <text x="225" y="104" font-size="7.5" fill="#64748b" text-anchor="middle">extrait le correct même minoritaire (bat le vote)</text>
+
+    <rect x="460" y="18" width="420" height="100" rx="10" fill="#fffbeb" stroke="#ca8a04"/>
+    <text x="474" y="37" font-size="11.5" font-weight="700" fill="#854d0e">T-Consensus</text>
+    <text x="474" y="52" font-size="8.5" fill="#a16207">K gén. ∥ + J juges ∥ → Blackboard → Vote/Borda/Condorcet</text>
+    <rect x="480" y="60" width="54" height="16" rx="4" fill="#fef9c3"/><text x="507" y="72" text-anchor="middle" font-size="7.5" fill="#713f12">gen×K</text>
+    <rect x="480" y="82" width="54" height="16" rx="4" fill="#e0f2fe"/><text x="507" y="94" text-anchor="middle" font-size="7.5" fill="#075985">juge×J</text>
+    <rect x="554" y="64" width="90" height="30" rx="5" fill="#fff" stroke="#ca8a04"/><text x="599" y="77" text-anchor="middle" font-size="7.5" fill="#854d0e">Blackboard</text><text x="599" y="89" text-anchor="middle" font-size="7" fill="#a16207">/cand·/ballot</text>
+    <rect x="664" y="64" width="150" height="30" rx="5" fill="#854d0e"/><text x="739" y="77" text-anchor="middle" font-size="8" fill="#fff">agrégateur+confiance</text><text x="739" y="89" text-anchor="middle" font-size="7" fill="#fde68a">escalade coût-consciente</text>
+
+    <rect x="20" y="130" width="420" height="100" rx="10" fill="#eff6ff" stroke="#2563eb"/>
+    <text x="34" y="149" font-size="11.5" font-weight="700" fill="#1e40af">T2 · Pipeline (streaming)</text>
+    <text x="34" y="164" font-size="8.5" fill="#1d4ed8">étages chaînés sur StreamingSwarm, terminaison par quiescence</text>
+    <rect x="40" y="178" width="86" height="28" rx="5" fill="#dbeafe"/><text x="83" y="196" text-anchor="middle" font-size="8" fill="#1e40af">normalize</text>
+    <rect x="150" y="178" width="86" height="28" rx="5" fill="#dbeafe"/><text x="193" y="196" text-anchor="middle" font-size="8" fill="#1e40af">uppercase</text>
+    <rect x="260" y="178" width="86" height="28" rx="5" fill="#dbeafe"/><text x="303" y="196" text-anchor="middle" font-size="8" fill="#1e40af">extract</text>
+    <line x1="126" y1="192" x2="150" y2="192" stroke="#475569" marker-end="url(#tp)"/><line x1="236" y1="192" x2="260" y2="192" stroke="#475569" marker-end="url(#tp)"/>
+
+    <rect x="460" y="130" width="420" height="100" rx="10" fill="#fdf4ff" stroke="#c026d3"/>
+    <text x="474" y="149" font-size="11.5" font-weight="700" fill="#86198f">T3 · Hierarchical (récursif)</text>
+    <text x="474" y="164" font-size="8.5" fill="#a21caf">décompose → résout ∥ (Solver = T1/T2/T3) → agrège</text>
+    <rect x="480" y="176" width="80" height="30" rx="5" fill="#fae8ff"/><text x="520" y="194" text-anchor="middle" font-size="8" fill="#86198f">decompose</text>
+    <rect x="586" y="172" width="70" height="16" rx="4" fill="#f5d0fe"/><text x="621" y="184" text-anchor="middle" font-size="7.5" fill="#86198f">solve ∥</text>
+    <rect x="586" y="192" width="70" height="16" rx="4" fill="#f5d0fe"/><text x="621" y="204" text-anchor="middle" font-size="7.5" fill="#86198f">solve ∥</text>
+    <rect x="686" y="176" width="120" height="30" rx="5" fill="#86198f"/><text x="746" y="194" text-anchor="middle" font-size="8" fill="#fff">merge</text>
+    <line x1="560" y1="191" x2="586" y2="184" stroke="#475569" marker-end="url(#tp)"/><line x1="656" y1="190" x2="686" y2="190" stroke="#475569" marker-end="url(#tp)"/>
+  </svg>
+  <div class="cap">Figure 4 — Les 4 patterns. Fichiers : <code>generate_verify.rs</code>, <code>consensus_topology.rs</code>, <code>pipeline.rs</code>, <code>hierarchical.rs</code>.</div>
+  </div>
+
+  <h3>Comment le parallélisme est réellement obtenu</h3>
+  <ul>
+    <li><b>T1</b> (<code>generate_verify.rs</code>) : un <code>JoinSet</code> lance K tâches générateur,
+      chacune prenant un permis d'un <code>Semaphore(max_concurrency)</code> (backpressure si les agents sont
+      des SLM lents). On collecte les candidats dans l'ordre d'arrivée, puis le vérificateur sélectionne
+      a-posteriori le passant de meilleur score (sinon le meilleur score en fallback).</li>
+    <li><b>T-Consensus</b> (<code>consensus_topology.rs</code>) : génération via <code>JoinSet</code>, puis
+      jugement via <code>tokio::spawn</code> (bornés). Voir le déroulé ci-dessous.</li>
+    <li><b>T2</b> (<code>pipeline.rs</code>) : étages exécutés en <b>streaming</b> sur
+      <code>efe_blackboard::StreamingSwarm</code> — pas de barrière entre couches, terminaison par
+      <b>quiescence</b> (plus rien à faire). Un étage peut faire du fan-out 1→N.</li>
+    <li><b>T3</b> (<code>hierarchical.rs</code>) : décompose, puis résout les sous-tâches <b>en parallèle via
+      un T2 mono-étage</b> (<code>Pipeline.run_batch</code>), puis agrège. <b>Récursif</b> : le
+      <code>Solver</code> peut être un T1/T2/T3 → profondeur arbitraire (ramène une tâche dure dans
+      l'enveloppe de capacité en la découpant).</li>
+  </ul>
+
+  <h3>Déroulé d'un consensus (K=7, J=2), pas à pas</h3>
+  <ol>
+    <li><b>Génération ∥.</b> 7 tâches générateur (JoinSet + Semaphore), chacune avec un <code>variant</code>
+      0…6 (le levier de diversité). Les candidats sont écrits en <code>/cand/0…6</code> au Blackboard.</li>
+    <li><b>Vote gratuit d'abord (escalade).</b> On tente un <code>MajorityVote</code> sans juge ; si la
+      confiance ≥ seuil → <b>terminé</b> (juges économisés, coût = 7). Sinon on escalade.</li>
+    <li><b>Jugement ∥.</b> 2 juges en <code>spawn</code> ; chacun lit les 7 candidats, écrit
+      <code>/ballot/j</code> (vérité) <b>et</b> publie sur <code>ballot.j</code> (indice → dashboard).</li>
+    <li><b>Réconciliation.</b> On draine le bus pour le tempo, puis on relit le Blackboard
+      (<code>snapshot()</code>) pour reconstruire <b>exhaustivement</b> les 2 ballots.</li>
+    <li><b>Agrégation.</b> Borda combine 2 ballots × 7 candidats → gagnant + confiance ; publie
+      <code>consensus.decided</code>.</li>
+  </ol>
+
+  <h3>L'agrégation (le « vote intelligent ») — exemple Borda chiffré</h3>
+  <p>Borda donne à chaque candidat des points = Σ<sub>juges</sub> ((K−1) − rang). Avec 3 candidats (K=3) :
+  1ᵉʳ→2 pts, 2ᵉ→1, 3ᵉ→0.</p>
+  <table class="small">
+    <thead><tr><th>Candidat</th><th>Juge 1</th><th>Juge 2</th><th>Total</th></tr></thead>
+    <tbody>
+      <tr><td><b>A</b></td><td>1ᵉʳ → 2</td><td>1ᵉʳ → 2</td><td><b>4</b> ← gagnant</td></tr>
+      <tr><td>B</td><td>2ᵉ → 1</td><td>3ᵉ → 0</td><td>1</td></tr>
+      <tr><td>C</td><td>3ᵉ → 0</td><td>2ᵉ → 1</td><td>1</td></tr>
+    </tbody>
+  </table>
+  <p>L'intérêt : si 7 candidats contiennent 3 corrects (variés) et 4 fois le <b>même</b> leurre, un vote
+  majoritaire choisit le leurre ; Borda, en intégrant <b>tout le classement</b> de juges qui savent
+  reconnaître la qualité, fait remonter un correct. <b>Condorcet</b> (vainqueur pairwise, fallback
+  <b>Copeland</b> sur cycle) est l'alternative. La <b>confiance</b> = marge (1ᵉʳ−2ᵉ) ÷ gain max : 0 en cas
+  d'égalité (candidats identiques → « CONF 0 % » du démo keyless), élevée si un candidat domine.</p>
+
+  <h3>Quelle topologie pour quel problème (guide de décision)</h3>
+  <table class="small">
+    <thead><tr><th>Si la tâche est…</th><th>Topologie</th><th>Pourquoi</th></tr></thead>
+    <tbody>
+      <tr><td>vérifiable (réponse checkable)</td><td><b>T1</b></td><td>générer beaucoup, extraire le bon avec un vérificateur déterministe</td></tr>
+      <tr><td>non vérifiable (qualité/jugement)</td><td><b>T-Consensus</b></td><td>un panel de juges + agrégation discrimine là où le vote échoue</td></tr>
+      <tr><td>une transformation en étapes</td><td><b>T2</b></td><td>chaîne d'étapes cheap, en streaming (normaliser → extraire → …)</td></tr>
+      <tr><td>trop dure d'un bloc</td><td><b>T3</b></td><td>découper en sous-tâches résolues ∥ (chacune par un T1/T2), puis fusionner</td></tr>
+    </tbody>
+  </table>
+  <p>Le mode <code>Auto</code> du SDK choisit pour vous : si la tâche porte un <code>expected</code>
+  (vérifiable), il oriente vers T1/Consensus. C'est « conscient du mode » : en self-host, <code>Auto</code>
+  monte un consensus N-juges local.</p>
+
+  <h3>T2 : « streaming » et « quiescence », expliqués</h3>
+  <p>Un pipeline classique a des <b>barrières</b> : l'étape 2 attend que TOUTE l'étape 1 soit finie. T2
+  n'en a pas : dès qu'un item sort de l'étape 1, il <b>coule</b> vers l'étape 2 (streaming sur
+  <code>StreamingSwarm</code>). Comment savoir qu'on a fini, sans barrière ? Par <b>quiescence</b> : le
+  système se déclare terminé quand <b>plus aucun</b> item n'est en vol et qu'aucune étape n'a de travail en
+  attente — « le silence retombe ». C'est plus efficace (pas d'attente inutile) et naturel pour des étages
+  de vitesses différentes.</p>
+
+  <h3>T3 : la récursion, sur un exemple</h3>
+  <p>Tâche trop grosse pour un petit modèle : « résume ce document de 40 pages ». T3 la <b>décompose</b>
+  (page-split → 40 sous-tâches), <b>résout chaque sous-tâche en parallèle</b> — et voici l'astuce : chaque
+  <code>Solver</code> peut lui-même être un <b>T1</b> (générer 5 résumés de page, garder le meilleur) ou un
+  autre <b>T3</b>. Un <code>Merger</code> (ex. <code>join_lines</code>) recombine. On a ramené une tâche
+  hors-enveloppe dans l'enveloppe de capacité des nano-modèles en <b>empilant des essaims</b> (« superviseur
+  de superviseurs »). La profondeur est arbitraire car <code>Solver</code> est juste un trait que toutes les
+  topologies satisfont.</p>
+</div>
+
+<!-- §6 SDK -->
+<div class="wrap page">
+  <h2><span class="num">§6</span> &nbsp;Le SDK : orchestration d'un run <span class="small muted">(crate efe-swarm-sdk)</span></h2>
+  <p class="lede">Le SDK est le chef d'orchestre. <code>Swarm::run_traced(task, topology, budget)</code> assemble
+  tout : il choisit le backend selon le mode, monte la topologie via le <code>Resolver</code>, exécute, puis
+  scelle la provenance. Voici sa séquence réelle (<code>sdk.rs</code>).</p>
+  <ol>
+    <li><b>Pré-vol budget.</b> On calcule le prix par appel (du mode, ou du budget). En politique
+      <code>Error</code>, si l'estimation dépasse le plafond → on refuse <b>avant</b> d'exécuter. En
+      <code>Degrade</code>, on réduit K (et on rogne les juges) pour tenir.</li>
+    <li><b>Mode → backend + nature.</b> <code>Keyless</code> → pas de backend, <code>AgentKind::ModeA</code>.
+      <code>SelfHost</code> → <code>build_local_backend</code> (avec le garde-fou souveraineté),
+      <code>AgentKind::ModeC</code>. <code>Network</code> est écarté ici (le SDK le refuse in-process ; c'est
+      la passerelle qui l'a déjà traduit en SelfHost-vers-routeur).</li>
+    <li><b>Health-check.</b> En self-host, on sonde le backend (échec rapide si injoignable).</li>
+    <li><b>Provenance + budget + N17.</b> On crée un <code>ProvenanceRecorder</code>, un
+      <code>BudgetGuard</code>, et (en Mode C) un <code>LlmProvenanceCollector</code>. Le tout est porté par
+      un <code>Meter</code>.</li>
+    <li><b>Substrat + observateur.</b> On construit le <code>SwarmContext</code> en branchant le
+      <code>ProvenanceSink</code> (et, si dashboard, un <code>TeeSink</code> qui duplique vers l'observateur)
+      sur le write_sink, plus les métriques et le tap d'événements.</li>
+    <li><b>Résolution + exécution.</b> La topologie est concrétisée puis résolue par le <code>Resolver</code>
+      (voir ci-dessous), et exécutée : <code>topo.run(&task, &ctx).await</code>.</li>
+    <li><b>Scellement + re-preuve.</b> <code>recorder.seal_with_key(clé)</code> produit la
+      <code>SealedProvenance</code> ; <code>verify_swarm</code> la re-prouve immédiatement (et alimente les
+      métriques) ; on assemble le résumé N17.</li>
+    <li><b>Retour.</b> Un <code>RunOutcome { run, sealed, llm_records }</code> : la passerelle persiste
+      <code>sealed.records</code> (la preuve) et renvoie <code>run</code>.</li>
+  </ol>
+
+  <h3>Le Resolver : le même nom, deux réalités (<code>resolver.rs</code>)</h3>
+  <p>C'est le point de bascule Mode A / Mode C. Pour chaque rôle, le Resolver regarde s'il y a un backend :</p>
+  <pre><code>fn generator(name, id):
+    g = match backend {
+      Some(b) => llm_gen(b, name)          // Mode C : le NOM est une INSTRUCTION (prompt)
+      None    => fleet.generator(name)?    // Mode A : le NOM est une CLÉ de flotte (nano-agent)
+    }
+    meter_gen(g, meter, id)                // ENVELOPPE : budget + provenance + N17 + observateur</code></pre>
+  <p>Conséquence remarquable : <b>la topologie ne change pas d'une ligne</b> entre Mode A et Mode C. En
+  keyless, <code>"echo_generator"</code> désigne un nano-agent ; en self-host, <code>"Classe le sujet en un
+  mot…"</code> devient l'instruction envoyée au LLM. Le <b>vérificateur reste toujours déterministe</b>
+  (depuis la flotte) — c'est l'ancre a-posteriori d'ADR-002.</p>
+
+  <h3>Le Meter : la couche qui rend chaque pas gouverné et prouvé (<code>agents.rs</code>)</h3>
+  <p>Chaque agent résolu est <b>décoré</b> par le Meter. Autour de chaque appel, dans l'ordre :</p>
+  <ul>
+    <li><b>charge (I13)</b> : <code>BudgetGuard.charge</code> facture l'appel (atomique, jamais de dépassement) ; si épuisé → sentinel neutre.</li>
+    <li><b>scope N17</b> : <code>run_agent</code> pose un puits task-local, exécute l'appel, draine le puits → un <code>LlmProvenanceRecord</code> (Mode C).</li>
+    <li><b>capture</b> : un <code>AgentCallRecord</code> (input/output hash, rôle, variant, lien N17) est remis au <code>ProvenanceRecorder</code>.</li>
+    <li><b>observe</b> : notification au dashboard (sortie + coût + budget courant), coût nul si aucun observateur.</li>
+  </ul>
+  <p>C'est ici que « beaucoup de petits agents » devient « beaucoup de petits agents <b>gouvernés et
+  prouvés</b> » — sans que les agents ni les topologies aient à le savoir.</p>
+
+  <h3>Les trois politiques de budget, et quand les choisir</h3>
+  <ul>
+    <li><b>Error</b> — refuse <b>avant</b> d'exécuter si l'estimation dépasse le plafond (et échoue si épuisé
+      en cours). À choisir quand on veut une garantie stricte « jamais un centime de trop, quitte à ne rien
+      faire ».</li>
+    <li><b>Stop</b> — exécute et s'arrête proprement à l'épuisement (résultat <b>partiel</b>). Le défaut
+      raisonnable : on prend ce qu'on peut dans le budget.</li>
+    <li><b>Degrade</b> — <b>réduit K</b> et rogne les juges <i>avant</i> d'exécuter pour tenir dans le budget,
+      puis exécute normalement. À choisir quand on préfère un essaim plus petit mais complet à un essaim
+      tronqué.</li>
+  </ul>
+  <p>Dans tous les cas l'invariant <b>I13</b> tient : le compteur ne dépasse jamais le plafond (ajout
+  atomique → test → revert). Le test <code>i13_holds_under_concurrency</code> le vérifie sous 8 threads.</p>
+
+  <h3>Deux détails d'orchestration qui comptent</h3>
+  <p><b>concretize.</b> Avant l'exécution, la topologie est « concrétisée » selon la tâche et le mode (ex.
+  <code>Auto</code> devient un T1 ou un consensus). C'est ce qui permet à l'utilisateur de dire <code>Auto</code>
+  sans connaître les internals.</p>
+  <p><b>TeeSink.</b> Quand un observateur (dashboard) est branché, le SDK ne remplace pas le sink de
+  provenance : il <b>duplique</b> (un <code>TeeSink</code> écrit vers les deux). Conséquence cruciale : la
+  provenance reste <b>byte-identique</b> qu'on regarde ou non le dashboard — l'observation ne peut pas altérer
+  la preuve. C'est le principe « live ≠ audit » poussé jusqu'à l'octet.</p>
+</div>
+<!-- §7 PROVENANCE -->
+<div class="wrap page">
+  <h2><span class="num">§7</span> &nbsp;La provenance — le moat <span class="small muted">(crate efe-swarm-provenance)</span></h2>
+  <p class="lede">L'argument différenciant : chaque pas de chaque nano-agent laisse un
+  <code>AgentCallRecord</code> scellé, et un tiers re-prouve <b>tout le run</b> à partir des seuls records +
+  une clé tenant — <b>hors-ligne</b>, sans nous croire ni croire un provider (ADR-SWARM-006/009).</p>
+
+  <div class="fig">
+  <svg viewBox="0 0 900 230" role="img" aria-label="Chaîne de provenance">
+    <defs><marker id="p1" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="#0d9488"/></marker>
+      <marker id="pb" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="#dc2626"/></marker></defs>
+    <rect x="30" y="26" width="150" height="70" rx="9" fill="#fff" stroke="#0d9488" stroke-width="1.5"/><text x="44" y="44" font-size="9.5" font-weight="700" fill="#115e59">#0 generator</text><text x="44" y="60" font-size="8" fill="#475569">input/output_hash (blake3)</text><text x="44" y="73" font-size="8" fill="#475569">llm_provenance_id → N17</text><text x="44" y="88" font-size="8" fill="#0d9488" font-weight="700">hmac₀=H(genesis‖rec)</text>
+    <rect x="210" y="26" width="150" height="70" rx="9" fill="#fff" stroke="#0d9488" stroke-width="1.5"/><text x="224" y="44" font-size="9.5" font-weight="700" fill="#115e59">#1 judge</text><text x="224" y="60" font-size="8" fill="#475569">parents (DAG)</text><text x="224" y="88" font-size="8" fill="#0d9488" font-weight="700">hmac₁=H(hmac₀‖rec)</text>
+    <rect x="390" y="26" width="150" height="70" rx="9" fill="#fff" stroke="#0d9488" stroke-width="1.5"/><text x="404" y="44" font-size="9.5" font-weight="700" fill="#115e59">#… judges</text><text x="404" y="88" font-size="8" fill="#0d9488" font-weight="700">hmacᵢ=H(hmacᵢ₋₁‖rec)</text>
+    <rect x="570" y="26" width="150" height="70" rx="9" fill="#fff" stroke="#0d9488" stroke-width="1.5"/><text x="584" y="44" font-size="9.5" font-weight="700" fill="#115e59">#n decided</text><text x="584" y="60" font-size="8" fill="#475569">aggregate (Borda)</text><text x="584" y="88" font-size="8" fill="#0d9488" font-weight="700">hmacₙ</text>
+    <line x1="180" y1="61" x2="210" y2="61" stroke="#0d9488" stroke-width="2" marker-end="url(#p1)"/><line x1="360" y1="61" x2="390" y2="61" stroke="#0d9488" stroke-width="2" marker-end="url(#p1)"/><line x1="540" y1="61" x2="570" y2="61" stroke="#0d9488" stroke-width="2" marker-end="url(#p1)"/>
+    <rect x="745" y="36" width="125" height="50" rx="10" fill="#0f766e"/><text x="807" y="58" fill="#fff" font-size="10" text-anchor="middle" font-weight="700">root (64 hex)</text><text x="807" y="74" fill="#99f6e4" font-size="7.5" text-anchor="middle">résume la chaîne</text><line x1="720" y1="61" x2="745" y2="61" stroke="#0d9488" stroke-width="2" marker-end="url(#p1)"/>
+    <rect x="30" y="132" width="240" height="40" rx="10" fill="#e0e7ff" stroke="#4f46e5"/><text x="150" y="150" fill="#3730a3" font-size="9.5" text-anchor="middle" font-weight="700">clé tenant = HKDF(master, tenant)</text><text x="150" y="165" fill="#4338ca" font-size="8" text-anchor="middle">SIGNE · jamais transmise</text>
+    <rect x="300" y="132" width="300" height="40" rx="10" fill="#dcfce7" stroke="#16a34a"/><text x="450" y="150" fill="#166534" font-size="10" text-anchor="middle" font-weight="700">verify_swarm() hors-ligne</text><text x="450" y="165" fill="#15803d" font-size="8" text-anchor="middle">chain ✓ · content ✓ · dag ✓ · même root</text>
+    <rect x="640" y="132" width="230" height="40" rx="10" fill="#fee2e2" stroke="#dc2626"/><text x="755" y="150" fill="#991b1b" font-size="9.5" text-anchor="middle" font-weight="700">altération → rupture</text><text x="755" y="165" fill="#b91c1c" font-size="8" text-anchor="middle">first_break localisé</text>
+    <line x1="270" y1="152" x2="300" y2="152" stroke="#475569" marker-end="url(#p1)"/><line x1="600" y1="152" x2="640" y2="152" stroke="#dc2626" stroke-dasharray="4 3" marker-end="url(#pb)"/>
+  </svg>
+  <div class="cap">Figure 5 — La chaîne HMAC + DAG + sa re-preuve.</div>
+  </div>
+
+  <h3>Ce que « sceller » veut dire, concrètement</h3>
+  <p>Un <code>AgentCallRecord</code> capture un pas : qui (rôle, agent_id), entrée (<code>input_hash</code> =
+  blake3 du JSON), sortie (<code>output_hash</code>), parents (DAG), et — pour un agent LLM — un
+  <code>llm_provenance_id</code> vers le forensique N17. À la fermeture, on chaîne un HMAC :</p>
+  <pre><code>hmac₀ = HMAC(clé_tenant, genesis ‖ record₀)
+hmacᵢ = HMAC(clé_tenant, hmacᵢ₋₁ ‖ recordᵢ)     // chaque maillon scelle le précédent
+provenance_root = f(hmac…) → 64 hex</code></pre>
+  <p>La <b>clé tenant</b> est <b>dérivée</b> par HKDF-SHA256 (master + UUID tenant, <code>efe-audit-core</code>) :
+  elle <b>signe</b>, n'est jamais transmise ni stockée dans un record. Deux tenants → deux clés → deux chaînes
+  incomparables (isolation).</p>
+
+  <h3>Les trois contrôles de <code>verify_swarm</code>, et ce que chacun attrape</h3>
+  <ul>
+    <li><b><code>chain_intact</code></b> : recalcule toute la chaîne HMAC → détecte insertion / suppression /
+      <b>réordonnancement</b> (la <i>structure</i>).</li>
+    <li><b><code>content_intact</code></b> : recalcule les blake3 entrée/sortie → détecte la <b>mutation d'un
+      seul octet</b> (le <i>contenu</i>).</li>
+    <li><b><code>dag_consistent</code></b> : vérifie que les arêtes de causalité pointent vers des records
+      cohérents (le <i>graphe</i>).</li>
+  </ul>
+  <p>Les trois passent ⇒ <code>verified = true</code> et <b>root recalculé == root d'origine</b>. Le calcul
+  n'exige <b>rien d'autre</b> que les records (exportables via <code>GET …/records</code>) et la clé tenant →
+  un régulateur le fait sur une machine déconnectée. Quand ça casse, <code>first_break</code> <b>localise</b>
+  le record fautif.</p>
+  <div class="callout key"><b>La nuance honnête :</b> ceci prouve l'<b>intégrité et la lignée</b>
+  (tamper-evidence), <b>pas</b> que le LLM redonnerait le même texte. On ne re-exécute pas le modèle ; on
+  prouve que <i>ce qui a été produit n'a pas bougé</i>, et <i>par qui / dans quel ordre</i>.</div>
+
+  <h3>Une falsification, pas à pas (ce que voit l'attaquant et ce que voit verify)</h3>
+  <p>Imaginons qu'après coup, quelqu'un veuille faire croire que l'essaim a répondu « finance » au lieu de
+  « legal ». Il a accès aux records stockés. Il modifie la sortie du record gagnant :
+  <code>output: "legal" → "finance"</code>. Que se passe-t-il au prochain <code>verify</code> ?</p>
+  <ol>
+    <li>verify recalcule <code>output_hash = blake3("finance")</code> et le compare au hash scellé
+      (<code>blake3("legal")</code>) → <b>différent</b> → <code>content_intact = false</code>.</li>
+    <li>Pour « réparer », l'attaquant devrait aussi changer le <code>output_hash</code> scellé. Mais ce hash
+      entre dans le HMAC du record, donc <code>hmacᵢ</code> change → <code>chain_intact = false</code> à
+      partir de ce maillon.</li>
+    <li>Pour « réparer » la chaîne, il faudrait recalculer tous les HMAC suivants — ce qui exige la
+      <b>clé tenant</b>, qu'il n'a pas (elle n'est nulle part dans les records ; elle vit côté serveur).</li>
+  </ol>
+  <p>Résultat : <code>verified = false</code>, et <code>first_break</code> pointe le record gagnant. La
+  falsification est <b>détectée et localisée</b>. C'est précisément ce que vérifie le test
+  <code>verify_detects_tampering</code> de la passerelle, et ce qu'on a mesuré en réel (Lot P5 :
+  <code>tamper_detected = 100 %</code>). Sans la clé, on ne peut pas forger une chaîne valide — d'où
+  l'importance du binaire prod qui signe avec <code>EnvHkdf</code> et non la clé de test publique.</p>
+</div>
+
+<!-- §8 N17 -->
+<div class="wrap page">
+  <h2><span class="num">§8</span> &nbsp;Le pont N17 — forensique par-appel <span class="small muted">(sdk/n17.rs)</span></h2>
+  <p>L'<code>AgentCallRecord</code> dit « quel agent, quelle entrée/sortie ». Le pont N17 ajoute la
+  granularité <b>par appel LLM</b> : un <code>LlmProvenanceRecord</code> capte <i>modèle, seed, paramètres,
+  hash prompt/réponse, latence, re-tentatives</i>. L'<code>AgentCallRecord</code> le référence via
+  <code>llm_provenance_id</code>. Une seule lignée, deux granularités.</p>
+
+  <h3>Le fossé d'information, et l'astuce du task-local</h3>
+  <p>Le <b>backend</b> connaît le modèle/prompt/réponse mais <b>ignore</b> le contexte d'essaim (quel agent,
+  quel tenant). Le <b>Meter</b> connaît le contexte mais <b>ne voit pas</b> l'appel LLM brut. On les relie
+  par un <b>task-local</b> (variable propre à la tâche async) :</p>
+  <ol>
+    <li>Avant l'appel d'agent, le Meter <b>pose un puits</b> dans le task-local (<code>scoped</code>).</li>
+    <li>Le backend, à chaque <code>complete()</code>, <b>dépose</b> sa forensique (<code>push_pending</code>)
+      dans le puits courant — sans savoir à qui il appartient (<code>no-op</code> hors scope).</li>
+    <li>L'appel terminé, le Meter <b>draine</b> le puits, ajoute le contexte, assemble le
+      <code>LlmProvenanceRecord</code> et lie l'<code>AgentCallRecord</code> au <code>ProvenanceId</code>.</li>
+  </ol>
+  <p>C'est <b>concurrence-safe par construction</b> : chaque appel d'agent a <b>son</b> puits (task-local
+  scopé), donc même avec 7 générateurs en parallèle, aucune confusion — chaque forensique retombe dans le bon
+  panier.</p>
+
+  <h3>Le piège des re-tentatives (et sa correction)</h3>
+  <p>Si le Retrier rappelait le backend 3 fois, il pousserait 3 forensiques pour <b>un seul</b> appel logique
+  → le pont compterait des appels fantômes et risquerait de lier le record à une <b>tentative échouée</b>. La
+  correction : le Retrier exécute chaque tentative dans un <b>puits imbriqué</b> qu'il vide, et ne ré-émet
+  qu'<b>un</b> record final (l'issue retenue) avec <code>retry_count</code> (0 = réussi du 1ᵉʳ coup,
+  >0 = N re-tentatives → <code>retry_outcome</code> RetriedSucceeded/RetriedExhausted). Le lien pointe donc
+  toujours vers ce qui a compté. Sur le run Claude réel : <code>consistent: 4, unlinked: 0, broken: 0</code>.</p>
+</div>
+
+<!-- §9 BACKENDS -->
+<div class="wrap page">
+  <h2><span class="num">§9</span> &nbsp;Les backends locaux &amp; la résilience <span class="small muted">(sdk/backend/)</span></h2>
+  <p class="lede">En Mode C, les agents appellent un LLM via un <code>LocalBackend</code>. Tout est <b>keyless</b>
+  et <b>local par défaut</b> : on « shell-out » <code>curl</code> vers <code>127.0.0.1</code>, sans en-tête
+  d'auth, sans dépendance réseau crate (G10).</p>
+
+  <h3>Un trait, deux moteurs</h3>
+  <pre><code>trait LocalBackend {
+    async fn complete(&self, prompt, params) -> Option&lt;String&gt;;  // None = échec → sentinel
+    fn descriptor(&self) -> BackendDescriptor;                    // moteur+modèle+endpoint (N17)
+    async fn health(&self) -> bool;                              // sonde rapide
+}</code></pre>
+  <ul>
+    <li><b>OllamaBackend</b> (<code>ollama.rs</code>) : <code>POST /api/generate</code> (protocole natif Ollama).</li>
+    <li><b>OpenAiLocalBackend</b> (<code>openai_local.rs</code>) : <code>POST /v1/chat/completions</code> —
+      couvre llama.cpp-server, vLLM, TGI, LM Studio (et, en mode Network, le routeur frontière).</li>
+  </ul>
+
+  <h3>Le garde-fou souveraineté (G2) et les deux enveloppes</h3>
+  <p><code>build_local_backend(endpoint, model, allow_remote)</code> :</p>
+  <ol>
+    <li><b>Refuse l'egress par défaut</b> : si l'endpoint n'est pas local (<code>127.*</code>/<code>localhost</code>/<code>::1</code>)
+      et <code>allow_remote == false</code> → <code>RemoteBackendDenied</code>. Seul le mode Network (egress
+      assumé) passe <code>allow_remote = true</code>.</li>
+    <li><b>Choisit le moteur</b> : modèle préfixé <code>openai:</code> ou endpoint contenant <code>/v1</code>
+      → OpenAI-compat ; sinon Ollama.</li>
+    <li><b>Empile la résilience</b> : <code>Breaker(Retrier(moteur))</code> sur le chemin Network ;
+      <code>Breaker(moteur)</code> en self-host local.</li>
+  </ol>
+  <div class="grid2">
+    <div class="card"><h4 style="margin-top:0">Breaker (circuit-breaker, G3)</h4><p class="small">Après N
+      échecs consécutifs, <b>ouvre</b> le circuit pour un cooldown : les appels suivants renvoient un sentinel
+      <b>sans toucher</b> au backend (protège l'hôte ; la topologie dégrade au lieu d'empiler les timeouts).
+      Un succès réarme.</p></div>
+    <div class="card"><h4 style="margin-top:0">Retrier (Network seulement)</h4><p class="small">Re-tentatives
+      à back-off exponentiel + jitter sur hoquet transitoire d'un appel frontière (réseau). En self-host
+      local, pas de Retrier : un échec sur boucle locale est franc, le Breaker suffit. N17-correct (un seul
+      record final).</p></div>
+  </div>
+  <h3>La machine d'états du circuit-breaker, en clair</h3>
+  <p>Le but du breaker : ne pas s'acharner sur un backend mort. Il a trois états (comme un disjoncteur) :</p>
+  <ul>
+    <li><b>Fermé (normal)</b> : les appels passent. On compte les échecs <i>consécutifs</i>.</li>
+    <li><b>Ouvert</b> : après N échecs d'affilée, on « disjoncte ». Pendant un <i>cooldown</i>, les appels
+      suivants renvoient immédiatement un sentinel <b>sans toucher</b> au backend — on arrête d'empiler des
+      timeouts qui satureraient l'hôte. La topologie dégrade proprement (résultat partiel).</li>
+    <li><b>Réarmement</b> : passé le cooldown, on laisse repasser un appel ; un <b>succès réarme</b> (retour
+      à Fermé), un échec ré-ouvre.</li>
+  </ul>
+  <p>Concrètement : avec un seuil de 5, si un Ollama tombe, les 5 premiers appels échouent (timeout), puis le
+  6ᵉ et les suivants échouent <b>instantanément</b> (circuit ouvert) au lieu d'attendre 5 timeouts de plus ×
+  K agents. C'est ce qui empêche un essaim de geler tout l'hôte quand son modèle est indisponible.</p>
+  <p><b>Pourquoi Breaker(Retrier(...)) et pas l'inverse ?</b> Le Retrier épuise ses re-tentatives <i>à
+  l'intérieur</i> d'un appel logique ; le Breaker ne voit donc qu'<b>une</b> défaillance par appel (après
+  épuisement), et ne compte pas chaque petite re-tentative comme un échec distinct. L'ordre des enveloppes
+  est délibéré.</p>
+
+  <p class="small muted">Un test CI (<code>keyless_guardrails</code>) asserte que le SDK n'embarque <b>ni</b>
+  reqwest <b>ni</b> TLS, et ne lit aucune clé / n'envoie aucun en-tête d'auth — la souveraineté vérifiée par
+  la compilation, pas seulement par la doctrine.</p>
+</div>
+<!-- §10 GATEWAY + NETWORK -->
+<div class="wrap page">
+  <h2><span class="num">§10</span> &nbsp;La passerelle HTTP &amp; le mode Network <span class="small muted">(crate efe-swarm-gateway)</span></h2>
+  <p>La passerelle est mince : elle authentifie (RBAC), résout le mode, délègue au SDK, persiste la preuve,
+  expose la re-preuve. Les routes (<code>lib.rs</code>) :</p>
+  <table class="small">
+    <thead><tr><th>Route</th><th>Rôle</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">POST /v1/swarm/run</td><td>exécute (sync) ; <code>?stream=true</code> = job live (202 + run_id)</td></tr>
+      <tr><td class="mono">GET /v1/swarm/verify/:id</td><td><b>le moat</b> : re-preuve indépendante</td></tr>
+      <tr><td class="mono">GET /v1/swarm/runs/:id/records</td><td>export hors-ligne (pour re-vérifier ailleurs)</td></tr>
+      <tr><td class="mono">GET /v1/swarm/runs/:id/events</td><td>SSE (dashboard live)</td></tr>
+      <tr><td class="mono">GET /metrics · /dashboard</td><td>Prometheus · UI 4 panneaux</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Le mode Network, concrètement (Inc.4.b)</h3>
+  <p>Le SDK <b>refuse</b> <code>Network</code> in-process (il n'a pas les clés). La passerelle le rend possible
+  en l'interposant un routeur : <code>resolve_mode</code> (<code>state.rs</code>) traduit
+  <code>Network{provider}</code> en <code>SelfHost{endpoint=routeur/v1, model=résolu}</code> avec
+  <code>allow_remote = true</code> — et renvoie le tarif Network à préserver.</p>
+  <div class="fig">
+  <svg viewBox="0 0 900 170" role="img" aria-label="Network">
+    <defs><marker id="nw" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="#475569"/></marker></defs>
+    <rect x="20" y="30" width="220" height="100" rx="10" fill="#ccfbf1" stroke="#0d9488"/><text x="130" y="52" text-anchor="middle" font-size="11" font-weight="700" fill="#115e59">gateway</text><text x="130" y="72" text-anchor="middle" font-size="8.5" fill="#0f766e">AUCUNE clé provider</text><text x="130" y="90" text-anchor="middle" font-size="8" fill="#0f766e">RouterMap : "anthropic" →</text><text x="130" y="103" text-anchor="middle" font-size="7.5" fill="#0f766e">anthropic/claude-3-5-sonnet-latest</text><text x="130" y="120" text-anchor="middle" font-size="8" fill="#0f766e">Retrier + breaker</text>
+    <rect x="350" y="30" width="200" height="100" rx="10" fill="#eef2ff" stroke="#4f46e5"/><text x="450" y="52" text-anchor="middle" font-size="11" font-weight="700" fill="#3730a3">routeur (server-side)</text><text x="450" y="74" text-anchor="middle" font-size="8.5" fill="#4338ca">DÉTIENT les clés (env/Vault)</text><text x="450" y="92" text-anchor="middle" font-size="8.5" fill="#4338ca">cost-governor · cache</text><text x="450" y="108" text-anchor="middle" font-size="8.5" fill="#4338ca">circuit-breaker · audit</text>
+    <rect x="660" y="30" width="220" height="100" rx="10" fill="#f5f3ff" stroke="#7c3aed"/><text x="770" y="56" text-anchor="middle" font-size="11" font-weight="700" fill="#5b21b6">providers</text><text x="770" y="82" text-anchor="middle" font-size="9" fill="#6d28d9">Anthropic · OpenAI · …</text>
+    <line x1="240" y1="80" x2="350" y2="80" stroke="#475569" stroke-width="2" marker-end="url(#nw)"/><text x="295" y="72" text-anchor="middle" font-size="7.5" fill="#475569">/v1/chat/completions</text><text x="295" y="96" text-anchor="middle" font-size="7" fill="#94a3b8">sans Authorization</text>
+    <line x1="550" y1="80" x2="660" y2="80" stroke="#475569" stroke-width="2" marker-end="url(#nw)"/><text x="605" y="72" text-anchor="middle" font-size="7.5" fill="#475569">+ clé provider</text>
+  </svg>
+  <div class="cap">Figure 6 — Le mode Network. La passerelle parle OpenAI-compat sans auth applicative ; le routeur injecte la clé. Un nom de modèle n'est pas un secret, donc le mapping vit côté passerelle.</div>
+  </div>
+  <p>Le mode Network <b>réutilise</b> donc tout le chemin self-host (le <code>OpenAiLocalBackend</code> + le
+  Retrier) — l'égalité d'implémentation est volontaire : un seul code à éprouver. La seule différence est
+  <code>allow_remote = true</code> (egress assumé) et le tarif (5¢ vs 0¢), préservé à travers la traduction.</p>
+</div>
+
+<!-- §11 DEPLOIEMENT -->
+<div class="wrap page">
+  <h2><span class="num">§11</span> &nbsp;Déploiement souverain</h2>
+  <p>Le binaire de production (<code>src/main.rs</code>) sélectionne la source de clé de provenance selon
+  l'environnement : <code>EnvHkdf</code> (master lu server-side) si présent, sinon repli <code>test_key()</code>
+  <b>avec avertissement bruyant</b> (le master de test est public → la provenance serait forgeable). Bind
+  <code>0.0.0.0</code>, arrêt gracieux SIGTERM. Câble store/oidc/pii/routeur depuis l'env.</p>
+  <div class="fig">
+  <svg viewBox="0 0 900 220" role="img" aria-label="Déploiement">
+    <defs><marker id="dp" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="#475569"/></marker></defs>
+    <rect x="30" y="20" width="560" height="180" rx="14" fill="#f0fdfa" stroke="#0d9488" stroke-width="1.5"/>
+    <text x="50" y="42" font-size="12" font-weight="700" fill="#115e59">POD — air-gappable (NetworkPolicy egress=DENY)</text>
+    <rect x="60" y="56" width="230" height="68" rx="10" fill="#ccfbf1" stroke="#0d9488"/><text x="175" y="78" text-anchor="middle" font-size="10.5" font-weight="700" fill="#115e59">gateway (souverain)</text><text x="175" y="96" text-anchor="middle" font-size="8" fill="#0f766e">/run · /verify · /metrics</text><text x="175" y="111" text-anchor="middle" font-size="8" fill="#0f766e">provenance HKDF (server-side)</text>
+    <rect x="330" y="56" width="230" height="68" rx="10" fill="#e0f2fe" stroke="#0284c7"/><text x="445" y="78" text-anchor="middle" font-size="10.5" font-weight="700" fill="#075985">sidecar Ollama</text><text x="445" y="96" text-anchor="middle" font-size="8" fill="#0369a1">127.0.0.1 · modèles PVC</text><text x="445" y="111" text-anchor="middle" font-size="8" fill="#0369a1">OLLAMA_NOPRUNE (air-gap)</text>
+    <line x1="290" y1="90" x2="330" y2="90" stroke="#475569" marker-end="url(#dp)"/><text x="310" y="84" text-anchor="middle" font-size="7" fill="#64748b">curl</text>
+    <rect x="60" y="136" width="500" height="50" rx="10" fill="#eef2ff" stroke="#4f46e5"/><text x="80" y="156" font-size="9" font-weight="700" fill="#3730a3">Secret HKDF → EFE_NANO_AUDIT_HMAC_MASTER (signe)</text><text x="80" y="174" font-size="8.5" fill="#4338ca">provision-job pré-télécharge les modèles · egress interdit en dur</text>
+    <rect x="630" y="74" width="240" height="80" rx="12" fill="#dcfce7" stroke="#16a34a"/><text x="750" y="100" text-anchor="middle" font-size="11" font-weight="700" fill="#166534">Régulateur</text><text x="750" y="120" text-anchor="middle" font-size="8.5" fill="#15803d">exporte …/records</text><text x="750" y="137" text-anchor="middle" font-size="8.5" fill="#15803d">verify HORS-LIGNE (sa clé)</text>
+    <line x1="590" y1="112" x2="630" y2="112" stroke="#16a34a" stroke-dasharray="4 3" marker-end="url(#dp)"/>
+  </svg>
+  <div class="cap">Figure 7 — Tâche, données et modèle restent sur l'hôte ; seule la preuve sort, re-vérifiable sans clé ni réseau. Défense en profondeur : garde-fou applicatif (egress refusé) + NetworkPolicy cluster.</div>
+  </div>
+  <p><b>Deux « clés », deux natures.</b> Les <b>clés provider</b> (qui dépensent de l'argent chez un tiers) ne
+  sont jamais touchées par EFE — en Network, elles vivent au routeur. Le <b>master HKDF</b> (qui <i>prouve</i>,
+  ne <i>dépense</i> pas) est lu server-side et dérive une clé par tenant ; il n'apparaît dans aucun record. La
+  PII (feature, détection <b>locale</b>) caviarde la présentation sans toucher aux records → verify reste
+  exact.</p>
+</div>
+
+<!-- §A ANNEXES -->
+<div class="wrap page">
+  <h2><span class="num">§A</span> &nbsp;Annexes</h2>
+  <h3>A.1 — Carte des fichiers (où vit quoi)</h3>
+  <table class="filemap">
+    <thead><tr><th>Fichier</th><th>Contenu clé</th></tr></thead>
+    <tbody>
+      <tr><td>blackboard/blackboard.rs</td><td>Blackboard (DashMap, CAS write_if, versioning, bornes)</td></tr>
+      <tr><td>blackboard/topic_router.rs</td><td>TopicRouter (broadcast/topic, publish/subscribe_prefix)</td></tr>
+      <tr><td>blackboard/sink.rs</td><td>WriteSink / EventSink (les deux seams)</td></tr>
+      <tr><td>topology/traits.rs</td><td>Generator/Verifier/Stage/Decomposer/Solver/Merger</td></tr>
+      <tr><td>topology/catalog.rs</td><td>les 34 nano-agents Mode A (Uppercase, WordSplit, …)</td></tr>
+      <tr><td>topology/fleet.rs</td><td>AgentFleet::standard() — registre des 43 agents</td></tr>
+      <tr><td>topology/generate_verify.rs</td><td>T1 (JoinSet + Semaphore)</td></tr>
+      <tr><td>topology/consensus_topology.rs</td><td>T-Consensus (gén ∥ + juges ∥ + agrégation/escalade)</td></tr>
+      <tr><td>topology/consensus/{borda,condorcet,vote}.rs</td><td>agrégateurs + confiance</td></tr>
+      <tr><td>topology/pipeline.rs · hierarchical.rs</td><td>T2 streaming · T3 récursif</td></tr>
+      <tr><td>sdk/sdk.rs</td><td>Swarm::run_traced (orchestration)</td></tr>
+      <tr><td>sdk/resolver.rs</td><td>nom → flotte (Mode A) OU instruction (Mode C)</td></tr>
+      <tr><td>sdk/agents.rs</td><td>Meter (budget+provenance+N17+observateur)</td></tr>
+      <tr><td>sdk/n17.rs</td><td>pont task-local + LlmProvenanceCollector</td></tr>
+      <tr><td>sdk/backend/{mod,ollama,openai_local}.rs</td><td>LocalBackend · Breaker · Retrier · garde-fou egress</td></tr>
+      <tr><td>provenance/*.rs</td><td>AgentCallRecord · chaîne HMAC · verify_swarm</td></tr>
+      <tr><td>gateway/state.rs · routes/run.rs</td><td>resolve_mode · RouterMap · cycle de requête</td></tr>
+      <tr><td>gateway/src/main.rs</td><td>binaire prod (EnvHkdf, arrêt gracieux)</td></tr>
+    </tbody>
+  </table>
+
+  <h3>A.2 — Glossaire opérationnel</h3>
+  <table class="small">
+    <tbody>
+      <tr><td><b>nano-agent</b></td><td>struct Rust mono-fonction, déterministe, sans poids (Mode A)</td></tr>
+      <tr><td><b>Mode A / Mode C</b></td><td>agent déterministe in-process / agent LLM réel (self-host ou Network)</td></tr>
+      <tr><td><b>variant</b></td><td>indice de diversité passé aux K générateurs</td></tr>
+      <tr><td><b>bus = indice / BB = vérité</b></td><td>le TopicRouter signale ; le Blackboard garantit l'exhaustivité</td></tr>
+      <tr><td><b>CAS (write_if)</b></td><td>écriture conditionnée à la version → pas de perte silencieuse</td></tr>
+      <tr><td><b>seam</b></td><td>callback d'observation (WriteSink/EventSink) sans couplage</td></tr>
+      <tr><td><b>provenance_root</b></td><td>hash 64-hex de la chaîne, re-calculable hors-ligne</td></tr>
+      <tr><td><b>N17 · I13 · G2/G8/G10</b></td><td>pont forensique · budget jamais dépassé · garde-fous (egress/bornes/zéro-réseau)</td></tr>
+    </tbody>
+  </table>
+  <hr>
+  <p class="small muted" style="text-align:center">EFE — Essaim Fluide Éphémère · Architecture &amp; Fonctionnement · 2026-06-11 ·
+  <i>Des nano-agents parallèles qui se passent l'information. Souverain, local, vérifiable.</i></p>
+</div>
+</body>
+</html>

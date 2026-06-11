@@ -1,0 +1,994 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>EFE · Rapport d'architecture &amp; d'ingénierie</title>
+<style>
+  :root{
+    --ink:#0f172a; --muted:#475569; --soft:#64748b; --line:#e2e8f0; --line2:#cbd5e1;
+    --teal:#0d9488; --teal-d:#0f766e; --teal-dd:#115e59; --slate:#334155; --slate-d:#1e293b;
+    --indigo:#4f46e5; --indigo-d:#4338ca; --amber:#ca8a04; --ok:#16a34a; --warn:#d97706; --bad:#dc2626;
+    --violet:#7c3aed; --sky:#0284c7; --bg-tint:#f8fafc; --bg-card:#f1f5f9; --code-bg:#0f172a; --code-fg:#e2e8f0;
+  }
+  *{box-sizing:border-box;}
+  html{font-size:10.6px;}
+  body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,Helvetica,Arial,sans-serif;
+    color:var(--ink);margin:0;line-height:1.6;background:#fff;-webkit-font-smoothing:antialiased;}
+  .wrap{max-width:185mm;margin:0 auto;padding:0 2mm;}
+  h1,h2,h3,h4{line-height:1.18;font-weight:700;}
+  h2{font-size:1.45rem;margin:0 0 .6rem;padding-bottom:.35rem;border-bottom:3px solid var(--teal);color:var(--teal-dd);}
+  h2 .num{color:var(--teal);font-variant-numeric:tabular-nums;}
+  h3{font-size:1.1rem;margin:1.05rem 0 .35rem;color:var(--teal-d);}
+  h4{font-size:.97rem;margin:.8rem 0 .25rem;color:var(--slate);}
+  p{margin:.5rem 0;}
+  code{font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace;font-size:.86em;background:var(--bg-card);padding:.05em .35em;border-radius:4px;color:#0b3b36;}
+  .muted{color:var(--muted);} .small{font-size:.88rem;}
+  .page{break-before:page;} h2{break-after:avoid;} h3{break-after:avoid;}
+  table{border-collapse:collapse;width:100%;margin:.6rem 0;font-size:.83rem;}
+  th,td{border:1px solid var(--line);padding:.34rem .5rem;text-align:left;vertical-align:top;}
+  th{background:var(--teal-dd);color:#fff;font-weight:700;}
+  tbody tr:nth-child(even){background:var(--bg-tint);} tr{break-inside:avoid;}
+  .tag{display:inline-block;font-size:.72rem;font-weight:700;padding:.08em .5em;border-radius:20px;vertical-align:middle;}
+  .t-ok{background:#dcfce7;color:#166534;} .t-info{background:#e0e7ff;color:#3730a3;} .t-teal{background:#ccfbf1;color:#115e59;} .t-amber{background:#fef3c7;color:#92400e;} .t-bad{background:#fee2e2;color:#991b1b;} .t-violet{background:#ede9fe;color:#5b21b6;}
+  pre{background:var(--code-bg);color:var(--code-fg);padding:.65rem .85rem;border-radius:8px;overflow:auto;
+    font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace;font-size:.74rem;line-height:1.45;margin:.5rem 0;break-inside:avoid;}
+  pre code{background:none;color:inherit;padding:0;}
+  .kw{color:#5eead4;} .ty{color:#fcd34d;} .cm{color:#94a3b8;font-style:italic;} .fn{color:#86efac;} .st{color:#fda4af;} .nu{color:#a5b4fc;}
+  .callout{border-left:4px solid var(--teal);background:#f0fdfa;padding:.6rem .85rem;border-radius:0 8px 8px 0;margin:.6rem 0;break-inside:avoid;}
+  .callout.amber{border-color:var(--amber);background:#fffbeb;}
+  .callout.slate{border-color:var(--slate);background:#f1f5f9;}
+  .callout.ex{border-color:var(--indigo);background:#eef2ff;}
+  .callout.bad{border-color:var(--bad);background:#fef2f2;}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:.8rem;}
+  .grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:.7rem;}
+  .card{border:1px solid var(--line);border-radius:10px;padding:.6rem .8rem;background:#fff;break-inside:avoid;}
+  .fig{margin:.7rem 0 1rem;text-align:center;break-inside:avoid;}
+  .fig svg{max-width:100%;height:auto;border:1px solid var(--line);border-radius:10px;background:#fff;}
+  .fig .cap{font-size:.82rem;color:var(--muted);margin-top:.35rem;font-style:italic;}
+  .kpi{display:flex;gap:.55rem;flex-wrap:wrap;margin:.55rem 0;}
+  .kpi .k{flex:1 1 105px;border:1px solid var(--line);border-radius:10px;padding:.5rem .65rem;background:var(--bg-tint);}
+  .kpi .k .v{font-size:1.4rem;font-weight:800;color:var(--teal-d);font-variant-numeric:tabular-nums;line-height:1;}
+  .kpi .k .l{font-size:.72rem;color:var(--muted);margin-top:.2rem;}
+  ul,ol{margin:.4rem 0 .4rem 1.25rem;padding:0;} li{margin:.3rem 0;}
+  svg text{font-family:-apple-system,"Segoe UI",Inter,sans-serif;}
+  .mono{font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace;}
+  hr{border:none;border-top:1px solid var(--line);margin:1rem 0;}
+  .toc{font-size:.9rem;}
+  .toc .part{font-weight:800;color:var(--teal-dd);margin:.5rem 0 .15rem;font-size:.95rem;text-transform:uppercase;letter-spacing:.05em;}
+  .toc .row{break-inside:avoid;margin:.12rem 0;} .toc .n{color:var(--teal);font-weight:700;display:inline-block;width:2.1em;}
+  .term{font-weight:700;color:var(--teal-d);}
+  .ix{font-size:.83rem;color:var(--soft);font-style:italic;}
+  .lede{font-size:1.05rem;color:#1e293b;}
+  .cover{height:262mm;display:flex;flex-direction:column;justify-content:center;position:relative;padding:0 6mm;
+    background:linear-gradient(180deg,#fff 60%, #f0fdfa 100%);}
+  .cover .eyebrow{color:var(--teal);font-weight:800;letter-spacing:.24em;font-size:.92rem;text-transform:uppercase;}
+  .cover h1{font-size:2.7rem;margin:.4rem 0 .2rem;letter-spacing:-.01em;color:var(--teal-dd);}
+  .cover .sub{font-size:1.3rem;color:var(--muted);font-weight:500;margin-bottom:1.3rem;}
+  .cover .tagline{font-size:1.06rem;max-width:163mm;border-left:4px solid var(--teal);padding-left:1rem;font-style:italic;}
+  .cover .meta{position:absolute;bottom:6mm;left:6mm;right:6mm;display:flex;justify-content:space-between;border-top:1px solid var(--line);padding-top:.7rem;font-size:.82rem;color:var(--soft);}
+  .cover .pills{margin:1.1rem 0;} .cover .pills .tag{font-size:.78rem;margin-right:.35rem;}
+  .partbreak{break-before:page;text-align:center;padding:14mm 0 2mm;}
+  .partbreak .pl{font-size:.95rem;letter-spacing:.3em;color:var(--teal);font-weight:800;text-transform:uppercase;}
+  .partbreak .pt{font-size:2.1rem;font-weight:800;color:var(--teal-dd);margin:.3rem 0;}
+  .partbreak .pd{font-size:1rem;color:var(--muted);max-width:150mm;margin:0 auto;}
+  .stepn > li{margin:.45rem 0;}
+</style>
+</head>
+<body>
+
+<!-- ===== COUVERTURE ===== -->
+<div class="wrap">
+<div class="cover">
+  <div class="eyebrow">Rapport d'architecture &amp; d'ingénierie · Édition complète</div>
+  <h1>EFE — Essaim Fluide Éphémère</h1>
+  <div class="sub">Des nano-agents parallèles qui se passent l'information — et le prouvent.</div>
+  <div class="tagline">
+    Ce rapport couvre <b>tout</b> : l'<b>architecture</b> (le modèle d'agent minimaliste, les deux substrats
+    d'échange, les quatre topologies, les trois modes, le moat de provenance), l'<b>ingénierie</b> (le
+    fonctionnement réel, dans le moindre détail : le cycle de vie d'un run, le micro-cycle de chaque appel,
+    l'anatomie d'un enregistrement champ par champ, la concurrence, le vote, le scellement), et les
+    <b>résultats</b> (la campagne de tests réelle) avec l'<b>état</b> du projet. La partie ingénierie est
+    <b>ultra-explicative</b> : aucun mécanisme n'est résumé.
+  </div>
+  <div class="pills">
+    <span class="tag t-teal">43 nano-agents</span>
+    <span class="tag t-info">2 substrats · K // · J //</span>
+    <span class="tag t-ok">~700 tests · 3 SLM réels</span>
+    <span class="tag t-violet">audit → preuve re-vérifiable</span>
+  </div>
+  <div class="meta">
+    <span><b>Portée :</b> stack essaim complète (sdk · topology · provenance · blackboard · gateway · dashboard)</span>
+    <span><b>Réf. :</b> <span class="mono">main @ 4c811ba</span> · 2026-06-10</span>
+  </div>
+</div>
+</div>
+
+<!-- ===== SOMMAIRE ===== -->
+<div class="wrap page">
+  <h2><span class="num">§0</span> &nbsp;Sommaire</h2>
+  <div class="toc">
+    <div class="part">Partie I — Architecture</div>
+    <div class="row"><span class="n">1</span>Thèse &amp; vision : pourquoi « beaucoup de petits »</div>
+    <div class="row"><span class="n">2</span>Architecture en couches (la stack)</div>
+    <div class="row"><span class="n">3</span>Le modèle d'agent (5 traits, 43 agents)</div>
+    <div class="row"><span class="n">4</span>Les deux substrats d'échange (vérité / indice)</div>
+    <div class="row"><span class="n">5</span>Les quatre topologies de câblage</div>
+    <div class="row"><span class="n">6</span>Les trois modes d'exécution</div>
+    <div class="row"><span class="n">7</span>Le moat : la provenance vérifiable</div>
+    <div class="row"><span class="n">8</span>Le pont N17 (forensique par-appel)</div>
+    <div class="part">Partie II — Ingénierie : le fonctionnement réel</div>
+    <div class="row"><span class="n">9</span>Le cycle de vie d'un run (ordre exact)</div>
+    <div class="row"><span class="n">10</span>Le micro-cycle d'un appel d'agent</div>
+    <div class="row"><span class="n">11</span>L'anatomie d'un AgentCallRecord (15 champs)</div>
+    <div class="row"><span class="n">12</span>La concurrence bornée (en détail)</div>
+    <div class="row"><span class="n">13</span>Le write path, le CAS &amp; la quiescence</div>
+    <div class="row"><span class="n">14</span>La génération, le jugement, le vote</div>
+    <div class="row"><span class="n">15</span>Le scellement &amp; la re-preuve (champ par champ)</div>
+    <div class="row"><span class="n">16</span>Le budget I13 &amp; la gouvernance</div>
+    <div class="row"><span class="n">17</span>Souveraineté, clés &amp; déploiement</div>
+    <div class="row"><span class="n">18</span>Catalogue des erreurs</div>
+    <div class="part">Partie III — Résultats &amp; état</div>
+    <div class="row"><span class="n">19</span>Résultats des tests (campagne réelle)</div>
+    <div class="row"><span class="n">20</span>Où on en est &amp; ce qui reste</div>
+  </div>
+
+  <h3 style="margin-top:1rem">Le projet en cinq nombres</h3>
+  <div class="kpi">
+    <div class="k"><div class="v">43</div><div class="l">nano-agents (≤2 params, 3–8 LoC)</div></div>
+    <div class="k"><div class="v">~30 k</div><div class="l">lignes Rust (10 crates cœur)</div></div>
+    <div class="k"><div class="v">~700</div><div class="l">tests verts · 0 warning</div></div>
+    <div class="k"><div class="v">3 / 3</div><div class="l">modes prouvés en réel</div></div>
+    <div class="k"><div class="v">100 %</div><div class="l">runs re-prouvés · falsifications détectées</div></div>
+  </div>
+</div>
+
+<!-- ===== PARTIE I ===== -->
+<div class="wrap">
+  <div class="partbreak">
+    <div class="pl">Partie I</div>
+    <div class="pt">Architecture</div>
+    <div class="pd">Le système, ses couches, son modèle d'agent, ses substrats d'échange, ses topologies,
+    ses modes, et le moat de provenance qui les sous-tend.</div>
+  </div>
+</div>
+
+<!-- ===== §1 THÈSE ===== -->
+<div class="wrap">
+  <h2><span class="num">§1</span> &nbsp;Thèse &amp; vision : pourquoi « beaucoup de petits »</h2>
+
+  <p class="lede">EFE prend un parti à contre-courant. Là où l'industrie construit des agents <b>gros et
+  intelligents</b> (mémoire, outils, boucles de raisonnement), EFE construit <b>beaucoup d'agents minuscules
+  et bêtes</b> — chacun fait <b>une</b> chose, en quelques lignes, sans état — et les fait <b>communiquer en
+  parallèle</b>. L'intelligence est dans la <b>topologie</b> (le câblage) et la <b>circulation de
+  l'information</b> (les substrats), pas dans l'agent.</p>
+
+  <h3>Les quatre piliers de la proposition</h3>
+  <div class="grid2">
+    <div class="card"><b>🔒 Souverain.</b> <span class="small">Mode phare <i>self-host keyless</i> : les modèles
+    tournent sur <code>127.0.0.1</code>, air-gappable, zéro egress. Aucune clé dans le binaire ; le seul secret
+    est le master HKDF qui <b>signe</b> la provenance, lu server-side.</span></div>
+    <div class="card"><b>✅ Vérifiable.</b> <span class="small">Chaque run renvoie un <code>provenance_root</code>
+    (64 hex). Un tiers re-prouve la chaîne + le contenu + le DAG à partir des <b>seuls records</b> et d'une clé
+    tenant — <b>hors-ligne</b>, sans nous croire.</span></div>
+    <div class="card"><b>💧 Fluide &amp; parallèle.</b> <span class="small">K générateurs et J juges tournent en
+    <b>parallèle borné</b> ; l'information circule en continu via deux substrats. Pas de barrière globale
+    rigide.</span></div>
+    <div class="card"><b>💸 Gouverné.</b> <span class="small">Budget <b>atomique</b> (invariant I13) : le plafond
+    n'est <b>jamais</b> dépassé, même en concurrence. Dégradation gracieuse plutôt qu'effondrement.</span></div>
+  </div>
+
+  <h3>Pourquoi ce choix gagne (et n'est pas un compromis)</h3>
+  <ul>
+    <li><b>Vérifiabilité.</b> Un pas minuscule et déterministe se re-prouve trivialement ; un gros modèle opaque
+    non. La petitesse <b>achète</b> l'auditabilité.</li>
+    <li><b>Robustesse.</b> Un nano-agent qui rate renvoie un sentinel neutre — la topologie dégrade, elle ne
+    s'effondre pas. Pas de point de défaillance unique « intelligent ».</li>
+    <li><b>Souveraineté.</b> Des fonctions Rust locales n'ont besoin ni de clé ni de réseau. Air-gappable par
+    construction.</li>
+    <li><b>Gouvernance.</b> Chaque appel est une <b>unité atomique facturable</b> (I13). Le coût est borné et
+    prévisible — l'opposé d'un agent monolithique au coût opaque.</li>
+  </ul>
+
+  <div class="callout"><b>La nuance honnête.</b> On ne promet <b>jamais</b> la reproductibilité bit-à-bit d'un
+  LLM. On promet la <b>re-preuve forensique</b> : les sorties LLM sont captées (hash prompt/réponse, modèle,
+  params, seed) et <b>tamper-evident</b>, mais pas rejouables à l'identique. Le Mode A déterministe et
+  l'agrégation, eux, <b>sont</b> reproductibles (ADR-SWARM-007). Le <code>provenance_root</code> est stable pour
+  un même ensemble de records.</div>
+</div>
+
+<!-- ===== §2 COUCHES ===== -->
+<div class="wrap page">
+  <h2><span class="num">§2</span> &nbsp;Architecture en couches (la stack)</h2>
+  <p>EFE est un monorepo Rust. La stack essaim s'empile en couches strictes : le haut dépend du bas, sans
+  cycle. Le SDK reste <b>léger</b> (aucune dépendance réseau/TLS dans son cœur, asserté en CI) ; les
+  préoccupations prod (Postgres, OIDC, PII) sont des <b>features optionnelles</b>.</p>
+
+  <div class="fig">
+  <svg viewBox="0 0 900 430" role="img" aria-label="Architecture en couches">
+    <defs><marker id="ar" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="#475569"/></marker>
+      <linearGradient id="gP" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#0d9488"/><stop offset="1" stop-color="#0f766e"/></linearGradient></defs>
+    <rect x="40" y="18" width="820" height="58" rx="10" fill="url(#gP)"/>
+    <text x="60" y="40" fill="#fff" font-size="14" font-weight="700">Produit · efe-swarm-gateway (2 759 LoC)</text>
+    <text x="60" y="60" fill="#d1fae5" font-size="10">HTTP axum · POST /run · GET /verify/:id (le moat) · /records · /metrics · /dashboard · SSE · binaire prod (EnvHkdf)</text>
+    <rect x="40" y="90" width="400" height="52" rx="10" fill="#eef2ff" stroke="#4f46e5"/><text x="60" y="112" fill="#3730a3" font-size="12.5" font-weight="700">efe-swarm-dashboard (902)</text><text x="60" y="130" fill="#4338ca" font-size="10">DashboardBus · Observer · SSE live · 4 panneaux</text>
+    <rect x="460" y="90" width="400" height="52" rx="10" fill="#f5f3ff" stroke="#7c3aed"/><text x="480" y="112" fill="#5b21b6" font-size="12.5" font-weight="700">routeur frontière (server-side)</text><text x="480" y="130" fill="#6d28d9" font-size="10">efe-llm-router 2 832 · ou LiteLLM — détient les clés provider</text>
+    <rect x="40" y="156" width="820" height="54" rx="10" fill="#ccfbf1" stroke="#0d9488"/><text x="60" y="178" fill="#115e59" font-size="13.5" font-weight="700">efe-swarm-sdk — l'entrée unique (2 919 LoC)</text><text x="60" y="197" fill="#0f766e" font-size="10">Swarm::run(task, topology, budget) · ClientMode · backends locaux · Budget I13 · pont N17 · Meter (charge·run·capture)</text>
+    <rect x="40" y="224" width="405" height="54" rx="10" fill="#fef9c3" stroke="#ca8a04"/><text x="60" y="246" fill="#854d0e" font-size="13" font-weight="700">efe-swarm-provenance (3 591)</text><text x="60" y="264" fill="#a16207" font-size="10">AgentCallRecord · verify_swarm · pont N17 · chaîne HMAC</text>
+    <rect x="455" y="224" width="405" height="54" rx="10" fill="#ffedd5" stroke="#ea580c"/><text x="475" y="246" fill="#9a3412" font-size="13" font-weight="700">efe-swarm-topology (3 283)</text><text x="475" y="264" fill="#c2410c" font-size="10">T1/T2/T3/Consensus · SwarmContext · 43 agents (flotte)</text>
+    <rect x="40" y="292" width="265" height="62" rx="10" fill="#e2e8f0" stroke="#64748b"/><text x="58" y="314" fill="#334155" font-size="12.5" font-weight="700">efe-blackboard (4 093)</text><text x="58" y="332" fill="#475569" font-size="9.5">substrat CAS · TopicRouter</text><text x="58" y="347" fill="#475569" font-size="9.5">SubstrateMetrics · quiescence</text>
+    <rect x="315" y="292" width="265" height="62" rx="10" fill="#e2e8f0" stroke="#64748b"/><text x="333" y="314" fill="#334155" font-size="12.5" font-weight="700">efe-audit-core (323)</text><text x="333" y="332" fill="#475569" font-size="9.5">HKDF-SHA256 par tenant</text><text x="333" y="347" fill="#475569" font-size="9.5">HmacKeySource · EnvHkdf (prod)</text>
+    <rect x="590" y="292" width="270" height="62" rx="10" fill="#e2e8f0" stroke="#64748b"/><text x="608" y="314" fill="#334155" font-size="12.5" font-weight="700">efe-nano-sdk (10 769)</text><text x="608" y="332" fill="#475569" font-size="9.5">types · LlmProvenanceRecord</text><text x="608" y="347" fill="#475569" font-size="9.5">blake3 · TenantId</text>
+    <rect x="40" y="370" width="820" height="42" rx="10" fill="#fae8ff" stroke="#c026d3"/><text x="60" y="394" fill="#86198f" font-size="11.5" font-weight="700">efe-pii (feature, 1 203)</text><text x="180" y="394" fill="#a21caf" font-size="10">détection LOCALE (regex, sans réseau) + redactor pur → caviarde présentation, records intacts</text>
+    <line x1="450" y1="156" x2="450" y2="142" stroke="#475569" marker-end="url(#ar)"/>
+    <line x1="240" y1="224" x2="240" y2="210" stroke="#475569" marker-end="url(#ar)"/>
+    <line x1="650" y1="224" x2="650" y2="210" stroke="#475569" marker-end="url(#ar)"/>
+    <line x1="170" y1="292" x2="170" y2="278" stroke="#475569" marker-end="url(#ar)"/>
+    <line x1="447" y1="292" x2="447" y2="278" stroke="#475569" marker-end="url(#ar)"/>
+    <line x1="720" y1="292" x2="720" y2="278" stroke="#475569" marker-end="url(#ar)"/>
+    <line x1="450" y1="90" x2="450" y2="76" stroke="#475569" marker-end="url(#ar)"/>
+  </svg>
+  <div class="cap">Figure 1 — Les couches et leurs dépendances (flèches : le haut dépend du bas). Le routeur frontière est server-side, hors du binaire souverain.</div>
+  </div>
+
+  <p class="small muted">Principe d'isolation : le SDK « shell-out » <code>curl</code> vers
+  <code>127.0.0.1</code> pour les modèles locaux — il n'importe <b>ni</b> reqwest <b>ni</b> TLS. Un test CI
+  (<code>keyless_guardrails</code>) <b>asserte</b> l'absence de dépendance réseau/clé dans le SDK : la
+  souveraineté est vérifiée mécaniquement, pas seulement promise.</p>
+</div>
+
+<!-- ===== §3 MODÈLE D'AGENT ===== -->
+<div class="wrap page">
+  <h2><span class="num">§3</span> &nbsp;Le modèle d'agent (5 traits, 43 agents)</h2>
+
+  <p>Un agent est une <b>fonction async</b> sans état, à signature minimale. Toute la « surface agent » du
+  système tient en cinq contrats (traits) :</p>
+  <pre><code><span class="kw">trait</span> <span class="ty">Generator</span>  { <span class="kw">async fn</span> <span class="fn">generate</span>(&<span class="kw">self</span>, task:&<span class="ty">Value</span>, variant:<span class="ty">usize</span>) -> <span class="ty">Value</span>; }     <span class="cm">// propose 1 candidat</span>
+<span class="kw">trait</span> <span class="ty">Verifier</span>   { <span class="kw">fn</span> <span class="fn">score</span>(&<span class="kw">self</span>, task:&<span class="ty">Value</span>, cand:&<span class="ty">Value</span>) -> <span class="ty">f64</span>; }            <span class="cm">// note ∈ [0,1]</span>
+<span class="kw">trait</span> <span class="ty">Stage</span>      { <span class="kw">async fn</span> <span class="fn">process</span>(&<span class="kw">self</span>, input:&<span class="ty">Value</span>) -> <span class="ty">Vec</span>&lt;<span class="ty">Value</span>&gt;; }        <span class="cm">// 1 → 0..N</span>
+<span class="kw">trait</span> <span class="ty">Decomposer</span> { <span class="kw">async fn</span> <span class="fn">decompose</span>(&<span class="kw">self</span>, task:&<span class="ty">Value</span>) -> <span class="ty">Vec</span>&lt;<span class="ty">Value</span>&gt;; }     <span class="cm">// tâche → sous-tâches</span>
+<span class="kw">trait</span> <span class="ty">Merger</span>     { <span class="kw">async fn</span> <span class="fn">merge</span>(&<span class="kw">self</span>, task:&<span class="ty">Value</span>, parts:<span class="ty">Vec</span>&lt;<span class="ty">Value</span>&gt;) -> <span class="ty">Value</span>; } <span class="cm">// N → 1</span></code></pre>
+
+  <h3>La flotte standard : 43 agents</h3>
+  <p>La flotte enregistre exactement <b>43 agents</b> (assert vérifié dans <code>fleet.rs</code>) : 34 du
+  catalogue Mode A + 9 juges. Répartition :</p>
+  <table>
+    <thead><tr><th>Famille</th><th>Nombre</th><th>Exemples (par identifiant)</th></tr></thead>
+    <tbody>
+      <tr><td>Decomposers</td><td>7</td><td>word_split · line_split · sentence_split · char_chunk · json_array_split</td></tr>
+      <tr><td>Stages (transformations)</td><td>10</td><td>trim · lowercase · uppercase · normalize_whitespace · extract_field · word_count</td></tr>
+      <tr><td>Verifiers</td><td>8</td><td>non_empty_text · length_bounded · keyword_present · numeric_equals · equals_expected (oracle)</td></tr>
+      <tr><td>Mergers</td><td>7</td><td>join_lines · concat_text · sum_values · majority_value · max_by_score_field</td></tr>
+      <tr><td>Generators</td><td>2</td><td>echo_generator · const_generator</td></tr>
+      <tr><td>Juges</td><td>9</td><td>consistency · length_band · keyword_overlap · groundedness · j_equals_expected</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Quatre propriétés obtenues « gratuitement »</h3>
+  <table>
+    <thead><tr><th>Propriété</th><th>Conséquence concrète</th></tr></thead>
+    <tbody>
+      <tr><td><b>Sans état</b> (struct immuable, <code>Arc&lt;dyn Trait&gt;</code>)</td><td>partageable entre tâches <b>sans verrou</b> ; thread-safe par construction</td></tr>
+      <tr><td><b>Déterministe</b> (pas d'I/O, diversité par <code>variant</code>)</td><td>même entrée → même sortie ⇒ <b>reproductible</b> &amp; testable exhaustivement</td></tr>
+      <tr><td><b>Petit</b> (médiane 3–8 LoC, ≤ 2 champs)</td><td><b>auditable d'un coup d'œil</b> ; surface de bug minuscule</td></tr>
+      <tr><td><b>Composable</b> (un solveur peut être un T1/T2/T3)</td><td>récursion arbitraire (« superviseur de superviseurs »)</td></tr>
+    </tbody>
+  </table>
+
+  <div class="callout ex"><b>L'agent le plus simple, en entier.</b>
+  <pre style="margin:.4rem 0 .1rem"><code><span class="kw">struct</span> <span class="ty">Uppercase</span>;                                  <span class="cm">// 0 champ de config</span>
+<span class="kw">impl</span> <span class="ty">Stage</span> <span class="kw">for</span> <span class="ty">Uppercase</span> {
+  <span class="kw">async fn</span> <span class="fn">process</span>(&<span class="kw">self</span>, x:&<span class="ty">Value</span>) -> <span class="ty">Vec</span>&lt;<span class="ty">Value</span>&gt; {
+    <span class="fn">vec!</span>[<span class="fn">json!</span>({ <span class="st">"text"</span>: <span class="fn">text_of</span>(x).<span class="fn">to_uppercase</span>() })]    <span class="cm">// 1 ligne utile</span>
+  }
+}</code></pre>
+  Le plus « gros » du dépôt a <b>deux</b> champs (ex. <code>LengthBounded{min, max}</code>). Aucun agent ne
+  dépasse cette taille — la complexité vit dans la composition, jamais dans l'agent.</div>
+</div>
+
+<!-- ===== §4 SUBSTRATS ===== -->
+<div class="wrap page">
+  <h2><span class="num">§4</span> &nbsp;Les deux substrats d'échange (vérité / indice)</h2>
+  <p>Si les agents ne gardent rien, l'information du run vit dans le <b>substrat</b>. EFE en utilise deux,
+  complémentaires — c'est le <b>keystone WS1</b> de l'architecture.</p>
+
+  <div class="grid2">
+    <div class="card"><h4 style="margin-top:0">Blackboard — la VÉRITÉ durable</h4>
+      <ul class="small">
+        <li>store adressé par contenu : <code>DashMap&lt;String, BlackboardValue&gt;</code> (verrou par shard, µs).</li>
+        <li>chaque pointeur a une <b>version monotone</b> (v1, v2…) — horloge logique locale.</li>
+        <li><b>CAS</b> : <code>write_if(ptr, version_attendue, …)</code> atomique (réservation, accord).</li>
+        <li><b>write-sink</b> : chaque écriture devient un maillon de provenance.</li>
+        <li><b>bornes</b> : cap global d'octets + caps par namespace + ring de 8192 (mémoire O(1)).</li>
+      </ul>
+      <p class="small"><b>Garantit la complétude</b> : l'agrégateur reconstruit TOUS les ballots depuis
+      <code>/ballot/*</code> — aucun vote perdu.</p>
+    </div>
+    <div class="card"><h4 style="margin-top:0">TopicRouter — l'INDICE éphémère</h4>
+      <ul class="small">
+        <li>pub/sub partitionné : <code>DashMap&lt;topic, broadcast::Sender&gt;</code> — un canal par sujet.</li>
+        <li><code>publish(ev)</code> → diffuse aux abonnés du <b>seul</b> topic concerné.</li>
+        <li><code>subscribe_prefix("ballot.")</code> → fusionne plusieurs topics (un forwarder par topic).</li>
+        <li><b>capacité bornée</b> → backpressure ; les drops sont <b>comptés</b> (jamais silencieux).</li>
+      </ul>
+      <p class="small"><b>Corrige le goulot F1</b> : un bus global diffusait chaque événement à N agents → O(N²).
+      Par topic ⇒ fan-out O(abonnés intéressés).</p>
+    </div>
+  </div>
+
+  <h3>Pourquoi deux substrats — le compromis indice/vérité</h3>
+  <p>Aucun seul ne suffit. Le <b>bus seul</b> est rapide mais peut <b>perdre</b> un message sous pression
+  (canal borné) — inacceptable pour un vote (un vote incomplet est faux). Le <b>tableau seul</b> ne perd rien
+  mais obligerait à scruter (polling, lent). Combinés : le bus <b>réveille</b> le consommateur (latence basse),
+  le tableau lui <b>garantit l'exhaustivité</b> (correction). On résume : « le bus est l'indice, le Blackboard
+  est la vérité ». Concrètement, un juge fait <b>les deux</b> : <code>bb.write("/ballot/j", …)</code> (vérité)
+  ET <code>router.publish("ballot.j", …)</code> (indice).</p>
+</div>
+
+<!-- ===== §5 TOPOLOGIES ===== -->
+<div class="wrap page">
+  <h2><span class="num">§5</span> &nbsp;Les quatre topologies de câblage</h2>
+  <p>La même flotte de nano-agents, câblée de quatre façons. C'est <b>ici</b> qu'est l'intelligence du système.</p>
+
+  <table>
+    <thead><tr><th>Topologie</th><th>Câblage</th><th>Où est le parallélisme</th><th>Quand</th></tr></thead>
+    <tbody>
+      <tr><td><b>T1 · Generate-Verify</b></td><td>K candidats → 1 vérificateur sélectionne le meilleur</td><td>K générateurs en //</td><td>tâche vérifiable (oracle)</td></tr>
+      <tr><td><b>T2 · Pipeline</b></td><td>étages en chaîne, données en flux (streaming)</td><td>items en vol simultanés / étage</td><td>transformation séquentielle</td></tr>
+      <tr><td><b>T3 · Hierarchical</b></td><td>décompose → résout → fusionne (récursif)</td><td>sous-tâches résolues en //</td><td>problème décomposable</td></tr>
+      <tr><td><b>Consensus</b></td><td>K candidats + J juges + vote (Borda/Condorcet)</td><td>générateurs ET juges en //</td><td>non-vérifiable mais jugeable</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Détails fonctionnels notables</h3>
+  <ul>
+    <li><b>Composition.</b> Un <code>Solver</code> de T3 peut être lui-même un T1, un T2 ou un autre T3 →
+    profondeur arbitraire. Un test démontre un « superviseur de superviseurs » (T3 dont le solveur est un T3).</li>
+    <li><b>Streaming (T2).</b> Chaque étage est un <i>agent asynchrone</i> qui consomme un topic, traite, et
+    émet vers le topic de l'étage suivant — ou écrit dans <code>/out/*</code> s'il est le dernier. Le pipeline
+    s'arrête par <b>quiescence</b> (tous les topics drainés), pas par un compteur.</li>
+    <li><b>Fan-out/in.</b> Un étage peut renvoyer 0, 1 ou N sorties — un filtre (0/1), un transformateur (1), un
+    démultiplicateur (N). Le flux se réorganise dynamiquement.</li>
+    <li><b>Auto, conscient du mode.</b> <code>Auto</code> regarde la tâche ET le mode : tâche vérifiable → T1 ;
+    mode self-host (vrai LLM) → consensus N-juges (la délibération réduit l'erreur). Testé
+    (<code>auto_is_mode_aware</code>).</li>
+  </ul>
+</div>
+
+<!-- ===== §6 MODES ===== -->
+<div class="wrap page">
+  <h2><span class="num">§6</span> &nbsp;Les trois modes d'exécution</h2>
+  <p>Un seul type <code>ClientMode</code> pilote le backend, le tarif nominal, et la posture de souveraineté.</p>
+  <table>
+    <thead><tr><th>Mode</th><th>Backend</th><th>Clés</th><th>Egress</th><th>Tarif</th><th>Usage</th></tr></thead>
+    <tbody>
+      <tr><td><b>Keyless</b></td><td>flotte Mode A déterministe (in-process)</td><td>aucune</td><td>aucun</td><td>1 ¢</td><td>démo · dev · CI · ancres</td></tr>
+      <tr><td><b>Self-host</b> <span class="tag t-teal">phare</span></td><td>SLM local (Ollama / llama.cpp / vLLM)</td><td>aucune</td><td><b>aucun</b> (127.0.0.1)</td><td>0 ¢</td><td>production souveraine, air-gap</td></tr>
+      <tr><td><b>Network</b></td><td>routeur frontière OpenAI-compat</td><td>server-side (routeur)</td><td>oui</td><td>5 ¢</td><td>modèles frontières, clés déléguées</td></tr>
+    </tbody>
+  </table>
+  <p>Le mode self-host est le <b>phare</b> : le client lance l'essaim sur <b>son</b> modèle, <b>sans clé</b>,
+  <b>sans egress</b> ; son régulateur re-prouve hors-ligne. Les deux autres modes le servent : keyless pour les
+  ancres déterministes et le dev ; network pour l'escalade frontière (les clés vivent dans le routeur, jamais
+  dans la passerelle). Le détail exact de la résolution (mapping provider→modèle, préservation du tarif) est
+  traité en ingénierie au §2 du fonctionnement (voir Partie II).</p>
+</div>
+
+<!-- ===== §7 MOAT ===== -->
+<div class="wrap page">
+  <h2><span class="num">§7</span> &nbsp;Le moat : la provenance vérifiable</h2>
+  <p>Chaque appel d'agent produit un <code>AgentCallRecord</code> scellé. Les records forment une <b>chaîne
+  HMAC</b> (chaque maillon couvre le précédent → détecte insertion/suppression/réordonnancement) et un <b>DAG</b>
+  de causalité ; le contenu de chaque record est haché en <b>blake3</b>. Une <b>racine</b> unique
+  (<code>provenance_root</code>, 64 hex) résume l'ensemble. <code>verify_swarm</code> recalcule <b>tout</b> à
+  partir des seuls records + une clé tenant — <b>hors-ligne</b>.</p>
+
+  <div class="fig">
+  <svg viewBox="0 0 900 250" role="img" aria-label="Provenance et verify">
+    <defs><marker id="a3" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="#0d9488"/></marker>
+      <marker id="ab" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="#dc2626"/></marker></defs>
+    <g fill="#fff" stroke="#0d9488" stroke-width="1.4"><rect x="20" y="30" width="150" height="78" rx="9"/><rect x="200" y="30" width="150" height="78" rx="9"/><rect x="380" y="30" width="150" height="78" rx="9"/><rect x="560" y="30" width="150" height="78" rx="9"/></g>
+    <g font-size="9.5" font-weight="700" fill="#115e59"><text x="34" y="50">record #0</text><text x="214" y="50">record #1</text><text x="394" y="50">record #2</text><text x="574" y="50">record #n</text></g>
+    <g font-size="8" fill="#475569"><text x="34" y="66">input/output_hash</text><text x="34" y="80">writes · reads</text><text x="34" y="94">llm_provenance_id</text>
+      <text x="214" y="66">payload_hash</text><text x="214" y="80">causal_parents</text>
+      <text x="394" y="66">…</text><text x="574" y="66">decided</text></g>
+    <g font-size="8.5" fill="#0d9488" font-weight="700"><text x="34" y="104">hmac=H(genesis‖rec)</text><text x="214" y="104">hmac=H(h0‖rec)</text><text x="394" y="104">hmac=H(h1‖rec)</text><text x="574" y="104">hmac=H(hn‖rec)</text></g>
+    <line x1="170" y1="69" x2="200" y2="69" stroke="#0d9488" stroke-width="2" marker-end="url(#a3)"/>
+    <line x1="350" y1="69" x2="380" y2="69" stroke="#0d9488" stroke-width="2" marker-end="url(#a3)"/>
+    <line x1="530" y1="69" x2="560" y2="69" stroke="#0d9488" stroke-width="2" marker-end="url(#a3)"/>
+    <rect x="300" y="142" width="300" height="40" rx="9" fill="#0f766e"/><text x="450" y="160" fill="#fff" text-anchor="middle" font-weight="700" font-size="11">provenance_root (64 hex)</text><text x="450" y="175" fill="#99f6e4" text-anchor="middle" font-size="8.5">engagement du run entier</text>
+    <line x1="635" y1="108" x2="540" y2="142" stroke="#0d9488" marker-end="url(#a3)"/>
+    <rect x="40" y="142" width="230" height="40" rx="9" fill="#e0e7ff" stroke="#4f46e5"/><text x="155" y="160" fill="#3730a3" text-anchor="middle" font-weight="700" font-size="10">clé tenant = HKDF(master, tenant)</text><text x="155" y="174" fill="#4338ca" text-anchor="middle" font-size="8">SIGNE · jamais transmise</text>
+    <line x1="270" y1="162" x2="300" y2="162" stroke="#475569" marker-end="url(#a3)"/>
+    <rect x="280" y="200" width="340" height="40" rx="9" fill="#dcfce7" stroke="#16a34a"/><text x="450" y="218" fill="#166534" text-anchor="middle" font-weight="700" font-size="10.5">verify_swarm — hors-ligne</text><text x="450" y="233" fill="#15803d" text-anchor="middle" font-size="8.5">chain_intact · content_intact · dag_consistent · même root</text>
+    <line x1="450" y1="182" x2="450" y2="200" stroke="#475569" marker-end="url(#a3)"/>
+    <rect x="660" y="200" width="220" height="40" rx="9" fill="#fee2e2" stroke="#dc2626"/><text x="770" y="218" fill="#991b1b" text-anchor="middle" font-weight="700" font-size="10">altération ⇒ rupture</text><text x="770" y="233" fill="#b91c1c" text-anchor="middle" font-size="8">first_break localise la faute</text>
+    <line x1="620" y1="220" x2="660" y2="220" stroke="#dc2626" stroke-dasharray="4 3" marker-end="url(#ab)"/>
+  </svg>
+  <div class="cap">Figure 2 — La chaîne de provenance et sa re-preuve. Muter un octet d'une sortie casse <code>content_intact</code> ; réordonner casse <code>chain_intact</code> ; les deux changent le root. La faute est <b>localisée</b>.</div>
+  </div>
+
+  <div class="callout"><b>ADR-SWARM-009 : « le endpoint verify EST le produit ».</b> La preuve ne dépend ni
+  d'EFE ni d'un provider. Le client exporte <code>GET /records</code> et re-prouve avec sa <b>propre</b> clé
+  tenant, sur une machine déconnectée. C'est le différenciateur qu'aucun fournisseur hébergé ne peut offrir
+  sans renoncer à son lock-in.</div>
+</div>
+
+<!-- ===== §8 N17 ===== -->
+<div class="wrap page">
+  <h2><span class="num">§8</span> &nbsp;Le pont N17 (forensique par-appel)</h2>
+  <p>Au niveau essaim, un <code>AgentCallRecord</code> dit <i>quel agent, quelle entrée, quelle sortie</i>. Le
+  pont <b>N17</b> ajoute une granularité <b>par appel LLM</b> : pour chaque agent Mode C (self-host / network),
+  un <code>LlmProvenanceRecord</code> forensique capte le modèle, les paramètres, le seed, les hashs
+  prompt/réponse, la latence, le <code>retry_count</code>. L'<code>AgentCallRecord</code> le <b>référence</b>
+  via <code>llm_provenance_id</code>. <b>Une seule lignée, deux granularités.</b></p>
+
+  <h3>Le seam (sans réécrire les agents)</h3>
+  <p>Le backend ne connaît pas le contexte d'essaim ; le <code>Meter</code> ne voit pas l'appel LLM brut. On les
+  relie par un <b>task-local</b> (un « puits » par appel d'agent) : le Meter pose le puits, le backend y pousse
+  sa fiche à chaque <code>complete()</code>, le Meter draine et assemble. <b>Concurrence-safe</b> : un puits par
+  appel ⇒ pas de course même à K générateurs parallèles. <b>Correct sous re-tentative</b> : le Retrier (mode
+  réseau) exécute chaque tentative dans un puits imbriqué et ne ré-émet qu'<b>un</b> record final (l'issue
+  retenue, avec son <code>retry_count</code>), jamais un appel fantôme.</p>
+
+  <p>Le résumé du run (<code>N17Summary</code>) expose : <code>calls</code> (records LLM),
+  <code>mode_c_records</code>, <code>consistent</code>, <code>unlinked</code>, <code>broken</code>,
+  <code>all_consistent</code>. Prouvé en réel : sur Claude 3.5 Sonnet via routeur → <code>consistent 4,
+  unlinked 0, broken 0, all_consistent true</code> ; et sur gemma3:12b en self-host local.</p>
+
+  <div class="callout slate"><b>La conséquence profonde.</b> Chaque pas de l'essaim — chaque écriture, chaque
+  appel de modèle — est forensiquement lié à la chaîne de provenance. La circulation d'information
+  <b>n'accompagne pas</b> la preuve : elle <b>est</b> la preuve. C'est ce qui permet de re-prouver, hors-ligne,
+  « quel nano-agent a produit quoi, avec quel modèle, et pourquoi tel gagnant ».</div>
+</div>
+
+<!-- ===== PARTIE II ===== -->
+<div class="wrap">
+  <div class="partbreak">
+    <div class="pl">Partie II</div>
+    <div class="pt">Ingénierie : le fonctionnement réel</div>
+    <div class="pd">On suit une requête de bout en bout, dans le moindre détail : l'ordre exact des
+    opérations, le micro-cycle de chaque appel, l'anatomie d'un enregistrement champ par champ, la
+    concurrence, le vote, le scellement. Rien n'est résumé.</div>
+  </div>
+</div>
+
+<!-- ===== §9 CYCLE DE VIE ===== -->
+<div class="wrap">
+  <h2><span class="num">§9</span> &nbsp;Le cycle de vie d'un run (ordre exact)</h2>
+  <p>Voici la séquence réelle de <code>run_traced</code> — l'unique fonction qui exécute un run et expose sa
+  provenance scellée. L'ordre est <b>strict</b> ; chaque étape a une raison.</p>
+
+  <ol class="stepn">
+    <li><b>Rejet précoce de Network in-process.</b> Si le mode est <code>Network</code>, on échoue
+    immédiatement avec <code>NetworkRequiresGateway</code> : le réseau exige la passerelle serveur (clés). En
+    pratique, la passerelle a déjà traduit Network → SelfHost (§2 du fonctionnement) avant d'arriver ici.</li>
+    <li><b>Calcul du tarif.</b> <code>price = budget.price_per_call_cents.unwrap_or(mode.price_per_call_cents())</code> —
+    le tarif explicite du client gagne, sinon celui du mode.</li>
+    <li><b>Concrétisation + politique de pré-vol.</b> <code>Auto</code> devient concret (selon tâche + mode).
+    Puis : <b>Degrade</b> → on réduit la topologie pour tenir (<code>degraded_to_fit</code>) ; <b>Error</b> → si
+    le coût estimé dépasse le plafond, <code>BudgetTooLow</code> (rien n'est exécuté) ; <b>Stop</b> → on laisse
+    tel quel.</li>
+    <li><b>Construction du backend + nature.</b> Keyless → <code>(None, ModeA)</code> ; SelfHost → on construit
+    le backend local (<code>build_local_backend</code>, qui applique le garde-fou egress) → <code>(Some, ModeC)</code>.</li>
+    <li><b>Health-check.</b> Si <code>require_healthy_backend</code>, on sonde le backend ; injoignable ⇒
+    <code>BackendUnavailable</code> (échec rapide, pas N timeouts).</li>
+    <li><b>Capture du descripteur backend</b> (moteur + modèle + endpoint) pour la forensique — avant que le
+    backend ne soit déplacé dans le résolveur.</li>
+    <li><b>Câblage.</b> <code>SwarmId</code> neuf ; <code>ProvenanceRecorder</code> ; <code>BudgetGuard(plafond, tarif)</code> ;
+    collecteur N17 (seulement si ModeC) ; le <code>Meter</code> qui réunit tout ça + l'observateur.</li>
+    <li><b>Substrat.</b> Un puits de provenance (<code>ProvenanceSink</code>) ; si un observateur fournit un
+    exutoire, on <b>tee</b> provenance + dashboard (la provenance reste byte-identique) ; on branche le tap
+    d'événements (trafic inter-agent → dashboard) et les métriques de substrat.</li>
+    <li><b>Résolution de la topologie.</b> Chaque agent nommé est cherché dans la flotte et enveloppé du Meter
+    (sinon <code>UnknownAgent{role, name}</code>). On obtient une topologie exécutable.</li>
+    <li><b>Notification de démarrage</b> (<code>on_run_start</code>) à l'observateur.</li>
+    <li><b>Exécution</b> : <code>topo.run(&task, &ctx).await</code> — le cœur (§14).</li>
+    <li><b>Post-vol budget</b> : politique Error + budget épuisé ⇒ <code>BudgetExceeded</code>.</li>
+    <li><b>Collecte des records N17</b> (ModeC).</li>
+    <li><b>Scellement + verify</b> : on scelle la chaîne (<code>seal_with_key</code>), on appelle
+    <code>verify_swarm</code>, on alimente les métriques partagées, on construit le résumé N17, on notifie
+    <code>on_seal</code>.</li>
+    <li><b>Assemblage</b> du <code>SwarmRun</code> (les 9 champs, §13), notification <code>on_finish</code>, et
+    retour du <code>RunOutcome</code> (run + sealed + llm_records).</li>
+  </ol>
+
+  <div class="callout ex"><b>Notre fil rouge.</b> Keyless → étape 1 sautée, tarif 1¢ (étape 2), pas de
+  dégradation (étape 3), pas de backend (étape 4-6), câblage sans collecteur N17 (étape 7), exécution du
+  consensus (étape 11), scellement (étape 14), réponse (étape 15).</div>
+</div>
+
+<!-- ===== §10 MICRO-CYCLE ===== -->
+<div class="wrap page">
+  <h2><span class="num">§10</span> &nbsp;Le micro-cycle d'un appel d'agent</h2>
+  <p class="lede">La pièce la plus importante du fonctionnement. <b>Aucun</b> agent n'est appelé « nu » : il est
+  enveloppé par le Meter dans un décorateur qui exécute toujours la <b>même</b> séquence de trois actes —
+  facturer, exécuter (dans le scope forensique), capturer. Voici le code réel du générateur (les autres rôles
+  sont identiques) :</p>
+
+  <pre><code><span class="kw">impl</span> <span class="ty">Generator</span> <span class="kw">for</span> <span class="ty">MeteredGen</span> {
+  <span class="kw">async fn</span> <span class="fn">generate</span>(&<span class="kw">self</span>, task:&<span class="ty">Value</span>, variant:<span class="ty">usize</span>) -> <span class="ty">Value</span> {
+    <span class="kw">if</span> !<span class="kw">self</span>.meter.<span class="fn">charge</span>(&<span class="kw">self</span>.id) {                 <span class="cm">// ① FACTURE</span>
+      <span class="kw">return</span> <span class="ty">Value</span>::Null;                              <span class="cm">//    budget épuisé → SENTINEL, on s'arrête</span>
+    }
+    <span class="kw">let</span> (out, llm) = <span class="kw">self</span>.meter
+        .<span class="fn">run_agent</span>(&<span class="kw">self</span>.id, Generator, <span class="kw">self</span>.inner.<span class="fn">generate</span>(task, variant)).<span class="kw">await</span>; <span class="cm">// ② EXÉCUTE (scope N17)</span>
+    <span class="kw">self</span>.meter.<span class="fn">capture</span>(&<span class="kw">self</span>.id, Generator, <span class="ty">Some</span>(variant), task, &out, llm); <span class="cm">// ③ CAPTURE</span>
+    out
+  }
+}</code></pre>
+
+  <h3>Acte ① — <code>charge</code> : payer avant de travailler</h3>
+  <p>Le Meter facture le tarif (1¢ keyless / 0¢ self-host / 5¢ network) au <code>BudgetGuard</code>. Si le
+  plafond serait dépassé, <code>charge</code> renvoie <code>false</code> : l'agent ne s'exécute <b>pas</b>,
+  renvoie son <b>sentinel</b>, et <b>rien n'est tracé</b> (pas de provenance pour un appel qui n'a pas eu lieu).
+  C'est exactement ainsi que la politique <b>Stop</b> dégrade : à court de budget, les agents deviennent des
+  passe-plats neutres et la topologie continue avec ce qu'elle a.</p>
+
+  <h3>Acte ② — <code>run_agent</code> : exécuter dans le scope forensique</h3>
+  <p>On lance l'agent réel <b>à l'intérieur</b> d'un scope task-local (le puits N17). En <b>Mode A</b>
+  (keyless), ce scope est vide — aucun appel LLM à capter — et <code>run_agent</code> renvoie simplement
+  <code>(sortie, None)</code>. En <b>Mode C</b>, le backend pousse sa fiche forensique dans le puits ;
+  <code>run_agent</code> la draine, assemble un <code>LlmProvenanceRecord</code>, et renvoie
+  <code>(sortie, Some(ProvenanceId))</code> — le lien forensique. <b>Détail concurrence</b> : si plusieurs
+  appels LLM sont poussés dans un même scope, <code>run_agent</code> les assemble tous et lie
+  l'<code>AgentCallRecord</code> au <b>premier</b> <code>ProvenanceId</code>.</p>
+
+  <h3>Acte ③ — <code>capture</code> : graver la preuve ET prévenir le dashboard</h3>
+  <p>L'acte double. <code>capture</code> fabrique un <code>AgentCallRecord</code> (§11) — hash de l'entrée, hash
+  de la sortie, rôle, variante, et (s'il existe) le lien <code>llm_provenance_id</code> — et le remet au
+  <code>ProvenanceRecorder</code> (la preuve grandit d'un maillon). <b>Puis</b>, s'il y a un observateur, il
+  notifie <code>on_agent_call</code> avec la sortie, le coût et l'état du budget — ce qui fait apparaître le
+  candidat dans le panneau « consensus » et met à jour le panneau « budget » en direct.</p>
+
+  <h3>Le sentinel, exhaustivement par rôle</h3>
+  <p>Quand le budget est épuisé, chaque rôle renvoie un sentinel <b>choisi pour préserver le flux</b>, jamais
+  une exception :</p>
+  <table class="fieldgrid">
+    <thead><tr><th>Rôle</th><th>Sentinel</th><th>Effet sur la topologie</th></tr></thead>
+    <tbody>
+      <tr><td>Generator</td><td><code>Value::Null</code></td><td>candidat vide (les juges le noteront bas)</td></tr>
+      <tr><td>Stage</td><td><code>vec![input.clone()]</code></td><td>pass-through — le pipeline ne se rompt pas</td></tr>
+      <tr><td>Decomposer</td><td><code>vec![task.clone()]</code></td><td>pas de découpe — la tâche entière passe</td></tr>
+      <tr><td>Solver</td><td><code>Value::Null</code></td><td>sous-tâche non résolue</td></tr>
+      <tr><td>Merger</td><td><code>Value::Null</code></td><td>fusion vide</td></tr>
+    </tbody>
+  </table>
+  <p class="ix">Dans tous les cas : aucune exécution, aucune provenance, aucun coût. La topologie <b>dégrade</b>
+  au lieu de <b>planter</b> — c'est le comportement « résultat partiel » de la politique Stop.</p>
+</div>
+
+<!-- ===== §11 ANATOMIE RECORD ===== -->
+<div class="wrap page">
+  <h2><span class="num">§11</span> &nbsp;L'anatomie d'un AgentCallRecord (15 champs)</h2>
+  <p>C'est l'unité atomique de la preuve. Chaque appel d'agent (qui s'exécute réellement) en produit un. Sa
+  structure est divisée en quatre zones, et la distinction entre ce qui est <b>haché</b> et ce qui est
+  <b>advisory</b> (hors hash) est le secret de la reproductibilité déterministe.</p>
+
+  <h3>Zone 1 — le contenu (engagé dans <code>payload_hash</code>)</h3>
+  <table class="fieldgrid">
+    <thead><tr><th>Champ</th><th>Type</th><th>Sens</th></tr></thead>
+    <tbody>
+      <tr><td><code>record_id</code></td><td>Uuid</td><td>identifiant unique du record</td></tr>
+      <tr><td><code>swarm_id</code></td><td>SwarmId</td><td>le run auquel il appartient (isolation)</td></tr>
+      <tr><td><code>tenant_id</code></td><td>TenantId</td><td>le tenant (isolation + clé de signature)</td></tr>
+      <tr><td><code>agent_id</code></td><td>AgentId</td><td>quel agent a produit ce pas</td></tr>
+      <tr><td><code>agent_role</code></td><td>AgentRole</td><td>Generator / Judge / Stage / Decomposer / Solver / Merger</td></tr>
+      <tr><td><code>agent_kind</code></td><td>AgentKind</td><td>ModeA (déterministe) ou ModeC (LLM)</td></tr>
+      <tr><td><code>input_hash</code></td><td>Blake3Hash</td><td>hash de l'entrée (le contenu n'est pas stocké, seulement son empreinte)</td></tr>
+      <tr><td><code>reads</code></td><td>Vec&lt;CellRef&gt;</td><td>quelles cellules du Blackboard ont été lues (+ versions)</td></tr>
+      <tr><td><code>output_hash</code></td><td>Blake3Hash</td><td>hash de la sortie</td></tr>
+      <tr><td><code>writes</code></td><td>Vec&lt;CellRef&gt;</td><td>quelles cellules ont été écrites (+ versions)</td></tr>
+      <tr><td><code>variant</code></td><td>Option&lt;u64&gt;</td><td>l'indice de variante (pour les générateurs)</td></tr>
+      <tr><td><code>causal_parents</code></td><td>Vec&lt;Uuid&gt;</td><td>les records dont celui-ci dépend (le DAG de causalité)</td></tr>
+      <tr><td><code>llm_provenance_id</code></td><td>Option&lt;ProvenanceId&gt;</td><td>le lien vers la fiche N17 (Mode C)</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Zone 2 — advisory (HORS <code>payload_hash</code> — ADR-SWARM-007)</h3>
+  <table class="fieldgrid">
+    <tbody>
+      <tr><td><code>wall_at</code></td><td>SystemTime</td><td>l'horloge murale — <b>capturée mais NON hachée</b></td></tr>
+    </tbody>
+  </table>
+  <div class="callout amber"><b>Le détail qui rend la reproductibilité possible.</b> <code>wall_at</code> est
+  <b>advisory</b> : on le conserve (utile pour le débogage et l'observabilité) mais il n'entre <b>pas</b> dans
+  <code>payload_hash</code>. Conséquence directe : deux exécutions du même run, à deux instants différents,
+  produisent le <b>même</b> <code>provenance_root</code>. Si l'horloge était hachée, aucune re-preuve
+  déterministe ne serait possible. C'est l'application concrète d'ADR-SWARM-007 (« le rejeu déterministe se
+  base sur la version, pas l'horloge »).</div>
+
+  <h3>Zone 3 — position de chaîne</h3>
+  <table class="fieldgrid">
+    <tbody>
+      <tr><td><code>seq</code></td><td>u64</td><td>la position du record dans la chaîne du run</td></tr>
+      <tr><td><code>chain_parent_hmac</code></td><td>Option&lt;[u8;32]&gt;</td><td>le HMAC du maillon précédent (le chaînage)</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Zone 4 — intégrité</h3>
+  <table class="fieldgrid">
+    <tbody>
+      <tr><td><code>payload_hash</code></td><td>[u8;32]</td><td>blake3 de la zone 1 (engagement du contenu)</td></tr>
+      <tr><td><code>hmac</code></td><td>[u8;32]</td><td>HMAC(clé tenant, chain_parent_hmac ‖ payload_hash) — le scellement</td></tr>
+    </tbody>
+  </table>
+
+  <p>Ainsi, altérer <b>n'importe quel</b> champ de la zone 1 change <code>payload_hash</code>, donc
+  <code>hmac</code>, donc tous les HMAC suivants, donc le root — et <code>verify_swarm</code> le détecte et
+  <b>localise</b> le premier record en faute (<code>first_break</code>). On ne stocke jamais les données brutes,
+  seulement leurs empreintes : la preuve est <b>compacte</b> et ne fuit pas le contenu.</p>
+</div>
+
+<!-- ===== §12 CONCURRENCE ===== -->
+<div class="wrap page">
+  <h2><span class="num">§12</span> &nbsp;La concurrence bornée (en détail)</h2>
+  <p>« En parallèle » ne signifie pas « sans limite ». EFE borne <b>partout</b> la concurrence par un
+  <b>sémaphore</b> (un distributeur de P jetons) : pour s'exécuter, une tâche prend un jeton, le rend à la fin ;
+  plus de jeton ⇒ on attend. C'est ce qui protège l'hôte (garde-fou G8, anti-déni-de-service).</p>
+
+  <h3>Le schéma des générateurs / juges (JoinSet + Semaphore)</h3>
+  <pre><code><span class="kw">let</span> sem = <span class="ty">Arc</span>::<span class="fn">new</span>(<span class="ty">Semaphore</span>::<span class="fn">new</span>(max_concurrency));   <span class="cm">// P jetons</span>
+<span class="kw">let mut</span> set = <span class="ty">JoinSet</span>::<span class="fn">new</span>();
+<span class="kw">for</span> variant <span class="kw">in</span> <span class="nu">0</span>..k {
+  set.<span class="fn">spawn</span>(<span class="kw">async move</span> {
+    <span class="kw">let</span> _permit = sem.<span class="fn">acquire_owned</span>().<span class="kw">await</span>;     <span class="cm">// borne : attend si P déjà pris</span>
+    (variant, gen.<span class="fn">generate</span>(&task, variant).<span class="kw">await</span>) <span class="cm">// le micro-cycle complet (§10)</span>
+  });
+}
+<span class="kw">while let</span> <span class="ty">Some</span>(r) = set.<span class="fn">join_next</span>().<span class="kw">await</span> { <span class="cm">/* collecte à mesure que ça finit */</span> }</code></pre>
+  <p>On lance K tâches d'un coup, mais au plus P tournent <b>en même temps</b>. <code>join_next</code> collecte
+  les résultats <b>à mesure</b> qu'ils finissent — on ne bloque pas sur le plus lent. Pour les juges, le même
+  schéma avec <code>tokio::spawn</code> + le sémaphore.</p>
+
+  <h3>Le schéma du pipeline (async_agent)</h3>
+  <p>En T2, chaque étage est un <b>agent asynchrone</b> : une boucle <code>while let Some(ev) = sub.recv()</code>
+  qui, pour chaque message, <b>prend un permis</b>, <b>spawn</b> le handler, signale <code>on_done()</code> à la
+  fin, et rend le permis. <b>Backpressure</b> : si un modèle est lent, les P permis restent pris, la boucle
+  cesse de consommer, et les messages s'accumulent dans le canal <b>borné</b> du bus (qui finira par dropper)
+  plutôt que dans une file mémoire illimitée. La pression se propage proprement de l'aval vers l'amont.</p>
+
+  <div class="callout"><b>Détail subtil — l'ordre « émettre puis créditer ».</b> Le crédit de quiescence
+  (<code>on_done()</code>) est signalé <b>après</b> que le handler ait émis ses sorties. Si on créditait avant,
+  le compteur « en vol » pourrait atteindre zéro alors qu'une chaîne d'étages n'est pas finie → on terminerait
+  trop tôt. L'ordre garantit qu'on ne déclare jamais la fin prématurément.</div>
+</div>
+
+<!-- ===== §13 WRITE PATH / CAS / QUIESCENCE ===== -->
+<div class="wrap page">
+  <h2><span class="num">§13</span> &nbsp;Le write path, le CAS &amp; la quiescence</h2>
+
+  <h3>Le chemin d'écriture (7 étapes)</h3>
+  <p>Chaque <code>write(pointer, value, agent)</code> traverse : (1) <b>validation</b> du pointeur ; (2)
+  <b>mesure</b> d'octets (ancien vs nouveau) ; (3) <b>cap global</b> — si ça déborde le budget mémoire total,
+  refus <code>SizeLimitExceeded</code> + compteur de rejets ; (4) <b>cap par namespace</b> (le préfixe le plus
+  spécifique l'emporte) ; (5) <b>version++</b> (ancienne + 1) ; (6) <b>insertion</b> dans le shard DashMap (seul
+  verrou, µs) ; (7) <b>triple exutoire</b> : write-sink (provenance), metrics (Prometheus), ring 8192 (rejeu).
+  Le rejet est <b>typé pour l'agent</b> (il dégrade) et <b>compté pour la télémétrie</b> (jamais silencieux).</p>
+
+  <h3>Le compare-and-swap (CAS)</h3>
+  <p><code>write_if(ptr, version_attendue, value, agent)</code> écrit <b>seulement si</b> la version courante
+  vaut exactement <code>version_attendue</code>. La comparaison ET l'échange se font <b>sous le même verrou de
+  shard</b> (correctif d'audit B-CAS) → deux écrivains concurrents sur le même pointeur <b>sérialisent</b> ; le
+  perdant voit une version inattendue et réessaie. <b>Aucune mise à jour perdue</b> — prouvé par
+  <code>swarm_cas_invariant</code> (somme exacte de N writers). C'est la primitive des réservations et accords.</p>
+
+  <h3>La terminaison par quiescence à crédit</h3>
+  <p>Comment savoir qu'un essaim a fini sans coordinateur ? Par un <b>bilan</b> : <code>produced</code> (émis)
+  vs <code>consumed</code> (traités), avec <code>in_flight = produced − consumed</code>. Quand
+  <code>in_flight == 0</code> ET que les sources sont taries, l'essaim est <b>quiescent</b>. L'arrêt est élégant :
+  les agents ne tiennent qu'un <b>pointeur faible</b> (<code>Weak&lt;TopicRouter&gt;</code>) ; le coordinateur
+  <code>drop</code> l'unique pointeur <b>fort</b> → tous les canaux se ferment → chaque <code>recv()</code>
+  renvoie <code>None</code> → les boucles sortent <b>d'elles-mêmes</b> et rendent leur rapport. Un
+  <code>timeout</code> borne l'attente (anti-blocage) ; le rapport expose <code>quiesced</code>,
+  <code>produced</code>, <code>consumed</code>, <code>elapsed</code>.</p>
+
+  <h3>Le sharding déterministe (pour distribuer sans chef)</h3>
+  <p>N items sur R workers, sans file partagée contendue : l'item <code>i</code> est possédé par
+  <code>shard_owner(i) = i mod R</code>. Tous les workers calculent la même formule → accord sans communication.
+  La notif d'un item est routée vers <code>{base}.shard.{owner}</code>, et seul le propriétaire y est abonné.
+  Chaque item traité <b>exactement une fois</b>, partition <b>stable</b> (donc reproductible). Testé par
+  <code>work_queue_sharding</code>.</p>
+</div>
+
+<!-- ===== §14 GÉNÉRATION / JUGEMENT / VOTE ===== -->
+<div class="wrap page">
+  <h2><span class="num">§14</span> &nbsp;La génération, le jugement, le vote</h2>
+  <p>Le cœur d'un consensus, phase par phase, en suivant notre fil rouge (K=3, 1 juge).</p>
+
+  <h3>Phase 1 — la génération parallèle</h3>
+  <p>Trois tâches sont lancées (variants 0, 1, 2), bornées par un sémaphore. Chaque générateur traverse son
+  micro-cycle : <b>charge 1¢</b> → <b>exécute</b> (un agent déterministe qui classe le texte) → <b>capture</b>
+  un record. Le résultat est <b>écrit</b> sur le Blackboard en <code>/cand/0</code>, <code>/cand/1</code>,
+  <code>/cand/2</code> (la vérité durable). En keyless déterministe, les 3 candidats valent « legal ». Bilan :
+  3 appels = 3¢, 3 records, 3 valeurs sur le tableau. <span class="ix">En self-host, les 3 candidats
+  <b>différeraient</b> — c'est cette diversité que les juges départagent.</span></p>
+
+  <h3>Phase 2 — le choix du motif, puis le jugement parallèle</h3>
+  <p>Avant de juger, le système choisit le <b>motif</b> : en mode adaptatif, si les candidats sont en fort
+  accord, un simple vote majoritaire suffit (et on peut <b>sauter</b> les juges, économisant des appels) ;
+  sinon Borda ou Condorcet. Puis les J juges notent <b>en parallèle</b> (chacun son micro-cycle). Chaque juge
+  produit un <b>ballot</b> (un score par candidat) et fait <b>les deux</b> écritures :
+  <code>bb.write("/ballot/j", scores)</code> (vérité) ET <code>router.publish("ballot.j", scores)</code>
+  (indice). Bilan pour notre fil rouge : 1 juge → 1 ballot, 1¢, 1 record.</p>
+
+  <h3>Phase 3 — la réconciliation &amp; le vote</h3>
+  <p>L'agrégateur, abonné au préfixe <code>ballot.</code>, est <b>réveillé</b> par le bus. Mais il ne compte pas
+  depuis le bus : il <b>relit le Blackboard</b> (<code>/ballot/0..J</code>) — garanti <b>exhaustif</b>. Avec la
+  matrice complète J×K, il applique le motif. <b>Borda</b> : chaque juge classe les candidats (rangs), un
+  candidat marque <code>(K−1) − rang</code> points par juge, on additionne, le plus haut total gagne. La
+  <b>confiance</b> = <code>margin(points) / (|juges| × (K−1))</code> ∈ [0,1]. Les ex-æquo sont départagés
+  déterministiquement (somme → premières places → index), <b>jamais</b> par l'ordre d'arrivée.</p>
+
+  <div class="callout ex"><b>Calcul Borda, déroulé (exemple à 2 juges, 4 candidats).</b>
+  <pre style="margin:.4rem 0 .1rem"><code>candidats : ["hello", "hi", "hello world", "h"]
+juge 0 scores [0.998, 0.002, 0.5, 0.0001] → rangs [0,2,1,3] → points [3,1,2,0]
+juge 1 scores [1.0, 0.5, 0.75, 0.0]       → rangs [0,2,1,3] → points [3,1,2,0]
+Borda total = [6, 2, 4, 0]  →  gagnant = index 0 ("hello")
+confiance = (6 − 4) / (2 × 3) ≈ 0,33</code></pre>
+  <b>Notre fil rouge (keyless) :</b> les 3 candidats valent « legal », notés identiquement → égalité parfaite →
+  gagnant « legal », <b>confiance 0</b> (aveu honnête : aucun vrai désaccord à trancher). En self-host, une
+  confiance sous un seuil déclencherait une <b>escalade humaine</b>.</div>
+
+  <p><b>Condorcet</b> (alternative) : un vainqueur bat tous les autres en duels (<code>prefers</code>) ; un
+  <b>cycle</b> (A&gt;B&gt;C&gt;A) est détecté (<code>cycle_detected</code>) → repli Borda. C'est « le consensus
+  craque le non-vérifiable <i>si</i> on a des juges » (ADR-SWARM-004). Le candidat gagnant devient la
+  <b>sortie</b> du run.</p>
+</div>
+
+<!-- ===== §15 SCELLEMENT / VERIFY ===== -->
+<div class="wrap page">
+  <h2><span class="num">§15</span> &nbsp;Le scellement &amp; la re-preuve (champ par champ)</h2>
+
+  <h3>Le scellement</h3>
+  <p>À la fin du run, le <code>ProvenanceRecorder</code> a accumulé tous les <code>AgentCallRecord</code>. On les
+  <b>scelle</b> (<code>seal_with_key(clé_tenant)</code>) : pour chaque record, on calcule
+  <code>payload_hash</code> (blake3 du contenu), puis <code>hmac = HMAC(clé, chain_parent_hmac ‖ payload_hash)</code>,
+  en chaînant du premier au dernier. Le HMAC du dernier maillon, combiné, donne le <code>provenance_root</code>
+  (64 hex). La clé tenant est dérivée par HKDF-SHA256 du master, salée par l'UUID du tenant — server-side,
+  jamais exposée.</p>
+
+  <h3>L'auto-vérification immédiate</h3>
+  <p>Juste après le scellement, on appelle <code>verify_swarm(records, clé)</code> sur nos propres records — la
+  <b>même</b> fonction qu'un tiers exécutera. Elle reçoit les records (dans un ordre quelconque) et la clé, et ne
+  consulte <b>aucun</b> provider. Elle renvoie un <code>SwarmProvenanceReport</code> :</p>
+  <table class="fieldgrid">
+    <thead><tr><th>Champ du rapport</th><th>Type</th><th>Sens</th></tr></thead>
+    <tbody>
+      <tr><td><code>records</code></td><td>usize</td><td>nombre d'enregistrements vérifiés</td></tr>
+      <tr><td><code>traced_pct</code></td><td>f64</td><td>fraction ancrée à une cellule durable (cible 100 %)</td></tr>
+      <tr><td><code>chain_intact</code></td><td>bool</td><td>tous les HMAC se recalculent (chaîne non altérée)</td></tr>
+      <tr><td><code>content_intact</code></td><td>bool</td><td>tous les <code>payload_hash</code> se recalculent (contenu non altéré)</td></tr>
+      <tr><td><code>dag_consistent</code></td><td>bool</td><td>DAG causal cohérent (parents existants, pas de lecture de version fantôme)</td></tr>
+      <tr><td><code>first_break</code></td><td>Option&lt;Uuid&gt;</td><td>le premier record en faute (forensique), si rupture</td></tr>
+      <tr><td><code>root</code></td><td>Option&lt;[u8;32]&gt;</td><td>le <code>provenance_root</code> reconstruit, si la chaîne est intacte</td></tr>
+    </tbody>
+  </table>
+  <p>Le run est <b>intégralement re-prouvé</b> ssi <code>chain_intact &amp;&amp; content_intact &amp;&amp;
+  dag_consistent</code> (méthode <code>ok()</code>). Ce booléen alimente <code>provenance.verified</code> du
+  <code>SwarmRun</code>. On lance déjà cette vérification ici pour garantir qu'on ne renvoie <b>jamais</b> un run
+  non re-prouvable.</p>
+
+  <div class="callout"><b>Les trois dimensions d'altération.</b> <code>chain_intact</code> tombe si on
+  <b>réordonne / insère / supprime</b> un record (le chaînage HMAC casse). <code>content_intact</code> tombe si
+  on <b>mute une sortie</b> (le <code>payload_hash</code> ne se recalcule plus). <code>dag_consistent</code>
+  tombe si un record <b>prétend lire</b> une version qui n'a jamais existé, ou référence un parent absent. Les
+  trois ensemble couvrent intégrité, ordre, et causalité. La faute est <b>localisée</b> par
+  <code>first_break</code> (le <code>record_id</code> du premier maillon brisé).</div>
+</div>
+
+<!-- ===== §16 BUDGET ===== -->
+<div class="wrap page">
+  <h2><span class="num">§16</span> &nbsp;Le budget I13 &amp; la gouvernance</h2>
+  <p>Le <code>BudgetGuard</code> facture chaque appel d'agent. Son invariant <b>I13</b> est <b>absolu</b> : le
+  compteur ne dépasse <b>JAMAIS</b> le plafond, même sous concurrence.</p>
+
+  <h3>Le mécanisme : ajout atomique puis revert</h3>
+  <pre><code><span class="kw">fn</span> <span class="fn">charge</span>(&<span class="kw">self</span>, who:&<span class="ty">str</span>) -> <span class="ty">bool</span> {
+  <span class="kw">if</span> <span class="kw">self</span>.price_cents == <span class="nu">0</span> { <span class="kw">self</span>.<span class="fn">note</span>(who, <span class="nu">0</span>); <span class="kw">return</span> <span class="kw">true</span>; } <span class="cm">// local/gratuit : compté, jamais plafonné</span>
+  <span class="kw">let</span> prev = <span class="kw">self</span>.spent.<span class="fn">fetch_add</span>(cents, SeqCst);        <span class="cm">// ajoute d'abord (atomique)</span>
+  <span class="kw">if</span> prev + cents &gt; <span class="kw">self</span>.max_cents {
+    <span class="kw">self</span>.spent.<span class="fn">fetch_sub</span>(cents, SeqCst);            <span class="cm">// REVERT : on annule le dépassement</span>
+    <span class="kw">self</span>.exhausted.<span class="fn">store</span>(<span class="kw">true</span>); <span class="kw">false</span>             <span class="cm">// l'agent renverra un sentinel</span>
+  } <span class="kw">else</span> { <span class="kw">self</span>.<span class="fn">note</span>(who, cents); <span class="kw">true</span> }
+}</code></pre>
+  <p>L'astuce : on <b>ajoute d'abord</b> (opération atomique), puis si le total dépasse, on <b>annule</b>
+  (fetch_sub). Comme l'ajout est atomique, deux threads ne peuvent pas tous les deux « passer » un appel qui
+  ferait déborder : l'un voit le total au-dessus du plafond et reverte. La somme finale est <b>toujours</b> ≤
+  plafond. Prouvé par <code>i13_holds_under_concurrency</code> (8 threads × 1000 charges → <code>spent ≤ 100</code>).</p>
+
+  <h3>Le snapshot exposé</h3>
+  <p>À la fin, <code>BudgetSnapshot</code> expose <code>spent_cents</code>, <code>max_cost_cents</code>,
+  <code>remaining</code>, et <code>per_llm</code> (la <b>ventilation par agent</b>, ordre déterministe). C'est ce
+  qui alimente le panneau « budget » du dashboard et le champ <code>budget</code> du <code>SwarmRun</code>.</p>
+
+  <div class="callout amber"><b>Le tarif zéro est spécial.</b> En self-host (0¢/appel), <code>charge</code>
+  compte l'appel (pour la ventilation) mais ne plafonne pas — un run local « gratuit » ne s'arrête jamais pour
+  cause de budget. C'est cohérent : le coût d'un modèle local est en compute, pas en cents. En network (5¢), le
+  tarif est préservé à travers la traduction (§2) pour que la gouvernance garde du mordant.</div>
+</div>
+
+<!-- ===== §17 SOUVERAINETÉ ===== -->
+<div class="wrap page">
+  <h2><span class="num">§17</span> &nbsp;Souveraineté, clés &amp; déploiement</h2>
+
+  <h3>La règle absolue des clés</h3>
+  <ul>
+    <li><b>Aucune clé provider</b> n'est jamais saisie, lue ou stockée par la passerelle. En network, elles
+    vivent <b>dans le routeur</b>, server-side.</li>
+    <li>Le <b>seul</b> secret côté EFE est le <b>master HKDF</b> (<code>EFE_NANO_AUDIT_HMAC_MASTER</code>) qui
+    <b>signe</b> la provenance — lu server-side via l'environnement, <b>jamais</b> transmis. Le binaire prod
+    sélectionne <code>EnvHkdf</code> dès qu'il est présent ; sinon repli <code>test_key()</code> dev avec
+    <b>avertissement bruyant</b> (le master de test est public → provenance forgeable).</li>
+    <li>OIDC : clé <b>publique</b> server-side uniquement.</li>
+  </ul>
+
+  <h3>Le déploiement souverain</h3>
+  <p>EFE se déploie via un <b>chart Helm</b> dans le tenant Azure/AWS du client : la passerelle + un
+  <b>sidecar Ollama</b> (modèles pré-provisionnés sur un PVC, <code>OLLAMA_NOPRUNE</code>, aucun pull réseau),
+  une <code>NetworkPolicy egress=deny</code> (le pod ne peut pas sortir sur Internet), un Secret HKDF, et
+  (features) PgRunStore + OIDC + PII. La donnée, le run et le modèle <b>restent sur l'hôte</b> ; <b>seule la
+  preuve</b> (records + root) circule, et se re-vérifie sans clé ni réseau. C'est l'air-gap par construction.</p>
+
+  <h3>Les 10 garde-fous (synthèse)</h3>
+  <table>
+    <thead><tr><th>#</th><th>Garde-fou</th><th>État</th></tr></thead>
+    <tbody>
+      <tr><td>G1</td><td>Keyless par construction</td><td><span class="tag t-ok">tenu</span></td></tr>
+      <tr><td>G2</td><td>Souveraineté (127.0.0.1, egress refusé par défaut)</td><td><span class="tag t-ok">tenu+testé</span></td></tr>
+      <tr><td>G3</td><td>Robustesse (breaker + health + retries)</td><td><span class="tag t-ok">tenu</span></td></tr>
+      <tr><td>G4</td><td>Vérifiabilité (verify hors-ligne)</td><td><span class="tag t-ok">tenu+testé</span></td></tr>
+      <tr><td>G6</td><td>Déterminisme gradué (Mode A reproductible)</td><td><span class="tag t-ok">tenu</span></td></tr>
+      <tr><td>G8</td><td>Bornes substrat (ring, caps, quotas)</td><td><span class="tag t-ok">tenu</span></td></tr>
+      <tr><td>G9</td><td>PII opt-in (détection locale)</td><td><span class="tag t-ok">tenu</span></td></tr>
+      <tr><td>G10</td><td>Pas de réseau caché (CI asserte l'absence de reqwest/TLS)</td><td><span class="tag t-ok">tenu+testé</span></td></tr>
+      <tr><td>I13</td><td>Budget jamais dépassé (atomique)</td><td><span class="tag t-ok">tenu+testé</span></td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ===== §18 ERREURS ===== -->
+<div class="wrap page">
+  <h2><span class="num">§18</span> &nbsp;Catalogue complet des erreurs</h2>
+  <p>Le SDK expose un type d'erreur fermé (<code>SwarmError</code>). Chaque variante a une cause précise et un
+  mapping HTTP côté passerelle. Les connaître, c'est comprendre tous les chemins d'échec possibles.</p>
+  <table class="fieldgrid">
+    <thead><tr><th>Erreur</th><th>Quand elle survient</th><th>HTTP</th></tr></thead>
+    <tbody>
+      <tr><td><code>UnknownAgent{role,name}</code></td><td>un nom d'agent n'existe pas dans la flotte (résolution de topologie)</td><td>400</td></tr>
+      <tr><td><code>EmptySpec(s)</code></td><td>spécification vide (ex. pipeline sans étage)</td><td>400</td></tr>
+      <tr><td><code>BudgetTooLow{needed,max}</code></td><td>politique Error : coût estimé &gt; plafond, <b>avant</b> exécution</td><td>400</td></tr>
+      <tr><td><code>BudgetExceeded{spent,max}</code></td><td>politique Error : budget épuisé <b>en cours</b> d'exécution</td><td>402/409</td></tr>
+      <tr><td><code>KeyError(e)</code></td><td>échec de dérivation de la clé de provenance (ex. master absent)</td><td>500</td></tr>
+      <tr><td><code>NetworkRequiresGateway</code></td><td>mode Network demandé en in-process (sans passerelle serveur)</td><td>501</td></tr>
+      <tr><td><code>RemoteBackendDenied{endpoint}</code></td><td>garde-fou G2 : backend self-host non-local refusé (egress)</td><td>403</td></tr>
+      <tr><td><code>BackendUnavailable{endpoint}</code></td><td>health-check : backend self-host injoignable au démarrage</td><td>503</td></tr>
+    </tbody>
+  </table>
+  <p class="ix">Principe transversal : on échoue <b>tôt</b> (validation, pré-vol, health) et <b>clairement</b>
+  (erreur typée + message explicite). Un run qui démarre est un run qui ira jusqu'au bout ou dégradera
+  proprement — pas de plantage opaque en milieu d'exécution.</p>
+</div>
+
+<!-- ===== PARTIE III ===== -->
+<div class="wrap">
+  <div class="partbreak">
+    <div class="pl">Partie III</div>
+    <div class="pt">Résultats &amp; état</div>
+    <div class="pd">La preuve par les tests : la suite déterministe complète, la campagne multi-modèles
+    réelle, le bout-en-bout réseau — et l'état exact du projet face à sa définition de « fait ».</div>
+  </div>
+</div>
+
+<!-- ===== §19 RÉSULTATS ===== -->
+<div class="wrap">
+  <h2><span class="num">§19</span> &nbsp;Résultats des tests (campagne réelle)</h2>
+  <p class="lede">Discipline : <b>réel quand disponible</b> (vraie crypto, vrais modèles),
+  <b>simulé-mais-étiqueté</b> sinon. Toutes les mesures proviennent d'exécutions effectives sur la machine de
+  développement (macOS, Apple Silicon, 2026-06-10).</p>
+
+  <h3>19.1 — La suite déterministe (vraie crypto, sans mock)</h3>
+  <table>
+    <thead><tr><th>Crate</th><th>Tests</th><th>Ce qui est réellement exercé</th></tr></thead>
+    <tbody>
+      <tr><td>efe-nano-sdk</td><td>327</td><td>types provenance, identités d'agents, HKDF, blake3</td></tr>
+      <tr><td>efe-blackboard (lib + intégration)</td><td>98 + 22</td><td>write path, CAS invariant, caps, sharding, livraison fiable, quiescence</td></tr>
+      <tr><td>efe-swarm-provenance</td><td>93 + 4</td><td>chaînes HMAC réelles, DAG, verify_swarm, pont N17, instrumented_consensus</td></tr>
+      <tr><td>efe-swarm-topology</td><td>60</td><td>T1/T2/T3/Consensus, fan-out/in, récursion, rank/Borda/Condorcet</td></tr>
+      <tr><td>efe-swarm-sdk</td><td>38 + 2</td><td>budget I13 concurrence, retries N17-corrects, garde-fous keyless</td></tr>
+      <tr><td>efe-swarm-gateway</td><td>34 + 2</td><td>routes, mapping, sélection de clé, cost-governance</td></tr>
+      <tr><td>efe-swarm-dashboard</td><td>16 + 3</td><td>bus SSE, rejeu, redaction previews</td></tr>
+      <tr><td>efe-audit-core</td><td>14</td><td>HKDF golden vector figé (cross-vérifiable)</td></tr>
+      <tr><th>Total</th><th>≈ 700</th><th>0 échec · 0 warning</th></tr>
+    </tbody>
+  </table>
+
+  <h3>19.2 — La campagne multi-modèles « Lot P5 » (gate → ADR-SWARM-008)</h3>
+  <p>Même topologie consensus (K générateurs // + juges // + Borda), exécutée en self-host <b>réel</b> sur trois
+  modèles locaux. Les garanties testées (souveraineté/egress, keyless, budget I13, tamper-evidence, couverture)
+  sont toutes <b>model-independent</b> — elles tiennent pour tout modèle, par construction.</p>
+  <table>
+    <thead><tr><th>Arme</th><th>Runs</th><th>verify</th><th>traced</th><th>I13</th><th>tamper détecté</th></tr></thead>
+    <tbody>
+      <tr><td>keyless (Mode A déterministe)</td><td>50</td><td>100 %</td><td>100 %</td><td>✓</td><td>100 %</td></tr>
+      <tr><td>self-host · gemma3:12b</td><td>5</td><td>100 %</td><td>100 %</td><td>✓</td><td>100 %</td></tr>
+      <tr><td>self-host · qwen3-coder:30b</td><td>5</td><td>100 %</td><td>100 %</td><td>✓</td><td>100 %</td></tr>
+      <tr><td>self-host · qwen3-vl:30b</td><td>5</td><td>100 %</td><td>100 %</td><td>✓</td><td>100 %</td></tr>
+      <tr><th colspan="6" style="text-align:center;background:#dcfce7;color:#166534">VERDICT : GO ✓ — garde-fous structurels (egress-deny · health fail-fast · keyless) tous ✓</th></tr>
+    </tbody>
+  </table>
+
+  <h3>19.3 — Le bout-en-bout réseau réel (Claude 3.5 Sonnet via routeur)</h3>
+  <p>Routeur LiteLLM (OpenAI-compat) détenant la clé Anthropic server-side ; la passerelle keyless pointée
+  dessus. Résultat observé :</p>
+  <pre><code>backend  : { engine:"openai_local", model:"anthropic/claude-3-5-sonnet-latest", endpoint:".../v1" }
+n17      : { calls:5, consistent:4, unlinked:0, broken:0, all_consistent:true }
+provenance: verified:true · root:13a1f97369cd…20730
+verify/:id: chain_intact ✓ · content_intact ✓ · dag_consistent ✓ · MÊME root</code></pre>
+  <p class="small muted">→ Mapping provider→modèle opérant, appel frontière réel via clé server-side, pont N17
+  cohérent, re-preuve indépendante. <b>La clé n'a jamais quitté le routeur.</b></p>
+
+  <h3>19.4 — Autres validations réelles</h3>
+  <div class="kpi">
+    <div class="k"><div class="v">12,0 s</div><div class="l">E2E self-host (qwen3-coder) → verify ✓</div></div>
+    <div class="k"><div class="v">7,7 s</div><div class="l">pont N17 réel (gemma3:12b) cohérent</div></div>
+    <div class="k"><div class="v">&gt; 0 ¢</div><div class="l">cost-governance network (spent_cents accru) ✓</div></div>
+    <div class="k"><div class="v">VERIFIED</div><div class="l">dashboard live (4 panneaux remplis)</div></div>
+  </div>
+</div>
+
+<!-- ===== §20 ÉTAT ===== -->
+<div class="wrap page">
+  <h2><span class="num">§20</span> &nbsp;Où on en est &amp; ce qui reste</h2>
+
+  <h3>Face à la définition de « fait » (Phase 5)</h3>
+  <table>
+    <thead><tr><th>Livrable</th><th>État</th></tr></thead>
+    <tbody>
+      <tr><td>SDK <code>Swarm::run</code> — 3 modes, provenance auto, budget plafonné</td><td><span class="tag t-ok">fait + testé</span></td></tr>
+      <tr><td>Gateway <code>/run · /verify · /records · /metrics</code></td><td><span class="tag t-ok">fait + E2E réel</span></td></tr>
+      <tr><td>Dashboard live SSE 4 panneaux</td><td><span class="tag t-ok">fait (confirmé visuellement)</span></td></tr>
+      <tr><td>Lot P5 / gate ADR-008 (multi-modèles)</td><td><span class="tag t-ok">GO (3 modèles réels)</span></td></tr>
+      <tr><td>Pont N17 par-appel</td><td><span class="tag t-ok">fait (réel gemma3 + Claude)</span></td></tr>
+      <tr><td>Inc.4 + 4.b — Network (mapping, retries, cost-gov)</td><td><span class="tag t-ok">fait + prouvé E2E</span></td></tr>
+      <tr><td>PII opt-in (G9) · Helm + NetworkPolicy · PgRunStore + OIDC</td><td><span class="tag t-ok">fait (features, chart)</span></td></tr>
+      <tr><td>Binaire prod (EnvHkdf, arrêt gracieux)</td><td><span class="tag t-ok">fait (trou signature fermé)</span></td></tr>
+      <tr><td>« Aucune clé dans le produit » + 0 warning</td><td><span class="tag t-ok">tenu (CI guardrails)</span></td></tr>
+    </tbody>
+  </table>
+
+  <h3>La surface honnête qui reste (intégration / ops)</h3>
+  <table>
+    <thead><tr><th>Item</th><th>Nature</th><th>Priorité</th></tr></thead>
+    <tbody>
+      <tr><td>Tests Postgres / OIDC réels (nécessitent une base + un IdP)</td><td>infra</td><td><span class="tag t-amber">moyenne</span></td></tr>
+      <tr><td>Dockerfile (ENTRYPOINT = binaire prod) — image référencée par le chart, pas dans le repo</td><td>code/ops</td><td><span class="tag t-amber">moyenne</span></td></tr>
+      <tr><td>Test d'intégration Network contre un faux routeur en process (sans clé)</td><td>code</td><td><span class="tag t-amber">moyenne</span></td></tr>
+      <tr><td><code>VaultTransit</code> (custody serveur) — placeholder ; EnvHkdf est le chemin prod</td><td>ops</td><td><span class="tag t-info">basse</span></td></tr>
+      <tr><td>Correctif cosmétique dashboard (« interrompu » → « terminé » à la fin du flux SSE)</td><td>UX</td><td><span class="tag t-info">basse</span></td></tr>
+      <tr><td>Mesure empirique TTFS &lt; 15 min (onboarding dev externe)</td><td>preuve</td><td><span class="tag t-info">basse</span></td></tr>
+    </tbody>
+  </table>
+
+  <div class="callout"><b>Verdict d'ensemble.</b> Le cœur produit — modèle d'agent, double substrat, concurrence
+  bornée, quiescence, sharding, vote, provenance, verify, budget, les 3 modes — est <b>livré, durci et testé en
+  réel</b>. Il atteint la définition de « fait » de la Phase 5 (~80 % / GO). Le reliquat est de l'intégration
+  ops (Postgres, image, Vault) qui se déclenche au déploiement réel, hors de ce qui se prouve sans infra live.
+  Les garanties techniques décrites dans ce rapport sont <b>model-independent</b> : elles tiennent pour tout
+  backend, prouvées à l'échelle par 50 runs Mode A déterministes + 3 SLM réels.</div>
+
+  <div class="kpi" style="margin-top:.7rem">
+    <div class="k"><div class="v">3 / 3</div><div class="l">modes livrés &amp; prouvés en réel</div></div>
+    <div class="k"><div class="v">12</div><div class="l">décisions d'architecture (ADR-SWARM)</div></div>
+    <div class="k"><div class="v">~700</div><div class="l">tests verts · 0 warning</div></div>
+    <div class="k"><div class="v">~80 %</div><div class="l">de la Phase 5 (GO)</div></div>
+  </div>
+
+  <hr>
+  <p class="small muted" style="text-align:center">EFE — Essaim Fluide Éphémère · Rapport d'architecture &amp;
+  d'ingénierie · 2026-06-10 · <span class="mono">main @ 4c811ba</span><br>
+  <i>Beaucoup de petits agents, en parallèle borné, qui se passent l'information — et chaque pas est facturé,
+  exécuté, tracé, et re-vérifiable par n'importe qui, hors-ligne.</i></p>
+</div>
+
+</body>
+</html>
