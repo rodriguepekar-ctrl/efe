@@ -57,7 +57,7 @@ async fn main() {
         conc,
         Arc::new(move |ctx, ev| {
             let client = client.clone();
-            let tenant = tenant.clone();
+            let tenant = tenant;
             Box::pin(async move {
                 let text = ev.payload.get("text").and_then(|v| v.as_str()).unwrap_or("");
                 let id = ev.payload.get("id").and_then(|v| v.as_i64()).unwrap_or(0);

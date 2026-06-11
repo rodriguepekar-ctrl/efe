@@ -33,6 +33,8 @@ impl Aggregator for CondorcetConsensus {
         // matrice de préférences P[i][j] = # juges avec score_i > score_j.
         let mut p = vec![vec![0usize; k]; k];
         for b in &valid {
+            // matrice P[i][j] : l'indexation explicite par (i,j) est plus lisible qu'un itérateur.
+            #[allow(clippy::needless_range_loop)]
             for i in 0..k {
                 for j in 0..k {
                     if i != j && b.scores[i] > b.scores[j] + EPS {
@@ -94,7 +96,7 @@ impl Aggregator for CondorcetConsensus {
                             )
                             .then(b.cmp(&a))
                     })
-                    .unwrap();
+                    .expect("0..k non vide : k>0 garanti plus haut");
                 AggOutcome {
                     selected: candidates[sel].clone(),
                     selected_index: sel,

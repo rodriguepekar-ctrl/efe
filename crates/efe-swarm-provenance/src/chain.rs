@@ -346,7 +346,7 @@ mod tests {
     fn verify_with_wrong_key_breaks_at_genesis() {
         let mut c = chain();
         let recs = c.append_all((0..3).map(draft));
-        let v = verify_chain(&recs, &vec![0u8; 32]); // mauvaise clé
+        let v = verify_chain(&recs, &[0u8; 32]); // mauvaise clé
         assert!(!v.ok);
         let brk = v.first_break.unwrap();
         assert_eq!(brk.index, 0);

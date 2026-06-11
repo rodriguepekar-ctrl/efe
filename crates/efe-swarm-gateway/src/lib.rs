@@ -467,12 +467,11 @@ mod tests {
                 .oneshot(Request::builder().uri(format!("/v1/swarm/runs/{run_id}")).body(Body::empty()).unwrap())
                 .await
                 .unwrap();
-            if resp.status() == StatusCode::OK {
-                if body_json(resp).await["status"] == "finished" {
+            if resp.status() == StatusCode::OK
+                && body_json(resp).await["status"] == "finished" {
                     finished = true;
                     break;
                 }
-            }
             tokio::time::sleep(std::time::Duration::from_millis(10)).await;
         }
         assert!(finished, "le job persiste le run");

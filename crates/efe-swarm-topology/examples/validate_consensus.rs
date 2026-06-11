@@ -173,7 +173,7 @@ async fn main() {
     let gain = mid.consensus.0 - mid.best_single.0;
     println!("\n────────────────────────── SLO PHASE 3 (réf. v=0,70) ──────────────────────────");
     println!(" Δqualité consensus − best-single : {:+.3}  ·  − vote : {:+.3}", gain, mid.consensus.0 - mid.vote.0);
-    println!(" Coût/gain : consensus = {K} générations (+ juges) vs best-single = 1 → +{:.3} qualité pour {K}× coût.", gain);
+    println!(" Coût/gain : consensus = {K} générations (+ juges) vs best-single = 1 → +{gain:.3} qualité pour {K}× coût.");
     println!(" Familles GO (consensus bat best-single ET vote, robuste) : {go_families}/{}", fams.len());
     let verdict = if go_families >= 1 {
         "GO — le consensus apporte un Δqualité positif robuste dès que les juges ont du signal (v≥~0,7)"

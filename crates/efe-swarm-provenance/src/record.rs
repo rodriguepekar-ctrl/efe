@@ -217,6 +217,7 @@ pub struct AgentCallDraft {
 
 impl AgentCallDraft {
     /// Brouillon minimal : `record_id` frais, `wall_at = now`, listes vides.
+    #[allow(clippy::too_many_arguments)] // constructeur explicite de l'atome de provenance (champs nommés voulus)
     pub fn new(
         swarm_id: SwarmId,
         tenant_id: TenantId,
@@ -246,6 +247,7 @@ impl AgentCallDraft {
 
     /// Brouillon à partir des **valeurs** d'entrée/sortie (hashées en BLAKE3 canonique).
     /// C'est la voie qu'empruntera le décorateur (Inc.3).
+    #[allow(clippy::too_many_arguments)] // constructeur explicite de l'atome de provenance (champs nommés voulus)
     pub fn from_io(
         swarm_id: SwarmId,
         tenant_id: TenantId,

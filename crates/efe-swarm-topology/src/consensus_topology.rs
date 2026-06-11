@@ -138,6 +138,7 @@ impl ConsensusTopology {
     /// Phase JUGES sur le substrat : juges-agents (∥, bornés) écrivent `/ballot/<j>`
     /// + publient sur `ballot.<j>` ; collecte via subscribe_prefix (bus = indice) +
     /// réconciliation depuis le Blackboard (vérité). Renvoie (ballots, #reçus via bus).
+    #[allow(clippy::too_many_arguments, clippy::doc_lazy_continuation)] // phase interne : params explicites (substrat + bus + tap)
     async fn run_judges(
         &self,
         task: &Value,
@@ -167,7 +168,7 @@ impl ConsensusTopology {
             let router = router.clone();
             let task = task.clone();
             let sem = sem.clone();
-            let jid = AgentId::new(format!("judge_{j:03}")).unwrap();
+            let jid = AgentId::new(format!("judge_{j:03}")).expect("id de juge valide (judge_NNN, alphanumérique)");
             handles.push(tokio::spawn(async move {
                 let _p = sem.acquire_owned().await.expect("semaphore");
                 let scores = judge.assess(&task, &cands).await;

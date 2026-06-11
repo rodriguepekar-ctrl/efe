@@ -199,7 +199,7 @@ mod tests {
         m.observe_verify(&verify_swarm(&s.records, &key));
         assert_eq!(m.chain_breaks_total(), 0);
         // mauvaise clé → rupture comptée.
-        m.observe_verify(&verify_swarm(&s.records, &vec![0u8; 32]));
+        m.observe_verify(&verify_swarm(&s.records, &[0u8; 32]));
         assert_eq!(m.chain_breaks_total(), 1);
     }
 

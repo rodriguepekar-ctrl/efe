@@ -65,6 +65,7 @@ impl Meter {
         }
     }
 
+    #[allow(clippy::too_many_arguments)] // capture interne : paramètres explicites du record de provenance
     fn capture(
         &self,
         id: &AgentId,

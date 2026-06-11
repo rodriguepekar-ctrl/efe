@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: UNLICENSED
+#![allow(clippy::doc_lazy_continuation)] // doc d'exemple : listes markdown multi-lignes
 //! # `swarm_reliable` — WS1 ferme le ❌ de la baseline (perte best-effort).
 //!
 //! La baseline `swarm_load` a montré : sous charge, le bus best-effort perd

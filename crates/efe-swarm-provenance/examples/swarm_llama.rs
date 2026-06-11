@@ -253,7 +253,7 @@ async fn main() {
     let overhead_pct = if mean_run_ms > 0.0 { 100.0 * (mean_seal_us / 1000.0) / mean_run_ms } else { 0.0 };
     let gate_b = traced_all && verified_all;
 
-    println!("\n  agents RÉELS : {records} enregistrements/run · run moy {mean_run_ms:.0} ms · seal moy {mean_seal_us:.0} µs", records = last_records);
+    println!("\n  agents RÉELS : {last_records} enregistrements/run · run moy {mean_run_ms:.0} ms · seal moy {mean_seal_us:.0} µs");
     println!("  overhead provenance / latence LLM : {overhead_pct:.4} %  (négligeable — thèse ADR-006 confirmée en RÉEL)");
     println!("  tracé 100 % : {traced_all} · verify_swarm : {verified_all} · accuracy consensus : {}/{}", acc_ok, gate_tasks.len());
 

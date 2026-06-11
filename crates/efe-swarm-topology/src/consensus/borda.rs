@@ -51,7 +51,7 @@ impl Aggregator for BordaConsensus {
                     .then(firsts[a].cmp(&firsts[b]))
                     .then(b.cmp(&a)) // index plus petit = préféré
             })
-            .unwrap();
+            .expect("0..k non vide : k>0 garanti par l'early-return plus haut");
 
         let max_gain = (valid.len() * (k.max(2) - 1)) as f64;
         let confidence = rank::margin(&borda) / max_gain;

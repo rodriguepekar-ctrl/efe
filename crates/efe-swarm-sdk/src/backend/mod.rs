@@ -155,6 +155,7 @@ pub(crate) fn is_local_endpoint(endpoint: &str) -> bool {
 ///   (Breaker seul) : sur boucle locale, un échec est franc et rapide, le breaker suffit.
 /// - L'empilement final est `Breaker(Retrier(moteur))` : le breaker ne compte qu'**une**
 ///   défaillance par appel logique (après épuisement des re-tentatives).
+#[allow(clippy::doc_lazy_continuation)] // listes de doc multi-lignes : présentation intentionnelle
 pub(crate) fn build_local_backend(
     endpoint: &str,
     model: &str,

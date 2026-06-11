@@ -75,7 +75,7 @@ async fn main() {
     print_report(&r3);
 
     // (4) mauvaise clé (un imposteur sans le secret tenant).
-    let r4 = verify_swarm(&sealed.records, &vec![0u8; 32]);
+    let r4 = verify_swarm(&sealed.records, &[0u8; 32]);
     println!("\n [imposteur · sans la clé tenant]");
     print_report(&r4);
 

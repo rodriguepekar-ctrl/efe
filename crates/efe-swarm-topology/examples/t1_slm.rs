@@ -50,7 +50,7 @@ struct LlmGenerator {
 impl Generator for LlmGenerator {
     async fn generate(&self, task: &Value, variant: usize) -> Value {
         let text = task.get("text").and_then(|v| v.as_str()).unwrap_or("");
-        let req = LlmCallRequest::builder(self.tenant.clone(), "m50.classify_topic.v1")
+        let req = LlmCallRequest::builder(self.tenant, "m50.classify_topic.v1")
             .template_inputs(json!({ "text": text }))
             .max_tokens(48)
             .build();
@@ -95,7 +95,7 @@ impl Verifier for OracleVerifier {
 /// Pour K=7 : variants 1-4 faux (4), variants 0,5,6 corrects (3) → vote→leurre.
 fn is_wrong(variant: usize) -> bool {
     let v = variant % 7;
-    v >= 1 && v <= 4
+    (1..=4).contains(&v)
 }
 
 /// Un seul leurre COMMUN par texte (corrélé entre variants) → peut former majorité.

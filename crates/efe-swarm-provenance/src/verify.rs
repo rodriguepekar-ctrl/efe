@@ -246,7 +246,7 @@ mod tests {
     #[test]
     fn wrong_key_breaks_the_chain() {
         let recs = sealed_run();
-        let rep = verify_swarm(&recs, &vec![0u8; 32]);
+        let rep = verify_swarm(&recs, &[0u8; 32]);
         assert!(!rep.chain_intact, "mauvaise clé → HMAC ne concorde pas");
         assert!(!rep.ok());
     }

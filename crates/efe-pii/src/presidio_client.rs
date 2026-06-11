@@ -100,7 +100,7 @@ impl PresidioClient {
             .timeout(cfg.timeout)
             .user_agent("efe-pii/2.4.0")
             .build()
-            .map_err(|e| PiiError::Http(format!("client build : {}", e)))?;
+            .map_err(|e| PiiError::Http(format!("client build : {e}")))?;
         Ok(Self {
             http,
             cfg,
@@ -162,7 +162,7 @@ impl PresidioClient {
                 metrics::ANALYZE_FAILURES_TOTAL
                     .with_label_values(&["decode"])
                     .inc();
-                return Err(PiiError::Http(format!("response json : {}", e)));
+                return Err(PiiError::Http(format!("response json : {e}")));
             }
         };
         self.breaker.record_success();
@@ -199,7 +199,7 @@ impl PiiAnalyzer for PresidioClient {
             Err(e) => {
                 debug!(?e, "presidio analyze failed");
                 return AnalysisOutcome::Unavailable {
-                    reason: format!("{}", e),
+                    reason: format!("{e}"),
                 };
             }
         };

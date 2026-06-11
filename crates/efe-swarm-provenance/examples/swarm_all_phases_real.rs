@@ -239,6 +239,7 @@ async fn main() {
     let t_cons: Box<dyn Topology> = Box::new(ConsensusTopology::new(gen_role(OllamaGen, &recorder, "generator"), 3, judges).with_pattern(Pattern::Borda));
 
     // ── Tâches par topologie + exécution UNIFORME via l'interface §3. ───────────
+    #[allow(clippy::type_complexity)] // tableau de démo (nom, topologie, tâche) — type explicite voulu
     let runs: Vec<(&str, &Box<dyn Topology>, Value)> = vec![
         ("T1 classify", &t1, json!({ "text": "The court ruled the contract clause was unenforceable.", "expected": "legal" })),
         ("T2 transform", &t2, json!({ "text": "Artificial intelligence is transforming healthcare diagnostics rapidly." })),

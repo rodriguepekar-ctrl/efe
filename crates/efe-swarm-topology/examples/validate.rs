@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: UNLICENSED
+#![allow(clippy::doc_overindented_list_items)] // doc d'exemple : alignement de liste intentionnel
 //! # `validate` — validation Phase 2 : cost/task + win% multi-familles.
 //!
 //! EXÉCUTE le VRAI code des topologies (T1 `GenerateVerify`, T3 `Hierarchical`)

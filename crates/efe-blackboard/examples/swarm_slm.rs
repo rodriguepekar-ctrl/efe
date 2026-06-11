@@ -348,7 +348,6 @@ async fn main() {
         let bb = bb.clone();
         let bus = bus.clone();
         let client = client.clone();
-        let tenant = tenant.clone();
         let id = AgentId::new(format!("classifier_{m:02}")).unwrap();
         let text = CORPUS[m % CORPUS.len()].to_string();
         class_tasks.push(tokio::spawn(async move {

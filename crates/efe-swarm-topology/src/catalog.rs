@@ -548,7 +548,7 @@ mod tests {
     #[test]
     fn verifiers_score() {
         assert_eq!(NonEmptyText.score(&json!({}), &json!({"text":"x"})), 1.0);
-        assert_eq!(NonEmptyText.passes(&json!({}), &json!({"text":""})), false);
+        assert!(!NonEmptyText.passes(&json!({}), &json!({"text":""})));
         assert_eq!(NumericEquals { target: 4.0 }.score(&json!({}), &json!({"value":4})), 1.0);
         assert!(RequiredFields { fields: vec!["a".into(), "b".into()] }
             .passes(&json!({}), &json!({"a":1,"b":2})));
@@ -575,7 +575,6 @@ mod tests {
 
     #[test]
     fn catalog_has_about_thirty_agents() {
-        assert_eq!(MODE_A_AGENT_COUNT, 34);
-        assert!(MODE_A_AGENT_COUNT >= 30, "catalogue ~30 agents Mode A");
+        assert_eq!(MODE_A_AGENT_COUNT, 34, "catalogue Mode A : 34 agents");
     }
 }

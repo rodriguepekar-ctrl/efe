@@ -36,7 +36,7 @@ impl Judge for LlmJudge {
             let text = c.get("value").and_then(|v| v.as_str()).map(String::from).unwrap_or_else(|| c.to_string());
             // En réel : un PROMPT DE JUGE (« note la qualité de cette réponse 0-1 »).
             // Keyless : on réutilise classify_topic et on prend la `confidence` comme proxy.
-            let req = LlmCallRequest::builder(self.tenant.clone(), "m50.classify_topic.v1")
+            let req = LlmCallRequest::builder(self.tenant, "m50.classify_topic.v1")
                 .template_inputs(json!({ "text": text }))
                 .max_tokens(32)
                 .build();

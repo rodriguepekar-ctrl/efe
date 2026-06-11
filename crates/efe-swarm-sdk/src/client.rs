@@ -15,9 +15,11 @@ use serde::Serialize;
 
 /// Où s'exécutent les agents LLM (le cas échéant) — et le prix associé.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Default)]
 pub enum ClientMode {
     /// **Keyless** : agents déterministes en process (flotte Mode A / `BuiltinLlmClient`).
     /// Aucune clé, aucune dépendance réseau. Le mode démo/dev/CI.
+    #[default]
     Keyless,
     /// **Self-host** : modèle local (`llama-server`/Ollama). **Aucune clé** — souverain,
     /// on-prem, air-gappable. Le mode « privacy » phare.
@@ -27,11 +29,6 @@ pub enum ClientMode {
     Network { provider: String },
 }
 
-impl Default for ClientMode {
-    fn default() -> Self {
-        ClientMode::Keyless
-    }
-}
 
 impl ClientMode {
     /// Prix NOMINAL par appel d'agent (cents) pour la gouvernance de budget.

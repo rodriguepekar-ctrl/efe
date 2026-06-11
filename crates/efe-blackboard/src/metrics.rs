@@ -94,11 +94,11 @@ impl LatencyHistogram {
             cum += b.load(Ordering::Relaxed);
             if cum >= target {
                 // borne sup du bucket i (overflow → dernière borne finie).
-                let bound = if i < BOUNDS_US.len() { BOUNDS_US[i] } else { *BOUNDS_US.last().unwrap() };
+                let bound = if i < BOUNDS_US.len() { BOUNDS_US[i] } else { *BOUNDS_US.last().expect("BOUNDS_US est une constante non vide") };
                 return bound as f64 / 1000.0;
             }
         }
-        *BOUNDS_US.last().unwrap() as f64 / 1000.0
+        *BOUNDS_US.last().expect("BOUNDS_US est une constante non vide") as f64 / 1000.0
     }
 
     fn cumulative(&self) -> Vec<(f64, u64)> {

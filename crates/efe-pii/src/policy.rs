@@ -59,7 +59,7 @@ impl FromStr for PolicyKind {
             "detect" => Ok(Self::Detect),
             "redact" => Ok(Self::Redact),
             "strict" => Ok(Self::Strict),
-            other => Err(format!("unknown pii_policy : {}", other)),
+            other => Err(format!("unknown pii_policy : {other}")),
         }
     }
 }

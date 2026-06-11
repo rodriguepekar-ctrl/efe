@@ -22,13 +22,15 @@ use serde_json::Value;
 fn detectors() -> &'static Vec<(Regex, &'static str)> {
     static D: OnceLock<Vec<(Regex, &'static str)>> = OnceLock::new();
     D.get_or_init(|| {
+        // `expect` : regex LITTÉRALES (constantes) → compilation infaillible. Le message
+        // documente l'invariant et signalerait nettement toute édition fautive future.
         vec![
-            (Regex::new(r"[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}").unwrap(), "EMAIL_ADDRESS"),
-            (Regex::new(r"\b\d{3}-\d{2}-\d{4}\b").unwrap(), "US_SSN"),
-            (Regex::new(r"\b(?:\d[ \-]?){13,19}\b").unwrap(), "CREDIT_CARD"),
-            (Regex::new(r"\b[A-Z]{2}\d{2}[A-Z0-9]{11,30}\b").unwrap(), "IBAN"),
-            (Regex::new(r"\b(?:\d{1,3}\.){3}\d{1,3}\b").unwrap(), "IP_ADDRESS"),
-            (Regex::new(r"\+?\d[\d \-.()]{8,}\d").unwrap(), "PHONE_NUMBER"),
+            (Regex::new(r"[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}").expect("regex PII littérale valide"), "EMAIL_ADDRESS"),
+            (Regex::new(r"\b\d{3}-\d{2}-\d{4}\b").expect("regex PII littérale valide"), "US_SSN"),
+            (Regex::new(r"\b(?:\d[ \-]?){13,19}\b").expect("regex PII littérale valide"), "CREDIT_CARD"),
+            (Regex::new(r"\b[A-Z]{2}\d{2}[A-Z0-9]{11,30}\b").expect("regex PII littérale valide"), "IBAN"),
+            (Regex::new(r"\b(?:\d{1,3}\.){3}\d{1,3}\b").expect("regex PII littérale valide"), "IP_ADDRESS"),
+            (Regex::new(r"\+?\d[\d \-.()]{8,}\d").expect("regex PII littérale valide"), "PHONE_NUMBER"),
         ]
     })
 }

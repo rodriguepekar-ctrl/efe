@@ -81,7 +81,7 @@ fn run_v(v: f64) -> Row {
     for i in 0..N {
         let d = 0.3 + 0.4 * unit(0xD1FF ^ i as u64);
         // candidats + vérité cachée.
-        let mut correct = vec![false; K];
+        let mut correct = [false; K];
         let mut candidates = Vec::with_capacity(K);
         for k in 0..K {
             let p = (skills[k] - GAMMA * d).clamp(0.0, 1.0);
