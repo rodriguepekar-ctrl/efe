@@ -1,0 +1,639 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>EFE — Partie 4 : Nano-agents &amp; topologies</title>
+<style>
+  :root{--ink:#0f172a;--muted:#475569;--soft:#64748b;--line:#e2e8f0;--teal:#0d9488;--teal-d:#0f766e;--indigo:#4f46e5;--indigo-d:#4338ca;--ok:#16a34a;--warn:#d97706;--bad:#dc2626;--bg-tint:#f8fafc;--bg-card:#f1f5f9;--code-bg:#0f172a;--code-fg:#e2e8f0;}
+  *{box-sizing:border-box;} html{font-size:11.4px;}
+  body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,Arial,sans-serif;color:var(--ink);margin:0;line-height:1.62;background:#fff;-webkit-font-smoothing:antialiased;}
+  .wrap{max-width:178mm;margin:0 auto;padding:0 2mm;}
+  h1,h2,h3,h4{line-height:1.2;font-weight:700;}
+  h2{font-size:1.5rem;margin:0 0 .6rem;padding-bottom:.35rem;border-bottom:3px solid var(--teal);}
+  h2 .num{color:var(--teal);} h3{font-size:1.18rem;margin:1.25rem 0 .35rem;color:var(--indigo-d);}
+  h4{font-size:1rem;margin:.9rem 0 .25rem;color:var(--teal-d);}
+  p{margin:.6rem 0;text-align:justify;hyphens:auto;} a{color:var(--indigo);text-decoration:none;}
+  code{font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace;font-size:.85em;background:var(--bg-card);padding:.05em .35em;border-radius:4px;color:#0b3b36;}
+  .muted{color:var(--muted);} .small{font-size:.88rem;}
+  .lead-in{font-weight:700;color:var(--teal-d);}
+  section{break-inside:avoid;} .page{break-before:page;} h2{break-after:avoid;}
+  table{border-collapse:collapse;width:100%;margin:.6rem 0;font-size:.85rem;}
+  th,td{border:1px solid var(--line);padding:.34rem .55rem;text-align:left;vertical-align:top;}
+  th{background:var(--bg-card);font-weight:700;} tbody tr:nth-child(even){background:var(--bg-tint);}
+  td.c,th.c{text-align:center;} .win{background:#dcfce7 !important;font-weight:700;color:#166534;}
+  .tag{display:inline-block;font-size:.71rem;font-weight:700;padding:.08em .5em;border-radius:20px;}
+  .t-ok{background:#dcfce7;color:#166534;} .t-info{background:#e0e7ff;color:#3730a3;} .t-teal{background:#ccfbf1;color:#115e59;} .t-warn{background:#fef3c7;color:#92400e;}
+  pre{background:var(--code-bg);color:var(--code-fg);padding:.6rem .85rem;border-radius:8px;overflow:auto;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.76rem;line-height:1.5;margin:.6rem 0;}
+  .callout{border-left:4px solid var(--teal);background:var(--bg-tint);padding:.6rem .9rem;border-radius:0 8px 8px 0;margin:.7rem 0;}
+  .callout p{text-align:left;margin:.3rem 0;}
+  .callout.key{border-color:var(--indigo);background:#eef2ff;} .callout.warn{border-color:var(--warn);background:#fffbeb;}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:.8rem;}
+  .card{border:1px solid var(--line);border-radius:10px;padding:.65rem .8rem;background:#fff;} .card p{text-align:left;}
+  .fig{margin:.8rem 0 1rem;text-align:center;break-inside:avoid;}
+  .fig svg{max-width:100%;height:auto;border:1px solid var(--line);border-radius:10px;background:#fff;}
+  .fig .cap{font-size:.8rem;color:var(--muted);margin-top:.35rem;font-style:italic;text-align:center;}
+  ul,ol{margin:.45rem 0 .6rem 1.15rem;padding:0;} li{margin:.28rem 0;}
+  svg text{font-family:-apple-system,"Segoe UI",Inter,sans-serif;}
+  .cover{height:262mm;display:flex;flex-direction:column;justify-content:center;position:relative;padding:0 6mm;}
+  .cover .eyebrow{color:var(--teal);font-weight:800;letter-spacing:.28em;font-size:.92rem;text-transform:uppercase;}
+  .cover h1{font-size:2.95rem;margin:.4rem 0 .2rem;line-height:1.05;} .cover .sub{font-size:1.35rem;color:var(--muted);margin-bottom:1.2rem;}
+  .cover .tagline{font-size:1.04rem;color:var(--ink);max-width:160mm;border-left:4px solid var(--teal);padding-left:1rem;font-style:italic;text-align:left;}
+  .cover .meta{position:absolute;bottom:6mm;left:6mm;right:6mm;display:flex;justify-content:space-between;border-top:1px solid var(--line);padding-top:.7rem;font-size:.82rem;color:var(--soft);}
+  .cover .pills{margin:1.1rem 0;} .cover .pills .tag{font-size:.8rem;margin-right:.35rem;}
+  .lede{font-size:1.06rem;color:#1e293b;text-align:left;} .mono{font-family:ui-monospace,Menlo,Consolas,monospace;}
+  hr{border:none;border-top:1px solid var(--line);margin:1rem 0;}
+  .toc{font-size:.92rem;columns:2;column-gap:2rem;} .toc div{margin:.18rem 0;break-inside:avoid;} .toc .n{color:var(--teal);font-weight:700;display:inline-block;width:1.8em;}
+</style>
+</head>
+<body>
+
+<!-- COVER -->
+<div class="wrap"><div class="cover">
+  <div class="eyebrow">Rapport maître · Partie 4 — édition rédigée</div>
+  <h1>Les nano-agents &amp; les 4 topologies</h1>
+  <div class="sub">Beaucoup de petits agents, quatre façons de les composer — et le Borda, chiffré.</div>
+  <div class="tagline">Ce document explique en détail comment EFE transforme une nuée de fonctions minuscules en
+   un système capable de résoudre des tâches. On y développe le pari fondateur — <i>générer en masse,
+   sélectionner finement</i> —, on décrit les six rôles d'agents, puis on déplie les quatre patterns de
+   collaboration (Generate-Verify, Consensus, Pipeline, Hiérarchique). Le cœur du document est une démonstration
+   <b>entièrement chiffrée</b> du consensus de Borda, calculée pas à pas sur l'exemple même des tests du code.</div>
+  <div class="pills">
+    <span class="tag t-teal">43 nano-agents · 6 rôles</span>
+    <span class="tag t-info">4 topologies object-safe</span>
+    <span class="tag t-ok">Borda chiffré (conf. 0,75)</span>
+    <span class="tag t-warn">Condorcet / Copeland</span>
+  </div>
+  <div class="meta"><span><b>Crate :</b> efe-swarm-topology (~3 283 LoC)</span><span><b>Réf. :</b> <span class="mono">main @ baaf98d</span> · 2026-06-11</span></div>
+</div></div>
+
+<!-- TOC -->
+<div class="wrap page">
+  <h2><span class="num">§0</span> Plan du document</h2>
+  <p class="lede">Cette partie est volontairement <b>longue et rédigée</b>. Chaque topologie est expliquée pour
+  elle-même, avec sa motivation, son mécanisme détaillé et le type de tâche auquel elle répond. La section 5,
+  consacrée au Borda, est une démonstration arithmétique complète — c'est le passage à lire si l'on veut
+  comprendre exactement comment l'essaim « choisit ».</p>
+  <div class="toc">
+    <div><span class="n">1</span>Le pari fondateur &amp; les six rôles</div>
+    <div><span class="n">2</span>Les nano-agents — 43 fonctions pures</div>
+    <div><span class="n">3</span>T1 · Generate-Verify</div>
+    <div><span class="n">4</span>T-Consensus &amp; les juges</div>
+    <div><span class="n">5</span>Borda, chiffré de bout en bout</div>
+    <div><span class="n">6</span>T2 Pipeline &amp; T3 Hiérarchique</div>
+    <div><span class="n">7</span>Synthèse — choisir sa topologie</div>
+    <div><span class="n">A</span>Annexe — surface publique</div>
+  </div>
+</div>
+
+<!-- §1 -->
+<div class="wrap page">
+  <h2><span class="num">§1</span> Le pari fondateur &amp; les six rôles</h2>
+
+  <p class="lede">Avant de décrire les agents et les topologies, il faut comprendre <b>l'intuition</b> qui les
+  justifie tous. EFE ne mise pas sur un gros agent intelligent que l'on rendrait toujours plus puissant ; il
+  mise sur une <b>nuée</b> de petits agents bon marché et sur la <b>manière de les coordonner</b>. C'est un pari,
+  et il a un nom dans le code : le pari S1.</p>
+
+  <h3>1.1 — L'intuition : la bonne réponse est souvent présente, mais minoritaire</h3>
+
+  <p>Considérons une tâche dont on peut <b>vérifier</b> la réponse — par exemple « extrais les entiers de ce
+  texte », « cette sortie est-elle un JSON valide contenant le champ <code>x</code> ? », « ce résumé est-il
+  ancré dans la source ? ». Pour ce genre de tâche, vérifier une réponse est facile et fiable ; produire la
+  bonne réponse du premier coup l'est beaucoup moins. Le pari S1 (formalisé dans l'ADR-SWARM-002) part de ce
+  constat empirique : si l'on génère <b>K candidats bon marché</b>, la bonne réponse est très souvent
+  <b>présente</b> parmi eux — mais elle peut être <b>minoritaire</b>.</p>
+
+  <p>C'est ce dernier point qui change tout. Le réflexe naturel, quand on a K candidats, est de les faire
+  <b>voter</b> : on garde la réponse majoritaire. Mais le vote échoue précisément dans le cas qui nous
+  intéresse. Si les générateurs partagent un biais — et de petits modèles partagent souvent les mêmes biais —,
+  ils se trompent <b>de la même façon</b>. Leurs erreurs sont <b>corrélées</b>. Le vote élit alors l'erreur
+  commune, et écrase la bonne réponse minoritaire qui, elle, était correcte mais isolée. Voter, c'est faire
+  confiance à la fréquence ; or la fréquence est exactement ce qui ment quand les erreurs sont corrélées.</p>
+
+  <p>La conclusion du pari S1 est donc : il ne faut pas <b>voter</b> la réponse, il faut la <b>sélectionner</b>.
+  Et pour sélectionner, on a deux instruments. Soit un <b>vérificateur</b> déterministe qui regarde la qualité
+  intrinsèque de chaque candidat et garde le meilleur, indépendamment de sa popularité (c'est la topologie T1).
+  Soit, quand aucun vérificateur unique n'est assez fiable, un <b>panel de juges</b> dont on agrège les
+  classements de façon fine (c'est T-Consensus, et le Borda de la section 5). Dans les deux cas, on remplace la
+  démocratie naïve du vote par un jugement sur le fond.</p>
+
+  <div class="callout key">
+    <p><b>Le pari fondateur, en une phrase :</b> sur une tâche vérifiable, <i>générer est bon marché, vérifier
+    est sûr</i> — donc on génère beaucoup et on sélectionne finement, plutôt que de chercher à avoir raison du
+    premier coup ou de voter. Toutes les topologies d'EFE sont des déclinaisons de cette idée.</p>
+  </div>
+
+  <h3>1.2 — Le vocabulaire : les six rôles d'agents</h3>
+
+  <p>Pour exprimer ces patterns, le code définit six <b>traits</b> Rust — six « formes » qu'un agent peut
+  prendre. Un trait, ici, n'est rien d'autre qu'un contrat : une fonction (asynchrone, le plus souvent) avec une
+  signature précise. C'est le vocabulaire minimal qui permet de décrire n'importe quelle topologie sans rien
+  savoir de l'<i>implémentation</i> des agents — ce qui, on le verra en §2, permet de basculer entre agents
+  déterministes et agents LLM sans toucher aux topologies.</p>
+
+  <table>
+    <thead><tr><th>Rôle (trait)</th><th>Signature réelle</th><th>Ce qu'il fait dans l'essaim</th></tr></thead>
+    <tbody>
+      <tr><td><code>Generator</code></td><td><code>async generate(task, variant) → Value</code></td><td>produit un candidat. Le paramètre <code>variant</code> sert à <b>diversifier</b> : le générateur n° 3 ne produit pas la même chose que le n° 0.</td></tr>
+      <tr><td><code>Verifier</code></td><td><code>score(task, candidat) → f64</code> · <code>passes()</code></td><td>note un candidat (et dit s'il « passe »). <b>Déterministe</b>, synchrone, sans appel externe — c'est l'ancre de confiance de T1.</td></tr>
+      <tr><td><code>Stage</code></td><td><code>async process(input) → Vec&lt;Value&gt;</code></td><td>une étape de transformation, maillon d'un pipeline (T2). Peut produire plusieurs sorties.</td></tr>
+      <tr><td><code>Decomposer</code></td><td><code>async decompose(task) → Vec&lt;Value&gt;</code></td><td>découpe une tâche trop dure en sous-tâches plus simples (T3).</td></tr>
+      <tr><td><code>Solver</code></td><td><code>async solve(subtask) → Value</code></td><td>résout une sous-tâche. <b>Récursif</b> : un Solver peut lui-même être un T1, un T2 ou un T3 (§6).</td></tr>
+      <tr><td><code>Merger</code></td><td><code>async merge(task, results) → Value</code></td><td>recombine les sous-résultats en une réponse finale (T3).</td></tr>
+    </tbody>
+  </table>
+
+  <p>On notera que le <code>Verifier</code> est le seul rôle <b>synchrone et déterministe</b> du lot. Ce n'est
+  pas un hasard : c'est lui qui sert d'« ancre » objective. Même quand les générateurs sont des modèles de
+  langage (donc non déterministes), le vérificateur, lui, reste une fonction pure et reproductible. On reviendra
+  sur ce point en §3 — c'est ce qui empêche un essaim de se juger lui-même avec ses propres biais.</p>
+
+  <h3>1.3 — Les quatre topologies, vue d'ensemble</h3>
+
+  <p>À partir de ces six rôles, EFE compose quatre patterns de collaboration. Tous se cachent derrière un même
+  trait <code>Topology</code> (object-safe, donc manipulable de façon uniforme). Voici la carte ; les sections
+  suivantes les détaillent une par une.</p>
+
+  <table>
+    <thead><tr><th>Topologie</th><th>Forme</th><th>Pour quel genre de tâche</th></tr></thead>
+    <tbody>
+      <tr><td><b>T1 · Generate-Verify</b></td><td>K générateurs en ∥ → un vérificateur a-posteriori</td><td>tâche vérifiable où la bonne réponse peut être minoritaire — le gagnant du gate S2 (§3)</td></tr>
+      <tr><td><b>T-Consensus</b></td><td>K générateurs + J juges en ∥ → Vote / Borda / Condorcet</td><td>quand aucun vérificateur unique n'est fiable : on agrège plusieurs avis ordinaux (§4-5)</td></tr>
+      <tr><td><b>T2 · Pipeline</b></td><td>étapes chaînées, en flux (streaming, sans barrière)</td><td>décomposer une tâche en transformations successives bon marché (§6)</td></tr>
+      <tr><td><b>T3 · Hiérarchique</b></td><td>décompose → résout en ∥ → fusionne (récursif)</td><td>ramener une tâche trop dure dans l'enveloppe de capacité d'un petit modèle (§6)</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- §2 NANO-AGENTS -->
+<div class="wrap page">
+  <h2><span class="num">§2</span> Les nano-agents — 43 fonctions pures</h2>
+
+  <p class="lede">Le mot « nano » est à prendre au sérieux. Un nano-agent n'est pas un mini-modèle de langage,
+  ni un acteur avec un état interne : c'est une <b>fonction pure</b>, une <code>struct</code> Rust qui implémente
+  l'un des six rôles et ne fait rien d'autre. Pas de poids, pas de réseau, pas de mémoire entre les appels.
+  Cette austérité est un choix, et elle a des conséquences profondes.</p>
+
+  <h3>2.1 — Ce qu'est (et n'est pas) un nano-agent</h3>
+
+  <p>Voici un agent complet, tel qu'il apparaît dans le code. Quatre lignes utiles :</p>
+  <pre>struct Uppercase;
+impl Stage for Uppercase {
+  async fn process(&self, input: &Value) -> Vec&lt;Value&gt; {
+    vec![ json!({ "text": text_of(input).to_uppercase() }) ]
+  }
+}</pre>
+
+  <p>Cet agent met un texte en majuscules. Il n'a pas de modèle, pas de paramètres entraînés, pas d'état qui
+  survivrait d'un appel au suivant. Donné la même entrée, il produit toujours exactement la même sortie. Cette
+  propriété — le <b>déterminisme</b> — n'est pas un détail : elle rend l'agent <i>testable</i> (on peut écrire
+  une assertion exacte sur sa sortie), <i>reproductible</i> (un run keyless rejoué donne le même résultat au
+  bit près), et <i>instantané</i> (pas de latence réseau, pas de GPU). C'est ce qui permet à EFE d'avoir un
+  mode entièrement gratuit et déterministe (Mode A) qui sert à la fois de démo, de banc de test et d'<b>ancre</b>
+  de confiance.</p>
+
+  <p>La force, évidemment, ne vient pas d'un agent isolé — un agent qui met en majuscules ne « résout » rien.
+  Elle vient de la <b>composition</b> : on assemble des dizaines de ces briques via une topologie, et c'est
+  l'agencement qui produit un comportement utile. C'est l'analogue, dans le logiciel, de la division du travail :
+  chaque ouvrier fait une chose simple, l'organisation produit l'objet complexe.</p>
+
+  <h3>2.2 — Le catalogue des 43, par rôle</h3>
+
+  <p>La flotte standard (<code>AgentFleet</code>) embarque 43 nano-agents, montables <b>par leur nom</b>. Les
+  voici regroupés par rôle ; les noms sont suffisamment parlants pour que le catalogue se lise comme un
+  inventaire de petites capacités composables.</p>
+
+  <table class="small">
+    <tbody>
+      <tr><td><b>Décomposeurs (7)</b></td><td>sentence_split · line_split · word_split · paragraph_split · char_chunk · json_array_split · fixed_count_split — découper une entrée selon différentes granularités</td></tr>
+      <tr><td><b>Transformations (10)</b></td><td>trim · lowercase · uppercase · normalize_whitespace · filter_nonempty · extract_field · rename_field · extract_integers · word_count · prefix_text — nettoyer, projeter, reformater</td></tr>
+      <tr><td><b>Vérificateurs (8)</b></td><td>non_empty_text · is_object · has_field · numeric_equals · length_bounded · keyword_present · required_fields · equals_expected — décider si un candidat satisfait un critère</td></tr>
+      <tr><td><b>Agrégateurs (7)</b></td><td>collect_array · concat_text · join_lines · sum_values · majority_value · first_result · max_by_score_field — recombiner des morceaux en un tout</td></tr>
+      <tr><td><b>Générateurs (2)</b></td><td>echo_generator · const_generator — produire des candidats (triviaux en Mode A ; remplacés par le SLM en Mode C)</td></tr>
+      <tr><td><b>Juges (9)</b></td><td>length_band · keyword_overlap · groundedness · consistency · j_non_empty · j_is_object · j_keyword · j_length · j_equals_expected — noter des candidats pour le consensus</td></tr>
+    </tbody>
+  </table>
+
+  <p>On remarque le déséquilibre assumé : peu de générateurs (deux), beaucoup de vérificateurs, transformateurs
+  et juges. C'est une conséquence directe du pari S1 : en Mode A, la « génération » est triviale ; toute
+  l'intelligence est dans la <b>sélection</b> et la <b>transformation</b>. En Mode C (self-host), ce sont les
+  générateurs et les juges qui deviennent des appels au SLM, tandis que les vérificateurs restent
+  déterministes.</p>
+
+  <h3>2.3 — Le même nom, deux réalités (Mode A ↔ Mode C)</h3>
+
+  <p>Voici le mécanisme qui fait toute la souplesse d'EFE, et il mérite qu'on s'y arrête. La couche SDK contient
+  un <i>Resolver</i> (détaillé dans la Partie 5–6) dont le rôle est de transformer un <b>nom d'agent</b> en un
+  objet concret. Or ce nom est interprété <b>différemment selon le mode d'exécution</b>.</p>
+
+  <div class="grid2">
+    <div class="card"><h4 style="margin-top:0">En Mode A (keyless, déterministe)</h4>
+      <p class="small">le nom est une <b>clé dans la flotte</b>. <code>"uppercase"</code> résout vers la
+      <code>struct Uppercase</code> ci-dessus. Tout est local, gratuit, instantané, reproductible. C'est le mode
+      de la démo, du développement, de l'intégration continue — et l'ancre reproductible que la provenance peut
+      rejouer (ADR-007).</p></div>
+    <div class="card"><h4 style="margin-top:0">En Mode C (self-host, SLM local)</h4>
+      <p class="small">le même nom devient une <b>instruction</b> envoyée à un petit modèle de langage local.
+      <code>"uppercase"</code> devient, en substance, un prompt qui demande au modèle d'effectuer la tâche. La
+      topologie qui orchestre les agents <b>ne change pas d'une seule ligne</b>.</p></div>
+  </div>
+
+  <p>L'intérêt est considérable. On peut prototyper et tester une topologie entièrement en Mode A — c'est
+  gratuit et déterministe, donc idéal en CI —, puis basculer la même topologie en Mode C pour la faire tourner
+  sur un vrai SLM souverain, sans réécrire la logique de coordination. Le découplage <b>nom → réalité</b> est
+  ce qui rend cette bascule possible.</p>
+
+  <p>Un point reste invariant à travers les deux modes, et c'est volontaire : le <b>vérificateur de T1 demeure
+  toujours déterministe</b>, tiré de la flotte, même quand les générateurs sont des appels au SLM. La raison
+  tient au pari S1 : si l'on confiait la vérification au même type de modèle (biaisé) qui a généré les
+  candidats, on retomberait dans le piège des erreurs corrélées — l'essaim validerait ses propres erreurs. En
+  gardant une ancre déterministe et objective pour juger, on conserve un point de vérité externe aux biais des
+  générateurs. C'est l'ADR-SWARM-002.</p>
+</div>
+
+<!-- §3 T1 -->
+<div class="wrap page">
+  <h2><span class="num">§3</span> T1 · Generate-Verify — générer en masse, sélectionner finement</h2>
+
+  <p class="lede">T1 est l'incarnation la plus directe du pari S1, et le pattern qui a gagné le gate Lot S2 sur
+  les tâches vérifiables. Son principe tient en une phrase : lancer beaucoup de générateurs en parallèle, puis
+  laisser un vérificateur choisir le meilleur a posteriori.</p>
+
+  <h3>3.1 — Le mécanisme</h3>
+
+  <p>L'objet <code>GenerateVerify::new(k, max_concurrency)</code> prend deux paramètres : <code>k</code>, le
+  nombre de candidats à produire (la « taille » de l'essaim sur cette tâche), et <code>max_concurrency</code>,
+  le nombre maximum de générateurs autorisés à tourner <i>simultanément</i>. À l'exécution, il lance les K
+  générateurs comme autant de tâches asynchrones, collectées dans un <code>JoinSet</code>, et borne leur
+  parallélisme avec un <code>Semaphore</code> : on peut demander K = 200 candidats tout en n'en exécutant que 8
+  à la fois, pour ne pas saturer la machine. Chaque générateur reçoit un numéro de <code>variant</code> distinct,
+  ce qui le pousse à produire une variation différente.</p>
+
+  <p>Une fois les candidats produits, le vérificateur entre en scène. Il <b>note chaque candidat</b>
+  (<code>score</code>) et indique lesquels « passent » (<code>passes</code>). La sélection finale suit une règle
+  à deux niveaux, soigneusement choisie : on retient le candidat <b>passant</b> de meilleur score ; s'il n'y a
+  aucun passant, on retient par défaut le candidat de meilleur score (un repli gracieux plutôt qu'un échec) ; et
+  s'il n'y a aucun candidat du tout, on renvoie <code>None</code>. Le résultat, <code>GvResult</code>, porte le
+  candidat sélectionné et le meilleur score observé.</p>
+
+  <div class="fig">
+  <svg viewBox="0 0 900 220" role="img" aria-label="T1 generate-verify">
+    <defs><marker id="g1" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="#475569"/></marker></defs>
+    <rect x="30" y="86" width="120" height="44" rx="9" fill="#0f172a"/><text x="90" y="106" text-anchor="middle" font-size="9.5" font-weight="700" fill="#fff">task</text><text x="90" y="121" text-anchor="middle" font-size="8" fill="#94a3b8">+ Semaphore(max_c)</text>
+    <g><rect x="220" y="20" width="150" height="26" rx="6" fill="#ccfbf1" stroke="#0d9488"/><text x="295" y="37" text-anchor="middle" font-size="8.5" fill="#115e59">gen(variant 0) → c₀</text>
+      <rect x="220" y="52" width="150" height="26" rx="6" fill="#ccfbf1" stroke="#0d9488"/><text x="295" y="69" text-anchor="middle" font-size="8.5" fill="#115e59">gen(variant 1) → c₁</text>
+      <rect x="220" y="84" width="150" height="26" rx="6" fill="#ccfbf1" stroke="#0d9488"/><text x="295" y="101" text-anchor="middle" font-size="8.5" fill="#115e59">gen(variant 2) → c₂ ✓</text>
+      <rect x="220" y="116" width="150" height="26" rx="6" fill="#ccfbf1" stroke="#0d9488"/><text x="295" y="133" text-anchor="middle" font-size="8.5" fill="#115e59">… variant K−1 → c_K</text></g>
+    <text x="295" y="158" text-anchor="middle" font-size="8" fill="#0f766e">K générateurs EN PARALLÈLE (JoinSet)</text>
+    <rect x="440" y="60" width="150" height="90" rx="9" fill="#0f766e"/><text x="515" y="100" text-anchor="middle" font-size="10" font-weight="700" fill="#fff">Verifier.score</text><text x="515" y="118" text-anchor="middle" font-size="8" fill="#99f6e4">note CHAQUE candidat</text>
+    <rect x="660" y="40" width="210" height="50" rx="9" fill="#dcfce7" stroke="#16a34a"/><text x="765" y="60" text-anchor="middle" font-size="9.5" font-weight="700" fill="#166534">meilleur PASSANT</text><text x="765" y="77" text-anchor="middle" font-size="8" fill="#15803d">c₂ même s'il est minoritaire</text>
+    <rect x="660" y="100" width="210" height="50" rx="9" fill="#fef9c3" stroke="#ca8a04"/><text x="765" y="120" text-anchor="middle" font-size="9.5" font-weight="700" fill="#854d0e">sinon : meilleur score</text><text x="765" y="137" text-anchor="middle" font-size="8" fill="#a16207">(fallback) · None si 0 candidat</text>
+    <line x1="150" y1="108" x2="220" y2="60" stroke="#475569" marker-end="url(#g1)"/><line x1="150" y1="108" x2="220" y2="97" stroke="#475569" marker-end="url(#g1)"/><line x1="150" y1="108" x2="220" y2="129" stroke="#475569" marker-end="url(#g1)"/>
+    <line x1="370" y1="97" x2="440" y2="100" stroke="#475569" marker-end="url(#g1)"/>
+    <line x1="590" y1="90" x2="660" y2="70" stroke="#16a34a" marker-end="url(#g1)"/><line x1="590" y1="115" x2="660" y2="120" stroke="#ca8a04" marker-end="url(#g1)"/>
+  </svg>
+  <div class="cap">Figure 1 — T1 : K générateurs en parallèle (bornés par un sémaphore) ; le vérificateur note tout le monde et retient le meilleur passant — ici c₂, même s'il est minoritaire.</div>
+  </div>
+
+  <h3>3.2 — Pourquoi ça bat le vote — l'argument complet</h3>
+
+  <p>Reprenons l'argument du §1.1, en l'appliquant concrètement à T1. Supposons quatre générateurs sur une
+  tâche d'extraction. Trois d'entre eux partagent un biais et produisent la même réponse <i>fausse</i> ; le
+  quatrième produit la réponse <i>juste</i>. Un vote majoritaire élirait l'erreur trois-contre-un. T1, lui, ne
+  compte pas les voix : il fait passer chaque candidat sous le regard du vérificateur. Comme la réponse du
+  quatrième générateur satisfait réellement le critère (par exemple, ses entiers extraits correspondent au
+  texte) et que les trois autres échouent à la vérification, c'est le candidat juste, pourtant minoritaire, qui
+  est retenu.</p>
+
+  <p>La clé de voûte est une <b>asymétrie</b> : <i>générer est bon marché, vérifier est sûr</i>. Produire K
+  candidats coûte K appels, mais chacun est peu coûteux ; vérifier un candidat est une opération déterministe
+  fiable. On dépense donc dans la quantité (générer beaucoup, pour maximiser la chance que la bonne réponse soit
+  présente) et on s'appuie sur la qualité de la vérification (pour l'extraire à coup sûr). C'est l'inverse du
+  réflexe « un seul agent, mais qu'il ait raison » — réflexe qui mise tout sur un coup et n'a aucun filet.</p>
+
+  <div class="callout">
+    <p><b>Quand T1 ne suffit pas.</b> T1 suppose qu'il existe un vérificateur <i>unique et fiable</i>. Pour
+    certaines tâches, ce n'est pas le cas : la « qualité » d'une réponse est multidimensionnelle (longueur,
+    pertinence, ancrage, cohérence…) et aucun critère seul ne tranche. C'est précisément là qu'intervient le
+    consensus : on remplace le vérificateur unique par un <b>panel de juges</b>, et l'on agrège leurs avis. Ce
+    qui nous amène à la section suivante.</p>
+  </div>
+</div>
+
+<!-- §4 CONSENSUS -->
+<div class="wrap page">
+  <h2><span class="num">§4</span> T-Consensus — un panel de juges sur le substrat</h2>
+
+  <p class="lede">Quand aucun vérificateur unique ne suffit, on convoque un <b>panel</b>. Plusieurs juges notent
+  les candidats selon des critères différents, et l'on agrège leurs avis. T-Consensus orchestre cela sur le
+  substrat, et — point important — il le fait en respectant le keystone de la Partie 3.</p>
+
+  <h3>4.1 — Le déroulé sur le substrat</h3>
+
+  <p>L'exécution se déroule en deux phases qui exploitent directement le Blackboard et le bus. <b>Phase de
+  génération</b> : un générateur produit K candidats (en parallèle, bornés par un sémaphore, comme en T1), et
+  chacun est écrit au Blackboard sous <code>/cand/&lt;i&gt;</code> — c'est la <b>vérité</b>. <b>Phase de
+  jugement</b> : J juges s'exécutent en parallèle (bornés, par défaut, à <code>max_concurrency = 8</code>),
+  chacun évalue tous les candidats, et écrit son <i>ballot</i> (un score par candidat) au Blackboard sous
+  <code>/ballot/&lt;j&gt;</code>, tout en publiant une notification légère sur le bus. Enfin, l'agrégateur
+  collecte les ballots et calcule un gagnant.</p>
+
+  <p>Ici se joue le respect du keystone. L'agrégateur pourrait être tenté de lire les ballots <i>depuis le
+  bus</i>, au fil de leur publication. Ce serait une erreur : le bus peut perdre des notifications, et
+  l'agrégateur déciderait alors sur un ensemble incomplet de ballots. Au lieu de cela, il <b>réconcilie depuis
+  le snapshot</b> du Blackboard : il lit <code>/ballot/*</code>, donc <b>tous</b> les ballots réellement écrits.
+  Le <code>subscribe_prefix("ballot.")</code> sur le bus ne sert qu'à le réveiller (« de nouveaux ballots sont
+  arrivés ») ; la décision, elle, est prise sur la vérité exhaustive. Conséquence : même si le bus perd la
+  moitié de ses notifications, le verdict reste juste.</p>
+
+  <div class="fig">
+  <svg viewBox="0 0 900 230" role="img" aria-label="T-Consensus">
+    <defs><marker id="c2" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="#475569"/></marker></defs>
+    <rect x="30" y="40" width="120" height="44" rx="8" fill="#ccfbf1" stroke="#0d9488"/><text x="90" y="60" text-anchor="middle" font-size="9" font-weight="700" fill="#115e59">générateur</text><text x="90" y="76" text-anchor="middle" font-size="8" fill="#0f766e">K variants ∥</text>
+    <rect x="220" y="26" width="180" height="80" rx="9" fill="#fffbeb" stroke="#ca8a04"/><text x="310" y="45" text-anchor="middle" font-size="9.5" font-weight="700" fill="#854d0e">Blackboard (VÉRITÉ)</text>
+    <g font-size="8" fill="#713f12"><rect x="234" y="54" width="152" height="15" rx="3" fill="#fef9c3"/><text x="240" y="65">/cand/0 · /cand/1 …</text>
+      <rect x="234" y="73" width="152" height="15" rx="3" fill="#fde68a"/><text x="240" y="84">/ballot/0 · /ballot/1 …</text></g>
+    <rect x="220" y="124" width="180" height="40" rx="8" fill="#e0f2fe" stroke="#0284c7"/><text x="310" y="143" text-anchor="middle" font-size="9" font-weight="700" fill="#075985">J juges ∥ (bornés 8)</text><text x="310" y="158" text-anchor="middle" font-size="7.5" fill="#0369a1">assess → scores → /ballot + bus</text>
+    <rect x="470" y="60" width="170" height="44" rx="8" fill="#eef2ff" stroke="#4f46e5"/><text x="555" y="79" text-anchor="middle" font-size="8.5" font-weight="700" fill="#3730a3">subscribe_prefix("ballot.")</text><text x="555" y="94" text-anchor="middle" font-size="7.5" fill="#4338ca">réveille + réconcilie /ballot/*</text>
+    <rect x="700" y="50" width="170" height="64" rx="9" fill="#0f766e"/><text x="785" y="72" text-anchor="middle" font-size="9.5" font-weight="700" fill="#fff">Agrégateur</text><text x="785" y="89" text-anchor="middle" font-size="8" fill="#99f6e4">Vote / Borda / Condorcet</text><text x="785" y="103" text-anchor="middle" font-size="8" fill="#99f6e4">→ gagnant + confiance</text>
+    <line x1="150" y1="62" x2="220" y2="62" stroke="#475569" marker-end="url(#c2)"/>
+    <line x1="310" y1="106" x2="310" y2="124" stroke="#475569" marker-end="url(#c2)"/>
+    <line x1="400" y1="84" x2="470" y2="84" stroke="#475569" marker-end="url(#c2)"/>
+    <line x1="640" y1="82" x2="700" y2="82" stroke="#475569" marker-end="url(#c2)"/>
+  </svg>
+  <div class="cap">Figure 2 — Le consensus écrit candidats et ballots dans la vérité (Blackboard) ; l'agrégateur réconcilie depuis le snapshot, jamais depuis le seul bus. La perte d'indice n'altère pas le verdict.</div>
+  </div>
+
+  <h3>4.2 — Les juges réels</h3>
+
+  <p>Un juge implémente <code>assess(task, candidates) → Vec&lt;f64&gt;</code> : il attribue un score à chaque
+  candidat. Le code en fournit plusieurs, chacun capturant une dimension de « qualité » distincte. Leur
+  diversité est le point : c'est en combinant des regards complémentaires qu'on dépasse ce qu'un vérificateur
+  unique pourrait juger.</p>
+
+  <table>
+    <thead><tr><th>Juge</th><th>Dimension qu'il mesure</th></tr></thead>
+    <tbody>
+      <tr><td><code>VerifierJudge</code></td><td>enveloppe n'importe quel <code>Verifier</code> déterministe pour en faire un juge — le pont entre l'ancre objective de T1 et le panel.</td></tr>
+      <tr><td><code>LengthBandJudge</code></td><td>la proximité d'un candidat à une longueur cible (ni trop court, ni trop long).</td></tr>
+      <tr><td><code>KeywordOverlapJudge</code></td><td>le recouvrement de mots-clés entre la tâche et le candidat — une mesure grossière de pertinence.</td></tr>
+      <tr><td><code>GroundednessJudge</code></td><td>l'ancrage du candidat dans un champ <code>source</code> fourni — une défense directe contre l'hallucination.</td></tr>
+      <tr><td><code>ConsistencyJudge</code></td><td>la cohérence interne du candidat et son accord avec les autres.</td></tr>
+    </tbody>
+  </table>
+
+  <p>L'agrégateur, lui, ne voit jamais les juges : il ne reçoit que des <code>Ballot{ judge, scores }</code>.
+  Cette indirection est précieuse — on peut ajouter, retirer ou remplacer des juges sans toucher à la logique
+  d'agrégation, et réciproquement changer de méthode d'agrégation (Vote → Borda → Condorcet) sans toucher aux
+  juges.</p>
+
+  <h3>4.3 — L'escalade coût-consciente</h3>
+
+  <p>Convoquer un panel de juges a un coût (chaque juge fait, en Mode C, autant d'appels au SLM qu'il y a de
+  candidats). Or ce coût est parfois inutile : si les candidats sont manifestement d'accord, un simple vote
+  suffit à trancher. D'où la politique <code>AggregatorPolicy::Escalating</code>. On tente d'abord un <b>vote
+  gratuit</b> ; si la confiance qu'il dégage dépasse un seuil configurable
+  (<code>with_escalation(seuil, escalate_to)</code>), on s'arrête là — coût = K générateurs, zéro juge. Sinon,
+  on <b>escalade</b> vers la méthode plus fine (Borda ou Condorcet) en payant les juges. La confiance devient
+  ainsi un <b>levier de coût</b> : on ne dépense l'effort de jugement que lorsque l'essaim hésite réellement.
+  Trois tests verrouillent ce comportement (le vote est choisi quand les candidats s'accordent ; les juges sont
+  sautés quand le vote est confiant, exécutés quand il est incertain).</p>
+</div>
+
+<!-- §5 BORDA CHIFFRE -->
+<div class="wrap page">
+  <h2><span class="num">§5</span> Borda, chiffré de bout en bout</h2>
+
+  <p class="lede">Cette section est le cœur arithmétique du document. On y explique précisément comment
+  l'agrégateur de Borda transforme des scores de juges en un gagnant et une confiance — d'abord l'algorithme,
+  puis un exemple <b>entièrement calculé</b>, repris du test du code lui-même.</p>
+
+  <h3>5.1 — Pourquoi Borda, et pas le vote</h3>
+
+  <p>Le vote majoritaire ne regarde que le <b>premier choix</b> de chaque juge : il jette toute l'information
+  sur la manière dont les juges classent les <i>autres</i> candidats. Borda, lui, exploite le <b>classement
+  complet</b>. Un candidat que tous les juges placent deuxième (jamais premier) est sans doute un meilleur
+  compromis qu'un candidat placé premier par la moitié et dernier par l'autre — et c'est exactement ce genre de
+  signal que Borda capte et que le vote ignore. C'est pour cela que Borda peut « battre le vote » quand les
+  juges apportent un signal ordinal indépendant.</p>
+
+  <h3>5.2 — L'algorithme exact</h3>
+
+  <pre>1. ranks = scores_to_ranks(scores)   // rang 0 = meilleur ; ex-æquo → rang MOYEN (fractionnaire)
+2. points_i = Σ_juges ( (K−1) − rang_i )      // K = nombre de candidats
+3. gagnant = argmax(points)                   // tiebreak : # 1ʳᵉˢ places, puis plus petit index
+4. confiance = marge(points) / ( J × (K−1) )  // marge = 1ᵉʳ − 2ᵉ des totaux ; J = nb de juges</pre>
+
+  <p>Décortiquons chaque ligne. <b>Ligne 1</b> : on convertit les scores bruts d'un juge en <b>rangs</b>, où 0
+  désigne le meilleur. Le point délicat — et c'est le plus piégeux du consensus — est le traitement des
+  <b>ex-æquo</b> : deux candidats à score égal reçoivent le <b>rang moyen</b> de leur groupe (par exemple, deux
+  candidats se disputant les positions 0 et 1 reçoivent tous deux le rang 0,5). Sans cette moyenne, l'ordre
+  d'arrivée des ex-æquo introduirait un biais arbitraire. Conséquence remarquable : un juge « neutre » qui
+  donnerait le même score à tous attribue à chacun le rang moyen <code>(K−1)/2</code> — donc le même nombre de
+  points à tout le monde — et ne modifie donc <b>pas</b> le classement. La neutralité est mathématiquement
+  neutre.</p>
+
+  <p><b>Ligne 2</b> : on convertit les rangs en points. Le meilleur (rang 0) reçoit <code>K−1</code> points, le
+  suivant <code>K−2</code>, et ainsi de suite jusqu'à 0 pour le dernier. On <b>somme</b> ces points sur tous les
+  juges. <b>Ligne 3</b> : le gagnant est celui de plus haut total ; en cas d'égalité, on départage par le nombre
+  de premières places, puis par le plus petit index (un choix déterministe pour ne jamais dépendre du hasard).
+  <b>Ligne 4</b> : la confiance normalise la <b>marge</b> (l'écart entre le premier et le deuxième total) par le
+  maximum théorique possible (<code>J × (K−1)</code>, ce qu'obtiendrait un candidat classé premier par tous les
+  juges face à un dernier classé dernier par tous). Une confiance proche de 1 signale un gagnant net ; proche de
+  0, un quasi-ex-æquo.</p>
+
+  <h3>5.3 — L'exemple, calculé (K = 3 candidats A, B, C · J = 2 juges)</h3>
+
+  <p>Prenons l'exemple exact du test <code>textbook_borda_winner</code>. Deux juges notent trois candidats. Le
+  juge 1 préfère A, puis B, puis C ; le juge 2 préfère A, puis C, puis B. Voici leurs scores bruts.</p>
+
+  <table>
+    <thead><tr><th>Juge</th><th class="c">A</th><th class="c">B</th><th class="c">C</th><th>Préférence</th></tr></thead>
+    <tbody>
+      <tr><td>j1</td><td class="c">3,0</td><td class="c">2,0</td><td class="c">1,0</td><td>A ≻ B ≻ C</td></tr>
+      <tr><td>j2</td><td class="c">3,0</td><td class="c">1,0</td><td class="c">2,0</td><td>A ≻ C ≻ B</td></tr>
+    </tbody>
+  </table>
+
+  <p><b>Étape 1 — scores → rangs.</b> Pour le juge 1, A a le plus haut score (rang 0), B vient ensuite (rang 1),
+  C est dernier (rang 2). Pour le juge 2, A est premier (rang 0), C deuxième (rang 1), B dernier (rang 2). Aucun
+  ex-æquo ici, donc tous les rangs sont entiers.</p>
+
+  <p><b>Étape 2 — rangs → points</b> (avec K = 3, points = 2 − rang). On obtient :</p>
+  <div class="grid2">
+    <table class="small">
+      <thead><tr><th>juge 1</th><th class="c">A</th><th class="c">B</th><th class="c">C</th></tr></thead>
+      <tbody>
+        <tr><td>rang</td><td class="c">0</td><td class="c">1</td><td class="c">2</td></tr>
+        <tr><td><b>points = 2−rang</b></td><td class="c"><b>2</b></td><td class="c"><b>1</b></td><td class="c"><b>0</b></td></tr>
+      </tbody>
+    </table>
+    <table class="small">
+      <thead><tr><th>juge 2</th><th class="c">A</th><th class="c">B</th><th class="c">C</th></tr></thead>
+      <tbody>
+        <tr><td>rang</td><td class="c">0</td><td class="c">2</td><td class="c">1</td></tr>
+        <tr><td><b>points = 2−rang</b></td><td class="c"><b>2</b></td><td class="c"><b>0</b></td><td class="c"><b>1</b></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p><b>Étape 3 — somme sur les juges.</b> On additionne les points de chaque candidat à travers les deux
+  juges :</p>
+  <table>
+    <thead><tr><th>Candidat</th><th class="c">points juge 1</th><th class="c">points juge 2</th><th class="c">Total Borda</th><th class="c">1ʳᵉˢ places</th></tr></thead>
+    <tbody>
+      <tr class="win"><td>A</td><td class="c">2</td><td class="c">2</td><td class="c">4</td><td class="c">2</td></tr>
+      <tr><td>B</td><td class="c">1</td><td class="c">0</td><td class="c">1</td><td class="c">0</td></tr>
+      <tr><td>C</td><td class="c">0</td><td class="c">1</td><td class="c">1</td><td class="c">0</td></tr>
+    </tbody>
+  </table>
+
+  <p><b>Étape 4 — gagnant et confiance.</b> Le total maximum est 4, atteint par A : <b>A gagne</b>
+  (<code>selected_index = 0</code>). B et C sont ex-æquo à 1 point, mais cela ne concerne pas le gagnant — le
+  tiebreak (premières places, puis index) ne sert qu'à les départager entre eux. Pour la confiance, la marge
+  entre le premier total (4) et le deuxième (1) vaut <b>3</b> ; le plafond théorique est <code>J × (K−1) = 2 × 2
+  = 4</code> ; la confiance est donc <b>3 / 4 = 0,75</b>. C'est exactement la valeur que renvoie le code.</p>
+
+  <div class="callout key">
+    <p><b>La leçon de l'exemple.</b> Ici A était unanimement premier, donc Borda le sépare nettement (confiance
+    élevée, 0,75). Mais l'intérêt de Borda se révèle dans les cas <i>moins</i> évidents : si la bonne réponse
+    avait été classée 2ᵉ par tous les juges plutôt que 1ᵉ par la moitié, le vote majoritaire aurait pu la
+    rater, tandis que Borda — en cumulant ses bonnes positions sur tous les juges — l'aurait fait remonter. Borda
+    récompense la <b>solidité ordinale</b>, pas la simple popularité.</p>
+  </div>
+
+  <h3>5.4 — Les deux alternatives d'agrégation</h3>
+
+  <p>Borda n'est pas seul. Le code propose trois agrégateurs, chacun avec son domaine de pertinence.</p>
+
+  <p><span class="lead-in">MajorityVote — le plancher de référence.</span> Il prend simplement la valeur de
+  candidat la plus fréquente. Le code le qualifie explicitement de plancher : il est construit « pour être
+  mesuré, pas pour être vendu ». Il sert d'étalon contre lequel comparer les méthodes plus fines, et il échoue
+  — par construction — sur les erreurs corrélées.</p>
+
+  <p><span class="lead-in">Borda — le signal ordinal.</span> Décrit ci-dessus. Pertinent quand les juges
+  apportent un classement fiable et qu'on veut récompenser les bons compromis.</p>
+
+  <p><span class="lead-in">Condorcet — les duels, avec repli Copeland.</span> Plutôt que de sommer des points,
+  Condorcet organise des <b>duels deux à deux</b> : un candidat qui bat tous les autres en confrontation directe
+  (le « gagnant de Condorcet ») est élu. Mais ces duels peuvent former un <b>cycle</b> (A bat B, B bat C, C bat
+  A — le paradoxe de Condorcet). Dans ce cas, le code bascule sur la méthode de <b>Copeland</b> (le bilan de
+  victoires : nombre de duels gagnés + un demi-point par nul), qui est Condorcet-consistante, et il signale
+  <code>cycle_detected</code> pour que l'appelant sache qu'un cycle a eu lieu. Condorcet est pertinent quand
+  l'<i>ordre</i> des préférences est plus fiable que l'<i>intensité</i> des scores.</p>
+
+  <p>Tous renvoient le même type, <code>AggOutcome</code>, qui porte le candidat sélectionné, son index, le
+  vecteur de scores, la confiance, le nom de la méthode et le drapeau <code>cycle_detected</code>. L'appelant
+  est donc indifférent à la méthode employée — il lit toujours la même structure.</p>
+</div>
+
+<!-- §6 T2 T3 -->
+<div class="wrap page">
+  <h2><span class="num">§6</span> T2 Pipeline &amp; T3 Hiérarchique — dompter une tâche dure</h2>
+
+  <p class="lede">T1 et le consensus supposent que la tâche tient dans ce que le code appelle l'« enveloppe de
+  capacité » : la difficulté qu'un petit modèle peut gérer en un coup. T2 et T3 répondent à la question
+  inverse — que faire d'une tâche <b>trop dure</b> pour cette enveloppe ? La réponse commune : la <b>découper</b>
+  en morceaux qui, eux, rentrent dans l'enveloppe.</p>
+
+  <h3>6.1 — T2 · Pipeline streaming</h3>
+
+  <p>Le pipeline enchaîne des <b>étapes</b> (<code>Stage</code>) : normaliser, puis découper en phrases, puis
+  extraire, puis collecter, par exemple. Sa particularité tient à son mode d'exécution : il tourne sur la
+  <code>StreamingSwarm</code> de la Partie 3 (§4), <b>sans barrière de couche</b>. Chaque étape traite une
+  entrée dès qu'elle arrive de l'étape précédente, plutôt que d'attendre que toute l'étape amont soit finie. La
+  terminaison est détectée par <b>quiescence</b> (le compteur de crédits de la Partie 3). Le pipeline est l'outil
+  de prédilection quand une tâche dure se laisse décomposer en une <b>suite de transformations</b> simples : on
+  remplace un gros problème par une chaîne de petits.</p>
+
+  <h3>6.2 — T3 · Hiérarchique (récursif)</h3>
+
+  <p>Le pattern hiérarchique met en scène trois rôles : un <code>Decomposer</code> qui découpe la tâche en
+  sous-tâches, des <code>Solver</code> qui les résolvent <b>en parallèle</b>, et un <code>Merger</code> qui
+  recombine les sous-résultats. La propriété qui en fait un outil puissant est la <b>récursivité</b> : un
+  <code>Solver</code> n'est pas forcément un agent élémentaire — ce peut être un T1 entier, un T2, ou même un
+  autre T3. On peut donc construire des « superviseurs de superviseurs », ou un « vérifier-de-vérifier », en
+  emboîtant les topologies. Le code fournit des adaptateurs prêts à l'emploi (<code>GvSolver</code> qui enveloppe
+  un Generate-Verify en Solver, <code>FnSolver</code> pour un Solver ad hoc).</p>
+
+  <p>L'usage typique est exactement celui du pari S1 poussé d'un cran : une tâche trop dure pour être résolue —
+  donc vérifiée — d'un coup est <b>découpée</b> en sous-tâches qui, elles, sont assez simples pour qu'un T1 les
+  résolve de façon fiable. On ramène ainsi le problème difficile dans l'enveloppe où les garanties de T1
+  s'appliquent, puis on recombine.</p>
+
+  <div class="fig">
+  <svg viewBox="0 0 900 210" role="img" aria-label="T2 et T3">
+    <defs><marker id="t2" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#475569"/></marker></defs>
+    <rect x="20" y="18" width="860" height="86" rx="10" fill="#eff6ff" stroke="#2563eb"/>
+    <text x="34" y="38" font-size="11.5" font-weight="700" fill="#1e40af">T2 · Pipeline streaming (sans barrière de couche, quiescence)</text>
+    <rect x="40" y="50" width="120" height="34" rx="6" fill="#dbeafe"/><text x="100" y="71" text-anchor="middle" font-size="8.5" fill="#1e40af">normalize</text>
+    <rect x="190" y="50" width="120" height="34" rx="6" fill="#dbeafe"/><text x="250" y="71" text-anchor="middle" font-size="8.5" fill="#1e40af">split phrases</text>
+    <rect x="340" y="50" width="120" height="34" rx="6" fill="#dbeafe"/><text x="400" y="71" text-anchor="middle" font-size="8.5" fill="#1e40af">extract</text>
+    <rect x="490" y="50" width="120" height="34" rx="6" fill="#dbeafe"/><text x="550" y="71" text-anchor="middle" font-size="8.5" fill="#1e40af">collect</text>
+    <line x1="160" y1="67" x2="190" y2="67" stroke="#475569" marker-end="url(#t2)"/><line x1="310" y1="67" x2="340" y2="67" stroke="#475569" marker-end="url(#t2)"/><line x1="460" y1="67" x2="490" y2="67" stroke="#475569" marker-end="url(#t2)"/>
+    <text x="700" y="60" font-size="8.5" fill="#1d4ed8">chaque étape réagit dès</text><text x="700" y="74" font-size="8.5" fill="#1d4ed8">que l'entrée arrive (StreamingSwarm)</text>
+    <rect x="20" y="116" width="860" height="86" rx="10" fill="#fdf4ff" stroke="#c026d3"/>
+    <text x="34" y="136" font-size="11.5" font-weight="700" fill="#86198f">T3 · Hiérarchique (récursif : Solver = T1 / T2 / T3)</text>
+    <rect x="40" y="150" width="120" height="36" rx="6" fill="#fae8ff"/><text x="100" y="172" text-anchor="middle" font-size="8.5" fill="#86198f">decompose</text>
+    <rect x="200" y="146" width="120" height="18" rx="4" fill="#f5d0fe"/><text x="260" y="159" text-anchor="middle" font-size="8" fill="#86198f">solve(s₀) ∥ [T1]</text>
+    <rect x="200" y="168" width="120" height="18" rx="4" fill="#f5d0fe"/><text x="260" y="181" text-anchor="middle" font-size="8" fill="#86198f">solve(s₁) ∥ [T1]</text>
+    <rect x="360" y="150" width="120" height="36" rx="6" fill="#c026d3"/><text x="420" y="172" text-anchor="middle" font-size="8.5" fill="#fff">merge</text>
+    <line x1="160" y1="168" x2="200" y2="157" stroke="#475569" marker-end="url(#t2)"/><line x1="160" y1="168" x2="200" y2="177" stroke="#475569" marker-end="url(#t2)"/><line x1="320" y1="168" x2="360" y2="168" stroke="#475569" marker-end="url(#t2)"/>
+    <text x="560" y="160" font-size="8.5" fill="#a21caf">un Solver peut être un T3 entier</text><text x="560" y="174" font-size="8.5" fill="#a21caf">→ superviseur-de-superviseurs</text>
+  </svg>
+  <div class="cap">Figure 3 — T2 (étapes chaînées sur le substrat, terminaison par quiescence) et T3 (décompose → résout en ∥ → fusionne, récursif). T3 s'appuie sur un T2 mono-étage pour exécuter ses Solver en parallèle.</div>
+  </div>
+</div>
+
+<!-- §7 SYNTHESE + ANNEXE -->
+<div class="wrap page">
+  <h2><span class="num">§7</span> Synthèse — choisir sa topologie</h2>
+
+  <p class="lede">Les quatre topologies ne sont pas concurrentes : elles répondent à des formes de problème
+  différentes, et se composent. Le tableau suivant résume quand employer chacune, et sur quel levier agir.</p>
+
+  <table>
+    <thead><tr><th>Situation</th><th>Topologie</th><th>Levier principal</th></tr></thead>
+    <tbody>
+      <tr><td>tâche vérifiable, un vérificateur fiable existe</td><td><b>T1</b></td><td>K (taille de l'essaim) + <code>max_concurrency</code></td></tr>
+      <tr><td>pas de vérificateur unique sûr ; qualité multidimensionnelle</td><td><b>Consensus</b></td><td>les J juges + la méthode (Vote → Borda → Condorcet) + le seuil d'escalade</td></tr>
+      <tr><td>tâche = suite de transformations</td><td><b>T2</b></td><td>la chaîne d'étapes <code>Stage</code></td></tr>
+      <tr><td>tâche trop dure pour un coup unique</td><td><b>T3</b></td><td>la stratégie de découpe + la récursion (Solver = T1/T2/T3)</td></tr>
+    </tbody>
+  </table>
+
+  <p>Par-delà leurs différences, les quatre patterns partagent une seule philosophie, celle du pari S1 :
+  <b>générer en masse, sélectionner finement</b>. T1 génère K candidats et en sélectionne un par vérification ;
+  le consensus génère puis sélectionne par un panel ; T2 et T3 génèrent des décompositions et recomposent. Dans
+  tous les cas, on ne mise jamais tout sur un coup unique, et l'on s'appuie sur une étape de jugement objective
+  pour extraire la qualité.</p>
+
+  <p>Enfin, un fil conducteur économique : la <b>confiance</b> calculée par les agrégateurs (et le seuil
+  d'escalade) transforme la sélection en <b>levier de coût</b>. On ne paie l'effort coûteux — convoquer les
+  juges, escalader vers une méthode fine, voire monter en mode Network — que <i>lorsque l'essaim hésite</i>.
+  Quand les candidats s'accordent, un vote gratuit tranche ; quand ils divergent, on investit dans le jugement.
+  C'est cette élasticité qui rend l'approche soutenable à grande échelle.</p>
+
+  <h2 style="margin-top:1.4rem"><span class="num">§A</span> Annexe — surface publique</h2>
+  <table class="small">
+    <thead><tr><th>Module / type</th><th>Rôle</th></tr></thead>
+    <tbody>
+      <tr><td><code>traits.rs</code></td><td>Generator · Verifier · Stage · Decomposer · Solver · Merger (les 6 rôles)</td></tr>
+      <tr><td><code>generate_verify.rs</code></td><td>GenerateVerify · GvResult</td></tr>
+      <tr><td><code>consensus_topology.rs</code></td><td>ConsensusTopology · AggregatorPolicy {Vote, Borda, Condorcet, Escalating}</td></tr>
+      <tr><td><code>consensus/</code></td><td>BordaConsensus · CondorcetConsensus · MajorityVote · Ballot · AggOutcome · Judge · rank · selector (Pattern, agreement)</td></tr>
+      <tr><td><code>consensus/judges.rs</code></td><td>VerifierJudge · LengthBandJudge · KeywordOverlapJudge · GroundednessJudge · ConsistencyJudge</td></tr>
+      <tr><td><code>pipeline.rs · hierarchical.rs</code></td><td>Pipeline · Hierarchical · HierSolver (GvSolver, FnSolver) · HierResult</td></tr>
+      <tr><td><code>fleet.rs · catalog.rs</code></td><td>AgentFleet (montage par nom) · catalogue des 43 nano-agents</td></tr>
+    </tbody>
+  </table>
+  <p class="small"><b>Type de sortie commun des agrégateurs —</b> <code>AggOutcome { selected, selected_index,
+  scores, confidence, method, cycle_detected }</code> : l'appelant lit toujours la même structure, quelle que
+  soit la méthode (Vote, Borda, Condorcet).</p>
+  <hr>
+  <p class="small muted" style="text-align:center">EFE — Nano-agents &amp; topologies (Partie 4, édition rédigée) · 2026-06-11 · crate <code>efe-swarm-topology</code> ·
+  <i>Générer en masse, sélectionner finement.</i></p>
+</div>
+
+</body>
+</html>

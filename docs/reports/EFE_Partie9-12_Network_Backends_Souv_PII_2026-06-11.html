@@ -1,0 +1,645 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>EFE — Parties 9–12 : Network · backends · souveraineté · PII/dashboard</title>
+<style>
+  :root{--ink:#0f172a;--muted:#475569;--soft:#64748b;--line:#e2e8f0;--teal:#0d9488;--teal-d:#0f766e;--indigo:#4f46e5;--indigo-d:#4338ca;--ok:#16a34a;--warn:#d97706;--bad:#dc2626;--bg-tint:#f8fafc;--bg-card:#f1f5f9;--code-bg:#0f172a;--code-fg:#e2e8f0;}
+  *{box-sizing:border-box;} html{font-size:11.4px;}
+  body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,Arial,sans-serif;color:var(--ink);margin:0;line-height:1.62;background:#fff;-webkit-font-smoothing:antialiased;}
+  .wrap{max-width:178mm;margin:0 auto;padding:0 2mm;}
+  h1,h2,h3,h4{line-height:1.2;font-weight:700;}
+  h2{font-size:1.5rem;margin:0 0 .6rem;padding-bottom:.35rem;border-bottom:3px solid var(--teal);}
+  h2 .num{color:var(--teal);} h3{font-size:1.18rem;margin:1.25rem 0 .35rem;color:var(--indigo-d);}
+  h4{font-size:1rem;margin:.9rem 0 .25rem;color:var(--teal-d);}
+  p{margin:.6rem 0;text-align:justify;hyphens:auto;} a{color:var(--indigo);text-decoration:none;}
+  code{font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace;font-size:.85em;background:var(--bg-card);padding:.05em .35em;border-radius:4px;color:#0b3b36;}
+  .muted{color:var(--muted);} .small{font-size:.88rem;}
+  .lead-in{font-weight:700;color:var(--teal-d);}
+  section{break-inside:avoid;} .page{break-before:page;} h2{break-after:avoid;}
+  table{border-collapse:collapse;width:100%;margin:.6rem 0;font-size:.85rem;}
+  th,td{border:1px solid var(--line);padding:.34rem .55rem;text-align:left;vertical-align:top;}
+  th{background:var(--bg-card);font-weight:700;} tbody tr:nth-child(even){background:var(--bg-tint);}
+  td.c,th.c{text-align:center;} .good{background:#dcfce7 !important;color:#166534;font-weight:700;} .bad{background:#fee2e2 !important;color:#991b1b;font-weight:700;}
+  .tag{display:inline-block;font-size:.71rem;font-weight:700;padding:.08em .5em;border-radius:20px;}
+  .t-ok{background:#dcfce7;color:#166534;} .t-info{background:#e0e7ff;color:#3730a3;} .t-teal{background:#ccfbf1;color:#115e59;} .t-warn{background:#fef3c7;color:#92400e;} .t-bad{background:#fee2e2;color:#991b1b;}
+  pre{background:var(--code-bg);color:var(--code-fg);padding:.6rem .85rem;border-radius:8px;overflow:auto;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.76rem;line-height:1.5;margin:.6rem 0;}
+  .callout{border-left:4px solid var(--teal);background:var(--bg-tint);padding:.6rem .9rem;border-radius:0 8px 8px 0;margin:.7rem 0;}
+  .callout p{text-align:left;margin:.3rem 0;}
+  .callout.key{border-color:var(--indigo);background:#eef2ff;} .callout.warn{border-color:var(--warn);background:#fffbeb;}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:.8rem;}
+  .card{border:1px solid var(--line);border-radius:10px;padding:.65rem .8rem;background:#fff;} .card p{text-align:left;}
+  .fig{margin:.8rem 0 1rem;text-align:center;break-inside:avoid;}
+  .fig svg{max-width:100%;height:auto;border:1px solid var(--line);border-radius:10px;background:#fff;}
+  .fig .cap{font-size:.8rem;color:var(--muted);margin-top:.35rem;font-style:italic;text-align:center;}
+  ul,ol{margin:.45rem 0 .6rem 1.15rem;padding:0;} li{margin:.28rem 0;}
+  svg text{font-family:-apple-system,"Segoe UI",Inter,sans-serif;}
+  .cover{height:262mm;display:flex;flex-direction:column;justify-content:center;position:relative;padding:0 6mm;}
+  .cover .eyebrow{color:var(--teal);font-weight:800;letter-spacing:.28em;font-size:.92rem;text-transform:uppercase;}
+  .cover h1{font-size:2.6rem;margin:.4rem 0 .2rem;line-height:1.1;} .cover .sub{font-size:1.28rem;color:var(--muted);margin-bottom:1.2rem;}
+  .cover .tagline{font-size:1.04rem;color:var(--ink);max-width:160mm;border-left:4px solid var(--teal);padding-left:1rem;font-style:italic;text-align:left;}
+  .cover .meta{position:absolute;bottom:6mm;left:6mm;right:6mm;display:flex;justify-content:space-between;border-top:1px solid var(--line);padding-top:.7rem;font-size:.82rem;color:var(--soft);}
+  .cover .pills{margin:1.1rem 0;} .cover .pills .tag{font-size:.8rem;margin-right:.35rem;}
+  .lede{font-size:1.06rem;color:#1e293b;text-align:left;} .mono{font-family:ui-monospace,Menlo,Consolas,monospace;}
+  hr{border:none;border-top:1px solid var(--line);margin:1rem 0;}
+  .toc{font-size:.92rem;columns:2;column-gap:2rem;} .toc div{margin:.18rem 0;break-inside:avoid;} .toc .n{color:var(--teal);font-weight:700;display:inline-block;width:1.8em;}
+</style>
+</head>
+<body>
+
+<!-- COVER -->
+<div class="wrap"><div class="cover">
+  <div class="eyebrow">Rapport maître · Parties 9–12 — édition rédigée</div>
+  <h1>Network · backends · souveraineté · PII &amp; dashboard</h1>
+  <div class="sub">La frontière sans les clés, la résilience sans la triche, la conformité sans casser la preuve.</div>
+  <div class="tagline">Ce document couvre la périphérie opérationnelle d'EFE — tout ce qui entoure le cœur
+   (substrat, topologies, SDK, provenance) pour en faire un produit déployable. On y détaille le protocole
+   concret du mode Network (comment atteindre un modèle frontière sans qu'aucune clé ne touche le client), la
+   pile de résilience des backends (circuit-breaker et re-tentatives, avec la correction N17 qui empêche les
+   tentatives de polluer la preuve), les garde-fous de souveraineté et le binaire de production qui ferme un
+   vrai trou de sécurité, puis la couche PII — qui caviarde la présentation <b>sans toucher</b> aux
+   enregistrements prouvés — et le dashboard, observateur strict de l'essaim.</div>
+  <div class="pills">
+    <span class="tag t-teal">RouterMap (Inc.4.b)</span>
+    <span class="tag t-info">Breaker 5/15 s · Retrier 3×</span>
+    <span class="tag t-ok">G2 egress · EnvHkdf</span>
+    <span class="tag t-warn">PII : présentation ≠ preuve</span>
+    <span class="tag t-bad">dashboard = observateur</span>
+  </div>
+  <div class="meta"><span><b>Crates :</b> efe-swarm-gateway · efe-swarm-sdk/backend · efe-pii (1 203 LoC) · efe-swarm-dashboard (902 LoC)</span><span><b>Réf. :</b> <span class="mono">main @ baaf98d</span> · 2026-06-11</span></div>
+</div></div>
+
+<!-- TOC -->
+<div class="wrap page">
+  <h2><span class="num">§0</span> Plan du document</h2>
+  <p class="lede">Quatre sujets, un fil conducteur : chacun montre comment EFE étend ses capacités (modèles
+  frontière, robustesse réseau, conformité, observabilité) <b>sans jamais entamer</b> ses deux promesses
+  fondatrices — le keyless côté client et la re-prouvabilité de la preuve. À chaque section, on verra où la
+  tentation de « tricher » existait, et comment le code l'a refusée.</p>
+  <div class="toc">
+    <div><span class="n">1</span>Le mode Network — la frontière sans les clés</div>
+    <div><span class="n">2</span>Les backends locaux — keyless par construction</div>
+    <div><span class="n">3</span>La résilience — Breaker &amp; Retrier (et N17)</div>
+    <div><span class="n">4</span>Souveraineté &amp; déploiement — le binaire qui ferme le trou</div>
+    <div><span class="n">5</span>PII — caviarder sans casser la preuve</div>
+    <div><span class="n">6</span>Le dashboard — voir l'essaim sans le toucher</div>
+    <div><span class="n">7</span>Synthèse</div>
+    <div><span class="n">A</span>Annexe — surface &amp; variables d'environnement</div>
+  </div>
+</div>
+
+<!-- §1 NETWORK -->
+<div class="wrap page">
+  <h2><span class="num">§1</span> Le mode Network — la frontière sans les clés</h2>
+
+  <p class="lede">Le mode SelfHost est le phare souverain d'EFE, mais certains clients veulent la qualité d'un
+  modèle frontière (Claude, GPT-4o…). Le problème : ces modèles exigent des clés d'API, et la règle absolue du
+  projet interdit qu'une clé touche le client ou la passerelle. Le mode Network résout cette équation — et la
+  manière dont il la résout (l'incrément 4.b) est un petit modèle de décision d'architecture.</p>
+
+  <h3>1.1 — La décision : le routeur reste un endpoint OpenAI-compatible</h3>
+
+  <p>Quand il a fallu câbler le protocole concret du routeur, deux options se présentaient. La première :
+  inventer un protocole propriétaire entre la passerelle et le routeur (gRPC dédié, schéma maison) — le crate
+  <code>efe-llm-router</code> avait d'ailleurs une ébauche gRPC, restée à l'état de squelette. La seconde,
+  retenue : <b>le routeur est, vu de la passerelle, un simple serveur OpenAI-compatible</b>. Cette décision a
+  une conséquence élégante : la passerelle n'a <i>aucun code Network spécifique</i> à maintenir. Elle réutilise
+  tel quel le backend OpenAI-local du SDK (§2) — le même qui parle à un llama.cpp sur la boucle locale parle au
+  routeur frontière. Le routeur (un LiteLLM, un vLLM gateway, ou l'<code>efe-llm-router</code> à terme) reçoit
+  l'appel au format OpenAI, détient les clés des fournisseurs <b>server-side</b> (environnement ou coffre), et
+  traduit vers le fournisseur réel. La frontière des secrets est nette : <b>tout ce qui est en amont du routeur
+  est keyless ; tout ce qui exige une clé vit dans le routeur</b>.</p>
+
+  <p>Restait une question de vocabulaire : l'appelant demande <code>Network { provider: "anthropic" }</code> —
+  une <b>famille</b> — mais un routeur OpenAI-compatible attend un <b>identifiant de modèle</b> concret
+  (<code>"anthropic/claude-3-5-sonnet-latest"</code>). Qui traduit ? La réponse tient dans une observation de
+  sécurité : <b>un nom de modèle n'est pas un secret</b> — c'est une politique de routage. Il peut donc vivre
+  côté passerelle, configurable au déploiement, sans rien compromettre. C'est la <code>RouterMap</code>.</p>
+
+  <h3>1.2 — La <code>RouterMap</code> : trois règles déterministes</h3>
+
+  <p>La table de résolution applique trois règles, dans cet ordre, et chacune a sa justification.
+  <b>Règle 1 — le passthrough explicite :</b> si la demande contient déjà un identifiant qualifié
+  (<code>famille/modèle</code> ou <code>famille:modèle</code>), on ne touche à rien — l'appelant a tranché, la
+  passerelle ne réinterprète pas une décision explicite. <b>Règle 2 — la famille connue :</b> si la demande est
+  une famille nue présente dans la table, on la traduit par l'identifiant par défaut. <b>Règle 3 — la famille
+  inconnue :</b> passthrough encore — on laisse le routeur trancher (ou renvoyer une erreur claire), plutôt que
+  d'inventer une traduction hasardeuse côté passerelle.</p>
+
+  <table>
+    <thead><tr><th>Famille</th><th>Modèle par défaut</th></tr></thead>
+    <tbody>
+      <tr><td><code>anthropic</code></td><td><code>anthropic/claude-3-5-sonnet-latest</code></td></tr>
+      <tr><td><code>openai</code></td><td><code>openai/gpt-4o</code></td></tr>
+      <tr><td><code>mistral</code></td><td><code>mistral/mistral-large-latest</code></td></tr>
+      <tr><td><code>google</code> · <code>vertex</code> · <code>gemini</code></td><td><code>vertex_ai/gemini-1.5-pro</code></td></tr>
+      <tr><td><code>groq</code></td><td><code>groq/llama-3.3-70b-versatile</code></td></tr>
+      <tr><td><code>cohere</code></td><td><code>cohere/command-r-plus</code></td></tr>
+    </tbody>
+  </table>
+
+  <p>Deux choix de détail méritent l'explication. Les défauts privilégient les alias <code>-latest</code> :
+  une table figée sur des versions datées deviendrait obsolète silencieusement ; l'alias suit le fournisseur.
+  Et la forme retenue est <code>provider/model</code> (la convention des routeurs OpenAI-compatibles type
+  LiteLLM) — <b>surtout pas</b> le préfixe <code>openai:</code>, et ce n'est pas un caprice : on verra en §2
+  que ce préfixe est précisément le sélecteur de moteur du SDK ; l'utiliser ici forcerait une interprétation
+  parasite au mauvais étage. Enfin, la table entière est surchargeable au déploiement par la variable
+  <code>EFE_SWARM_ROUTER_MODELS</code> — la politique de routage appartient à l'exploitant, pas au code.</p>
+
+  <h3>1.3 — <code>resolve_mode</code> : la traduction, et le tarif préservé</h3>
+
+  <p>Côté passerelle, tout converge dans une fonction : <code>resolve_mode</code>. Pour les modes souverains
+  (Keyless, SelfHost), elle est transparente. Pour <code>Network { provider }</code>, elle opère la traduction
+  complète : si un routeur est configuré (<code>EFE_SWARM_ROUTER_ENDPOINT</code>), le mode devient
+  <code>SelfHost { endpoint: routeur, model: router_map.resolve(provider) }</code> avec
+  <code>allow_remote = true</code> (l'egress vers le routeur est assumé — c'est le seul cas) ; s'il n'y en a
+  pas, la réponse est un <b>501 net</b> avec un message qui dit exactement quoi faire (« définissez
+  <code>EFE_SWARM_ROUTER_ENDPOINT</code> côté serveur »). Pas de demi-mesure : le Network non câblé n'est pas
+  simulé, il est refusé.</p>
+
+  <p>La fonction renvoie un troisième élément, et son histoire vaut d'être racontée parce que c'est un bug
+  réel trouvé par les tests de bout en bout. La traduction Network → SelfHost héritait du modèle de prix du
+  <i>véhicule</i> : SelfHost = 0 ¢. Résultat observé lors du premier test réel : un run Network entier
+  affichait <code>spent_cents: 0</code> — la gouvernance de budget était muette précisément sur le seul mode
+  qui coûte de l'argent réel. Le correctif : <code>resolve_mode</code> renvoie un <b>tarif à forcer</b>
+  (<code>Some(5 ¢)</code>, le prix nominal Network) que le chemin d'exécution injecte dans le budget
+  (<code>price_per_call_cents.get_or_insert(...)</code>). Le run est exécuté par le véhicule SelfHost, mais
+  <b>facturé au tarif du mode demandé</b>. Trois tests verrouillent désormais ce comportement (souverains
+  inchangés, 501 sans routeur, traduction avec tarif).</p>
+
+  <h3>1.4 — Les preuves : in-process et bout en bout réel</h3>
+
+  <p>Le chemin Network est prouvé à deux niveaux. <b>In-process</b> (CI, sans réseau ni clé) : un test monte un
+  faux routeur OpenAI-compatible (un serveur axum sur un port éphémère de la boucle locale), configure la
+  passerelle dessus, et soumet un run Network. Les assertions couvrent toute la promesse : le run est
+  <code>verified</code>, le moteur forensique est <code>openai_local</code> (le descripteur traverse les
+  enveloppes), le modèle est bien l'identifiant <i>traduit</i> par la RouterMap, la dépense est non nulle
+  (le tarif a survécu à la traduction), et le pont N17 est intégralement cohérent. Un second test vérifie le
+  501 sans routeur. <b>Bout en bout réel</b> : la même passerelle, pointée sur un proxy LiteLLM local détenant
+  une vraie clé Anthropic (server-side, jamais vue par EFE), a produit un run réel — vérifié, modèle
+  <code>anthropic/claude-3-5-sonnet-latest</code>, pont N17 4/4 cohérent. La chaîne complète — famille →
+  RouterMap → routeur → fournisseur frontière → réponse → provenance scellée — fonctionne avec exactement
+  <b>zéro clé</b> côté EFE.</p>
+
+  <div class="callout key">
+    <p><b>Ce qu'il faut retenir du Network.</b> Le mode frontière n'a pas affaibli la posture : il l'a
+    <i>déplacée</i>. La passerelle ne connaît que des noms de modèles (publics) et un endpoint de routeur ;
+    les clés vivent dans le routeur, server-side, remplaçables sans toucher EFE. Et la gouvernance (tarif,
+    budget, provenance, N17) traverse la traduction intacte — parce qu'un test l'a exigé.</p>
+  </div>
+</div>
+
+<!-- §2 BACKENDS -->
+<div class="wrap page">
+  <h2><span class="num">§2</span> Les backends locaux — keyless par construction</h2>
+
+  <p class="lede">Sous le mode SelfHost (et, on vient de le voir, sous le Network traduit), il y a une pièce
+  unique : le <code>LocalBackend</code>. Sa conception illustre une discipline rare — le keyless n'y est pas
+  une configuration, c'est une <b>propriété structurelle</b> : il n'existe aucun champ, aucun en-tête, aucune
+  dépendance où une clé pourrait se glisser.</p>
+
+  <h3>2.1 — Un seul trait, deux moteurs</h3>
+
+  <p>Le trait <code>LocalBackend</code> expose trois méthodes : <code>complete(prompt, params)</code> qui rend
+  <code>Option&lt;String&gt;</code> (l'échec est un <code>None</code> franc, jamais une exception — la couche
+  appelante le transforme en sentinel neutre), <code>descriptor()</code> qui rend le triplet forensique
+  (moteur, modèle, endpoint — jamais une clé, le commentaire le précise), et <code>health()</code>, la sonde de
+  démarrage. Derrière ce trait, deux moteurs : <b>Ollama</b> natif (son API <code>/api/generate</code>) et
+  <b>OpenAI-compatible local</b> (llama.cpp-server, vLLM, TGI, LM Studio — et le routeur Network, §1). La
+  sélection du moteur est déterministe et documentée : un modèle préfixé <code>openai:</code> <i>ou</i> un
+  endpoint contenant <code>/v1</code> désignent l'OpenAI-compatible (le préfixe est retiré du nom de modèle au
+  passage) ; tout le reste va à Ollama. C'est ce sélecteur que la RouterMap évite soigneusement de déclencher
+  (§1.2) : le <code>openai:</code> est un mot-clé du SDK, pas un préfixe décoratif.</p>
+
+  <h3>2.2 — Le transport : un shell-out <code>curl</code>, et c'est voulu (G10)</h3>
+
+  <p>Le choix le plus surprenant — et le plus délibéré — est le transport. Le SDK ne dépend d'<b>aucune</b>
+  bibliothèque HTTP, d'aucune pile TLS : il invoque <code>curl</code> en sous-processus. La fonction
+  <code>curl_json</code> tient en vingt lignes : un POST avec <code>content-type: application/json</code>, un
+  <code>--max-time</code> strict, et — détail de sécurité — <b>le corps passé par stdin</b>
+  (<code>-d @-</code>), jamais par argument : aucun échappement shell, aucun prompt qui fuite dans la liste
+  des processus. Aucun en-tête <code>Authorization</code> n'est construit <i>nulle part</i> : le grep le plus
+  paranoïaque du crate ne trouvera pas un point d'injection de clé, parce qu'il n'y en a pas.</p>
+
+  <p>Pourquoi cette austérité ? C'est le garde-fou G10 : <b>aucune dépendance réseau dans le crate SDK</b>. Les
+  bénéfices sont en cascade. L'audit de sécurité du SDK se réduit à « il appelle <code>curl</code> vers un
+  endpoint que G2 contraint » — pas de pile TLS à auditer, pas de CVE de bibliothèque HTTP à suivre, pas de
+  négociation de certificats dans le périmètre du code. Le binaire reste petit. Et la frontière de confiance
+  est limpide : ce qui sort de la machine est exactement ce que <code>curl</code> envoie, observable par
+  n'importe quel outil système. Le coût assumé : un <code>spawn_blocking</code> par appel (le sous-processus
+  est bloquant) et une granularité d'erreur grossière — on y reviendra en §3.4, car cette limite est documentée
+  honnêtement dans le code.</p>
+
+  <h3>2.3 — La sonde de santé et le garde-fou d'egress</h3>
+
+  <p>Deux compléments ferment le dispositif. La <b>sonde de santé</b> (<code>health_probe</code>) : un
+  <code>curl --max-time 3</code> de joignabilité, sans secret transmis — c'est elle que le SDK appelle au
+  démarrage d'un run quand <code>require_healthy_backend</code> est actif (la passerelle l'active toujours),
+  pour échouer en une requête plutôt qu'en K timeouts. Et le <b>garde-fou G2</b> : la fabrique
+  <code>build_local_backend</code> refuse tout endpoint non local (<code>RemoteBackendDenied</code>) sauf
+  opt-in explicite. Le test de localité (<code>is_local_endpoint</code>) ne se contente pas d'un
+  <code>contains("localhost")</code> naïf : il <b>parse</b> l'autorité de l'URL — schéma, userinfo éventuel
+  (ignoré, pour qu'un <code>http://localhost@evil.com</code> ne trompe pas le test), littéraux IPv6
+  <code>[::1]</code>, port — et n'accepte que <code>localhost</code>, <code>::1</code> et <code>127.*</code>.
+  Les tests énumèrent les deux côtés : quatre formes locales reconnues, quatre formes distantes refusées (dont
+  les adresses privées <code>10.x</code> et <code>192.168.x</code> — « privé » n'est pas « local »).</p>
+
+  <div class="callout">
+    <p><b>La hiérarchie des refus.</b> Notons la cohérence d'ensemble : le SDK refuse l'egress par défaut (G2),
+    la passerelle n'autorise l'egress que pour le routeur Network qu'elle a elle-même configuré
+    (<code>allow_remote = true</code> sur ce seul chemin), et le Network sans routeur est un 501. À chaque
+    étage, la voie par défaut est la plus souveraine, et chaque ouverture est un acte explicite et localisé.</p>
+  </div>
+</div>
+
+<!-- §3 RESILIENCE -->
+<div class="wrap page">
+  <h2><span class="num">§3</span> La résilience — Breaker &amp; Retrier (et la correction N17)</h2>
+
+  <p class="lede">Un backend peut tomber, hoqueter, ou ramer. La pile de résilience d'EFE répond avec deux
+  enveloppes composables — un circuit-breaker et un module de re-tentatives — dont l'empilement n'est pas le
+  même selon le chemin. Et elle contient un bijou d'ingénierie discret : la correction qui empêche les
+  re-tentatives de <i>polluer la preuve</i>.</p>
+
+  <h3>3.1 — L'empilement différencié : <code>Breaker(Retrier(moteur))</code>, mais pas partout</h3>
+
+  <p>La fabrique assemble la pile selon le chemin. <b>Self-host souverain</b> (boucle locale) :
+  <code>Breaker(moteur)</code> seul. La justification est physique : sur la loopback, un échec est <i>franc et
+  rapide</i> — le serveur local répond ou ne répond pas, il n'y a ni congestion réseau ni hoquet transitoire
+  qui justifierait de réessayer ; re-tenter ne ferait que marteler un service déjà en difficulté.
+  <b>Chemin routeur Network</b> (egress assumé) : <code>Breaker(Retrier(moteur))</code>. Là, le réseau étendu
+  introduit des défaillances <i>transitoires</i> — un paquet perdu, un load-balancer qui bascule, un 503
+  momentané — pour lesquelles la re-tentative est la réponse correcte.</p>
+
+  <p>L'<b>ordre</b> d'empilement est lui-même un choix raisonné : le Breaker enveloppe le Retrier, pas
+  l'inverse. Conséquence : le breaker compte <b>une</b> défaillance par <i>appel logique</i> — après épuisement
+  des re-tentatives — et non une par tentative. Si c'était l'inverse, trois tentatives échouées d'un même appel
+  consommeraient trois « points » du seuil du breaker, et deux appels malchanceux suffiraient à ouvrir un
+  circuit calibré pour cinq défaillances réelles. L'empilement choisi préserve la sémantique du seuil.</p>
+
+  <h3>3.2 — Le Breaker : protéger l'hôte, pas masquer la panne</h3>
+
+  <p>Le circuit-breaker est volontairement simple : un compteur d'échecs <b>consécutifs</b> (seuil par défaut :
+  <b>5</b>), une fenêtre d'ouverture (<b>15 secondes</b>). Tant que le circuit est fermé, les appels passent ;
+  chaque succès <b>réarme</b> le compteur à zéro ; au cinquième échec consécutif, le circuit <b>s'ouvre</b> :
+  pendant la fenêtre, les appels renvoient <code>None</code> <i>sans toucher au backend</i>. Le test le vérifie
+  au compteur près : après ouverture, le moteur interne n'est plus appelé du tout. L'objectif n'est pas de
+  cacher la panne — les sentinels remontent et la topologie dégrade (Partie 5–6, §5.1) — mais de protéger
+  l'hôte et le backend : pas de tempête de requêtes sur un service à terre, pas de file de timeouts qui
+  s'accumule. Après la fenêtre, le prochain appel re-sonde naturellement le backend ; s'il répond, le succès
+  referme tout.</p>
+
+  <h3>3.3 — Le Retrier : back-off exponentiel plafonné, jitter sans dépendance</h3>
+
+  <p>Le Retrier exécute jusqu'à <b>3 tentatives</b> au total (l'essai initial plus deux re-tentatives), avec un
+  délai croissant entre elles : base <b>200 ms</b>, doublée à chaque tentative, plafonnée à <b>5 s</b>. Au
+  délai s'ajoute un <b>jitter</b> de type <i>equal-jitter</i> — la moitié du délai est fixe, l'autre moitié
+  tirée au hasard — pour éviter qu'une flotte d'appels échoués au même instant ne re-frappe le routeur en
+  vague synchronisée. Détail d'implémentation fidèle à la sobriété du crate : l'aléa vient des nanosecondes de
+  l'horloge système (« entropie bon marché », dit le code), pas d'une dépendance <code>rand</code> — pour du
+  jitter, c'est exactement suffisant. Et l'arithmétique est blindée aux extrêmes : le décalage exponentiel est
+  plafonné à 2¹⁶, les multiplications saturent au lieu de déborder.</p>
+
+  <h3>3.4 — La correction N17 : les tentatives ne polluent pas la preuve</h3>
+
+  <p>Voici le point le plus délicat du module, et le code le qualifie lui-même de tel. Rappel du pont N17
+  (Parties 7–8, §6) : le backend feuille pousse, à chaque <code>complete()</code>, une fiche forensique dans le
+  puits task-local posé par le Meter ; le Meter assemble et lie l'enregistrement d'agent à la <b>première</b>
+  fiche. Maintenant, introduisons naïvement le Retrier : trois tentatives = trois <code>complete()</code> du
+  moteur feuille = <b>trois fiches</b> dans le puits du Meter. Double dégât : le pont compterait des appels
+  fantômes (des tentatives, pas des appels logiques), et — pire — l'enregistrement d'agent se lierait à la
+  <i>première</i> fiche, c'est-à-dire à une <b>tentative échouée</b>, alors que la réponse réellement utilisée
+  vient de la troisième. La preuve raconterait une histoire fausse.</p>
+
+  <p>La correction : le Retrier exécute <b>chaque tentative dans un puits imbriqué</b> — un scope task-local à
+  lui, posé par-dessus celui du Meter. La fiche de la tentative tombe dans ce puits privé, où le Retrier la
+  draine. À l'issue de l'appel logique, il ne ré-émet vers le puits parent qu'<b>une seule</b> fiche : celle de
+  l'issue retenue (la réponse en cas de succès, la dernière tentative en cas d'épuisement), en y inscrivant le
+  <code>retry_count</code>. Trois tests verrouillent les trois cas : succès après deux échecs → une fiche,
+  <code>retry_count = 2</code>, réponse présente ; épuisement → une fiche, <code>retry_count = 2</code>,
+  réponse absente ; succès immédiat → une fiche, <code>retry_count = 0</code>. Le pont N17 voit des appels
+  logiques, jamais des tentatives — et le compteur de re-tentatives, loin d'être perdu, devient une donnée
+  forensique de la fiche.</p>
+
+  <div class="callout warn">
+    <p><b>La limite, documentée dans le code.</b> La couche <code>curl</code> keyless ne distingue pas un 4xx
+    (erreur définitive : mauvaise requête, modèle inconnu) d'un 5xx ou d'un timeout (transitoire) — elle rend
+    <code>None</code> dans tous les cas. Les re-tentatives sont donc <i>transitoires-par-défaut</i> : on
+    réessaie aussi ce qui ne méritait pas de l'être. Le commentaire assume cette imperfection et trace
+    l'évolution possible (faire remonter le code HTTP via <code>curl %{http_code}</code>). C'est un compromis
+    typique du projet : une limite réelle, bornée (au pire deux re-tentatives inutiles), dite à voix haute
+    plutôt que masquée.</p>
+  </div>
+
+  <div class="fig">
+  <svg viewBox="0 0 900 235" role="img" aria-label="Pile de resilience">
+    <defs><marker id="r1" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="#475569"/></marker></defs>
+    <rect x="20" y="30" width="270" height="170" rx="11" fill="#fef2f2" stroke="#dc2626" stroke-width="1.5"/>
+    <text x="155" y="52" text-anchor="middle" font-size="10.5" font-weight="700" fill="#991b1b">Breaker (5 échecs / 15 s)</text>
+    <text x="155" y="68" text-anchor="middle" font-size="7.5" fill="#b91c1c">1 défaillance par APPEL LOGIQUE · ouvert ⇒ None sans toucher</text>
+    <rect x="40" y="80" width="230" height="104" rx="9" fill="#fffbeb" stroke="#ca8a04" stroke-width="1.5"/>
+    <text x="155" y="100" text-anchor="middle" font-size="10" font-weight="700" fill="#854d0e">Retrier (3× · 200 ms → 5 s)</text>
+    <text x="155" y="115" text-anchor="middle" font-size="7.5" fill="#a16207">equal-jitter · puits N17 imbriqué</text>
+    <rect x="58" y="126" width="194" height="44" rx="7" fill="#f0fdfa" stroke="#0d9488"/>
+    <text x="155" y="144" text-anchor="middle" font-size="9" font-weight="700" fill="#115e59">moteur (curl keyless)</text>
+    <text x="155" y="159" text-anchor="middle" font-size="7.5" fill="#0f766e">Ollama · OpenAI-local / routeur</text>
+    <text x="155" y="222" text-anchor="middle" font-size="8.5" font-weight="700" fill="#334155">chemin Network (egress)</text>
+    <rect x="330" y="62" width="220" height="106" rx="11" fill="#fef2f2" stroke="#dc2626" stroke-width="1.5"/>
+    <text x="440" y="84" text-anchor="middle" font-size="10.5" font-weight="700" fill="#991b1b">Breaker (5 / 15 s)</text>
+    <rect x="348" y="96" width="184" height="56" rx="9" fill="#f0fdfa" stroke="#0d9488"/>
+    <text x="440" y="118" text-anchor="middle" font-size="9" font-weight="700" fill="#115e59">moteur (curl keyless)</text>
+    <text x="440" y="134" text-anchor="middle" font-size="7.5" fill="#0f766e">127.0.0.1 — échec franc</text>
+    <text x="440" y="222" text-anchor="middle" font-size="8.5" font-weight="700" fill="#334155">self-host souverain (loopback) : PAS de Retrier</text>
+    <rect x="600" y="40" width="280" height="160" rx="11" fill="#eef2ff" stroke="#4f46e5" stroke-width="1.5"/>
+    <text x="740" y="62" text-anchor="middle" font-size="10" font-weight="700" fill="#3730a3">Correction N17</text>
+    <text x="740" y="84" text-anchor="middle" font-size="8" fill="#4338ca">tentative 1 ✗ → puits imbriqué (drainé)</text>
+    <text x="740" y="102" text-anchor="middle" font-size="8" fill="#4338ca">tentative 2 ✗ → puits imbriqué (drainé)</text>
+    <text x="740" y="120" text-anchor="middle" font-size="8" fill="#4338ca">tentative 3 ✓ → retenue</text>
+    <text x="740" y="146" text-anchor="middle" font-size="8.5" font-weight="700" fill="#3730a3">⇒ UNE fiche vers le Meter</text>
+    <text x="740" y="162" text-anchor="middle" font-size="8" fill="#4338ca">retry_count = 2 · lien N17 = l'issue réelle</text>
+    <text x="740" y="186" text-anchor="middle" font-size="7.5" font-style="italic" fill="#64748b">les tentatives ne polluent jamais la preuve</text>
+  </svg>
+  <div class="cap">Figure 1 — La pile différenciée : Retrier seulement sur l'egress (le local échoue franchement), Breaker au sommet (une défaillance par appel logique), et le puits N17 imbriqué qui ne laisse passer qu'une fiche — celle de l'issue retenue.</div>
+  </div>
+</div>
+
+<!-- §4 SOUVERAINETE -->
+<div class="wrap page">
+  <h2><span class="num">§4</span> Souveraineté &amp; déploiement — le binaire qui ferme le trou</h2>
+
+  <p class="lede">« Souverain » est un mot facile à mettre sur une plaquette. Cette section le rend
+  vérifiable : l'inventaire exhaustif des secrets du système, les garde-fous qui tiennent la frontière, le
+  binaire de production — qui a fermé un vrai trou de sécurité — et l'image Docker qui porte le tout.</p>
+
+  <h3>4.1 — L'inventaire des secrets, exhaustif</h3>
+
+  <p>Faisons l'exercice que tout audit devrait faire : lister <i>tout</i> ce qui, dans le système, relève du
+  secret. La liste est remarquablement courte. <b>Un</b> : le master de signature HKDF
+  (<code>EFE_NANO_AUDIT_HMAC_MASTER</code>), qui <i>signe</i> la provenance — server-side, jamais saisi, jamais
+  loggé (Parties 7–8, §5). <b>Deux</b> : les clés des fournisseurs frontière — qui vivent dans le <i>routeur</i>
+  Network, pas dans EFE (§1.1). Et c'est tout. L'authentification OIDC de la passerelle ne détient que des clés
+  <b>publiques</b> de vérification de signature (ES256) ; le mode SelfHost ne demande rien ; le mode Keyless,
+  par définition, rien non plus. Un déploiement souverain pur (keyless + self-host, sans Network) embarque donc
+  <b>exactement un</b> secret — et ce secret ne protège pas des données : il rend la preuve infalsifiable.</p>
+
+  <h3>4.2 — Les garde-fous, en système</h3>
+
+  <p>Les sections précédentes ont égrené des garde-fous numérotés ; voici comment ils se composent en une
+  défense en profondeur. <b>G2</b> (egress) : aucun backend non local sans opt-in explicite — et l'unique
+  opt-in du système est le routeur Network configuré par l'exploitant (§2.3). <b>G3</b> (robustesse) : le
+  circuit-breaker protège l'hôte d'un backend à terre (§3.2). <b>G8</b> (mémoire) : le Blackboard est borné par
+  construction (Partie 3, §2.5) — pas d'épuisement de ressources par un run emballé. <b>G9</b> (PII) : le
+  caviardage par tenant, qu'on verra en §5. <b>G10</b> (surface) : aucune dépendance réseau dans le crate SDK
+  (§2.2). À quoi s'ajoutent les disciplines transverses : <code>#![deny(unsafe_code)]</code> sur les sept
+  crates de bibliothèque, zéro <code>panic!</code> en production, zéro avertissement clippy — la souveraineté
+  commence par un binaire dont on peut lire chaque ligne.</p>
+
+  <h3>4.3 — Le binaire de production : l'histoire d'un trou fermé</h3>
+
+  <p>Le binaire <code>efe-swarm-gateway</code> mérite qu'on raconte pourquoi il existe. Pendant le
+  développement, le serveur de référence était un <i>exemple</i> (<code>serve_standalone</code>) qui, par
+  commodité, signait la provenance avec la <b>clé de test</b> — un master <i>public</i>, écrit en clair dans la
+  source. Parfaitement acceptable en développement. Mais le chart Helm de déploiement, lui, montait
+  consciencieusement un Secret Kubernetes contenant le master HKDF de production… que l'exemple <b>n'utilisait
+  pas</b>. Conséquence silencieuse : un déploiement « production » aurait signé toute sa provenance avec une
+  clé publique — c'est-à-dire <b>forgeable par quiconque</b> lit le dépôt. Le moat, vidé de sa substance, sans
+  qu'aucun voyant ne s'allume.</p>
+
+  <p>Le binaire de production ferme ce trou par une logique de sélection explicite : si
+  <code>EFE_NANO_AUDIT_HMAC_MASTER</code> est <b>présent et non vide</b> dans l'environnement, la source de clé
+  est <code>EnvHkdf</code> (le master réel, dérivé par tenant au moment de signer) ; sinon, repli sur la clé de
+  test <i>avec un avertissement bruyant</i> sur la sortie d'erreur : « la provenance serait FORGEABLE
+  (<code>verify</code> non fiable). NE JAMAIS utiliser en production. » Notons la discipline dans le détail :
+  le binaire ne teste que la <b>présence</b> du master — sa valeur n'est jamais lue à cet endroit, jamais
+  loggée ; c'est <code>EnvHkdf::derive</code> qui la lira, server-side, à l'instant de la signature. Même pour
+  décider, on ne manipule pas le secret.</p>
+
+  <p>Le reste du binaire est l'outillage d'un service qui doit vivre dans un cluster : bind par défaut
+  <code>0.0.0.0:8080</code> (joignable dans le pod, surchargeable par <code>EFE_SWARM_GATEWAY_ADDR</code>),
+  <b>arrêt gracieux</b> sur SIGTERM et Ctrl-C (les rollouts Kubernetes drainent les connexions au lieu de les
+  couper), et le câblage <i>depuis l'environnement</i> de tous les modules optionnels : le store Postgres
+  (<code>DATABASE_URL</code>, feature <code>postgres</code>), l'authentification OIDC (clé publique, issuer,
+  audience — feature <code>oidc</code>), la politique PII par défaut (<code>EFE_PII_DEFAULT_POLICY</code>,
+  feature <code>pii</code>), et le routeur Network (<code>EFE_SWARM_ROUTER_ENDPOINT</code> +
+  <code>EFE_SWARM_ROUTER_MODELS</code>, §1).</p>
+
+  <h3>4.4 — L'image Docker : rien dedans, tout au runtime</h3>
+
+  <p>L'image de production suit la même philosophie. Construction <b>multi-étages</b> : un étage
+  <code>rust:1-bookworm</code> compile en release avec les features de production
+  (<code>postgres oidc pii</code>) ; l'étage final, un <code>debian:bookworm-slim</code>, ne reçoit que le
+  binaire et deux paquets — <code>curl</code> (le transport des backends et du routeur, §2.2 : le shell-out est
+  une dépendance <i>système</i>, pas crate) et <code>ca-certificates</code> (le TLS vers un routeur frontière
+  distant, le cas échéant). L'exécution est <b>non-root</b> (un utilisateur dédié, uid 10001 — défense en
+  profondeur : une compromission du processus n'offre pas la machine), un <code>HEALTHCHECK</code> sonde
+  <code>/metrics</code> toutes les 15 secondes (la passerelle est vivante dès qu'elle répond — c'est la même
+  sonde que le chart Helm utilise en liveness/readiness). Et le commentaire final de l'image est la règle du
+  déploiement entier : <b>« AUCUNE clé dans l'image »</b> — le master HKDF, l'URL de base, les paramètres OIDC
+  arrivent de l'environnement et des Secrets Kubernetes au runtime, jamais des couches de l'image. Une image
+  compromise ou redistribuée ne contient rien à voler.</p>
+
+  <div class="callout key">
+    <p><b>La souveraineté, en pratique.</b> Un déploiement EFE souverain se décrit en une phrase auditable :
+    un binaire Rust sans <code>unsafe</code>, sans dépendance réseau crate, qui refuse l'egress par défaut,
+    dont l'image ne contient aucun secret, et dont l'unique secret runtime — un master de <i>signature</i> —
+    n'est jamais ni saisi, ni affiché, ni embarqué. Chaque mot de cette phrase correspond à un mécanisme
+    vérifié de ce document ou des précédents.</p>
+  </div>
+</div>
+
+<!-- §5 PII -->
+<div class="wrap page">
+  <h2><span class="num">§5</span> PII — caviarder sans casser la preuve</h2>
+
+  <p class="lede">Un essaim qui traite du texte client traite, tôt ou tard, des données personnelles — adresses
+  électroniques, numéros de sécurité sociale, cartes bancaires. La couche PII d'EFE répond à deux exigences qui
+  semblent se contredire : <b>caviarder</b> ce qui sort du système, et <b>ne rien altérer</b> de ce qui a été
+  prouvé. La résolution de cette tension est le point le plus intéressant de la section.</p>
+
+  <h3>5.1 — Le crate <code>efe-pii</code> : trois couches et un disjoncteur</h3>
+
+  <p>Le crate historique (M29) organise la détection en trois couches successives. <b>Première couche, la
+  canonicalisation</b> — et elle est pensée contre un adversaire, pas contre la maladresse. Avant toute
+  analyse, le texte subit une normalisation Unicode NFKC (le « А » cyrillique, homoglyphe parfait du « A »
+  latin, redevient un A — les confusables ne cachent plus rien), un retrait des caractères de contrôle (les
+  <i>zero-width joiners</i> qui découperaient un numéro en fragments invisibles sont éliminés), et un plafond
+  de longueur (4 096 caractères — pour borner le temps de calcul de l'analyseur, donc fermer un vecteur de déni
+  de service). Le crate documente aussi, honnêtement, ce qu'il ne fait <i>pas</i> : la PII encodée en base64
+  n'est pas auto-décodée — un client qui a ce besoin met un pré-processeur en amont, plutôt que de laisser
+  croire à une protection qui n'existerait qu'à moitié.</p>
+
+  <p><b>Deuxième couche, l'analyse</b> : un trait <code>PiiAnalyzer</code> dont l'implémentation de référence
+  appelle l'API HTTP d'un <i>sidecar</i> Presidio (l'analyseur PII open-source de Microsoft) et rend des
+  <i>spans</i> détectés, typés. <b>Troisième couche, la politique</b> : quatre niveaux par tenant —
+  <code>Off</code> (rien), <code>Detect</code> (détecter et signaler, sans modifier), <code>Redact</code>
+  (caviarder les spans), <code>Strict</code> (caviarder, et <b>rejeter</b> si l'analyse est indisponible). Ce
+  dernier point est articulé au mode de défaillance : si le sidecar Presidio ne répond plus, un disjoncteur
+  s'ouvre après trois échecs consécutifs et les appels suivants rendent immédiatement « indisponible ». La
+  décision appartient alors à la politique : les niveaux Off/Detect/Redact sont <i>fail-open</i> (le service
+  continue, sans garantie PII), le niveau Strict est <i>fail-closed</i> (mieux vaut refuser de répondre que
+  laisser fuir). Le compromis disponibilité/conformité n'est pas tranché par le code — il est rendu au
+  client, par tenant.</p>
+
+  <h3>5.2 — Le tour de la passerelle (G9) : détection locale, présentation caviardée, preuve intacte</h3>
+
+  <p>La passerelle réutilise ce crate, mais avec deux inflexions qui changent tout. <b>Première inflexion : la
+  détection est locale.</b> Appeler un sidecar Presidio, c'est une dépendance réseau — incompatible avec un
+  déploiement <code>egress = deny</code>. Le module <code>pii.rs</code> de la passerelle n'utilise donc
+  <i>pas</i> le client Presidio : il embarque ses propres détecteurs <b>regex compilés une fois</b> (adresse
+  électronique, numéro de sécurité sociale américain, carte bancaire de 13 à 19 chiffres avec séparateurs…) et
+  ne réutilise du crate que le <b>redactor pur</b> (la fonction qui remplace des spans dans un texte) et la
+  taxonomie de politiques. Les détecteurs sont volontairement <b>conservateurs</b> — le commentaire le dit :
+  « sur-caviarder est sûr » ; un faux positif coûte un peu de lisibilité, un faux négatif coûte une fuite. La
+  politique se règle par tenant, avec <code>Off</code> par défaut et une valeur d'amorçage par
+  l'environnement (<code>EFE_PII_DEFAULT_POLICY</code>).</p>
+
+  <p><b>Seconde inflexion — la plus importante : on caviarde la <i>présentation</i>, jamais la
+  <i>preuve</i>.</b> Posons le dilemme qu'elle résout. La provenance (Parties 7–8) scelle le hash de la sortie
+  de chaque agent ; la racine engage ces hashs. Si la passerelle caviardait la sortie <i>avant</i> scellement,
+  la preuve porterait sur un texte expurgé — et le caviardage, qui peut évoluer (nouvelles regex, nouvelle
+  politique), rendrait les runs anciens non reproductibles. Si elle caviardait <i>les enregistrements</i> après
+  coup, elle détruirait littéralement la preuve — <code>verify_swarm</code> échouerait, par construction. La
+  solution : le caviardage s'applique aux <b>surfaces de présentation</b> — la sortie renvoyée à l'appelant,
+  les aperçus du dashboard, la copie au repos destinée à l'affichage — tandis que les
+  <code>AgentCallRecord</code> et leurs hashs restent <b>byte-intacts</b>. Le commentaire du module le résume :
+  « <code>verify_swarm</code> re-prouve l'original ».</p>
+
+  <div class="callout key">
+    <p><b>Pourquoi c'est la bonne décomposition.</b> La conformité PII et l'intégrité de preuve protègent
+    contre des risques différents : la première contre l'<i>exposition</i> d'une donnée personnelle, la seconde
+    contre la <i>falsification</i> de l'historique. Les confondre — caviarder dans la preuve — sacrifierait la
+    seconde sans renforcer la première (la donnée a déjà été traitée ; c'est sa <i>diffusion</i> qu'on
+    contrôle). La séparation présentation/preuve donne les deux : ce que les humains voient est expurgé selon
+    la politique du tenant ; ce que l'auditeur re-prouve est l'original exact. L'accès aux enregistrements
+    bruts relève alors du contrôle d'accès (OIDC, rôles), c'est-à-dire du bon outil pour ce risque-là.</p>
+  </div>
+</div>
+
+<!-- §6 DASHBOARD -->
+<div class="wrap page">
+  <h2><span class="num">§6</span> Le dashboard — voir l'essaim sans le toucher</h2>
+
+  <p class="lede">Dernière pièce : rendre <i>visible</i> ce que les onze parties précédentes décrivent — les
+  petits agents qui se passent l'information en parallèle. Le crate <code>efe-swarm-dashboard</code> le fait
+  avec une discipline qui tient en une phrase de sa documentation : « le dashboard est un <b>observateur</b>,
+  pas un acteur ».</p>
+
+  <h3>6.1 — Le branchement : les seams existants, et rien d'autre</h3>
+
+  <p>Le cœur est un <code>DashboardBus</code> auquel on attache un <code>DashboardObserver</code> — une
+  implémentation du hook générique <code>SwarmObserver</code> du SDK (Partie 5–6, §5.1, quatrième temps du
+  Meter). Le branchement tient en une ligne de builder (<code>with_observer(...)</code>), et c'est tout : le
+  dashboard se nourrit exclusivement des <b>seams déjà existants</b> — le <code>WriteSink</code> des écritures
+  (en <i>tee</i> avec la provenance, qui reste byte-identique), l'<code>EventSink</code> du trafic de bus, et
+  les événements de cycle de vie du Meter (départ, appel facturé, scellement, fin). Pas un agent réécrit, pas
+  une topologie modifiée, pas un chemin d'exécution conditionné par « est-on observé ? ». Si l'observateur est
+  absent, le coût est un test d'option ; s'il est présent, l'essaim se comporte à l'identique — c'est vérifiable
+  puisque la provenance scellée est la même dans les deux cas.</p>
+
+  <h3>6.2 — Ce qu'on voit : quatre familles de panneaux</h3>
+
+  <p>Le bus diffuse chaque micro-événement (<code>DashboardEvent</code>) vers quatre familles de panneaux, qui
+  correspondent exactement aux quatre récits des parties précédentes : le <b>trafic inter-agents</b> (qui écrit
+  quoi, qui lit quoi — le substrat de la Partie 3 rendu visible), le <b>consensus</b> (les candidats, les
+  ballots des juges, le verdict — la Partie 4 en direct), la <b>provenance</b> (les enregistrements qui
+  s'accumulent, le scellement, la racine — les Parties 7–8), et le <b>budget</b> (la dépense appel par appel,
+  l'instantané vivant — la Partie 5–6). Un tampon de rejeu (8 192 événements) permet de revoir un run qui vient
+  de s'achever : la méthode <code>replay()</code> rend la séquence complète des événements captés.</p>
+
+  <h3>6.3 — La hiérarchie des vérités, une dernière fois</h3>
+
+  <p>Le flux du dashboard est <b>best-effort et avec perte</b> — assumé, documenté. Sous charge, des événements
+  d'affichage peuvent être abandonnés plutôt que de ralentir l'essaim (les variantes <i>lossy</i> des sinks,
+  Partie 3 §6.2). Est-ce un problème ? Non, et c'est le keystone du projet qui répond, appliqué une dernière
+  fois : le dashboard est un <b>indice</b> — il montre, il oriente, il rassure — mais la <b>vérité</b> durable
+  est ailleurs : dans la chaîne de provenance, scellée et re-prouvable. Perdre un événement d'affichage ne fait
+  perdre ni une donnée (le Blackboard l'a), ni une preuve (la chaîne l'a). Le tableau de bord peut mentir par
+  omission sous charge extrême ; l'audit, jamais. C'est la même séparation indice/vérité qui structure le
+  substrat, la lane fiable, et maintenant l'observabilité — un seul principe, décliné à tous les étages.</p>
+
+  <div class="callout">
+    <p><b>Le démonstrateur.</b> Au-dessus de ce cœur sans HTTP, un exemple de serveur expose les panneaux en
+    direct dans un navigateur — c'est la démo « on voit les nano-agents se passer l'info ». Mais la valeur
+    architecturale est dans le cœur : n'importe quel front (web, TUI, export métriques) peut se brancher sur le
+    même bus, parce que l'observation est découplée de la présentation.</p>
+  </div>
+</div>
+
+<!-- §7 SYNTHESE -->
+<div class="wrap page">
+  <h2><span class="num">§7</span> Synthèse — quatre extensions, zéro compromis</h2>
+
+  <p class="lede">Reprenons le fil conducteur annoncé au plan : chacune de ces quatre capacités étendait le
+  système vers un terrain où la tentation de compromettre les promesses fondatrices était réelle. Voici, en
+  regard, la tentation refusée et le mécanisme qui l'a remplacée.</p>
+
+  <table>
+    <thead><tr><th>Capacité</th><th>La tentation (refusée)</th><th>Le mécanisme retenu</th></tr></thead>
+    <tbody>
+      <tr><td><b>Network</b> (§1)</td><td>mettre une clé d'API « juste côté passerelle »</td><td>routeur OpenAI-compat server-side ; la passerelle ne porte que des <i>noms de modèles</i> (RouterMap, 3 règles) ; tarif Network préservé à travers la traduction ; 501 net sans routeur</td></tr>
+      <tr><td><b>Backends</b> (§2)</td><td>une pile HTTP/TLS crate « plus propre »</td><td>shell-out <code>curl</code> keyless (G10) : zéro dépendance réseau, corps par stdin, aucun en-tête d'auth nulle part ; G2 parse l'autorité de l'URL (loopback uniquement)</td></tr>
+      <tr><td><b>Résilience</b> (§3)</td><td>re-tenter partout, et laisser les tentatives au pont N17</td><td>Retrier <i>seulement</i> sur l'egress ; Breaker au sommet (1 défaillance par appel logique) ; puits N17 imbriqué → <b>une</b> fiche, l'issue réelle, <code>retry_count</code> inscrit</td></tr>
+      <tr><td><b>Production</b> (§4)</td><td>laisser l'exemple dev signer en prod (clé de test publique)</td><td>binaire dédié : <code>EnvHkdf</code> dès que le master est <i>présent</i> (jamais lu, jamais loggé) ; avertissement bruyant sinon ; image sans aucun secret, non-root</td></tr>
+      <tr><td><b>PII</b> (§5)</td><td>caviarder les enregistrements (« plus simple »)</td><td>détection <i>locale</i> (regex, compatible egress=deny) ; caviardage de la <b>présentation</b> seulement — la preuve reste byte-intacte, <code>verify_swarm</code> re-prouve l'original</td></tr>
+      <tr><td><b>Dashboard</b> (§6)</td><td>instrumenter les agents (« pour mieux voir »)</td><td>observateur strict sur les seams existants ; flux lossy assumé — l'indice peut perdre, la vérité (provenance) jamais</td></tr>
+    </tbody>
+  </table>
+
+  <p>Vu d'ensemble, le motif est toujours le même, et c'est lui qui donne sa cohérence à la périphérie du
+  système : <b>chaque extension trace une frontière explicite</b> — les clés au routeur, l'egress au seul
+  chemin configuré, le secret au runtime, la PII à la présentation, l'observation aux seams — <b>et un
+  mécanisme vérifiable tient cette frontière</b>. Jamais une convention, jamais un « il suffit de ne pas » :
+  un type, un garde-fou, un test. C'est ce qui permet d'affirmer, à la fin de cette série de douze parties, que
+  les promesses du projet — keyless côté client, souverain par défaut, prouvable par un tiers — ne sont pas des
+  intentions : ce sont des propriétés du code, chacune adossée à la mécanique qui l'impose.</p>
+</div>
+
+<!-- §A ANNEXE -->
+<div class="wrap page">
+  <h2><span class="num">§A</span> Annexe — surface &amp; variables d'environnement</h2>
+
+  <h3>Surface publique (par section)</h3>
+  <table class="small">
+    <thead><tr><th>Élément</th><th>Rôle</th><th>§</th></tr></thead>
+    <tbody>
+      <tr><td><code>RouterMap</code> (gateway)</td><td><code>resolve(provider)</code> : passthrough qualifié → table famille→modèle → passthrough inconnu ; <code>from_env_str</code> (surcharges)</td><td>§1.2</td></tr>
+      <tr><td><code>resolve_mode</code> (state.rs)</td><td><code>ClientMode → (mode_exécutable, allow_remote, Option&lt;tarif_forcé&gt;)</code> ; Network→SelfHost(routeur) + 5 ¢ préservés ; 501 sans routeur</td><td>§1.3</td></tr>
+      <tr><td><code>LocalBackend</code> (sdk/backend)</td><td><code>complete / descriptor / health</code> ; moteurs <code>OllamaBackend</code> · <code>OpenAiLocalBackend</code></td><td>§2.1</td></tr>
+      <tr><td><code>build_local_backend</code></td><td>G2 (RemoteBackendDenied) · sélection moteur (<code>openai:</code> / <code>/v1</code>) · empilement <code>Breaker(Retrier?(moteur))</code></td><td>§2.3, §3.1</td></tr>
+      <tr><td><code>Breaker</code> · <code>Retrier</code></td><td>5 échecs consécutifs / 15 s de fenêtre · 3 tentatives, 200 ms → 5 s, equal-jitter, puits N17 imbriqué</td><td>§3</td></tr>
+      <tr><td><code>efe-pii</code></td><td><code>canonicalize_for_pii</code> · <code>PiiAnalyzer</code>/<code>PresidioClient</code> · <code>PolicyKind {Off, Detect, Redact, Strict}</code> · disjoncteur 3 échecs</td><td>§5.1</td></tr>
+      <tr><td><code>gateway::pii</code> (G9)</td><td>détecteurs regex locaux (EMAIL · US_SSN · CREDIT_CARD…) · redactor pur réutilisé · politique par tenant (défaut Off)</td><td>§5.2</td></tr>
+      <tr><td><code>efe-swarm-dashboard</code></td><td><code>DashboardBus</code> · <code>DashboardObserver</code> (hook <code>SwarmObserver</code>) · <code>DashboardEvent</code> · <code>replay()</code> (tampon 8 192)</td><td>§6</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Variables d'environnement (binaire de production)</h3>
+  <table class="small">
+    <thead><tr><th>Variable</th><th>Rôle</th></tr></thead>
+    <tbody>
+      <tr><td><code>EFE_NANO_AUDIT_HMAC_MASTER</code></td><td>master de signature (≥ 32 o) → sélectionne <code>EnvHkdf</code> ; absent ⇒ clé de test + avertissement bruyant</td></tr>
+      <tr><td><code>EFE_SWARM_GATEWAY_ADDR</code></td><td>adresse d'écoute (défaut <code>0.0.0.0:8080</code>)</td></tr>
+      <tr><td><code>EFE_SWARM_ROUTER_ENDPOINT</code></td><td>endpoint du routeur Network (OpenAI-compat) ; absent ⇒ Network = 501</td></tr>
+      <tr><td><code>EFE_SWARM_ROUTER_MODELS</code></td><td>surcharges de la table famille→modèle (politique de routage de l'exploitant)</td></tr>
+      <tr><td><code>DATABASE_URL</code></td><td>store Postgres des runs (feature <code>postgres</code>)</td></tr>
+      <tr><td><code>EFE_OIDC_PUBLIC_KEY_PEM</code> · <code>EFE_OIDC_ISSUER_URL</code> · <code>EFE_OIDC_AUDIENCE</code></td><td>vérification JWT ES256 — clé <b>publique</b> uniquement (feature <code>oidc</code>)</td></tr>
+      <tr><td><code>EFE_PII_DEFAULT_POLICY</code></td><td>politique PII d'amorçage par tenant (feature <code>pii</code>, défaut <code>Off</code>)</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Constantes réelles</h3>
+  <table class="small"><tbody>
+    <tr><td>Circuit-breaker</td><td>seuil <b>5</b> échecs consécutifs · fenêtre <b>15 s</b> · succès = réarmement · ouvert ⇒ <code>None</code> sans appel</td></tr>
+    <tr><td>Retrier (egress uniquement)</td><td><b>3</b> tentatives totales · base <b>200 ms</b> doublée · plafond <b>5 s</b> · equal-jitter (nanos d'horloge, sans dép <code>rand</code>)</td></tr>
+    <tr><td>Sonde de santé</td><td><code>curl --max-time 3</code> (joignabilité, aucun secret transmis)</td></tr>
+    <tr><td>PII (crate)</td><td>canonicalisation NFKC · plafond 4 096 caractères · disjoncteur Presidio 3 échecs · base64 non auto-décodé (assumé)</td></tr>
+    <tr><td>Localité (G2)</td><td>acceptés : <code>localhost</code> · <code>::1</code> · <code>127.*</code> — refusés : tout le reste, y compris <code>10.x</code>/<code>192.168.x</code></td></tr>
+    <tr><td>Image Docker</td><td>multi-étages → <code>debian:bookworm-slim</code> + <code>curl</code> + <code>ca-certificates</code> · non-root (uid 10001) · HEALTHCHECK <code>/metrics</code> 15 s · aucune clé en couche</td></tr>
+  </tbody></table>
+  <hr>
+  <p class="small muted" style="text-align:center">EFE — Network · backends · souveraineté · PII/dashboard (Parties 9–12, édition rédigée) · 2026-06-11 ·
+  <i>Étendre les capacités sans entamer les promesses.</i></p>
+</div>
+
+</body>
+</html>

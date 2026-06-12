@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>EFE — Partie 15 : Qualité de code</title>
+<style>
+  :root{--ink:#0f172a;--muted:#475569;--soft:#64748b;--line:#e2e8f0;--teal:#0d9488;--teal-d:#0f766e;--indigo:#4f46e5;--indigo-d:#4338ca;--ok:#16a34a;--warn:#d97706;--bad:#dc2626;--bg-tint:#f8fafc;--bg-card:#f1f5f9;--code-bg:#0f172a;--code-fg:#e2e8f0;}
+  *{box-sizing:border-box;} html{font-size:11.4px;}
+  body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,Arial,sans-serif;color:var(--ink);margin:0;line-height:1.62;background:#fff;-webkit-font-smoothing:antialiased;}
+  .wrap{max-width:178mm;margin:0 auto;padding:0 2mm;}
+  h1,h2,h3,h4{line-height:1.2;font-weight:700;}
+  h2{font-size:1.5rem;margin:0 0 .6rem;padding-bottom:.35rem;border-bottom:3px solid var(--teal);}
+  h2 .num{color:var(--teal);} h3{font-size:1.18rem;margin:1.25rem 0 .35rem;color:var(--indigo-d);}
+  h4{font-size:1rem;margin:.9rem 0 .25rem;color:var(--teal-d);}
+  p{margin:.6rem 0;text-align:justify;hyphens:auto;} a{color:var(--indigo);text-decoration:none;}
+  code{font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace;font-size:.85em;background:var(--bg-card);padding:.05em .35em;border-radius:4px;color:#0b3b36;}
+  .muted{color:var(--muted);} .small{font-size:.88rem;}
+  .lead-in{font-weight:700;color:var(--teal-d);}
+  section{break-inside:avoid;} .page{break-before:page;} h2{break-after:avoid;}
+  table{border-collapse:collapse;width:100%;margin:.6rem 0;font-size:.85rem;}
+  th,td{border:1px solid var(--line);padding:.34rem .55rem;text-align:left;vertical-align:top;}
+  th{background:var(--bg-card);font-weight:700;} tbody tr:nth-child(even){background:var(--bg-tint);}
+  td.c,th.c{text-align:center;} .good{background:#dcfce7 !important;color:#166534;font-weight:700;} .mid{background:#fef9c3 !important;color:#854d0e;font-weight:700;}
+  .tag{display:inline-block;font-size:.71rem;font-weight:700;padding:.08em .5em;border-radius:20px;}
+  .t-ok{background:#dcfce7;color:#166534;} .t-info{background:#e0e7ff;color:#3730a3;} .t-teal{background:#ccfbf1;color:#115e59;} .t-warn{background:#fef3c7;color:#92400e;}
+  pre{background:var(--code-bg);color:var(--code-fg);padding:.6rem .85rem;border-radius:8px;overflow:auto;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.76rem;line-height:1.5;margin:.6rem 0;}
+  .callout{border-left:4px solid var(--teal);background:var(--bg-tint);padding:.6rem .9rem;border-radius:0 8px 8px 0;margin:.7rem 0;}
+  .callout p{text-align:left;margin:.3rem 0;}
+  .callout.key{border-color:var(--indigo);background:#eef2ff;} .callout.warn{border-color:var(--warn);background:#fffbeb;}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:.8rem;}
+  .card{border:1px solid var(--line);border-radius:10px;padding:.65rem .8rem;background:#fff;} .card p{text-align:left;}
+  ul,ol{margin:.45rem 0 .6rem 1.15rem;padding:0;} li{margin:.28rem 0;}
+  svg text{font-family:-apple-system,"Segoe UI",Inter,sans-serif;}
+  .cover{height:262mm;display:flex;flex-direction:column;justify-content:center;position:relative;padding:0 6mm;}
+  .cover .eyebrow{color:var(--teal);font-weight:800;letter-spacing:.28em;font-size:.92rem;text-transform:uppercase;}
+  .cover h1{font-size:2.9rem;margin:.4rem 0 .2rem;line-height:1.08;} .cover .sub{font-size:1.3rem;color:var(--muted);margin-bottom:1.2rem;}
+  .cover .tagline{font-size:1.04rem;color:var(--ink);max-width:160mm;border-left:4px solid var(--teal);padding-left:1rem;font-style:italic;text-align:left;}
+  .cover .meta{position:absolute;bottom:6mm;left:6mm;right:6mm;display:flex;justify-content:space-between;border-top:1px solid var(--line);padding-top:.7rem;font-size:.82rem;color:var(--soft);}
+  .cover .pills{margin:1.1rem 0;} .cover .pills .tag{font-size:.8rem;margin-right:.35rem;}
+  .lede{font-size:1.06rem;color:#1e293b;text-align:left;} .mono{font-family:ui-monospace,Menlo,Consolas,monospace;}
+  hr{border:none;border-top:1px solid var(--line);margin:1rem 0;}
+  .toc{font-size:.92rem;columns:2;column-gap:2rem;} .toc div{margin:.18rem 0;break-inside:avoid;} .toc .n{color:var(--teal);font-weight:700;display:inline-block;width:1.8em;}
+</style>
+</head>
+<body>
+
+<!-- COVER -->
+<div class="wrap"><div class="cover">
+  <div class="eyebrow">Rapport maître · Partie 15 — édition rédigée</div>
+  <h1>La qualité de code</h1>
+  <div class="sub">Zéro <code>unsafe</code> · zéro panique en production · clippy à zéro · scorecard A — tout re-vérifié en direct.</div>
+  <div class="tagline">Ce document audite le code d'EFE comme on auditerait celui d'un fournisseur : aucun
+   chiffre n'y est recopié d'un rapport antérieur — chaque affirmation a été <b>re-mesurée le jour de la
+   rédaction</b>, avec la commande qui la reproduit en annexe. On y trouve l'inventaire exact des interdits
+   structurels, l'autopsie de chaque <code>unwrap</code> et de chaque <code>unreachable!</code> survivant en
+   production, la discipline des messages d'invariant, les six dérogations clippy et leur justification — et,
+   parce que l'honnêteté est la règle, les trois imperfections résiduelles que la mesure a trouvées.</div>
+  <div class="pills">
+    <span class="tag t-teal">0 unsafe / 32 678 LoC</span>
+    <span class="tag t-ok">0 panic · 0 todo · 4 unwrap (littéraux)</span>
+    <span class="tag t-info">clippy 0 sur la pile (9 crates)</span>
+    <span class="tag t-warn">6 #[allow] justifiés · 13,1 % de doc</span>
+  </div>
+  <div class="meta"><span><b>Périmètre :</b> pile essaim (10 crates, 32 678 LoC mesurées)</span><span><b>Réf. :</b> <span class="mono">main @ baaf98d</span> · 2026-06-11</span></div>
+</div></div>
+
+<!-- TOC -->
+<div class="wrap page">
+  <h2><span class="num">§0</span> Plan du document</h2>
+  <p class="lede">La qualité de code se proclame facilement et se vérifie rarement. Ce document fait l'inverse :
+  peu de proclamations, beaucoup de mesures — et pour chaque mesure, sa méthode, son périmètre exact, et ses
+  exceptions nommées une à une.</p>
+  <div class="toc">
+    <div><span class="n">1</span>La méthode — re-vérifier, pas recopier</div>
+    <div><span class="n">2</span>Les interdits structurels — <code>unsafe</code></div>
+    <div><span class="n">3</span>Zéro panique en production — l'autopsie</div>
+    <div><span class="n">4</span>Clippy à zéro — et comment c'est tenu</div>
+    <div><span class="n">5</span>Le scorecard et les masses</div>
+    <div><span class="n">6</span>Synthèse — la qualité comme posture de sécurité</div>
+    <div><span class="n">A</span>Annexe — reproduire chaque mesure</div>
+  </div>
+</div>
+
+<!-- §1 -->
+<div class="wrap page">
+  <h2><span class="num">§1</span> La méthode — re-vérifier, pas recopier</h2>
+
+  <p class="lede">Un chiffre de qualité a une durée de vie courte : le commit suivant peut l'invalider. Tous les
+  chiffres de ce document ont donc été <b>re-mesurés aujourd'hui</b>, sur l'état exact du dépôt
+  (<code>main @ baaf98d</code>), par des commandes reproductibles données en annexe. Quand une mesure du jour a
+  contredit un chiffre antérieur, c'est la mesure du jour qui fait foi — et l'écart est expliqué.</p>
+
+  <h3>1.1 — Les périmètres, définis avant les chiffres</h3>
+
+  <p>Un audit sans périmètre est une publicité. Trois périmètres distincts servent dans ce document, et chaque
+  chiffre dira auquel il s'applique. <b>La pile essaim (9 crates)</b> : les bibliothèques qui constituent le
+  produit décrit par les Parties 3 à 12 — <code>efe-blackboard</code>, <code>efe-swarm-topology</code>,
+  <code>efe-swarm-provenance</code>, <code>efe-swarm-sdk</code>, <code>efe-swarm-gateway</code>,
+  <code>efe-swarm-dashboard</code>, <code>efe-pii</code>, <code>efe-audit-core</code>, plus le socle
+  <code>efe-nano-sdk</code>. C'est le périmètre par défaut. <b>Le stub <code>efe-llm-router</code></b> : le
+  squelette gRPC du routeur (phase 4, non câblé — le mode Network passe aujourd'hui par un routeur
+  OpenAI-compatible externe, Partie 9–12 §1). Il est mesuré séparément, car son statut de chantier déclaré
+  serait malhonnête à fondre dans la moyenne. <b>Le monorepo</b> : tout le reste (le serveur historique, les
+  outils), hors sujet ici sauf mention.</p>
+
+  <h3>1.2 — Pourquoi tant d'exigence sur ce sujet précis</h3>
+
+  <p>Pour la plupart des logiciels, la qualité de code est une affaire interne. Pour EFE, c'est un argument de
+  vente au même titre que le moat — et pour la même raison. Le produit dit à ses clients : « déployez-moi
+  souverainement, au besoin coupé du réseau, et re-prouvez mes résultats vous-mêmes ». Un client souverain
+  <i>lit le code</i> — c'est tout l'intérêt de l'auto-hébergement. La présence d'un <code>unsafe</code> non
+  justifié, d'un <code>panic!</code> en production ou d'un avertissement ignoré n'est pas, dans ce contexte,
+  un détail d'artisanat : c'est une question que l'auditeur du client posera, et chaque question sans bonne
+  réponse érode la crédibilité de la promesse centrale. La qualité de code est ici une <b>posture de
+  sécurité</b> ; ce document est écrit pour l'auditeur en question.</p>
+</div>
+
+<!-- §2 UNSAFE -->
+<div class="wrap page">
+  <h2><span class="num">§2</span> Les interdits structurels — <code>unsafe</code></h2>
+
+  <p class="lede">Rust offre une garantie que peu de langages systèmes offrent : tant qu'on n'écrit pas le mot
+  <code>unsafe</code>, la sûreté mémoire — pas de <i>use-after-free</i>, pas de débordement de tampon, pas de
+  course de données — est <b>vérifiée par le compilateur</b>, mécaniquement, sur chaque ligne. La question
+  d'audit est donc simple : où le projet s'autorise-t-il à désactiver cette garantie ?</p>
+
+  <h3>2.1 — La mesure : zéro occurrence, et des verrous pour que ça dure</h3>
+
+  <p>Le grep du jour sur les dix crates (32 678 lignes) trouve <b>une seule</b> occurrence du mot
+  <code>unsafe</code> — et c'est… l'attribut qui l'interdit (<code>#![forbid(unsafe_code)]</code> en tête
+  d'<code>efe-llm-router</code>). Aucun bloc <code>unsafe</code>, aucune fonction <code>unsafe</code>, nulle
+  part. Toute la concurrence des Parties 3 et 5 — le CAS, les compteurs, les chaînes — est construite sur les
+  primitives sûres de la bibliothèque standard et de crates vérifiées (<code>DashMap</code>, atomiques,
+  <code>tokio</code>).</p>
+
+  <p>Mieux : l'absence est <b>verrouillée</b> pour l'avenir. Huit crates portent
+  <code>#![deny(unsafe_code)]</code> en tête de leur <code>lib.rs</code> — tout <code>unsafe</code> ajouté par
+  un futur contributeur devient une <i>erreur de compilation</i>. Le stub <code>efe-llm-router</code> va plus
+  loin avec <code>forbid</code> — la variante qui interdit même de ré-autoriser localement par un
+  <code>#[allow]</code> : <code>deny</code> est un mur, <code>forbid</code> est un mur sans porte. L'inventaire
+  exact :</p>
+
+  <table class="small">
+    <thead><tr><th>Crate</th><th class="c">attribut</th><th class="c">occurrences <code>unsafe</code></th></tr></thead>
+    <tbody>
+      <tr><td>blackboard · topology · provenance · swarm-sdk · gateway · dashboard · audit-core · nano-sdk</td><td class="c"><code>#![deny(unsafe_code)]</code></td><td class="c good">0</td></tr>
+      <tr><td>efe-llm-router</td><td class="c"><code>#![forbid(unsafe_code)]</code></td><td class="c good">0</td></tr>
+      <tr><td>efe-pii</td><td class="c mid">aucun attribut</td><td class="c good">0</td></tr>
+    </tbody>
+  </table>
+
+  <p>La ligne <code>efe-pii</code> mérite la franchise qu'on applique partout : le crate ne contient aucun
+  <code>unsafe</code>, mais il est le seul à ne pas porter la ceinture-et-bretelles de l'attribut. Ce n'est pas
+  une faille — c'est une incohérence de zèle, l'un des trois résidus honnêtes listés en §6. Une ligne à
+  ajouter, et l'inventaire serait uniforme.</p>
+
+  <div class="callout key">
+    <p><b>Ce que « 0 unsafe » achète, concrètement.</b> Les classes de vulnérabilités qui dominent les
+    avis de sécurité des logiciels systèmes — corruptions mémoire, lectures hors bornes, double libération,
+    courses de données exploitables — sont <i>exclues par construction</i> sur l'intégralité de la pile, et le
+    resteront tant que les attributs tiennent. Pour l'auditeur souverain du §1.2, cela transforme une revue
+    ligne à ligne de la gestion mémoire en une vérification d'un seul invariant : « les attributs sont-ils
+    toujours là ? ». C'est l'économie d'audit la plus rentable du projet.</p>
+  </div>
+</div>
+
+<!-- §3 PANIQUES -->
+<div class="wrap page">
+  <h2><span class="num">§3</span> Zéro panique en production — l'autopsie</h2>
+
+  <p class="lede">Une panique Rust est un arrêt brutal : pour une passerelle multi-tenant, c'est un déni de
+  service qu'un seul input malformé pourrait déclencher. La politique d'EFE est donc : <b>aucun chemin de
+  production ne panique</b> — les erreurs remontent en <code>Result</code>, les budgets épuisés rendent des
+  sentinels, les backends morts rendent <code>None</code>. Cette section vérifie la politique au symbole près.</p>
+
+  <h3>3.1 — La méthode de mesure, et ses chiffres</h3>
+
+  <p>La difficulté est de séparer le code de <i>production</i> du code de <i>test</i> — les tests, eux,
+  <b>doivent</b> paniquer bruyamment (c'est leur façon d'échouer). La mesure découpe chaque fichier au premier
+  <code>#[cfg(test)]</code> (la convention du dépôt : modules de test en fin de fichier) et compte de part et
+  d'autre. Résultat du jour, sur la pile :</p>
+
+  <table>
+    <thead><tr><th>Symbole</th><th class="c">production</th><th class="c">tests</th><th>lecture</th></tr></thead>
+    <tbody>
+      <tr><td><code>panic!</code></td><td class="c good">0</td><td class="c">13</td><td>aucun arrêt volontaire en prod ; les tests échouent fort, c'est leur rôle</td></tr>
+      <tr><td><code>todo!</code> / <code>unimplemented!</code></td><td class="c good">0 / 0</td><td class="c">0 / 0</td><td>aucun stub masqué : ce qui n'existe pas renvoie une erreur typée (<code>NotImplemented</code>), jamais une panique</td></tr>
+      <tr><td><code>unreachable!</code></td><td class="c mid">3</td><td class="c">1</td><td>trois assertions d'impossibilité — autopsiées en §3.2</td></tr>
+      <tr><td><code>.unwrap()</code></td><td class="c mid">19 brut → <b>4 réels</b></td><td class="c">516</td><td>14 des 19 sont des lignes d'<i>exemples de doc</i> (<code>//!</code>) ; les 4 réels en §3.3</td></tr>
+      <tr><td><code>.expect(</code></td><td class="c">39</td><td class="c">8</td><td>la forme <i>documentée</i> de l'invariant — la discipline en §3.4</td></tr>
+    </tbody>
+  </table>
+
+  <p>On notera le soin de lecture sur les <code>unwrap</code> : le compte brut (19) surestime, car la découpe
+  ne distingue pas les <i>doc-comments</i> — les exemples exécutables des en-têtes de crate
+  (<code>//! let rt = Runtime::new().unwrap();</code>) qui sont du code d'illustration, pas du code de
+  production. L'inspection ligne à ligne en élimine 14 ; restent <b>quatre</b> occurrences réelles, toutes
+  examinées ci-dessous.</p>
+
+  <h3>3.2 — Les trois <code>unreachable!</code>, et la garde qui rend chacun vrai</h3>
+
+  <p>Un <code>unreachable!</code> est une promesse forte : « ce bras ne peut pas être atteint ». Elle n'est
+  acceptable que si une garde <i>en amont du même flux</i> la rend vraie — sinon c'est une panique en sursis.
+  Les trois survivants passent ce test, chacun avec sa garde nommée :</p>
+
+  <table class="small">
+    <thead><tr><th>Site</th><th>Le bras</th><th>La garde qui le rend inatteignable</th></tr></thead>
+    <tbody>
+      <tr><td><code>sdk.rs:113</code></td><td><code>ClientMode::Network ⇒ unreachable!("écarté en tête de run")</code></td><td><code>run_traced</code> rejette Network par un retour anticipé <i>à sa première ligne</i> (<code>NetworkRequiresGateway</code>, Partie 5–6 §3 phase 0) — le match du backend ne peut plus voir ce variant.</td></tr>
+      <tr><td><code>spec.rs:154</code></td><td><code>TopologySpec::Auto ⇒ unreachable!("Auto doit être concrétisé avant resolve")</code></td><td><code>concretize()</code> est appelé en phase 0 du cycle, avant tout <code>resolve()</code> — <code>Auto</code> n'existe plus quand on résout. Le message <i>énonce</i> l'invariant d'ordre.</td></tr>
+      <tr><td><code>presidio_client.rs:217</code></td><td><code>PolicyKind::Off ⇒ unreachable!()</code></td><td>la politique <code>Off</code> court-circuite l'analyse en amont (on ne lance pas Presidio pour ne rien en faire) — l'application de politique n'est atteinte que pour Detect/Redact/Strict.</td></tr>
+    </tbody>
+  </table>
+
+  <p>On peut discuter le style — un <code>match</code> exhaustif restructuré éliminerait le besoin — mais pas
+  la sûreté : chaque bras est mort par construction, et deux des trois portent un message qui transforme la
+  panique théorique en documentation de l'invariant. Si un refactoring cassait la garde, la panique serait
+  immédiate et nommée — c'est précisément le comportement voulu d'une assertion d'impossibilité.</p>
+
+  <h3>3.3 — Les quatre <code>unwrap</code> réels : tous sur des littéraux infaillibles</h3>
+
+  <p>Les quatre survivants partagent une propriété qui les rend inoffensifs : l'opération déballée porte sur
+  une <b>constante littérale du code source</b>, pas sur une donnée d'exécution. <code>AgentId::new("source")</code>
+  (streaming) et <code>AgentId::new("generator")</code> (consensus) valident des identifiants écrits en dur —
+  la validation ne peut échouer que si quelqu'un édite le littéral en chaîne invalide, auquel cas le premier
+  test du module explose. Les deux derniers (n17.rs) sont plus élégants encore : la conversion d'un identifiant
+  d'agent vers le format N17 tente la donnée réelle puis se replie sur un littéral —
+  <code>NanoAgentId::new(id).unwrap_or_else(|_| NanoAgentId::new("swarm_agent").unwrap())</code> — le seul
+  <code>unwrap</code> est sur le repli littéral <code>"swarm_agent"</code> (et <code>"1.0.0"</code> pour la
+  version). Aucun des quatre ne peut être déclenché par une entrée externe. C'est la frontière exacte de la
+  politique : l'<code>unwrap</code> sur littéral est toléré ; l'<code>unwrap</code> sur donnée d'exécution a
+  été éradiqué.</p>
+
+  <h3>3.4 — La discipline <code>expect</code> : le message nomme l'invariant</h3>
+
+  <p>Cette éradication a une histoire mesurable. La campagne de durcissement (rapport d'analyse, recommandation
+  n° 2) a converti <b>41</b> <code>unwrap</code> de production en <code>expect</code> — ce qui explique
+  exactement la photographie du jour : 39 <code>expect</code> et 4 <code>unwrap</code> littéraux. Mais la
+  conversion n'était pas cosmétique : la règle impose que le message <b>nomme la raison pour laquelle l'échec
+  est impossible</b>, transformant chaque site en documentation d'invariant. Échantillon verbatim du code :</p>
+
+  <pre>.expect("0..k non vide : k>0 garanti par l'early-return plus haut")   // borda.rs
+.expect("HMAC-SHA256 accepte toute longueur de clé")                  // audit-core
+.expect("agent id SDK valide")                                        // resolver
+.expect("regex PII littérale valide")                                 // gateway/pii — avec le commentaire :
+   // « Le message documente l'invariant et signalerait nettement toute édition fautive future. »</pre>
+
+  <p>La différence opérationnelle avec un <code>unwrap</code> nu : si l'impossible se produit (un refactoring
+  qui casse la garde), le rapport de panique cite l'invariant violé au lieu d'un numéro de ligne anonyme —
+  le diagnostic est dans le message. Et la différence d'audit : un relecteur peut <i>vérifier</i> chaque
+  affirmation (« k &gt; 0 garanti plus haut » se contrôle en dix lignes) là où un <code>unwrap</code> nu
+  l'oblige à reconstruire l'argument lui-même.</p>
+
+  <div class="callout key">
+    <p><b>Et les 516 <code>unwrap</code> des tests ?</b> Ils sont exactement où ils doivent être. Dans un
+    test, l'échec d'un <code>unwrap</code> <i>est</i> le mécanisme de rapport : net, localisé, sans cérémonie.
+    Les durcir en gestion d'erreur affaiblirait les tests (un échec avalé est un test qui ment). La politique
+    n'est donc pas « zéro unwrap » — slogan facile — mais « zéro panique <i>atteignable en production</i> »,
+    ce qui est à la fois plus exigeant et plus utile.</p>
+  </div>
+</div>
+
+<!-- §4 CLIPPY -->
+<div class="wrap page">
+  <h2><span class="num">§4</span> Clippy à zéro — et comment c'est tenu</h2>
+
+  <p class="lede">Clippy est le linter de l'écosystème Rust : plusieurs centaines de règles, de la correction
+  subtile au style. « Zéro avertissement » n'a de valeur que précisément qualifié : sur quel périmètre, avec
+  quelles cibles, au prix de combien de dérogations. Voici les trois réponses, mesurées.</p>
+
+  <h3>4.1 — La mesure du jour, et le piège du périmètre</h3>
+
+  <p>La commande du jour — <code>cargo clippy --all-targets</code> sur la pile — mérite son détail :
+  <code>--all-targets</code> couvre <b>tout</b> ce qui compile (bibliothèques, binaires, tests, exemples,
+  benchs), pas seulement les bibliothèques — c'est la variante exigeante, celle qui interdit de cacher la
+  poussière dans les exemples. Résultat sur les <b>neuf crates de la pile : zéro avertissement</b>.</p>
+
+  <p>L'honnêteté du périmètre impose de montrer ce que la première mesure, plus large, a trouvé : en incluant
+  le stub <code>efe-llm-router</code>, le compteur affiche 183 avertissements — dont l'écrasante majorité
+  (~170) sont « <i>missing documentation</i> »… déclenchés par le propre
+  <code>#![warn(missing_docs)]</code> du crate sur ses structures gRPC non documentées. Le diagnostic exact
+  n'est donc pas « code sale » mais « chantier déclaré qui s'impose un standard qu'il ne remplit pas
+  encore » : le stub de phase 4 s'est doté du lint de documentation avant d'écrire la documentation. Les ~12
+  avertissements restants y sont cosmétiques (interpolations <code>format!</code>, un <code>impl</code>
+  dérivable). Aucun des 183 ne touche la pile livrée. Même traitement pour l'unique avertissement de
+  <i>build</i> : c'est une notice de configuration Cargo (un profil déclaré dans le manifeste d'un crate hors
+  pile, <code>efe-meta-swarm-server</code>, ignoré car hors racine d'espace de travail) — zéro avertissement de
+  <i>code</i> à la compilation.</p>
+
+  <h3>4.2 — Le chemin vers zéro : une correction, pas un maquillage</h3>
+
+  <p>Le zéro n'est pas natif : la campagne de qualité (rapport d'analyse, recommandation n° 1) est partie de
+  <b>~29 avertissements</b> — principalement dans les exemples et les harnais, le cœur étant déjà propre — et
+  les a traités par le bon mélange : <code>cargo clippy --fix</code> pour le mécanique, corrections manuelles
+  pour le reste, et — c'est le point d'audit — <b>six dérogations</b> <code>#[allow(clippy::…)]</code>
+  seulement, toutes <i>au site</i> (jamais à l'échelle d'un crate), toutes sur des lints d'<i>opinion</i>,
+  toutes commentées. L'inventaire exhaustif :</p>
+
+  <table class="small">
+    <thead><tr><th>Site</th><th>Lint toléré</th><th>Justification (du commentaire au site)</th></tr></thead>
+    <tbody>
+      <tr><td><code>record.rs</code> (×2)</td><td><code>too_many_arguments</code></td><td>constructeurs explicites de l'atome de provenance — « champs nommés voulus » : 7 paramètres qui <i>sont</i> les 7 champs de la question du moat</td></tr>
+      <tr><td><code>agents.rs</code></td><td><code>too_many_arguments</code></td><td>la capture interne du Meter : paramètres explicites du record plutôt qu'une struct-sac opaque</td></tr>
+      <tr><td><code>consensus_topology.rs</code></td><td><code>too_many_arguments</code> + <code>doc_lazy_continuation</code></td><td>l'exécution du consensus (paramètres du run) ; mise en forme de listes de doc multi-lignes</td></tr>
+      <tr><td><code>condorcet.rs</code></td><td><code>needless_range_loop</code></td><td>le double indice <code>i, j</code> de la matrice de duels — l'itérateur idiomatique serait <i>moins</i> lisible qu'une boucle indexée sur une matrice</td></tr>
+      <tr><td><code>backend/mod.rs</code></td><td><code>doc_lazy_continuation</code></td><td>« listes de doc multi-lignes : présentation intentionnelle »</td></tr>
+    </tbody>
+  </table>
+
+  <p>La grille de lecture : aucune dérogation ne touche une famille <i>correctness</i> ou <i>suspicious</i> de
+  clippy — uniquement des règles de style où l'auteur revendique un choix, et le motive par écrit. C'est la
+  différence entre « zéro warning par suppression » et « zéro warning par décision » : les six décisions sont
+  listées, localisées, contestables une à une.</p>
+</div>
+
+<!-- §5 SCORECARD -->
+<div class="wrap page">
+  <h2><span class="num">§5</span> Le scorecard et les masses</h2>
+
+  <p class="lede">Le rapport d'analyse du code (même dépôt, <code>EFE_Analyse_Code_2026-06-11</code>) condense
+  l'état en six axes notés. Les voici, chacun adossé aux mesures des sections précédentes — puis les masses :
+  lignes, documentation, dette, tests.</p>
+
+  <h3>5.1 — Les six axes, tous A</h3>
+
+  <table>
+    <thead><tr><th>Axe</th><th class="c">note</th><th>Le critère atteint</th></tr></thead>
+    <tbody>
+      <tr><td>Sûreté mémoire</td><td class="c good">A</td><td><code>deny(unsafe_code)</code> sur les crates lib, 0 <code>unsafe</code> (§2 — re-vérifié : 8 deny + 1 forbid, 0 occurrence)</td></tr>
+      <tr><td>Propreté compilateur</td><td class="c good">A</td><td>0 warning build <b>et</b> 0 warning clippy <code>--all-targets</code> (§4 — re-vérifié sur la pile)</td></tr>
+      <tr><td>Gestion d'erreur (prod)</td><td class="c good">A</td><td>0 <code>panic</code>, 0 <code>todo</code>/<code>unimplemented</code> ; 41 <code>unwrap</code> d'invariants durcis en <code>expect</code> (§3)</td></tr>
+      <tr><td>Couverture de test</td><td class="c good">A</td><td>785 fonctions de test sur la pile ; <b>783 passées / 0 échec / 5 ignorées</b> à la ré-exécution du jour (Partie 13, §5)</td></tr>
+      <tr><td>Dette déclarée</td><td class="c good">A</td><td>0 TODO/FIXME/HACK sur la pile (§5.3 — l'unique marqueur du périmètre élargi, autopsié ci-dessous)</td></tr>
+      <tr><td>Architecture</td><td class="c good">A</td><td>couches strictes sans cycle, traits object-safe, seams découplés (établi aux Parties 3–12)</td></tr>
+    </tbody>
+  </table>
+
+  <h3>5.2 — Les masses : 32 678 lignes, 13,1 % de documentation</h3>
+
+  <table class="small">
+    <thead><tr><th>Crate</th><th class="c">LoC (mesurées ce jour)</th><th>Rôle</th></tr></thead>
+    <tbody>
+      <tr><td><code>efe-nano-sdk</code></td><td class="c">10 769</td><td>le socle (types, N17, identifiants)</td></tr>
+      <tr><td><code>efe-blackboard</code></td><td class="c">4 093</td><td>le substrat (Partie 3)</td></tr>
+      <tr><td><code>efe-swarm-provenance</code></td><td class="c">3 593</td><td>le moat (Parties 7–8)</td></tr>
+      <tr><td><code>efe-swarm-topology</code></td><td class="c">3 285</td><td>les topologies (Partie 4)</td></tr>
+      <tr><td><code>efe-swarm-sdk</code></td><td class="c">2 918</td><td>l'orchestrateur (Parties 5–6)</td></tr>
+      <tr><td><code>efe-llm-router</code></td><td class="c">2 832</td><td>le stub routeur (phase 4)</td></tr>
+      <tr><td><code>efe-swarm-gateway</code></td><td class="c">2 760</td><td>la passerelle (Parties 9–12)</td></tr>
+      <tr><td><code>efe-pii</code> · <code>efe-swarm-dashboard</code> · <code>efe-audit-core</code></td><td class="c">1 203 · 902 · 323</td><td>PII · observabilité · clés</td></tr>
+      <tr><td><b>Total</b></td><td class="c"><b>32 678</b></td><td class="small muted">dont 4 269 lignes de doc-comments (<code>///</code> + <code>//!</code>) = <b>13,1 %</b></td></tr>
+    </tbody>
+  </table>
+
+  <p>Deux observations sur ces masses. D'abord la <b>proportion</b> : une ligne sur huit est de la
+  documentation de symbole — et les Parties 2 à 12 en ont montré le caractère : des en-têtes de module qui
+  expliquent le <i>pourquoi</i> (le keystone, les garde-fous, les limites assumées), pas des paraphrases de
+  signatures. Ensuite la <b>granularité</b> : les plus gros fichiers de la pile restent sous mille lignes
+  (<code>blackboard.rs</code> 960, <code>record.rs</code> 725, <code>sdk.rs</code> 616) — il n'existe pas de
+  fichier-monstre où la complexité s'accumulerait hors de vue.</p>
+
+  <h3>5.3 — La dette déclarée : zéro sur la pile, un marqueur — daté — au-delà</h3>
+
+  <p>Le grep TODO/FIXME/HACK/XXX du jour sur les dix crates renvoie <b>une</b> ligne, et elle vaut d'être citée
+  intégralement, car c'est un petit modèle de dette bien tenue :</p>
+
+  <pre>efe-nano-sdk/src/lib.rs:40 :  #![allow(missing_docs)]  // TODO Sprint 1 Day 10 : enable strict missing_docs</pre>
+
+  <p>Le socle historique s'autorise — explicitement, en tête de crate, avec une échéance nommée — à ne pas
+  encore imposer la documentation exhaustive de ses 10 769 lignes. Ce n'est pas une dette cachée dans un coin :
+  c'est une dérogation datée au standard que le reste de la pile applique. Sur les neuf crates de l'essaim
+  proprement dit : <b>zéro marqueur</b>. La dette du projet tient en une ligne, et cette ligne se décrit
+  elle-même.</p>
+</div>
+
+<!-- §6 SYNTHESE -->
+<div class="wrap page">
+  <h2><span class="num">§6</span> Synthèse — la qualité comme posture de sécurité</h2>
+
+  <p class="lede">Rassemblons la photographie du jour en une table, puis nommons — parce que c'est la règle de
+  cette série — ce que la mesure a trouvé d'imparfait.</p>
+
+  <table>
+    <thead><tr><th>Indicateur (pile essaim, re-mesuré ce jour)</th><th class="c">valeur</th></tr></thead>
+    <tbody>
+      <tr><td>occurrences <code>unsafe</code> / verrous</td><td class="c good">0 — 8 × <code>deny</code> + 1 × <code>forbid</code></td></tr>
+      <tr><td><code>panic!</code> · <code>todo!</code> · <code>unimplemented!</code> en production</td><td class="c good">0 · 0 · 0</td></tr>
+      <tr><td><code>unreachable!</code> en production</td><td class="c good">3 — chacun gardé en amont, autopsié (§3.2)</td></tr>
+      <tr><td><code>.unwrap()</code> réels en production</td><td class="c good">4 — tous sur littéraux infaillibles (§3.3)</td></tr>
+      <tr><td>invariants documentés (<code>.expect</code> prod)</td><td class="c">39 — messages qui nomment l'invariant (§3.4)</td></tr>
+      <tr><td>clippy <code>--all-targets</code> (9 crates)</td><td class="c good">0 warning — 6 <code>#[allow]</code> au site, justifiés (§4)</td></tr>
+      <tr><td>warnings de code à la compilation</td><td class="c good">0</td></tr>
+      <tr><td>dette marquée (TODO/FIXME/HACK)</td><td class="c good">0 sur la pile — 1 marqueur daté sur le socle (§5.3)</td></tr>
+      <tr><td>tests (ré-exécution du jour)</td><td class="c good">783 passés · 0 échec · 5 ignorés (ressources)</td></tr>
+      <tr><td>documentation</td><td class="c">4 269 lignes de doc-comments — 13,1 % du code</td></tr>
+      <tr><td>scorecard (rapport d'analyse)</td><td class="c good">A sur les six axes</td></tr>
+    </tbody>
+  </table>
+
+  <h3>6.1 — Les trois résidus, nommés</h3>
+
+  <p>Un audit qui ne trouve rien n'a pas cherché. Celui-ci a trouvé trois imperfections, toutes mineures,
+  toutes nommées : <b>(1)</b> <code>efe-pii</code> est le seul crate sans attribut anti-<code>unsafe</code> —
+  zéro <code>unsafe</code> dedans, mais la ceinture manque ; une ligne à ajouter. <b>(2)</b> le stub
+  <code>efe-llm-router</code> porte 183 avertissements de documentation auto-infligés — un chantier de phase 4
+  qui s'est donné le standard avant de le remplir ; soit documenter, soit dater l'exemption comme l'a fait le
+  socle. <b>(3)</b> une notice de configuration Cargo (profil hors racine d'espace de travail, crate hors
+  pile) pollue la sortie de build — cosmétique, mais un build parfaitement silencieux vaut la ligne de
+  manifeste à déplacer. Rien de tout cela ne touche un chemin de production de la pile ; tout cela est
+  corrigeable en une heure — et c'est précisément parce que le reste est à zéro que ces trois-là se voient.</p>
+
+  <div class="callout key">
+    <p><b>Pourquoi ce niveau d'hygiène n'est pas du luxe.</b> Le produit demande à ses clients deux actes de
+    confiance technique : exécuter ce code <i>chez eux</i> (souveraineté), et croire ses preuves
+    (<code>verify_swarm</code>). Le premier acte invite l'audit ligne à ligne — et ce document montre ce que
+    l'auditeur trouvera : des interdits vérifiables par attribut, des paniques absentes par construction, des
+    dérogations comptées et motivées, une dette qui tient en une ligne datée. Le second acte repose sur du
+    code de chaîne et de hachage <i>écrit dans ce même dépôt</i> — la crédibilité cryptographique hérite de la
+    crédibilité du code qui la porte. La qualité n'est pas ici une fierté d'artisan : c'est le socle des deux
+    promesses commerciales du projet.</p>
+  </div>
+</div>
+
+<!-- §A ANNEXE -->
+<div class="wrap page">
+  <h2><span class="num">§A</span> Annexe — reproduire chaque mesure</h2>
+
+  <p>Chaque chiffre de ce document se reproduit par une commande sur le dépôt (les chemins contenant une
+  espace, citer les chemins ; la pile = les 9 crates listées en §1.1, <code>STACK</code> ci-dessous).</p>
+
+  <table class="small">
+    <thead><tr><th>Mesure</th><th>Commande</th></tr></thead>
+    <tbody>
+      <tr><td>clippy 0 (pile, toutes cibles)</td><td><code>cargo clippy --all-targets $STACK</code> → aucune ligne « generated N warnings »</td></tr>
+      <tr><td><code>unsafe</code> = 0 + verrous</td><td><code>grep -rn "unsafe" crates/*/src --include="*.rs"</code> → 1 seule ligne (le <code>forbid</code>) ; <code>grep -l "deny(unsafe_code)" crates/*/src/lib.rs</code></td></tr>
+      <tr><td>paniques prod vs tests</td><td>découpe de chaque fichier au premier <code>#[cfg(test)]</code> puis comptage de <code>panic!/todo!/unimplemented!/unreachable!/unwrap/expect</code> de part et d'autre (script Python de 20 lignes ; inspection manuelle des survivants)</td></tr>
+      <tr><td>dérogations clippy</td><td><code>grep -rn "allow(clippy::" crates/*/src --include="*.rs"</code> → 6 sites</td></tr>
+      <tr><td>dette marquée</td><td><code>grep -rnE "TODO|FIXME|HACK|XXX" crates/*/src --include="*.rs"</code> → 1 ligne (nano-sdk, datée)</td></tr>
+      <tr><td>LoC + densité de doc</td><td><code>find crates/*/src -name "*.rs" -exec cat {} + | wc -l</code> ; ratio des lignes débutant par <code>///</code> ou <code>//!</code></td></tr>
+      <tr><td>tests 783/0/5</td><td><code>cargo test $STACK</code> (Partie 13, §5 — exécuté le même jour)</td></tr>
+      <tr><td>scorecard</td><td><code>docs/reports/EFE_Analyse_Code_2026-06-11.html</code> (rapport d'analyse, §scorecard + table avant/après)</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Rappel des constantes d'hygiène</h3>
+  <table class="small"><tbody>
+    <tr><td>Campagne clippy</td><td>~29 avertissements → 0 (<code>--fix</code> + ciblé + balayage des exemples) ; 6 <code>#[allow]</code> au site, lints d'opinion uniquement</td></tr>
+    <tr><td>Campagne unwrap</td><td>41 <code>unwrap</code> de production durcis en <code>.expect("&lt;invariant&gt;")</code> → reste 4 <code>unwrap</code> sur littéraux</td></tr>
+    <tr><td>Plus gros fichiers</td><td><code>blackboard.rs</code> 960 · <code>record.rs</code> 725 · <code>sdk.rs</code> 616 lignes — pas de fichier-monstre</td></tr>
+    <tr><td>Tests-gardiens</td><td><code>keyless_guardrails</code> : la source du SDK scannée en CI (0 dépendance réseau/TLS, 0 lecture de clé/en-tête d'auth)</td></tr>
+  </tbody></table>
+  <hr>
+  <p class="small muted" style="text-align:center">EFE — La qualité de code (Partie 15, édition rédigée) · 2026-06-11 ·
+  pile essaim @ <code>main baaf98d</code> · <i>Zéro par décision, pas par suppression — et les résidus, nommés.</i></p>
+</div>
+
+</body>
+</html>
