@@ -5,7 +5,7 @@
 //! personne ne révise sa copie à la lumière de celle du voisin. Ce module ajoute la
 //! cinquième famille : des agents qui **se lisent et s'adaptent**, par tours.
 //!
-//! ## Statut & gates (ADR-SWARM-003 · ADR-SWARM-005)
+//! ## Statut & gates (ADR-SWARM-003 · 005 — levée actée par **ADR-SWARM-013**)
 //! Ces topologies étaient **gatées à 0 LOC** (priors défavorables chiffrés : Lot 1
 //! Δ = −0,4 % ± 3,1 % ; S3 one-shot 0,716/0,871 ≈ oracle). La décision de build a été
 //! prise par le propriétaire du projet ; la discipline est honorée *dans* le build :

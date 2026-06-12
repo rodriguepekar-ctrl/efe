@@ -182,3 +182,40 @@ async fn influence_graph_is_sealed_as_reads_and_dag_checked() {
     );
 }
 
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn fleet_stage_serves_as_refiner_fallback() {
+    // Un nom NON réservé en keyless tombe sur l'adaptation d'une Stage de flotte
+    // (StageRefiner) : "trim" reçoit {task, own, peers} et rend sa 1ʳᵉ sortie —
+    // identique pour tous → l'Agreement converge au tour 1. Le chemin de repli
+    // est exercé de bout en bout, preuve comprise.
+    let swarm = Swarm::keyless();
+    let spec = TopologySpec::Gossip {
+        refiner: "trim".into(), // stage de flotte, pas un builtin
+        k: 3,
+        max_rounds: 4,
+        epsilon: 0.0,
+        metric: ConvergenceMetric::Agreement,
+    };
+    let out = swarm
+        .run_traced(json!({ "text": "  x  " }), spec, Budget::cents(50))
+        .await
+        .expect("fallback StageRefiner");
+    assert!(out.run.provenance.verified);
+    assert_eq!(out.run.output.pointer("/gossip/converged"), Some(&json!(true)));
+    assert_eq!(out.run.output.pointer("/gossip/rounds"), Some(&json!(1)), "identiques dès le tour 0");
+    assert_eq!(out.run.accounting.agents_used, 3);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn unknown_refiner_is_a_clean_typed_error() {
+    let swarm = Swarm::keyless();
+    let spec = TopologySpec::gossip("definitely_not_an_agent", 3, 2, 0.1);
+    let err = swarm
+        .run_traced(json!({}), spec, Budget::cents(50))
+        .await
+        .expect_err("nom inconnu → erreur nette");
+    let msg = format!("{err}");
+    assert!(msg.contains("refiner") && msg.contains("definitely_not_an_agent"),
+            "l'erreur nomme le rôle ET le nom : {msg}");
+}
+

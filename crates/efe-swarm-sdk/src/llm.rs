@@ -199,3 +199,56 @@ impl Judge for LlmJudge {
 pub(crate) fn llm_judge(backend: Arc<dyn LocalBackend>, instruction: String) -> Arc<dyn Judge> {
     Arc::new(LlmJudge { backend, instruction })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::backend::{BackendDescriptor, BackendKind};
+    use serde_json::json;
+    use std::sync::Mutex;
+
+    /// Backend SCRIPTÉ : rejoue une réponse fixe et capture les prompts émis —
+    /// l'unité Mode C sans réseau (le motif des mocks de `backend/mod.rs`).
+    struct Scripted {
+        reply: String,
+        prompts: Mutex<Vec<String>>,
+    }
+    #[async_trait]
+    impl LocalBackend for Scripted {
+        async fn complete(&self, prompt: &str, _p: SamplingParams) -> Option<String> {
+            self.prompts.lock().unwrap().push(prompt.to_string());
+            Some(self.reply.clone())
+        }
+        fn descriptor(&self) -> BackendDescriptor {
+            BackendDescriptor { kind: BackendKind::OpenAiLocal, model: "mock".into(), endpoint: "mock".into() }
+        }
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn llm_refiner_anti_echo_prompt_and_numeric_parse() {
+        let be = Arc::new(Scripted { reply: "42".into(), prompts: Mutex::new(Vec::new()) });
+        let r = llm_refiner(be.clone(), "Estimate the value.".into());
+
+        // Tour 0 : pas d'état propre, pas de pairs — le refiner EST le générateur.
+        let task = json!({ "text": "t", "gossip": { "round": 0, "agent_index": 1 } });
+        let out = r.refine(&task, None, &[]).await;
+        assert_eq!(out, json!({ "value": 42.0 }), "réponse numérique parsée en valeur");
+
+        // Tour 1 : le prompt porte SON estimation, LES pairs, et la consigne
+        // anti-chambre-d'écho (réviser seulement si convaincu — archi §7).
+        let own = json!({ "value": 40.0 });
+        let peers = vec![json!({ "value": 50.0 }), json!({ "value": 44.0 })];
+        let _ = r.refine(&task, Some(&own), &peers).await;
+
+        let prompts = be.prompts.lock().unwrap();
+        assert!(prompts[0].contains("none"), "tour 0 : estimation propre absente, dite");
+        let p1 = &prompts[1];
+        assert!(p1.contains("40"), "l'estimation propre est dans le prompt");
+        assert!(p1.contains("50") && p1.contains("44"), "les pairs sont dans le prompt");
+        assert!(
+            p1.contains("Revise ONLY if the peers convince you"),
+            "la consigne anti-écho est présente : {p1}"
+        );
+    }
+}
+
