@@ -9,14 +9,17 @@
 use std::sync::Arc;
 
 use efe_nano_sdk::AgentId;
-use efe_swarm_topology::{AgentFleet, Decomposer, Generator, Judge, Merger, Solver, Stage, Verifier};
+use efe_swarm_topology::{
+    builtin_arguers, builtin_refiner, AgentFleet, Decomposer, Generator, Judge, Merger, Refiner,
+    Solver, Stage, StageRefiner, Verifier,
+};
 
 use crate::agents::{
-    meter_decomposer, meter_gen, meter_judge, meter_merger, meter_solver, meter_stage, Meter,
-    StageSolver,
+    meter_decomposer, meter_gen, meter_judge, meter_merger, meter_refiner, meter_solver,
+    meter_stage, Meter, StageSolver,
 };
 use crate::backend::LocalBackend;
-use crate::llm::{llm_decomposer, llm_gen, llm_judge, llm_merger, llm_solver, llm_stage};
+use crate::llm::{llm_decomposer, llm_gen, llm_judge, llm_merger, llm_refiner, llm_solver, llm_stage};
 use crate::result::SwarmError;
 
 pub(crate) struct Resolver<'a> {
@@ -77,6 +80,33 @@ impl Resolver<'_> {
             None => self.fleet.merger(name).ok_or_else(|| SwarmError::UnknownAgent { role: "merger", name: name.to_string() })?,
         };
         Ok(meter_merger(m, self.meter.clone(), aid(id)))
+    }
+
+
+    /// **T4 Gossip** : résout un refiner. Mode C = instruction LLM ; Mode A = refiner
+    /// intégré réservé (`mean_pull`, `median_pull`, `hold`, `majority_adopt`), sinon
+    /// adaptation d'une `Stage` de flotte (l'étage reçoit `{task, own, peers}`).
+    pub fn refiner(&self, name: &str, id: &str) -> Result<Arc<dyn Refiner>, SwarmError> {
+        let r: Arc<dyn Refiner> = match &self.backend {
+            Some(b) => llm_refiner(b.clone(), name.to_string()),
+            None => match builtin_refiner(name) {
+                Some(r) => r,
+                None => Arc::new(StageRefiner(self.fleet.stage(name).ok_or_else(|| {
+                    SwarmError::UnknownAgent { role: "refiner", name: name.to_string() }
+                })?)),
+            },
+        };
+        Ok(meter_refiner(r, self.meter.clone(), aid(id)))
+    }
+
+    /// **Debate** : résout la paire (PRO, CONTRA). Mode C = instructions LLM ;
+    /// Mode A = arguers déterministes intégrés (les noms servent d'étiquettes).
+    pub fn arguers(&self, pro: &str, contra: &str) -> (Arc<dyn Generator>, Arc<dyn Generator>) {
+        let (p, c): (Arc<dyn Generator>, Arc<dyn Generator>) = match &self.backend {
+            Some(b) => (llm_gen(b.clone(), pro.to_string()), llm_gen(b.clone(), contra.to_string())),
+            None => builtin_arguers(false),
+        };
+        (meter_gen(p, self.meter.clone(), aid("pro")), meter_gen(c, self.meter.clone(), aid("contra")))
     }
 
     pub fn judge(&self, name: &str, id: &str) -> Result<Arc<dyn Judge>, SwarmError> {

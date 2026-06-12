@@ -6,8 +6,8 @@
 use std::sync::Arc;
 
 use efe_swarm_topology::{
-    ConsensusTopology, GenerateVerify, GvTopology, HierTopology, Hierarchical, Pattern, Pipeline,
-    PipelineTopology, Topology,
+    ConsensusTopology, ConvergenceMetric, DebateTopology, GenerateVerify, GossipTopology,
+    GvTopology, HierTopology, Hierarchical, Pattern, Pipeline, PipelineTopology, Topology,
 };
 use serde_json::Value;
 
@@ -26,11 +26,56 @@ pub enum TopologySpec {
     Hierarchical { decomposer: String, solver: String, merger: String },
     /// **T-Consensus** : K générateurs + panel de juges → Vote/Borda/Condorcet.
     Consensus { generator: String, judges: Vec<String>, k: usize, pattern: Pattern, escalate: bool },
+    /// **T4 — Gossip** (itératif, ADR-003) : K refiners × tours, arrêt à ε ou r_max.
+    /// L'influence mutuelle — chaque agent lit les pairs du tour précédent et révise.
+    Gossip { refiner: String, k: usize, max_rounds: usize, epsilon: f64, metric: ConvergenceMetric },
+    /// **Debate** (itératif, ADR-005) : consensus à DOSSIER contradictoire — PRO/CONTRA
+    /// argumentent sur r tours, le jury note sur dossier, l'agrégation est inchangée.
+    /// `rounds = 0` dégrade en consensus pur (la borne basse budgétaire).
+    Debate {
+        generator: String,
+        judges: Vec<String>,
+        pro: String,
+        contra: String,
+        k: usize,
+        pattern: Pattern,
+        rounds: usize,
+        /// Escalade à trois étages (Vote → jury → débat) — le débat n'est payé que
+        /// sur les instances où l'essaim, déjà escaladé, hésite encore.
+        escalate: bool,
+    },
     /// **Auto** : choisit selon la tâche (vérifiable → T1 ; sinon défaut sûr).
+    /// Les topologies ITÉRATIVES ne sont JAMAIS auto-sélectionnées (opt-in explicite).
     Auto,
 }
 
 impl TopologySpec {
+    /// Raccourci : un gossip Variance standard (mean_pull-compatible).
+    pub fn gossip(refiner: &str, k: usize, max_rounds: usize, epsilon: f64) -> Self {
+        TopologySpec::Gossip {
+            refiner: refiner.into(),
+            k,
+            max_rounds,
+            epsilon,
+            metric: ConvergenceMetric::Variance,
+        }
+    }
+
+    /// Raccourci : un débat Borda ESCALADÉ (Vote → jury → débat) avec des
+    /// instructions PRO/CONTRA génériques — le débat n'est payé qu'à l'hésitation.
+    pub fn debate(generator: &str, judges: &[&str], k: usize, rounds: usize) -> Self {
+        TopologySpec::Debate {
+            generator: generator.into(),
+            judges: judges.iter().map(|s| s.to_string()).collect(),
+            pro: "Argue FOR the candidate: cite its strongest evidence.".into(),
+            contra: "Argue AGAINST the candidate: cite its weakest point.".into(),
+            k,
+            pattern: Pattern::Borda,
+            rounds,
+            escalate: true,
+        }
+    }
+
     /// Raccourci : un consensus Borda standard.
     pub fn consensus(generator: &str, judges: &[&str], k: usize) -> Self {
         TopologySpec::Consensus {
@@ -79,6 +124,13 @@ impl TopologySpec {
             TopologySpec::Pipeline { stages } => stages.len().max(1),
             TopologySpec::Hierarchical { .. } => 1 + assumed_subtasks + 1,
             TopologySpec::Consensus { k, judges, .. } => (*k).max(1) + judges.len(),
+            // I-IT4 : le multi-tours est compté AVANT le premier appel.
+            TopologySpec::Gossip { k, max_rounds, .. } => (*k).max(1) * (*max_rounds).max(1),
+            TopologySpec::Debate { k, judges, rounds, escalate, .. } => {
+                // pire cas escaladé : K + jury① + 2K×r + jury② (les DEUX jurys).
+                let jury_passes = if *escalate { 2 } else { 1 };
+                (*k).max(1) + 2 * (*k).max(1) * rounds + judges.len() * jury_passes
+            }
             TopologySpec::Auto => assumed_subtasks,
         }
     }
@@ -102,6 +154,23 @@ impl TopologySpec {
                 let remaining = budget_calls.saturating_sub(k).max(1);
                 let judges: Vec<String> = judges.into_iter().take(remaining).collect();
                 TopologySpec::Consensus { generator, judges, k, pattern, escalate }
+            }
+            // Itératif : on rogne les TOURS d'abord (perdre un tour coûte moins que
+            // perdre des voix — l'enseignement S1), puis K / les juges.
+            TopologySpec::Gossip { refiner, k, max_rounds, epsilon, metric } => {
+                let k2 = k.min(budget_calls.max(1)).max(1);
+                let r2 = (budget_calls / k2).clamp(1, max_rounds.max(1));
+                TopologySpec::Gossip { refiner, k: k2, max_rounds: r2, epsilon, metric }
+            }
+            TopologySpec::Debate { generator, judges, pro, contra, k, pattern, rounds, escalate } => {
+                let jury_passes = if escalate { 2 } else { 1 };
+                let k2 = k.min(budget_calls.saturating_sub(1).max(1)).max(1);
+                let after_base = budget_calls.saturating_sub(k2);
+                let judges2: Vec<String> =
+                    judges.into_iter().take((after_base / jury_passes).max(1)).collect();
+                let left = after_base.saturating_sub(judges2.len() * jury_passes);
+                let rounds2 = if k2 > 0 { (left / (2 * k2)).min(rounds) } else { 0 };
+                TopologySpec::Debate { generator, judges: judges2, pro, contra, k: k2, pattern, rounds: rounds2, escalate }
             }
             other => other,
         }
@@ -148,6 +217,27 @@ impl TopologySpec {
                 let mut topo = ConsensusTopology::new(gen, k.max(1), jv).with_pattern(pattern);
                 if escalate {
                     topo = topo.with_escalation(0.9, pattern);
+                }
+                Ok(Box::new(topo))
+            }
+            TopologySpec::Gossip { refiner, k, max_rounds, epsilon, metric } => {
+                // agent_id "refiner" → matche les écritures /gossip/<r>/<i> (ancrage).
+                let rf = r.refiner(&refiner, "refiner")?;
+                Ok(Box::new(GossipTopology::new(rf, k.max(1), max_rounds.max(1), epsilon, metric)))
+            }
+            TopologySpec::Debate { generator, judges, pro, contra, k, pattern, rounds, escalate } => {
+                if judges.is_empty() {
+                    return Err(SwarmError::EmptySpec("debate sans juge"));
+                }
+                let gen = r.generator(&generator, "generator")?;
+                let mut jv = Vec::with_capacity(judges.len());
+                for (i, name) in judges.iter().enumerate() {
+                    jv.push(r.judge(name, &format!("judge_{i:03}"))?);
+                }
+                let (p, c) = r.arguers(&pro, &contra);
+                let mut topo = DebateTopology::new(gen, k.max(1), p, c, jv, pattern, rounds);
+                if escalate {
+                    topo = topo.with_escalation(0.9, 0.9); // parité consensus (escalade 0.9)
                 }
                 Ok(Box::new(topo))
             }

@@ -14,7 +14,7 @@ use std::sync::{Arc, Mutex};
 use async_trait::async_trait;
 use efe_nano_sdk::{AgentId, ProvenanceId, SwarmId, TenantId};
 use efe_swarm_provenance::{AgentKind, AgentRole, CallCapture, ProvenanceRecorder};
-use efe_swarm_topology::{Decomposer, Generator, Judge, Merger, Solver, Stage};
+use efe_swarm_topology::{Decomposer, Generator, Judge, Merger, Refiner, Solver, Stage};
 use serde_json::{json, Value};
 
 use crate::budget::BudgetGuard;
@@ -37,6 +37,25 @@ pub(crate) struct Meter {
 }
 
 impl Meter {
+
+    /// Lit la convention `_reads` d'un input (au niveau racine, ou sous `task`
+    /// pour les inputs composés comme celui du Refiner : `{task, own, peers}`).
+    fn declared_reads(input: &Value) -> Vec<(String, u64)> {
+        let arr = input
+            .get("_reads")
+            .or_else(|| input.pointer("/task/_reads"))
+            .and_then(Value::as_array);
+        let Some(arr) = arr else { return Vec::new() };
+        arr.iter()
+            .filter_map(|r| {
+                Some((
+                    r.get("pointer")?.as_str()?.to_string(),
+                    r.get("version")?.as_u64()?,
+                ))
+            })
+            .collect()
+    }
+
     fn charge(&self, id: &AgentId) -> bool {
         self.guard.charge(id.as_str())
     }
@@ -78,6 +97,15 @@ impl Meter {
         let mut cap = CallCapture::new(id.clone(), role, self.kind, input, output);
         if let Some(v) = variant {
             cap = cap.with_variant(v);
+        }
+        // **Graphe d'influence (archi itérative §4.3)** : un input peut DÉCLARER ses
+        // lectures de cellules via la convention `_reads: [{pointer, version}, …]`
+        // (posée par la topologie — gossip : pairs lus ; debate : candidat + contre-
+        // argument). Liftées dans le record scellé, elles sont contrôlées par le
+        // check DAG de `verify_swarm` (anti-version-fantôme) : l'influence devient
+        // re-prouvable cellule par cellule, pas seulement par le hash d'entrée.
+        for r in Self::declared_reads(input) {
+            cap = cap.reading(r.0, r.1);
         }
         if let Some(lid) = llm_id {
             cap = cap.with_llm_provenance(lid); // ← le pont N17 par-appel
@@ -142,6 +170,35 @@ impl Stage for MeteredStage {
 }
 pub(crate) fn meter_stage(inner: Arc<dyn Stage>, meter: Meter, id: AgentId) -> Arc<dyn Stage> {
     Arc::new(MeteredStage { inner, meter, id })
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Refiner (T4 Gossip) — l'influence mutuelle, métrée comme tout le monde
+// ─────────────────────────────────────────────────────────────────────────────
+struct MeteredRefiner {
+    inner: Arc<dyn Refiner>,
+    meter: Meter,
+    id: AgentId,
+}
+#[async_trait]
+impl Refiner for MeteredRefiner {
+    async fn refine(&self, task: &Value, own: Option<&Value>, peers: &[Value]) -> Value {
+        if !self.meter.charge(&self.id) {
+            // budget épuisé : on MAINTIENT sa position (sentinel conservateur — la
+            // convergence continue sans cet appel, rien n'est inventé).
+            return own.cloned().unwrap_or(Value::Null);
+        }
+        // L'input capturé COMMET l'influence : la valeur propre + les pairs lus
+        // entrent dans le hash d'entrée du record (le contenu lu est prouvé).
+        let input = json!({ "task": task, "own": own, "peers": peers });
+        let (out, llm) =
+            self.meter.run_agent(&self.id, AgentRole::Stage, self.inner.refine(task, own, peers)).await;
+        self.meter.capture(&self.id, AgentRole::Stage, None, &input, &out, llm);
+        out
+    }
+}
+pub(crate) fn meter_refiner(inner: Arc<dyn Refiner>, meter: Meter, id: AgentId) -> Arc<dyn Refiner> {
+    Arc::new(MeteredRefiner { inner, meter, id })
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

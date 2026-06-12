@@ -28,6 +28,7 @@ pub mod consensus_topology;
 pub mod fleet;
 pub mod generate_verify;
 pub mod hierarchical;
+pub mod iterative;
 pub mod pipeline;
 pub mod topology;
 pub mod traits;
@@ -37,6 +38,10 @@ pub use consensus::{
     Judge, MajorityVote, Pattern, PatternSelector,
 };
 pub use consensus_topology::{AggregatorPolicy, ConsensusTopology};
+pub use iterative::{
+    builtin_arguers, builtin_refiner, ConvergenceMetric, DebateTopology, GossipTopology, Refiner,
+    RoundsReport, StageRefiner,
+};
 pub use fleet::AgentFleet;
 pub use generate_verify::{GenerateVerify, GvResult};
 pub use hierarchical::{FnSolver, GvSolver, HierResult, HierSolver, Hierarchical};

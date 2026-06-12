@@ -74,7 +74,7 @@ pub use efe_swarm_provenance::{
 };
 pub use efe_nano_sdk::LlmProvenanceRecord;
 pub use efe_blackboard::{BlackboardWrite, EventSink, SubstrateMetrics, SwarmEvent, WriteSink};
-pub use efe_swarm_topology::Pattern;
+pub use efe_swarm_topology::{ConvergenceMetric, Pattern};
 
 /// Version du crate (semver).
 pub const CRATE_VERSION: &str = env!("CARGO_PKG_VERSION");

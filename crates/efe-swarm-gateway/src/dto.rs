@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use uuid::Uuid;
 
-use efe_swarm_sdk::{Budget, ClientMode, OnExceed, Pattern, SwarmRun, TopologySpec};
+use efe_swarm_sdk::{Budget, ClientMode, ConvergenceMetric, OnExceed, Pattern, SwarmRun, TopologySpec};
 
 use crate::error::GatewayError;
 
@@ -66,8 +66,70 @@ pub enum TopologyDto {
         #[serde(default)]
         escalate: bool,
     },
+    /// T4 — Gossip (itératif, ADR-003) : K refiners × tours, arrêt à ε ou r_max.
+    Gossip {
+        refiner: String,
+        #[serde(default = "default_k")]
+        k: usize,
+        #[serde(default = "default_rounds")]
+        max_rounds: usize,
+        #[serde(default = "default_epsilon")]
+        epsilon: f64,
+        #[serde(default)]
+        metric: MetricDto,
+    },
+    /// Debate (itératif, ADR-005) : consensus à dossier contradictoire.
+    Debate {
+        generator: String,
+        judges: Vec<String>,
+        #[serde(default = "default_pro")]
+        pro: String,
+        #[serde(default = "default_contra")]
+        contra: String,
+        #[serde(default = "default_k")]
+        k: usize,
+        #[serde(default)]
+        pattern: PatternDto,
+        #[serde(default = "default_rounds")]
+        rounds: usize,
+        /// Escalade à trois étages (Vote → jury → débat).
+        #[serde(default)]
+        escalate: bool,
+    },
     /// Auto — choisit selon la tâche + le mode.
     Auto,
+}
+
+fn default_rounds() -> usize {
+    2
+}
+fn default_epsilon() -> f64 {
+    0.05
+}
+fn default_pro() -> String {
+    "Argue FOR the candidate: cite its strongest evidence.".into()
+}
+fn default_contra() -> String {
+    "Argue AGAINST the candidate: cite its weakest point.".into()
+}
+
+/// Métrique de convergence de fil (snake_case).
+#[derive(Debug, Clone, Copy, Default, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum MetricDto {
+    #[default]
+    Variance,
+    Agreement,
+    Stability,
+}
+impl From<MetricDto> for ConvergenceMetric {
+    fn from(m: MetricDto) -> Self {
+        match m {
+            MetricDto::Variance => ConvergenceMetric::Variance,
+            MetricDto::Agreement => ConvergenceMetric::Agreement,
+            MetricDto::Stability => ConvergenceMetric::Stability,
+        }
+    }
 }
 
 impl TopologyDto {
@@ -90,6 +152,15 @@ impl TopologyDto {
                     return Err(GatewayError::BadRequest("topology.consensus : `judges` vide".into()));
                 }
                 TopologySpec::Consensus { generator, judges, k, pattern: pattern.into(), escalate }
+            }
+            TopologyDto::Gossip { refiner, k, max_rounds, epsilon, metric } => {
+                TopologySpec::Gossip { refiner, k, max_rounds, epsilon, metric: metric.into() }
+            }
+            TopologyDto::Debate { generator, judges, pro, contra, k, pattern, rounds, escalate } => {
+                if judges.is_empty() {
+                    return Err(GatewayError::BadRequest("topology.debate : `judges` vide".into()));
+                }
+                TopologySpec::Debate { generator, judges, pro, contra, k, pattern: pattern.into(), rounds, escalate }
             }
             TopologyDto::Auto => TopologySpec::Auto,
         })
@@ -325,5 +396,43 @@ mod tests {
         assert_eq!(budget.max_cents, 50);
         assert_eq!(budget.on_exceed, OnExceed::Degrade);
         assert_eq!(budget.price_per_call_cents, Some(2));
+    }
+
+    #[test]
+    fn gossip_and_debate_wire_forms_parse() {
+        // Gossip : défauts (k=3, r=2, ε=0.05, metric=variance).
+        let req: RunRequest = serde_json::from_value(serde_json::json!({
+            "task": { "initial": [1.0, 2.0] },
+            "topology": { "kind": "gossip", "refiner": "mean_pull" }
+        }))
+        .unwrap();
+        match req.topology.into_spec().unwrap() {
+            TopologySpec::Gossip { refiner, k, max_rounds, epsilon, .. } => {
+                assert_eq!(refiner, "mean_pull");
+                assert_eq!((k, max_rounds), (3, 2));
+                assert!((epsilon - 0.05).abs() < 1e-12);
+            }
+            other => panic!("attendu Gossip, eu {other:?}"),
+        }
+        // Debate : juges requis ; pro/contra ont des instructions par défaut.
+        let req: RunRequest = serde_json::from_value(serde_json::json!({
+            "task": { "text": "t" },
+            "topology": { "kind": "debate", "generator": "g", "judges": ["j1"], "rounds": 1 }
+        }))
+        .unwrap();
+        match req.topology.into_spec().unwrap() {
+            TopologySpec::Debate { judges, rounds, pro, .. } => {
+                assert_eq!(judges.len(), 1);
+                assert_eq!(rounds, 1);
+                assert!(pro.contains("FOR"), "instruction PRO par défaut");
+            }
+            other => panic!("attendu Debate, eu {other:?}"),
+        }
+        // Debate sans juge → 400.
+        let req: RunRequest = serde_json::from_value(serde_json::json!({
+            "task": {}, "topology": { "kind": "debate", "generator": "g", "judges": [] }
+        }))
+        .unwrap();
+        assert!(req.topology.into_spec().is_err());
     }
 }

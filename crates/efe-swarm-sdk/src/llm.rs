@@ -12,7 +12,7 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use efe_swarm_topology::{Decomposer, Generator, Judge, Merger, Solver, Stage};
+use efe_swarm_topology::{Decomposer, Generator, Judge, Merger, Refiner, Solver, Stage};
 use serde_json::{json, Value};
 
 use crate::backend::{LocalBackend, SamplingParams};
@@ -47,6 +47,37 @@ async fn ask(backend: &Arc<dyn LocalBackend>, prompt: String, max_tokens: u32, t
 // ─────────────────────────────────────────────────────────────────────────────
 //  Agents LLM (instruction = le « nom » de l'agent dans TopologySpec)
 // ─────────────────────────────────────────────────────────────────────────────
+
+struct LlmRefiner {
+    backend: Arc<dyn LocalBackend>,
+    instruction: String,
+}
+#[async_trait]
+impl Refiner for LlmRefiner {
+    async fn refine(&self, task: &Value, own: Option<&Value>, peers: &[Value]) -> Value {
+        let own_txt = own.map(|v| v.to_string()).unwrap_or_else(|| "none".into());
+        let peers_txt =
+            peers.iter().map(|p| p.to_string()).collect::<Vec<_>>().join(" | ");
+        // Révision ARGUMENTÉE, pas alignement (anti-chambre d'écho, archi §7) :
+        let prompt = format!(
+            "{} Task: \"{}\". Your previous estimate: {}. Peer estimates: [{}]. \
+             Revise ONLY if the peers convince you; otherwise keep your estimate. \
+             Answer with only the result, no preamble.",
+            self.instruction,
+            text_of(task),
+            own_txt,
+            peers_txt
+        );
+        let round = task.pointer("/gossip/round").and_then(Value::as_u64).unwrap_or(0);
+        let idx = task.pointer("/gossip/agent_index").and_then(Value::as_u64).unwrap_or(0);
+        let out = ask(&self.backend, prompt, 16, 0.2 + 0.1 * (idx % 4) as f64, 42 + round * 31 + idx).await;
+        out.trim().parse::<f64>().map(|x| json!({ "value": x })).unwrap_or_else(|_| json!({ "value": out }))
+    }
+}
+/// Refiner LLM (Mode C) : l'instruction = le « nom » de l'agent dans la spec.
+pub(crate) fn llm_refiner(backend: Arc<dyn LocalBackend>, instruction: String) -> Arc<dyn Refiner> {
+    Arc::new(LlmRefiner { backend, instruction })
+}
 
 struct LlmGen {
     backend: Arc<dyn LocalBackend>,

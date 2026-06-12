@@ -62,13 +62,27 @@ struct DashEventTap {
 }
 impl EventSink for DashEventTap {
     fn on_event(&self, ev: &SwarmEvent) {
-        // Verdict de l'agrégateur (topic réservé) → événement structuré `Decided`.
-        if ev.topic == DECIDED_TOPIC {
+        // Verdicts d'agrégation (topics réservés) → événement structuré `Decided`.
+        // Trois sources : consensus (historique), debate (itératif — même forme de
+        // payload) et gossip (converged : la confiance est binaire, le résiduel fin
+        // reste visible dans le flux générique).
+        if ev.topic == DECIDED_TOPIC || ev.topic == "debate.decided" {
             let p = &ev.payload;
             self.bus.emit(DashboardEvent::Decided {
                 pattern: p.get("pattern").and_then(|v| v.as_str()).unwrap_or("?").to_string(),
                 confidence: p.get("confidence").and_then(|v| v.as_f64()).unwrap_or(0.0),
                 judges_used: p.get("judges_used").and_then(|v| v.as_u64()).unwrap_or(0) as usize,
+                winner_preview: redacted_preview(&self.redactor, p.get("winner").unwrap_or(&Value::Null)),
+            });
+            return;
+        }
+        if ev.topic == "gossip.converged" {
+            let p = &ev.payload;
+            let converged = p.get("converged").and_then(|v| v.as_bool()).unwrap_or(false);
+            self.bus.emit(DashboardEvent::Decided {
+                pattern: "gossip".to_string(),
+                confidence: if converged { 1.0 } else { 0.0 },
+                judges_used: 0,
                 winner_preview: redacted_preview(&self.redactor, p.get("winner").unwrap_or(&Value::Null)),
             });
             return;
@@ -278,5 +292,43 @@ mod tests {
             matches!(&e.event, DashboardEvent::Ballot { scores, .. } if !scores.is_empty())
         });
         assert!(has_scored_ballot, "les scores du ballot viennent du Meter (réels)");
+    }
+
+    /// Les verdicts ITÉRATIFS (debate.decided, gossip.converged) sont structurés en
+    /// `Decided` — parité Mission-Control avec le consensus historique.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn iterative_verdicts_become_decided_events() {
+        use efe_blackboard::{EventSink, SwarmEvent};
+        use std::time::SystemTime;
+        let bus = DashboardBus::new(efe_nano_sdk::TenantId::system(), Uuid::from_u128(7), 8192);
+        let tap = DashEventTap { bus: bus.clone(), redactor: None };
+        let mk = |topic: &str, payload: serde_json::Value| SwarmEvent {
+            swarm_id: efe_nano_sdk::SwarmId::new(),
+            published_by: efe_nano_sdk::AgentId::new("tap_test").unwrap(),
+            topic: topic.into(),
+            payload,
+            published_at: SystemTime::now(),
+        };
+        tap.on_event(&mk(
+            "debate.decided",
+            json!({ "pattern": "Borda", "confidence": 0.75, "judges_used": 6, "winner": "e", "rounds": 2 }),
+        ));
+        tap.on_event(&mk(
+            "gossip.converged",
+            json!({ "rounds": 4, "residual": 0.01, "converged": true, "winner": 100.0 }),
+        ));
+        let decided: Vec<(String, f64, usize)> = bus
+            .replay()
+            .into_iter()
+            .filter_map(|e| match e.event {
+                DashboardEvent::Decided { pattern, confidence, judges_used, .. } => {
+                    Some((pattern, confidence, judges_used))
+                }
+                _ => None,
+            })
+            .collect();
+        assert_eq!(decided.len(), 2, "les deux verdicts structurés");
+        assert_eq!(decided[0], ("Borda".into(), 0.75, 6));
+        assert_eq!(decided[1], ("gossip".into(), 1.0, 0));
     }
 }

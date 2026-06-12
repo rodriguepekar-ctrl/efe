@@ -1,0 +1,88 @@
+{
+  "_note": "harnais déterministe : math Borda RÉELLE ; juges simulés à compétence v ; le débat modélisé en v_eff = v + δ — δ réel à mesurer en Mode C",
+  "break_even_delta": null,
+  "criterion": "GO ssi δ_mesuré(Mode C) ≥ δ* ; sinon investir dans v (plus/meilleurs juges)",
+  "date": "2026-06-11",
+  "lot": "S3-bis",
+  "protocol": {
+    "baseline_acc": 0.914,
+    "k": 7,
+    "trials": 2000,
+    "v": 0.7
+  },
+  "rows": [
+    {
+      "acc_debate": 0.888,
+      "acc_witness": 0.999,
+      "beats_witness": false,
+      "cost": 26,
+      "delta": 0.0,
+      "r": 1,
+      "witness_j": 19
+    },
+    {
+      "acc_debate": 0.934,
+      "acc_witness": 0.999,
+      "beats_witness": false,
+      "cost": 26,
+      "delta": 0.05,
+      "r": 1,
+      "witness_j": 19
+    },
+    {
+      "acc_debate": 0.9585,
+      "acc_witness": 0.999,
+      "beats_witness": false,
+      "cost": 26,
+      "delta": 0.1,
+      "r": 1,
+      "witness_j": 19
+    },
+    {
+      "acc_debate": 0.979,
+      "acc_witness": 0.999,
+      "beats_witness": false,
+      "cost": 26,
+      "delta": 0.15,
+      "r": 1,
+      "witness_j": 19
+    },
+    {
+      "acc_debate": 0.888,
+      "acc_witness": 1.0,
+      "beats_witness": false,
+      "cost": 40,
+      "delta": 0.0,
+      "r": 2,
+      "witness_j": 33
+    },
+    {
+      "acc_debate": 0.934,
+      "acc_witness": 1.0,
+      "beats_witness": false,
+      "cost": 40,
+      "delta": 0.05,
+      "r": 2,
+      "witness_j": 33
+    },
+    {
+      "acc_debate": 0.9585,
+      "acc_witness": 1.0,
+      "beats_witness": false,
+      "cost": 40,
+      "delta": 0.1,
+      "r": 2,
+      "witness_j": 33
+    },
+    {
+      "acc_debate": 0.979,
+      "acc_witness": 1.0,
+      "beats_witness": false,
+      "cost": 40,
+      "delta": 0.15,
+      "r": 2,
+      "witness_j": 33
+    }
+  ],
+  "verdict": "CONDITIONNEL (NO-GO par défaut, prior ADR-005)"
+}
