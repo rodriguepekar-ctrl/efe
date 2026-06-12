@@ -35,6 +35,9 @@ pub enum Lane {
     Candidate,
     Ballot,
     Output,
+    /// **ADR-015** : trafic de courrier adressé (`/mail/*`) — la messagerie ciblée
+    /// est observable au panneau trafic, jour 1.
+    Mail,
     Other,
 }
 
@@ -47,6 +50,8 @@ impl Lane {
             Lane::Ballot
         } else if pointer.starts_with("/out/") {
             Lane::Output
+        } else if pointer.starts_with("/mail/") {
+            Lane::Mail
         } else {
             Lane::Other
         }
@@ -120,6 +125,8 @@ mod tests {
         assert_eq!(Lane::classify("/cand/3"), Lane::Candidate);
         assert_eq!(Lane::classify("/ballot/1"), Lane::Ballot);
         assert_eq!(Lane::classify("/out/00000000000000000001"), Lane::Output);
+        // ADR-015 : le courrier adressé a son couloir (gardien : dashboard_classifies_mail_lane).
+        assert_eq!(Lane::classify("/mail/bob/00000000000000000007"), Lane::Mail);
         assert_eq!(Lane::classify("/misc/x"), Lane::Other);
     }
 

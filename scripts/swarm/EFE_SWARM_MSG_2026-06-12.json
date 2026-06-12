@@ -1,0 +1,248 @@
+{
+  "adr": "ADR-SWARM-015",
+  "cells": [
+    {
+      "arms": [
+        {
+          "arm": "broadcast-claim",
+          "bb_writes": 400,
+          "cas_lost": 2800,
+          "coordination_cost": 800,
+          "events_published": 400,
+          "load_stddev": 83.0723,
+          "makespan": 250.0,
+          "p99": 246.0
+        },
+        {
+          "arm": "sharded(ws4,sans-vol)",
+          "bb_writes": 400,
+          "cas_lost": 0,
+          "coordination_cost": 800,
+          "events_published": 400,
+          "load_stddev": 5.9582,
+          "makespan": 60.0,
+          "p99": 57.0
+        },
+        {
+          "arm": "targeted(mailbox)",
+          "bb_writes": 400,
+          "cas_lost": 0,
+          "coordination_cost": 800,
+          "events_published": 400,
+          "load_stddev": 0.0,
+          "makespan": 50.0,
+          "p99": 50.0
+        }
+      ],
+      "cell_go": false,
+      "coordination_ratio_vs_sharded": 1.0,
+      "p99_gain_vs_sharded": 0.1228,
+      "sigma": 0.0
+    },
+    {
+      "arms": [
+        {
+          "arm": "broadcast-claim",
+          "bb_writes": 400,
+          "cas_lost": 2800,
+          "coordination_cost": 800,
+          "events_published": 400,
+          "load_stddev": 74.9632,
+          "makespan": 217.9773,
+          "p99": 214.8301
+        },
+        {
+          "arm": "sharded(ws4,sans-vol)",
+          "bb_writes": 400,
+          "cas_lost": 0,
+          "coordination_cost": 800,
+          "events_published": 400,
+          "load_stddev": 5.9388,
+          "makespan": 69.4085,
+          "p99": 62.4517
+        },
+        {
+          "arm": "targeted(mailbox)",
+          "bb_writes": 400,
+          "cas_lost": 0,
+          "coordination_cost": 800,
+          "events_published": 400,
+          "load_stddev": 0.5673,
+          "makespan": 58.2475,
+          "p99": 57.2649
+        }
+      ],
+      "cell_go": false,
+      "coordination_ratio_vs_sharded": 1.0,
+      "p99_gain_vs_sharded": 0.0831,
+      "sigma": 0.5
+    },
+    {
+      "arms": [
+        {
+          "arm": "broadcast-claim",
+          "bb_writes": 400,
+          "cas_lost": 2800,
+          "coordination_cost": 800,
+          "events_published": 400,
+          "load_stddev": 116.0348,
+          "makespan": 333.5103,
+          "p99": 329.5959
+        },
+        {
+          "arm": "sharded(ws4,sans-vol)",
+          "bb_writes": 400,
+          "cas_lost": 0,
+          "coordination_cost": 800,
+          "events_published": 400,
+          "load_stddev": 10.9754,
+          "makespan": 93.2323,
+          "p99": 88.8833
+        },
+        {
+          "arm": "targeted(mailbox)",
+          "bb_writes": 400,
+          "cas_lost": 0,
+          "coordination_cost": 800,
+          "events_published": 400,
+          "load_stddev": 1.0178,
+          "makespan": 77.3652,
+          "p99": 74.7769
+        }
+      ],
+      "cell_go": false,
+      "coordination_ratio_vs_sharded": 1.0,
+      "p99_gain_vs_sharded": 0.1587,
+      "sigma": 1.0
+    },
+    {
+      "arms": [
+        {
+          "arm": "broadcast-claim",
+          "bb_writes": 400,
+          "cas_lost": 2800,
+          "coordination_cost": 800,
+          "events_published": 400,
+          "load_stddev": 340.8017,
+          "makespan": 1036.2958,
+          "p99": 1025.0921
+        },
+        {
+          "arm": "sharded(ws4,sans-vol)",
+          "bb_writes": 400,
+          "cas_lost": 0,
+          "coordination_cost": 800,
+          "events_published": 400,
+          "load_stddev": 22.5565,
+          "makespan": 192.2624,
+          "p99": 187.0935
+        },
+        {
+          "arm": "targeted(mailbox)",
+          "bb_writes": 400,
+          "cas_lost": 0,
+          "coordination_cost": 800,
+          "events_published": 400,
+          "load_stddev": 6.1908,
+          "makespan": 174.4552,
+          "p99": 158.3944
+        }
+      ],
+      "cell_go": false,
+      "coordination_ratio_vs_sharded": 1.0,
+      "p99_gain_vs_sharded": 0.1534,
+      "sigma": 1.5
+    },
+    {
+      "arms": [
+        {
+          "arm": "broadcast-claim",
+          "bb_writes": 400,
+          "cas_lost": 2800,
+          "coordination_cost": 800,
+          "events_published": 400,
+          "load_stddev": 568.0969,
+          "makespan": 1662.4196,
+          "p99": 1660.9049
+        },
+        {
+          "arm": "sharded(ws4,sans-vol)",
+          "bb_writes": 400,
+          "cas_lost": 0,
+          "coordination_cost": 800,
+          "events_published": 400,
+          "load_stddev": 150.0154,
+          "makespan": 673.6744,
+          "p99": 452.1208
+        },
+        {
+          "arm": "targeted(mailbox)",
+          "bb_writes": 400,
+          "cas_lost": 0,
+          "coordination_cost": 800,
+          "events_published": 400,
+          "load_stddev": 66.2702,
+          "makespan": 471.6395,
+          "p99": 270.3657
+        }
+      ],
+      "cell_go": true,
+      "coordination_ratio_vs_sharded": 1.0,
+      "p99_gain_vs_sharded": 0.402,
+      "sigma": 2.0
+    },
+    {
+      "arms": [
+        {
+          "arm": "broadcast-claim",
+          "bb_writes": 400,
+          "cas_lost": 2800,
+          "coordination_cost": 800,
+          "events_published": 400,
+          "load_stddev": 1135.9561,
+          "makespan": 3345.0327,
+          "p99": 3044.2569
+        },
+        {
+          "arm": "sharded(ws4,sans-vol)",
+          "bb_writes": 400,
+          "cas_lost": 0,
+          "coordination_cost": 800,
+          "events_published": 400,
+          "load_stddev": 400.7054,
+          "makespan": 1513.2305,
+          "p99": 1494.8905
+        },
+        {
+          "arm": "targeted(mailbox)",
+          "bb_writes": 400,
+          "cas_lost": 0,
+          "coordination_cost": 800,
+          "events_published": 400,
+          "load_stddev": 244.6505,
+          "makespan": 1377.9656,
+          "p99": 626.8493
+        }
+      ],
+      "cell_go": true,
+      "coordination_ratio_vs_sharded": 1.0,
+      "p99_gain_vs_sharded": 0.5807,
+      "sigma": 2.5
+    }
+  ],
+  "criteria": {
+    "cas_eliminated_vs_broadcast": true,
+    "coordination_ratio_band": [
+      0.9,
+      1.1
+    ],
+    "p99_gain_min": 0.25
+  },
+  "date": "2026-06-12",
+  "honesty": "bras sharded SANS vol (le vol WS4 est déclenché au timeout temporel — hors harnais analytique) ; temps de travail VIRTUEL (le harnais mesure l'affectation + la coordination réelles, pas un sleep)",
+  "items": 400,
+  "lot": "MSG",
+  "sigma_star": 2.0,
+  "verdict": "CONDITIONNEL",
+  "workers": 8
+}

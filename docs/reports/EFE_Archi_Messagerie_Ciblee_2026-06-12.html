@@ -1,0 +1,659 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>EFE — Architecture : messagerie ciblée agent↔agent</title>
+<style>
+  :root{--ink:#0f172a;--muted:#475569;--soft:#64748b;--line:#e2e8f0;--teal:#0d9488;--teal-d:#0f766e;--indigo:#4f46e5;--indigo-d:#4338ca;--ok:#16a34a;--warn:#d97706;--bad:#dc2626;--bg-tint:#f8fafc;--bg-card:#f1f5f9;--code-bg:#0f172a;--code-fg:#e2e8f0;}
+  *{box-sizing:border-box;} html{font-size:11.4px;}
+  body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,Arial,sans-serif;color:var(--ink);margin:0;line-height:1.62;background:#fff;-webkit-font-smoothing:antialiased;}
+  .wrap{max-width:178mm;margin:0 auto;padding:0 2mm;}
+  h1,h2,h3,h4{line-height:1.2;font-weight:700;}
+  h2{font-size:1.5rem;margin:0 0 .6rem;padding-bottom:.35rem;border-bottom:3px solid var(--teal);}
+  h2 .num{color:var(--teal);} h3{font-size:1.18rem;margin:1.25rem 0 .35rem;color:var(--indigo-d);}
+  h4{font-size:1rem;margin:.9rem 0 .25rem;color:var(--teal-d);}
+  p{margin:.6rem 0;text-align:justify;hyphens:auto;} a{color:var(--indigo);text-decoration:none;}
+  code{font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace;font-size:.85em;background:var(--bg-card);padding:.05em .35em;border-radius:4px;color:#0b3b36;}
+  .muted{color:var(--muted);} .small{font-size:.88rem;}
+  .lead-in{font-weight:700;color:var(--teal-d);}
+  section{break-inside:avoid;} .page{break-before:page;} h2{break-after:avoid;}
+  table{border-collapse:collapse;width:100%;margin:.6rem 0;font-size:.85rem;}
+  th,td{border:1px solid var(--line);padding:.34rem .55rem;text-align:left;vertical-align:top;}
+  th{background:var(--bg-card);font-weight:700;} tbody tr:nth-child(even){background:var(--bg-tint);}
+  td.c,th.c{text-align:center;} .good{background:#dcfce7 !important;color:#166534;font-weight:700;} .mid{background:#fef9c3 !important;color:#854d0e;font-weight:700;} .bad{background:#fee2e2 !important;color:#991b1b;font-weight:700;}
+  .tag{display:inline-block;font-size:.71rem;font-weight:700;padding:.08em .5em;border-radius:20px;}
+  .t-ok{background:#dcfce7;color:#166534;} .t-info{background:#e0e7ff;color:#3730a3;} .t-teal{background:#ccfbf1;color:#115e59;} .t-warn{background:#fef3c7;color:#92400e;} .t-bad{background:#fee2e2;color:#991b1b;}
+  pre{background:var(--code-bg);color:var(--code-fg);padding:.6rem .85rem;border-radius:8px;overflow:auto;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.74rem;line-height:1.5;margin:.6rem 0;}
+  .callout{border-left:4px solid var(--teal);background:var(--bg-tint);padding:.6rem .9rem;border-radius:0 8px 8px 0;margin:.7rem 0;}
+  .callout p{text-align:left;margin:.3rem 0;}
+  .callout.key{border-color:var(--indigo);background:#eef2ff;} .callout.warn{border-color:var(--warn);background:#fffbeb;}
+  ul,ol{margin:.45rem 0 .6rem 1.15rem;padding:0;} li{margin:.28rem 0;}
+  .cover{height:262mm;display:flex;flex-direction:column;justify-content:center;position:relative;padding:0 6mm;}
+  .cover .eyebrow{color:var(--teal);font-weight:800;letter-spacing:.28em;font-size:.92rem;text-transform:uppercase;}
+  .cover h1{font-size:2.6rem;margin:.4rem 0 .2rem;line-height:1.1;} .cover .sub{font-size:1.28rem;color:var(--muted);margin-bottom:1.2rem;}
+  .cover .tagline{font-size:1.04rem;color:var(--ink);max-width:160mm;border-left:4px solid var(--teal);padding-left:1rem;font-style:italic;text-align:left;}
+  .cover .meta{position:absolute;bottom:6mm;left:6mm;right:6mm;display:flex;justify-content:space-between;border-top:1px solid var(--line);padding-top:.7rem;font-size:.82rem;color:var(--soft);}
+  .cover .pills{margin:1.1rem 0;} .cover .pills .tag{font-size:.8rem;margin-right:.35rem;}
+  .lede{font-size:1.06rem;color:#1e293b;text-align:left;} .mono{font-family:ui-monospace,Menlo,Consolas,monospace;}
+  hr{border:none;border-top:1px solid var(--line);margin:1rem 0;}
+  .toc{font-size:.92rem;columns:2;column-gap:2rem;} .toc div{margin:.18rem 0;break-inside:avoid;} .toc .n{color:var(--teal);font-weight:700;display:inline-block;width:1.8em;}
+</style>
+</head>
+<body>
+
+<!-- COVER -->
+<div class="wrap"><div class="cover">
+  <div class="eyebrow">Architecture · avant code — la quatrième voie du passage d'information</div>
+  <h1>Messagerie ciblée agent↔agent</h1>
+  <div class="sub">« Tel agent dit telle chose à tel autre » — sans jamais trahir le keystone : le bus est un indice, la vérité est au Blackboard.</div>
+  <div class="tagline">EFE sait aujourd'hui faire circuler l'information de trois façons : le <b>broadcast par
+   topic</b> (l'indice, avec perte assumée), la <b>vérité partagée</b> (la stigmergie du Blackboard), et
+   l'<b>influence par tours</b> (l'itératif d'ADR-013). Aucune de ces voies ne sait dire « <i>toi,
+   précisément</i> » — déléguer une tâche au worker le moins chargé, adresser une contre-question au juge 3,
+   répondre à l'expéditeur d'une requête. Ce document est l'architecture complète de cette quatrième voie —
+   et sa thèse est une thèse de discipline : la messagerie ciblée d'EFE n'est <b>pas un canal</b>, pas un
+   broker, pas un système d'acteurs. C'est une <b>spécialisation adressée de la lane fiable qui existe
+   déjà</b> dans le substrat (vérité d'abord, réveil-indice, curseur de drainage) : une boîte aux lettres est
+   un namespace du Blackboard, un envoi est une écriture write-once ancrée par la provenance, une lecture est
+   une déclaration scellée que le DAG contrôle. « Qui a dit quoi à qui, et qui l'a lu » devient re-prouvable
+   hors ligne — le moat, étendu aux conversations. Doctrine maison intégrale : ne s'appuyer que sur des
+   primitives vérifiées au fichier et à la ligne, chiffrer chaque coût, spécifier le harnais de gate jusqu'aux
+   critères — et n'écrire aucun code avant l'ordre.</div>
+  <div class="pills">
+    <span class="tag t-teal">courrier = cellule adressée (vérité) — jamais un canal</span>
+    <span class="tag t-info">réveil = indice (perte de 100 % des notifs : sans conséquence)</span>
+    <span class="tag t-ok">« qui a dit quoi à qui » : scellé, DAG-contrôlé</span>
+    <span class="tag t-warn">harnais Lot MSG spécifié — délégation 1-parmi-K</span>
+  </div>
+  <div class="meta"><span><b>Fondations :</b> lane fiable WS1-F2 · work-queue WS4 · convention <span class="mono">_reads</span> (ADR-013) · appariement déterministe (ADR-014)</span><span><b>Réf. :</b> <span class="mono">main @ be2ae65</span> · 2026-06-12</span></div>
+</div></div>
+
+<!-- TOC -->
+<div class="wrap page">
+  <h2><span class="num">§0</span> Plan &amp; statut du document</h2>
+  <p class="lede">Ce document suit le genre que le projet a forgé : une <b>architecture avant code</b>. Il ne
+  décrit pas du code existant — il décrit le code qui serait écrit sur ordre du propriétaire, avec les trois
+  exigences habituelles : ne composer que des primitives <b>réelles et vérifiées</b> du dépôt (chaque citation
+  porte son fichier et sa ligne) ; chiffrer chaque coût (écritures, événements, octets, LoC) ; et spécifier le
+  <b>harnais de mesure</b> jusqu'aux critères GO/NO-GO, parce que dans ce projet le harnais fait partie de
+  l'architecture. Le statut est celui d'une capacité <b>non gatée mais non triviale</b> : aucun ADR ne
+  l'interdit, aucun prior chiffré ne la condamne — mais la maison a appris (ADR-003/005/013/014) qu'une
+  capacité se livre avec la mesure de quand s'en servir, et la baseline <code>swarm_load</code> fournit déjà
+  des chiffres durs sur ce que coûtent les alternatives.</p>
+  <div class="toc">
+    <div><span class="n">1</span>Le problème — l'adressage manquant</div>
+    <div><span class="n">2</span>L'état des lieux chirurgical — tout existe, sauf « toi »</div>
+    <div><span class="n">3</span>La doctrine — trois anti-architectures rejetées, une thèse</div>
+    <div><span class="n">4</span>Architecture détaillée — boîtes, enveloppes, requête/réponse</div>
+    <div><span class="n">5</span>Provenance — le moat conversationnel</div>
+    <div><span class="n">6</span>Les invariants I-MSG</div>
+    <div><span class="n">7</span>Le harnais — Lot MSG &amp; bench_mail</div>
+    <div><span class="n">8</span>Risques honnêtes &amp; hors-périmètre</div>
+    <div><span class="n">9</span>Plan de construction — lots, fichiers, tests, ADR-015</div>
+    <div><span class="n">A</span>Annexe — signatures, formats, glossaire</div>
+  </div>
+  <div class="callout key">
+    <p><b>La thèse en quatre phrases.</b> ① Une <b>boîte aux lettres</b> est un namespace du Blackboard
+    (<code>/mail/&lt;destinataire&gt;/&lt;seq&gt;</code>) : le courrier est de la <b>vérité</b>, durable,
+    versionnée, ancrée — jamais un message en vol. ② Le bus ne porte que le <b>réveil</b>
+    (<code>mail.&lt;destinataire&gt;</code>) : la perte de toutes les notifications ne perd aucun courrier —
+    c'est la lane fiable existante (<code>reliable.rs</code>), spécialisée par destinataire. ③ L'<b>enveloppe</b>
+    (de, type, corrélation) fait du requête/réponse un motif prouvé : la réponse déclare la <b>lecture</b> de
+    la cellule de requête (`_reads`, ADR-013) — la causalité conversationnelle entre dans le DAG. ④ Le harnais
+    Lot MSG mesure la seule question qui compte : sur la délégation 1-parmi-K, l'adressage bat-il le broadcast
+    (dont la baseline a mesuré 90→99,9 % de CAS gaspillés) <i>et</i> le shard statique (aveugle à la charge) ?</p>
+  </div>
+</div>
+
+<!-- §1 -->
+<div class="wrap page">
+  <h2><span class="num">§1</span> Le problème — l'adressage manquant</h2>
+
+  <p class="lede">« Des nano-agents parallèles qui se passent l'information » : la phrase fondatrice du projet.
+  Trois voies de passage existent, livrées et testées. Les poser côte à côte fait apparaître le trou avec
+  précision : aucune ne sait <i>désigner un destinataire</i>.</p>
+
+  <h3>1.1 — Les trois voies livrées, et ce que chacune sait dire</h3>
+
+  <table>
+    <thead><tr><th>Voie</th><th>Primitive (vérifiée)</th><th>Ce qu'elle sait dire</th><th>Ce qu'elle ne sait PAS dire</th></tr></thead>
+    <tbody>
+      <tr><td><b>Broadcast-indice</b></td><td><code>TopicRouter</code> (WS1) : un canal broadcast borné par topic, <code>subscribe</code>/<code>subscribe_prefix</code>, perte comptée (<code>dropped_total</code>)</td><td>« à qui veut l'entendre : ceci s'est produit »</td><td>« à TOI » — et rien de décisionnel : la perte est un mode de fonctionnement</td></tr>
+      <tr><td><b>Vérité partagée</b></td><td><code>Blackboard</code> : cellules JSON versionnées, CAS <code>write_if</code>, snapshot, caps par namespace, historique</td><td>« voici l'état, que quiconque peut lire » (stigmergie)</td><td>« ceci est POUR toi » — une cellule n'a pas de destinataire, et le lecteur doit savoir où regarder</td></tr>
+      <tr><td><b>Influence par tours</b></td><td>RoundDriver + <code>_reads</code> (ADR-013) : vagues, cellules de tour, lectures déclarées scellées</td><td>« je révise à la lumière de TOUS mes pairs du tour r−1 »</td><td>« je réponds à TON argument » — l'influence est de vague à vague, jamais de tête à tête</td></tr>
+    </tbody>
+  </table>
+
+  <p>Le trou n'est pas théorique. Trois situations concrètes du dépôt le rencontrent déjà. <b>La délégation
+  dynamique</b> : dans le motif <code>swarm_relay</code> (l'exemple fondateur — mappers, reducers,
+  work-stealing), chaque partiel est réclamé par CAS <i>en course</i> : tous les reducers tentent, un gagne,
+  les autres brûlent un <code>write_if</code> perdu. La baseline <code>swarm_load</code> a chiffré ce motif :
+  <b>90 % → 99,9 % de CAS gaspillés</b> quand N croît (doc de <code>work_queue.rs</code>, F6) — et la réponse
+  livrée (le shard WS4) est <i>statique</i> : l'item i appartient à <code>shard_owner(i)</code> par hachage,
+  aveugle à la charge réelle des workers. Déléguer « au moins chargé » exige de pouvoir le <i>désigner</i>.
+  <b>La conversation</b> : le Debate d'ADR-013 fait argumenter PRO et CONTRA par tours — chacun lit l'adverse
+  du tour précédent, mais ne peut pas lui poser une question et attendre SA réponse ; le requête/réponse
+  n'existe nulle part dans le substrat. <b>Les agents long-vivants</b> : le streaming WS2
+  (<code>streaming.rs</code> — agents réactifs, quiescence à la Dijkstra-Scholten) abonne chaque agent « à SON
+  topic d'entrée » — la convention d'adressage existe en filigrane (le topic <i>par agent</i>), mais sans
+  enveloppe, sans fiabilité, sans preuve.</p>
+
+  <h3>1.2 — Et le quasi-adressé qui existe déjà — en filigrane, sans contrat</h3>
+
+  <p>Le dépôt contient en réalité <i>trois</i> conventions d'adressage informelles, qu'il vaut la peine de
+  nommer parce que l'architecture proposée les unifie au lieu de les concurrencer. ① Le consensus publie
+  <code>ballot.&lt;j&gt;</code> — un topic <i>par juge</i> (consensus_topology.rs : 157-181) : du
+  presque-adressé, mais en pur indice (la vérité est reconstruite du snapshot, et c'est très bien ainsi). ②
+  La work-queue WS4 route la notification d'un item vers <code>{base}.shard.{worker}</code>
+  (<code>shard_topic</code>, work_queue.rs : 44-46) — un topic <i>par worker</i>, adressage par hachage. ③ Le
+  streaming WS2 abonne chaque agent long-vivant à son topic d'entrée. Trois fois la même idée — « un topic
+  par destinataire » — trois fois sans enveloppe (qui parle ? pour répondre où ?), sans lane fiable (tout est
+  best-effort), et sans preuve (rien ne scelle « qui a lu quoi »). L'architecture du §4 n'invente donc pas
+  l'adressage dans EFE : elle le <b>promeut</b> de convention informelle à primitive contractuelle — avec la
+  fiabilité de la lane WS1-F2 et la preuve d'ADR-013.</p>
+
+  <div class="callout">
+    <p><b>La définition exacte du besoin.</b> Une primitive qui permette à l'agent A de remettre à l'agent B —
+    et à B seul — un contenu adressé, avec : <b>(a)</b> remise garantie par la vérité (pas par la chance du
+    bus) ; <b>(b)</b> une enveloppe (expéditeur, type, corrélation) qui rende le requête/réponse possible ;
+    <b>(c)</b> la preuve scellée de l'envoi ET de la lecture (le moat) ; <b>(d)</b> des bornes dures
+    (quotas par boîte, transience d'époque) ; <b>(e)</b> un coût connu, mesuré contre les motifs existants —
+    car si le broadcast ou le shard suffisent, la maison veut le savoir et le dire.</p>
+  </div>
+</div>
+
+<!-- §2 -->
+<div class="wrap page">
+  <h2><span class="num">§2</span> L'état des lieux chirurgical — tout existe, sauf « toi »</h2>
+
+  <p class="lede">L'inventaire qui rend cette architecture courte : les cinq pièces dont la messagerie ciblée
+  a besoin existent, testées, avec leurs garanties écrites. Il manque ~300 lignes de spécialisation — pas un
+  sous-système.</p>
+
+  <h3>2.1 — La pièce maîtresse : la lane fiable (l'ancêtre direct)</h3>
+
+  <p><code>efe-blackboard/src/reliable.rs</code> (322 lignes, WS1-F2) est, à peu de chose près, une messagerie
+  ciblée <i>sans destinataire</i>. Son contrat, cité de sa doc : le producteur « écrit le payload au Blackboard
+  sous <code>&lt;ns&gt;/&lt;seq&gt;</code> — la VÉRITÉ, d'ABORD ; publie une notif légère <code>{seq}</code>
+  sur le topic — l'INDICE » ; le consommateur tient un <b>curseur</b> (dernier seq contigu livré) et
+  <b>draine par point-reads</b> à chaque réveil — O(livrés), pas O(total). Garanties écrites et testées
+  (<code>tests/reliable_delivery.rs</code>) : <b>at-least-once</b> (« même si TOUTES les notifs sont perdues,
+  un seul réveil — ou la fermeture — suffit à tout drainer ») ; <b>exactly-once par lecteur</b> (curseur
+  monotone) ; <b>in-order, sûr aux réordonnancements</b> (le drain s'arrête au premier seq absent — un gap ne
+  se saute jamais). Une limite documentée avec la même honnêteté : un seq <i>définitivement</i> manquant
+  (producteur crashé entre l'attribution et l'écriture) bloque la suite — « conservateur = ne rien perdre »,
+  variante timeout hors scope. La messagerie du §4 hérite ce contrat <b>tel quel</b> : une boîte aux lettres
+  est une <code>ReliableTopic</code> dont le namespace est le destinataire.</p>
+
+  <h3>2.2 — Les quatre pièces de support, au fichier et à la ligne</h3>
+
+  <table class="small">
+    <thead><tr><th>Pièce</th><th>Où (vérifié)</th><th>Ce qu'elle apporte à la messagerie</th></tr></thead>
+    <tbody>
+      <tr><td><b>Quotas par namespace</b></td><td><code>Blackboard::with_namespaces</code> (blackboard.rs : 111) — caps par préfixe, appariement <i>longest-prefix-first</i> (l. 127), <code>rejections_total</code> compté</td><td>le quota par boîte (<code>/mail/&lt;to&gt;/</code> plafonné) existe SANS une ligne de code neuve — un envoi au-delà du cap est un <code>Err</code> rendu à l'expéditeur, jamais une éviction silencieuse</td></tr>
+      <tr><td><b>Transience d'époque</b></td><td><code>new_epoch(&amp;["/mail"])</code> + <code>evict_namespace</code> (blackboard.rs : 409, 443) — le contrat des namespaces transients d'ADR-003</td><td>le courrier d'un run ne fuit jamais dans le suivant ; purge intégrale entre époques</td></tr>
+      <tr><td><b>Ancrage de provenance</b></td><td><code>WriteSink</code> (set_write_sink, blackboard.rs : 384) → chaque écriture <code>/mail/*</code> est ancrée ; convention <code>_reads</code> liftée par le Meter (agents.rs : 43-57, ADR-013) ; check DAG anti-version-fantôme (<code>verify_swarm</code>)</td><td>l'envoi est PROUVÉ (cellule ancrée au record de l'expéditeur — appariement déterministe d'ADR-014) ; la lecture est PROUVÉE (déclarée, scellée, contrôlée) — toute la plomberie existe</td></tr>
+      <tr><td><b>Routage par destinataire</b></td><td><code>shard_topic("mail", w)</code>-like (work_queue.rs : 44) ; topics par agent déjà pratiqués (<code>ballot.&lt;j&gt;</code>) ; <code>subscribe_prefix</code> avec sa mise en garde écrite (topic_router.rs : 115-117 : ne capte que les topics existants à l'appel)</td><td>le réveil ciblé <code>mail.&lt;to&gt;</code> est le motif topic-par-destinataire, déjà éprouvé deux fois</td></tr>
+      <tr><td><b>Observabilité</b></td><td><code>Lane::classify</code> (dashboard event.rs : 41-53 — <code>/cand</code>, <code>/ballot</code>, <code>/out</code>, Other) ; tap du routeur AVANT diffusion (topic_router.rs : 91-96) ; <code>SubstrateMetrics</code> (publish/drop)</td><td>une lane <code>Mail</code> = 2 lignes dans <code>classify</code> ; le trafic de courrier est visible au dashboard sans rien inventer</td></tr>
+    </tbody>
+  </table>
+
+  <h3>2.3 — Les chiffres durs que la baseline a déjà payés</h3>
+
+  <p>L'architecture n'a pas à spéculer sur le coût des alternatives : la Phase 1 l'a mesuré et l'a écrit dans
+  les docs de module. <b>Le bus best-effort perd ~99 % des événements sous charge</b> (doc de
+  <code>reliable.rs</code>, citant la baseline <code>swarm_load</code>) — c'est le fait fondateur du keystone
+  « bus = indice », et la raison pour laquelle un courrier ne sera <i>jamais</i> un événement. <b>Le claim par
+  broadcast gaspille 90 % → 99,9 % des CAS</b> quand N croît — O(N×items), « 1 gagnant + (R−1) conflits par
+  item » (doc de <code>work_queue.rs</code>, F6) — c'est le coût du « tout le monde tente » que l'adressage
+  élimine par construction. Et <b>le fan-out par topic est déjà O(abonnés intéressés)</b> (doc de
+  <code>topic_router.rs</code>, F1) — le réveil ciblé <code>mail.&lt;to&gt;</code> ne réveille qu'un agent.
+  Ces trois mesures bornent le débat du §7 : le harnais n'aura pas à prouver que le broadcast est cher (c'est
+  acquis), mais que l'adressage <i>dynamique</i> vaut son état par rapport au shard <i>statique</i>.</p>
+
+  <div class="callout">
+    <p><b>Bilan d'inventaire.</b> Vérité durable adressable ✓ (Blackboard + namespaces). Fiabilité
+    par-réconciliation ✓ (lane WS1-F2, testée). Réveil ciblé ✓ (topic par destinataire, motif éprouvé).
+    Quotas ✓ (caps longest-prefix). Purge ✓ (new_epoch). Preuve d'envoi ✓ (WriteSink + appariement ADR-014).
+    Preuve de lecture ✓ (<code>_reads</code> + DAG, ADR-013). Observabilité ✓ (Lane + tap). <b>Il manque
+    exactement trois choses</b> : l'<b>enveloppe</b> (qui parle, quel type, quelle corrélation), le
+    <b>registre de boîtes</b> (un seq partagé PAR destinataire, multi-expéditeurs), et le motif
+    <b>requête/réponse</b> (attendre LA réponse corrélée). C'est le périmètre du §4 — et rien d'autre.</p>
+  </div>
+</div>
+
+<!-- §3 -->
+<div class="wrap page">
+  <h2><span class="num">§3</span> La doctrine — trois anti-architectures rejetées, une thèse</h2>
+
+  <p class="lede">La messagerie est le sujet où il est le plus facile de trahir le keystone sans s'en rendre
+  compte. Trois architectures « naturelles » sont donc rejetées <i>explicitement</i>, avec leurs raisons —
+  parce qu'un futur contributeur les proposera, et que le refus doit être versionné.</p>
+
+  <h3>3.1 — Rejet n°1 : le canal direct (<code>mpsc</code> agent→agent)</h3>
+
+  <p>La solution réflexe : un <code>tokio::sync::mpsc</code> par paire d'agents, ou un canal par boîte. Rejetée
+  pour trois raisons cumulatives. <b>(a)</b> Elle fait du message <i>en vol</i> le porteur de la décision — la
+  violation frontale du keystone (« le bus ne décide jamais ») : un canal plein, un destinataire mort, un drop,
+  et la décision disparaît sans trace. <b>(b)</b> Elle est <b>invisible à la preuve</b> : un message dans un
+  canal n'est ni une écriture ancrée ni une lecture déclarée — « qui a dit quoi à qui » redeviendrait une
+  affirmation, pas un fait re-prouvable ; tout le moat d'ADR-013/014 passerait à côté. <b>(c)</b> Elle crée un
+  cycle de vie parallèle au substrat (qui possède les canaux ? qui les ferme ? que devient un message non lu à
+  la fin du run ?) — exactement la complexité que le Blackboard a été construit pour absorber
+  (<code>new_epoch</code>, caps, historique).</p>
+
+  <h3>3.2 — Rejet n°2 : fiabiliser le bus (acks, retries, dead-letter queue)</h3>
+
+  <p>La solution « industrielle » : garder le TopicRouter mais lui ajouter des accusés de réception, des
+  re-livraisons, une file des morts. Rejetée par l'histoire du projet : c'est précisément la voie que la
+  Phase 1 a <i>écartée</i> en posant le keystone — « on ne rend pas le bus fiable ; on rend la perte d'indice
+  RÉCUPÉRABLE par réconciliation contre la vérité » (doc de <code>reliable.rs</code>, mot pour mot). Un bus
+  fiabilisé est un deuxième système de vérité qui concurrence le Blackboard, avec tous les problèmes des
+  brokers (ordering distribué, doublons, backpressure de bout en bout) importés dans un substrat in-process
+  qui n'en a aucun besoin. La lane WS1-F2 obtient les mêmes garanties — at-least-once, exactly-once par
+  lecteur, in-order — avec un curseur et des point-reads.</p>
+
+  <h3>3.3 — Rejet n°3 : le système d'acteurs (mailbox = état privé du runtime)</h3>
+
+  <p>La solution « framework » : donner à chaque agent une mailbox d'acteur (à la Erlang/Akka), gérée par le
+  runtime, consommée par un handler. Rejetée parce qu'elle <b>privatise</b> ce qu'EFE veut <b>public et
+  auditable</b> : la mailbox d'un acteur est un état interne, invisible au snapshot, intracable au dashboard,
+  étranger à la provenance ; et elle impose un modèle d'exécution (un agent = une boucle) là où EFE compose
+  des agents-fonctions métrés par des topologies. La stigmergie est le choix fondateur — le courrier doit
+  vivre <i>dans</i> l'environnement partagé, pas à côté.</p>
+
+  <div class="callout key">
+    <p><b>La thèse (l'architecture en une phrase).</b> Une boîte aux lettres est un <b>namespace du
+    Blackboard</b> (<code>/mail/&lt;to&gt;/&lt;seq&gt;</code>, write-once, plafonné, transient d'époque) ; un
+    envoi est une <b>écriture de vérité ancrée</b> suivie d'un <b>réveil-indice</b>
+    (<code>mail.&lt;to&gt;</code>, perte sans conséquence) ; une réception est un <b>drainage par curseur</b>
+    (exactly-once, in-order) dont le traitement <b>déclare ses lectures</b> (<code>_reads</code> → DAG). La
+    messagerie ciblée n'ajoute AUCUNE primitive au substrat : elle nomme et outille un motif que le substrat
+    sait déjà porter — c'est sa force (tout le contrat est hérité, déjà testé) et c'est son garde-fou (il est
+    <i>impossible par construction</i> de faire passer une décision par le bus).</p>
+  </div>
+
+  <p>Une conséquence de la thèse mérite d'être dite avant le détail : <b>les topologies one-shot n'ont pas
+  besoin de cette capacité</b> — T1/Consensus appellent leurs agents par trait, en process, et c'est plus
+  simple et moins cher que tout courrier. La messagerie ciblée vise les motifs où les agents sont
+  <i>découplés dans le temps</i> : agents long-vivants du streaming WS2, délégation dynamique de la
+  work-queue, requête/réponse contradictoire, et — à terme — les essaims durables du serveur. Elle sera donc
+  <b>opt-in strict</b> (parité ADR-013/014) : aucune topologie existante ne change, la primitive s'offre à
+  qui en a l'usage, et le gate du §7 dit quand cet usage vaut son coût.</p>
+</div>
+
+<!-- §4 -->
+<div class="wrap page">
+  <h2><span class="num">§4</span> Architecture détaillée — boîtes, enveloppes, requête/réponse</h2>
+
+  <p class="lede">Trois types (<code>MsgKind</code>, <code>Letter</code>, le registre <code>Mailboxes</code>),
+  deux opérations (<code>send</code>, <code>drain</code>/<code>recv_batch</code>), un motif
+  (<code>await_reply</code>). Tout le reste — fiabilité, quotas, purge, preuve — est hérité, pas codé.</p>
+
+  <h3>4.1 — Le plan d'adressage : des noms qui sont déjà des contrats</h3>
+
+  <pre>VÉRITÉ (Blackboard)                          INDICE (TopicRouter)
+/mail/&lt;to&gt;/&lt;seq:020&gt;  ←─ write-once ─┐       mail.&lt;to&gt;          ←─ réveil ciblé
+   l'enveloppe + le corps             │       payload notif : { "seq": n, "ns": "/mail/&lt;to&gt;" }
+   (cellule versionnée, ancrée)       │       (perte de 100 % des notifs : RÉCUPÉRABLE —
+                                      │        drain au réveil suivant ou à la fermeture)
+quota : with_namespaces caps          │
+  ("/mail/", CAP_GLOBAL)              │       dashboard : Lane::Mail (classify "/mail/")
+  ("/mail/&lt;to&gt;/", CAP_BOÎTE)  ← longest-prefix-first (blackboard.rs : 127)
+époque : new_epoch(&amp;["/mail"]) — transient par contrat (parité /gossip, /debate)</pre>
+
+  <p>Le seq est <b>par boîte</b> (zero-paddé à 20 chiffres : l'ordre lexical est l'ordre numérique —
+  convention <code>rel_key</code> existante, reliable.rs : 46-48), attribué par un compteur atomique partagé
+  entre <i>tous</i> les expéditeurs de cette boîte : le multi-expéditeurs vers un destinataire est sérialisé
+  par l'atomique, pas par un verrou. Le destinataire est un <code>AgentId</code> (la monnaie d'identité de
+  tout le substrat — c'est elle qui signe déjà chaque écriture et chaque record).</p>
+
+  <h3>4.2 — L'enveloppe : le minimum qui rend la conversation possible</h3>
+
+  <pre>// La cellule /mail/&lt;to&gt;/&lt;seq&gt; contient :
+{
+  "from": "reducer_03",            // AgentId expéditeur (redondant avec written_by — et c'est voulu :
+                                   //   written_by est la SIGNATURE substrat, from est le CHAMP métier ;
+                                   //   l'égalité des deux est un invariant contrôlable)
+  "kind": "request",               // request | reply | inform  (MsgKind, fermé à dessein)
+  "correlation": "c7f2…",          // Uuid — pose l'identité de la conversation (request la crée,
+                                   //   reply la PORTE ; inform : absente)
+  "reply_to": "mapper_12",         // où répondre (kind=request seulement) — l'AgentId, pas un chemin :
+                                   //   le chemin se dérive (/mail/&lt;reply_to&gt;), jamais stocké en dur
+  "body": { … }                    // le contenu métier, JSON libre
+}</pre>
+
+  <p>Trois choix de sobriété, argumentés. <b>Pas de TTL</b> : la transience est gérée par l'époque (le courrier
+  vit le temps du run), pas par message — un TTL par message est de la complexité de broker sans cas d'usage
+  in-process. <b>Pas de priorité</b> : l'ordre est l'ordre d'envoi (seq), point — une priorité réintroduirait
+  du réordonnancement, donc du non-déterminisme de traitement, pour un gain non démontré (le gate pourra
+  l'instruire un jour, famille à l'appui). <b>Pas d'accusé de réception</b> : la lecture <i>prouvée</i>
+  (§5) est plus forte qu'un ack — elle est scellée, datée logiquement, et contrôlée par le DAG ; un ack
+  applicatif, si un motif l'exige, est juste… une <code>reply</code>.</p>
+
+  <h3>4.3 — L'API : deux opérations, un motif</h3>
+
+  <pre>// efe-blackboard/src/mailbox.rs — la pièce neuve (~280 LoC), sœur de reliable.rs
+pub enum MsgKind { Request, Reply, Inform }
+
+/// Une lettre DRAINÉE : le contenu + son ADRESSE exacte (pointer@version) — c'est ce
+/// qui permet au traitement de DÉCLARER sa lecture (la convention `_reads`, ADR-013).
+pub struct Letter {
+    pub seq: u64,
+    pub pointer: String,           // "/mail/&lt;to&gt;/&lt;seq&gt;"
+    pub version: u64,              // write-once ⇒ 1 — mais porté, jamais supposé
+    pub from: AgentId,
+    pub kind: MsgKind,
+    pub correlation: Option&lt;Uuid&gt;,
+    pub body: Value,
+}
+impl Letter {
+    /// La lettre, prête à entrer dans la tâche d'un agent métré :
+    /// `{"_reads":[{"pointer":…,"version":…}]}` — le Meter la scelle (agents.rs:43).
+    pub fn as_read(&amp;self) -&gt; Value;
+}
+
+pub struct Mailboxes { /* DashMap&lt;AgentId, Arc&lt;AtomicU64&gt;&gt; : un seq par boîte */ }
+impl Mailboxes {
+    /// VÉRITÉ d'abord (write /mail/&lt;to&gt;/&lt;seq&gt;) puis INDICE (publish mail.&lt;to&gt;).
+    /// Err si le cap de la boîte est atteint — l'expéditeur est INFORMÉ, jamais
+    /// d'éviction silencieuse de courrier non lu (I-MSG5).
+    pub fn send(&amp;self, router, bb, from: &amp;AgentId, to: &amp;AgentId,
+                kind: MsgKind, correlation: Option&lt;Uuid&gt;, body: Value)
+        -&gt; Result&lt;u64, BlackboardError&gt;;
+
+    /// Sucre : send(kind=Request, correlation=Uuid::new_v4()) → l'uuid rendu.
+    pub fn request(&amp;self, …) -&gt; Result&lt;(u64, Uuid), BlackboardError&gt;;
+    /// Sucre : send(kind=Reply, correlation=Some(c)) vers `to`.
+    pub fn reply(&amp;self, …, c: Uuid, …) -&gt; Result&lt;u64, BlackboardError&gt;;
+
+    /// Le lecteur de SA boîte : curseur à 0, abonné à mail.&lt;me&gt;.
+    pub fn reader(&amp;self, router, me: &amp;AgentId) -&gt; MailReader;
+}
+
+pub struct MailReader { /* curseur + souscription — le ReliableReader, adressé */ }
+impl MailReader {
+    pub fn drain(&amp;mut self, bb) -&gt; Vec&lt;Letter&gt;;              // O(livrés), s'arrête au gap
+    pub async fn recv_batch(&amp;mut self, bb) -&gt; Option&lt;Vec&lt;Letter&gt;&gt;; // réveil → drain ; bus fermé → dernier drain
+    /// Le MOTIF : attend la réponse corrélée `c`, met de côté le reste (jamais
+    /// perdu : re-livré aux drains suivants), abandonne à `deadline` (None rendu —
+    /// le contrat ne promet JAMAIS qu'une réponse existe, seulement que si elle
+    /// est écrite, elle est livrée).
+    pub async fn await_reply(&amp;mut self, bb, c: Uuid, deadline: Duration)
+        -&gt; Option&lt;Letter&gt;;
+}</pre>
+
+  <p>Le flux requête/réponse complet, pas à pas : ① A fait <code>request(…, to=B, body)</code> — la cellule
+  <code>/mail/B/&lt;n&gt;</code> est écrite (ancrée au record de A par le WriteSink — appariement déterministe
+  d'ADR-014), la notif <code>mail.B</code> part (best-effort) ; ② B, réveillé (ou drainant à son rythme),
+  reçoit la <code>Letter</code> ; ③ le travail de B s'exécute <i>métré</i>, sa tâche portant
+  <code>letter.as_read()</code> — le record de B scelle la lecture de <code>/mail/B/&lt;n&gt;@1</code> ; ④ B
+  fait <code>reply(…, to=A, c, résultat)</code> — même mécanique, en sens inverse ; ⑤ A, en
+  <code>await_reply(c)</code>, reçoit LA réponse — les autres lettres arrivées entre-temps restent dans sa
+  boîte (le curseur n'avance que sur ce qui est rendu… <span class="muted">précision d'implémentation : le
+  curseur avance, les lettres non-réclamées sont gardées dans un tampon local re-livré en tête du prochain
+  drain — l'exactly-once est préservé, rien n'est relu du Blackboard</span>). Coût total du motif : <b>2
+  écritures + 2 notifs</b>, quel que soit K.</p>
+
+  <h3>4.4 — Les intégrations (et les non-intégrations, assumées)</h3>
+
+  <table class="small">
+    <thead><tr><th>Où</th><th>Quoi</th><th>Pourquoi c'est sobre</th></tr></thead>
+    <tbody>
+      <tr><td><b>Streaming WS2</b></td><td>un agent long-vivant tient un <code>MailReader</code> ; <code>send</code> crédite la quiescence (<code>on_emit</code>) et le traitement la décrémente (<code>on_done</code>) — le schéma Dijkstra-Scholten existant (streaming.rs : 10-16) compte le courrier comme tout événement</td><td>la terminaison reste UN seul mécanisme — pas de « quiescence du courrier » séparée</td></tr>
+      <tr><td><b>Work-queue WS4</b></td><td>la délégation dynamique : le dispatcher <code>send</code> à l'élu (le moins chargé) au lieu de notifier le shard du hash — le claim CAS devient inutile (la boîte EST l'attribution : write-once, un seul destinataire)</td><td>c'est le bras n°3 du gate §7 — pas un remplacement de WS4, une alternative mesurée</td></tr>
+      <tr><td><b>Dashboard</b></td><td><code>Lane::Mail</code> dans <code>classify</code> (préfixe <code>/mail/</code>) + le tap du routeur voit déjà <code>mail.*</code></td><td>2 lignes + 1 test — le trafic de courrier est observable jour 1</td></tr>
+      <tr><td><b>Topologies T1/T3/Consensus</b></td><td class="bad">AUCUNE — elles n'en ont pas besoin (appels par trait, moins chers)</td><td>l'honnêteté du §3 : opt-in strict, zéro churn sur le validé</td></tr>
+      <tr><td><b>Gateway / multi-process</b></td><td class="bad">AUCUNE dans ce lot — le substrat est in-process ; le courrier inter-process passera par le serveur (hors périmètre, dit au §8)</td><td>pas de sur-promesse : la primitive est honnête sur sa portée</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- §5 -->
+<div class="wrap page">
+  <h2><span class="num">§5</span> Provenance — le moat conversationnel</h2>
+
+  <p class="lede">La question du moat est, depuis le premier jour : « quel agent a dit quoi, quand, à partir
+  de quoi ? ». La messagerie ciblée y ajoute le mot qui manquait : <b>à qui</b> — et la réponse n'exige aucun
+  champ nouveau dans le format de record gelé. Tout est composition de mécanismes déjà scellés.</p>
+
+  <h3>5.1 — Les quatre faits prouvés d'une conversation, et leur mécanique</h3>
+
+  <table>
+    <thead><tr><th>Fait à prouver</th><th>Mécanique (existante)</th><th>Qui le contrôle</th></tr></thead>
+    <tbody>
+      <tr><td><b>A a envoyé ce contenu à B</b></td><td>l'écriture <code>/mail/B/&lt;n&gt;</code> est ancrée au record de A (WriteSink → <code>writes: [/mail/B/n@1]</code>, appariement déterministe ADR-014) ; le <code>from</code> de l'enveloppe doit égaler le <code>written_by</code> de la cellule ET l'<code>agent_id</code> du record — <b>triple concordance contrôlable</b></td><td><code>verify_swarm</code> (contenu) + invariant applicatif I-MSG4a (concordance)</td></tr>
+      <tr><td><b>B a lu cette lettre</b></td><td>le traitement de B porte <code>letter.as_read()</code> → le Meter scelle <code>reads: [/mail/B/n@1]</code> dans le record de B (convention <code>_reads</code>, agents.rs : 43-57)</td><td>le check DAG anti-version-fantôme : une lecture déclarée doit référencer une écriture scellée</td></tr>
+      <tr><td><b>Cette réponse répond à cette requête</b></td><td>double lien : la corrélation (champ d'enveloppe, commis dans le hash de la cellule de réponse) ET la lecture déclarée de la cellule de requête par le record qui a produit la réponse — la causalité est dans le DAG, pas seulement annotée</td><td>I-MSG7 : la corrélation sans la lecture déclarée est un mensonge détectable</td></tr>
+      <tr><td><b>L'ordre de la conversation</b></td><td>le seq par boîte (ordre d'envoi, lexical = numérique) + l'ordre canonique de scellement (version, pointer — ADR-007) : l'horloge murale ne pèse rien, comme partout</td><td><code>replay_root</code> — la conversation re-scelle à l'identique</td></tr>
+    </tbody>
+  </table>
+
+  <p>Ce que cela donne concrètement à l'audit : un tiers muni des seuls records re-prouve qu'<i>au tour de
+  parole près</i>, le dialogue s'est tenu comme rapporté — qui a initié, qui a répondu, sur la base de quel
+  contenu (les hashs d'entrée commettent les corps), dans quel ordre logique. C'est la version
+  <b>conversationnelle</b> de l'argument qui a fondé le graphe d'influence d'ADR-013 : on ne demande jamais à
+  l'auditeur de croire une annotation — on lui donne de quoi recompter. Et la limite, dite avec la même
+  honnêteté : la provenance prouve les lectures <b>déclarées</b> ; un agent qui draine sa boîte hors de tout
+  appel métré laisse une conversation sans preuve de lecture — c'est pourquoi le §9 fait du « drainage métré »
+  (la lettre entre dans la tâche, jamais à côté) la convention d'intégration SDK, gardée par test.</p>
+
+  <h3>5.2 — Mode A / Mode C : la même asymétrie qu'ADR-014, assumée</h3>
+
+  <p>En <b>Mode A</b>, la conversation entière est <i>rejouable</i> : agents purs, corps re-dérivables
+  (<code>replay_outputs</code>), trajectoire de courrier recomptable hors ligne. En <b>Mode C</b>, elle est
+  <i>auditable</i> sans être rejouable : chaque tour de parole LLM porte son <code>LlmProvenanceRecord</code>
+  (pont N17, prompt et réponse archivés) — l'auditeur relit le dialogue réel, mais ne peut pas le re-produire.
+  C'est exactement le statut de tout le Mode C depuis ADR-007 ; le doc le répète pour qu'aucun lecteur ne
+  prête à la messagerie une promesse qu'elle n'a pas faite.</p>
+</div>
+
+<!-- §6 -->
+<div class="wrap page">
+  <h2><span class="num">§6</span> Les invariants — famille I-MSG</h2>
+
+  <p class="lede">Sept invariants, la grammaire habituelle : une phrase vérifiable, un gardien keyless nommé.
+  Les quatre premiers sont <b>hérités</b> de la lane fiable (leurs gardiens existent déjà — la spécialisation
+  les re-affirme sur le chemin adressé) ; les trois derniers sont propres à la messagerie.</p>
+
+  <table>
+    <thead><tr><th>Inv.</th><th>Énoncé</th><th>Gardien prévu (keyless)</th></tr></thead>
+    <tbody>
+      <tr><td><b>I-MSG1</b></td><td><b>Vérité d'abord</b> : aucun courrier n'existe que comme événement — la cellule précède la notif ; un échec d'écriture (cap) ⇒ aucune notif ne part.</td><td><code>mail_is_truth_first_no_cell_no_notify</code></td></tr>
+      <tr><td><b>I-MSG2</b></td><td><b>Le bus ne décide jamais</b> : avec un routeur de capacité 1 saturé (perte quasi totale des notifs), 100 % du courrier est livré — par drain au réveil suivant ou à la fermeture.</td><td><code>all_mail_delivered_despite_total_notify_loss</code></td></tr>
+      <tr><td><b>I-MSG3</b></td><td><b>Exactly-once, in-order, par destinataire</b> : curseur monotone ; le drain s'arrête au premier gap (un seq jamais écrit bloque la suite — conservateur, hérité et documenté).</td><td><code>cursor_is_exactly_once_and_gap_conservative</code></td></tr>
+      <tr><td><b>I-MSG4</b></td><td><b>Envoi prouvé, triple concordance</b> : la cellule est ancrée au record de l'expéditeur, et <code>from</code> = <code>written_by</code> = <code>agent_id</code> du record — un courrier au <code>from</code> usurpé est détectable depuis les seuls records.</td><td><code>send_is_anchored_and_from_matches_writer</code></td></tr>
+      <tr><td><b>I-MSG5</b></td><td><b>Quotas durs, jamais d'éviction silencieuse</b> : la boîte pleine refuse l'ENVOI (Err à l'expéditeur, <code>rejections_total</code> compté) — le courrier non lu n'est jamais évincé ; la purge n'existe qu'entre époques.</td><td><code>full_mailbox_rejects_sender_never_evicts_unread</code></td></tr>
+      <tr><td><b>I-MSG6</b></td><td><b>Transience d'époque</b> : <code>new_epoch(&amp;["/mail"])</code> purge tout courrier et remet les seq à zéro — un run ne lit jamais le courrier d'un autre.</td><td><code>epoch_purges_mail_and_resets_seq</code></td></tr>
+      <tr><td><b>I-MSG7</b></td><td><b>Corrélation prouvée par lecture</b> : une <code>reply</code> valide porte la corrélation ET son producteur déclare la lecture de la cellule de requête — la causalité conversationnelle est dans le DAG, pas dans une annotation.</td><td><code>reply_correlates_and_declares_reading_the_request</code></td></tr>
+    </tbody>
+  </table>
+
+  <div class="callout key">
+    <p><b>Le couple I-MSG2 / I-MSG4 est le cœur.</b> Ensemble ils énoncent la version conversationnelle de la
+    doctrine du projet : <i>ce qui compte est durable et prouvé ; ce qui circule n'est qu'un réveil</i>. Le
+    test d'I-MSG2 — couper le bus et exiger 100 % de livraison — est le test le plus court qui sépare cette
+    architecture d'un système de messages classique : chez les autres, couper le bus EST la panne ; ici,
+    c'est un ralentissement.</p>
+  </div>
+</div>
+
+<!-- §7 -->
+<div class="wrap page">
+  <h2><span class="num">§7</span> Le harnais — Lot MSG &amp; bench_mail</h2>
+
+  <p class="lede">La discipline des Lots S2-bis/S3-bis/K-ADAPT : le jour du build, les harnais se construisent
+  AVEC le code, bras-témoins inclus, verdicts archivés quoi qu'ils disent. La question instruite n'est PAS
+  « la messagerie marche-t-elle » (les invariants y répondent) mais « <b>quand vaut-elle son coût</b> » —
+  contre les deux motifs livrés qui font déjà le travail.</p>
+
+  <h3>7.1 — Lot MSG : la délégation 1-parmi-K sous hétérogénéité</h3>
+
+  <p><b>La famille</b> : N items de travail (coûts hétérogènes, tirés lognormal — le paramètre de skew σ
+  balayé {0 ; 0,5 ; 1,5}), K workers, chaque item doit être traité par EXACTEMENT un worker. C'est la famille
+  de <code>swarm_relay</code>/<code>swarm_load</code> — celle dont la baseline a déjà chiffré le bras naïf.
+  <b>Les trois bras</b>, à candidats et coûts PARTAGÉS (splitmix64) :</p>
+
+  <table class="small">
+    <thead><tr><th>Bras</th><th>Mécanique</th><th>Coût attendu (écrit avant mesure)</th></tr></thead>
+    <tbody>
+      <tr><td><code>broadcast-claim</code></td><td>le motif historique : notif broadcast, K workers tentent <code>write_if(/claim/i)</code>, 1 gagne</td><td>O(N×K) réveils, (K−1)/K de CAS gaspillés ≈ 87,5 % à K=8 (baseline mesurée : 90→99,9 %) — le témoin « ce qu'on fuit »</td></tr>
+      <tr><td><code>sharded</code> (WS4)</td><td>owner = <code>shard_owner(i)</code>, notif sur le shard du propriétaire, vol au timeout</td><td>O(N) réveils, ~0 conflit — mais répartition AVEUGLE à la charge : sous skew σ=1,5, le p99 dérive avec le worker malchanceux ; le témoin « le champion actuel »</td></tr>
+      <tr><td><code>targeted</code> (mailbox)</td><td>un dispatcher tient la charge estimée par worker et <code>send</code> chaque item au moins chargé ; la boîte EST l'attribution (write-once, pas de claim)</td><td>O(N) écritures + notifs, 0 conflit, équilibre ≈ optimal — son surcoût : l'état de routage (un dispatcher) et 1 écriture d'enveloppe par item</td></tr>
+    </tbody>
+  </table>
+
+  <p><b>Les métriques</b> : CAS gaspillés (compteur exact), événements publiés/perdus, p50/p99 du temps de
+  complétion de bout en bout, déséquilibre (écart-type des items et du travail par worker), écritures et
+  octets Blackboard (le coût mémoire du courrier, honnêtement compté). <b>Le verdict</b> : <span class="tag t-ok">GO</span>
+  si, sous skew fort (σ=1,5), <code>targeted</code> réduit le p99 d'au moins <b>25 %</b> vs
+  <code>sharded</code> à coût total comparable (±10 % d'écritures+événements) ET élimine les CAS gaspillés vs
+  <code>broadcast</code> ; <span class="tag t-warn">CONDITIONNEL</span> si le gain n'apparaît qu'à fort skew —
+  le verdict chiffre alors le σ* de bascule (la notice d'emploi : « en-dessous, restez en shardé ») ;
+  <span class="tag t-bad">NO-GO</span> si le shard statique fait aussi bien partout — et alors la primitive
+  reste livrée pour ses cas PROPRES (requête/réponse prouvé, agents long-vivants) avec la notice « pas pour la
+  délégation », exactement comme l'itératif d'ADR-013 vit avec son NO-GO de famille. <b>Prédiction écrite
+  avant mesure</b> : à σ=0 les trois bras se valent (le shard gagne même, zéro état) ; à σ=1,5 le déséquilibre
+  du hash statique sur K=8 workers devrait coûter 30-60 % de p99 — si la mesure dit autre chose, c'est le
+  modèle de skew qu'on réinterroge d'abord.</p>
+
+  <h3>7.2 — bench_mail : les invariants sous charge, et le coût nu</h3>
+
+  <p>Le second harnais ne compare pas — il <b>éprouve</b>. ① <b>I-MSG2 sous brutalité</b> : routeur de
+  capacité 1, M expéditeurs × P lettres vers une boîte chaude, drains espacés — assertion : 100 % livré,
+  exactly-once, in-order, quel que soit le taux de perte de notifs (mesuré et imprimé : il dépassera 90 %,
+  c'est voulu et c'est le point). ② <b>Le coût nu d'un courrier</b> : µs par send (écriture + notif), µs par
+  lettre drainée, à comparer au coût d'un appel d'agent Mode A (~90 µs CPU mesurés au bench_width) — pour
+  que la notice d'emploi dise « un courrier coûte X appels d'agent ». ③ <b>Le requête/réponse de bout en
+  bout</b> : latence du motif complet (2 écritures + 2 notifs + 2 drains), p50/p99, à 1 et à K conversations
+  croisées (les corrélations ne se mélangent jamais — asserté). Artefacts datés
+  <code>scripts/swarm/EFE_SWARM_MSG_&lt;date&gt;.json</code> et <code>EFE_SWARM_MAILBENCH_&lt;date&gt;.json</code>,
+  même format que la série.</p>
+</div>
+
+<!-- §8 -->
+<div class="wrap page">
+  <h2><span class="num">§8</span> Risques honnêtes &amp; hors-périmètre</h2>
+
+  <table>
+    <thead><tr><th>Risque / limite</th><th>Réalité, sans fard</th><th>Tenue</th></tr></thead>
+    <tbody>
+      <tr><td><b>« Déjà suffisant »</b></td><td>le risque n°1 est de construire une primitive dont personne n'a besoin : les topologies one-shot n'en veulent pas, le shard couvre la délégation homogène</td><td>dit en face (§3, §4.4) ; opt-in strict ; le gate §7 instruit le seul cas où l'adressage prétend gagner — et un NO-GO de famille serait versionné comme notice, pas enterré</td></tr>
+      <tr><td><b>Le courrier privatise l'information</b></td><td>deux agents qui conversent par boîtes contournent la stigmergie publique — l'essaim « voit » moins</td><td>structurel : le courrier EST du Blackboard (snapshot, historique, dashboard Lane::Mail, métriques) — privé d'adressage, public d'audit ; et la convention de drainage métré rend chaque lecture scellée</td></tr>
+      <tr><td><b>Gap bloquant hérité</b></td><td>un expéditeur qui meurt entre l'attribution du seq et l'écriture bloque le drain de la boîte (conservateur : ne rien perdre) — hérité de la lane, documenté chez elle</td><td>in-process, la fenêtre est minuscule (pas d'await entre les deux) ; la variante saut-de-gap-sur-timeout reste notée hors scope, comme chez l'ancêtre — cohérence avant héroïsme</td></tr>
+      <tr><td><b>Boîte jamais drainée</b></td><td>un destinataire qui ne lit pas accumule jusqu'au cap — puis les expéditeurs reçoivent Err</td><td>c'est le comportement VOULU (backpressure honnête, I-MSG5) ; <code>rejections_total</code> + la jauge d'octets par namespace (<code>namespace_bytes</code>, existant) le rendent visible ; jamais d'éviction silencieuse</td></tr>
+      <tr><td><b>Le dispatcher, point chaud</b></td><td>le bras <code>targeted</code> du gate introduit UN décideur de routage — un proto-scheduler, là où la maison aime l'émergence</td><td>périmètre tenu : le dispatcher est un MOTIF d'usage (du harnais), pas une pièce du substrat ; la primitive ne l'impose pas — le vol shardé reste disponible</td></tr>
+      <tr><td><b>Multi-process / réseau</b></td><td>la primitive est in-process, comme tout le substrat — un courrier ne traverse ni processus ni machine</td><td>hors périmètre EXPLICITE : l'inter-process est l'affaire du serveur/de la passerelle (qui ont déjà leurs canaux) ; aucune promesse distribuée n'est faite ni laissée entendre</td></tr>
+      <tr><td><b>Usurpation de <code>from</code></b></td><td>in-process, un agent malveillant n'est pas le modèle de menace — mais un BUG d'enveloppe (from ≠ écrivain) corromprait l'audit</td><td>I-MSG4 (triple concordance) le rend détectable depuis les seuls records ; gardien dédié</td></tr>
+      <tr><td><b>Dérive « broker »</b></td><td>TTL, priorités, acks, DLQ, retries : chaque ajout futur rapprochera la primitive du broker rejeté au §3</td><td>l'ADR-015 gravera la liste des NON-features avec leurs raisons — le refus versionné est la seule défense durable contre la dérive</td></tr>
+    </tbody>
+  </table>
+
+  <div class="callout key">
+    <p><b>Synthèse de décision.</b> ~300 lignes de spécialisation d'une lane déjà testée, zéro primitive
+    nouvelle au substrat, zéro churn sur les topologies validées — contre quoi : le requête/réponse prouvé
+    (une capacité d'audit que rien d'autre ne donne), la délégation dynamique mesurable contre deux témoins,
+    et l'unification de trois conventions d'adressage informelles. Le coût du non-build est faible (les
+    motifs actuels suffisent au présent) ; le coût du build l'est aussi — c'est le gate qui départage, et la
+    capacité de preuve conversationnelle est, elle, acquise quel que soit son verdict de famille.</p>
+  </div>
+</div>
+
+<!-- §9 -->
+<div class="wrap page">
+  <h2><span class="num">§9</span> Plan de construction — lots, fichiers, tests, ADR-015</h2>
+
+  <p class="lede">Trois lots, chaque commit laissant la suite verte. Total estimé ≈ 1 250 LoC (code + tests +
+  harnais) — la moitié d'ADR-014, le quart de l'itératif : la taille d'une spécialisation, pas d'un
+  sous-système.</p>
+
+  <table class="small">
+    <thead><tr><th>Lot</th><th>Contenu</th><th>Fichiers touchés (exhaustif)</th><th class="c">LoC ≈</th></tr></thead>
+    <tbody>
+      <tr><td><b>MSG-1</b><br>la primitive</td><td><code>mailbox.rs</code> : MsgKind, Letter (+ <code>as_read()</code>), Mailboxes (send/request/reply/reader, seq par boîte), MailReader (drain/recv_batch/await_reply avec tampon de mise de côté) ; constantes de caps ; <code>Lane::Mail</code> au dashboard</td><td>efe-blackboard : <code>mailbox.rs</code> (nouveau), <code>lib.rs</code> (export) · dashboard : <code>event.rs</code> (+2 lignes), test tap</td><td class="c">~300</td></tr>
+      <tr><td><b>MSG-2</b><br>la preuve</td><td>convention de drainage MÉTRÉ (la lettre entre dans la tâche via <code>as_read()</code> — le Meter existant scelle ; aucun changement au Meter) ; exemple <code>swarm_mailbox.rs</code> : requête/réponse prouvé de bout en bout (provenance + verify + DAG), style <code>swarm_all_phases_real</code> ; intégration quiescence WS2 (on_emit/on_done autour de send/traitement)</td><td>efe-blackboard : <code>streaming.rs</code> (hook optionnel ~10 l.) · examples : <code>swarm_mailbox.rs</code> (nouveau) · provenance : RIEN (format gelé — c'est le point)</td><td class="c">~250</td></tr>
+      <tr><td><b>MSG-3</b><br>la mesure</td><td><code>lot_msg.rs</code> (3 bras × 3 skews, candidats partagés splitmix, verdict + artefact) ; <code>bench_mail.rs</code> (I-MSG2 sous brutalité, coût nu, requête/réponse p50/p99) ; <b>ADR-015</b> ; exécution le jour même, artefacts commités</td><td>examples : 2 nouveaux · <code>scripts/swarm/EFE_SWARM_MSG_*.json</code>, <code>EFE_SWARM_MAILBENCH_*.json</code> · <code>docs/docs/adr/ADR-SWARM-015-….md</code></td><td class="c">~700</td></tr>
+    </tbody>
+  </table>
+
+  <h3>9.1 — La suite de tests nominative (les gardiens prévus)</h3>
+
+  <p class="small"><b>Invariants (7)</b> : <code>mail_is_truth_first_no_cell_no_notify</code> ·
+  <code>all_mail_delivered_despite_total_notify_loss</code> (routeur cap 1) ·
+  <code>cursor_is_exactly_once_and_gap_conservative</code> ·
+  <code>send_is_anchored_and_from_matches_writer</code> (triple concordance, sur records scellés) ·
+  <code>full_mailbox_rejects_sender_never_evicts_unread</code> ·
+  <code>epoch_purges_mail_and_resets_seq</code> ·
+  <code>reply_correlates_and_declares_reading_the_request</code> (le DAG voit la causalité).
+  <b>Mécanique (5)</b> : <code>multi_sender_single_box_is_seq_monotone</code> ·
+  <code>await_reply_sets_aside_other_letters_without_loss</code> ·
+  <code>await_reply_times_out_honestly_none</code> ·
+  <code>drain_after_router_dropped_recovers_tail</code> ·
+  <code>dashboard_classifies_mail_lane</code>.
+  <b>Intégration (2)</b> : <code>quiescence_counts_addressed_mail</code> (WS2) ·
+  <code>request_reply_end_to_end_reproves_offline</code> (l'exemple, en version test).</p>
+
+  <h3>9.2 — ADR-SWARM-015, le squelette</h3>
+
+  <div class="callout">
+    <p class="small"><b>Titre</b> : « Messagerie ciblée = lane fiable adressée — boîtes aux lettres sur la
+    vérité, réveil-indice, conversation prouvée ». <b>Contexte</b> : trois conventions d'adressage informelles
+    (ballot.&lt;j&gt;, shard_topic, topics WS2) sans enveloppe ni fiabilité ni preuve ; baseline chiffrée
+    (bus ~99 % de perte sous charge ; claim broadcast 90→99,9 % de CAS gaspillés). <b>Décision</b> : ①
+    spécialisation de <code>reliable.rs</code> (AUCUNE primitive substrat nouvelle) ; ② enveloppe minimale
+    {from, kind, correlation} — NON-features versionnées : pas de TTL, pas de priorités, pas d'acks, pas de
+    DLQ, pas d'inter-process ; ③ quotas par caps de namespace, purge par époque ; ④ preuve par composition
+    (ancrage + <code>_reads</code> + DAG), format de record GELÉ ; ⑤ opt-in strict — zéro changement aux
+    topologies livrées. <b>Verdicts</b> : tableaux Lot MSG (σ* de bascule) + bench_mail, le jour du build.
+    <b>Conséquences</b> : 7 invariants I-MSG gardés par 14 tests ; « qui a dit quoi à qui » entre dans le
+    moat ; le reste (inter-process, saut de gap, priorités) explicitement ouvert.</p>
+  </div>
+
+  <p>Gouvernance, pour finir comme il se doit : ce document est l'architecture complète — primitives
+  vérifiées, coûts chiffrés, harnais spécifiés, refus versionnés. <b>Le code attend l'ordre</b> ; le jour où
+  il vient, les gates s'exécutent avec lui, et leurs verdicts — GO, CONDITIONNEL avec σ*, ou NO-GO de
+  famille — rejoindront l'ADR-015 quoi qu'ils disent.</p>
+</div>
+
+<!-- §A -->
+<div class="wrap page">
+  <h2><span class="num">§A</span> Annexe — signatures, formats, constantes, glossaire</h2>
+
+  <h3>A.1 — Formats au fil du Blackboard</h3>
+  <pre>cellule  : /mail/&lt;to&gt;/&lt;seq:020&gt;   (write-once ; rel_key existant — ordre lexical = numérique)
+contenu  : { "from", "kind": "request|reply|inform", "correlation"?, "reply_to"?, "body" }
+notif    : topic "mail.&lt;to&gt;" · payload { "seq", "ns" }   (best-effort, jamais décisionnel)
+quotas   : with_namespaces [("/mail/", CAP_MAIL_GLOBAL), ("/mail/&lt;hot&gt;/", CAP_MAIL_BOX)]
+époque   : new_epoch(&amp;["/mail"]) — purge + seq remis à zéro (boîtes recréées à la demande)</pre>
+
+  <h3>A.2 — Constantes proposées (à arbitrer au build)</h3>
+  <table class="small">
+    <tbody>
+      <tr><td><code>CAP_MAIL_BOX</code></td><td>64 KiB par boîte (≈ centaines de lettres courtes) — Err au-delà, jamais d'éviction</td></tr>
+      <tr><td><code>CAP_MAIL_GLOBAL</code></td><td>1 MiB pour <code>/mail/</code> entier — la borne « le courrier ne mange pas le run »</td></tr>
+      <tr><td><code>AWAIT_REPLY_DEFAULT</code></td><td>pas de défaut : la deadline est un paramètre OBLIGATOIRE d'<code>await_reply</code> — un await sans borne est un bug d'appelant, pas une politique</td></tr>
+      <tr><td>seq</td><td>u64, 1-based, zero-pad 20 (convention <code>rel_key</code> héritée)</td></tr>
+      <tr><td>kinds</td><td>enum FERMÉ {Request, Reply, Inform} — l'extension est une décision d'ADR, pas une chaîne libre</td></tr>
+    </tbody>
+  </table>
+
+  <h3>A.3 — Glossaire des termes introduits</h3>
+  <table class="small">
+    <tbody>
+      <tr><td><b>boîte (mailbox)</b></td><td>namespace <code>/mail/&lt;to&gt;</code> + son compteur seq — la vérité adressée d'un destinataire</td></tr>
+      <tr><td><b>lettre (Letter)</b></td><td>une cellule de courrier drainée, portant son adresse exacte (pointer@version) — prête à être déclarée en lecture</td></tr>
+      <tr><td><b>enveloppe</b></td><td>les champs {from, kind, correlation, reply_to} qui font d'une cellule un message</td></tr>
+      <tr><td><b>drainage métré</b></td><td>la convention : une lettre entre dans la TÂCHE d'un agent métré (via <code>as_read()</code>) — jamais traitée à côté de la preuve</td></tr>
+      <tr><td><b>triple concordance</b></td><td>from (enveloppe) = written_by (cellule) = agent_id (record) — l'anti-usurpation contrôlable</td></tr>
+      <tr><td><b>mise de côté</b></td><td>tampon local d'<code>await_reply</code> : les lettres non corrélées re-livrées au prochain drain — l'exactly-once survit à l'attente sélective</td></tr>
+      <tr><td><b>σ* de bascule</b></td><td>le skew d'hétérogénéité au-delà duquel l'adressage dynamique bat le shard statique — LE chiffre que le gate doit produire</td></tr>
+    </tbody>
+  </table>
+  <hr>
+  <p class="small muted" style="text-align:center">EFE — Architecture : messagerie ciblée agent↔agent · 2026-06-12 ·
+  <span class="mono">main @ be2ae65</span> · <i>le courrier est de la vérité ; le bus n'est qu'un réveil ;
+  la conversation se prouve.</i></p>
+</div>
+
+</body>
+</html>
