@@ -213,14 +213,33 @@ impl ProvenanceRecorder {
             by_agent.entry(a.agent_id.as_str().to_string()).or_default().push_back(a);
         }
 
+        // **Appariement DÉTERMINISTE (ADR-014 / I-CP1)** : les brouillons arrivent en
+        // ordre de CAPTURE (= ordre d'achèvement des agents ∥ — non déterministe sous
+        // largeur variable), les ancres en ordre d'écriture. Apparier en ordre de
+        // capture lierait `variant i` à une cellule qui dépend de l'ordonnanceur → le
+        // root varierait d'un run à l'autre. On apparie donc en ordre de CONTENU :
+        // (agent, variant — None en dernier, input_hash, output_hash). Pour les rôles
+        // à variant (générateurs), c'est AUSSI l'appariement sémantique exact
+        // (variant i ↔ i-ème écriture de l'agent) ; pour les autres, c'est un ordre
+        // stable de contenu — la largeur d'exécution ne peut plus toucher la racine.
+        let mut drafts_sorted: Vec<AgentCallDraft> = recorded.drafts.clone();
+        drafts_sorted.sort_by(|a, b| {
+            a.agent_id
+                .as_str()
+                .cmp(b.agent_id.as_str())
+                .then(a.variant.unwrap_or(u64::MAX).cmp(&b.variant.unwrap_or(u64::MAX)))
+                .then(a.input_hash.to_hex().cmp(&b.input_hash.to_hex()))
+                .then(a.output_hash.to_hex().cmp(&b.output_hash.to_hex()))
+        });
+
         // enrichit chaque brouillon : attache la prochaine ancre (cellule écrite) de SON
         // agent, FIFO par version. La clé d'ordre (ADR-SWARM-007) est calculée APRÈS, sur
         // la cellule écrite + payload_hash — JAMAIS sur wall_at. Partagée avec `replay` ⇒
         // le root vivant == le root rejoué.
         let mut enriched: Vec<(crate::replay::OrderKey, AgentCallDraft)> =
-            Vec::with_capacity(recorded.drafts.len());
+            Vec::with_capacity(drafts_sorted.len());
         let mut anchored_records = 0usize;
-        for d in recorded.drafts.iter() {
+        for d in drafts_sorted.iter() {
             let mut d = d.clone();
             if let Some(a) = by_agent.get_mut(d.agent_id.as_str()).and_then(|q| q.pop_front()) {
                 d = d.wrote(a.pointer, a.version);
@@ -354,6 +373,60 @@ mod tests {
         assert_eq!(sealed.records[1].seq, 1);
         assert_eq!(sealed.anchored_records, 2);
         assert!((sealed.anchored_record_ratio() - 1.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn pairing_is_deterministic_under_capture_order() {
+        // **I-CP1 (ADR-014)** : l'ordre de CAPTURE (= achèvement des agents ∥, que la
+        // largeur d'exécution remanie) ne doit toucher AUCUN contenu sémantique.
+        // Deux recorders, mêmes contenus, ordres de capture OPPOSÉS :
+        // ① l'appariement est sémantique (variant i ↔ /cand/i — plus jamais « le
+        //   premier fini prend la première cellule ») ;
+        // ② à IDENTITÉS normalisées (record_id est l'entropie PAR-RUN de l'atome,
+        //   volontairement aléatoire), la chaîne re-scellée donne le MÊME root.
+        let reseal_normalized = |records: &[crate::record::AgentCallRecord]| -> String {
+            let mut drafts: Vec<AgentCallDraft> = records
+                .iter()
+                .map(|r| {
+                    let mut d = r.to_draft();
+                    // identité déterministe : une par variant (l'entropie v4 neutralisée).
+                    d.record_id = Uuid::from_u128(0xC0FFEE + u128::from(d.variant.unwrap_or(0)));
+                    d
+                })
+                .collect();
+            // même ordre canonique que seal/replay (ADR-007).
+            drafts.sort_by_key(|d| crate::replay::key_of(&d.writes, d.payload_hash()));
+            let mut chain = SwarmChain::new(TenantId::system(), swarm(), key());
+            let _ = chain.append_all(drafts);
+            hex32(&chain.root().expect("root"))
+        };
+
+        let roots: Vec<String> = [[0u64, 1, 2, 3], [3, 2, 1, 0]]
+            .into_iter()
+            .map(|order| {
+                let r = ProvenanceRecorder::new(swarm(), TenantId::system());
+                for v in order {
+                    r.capture(cap("generator", AgentRole::Generator, v));
+                }
+                // les écritures, elles, arrivent en ordre d'index (le motif consensus).
+                for i in 0..4u64 {
+                    r.anchor(&write(&format!("/cand/{i}"), 1, "generator"));
+                }
+                let sealed = r.seal_with_key(key());
+                // ① appariement sémantique : le record du variant i écrit /cand/i.
+                for rec in &sealed.records {
+                    let v = rec.variant.expect("variant posé");
+                    assert_eq!(
+                        rec.writes,
+                        vec![CellRef::new(format!("/cand/{v}"), 1)],
+                        "variant {v} ↔ /cand/{v}"
+                    );
+                }
+                reseal_normalized(&sealed.records)
+            })
+            .collect();
+        // ② contenu ⇒ racine : l'ordre de capture n'existe plus nulle part.
+        assert_eq!(roots[0], roots[1], "à identités normalisées, racine invariante sous l'ordre de capture");
     }
 
     #[test]

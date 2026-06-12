@@ -4,9 +4,12 @@
 //! Mappe [`SwarmError`] (SDK) vers le bon statut HTTP. Aucune clé ni secret n'est exposé :
 //! seules des descriptions sûres remontent au client.
 
+use async_trait::async_trait;
+use axum::extract::{FromRequest, Request};
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use axum::Json;
+use serde::de::DeserializeOwned;
 use serde_json::json;
 
 use efe_swarm_sdk::SwarmError;
@@ -63,6 +66,29 @@ impl IntoResponse for GatewayError {
     fn into_response(self) -> Response {
         let (status, code, msg) = self.parts();
         (status, Json(json!({ "error": code, "message": msg }))).into_response()
+    }
+}
+
+/// **Extracteur JSON à enveloppe STABLE** (revue ADR-014). L'extracteur axum nu
+/// (`Json<T>`) rejette un corps malformé en **422 text/plain** au message untagged
+/// opaque — hors du contrat « un code HTTP + un corps JSON stable » de ce module.
+/// Ce wrapper ramène TOUT rejet de désérialisation dans l'enveloppe :
+/// `400 {"error":"bad_request","message":<détail serde>}`.
+pub struct GatewayJson<T>(pub T);
+
+#[async_trait]
+impl<S, T> FromRequest<S> for GatewayJson<T>
+where
+    T: DeserializeOwned,
+    S: Send + Sync,
+{
+    type Rejection = GatewayError;
+
+    async fn from_request(req: Request, state: &S) -> Result<Self, Self::Rejection> {
+        match axum::Json::<T>::from_request(req, state).await {
+            Ok(axum::Json(v)) => Ok(GatewayJson(v)),
+            Err(rej) => Err(GatewayError::BadRequest(rej.body_text())),
+        }
     }
 }
 

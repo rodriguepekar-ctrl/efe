@@ -3,7 +3,7 @@
 //!
 //! Run :  cargo run --example quickstart -p efe-swarm-sdk
 
-use efe_swarm_sdk::{Budget, OnExceed, Swarm, TopologySpec};
+use efe_swarm_sdk::{Budget, OnExceed, Swarm, TopologySpec, WidthSpec};
 use serde_json::json;
 
 #[tokio::main(flavor = "multi_thread")]
@@ -43,7 +43,7 @@ async fn main() {
     let tight = || TopologySpec::Consensus {
         generator: "echo_generator".into(),
         judges: vec!["consistency".into(), "length_band".into(), "j_non_empty".into()],
-        k: 7, pattern: efe_swarm_sdk::Pattern::Borda, escalate: false,
+        k: 7.into(), pattern: efe_swarm_sdk::Pattern::Borda, escalate: false,
     };
     let err = swarm.run(json!({"text":"x"}), tight(), Budget::cents(3).with_policy(OnExceed::Error)).await;
     println!("   Error   → {}", err.err().map(|e| e.to_string()).unwrap_or_else(|| "ok".into()));
@@ -52,8 +52,35 @@ async fn main() {
     let stop = swarm.run(json!({"text":"x"}), tight(), Budget::cents(4).with_policy(OnExceed::Stop)).await.unwrap();
     println!("   Stop    → {}¢ dépensés (≤ 4) · arrêté en cours : {}", stop.budget.spent_cents, stop.budget_stopped);
 
+    // 4. ADR-014 : taille d'essaim ADAPTATIVE + largeur d'exécution.
+    println!("\n────────── ADR-014 : K adaptatif (payer selon la difficulté) ──────────────");
+    // instance facile (candidats unanimes) : l'essaim s'arrête au plancher k_min=4
+    // au lieu de dépenser k_max=24 — l'économie est réelle ET facturée.
+    let adaptive = TopologySpec::consensus_adaptive("const_generator", &["consistency"], 4, 24, 0.9);
+    let run = swarm.run(json!({ "text": "easy" }), adaptive, Budget::cents(100)).await.unwrap();
+    println!(
+        "   K adaptatif → k_used {} / k_max 24 · raison `{}` · {}¢ dépensés (au lieu de 25)",
+        run.output["sizing"]["k_used"], run.output["sizing"]["stop_reason"], run.budget.spent_cents
+    );
+    // T1 + quota vérifié (le cas-phare) : stop dès le 1er candidat VÉRIFIÉ.
+    let t1q = TopologySpec::generate_verify_adaptive("echo_generator", "equals_expected", 2, 8, 1);
+    let run = swarm.run(json!({ "text": "x", "expected": "x" }), t1q, Budget::cents(100)).await.unwrap();
+    println!(
+        "   T1 quota=1  → k_used {} / k_max 8 · le vérifié est rendu · {}¢",
+        run.output["sizing"]["k_used"], run.budget.spent_cents
+    );
+    // largeur d'exécution : une politique d'EXÉCUTION, jamais une sémantique (I-CP1) —
+    // largeur 1 (séquentiel) et Auto (cœurs) rendent le MÊME résultat.
+    let narrow = Swarm::builder().width(WidthSpec::Fixed(1)).build().unwrap();
+    let run1 = narrow.run(json!({ "text": "w", "expected": "w" }),
+        TopologySpec::consensus("echo_generator", &["consistency"], 8), Budget::cents(100)).await.unwrap();
+    println!(
+        "   largeur     → résolue {} (Fixed(1)) · même sortie qu'en Auto · verified {}",
+        run1.accounting.width, run1.provenance.verified
+    );
+
     println!("\n──────────────────────────────────────────────────────────────────────────");
-    println!(" → Une fonction : 4 topologies, budget plafonné (jamais dépassé), et chaque");
-    println!("   run renvoie un provenance_root que ton régulateur vérifie — sans clé.");
+    println!(" → Une fonction : 4 topologies + K adaptatif, budget plafonné (jamais");
+    println!("   dépassé), et chaque run renvoie un provenance_root vérifiable — sans clé.");
     println!("══════════════════════════════════════════════════════════════════════════");
 }

@@ -33,7 +33,7 @@ fn consensus(k: usize) -> TopologySpec {
     TopologySpec::Consensus {
         generator: "echo_generator".into(),
         judges: JUDGES.iter().map(|s| s.to_string()).collect(),
-        k,
+        k: k.into(),
         pattern: Pattern::Borda,
         escalate: false,
     }

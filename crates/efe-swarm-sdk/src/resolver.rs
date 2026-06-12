@@ -10,8 +10,8 @@ use std::sync::Arc;
 
 use efe_nano_sdk::AgentId;
 use efe_swarm_topology::{
-    builtin_arguers, builtin_refiner, AgentFleet, Decomposer, Generator, Judge, Merger, Refiner,
-    Solver, Stage, StageRefiner, Verifier,
+    builtin_arguers, builtin_refiner, AgentFleet, BudgetProbe, Decomposer, Generator, Judge,
+    Merger, Refiner, Solver, Stage, StageRefiner, Verifier,
 };
 
 use crate::agents::{
@@ -28,6 +28,10 @@ pub(crate) struct Resolver<'a> {
     /// keyless (Ollama ou OpenAI-compatible local), enveloppé d'un circuit-breaker.
     pub backend: Option<Arc<dyn LocalBackend>>,
     pub meter: Meter,
+    /// **ADR-014 (CP-1)** : largeur d'exécution du run, résolue par `run_traced`
+    /// (cœurs Mode A / backend déclaré Mode C / env / spec) — descendue dans chaque
+    /// topologie par `TopologySpec::resolve`. Jamais une sémantique (I-CP1).
+    pub width: usize,
 }
 
 fn aid(s: &str) -> AgentId {
@@ -35,6 +39,22 @@ fn aid(s: &str) -> AgentId {
 }
 
 impl Resolver<'_> {
+    /// **I-AK4 (ADR-014)** : la sonde de budget coopérative du sizer — enveloppe le
+    /// `BudgetGuard` du run (« n appels de plus, payables entièrement ? »). La
+    /// topologie reste découplée du modèle de prix. Un refus MARQUE l'épuisement :
+    /// le chemin coopératif n'a aucun `charge()` refusé pour le faire — sans ça, un
+    /// run tronqué par le budget se déclarerait propre (`budget_stopped: false`).
+    pub fn budget_probe(&self) -> BudgetProbe {
+        let guard = self.meter.guard.clone();
+        Arc::new(move |calls: usize| {
+            let ok = guard.can_pay(calls);
+            if !ok {
+                guard.mark_exhausted();
+            }
+            ok
+        })
+    }
+
     pub fn generator(&self, name: &str, id: &str) -> Result<Arc<dyn Generator>, SwarmError> {
         let g = match &self.backend {
             Some(b) => llm_gen(b.clone(), name.to_string()),

@@ -72,7 +72,7 @@ async fn main() {
                     "Judge how well the proposed topic label fits the text.".into(),
                     "Assess the relevance of the topic to the text.".into(),
                 ],
-                k: 3,
+                k: 3.into(),
                 pattern: Pattern::Borda,
                 escalate: false,
             },

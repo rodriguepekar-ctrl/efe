@@ -118,6 +118,28 @@ impl BudgetGuard {
         }
     }
 
+    /// **I-AK4 (ADR-014)** : le budget peut-il payer `calls` appels de plus,
+    /// **entièrement** ? Sonde coopérative du sizer adaptatif — consultative (sans
+    /// réservation : les vagues d'un run sont séquentielles, I13 reste souverain en
+    /// vol). `prix = 0` ⇒ toujours vrai (local/gratuit). **Pure** (ne pose pas
+    /// `exhausted` — la sonde du run le fait via [`BudgetGuard::mark_exhausted`]).
+    pub fn can_pay(&self, calls: usize) -> bool {
+        if self.price_cents == 0 {
+            return true;
+        }
+        let cost = (calls as u64).saturating_mul(self.price_cents as u64);
+        (self.spent_cents() as u64).saturating_add(cost) <= self.max_cents as u64
+    }
+
+    /// **ADR-014 (revue)** : marque l'épuisement SANS débit. Le chemin coopératif
+    /// (sonde I-AK4) refuse les vagues AVANT tout `charge()` — aucun débit n'échoue
+    /// donc jamais, et sans ce marqueur un run adaptatif tronqué par le budget
+    /// rapporterait `budget_stopped: false` / `is_clean() == true` (régression vs le
+    /// chemin K fixe, où les `charge()` refusés posaient le flag).
+    pub(crate) fn mark_exhausted(&self) {
+        self.exhausted.store(true, Ordering::Relaxed);
+    }
+
     pub fn exhausted(&self) -> bool {
         self.exhausted.load(Ordering::Relaxed)
     }
@@ -158,6 +180,21 @@ mod tests {
         assert_eq!(snap.spent_cents, 8);
         assert_eq!(snap.remaining, 2);
         assert_eq!(snap.per_llm.get("a"), Some(&8));
+    }
+
+    #[test]
+    fn can_pay_is_a_whole_wave_probe() {
+        // I-AK4 : la sonde répond « la vague ENTIÈRE est-elle payable ? » — jamais
+        // d'échantillon partiel.
+        let g = BudgetGuard::new(10, 2); // plafond 10¢, 2¢/appel
+        assert!(g.can_pay(5), "5 appels = 10¢ = plafond : payable");
+        assert!(!g.can_pay(6), "6 appels = 12¢ > 10¢ : refusé AVANT la vague");
+        assert!(g.charge("a") && g.charge("a")); // 4¢ dépensés
+        assert!(g.can_pay(3), "4 + 6 = 10¢ : encore payable");
+        assert!(!g.can_pay(4), "4 + 8 = 12¢ : refusé");
+        // prix 0 (self-host local) : toujours payable, jamais de plafond.
+        let free = BudgetGuard::new(0, 0);
+        assert!(free.can_pay(1_000_000));
     }
 
     #[test]

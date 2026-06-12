@@ -30,6 +30,11 @@ pub struct Accounting {
     /// Unités d'appel générateur (comptabilité topologie).
     pub cost_units: f64,
     pub elapsed_ms: u64,
+    /// **ADR-014** : largeur d'exécution RÉSOLUE du run (cœurs / backend / spec) —
+    /// l'observabilité « exec_width » de l'architecture §3.3, réalisée par-run (champ
+    /// additif) plutôt qu'en jauge Prometheus (une jauge par-run n'a pas de sens ;
+    /// déviation actée ADR-014). I-CP1 : informative, jamais une sémantique.
+    pub width: usize,
 }
 
 /// Descripteur **forensique** du backend local d'un run self-host (alimente le pont N17 :

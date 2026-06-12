@@ -14,7 +14,7 @@ use crate::agents::Meter;
 use crate::backend::{build_local_backend, LocalBackend};
 use crate::budget::{Budget, BudgetGuard, OnExceed};
 use crate::n17::LlmProvenanceCollector;
-use crate::client::ClientMode;
+use crate::client::{ClientMode, WidthSpec};
 use crate::observer::{SwarmObserver, TeeSink};
 use crate::resolver::Resolver;
 use crate::result::{Accounting, ProvenanceSummary, RunOutcome, SwarmError, SwarmRun};
@@ -40,6 +40,10 @@ pub struct Swarm {
     /// **Health-check (S.a)** : sonde le backend self-host au démarrage (échec rapide si
     /// injoignable). `false` par défaut (compatibilité).
     require_healthy_backend: bool,
+    /// **ADR-014 (CP-1)** : largeur d'exécution des vagues — `Auto` = cœurs (Mode A) /
+    /// capacité déclarée du backend (Mode C). Politique d'exécution, jamais une
+    /// sémantique (I-CP1) : la racine de provenance n'en dépend pas.
+    width: WidthSpec,
 }
 
 impl Swarm {
@@ -93,9 +97,14 @@ impl Swarm {
         let spec = match budget.on_exceed {
             OnExceed::Degrade => spec.degraded_to_fit(budget.max_cents, price, self.assumed_subtasks),
             OnExceed::Error => {
-                let est = spec.estimated_calls(self.assumed_subtasks).saturating_mul(price as usize) as u32;
-                if est > budget.max_cents {
-                    return Err(SwarmError::BudgetTooLow { needed_cents: est, max_cents: budget.max_cents });
+                // Revue ADR-014 : arithmétique u64 SANS cast tronquant — un produit
+                // k×rounds énorme doit être REFUSÉ net, jamais admis par débordement.
+                let est = (spec.estimated_calls(self.assumed_subtasks) as u64).saturating_mul(price as u64);
+                if est > budget.max_cents as u64 {
+                    return Err(SwarmError::BudgetTooLow {
+                        needed_cents: u32::try_from(est).unwrap_or(u32::MAX),
+                        max_cents: budget.max_cents,
+                    });
                 }
                 spec
             }
@@ -158,8 +167,13 @@ impl Swarm {
             ctx = ctx.with_event_tap(tap); // Inc.3 : trafic inter-agent → dashboard
         }
 
+        // 2.b — ADR-014 (CP-1) : résout la LARGEUR d'exécution du run, par mode
+        // (Mode A : cœurs mesurés ; Mode C : capacité déclarée du backend ; env
+        // EFE_SWARM_WIDTH prioritaire). Descendue dans chaque topologie au resolve.
+        let width = self.width.resolve(&self.mode, backend.as_ref().map(|b| b.suggested_width()));
+
         // 3. assemble la topologie (agents flotte OU LLM, enveloppés) + exécute.
-        let resolver = Resolver { fleet: &self.fleet, backend, meter };
+        let resolver = Resolver { fleet: &self.fleet, backend, meter, width };
         let topo = spec.resolve(&resolver)?;
         let topo_name = topo.name().to_string();
         if let Some(o) = &self.observer {
@@ -209,6 +223,7 @@ impl Swarm {
                 agents_used: out.agents_used,
                 cost_units: out.cost_units,
                 elapsed_ms: out.elapsed_ms,
+                width, // ADR-014 : la largeur résolue, rapportée par-run (jamais une sémantique)
             },
             budget: guard.snapshot(),
             provenance,
@@ -260,6 +275,7 @@ pub struct SwarmBuilder {
     observer: Option<Arc<dyn SwarmObserver>>,
     allow_remote_backend: bool,
     require_healthy_backend: bool,
+    width: WidthSpec,
 }
 
 impl Default for SwarmBuilder {
@@ -276,6 +292,7 @@ impl Default for SwarmBuilder {
             observer: None,
             allow_remote_backend: false, // souverain par défaut : egress interdit
             require_healthy_backend: false,
+            width: WidthSpec::Auto, // ADR-014 : cœurs (Mode A) / backend déclaré (Mode C)
         }
     }
 }
@@ -347,6 +364,16 @@ impl SwarmBuilder {
         self
     }
 
+    /// **ADR-014 (CP-1)** : la **largeur d'exécution** des vagues. `Auto` (défaut) =
+    /// `min(vague, P_eff)` — cœurs mesurés en Mode A, capacité déclarée du backend en
+    /// Mode C. `Fixed(w)` impose. Env `EFE_SWARM_WIDTH` prioritaire sur tout (l'opérateur
+    /// a le dernier mot). **I-CP1** : ce réglage ne change ni cellules, ni records, ni
+    /// racine — seules les durées.
+    pub fn width(mut self, w: WidthSpec) -> Self {
+        self.width = w;
+        self
+    }
+
     /// Construit le `Swarm` (dérive la clé de provenance par tenant).
     pub fn build(self) -> Result<Swarm, SwarmError> {
         let key = self.key_source.derive(self.tenant).map_err(|e| SwarmError::KeyError(e.to_string()))?;
@@ -362,6 +389,7 @@ impl SwarmBuilder {
             observer: self.observer,
             allow_remote_backend: self.allow_remote_backend,
             require_healthy_backend: self.require_healthy_backend,
+            width: self.width,
         })
     }
 }
@@ -398,7 +426,7 @@ mod tests {
     async fn t1_generate_verify_runs() {
         let swarm = Swarm::keyless();
         let run = swarm
-            .run(json!({ "text": "abc" }), TopologySpec::GenerateVerify { generator: "echo_generator".into(), verifier: "non_empty_text".into(), k: 3 }, Budget::cents(100))
+            .run(json!({ "text": "abc" }), TopologySpec::GenerateVerify { generator: "echo_generator".into(), verifier: "non_empty_text".into(), k: 3.into() }, Budget::cents(100))
             .await
             .unwrap();
         assert_eq!(run.topology, "T1:generate-verify");
@@ -440,7 +468,7 @@ mod tests {
         let err = swarm
             .run(
                 json!({ "text": "x" }),
-                TopologySpec::Consensus { generator: "echo_generator".into(), judges: vec!["consistency".into(), "length_band".into(), "j_non_empty".into()], k: 7, pattern: Pattern::Borda, escalate: false },
+                TopologySpec::Consensus { generator: "echo_generator".into(), judges: vec!["consistency".into(), "length_band".into(), "j_non_empty".into()], k: 7.into(), pattern: Pattern::Borda, escalate: false },
                 Budget::cents(3).with_policy(OnExceed::Error),
             )
             .await;
@@ -454,7 +482,7 @@ mod tests {
         let run = swarm
             .run(
                 json!({ "text": "x", "expected": "x" }),
-                TopologySpec::Consensus { generator: "echo_generator".into(), judges: vec!["consistency".into(), "length_band".into(), "j_non_empty".into()], k: 7, pattern: Pattern::Borda, escalate: false },
+                TopologySpec::Consensus { generator: "echo_generator".into(), judges: vec!["consistency".into(), "length_band".into(), "j_non_empty".into()], k: 7.into(), pattern: Pattern::Borda, escalate: false },
                 Budget::cents(3).with_policy(OnExceed::Degrade),
             )
             .await
@@ -469,7 +497,7 @@ mod tests {
         let run = swarm
             .run(
                 json!({ "text": "x" }),
-                TopologySpec::Consensus { generator: "echo_generator".into(), judges: vec!["consistency".into(), "length_band".into(), "j_non_empty".into()], k: 7, pattern: Pattern::Borda, escalate: false },
+                TopologySpec::Consensus { generator: "echo_generator".into(), judges: vec!["consistency".into(), "length_band".into(), "j_non_empty".into()], k: 7.into(), pattern: Pattern::Borda, escalate: false },
                 Budget::cents(4).with_policy(OnExceed::Stop),
             )
             .await
@@ -480,7 +508,7 @@ mod tests {
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     async fn unknown_agent_errors() {
         let swarm = Swarm::keyless();
-        let err = swarm.run(json!({}), TopologySpec::GenerateVerify { generator: "does_not_exist".into(), verifier: "non_empty_text".into(), k: 1 }, Budget::unlimited()).await;
+        let err = swarm.run(json!({}), TopologySpec::GenerateVerify { generator: "does_not_exist".into(), verifier: "non_empty_text".into(), k: 1.into() }, Budget::unlimited()).await;
         assert!(matches!(err, Err(SwarmError::UnknownAgent { role: "generator", .. })));
     }
 
@@ -546,7 +574,7 @@ mod tests {
                 TopologySpec::Consensus {
                     generator: "Classify the topic in one word from {technology,finance,health,legal}.".into(),
                     judges: vec!["Judge how well the label fits.".into()],
-                    k: 3,
+                    k: 3.into(),
                     pattern: Pattern::Borda,
                     escalate: false,
                 },

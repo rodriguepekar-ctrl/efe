@@ -58,4 +58,5 @@ impl LocalBackend for OllamaBackend {
     fn descriptor(&self) -> BackendDescriptor {
         BackendDescriptor { kind: BackendKind::Ollama, model: self.model.clone(), endpoint: self.endpoint.clone() }
     }
+
 }

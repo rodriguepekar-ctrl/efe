@@ -30,6 +30,7 @@ pub mod generate_verify;
 pub mod hierarchical;
 pub mod iterative;
 pub mod pipeline;
+pub mod sizing;
 pub mod topology;
 pub mod traits;
 
@@ -46,9 +47,13 @@ pub use fleet::AgentFleet;
 pub use generate_verify::{GenerateVerify, GvResult};
 pub use hierarchical::{FnSolver, GvSolver, HierResult, HierSolver, Hierarchical};
 pub use pipeline::Pipeline;
+pub use sizing::{
+    run_waves, run_waves_pure, BatchPoint, BudgetProbe, KPlan, SizingTrace, StopReason, StopRule,
+    DEFAULT_BATCH,
+};
 pub use topology::{
-    GvTopology, HierTopology, PipelineTopology, QualitySignals, SwarmContext, Topology,
-    TopologyOutput,
+    AdaptiveGvTopology, GvTopology, HierTopology, PipelineTopology, QualitySignals, SwarmContext,
+    Topology, TopologyOutput,
 };
 pub use traits::{Decomposer, Generator, Merger, Solver, Stage, Verifier};
 

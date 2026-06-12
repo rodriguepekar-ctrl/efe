@@ -56,7 +56,7 @@ pub mod sdk;
 pub mod spec;
 
 pub use budget::{Budget, OnExceed};
-pub use client::ClientMode;
+pub use client::{ClientMode, WidthSpec};
 pub use budget::BudgetSnapshot;
 pub use n17::LlmProvenanceCollector;
 pub use observer::{AgentCall, SwarmObserver};
@@ -65,7 +65,7 @@ pub use result::{
     SwarmRun,
 };
 pub use sdk::{Swarm, SwarmBuilder};
-pub use spec::TopologySpec;
+pub use spec::{KSpec, TopologySpec};
 
 // Réexports pratiques (la passerelle HTTP s'appuie dessus pour persister + re-prouver).
 pub use efe_swarm_provenance::{
@@ -74,7 +74,7 @@ pub use efe_swarm_provenance::{
 };
 pub use efe_nano_sdk::LlmProvenanceRecord;
 pub use efe_blackboard::{BlackboardWrite, EventSink, SubstrateMetrics, SwarmEvent, WriteSink};
-pub use efe_swarm_topology::{ConvergenceMetric, Pattern};
+pub use efe_swarm_topology::{ConvergenceMetric, Pattern, StopRule, DEFAULT_BATCH};
 
 /// Version du crate (semver).
 pub const CRATE_VERSION: &str = env!("CARGO_PKG_VERSION");

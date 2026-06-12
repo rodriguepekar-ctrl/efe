@@ -77,7 +77,14 @@ impl GenerateVerify {
             }
         }
 
-        // ── Sélection a-posteriori (par INDEX → aucun emprunt à travers le move) ─
+        Self::select_from(task, candidates, ver)
+    }
+
+    /// **Sélection a-posteriori** sur des candidats déjà produits (par INDEX → aucun
+    /// emprunt à travers le move). Partagée entre [`GenerateVerify::run`] (K fixe) et
+    /// le chemin **adaptatif** d'ADR-014 (`AdaptiveGvTopology` : vagues + quota vérifié) —
+    /// I-AK5 : le sizer choisit COMBIEN de candidats, jamais comment on sélectionne.
+    pub fn select_from(task: &Value, candidates: Vec<Value>, ver: &dyn Verifier) -> GvResult {
         let mut best_pass: Option<(f64, usize)> = None;
         let mut best_any: Option<(f64, usize)> = None;
         let mut passed = 0usize;

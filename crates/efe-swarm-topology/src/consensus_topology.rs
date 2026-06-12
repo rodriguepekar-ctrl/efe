@@ -27,6 +27,7 @@ use tokio::task::JoinSet;
 
 use crate::consensus::selector::{aggregator_for, Pattern, PatternSelector};
 use crate::consensus::{Aggregator, Ballot, Judge, MajorityVote};
+use crate::sizing::{run_waves_pure, BudgetProbe, KPlan, SizingTrace};
 use crate::topology::{QualitySignals, SwarmContext, Topology, TopologyOutput};
 use crate::traits::Generator;
 
@@ -58,6 +59,13 @@ pub struct ConsensusTopology {
     /// écritures (`/cand/*`, `/ballot/*`) **sans** que la topologie connaisse la
     /// provenance (type `efe_blackboard::WriteSink` — aucun couplage, aucun cycle).
     write_sink: Option<Arc<dyn WriteSink>>,
+    /// **ADR-014 — taille adaptative** : `Some(plan)` ⇒ la génération échantillonne par
+    /// vagues bornées `[k_min, k_max]` et s'arrête à la cible (`self.k` sert alors de
+    /// plafond de référence = `plan.k_max`). `None` ⇒ chemin K fixe, inchangé.
+    k_plan: Option<KPlan>,
+    /// **I-AK4** : sonde de budget coopérative (« n appels de plus, payables ? ») —
+    /// injectée par le SDK ; la topologie ignore le modèle de prix.
+    budget_probe: Option<BudgetProbe>,
 }
 
 impl std::fmt::Debug for ConsensusTopology {
@@ -67,6 +75,7 @@ impl std::fmt::Debug for ConsensusTopology {
             .field("judges", &self.judges.len())
             .field("policy", &self.policy)
             .field("instrumented", &self.write_sink.is_some())
+            .field("adaptive", &self.k_plan.is_some())
             .finish()
     }
 }
@@ -81,6 +90,8 @@ impl ConsensusTopology {
             policy: AggregatorPolicy::Adaptive(PatternSelector::default()),
             max_concurrency: 8,
             write_sink: None,
+            k_plan: None,
+            budget_probe: None,
         }
     }
 
@@ -108,6 +119,21 @@ impl ConsensusTopology {
         self.max_concurrency = c.max(1);
         self
     }
+    /// **ADR-014** : active la **taille adaptative** — la génération échantillonne par
+    /// vagues (`plan.batch` ∈ spec, jamais la machine — §2.3 de l'architecture) et
+    /// s'arrête à la cible. Le plan est normalisé (I-AK1 : bornes dures).
+    pub fn with_k_plan(mut self, plan: KPlan) -> Self {
+        let plan = plan.normalized();
+        self.k = plan.k_max; // cohérence : le plafond de référence suit le plan
+        self.k_plan = Some(plan);
+        self
+    }
+    /// **I-AK4** : branche la sonde de budget coopérative (le SDK enveloppe son
+    /// `BudgetGuard`) — aucune vague impayable n'est émise, zéro sentinelle.
+    pub fn with_budget_probe(mut self, probe: BudgetProbe) -> Self {
+        self.budget_probe = Some(probe);
+        self
+    }
 
     /// Génère K candidats EN PARALLÈLE + les écrit au Blackboard (vérité durable).
     async fn generate(&self, task: &Value, bb: &Blackboard) -> Vec<Value> {
@@ -133,6 +159,21 @@ impl ConsensusTopology {
             let _ = bb.write(&format!("/cand/{i}"), c.clone(), gid.clone());
         }
         cands
+    }
+
+    /// **ADR-014** : génération par **vagues bornées** (le sizer, `crate::sizing`) —
+    /// vague → observation **pure** (I-AK2) → décision dans `[k_min, k_max]` (I-AK1),
+    /// sous sonde de budget (I-AK4). Les cellules `/cand/<i>` sont écrites en indices
+    /// **continus** (variant = i, I-AK3) : juges, agrégation, ancrage et DAG ne voient
+    /// aucune différence avec un run fixe de même K.
+    async fn generate_adaptive(&self, task: &Value, bb: &Blackboard, plan: &KPlan) -> (Vec<Value>, SizingTrace) {
+        let (cands, trace) =
+            run_waves_pure(&self.generator, task, plan, self.max_concurrency, self.budget_probe.as_ref()).await;
+        let gid = AgentId::new("generator").unwrap();
+        for (i, c) in cands.iter().enumerate() {
+            let _ = bb.write(&format!("/cand/{i}"), c.clone(), gid.clone());
+        }
+        (cands, trace)
     }
 
     /// Phase JUGES sur le substrat : juges-agents (∥, bornés) écrivent `/ballot/<j>`
@@ -232,7 +273,25 @@ impl Topology for ConsensusTopology {
         }
 
         // 1. génération + écriture des candidats au Blackboard (vérité durable).
-        let candidates = self.generate(task, &bb).await;
+        //    ADR-014 : chemin fixe (K d'un bloc) OU adaptatif (vagues bornées + trace).
+        let (candidates, sizing) = match &self.k_plan {
+            None => (self.generate(task, &bb).await, None),
+            Some(plan) => {
+                let (c, t) = self.generate_adaptive(task, &bb, plan).await;
+                (c, Some((plan.clone(), t)))
+            }
+        };
+        // Le sizer annonce sa décision (topic réservé) : K_used + trajectoire + raison —
+        // non dérivables des seuls ballots. Coût nul si aucun tap n'est branché.
+        if let (Some((plan, trace)), Some(tap)) = (&sizing, &ctx.event_tap) {
+            tap.on_event(&SwarmEvent {
+                swarm_id,
+                published_by: AgentId::new("sizer").expect("agent id valide"),
+                topic: "sizer.decided".to_string(),
+                payload: trace.to_json(plan),
+                published_at: SystemTime::now(),
+            });
+        }
 
         // 2. décide le pattern + si les juges sont nécessaires (escalade incluse).
         let (pattern, judges_needed) = match &self.policy {
@@ -281,14 +340,24 @@ impl Topology for ConsensusTopology {
             });
         }
 
+        // ADR-014 : en adaptatif, la sortie est ENVELOPPÉE `{value, sizing}` — la même
+        // grammaire de diagnostic que le gossip (`{value, gossip:{…}}`) : on rend
+        // l'observable, jamais seulement la décision. Chemin fixe : forme historique.
+        let k_used = candidates.len();
+        let output = match &sizing {
+            None => outcome.selected,
+            Some((plan, trace)) => json!({ "value": outcome.selected, "sizing": trace.to_json(plan) }),
+        };
         TopologyOutput {
-            output: outcome.selected,
-            agents_used: self.k + judges_run,
-            // coût = K générations + appels JUGES réellement effectués (récompense l'escalade).
-            cost_units: self.k as f64 + judges_run as f64,
+            output,
+            // K réellement dépensé (= self.k en fixe ; = K_used ≤ k_max en adaptatif).
+            agents_used: k_used + judges_run,
+            // coût = générations réelles + appels JUGES réellement effectués
+            // (récompense l'escalade ET l'arrêt anticipé du sizer).
+            cost_units: k_used as f64 + judges_run as f64,
             elapsed_ms: t0.elapsed().as_millis() as u64,
             quality: QualitySignals {
-                candidates: candidates.len(),
+                candidates: k_used,
                 verified: bus_count,
                 subtasks: judges_run,
             },
@@ -385,6 +454,47 @@ mod tests {
         assert_eq!(out.output, json!({ "value": "u" }));
         assert_eq!(out.quality.subtasks, 0, "vote confiant → juges économisés");
         assert_eq!(out.cost_units, 7.0, "coût = K seulement (pas d'appel juge)");
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn adaptive_k_stops_at_k_min_and_wraps_output_with_sizing() {
+        use crate::sizing::{KPlan, StopRule};
+        // tous les variants corrects → candidats UNANIMES → accord 1.0 dès k_min :
+        // le sizer s'arrête au plancher, et la sortie porte la trace (ADR-014).
+        let topo = ConsensusTopology::new(
+            Arc::new(TestGen { expected: json!("a"), correct_variants: (0..24).collect() }),
+            24,
+            discerning_judges(3),
+        )
+        .with_pattern(Pattern::Borda)
+        .with_k_plan(KPlan { k_min: 4, k_max: 24, batch: 4, stop: StopRule::Agreement { threshold: 0.9 } });
+        let out = topo.run(&json!({ "expected": "a" }), &SwarmContext::standard()).await;
+        assert_eq!(out.output["value"], json!({ "value": "a" }), "le gagnant sous `value`");
+        assert_eq!(out.output["sizing"]["k_used"], json!(4), "arrêt au plancher k_min");
+        assert_eq!(out.output["sizing"]["stop_reason"], json!("target"));
+        assert_eq!(out.quality.candidates, 4);
+        assert_eq!(out.agents_used, 4 + 3, "K_used + juges (le sizer économise 20 appels)");
+        assert_eq!(out.cost_units, 7.0);
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn adaptive_k_runs_to_k_max_when_candidates_disagree() {
+        use crate::sizing::{KPlan, StopRule};
+        // 1 seul variant correct → candidats jamais d'accord à 0.9 → plafond k_max (I-AK1),
+        // et Borda + juges discriminants extraient quand même le correct (I-AK5 :
+        // l'agrégation est inchangée — le sizer a choisi COMBIEN, pas QUOI).
+        let topo = ConsensusTopology::new(
+            Arc::new(TestGen { expected: json!("e"), correct_variants: vec![0] }),
+            7,
+            discerning_judges(5),
+        )
+        .with_pattern(Pattern::Borda)
+        .with_k_plan(KPlan { k_min: 3, k_max: 7, batch: 2, stop: StopRule::Agreement { threshold: 0.9 } });
+        let out = topo.run(&json!({ "expected": "e" }), &SwarmContext::standard()).await;
+        assert_eq!(out.output["sizing"]["k_used"], json!(7), "plafond dur atteint");
+        assert_eq!(out.output["sizing"]["stop_reason"], json!("k_max"));
+        assert_eq!(out.output["value"], json!({ "value": "e" }), "Borda extrait le correct");
+        assert_eq!(out.agents_used, 7 + 5);
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]

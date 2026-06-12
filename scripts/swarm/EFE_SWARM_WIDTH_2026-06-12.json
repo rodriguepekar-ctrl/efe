@@ -1,0 +1,160 @@
+{
+  "adr": "ADR-SWARM-014",
+  "bench": "width",
+  "date": "2026-06-12",
+  "grid": [
+    {
+      "agents_per_s": 16172.0,
+      "budget_within_cap": true,
+      "k": 50,
+      "p50_ms": 3.227,
+      "p99_ms": 3.755,
+      "verify_ok": true,
+      "width": "1"
+    },
+    {
+      "agents_per_s": 16047.0,
+      "budget_within_cap": true,
+      "k": 50,
+      "p50_ms": 3.291,
+      "p99_ms": 3.48,
+      "verify_ok": true,
+      "width": "2"
+    },
+    {
+      "agents_per_s": 15620.0,
+      "budget_within_cap": true,
+      "k": 50,
+      "p50_ms": 3.399,
+      "p99_ms": 3.541,
+      "verify_ok": true,
+      "width": "4"
+    },
+    {
+      "agents_per_s": 15736.0,
+      "budget_within_cap": true,
+      "k": 50,
+      "p50_ms": 3.376,
+      "p99_ms": 3.545,
+      "verify_ok": true,
+      "width": "8"
+    },
+    {
+      "agents_per_s": 15673.0,
+      "budget_within_cap": true,
+      "k": 50,
+      "p50_ms": 3.378,
+      "p99_ms": 3.59,
+      "verify_ok": true,
+      "width": "11"
+    },
+    {
+      "agents_per_s": 15583.0,
+      "budget_within_cap": true,
+      "k": 50,
+      "p50_ms": 3.387,
+      "p99_ms": 3.558,
+      "verify_ok": true,
+      "width": "16"
+    },
+    {
+      "agents_per_s": 16925.0,
+      "budget_within_cap": true,
+      "k": 50,
+      "p50_ms": 3.075,
+      "p99_ms": 3.498,
+      "verify_ok": true,
+      "width": "32"
+    },
+    {
+      "agents_per_s": 17685.0,
+      "budget_within_cap": true,
+      "k": 50,
+      "p50_ms": 2.955,
+      "p99_ms": 3.442,
+      "verify_ok": true,
+      "width": "auto"
+    },
+    {
+      "agents_per_s": 13847.0,
+      "budget_within_cap": true,
+      "k": 200,
+      "p50_ms": 14.684,
+      "p99_ms": 16.433,
+      "verify_ok": true,
+      "width": "1"
+    },
+    {
+      "agents_per_s": 13080.0,
+      "budget_within_cap": true,
+      "k": 200,
+      "p50_ms": 15.761,
+      "p99_ms": 16.65,
+      "verify_ok": true,
+      "width": "2"
+    },
+    {
+      "agents_per_s": 12368.0,
+      "budget_within_cap": true,
+      "k": 200,
+      "p50_ms": 16.442,
+      "p99_ms": 17.092,
+      "verify_ok": true,
+      "width": "4"
+    },
+    {
+      "agents_per_s": 11850.0,
+      "budget_within_cap": true,
+      "k": 200,
+      "p50_ms": 17.043,
+      "p99_ms": 17.831,
+      "verify_ok": true,
+      "width": "8"
+    },
+    {
+      "agents_per_s": 11858.0,
+      "budget_within_cap": true,
+      "k": 200,
+      "p50_ms": 17.171,
+      "p99_ms": 17.731,
+      "verify_ok": true,
+      "width": "11"
+    },
+    {
+      "agents_per_s": 11905.0,
+      "budget_within_cap": true,
+      "k": 200,
+      "p50_ms": 17.045,
+      "p99_ms": 18.034,
+      "verify_ok": true,
+      "width": "16"
+    },
+    {
+      "agents_per_s": 11775.0,
+      "budget_within_cap": true,
+      "k": 200,
+      "p50_ms": 16.994,
+      "p99_ms": 18.233,
+      "verify_ok": true,
+      "width": "32"
+    },
+    {
+      "agents_per_s": 11772.0,
+      "budget_within_cap": true,
+      "k": 200,
+      "p50_ms": 17.19,
+      "p99_ms": 18.038,
+      "verify_ok": true,
+      "width": "auto"
+    }
+  ],
+  "invariants": {
+    "budget_never_exceeded_I13": true,
+    "semantic_fingerprint_invariant_under_width_ICP1": true,
+    "verify_ok_all_cells": true
+  },
+  "machine_cores": 11,
+  "mode": "keyless (Mode A déterministe)",
+  "runs_per_cell": 20,
+  "verdict": "GO"
+}

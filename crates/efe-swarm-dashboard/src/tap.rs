@@ -317,6 +317,12 @@ mod tests {
             "gossip.converged",
             json!({ "rounds": 4, "residual": 0.01, "converged": true, "winner": 100.0 }),
         ));
+        // ADR-014 : la décision du SIZER traverse le tap en flux générique (topic
+        // préservé) — le dashboard voit « pourquoi ce run a coûté K_used ».
+        tap.on_event(&mk(
+            "sizer.decided",
+            json!({ "k_used": 4, "stop_reason": "target", "batches": [{ "k": 4, "observed": 1.0 }] }),
+        ));
         let decided: Vec<(String, f64, usize)> = bus
             .replay()
             .into_iter()
@@ -330,5 +336,11 @@ mod tests {
         assert_eq!(decided.len(), 2, "les deux verdicts structurés");
         assert_eq!(decided[0], ("Borda".into(), 0.75, 6));
         assert_eq!(decided[1], ("gossip".into(), 1.0, 0));
+        // sizer.decided : flux générique, topic intact (la trace reste lisible).
+        let sizer_msg = bus.replay().into_iter().any(|e| {
+            matches!(&e.event, DashboardEvent::AgentMessage { topic, from, .. }
+                     if topic == "sizer.decided" && from == "tap_test")
+        });
+        assert!(sizer_msg, "sizer.decided traverse le tap (AgentMessage, topic préservé)");
     }
 }

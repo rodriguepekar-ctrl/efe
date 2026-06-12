@@ -4,14 +4,16 @@
 //! registres de métriques.
 
 use std::str::FromStr;
+use std::sync::atomic::AtomicU64;
 use std::sync::Arc;
 
 use efe_blackboard::SubstrateMetrics;
 use efe_nano_sdk::TenantId;
 use efe_swarm_dashboard::{DashboardBus, DashboardMetrics, DashboardObserver, DashboardRegistry};
 use efe_swarm_provenance::ProvenanceMetrics;
-use efe_swarm_sdk::{ClientMode, HmacKeySource, Swarm, SwarmObserver};
+use efe_swarm_sdk::{ClientMode, HmacKeySource, Swarm, SwarmObserver, WidthSpec};
 use efe_swarm_topology::AgentFleet;
+use tokio::sync::Semaphore;
 
 use crate::error::GatewayError;
 use crate::router_map::RouterMap;
@@ -19,6 +21,27 @@ use crate::store::{InMemoryRunStore, RunStore};
 
 /// Plafond de runs live simultanés conservés dans le registre (drop-oldest au-delà).
 const DASHBOARD_REGISTRY_CAP: usize = 256;
+
+/// **ADR-014 (CP-2)** : permits d'admission process — runs en vol simultanés.
+/// Env `EFE_GATEWAY_MAX_INFLIGHT_RUNS` ; défaut `max(4, cœurs)`. Au-delà : 429 visible
+/// (backpressure honnête) plutôt qu'une file invisible qui finit en timeouts.
+fn admission_permits() -> usize {
+    std::env::var("EFE_GATEWAY_MAX_INFLIGHT_RUNS")
+        .ok()
+        .and_then(|s| s.parse::<usize>().ok())
+        .unwrap_or_else(|| std::thread::available_parallelism().map(|n| n.get()).unwrap_or(4).max(4))
+        .max(1)
+}
+
+/// **ADR-014 (CP-2)** : plafond serveur du champ DTO `width` (un client ne dimensionne
+/// pas la machine d'autrui). Env `EFE_GATEWAY_MAX_WIDTH` ; défaut 32.
+fn max_width_cap() -> usize {
+    std::env::var("EFE_GATEWAY_MAX_WIDTH")
+        .ok()
+        .and_then(|s| s.parse::<usize>().ok())
+        .unwrap_or(32)
+        .max(1)
+}
 
 /// État de la passerelle (clonable : tout est `Arc` ou `Clone` bon marché).
 #[derive(Clone)]
@@ -54,6 +77,17 @@ pub struct SwarmGatewayState {
     /// previews. Détection LOCALE (souverain).
     #[cfg(feature = "pii")]
     pub pii: crate::pii::PiiConfig,
+    /// **ADR-014 (CP-2)** : sémaphore d'**admission process** (FIFO) — borne les runs
+    /// en vol (sync ET jobs). `try_acquire` en tête de handler ; refus = 429 +
+    /// `Retry-After` (backpressure VISIBLE). Ferme l'étage process du gap §17
+    /// « admission-control » (les tiers/files par tenant restent ouverts — ADR-014).
+    pub admission: Arc<Semaphore>,
+    /// Permits configurés (pour la jauge `inflight = max − disponibles`).
+    pub admission_max: usize,
+    /// Refus d'admission cumulés (compteur `/metrics`).
+    pub admission_rejected: Arc<AtomicU64>,
+    /// Plafond serveur du champ DTO `width` (`EFE_GATEWAY_MAX_WIDTH`, défaut 32).
+    pub max_width: usize,
 }
 
 impl SwarmGatewayState {
@@ -66,6 +100,7 @@ impl SwarmGatewayState {
         prov_metrics: Arc<ProvenanceMetrics>,
         substrate_metrics: Arc<SubstrateMetrics>,
     ) -> Self {
+        let permits = admission_permits();
         Self {
             fleet,
             keys,
@@ -80,27 +115,31 @@ impl SwarmGatewayState {
             oidc: None,
             #[cfg(feature = "pii")]
             pii: crate::pii::PiiConfig::default(),
+            admission: Arc::new(Semaphore::new(permits)),
+            admission_max: permits,
+            admission_rejected: Arc::new(AtomicU64::new(0)),
+            max_width: max_width_cap(),
         }
     }
 
     /// État **dev/standalone** : flotte standard, clé de test, store en mémoire, métriques
     /// neuves. Le mode démo souverain en une ligne. `Network` désactivé (pas de routeur).
     pub fn in_memory() -> Self {
-        Self {
-            fleet: Arc::new(AgentFleet::standard()),
-            keys: HmacKeySource::test_key(),
-            store: Arc::new(InMemoryRunStore::new()),
-            prov_metrics: ProvenanceMetrics::new(),
-            substrate_metrics: Arc::new(SubstrateMetrics::default()),
-            dashboards: Arc::new(DashboardRegistry::new(DASHBOARD_REGISTRY_CAP)),
-            dash_metrics: DashboardMetrics::new(),
-            router_endpoint: None,
-            router_map: RouterMap::default(),
-            #[cfg(feature = "oidc")]
-            oidc: None,
-            #[cfg(feature = "pii")]
-            pii: crate::pii::PiiConfig::default(),
-        }
+        Self::new(
+            Arc::new(AgentFleet::standard()),
+            HmacKeySource::test_key(),
+            Arc::new(InMemoryRunStore::new()),
+            ProvenanceMetrics::new(),
+            Arc::new(SubstrateMetrics::default()),
+        )
+    }
+
+    /// **ADR-014 (CP-2, tests/déploiements)** : remplace les permits d'admission process.
+    pub fn with_admission_permits(mut self, permits: usize) -> Self {
+        let permits = permits.max(1);
+        self.admission = Arc::new(Semaphore::new(permits));
+        self.admission_max = permits;
+        self
     }
 
     /// **G9 (feature `pii`)** : branche une politique PII par tenant (caviardage souverain).
@@ -227,9 +266,30 @@ impl SwarmGatewayState {
         }
     }
 
+    /// **ADR-014 (CP-2)** : largeur demandée par le client → [`WidthSpec`], plafonnée
+    /// serveur (`max_width`). Sans demande client : l'override opérateur
+    /// `EFE_SWARM_WIDTH` (lu ICI, côté binaire — le SDK ne lit jamais l'env, garde-fou
+    /// G1), sinon `Auto` (cœurs / backend déclaré).
+    fn width_spec(&self, requested: Option<usize>) -> WidthSpec {
+        match requested {
+            Some(w) => WidthSpec::Fixed(w.clamp(1, self.max_width)),
+            None => match std::env::var("EFE_SWARM_WIDTH").ok().and_then(|s| s.parse::<usize>().ok()) {
+                Some(w) => WidthSpec::Fixed(w.clamp(1, self.max_width)),
+                None => WidthSpec::Auto,
+            },
+        }
+    }
+
     /// Fabrique un [`Swarm`] **pour ce tenant**. `allow_remote` n'est `true` que pour le
     /// routeur Network (egress assumé) ; `false` garde la souveraineté (self-host local).
-    pub fn swarm_for(&self, tenant: &str, mode: ClientMode, allow_remote: bool) -> Result<Swarm, GatewayError> {
+    /// `width` : largeur d'exécution demandée (DTO), plafonnée serveur — I-CP1.
+    pub fn swarm_for(
+        &self,
+        tenant: &str,
+        mode: ClientMode,
+        allow_remote: bool,
+        width: Option<usize>,
+    ) -> Result<Swarm, GatewayError> {
         let tid = self.tenant_id(tenant)?;
         Swarm::builder()
             .fleet(self.fleet.clone())
@@ -240,6 +300,7 @@ impl SwarmGatewayState {
             .with_substrate_metrics(self.substrate_metrics.clone())
             .require_healthy_backend(true) // échec rapide si backend (self-host ou routeur) mort ; no-op keyless
             .allow_remote_backend(allow_remote)
+            .width(self.width_spec(width))
             .build()
             .map_err(GatewayError::from)
     }
@@ -251,6 +312,7 @@ impl SwarmGatewayState {
         mode: ClientMode,
         observer: Arc<dyn SwarmObserver>,
         allow_remote: bool,
+        width: Option<usize>,
     ) -> Result<Swarm, GatewayError> {
         let tid = self.tenant_id(tenant)?;
         Swarm::builder()
@@ -263,6 +325,7 @@ impl SwarmGatewayState {
             .with_observer(observer)
             .require_healthy_backend(true)
             .allow_remote_backend(allow_remote)
+            .width(self.width_spec(width))
             .build()
             .map_err(GatewayError::from)
     }
@@ -282,12 +345,29 @@ mod tests {
     #[test]
     fn in_memory_state_builds_swarms_and_keys() {
         let s = SwarmGatewayState::in_memory();
-        assert!(s.swarm_for("system", ClientMode::Keyless, false).is_ok());
+        assert!(s.swarm_for("system", ClientMode::Keyless, false, None).is_ok());
+        assert!(s.swarm_for("system", ClientMode::Keyless, false, Some(4)).is_ok());
         // même clé pour le même tenant (déterministe) → re-preuve cohérente.
         let k1 = s.derive_key("system").unwrap();
         let k2 = s.derive_key("system").unwrap();
         assert_eq!(k1, k2);
         assert!(s.tenant_id("not-a-uuid").is_err());
+    }
+
+    #[test]
+    fn width_is_capped_server_side_and_admission_is_bounded() {
+        // ADR-014 (CP-2) : le plafond serveur mord (un client ne dimensionne pas la
+        // machine d'autrui), et l'admission est bornée + FIFO.
+        let s = SwarmGatewayState::in_memory().with_admission_permits(2);
+        assert_eq!(s.width_spec(Some(10_000)), WidthSpec::Fixed(s.max_width), "plafonné");
+        assert_eq!(s.width_spec(Some(0)), WidthSpec::Fixed(1), "plancher 1 (I-CP3)");
+        assert_eq!(s.width_spec(None), WidthSpec::Auto);
+        assert_eq!(s.admission_max, 2);
+        let p1 = s.admission.clone().try_acquire_owned().unwrap();
+        let _p2 = s.admission.clone().try_acquire_owned().unwrap();
+        assert!(s.admission.clone().try_acquire_owned().is_err(), "3ᵉ run refusé à 2 permits");
+        drop(p1);
+        assert!(s.admission.clone().try_acquire_owned().is_ok(), "permit libéré → admis");
     }
 
     #[test]

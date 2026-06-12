@@ -35,7 +35,11 @@
 //! ## Sécurité (règle absolue)
 //! La clé de provenance par tenant (HKDF) reste **server-side** (dans l'état) ; on dérive
 //! pour sceller/re-prouver, on n'expose **que** le `root`. L'auth (dev : `Caller` par
-//! en-tête ; prod : `AuthCtx` OIDC) **tenant-scope** toutes les routes.
+//! en-tête ; prod : `AuthCtx` OIDC) **tenant-scope** toutes les routes **de données**
+//! (`/v1/swarm/*`). Exceptions ASSUMÉES (revue ADR-014) : `GET /metrics` et
+//! `/dashboard` sont des surfaces **agrégées sans données tenant** servies SANS auth —
+//! le plan scrape/probe (Prometheus, liveness k8s) l'exige ; à protéger au niveau
+//! réseau (NetworkPolicy), ne jamais les router publiquement via l'ingress.
 
 #![deny(unsafe_code)]
 #![warn(rust_2018_idioms)]

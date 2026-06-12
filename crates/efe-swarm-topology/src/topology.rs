@@ -7,16 +7,18 @@
 //! [`TopologyOutput`] uniformise la comptabilité (coût, latence, agents, qualité).
 
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime};
 
 use async_trait::async_trait;
-use efe_blackboard::{EventSink, SubstrateMetrics, WriteSink};
-use serde_json::Value;
+use efe_blackboard::{EventSink, SubstrateMetrics, SwarmEvent, WriteSink};
+use efe_nano_sdk::{AgentId, SwarmId};
+use serde_json::{json, Value};
 
 use crate::fleet::AgentFleet;
 use crate::generate_verify::GenerateVerify;
 use crate::hierarchical::Hierarchical;
 use crate::pipeline::Pipeline;
+use crate::sizing::{run_waves, BudgetProbe, KPlan, StopRule};
 use crate::traits::{Generator, Verifier};
 
 /// Signaux de qualité d'un run de topologie (pour audit / provenance).
@@ -133,6 +135,74 @@ impl Topology for GvTopology {
             cost_units: n as f64,
             elapsed_ms: t0.elapsed().as_millis() as u64,
             quality: QualitySignals { candidates: n, verified: r.passed, subtasks: 0 },
+        }
+    }
+}
+
+/// **T1 ADAPTATIF** (ADR-014) — la variante sœur de [`GvTopology`] : génération par
+/// **vagues bornées** (`crate::sizing`), arrêt au **quota vérifié** (ou à toute autre
+/// [`StopRule`]), sélection a-posteriori inchangée (I-AK5). C'est le cas-phare du K
+/// adaptatif : sur la zone vérifiable, le coût attendu d'un « premier candidat
+/// vérifié » est 1/p appels, là où le K fixe paie K quoi qu'il arrive.
+///
+/// Adaptateur **séparé** (et non des champs ajoutés à `GvTopology`) : zéro churn sur
+/// les constructions littérales existantes — la déviation assumée façon ADR-013.
+pub struct AdaptiveGvTopology {
+    pub gen: Arc<dyn Generator>,
+    pub ver: Arc<dyn Verifier>,
+    pub plan: KPlan,
+    /// Largeur d'exécution de la vague (I-CP1 : jamais une sémantique).
+    pub width: usize,
+    /// Sonde de budget coopérative (I-AK4) — injectée par le SDK.
+    pub budget_probe: Option<BudgetProbe>,
+}
+
+#[async_trait]
+impl Topology for AdaptiveGvTopology {
+    fn name(&self) -> &str {
+        "T1:generate-verify"
+    }
+    async fn run(&self, task: &Value, ctx: &SwarmContext) -> TopologyOutput {
+        let t0 = Instant::now();
+        let plan = self.plan.clone().normalized();
+        // L'observable : le QUOTA compte les candidats qui PASSENT le vérificateur
+        // (a-posteriori, gratuit — cohérent avec le modèle de coût T1) ; les règles
+        // pures (accord / erreur-type) restent disponibles telles quelles.
+        let ver = self.ver.clone();
+        let task_for_obs = task.clone();
+        let stop = plan.stop.clone();
+        let observe = move |cands: &[Value]| match &stop {
+            StopRule::VerifiedQuota { .. } => {
+                cands.iter().filter(|c| ver.passes(&task_for_obs, c)).count() as f64
+            }
+            pure => pure.observe_candidates(cands).unwrap_or(f64::NAN),
+        };
+        let (cands, trace) =
+            run_waves(&self.gen, task, &plan, self.width, self.budget_probe.as_ref(), &observe).await;
+
+        // Le sizer annonce sa décision (même topic réservé que le consensus adaptatif).
+        if let Some(tap) = &ctx.event_tap {
+            tap.on_event(&SwarmEvent {
+                swarm_id: SwarmId::new(),
+                published_by: AgentId::new("sizer").expect("agent id valide"),
+                topic: "sizer.decided".to_string(),
+                payload: trace.to_json(&plan),
+                published_at: SystemTime::now(),
+            });
+        }
+
+        let k_used = cands.len();
+        let r = GenerateVerify::select_from(task, cands, self.ver.as_ref());
+        TopologyOutput {
+            // ADR-014 : sortie enveloppée `{value, sizing}` — la grammaire gossip.
+            output: json!({
+                "value": r.selected.clone().unwrap_or(Value::Null),
+                "sizing": trace.to_json(&plan),
+            }),
+            agents_used: k_used,
+            cost_units: k_used as f64,
+            elapsed_ms: t0.elapsed().as_millis() as u64,
+            quality: QualitySignals { candidates: k_used, verified: r.passed, subtasks: 0 },
         }
     }
 }
@@ -266,6 +336,59 @@ mod tests {
             assert!(o.cost_units > 0.0);
         }
         assert_eq!(names, vec!["T1:generate-verify", "T3:hierarchical"]);
+    }
+
+    /// Générateur qui ne réussit qu'à partir d'un variant donné (difficulté réglable).
+    struct LateGen {
+        first_ok: usize,
+    }
+    #[async_trait]
+    impl Generator for LateGen {
+        async fn generate(&self, task: &Value, variant: usize) -> Value {
+            if variant >= self.first_ok {
+                json!({ "value": task.get("expected").cloned().unwrap_or(Value::Null) })
+            } else {
+                json!({ "value": format!("__wrong_{variant}__") })
+            }
+        }
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn adaptive_t1_stops_at_first_verified_quota() {
+        use crate::sizing::{KPlan, StopRule};
+        // tâche FACILE (OkGen réussit dès le variant 0) : quota 1 atteint dans la
+        // première vague → K_used = k_min = 2 au lieu de k_max = 8 (coût ÷4).
+        let topo = AdaptiveGvTopology {
+            gen: Arc::new(OkGen),
+            ver: Arc::new(EqualsExpected),
+            plan: KPlan { k_min: 2, k_max: 8, batch: 2, stop: StopRule::VerifiedQuota { quota: 1 } },
+            width: 4,
+            budget_probe: None,
+        };
+        let out = topo.run(&json!({ "expected": "tech" }), &SwarmContext::standard()).await;
+        assert_eq!(out.output["value"]["value"], "tech", "le vérifié est sélectionné");
+        assert_eq!(out.output["sizing"]["k_used"], json!(2), "arrêt au plancher");
+        assert_eq!(out.output["sizing"]["stop_reason"], json!("target"));
+        assert_eq!(out.agents_used, 2);
+        assert_eq!(out.quality.verified, 2, "OkGen : tous les candidats passent");
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn adaptive_t1_escalates_waves_until_difficulty_yields() {
+        use crate::sizing::{KPlan, StopRule};
+        // tâche DURE (premier succès au variant 5) : vagues 2, 4, 6 → quota atteint
+        // à K_used = 6 — l'adaptatif paie exactement ce que la difficulté exige.
+        let topo = AdaptiveGvTopology {
+            gen: Arc::new(LateGen { first_ok: 5 }),
+            ver: Arc::new(EqualsExpected),
+            plan: KPlan { k_min: 2, k_max: 8, batch: 2, stop: StopRule::VerifiedQuota { quota: 1 } },
+            width: 4,
+            budget_probe: None,
+        };
+        let out = topo.run(&json!({ "expected": "x" }), &SwarmContext::standard()).await;
+        assert_eq!(out.output["sizing"]["k_used"], json!(6), "2 → 4 → 6 : le succès tombe au variant 5");
+        assert_eq!(out.output["value"]["value"], "x", "sélection a-posteriori inchangée (I-AK5)");
+        assert_eq!(out.quality.verified, 1, "un seul passant (variant 5)");
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]

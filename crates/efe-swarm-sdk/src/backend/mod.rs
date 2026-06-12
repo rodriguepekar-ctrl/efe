@@ -78,6 +78,17 @@ pub(crate) trait LocalBackend: Send + Sync {
         let endpoint = self.descriptor().endpoint;
         tokio::task::spawn_blocking(move || health_probe(&endpoint)).await.unwrap_or(false)
     }
+
+    /// **ADR-014 (CP-2)** : capacité **déclarée** du backend — combien d'appels
+    /// simultanés ont un sens (Ollama sérialise à `OLLAMA_NUM_PARALLEL`, 1-4 typique :
+    /// pousser plus large n'achète que des files et des threads bloquants). Défaut
+    /// conservateur **2**. Le SDK ne lit JAMAIS l'environnement (garde-fou G1) : une
+    /// capacité supérieure se déclare par largeur EXPLICITE (builder `width(Fixed)`,
+    /// DTO `width`, ou env `EFE_SWARM_WIDTH` lu côté passerelle). Déclaratif, pas
+    /// mesuré — le breaker (G3) encaisse les déclarations erronées.
+    fn suggested_width(&self) -> usize {
+        2
+    }
 }
 
 /// Sonde de joignabilité (connexion établie = sain ; aucun secret transmis). Bloquant.
@@ -283,6 +294,10 @@ impl LocalBackend for Retrier {
     async fn health(&self) -> bool {
         self.inner.health().await
     }
+
+    fn suggested_width(&self) -> usize {
+        self.inner.suggested_width() // la capacité traverse l'enveloppe (comme le descripteur)
+    }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -351,6 +366,9 @@ impl LocalBackend for Breaker {
     }
     fn descriptor(&self) -> BackendDescriptor {
         self.inner.descriptor()
+    }
+    fn suggested_width(&self) -> usize {
+        self.inner.suggested_width()
     }
 }
 
