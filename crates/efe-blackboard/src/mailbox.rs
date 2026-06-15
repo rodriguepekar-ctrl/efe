@@ -68,6 +68,12 @@ pub const CAP_MAIL_BOX: usize = 64 * 1024;
 /// un substrat à courrier intensif se construit avec `with_namespaces`).
 pub const CAP_MAIL_GLOBAL: usize = 1024 * 1024;
 
+/// Invariant de conception vérifié **à la compilation** : une boîte ne peut pas, à
+/// elle seule, manger tout le budget courrier — sinon les caps `mail_caps` seraient
+/// incohérents (le longest-prefix-first plafonnerait une boîte au-dessus du global).
+/// Quiconque édite ces constantes sans tenir l'ordre casse le build, pas un test.
+const _: () = assert!(CAP_MAIL_BOX < CAP_MAIL_GLOBAL);
+
 /// Les caps de namespace recommandés d'un substrat à courrier — à passer à
 /// [`Blackboard::with_namespaces`] (l'appariement longest-prefix-first y est géré) :
 /// le cap GLOBAL sur `/mail/`, et le cap PAR BOÎTE pour chaque destinataire déclaré.
@@ -580,7 +586,9 @@ mod tests {
         assert_eq!(caps[0], ("/mail/".to_string(), CAP_MAIL_GLOBAL));
         assert!(caps.contains(&("/mail/alice/".to_string(), CAP_MAIL_BOX)));
         assert!(caps.contains(&("/mail/bob/".to_string(), CAP_MAIL_BOX)));
-        assert!(CAP_MAIL_BOX < CAP_MAIL_GLOBAL, "une boîte ne peut pas manger le courrier entier");
+        // l'ordre box < global est garanti à la COMPILATION (const _: () = assert!… plus
+        // haut) — pas besoin d'une assertion runtime sur des constantes (que clippy
+        // optimiserait de toute façon).
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
