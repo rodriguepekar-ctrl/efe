@@ -7,7 +7,7 @@
 //! **tenant-scopée** (isolation). Réutilise le pattern `PgPool` d'`efe-server`.
 
 use async_trait::async_trait;
-use efe_swarm_sdk::{AgentCallRecord, RunOutcome};
+use efe_swarm_sdk::{AgentCallRecord, LlmProvenanceRecord, RunOutcome};
 use serde_json::Value;
 use sqlx::types::Json;
 use sqlx::{postgres::PgPoolOptions, PgPool, Row};
@@ -17,6 +17,8 @@ use uuid::Uuid;
 use crate::error::GatewayError;
 use crate::store::{RunStore, StoredRun};
 
+// ADR-016 : colonnes N17 ajoutées (llm_records, n17_leaves, n17_root). DEFAULT pour la
+// compatibilité ascendante — les runs persistés avant le lot ont 0 forensique (run Mode A).
 const DDL: &str = "CREATE TABLE IF NOT EXISTS swarm_runs (\
     id UUID PRIMARY KEY,\
     tenant TEXT NOT NULL,\
@@ -24,8 +26,17 @@ const DDL: &str = "CREATE TABLE IF NOT EXISTS swarm_runs (\
     root TEXT,\
     output JSONB NOT NULL,\
     topology TEXT NOT NULL,\
-    created_at BIGINT NOT NULL)";
+    created_at BIGINT NOT NULL,\
+    llm_records JSONB NOT NULL DEFAULT '[]'::jsonb,\
+    n17_leaves JSONB NOT NULL DEFAULT '[]'::jsonb,\
+    n17_root TEXT)";
 const DDL_INDEX: &str = "CREATE INDEX IF NOT EXISTS swarm_runs_tenant_idx ON swarm_runs (tenant)";
+// ADR-016 : migration en place d'une table pré-existante (idempotent — IF NOT EXISTS).
+const DDL_ALTER: &[&str] = &[
+    "ALTER TABLE swarm_runs ADD COLUMN IF NOT EXISTS llm_records JSONB NOT NULL DEFAULT '[]'::jsonb",
+    "ALTER TABLE swarm_runs ADD COLUMN IF NOT EXISTS n17_leaves JSONB NOT NULL DEFAULT '[]'::jsonb",
+    "ALTER TABLE swarm_runs ADD COLUMN IF NOT EXISTS n17_root TEXT",
+];
 
 /// Store Postgres des runs (prod). Les records sont immuables (write-once).
 pub struct PgRunStore {
@@ -58,6 +69,13 @@ impl PgRunStore {
             .execute(&self.pool)
             .await
             .map_err(|e| GatewayError::Internal(format!("migration (index) : {e}")))?;
+        // ADR-016 : ajoute les colonnes N17 si la table préexiste (idempotent).
+        for stmt in DDL_ALTER {
+            sqlx::query(stmt)
+                .execute(&self.pool)
+                .await
+                .map_err(|e| GatewayError::Internal(format!("migration (N17) : {e}")))?;
+        }
         Ok(())
     }
 
@@ -71,8 +89,9 @@ impl RunStore for PgRunStore {
     async fn put(&self, id: Uuid, tenant: &str, outcome: &RunOutcome) -> Result<(), GatewayError> {
         let stored = StoredRun::from_outcome(tenant, outcome);
         sqlx::query(
-            "INSERT INTO swarm_runs (id, tenant, records, root, output, topology, created_at) \
-             VALUES ($1, $2, $3, $4, $5, $6, $7) ON CONFLICT (id) DO NOTHING",
+            "INSERT INTO swarm_runs \
+             (id, tenant, records, root, output, topology, created_at, llm_records, n17_leaves, n17_root) \
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) ON CONFLICT (id) DO NOTHING",
         )
         .bind(id)
         .bind(&stored.tenant)
@@ -81,6 +100,9 @@ impl RunStore for PgRunStore {
         .bind(Json(&stored.output))
         .bind(&stored.topology)
         .bind(stored.created_at_unix() as i64)
+        .bind(Json(&stored.llm_records)) // ADR-016 : la forensique N17, durable
+        .bind(Json(&stored.n17_leaves))
+        .bind(&stored.n17_root)
         .execute(&self.pool)
         .await
         .map_err(|e| GatewayError::Internal(format!("store.put : {e}")))?;
@@ -90,7 +112,7 @@ impl RunStore for PgRunStore {
     async fn get(&self, id: Uuid, tenant: &str) -> Result<Option<StoredRun>, GatewayError> {
         // Isolation tenant : un run d'un autre tenant est INVISIBLE (clause AND tenant).
         let row = sqlx::query(
-            "SELECT records, root, output, topology, created_at \
+            "SELECT records, root, output, topology, created_at, llm_records, n17_leaves, n17_root \
              FROM swarm_runs WHERE id = $1 AND tenant = $2",
         )
         .bind(id)
@@ -108,11 +130,18 @@ impl RunStore for PgRunStore {
         let root: Option<String> = row.try_get("root").map_err(map)?;
         let topology: String = row.try_get("topology").map_err(map)?;
         let created_at_unix: i64 = row.try_get("created_at").map_err(map)?;
+        // ADR-016 : la forensique N17 (DEFAULT '[]' pour les runs d'avant le lot).
+        let llm_records: Json<Vec<LlmProvenanceRecord>> = row.try_get("llm_records").map_err(map)?;
+        let n17_leaves: Json<Vec<String>> = row.try_get("n17_leaves").map_err(map)?;
+        let n17_root: Option<String> = row.try_get("n17_root").map_err(map)?;
 
         Ok(Some(StoredRun {
             tenant: tenant.to_string(),
             records: records.0,
             root,
+            llm_records: llm_records.0,
+            n17_leaves: n17_leaves.0,
+            n17_root,
             output: output.0,
             topology,
             created_at: UNIX_EPOCH + Duration::from_secs(created_at_unix.max(0) as u64),

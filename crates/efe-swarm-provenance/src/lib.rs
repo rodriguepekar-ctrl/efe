@@ -71,6 +71,7 @@ pub mod chain;
 pub mod decorator;
 pub mod hash;
 pub mod metrics;
+pub mod n17_chain;
 pub mod record;
 pub mod recorder;
 pub mod replay;
@@ -86,6 +87,10 @@ pub use chain::{verify_chain, BreakReason, ChainBreak, ChainVerdict, SwarmChain}
 pub use decorator::ProvenancedAgent;
 pub use hash::{blake3_bytes, blake3_value, payload_hash_of, sha256};
 pub use metrics::{ProvenanceMetrics, ProvenanceMetricsSnapshot};
+pub use n17_chain::{
+    seal_n17, verify_n17_chain, verify_run_offline, N17Break, N17ChainVerdict, OfflineVerdict,
+    SealedN17,
+};
 pub use record::{
     hex32, AgentCallDraft, AgentCallRecord, AgentKind, AgentRole, CellRef,
 };

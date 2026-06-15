@@ -22,6 +22,7 @@ pub fn routes() -> Router<SwarmGatewayState> {
         .route("/verify/:id", get(verify::verify))
         .route("/runs/:id", get(records::get_run))
         .route("/runs/:id/records", get(records::get_records))
+        .route("/runs/:id/n17", get(records::get_n17)) // ADR-016 : export forensique offline
         .route("/runs/:id/events", get(events::run_events)) // SSE : rejeu + live (Inc.3)
         .route("/events", get(events::tenant_events)) // SSE : firehose tenant (Inc.3)
 }

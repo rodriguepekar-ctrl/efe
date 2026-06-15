@@ -188,6 +188,10 @@ impl Swarm {
 
         // Pont N17 par-appel : les `LlmProvenanceRecord` forensiques collectés (Mode C).
         let llm_records = n17.as_ref().map(|c| c.records()).unwrap_or_default();
+        // ADR-016 : scelle la forensique N17 en chaîne HMAC propre, avec la MÊME clé
+        // tenant que la chaîne d'essaim — durable + tamper-evidente une fois persistée.
+        // Vide en keyless/Mode A (aucun appel LLM ⇒ SealedN17 vide, no-op).
+        let n17_sealed = efe_swarm_provenance::seal_n17(&llm_records, &self.key);
 
         // 4. scelle la provenance + re-prouve (verify_swarm) → provenance_root. La
         //    `SealedProvenance` est conservée (records bruts) pour la persistance HTTP ;
@@ -235,7 +239,7 @@ impl Swarm {
         if let Some(o) = &self.observer {
             o.on_finish(&run);
         }
-        Ok(RunOutcome { run, sealed, llm_records })
+        Ok(RunOutcome { run, sealed, llm_records, n17_sealed })
     }
 }
 

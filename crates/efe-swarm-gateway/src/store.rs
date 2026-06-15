@@ -15,7 +15,7 @@ use async_trait::async_trait;
 use serde_json::Value;
 use uuid::Uuid;
 
-use efe_swarm_sdk::{AgentCallRecord, RunOutcome};
+use efe_swarm_sdk::{AgentCallRecord, LlmProvenanceRecord, RunOutcome};
 
 use crate::error::GatewayError;
 
@@ -26,22 +26,51 @@ pub struct StoredRun {
     /// Les `AgentCallRecord` chaînés (l'évidence pour `verify_swarm`).
     pub records: Vec<AgentCallRecord>,
     pub root: Option<String>,
+    /// **ADR-016 — forensique N17 durable** : les `LlmProvenanceRecord` (un par appel
+    /// LLM Mode C). Vide pour un run keyless/Mode A. Sérialisés serde (JSONB en prod).
+    pub llm_records: Vec<LlmProvenanceRecord>,
+    /// **ADR-016** : les feuilles SHA-256 de contenu (hex, ordre canonique) — la
+    /// localisation d'un record muté à la re-preuve.
+    pub n17_leaves: Vec<String>,
+    /// **ADR-016** : `n17_root` (hex) — la racine de la chaîne forensique scellée.
+    pub n17_root: Option<String>,
     pub output: Value,
     pub topology: String,
     pub created_at: SystemTime,
 }
 
 impl StoredRun {
-    /// Construit depuis un [`RunOutcome`] du SDK (copie des records scellés).
+    /// Construit depuis un [`RunOutcome`] du SDK. La forensique N17 — déjà **scellée**
+    /// par le SDK avec la clé tenant (`outcome.n17_sealed`) — est **conservée** (ADR-016 :
+    /// on ne la jette plus). Pour un run keyless/Mode A, elle est vide (no-op).
     pub fn from_outcome(tenant: &str, outcome: &RunOutcome) -> Self {
         Self {
             tenant: tenant.to_string(),
             records: outcome.records().to_vec(),
             root: outcome.run.provenance.root.clone(),
+            llm_records: outcome.llm_records.clone(),
+            n17_leaves: outcome.n17_sealed.leaves_hex(),
+            n17_root: outcome.n17_sealed.root_hex(),
             output: outcome.run.output.clone(),
             topology: outcome.run.topology.clone(),
             created_at: SystemTime::now(),
         }
+    }
+
+    /// **ADR-016** : les feuilles N17 décodées (`[u8;32]`) pour `verify_run_offline`.
+    /// Une feuille hex malformée est ignorée (la chaîne cassera de toute façon).
+    pub fn n17_leaf_bytes(&self) -> Vec<[u8; 32]> {
+        self.n17_leaves.iter().filter_map(|h| unhex32(h)).collect()
+    }
+
+    /// **ADR-016** : `n17_root` décodé (`[u8;32]`), si présent et bien formé.
+    pub fn n17_root_bytes(&self) -> Option<[u8; 32]> {
+        self.n17_root.as_deref().and_then(unhex32)
+    }
+
+    /// Y a-t-il de la forensique LLM (run Mode C) ? (sinon la re-preuve N17 est triviale).
+    pub fn has_n17(&self) -> bool {
+        !self.llm_records.is_empty()
     }
 
     /// Date de création en secondes epoch (pour la sérialisation de fil).
@@ -51,6 +80,27 @@ impl StoredRun {
             .map(|d| d.as_secs())
             .unwrap_or(0)
     }
+}
+
+/// Décode 32 octets depuis un hex de 64 caractères (`None` si malformé). Sans dépendance.
+fn unhex32(s: &str) -> Option<[u8; 32]> {
+    if s.len() != 64 {
+        return None;
+    }
+    let b = s.as_bytes();
+    let nib = |c: u8| -> Option<u8> {
+        match c {
+            b'0'..=b'9' => Some(c - b'0'),
+            b'a'..=b'f' => Some(c - b'a' + 10),
+            b'A'..=b'F' => Some(c - b'A' + 10),
+            _ => None,
+        }
+    };
+    let mut out = [0u8; 32];
+    for (i, byte) in out.iter_mut().enumerate() {
+        *byte = (nib(b[i * 2])? << 4) | nib(b[i * 2 + 1])?;
+    }
+    Some(out)
 }
 
 /// Persistance des runs (la preuve). **Tenant-scopé** : `get` ne rend un run que s'il
@@ -79,6 +129,16 @@ impl InMemoryRunStore {
 
     pub fn is_empty(&self) -> bool {
         self.len() == 0
+    }
+
+    /// **Test-only (ADR-016)** : insère un [`StoredRun`] synthétique (un run Mode C
+    /// fabriqué à la main, avec forensique N17), pour éprouver la persistance + la
+    /// re-preuve forensique sans Ollama. Écrase un id existant.
+    #[cfg(any(test, feature = "tamper-testkit"))]
+    pub fn insert_stored(&self, id: Uuid, stored: StoredRun) {
+        if let Ok(mut g) = self.runs.lock() {
+            g.insert(id, stored);
+        }
     }
 
     /// **Test-only** : mute une sortie d'un record stocké, pour prouver que `verify_swarm`

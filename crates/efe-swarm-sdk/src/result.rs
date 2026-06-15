@@ -136,12 +136,22 @@ pub struct RunOutcome {
     /// **Pont N17 par-appel** : les `LlmProvenanceRecord` forensiques (un par appel LLM
     /// Mode C). Vide en keyless. Sérialisables (serde) → persistables/exportables.
     pub llm_records: Vec<efe_nano_sdk::LlmProvenanceRecord>,
+    /// **ADR-016 — forensique N17 scellée** : la chaîne HMAC de la forensique LLM
+    /// (feuilles SHA-256 de contenu + `n17_root`), scellée au run avec la **même clé
+    /// tenant** que la chaîne d'essaim. Vide en keyless/Mode A. C'est ce qui rend la
+    /// forensique **durable ET tamper-evidente** une fois persistée par la passerelle —
+    /// et re-prouvable hors ligne par `verify_run_offline`.
+    pub n17_sealed: efe_swarm_provenance::SealedN17,
 }
 
 impl RunOutcome {
     /// Les `AgentCallRecord` bruts à persister (vide si provenance désactivée).
     pub fn records(&self) -> &[efe_swarm_provenance::AgentCallRecord] {
         self.sealed.as_ref().map(|s| s.records.as_slice()).unwrap_or(&[])
+    }
+    /// **ADR-016** : `n17_root` en hex (la racine de la chaîne forensique), si Mode C.
+    pub fn n17_root_hex(&self) -> Option<String> {
+        self.n17_sealed.root_hex()
     }
 }
 

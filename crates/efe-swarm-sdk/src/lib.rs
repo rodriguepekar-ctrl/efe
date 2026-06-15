@@ -69,8 +69,10 @@ pub use spec::{KSpec, TopologySpec};
 
 // Réexports pratiques (la passerelle HTTP s'appuie dessus pour persister + re-prouver).
 pub use efe_swarm_provenance::{
-    verify_bridge, verify_swarm, AgentCallRecord, AgentKind, AgentRole, BridgeReport, HmacKeySource,
-    LlmResolver, MapResolver, ProvenanceMetrics, SealedProvenance, SwarmProvenanceReport,
+    seal_n17, verify_bridge, verify_n17_chain, verify_run_offline, AgentCallRecord, AgentKind,
+    AgentRole, BridgeReport, HmacKeySource, LlmResolver, MapResolver, N17Break, N17ChainVerdict,
+    OfflineVerdict, ProvenanceMetrics, SealedN17, SealedProvenance, SwarmProvenanceReport,
+    verify_swarm,
 };
 pub use efe_nano_sdk::LlmProvenanceRecord;
 pub use efe_blackboard::{BlackboardWrite, EventSink, SubstrateMetrics, SwarmEvent, WriteSink};

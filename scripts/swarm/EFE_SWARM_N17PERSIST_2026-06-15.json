@@ -1,0 +1,38 @@
+{
+  "_note": "Appels LLM SYNTHÉTIQUES (forensique fabriquée) ; crypto (BLAKE3+SHA256+HMAC+HKDF) + seal_n17/verify_run_offline RÉELS. Persistance éprouvée par aller-retour serde JSON (frontière JSONB du store).",
+  "budgets": {
+    "bytes_per_record": 8192.0,
+    "verify_us_per_record": 2000.0
+  },
+  "cost": {
+    "seal_us_per_run": 86.48053333333334,
+    "verify_offline_us_per_record": 32.296412,
+    "verify_offline_us_per_run": 161.48206
+  },
+  "go": true,
+  "mode_a_trivially_proven": true,
+  "mode_c_calls": 5,
+  "round_trip": {
+    "bridge": {
+      "broken": 0,
+      "consistent": 5,
+      "unlinked": 0
+    },
+    "bridge_consistent": true,
+    "bytes_per_record": 2502.6,
+    "fully_proven": true,
+    "n17_chain_intact": true,
+    "n17_records": 5,
+    "payload_bytes": 12513,
+    "swarm_ok": true
+  },
+  "tamper_detection": {
+    "all_detected": true,
+    "forensic_field_mutated_detected": true,
+    "forensic_field_mutated_localized": true,
+    "leaf_forged_detected": true,
+    "n17_record_dropped_detected": true,
+    "swarm_record_mutated_detected": true
+  },
+  "verdict": "GO ✅ — la forensique N17 est durable, re-prouvable hors ligne, et infalsifiable"
+}

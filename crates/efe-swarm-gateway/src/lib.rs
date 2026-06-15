@@ -152,6 +152,138 @@ mod tests {
             .unwrap()
     }
 
+    // ── ADR-016 : un run Mode C SYNTHÉTIQUE (sans Ollama) pour éprouver la persistance
+    //    forensique + la re-preuve N17 de bout en bout en HTTP. ─────────────────────
+    #[cfg(test)]
+    fn synthetic_mode_c_run(model: &str) -> (Vec<efe_swarm_provenance::AgentCallRecord>, StoredRun) {
+        use efe_nano_sdk::{
+            Blake3Hash, Completeness, CostAccounting, FinishReason, LlmProvenanceRecord,
+            ModelIdentity, NanoAgentId, NanoAgentVersion, PiiStrategy, ProvenanceId, RetryOutcome,
+            SamplingParams, SwarmId, TenantId, TokenUsage,
+        };
+        use efe_swarm_provenance::{seal_n17, AgentCallDraft, AgentKind, AgentRole, SwarmChain};
+
+        let tenant = TenantId::system();
+        let swarm = SwarmId::from_uuid(Uuid::from_u128(0x5EED));
+        let key = HmacKeySource::test_key().derive(tenant).unwrap();
+        let prov = ProvenanceId::from_uuid(Uuid::from_u128(0xC0FFEE));
+
+        // la forensique N17 d'un appel LLM.
+        let llm = LlmProvenanceRecord {
+            provenance_id: prov,
+            trace_id: Uuid::from_u128(0xBEEF),
+            swarm_request_id: swarm.as_uuid(),
+            op_id: "swarm.generator".into(),
+            tenant_id: tenant,
+            agent_id: NanoAgentId::new("generator").unwrap(),
+            agent_version: NanoAgentVersion::new("1.0.0").unwrap(),
+            model_identity: ModelIdentity::hosted("ollama", model, "local"),
+            model_hash_verified: false,
+            prompt_template_id: "swarm.selfhost".into(),
+            prompt_template_version: "1.0.0".into(),
+            prompt_inputs_hash: Blake3Hash::ZERO,
+            system_prompt_hash: Blake3Hash::ZERO,
+            user_prompt_hash: Blake3Hash::from_bytes([3u8; 32]),
+            final_prompt_hash: Blake3Hash::from_bytes([3u8; 32]),
+            sampling: SamplingParams { temperature: 0.2, top_p: None, max_tokens: 16, seed: Some(7), stop_sequences: vec![] },
+            token_usage: TokenUsage { client_estimated_input: 5, client_estimated_output: 2, provider_reported_input: None, provider_reported_output: None, is_estimated: true },
+            cost_accounting: CostAccounting { cost_cents: 0.0, prices_table_version: 0, provider_quoted_cost_cents: None, overflow_capped: false },
+            provider_request_id: None,
+            provider_response_time_ms: 5,
+            provider_finish_reason: FinishReason::Stop,
+            provider_region: None,
+            publisher_id: None,
+            publisher_kyc_tier: None,
+            gold_case_id: None,
+            provider_metadata: std::collections::HashMap::new(),
+            output_hash: Some(Blake3Hash::from_bytes([5u8; 32])),
+            completeness: Completeness::Complete,
+            safety_flags: vec![],
+            tool_calls: vec![],
+            pii_strategy_applied: PiiStrategy::None,
+            redaction_token_set: vec![],
+            replay_of: None,
+            cache_hit: None,
+            recorded_at: std::time::SystemTime::UNIX_EPOCH,
+            streaming_mode: false,
+            retry_count: 0,
+            retry_outcome: RetryOutcome::NoRetry,
+            time_to_first_token_ms: None,
+        };
+
+        // l'AgentCallRecord Mode C qui RÉFÉRENCE la forensique (le lien), scellé en chaîne.
+        let draft = AgentCallDraft::new(
+            swarm, tenant, efe_nano_sdk::AgentId::new("generator").unwrap(), AgentRole::Generator,
+            AgentKind::ModeC, Blake3Hash::from_bytes([1u8; 32]), Blake3Hash::from_bytes([2u8; 32]),
+        )
+        .with_llm_provenance(prov);
+        let mut chain = SwarmChain::new(tenant, swarm, key.clone());
+        let records = chain.append_all(std::iter::once(draft));
+        let root_hex = chain.root_hex();
+
+        let sealed = seal_n17(std::slice::from_ref(&llm), &key);
+        let stored = StoredRun {
+            // Le tenant par défaut d'un appelant sans en-tête = `TenantId::system()` rendu en
+            // UUID (00…001) ; on s'y aligne pour que `store.get` retrouve le run injecté, et
+            // pour que `derive_key` recompose la MÊME clé (from_str(uuid) == system).
+            tenant: tenant.to_string(),
+            records: records.clone(),
+            root: root_hex,
+            llm_records: vec![llm],
+            n17_leaves: sealed.leaves_hex(),
+            n17_root: sealed.root_hex(),
+            output: json!({ "value": "ok" }),
+            topology: "T-consensus".into(),
+            created_at: std::time::SystemTime::now(),
+        };
+        (records, stored)
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn mode_c_n17_is_persisted_and_reproven_over_http() {
+        // I-PN1 + I-PN3 (HTTP) : un run Mode C persisté re-prouve sa forensique — le pont
+        // résout, la chaîne N17 se recompose, le verdict GLOBAL est verified.
+        let (app, store) = app_with_store();
+        let (_recs, stored) = synthetic_mode_c_run("gemma3:12b");
+        let id = Uuid::new_v4();
+        store.insert_stored(id, stored);
+
+        let resp = app
+            .oneshot(Request::builder().uri(format!("/v1/swarm/verify/{id}")).body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let v = body_json(resp).await;
+        assert_eq!(v["verified"], json!(true), "essaim + N17 + pont re-prouvés");
+        assert_eq!(v["n17"]["records"], json!(1), "la forensique a SURVÉCU à la persistance");
+        assert_eq!(v["n17"]["chain_intact"], json!(true), "la chaîne N17 se recompose");
+        assert_eq!(v["n17"]["bridge_consistent"], json!(true));
+        assert_eq!(v["n17"]["mode_c_consistent"], json!(1), "le lien Mode C résout (plus de pointeur pendant)");
+        assert!(v["n17"]["root"].is_string(), "n17_root présent");
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn tampered_n17_forensics_break_the_reproof() {
+        // I-PN2 (HTTP) : muter un champ forensique d'un record N17 persisté casse la
+        // re-preuve — le verdict GLOBAL tombe à verified=false.
+        let (app, store) = app_with_store();
+        let (_recs, mut stored) = synthetic_mode_c_run("gemma3:12b");
+        // un attaquant réécrit le MODÈLE déclaré du record N17 persisté (sans la clé).
+        stored.llm_records[0].model_identity =
+            efe_nano_sdk::ModelIdentity::hosted("ollama", "MENTEUR:70b", "local");
+        let id = Uuid::new_v4();
+        store.insert_stored(id, stored);
+
+        let resp = app
+            .oneshot(Request::builder().uri(format!("/v1/swarm/verify/{id}")).body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        let v = body_json(resp).await;
+        assert_eq!(v["verified"], json!(false), "forensique altérée → re-preuve cassée");
+        assert_eq!(v["chain_intact"], json!(true), "la chaîne d'ESSAIM, elle, reste intègre");
+        assert_eq!(v["n17"]["chain_intact"], json!(false), "mais la chaîne N17 détecte la mutation");
+    }
+
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     async fn run_then_verify_roundtrip_is_proven() {
         let (app, _state) = app();

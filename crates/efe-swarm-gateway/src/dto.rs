@@ -377,7 +377,8 @@ pub struct RunResponse {
 #[derive(Debug, Clone, Serialize)]
 pub struct VerifyResponse {
     pub run_id: Uuid,
-    /// `verify_swarm` a-t-il **tout** re-prouvé (chaîne + contenu + DAG) ?
+    /// Re-preuve COMPLÈTE : chaîne d'essaim OK **ET** (zéro Mode C, ou chaîne N17 intacte
+    /// ET pont entièrement cohérent). Un run keyless/Mode A reste `verified` trivialement.
     pub verified: bool,
     /// `provenance_root` reconstruit depuis les records + la clé tenant.
     pub root: Option<String>,
@@ -388,6 +389,27 @@ pub struct VerifyResponse {
     pub records: usize,
     /// Premier enregistrement en faute (forensique), si altération.
     pub first_break: Option<Uuid>,
+    /// **ADR-016 — la re-preuve forensique N17 (offline, ici en HTTP).**
+    pub n17: N17VerifyView,
+}
+
+/// **ADR-016** : le verdict du pont N17 + de la chaîne forensique, dans la re-preuve.
+#[derive(Debug, Clone, Serialize)]
+pub struct N17VerifyView {
+    /// Nombre de records forensiques persistés (0 = run Mode A, pont trivial).
+    pub records: usize,
+    /// La chaîne N17 se recompose-t-elle depuis les records persistés + la clé tenant ?
+    pub chain_intact: bool,
+    /// `n17_root` recalculé (hex).
+    pub root: Option<String>,
+    /// Le pont est-il entièrement cohérent (aucun Mode C non lié, aucune rupture) ?
+    pub bridge_consistent: bool,
+    /// Mode C liés et cohérents (résolvent vers un N17 persisté, même tenant/swarm).
+    pub mode_c_consistent: usize,
+    /// Mode C **sans** lien (lacune).
+    pub mode_c_unlinked: usize,
+    /// Liens rompus (pointeur pendant / incohérence d'isolation).
+    pub mode_c_broken: usize,
 }
 
 /// Vue d'un run (`GET /v1/swarm/runs/:id`) — **terminé** (dans le store) **ou en cours**

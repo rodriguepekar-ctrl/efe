@@ -25,5 +25,7 @@ async-trait = { workspace = true }
 tokio       = { workspace = true, features = ["sync", "rt"] }
 
 [dev-dependencies]
-serde_json = { workspace = true }
-tokio      = { workspace = true, features = ["macros", "rt-multi-thread"] }
+serde_json   = { workspace = true }
+tokio        = { workspace = true, features = ["macros", "rt-multi-thread"] }
+# ADR-016 : le test Mode C RÉEL re-dérive la clé tenant (test_key ∘ TenantId::system).
+efe-nano-sdk = { path = "../efe-nano-sdk", version = "0.0.1" }
