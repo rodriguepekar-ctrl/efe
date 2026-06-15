@@ -34,8 +34,8 @@ async fn body_json(resp: axum::response::Response) -> Value {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn keyless_run_persists_zero_n17_and_stays_verified() {
-    // I-PN6 : Mode A no-op. Le run keyless (0 appel LLM) persiste 0 forensique ; la
+async fn mode_a_persists_zero_n17_and_stays_verified() {
+    // I-PN6 (§9.1) : Mode A no-op. Le run keyless (0 appel LLM) persiste 0 forensique ; la
     // re-preuve reste verified, le verdict N17 est trivial (chaîne intacte, pont cohérent).
     let app = app();
     let resp = app

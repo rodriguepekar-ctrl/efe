@@ -69,26 +69,41 @@ sur l'architecture du 2026-06-15.
    donc `SealedN17` vide, `n17_root = None` : `verify_n17_chain` passe vacuousement, le pont
    n'a aucun Mode C à résoudre. La feature est **invisible** au chemin keyless (le flagship).
 
-## Invariants introduits (gardiens nominatifs — 16 tests : 10 provenance · 5 passerelle · 1 Mode C réel ignoré)
+## Invariants introduits (gardiens nominatifs — 21 tests : 10 provenance · 10 passerelle · 1 Mode C réel ignoré)
+
+Les **six** invariants I-PN de §9.1 ont chacun leur gardien **homonyme au niveau
+persistance/relecture** (passerelle), conformément à la note de méthode de §6 (« l'invariant
+tient sur le store relu, pas seulement sur le collecteur en mémoire »). La couche provenance
+fournit en plus le **socle cryptographique** (chaîne N17 pure, sans store).
 
 **Provenance (`n17_chain.rs`, 10)** — `seal_then_verify_is_intact` ;
 `canonical_order_is_deterministic_regardless_of_input_order` (ordre d'entrée neutre) ;
 `mutated_n17_field_breaks_the_chain_and_localizes` (**I-PN2** : `first_break` pointe le
-record muté) ; `mutated_seed_is_also_caught` ; `deleted_record_breaks_count`
-(`CountMismatch`) ; `forged_leaves_and_root_break_at_chain_level` (feuille/racine forgée →
-`ChainRootMismatch`, sans localisation fine — l'HMAC tranche) ; `wrong_key_breaks_the_chain`
-(**I-PN5**, isolation par clé) ; `empty_n17_seals_and_verifies_vacuously` (**I-PN6**,
+record muté) ; `mutated_seed_is_also_caught` ; `deleted_record_breaks_root`
+(`CountMismatch` — le compte relu ≠ scellé, la racine ne recompose plus) ;
+`forged_leaves_and_root_break_at_chain_level` (feuille/racine forgée → `ChainRootMismatch`,
+sans localisation fine — l'HMAC tranche) ; `wrong_key_breaks_the_chain` (socle crypto
+d'**I-PN5**, isolation par clé) ; `empty_n17_seals_and_verifies_vacuously` (socle d'**I-PN6**,
 Mode A) ; `offline_verify_reproves_swarm_n17_and_bridge` (**I-PN3**, la re-preuve complète) ;
-`offline_verify_catches_a_dangling_link_after_n17_loss` (**I-PN4** : forensique perdue → le
-pont signale le lien pendant, `verified=false`).
+`offline_verify_catches_a_dangling_link_after_n17_loss` (socle d'**I-PN4** : forensique
+perdue → le pont signale le lien pendant, `verified=false`).
 
-**Passerelle (5)** — intégration HTTP keyless : `keyless_run_persists_zero_n17_and_stays_verified`
-(**I-PN6** bout-en-bout), `n17_export_endpoint_round_trips_empty_for_mode_a`,
-`n17_export_unknown_run_is_404_and_tenant_scoped` ; Mode C synthétique (lib) :
-`mode_c_n17_is_persisted_and_reproven_over_http` (**I-PN1** : la forensique survit à la
-persistance, le verdict global est `verified`), `tampered_n17_forensics_break_the_reproof`
-(muter un champ forensique persisté → `verified=false`, chaîne d'essaim intacte mais chaîne
-N17 cassée).
+**Passerelle (10)** — les six I-PN au niveau persistance + 4 gardiens HTTP/store :
+`n17_round_trips_through_the_store` (**I-PN1** : compte relu == compte produit, aller-retour
+serde, re-preuve hors ligne) ; `persisted_link_resolves_or_is_flagged_missing` (**I-PN4** :
+le lien Mode C persisté résout, ou est signalé `Missing` — jamais ignoré) ;
+`cross_tenant_n17_is_rejected_after_reload` (**I-PN5** : un N17 injecté d'un autre
+tenant/swarm, **re-scellé** donc chaîne intacte, est rejeté par le pont sur le store relu —
+`TenantMismatch`/`SwarmMismatch`) ; `mode_a_persists_zero_n17_and_stays_verified` (**I-PN6**
+bout-en-bout HTTP) ; `verify_endpoint_reports_bridge_verdict` (l'endpoint expose le verdict du
+pont — cohérent sur run sain, `mode_c_broken≥1` sur forensique perdue) ;
+`n17_export_round_trips_for_offline_verifier` (les exports `/records` + `/n17` d'un run Mode C
+rejouent `verify_run_offline` avec la clé du tiers → prouvé) ;
+`mode_c_n17_is_persisted_and_reproven_over_http` (**I-PN1/I-PN3** HTTP, la forensique survit
+et re-prouve) ; `tampered_n17_forensics_break_the_reproof` (**I-PN2** HTTP : champ forensique
+muté → `verified=false`, essaim intact mais chaîne N17 cassée) ;
+`n17_export_endpoint_round_trips_empty_for_mode_a` ;
+`n17_export_unknown_run_is_404_and_tenant_scoped`.
 
 **Mode C RÉEL (`n17_persist_real.rs`, 1, ignoré sans Ollama)** —
 `real_llm_forensics_survive_process_death` : un run `gemma3:12b` authentique, sa forensique

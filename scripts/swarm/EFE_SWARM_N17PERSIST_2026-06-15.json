@@ -5,9 +5,9 @@
     "verify_us_per_record": 2000.0
   },
   "cost": {
-    "seal_us_per_run": 86.48053333333334,
-    "verify_offline_us_per_record": 32.296412,
-    "verify_offline_us_per_run": 161.48206
+    "seal_us_per_run": 98.78737666666666,
+    "verify_offline_us_per_record": 37.876002,
+    "verify_offline_us_per_run": 189.38001
   },
   "go": true,
   "mode_a_trivially_proven": true,

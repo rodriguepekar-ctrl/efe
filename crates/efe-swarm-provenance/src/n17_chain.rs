@@ -342,7 +342,9 @@ mod tests {
     }
 
     #[test]
-    fn deleted_record_breaks_count() {
+    fn deleted_record_breaks_root() {
+        // (gardien §9.1 « deleted_record_breaks_root ») — mécanisme : CountMismatch. Retirer
+        // un record N17 fait que le compte relu ≠ scellé : la racine ne peut plus recomposer.
         let recs = three();
         let sealed = seal_n17(&recs, &key());
         let v = verify_n17_chain(&recs[..2], &sealed.leaf_hashes, sealed.n17_root, &key());

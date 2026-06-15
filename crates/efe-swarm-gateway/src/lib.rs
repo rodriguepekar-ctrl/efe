@@ -284,6 +284,178 @@ mod tests {
         assert_eq!(v["n17"]["chain_intact"], json!(false), "mais la chaîne N17 détecte la mutation");
     }
 
+    // ── ADR-016 §9.1 : les gardiens I-PN au niveau PERSISTANCE/RELECTURE ──────────────
+    //    (l'invariant tient « sur le store relu, pas seulement sur le collecteur mémoire »).
+
+    /// Décode 32 octets depuis 64 hex (miroir test de `store::unhex32`).
+    #[cfg(test)]
+    fn unhex32_t(s: &str) -> Option<[u8; 32]> {
+        if s.len() != 64 {
+            return None;
+        }
+        let b = s.as_bytes();
+        let nib = |c: u8| -> Option<u8> {
+            match c {
+                b'0'..=b'9' => Some(c - b'0'),
+                b'a'..=b'f' => Some(c - b'a' + 10),
+                b'A'..=b'F' => Some(c - b'A' + 10),
+                _ => None,
+            }
+        };
+        let mut out = [0u8; 32];
+        for (i, byte) in out.iter_mut().enumerate() {
+            *byte = (nib(b[i * 2])? << 4) | nib(b[i * 2 + 1])?;
+        }
+        Some(out)
+    }
+
+    /// La clé tenant par défaut (system) — celle qu'un appelant sans en-tête fait dériver.
+    #[cfg(test)]
+    fn key_system() -> Vec<u8> {
+        HmacKeySource::test_key().derive(efe_nano_sdk::TenantId::system()).unwrap()
+    }
+
+    #[test]
+    fn n17_round_trips_through_the_store() {
+        // I-PN1 : durabilité — zéro perte entre la fin du run et la relecture ;
+        // le compte relu == le compte produit, et la re-preuve hors ligne tient.
+        use efe_swarm_provenance::verify_run_offline;
+        let (_recs, stored) = synthetic_mode_c_run("gemma3:12b");
+        let produced = stored.llm_records.len();
+        assert!(produced >= 1, "le run synthétique EST bien Mode C");
+        // aller-retour serde (la frontière JSONB exacte du store).
+        let reloaded: Vec<efe_nano_sdk::LlmProvenanceRecord> =
+            serde_json::from_str(&serde_json::to_string(&stored.llm_records).unwrap()).unwrap();
+        assert_eq!(reloaded.len(), produced, "I-PN1 : compte relu == compte produit");
+        assert_eq!(reloaded, stored.llm_records, "forensique identique après relecture");
+        let v = verify_run_offline(
+            &stored.records,
+            &reloaded,
+            &stored.n17_leaf_bytes(),
+            stored.n17_root_bytes(),
+            &key_system(),
+        );
+        assert!(v.fully_proven, "la forensique relue se re-prouve");
+        assert_eq!(v.n17_chain.records, produced, "tous les records ont survécu");
+    }
+
+    #[test]
+    fn persisted_link_resolves_or_is_flagged_missing() {
+        // I-PN4 : plus de pointeur pendant — un lien Mode C persisté résout (a) ; une
+        // forensique manquante à la relecture est détectée Missing, jamais ignorée (b).
+        use efe_swarm_provenance::{verify_run_offline, LinkStatus};
+        let (_recs, stored) = synthetic_mode_c_run("gemma3:12b");
+        let key = key_system();
+        // (a) résout.
+        let ok = verify_run_offline(&stored.records, &stored.llm_records, &stored.n17_leaf_bytes(), stored.n17_root_bytes(), &key);
+        assert!(ok.bridge.consistent >= 1 && ok.bridge.all_mode_c_consistent(), "I-PN4 (a) : le lien résout");
+        // (b) forensique perdue → Missing.
+        let lost = verify_run_offline(&stored.records, &[], &[], None, &key);
+        assert!(!lost.fully_proven, "lien pendant → re-preuve cassée");
+        assert!(lost.bridge.broken >= 1, "le pont compte la rupture");
+        assert!(
+            lost.bridge.broken_links().any(|l| l.status == LinkStatus::Missing),
+            "I-PN4 (b) : statut = Missing (jamais ignoré)"
+        );
+    }
+
+    #[test]
+    fn cross_tenant_n17_is_rejected_after_reload() {
+        // I-PN5 : la triple cohérence (existe · même tenant · même swarm) tient sur le store
+        // RELU. Un N17 injecté d'un autre tenant/swarm est rejeté par le pont, même quand la
+        // chaîne N17 est re-scellée (donc intacte) — seule l'isolation casse.
+        use efe_swarm_provenance::{seal_n17, verify_run_offline};
+        let key = key_system();
+
+        // (a) injection tenant → TenantMismatch.
+        let (_r, mut t) = synthetic_mode_c_run("gemma3:12b");
+        t.llm_records[0].tenant_id = efe_nano_sdk::TenantId::new();
+        let rs = seal_n17(&t.llm_records, &key);
+        let reloaded: Vec<efe_nano_sdk::LlmProvenanceRecord> =
+            serde_json::from_str(&serde_json::to_string(&t.llm_records).unwrap()).unwrap();
+        let v = verify_run_offline(&t.records, &reloaded, &rs.leaf_hashes, rs.n17_root, &key);
+        assert!(v.swarm.ok() && v.n17_chain.intact, "essaim + chaîne N17 intacts (re-scellés)");
+        assert!(!v.fully_proven && v.bridge.broken >= 1, "I-PN5 : N17 cross-tenant REJETÉ après relecture");
+
+        // (b) injection swarm → SwarmMismatch.
+        let (_r2, mut s) = synthetic_mode_c_run("gemma3:12b");
+        s.llm_records[0].swarm_request_id = uuid::Uuid::from_u128(0xDEAD_BEEF);
+        let rs2 = seal_n17(&s.llm_records, &key);
+        let v2 = verify_run_offline(&s.records, &s.llm_records, &rs2.leaf_hashes, rs2.n17_root, &key);
+        assert!(!v2.fully_proven && v2.bridge.broken >= 1, "I-PN5 : N17 cross-swarm REJETÉ aussi");
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn verify_endpoint_reports_bridge_verdict() {
+        // HTTP (§9.1) : l'endpoint verify/:id EXPOSE le verdict du pont — cohérent sur un run
+        // sain, rompu (mode_c_broken) sur un run dont la forensique a été perdue.
+        let (app, store) = app_with_store();
+        let (_r, healthy) = synthetic_mode_c_run("gemma3:12b");
+        let id_ok = Uuid::new_v4();
+        store.insert_stored(id_ok, healthy);
+        let v = body_json(
+            app.clone()
+                .oneshot(Request::builder().uri(format!("/v1/swarm/verify/{id_ok}")).body(Body::empty()).unwrap())
+                .await
+                .unwrap(),
+        )
+        .await;
+        assert_eq!(v["n17"]["bridge_consistent"], json!(true));
+        assert_eq!(v["n17"]["mode_c_consistent"], json!(1));
+        assert_eq!(v["n17"]["mode_c_broken"], json!(0));
+
+        // forensique perdue (le lien Mode C devient pendant) → le pont REPORTE la rupture.
+        let (_r2, mut broken) = synthetic_mode_c_run("gemma3:12b");
+        broken.llm_records.clear();
+        broken.n17_leaves.clear();
+        broken.n17_root = None;
+        let id_ko = Uuid::new_v4();
+        store.insert_stored(id_ko, broken);
+        let v2 = body_json(
+            app.oneshot(Request::builder().uri(format!("/v1/swarm/verify/{id_ko}")).body(Body::empty()).unwrap())
+                .await
+                .unwrap(),
+        )
+        .await;
+        assert_eq!(v2["verified"], json!(false), "pont rompu → non vérifié");
+        assert!(v2["n17"]["mode_c_broken"].as_u64().unwrap() >= 1, "l'endpoint reporte le verdict du pont (Missing)");
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn n17_export_round_trips_for_offline_verifier() {
+        // HTTP (§9.1) : les exports /records + /n17 d'un run Mode C, récupérés par un tiers,
+        // se rejouent en verify_run_offline avec sa propre clé — re-preuve complète, sans serveur.
+        use efe_swarm_provenance::{verify_run_offline, AgentCallRecord};
+        let (app, store) = app_with_store();
+        let (_r, stored) = synthetic_mode_c_run("gemma3:12b");
+        let id = Uuid::new_v4();
+        store.insert_stored(id, stored);
+
+        let recs_v = body_json(
+            app.clone()
+                .oneshot(Request::builder().uri(format!("/v1/swarm/runs/{id}/records")).body(Body::empty()).unwrap())
+                .await
+                .unwrap(),
+        )
+        .await;
+        let exp = body_json(
+            app.oneshot(Request::builder().uri(format!("/v1/swarm/runs/{id}/n17")).body(Body::empty()).unwrap())
+                .await
+                .unwrap(),
+        )
+        .await;
+        assert_eq!(exp["llm_records"].as_array().unwrap().len(), 1, "export forensique NON vide (Mode C)");
+        assert!(exp["n17_root"].is_string(), "n17_root exporté");
+
+        let swarm: Vec<AgentCallRecord> = serde_json::from_value(recs_v).unwrap();
+        let llm: Vec<efe_nano_sdk::LlmProvenanceRecord> = serde_json::from_value(exp["llm_records"].clone()).unwrap();
+        let leaves: Vec<[u8; 32]> =
+            exp["n17_leaves"].as_array().unwrap().iter().filter_map(|x| unhex32_t(x.as_str().unwrap_or(""))).collect();
+        let root = exp["n17_root"].as_str().and_then(unhex32_t);
+        let v = verify_run_offline(&swarm, &llm, &leaves, root, &key_system());
+        assert!(v.fully_proven, "/records + /n17 + clé → re-preuve tierce complète (HTTP)");
+    }
+
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     async fn run_then_verify_roundtrip_is_proven() {
         let (app, _state) = app();
