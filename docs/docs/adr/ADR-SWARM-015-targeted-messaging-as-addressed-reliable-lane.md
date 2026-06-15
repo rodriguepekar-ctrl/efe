@@ -58,7 +58,7 @@ ordonné le build sur l'architecture du 2026-06-12.
    dynamique, requête/réponse contradictoire). Dashboard : `Lane::Mail` (le trafic
    de courrier est observable jour 1).
 
-## Invariants introduits (gardiens nominatifs — 14 tests)
+## Invariants introduits (gardiens nominatifs — 20 tests : 14 mailbox · 3 provenance · 2 pont SDK · 1 dashboard)
 
 | Inv. | Énoncé | Gardien |
 |---|---|---|
@@ -69,7 +69,8 @@ ordonné le build sur l'architecture du 2026-06-12.
 | I-MSG5 | boîte pleine ⇒ Err à l'expéditeur, jamais d'éviction de non-lu | `full_mailbox_rejects_sender_never_evicts_unread` (pression soutenue : 15 refus comptés, courrier intact, seule l'époque libère) · `mail_is_truth_first…` |
 | I-MSG6 | transience d'époque (purge + seq remis à zéro) | `epoch_purges_mail_and_resets_seq` |
 | I-MSG7 | corrélation prouvée par lecture déclarée (DAG) | `reply_correlates_and_declares_reading_the_request` (+ contre-épreuve : version fantôme → DAG inconsistant) |
-| — | mise de côté sans perte ; timeout honnête ; queue après fermeture ; réveil ; quiescence WS2 ; lane dashboard ; bout-en-bout re-prouvé | `await_reply_sets_aside…` · `await_reply_times_out…` · `drain_after_router_dropped…` · `wakeup_path_delivers…` · `quiescence_counts_addressed_mail` · `dashboard classify /mail` · `request_reply_end_to_end_reproves_offline` |
+| — | mise de côté sans perte ; timeout honnête ; queue après fermeture ; réveil ; quiescence WS2 ; lane dashboard ; bout-en-bout re-prouvé | `await_reply_sets_aside…` · `await_reply_times_out…` · `drain_after_router_dropped…` · `wakeup_path_delivers…` · `quiescence_counts_addressed_mail` · `dashboard_classifies_mail_lane` · `request_reply_end_to_end_reproves_offline` |
+| — | **contrat inter-crate** : la lettre attachée à la tâche passe par le VRAI Meter du SDK (`declared_reads`) et sa lecture est scellée — `attach_to_task` ↔ `declared_reads` ne peuvent plus diverger en silence | `mailbox_letter_read_is_lifted_by_the_real_sdk_meter` · `without_attach_no_mail_read_is_sealed` (anti-faux-positif) |
 
 ## Verdicts des gates (exécutés le jour du build — artefacts datés)
 
@@ -121,5 +122,6 @@ ordonné le build sur l'architecture du 2026-06-12.
 - `crates/efe-swarm-dashboard/src/event.rs` (Lane::Mail)
 - `crates/efe-swarm-provenance/tests/mailbox_provenance.rs` ·
   `crates/efe-swarm-provenance/examples/swarm_mailbox.rs`
+- `crates/efe-swarm-sdk/tests/mailbox_sdk_bridge.rs` (contrat inter-crate `attach_to_task` ↔ `declared_reads`)
 - `crates/efe-blackboard/examples/{lot_msg,bench_mail}.rs`
 - `scripts/swarm/EFE_SWARM_MSG_2026-06-12.json` · `EFE_SWARM_MAILBENCH_2026-06-12.json`

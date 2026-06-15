@@ -125,9 +125,21 @@ mod tests {
         assert_eq!(Lane::classify("/cand/3"), Lane::Candidate);
         assert_eq!(Lane::classify("/ballot/1"), Lane::Ballot);
         assert_eq!(Lane::classify("/out/00000000000000000001"), Lane::Output);
-        // ADR-015 : le courrier adressé a son couloir (gardien : dashboard_classifies_mail_lane).
-        assert_eq!(Lane::classify("/mail/bob/00000000000000000007"), Lane::Mail);
         assert_eq!(Lane::classify("/misc/x"), Lane::Other);
+    }
+
+    /// **ADR-015 (§9.1)** — gardien nommé du couloir courrier : le trafic `/mail/*`
+    /// est rangé dans `Lane::Mail` (observable au panneau trafic), distinct des autres
+    /// couloirs. Les sous-chemins `<to>/<seq>` n'altèrent pas la classification.
+    #[test]
+    fn dashboard_classifies_mail_lane() {
+        assert_eq!(Lane::classify("/mail/bob/00000000000000000007"), Lane::Mail);
+        assert_eq!(Lane::classify("/mail/coordinator/00000000000000000001"), Lane::Mail);
+        // un préfixe voisin n'est PAS du courrier (pas de faux positif).
+        assert_eq!(Lane::classify("/mailbox_other"), Lane::Other);
+        // les couloirs restent disjoints.
+        assert_ne!(Lane::classify("/mail/x/1"), Lane::Candidate);
+        assert_ne!(Lane::classify("/cand/0"), Lane::Mail);
     }
 
     #[test]
