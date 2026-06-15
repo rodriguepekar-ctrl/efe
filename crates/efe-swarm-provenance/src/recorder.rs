@@ -233,11 +233,11 @@ impl ProvenanceRecorder {
         });
 
         // enrichit chaque brouillon : attache la prochaine ancre (cellule écrite) de SON
-        // agent, FIFO par version. La clé d'ordre (ADR-SWARM-007) est calculée APRÈS, sur
-        // la cellule écrite + payload_hash — JAMAIS sur wall_at. Partagée avec `replay` ⇒
-        // le root vivant == le root rejoué.
-        let mut enriched: Vec<(crate::replay::OrderKey, AgentCallDraft)> =
-            Vec::with_capacity(drafts_sorted.len());
+        // agent, FIFO par version. L'ordre canonique (ADR-SWARM-007) — clé sur la cellule
+        // écrite + payload_hash, JAMAIS sur wall_at — est posé par `append_all_canonical`,
+        // le MÊME chemin que l'API publique : une seule définition de l'ordre canonique,
+        // partagée avec `replay`/`verify_swarm` ⇒ le root vivant == le root rejoué.
+        let mut enriched: Vec<AgentCallDraft> = Vec::with_capacity(drafts_sorted.len());
         let mut anchored_records = 0usize;
         for d in drafts_sorted.iter() {
             let mut d = d.clone();
@@ -245,14 +245,11 @@ impl ProvenanceRecorder {
                 d = d.wrote(a.pointer, a.version);
                 anchored_records += 1;
             }
-            let k = crate::replay::key_of(&d.writes, d.payload_hash());
-            enriched.push((k, d));
+            enriched.push(d);
         }
-        // ordre DÉTERMINISTE (ADR-SWARM-007).
-        enriched.sort_by(|a, b| a.0.cmp(&b.0));
 
         let mut chain = SwarmChain::new(self.tenant, self.swarm_id, key);
-        let records = chain.append_all(enriched.into_iter().map(|(_, d)| d));
+        let records = chain.append_all_canonical(enriched);
 
         SealedProvenance {
             records,

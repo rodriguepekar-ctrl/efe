@@ -136,13 +136,12 @@ fn synth_mode_c_run() -> (Vec<AgentCallRecord>, Vec<LlmProvenanceRecord>, Vec<u8
     ));
 
     // SCELLER dans l'ordre CANONIQUE (ADR-007) : `verify_swarm` rejoue la chaîne en
-    // `deterministic_order` (tri par `key_of(writes, payload_hash)`) ; comme le recorder
-    // réel (recorder.rs), on trie les brouillons AVANT de les enfiler — writes vides ⇒ le
-    // tri se réduit au `payload_hash`. Sinon l'ordre de scellement ≠ l'ordre de re-preuve
-    // et la chaîne casse (à tort).
+    // `deterministic_order` (tri par `key_of(writes, payload_hash)`). `append_all_canonical`
+    // applique ce tri AVANT de chaîner (le MÊME chemin que le recorder réel) ⇒ l'ordre de
+    // scellement == l'ordre de re-preuve, et la chaîne vérifie sous le moat. (Sceller un lot
+    // via `append_all` sans trier casserait `verify_swarm` à tort — cf. chain.rs.)
     let mut chain = SwarmChain::new(tenant, swarm, key.clone());
-    drafts.sort_by_key(|d| d.payload_hash());
-    let records = chain.append_all(drafts);
+    let records = chain.append_all_canonical(drafts);
     (records, n17, key)
 }
 
