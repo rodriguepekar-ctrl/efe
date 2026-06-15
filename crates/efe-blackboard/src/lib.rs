@@ -32,7 +32,10 @@ pub mod work_queue;
 pub use blackboard::{Blackboard, BlackboardValue, BlackboardWrite, DEFAULT_RECENT_HISTORY};
 pub use error::{BlackboardError, EventBusError};
 pub use eventbus::{EventBus, EventBusSubscription, SwarmEvent};
-pub use mailbox::{mail_key, mail_ns, mail_topic, Letter, MailReader, Mailboxes, MsgKind, MAIL_ROOT};
+pub use mailbox::{
+    mail_caps, mail_key, mail_ns, mail_topic, Letter, MailReader, Mailboxes, MsgKind,
+    CAP_MAIL_BOX, CAP_MAIL_GLOBAL, MAIL_ROOT,
+};
 pub use metrics::{LatencyHistogram, MetricsObserver, MetricsSnapshot, SubstrateMetrics};
 pub use observer::{BlackboardObserver, ObserverRegistration};
 pub use reliable::{ReliableItem, ReliableReader, ReliableTopic};

@@ -58,6 +58,28 @@ use crate::topic_router::TopicRouter;
 /// Préfixe racine du courrier (namespace transient d'époque — parité `/gossip`, `/debate`).
 pub const MAIL_ROOT: &str = "/mail";
 
+/// **Cap recommandé PAR BOÎTE** (arbitrage ADR-015, §A.2 de l'architecture) : 64 KiB
+/// ≈ des centaines de lettres courtes. Au-delà : `Err` à l'expéditeur (I-MSG5) —
+/// jamais d'éviction de courrier non lu ; seule l'époque libère.
+pub const CAP_MAIL_BOX: usize = 64 * 1024;
+
+/// **Cap recommandé GLOBAL** pour `/mail/` entier : 1 MiB — la borne « le courrier
+/// ne mange pas le run » (le Blackboard par défaut plafonne à 256 KiB TOUT compris :
+/// un substrat à courrier intensif se construit avec `with_namespaces`).
+pub const CAP_MAIL_GLOBAL: usize = 1024 * 1024;
+
+/// Les caps de namespace recommandés d'un substrat à courrier — à passer à
+/// [`Blackboard::with_namespaces`] (l'appariement longest-prefix-first y est géré) :
+/// le cap GLOBAL sur `/mail/`, et le cap PAR BOÎTE pour chaque destinataire déclaré.
+/// Les boîtes non déclarées restent bornées par le global (et par le cap du Blackboard).
+pub fn mail_caps(boxes: &[&AgentId]) -> Vec<(String, usize)> {
+    let mut caps = vec![(format!("{MAIL_ROOT}/"), CAP_MAIL_GLOBAL)];
+    for b in boxes {
+        caps.push((format!("{}/", mail_ns(b)), CAP_MAIL_BOX));
+    }
+    caps
+}
+
 /// Namespace de la boîte d'un destinataire : `/mail/<to>`.
 pub fn mail_ns(to: &AgentId) -> String {
     format!("{MAIL_ROOT}/{}", to.as_str())
@@ -493,6 +515,72 @@ mod tests {
         assert_eq!(letters[0].body, json!({ "n": 1 }));
         let s3 = boxes.send(&router, &bb, &alice, &aid("carol"), MsgKind::Inform, None, json!({}));
         assert_eq!(s3.unwrap(), 1, "boîtes indépendantes, seq par destinataire");
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn full_mailbox_rejects_sender_never_evicts_unread() {
+        // **I-MSG5 en propre, sous pression SOUTENUE** : boîte pleine — chaque envoi
+        // supplémentaire (plusieurs expéditeurs, tentatives répétées) reçoit Err ;
+        // le courrier non lu est INTACT et drainable ; et après drain, la place ne se
+        // libère PAS (les cellules restent — honnêteté : seule l'ÉPOQUE libère).
+        let bob = aid("bob");
+        let bb = Arc::new(Blackboard::with_namespaces(
+            SwarmId::new(),
+            1 << 20,
+            vec![(format!("{}/", mail_ns(&bob)), 200)], // ~3 enveloppes courtes
+        ));
+        let router = Arc::new(TopicRouter::new(64));
+        let boxes = Mailboxes::new();
+        // remplit la boîte jusqu'au refus.
+        let mut accepted = 0u64;
+        for i in 0..16 {
+            match boxes.send(&router, &bb, &aid("alice"), &bob, MsgKind::Inform, None, json!({ "i": i })) {
+                Ok(_) => accepted += 1,
+                Err(BlackboardError::SizeLimitExceeded { .. }) => break,
+                Err(e) => panic!("erreur inattendue : {e}"),
+            }
+        }
+        assert!(accepted >= 1, "au moins une lettre tient");
+        // pression soutenue : 3 expéditeurs × 5 tentatives — TOUTES refusées, comptées.
+        let rejections_before = bb.rejections();
+        for s in 0..3 {
+            for _ in 0..5 {
+                let r = boxes.send(&router, &bb, &aid(&format!("spam_{s}")), &bob, MsgKind::Inform, None, json!("x"));
+                assert!(matches!(r, Err(BlackboardError::SizeLimitExceeded { .. })), "boîte pleine ⇒ Err, toujours");
+            }
+        }
+        assert!(bb.rejections() >= rejections_before + 15, "chaque refus est compté");
+        // le courrier non lu n'a JAMAIS été évincé : tout est là, in-order.
+        let mut reader = boxes.reader(&router, &bob);
+        let letters = reader.drain(&bb);
+        assert_eq!(letters.len() as u64, accepted, "zéro éviction sous pression");
+        for (i, l) in letters.iter().enumerate() {
+            assert_eq!(l.body["i"], json!(i as u64), "ordre intact");
+        }
+        // et le drain ne LIBÈRE pas la place (les cellules restent — seule l'époque purge).
+        let still = boxes.send(&router, &bb, &aid("alice"), &bob, MsgKind::Inform, None, json!("post-drain"));
+        assert!(matches!(still, Err(BlackboardError::SizeLimitExceeded { .. })),
+                "après drain, la boîte reste pleine (backpressure persistant, par contrat)");
+        // l'époque, ELLE, libère.
+        boxes.new_epoch(&bb);
+        assert_eq!(
+            boxes.send(&router, &bb, &aid("alice"), &bob, MsgKind::Inform, None, json!("ep2")).unwrap(),
+            1,
+            "nouvelle époque : la place est rendue, le seq repart"
+        );
+    }
+
+    #[test]
+    fn mail_caps_shape_is_global_plus_per_box() {
+        // les caps ARBITRÉS (ADR-015) : global /mail/ + un cap par boîte déclarée —
+        // la forme exacte attendue par with_namespaces (longest-prefix-first géré là-bas).
+        let (a, b) = (aid("alice"), aid("bob"));
+        let caps = mail_caps(&[&a, &b]);
+        assert_eq!(caps.len(), 3);
+        assert_eq!(caps[0], ("/mail/".to_string(), CAP_MAIL_GLOBAL));
+        assert!(caps.contains(&("/mail/alice/".to_string(), CAP_MAIL_BOX)));
+        assert!(caps.contains(&("/mail/bob/".to_string(), CAP_MAIL_BOX)));
+        assert!(CAP_MAIL_BOX < CAP_MAIL_GLOBAL, "une boîte ne peut pas manger le courrier entier");
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

@@ -66,7 +66,7 @@ ordonné le build sur l'architecture du 2026-06-12.
 | I-MSG2 | le bus ne décide jamais : perte totale d'indice ⇒ livraison totale | `all_mail_delivered_despite_total_notify_loss` · bench ① (4 000 lettres, **0 réveil consommé**) |
 | I-MSG3 | exactly-once, in-order, gap-conservateur | `cursor_is_exactly_once_and_gap_conservative` · `multi_sender_single_box_is_seq_monotone` (8 expéditeurs ∥, 400 seq contigus) |
 | I-MSG4 | envoi ancré + triple concordance | `send_is_anchored_and_from_matches_writer` |
-| I-MSG5 | boîte pleine ⇒ Err à l'expéditeur, jamais d'éviction de non-lu | `full…` (couvert par `mail_is_truth_first…` : cap → Err + courrier intact) |
+| I-MSG5 | boîte pleine ⇒ Err à l'expéditeur, jamais d'éviction de non-lu | `full_mailbox_rejects_sender_never_evicts_unread` (pression soutenue : 15 refus comptés, courrier intact, seule l'époque libère) · `mail_is_truth_first…` |
 | I-MSG6 | transience d'époque (purge + seq remis à zéro) | `epoch_purges_mail_and_resets_seq` |
 | I-MSG7 | corrélation prouvée par lecture déclarée (DAG) | `reply_correlates_and_declares_reading_the_request` (+ contre-épreuve : version fantôme → DAG inconsistant) |
 | — | mise de côté sans perte ; timeout honnête ; queue après fermeture ; réveil ; quiescence WS2 ; lane dashboard ; bout-en-bout re-prouvé | `await_reply_sets_aside…` · `await_reply_times_out…` · `drain_after_router_dropped…` · `wakeup_path_delivers…` · `quiescence_counts_addressed_mail` · `dashboard classify /mail` · `request_reply_end_to_end_reproves_offline` |
