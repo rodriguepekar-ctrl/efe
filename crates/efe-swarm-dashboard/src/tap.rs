@@ -189,6 +189,7 @@ impl SwarmObserver for DashboardObserver {
             output_preview: redacted_preview(&self.redactor, &run.output),
             verified: run.provenance.verified,
             root: run.provenance.root.clone(),
+            termination: run.termination.as_str().to_string(), // ADR-018 : visibilité du plafond sur le flux live
         });
     }
 }
@@ -261,6 +262,16 @@ mod tests {
         assert!(kinds.contains(&"decided"), "consensus : verdict de l'agrégateur");
         assert!(kinds.contains(&"budget_tick"), "budget : ticks");
         assert!(kinds.contains(&"sealed"), "provenance : scellé");
+
+        // ADR-018 : l'événement terminal NOMME la terminaison sur le flux live — ici un run
+        // nominal → "completed". MÊME chemin (run.termination.as_str()) qu'un run deadliné,
+        // qui porterait "deadline_exceeded"/"deadline_hard_abort" : ferme l'asymétrie de
+        // visibilité sync (SwarmRun) vs stream (SSE).
+        let term = bus.replay().into_iter().find_map(|e| match e.event {
+            DashboardEvent::RunFinished { termination, .. } => Some(termination),
+            _ => None,
+        });
+        assert_eq!(term.as_deref(), Some("completed"), "run_finished porte le statut de terminaison");
 
         // le verdict porte un pattern + une confiance réels.
         let decided = bus.replay().into_iter().find_map(|e| match e.event {

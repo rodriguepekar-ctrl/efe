@@ -134,7 +134,8 @@ dilemme « tuer vs prouver » : on peut tuer **et** prouver.
   avec racine reproduite**. **§C backstop** : consensus K fixe (gén. 500 ms, deadline 20 ms) →
   `deadline_hard_abort` en **273 ms** (≈ deadline + grâce, bien avant les 500 ms du générateur),
   provenance scellée, run renvoyé Ok. **§D témoin** : sans deadline → `completed` + `clean` +
-  vérifié.
+  vérifié. **§E composition (I-AD5)** : plafond coût → `budget_stopped` vs plafond temps →
+  `deadline_exceeded` — noms **distincts**, précédence déterministe (jamais confondus).
 
 ## Conséquences
 
@@ -142,6 +143,10 @@ dilemme « tuer vs prouver » : on peut tuer **et** prouver.
 
 - **Le temps devient un plafond de première classe**, au même rang que le coût et la concurrence —
   et, comme eux, **visible** (statut `RunTermination`) et **sans perte de preuve**.
+- **Visibilité sur les DEUX chemins** : le statut de terminaison apparaît dans la réponse
+  **synchrone** (`SwarmRun.termination`) ET sur le **flux live** (`DashboardEvent::RunFinished.termination`,
+  SSE) — un client en streaming voit donc, lui aussi, qu'un run a été tronqué par le temps/coût.
+  *Borner visiblement* vaut sur les deux surfaces, pas seulement sur la réponse bloquante.
 - **Le deadline ne sacrifie pas le moat** : un run tronqué reste re-prouvable (R0). C'est l'apport
   conceptuel — la découverte du recorder partagé transforme le backstop d'une perte de preuve en
   un simple point de coupe plus grossier.

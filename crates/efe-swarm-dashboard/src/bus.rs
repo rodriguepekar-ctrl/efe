@@ -174,7 +174,7 @@ mod tests {
     #[test]
     fn terminal_is_detected() {
         let b = bus();
-        b.emit(DashboardEvent::RunFinished { elapsed_ms: 1, agents_used: 1, output_preview: "x".into(), verified: true, root: None });
+        b.emit(DashboardEvent::RunFinished { elapsed_ms: 1, agents_used: 1, output_preview: "x".into(), verified: true, root: None, termination: "completed".into() });
         assert!(b.replay().last().unwrap().is_terminal());
     }
 }

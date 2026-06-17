@@ -64,7 +64,12 @@ impl Lane {
 pub enum DashboardEvent {
     // ── cycle de vie ─────────────────────────────────────────────────────────
     RunStarted { topology: String, mode: String, budget_cap_cents: u32, assumed_agents: usize },
-    RunFinished { elapsed_ms: u64, agents_used: usize, output_preview: String, verified: bool, root: Option<String> },
+    /// **ADR-018** : `termination` nomme COMMENT le run s'est terminé (`completed`,
+    /// `budget_stopped`, `deadline_exceeded`, `deadline_hard_abort`) — sinon un client en
+    /// SSE (chemin JOB live) ne saurait PAS qu'un run a été tronqué par le temps/coût, alors
+    /// que l'appelant SYNC le voit dans `SwarmRun`. Ferme l'asymétrie de visibilité : borner
+    /// VISIBLEMENT vaut aussi sur le flux live, pas seulement sur la réponse synchrone.
+    RunFinished { elapsed_ms: u64, agents_used: usize, output_preview: String, verified: bool, root: Option<String>, termination: String },
     /// Le job a échoué (budget pré-vol, agent inconnu…) — terminal, message sûr.
     RunFailed { message: String },
 
