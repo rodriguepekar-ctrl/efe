@@ -33,13 +33,21 @@ fn render_admission(s: &SwarmGatewayState) -> String {
          efe_swarm_gateway_admission_rejected_total {}\n\
          # HELP efe_swarm_gateway_max_width Plafond serveur du champ DTO width (ADR-014).\n\
          # TYPE efe_swarm_gateway_max_width gauge\n\
-         efe_swarm_gateway_max_width {}\n",
+         efe_swarm_gateway_max_width {}\n\
+         # HELP efe_swarm_gateway_memory_recalls_total Runs ayant lu un instantané mémoire (ADR-019).\n\
+         # TYPE efe_swarm_gateway_memory_recalls_total counter\n\
+         efe_swarm_gateway_memory_recalls_total {}\n\
+         # HELP efe_swarm_gateway_memory_learns_total Runs propres ayant replié en mémoire (ADR-019).\n\
+         # TYPE efe_swarm_gateway_memory_learns_total counter\n\
+         efe_swarm_gateway_memory_learns_total {}\n",
         inflight,
         s.admission_max,
         s.admission_per_tenant_max,
         s.admission_tenants_active(),
         s.admission_rejected.load(Ordering::Relaxed),
         s.max_width,
+        s.memory_recalls.load(Ordering::Relaxed),
+        s.memory_learns.load(Ordering::Relaxed),
     )
 }
 

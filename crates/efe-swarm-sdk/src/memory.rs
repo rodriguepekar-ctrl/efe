@@ -45,11 +45,22 @@ pub struct MemoryConfig {
     pub mode: FamilyMode,
     /// Famille imposée (sinon dérivée de la tâche + topologie). Utile pour le benchmark.
     pub family_override: Option<FamilyKey>,
+    /// **ADR-019 (MEM-3, I-MEM7)** : épingle une version PASSÉE de la mémoire (au lieu de la
+    /// courante). `Some(v)` ⇒ le recall lit `snapshot_at(v)` — l'instantané EXACT d'alors, pour
+    /// **reproduire** un run (extension d'ADR-017 : déterministe sachant l'instantané). `None`
+    /// ⇒ version courante (le cas nominal).
+    pub pin_version: Option<u64>,
 }
 
 impl Default for MemoryConfig {
     fn default() -> Self {
-        Self { recall: true, learn: true, mode: FamilyMode::Structural, family_override: None }
+        Self {
+            recall: true,
+            learn: true,
+            mode: FamilyMode::Structural,
+            family_override: None,
+            pin_version: None,
+        }
     }
 }
 

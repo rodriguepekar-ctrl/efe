@@ -2901,6 +2901,7 @@ dependencies = [
  "efe-nano-sdk",
  "efe-pii",
  "efe-swarm-dashboard",
+ "efe-swarm-memory",
  "efe-swarm-provenance",
  "efe-swarm-sdk",
  "efe-swarm-topology",

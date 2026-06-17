@@ -59,6 +59,8 @@ mod store;
 mod test_support; // ADR-016 : synthetic_mode_c_run partagé (lib tests + store_pg tests)
 #[cfg(feature = "postgres")]
 mod store_pg;
+#[cfg(feature = "postgres")]
+mod store_pg_memory; // ADR-019 (MEM-3) : PgMemoryStore (mémoire durable Postgres)
 
 use axum::routing::get;
 use axum::Router;
@@ -78,6 +80,8 @@ pub use oidc::OidcVerifier;
 pub use pii::{GatewayRedactor, PiiConfig, PolicyKind};
 #[cfg(feature = "postgres")]
 pub use store_pg::PgRunStore;
+#[cfg(feature = "postgres")]
+pub use store_pg_memory::PgMemoryStore;
 
 /// Version du crate (semver).
 pub const CRATE_VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -582,6 +586,141 @@ mod tests {
         let txt = String::from_utf8(bytes.to_vec()).unwrap();
         assert!(txt.contains("efe_swarm_gateway_inflight_per_tenant_max"), "plafond par-tenant exposé");
         assert!(txt.contains("efe_swarm_gateway_admission_tenants_active"), "tenants actifs exposés");
+    }
+
+    // ════════════════════════════════════════════════════════════════════════════════
+    //  ADR-019 (MEM-3) — mémoire inter-runs en HTTP (gardiens passerelle)
+    // ════════════════════════════════════════════════════════════════════════════════
+
+    fn post_run_as(tenant: &str, body: Value) -> Request<Body> {
+        Request::builder()
+            .method("POST")
+            .uri("/v1/swarm/run")
+            .header("content-type", "application/json")
+            .header("x-efe-tenant", tenant)
+            .body(Body::from(body.to_string()))
+            .unwrap()
+    }
+    fn get_as(uri: &str, tenant: &str) -> Request<Body> {
+        Request::builder().uri(uri).header("x-efe-tenant", tenant).body(Body::empty()).unwrap()
+    }
+    fn mem_run_body() -> Value {
+        json!({
+            "task": { "text": "hello", "expected": "hello" },
+            "topology": { "kind": "consensus", "generator": "echo_generator",
+                          "judges": ["consistency", "j_non_empty"], "k": 3 },
+            "memory": { "recall": true, "learn": true }
+        })
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn memory_off_by_default_over_http() {
+        // I-MEM8 : sans bloc `memory`, la réponse ne porte aucune interaction mémoire.
+        let (app, _s) = app();
+        let resp = app
+            .oneshot(post_run(json!({
+                "task": { "text": "x", "expected": "x" },
+                "topology": { "kind": "auto" }
+            })))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let v = body_json(resp).await;
+        assert!(v["run"]["memory"].is_null(), "mémoire OFF par défaut → run.memory = null");
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn memory_run_learns_then_snapshot_and_verify_endpoints() {
+        // Bout-en-bout HTTP : un run avec mémoire apprend (I-MEM3) + trace le recall (I-MEM2) ;
+        // GET /memory/:family reflète l'apprentissage ; GET …/verify re-prouve le memory_root.
+        let (app, _s) = app();
+        let resp = app.clone().oneshot(post_run(mem_run_body())).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let v = body_json(resp).await;
+        let m = &v["run"]["memory"];
+        assert_eq!(m["recalled"], json!(true), "recall effectué");
+        assert_eq!(m["learned"], json!(true), "run propre → replié (I-MEM3)");
+        let family = m["family"].as_str().expect("famille exposée").to_string();
+        assert_eq!(family.len(), 64, "famille = hash hex");
+
+        // GET /memory/:family → l'instantané reflète le repli (version 1, content_hash, K=3).
+        let snap = app
+            .clone()
+            .oneshot(Request::builder().uri(format!("/v1/swarm/memory/{family}")).body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        assert_eq!(snap.status(), StatusCode::OK);
+        let sv = body_json(snap).await;
+        assert_eq!(sv["version"], json!(1), "un repli → version 1");
+        assert_eq!(sv["content_hash"].as_str().unwrap().len(), 64, "épingle content_hash");
+        assert_eq!(sv["size_histogram"]["3"], json!(1), "K=3 observé une fois");
+
+        // GET /memory/:family/verify → re-preuve du memory_root (I-MEM5).
+        let ver = app
+            .oneshot(Request::builder().uri(format!("/v1/swarm/memory/{family}/verify")).body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        assert_eq!(ver.status(), StatusCode::OK, "chaîne mémoire intègre → 200");
+        let vv = body_json(ver).await;
+        assert_eq!(vv["intact"], json!(true));
+        assert_eq!(vv["records"], json!(1));
+        assert_eq!(vv["memory_root"].as_str().unwrap().len(), 64, "memory_root re-prouvé");
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn memory_is_tenant_scoped_over_http() {
+        // I-MEM6 : le tenant A apprend ; le tenant B ne voit RIEN sur la même famille.
+        let (app, _s) = app();
+        let resp = app.clone().oneshot(post_run_as(TENANT_A, mem_run_body())).await.unwrap();
+        let v = body_json(resp).await;
+        let family = v["run"]["memory"]["family"].as_str().unwrap().to_string();
+
+        // A voit son apprentissage…
+        let a = app.clone().oneshot(get_as(&format!("/v1/swarm/memory/{family}"), TENANT_A)).await.unwrap();
+        assert_eq!(body_json(a).await["version"], json!(1), "A voit sa mémoire");
+        // …B ne voit rien (même famille, autre tenant → instantané genèse v0).
+        let b = app.oneshot(get_as(&format!("/v1/swarm/memory/{family}"), TENANT_B)).await.unwrap();
+        assert_eq!(body_json(b).await["version"], json!(0), "B ne voit PAS la mémoire de A (I-MEM6)");
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn memory_self_view_is_consistent_for_system_alias() {
+        // RÉGRESSION (revue MEM-3, I-MEM6 self-view) : un appelant via l'alias "system" replie
+        // sous la clé CANONIQUE (UUID système) ; l'endpoint canonicalise pareil → le tenant voit
+        // SA mémoire. Avant le fix, le GET sous "system" brut lisait une autre clé de map → v0.
+        let (app, _s) = app();
+        let resp = app.clone().oneshot(post_run_as("system", mem_run_body())).await.unwrap();
+        let v = body_json(resp).await;
+        let family = v["run"]["memory"]["family"].as_str().unwrap().to_string();
+        let snap = app.oneshot(get_as(&format!("/v1/swarm/memory/{family}"), "system")).await.unwrap();
+        assert_eq!(snap.status(), StatusCode::OK);
+        assert_eq!(body_json(snap).await["version"], json!(1), "l'alias 'system' voit SA mémoire (canonicalisé)");
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn memory_bogus_tenant_is_a_clean_400() {
+        // Bonus du fix : un tenant non-UUID (et ≠ "system") sur l'endpoint mémoire → 400 honnête
+        // (au lieu d'une vue vide silencieuse).
+        let (app, _s) = app();
+        let resp = app
+            .oneshot(get_as("/v1/swarm/memory/deadbeef", "pas-un-uuid"))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::BAD_REQUEST, "tenant bogué → 400");
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn metrics_expose_memory_counters() {
+        let (app, _s) = app();
+        let _ = app.clone().oneshot(post_run(mem_run_body())).await.unwrap();
+        let resp = app
+            .oneshot(Request::builder().uri("/metrics").body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        let bytes = resp.into_body().collect().await.unwrap().to_bytes();
+        let txt = String::from_utf8(bytes.to_vec()).unwrap();
+        assert!(txt.contains("efe_swarm_gateway_memory_recalls_total"), "compteur recalls exposé");
+        assert!(txt.contains("efe_swarm_gateway_memory_learns_total"), "compteur learns exposé");
     }
 
     /// **E2E self-host RÉEL** (Ollama local, keyless). Ignoré par défaut (CI sans modèle) ;

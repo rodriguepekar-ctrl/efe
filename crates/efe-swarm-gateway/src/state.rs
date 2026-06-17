@@ -11,6 +11,7 @@ use std::sync::{Arc, Mutex};
 use efe_blackboard::SubstrateMetrics;
 use efe_nano_sdk::TenantId;
 use efe_swarm_dashboard::{DashboardBus, DashboardMetrics, DashboardObserver, DashboardRegistry};
+use efe_swarm_memory::{InMemoryMemoryStore, MemoryStore};
 use efe_swarm_provenance::ProvenanceMetrics;
 use efe_swarm_sdk::{ClientMode, HmacKeySource, Swarm, SwarmObserver, WidthSpec};
 use efe_swarm_topology::AgentFleet;
@@ -139,6 +140,15 @@ pub struct SwarmGatewayState {
     pub keys: HmacKeySource,
     /// Persistance des runs (la preuve).
     pub store: Arc<dyn RunStore>,
+    /// **ADR-019 (MEM-3)** : la mémoire/apprentissage inter-runs, tenant-scopée. Dev :
+    /// `InMemoryMemoryStore` ; prod : `PgMemoryStore` (feature `postgres`). Le recall/learn se
+    /// branchent par-requête sur l'essaim (selon le DTO `memory`) ; les endpoints `/memory/*`
+    /// lisent + re-prouvent ce store.
+    pub memory: Arc<dyn MemoryStore>,
+    /// **ADR-019** : recalls mémoire cumulés (compteur `/metrics`) — un run a lu un instantané.
+    pub memory_recalls: Arc<AtomicU64>,
+    /// **ADR-019** : replis mémoire cumulés (compteur `/metrics`) — un run propre a appris.
+    pub memory_learns: Arc<AtomicU64>,
     /// Métriques de provenance **partagées** : chaque run les alimente (→ `/metrics`).
     pub prov_metrics: Arc<ProvenanceMetrics>,
     /// Métriques de substrat (Blackboard/EventBus) — exposées en `/metrics`.
@@ -195,10 +205,17 @@ impl SwarmGatewayState {
         substrate_metrics: Arc<SubstrateMetrics>,
     ) -> Self {
         let permits = admission_permits();
+        // ADR-019 : le store mémoire par défaut scelle son `memory_root` avec la MÊME source de
+        // clé tenant que le reste (sinon, en prod EnvHkdf, la mémoire serait scellée sous
+        // test_key — racine incohérente avec `derive_key`). Clone AVANT le move de `keys`.
+        let memory_keys = keys.clone();
         Self {
             fleet,
             keys,
             store,
+            memory: Arc::new(InMemoryMemoryStore::with_keys(memory_keys)),
+            memory_recalls: Arc::new(AtomicU64::new(0)),
+            memory_learns: Arc::new(AtomicU64::new(0)),
             prov_metrics,
             substrate_metrics,
             dashboards: Arc::new(DashboardRegistry::new(DASHBOARD_REGISTRY_CAP)),
@@ -339,6 +356,12 @@ impl SwarmGatewayState {
     /// Remplace le store des runs (ex. `PgRunStore` en prod via la feature `postgres`).
     pub fn with_store(mut self, store: Arc<dyn RunStore>) -> Self {
         self.store = store;
+        self
+    }
+
+    /// **ADR-019 (MEM-3)** : remplace le store de **mémoire** (ex. `PgMemoryStore` en prod).
+    pub fn with_memory_store(mut self, memory: Arc<dyn MemoryStore>) -> Self {
+        self.memory = memory;
         self
     }
 

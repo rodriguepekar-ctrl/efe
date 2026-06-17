@@ -72,6 +72,14 @@ impl Swarm {
         self
     }
 
+    /// **ADR-019 (MEM-2/3)** : branche (ou retire) la mémoire inter-runs sur un essaim déjà
+    /// construit. Pratique pour la passerelle, qui dérive un essaim par requête et y greffe
+    /// une poignée mémoire selon le DTO `memory`. `None` ⇒ mémoire OFF (chemin historique).
+    pub fn with_memory(mut self, memory: Option<MemoryHandle>) -> Self {
+        self.memory = memory;
+        self
+    }
+
     /// Essaim **keyless** par défaut (flotte standard, provenance activée). Le mode
     /// démo/dev en une ligne.
     pub fn keyless() -> Self {
@@ -145,7 +153,12 @@ impl Swarm {
         if let Some(h) = &mem {
             let family = crate::memory::family_for(&task, &spec, &h.config);
             if h.config.recall {
-                if let Ok(snap) = h.store.snapshot(&tenant_str, &family).await {
+                // I-MEM7 : une version épinglée lit l'instantané PASSÉ (repro) ; sinon le courant.
+                let snap_read = match h.config.pin_version {
+                    Some(v) => h.store.snapshot_at(&tenant_str, &family, v).await,
+                    None => h.store.snapshot(&tenant_str, &family).await,
+                };
+                if let Ok(snap) = snap_read {
                     mem_warm_k_min = spec
                         .adaptive_bounds()
                         .and_then(|(lo, hi)| snap.cells.size.suggested_k_min(lo as u32, hi as u32))

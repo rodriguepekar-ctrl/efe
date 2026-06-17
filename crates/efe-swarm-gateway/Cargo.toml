@@ -36,6 +36,7 @@ pii = ["dep:efe-pii", "dep:regex"]
 [dependencies]
 efe-swarm-sdk        = { path = "../efe-swarm-sdk", version = "0.0.1" }
 efe-swarm-provenance = { path = "../efe-swarm-provenance", version = "0.0.1" }  # verify_swarm + AgentCallRecord + métriques
+efe-swarm-memory     = { path = "../efe-swarm-memory", version = "0.0.1" }      # ADR-019 (MEM-3) : store + endpoints mémoire
 efe-swarm-topology   = { path = "../efe-swarm-topology", version = "0.0.1" }    # AgentFleet (flotte partagée)
 efe-swarm-dashboard  = { path = "../efe-swarm-dashboard", version = "0.0.1" }   # DashboardBus + observer (Inc.3)
 efe-blackboard       = { path = "../efe-blackboard", version = "0.0.1" }        # SubstrateMetrics (/metrics)

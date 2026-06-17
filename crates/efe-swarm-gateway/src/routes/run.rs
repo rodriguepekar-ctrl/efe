@@ -19,6 +19,8 @@ use tokio::task::JoinHandle;
 use uuid::Uuid;
 
 use crate::auth::Caller;
+use efe_swarm_sdk::MemoryHandle;
+
 use crate::dto::{JobAccepted, RunParams, RunRequest, RunResponse};
 use crate::error::{GatewayError, GatewayJson};
 use crate::state::SwarmGatewayState;
@@ -69,6 +71,12 @@ pub async fn run(
     // ADR-018 : fenêtre temporelle demandée, CLAMPÉE côté serveur ([50 ms, cap env]). Lue
     // avant `into_parts` (qui consomme la requête) ; posée sur le `Swarm` via with_deadline.
     let deadline = req.resolved_deadline();
+    // ADR-019 (MEM-3) : poignée mémoire (opt-in). Construite depuis le store tenant-scopé de
+    // l'état + la politique du DTO ; posée sur l'essaim via with_memory. `None` ⇒ mémoire OFF.
+    let memory_handle = req
+        .memory
+        .as_ref()
+        .map(|m| MemoryHandle::with_config(s.memory.clone(), m.to_config()));
     let (task, spec, mut budget, mode) = req.into_parts()?;
     // Inc.4 : résout le mode (Network → routeur server-side, sinon souverain). 501 si Network
     // demandé sans routeur câblé. `allow_remote` n'est vrai que pour le routeur Network.
@@ -90,7 +98,10 @@ pub async fn run(
         let observer = s.dashboard_observer(&caller.tenant, bus.clone());
         // ADR-018 : la fenêtre temporelle est posée sur l'essaim dérivé (with_deadline) —
         // sonde coopérative + backstop dur s'arment dans run_traced. None ⇒ run non borné.
-        let swarm = s.swarm_for_observed(&caller.tenant, mode, observer, allow_remote, width)?.with_deadline(deadline);
+        let swarm = s
+            .swarm_for_observed(&caller.tenant, mode, observer, allow_remote, width)?
+            .with_deadline(deadline)
+            .with_memory(memory_handle.clone()); // ADR-019 : recall/learn si demandé
 
         let state = s.clone();
         let tenant = caller.tenant.clone();
@@ -100,6 +111,7 @@ pub async fn run(
             let ticker = spawn_metrics_ticker(state.clone(), bus.clone());
             match swarm.run_traced(task, spec, budget).await {
                 Ok(mut outcome) => {
+                    record_memory_metrics(&state, &outcome.run); // ADR-019 : compteurs recall/learn
                     // G9 : caviarde la sortie au repos selon la politique du tenant (records intacts).
                     state.redact_output(&tenant, &mut outcome.run);
                     // persiste la PREUVE (records) — re-vérifiable via verify/:id. Un échec
@@ -125,14 +137,31 @@ pub async fn run(
 
     // ── Mode SYNC (Inc.2) — le permit d'admission reste tenu jusqu'au retour. ──
     let _permit = permit;
-    // ADR-018 : fenêtre temporelle posée sur l'essaim (cf. mode JOB ci-dessus).
-    let swarm = s.swarm_for(&caller.tenant, mode, allow_remote, width)?.with_deadline(deadline);
+    // ADR-018 + ADR-019 : fenêtre temporelle + mémoire posées sur l'essaim (cf. mode JOB).
+    let swarm = s
+        .swarm_for(&caller.tenant, mode, allow_remote, width)?
+        .with_deadline(deadline)
+        .with_memory(memory_handle);
     let mut outcome = swarm.run_traced(task, spec, budget).await?;
+    record_memory_metrics(&s, &outcome.run); // ADR-019 : compteurs recall/learn
     // G9 : caviarde la sortie selon la politique PII du tenant (réponse + au repos).
     s.redact_output(&caller.tenant, &mut outcome.run);
     let run_id = Uuid::new_v4();
     s.store.put(run_id, &caller.tenant, &outcome).await?;
     Ok((StatusCode::OK, Json(RunResponse { run_id, run: outcome.run })).into_response())
+}
+
+/// **ADR-019 (MEM-3)** : incrémente les compteurs `/metrics` de recall/learn d'après le résumé
+/// mémoire du run (`None` ⇒ mémoire OFF, no-op). Hors chemin chaud (deux `fetch_add` relaxés).
+fn record_memory_metrics(state: &SwarmGatewayState, run: &efe_swarm_sdk::SwarmRun) {
+    if let Some(m) = &run.memory {
+        if m.recalled {
+            state.memory_recalls.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        }
+        if m.learned {
+            state.memory_learns.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        }
+    }
 }
 
 /// Émet périodiquement un `metrics_tick` (jauges globales) jusqu'à l'`abort`. Hors chemin

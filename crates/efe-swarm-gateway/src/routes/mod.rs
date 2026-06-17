@@ -4,6 +4,7 @@
 
 pub mod dashboard;
 pub mod events;
+pub mod memory;
 pub mod metrics;
 pub mod records;
 pub mod replay;
@@ -28,4 +29,7 @@ pub fn routes() -> Router<SwarmGatewayState> {
         .route("/runs/:id/n17", get(records::get_n17)) // ADR-016 : export forensique offline
         .route("/runs/:id/events", get(events::run_events)) // SSE : rejeu + live (Inc.3)
         .route("/events", get(events::tenant_events)) // SSE : firehose tenant (Inc.3)
+        // ADR-019 (MEM-3) : mémoire inter-runs — instantané + re-preuve du memory_root.
+        .route("/memory/:family", get(memory::get_memory))
+        .route("/memory/:family/verify", get(memory::verify_memory_chain))
 }

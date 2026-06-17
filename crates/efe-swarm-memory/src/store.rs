@@ -43,6 +43,8 @@ pub enum MemError {
     KeyDerivation(String),
     /// Un verrou empoisonné (un thread a paniqué en le tenant) — refus prudent.
     Poisoned,
+    /// **MEM-3** : erreur d'un store persistant (ex. Postgres) — requête, décodage, connexion.
+    Backend(String),
 }
 
 impl std::fmt::Display for MemError {
@@ -50,6 +52,7 @@ impl std::fmt::Display for MemError {
         match self {
             MemError::KeyDerivation(e) => write!(f, "dérivation de clé tenant échouée : {e}"),
             MemError::Poisoned => write!(f, "verrou mémoire empoisonné"),
+            MemError::Backend(e) => write!(f, "store mémoire (backend) : {e}"),
         }
     }
 }
@@ -82,6 +85,21 @@ pub struct FoldOutcome {
 pub trait MemoryStore: Send + Sync {
     /// Lit un **instantané gelé** (version courante) pour `(tenant, family)`. Tenant-scopé.
     async fn snapshot(&self, tenant: &str, family: &FamilyKey) -> Result<MemorySnapshot, MemError>;
+
+    /// **ADR-019 (MEM-3, I-MEM7)** : l'instantané gelé à une version **passée** — l'état
+    /// mémoire tel qu'il était après les `version` premiers replis. Permet de **ré-épingler**
+    /// l'instantané exact qu'un run a lu, donc de reproduire ses sorties (R1 « sachant
+    /// l'instantané », extension d'ADR-017). `version ≥ courant` ⇒ l'instantané courant (clampé).
+    /// Le défaut renvoie l'instantané courant — un store sans rétention de versions reste correct
+    /// pour la version courante (le seul cas où le caller n'épingle rien).
+    async fn snapshot_at(
+        &self,
+        tenant: &str,
+        family: &FamilyKey,
+        _version: u64,
+    ) -> Result<MemorySnapshot, MemError> {
+        self.snapshot(tenant, family).await
+    }
 
     /// Replie un run (si `clean`, I-MEM3 ; idempotent par `run_id`) → nouvelle version chaînée.
     async fn fold(&self, tenant: &str, update: MemoryUpdate) -> Result<FoldOutcome, MemError>;
@@ -138,6 +156,17 @@ impl MemoryStore for InMemoryMemoryStore {
         let version = journal.len() as u64;
         let cells = materialize(&journal);
         Ok(MemorySnapshot::freeze(version, cells))
+    }
+
+    async fn snapshot_at(&self, tenant: &str, family: &FamilyKey, version: u64) -> Result<MemorySnapshot, MemError> {
+        // Reconstruction d'un instantané PASSÉ : le journal est append-only, donc « version N »
+        // = les N premiers replis insérés. On replie ce préfixe (materialize re-trie
+        // canoniquement, donc le résultat est stable). `version` au-delà du courant est clampé.
+        let journals = self.journals.lock().map_err(|_| MemError::Poisoned)?;
+        let journal = journals.get(&(tenant.to_string(), family.clone())).cloned().unwrap_or_default();
+        let n = (version as usize).min(journal.len());
+        let cells = materialize(&journal[..n]);
+        Ok(MemorySnapshot::freeze(n as u64, cells))
     }
 
     async fn fold(&self, tenant: &str, update: MemoryUpdate) -> Result<FoldOutcome, MemError> {

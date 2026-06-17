@@ -31,6 +31,14 @@ impl FamilyKey {
     pub fn from_hash(h: &[u8; 32]) -> Self {
         FamilyKey(hex32(h))
     }
+
+    /// **ADR-019 (MEM-3)** : reconstruit une clé depuis sa forme hex (ex. un override de
+    /// famille fourni par le DTO de la passerelle, ou la famille consignée dans un run). La
+    /// chaîne EST l'identité opaque — pas de re-validation (une clé inconnue donne simplement
+    /// une famille vide à la lecture).
+    pub fn from_hex(s: impl Into<String>) -> Self {
+        FamilyKey(s.into())
+    }
     /// La représentation hex (persistance / fil / indexation).
     pub fn as_str(&self) -> &str {
         &self.0

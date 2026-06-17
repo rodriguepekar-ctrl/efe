@@ -8,11 +8,15 @@ use serde_json::Value;
 use uuid::Uuid;
 
 use efe_swarm_sdk::{
-    Budget, ClientMode, ConvergenceMetric, KSpec, OnExceed, Pattern, StopRule, SwarmRun,
-    TopologySpec, DEFAULT_BATCH,
+    Budget, ClientMode, ConvergenceMetric, FamilyKey, FamilyMode, KSpec, MemoryConfig, OnExceed,
+    Pattern, StopRule, SwarmRun, TopologySpec, DEFAULT_BATCH,
 };
 
 use crate::error::GatewayError;
+
+fn default_true() -> bool {
+    true
+}
 
 fn default_k() -> KDto {
     KDto::Fixed(3)
@@ -51,6 +55,11 @@ pub struct RunRequest {
     /// run deadliné reste re-prouvable (R0) mais non reproductible (R1) — cf. ADR-017/018.
     #[serde(default)]
     pub deadline_ms: Option<u64>,
+    /// **ADR-019 (MEM-3)** : mémoire/apprentissage inter-runs (opt-in). Absent ⇒ mémoire OFF
+    /// (chemin historique, I-MEM8). Présent ⇒ le run lit un instantané gelé (warm-start +
+    /// trace MemoryRead) et replie s'il est propre (I-MEM3).
+    #[serde(default)]
+    pub memory: Option<MemoryDto>,
 }
 
 impl RunRequest {
@@ -88,6 +97,57 @@ fn max_deadline_ms() -> u64 {
         .and_then(|s| s.parse::<u64>().ok())
         .unwrap_or(300_000)
         .max(MIN_DEADLINE_MS)
+}
+
+/// **ADR-019 (MEM-3)** : l'empreinte de famille de fil — `structural` (défaut souverain) ou
+/// `exact`. La sémantique (embedding) reste hors périmètre HTTP (opt-in serveur futur).
+#[derive(Debug, Clone, Copy, Default, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum FamilyModeDto {
+    Exact,
+    #[default]
+    Structural,
+}
+
+impl From<FamilyModeDto> for FamilyMode {
+    fn from(m: FamilyModeDto) -> Self {
+        match m {
+            FamilyModeDto::Exact => FamilyMode::Exact,
+            FamilyModeDto::Structural => FamilyMode::Structural,
+        }
+    }
+}
+
+/// **ADR-019 (MEM-3)** : la politique mémoire de fil. `deny_unknown_fields` : une typo de
+/// gouvernance d'apprentissage est un 400, jamais un défaut silencieux. Tous les booléens
+/// défaut à `true` (présent ⇒ on veut la mémoire) ; `pin_version` épingle une version passée
+/// (reproductibilité, I-MEM7) ; `family` impose une famille hex (benchmark).
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct MemoryDto {
+    #[serde(default = "default_true")]
+    pub recall: bool,
+    #[serde(default = "default_true")]
+    pub learn: bool,
+    #[serde(default)]
+    pub mode: FamilyModeDto,
+    #[serde(default)]
+    pub family: Option<String>,
+    #[serde(default)]
+    pub pin_version: Option<u64>,
+}
+
+impl MemoryDto {
+    /// Mappe vers la `MemoryConfig` du SDK. La famille hex (si fournie) devient un override.
+    pub fn to_config(&self) -> MemoryConfig {
+        MemoryConfig {
+            recall: self.recall,
+            learn: self.learn,
+            mode: self.mode.into(),
+            family_override: self.family.as_ref().map(|h| FamilyKey::from_hex(h.clone())),
+            pin_version: self.pin_version,
+        }
+    }
 }
 
 /// **Taille d'essaim de fil** (ADR-014) — **untagged** : un nombre nu (`"k": 12`,
