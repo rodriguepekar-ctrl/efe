@@ -38,6 +38,16 @@ pub struct TopologyOutput {
     pub cost_units: f64,
     pub elapsed_ms: u64,
     pub quality: QualitySignals,
+    /// **ADR-019 (MEM-2.b)** : le **pattern d'agrégation gagnant** (`"vote"`/`"borda"`/
+    /// `"condorcet"`…), si la topologie en décide un (consensus). `None` pour les topologies
+    /// sans notion de pattern (GV/T1, pipeline, hiérarchique, gossip, débat). C'est le signal
+    /// que la mémoire replie dans le **prior de pattern** (`PatternPrior`) et que `SwarmRun`
+    /// rend observable — auparavant non exposé sur `SwarmRun` (d'où le « vide » de MEM-2).
+    pub decided_pattern: Option<String>,
+    /// **ADR-019 (MEM-2.b)** : le run a-t-il **escaladé** (vote peu confiant → juges payés) ?
+    /// `true` uniquement sur la branche d'escalade d'une politique `Escalating` ; `false` en
+    /// pattern fixe/adaptatif et hors consensus. Replié dans `PatternPrior::escalations`.
+    pub escalated: bool,
 }
 
 /// Contexte partagé injecté aux topologies (services : flotte d'agents + provenance).
@@ -135,6 +145,8 @@ impl Topology for GvTopology {
             cost_units: n as f64,
             elapsed_ms: t0.elapsed().as_millis() as u64,
             quality: QualitySignals { candidates: n, verified: r.passed, subtasks: 0 },
+            decided_pattern: None, // T1/GV : aucune notion de pattern d'agrégation (ADR-019)
+            escalated: false,
         }
     }
 }
@@ -214,6 +226,8 @@ impl Topology for AdaptiveGvTopology {
             cost_units: k_used as f64,
             elapsed_ms: t0.elapsed().as_millis() as u64,
             quality: QualitySignals { candidates: k_used, verified: r.passed, subtasks: 0 },
+            decided_pattern: None, // T1 adaptatif : pas de pattern non plus (ADR-019)
+            escalated: false,
         }
     }
 }
@@ -254,6 +268,8 @@ impl Topology for PipelineTopology {
             cost_units: self.pipeline.len() as f64,
             elapsed_ms: t0.elapsed().as_millis() as u64,
             quality: QualitySignals { candidates: 0, verified: 0, subtasks: produced },
+            decided_pattern: None, // T2 pipeline : pas d'agrégation par pattern (ADR-019)
+            escalated: false,
         }
     }
 }
@@ -282,6 +298,8 @@ impl Topology for HierTopology {
             cost_units: r.subtasks as f64 * self.cost_per_subtask,
             elapsed_ms: t0.elapsed().as_millis() as u64,
             quality: QualitySignals { candidates: 0, verified: 0, subtasks: r.subtasks },
+            decided_pattern: None, // T3 hiérarchique : pas de pattern d'agrégation (ADR-019)
+            escalated: false,
         }
     }
 }

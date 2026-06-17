@@ -313,20 +313,23 @@ impl Topology for ConsensusTopology {
             });
         }
 
-        // 2. décide le pattern + si les juges sont nécessaires (escalade incluse).
-        let (pattern, judges_needed) = match &self.policy {
-            AggregatorPolicy::Fixed(p) => (*p, *p != Pattern::Vote),
+        // 2. décide le pattern + si les juges sont nécessaires + si l'on a ESCALADÉ. Le 3ᵉ
+        //    booléen (ADR-019) est l'escalade STRICTE : `true` seulement quand une politique
+        //    `Escalating` a basculé du Vote gratuit vers les juges payés (vote peu confiant) ;
+        //    un pattern fixe/adaptatif non-Vote n'est PAS une escalade (c'est un choix posé).
+        let (pattern, judges_needed, escalated) = match &self.policy {
+            AggregatorPolicy::Fixed(p) => (*p, *p != Pattern::Vote, false),
             AggregatorPolicy::Adaptive(s) => {
                 let p = s.select(&candidates);
-                (p, p != Pattern::Vote)
+                (p, p != Pattern::Vote, false)
             }
             AggregatorPolicy::Escalating { vote_confidence_threshold, escalate_to } => {
                 // tente le Vote (GRATUIT) ; escalade seulement si peu confiant.
                 let vote = MajorityVote.aggregate(task, &candidates, &[]);
                 if vote.confidence >= *vote_confidence_threshold {
-                    (Pattern::Vote, false) // confiant → juges ÉCONOMISÉS
+                    (Pattern::Vote, false, false) // confiant → juges ÉCONOMISÉS, pas d'escalade
                 } else {
-                    (*escalate_to, true) // escalade → on paie les juges
+                    (*escalate_to, true, true) // escalade → on paie les juges
                 }
             }
         };
@@ -381,6 +384,12 @@ impl Topology for ConsensusTopology {
                 verified: bus_count,
                 subtasks: judges_run,
             },
+            // ADR-019 (MEM-2.b) : EXPOSE le pattern décidé (forme canonique minuscule —
+            // `"vote"`/`"borda"`/`"condorcet"`…) + l'escalade, pour que la mémoire replie un
+            // VRAI prior de pattern (auparavant `None`, d'où le vide en MEM-2). C'est le même
+            // verdict que l'event `consensus.decided`, désormais porté aussi par `SwarmRun`.
+            decided_pattern: Some(format!("{pattern:?}").to_lowercase()),
+            escalated,
         }
     }
 }

@@ -421,6 +421,8 @@ impl DebateTopology {
             cost_units: calls as f64,
             elapsed_ms: t0.elapsed().as_millis() as u64,
             quality: QualitySignals { candidates: k, verified: rounds_done, subtasks: judges_total },
+            decided_pattern: None, // débat : juge final, pas de pattern d'agrégation de vote (ADR-019)
+            escalated: false,
         }
     }
 }

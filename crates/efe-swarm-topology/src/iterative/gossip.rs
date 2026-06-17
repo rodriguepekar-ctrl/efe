@@ -213,6 +213,8 @@ impl Topology for GossipTopology {
                 verified: usize::from(rep.converged),
                 subtasks: rep.rounds,
             },
+            decided_pattern: None, // gossip : convergence par raffinement, pas d'agrégation (ADR-019)
+            escalated: false,
         }
     }
 }

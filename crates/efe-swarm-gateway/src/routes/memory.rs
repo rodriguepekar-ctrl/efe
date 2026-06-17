@@ -38,7 +38,7 @@ struct MemorySnapshotView {
     size_histogram: BTreeMap<u32, u64>,
     /// L'amorce `k_min` (p25 du prior) — informative, NON bornée ici (le run la clampe, I-MEM4).
     suggested_k_min_p25: Option<u32>,
-    /// `pattern → victoires` (le prior de pattern ; vide en MEM-2, cf. doc SDK).
+    /// `pattern → victoires` (le prior de pattern, peuplé depuis MEM-2.b par les runs consensus).
     pattern_wins: BTreeMap<String, u64>,
     /// Nombre d'exemplaires retenus (borné par le cap) + les meilleurs.
     exemplars: usize,

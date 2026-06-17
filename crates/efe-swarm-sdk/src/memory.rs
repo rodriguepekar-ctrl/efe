@@ -15,13 +15,25 @@
 //! 3. **Learn** : après scellement+vérification, **si et seulement si** le run est propre
 //!    (`SwarmRun::is_clean()` — la porte I-MEM3), on replie un [`RunSummary`].
 //!
-//! ## Périmètre honnête de MEM-2
-//! MEM-2 capte ce qui est **fiablement exposé** par un `SwarmRun` : `k_used` (le prior de
-//! taille, qui pilote le warm-start) et le **gagnant** comme exemplaire few-shot. Le **pattern
-//! gagnant** (visible seulement sur le flux observateur, pas sur `SwarmRun`) et la **réputation
-//! par-agent** ne sont pas encore captés — laissés vides (jamais fabriqués). Leur lecture en
-//! retour (biais du sélecteur de pattern, injection d'exemplaires dans les prompts Mode C) est
-//! couplée à la topologie / au Mode C : c'est l'incrément suivant (MEM-2.b / MEM-3).
+//! ## Périmètre — MEM-2 puis MEM-2.b
+//! **MEM-2** captait le **fiablement exposé** d'un `SwarmRun` : `k_used` (prior de taille →
+//! warm-start) et le **gagnant** comme exemplaire (stocké, mais pas encore relu).
+//!
+//! **MEM-2.b** ferme deux des trois lectures différées :
+//! - **Pattern (populate)** — le **pattern gagnant** + l'**escalade** sont désormais portés par
+//!   `SwarmRun::decided_pattern` (alimenté par le consensus via `TopologyOutput`), donc repliés
+//!   dans un **vrai** `PatternPrior` (auparavant `None`/vide). Sa lecture-retour (biaiser le
+//!   sélecteur de pattern) reste bornée par le DTO, qui pose un pattern FIXE — documentée à part.
+//! - **Exemplaires (read)** — les meilleurs exemplaires recall-és sont **injectés en few-shot**
+//!   dans le prompt des générateurs **Mode C** (`llm.rs::gen_prompt`), bornés à [`FEWSHOT_N`] et
+//!   re-prouvables (l'instantané d'où ils viennent est épinglé + tracé, I-MEM2/I-MEM7).
+//!
+//! Reste différée — **réputation par-agent** : sur le chemin **consensus** (celui du DTO), les
+//! `k` candidats sont produits par un SEUL agent métré (`"generator"`), donc une réputation
+//! par-agent y serait **dégénérée** (un seul agent, qui « gagne » toujours). Une attribution
+//! granulaire exige des ids par-variante (chirurgie d'ids de topologie) + un routage qui les
+//! lise — faible valeur sur le chemin principal, laissé à un incrément topologie dédié. Jamais
+//! fabriqué (`agents` reste vide) plutôt que rempli d'une donnée trompeuse.
 
 use std::sync::Arc;
 
@@ -113,12 +125,17 @@ pub(crate) fn memory_read_capture(
     family: &FamilyKey,
     snap: &MemorySnapshot,
     warm_k_min: Option<usize>,
+    exemplars_recalled: usize,
 ) -> CallCapture {
     let input = json!({ "family": family.as_str(), "op": "recall" });
     let output = json!({
         "version": snap.version,
         "content_hash": snap.content_hash_hex(),
         "warm_start_k_min": warm_k_min,
+        // MEM-2.b : combien d'exemplaires few-shot ont été recall-és + rendus disponibles aux
+        // générateurs Mode C (l'épingle content_hash ci-dessus les couvre déjà ; ce compte rend
+        // l'INFLUENCE explicitement visible dans la racine, sans jamais fabriquer de donnée).
+        "exemplars_recalled": exemplars_recalled,
     });
     CallCapture::new(
         AgentId::new("memory_recall").expect("agent id mémoire valide"),
@@ -130,11 +147,16 @@ pub(crate) fn memory_read_capture(
 }
 
 /// Construit le [`RunSummary`] que la mémoire replie, depuis un `SwarmRun`. Capte le
-/// **fiablement exposé** : `k_used` (le K, via `quality.candidates`) et le **gagnant** comme
-/// exemplaire few-shot (content-addressed). Pattern gagnant + réputation : vides en MEM-2
-/// (non exposés sur `SwarmRun` — cf. doc du module). `clean` reflète `is_clean()` ; sur le
-/// chemin learn (gardé), il est toujours vrai, mais on le porte pour la traçabilité.
-pub(crate) fn summary_from_run(run: &SwarmRun) -> RunSummary {
+/// **fiablement exposé** : `k_used` (le K, via `quality.candidates`), le **gagnant** comme
+/// exemplaire few-shot (content-addressed), et — depuis MEM-2.b — le **pattern gagnant** +
+/// l'**escalade** (désormais portés par `SwarmRun::decided_pattern` / le param `escalated`,
+/// alimentés par le consensus via `TopologyOutput`). La **réputation par-agent** reste vide :
+/// sur le chemin consensus (celui du DTO), les `k` candidats partagent un SEUL agent métré
+/// (`"generator"`), donc une réputation par-agent y serait dégénérée — une attribution
+/// granulaire exige des ids par-variante (chirurgie d'ids de topologie), hors périmètre ici.
+/// `clean` reflète `is_clean()` ; sur le chemin learn (gardé), toujours vrai, mais porté pour
+/// la traçabilité.
+pub(crate) fn summary_from_run(run: &SwarmRun, escalated: bool) -> RunSummary {
     // Le gagnant : la valeur agrégée (`output.value` pour consensus/T1 ; sinon la sortie nue).
     let winner = run.output.get("value").cloned().unwrap_or_else(|| run.output.clone());
     let exemplar = Exemplar {
@@ -147,8 +169,10 @@ pub(crate) fn summary_from_run(run: &SwarmRun) -> RunSummary {
     RunSummary {
         clean: run.is_clean(),
         k_used: run.quality.candidates as u32,
-        winning_pattern: None,
-        escalated: false,
+        // MEM-2.b : le VRAI prior de pattern (consensus). `None` hors consensus → le fold
+        // ignore simplement la cellule pattern (cf. `fold_into` ②).
+        winning_pattern: run.decided_pattern.clone(),
+        escalated,
         exemplars: vec![exemplar],
         agents: Vec::new(),
         failed: false,
@@ -156,16 +180,34 @@ pub(crate) fn summary_from_run(run: &SwarmRun) -> RunSummary {
     }
 }
 
-/// Aperçu court + déterministe d'une valeur (pour l'exemplaire — jamais une valeur brute hors
-/// record). Tronqué à 80 caractères.
+/// Aperçu **déterministe** d'une valeur (l'exemplaire — jamais une valeur brute hors record).
+/// Tronqué à `PREVIEW_MAX` caractères : assez long pour servir d'**exemple few-shot utile**
+/// (MEM-2.b — l'aperçu EST ce qui est injecté dans le prompt Mode C), mais borné pour garder la
+/// mémoire compacte et l'exposition (vue `/memory`) raisonnable.
 fn preview_of(v: &Value) -> String {
     let s = match v {
         Value::String(s) => s.clone(),
         other => other.to_string(),
     };
-    if s.chars().count() > 80 {
-        s.chars().take(77).collect::<String>() + "…"
+    if s.chars().count() > PREVIEW_MAX {
+        s.chars().take(PREVIEW_MAX - 1).collect::<String>() + "…"
     } else {
         s
     }
+}
+
+/// Longueur max d'un aperçu d'exemplaire (cf. [`preview_of`]). Compromis few-shot/compacité.
+const PREVIEW_MAX: usize = 240;
+
+/// **ADR-019 (MEM-2.b)** : nombre d'exemplaires few-shot recall-és injectés dans le prompt d'un
+/// générateur Mode C. Borne l'influence de la mémoire (I-MEM4 : amorcer, jamais gouverner) et le
+/// coût en tokens. Les meilleurs (qualité-pondérés) d'abord, via [`Exemplars::top`].
+pub(crate) const FEWSHOT_N: usize = 3;
+
+/// Les aperçus des **meilleurs** exemplaires d'un instantané — ce que le run recall-e et injecte
+/// dans les prompts Mode C (few-shot, borné à [`FEWSHOT_N`]). Vide ⇒ aucune influence (I-MEM8).
+/// Provient de l'instantané GELÉ : l'épingle `content_hash` (déjà ancrée dans la racine par le
+/// record MemoryRead, I-MEM2) couvre ces exemplaires → l'injection est re-prouvable (R1 ré-épingle).
+pub(crate) fn recalled_exemplars(snap: &MemorySnapshot) -> Vec<String> {
+    snap.cells.exemplars.top(FEWSHOT_N).iter().map(|e| e.preview.clone()).collect()
 }

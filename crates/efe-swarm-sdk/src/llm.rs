@@ -82,17 +82,40 @@ pub(crate) fn llm_refiner(backend: Arc<dyn LocalBackend>, instruction: String) -
 struct LlmGen {
     backend: Arc<dyn LocalBackend>,
     instruction: String,
+    /// **ADR-019 (MEM-2.b)** : exemplaires few-shot **recall-és** de la mémoire — les aperçus de
+    /// gagnants passés de la MÊME famille (instantané gelé, épingle tracée dans la racine via le
+    /// record MemoryRead, I-MEM2). Vides ⇒ prompt **byte-identique** au chemin historique (I-MEM8).
+    exemplars: Vec<String>,
 }
 #[async_trait]
 impl Generator for LlmGen {
     async fn generate(&self, task: &Value, variant: usize) -> Value {
-        let prompt = format!("{} Text: \"{}\". Answer with only the result, no preamble.", self.instruction, text_of(task));
+        let prompt = gen_prompt(&self.instruction, task, &self.exemplars);
         let out = ask(&self.backend, prompt, 16, 0.2 + 0.3 * variant as f64, 42 + variant as u64).await;
         json!({ "value": out })
     }
 }
-pub(crate) fn llm_gen(backend: Arc<dyn LocalBackend>, instruction: String) -> Arc<dyn Generator> {
-    Arc::new(LlmGen { backend, instruction })
+
+/// Construit le prompt du générateur Mode C — **pur + déterministe** (testable sans backend,
+/// cf. `tests::gen_prompt_*`). Sans exemplaires : la forme **historique exacte** (byte-identique,
+/// I-MEM8). Avec : un **bloc few-shot** des aperçus de gagnants passés recall-és de la mémoire
+/// (ADR-019, MEM-2.b) est inséré AVANT la tâche, pour biaiser la génération vers ce qui a
+/// historiquement gagné dans cette famille. L'influence est BORNÉE (≤ N exemplaires, cf.
+/// `crate::memory::FEWSHOT_N`) et **re-prouvable** : l'instantané d'où ils proviennent est épinglé
+/// (R1 le ré-épingle → mêmes exemplaires → même prompt).
+fn gen_prompt(instruction: &str, task: &Value, exemplars: &[String]) -> String {
+    if exemplars.is_empty() {
+        return format!("{} Text: \"{}\". Answer with only the result, no preamble.", instruction, text_of(task));
+    }
+    let examples = exemplars.iter().map(|e| format!("- {e}")).collect::<Vec<_>>().join("\n");
+    format!(
+        "{instruction} Examples of good past answers:\n{examples}\n\nText: \"{}\". Answer with only the result, no preamble.",
+        text_of(task)
+    )
+}
+
+pub(crate) fn llm_gen(backend: Arc<dyn LocalBackend>, instruction: String, exemplars: Vec<String>) -> Arc<dyn Generator> {
+    Arc::new(LlmGen { backend, instruction, exemplars })
 }
 
 struct LlmStage {
@@ -249,6 +272,43 @@ mod tests {
             p1.contains("Revise ONLY if the peers convince you"),
             "la consigne anti-écho est présente : {p1}"
         );
+    }
+
+    // ── ADR-019 (MEM-2.b) : few-shot recall-é → prompt du générateur Mode C ──────────────
+
+    #[test]
+    fn gen_prompt_without_exemplars_is_the_historical_form() {
+        // I-MEM8 : aucune mémoire ⇒ prompt BYTE-IDENTIQUE au chemin historique (zéro influence).
+        let task = json!({ "text": "classe ceci" });
+        let p = gen_prompt("Classify.", &task, &[]);
+        assert_eq!(p, "Classify. Text: \"classe ceci\". Answer with only the result, no preamble.");
+        assert!(!p.contains("Examples"), "sans exemplaires, aucun bloc few-shot");
+    }
+
+    #[test]
+    fn gen_prompt_with_exemplars_injects_a_bounded_fewshot_block() {
+        // MEM-2.b : les exemplaires recall-és apparaissent comme exemples AVANT la tâche, et la
+        // tâche reste présente intacte. C'est l'injection few-shot, testée PUREMENT (sans backend).
+        let task = json!({ "text": "classe ceci" });
+        let p = gen_prompt("Classify.", &task, &["tech".to_string(), "sport".to_string()]);
+        assert!(p.contains("Examples of good past answers:"), "bloc few-shot présent : {p}");
+        assert!(p.contains("- tech") && p.contains("- sport"), "chaque exemplaire est listé : {p}");
+        assert!(p.contains("Text: \"classe ceci\""), "la tâche reste dans le prompt : {p}");
+        // l'ordre : exemples AVANT la tâche (le few-shot précède la question).
+        assert!(p.find("- tech").unwrap() < p.find("classe ceci").unwrap(), "exemples avant la tâche");
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn llm_gen_sends_recalled_exemplars_to_the_backend() {
+        // Bout-en-bout SANS réseau (mock `Scripted`) : un `LlmGen` construit avec des exemplaires
+        // les fait bien PARVENIR au backend dans le prompt — la preuve que le câblage
+        // resolver→llm_gen→prompt tient, indépendamment d'un vrai LLM (harnais honnête, labellisé).
+        let be = Arc::new(Scripted { reply: "tech".into(), prompts: Mutex::new(Vec::new()) });
+        let g = llm_gen(be.clone(), "Classify.".into(), vec!["tech".into(), "sport".into()]);
+        let _ = g.generate(&json!({ "text": "article sur les GPU" }), 0).await;
+        let prompts = be.prompts.lock().unwrap();
+        assert!(prompts[0].contains("Examples of good past answers:"), "few-shot émis au backend");
+        assert!(prompts[0].contains("- tech"), "exemplaire recall-é présent dans le prompt émis");
     }
 }
 

@@ -158,6 +158,13 @@ pub struct SwarmRun {
     /// (borné, I-MEM4), et si le run a **replié** en mémoire (gardé par `is_clean()`, I-MEM3).
     #[serde(default)]
     pub memory: Option<MemorySummary>,
+    /// **ADR-019 (MEM-2.b)** : le **pattern d'agrégation gagnant** (`"vote"`/`"borda"`/
+    /// `"condorcet"`…) quand la topologie en décide un (consensus) ; `None` sinon (T1/GV,
+    /// pipeline, hiérarchique, gossip, débat, ou run tronqué). Rend observable, sur le résultat,
+    /// le même verdict que l'event `consensus.decided` — et c'est ce que la mémoire replie dans
+    /// le **prior de pattern** (`PatternPrior`). Champ additif (`None` pour tout run historique).
+    #[serde(default)]
+    pub decided_pattern: Option<String>,
 }
 
 /// **ADR-019 (MEM-2)** — l'interaction mémoire d'un run : ce qui a été lu (recall) et écrit

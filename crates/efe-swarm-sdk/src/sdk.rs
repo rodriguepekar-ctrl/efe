@@ -150,6 +150,9 @@ impl Swarm {
         let mut mem_family: Option<efe_swarm_memory::FamilyKey> = None;
         let mut mem_snapshot: Option<efe_swarm_memory::MemorySnapshot> = None;
         let mut mem_warm_k_min: Option<usize> = None;
+        // MEM-2.b : exemplaires few-shot recall-és (aperçus des meilleurs gagnants passés), à
+        // injecter dans les prompts Mode C. Bornés (≤ FEWSHOT_N). Vide ⇒ aucune injection (I-MEM8).
+        let mut mem_exemplars: Vec<String> = Vec::new();
         if let Some(h) = &mem {
             let family = crate::memory::family_for(&task, &spec, &h.config);
             if h.config.recall {
@@ -163,6 +166,7 @@ impl Swarm {
                         .adaptive_bounds()
                         .and_then(|(lo, hi)| snap.cells.size.suggested_k_min(lo as u32, hi as u32))
                         .map(|k| k as usize);
+                    mem_exemplars = crate::memory::recalled_exemplars(&snap);
                     mem_snapshot = Some(snap);
                 }
             }
@@ -231,7 +235,7 @@ impl Swarm {
         // de ce qui a été recall-é (une sortie influencée par un recall non tracé serait
         // invalide). N'est émis que si un instantané a réellement été lu (recall ON).
         if let (Some(snap), Some(family)) = (&mem_snapshot, &mem_family) {
-            recorder.capture(crate::memory::memory_read_capture(family, snap, mem_warm_k_min));
+            recorder.capture(crate::memory::memory_read_capture(family, snap, mem_warm_k_min, mem_exemplars.len()));
         }
 
         // 2.b — ADR-014 (CP-1) : résout la LARGEUR d'exécution du run, par mode
@@ -253,6 +257,9 @@ impl Swarm {
             width,
             deadline: deadline.clone(),
             memory_k_min: mem_warm_k_min, // ADR-019 (I-MEM4) : warm-start borné dans resolve()
+            // ADR-019 (MEM-2.b) : few-shot recall-é (déjà compté dans MemoryRead ci-dessus) —
+            // injecté dans les prompts Mode C par `generator()`. Mode A : ignoré (aucun prompt).
+            memory_exemplars: mem_exemplars,
         };
         let topo = spec.resolve(&resolver)?;
         let topo_name = topo.name().to_string();
@@ -281,6 +288,10 @@ impl Swarm {
                         cost_units: 0.0,
                         elapsed_ms: run_t0.elapsed().as_millis() as u64,
                         quality: QualitySignals::default(),
+                        // Backstop dur : run inachevé → aucun pattern décidé (et `is_clean()` faux
+                        // ⇒ jamais de learn de toute façon). ADR-019.
+                        decided_pattern: None,
+                        escalated: false,
                     },
                     true,
                 ),
@@ -362,6 +373,9 @@ impl Swarm {
             backend: backend_info,
             n17: n17_summary,
             memory: None, // ADR-019 (MEM-2) : rempli juste après (recall + learn).
+            // ADR-019 (MEM-2.b) : le pattern décidé par la topologie (consensus), rendu
+            // observable + replié dans le prior de pattern par `summary_from_run`.
+            decided_pattern: out.decided_pattern.clone(),
         };
 
         // ── ADR-019 (MEM-2) : LEARN + résumé mémoire ────────────────────────────────────
@@ -376,7 +390,9 @@ impl Swarm {
                     let update = efe_swarm_memory::MemoryUpdate {
                         run_id: swarm_id.as_uuid(),
                         family: family.clone(),
-                        summary: crate::memory::summary_from_run(&run),
+                        // MEM-2.b : `escalated` vient du `TopologyOutput` (consensus) — `out`
+                        // n'est que partiellement déplacé (output/quality), ce champ Copy reste lisible.
+                        summary: crate::memory::summary_from_run(&run, out.escalated),
                     };
                     if let Ok(outcome) = h.store.fold(&tenant_str, update).await {
                         learned = outcome.folded;
@@ -1099,5 +1115,39 @@ mod tests {
         assert!(!stopped.is_clean(), "budget-stoppé → pas clean");
         assert!(!stopped.memory.as_ref().unwrap().learned, "run tronqué → PAS replié (I-MEM3)");
         assert_eq!(store.snapshot(&tenant, &family).await.unwrap().version, 1, "la mémoire n'a PAS bougé (toujours v1)");
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn learn_populates_pattern_prior_and_recallable_exemplars() {
+        // MEM-2.b : un run consensus PROPRE replie désormais (1) un VRAI prior de pattern
+        // (auparavant `None`/vide — la lecture "pattern" différée) et (2) un exemplaire
+        // recall-able (ce que le few-shot Mode C injecte). On vérifie les DEUX nouvelles captures.
+        let store = std::sync::Arc::new(InMemoryMemoryStore::new());
+        let tenant = efe_nano_sdk::TenantId::system().to_string();
+        let task = json!({ "text": "x", "expected": "x" });
+        let judges = ["consistency", "length_band", "j_non_empty"];
+        let family = consensus_family(&task, "echo_generator", &judges);
+        let swarm = Swarm::builder().memory(MemoryHandle::new(store.clone())).build().unwrap();
+
+        let run = swarm
+            .run(task.clone(), TopologySpec::consensus("echo_generator", &judges, 3), Budget::cents(1000))
+            .await
+            .unwrap();
+        assert!(run.is_clean());
+        // (1) le pattern décidé est EXPOSÉ sur le run (consensus Borda) — auparavant inexistant.
+        assert_eq!(run.decided_pattern.as_deref(), Some("borda"), "pattern décidé observable sur SwarmRun");
+        assert!(run.memory.as_ref().unwrap().learned, "run propre → replié");
+
+        // (2) la mémoire a un VRAI prior de pattern (plus jamais vide en consensus) — MEM-2.b.
+        let snap = store.snapshot(&tenant, &family).await.unwrap();
+        assert_eq!(snap.cells.pattern.wins.get("borda"), Some(&1), "prior de pattern peuplé (borda × 1)");
+        assert_eq!(snap.cells.pattern.total, 1, "un run de pattern observé");
+        assert_eq!(snap.cells.pattern.escalations, 0, "Borda fixe ⇒ aucune escalade comptée");
+
+        // (3) le gagnant est recall-able comme exemplaire few-shot — exactement ce que la prochaine
+        //     génération Mode C injecterait dans son prompt (cf. llm::gen_prompt + le mock backend).
+        let recalled = crate::memory::recalled_exemplars(&snap);
+        assert_eq!(recalled.len(), 1, "le gagnant du run propre est recall-able (few-shot)");
+        assert!(!recalled[0].is_empty(), "l'aperçu d'exemplaire n'est pas vide");
     }
 }

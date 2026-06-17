@@ -43,6 +43,11 @@ pub(crate) struct Resolver<'a> {
     /// démarre près du K historique ; `None` ⇒ départ standard (aucune mémoire / pas de donnée).
     /// La mémoire AMORCE, ne gouverne jamais : `warm_start_k_min` re-clampe par sécurité.
     pub memory_k_min: Option<usize>,
+    /// **ADR-019 (MEM-2.b)** : exemplaires few-shot recall-és (aperçus de gagnants passés de la
+    /// famille), à injecter dans le prompt des générateurs **Mode C** (`llm_gen`). En Mode A
+    /// (flotte keyless), il n'y a pas de prompt → ignorés (extraction sans effet, honnête). Vide
+    /// ⇒ prompt historique inchangé (I-MEM8). Bornés en amont (≤ `memory::FEWSHOT_N`).
+    pub memory_exemplars: Vec<String>,
 }
 
 fn aid(s: &str) -> AgentId {
@@ -92,7 +97,9 @@ impl Resolver<'_> {
 
     pub fn generator(&self, name: &str, id: &str) -> Result<Arc<dyn Generator>, SwarmError> {
         let g = match &self.backend {
-            Some(b) => llm_gen(b.clone(), name.to_string()),
+            // ADR-019 (MEM-2.b) : en Mode C, le générateur reçoit les exemplaires few-shot
+            // recall-és (cf. `memory_exemplars`). Vides ⇒ prompt historique (I-MEM8).
+            Some(b) => llm_gen(b.clone(), name.to_string(), self.memory_exemplars.clone()),
             None => self.fleet.generator(name).ok_or_else(|| SwarmError::UnknownAgent { role: "generator", name: name.to_string() })?,
         };
         Ok(meter_gen(g, self.meter.clone(), aid(id)))
@@ -158,7 +165,10 @@ impl Resolver<'_> {
     /// Mode A = arguers déterministes intégrés (les noms servent d'étiquettes).
     pub fn arguers(&self, pro: &str, contra: &str) -> (Arc<dyn Generator>, Arc<dyn Generator>) {
         let (p, c): (Arc<dyn Generator>, Arc<dyn Generator>) = match &self.backend {
-            Some(b) => (llm_gen(b.clone(), pro.to_string()), llm_gen(b.clone(), contra.to_string())),
+            // Débat : PAS de few-shot mémoire — l'exemplaire recall-é est un gagnant de
+            // CONSENSUS (réponse agrégée), de forme étrangère à un argument pro/contra. On ne
+            // l'injecte donc que dans `generator()`. (ADR-019, périmètre honnête.)
+            Some(b) => (llm_gen(b.clone(), pro.to_string(), Vec::new()), llm_gen(b.clone(), contra.to_string(), Vec::new())),
             None => builtin_arguers(false),
         };
         (meter_gen(p, self.meter.clone(), aid("pro")), meter_gen(c, self.meter.clone(), aid("contra")))
