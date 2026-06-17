@@ -4,10 +4,10 @@
     "verify_us_per_record": 2000.0
   },
   "cost": {
-    "r0_us_per_record": 21.0076925,
-    "r0_us_per_run": 168.06154,
-    "r1_us_per_record": 1.1382658333333333,
-    "r1_us_per_run": 9.106126666666666
+    "r0_us_per_record": 21.649369166666666,
+    "r0_us_per_run": 173.19495333333333,
+    "r1_us_per_record": 1.17699375,
+    "r1_us_per_run": 9.41595
   },
   "go": true,
   "identity_asymmetry": {

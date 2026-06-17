@@ -15,11 +15,15 @@
 //!   jamais re-exécutés en aveugle.
 
 use std::collections::HashMap;
+use std::sync::atomic::Ordering;
 
 use axum::extract::{Path, State};
+use axum::http::{header, StatusCode};
+use axum::response::{IntoResponse, Response};
 use axum::Json;
 use efe_swarm_provenance::{deterministic_order, replay, verify_run_offline, AgentCallRecord, AgentKind, AgentRole};
 use efe_swarm_sdk::LlmProvenanceRecord;
+use serde_json::json;
 use uuid::Uuid;
 
 use crate::auth::Caller;
@@ -169,7 +173,7 @@ pub async fn post_replay(
     caller: Caller,
     Path(id): Path<Uuid>,
     GatewayJson(req): GatewayJson<RunRequest>,
-) -> Result<Json<ReplayReport>, GatewayError> {
+) -> Result<Response, GatewayError> {
     caller.require_any_role(&["operator", "admin"])?; // re-exécution = compute → rôle opérateur
     let stored = s.store.get(id, &caller.tenant).await?.ok_or(GatewayError::NotFound)?;
     let key = s.derive_key(&caller.tenant)?;
@@ -194,10 +198,30 @@ pub async fn post_replay(
             fresh_root: None,
             note: "mode_c : re-exécution provider hors-périmètre (ADR-017 §10) — appels classés par DeterminismLevel (cache/replay_of → match ; éphémère → skipped). Re-preuve N17 dans le bloc n17.".into(),
         });
-        return Ok(Json(report));
+        return Ok(Json(report).into_response());
     }
 
-    // Run Mode A (keyless) : re-exécuter sur la task re-fournie, comparer (mirroir de /run, SANS persister).
+    // Run Mode A (keyless) : re-exécuter sur la task re-fournie, comparer (miroir de /run, SANS
+    // persister). ADR-014 : le rejeu R1 EST un run en vol → il acquiert un permis d'admission
+    // (429 + Retry-After si la passerelle est à capacité), tenu jusqu'à la fin de la re-exécution
+    // — sinon une rafale de /replay punce un trou dans le backpressure du moat.
+    let permit = match s.admission.clone().try_acquire_owned() {
+        Ok(p) => p,
+        Err(_) => {
+            s.admission_rejected.fetch_add(1, Ordering::Relaxed);
+            return Ok((
+                StatusCode::TOO_MANY_REQUESTS,
+                [(header::RETRY_AFTER, "1")],
+                Json(json!({
+                    "error": "too_many_requests",
+                    "message": "passerelle à capacité (admission ADR-014) : réessayez (Retry-After)",
+                    "inflight_max": s.admission_max,
+                })),
+            )
+                .into_response());
+        }
+    };
+    let _permit = permit; // tenu pendant toute la re-exécution (libéré au retour)
     let width = req.width;
     let (task, spec, mut budget, mode) = req.into_parts()?;
     let (mode, allow_remote, price_override) = s.resolve_mode(mode)?;
@@ -309,5 +333,5 @@ pub async fn post_replay(
         },
     };
     report.execution = Some(execution);
-    Ok(Json(report))
+    Ok(Json(report).into_response())
 }

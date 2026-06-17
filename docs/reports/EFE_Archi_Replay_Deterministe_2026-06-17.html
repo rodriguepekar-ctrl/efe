@@ -625,13 +625,15 @@
   <h3>9.1 — La suite de tests nominative (les gardiens prévus)</h3>
   <p><b>Reproductibilité (3)</b> : <code>replay_reexecutes_mode_a_to_identical_outputs</code> (I-RP1) ·
   <code>replay_r0_reseals_to_same_root_offline</code> (I-RP3) · <code>replay_is_width_invariant</code> (I-RP8, w ∈ {1,4,32}).
-  <b>Détection (2)</b> : <code>replay_detects_and_localizes_divergence</code> (I-RP2) ·
-  <code>replay_rejects_task_mismatch</code> (garde du contrat R1). <b>Honnêteté Mode C / N17 (2)</b> :
-  <code>replay_classifies_mode_c_honestly</code> (I-RP6, cache→Match, éphémère→Skipped) ·
-  <code>replay_reverifies_n17_without_recomputing_root</code> (I-RP7). <b>Isolation / intégrité (2)</b> :
-  <code>replay_is_tenant_scoped</code> (I-RP5) · <code>replay_never_mutates_the_store</code> (I-RP4). <b>HTTP (2)</b> :
-  <code>get_replay_reports_r0_verdict</code> · <code>post_replay_reexecutes_and_compares</code>. <b>Mode C réel (1,
-  ignoré)</b> : <code>replay_real_mode_c_skeleton_reproduces</code>.</p>
+  <b>Détection (3)</b> : <code>replay_detects_and_localizes_divergence</code> (I-RP2, R0 content-break) ·
+  <code>replay_r1_localizes_output_divergence</code> (I-RP2, R1 output-mismatch — mêmes générateurs, juge
+  divergent) · <code>replay_rejects_task_mismatch</code> (garde §5.1 : <code>task_mismatch</code>, pas de faux
+  verdict). <b>Honnêteté Mode C / N17 (2)</b> : <code>replay_classifies_mode_c_honestly_and_reverifies_n17</code>
+  (I-RP6) · <code>replay_reverifies_n17_without_recomputing_root</code> (I-RP7, forensique falsifiée → détectée,
+  racine d'essaim toujours reproduite). <b>Isolation / intégrité (2)</b> : <code>replay_is_tenant_scoped</code>
+  (I-RP5) · <code>replay_never_mutates_the_store</code> (I-RP4). <b>Mode C réel (1, ignoré)</b> :
+  <code>replay_r0_reproves_root_of_real_mode_c_run</code>. <i>Note : R1 acquiert un permis d'admission
+  (ADR-014) — la re-exécution est un run en vol, bornée par le même backpressure que <code>/run</code>.</i></p>
 
   <h3>9.2 — ADR-SWARM-017, le squelette</h3>
   <p><b>Titre</b> : « Rejeu déterministe — re-dériver vs re-prouver, Mode A bit-exact, Mode C honnêtement classé ».

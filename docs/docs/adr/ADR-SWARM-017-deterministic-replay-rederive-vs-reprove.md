@@ -61,11 +61,14 @@ build l'a réfuté empiriquement et a tranché pour le modèle honnête ci-desso
    laisserait croire le run non reproductible) — il signale `task_mismatch: true` avec
    `outputs_reproduced: null` (erreur d'opérateur, distincte d'une vraie non-reproduction).
    *(Affinement du build : un drapeau dans le rapport, plus diagnostique qu'un 400 opaque.)*
-6. **Lecture-seule, tenant-scopé, largeur neutre** — le rejeu ne mute jamais le store (R1
-   s'exécute sur un Blackboard vierge, ne persiste rien) ; un run d'un autre tenant est invisible
-   (404) ; rejouer à une largeur différente re-dérive les mêmes sorties (I-CP1 héritée).
+6. **Lecture-seule, tenant-scopé, largeur neutre, admission-borné** — le rejeu ne mute jamais le
+   store (R1 s'exécute sur un Blackboard vierge, ne persiste rien) ; un run d'un autre tenant est
+   invisible (404) ; rejouer à une largeur différente re-dérive les mêmes sorties (I-CP1 héritée).
+   **R1 acquiert un permis d'admission (ADR-014)** : la re-exécution EST un run en vol, donc elle
+   est bornée par le même backpressure que `/run` (429 + Retry-After à capacité) — sinon une
+   rafale de `/replay` puncerait un trou dans le cap d'inflight.
 
-## Invariants introduits (famille I-RP — 10 gardiens : 9 passerelle · 1 Mode C réel ignoré ; + socle `replay.rs`)
+## Invariants introduits (famille I-RP — 11 gardiens : 10 passerelle · 1 Mode C réel ignoré ; + socle `replay.rs`)
 
 - **I-RP1** — *Reproductibilité Mode A des SORTIES* : R1 re-exécute le squelette Mode A sur la
   task re-fournie → re-dérive les mêmes `output_hash` + flux de données. La racine, identité
@@ -73,7 +76,9 @@ build l'a réfuté empiriquement et a tranché pour le modèle honnête ci-desso
   `replay_reexecutes_mode_a_to_identical_outputs`.
 - **I-RP2** — *Divergence détectée et localisée* : toute non-reproduction (record muté → R0
   content-break ; sortie non re-dérivée → R1 output-mismatch) identifie le 1ᵉʳ record divergent.
-  Gardien : `replay_detects_and_localizes_divergence`.
+  Gardiens : `replay_detects_and_localizes_divergence` (R0 content-break) ·
+  `replay_r1_localizes_output_divergence` (R1 : mêmes générateurs, juge divergent → output-mismatch
+  localisé, sans faux `task_mismatch`).
 - **I-RP3** — *R0 hors-ligne, zéro-input* : `GET /replay/:id` re-scelle les records scellés →
   racine reproduite, sans task/provider/réseau. Gardien : `replay_r0_reseals_to_same_root_offline`.
 - **I-RP4** — *Intégrité préservée* : rejeu lecture-seule ; R1 sur Blackboard vierge ; aucun

@@ -871,6 +871,36 @@ mod tests {
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn replay_r1_localizes_output_divergence() {
+        // I-RP2 (R1, vecteur §8.1 ②(b)) : MÊME task + MÊMES générateurs, mais un jeu de JUGES
+        // différent → les générateurs reproduisent (task_mismatch=false), un record de juge
+        // DIVERGE → R1 émet outputs_reproduced=false et localise un `output_mismatch` (≠ le
+        // `content_break` de R0). C'est la non-reproduction RÉELLE de la computation, pas une
+        // erreur d'opérateur de task.
+        let (app, _s) = app();
+        let three = json!({
+            "task": { "text": "x", "expected": "x" },
+            "topology": { "kind": "consensus", "generator": "echo_generator",
+                          "judges": ["consistency", "length_band", "j_non_empty"], "k": 5 },
+            "budget": { "max_cents": 1000 }
+        });
+        let run = body_json(app.clone().oneshot(post_run(three)).await.unwrap()).await;
+        let id = run["run_id"].as_str().unwrap().to_string();
+        // rejoue avec un juge en MOINS (générateurs identiques) → un ballot scellé sans pendant.
+        let two = json!({
+            "task": { "text": "x", "expected": "x" },
+            "topology": { "kind": "consensus", "generator": "echo_generator",
+                          "judges": ["consistency", "length_band"], "k": 5 },
+            "budget": { "max_cents": 1000 }
+        });
+        let v = body_json(app.oneshot(replay_post(&id, two)).await.unwrap()).await;
+        assert_eq!(v["execution"]["task_mismatch"], json!(false), "générateurs identiques → PAS un task_mismatch");
+        assert_eq!(v["execution"]["outputs_reproduced"], json!(false), "jeu de juges différent → sorties non re-dérivées");
+        assert!(v["first_divergence"].is_object(), "divergence localisée");
+        assert_eq!(v["first_divergence"]["reason"], json!("output_mismatch"), "R1 : output_mismatch (≠ content_break de R0)");
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     async fn replay_classifies_mode_c_honestly_and_reverifies_n17() {
         // I-RP6 + I-RP7 : un run Mode C synthétique — R0 classe (Seeded) + re-vérifie la chaîne
         // N17 (sans la recomputer) ; R1 ne re-exécute PAS le provider (hors-périmètre) et classe
