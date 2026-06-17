@@ -51,6 +51,18 @@ pub const DEFAULT_BATCH: usize = 4;
 /// `BudgetGuard`) — la topologie reste découplée du modèle de prix.
 pub type BudgetProbe = Arc<dyn Fn(usize) -> bool + Send + Sync>;
 
+/// **Sonde de deadline coopérative (ADR-018, I-AD2)** — le **jumeau temporel** de
+/// [`BudgetProbe`]. Consultée au MÊME point de la boucle de vagues (avant d'émettre une
+/// vague), elle répond « la fenêtre temporelle reste-t-elle ouverte ? » (`true` = il
+/// reste du temps, émettre ; `false` = deadline atteinte, arrêt propre). Injectée par le
+/// SDK (qui possède la gouvernance, via son `DeadlineGuard` à horloge) — la topologie
+/// ignore l'horloge tout comme elle ignore le modèle de prix. La sonde ne prend AUCUN
+/// argument : le temps n'est pas indexé par la taille de la vague (asymétrie assumée avec
+/// le budget, qui demande « payer *n* de plus ? »). Le scellement du partiel — vague déjà
+/// produite, intacte dans le recorder — est ce qui distingue ce coopératif du `tokio`
+/// backstop dur (§AD-3) : ici l'arrêt tombe sur une frontière de vague, jamais en plein vol.
+pub type DeadlineProbe = Arc<dyn Fn() -> bool + Send + Sync>;
+
 // ─────────────────────────────────────────────────────────────────────────────
 //  StopRule — la cible d'arrêt (une par famille de tâches)
 // ─────────────────────────────────────────────────────────────────────────────
@@ -177,6 +189,12 @@ pub enum StopReason {
     /// Le budget ne peut plus payer une vague entière (I-AK4) — arrêt propre sur
     /// l'échantillon présent.
     Budget,
+    /// **ADR-018 (I-AD2)** : la fenêtre temporelle (deadline run) est atteinte — arrêt
+    /// **propre** sur l'échantillon présent, exactement comme le budget. La vague en cours
+    /// n'est pas émise (jamais de demi-vague) ; le partiel déjà produit est scellable et
+    /// re-prouvable. Comme `Budget`, ce motif peut, à l'extrême, tronquer SOUS `k_min`
+    /// (le temps prime la borne basse — I-AD exception, jumelle de l'exception I-AK4).
+    Deadline,
 }
 
 impl StopReason {
@@ -185,6 +203,7 @@ impl StopReason {
             StopReason::Target => "target",
             StopReason::KMax => "k_max",
             StopReason::Budget => "budget",
+            StopReason::Deadline => "deadline",
         }
     }
 }
@@ -273,12 +292,17 @@ async fn spawn_wave(
 /// **avant** la vague — jamais de vague partielle, zéro sentinelle dans l'échantillon).
 ///
 /// Renvoie les candidats **en ordre de variant** (0..K_used) et la trace.
+// La boucle du sizer prend ses paramètres EXPLICITES (générateur, plan, largeur, et les DEUX
+// sondes coopératives jumelles budget+deadline — ADR-018) plutôt qu'un struct-config opaque :
+// chacun a un rôle distinct et documenté. Comme `run_judges`, on assume le compte d'arguments.
+#[allow(clippy::too_many_arguments)]
 pub async fn run_waves(
     gen: &Arc<dyn Generator>,
     task: &Value,
     plan: &KPlan,
     width: usize,
     probe: Option<&BudgetProbe>,
+    deadline: Option<&DeadlineProbe>,
     observe: &(dyn Fn(&[Value]) -> f64 + Sync),
 ) -> (Vec<Value>, SizingTrace) {
     let plan = plan.clone().normalized();
@@ -298,6 +322,15 @@ pub async fn run_waves(
         if let Some(p) = probe {
             if !p(want) {
                 break StopReason::Budget;
+            }
+        }
+        // ②bis ADR-018 (I-AD2) : la fenêtre temporelle doit rester ouverte — sinon arrêt
+        // propre, AU MÊME point coopératif que le budget. On consulte AVANT d'émettre :
+        // la vague déjà produite reste donc une frontière nette (jamais de demi-vague),
+        // ce qui rend le partiel scellable et re-prouvable (R0). Twin exact de I-AK4.
+        if let Some(d) = deadline {
+            if !d() {
+                break StopReason::Deadline;
             }
         }
         // ③ la vague (∥ bornée par width — l'exécution, jamais la sémantique).
@@ -324,10 +357,11 @@ pub async fn run_waves_pure(
     plan: &KPlan,
     width: usize,
     probe: Option<&BudgetProbe>,
+    deadline: Option<&DeadlineProbe>,
 ) -> (Vec<Value>, SizingTrace) {
     let stop = plan.stop.clone();
     let observe = move |c: &[Value]| stop.observe_candidates(c).unwrap_or(f64::NAN);
-    run_waves(gen, task, plan, width, probe, &observe).await
+    run_waves(gen, task, plan, width, probe, deadline, &observe).await
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -413,7 +447,7 @@ mod tests {
     async fn stops_at_k_min_when_target_is_immediate() {
         let gen: Arc<dyn Generator> = Arc::new(Uniform);
         let p = plan(4, 24, 4, StopRule::Agreement { threshold: 0.9 });
-        let (cands, trace) = run_waves_pure(&gen, &json!({}), &p, 8, None).await;
+        let (cands, trace) = run_waves_pure(&gen, &json!({}), &p, 8, None, None).await;
         assert_eq!(cands.len(), 4, "unanimes → arrêt au plancher k_min");
         assert_eq!(trace.k_used, 4);
         assert_eq!(trace.stop_reason, StopReason::Target);
@@ -425,7 +459,7 @@ mod tests {
     async fn runs_to_k_max_when_target_is_unreachable() {
         let gen: Arc<dyn Generator> = Arc::new(AllDistinct);
         let p = plan(4, 10, 4, StopRule::Agreement { threshold: 0.9 });
-        let (cands, trace) = run_waves_pure(&gen, &json!({}), &p, 8, None).await;
+        let (cands, trace) = run_waves_pure(&gen, &json!({}), &p, 8, None, None).await;
         assert_eq!(cands.len(), 10, "I-AK1 : plafond dur");
         assert_eq!(trace.stop_reason, StopReason::KMax);
         // vagues : 4 (k_min) puis 4 puis 2 (rognée au plafond).
@@ -444,7 +478,7 @@ mod tests {
         // SE(8) = √(32/7)/√8 ≈ 0.756, SE(12) ≈ 0.603. Cible 0.8 → l'arrêt tombe à n=8
         // (pas à 4) — la cible de précision pilote réellement le K.
         let p = plan(4, 16, 4, StopRule::StdError { target: 0.8 });
-        let (cands, trace) = run_waves_pure(&gen, &json!({}), &p, 8, None).await;
+        let (cands, trace) = run_waves_pure(&gen, &json!({}), &p, 8, None, None).await;
         assert_eq!(cands.len(), 8, "la cible de précision tombe à n=8");
         assert_eq!(trace.stop_reason, StopReason::Target);
         assert_eq!(trace.batches.len(), 2);
@@ -462,7 +496,7 @@ mod tests {
             let calls = Arc::new(calls);
             Arc::new(move |_n| calls.fetch_add(1, std::sync::atomic::Ordering::SeqCst) == 0)
         };
-        let (cands, trace) = run_waves_pure(&gen, &json!({}), &p, 8, Some(&probe)).await;
+        let (cands, trace) = run_waves_pure(&gen, &json!({}), &p, 8, Some(&probe), None).await;
         assert_eq!(cands.len(), 4, "l'échantillon s'arrête sur la dernière vague payée");
         assert_eq!(trace.stop_reason, StopReason::Budget);
         assert!(cands.iter().all(|c| !c.is_null()), "zéro sentinelle dans l'échantillon");
@@ -476,11 +510,59 @@ mod tests {
         let gen: Arc<dyn Generator> = Arc::new(AllDistinct);
         let p = plan(4, 16, 4, StopRule::Agreement { threshold: 0.9 });
         let probe: BudgetProbe = Arc::new(|_n| false); // budget déjà à sec
-        let (cands, trace) = run_waves_pure(&gen, &json!({}), &p, 8, Some(&probe)).await;
+        let (cands, trace) = run_waves_pure(&gen, &json!({}), &p, 8, Some(&probe), None).await;
         assert!(cands.is_empty(), "aucune vague émise = aucun candidat");
         assert_eq!(trace.k_used, 0);
         assert_eq!(trace.stop_reason, StopReason::Budget);
         assert!(trace.batches.is_empty(), "aucune observation inventée");
+    }
+
+    // ── ADR-018 (I-AD2) : la sonde de deadline, jumelle de la sonde de budget ──────────
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn deadline_probe_stops_cleanly_at_a_wave_boundary() {
+        // I-AD2 : la sonde de deadline laisse passer la 1ʳᵉ vague (k_min) puis ferme la
+        // fenêtre → arrêt PROPRE sur l'échantillon présent, frontière de vague nette, zéro
+        // sentinelle. Jumeau EXACT de `budget_probe_refuses_unpayable_wave_cleanly`.
+        let gen: Arc<dyn Generator> = Arc::new(AllDistinct);
+        let p = plan(4, 16, 4, StopRule::Agreement { threshold: 0.9 });
+        let calls = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let dl: DeadlineProbe = {
+            let calls = calls.clone();
+            Arc::new(move || calls.fetch_add(1, std::sync::atomic::Ordering::SeqCst) == 0)
+        };
+        let (cands, trace) = run_waves_pure(&gen, &json!({}), &p, 8, None, Some(&dl)).await;
+        assert_eq!(cands.len(), 4, "arrêt sur la dernière vague émise (k_min)");
+        assert_eq!(trace.stop_reason, StopReason::Deadline);
+        assert!(cands.iter().all(|c| !c.is_null()), "frontière de vague nette : zéro sentinelle");
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn deadline_on_first_wave_yields_zero_sample_honestly() {
+        // Cas-limite assumé (twin de l'exception budget I-AK4) : fenêtre déjà fermée →
+        // AUCUNE vague émise, k_used = 0, raison `deadline`. Le SDK qualifie alors le run
+        // `DeadlineExceeded` — partiel vide, mais honnête et re-prouvable.
+        let gen: Arc<dyn Generator> = Arc::new(AllDistinct);
+        let p = plan(4, 16, 4, StopRule::Agreement { threshold: 0.9 });
+        let dl: DeadlineProbe = Arc::new(|| false); // hors fenêtre d'emblée
+        let (cands, trace) = run_waves_pure(&gen, &json!({}), &p, 8, None, Some(&dl)).await;
+        assert!(cands.is_empty(), "hors fenêtre d'emblée = aucun candidat");
+        assert_eq!(trace.k_used, 0);
+        assert_eq!(trace.stop_reason, StopReason::Deadline);
+        assert!(trace.batches.is_empty(), "aucune observation inventée");
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn budget_and_deadline_compose_without_interference() {
+        // Les DEUX plafonds coopératifs coexistent dans la même boucle. Le budget est testé
+        // en premier (ordre du code) : à sec, il l'emporte ; le temps, ouvert, n'interfère
+        // pas. La composition est un ET — émettre SSI budget ∧ deadline (architecture §AD).
+        let gen: Arc<dyn Generator> = Arc::new(AllDistinct);
+        let p = plan(4, 16, 4, StopRule::Agreement { threshold: 0.9 });
+        let budget: BudgetProbe = Arc::new(|_n| false); // budget à sec
+        let dl: DeadlineProbe = Arc::new(|| true); // temps OK
+        let (cands, trace) = run_waves_pure(&gen, &json!({}), &p, 8, Some(&budget), Some(&dl)).await;
+        assert_eq!(trace.stop_reason, StopReason::Budget, "budget testé avant deadline");
+        assert!(cands.is_empty());
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
@@ -501,7 +583,7 @@ mod tests {
                 })
                 .count() as f64
         };
-        let (cands, trace) = run_waves(&gen, &json!({}), &p, 8, None, &observe).await;
+        let (cands, trace) = run_waves(&gen, &json!({}), &p, 8, None, None, &observe).await;
         assert_eq!(cands.len(), 4);
         assert_eq!(trace.stop_reason, StopReason::Target);
         assert_eq!(trace.batches[0].observed, 2.0, "2 vérifiés comptés par l'appelant");

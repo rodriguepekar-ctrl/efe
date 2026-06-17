@@ -26,7 +26,7 @@ impl Generator for AlwaysPanics {
 async fn claim_step1_all_panic_wave_stops_at_kmin_with_target_and_all_nulls() {
     let gen: Arc<dyn Generator> = Arc::new(AlwaysPanics);
     let plan = KPlan { k_min: 4, k_max: 16, batch: 4, stop: StopRule::Agreement { threshold: 0.9 } };
-    let (cands, trace) = run_waves_pure(&gen, &json!({}), &plan, 8, None).await;
+    let (cands, trace) = run_waves_pure(&gen, &json!({}), &plan, 8, None, None).await;
 
     eprintln!("PROBE1: k_used={} stop={:?} cands={:?}", trace.k_used, trace.stop_reason, cands);
     // L'affirmation : arrêt au plancher, raison Target, échantillon 100 % Null,

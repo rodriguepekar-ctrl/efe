@@ -86,6 +86,45 @@ impl ProvenanceSummary {
     }
 }
 
+/// **ADR-SWARM-018 — comment le run s'est terminé** (les *trois plafonds*, un statut).
+/// Orthogonale au succès de la provenance : un run peut être tronqué (budget/temps) ET
+/// parfaitement re-prouvable. Sérialisée en `snake_case` (contrat de fil stable).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RunTermination {
+    /// La topologie a rendu sa sortie sans qu'aucun plafond ne tronque (cas nominal).
+    #[default]
+    Completed,
+    /// **Plafond coût** : le budget ne pouvait plus payer une vague (politique `Stop`) —
+    /// résultat partiel, scellé proprement (miroir de `budget_stopped`).
+    BudgetStopped,
+    /// **Plafond temps — coopératif (I-AD2)** : la sonde de deadline a refusé une vague à
+    /// une **frontière nette** ; le partiel est un préfixe propre, re-prouvable (R0) mais
+    /// non reproductible (R1, point de coupe wall-clock — écho ADR-017).
+    DeadlineExceeded,
+    /// **Plafond temps — backstop dur (I-AD3)** : une topologie non coopérative (K fixe,
+    /// T2/T3) ou un *hang* a dépassé `deadline + grâce` ; `tokio::timeout` a tranché et le
+    /// partiel présent dans le recorder a **quand même** été scellé (point de coupe
+    /// arbitraire — re-prouvable, mais plus grossier que le coopératif).
+    DeadlineHardAbort,
+}
+
+impl RunTermination {
+    /// Étiquette stable (logs, dashboard, artefacts).
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            RunTermination::Completed => "completed",
+            RunTermination::BudgetStopped => "budget_stopped",
+            RunTermination::DeadlineExceeded => "deadline_exceeded",
+            RunTermination::DeadlineHardAbort => "deadline_hard_abort",
+        }
+    }
+    /// Le run a-t-il été tronqué par la fenêtre temporelle (coopératif ou backstop) ?
+    pub fn is_deadline(&self) -> bool {
+        matches!(self, RunTermination::DeadlineExceeded | RunTermination::DeadlineHardAbort)
+    }
+}
+
 /// Le résultat **complet** d'un `swarm.run` : sortie + coût + budget + preuve + qualité.
 #[derive(Debug, Clone, Serialize)]
 pub struct SwarmRun {
@@ -102,6 +141,11 @@ pub struct SwarmRun {
     pub quality: QualitySummary,
     /// Le budget a-t-il été épuisé en cours de run (politique `Stop`) → résultat partiel.
     pub budget_stopped: bool,
+    /// **ADR-018** : comment le run s'est terminé (plafond coût / temps, ou nominal). Champ
+    /// additif — `Completed` pour tout run historique (aucun deadline posé). Le signal
+    /// riche : `budget_stopped` reste pour rétro-compatibilité, `termination` le subsume.
+    #[serde(default)]
+    pub termination: RunTermination,
     /// Backend local du run self-host (forensique, pont N17). `None` en keyless (Mode A).
     pub backend: Option<BackendInfo>,
     /// Résumé du pont N17 par-appel (records LLM forensiques + cohérence des liens). `None`
@@ -110,9 +154,13 @@ pub struct SwarmRun {
 }
 
 impl SwarmRun {
-    /// Le run est-il intègre ET dans le budget (pas d'arrêt prématuré) ?
+    /// Le run est-il intègre ET non tronqué (ni par le coût, ni par le temps) ?
+    /// La provenance se re-prouve, et aucun plafond n'a interrompu : `termination` subsume
+    /// l'ancien `!budget_stopped` et l'étend au deadline (un run deadliné est partiel, donc
+    /// pas `clean` — même s'il reste parfaitement re-prouvable, cf. ADR-018).
     pub fn is_clean(&self) -> bool {
-        (!self.provenance.enabled || self.provenance.verified) && !self.budget_stopped
+        (!self.provenance.enabled || self.provenance.verified)
+            && matches!(self.termination, RunTermination::Completed)
     }
 }
 

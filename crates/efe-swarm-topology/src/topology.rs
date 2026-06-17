@@ -18,7 +18,7 @@ use crate::fleet::AgentFleet;
 use crate::generate_verify::GenerateVerify;
 use crate::hierarchical::Hierarchical;
 use crate::pipeline::Pipeline;
-use crate::sizing::{run_waves, BudgetProbe, KPlan, StopRule};
+use crate::sizing::{run_waves, BudgetProbe, DeadlineProbe, KPlan, StopRule};
 use crate::traits::{Generator, Verifier};
 
 /// Signaux de qualité d'un run de topologie (pour audit / provenance).
@@ -155,6 +155,9 @@ pub struct AdaptiveGvTopology {
     pub width: usize,
     /// Sonde de budget coopérative (I-AK4) — injectée par le SDK.
     pub budget_probe: Option<BudgetProbe>,
+    /// **ADR-018 (I-AD2)** : sonde de deadline coopérative — jumelle temporelle de
+    /// `budget_probe`, injectée par le SDK. Même point d'arrêt (frontière de vague).
+    pub deadline_probe: Option<DeadlineProbe>,
 }
 
 #[async_trait]
@@ -177,8 +180,16 @@ impl Topology for AdaptiveGvTopology {
             }
             pure => pure.observe_candidates(cands).unwrap_or(f64::NAN),
         };
-        let (cands, trace) =
-            run_waves(&self.gen, task, &plan, self.width, self.budget_probe.as_ref(), &observe).await;
+        let (cands, trace) = run_waves(
+            &self.gen,
+            task,
+            &plan,
+            self.width,
+            self.budget_probe.as_ref(),
+            self.deadline_probe.as_ref(),
+            &observe,
+        )
+        .await;
 
         // Le sizer annonce sa décision (même topic réservé que le consensus adaptatif).
         if let Some(tap) = &ctx.event_tap {
@@ -364,6 +375,7 @@ mod tests {
             plan: KPlan { k_min: 2, k_max: 8, batch: 2, stop: StopRule::VerifiedQuota { quota: 1 } },
             width: 4,
             budget_probe: None,
+            deadline_probe: None,
         };
         let out = topo.run(&json!({ "expected": "tech" }), &SwarmContext::standard()).await;
         assert_eq!(out.output["value"]["value"], "tech", "le vérifié est sélectionné");
@@ -384,6 +396,7 @@ mod tests {
             plan: KPlan { k_min: 2, k_max: 8, batch: 2, stop: StopRule::VerifiedQuota { quota: 1 } },
             width: 4,
             budget_probe: None,
+            deadline_probe: None,
         };
         let out = topo.run(&json!({ "expected": "x" }), &SwarmContext::standard()).await;
         assert_eq!(out.output["sizing"]["k_used"], json!(6), "2 → 4 → 6 : le succès tombe au variant 5");

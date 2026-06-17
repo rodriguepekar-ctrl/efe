@@ -8,16 +8,17 @@ use efe_nano_sdk::{SwarmId, TenantId};
 use efe_swarm_provenance::{
     verify_swarm, AgentKind, HmacKeySource, ProvenanceMetrics, ProvenanceRecorder, ProvenanceSink,
 };
-use efe_swarm_topology::{AgentFleet, SwarmContext};
+use efe_swarm_topology::{AgentFleet, QualitySignals, SwarmContext, TopologyOutput};
 
 use crate::agents::Meter;
 use crate::backend::{build_local_backend, LocalBackend};
 use crate::budget::{Budget, BudgetGuard, OnExceed};
+use crate::deadline::DeadlineGuard;
 use crate::n17::LlmProvenanceCollector;
 use crate::client::{ClientMode, WidthSpec};
 use crate::observer::{SwarmObserver, TeeSink};
 use crate::resolver::Resolver;
-use crate::result::{Accounting, ProvenanceSummary, RunOutcome, SwarmError, SwarmRun};
+use crate::result::{Accounting, ProvenanceSummary, RunOutcome, RunTermination, SwarmError, SwarmRun};
 use crate::spec::TopologySpec;
 
 /// L'essaim productisé. Construit via [`Swarm::builder`] ou [`Swarm::keyless`].
@@ -44,11 +45,26 @@ pub struct Swarm {
     /// capacité déclarée du backend (Mode C). Politique d'exécution, jamais une
     /// sémantique (I-CP1) : la racine de provenance n'en dépend pas.
     width: WidthSpec,
+    /// **ADR-018** : fenêtre temporelle (deadline run) optionnelle. `Some(d)` ⇒ l'essaim
+    /// borne sa DURÉE d'exécution : sonde coopérative dans les vagues adaptatives (scelle
+    /// le partiel sur frontière de vague) + backstop `tokio::timeout(d + grâce)` universel
+    /// (scelle le partiel du recorder). `None` (défaut) ⇒ chemin historique inchangé.
+    /// Comme la largeur, c'est une politique d'**exécution** ; mais à la différence d'elle,
+    /// le deadline PEUT tronquer la sortie (le temps est un plafond, pas un simple réglage).
+    deadline: Option<std::time::Duration>,
 }
 
 impl Swarm {
     pub fn builder() -> SwarmBuilder {
         SwarmBuilder::default()
+    }
+
+    /// **ADR-018** : pose (ou retire) la fenêtre temporelle du run. Pratique pour la
+    /// passerelle, qui dérive un essaim par requête et y greffe le `deadline_ms` plafonné
+    /// **côté serveur**. `None` ⇒ aucun deadline (chemin historique). Idempotent, bon marché.
+    pub fn with_deadline(mut self, deadline: Option<std::time::Duration>) -> Self {
+        self.deadline = deadline;
+        self
     }
 
     /// Essaim **keyless** par défaut (flotte standard, provenance activée). Le mode
@@ -172,14 +188,47 @@ impl Swarm {
         // EFE_SWARM_WIDTH prioritaire). Descendue dans chaque topologie au resolve.
         let width = self.width.resolve(&self.mode, backend.as_ref().map(|b| b.suggested_width()));
 
+        // 2.c — ADR-018 : pose la fenêtre temporelle du run (si demandée). Le guard démarre
+        // SON chrono ici — la résolution de topologie et le pré-vol budget, déjà faits, ne
+        // sont pas comptés : on borne le temps d'EXÉCUTION de l'essaim. La sonde coopérative
+        // (I-AD2) en est dérivée par le resolver (`deadline_probe` → topologies adaptatives).
+        let deadline = self.deadline.map(|d| Arc::new(DeadlineGuard::new(d)));
+
         // 3. assemble la topologie (agents flotte OU LLM, enveloppés) + exécute.
-        let resolver = Resolver { fleet: &self.fleet, backend, meter, width };
+        let resolver = Resolver { fleet: &self.fleet, backend, meter, width, deadline: deadline.clone() };
         let topo = spec.resolve(&resolver)?;
         let topo_name = topo.name().to_string();
         if let Some(o) = &self.observer {
             o.on_run_start(&topo_name, &self.mode.label(), budget.max_cents, self.assumed_subtasks);
         }
-        let out = topo.run(&task, &ctx).await;
+        // ADR-018 — exécution sous fenêtre temporelle. Sans deadline : `topo.run` nu, zéro
+        // surcoût (chemin historique). Avec deadline : la sonde COOPÉRATIVE arrête déjà le
+        // sizer adaptatif sur une frontière de vague (cas courant, point de coupe propre) ;
+        // le BACKSTOP dur `tokio::timeout(deadline + grâce)` ne tranche que le non-coopératif
+        // (K fixe, T2/T3) ou un hang. Point CLÉ du moat : le `ProvenanceRecorder` est PARTAGÉ
+        // via le sink — tout record déjà écrit y SURVIT au drop du futur tranché. On scelle
+        // donc le PARTIEL dans les deux cas (étape 4 ci-dessous, inchangée) ; seule la NETTETÉ
+        // du point de coupe diffère. Un backstop n'est donc PAS une perte de preuve (I-AD3).
+        let run_t0 = std::time::Instant::now();
+        let (out, hard_aborted): (TopologyOutput, bool) = match &deadline {
+            Some(g) => match tokio::time::timeout(g.hard_limit(), topo.run(&task, &ctx)).await {
+                Ok(out) => (out, false),
+                Err(_) => (
+                    TopologyOutput {
+                        // Sortie tronquée HONNÊTE : aucune valeur agrégée (le run n'a pas fini) ;
+                        // la preuve, elle, est le partiel scellé (records réels). agents_used /
+                        // cost_units sont raffinés depuis les records scellés (étape 5).
+                        output: serde_json::json!({ "partial": true, "reason": "deadline_hard_abort" }),
+                        agents_used: 0,
+                        cost_units: 0.0,
+                        elapsed_ms: run_t0.elapsed().as_millis() as u64,
+                        quality: QualitySignals::default(),
+                    },
+                    true,
+                ),
+            },
+            None => (topo.run(&task, &ctx).await, false),
+        };
 
         // 3. budget POST-VOL (politique Error : échec si épuisé en cours).
         if budget.on_exceed == OnExceed::Error && guard.exhausted() {
@@ -220,19 +269,38 @@ impl Swarm {
             (ProvenanceSummary::disabled(), None, None)
         };
 
+        // ADR-018 — STATUT de terminaison (les trois plafonds, une priorité). Le backstop
+        // dur prime (coupe la plus grossière) ; sinon la troncature coopérative par le temps ;
+        // sinon l'arrêt budgétaire ; sinon nominal. `tripped()` lit l'AtomicBool partagé que
+        // la sonde coopérative a (ou non) armé pendant le run — un run qui FRÔLE la deadline
+        // sans jamais voir la sonde refuser reste honnêtement `Completed`.
+        let budget_stopped = budget.on_exceed == OnExceed::Stop && guard.exhausted();
+        let termination = if hard_aborted {
+            RunTermination::DeadlineHardAbort
+        } else if deadline.as_ref().is_some_and(|g| g.tripped()) {
+            RunTermination::DeadlineExceeded
+        } else if budget_stopped {
+            RunTermination::BudgetStopped
+        } else {
+            RunTermination::Completed
+        };
+
         let run = SwarmRun {
             output: out.output,
             topology: topo_name,
             accounting: Accounting {
-                agents_used: out.agents_used,
-                cost_units: out.cost_units,
+                // Sur backstop dur, la sortie synthétique ne porte pas le décompte : on le
+                // RAFFINE depuis les records réellement scellés (la seule vérité du partiel).
+                agents_used: if hard_aborted { provenance.records } else { out.agents_used },
+                cost_units: if hard_aborted { provenance.records as f64 } else { out.cost_units },
                 elapsed_ms: out.elapsed_ms,
                 width, // ADR-014 : la largeur résolue, rapportée par-run (jamais une sémantique)
             },
             budget: guard.snapshot(),
             provenance,
             quality: out.quality.into(),
-            budget_stopped: budget.on_exceed == OnExceed::Stop && guard.exhausted(),
+            budget_stopped,
+            termination,
             backend: backend_info,
             n17: n17_summary,
         };
@@ -280,6 +348,7 @@ pub struct SwarmBuilder {
     allow_remote_backend: bool,
     require_healthy_backend: bool,
     width: WidthSpec,
+    deadline: Option<std::time::Duration>,
 }
 
 impl Default for SwarmBuilder {
@@ -297,6 +366,7 @@ impl Default for SwarmBuilder {
             allow_remote_backend: false, // souverain par défaut : egress interdit
             require_healthy_backend: false,
             width: WidthSpec::Auto, // ADR-014 : cœurs (Mode A) / backend déclaré (Mode C)
+            deadline: None, // ADR-018 : aucun deadline par défaut (chemin historique)
         }
     }
 }
@@ -378,6 +448,13 @@ impl SwarmBuilder {
         self
     }
 
+    /// **ADR-018** : pose la fenêtre temporelle (deadline run). `Some(d)` borne la durée
+    /// d'exécution (coopératif + backstop) ; `None` (défaut) = aucun deadline.
+    pub fn deadline(mut self, deadline: Option<std::time::Duration>) -> Self {
+        self.deadline = deadline;
+        self
+    }
+
     /// Construit le `Swarm` (dérive la clé de provenance par tenant).
     pub fn build(self) -> Result<Swarm, SwarmError> {
         let key = self.key_source.derive(self.tenant).map_err(|e| SwarmError::KeyError(e.to_string()))?;
@@ -394,6 +471,7 @@ impl SwarmBuilder {
             allow_remote_backend: self.allow_remote_backend,
             require_healthy_backend: self.require_healthy_backend,
             width: self.width,
+            deadline: self.deadline,
         })
     }
 }
@@ -644,5 +722,98 @@ mod tests {
         assert!(snap.records_total >= 3, "records agrégés sur les 3 runs");
         assert_eq!(snap.chain_breaks_total, 0, "runs sains → aucune rupture");
         assert!(metrics.render_prometheus().contains("efe_swarm_prov_records_total"));
+    }
+
+    // ════════════════════════════════════════════════════════════════════════════════
+    //  ADR-018 — DEADLINE RUN (gardiens bout-en-bout du plafond TEMPS)
+    // ════════════════════════════════════════════════════════════════════════════════
+
+    /// Générateur LENT à valeurs DISTINCTES : dort `delay` puis renvoie un candidat unique
+    /// par variant. L'accord reste ≈ 0 (jamais Target) → la boucle de vagues court jusqu'au
+    /// deadline : l'outil pour observer la troncature temporelle de bout en bout.
+    struct SlowDistinctGen {
+        delay: std::time::Duration,
+    }
+    #[async_trait::async_trait]
+    impl efe_swarm_topology::Generator for SlowDistinctGen {
+        async fn generate(&self, _task: &serde_json::Value, variant: usize) -> serde_json::Value {
+            tokio::time::sleep(self.delay).await;
+            json!({ "text": format!("candidat-distinct-{variant}") })
+        }
+    }
+
+    /// Essaim keyless dont le générateur `slow_gen` dort `delay_ms` par appel, avec un
+    /// deadline run optionnel posé sur l'essaim (le reste = flotte standard, juges réels).
+    fn swarm_with_slow_gen(delay_ms: u64, deadline: Option<std::time::Duration>) -> Swarm {
+        let mut fleet = AgentFleet::standard();
+        fleet.register_generator(
+            "slow_gen",
+            Arc::new(SlowDistinctGen { delay: std::time::Duration::from_millis(delay_ms) }),
+        );
+        Swarm::builder().fleet(Arc::new(fleet)).deadline(deadline).build().unwrap()
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn run_without_deadline_terminates_completed() {
+        // Régression : sans deadline, statut `Completed`, run `clean` — chemin historique
+        // strictement préservé (aucun timeout enveloppé, aucune sonde branchée).
+        let swarm = Swarm::keyless();
+        let run = swarm
+            .run(
+                json!({ "text": "hello", "expected": "hello" }),
+                TopologySpec::consensus("echo_generator", &["consistency", "j_non_empty"], 3),
+                Budget::cents(1000),
+            )
+            .await
+            .unwrap();
+        assert_eq!(run.termination, RunTermination::Completed);
+        assert!(run.is_clean());
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn deadline_truncates_adaptive_run_and_seals_a_verifiable_partial() {
+        // I-AD2/I-AD3 bout-en-bout : un consensus ADAPTATIF à générateur lent (80 ms/appel)
+        // sous deadline serré (30 ms) est TRONQUÉ par le temps. 1ʳᵉ vague émise (guard frais),
+        // sonde refuse la suivante → arrêt ; le PARTIEL scellé se re-prouve (R0). Un run
+        // deadliné n'est PAS `clean`, mais reste re-prouvable. On assure `is_deadline()`
+        // plutôt que la variante exacte (sur une machine très chargée, le backstop dur peut
+        // devancer le coopératif — les DEUX scellent le partiel ; la variante coopérative
+        // PRÉCISE est prouvée, déterministe, dans `sizing.rs`).
+        let swarm = swarm_with_slow_gen(80, Some(std::time::Duration::from_millis(30)));
+        let run = swarm
+            .run(
+                json!({ "text": "x" }),
+                TopologySpec::consensus_adaptive("slow_gen", &["j_non_empty", "consistency"], 2, 24, 0.999),
+                Budget::cents(1_000_000),
+            )
+            .await
+            .unwrap();
+        assert!(run.termination.is_deadline(), "tronqué par le TEMPS : {:?}", run.termination);
+        assert!(run.provenance.verified, "le partiel scellé se re-prouve (R0) — I-AD3");
+        assert!(!run.is_clean(), "deadliné = partiel (pas clean), mais re-prouvable");
+        assert!(run.accounting.agents_used < 24, "partiel BORNÉ sous k_max (la deadline a mordu)");
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn hard_backstop_aborts_a_noncooperative_run_yet_still_seals() {
+        // I-AD3 backstop dur : un consensus À K FIXE (aucune sonde coopérative) à générateur
+        // très lent (500 ms/appel) sous un deadline minuscule (20 ms) dépasse `deadline +
+        // grâce` (~270 ms) → `tokio::timeout` tranche net. CRUCIAL : le run renvoie quand
+        // même Ok, scelle le partiel présent dans le recorder (le moat SURVIT au drop du
+        // futur tranché), et le statut est `DeadlineHardAbort`. Robuste quel que soit le
+        // nombre de cœurs (500 ms ≫ 270 ms, en parallèle comme en série).
+        let swarm = swarm_with_slow_gen(500, Some(std::time::Duration::from_millis(20)));
+        let run = swarm
+            .run(
+                json!({ "text": "x" }),
+                TopologySpec::consensus("slow_gen", &["j_non_empty"], 4),
+                Budget::cents(1_000_000),
+            )
+            .await
+            .unwrap();
+        assert_eq!(run.termination, RunTermination::DeadlineHardAbort, "backstop dur tranché");
+        assert!(!run.is_clean(), "tronqué net : pas propre");
+        assert!(run.provenance.enabled, "provenance toujours scellée (le moat survit au drop)");
+        assert_eq!(run.output["reason"], json!("deadline_hard_abort"), "sortie tronquée honnête");
     }
 }

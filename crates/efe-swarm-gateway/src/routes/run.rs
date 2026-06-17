@@ -6,7 +6,6 @@
 //!   en tâche détachée, renvoie **immédiatement** `202 {run_id, status, events}`. Le flux SSE
 //!   `…/runs/:id/events` rejoue puis streame en direct.
 
-use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -38,24 +37,28 @@ pub async fn run(
     GatewayJson(req): GatewayJson<RunRequest>,
 ) -> Result<Response, GatewayError> {
     caller.require_any_role(&["operator", "admin"])?;
-    // ── ADR-014 (CP-2) : ADMISSION PROCESS — avant toute résolution coûteuse. ────
-    // Borne les runs en vol (sync ET jobs). Refus = 429 + Retry-After : du
-    // backpressure VISIBLE, plutôt qu'une file invisible qui finit en timeouts.
-    // Le permit (FIFO) suit le run jusqu'à sa fin (déplacé dans la tâche du job).
-    let permit = match s.admission.clone().try_acquire_owned() {
+    // ── ADR-014 (CP-2) + ADR-018 : ADMISSION ÉQUITABLE — avant toute résolution coûteuse.
+    // Borne les runs en vol sous DEUX plafonds : process global (ADR-014) ET par-tenant
+    // (ADR-018, équité — un tenant bavard n'affame plus les autres). Refus = 429 +
+    // Retry-After : backpressure VISIBLE, jamais une file invisible qui finit en timeouts.
+    // Le permit composite (FIFO côté global, RAII côté tenant) suit le run jusqu'à sa fin
+    // (déplacé dans la tâche du job, libéré au retour en sync).
+    let permit = match s.admit(&caller.tenant) {
         Ok(p) => p,
-        Err(_) => {
-            s.admission_rejected.fetch_add(1, Ordering::Relaxed);
+        Err(reject) => {
+            // admission_rejected est déjà incrémenté dans `admit()` (compteur unifié).
             return Ok((
                 StatusCode::TOO_MANY_REQUESTS,
                 [(header::RETRY_AFTER, "1")],
-                // le code machine est CELUI de l'enveloppe stable (= l'autre 429 de
-                // l'API, quota SSE) — un client switche sur une seule valeur ; les
-                // champs additifs (inflight_max) précisent la cause.
+                // Code d'enveloppe stable (429, comme l'autre limite SSE) — le client
+                // switche sur une seule valeur ; `reason` distingue la CAUSE (gateway_full
+                // ⇒ réessayez ; tenant_quota ⇒ ralentissez VOTRE débit) sans casser le contrat.
                 Json(json!({
                     "error": "too_many_requests",
-                    "message": "passerelle à capacité (admission ADR-014) : réessayez (Retry-After)",
+                    "message": reject.message(),
+                    "reason": reject.reason(),
                     "inflight_max": s.admission_max,
+                    "inflight_per_tenant_max": s.admission_per_tenant_max,
                 })),
             )
                 .into_response());
@@ -63,6 +66,9 @@ pub async fn run(
     };
     // ADR-014 (CP-2) : largeur demandée (plafonnée serveur dans `swarm_for`) — I-CP1.
     let width = req.width;
+    // ADR-018 : fenêtre temporelle demandée, CLAMPÉE côté serveur ([50 ms, cap env]). Lue
+    // avant `into_parts` (qui consomme la requête) ; posée sur le `Swarm` via with_deadline.
+    let deadline = req.resolved_deadline();
     let (task, spec, mut budget, mode) = req.into_parts()?;
     // Inc.4 : résout le mode (Network → routeur server-side, sinon souverain). 501 si Network
     // demandé sans routeur câblé. `allow_remote` n'est vrai que pour le routeur Network.
@@ -82,7 +88,9 @@ pub async fn run(
 
         // G9 : observateur avec redactor PII des previews si le tenant l'active.
         let observer = s.dashboard_observer(&caller.tenant, bus.clone());
-        let swarm = s.swarm_for_observed(&caller.tenant, mode, observer, allow_remote, width)?;
+        // ADR-018 : la fenêtre temporelle est posée sur l'essaim dérivé (with_deadline) —
+        // sonde coopérative + backstop dur s'arment dans run_traced. None ⇒ run non borné.
+        let swarm = s.swarm_for_observed(&caller.tenant, mode, observer, allow_remote, width)?.with_deadline(deadline);
 
         let state = s.clone();
         let tenant = caller.tenant.clone();
@@ -117,7 +125,8 @@ pub async fn run(
 
     // ── Mode SYNC (Inc.2) — le permit d'admission reste tenu jusqu'au retour. ──
     let _permit = permit;
-    let swarm = s.swarm_for(&caller.tenant, mode, allow_remote, width)?;
+    // ADR-018 : fenêtre temporelle posée sur l'essaim (cf. mode JOB ci-dessus).
+    let swarm = s.swarm_for(&caller.tenant, mode, allow_remote, width)?.with_deadline(deadline);
     let mut outcome = swarm.run_traced(task, spec, budget).await?;
     // G9 : caviarde la sortie selon la politique PII du tenant (réponse + au repos).
     s.redact_output(&caller.tenant, &mut outcome.run);

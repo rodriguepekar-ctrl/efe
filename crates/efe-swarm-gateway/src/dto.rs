@@ -43,16 +43,51 @@ pub struct RunRequest {
     /// pas la machine d'autrui. I-CP1 : ne change jamais le résultat, seulement les durées.
     #[serde(default)]
     pub width: Option<usize>,
+    /// **ADR-018** : fenêtre temporelle demandée en millisecondes (optionnelle). Plafonnée
+    /// **côté serveur** (`EFE_GATEWAY_MAX_DEADLINE_MS`, défaut 300 000 = 5 min ; plancher
+    /// 50 ms) — un client ne monopolise pas le temps machine d'autrui, et ne pose pas non
+    /// plus un deadline absurdement court qui refuserait tout. À la DIFFÉRENCE de `width`,
+    /// le deadline PEUT tronquer la sortie (le temps est un plafond, pas un réglage) : un
+    /// run deadliné reste re-prouvable (R0) mais non reproductible (R1) — cf. ADR-017/018.
+    #[serde(default)]
+    pub deadline_ms: Option<u64>,
 }
 
 impl RunRequest {
     /// Démonte le DTO en types SDK prêts pour `swarm.run_traced(task, spec, budget)`.
+    /// (Le deadline est porté à part par [`resolved_deadline`](Self::resolved_deadline) —
+    /// il se pose sur le `Swarm` via `with_deadline`, pas dans la signature de run.)
     pub fn into_parts(self) -> Result<(Value, TopologySpec, Budget, ClientMode), GatewayError> {
         let spec = self.topology.into_spec()?;
         let budget = self.budget.into_budget();
         let mode = self.mode.into_mode();
         Ok((self.task, spec, budget, mode))
     }
+
+    /// **ADR-018** : la fenêtre temporelle demandée, **clampée côté serveur** à
+    /// `[MIN_DEADLINE_MS, EFE_GATEWAY_MAX_DEADLINE_MS]`. `None` ⇒ aucun deadline (run non
+    /// borné en temps — chemin historique strictement inchangé). Lue AVANT `into_parts`
+    /// (qui consomme la requête), exactement comme `width`.
+    pub fn resolved_deadline(&self) -> Option<std::time::Duration> {
+        self.deadline_ms.map(|ms| {
+            let ms = ms.clamp(MIN_DEADLINE_MS, max_deadline_ms());
+            std::time::Duration::from_millis(ms)
+        })
+    }
+}
+
+/// **ADR-018** : plancher du deadline serveur — sous 50 ms, même un run trivial n'a pas le
+/// temps d'émettre une vague ; on relève au plancher plutôt que de garantir un run vide.
+const MIN_DEADLINE_MS: u64 = 50;
+
+/// **ADR-018** : plafond serveur du deadline run. Env `EFE_GATEWAY_MAX_DEADLINE_MS` ;
+/// défaut 300 000 (5 min). Borne le temps machine qu'un client peut réserver.
+fn max_deadline_ms() -> u64 {
+    std::env::var("EFE_GATEWAY_MAX_DEADLINE_MS")
+        .ok()
+        .and_then(|s| s.parse::<u64>().ok())
+        .unwrap_or(300_000)
+        .max(MIN_DEADLINE_MS)
 }
 
 /// **Taille d'essaim de fil** (ADR-014) — **untagged** : un nombre nu (`"k": 12`,
@@ -594,6 +629,37 @@ mod tests {
         }
         assert_eq!(budget.max_cents, u32::MAX, "budget par défaut illimité");
         assert_eq!(mode, ClientMode::Keyless, "mode par défaut keyless");
+    }
+
+    #[test]
+    fn deadline_ms_is_optional_and_clamped_server_side() {
+        // ADR-018 : absent ⇒ None (run non borné en temps — chemin historique).
+        let no_dl: RunRequest = serde_json::from_value(json!({
+            "task": {}, "topology": { "kind": "auto" }
+        }))
+        .unwrap();
+        assert_eq!(no_dl.resolved_deadline(), None, "pas de deadline par défaut");
+
+        // Demande raisonnable ⇒ honorée telle quelle.
+        let ok: RunRequest = serde_json::from_value(json!({
+            "task": {}, "topology": { "kind": "auto" }, "deadline_ms": 2000
+        }))
+        .unwrap();
+        assert_eq!(ok.resolved_deadline(), Some(std::time::Duration::from_millis(2000)));
+
+        // Demande absurdement courte ⇒ relevée au plancher (jamais un run garanti vide).
+        let tiny: RunRequest = serde_json::from_value(json!({
+            "task": {}, "topology": { "kind": "auto" }, "deadline_ms": 1
+        }))
+        .unwrap();
+        assert_eq!(tiny.resolved_deadline(), Some(std::time::Duration::from_millis(MIN_DEADLINE_MS)));
+
+        // Demande gigantesque ⇒ plafonnée serveur (un client ne réserve pas le temps d'autrui).
+        let huge: RunRequest = serde_json::from_value(json!({
+            "task": {}, "topology": { "kind": "auto" }, "deadline_ms": 9_999_999_999u64
+        }))
+        .unwrap();
+        assert_eq!(huge.resolved_deadline(), Some(std::time::Duration::from_millis(max_deadline_ms())));
     }
 
     #[test]

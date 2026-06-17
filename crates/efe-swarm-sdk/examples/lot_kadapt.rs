@@ -110,7 +110,7 @@ impl Generator for Solver {
 /// Exécute un bras FIXE : k candidats (variants 0..k), mêmes graines que l'adaptatif.
 async fn fixed_arm(gen: &Arc<dyn Generator>, k: usize) -> Vec<Value> {
     let plan = KPlan { k_min: k, k_max: k, batch: k, stop: StopRule::Agreement { threshold: 2.0 } };
-    let (cands, _) = run_waves_pure(gen, &json!({}), &plan, 8, None).await;
+    let (cands, _) = run_waves_pure(gen, &json!({}), &plan, 8, None, None).await;
     cands
 }
 
@@ -175,7 +175,7 @@ async fn family_numeric(pi_idx: usize, pi: f64) -> (Vec<ArmStats>, f64) {
     }
     // passe 1 : adaptatif + témoin iso-qualité (k_max).
     for g in &gens {
-        let (cands, trace) = run_waves_pure(g, &json!({}), &plan, 8, None).await;
+        let (cands, trace) = run_waves_pure(g, &json!({}), &plan, 8, None, None).await;
         q_ad.push((mean_value(&cands) - TRUTH).abs());
         c_ad.push(trace.k_used as f64);
         q_max.push((mean_value(&fixed_arm(g, plan.k_max).await) - TRUTH).abs());
@@ -209,7 +209,7 @@ async fn family_categorical(pi_idx: usize, pi: f64) -> (Vec<ArmStats>, f64) {
         gens.push(Arc::new(Labeler { p_correct: p, base: seed_of(2, pi_idx as u64, i as u64, 0) }));
     }
     for g in &gens {
-        let (cands, trace) = run_waves_pure(g, &json!({}), &plan, 8, None).await;
+        let (cands, trace) = run_waves_pure(g, &json!({}), &plan, 8, None, None).await;
         q_ad.push(if majority_is_correct(&cands) { 1.0 } else { 0.0 });
         c_ad.push(trace.k_used as f64);
         q_max.push(if majority_is_correct(&fixed_arm(g, plan.k_max).await) { 1.0 } else { 0.0 });
@@ -241,7 +241,7 @@ async fn family_verifiable(p_idx: usize, p: f64) -> (Vec<ArmStats>, f64) {
         gens.push(Arc::new(Solver { p_pass: p, base: seed_of(3, p_idx as u64, i as u64, 0) }));
     }
     for g in &gens {
-        let (cands, trace) = run_waves(g, &json!({}), &plan, 8, None, &observe).await;
+        let (cands, trace) = run_waves(g, &json!({}), &plan, 8, None, None, &observe).await;
         q_ad.push(if any_verified(&cands) { 1.0 } else { 0.0 });
         c_ad.push(trace.k_used as f64);
         q_max.push(if any_verified(&fixed_arm(g, plan.k_max).await) { 1.0 } else { 0.0 });

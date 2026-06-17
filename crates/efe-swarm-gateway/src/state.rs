@@ -3,9 +3,10 @@
 //! [`Swarm`] **par tenant** (clé HKDF dérivée server-side), tient le [`RunStore`] et les
 //! registres de métriques.
 
+use std::collections::HashMap;
 use std::str::FromStr;
-use std::sync::atomic::AtomicU64;
-use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, Mutex};
 
 use efe_blackboard::SubstrateMetrics;
 use efe_nano_sdk::TenantId;
@@ -13,7 +14,7 @@ use efe_swarm_dashboard::{DashboardBus, DashboardMetrics, DashboardObserver, Das
 use efe_swarm_provenance::ProvenanceMetrics;
 use efe_swarm_sdk::{ClientMode, HmacKeySource, Swarm, SwarmObserver, WidthSpec};
 use efe_swarm_topology::AgentFleet;
-use tokio::sync::Semaphore;
+use tokio::sync::{OwnedSemaphorePermit, Semaphore};
 
 use crate::error::GatewayError;
 use crate::router_map::RouterMap;
@@ -41,6 +42,92 @@ fn max_width_cap() -> usize {
         .and_then(|s| s.parse::<usize>().ok())
         .unwrap_or(32)
         .max(1)
+}
+
+/// **ADR-018 (admission équitable)** : plafond de runs en vol simultanés **par tenant**,
+/// superposé au plafond process global. Sans lui, l'admission ADR-014 est globale : un
+/// seul tenant bavard peut occuper TOUS les permits et affamer les autres (le gap «
+/// fairness par tenant » laissé ouvert en ADR-014). Le défaut `max(1, global − 1)` est un
+/// **cap, pas une réservation** : il garantit qu'aucun tenant ne prend le dernier permit
+/// disponible, laissant toujours ≥ 1 slot tourner pour autrui — sans pré-allouer par
+/// tenant (impossible : le nombre de tenants est dynamique). Env
+/// `EFE_GATEWAY_MAX_INFLIGHT_PER_TENANT` ; un opérateur peut l'égaler au global (désactive
+/// l'équité) ou le baisser (équité stricte).
+fn admission_per_tenant_permits(global: usize) -> usize {
+    std::env::var("EFE_GATEWAY_MAX_INFLIGHT_PER_TENANT")
+        .ok()
+        .and_then(|s| s.parse::<usize>().ok())
+        .unwrap_or_else(|| global.saturating_sub(1).max(1))
+        .clamp(1, global.max(1))
+}
+
+/// **ADR-018** : pourquoi l'admission a refusé — distingue les deux plafonds pour que le
+/// client (et l'opérateur via `/metrics`) sachent s'il faut *réessayer plus tard*
+/// (passerelle pleine) ou *ralentir SON propre débit* (quota de tenant atteint). Même code
+/// d'enveloppe HTTP (429) que les autres limites de l'API ; le champ `reason` précise.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AdmitReject {
+    /// Plafond **process** (global) atteint — la passerelle entière est à capacité.
+    GatewayFull,
+    /// Plafond **par-tenant** atteint — l'appelant a déjà trop de runs en vol (équité) ;
+    /// la passerelle a peut-être de la capacité globale, mais pas pour CE tenant.
+    TenantQuota,
+}
+
+impl AdmitReject {
+    /// Code machine stable (corps 429 `reason`, métrique).
+    pub fn reason(&self) -> &'static str {
+        match self {
+            AdmitReject::GatewayFull => "gateway_full",
+            AdmitReject::TenantQuota => "tenant_quota",
+        }
+    }
+    /// Message humain (corps 429 `message`).
+    pub fn message(&self) -> &'static str {
+        match self {
+            AdmitReject::GatewayFull => {
+                "passerelle à capacité (admission process, ADR-014) : réessayez (Retry-After)"
+            }
+            AdmitReject::TenantQuota => {
+                "quota de runs simultanés de votre tenant atteint (équité ADR-018) : \
+                 attendez la fin d'un run en cours (Retry-After)"
+            }
+        }
+    }
+}
+
+/// **ADR-018** : permit d'admission **composite** — détient le permit global (process) ET
+/// décrémente le compteur par-tenant à sa libération. Un seul objet RAII gouverne les deux
+/// plafonds : tant qu'il vit, le run compte dans le global ET dans le quota de son tenant ;
+/// son `Drop` libère atomiquement les deux (en sync au retour du handler, ou en fin de
+/// tâche pour un job détaché — le permit y est déplacé). Jamais de fuite de compteur :
+/// même un panic du handler droppe le permit et rééquilibre le quota.
+#[derive(Debug)]
+pub struct AdmissionPermit {
+    /// Permit du sémaphore process global (libéré au `Drop`, ADR-014).
+    _global: OwnedSemaphorePermit,
+    /// Table des compteurs par-tenant (partagée avec l'état) — décrémentée au `Drop`.
+    inflight: Arc<Mutex<HashMap<String, usize>>>,
+    /// Tenant propriétaire de ce permit (clé du compteur à décrémenter).
+    tenant: String,
+}
+
+impl Drop for AdmissionPermit {
+    fn drop(&mut self) {
+        // Le permit global se libère seul (Drop de `_global`). Ici : décrément du
+        // compteur par-tenant, avec nettoyage de l'entrée à zéro (la table ne grossit pas
+        // avec le nombre de tenants vus). Un mutex empoisonné est ignoré (best-effort —
+        // on ne panique JAMAIS dans un Drop ; le pire cas est un compteur figé, borné par
+        // le sémaphore global qui, lui, se libère toujours).
+        if let Ok(mut m) = self.inflight.lock() {
+            if let Some(c) = m.get_mut(&self.tenant) {
+                *c = c.saturating_sub(1);
+                if *c == 0 {
+                    m.remove(&self.tenant);
+                }
+            }
+        }
+    }
 }
 
 /// État de la passerelle (clonable : tout est `Arc` ou `Clone` bon marché).
@@ -86,6 +173,13 @@ pub struct SwarmGatewayState {
     pub admission_max: usize,
     /// Refus d'admission cumulés (compteur `/metrics`).
     pub admission_rejected: Arc<AtomicU64>,
+    /// **ADR-018 (équité)** : plafond de runs en vol **par tenant**, superposé au global.
+    /// Ferme le gap « fairness par tenant » laissé ouvert en ADR-014.
+    pub admission_per_tenant_max: usize,
+    /// **ADR-018** : compteur de runs en vol **par tenant** (clé = tenant). Incrémenté à
+    /// l'admission, décrémenté au `Drop` de l'[`AdmissionPermit`]. `Mutex` std (section
+    /// critique = quelques instructions, jamais tenue à travers un `await`).
+    pub admission_tenant_inflight: Arc<Mutex<HashMap<String, usize>>>,
     /// Plafond serveur du champ DTO `width` (`EFE_GATEWAY_MAX_WIDTH`, défaut 32).
     pub max_width: usize,
 }
@@ -118,6 +212,8 @@ impl SwarmGatewayState {
             admission: Arc::new(Semaphore::new(permits)),
             admission_max: permits,
             admission_rejected: Arc::new(AtomicU64::new(0)),
+            admission_per_tenant_max: admission_per_tenant_permits(permits),
+            admission_tenant_inflight: Arc::new(Mutex::new(HashMap::new())),
             max_width: max_width_cap(),
         }
     }
@@ -135,11 +231,62 @@ impl SwarmGatewayState {
     }
 
     /// **ADR-014 (CP-2, tests/déploiements)** : remplace les permits d'admission process.
+    /// Recalcule aussi le plafond par-tenant (dérivé du global, ADR-018) sauf override env.
     pub fn with_admission_permits(mut self, permits: usize) -> Self {
         let permits = permits.max(1);
         self.admission = Arc::new(Semaphore::new(permits));
         self.admission_max = permits;
+        self.admission_per_tenant_max = admission_per_tenant_permits(permits);
         self
+    }
+
+    /// **ADR-018 (tests/déploiements)** : fixe explicitement le plafond par-tenant (borné
+    /// au global — un quota de tenant > capacité process n'aurait aucun sens).
+    pub fn with_admission_per_tenant(mut self, per_tenant: usize) -> Self {
+        self.admission_per_tenant_max = per_tenant.clamp(1, self.admission_max.max(1));
+        self
+    }
+
+    /// **ADR-018 — ADMISSION ÉQUITABLE**. Tente d'admettre un run pour `tenant`, sous les
+    /// **deux** plafonds : quota par-tenant (équité) PUIS capacité process (global). L'ordre
+    /// est délibéré — on teste l'équité AVANT de consommer un permit global, sinon un tenant
+    /// bavard épuiserait le global avant même que son quota ne le freine. Renvoie un
+    /// [`AdmissionPermit`] composite (RAII : libère les deux plafonds à sa chute) ou un
+    /// [`AdmitReject`] qualifié. **Tout** refus incrémente le compteur unifié
+    /// `admission_rejected` (→ `/metrics`) ; le `reason` distingue la cause côté client.
+    /// Sync, non bloquant (`try_acquire`) : aucune file invisible — backpressure VISIBLE.
+    pub fn admit(&self, tenant: &str) -> Result<AdmissionPermit, AdmitReject> {
+        // Mutex empoisonné (un Drop a paniqué ailleurs — ne devrait jamais arriver) : refus
+        // prudent côté capacité, jamais de panique en cascade.
+        let mut inflight = self.admission_tenant_inflight.lock().map_err(|_| {
+            self.admission_rejected.fetch_add(1, Ordering::Relaxed);
+            AdmitReject::GatewayFull
+        })?;
+        // ① Équité par-tenant : le tenant a-t-il déjà atteint SON quota ?
+        let count = inflight.entry(tenant.to_string()).or_insert(0);
+        if *count >= self.admission_per_tenant_max {
+            self.admission_rejected.fetch_add(1, Ordering::Relaxed);
+            return Err(AdmitReject::TenantQuota);
+        }
+        // ② Capacité process : reste-t-il un permit global ? (consommé SEULEMENT si ①
+        //    passe — l'équité garde la porte avant le global).
+        let global = self.admission.clone().try_acquire_owned().map_err(|_| {
+            self.admission_rejected.fetch_add(1, Ordering::Relaxed);
+            AdmitReject::GatewayFull
+        })?;
+        // Les deux plafonds accordés : on engage le compteur de tenant et on rend le permit
+        // composite (son Drop décrémentera ce même compteur).
+        *count += 1;
+        Ok(AdmissionPermit {
+            _global: global,
+            inflight: self.admission_tenant_inflight.clone(),
+            tenant: tenant.to_string(),
+        })
+    }
+
+    /// **ADR-018** : nombre de tenants ayant ≥ 1 run en vol (jauge `/metrics`).
+    pub fn admission_tenants_active(&self) -> usize {
+        self.admission_tenant_inflight.lock().map(|m| m.len()).unwrap_or(0)
     }
 
     /// **G9 (feature `pii`)** : branche une politique PII par tenant (caviardage souverain).
@@ -368,6 +515,44 @@ mod tests {
         assert!(s.admission.clone().try_acquire_owned().is_err(), "3ᵉ run refusé à 2 permits");
         drop(p1);
         assert!(s.admission.clone().try_acquire_owned().is_ok(), "permit libéré → admis");
+    }
+
+    #[test]
+    fn admit_enforces_per_tenant_fairness_then_global_capacity() {
+        // ADR-018 — ÉQUITÉ : global = 3 permits, plafond par-tenant = 2. Un tenant bavard
+        // est capé à 2 (même s'il reste de la capacité globale) ; un autre tenant peut
+        // toujours obtenir le permit restant — PAS de famine. Le global borne le total.
+        let s = SwarmGatewayState::in_memory().with_admission_permits(3).with_admission_per_tenant(2);
+        assert_eq!(s.admission_max, 3);
+        assert_eq!(s.admission_per_tenant_max, 2);
+
+        // Tenant A prend ses 2 slots (quota), puis se heurte à SON plafond — alors que le
+        // global a encore 1 permit libre : c'est l'équité, pas la capacité, qui le freine.
+        let a1 = s.admit("alice").unwrap();
+        let _a2 = s.admit("alice").unwrap();
+        assert_eq!(s.admit("alice").unwrap_err(), AdmitReject::TenantQuota, "A capé par l'équité, pas le global");
+        assert_eq!(s.admission_tenants_active(), 1);
+
+        // Tenant B obtient le dernier permit global (équité OK : B est à 0 < 2)…
+        let _b1 = s.admit("bob").unwrap();
+        assert_eq!(s.admission_tenants_active(), 2, "deux tenants en vol");
+        // …puis B se heurte au plafond GLOBAL (3/3), pas à son quota (1 < 2).
+        assert_eq!(s.admit("bob").unwrap_err(), AdmitReject::GatewayFull, "global plein");
+
+        // A libère un slot → A peut ré-admettre (quota 1 < 2 ET global a de la place).
+        drop(a1);
+        let _a3 = s.admit("alice").expect("slot rendu → ré-admission");
+        // Tout refus a alimenté le compteur unifié /metrics (2 refus : 1 quota + 1 global).
+        assert_eq!(s.admission_rejected.load(Ordering::Relaxed), 2);
+    }
+
+    #[test]
+    fn per_tenant_cap_defaults_below_global_to_guarantee_headroom() {
+        // ADR-018 : le défaut `max(1, global − 1)` laisse toujours ≥ 1 permit pour autrui
+        // (aucun tenant ne prend le DERNIER) — sauf à 1 permit, où cap = global = 1.
+        assert_eq!(SwarmGatewayState::in_memory().with_admission_permits(8).admission_per_tenant_max, 7);
+        assert_eq!(SwarmGatewayState::in_memory().with_admission_permits(2).admission_per_tenant_max, 1);
+        assert_eq!(SwarmGatewayState::in_memory().with_admission_permits(1).admission_per_tenant_max, 1);
     }
 
     #[test]

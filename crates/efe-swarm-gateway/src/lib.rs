@@ -70,7 +70,7 @@ pub use dto::{
 };
 pub use error::GatewayError;
 pub use router_map::RouterMap;
-pub use state::SwarmGatewayState;
+pub use state::{AdmissionPermit, AdmitReject, SwarmGatewayState};
 pub use store::{InMemoryRunStore, RunStore, StoredRun};
 #[cfg(feature = "oidc")]
 pub use oidc::OidcVerifier;
@@ -545,6 +545,43 @@ mod tests {
             .and_then(|v| v.trim().parse::<u64>().ok())
             .expect("métrique swarm_blackboard_writes_total présente");
         assert!(writes > 0, "le substrat est réellement alimenté (writes={writes})");
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn run_accepts_deadline_ms_and_reports_termination_in_response() {
+        // ADR-018 (HTTP) : `deadline_ms` est un champ ACCEPTÉ (pas un 400 deny_unknown_fields)
+        // et le statut de terminaison est exposé dans la réponse. Deadline GÉNÉREUX → le run
+        // rapide finit dans la fenêtre → `completed` (la troncature par le temps est, elle,
+        // prouvée bout-en-bout côté SDK : run_traced est le code que ce handler appelle).
+        let (app, _s) = app();
+        let resp = app
+            .oneshot(post_run(json!({
+                "task": { "text": "hello", "expected": "hello" },
+                "topology": { "kind": "consensus", "generator": "echo_generator",
+                              "judges": ["consistency", "j_non_empty"], "k": 3 },
+                "deadline_ms": 60000
+            })))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK, "deadline_ms accepté");
+        let v = body_json(resp).await;
+        assert_eq!(v["run"]["termination"], json!("completed"), "fini dans la fenêtre");
+        assert_eq!(v["run"]["provenance"]["verified"], json!(true));
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn metrics_expose_per_tenant_admission_surfaces() {
+        // ADR-018 : /metrics expose les surfaces d'équité (plafond par-tenant + tenants
+        // actifs), en plus des surfaces process ADR-014.
+        let (app, _s) = app();
+        let resp = app
+            .oneshot(Request::builder().uri("/metrics").body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        let bytes = resp.into_body().collect().await.unwrap().to_bytes();
+        let txt = String::from_utf8(bytes.to_vec()).unwrap();
+        assert!(txt.contains("efe_swarm_gateway_inflight_per_tenant_max"), "plafond par-tenant exposé");
+        assert!(txt.contains("efe_swarm_gateway_admission_tenants_active"), "tenants actifs exposés");
     }
 
     /// **E2E self-host RÉEL** (Ollama local, keyless). Ignoré par défaut (CI sans modèle) ;

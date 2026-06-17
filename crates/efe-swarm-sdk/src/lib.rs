@@ -49,6 +49,7 @@ mod llm;
 mod n17;
 mod resolver;
 pub mod budget;
+pub mod deadline;
 pub mod client;
 pub mod observer;
 pub mod result;
@@ -58,11 +59,12 @@ pub mod spec;
 pub use budget::{Budget, OnExceed};
 pub use client::{ClientMode, WidthSpec};
 pub use budget::BudgetSnapshot;
+pub use deadline::DeadlineGuard;
 pub use n17::LlmProvenanceCollector;
 pub use observer::{AgentCall, SwarmObserver};
 pub use result::{
-    Accounting, BackendInfo, N17Summary, ProvenanceSummary, QualitySummary, RunOutcome, SwarmError,
-    SwarmRun,
+    Accounting, BackendInfo, N17Summary, ProvenanceSummary, QualitySummary, RunOutcome,
+    RunTermination, SwarmError, SwarmRun,
 };
 pub use sdk::{Swarm, SwarmBuilder};
 pub use spec::{KSpec, TopologySpec};

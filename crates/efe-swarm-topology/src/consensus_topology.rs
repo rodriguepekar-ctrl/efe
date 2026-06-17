@@ -27,7 +27,7 @@ use tokio::task::JoinSet;
 
 use crate::consensus::selector::{aggregator_for, Pattern, PatternSelector};
 use crate::consensus::{Aggregator, Ballot, Judge, MajorityVote};
-use crate::sizing::{run_waves_pure, BudgetProbe, KPlan, SizingTrace};
+use crate::sizing::{run_waves_pure, BudgetProbe, DeadlineProbe, KPlan, SizingTrace};
 use crate::topology::{QualitySignals, SwarmContext, Topology, TopologyOutput};
 use crate::traits::Generator;
 
@@ -66,6 +66,11 @@ pub struct ConsensusTopology {
     /// **I-AK4** : sonde de budget coopérative (« n appels de plus, payables ? ») —
     /// injectée par le SDK ; la topologie ignore le modèle de prix.
     budget_probe: Option<BudgetProbe>,
+    /// **ADR-018 (I-AD2)** : sonde de deadline coopérative (« la fenêtre temporelle
+    /// reste-t-elle ouverte ? ») — jumelle temporelle de `budget_probe`, injectée par le
+    /// SDK ; la topologie ignore l'horloge. Consultée au MÊME point de la boucle de
+    /// vagues : l'arrêt tombe sur une frontière de vague, le partiel reste scellable.
+    deadline_probe: Option<DeadlineProbe>,
 }
 
 impl std::fmt::Debug for ConsensusTopology {
@@ -92,6 +97,7 @@ impl ConsensusTopology {
             write_sink: None,
             k_plan: None,
             budget_probe: None,
+            deadline_probe: None,
         }
     }
 
@@ -134,6 +140,13 @@ impl ConsensusTopology {
         self.budget_probe = Some(probe);
         self
     }
+    /// **ADR-018 (I-AD2)** : branche la sonde de deadline coopérative (le SDK enveloppe
+    /// son `DeadlineGuard` à horloge) — aucune vague n'est émise hors de la fenêtre
+    /// temporelle ; le partiel produit est scellé sur une frontière de vague nette.
+    pub fn with_deadline_probe(mut self, probe: DeadlineProbe) -> Self {
+        self.deadline_probe = Some(probe);
+        self
+    }
 
     /// Génère K candidats EN PARALLÈLE + les écrit au Blackboard (vérité durable).
     async fn generate(&self, task: &Value, bb: &Blackboard) -> Vec<Value> {
@@ -167,8 +180,15 @@ impl ConsensusTopology {
     /// **continus** (variant = i, I-AK3) : juges, agrégation, ancrage et DAG ne voient
     /// aucune différence avec un run fixe de même K.
     async fn generate_adaptive(&self, task: &Value, bb: &Blackboard, plan: &KPlan) -> (Vec<Value>, SizingTrace) {
-        let (cands, trace) =
-            run_waves_pure(&self.generator, task, plan, self.max_concurrency, self.budget_probe.as_ref()).await;
+        let (cands, trace) = run_waves_pure(
+            &self.generator,
+            task,
+            plan,
+            self.max_concurrency,
+            self.budget_probe.as_ref(),
+            self.deadline_probe.as_ref(),
+        )
+        .await;
         let gid = AgentId::new("generator").unwrap();
         for (i, c) in cands.iter().enumerate() {
             let _ = bb.write(&format!("/cand/{i}"), c.clone(), gid.clone());

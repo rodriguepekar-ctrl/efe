@@ -22,7 +22,7 @@ efe-nano-sdk         = { path = "../efe-nano-sdk", version = "0.0.1" }
 serde       = { workspace = true }
 serde_json  = { workspace = true }
 async-trait = { workspace = true }
-tokio       = { workspace = true, features = ["sync", "rt"] }
+tokio       = { workspace = true, features = ["sync", "rt", "time"] }
 
 [dev-dependencies]
 serde_json   = { workspace = true }

@@ -293,6 +293,7 @@ impl TopologySpec {
                         plan: KPlan { k_min, k_max, batch, stop },
                         width,
                         budget_probe: Some(r.budget_probe()),
+                        deadline_probe: r.deadline_probe(), // ADR-018 : None si pas de deadline
                     })),
                 }
             }
@@ -340,6 +341,11 @@ impl TopologySpec {
                     topo = topo
                         .with_k_plan(KPlan { k_min, k_max, batch, stop })
                         .with_budget_probe(r.budget_probe());
+                    // ADR-018 (I-AD2) : la sonde de deadline coopérative, si une fenêtre
+                    // temporelle est posée sur le run (jumelle de la sonde de budget).
+                    if let Some(dp) = r.deadline_probe() {
+                        topo = topo.with_deadline_probe(dp);
+                    }
                 }
                 Ok(Box::new(topo))
             }

@@ -10,9 +10,9 @@ use axum::response::IntoResponse;
 
 use crate::state::SwarmGatewayState;
 
-/// **ADR-014 (CP-2)** : surfaces d'admission process — runs en vol (jauge dérivée des
-/// permits), plafond configuré, refus cumulés. Rendu inline (même style sans-dépendance
-/// que les registres).
+/// **ADR-014 (CP-2) + ADR-018** : surfaces d'admission — runs en vol (jauge dérivée des
+/// permits global), plafond process, plafond **par-tenant** (équité ADR-018), tenants
+/// actifs, refus cumulés. Rendu inline (même style sans-dépendance que les registres).
 fn render_admission(s: &SwarmGatewayState) -> String {
     let inflight = s.admission_max.saturating_sub(s.admission.available_permits());
     format!(
@@ -22,7 +22,13 @@ fn render_admission(s: &SwarmGatewayState) -> String {
          # HELP efe_swarm_gateway_inflight_max Permits d'admission configurés.\n\
          # TYPE efe_swarm_gateway_inflight_max gauge\n\
          efe_swarm_gateway_inflight_max {}\n\
-         # HELP efe_swarm_gateway_admission_rejected_total Requêtes refusées 429 (capacité).\n\
+         # HELP efe_swarm_gateway_inflight_per_tenant_max Plafond runs en vol par tenant (équité, ADR-018).\n\
+         # TYPE efe_swarm_gateway_inflight_per_tenant_max gauge\n\
+         efe_swarm_gateway_inflight_per_tenant_max {}\n\
+         # HELP efe_swarm_gateway_admission_tenants_active Tenants avec ≥1 run en vol (ADR-018).\n\
+         # TYPE efe_swarm_gateway_admission_tenants_active gauge\n\
+         efe_swarm_gateway_admission_tenants_active {}\n\
+         # HELP efe_swarm_gateway_admission_rejected_total Requêtes refusées 429 (capacité globale OU quota tenant).\n\
          # TYPE efe_swarm_gateway_admission_rejected_total counter\n\
          efe_swarm_gateway_admission_rejected_total {}\n\
          # HELP efe_swarm_gateway_max_width Plafond serveur du champ DTO width (ADR-014).\n\
@@ -30,6 +36,8 @@ fn render_admission(s: &SwarmGatewayState) -> String {
          efe_swarm_gateway_max_width {}\n",
         inflight,
         s.admission_max,
+        s.admission_per_tenant_max,
+        s.admission_tenants_active(),
         s.admission_rejected.load(Ordering::Relaxed),
         s.max_width,
     )

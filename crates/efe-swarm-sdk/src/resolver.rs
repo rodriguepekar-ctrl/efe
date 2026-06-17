@@ -10,8 +10,8 @@ use std::sync::Arc;
 
 use efe_nano_sdk::AgentId;
 use efe_swarm_topology::{
-    builtin_arguers, builtin_refiner, AgentFleet, BudgetProbe, Decomposer, Generator, Judge,
-    Merger, Refiner, Solver, Stage, StageRefiner, Verifier,
+    builtin_arguers, builtin_refiner, AgentFleet, BudgetProbe, DeadlineProbe, Decomposer,
+    Generator, Judge, Merger, Refiner, Solver, Stage, StageRefiner, Verifier,
 };
 
 use crate::agents::{
@@ -19,6 +19,7 @@ use crate::agents::{
     meter_stage, Meter, StageSolver,
 };
 use crate::backend::LocalBackend;
+use crate::deadline::DeadlineGuard;
 use crate::llm::{llm_decomposer, llm_gen, llm_judge, llm_merger, llm_refiner, llm_solver, llm_stage};
 use crate::result::SwarmError;
 
@@ -32,6 +33,11 @@ pub(crate) struct Resolver<'a> {
     /// (cœurs Mode A / backend déclaré Mode C / env / spec) — descendue dans chaque
     /// topologie par `TopologySpec::resolve`. Jamais une sémantique (I-CP1).
     pub width: usize,
+    /// **ADR-018 (I-AD2)** : garde de deadline du run (`Some` ⇒ une fenêtre temporelle est
+    /// posée). `run_traced` la construit ; `deadline_probe()` l'enveloppe en sonde
+    /// coopérative descendue dans les topologies adaptatives. `None` ⇒ aucun deadline
+    /// (chemin historique inchangé — zéro surcoût, aucune sonde branchée).
+    pub deadline: Option<Arc<DeadlineGuard>>,
 }
 
 fn aid(s: &str) -> AgentId {
@@ -53,6 +59,17 @@ impl Resolver<'_> {
             }
             ok
         })
+    }
+
+    /// **I-AD2 (ADR-018)** : la sonde de deadline coopérative — le **jumeau temporel** de
+    /// [`budget_probe`](Self::budget_probe). Enveloppe le [`DeadlineGuard`] du run
+    /// (« la fenêtre temporelle reste-t-elle ouverte ? ») ; un refus MARQUE la troncature
+    /// (via `check`), tout comme le refus budgétaire marque l'épuisement. `None` si aucun
+    /// deadline n'est posé sur le run (la topologie ne branche alors aucune sonde — chemin
+    /// historique strictement inchangé). La topologie reste découplée de l'horloge.
+    pub fn deadline_probe(&self) -> Option<DeadlineProbe> {
+        let guard = self.deadline.clone()?;
+        Some(Arc::new(move || guard.check()))
     }
 
     pub fn generator(&self, name: &str, id: &str) -> Result<Arc<dyn Generator>, SwarmError> {

@@ -1,0 +1,42 @@
+{
+  "admission_fairness": {
+    "alice_third_rejected_by_tenant_quota_while_global_free": true,
+    "global_cap_bounds_total": true,
+    "global_permits": 3,
+    "go": true,
+    "other_tenant_still_admitted_no_starvation": true,
+    "per_tenant_max": 2,
+    "readmission_after_permit_release": true,
+    "rejections_counted": 2
+  },
+  "adr": "ADR-SWARM-018",
+  "control_no_deadline": {
+    "clean": true,
+    "go": true,
+    "termination": "completed"
+  },
+  "date": "2026-06-17",
+  "deadline_cooperative": {
+    "deadline_ms": 40,
+    "gen_delay_ms": 100,
+    "go": true,
+    "k_used": 4,
+    "partial_reproven_offline_R0": true,
+    "root_reproduces": true,
+    "termination": "deadline_exceeded",
+    "topology": "consensus_adaptive",
+    "wall_ms": 104
+  },
+  "deadline_hard_backstop": {
+    "deadline_ms": 20,
+    "gen_delay_ms": 500,
+    "go": true,
+    "sealed_even_after_drop": true,
+    "termination": "deadline_hard_abort",
+    "topology": "consensus_fixed_k (non coopératif)",
+    "wall_ms": 273
+  },
+  "lot": "ADMIT-DEADLINE",
+  "thesis": "trois plafonds orthogonaux (coût/concurrence/temps), un principe : borner visiblement, sceller le partiel, dire ce qui reste reproductible",
+  "verdict": "GO"
+}
