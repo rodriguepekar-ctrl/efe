@@ -62,25 +62,28 @@ sur l'architecture du 2026-06-15.
    exécutable.
 6. **Le `LlmResolver` est la couture** — `verify_bridge` résout `llm_provenance_id` via un
    trait `LlmResolver` (`MapResolver::from_records` pré-charge la forensique persistée) :
-   un store réel s'adapte derrière sans toucher la re-preuve. Un lien Mode C qui ne résout
-   pas est **signalé `unlinked`** (pas silencieusement ignoré) ; un lien qui résout vers une
-   forensique d'un autre swarm/tenant est **`broken`**.
+   un store réel s'adapte derrière sans toucher la re-preuve. La classification (`LinkStatus`,
+   `bridge.rs`) distingue : un Mode C **sans** `llm_provenance_id` est une lacune `Unlinked` ;
+   un `llm_provenance_id` présent mais **introuvable** (pointeur pendant) est `Missing` ; un lien
+   qui résout vers une forensique d'un autre tenant/swarm est `TenantMismatch`/`SwarmMismatch`.
+   Ces trois derniers comptent comme `broken` (jamais silencieusement ignorés).
 7. **Mode A = no-op strict** — un run keyless (0 appel LLM) produit 0 `LlmProvenanceRecord`,
    donc `SealedN17` vide, `n17_root = None` : `verify_n17_chain` passe vacuousement, le pont
    n'a aucun Mode C à résoudre. La feature est **invisible** au chemin keyless (le flagship).
 
-## Invariants introduits (gardiens nominatifs — 21 tests : 10 provenance · 10 passerelle · 1 Mode C réel ignoré)
+## Invariants introduits (gardiens nominatifs — 23 tests : 11 provenance · 11 passerelle · 1 Mode C réel ignoré)
 
 Les **six** invariants I-PN de §9.1 ont chacun leur gardien **homonyme au niveau
 persistance/relecture** (passerelle), conformément à la note de méthode de §6 (« l'invariant
 tient sur le store relu, pas seulement sur le collecteur en mémoire »). La couche provenance
 fournit en plus le **socle cryptographique** (chaîne N17 pure, sans store).
 
-**Provenance (`n17_chain.rs`, 10)** — `seal_then_verify_is_intact` ;
+**Provenance (`n17_chain.rs`, 11)** — `seal_then_verify_is_intact` ;
 `canonical_order_is_deterministic_regardless_of_input_order` (ordre d'entrée neutre) ;
 `mutated_n17_field_breaks_the_chain_and_localizes` (**I-PN2** : `first_break` pointe le
 record muté) ; `mutated_seed_is_also_caught` ; `deleted_record_breaks_root`
-(`CountMismatch` — le compte relu ≠ scellé, la racine ne recompose plus) ;
+(`CountMismatch`, direction suppression) ; `injected_record_breaks_root_via_count_and_localizes`
+(direction symétrique : un record orphelin injecté → `CountMismatch` + `first_break` localisé) ;
 `forged_leaves_and_root_break_at_chain_level` (feuille/racine forgée → `ChainRootMismatch`,
 sans localisation fine — l'HMAC tranche) ; `wrong_key_breaks_the_chain` (socle crypto
 d'**I-PN5**, isolation par clé) ; `empty_n17_seals_and_verifies_vacuously` (socle d'**I-PN6**,
@@ -88,28 +91,31 @@ Mode A) ; `offline_verify_reproves_swarm_n17_and_bridge` (**I-PN3**, la re-preuv
 `offline_verify_catches_a_dangling_link_after_n17_loss` (socle d'**I-PN4** : forensique
 perdue → le pont signale le lien pendant, `verified=false`).
 
-**Passerelle (10)** — les six I-PN au niveau persistance + 4 gardiens HTTP/store :
-`n17_round_trips_through_the_store` (**I-PN1** : compte relu == compte produit, aller-retour
-serde, re-preuve hors ligne) ; `persisted_link_resolves_or_is_flagged_missing` (**I-PN4** :
-le lien Mode C persisté résout, ou est signalé `Missing` — jamais ignoré) ;
-`cross_tenant_n17_is_rejected_after_reload` (**I-PN5** : un N17 injecté d'un autre
-tenant/swarm, **re-scellé** donc chaîne intacte, est rejeté par le pont sur le store relu —
-`TenantMismatch`/`SwarmMismatch`) ; `mode_a_persists_zero_n17_and_stays_verified` (**I-PN6**
+**Passerelle (11)** — les six I-PN au niveau persistance + 4 gardiens HTTP/store + 1 round-trip
+Postgres (ignoré) : `n17_round_trips_through_the_store` (**I-PN1** : les **trois** colonnes N17
+relues par aller-retour serde, **`n17_root` relu == scellé**, re-preuve depuis les valeurs
+relues) ; `persisted_link_resolves_or_is_flagged_missing` (**I-PN4** : le lien Mode C persisté
+résout, ou est signalé `Missing` — jamais ignoré) ; `cross_tenant_n17_is_rejected_after_reload`
+(**I-PN5** : un N17 injecté d'un autre tenant/swarm, **re-scellé** donc chaîne intacte, est
+classé **`TenantMismatch`/`SwarmMismatch`** par le pont sur le store relu — assertion de statut
+exact, pas un simple « cassé ») ; `mode_a_persists_zero_n17_and_stays_verified` (**I-PN6**
 bout-en-bout HTTP) ; `verify_endpoint_reports_bridge_verdict` (l'endpoint expose le verdict du
 pont — cohérent sur run sain, `mode_c_broken≥1` sur forensique perdue) ;
 `n17_export_round_trips_for_offline_verifier` (les exports `/records` + `/n17` d'un run Mode C
 rejouent `verify_run_offline` avec la clé du tiers → prouvé) ;
-`mode_c_n17_is_persisted_and_reproven_over_http` (**I-PN1/I-PN3** HTTP, la forensique survit
-et re-prouve) ; `tampered_n17_forensics_break_the_reproof` (**I-PN2** HTTP : champ forensique
-muté → `verified=false`, essaim intact mais chaîne N17 cassée) ;
-`n17_export_endpoint_round_trips_empty_for_mode_a` ;
-`n17_export_unknown_run_is_404_and_tenant_scoped`.
+`mode_c_n17_is_persisted_and_reproven_over_http` (**I-PN1/I-PN3** HTTP, la forensique survit et
+re-prouve) ; `tampered_n17_forensics_break_the_reproof` (**I-PN2** HTTP : champ forensique muté
+→ `verified=false`, essaim intact, chaîne N17 cassée, **faute localisée dans `n17.first_break`
+sur le fil**) ; `n17_export_endpoint_round_trips_empty_for_mode_a` ;
+`n17_export_unknown_run_is_404_and_tenant_scoped` ; `pg_roundtrips_nonempty_n17_forensics`
+(ignoré-sans-`DATABASE_URL` : le bind/décodage **sqlx↔JSONB** des 3 colonnes N17 survit sur un
+vrai Postgres, re-preuve complète depuis le store relu).
 
 **Mode C RÉEL (`n17_persist_real.rs`, 1, ignoré sans Ollama)** —
-`real_llm_forensics_survive_process_death` : un run `gemma3:12b` authentique, sa forensique
-sérialisée puis l'`out` **jeté** (mort du process), re-prouvée depuis les seuls octets +
-une re-dérivation de la clé tenant ; falsification d'un champ forensique relu → faute
-**localisée**.
+`real_llm_forensics_survive_process_death` : un run `gemma3:12b` authentique (graine épinglée
+déterministe par le SDK), sa forensique sérialisée puis l'`out` **jeté** (mort du process),
+re-prouvée depuis les seuls octets + une re-dérivation de la clé tenant ; falsification d'un
+champ forensique relu → faute **localisée**.
 
 ## Verdicts des gates (exécutés le jour du build — artefact daté)
 
@@ -118,12 +124,16 @@ une re-dérivation de la clé tenant ; falsification d'un champ forensique relu 
   **synthétiques** (forensique fabriquée, **étiquetée**). 5 appels Mode C + 1 juge Mode A,
   scellés puis persistés par **aller-retour serde JSON** (la frontière `JSONB` exacte du
   store), l'objet vivant **jeté**, relu, re-prouvé : ① **aller-retour re-prouvé**
-  (`fully_proven`, pont 5/5 cohérents) ; ② **Mode A** trivialement vérifié ; ③ **les 4
-  vecteurs de falsification détectés** — champ forensique muté (**localisé**), record
-  d'essaim muté, feuille forgée, record N17 retiré ; ④ **coût négligeable** : ~36 µs/record
-  de re-preuve hors ligne (budget 2000), ~2,5 Ko/forensique (budget 8192). L'exemple
-  `verify_offline` re-prouve l'export sain (sortie `0`) et **rejette** un `model_id`
-  falsifié (sortie `1`, faute localisée à la `provenance_id` mutée).
+  (`fully_proven`, pont 5/5 cohérents) ; ② **Mode A** trivialement vérifié ; ③ **falsification
+  toujours attrapée** — **chacun des 4 champs forensiques** (hash de prompt, modèle, graine,
+  `output_hash`) muté individuellement → détecté **et localisé**, plus record d'essaim muté,
+  feuille forgée, record N17 retiré ; ④ **coût borné, en BALAYAGE** `N ∈ {1, 10, 100}` appels
+  (§8.1 ③) : la latence/record reste **~constante (≈33–46 µs)** — linéarité O(records)
+  confirmée — et octets/forensique ≈ 2,3–3,2 Ko, sous budget à **chaque** point de charge.
+  L'exemple `verify_offline` re-prouve l'export sain (sortie `0`) et **rejette** un `model_id`
+  falsifié (sortie `1`, faute localisée à la `provenance_id` mutée) — verdict **capturé** dans
+  l'artefact (`verify_offline_cli`) et reproductible (export falsifié émis :
+  `n17_sample_export.TAMPERED.json`).
 
 ## Conséquences
 

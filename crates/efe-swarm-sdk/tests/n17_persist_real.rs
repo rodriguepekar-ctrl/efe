@@ -53,6 +53,11 @@ async fn real_llm_forensics_survive_process_death() {
         .build()
         .expect("backend Ollama sain");
 
+    // Reproductibilité (« graine épinglée », §8.2) : le SDK fixe DÉTERMINISTIQUEMENT la graine
+    // et la température de chaque appel (llm.rs : générateur seed=42+round*31+idx ; juges
+    // temperature=0.0, seed=7) — best-effort de reproductibilité côté Ollama. `SamplingParams`
+    // est pub(crate) : le test ne peut (ni n'a besoin de) la régler ; la graine épinglée vit
+    // dans le SDK et atterrit telle quelle dans chaque `LlmProvenanceRecord.sampling.seed`.
     let spec = TopologySpec::consensus(
         "Classify the topic in one word from {technology,finance,health,legal}.",
         &["Judge how well the label fits the text."],

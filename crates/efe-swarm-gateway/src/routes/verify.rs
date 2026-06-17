@@ -57,6 +57,8 @@ pub async fn verify(
             mode_c_consistent: v.bridge.consistent,
             mode_c_unlinked: v.bridge.unlinked,
             mode_c_broken: v.bridge.broken,
+            // ADR-016 : surface la faute forensique localisée (QUEL appel LLM a été muté).
+            first_break: v.n17_chain.first_break.map(|p| p.as_uuid().to_string()),
         },
     }))
 }

@@ -353,6 +353,22 @@ mod tests {
     }
 
     #[test]
+    fn injected_record_breaks_root_via_count_and_localizes() {
+        // Direction SYMÉTRIQUE de deleted_record_breaks_root : relire PLUS de records que de
+        // feuilles scellées (un N17 orphelin injecté que l'attaquant ne peut pas re-sceller).
+        // Éprouve la moitié `>` de la cardinalité ET la localisation first_break en CountMismatch
+        // (jamais asserties ailleurs : le doc-comment promet « ajout/suppression »).
+        let recs = three();
+        let sealed = seal_n17(&recs[..2], &key()); // ne scelle QUE 2 feuilles
+        let v = verify_n17_chain(&recs, &sealed.leaf_hashes, sealed.n17_root, &key());
+        assert!(!v.intact);
+        assert_eq!(v.reason, Some(N17Break::CountMismatch));
+        assert_eq!(v.records, 3, "le compte relu (3) > feuilles scellées (2)");
+        let first_canonical = recs.iter().min_by_key(|r| r.provenance_id.as_uuid()).unwrap().provenance_id;
+        assert_eq!(v.first_break, Some(first_canonical), "first_break pointe le 1er record en ordre canonique");
+    }
+
+    #[test]
     fn forged_leaves_and_root_break_at_chain_level() {
         // un attaquant mute un record ET réécrit sa feuille pour coller — mais ne peut
         // pas recomputer le HMAC (pas la clé) → casse au niveau chaîne.

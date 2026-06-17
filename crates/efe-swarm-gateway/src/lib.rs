@@ -55,6 +55,8 @@ mod router_map;
 mod routes;
 mod state;
 mod store;
+#[cfg(test)]
+mod test_support; // ADR-016 : synthetic_mode_c_run partagé (lib tests + store_pg tests)
 #[cfg(feature = "postgres")]
 mod store_pg;
 
@@ -152,92 +154,9 @@ mod tests {
             .unwrap()
     }
 
-    // ── ADR-016 : un run Mode C SYNTHÉTIQUE (sans Ollama) pour éprouver la persistance
-    //    forensique + la re-preuve N17 de bout en bout en HTTP. ─────────────────────
-    #[cfg(test)]
-    fn synthetic_mode_c_run(model: &str) -> (Vec<efe_swarm_provenance::AgentCallRecord>, StoredRun) {
-        use efe_nano_sdk::{
-            Blake3Hash, Completeness, CostAccounting, FinishReason, LlmProvenanceRecord,
-            ModelIdentity, NanoAgentId, NanoAgentVersion, PiiStrategy, ProvenanceId, RetryOutcome,
-            SamplingParams, SwarmId, TenantId, TokenUsage,
-        };
-        use efe_swarm_provenance::{seal_n17, AgentCallDraft, AgentKind, AgentRole, SwarmChain};
-
-        let tenant = TenantId::system();
-        let swarm = SwarmId::from_uuid(Uuid::from_u128(0x5EED));
-        let key = HmacKeySource::test_key().derive(tenant).unwrap();
-        let prov = ProvenanceId::from_uuid(Uuid::from_u128(0xC0FFEE));
-
-        // la forensique N17 d'un appel LLM.
-        let llm = LlmProvenanceRecord {
-            provenance_id: prov,
-            trace_id: Uuid::from_u128(0xBEEF),
-            swarm_request_id: swarm.as_uuid(),
-            op_id: "swarm.generator".into(),
-            tenant_id: tenant,
-            agent_id: NanoAgentId::new("generator").unwrap(),
-            agent_version: NanoAgentVersion::new("1.0.0").unwrap(),
-            model_identity: ModelIdentity::hosted("ollama", model, "local"),
-            model_hash_verified: false,
-            prompt_template_id: "swarm.selfhost".into(),
-            prompt_template_version: "1.0.0".into(),
-            prompt_inputs_hash: Blake3Hash::ZERO,
-            system_prompt_hash: Blake3Hash::ZERO,
-            user_prompt_hash: Blake3Hash::from_bytes([3u8; 32]),
-            final_prompt_hash: Blake3Hash::from_bytes([3u8; 32]),
-            sampling: SamplingParams { temperature: 0.2, top_p: None, max_tokens: 16, seed: Some(7), stop_sequences: vec![] },
-            token_usage: TokenUsage { client_estimated_input: 5, client_estimated_output: 2, provider_reported_input: None, provider_reported_output: None, is_estimated: true },
-            cost_accounting: CostAccounting { cost_cents: 0.0, prices_table_version: 0, provider_quoted_cost_cents: None, overflow_capped: false },
-            provider_request_id: None,
-            provider_response_time_ms: 5,
-            provider_finish_reason: FinishReason::Stop,
-            provider_region: None,
-            publisher_id: None,
-            publisher_kyc_tier: None,
-            gold_case_id: None,
-            provider_metadata: std::collections::HashMap::new(),
-            output_hash: Some(Blake3Hash::from_bytes([5u8; 32])),
-            completeness: Completeness::Complete,
-            safety_flags: vec![],
-            tool_calls: vec![],
-            pii_strategy_applied: PiiStrategy::None,
-            redaction_token_set: vec![],
-            replay_of: None,
-            cache_hit: None,
-            recorded_at: std::time::SystemTime::UNIX_EPOCH,
-            streaming_mode: false,
-            retry_count: 0,
-            retry_outcome: RetryOutcome::NoRetry,
-            time_to_first_token_ms: None,
-        };
-
-        // l'AgentCallRecord Mode C qui RÉFÉRENCE la forensique (le lien), scellé en chaîne.
-        let draft = AgentCallDraft::new(
-            swarm, tenant, efe_nano_sdk::AgentId::new("generator").unwrap(), AgentRole::Generator,
-            AgentKind::ModeC, Blake3Hash::from_bytes([1u8; 32]), Blake3Hash::from_bytes([2u8; 32]),
-        )
-        .with_llm_provenance(prov);
-        let mut chain = SwarmChain::new(tenant, swarm, key.clone());
-        let records = chain.append_all(std::iter::once(draft));
-        let root_hex = chain.root_hex();
-
-        let sealed = seal_n17(std::slice::from_ref(&llm), &key);
-        let stored = StoredRun {
-            // Le tenant par défaut d'un appelant sans en-tête = `TenantId::system()` rendu en
-            // UUID (00…001) ; on s'y aligne pour que `store.get` retrouve le run injecté, et
-            // pour que `derive_key` recompose la MÊME clé (from_str(uuid) == system).
-            tenant: tenant.to_string(),
-            records: records.clone(),
-            root: root_hex,
-            llm_records: vec![llm],
-            n17_leaves: sealed.leaves_hex(),
-            n17_root: sealed.root_hex(),
-            output: json!({ "value": "ok" }),
-            topology: "T-consensus".into(),
-            created_at: std::time::SystemTime::now(),
-        };
-        (records, stored)
-    }
+    // ── ADR-016 : le helper d'un run Mode C SYNTHÉTIQUE (sans Ollama) vit désormais dans
+    //    `crate::test_support` — partagé avec les tests Postgres, une seule définition.
+    use crate::test_support::synthetic_mode_c_run;
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     async fn mode_c_n17_is_persisted_and_reproven_over_http() {
@@ -282,6 +201,12 @@ mod tests {
         assert_eq!(v["verified"], json!(false), "forensique altérée → re-preuve cassée");
         assert_eq!(v["chain_intact"], json!(true), "la chaîne d'ESSAIM, elle, reste intègre");
         assert_eq!(v["n17"]["chain_intact"], json!(false), "mais la chaîne N17 détecte la mutation");
+        // ADR-016 : la faute forensique est LOCALISÉE sur le fil HTTP (quel appel LLM a été muté).
+        assert_eq!(
+            v["n17"]["first_break"],
+            json!(Uuid::from_u128(0xC0FFEE).to_string()),
+            "le record N17 muté (provenance 0xC0FFEE) est localisé dans n17.first_break"
+        );
     }
 
     // ── ADR-016 §9.1 : les gardiens I-PN au niveau PERSISTANCE/RELECTURE ──────────────
@@ -317,24 +242,28 @@ mod tests {
 
     #[test]
     fn n17_round_trips_through_the_store() {
-        // I-PN1 : durabilité — zéro perte entre la fin du run et la relecture ;
-        // le compte relu == le compte produit, et la re-preuve hors ligne tient.
+        // I-PN1 : durabilité — zéro perte entre la fin du run et la relecture ; le compte relu
+        // == le compte produit, **n17_root relu == scellé** (critère GO §8.1), et la re-preuve
+        // hors ligne tient depuis les SEULES valeurs relues (pas l'objet vivant).
         use efe_swarm_provenance::verify_run_offline;
         let (_recs, stored) = synthetic_mode_c_run("gemma3:12b");
         let produced = stored.llm_records.len();
         assert!(produced >= 1, "le run synthétique EST bien Mode C");
-        // aller-retour serde (la frontière JSONB exacte du store).
-        let reloaded: Vec<efe_nano_sdk::LlmProvenanceRecord> =
+        // aller-retour serde des TROIS colonnes N17 (la frontière JSONB exacte du store).
+        let llm: Vec<efe_nano_sdk::LlmProvenanceRecord> =
             serde_json::from_str(&serde_json::to_string(&stored.llm_records).unwrap()).unwrap();
-        assert_eq!(reloaded.len(), produced, "I-PN1 : compte relu == compte produit");
-        assert_eq!(reloaded, stored.llm_records, "forensique identique après relecture");
-        let v = verify_run_offline(
-            &stored.records,
-            &reloaded,
-            &stored.n17_leaf_bytes(),
-            stored.n17_root_bytes(),
-            &key_system(),
-        );
+        let leaves_hex: Vec<String> =
+            serde_json::from_str(&serde_json::to_string(&stored.n17_leaves).unwrap()).unwrap();
+        let root_hex: Option<String> =
+            serde_json::from_str(&serde_json::to_string(&stored.n17_root).unwrap()).unwrap();
+        assert_eq!(llm.len(), produced, "I-PN1 : compte relu == compte produit");
+        assert_eq!(llm, stored.llm_records, "forensique identique après relecture");
+        assert_eq!(root_hex, stored.n17_root, "I-PN1 (§8.1) : n17_root relu == scellé");
+        assert_eq!(leaves_hex, stored.n17_leaves, "feuilles relues == scellées");
+        // re-preuve depuis les valeurs RELUES décodées (hex → bytes), jamais l'objet vivant.
+        let leaves: Vec<[u8; 32]> = leaves_hex.iter().filter_map(|h| unhex32_t(h)).collect();
+        let root = root_hex.as_deref().and_then(unhex32_t);
+        let v = verify_run_offline(&stored.records, &llm, &leaves, root, &key_system());
         assert!(v.fully_proven, "la forensique relue se re-prouve");
         assert_eq!(v.n17_chain.records, produced, "tous les records ont survécu");
     }
@@ -362,12 +291,13 @@ mod tests {
     #[test]
     fn cross_tenant_n17_is_rejected_after_reload() {
         // I-PN5 : la triple cohérence (existe · même tenant · même swarm) tient sur le store
-        // RELU. Un N17 injecté d'un autre tenant/swarm est rejeté par le pont, même quand la
-        // chaîne N17 est re-scellée (donc intacte) — seule l'isolation casse.
-        use efe_swarm_provenance::{seal_n17, verify_run_offline};
+        // RELU. Un N17 injecté d'un autre tenant/swarm, RE-SCELLÉ (chaîne N17 intacte), doit être
+        // CLASSÉ TenantMismatch/SwarmMismatch par le pont — pas un simple Missing (sinon le
+        // gardien d'un invariant de SÉCURITÉ resterait vert même si l'isolation dégénérait).
+        use efe_swarm_provenance::{seal_n17, verify_run_offline, LinkStatus};
         let key = key_system();
 
-        // (a) injection tenant → TenantMismatch.
+        // (a) injection tenant → TenantMismatch, sur le store relu.
         let (_r, mut t) = synthetic_mode_c_run("gemma3:12b");
         t.llm_records[0].tenant_id = efe_nano_sdk::TenantId::new();
         let rs = seal_n17(&t.llm_records, &key);
@@ -375,14 +305,24 @@ mod tests {
             serde_json::from_str(&serde_json::to_string(&t.llm_records).unwrap()).unwrap();
         let v = verify_run_offline(&t.records, &reloaded, &rs.leaf_hashes, rs.n17_root, &key);
         assert!(v.swarm.ok() && v.n17_chain.intact, "essaim + chaîne N17 intacts (re-scellés)");
-        assert!(!v.fully_proven && v.bridge.broken >= 1, "I-PN5 : N17 cross-tenant REJETÉ après relecture");
+        assert!(!v.fully_proven, "I-PN5 (a) : run NON prouvé");
+        assert!(
+            v.bridge.broken_links().any(|l| l.status == LinkStatus::TenantMismatch),
+            "I-PN5 (a) : N17 cross-tenant CLASSÉ TenantMismatch (pas un simple Missing) sur le store relu"
+        );
 
-        // (b) injection swarm → SwarmMismatch.
+        // (b) injection swarm → SwarmMismatch, AUSSI sur le store relu (parité avec (a)).
         let (_r2, mut s) = synthetic_mode_c_run("gemma3:12b");
         s.llm_records[0].swarm_request_id = uuid::Uuid::from_u128(0xDEAD_BEEF);
         let rs2 = seal_n17(&s.llm_records, &key);
-        let v2 = verify_run_offline(&s.records, &s.llm_records, &rs2.leaf_hashes, rs2.n17_root, &key);
-        assert!(!v2.fully_proven && v2.bridge.broken >= 1, "I-PN5 : N17 cross-swarm REJETÉ aussi");
+        let reloaded2: Vec<efe_nano_sdk::LlmProvenanceRecord> =
+            serde_json::from_str(&serde_json::to_string(&s.llm_records).unwrap()).unwrap();
+        let v2 = verify_run_offline(&s.records, &reloaded2, &rs2.leaf_hashes, rs2.n17_root, &key);
+        assert!(!v2.fully_proven, "I-PN5 (b) : run NON prouvé");
+        assert!(
+            v2.bridge.broken_links().any(|l| l.status == LinkStatus::SwarmMismatch),
+            "I-PN5 (b) : N17 cross-swarm CLASSÉ SwarmMismatch sur le store relu"
+        );
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]

@@ -410,6 +410,12 @@ pub struct N17VerifyView {
     pub mode_c_unlinked: usize,
     /// Liens rompus (pointeur pendant / incohérence d'isolation).
     pub mode_c_broken: usize,
+    /// **ADR-016 — localisation forensique** : la `provenance_id` (UUID) du 1ᵉʳ record N17
+    /// en faute quand la chaîne casse par mutation de contenu. `None` si la chaîne est
+    /// intacte, ou si la rupture est une forge de feuille/racine (non localisable finement).
+    /// C'est la valeur ajoutée de la persistance des feuilles : le client sait QUEL appel
+    /// LLM a été altéré.
+    pub first_break: Option<String>,
 }
 
 /// Vue d'un run (`GET /v1/swarm/runs/:id`) — **terminé** (dans le store) **ou en cours**

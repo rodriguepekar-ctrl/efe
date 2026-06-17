@@ -5,9 +5,32 @@
     "verify_us_per_record": 2000.0
   },
   "cost": {
-    "seal_us_per_run": 98.78737666666666,
-    "verify_offline_us_per_record": 37.876002,
-    "verify_offline_us_per_run": 189.38001
+    "seal_us_per_run": 1943.2966299999998,
+    "sweep": [
+      {
+        "bytes_per_record": 3177.0,
+        "n": 1,
+        "seal_us_per_run": 18.302,
+        "verify_offline_us_per_record": 44.525043333333336,
+        "verify_offline_us_per_run": 44.525043333333336
+      },
+      {
+        "bytes_per_record": 2418.4,
+        "n": 10,
+        "seal_us_per_run": 194.75402333333335,
+        "verify_offline_us_per_record": 34.900513000000004,
+        "verify_offline_us_per_run": 349.00513
+      },
+      {
+        "bytes_per_record": 2343.35,
+        "n": 100,
+        "seal_us_per_run": 1943.2966299999998,
+        "verify_offline_us_per_record": 33.3457083,
+        "verify_offline_us_per_run": 3334.57083
+      }
+    ],
+    "verify_offline_us_per_record": 33.3457083,
+    "verify_offline_us_per_run": 3334.57083
   },
   "go": true,
   "mode_a_trivially_proven": true,
@@ -30,9 +53,34 @@
     "all_detected": true,
     "forensic_field_mutated_detected": true,
     "forensic_field_mutated_localized": true,
+    "forensic_fields": {
+      "model_id": {
+        "detected": true,
+        "localized": true
+      },
+      "output_hash": {
+        "detected": true,
+        "localized": true
+      },
+      "seed": {
+        "detected": true,
+        "localized": true
+      },
+      "user_prompt_hash": {
+        "detected": true,
+        "localized": true
+      }
+    },
     "leaf_forged_detected": true,
     "n17_record_dropped_detected": true,
     "swarm_record_mutated_detected": true
   },
-  "verdict": "GO ✅ — la forensique N17 est durable, re-prouvable hors ligne, et infalsifiable"
+  "verdict": "GO ✅ — la forensique N17 est durable, re-prouvable hors ligne, et infalsifiable",
+  "verify_offline_cli": {
+    "_note": "verdict mappé par le binaire verify_offline en code de sortie : sain→0, falsifié→1 (faute localisée). Export falsifié émis : scripts/swarm/n17_sample_export.TAMPERED.json",
+    "healthy_proven": true,
+    "ok": true,
+    "tampered_localized_provenance": "00000000-0000-0000-0000-0000c0ffee00",
+    "tampered_model_id_proven": false
+  }
 }

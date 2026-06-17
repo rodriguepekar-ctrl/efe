@@ -266,19 +266,24 @@
   <pre>// efe-swarm-provenance : sceller la forensique en chaîne HMAC propre (clé tenant).
 // Réutilise canon::canonical_bytes (hash de contenu déterministe) + chain_hmac (ADR-007).
 pub struct SealedN17 {
-    pub records: Vec&lt;LlmProvenanceRecord&gt;,   // la forensique, telle quelle (serde)
-    pub content_hashes: Vec&lt;[u8; 32]&gt;,        // sha256 canonique de CHAQUE record (ordre stable)
-    pub n17_root: Option&lt;[u8; 32]&gt;,           // HMAC replié sur les hashes ordonnés (clé tenant)
+    pub leaf_hashes: Vec&lt;[u8; 32]&gt;,           // sha256 canonique de CHAQUE record (ordre stable)
+    pub n17_root: Option&lt;[u8; 32]&gt;,           // HMAC replié sur les feuilles ordonnées (clé tenant)
 }
+// NB (impl) : le sceau ne porte PAS les records (ils vivent dans RunOutcome.llm_records /
+// StoredRun.llm_records) ; il porte les FEUILLES, qu'on persiste (StoredRun.n17_leaves) pour
+// pouvoir LOCALISER un record muté à la re-preuve — d'où le param sealed_leaves ci-dessous.
 
 /// Scelle un ensemble de records N17 : ordre canonique (par provenance_id — déterministe),
 /// hash de contenu par record, chaîne HMAC → n17_root. Même clé que la chaîne d'essaim.
 pub fn seal_n17(records: &amp;[LlmProvenanceRecord], key: &amp;[u8]) -> SealedN17;
 
-/// Re-prouve la chaîne N17 depuis les SEULS records persistés + la clé tenant :
-/// recompute les hashes de contenu, rejoue le HMAC, compare à n17_root. Localise la 1ʳᵉ faute.
-pub fn verify_n17_chain(records: &amp;[LlmProvenanceRecord], n17_root: Option&lt;[u8;32]&gt;, key: &amp;[u8])
-    -&gt; N17ChainVerdict;  // { intact: bool, first_break: Option&lt;ProvenanceId&gt;, root: Option&lt;[u8;32]&gt; }</pre>
+/// Re-prouve la chaîne N17 depuis les records persistés + les FEUILLES scellées + la clé :
+/// recompute chaque feuille et la compare à la feuille scellée (→ localise un record muté),
+/// puis rejoue le HMAC et compare à n17_root (→ détecte une forge). Le param sealed_leaves est
+/// ce qui distingue « localiser une mutation » de « détecter une forge de racine ».
+pub fn verify_n17_chain(records: &amp;[LlmProvenanceRecord], sealed_leaves: &amp;[[u8;32]],
+                        n17_root: Option&lt;[u8;32]&gt;, key: &amp;[u8])
+    -&gt; N17ChainVerdict;  // { intact, records, root, first_break: Option&lt;ProvenanceId&gt;, reason }</pre>
 
   <p>L'ordre de scellement est <b>canonique</b> (tri par <code>provenance_id</code>) — pas l'ordre
   d'assemblage, qui dépend de l'ordonnancement concurrent des K agents. C'est la même leçon qu'ADR-007 : on
@@ -349,11 +354,12 @@ pub struct OfflineVerdict {
 pub fn verify_run_offline(
     swarm_records: &amp;[AgentCallRecord],
     n17_records:   &amp;[LlmProvenanceRecord],
+    n17_leaves:    &amp;[[u8; 32]],            // les feuilles scellées persistées (→ localisation)
     n17_root:      Option&lt;[u8; 32]&gt;,
     key:           &amp;[u8],
 ) -&gt; OfflineVerdict {
     let swarm     = verify_swarm(swarm_records, key);
-    let n17_chain = verify_n17_chain(n17_records, n17_root, key);
+    let n17_chain = verify_n17_chain(n17_records, n17_leaves, n17_root, key);
     let resolver  = MapResolver::from_records(n17_records.iter());  // le seam, déjà prévu
     let bridge    = verify_bridge(swarm_records, &amp;resolver);
     OfflineVerdict { fully_proven: swarm.ok() &amp;&amp; n17_chain.intact &amp;&amp; bridge.all_mode_c_consistent(),
@@ -596,12 +602,14 @@ APRÈS : swarm_runs { id, tenant, records JSONB, root, output JSONB, topology, c
                      n17_root TEXT }      ← NEUF : la racine de la chaîne N17 (hex, tamper-evidence)
         (les deux colonnes write-once, ON CONFLICT DO NOTHING — parité records d'essaim)</pre>
 
-  <h3>A.2 — Signatures (l'API proposée)</h3>
-  <pre>// efe-swarm-provenance
-pub fn seal_n17(records: &amp;[LlmProvenanceRecord], key: &amp;[u8]) -&gt; SealedN17;
-pub fn verify_n17_chain(records: &amp;[LlmProvenanceRecord], root: Option&lt;[u8;32]&gt;, key: &amp;[u8]) -&gt; N17ChainVerdict;
+  <h3>A.2 — Signatures (l'API, telle qu'implémentée)</h3>
+  <pre>// efe-swarm-provenance — le param `sealed_leaves`/`n17_leaves` (feuilles scellées persistées)
+// est ce qui permet de LOCALISER un record muté, vs seulement détecter une forge de racine.
+pub fn seal_n17(records: &amp;[LlmProvenanceRecord], key: &amp;[u8]) -&gt; SealedN17;  // { leaf_hashes, n17_root }
+pub fn verify_n17_chain(records: &amp;[LlmProvenanceRecord], sealed_leaves: &amp;[[u8;32]],
+                        n17_root: Option&lt;[u8;32]&gt;, key: &amp;[u8]) -&gt; N17ChainVerdict;
 pub fn verify_run_offline(swarm: &amp;[AgentCallRecord], n17: &amp;[LlmProvenanceRecord],
-                          n17_root: Option&lt;[u8;32]&gt;, key: &amp;[u8]) -&gt; OfflineVerdict;
+                          n17_leaves: &amp;[[u8;32]], n17_root: Option&lt;[u8;32]&gt;, key: &amp;[u8]) -&gt; OfflineVerdict;
 // le seam EXISTANT, réutilisé tel quel :
 MapResolver::from_records(n17.iter()) -&gt; impl LlmResolver   // bridge.rs:83
 verify_bridge(swarm, &amp;resolver) -&gt; BridgeReport             // bridge.rs:220</pre>

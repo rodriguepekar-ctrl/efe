@@ -41,7 +41,8 @@ use serde_json::{json, Value};
 
 const RUNS: usize = 300; // itérations de mesure (seal + verify_offline)
 const WARMUP: usize = 30;
-const MODE_C_CALLS: usize = 5; // appels LLM (Mode C) par run synthétique
+const MODE_C_CALLS: usize = 5; // appels Mode C du run représentatif (volets ① round-trip, ② falsif.)
+const N_SWEEP: [usize; 3] = [1, 10, 100]; // §8.1 ③ : balayage de charge pour la courbe de coût
 // budgets figés AU LANCEMENT.
 const BYTES_PER_RECORD_BUDGET: f64 = 8192.0; // 8 Ko / forensique (record N17 riche)
 const VERIFY_US_PER_RECORD_BUDGET: f64 = 2000.0; // 2 ms / record re-prouvé hors ligne
@@ -97,17 +98,17 @@ fn synth_n17(prov_u128: u128, tenant: TenantId, swarm: SwarmId, model: &str) -> 
     }
 }
 
-/// Construit un run Mode C synthétique : `MODE_C_CALLS` appels LLM, chacun référencé par un
+/// Construit un run Mode C synthétique : `n` appels LLM, chacun référencé par un
 /// `AgentCallRecord` Mode C scellé en chaîne d'essaim, + un juge Mode A (le pont aura donc
 /// du Mode A ET du Mode C). Renvoie (records d'essaim, forensique N17, clé).
-fn synth_mode_c_run() -> (Vec<AgentCallRecord>, Vec<LlmProvenanceRecord>, Vec<u8>) {
+fn synth_mode_c_run(n: usize) -> (Vec<AgentCallRecord>, Vec<LlmProvenanceRecord>, Vec<u8>) {
     let tenant = TenantId::system();
     let swarm = SwarmId::from_uuid(uuid_from_u128(0x5EED));
     let key = tenant_key(tenant);
 
-    let mut n17: Vec<LlmProvenanceRecord> = Vec::with_capacity(MODE_C_CALLS);
-    let mut drafts: Vec<AgentCallDraft> = Vec::with_capacity(MODE_C_CALLS + 1);
-    for i in 0..MODE_C_CALLS {
+    let mut n17: Vec<LlmProvenanceRecord> = Vec::with_capacity(n);
+    let mut drafts: Vec<AgentCallDraft> = Vec::with_capacity(n + 1);
+    for i in 0..n {
         let prov_u128 = 0xC0FFEE00 + i as u128;
         let rec = synth_n17(prov_u128, tenant, swarm, "gemma3:12b");
         // l'atome Mode C qui RÉFÉRENCE la forensique (le lien du pont N17).
@@ -193,6 +194,36 @@ fn uuid_from_u128(v: u128) -> uuid::Uuid {
     uuid::Uuid::from_u128(v)
 }
 
+/// **§8.1 ③ — coût à UN point de charge `n`** : octets/forensique sérialisée + latence de
+/// `seal_n17` et `verify_run_offline` (RUNS itérations, WARMUP écarté). Renvoie
+/// `(seal_us_per_run, verify_us_per_run, verify_us_per_record, bytes_per_record)`.
+fn measure_cost(n: usize) -> (f64, f64, f64, f64) {
+    let (records, n17, key) = synth_mode_c_run(n);
+    let sealed = seal_n17(&n17, &key);
+    // octets : la MÊME enveloppe persistée que le round-trip (records + forensique + feuilles + root).
+    let payload = persist_payload(&records, &n17, &sealed.leaves_hex(), &sealed.root_hex());
+    let bytes_per_record = serde_json::to_string(&payload).unwrap().len() as f64 / n.max(1) as f64;
+    let mut seal_ns = Vec::with_capacity(RUNS);
+    let mut verify_ns = Vec::with_capacity(RUNS);
+    for i in 0..(RUNS + WARMUP) {
+        let t0 = Instant::now();
+        let s = seal_n17(&n17, &key);
+        let d_seal = t0.elapsed().as_nanos() as f64;
+        let t1 = Instant::now();
+        let _ = verify_run_offline(&records, &n17, &s.leaf_hashes, s.n17_root, &key);
+        let d_verify = t1.elapsed().as_nanos() as f64;
+        if i >= WARMUP {
+            seal_ns.push(d_seal);
+            verify_ns.push(d_verify);
+        }
+    }
+    let mean = |xs: &[f64]| xs.iter().sum::<f64>() / xs.len() as f64;
+    let us = |ns: f64| ns / 1000.0;
+    let seal_us = us(mean(&seal_ns));
+    let verify_us = us(mean(&verify_ns));
+    (seal_us, verify_us, verify_us / n.max(1) as f64, bytes_per_record)
+}
+
 fn main() {
     println!("══════════════════════════════════════════════════════════════════════════════");
     println!(" LOT N17PERSIST — gate ADR-016 : la forensique N17 survit-elle au process,");
@@ -201,8 +232,8 @@ fn main() {
     println!(" {MODE_C_CALLS} appels Mode C + 1 juge Mode A · aller-retour serde JSON · {RUNS} runs");
     println!("══════════════════════════════════════════════════════════════════════════════");
 
-    // ── 1) un run Mode C synthétique, scellé. ────────────────────────────────────
-    let (records, n17, key) = synth_mode_c_run();
+    // ── 1) un run Mode C synthétique représentatif (n = MODE_C_CALLS), scellé. ────
+    let (records, n17, key) = synth_mode_c_run(MODE_C_CALLS);
     let sealed = seal_n17(&n17, &key);
     let leaves_hex = sealed.leaves_hex();
     let root_hex = sealed.root_hex();
@@ -224,6 +255,29 @@ fn main() {
         }))
         .unwrap(),
     );
+
+    // Émet AUSSI un export FALSIFIÉ (model_id muté, feuilles/racine d'ORIGINE conservées car
+    // l'attaquant n'a pas la clé) : c'est l'intrant qui fait sortir le binaire `verify_offline`
+    // en code 1 avec faute localisée. On CAPTURE le verdict que le binaire mappe en code de
+    // sortie (0 sain / 1 falsifié) → la promesse §5.3/ADR devient reproductible ET enregistrée.
+    let mut tampered_n17 = n17.clone();
+    tampered_n17[0].model_identity = ModelIdentity::hosted("ollama", "MENTEUR:70b", "local");
+    let _ = fs::write(
+        "scripts/swarm/n17_sample_export.TAMPERED.json",
+        serde_json::to_string_pretty(&json!({
+            "run_id": uuid_from_u128(0x5EED),
+            "llm_records": &tampered_n17,
+            "n17_leaves": &leaves_hex, // feuilles d'ORIGINE (non re-scellées)
+            "n17_root": &root_hex,
+        }))
+        .unwrap(),
+    );
+    let vo_healthy_proven = verify_run_offline(&records, &n17, &sealed.leaf_hashes, sealed.n17_root, &key).fully_proven;
+    let vo_tampered = verify_run_offline(&records, &tampered_n17, &sealed.leaf_hashes, sealed.n17_root, &key);
+    let vo_tampered_proven = vo_tampered.fully_proven;
+    let vo_tampered_localized = vo_tampered.n17_chain.first_break.map(|p| p.as_uuid().to_string());
+    // le verdict binaire-équivalent : sain → exit 0, falsifié → exit 1 (faute localisée).
+    let verify_offline_ok = vo_healthy_proven && !vo_tampered_proven && vo_tampered_localized.is_some();
 
     // ── 2) ALLER-RETOUR de persistance (I-PN1) : sérialise → jette → relit → re-prouve. ──
     let payload = persist_payload(&records, &n17, &leaves_hex, &root_hex);
@@ -259,14 +313,26 @@ fn main() {
     };
 
     // ── 4) FALSIFICATIONS (4 vecteurs) — toutes doivent être détectées. ──────────
-    // (a) muter un CHAMP forensique d'un record N17 relu → chaîne N17 casse + LOCALISE.
-    let (t_field_detected, t_field_localized) = {
+    // (a) §8.1 ② : muter CHAQUE champ forensique sensible (hash prompt, modèle, graine,
+    //     output_hash) d'un record N17 relu → la chaîne N17 casse ET localise (first_break ==
+    //     provenance muté). On rejoue un reload FRAIS par champ.
+    #[allow(clippy::type_complexity)]
+    let field_mutations: Vec<(&str, Box<dyn Fn(&mut LlmProvenanceRecord)>)> = vec![
+        ("user_prompt_hash", Box::new(|r: &mut LlmProvenanceRecord| r.user_prompt_hash = Blake3Hash::from_bytes([0x11; 32]))),
+        ("model_id", Box::new(|r| r.model_identity = ModelIdentity::hosted("ollama", "MENTEUR:70b", "local"))),
+        ("seed", Box::new(|r| r.sampling.seed = Some(0xDEAD))),
+        ("output_hash", Box::new(|r| r.output_hash = Some(Blake3Hash::from_bytes([0x22; 32])))),
+    ];
+    let mut field_results: Vec<(&str, bool, bool)> = Vec::with_capacity(field_mutations.len());
+    for (label, mutate) in &field_mutations {
         let (rr, mut rn, rl, rt) = reload(&serde_json::from_str::<Value>(&payload_str).unwrap());
-        let victim = rn[2].provenance_id; // 3ᵉ appel (ordre canonique : à confirmer via first_break)
-        rn[2].model_identity = ModelIdentity::hosted("ollama", "MENTEUR:70b", "local");
+        let victim = rn[2].provenance_id;
+        mutate(&mut rn[2]);
         let vt = verify_run_offline(&rr, &rn, &rl, rt, &key);
-        (!vt.fully_proven && !vt.n17_chain.intact, vt.n17_chain.first_break == Some(victim))
-    };
+        field_results.push((label, !vt.fully_proven && !vt.n17_chain.intact, vt.n17_chain.first_break == Some(victim)));
+    }
+    let t_field_detected = field_results.iter().all(|(_, d, _)| *d);
+    let t_field_localized = field_results.iter().all(|(_, _, l)| *l);
     // (b) muter un record d'ESSAIM (Mode C) relu → chaîne d'essaim casse.
     let t_swarm_detected = {
         let (mut rr, rn, rl, rt) = reload(&serde_json::from_str::<Value>(&payload_str).unwrap());
@@ -291,33 +357,25 @@ fn main() {
         !vt.fully_proven && !vt.n17_chain.intact
     };
 
-    // ── 5) COÛT : latence de seal_n17 + verify_run_offline (sur run sain relu). On
-    //    RESCELLE à chaque tour (pour mesurer seal), d'où les feuilles/racine ignorées ici.
-    let (rr, rn, _rl, _rt) = reload(&serde_json::from_str::<Value>(&payload_str).unwrap());
-    let mut seal_ns = Vec::with_capacity(RUNS);
-    let mut verify_ns = Vec::with_capacity(RUNS);
-    for i in 0..(RUNS + WARMUP) {
-        let t0 = Instant::now();
-        let s = seal_n17(&rn, &key);
-        let d_seal = t0.elapsed().as_nanos() as f64;
-        let t1 = Instant::now();
-        let _ = verify_run_offline(&rr, &rn, &s.leaf_hashes, s.n17_root, &key);
-        let d_verify = t1.elapsed().as_nanos() as f64;
-        if i >= WARMUP {
-            seal_ns.push(d_seal);
-            verify_ns.push(d_verify);
-        }
-    }
-    let mean = |xs: &[f64]| xs.iter().sum::<f64>() / xs.len() as f64;
-    let us = |ns: f64| ns / 1000.0;
-    let seal_us = us(mean(&seal_ns));
-    let verify_us = us(mean(&verify_ns));
-    let verify_us_per_record = verify_us / n17_count.max(1) as f64;
+    // ── 5) COÛT (§8.1 ③) : BALAYAGE de charge N ∈ {1, 10, 100} appels — la COURBE, pas un
+    //    point. Confirme la linéarité O(records) et que le budget tient jusqu'à N=100.
+    //    Chaque point : (n, seal_us/run, verify_us/run, verify_us/record, octets/forensique).
+    let sweep: Vec<(usize, f64, f64, f64, f64)> = N_SWEEP
+        .iter()
+        .map(|&n| {
+            let (seal_us, verify_us, vpr, bpr) = measure_cost(n);
+            (n, seal_us, verify_us, vpr, bpr)
+        })
+        .collect();
+    // point de référence pour le résumé (le plus grand N = le pire cas de coût/record).
+    let (_, seal_us, verify_us, verify_us_per_record, _) = *sweep.last().unwrap();
 
     // ── verdict. ─────────────────────────────────────────────────────────────────
     let all_tamper = t_field_detected && t_field_localized && t_swarm_detected && t_leaf_detected && t_drop_detected;
-    let cost_ok = bytes_per_record <= BYTES_PER_RECORD_BUDGET && verify_us_per_record <= VERIFY_US_PER_RECORD_BUDGET;
-    let go = round_trip_proven && mode_a_proven && all_tamper && cost_ok;
+    // cost_ok : octets/forensique ET latence/record sous budget à CHAQUE point de charge.
+    let cost_ok = bytes_per_record <= BYTES_PER_RECORD_BUDGET
+        && sweep.iter().all(|(_, _, _, vpr, bpr)| *vpr <= VERIFY_US_PER_RECORD_BUDGET && *bpr <= BYTES_PER_RECORD_BUDGET);
+    let go = round_trip_proven && mode_a_proven && all_tamper && verify_offline_ok && cost_ok;
     let verdict = if go { "GO ✅ — la forensique N17 est durable, re-prouvable hors ligne, et infalsifiable" } else { "NO-GO ❌" };
 
     println!("\n ALLER-RETOUR (I-PN1) — survie à la mort du process :");
@@ -328,19 +386,43 @@ fn main() {
     println!("   pont : Mode C cohérents={} · non liés={} · rompus={}", v.bridge.consistent, v.bridge.unlinked, v.bridge.broken);
     println!("\n MODE A (no-op) : keyless trivialement re-prouvé = {mode_a_proven}");
     println!("\n FALSIFICATIONS (toutes doivent être détectées) :");
-    println!("   (a) champ forensique muté : détecté={t_field_detected} · LOCALISÉ={t_field_localized}");
+    println!("   (a) CHAQUE champ forensique muté (§8.1 ②) :");
+    for (label, d, l) in &field_results {
+        println!("        {label:<18} détecté={d} · LOCALISÉ={l}");
+    }
     println!("   (b) record d'essaim muté  : détecté={t_swarm_detected}");
     println!("   (c) feuille N17 forgée    : détecté={t_leaf_detected}");
     println!("   (d) record N17 retiré     : détecté={t_drop_detected}");
-    println!("\n COÛT (re-preuve hors ligne, {RUNS} runs) :");
-    println!("   seal_n17            : {seal_us:.1} µs / run");
-    println!("   verify_run_offline  : {verify_us:.1} µs / run  ·  {verify_us_per_record:.1} µs / record (budget {VERIFY_US_PER_RECORD_BUDGET:.0} µs)");
+    println!("\n VÉRIFICATEUR TIERS (verify_offline, verdict → code de sortie) :");
+    println!("   export sain      → prouvé={vo_healthy_proven} (exit 0)");
+    println!("   export falsifié  → prouvé={vo_tampered_proven} (exit 1) · localisé={}", vo_tampered_localized.as_deref().unwrap_or("∅"));
+    println!("\n COÛT (§8.1 ③ — balayage N ∈ {{1,10,100}}, {RUNS} runs/point) :");
+    println!("   {:<5} {:>12} {:>14} {:>16} {:>16}", "N", "seal µs/run", "verify µs/run", "verify µs/rec", "octets/rec");
+    for (n, s, vr, vpr, bpr) in &sweep {
+        println!("   {n:<5} {s:>12.1} {vr:>14.1} {vpr:>16.1} {bpr:>16.0}");
+    }
+    println!("   budgets : ≤ {VERIFY_US_PER_RECORD_BUDGET:.0} µs/record · ≤ {BYTES_PER_RECORD_BUDGET:.0} o/forensique (tenus à chaque N)");
 
     println!("\n────────────────────────── VERDICT LOT N17PERSIST ──────────────────────────");
     println!(" {verdict}");
     println!("────────────────────────────────────────────────────────────────────────────");
 
     // ── persiste l'artefact (format des Lots P4/P5). ─────────────────────────────
+    // détail par-champ de la falsification forensique (§8.1 ②) et courbe de coût (§8.1 ③).
+    let forensic_fields: serde_json::Map<String, Value> = field_results
+        .iter()
+        .map(|(label, d, l)| (label.to_string(), json!({ "detected": d, "localized": l })))
+        .collect();
+    let sweep_json: Vec<Value> = sweep
+        .iter()
+        .map(|(n, s, vr, vpr, bpr)| json!({
+            "n": n,
+            "seal_us_per_run": s,
+            "verify_offline_us_per_run": vr,
+            "verify_offline_us_per_record": vpr,
+            "bytes_per_record": bpr,
+        }))
+        .collect();
     let payload = json!({
         "_note": "Appels LLM SYNTHÉTIQUES (forensique fabriquée) ; crypto (BLAKE3+SHA256+HMAC+HKDF) + seal_n17/verify_run_offline RÉELS. Persistance éprouvée par aller-retour serde JSON (frontière JSONB du store).",
         "mode_c_calls": MODE_C_CALLS,
@@ -358,15 +440,24 @@ fn main() {
         "tamper_detection": {
             "forensic_field_mutated_detected": t_field_detected,
             "forensic_field_mutated_localized": t_field_localized,
+            "forensic_fields": Value::Object(forensic_fields),
             "swarm_record_mutated_detected": t_swarm_detected,
             "leaf_forged_detected": t_leaf_detected,
             "n17_record_dropped_detected": t_drop_detected,
             "all_detected": all_tamper
         },
+        "verify_offline_cli": {
+            "healthy_proven": vo_healthy_proven,
+            "tampered_model_id_proven": vo_tampered_proven,
+            "tampered_localized_provenance": vo_tampered_localized,
+            "ok": verify_offline_ok,
+            "_note": "verdict mappé par le binaire verify_offline en code de sortie : sain→0, falsifié→1 (faute localisée). Export falsifié émis : scripts/swarm/n17_sample_export.TAMPERED.json"
+        },
         "cost": {
             "seal_us_per_run": seal_us,
             "verify_offline_us_per_run": verify_us,
-            "verify_offline_us_per_record": verify_us_per_record
+            "verify_offline_us_per_record": verify_us_per_record,
+            "sweep": sweep_json
         },
         "budgets": { "bytes_per_record": BYTES_PER_RECORD_BUDGET, "verify_us_per_record": VERIFY_US_PER_RECORD_BUDGET },
         "verdict": verdict,

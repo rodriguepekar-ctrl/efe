@@ -13,11 +13,21 @@
 //! Il ne *croit* ni le serveur ni le store : il **re-prouve**. Code de sortie `0` ⇔ tout
 //! est re-prouvé ; `1` sinon (et la 1ʳᵉ faute est localisée).
 //!
-//! **Clé** : ici on dérive la clé via `HmacKeySource::test_key()` (la source de DEV, comme
-//! la passerelle hors `EFE_NANO_AUDIT_HMAC_MASTER`). En prod, le tiers branche sa copie du
-//! master HKDF ; la mécanique de re-preuve est identique — seule la source de clé change.
+//! **Clé** (le pilier « deux fichiers + UNE clé ») : la source est choisie à l'exécution.
+//!   - **Production** : exportez votre copie du master HKDF tenant dans
+//!     `EFE_NANO_AUDIT_HMAC_MASTER` → le binaire dérive via `HmacKeySource::EnvHkdf` (la lib
+//!     lit le master au moment du `derive`, comme la passerelle ; la clé ne transite pas ici).
+//!   - **Dév/démo** : sans cette variable, repli sur `HmacKeySource::test_key()` AVEC un
+//!     avertissement — n'authentifie PAS un export de production (faux négatif attendu).
+//!
+//! La mécanique de re-preuve est identique ; seule la source de clé change.
 //!
 //! Usage :
+//!   # export de PRODUCTION (régulateur) :
+//!   EFE_NANO_AUDIT_HMAC_MASTER=<votre-master> \
+//!     cargo run --release --example verify_offline -p efe-swarm-provenance -- \
+//!       records.json n17.json <tenant>
+//!   # démo sur les fichiers d'exemple (clé DEV) :
 //!   cargo run --release --example verify_offline -p efe-swarm-provenance -- \
 //!       scripts/swarm/n17_sample_records.json scripts/swarm/n17_sample_export.json [tenant]
 //!
@@ -105,7 +115,11 @@ fn main() -> ExitCode {
         }
     };
 
-    // ── 2) dériver la clé tenant (source DEV ; en prod : copie du master HKDF). ───────
+    // ── 2) dériver la clé tenant. SOURCE configurable (le pilier « deux fichiers + UNE clé ») :
+    //   - si `EFE_NANO_AUDIT_HMAC_MASTER` est défini → `EnvHkdf` (le chemin PROD : le régulateur
+    //     branche SA copie du master HKDF, lue par la lib au moment du derive — jamais ici) ;
+    //   - sinon → repli DEV `test_key()` AVEC un avertissement (n'authentifie PAS un export prod).
+    // Sans ça, le binaire dériverait toujours le master DEV → faux négatif sur des données réelles.
     let tenant = match tenant_of(tenant_str) {
         Ok(t) => t,
         Err(e) => {
@@ -113,7 +127,16 @@ fn main() -> ExitCode {
             return ExitCode::from(2);
         }
     };
-    let key = match HmacKeySource::test_key().derive(tenant) {
+    let src = if std::env::var("EFE_NANO_AUDIT_HMAC_MASTER").is_ok() {
+        HmacKeySource::EnvHkdf
+    } else {
+        eprintln!(
+            "⚠ clé DEV (test_key) : EFE_NANO_AUDIT_HMAC_MASTER absent. Pour vérifier un export de \
+             PRODUCTION, exportez votre copie du master HKDF tenant dans cette variable."
+        );
+        HmacKeySource::test_key()
+    };
+    let key = match src.derive(tenant) {
         Ok(k) => k,
         Err(e) => {
             eprintln!("dérivation de clé : {e}");
