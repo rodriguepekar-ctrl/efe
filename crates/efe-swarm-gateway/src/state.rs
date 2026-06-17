@@ -371,6 +371,11 @@ impl SwarmGatewayState {
     /// master **public** → la re-preuve (`verify`) serait **forgeable**. Cette clé **signe**
     /// la chaîne ; elle n'est **jamais** transmise ni une clé d'auth provider.
     pub fn with_keys(mut self, keys: HmacKeySource) -> Self {
+        // ADR-019 : le store mémoire par défaut HÉRITE de la nouvelle source de clé — sinon, le
+        // chemin prod `in_memory().with_keys(EnvHkdf)` laisserait la mémoire scellée sous le
+        // test_key d'in_memory() (memory_root incohérent avec `derive_key`). Un
+        // `with_memory_store(custom)` APRÈS `with_keys` reste souverain (override explicite).
+        self.memory = Arc::new(InMemoryMemoryStore::with_keys(keys.clone()));
         self.keys = keys;
         self
     }

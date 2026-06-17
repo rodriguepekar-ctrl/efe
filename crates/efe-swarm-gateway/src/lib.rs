@@ -723,6 +723,69 @@ mod tests {
         assert!(txt.contains("efe_swarm_gateway_memory_learns_total"), "compteur learns exposé");
     }
 
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn replay_r1_repins_memory_and_reproduces_warm_started_run() {
+        // ADR-019 (MEM-3, extension R1 d'ADR-017) : un run warm-starté par la mémoire se REPRODUIT
+        // via R1 quand le caller ré-épingle l'instantané (famille + version). Sans le ré-épinglage,
+        // R1 repartirait du k_min par défaut (4) → un multiset de générateurs différent (6 vs 4) →
+        // task_mismatch ; AVEC, il lit le MÊME instantané → MÊME warm-start (6) → sorties reproduites.
+        use efe_swarm_memory::{family_key, FamilyMode, MemoryUpdate, RunSummary as MR};
+        let (app, state) = app();
+        let tenant = efe_nano_sdk::TenantId::system().to_string();
+        let task = json!({ "text": "x", "expected": "x" });
+        let family = family_key(
+            &task,
+            "consensus",
+            &["const_generator".into(), "consistency".into(), "j_non_empty".into()],
+            FamilyMode::Structural,
+        );
+        // seed : 4 runs passés à K=6 → le prior suggère 6.
+        for r in 0u128..4 {
+            state
+                .memory
+                .fold(&tenant, MemoryUpdate { run_id: uuid::Uuid::from_u128(0x7000 + r), family: family.clone(), summary: MR::clean(6) })
+                .await
+                .unwrap();
+        }
+        let topo = json!({
+            "kind": "consensus", "generator": "const_generator",
+            "judges": ["consistency", "j_non_empty"],
+            "k": { "min": 4, "max": 24, "agreement": 0.9 }
+        });
+        // run avec recall (warm-start k_min=6), learn:false (ne bouge pas le prior).
+        let run_resp = app
+            .clone()
+            .oneshot(post_run(json!({ "task": task, "topology": topo, "memory": { "recall": true, "learn": false } })))
+            .await
+            .unwrap();
+        let rv = body_json(run_resp).await;
+        let run_id = rv["run_id"].as_str().unwrap().to_string();
+        assert_eq!(rv["run"]["memory"]["warm_start_k_min"], json!(6), "warm-start appliqué (K=6)");
+        let version = rv["run"]["memory"]["version"].as_u64().unwrap();
+        assert_eq!(version, 4, "instantané = 4 replis seedés");
+
+        // R1 AVEC ré-épinglage (famille + version) → MÊME instantané → reproduit.
+        let r1 = app
+            .oneshot(replay_post(
+                &run_id,
+                json!({
+                    "task": task, "topology": topo,
+                    "memory": { "recall": true, "learn": false, "family": family.as_str(), "pin_version": version }
+                }),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(r1.status(), StatusCode::OK);
+        let v = body_json(r1).await;
+        assert_eq!(v["execution"]["ran"], json!(true), "R1 a re-exécuté");
+        assert_eq!(v["execution"]["task_mismatch"], json!(false), "même multiset de générateurs (re-pin)");
+        assert_eq!(
+            v["execution"]["outputs_reproduced"],
+            json!(true),
+            "R1 ré-épingle l'instantané → reproduit le run warm-starté (I-MEM7)"
+        );
+    }
+
     /// **E2E self-host RÉEL** (Ollama local, keyless). Ignoré par défaut (CI sans modèle) ;
     /// `ollama serve` + `gemma3:12b` requis. La passerelle exécute un consensus LLM par
     /// HTTP, persiste les records, puis re-prouve via `verify/:id`.

@@ -21,7 +21,7 @@ use axum::http::{header, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::Json;
 use efe_swarm_provenance::{deterministic_order, replay, verify_run_offline, AgentCallRecord, AgentKind, AgentRole};
-use efe_swarm_sdk::LlmProvenanceRecord;
+use efe_swarm_sdk::{LlmProvenanceRecord, MemoryHandle};
 use serde_json::json;
 use uuid::Uuid;
 
@@ -224,12 +224,22 @@ pub async fn post_replay(
     };
     let _permit = permit; // tenu pendant toute la re-exécution (libéré au retour)
     let width = req.width;
+    // ADR-019 (MEM-3, extension R1 d'ADR-017) : R1 peut RÉ-ÉPINGLER la mémoire du run d'origine.
+    // Le caller re-fournit `memory{recall, family, pin_version}` (la famille + la version
+    // consignées dans le record MemoryRead du run stocké) → la re-exécution lit le MÊME
+    // instantané gelé → reproduit le warm-start, donc les sorties (I-MEM7). Le repli est FORCÉ
+    // OFF : un rejeu ne mute JAMAIS la mémoire (lecture seule, sinon R1 polluerait ce qu'il rejoue).
+    let memory_handle = req.memory.as_ref().map(|m| {
+        let mut cfg = m.to_config();
+        cfg.learn = false;
+        MemoryHandle::with_config(s.memory.clone(), cfg)
+    });
     let (task, spec, mut budget, mode) = req.into_parts()?;
     let (mode, allow_remote, price_override) = s.resolve_mode(mode)?;
     if let Some(price) = price_override {
         budget.price_per_call_cents.get_or_insert(price);
     }
-    let execution = match s.swarm_for(&caller.tenant, mode, allow_remote, width) {
+    let execution = match s.swarm_for(&caller.tenant, mode, allow_remote, width).map(|sw| sw.with_memory(memory_handle)) {
         Ok(swarm) => match swarm.run_traced(task, spec, budget).await {
             Ok(outcome) => {
                 let fresh = outcome.records();

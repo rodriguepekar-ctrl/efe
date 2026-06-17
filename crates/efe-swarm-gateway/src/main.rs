@@ -57,7 +57,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let pg = efe_swarm_gateway::PgRunStore::connect(&url).await?;
         pg.migrate().await?;
         state = state.with_store(std::sync::Arc::new(pg));
-        println!("→ PgRunStore câblé (persistance durable, write-once).");
+        // ADR-019 (MEM-3) : la mémoire inter-runs partage le backend durable + la MÊME source
+        // de clé tenant que le reste (sinon le memory_root serait scellé sous une autre clé).
+        let pg_mem = efe_swarm_gateway::PgMemoryStore::connect(&url, state.keys.clone()).await?;
+        pg_mem.migrate().await?;
+        state = state.with_memory_store(std::sync::Arc::new(pg_mem));
+        println!("→ PgRunStore + PgMemoryStore câblés (persistance durable, write-once).");
     }
 
     // ── Prod (feature `oidc`) : auth JWT OIDC ES256 (clé PUBLIQUE server-side) ───
