@@ -151,6 +151,35 @@ pub struct SwarmRun {
     /// Résumé du pont N17 par-appel (records LLM forensiques + cohérence des liens). `None`
     /// en keyless (Mode A).
     pub n17: Option<N17Summary>,
+    /// **ADR-019 (MEM-2)** : l'interaction mémoire inter-runs du run (recall + learn). `None`
+    /// si la mémoire est désactivée (chemin historique, I-MEM8). Quand `Some`, dit : la famille
+    /// lue, la version + `content_hash` de l'**instantané gelé** (l'épingle, tracée aussi dans
+    /// la `provenance_root` via le record MemoryRead, I-MEM2), le warm-start `k_min` appliqué
+    /// (borné, I-MEM4), et si le run a **replié** en mémoire (gardé par `is_clean()`, I-MEM3).
+    #[serde(default)]
+    pub memory: Option<MemorySummary>,
+}
+
+/// **ADR-019 (MEM-2)** — l'interaction mémoire d'un run : ce qui a été lu (recall) et écrit
+/// (learn). Le miroir, côté mémoire, de [`N17Summary`] pour la forensique LLM. Sérialisé dans
+/// la réponse du run + le flux ; rend l'apprentissage **visible** (comme ADR-018 a rendu la
+/// terminaison visible).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct MemorySummary {
+    /// Un instantané a-t-il été lu (recall activé + famille résolue) ?
+    pub recalled: bool,
+    /// La famille de tâche (empreinte hex) — l'index de la mémoire consultée.
+    pub family: String,
+    /// La version de l'instantané lu (= nombre de replis pliés ; 0 = famille neuve).
+    pub version: u64,
+    /// Le `content_hash` (hex) de l'instantané gelé — **l'épingle** (I-MEM1) ; identique à ce
+    /// qu'ancre le record MemoryRead dans la racine, et ce que R1 ré-épinglera (I-MEM7).
+    pub content_hash: String,
+    /// Le `k_min` effectivement amorcé par la mémoire (borné aux bornes du run, I-MEM4).
+    /// `None` ⇒ pas d'amorce (pas de donnée, ou topologie non adaptative).
+    pub warm_start_k_min: Option<usize>,
+    /// Le run a-t-il **replié** en mémoire (propre + verified + learn activé) — I-MEM3 ?
+    pub learned: bool,
 }
 
 impl SwarmRun {

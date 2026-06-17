@@ -38,10 +38,28 @@ pub(crate) struct Resolver<'a> {
     /// coopérative descendue dans les topologies adaptatives. `None` ⇒ aucun deadline
     /// (chemin historique inchangé — zéro surcoût, aucune sonde branchée).
     pub deadline: Option<Arc<DeadlineGuard>>,
+    /// **ADR-019 (MEM-2, I-MEM4)** : warm-start de `k_min` suggéré par la mémoire (prior de
+    /// taille), déjà clampé aux bornes du run par `run_traced`. `Some(k)` ⇒ le sizer adaptatif
+    /// démarre près du K historique ; `None` ⇒ départ standard (aucune mémoire / pas de donnée).
+    /// La mémoire AMORCE, ne gouverne jamais : `warm_start_k_min` re-clampe par sécurité.
+    pub memory_k_min: Option<usize>,
 }
 
 fn aid(s: &str) -> AgentId {
     AgentId::new(s).expect("agent id SDK valide")
+}
+
+impl Resolver<'_> {
+    /// **I-MEM4** : le `k_min` effectif après warm-start mémoire — l'amorce, **bornée** à
+    /// `[k_min, k_max]`. Sans mémoire (ou hors données), renvoie le `k_min` d'origine inchangé.
+    /// Défense en profondeur : même si l'amorce était hors bornes, le `clamp` la ramène — la
+    /// mémoire ne peut JAMAIS pousser `k_min` au-delà de `k_max` ni sous le plancher du run.
+    pub fn warm_start_k_min(&self, k_min: usize, k_max: usize) -> usize {
+        match self.memory_k_min {
+            Some(w) => w.clamp(k_min, k_max),
+            None => k_min,
+        }
+    }
 }
 
 impl Resolver<'_> {

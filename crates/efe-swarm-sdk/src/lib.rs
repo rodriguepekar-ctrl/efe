@@ -51,6 +51,7 @@ mod resolver;
 pub mod budget;
 pub mod deadline;
 pub mod client;
+pub mod memory;
 pub mod observer;
 pub mod result;
 pub mod sdk;
@@ -63,11 +64,19 @@ pub use deadline::DeadlineGuard;
 pub use n17::LlmProvenanceCollector;
 pub use observer::{AgentCall, SwarmObserver};
 pub use result::{
-    Accounting, BackendInfo, N17Summary, ProvenanceSummary, QualitySummary, RunOutcome,
-    RunTermination, SwarmError, SwarmRun,
+    Accounting, BackendInfo, MemorySummary, N17Summary, ProvenanceSummary, QualitySummary,
+    RunOutcome, RunTermination, SwarmError, SwarmRun,
 };
+pub use memory::{MemoryConfig, MemoryHandle};
 pub use sdk::{Swarm, SwarmBuilder};
 pub use spec::{KSpec, TopologySpec};
+
+// **ADR-019 (MEM-2)** : la mémoire inter-runs — réexports pratiques (la passerelle s'appuiera
+// dessus en MEM-3) pour brancher un store + re-prouver la chaîne sans dépendre du crate.
+pub use efe_swarm_memory::{
+    family_key, seal_memory, verify_memory, FamilyKey, FamilyMode, InMemoryMemoryStore, MemError,
+    MemoryStore, MemoryUpdate, RunSummary as MemoryRunSummary,
+};
 
 // Réexports pratiques (la passerelle HTTP s'appuie dessus pour persister + re-prouver).
 pub use efe_swarm_provenance::{

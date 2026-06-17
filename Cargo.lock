@@ -2918,6 +2918,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "efe-swarm-memory"
+version = "0.0.1"
+dependencies = [
+ "async-trait",
+ "efe-nano-sdk",
+ "efe-swarm-provenance",
+ "serde",
+ "serde_json",
+ "tokio",
+ "uuid",
+]
+
+[[package]]
 name = "efe-swarm-orchestrator"
 version = "0.0.1"
 dependencies = [
@@ -2961,11 +2974,13 @@ dependencies = [
  "async-trait",
  "efe-blackboard",
  "efe-nano-sdk",
+ "efe-swarm-memory",
  "efe-swarm-provenance",
  "efe-swarm-topology",
  "serde",
  "serde_json",
  "tokio",
+ "uuid",
 ]
 
 [[package]]

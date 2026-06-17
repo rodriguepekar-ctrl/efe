@@ -18,6 +18,7 @@ use crate::n17::LlmProvenanceCollector;
 use crate::client::{ClientMode, WidthSpec};
 use crate::observer::{SwarmObserver, TeeSink};
 use crate::resolver::Resolver;
+use crate::memory::MemoryHandle;
 use crate::result::{Accounting, ProvenanceSummary, RunOutcome, RunTermination, SwarmError, SwarmRun};
 use crate::spec::TopologySpec;
 
@@ -52,6 +53,10 @@ pub struct Swarm {
     /// Comme la largeur, c'est une politique d'**exécution** ; mais à la différence d'elle,
     /// le deadline PEUT tronquer la sortie (le temps est un plafond, pas un simple réglage).
     deadline: Option<std::time::Duration>,
+    /// **ADR-019 (MEM-2)** : la poignée de mémoire inter-runs (store + politique recall/learn).
+    /// `Some` ⇒ le run lit un instantané gelé (warm-start + trace MemoryRead) et replie s'il
+    /// est propre. `None` (défaut) ⇒ mémoire OFF, run byte-identique au chemin historique (I-MEM8).
+    memory: Option<crate::memory::MemoryHandle>,
 }
 
 impl Swarm {
@@ -127,6 +132,30 @@ impl Swarm {
             OnExceed::Stop => spec,
         };
 
+        // 0.b — ADR-019 (MEM-2) : RECALL. Si la mémoire est branchée, on calcule la FamilyKey
+        // de la tâche et on lit un INSTANTANÉ GELÉ (lecture seule, tenant-scopé). La famille
+        // sert au recall ET au learn ; le warm-start de `k_min` n'est extrait que sur le chemin
+        // ADAPTATIF et sera CLAMPÉ aux bornes du run par le resolver (I-MEM4 — la mémoire
+        // amorce, ne gouverne jamais). `None` (mémoire OFF) ⇒ chemin historique inchangé (I-MEM8).
+        let mem = self.memory.clone();
+        let tenant_str = self.tenant.to_string();
+        let mut mem_family: Option<efe_swarm_memory::FamilyKey> = None;
+        let mut mem_snapshot: Option<efe_swarm_memory::MemorySnapshot> = None;
+        let mut mem_warm_k_min: Option<usize> = None;
+        if let Some(h) = &mem {
+            let family = crate::memory::family_for(&task, &spec, &h.config);
+            if h.config.recall {
+                if let Ok(snap) = h.store.snapshot(&tenant_str, &family).await {
+                    mem_warm_k_min = spec
+                        .adaptive_bounds()
+                        .and_then(|(lo, hi)| snap.cells.size.suggested_k_min(lo as u32, hi as u32))
+                        .map(|k| k as usize);
+                    mem_snapshot = Some(snap);
+                }
+            }
+            mem_family = Some(family);
+        }
+
         // 1. mode → backend d'agents + nature (Mode A flotte / Mode C self-host). En
         //    self-host, le garde-fou souveraineté (G2) REFUSE un endpoint non-local par
         //    défaut (egress interdit) ; le backend est enveloppé d'un circuit-breaker (G3).
@@ -183,6 +212,15 @@ impl Swarm {
             ctx = ctx.with_event_tap(tap); // Inc.3 : trafic inter-agent → dashboard
         }
 
+        // 2.a — ADR-019 (I-MEM2) : trace la LECTURE mémoire dans la chaîne de provenance. Le
+        // record MemoryRead (rôle Memory, lecture pure) ancre dans la `provenance_root` la
+        // famille, la version et le `content_hash` de l'instantané lu : la racine DÉPEND donc
+        // de ce qui a été recall-é (une sortie influencée par un recall non tracé serait
+        // invalide). N'est émis que si un instantané a réellement été lu (recall ON).
+        if let (Some(snap), Some(family)) = (&mem_snapshot, &mem_family) {
+            recorder.capture(crate::memory::memory_read_capture(family, snap, mem_warm_k_min));
+        }
+
         // 2.b — ADR-014 (CP-1) : résout la LARGEUR d'exécution du run, par mode
         // (Mode A : cœurs mesurés ; Mode C : capacité déclarée du backend ; env
         // EFE_SWARM_WIDTH prioritaire). Descendue dans chaque topologie au resolve.
@@ -195,7 +233,14 @@ impl Swarm {
         let deadline = self.deadline.map(|d| Arc::new(DeadlineGuard::new(d)));
 
         // 3. assemble la topologie (agents flotte OU LLM, enveloppés) + exécute.
-        let resolver = Resolver { fleet: &self.fleet, backend, meter, width, deadline: deadline.clone() };
+        let resolver = Resolver {
+            fleet: &self.fleet,
+            backend,
+            meter,
+            width,
+            deadline: deadline.clone(),
+            memory_k_min: mem_warm_k_min, // ADR-019 (I-MEM4) : warm-start borné dans resolve()
+        };
         let topo = spec.resolve(&resolver)?;
         let topo_name = topo.name().to_string();
         if let Some(o) = &self.observer {
@@ -285,7 +330,7 @@ impl Swarm {
             RunTermination::Completed
         };
 
-        let run = SwarmRun {
+        let mut run = SwarmRun {
             output: out.output,
             topology: topo_name,
             accounting: Accounting {
@@ -303,7 +348,40 @@ impl Swarm {
             termination,
             backend: backend_info,
             n17: n17_summary,
+            memory: None, // ADR-019 (MEM-2) : rempli juste après (recall + learn).
         };
+
+        // ── ADR-019 (MEM-2) : LEARN + résumé mémoire ────────────────────────────────────
+        // La PORTE I-MEM3 : on ne replie QUE si le run est `is_clean()` (Completed ∧ verified
+        // — la même condition qu'ADR-018). Un run tronqué (budget/deadline) ou non re-prouvé
+        // est mis en quarantaine : il ne pollue pas la mémoire. Un échec de repli est
+        // best-effort (la mémoire n'est pas le moat) : il n'invalide pas le run.
+        if let Some(h) = &mem {
+            let mut learned = false;
+            if h.config.learn && run.is_clean() {
+                if let Some(family) = &mem_family {
+                    let update = efe_swarm_memory::MemoryUpdate {
+                        run_id: swarm_id.as_uuid(),
+                        family: family.clone(),
+                        summary: crate::memory::summary_from_run(&run),
+                    };
+                    if let Ok(outcome) = h.store.fold(&tenant_str, update).await {
+                        learned = outcome.folded;
+                    }
+                }
+            }
+            // Le résumé mémoire — VISIBLE (comme la terminaison d'ADR-018) : ce qui a été lu
+            // (recall + l'épingle content_hash) et écrit (learned).
+            run.memory = Some(crate::result::MemorySummary {
+                recalled: mem_snapshot.is_some(),
+                family: mem_family.as_ref().map(|f| f.as_str().to_string()).unwrap_or_default(),
+                version: mem_snapshot.as_ref().map(|s| s.version).unwrap_or(0),
+                content_hash: mem_snapshot.as_ref().map(|s| s.content_hash_hex()).unwrap_or_default(),
+                warm_start_k_min: mem_warm_k_min,
+                learned,
+            });
+        }
+
         if let Some(o) = &self.observer {
             o.on_finish(&run);
         }
@@ -349,6 +427,7 @@ pub struct SwarmBuilder {
     require_healthy_backend: bool,
     width: WidthSpec,
     deadline: Option<std::time::Duration>,
+    memory: Option<MemoryHandle>,
 }
 
 impl Default for SwarmBuilder {
@@ -367,6 +446,7 @@ impl Default for SwarmBuilder {
             require_healthy_backend: false,
             width: WidthSpec::Auto, // ADR-014 : cœurs (Mode A) / backend déclaré (Mode C)
             deadline: None, // ADR-018 : aucun deadline par défaut (chemin historique)
+            memory: None, // ADR-019 : mémoire OFF par défaut (chemin historique, I-MEM8)
         }
     }
 }
@@ -455,6 +535,13 @@ impl SwarmBuilder {
         self
     }
 
+    /// **ADR-019 (MEM-2)** : branche la mémoire inter-runs (store + politique recall/learn).
+    /// Sans cet appel, la mémoire est OFF (chemin historique, I-MEM8).
+    pub fn memory(mut self, handle: MemoryHandle) -> Self {
+        self.memory = Some(handle);
+        self
+    }
+
     /// Construit le `Swarm` (dérive la clé de provenance par tenant).
     pub fn build(self) -> Result<Swarm, SwarmError> {
         let key = self.key_source.derive(self.tenant).map_err(|e| SwarmError::KeyError(e.to_string()))?;
@@ -472,6 +559,7 @@ impl SwarmBuilder {
             require_healthy_backend: self.require_healthy_backend,
             width: self.width,
             deadline: self.deadline,
+            memory: self.memory,
         })
     }
 }
@@ -855,5 +943,148 @@ mod tests {
         assert!(deadline_run.termination.is_deadline(), "plafond temps → variant deadline : {:?}", deadline_run.termination);
         assert_ne!(deadline_run.termination, RunTermination::BudgetStopped, "le temps n'est pas confondu avec le coût");
         assert_ne!(deadline_run.termination, RunTermination::Completed, "le run a bien été tronqué");
+    }
+
+    // ════════════════════════════════════════════════════════════════════════════════
+    //  ADR-019 (MEM-2) — RECALL / LEARN dans run_traced (gardiens I-MEM côté run)
+    // ════════════════════════════════════════════════════════════════════════════════
+
+    use efe_swarm_memory::{
+        family_key, FamilyMode, InMemoryMemoryStore, MemoryStore, MemoryUpdate,
+        RunSummary as MemRunSummary,
+    };
+
+    /// La famille telle que le SDK la calcule pour un consensus (kind + [generator]+judges).
+    fn consensus_family(task: &serde_json::Value, generator: &str, judges: &[&str]) -> efe_swarm_memory::FamilyKey {
+        let mut agents = vec![generator.to_string()];
+        agents.extend(judges.iter().map(|s| s.to_string()));
+        family_key(task, "consensus", &agents, FamilyMode::Structural)
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn memory_off_is_the_historical_path() {
+        // I-MEM8 : sans mémoire, run.memory == None (et tout le reste inchangé).
+        let run = Swarm::keyless()
+            .run(json!({ "text": "x", "expected": "x" }), TopologySpec::Auto, Budget::cents(100))
+            .await
+            .unwrap();
+        assert!(run.memory.is_none(), "mémoire OFF par défaut → aucune interaction mémoire");
+        assert!(run.is_clean());
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn recall_traces_a_memory_read_in_the_root() {
+        // I-MEM2 : un run avec recall émet un record MemoryRead (rôle Memory) dans la chaîne,
+        // et le run reste re-prouvé (le record de lecture n'invalide pas la racine).
+        let store = std::sync::Arc::new(InMemoryMemoryStore::new());
+        let swarm = Swarm::builder()
+            .memory(MemoryHandle::with_config(store, crate::memory::MemoryConfig::recall_only()))
+            .build()
+            .unwrap();
+        let outcome = swarm
+            .run_traced(
+                json!({ "text": "hello", "expected": "hello" }),
+                TopologySpec::consensus("echo_generator", &["consistency", "j_non_empty"], 3),
+                Budget::cents(1000),
+            )
+            .await
+            .unwrap();
+        assert!(outcome.run.provenance.verified, "le MemoryRead n'invalide pas la preuve");
+        let has_memory_read = outcome
+            .records()
+            .iter()
+            .any(|r| r.agent_role == efe_swarm_provenance::AgentRole::Memory);
+        assert!(has_memory_read, "le recall est ANCRÉ dans la chaîne de provenance (I-MEM2)");
+        let m = outcome.run.memory.as_ref().expect("résumé mémoire présent");
+        assert!(m.recalled);
+        assert_eq!(m.version, 0, "famille neuve → instantané genèse v0");
+        assert_eq!(m.content_hash.len(), 64, "épingle content_hash présente (hex)");
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn recall_warm_starts_k_min_and_is_bounded() {
+        // I-MEM4 : la mémoire AMORCE k_min depuis le prior de taille, CLAMPÉ aux bornes du run.
+        let task = json!({ "text": "x", "expected": "x" });
+        let tenant = efe_nano_sdk::TenantId::system().to_string();
+        // const_generator renvoie une valeur IDENTIQUE par variant → accord = 1.0 → l'essaim
+        // s'arrête au k_min (amorcé) ; c'est ce qui rend le warm-start OBSERVABLE sur k_used.
+        let family = consensus_family(&task, "const_generator", &["consistency", "j_non_empty"]);
+
+        // (a) prior K=6 → warm-start = 6 (dans [4,24]) → accord → s'arrête à 6 (pas 4).
+        let store = std::sync::Arc::new(InMemoryMemoryStore::new());
+        for r in 0u128..4 {
+            let up = MemoryUpdate { run_id: uuid::Uuid::from_u128(0x6000 + r), family: family.clone(), summary: MemRunSummary::clean(6) };
+            store.fold(&tenant, up).await.unwrap();
+        }
+        let swarm = Swarm::builder()
+            .memory(MemoryHandle::with_config(store, crate::memory::MemoryConfig::recall_only()))
+            .build()
+            .unwrap();
+        let run = swarm
+            .run(task.clone(), TopologySpec::consensus_adaptive("const_generator", &["consistency", "j_non_empty"], 4, 24, 0.9), Budget::cents(1_000_000))
+            .await
+            .unwrap();
+        assert_eq!(run.memory.as_ref().unwrap().warm_start_k_min, Some(6), "warm-start = K historique");
+        assert_eq!(run.quality.candidates, 6, "echo agree → arrêt au k_min amorcé (6), pas au 4 d'origine");
+
+        // (b) prior ABSURDE K=100 → warm-start CLAMPÉ à k_max=24 (la mémoire ne gouverne pas).
+        let store2 = std::sync::Arc::new(InMemoryMemoryStore::new());
+        for r in 0u128..4 {
+            let up = MemoryUpdate { run_id: uuid::Uuid::from_u128(0x9000 + r), family: family.clone(), summary: MemRunSummary::clean(100) };
+            store2.fold(&tenant, up).await.unwrap();
+        }
+        let swarm2 = Swarm::builder()
+            .memory(MemoryHandle::with_config(store2, crate::memory::MemoryConfig::recall_only()))
+            .build()
+            .unwrap();
+        let run2 = swarm2
+            .run(task, TopologySpec::consensus_adaptive("const_generator", &["consistency", "j_non_empty"], 4, 24, 0.9), Budget::cents(1_000_000))
+            .await
+            .unwrap();
+        assert_eq!(run2.memory.as_ref().unwrap().warm_start_k_min, Some(24), "amorce BORNÉE à k_max (I-MEM4)");
+        assert_eq!(run2.quality.candidates, 24, "jamais au-delà de k_max, quoi que dise la mémoire");
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn learn_only_on_clean_runs() {
+        // I-MEM3 : un run propre replie ; un run tronqué (budget) NE replie PAS (quarantaine).
+        let store = std::sync::Arc::new(InMemoryMemoryStore::new());
+        let task = json!({ "text": "x", "expected": "x" });
+        let tenant = efe_nano_sdk::TenantId::system().to_string();
+        let family = consensus_family(&task, "echo_generator", &["consistency", "length_band", "j_non_empty"]);
+        let swarm = Swarm::builder().memory(MemoryHandle::new(store.clone())).build().unwrap();
+
+        // ① run propre → replié (la mémoire passe à v1).
+        let clean = swarm
+            .run(
+                task.clone(),
+                TopologySpec::consensus("echo_generator", &["consistency", "length_band", "j_non_empty"], 3),
+                Budget::cents(1000),
+            )
+            .await
+            .unwrap();
+        assert!(clean.is_clean());
+        assert!(clean.memory.as_ref().unwrap().learned, "run propre → replié");
+        assert_eq!(store.snapshot(&tenant, &family).await.unwrap().version, 1, "la mémoire a appris (v1)");
+
+        // ② run tronqué par le budget (Stop épuisé : 10 appels @ 1¢ > 4¢) → MÊME famille,
+        //    mais NON replié — la porte is_clean() met le run sale en quarantaine (I-MEM3).
+        let stopped = swarm
+            .run(
+                task.clone(),
+                TopologySpec::Consensus {
+                    generator: "echo_generator".into(),
+                    judges: vec!["consistency".into(), "length_band".into(), "j_non_empty".into()],
+                    k: 7.into(),
+                    pattern: Pattern::Borda,
+                    escalate: false,
+                },
+                Budget::cents(4).with_policy(OnExceed::Stop),
+            )
+            .await
+            .unwrap();
+        assert!(!stopped.is_clean(), "budget-stoppé → pas clean");
+        assert!(!stopped.memory.as_ref().unwrap().learned, "run tronqué → PAS replié (I-MEM3)");
+        assert_eq!(store.snapshot(&tenant, &family).await.unwrap().version, 1, "la mémoire n'a PAS bougé (toujours v1)");
     }
 }

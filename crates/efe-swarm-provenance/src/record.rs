@@ -52,6 +52,11 @@ pub enum AgentRole {
     Merger,
     Solver,
     Judge,
+    /// **ADR-019 (MEM-2)** : la **lecture de mémoire inter-runs** (recall). Pas un agent au
+    /// sens d'une topologie, mais un appel tracé : son record (un `MemoryRead`) ancre dans la
+    /// `provenance_root` ce qu'un run a LU de la mémoire (famille, version, `content_hash`) —
+    /// I-MEM2. Variant additif : aucun record déjà persisté ne le porte (rétro-compatible).
+    Memory,
 }
 
 impl AgentRole {
@@ -65,6 +70,7 @@ impl AgentRole {
             AgentRole::Merger => "merger",
             AgentRole::Solver => "solver",
             AgentRole::Judge => "judge",
+            AgentRole::Memory => "memory",
         }
     }
 }

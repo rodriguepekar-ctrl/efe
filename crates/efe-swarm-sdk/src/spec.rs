@@ -156,6 +156,48 @@ impl TopologySpec {
         }
     }
 
+    /// **ADR-019 (MEM-2)** : la signature de famille de la topologie — `(kind, agents)`.
+    /// Combinée à la tâche, elle forme la `FamilyKey` (l'empreinte qui regroupe les runs
+    /// « semblables »). Le kind ET le set d'agents font partie de l'identité de famille — un
+    /// même prompt jugé par d'autres juges est une autre famille.
+    pub fn family_signature(&self) -> (String, Vec<String>) {
+        match self {
+            TopologySpec::GenerateVerify { generator, verifier, .. } => {
+                ("generate_verify".into(), vec![generator.clone(), verifier.clone()])
+            }
+            TopologySpec::Pipeline { stages } => ("pipeline".into(), stages.clone()),
+            TopologySpec::Hierarchical { decomposer, solver, merger } => {
+                ("hierarchical".into(), vec![decomposer.clone(), solver.clone(), merger.clone()])
+            }
+            TopologySpec::Consensus { generator, judges, .. } => {
+                let mut a = vec![generator.clone()];
+                a.extend(judges.iter().cloned());
+                ("consensus".into(), a)
+            }
+            TopologySpec::Gossip { refiner, .. } => ("gossip".into(), vec![refiner.clone()]),
+            TopologySpec::Debate { generator, judges, .. } => {
+                let mut a = vec![generator.clone()];
+                a.extend(judges.iter().cloned());
+                ("debate".into(), a)
+            }
+            TopologySpec::Auto => ("auto".into(), Vec::new()),
+        }
+    }
+
+    /// **ADR-019 (MEM-2)** : les bornes adaptatives `(k_min, k_max)` si la topologie
+    /// échantillonne par vagues (consensus / generate-verify adaptatifs) ; `None` pour K fixe
+    /// ou non-vagues. Le warm-start mémoire de `k_min` n'a de sens — et n'est appliqué — que
+    /// sur ce chemin ; ailleurs, la mémoire n'influence pas le dimensionnement (I-MEM4).
+    pub fn adaptive_bounds(&self) -> Option<(usize, usize)> {
+        match self {
+            TopologySpec::GenerateVerify { k: KSpec::Adaptive { k_min, k_max, .. }, .. }
+            | TopologySpec::Consensus { k: KSpec::Adaptive { k_min, k_max, .. }, .. } => {
+                Some((*k_min, *k_max))
+            }
+            _ => None,
+        }
+    }
+
     /// Raccourci ADR-014 : un T1 à **quota vérifié** — l'essaim s'arrête dès `quota`
     /// candidats passés au vérificateur (coût attendu quota/p au lieu de k_max).
     pub fn generate_verify_adaptive(generator: &str, verifier: &str, k_min: usize, k_max: usize, quota: usize) -> Self {
@@ -287,14 +329,19 @@ impl TopologySpec {
                         let k = k.max(1);
                         Ok(Box::new(GvTopology { gv: GenerateVerify::new(k, width.min(k)), gen, ver }))
                     }
-                    KSpec::Adaptive { k_min, k_max, batch, stop } => Ok(Box::new(AdaptiveGvTopology {
-                        gen,
-                        ver,
-                        plan: KPlan { k_min, k_max, batch, stop },
-                        width,
-                        budget_probe: Some(r.budget_probe()),
-                        deadline_probe: r.deadline_probe(), // ADR-018 : None si pas de deadline
-                    })),
+                    KSpec::Adaptive { k_min, k_max, batch, stop } => {
+                        // ADR-019 (I-MEM4) : warm-start de k_min depuis le prior de taille,
+                        // CLAMPÉ aux bornes du run — la mémoire amorce, ne gouverne jamais.
+                        let k_min = r.warm_start_k_min(k_min, k_max);
+                        Ok(Box::new(AdaptiveGvTopology {
+                            gen,
+                            ver,
+                            plan: KPlan { k_min, k_max, batch, stop },
+                            width,
+                            budget_probe: Some(r.budget_probe()),
+                            deadline_probe: r.deadline_probe(), // ADR-018 : None si pas de deadline
+                        }))
+                    }
                 }
             }
             TopologySpec::Pipeline { stages } => {
@@ -338,6 +385,8 @@ impl TopologySpec {
                     topo = topo.with_escalation(0.9, pattern);
                 }
                 if let KSpec::Adaptive { k_min, k_max, batch, stop } = k {
+                    // ADR-019 (I-MEM4) : warm-start de k_min, borné aux bornes du run.
+                    let k_min = r.warm_start_k_min(k_min, k_max);
                     topo = topo
                         .with_k_plan(KPlan { k_min, k_max, batch, stop })
                         .with_budget_probe(r.budget_probe());
