@@ -1,0 +1,803 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>EFE — Architecture : les deux lectures-retour de la mémoire</title>
+<style>
+  :root{--ink:#0f172a;--muted:#475569;--soft:#64748b;--line:#e2e8f0;--teal:#0d9488;--teal-d:#0f766e;--indigo:#4f46e5;--indigo-d:#4338ca;--ok:#16a34a;--warn:#d97706;--bad:#dc2626;--bg-tint:#f8fafc;--bg-card:#f1f5f9;--code-bg:#0f172a;--code-fg:#e2e8f0;}
+  *{box-sizing:border-box;} html{font-size:11.4px;}
+  body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,Arial,sans-serif;color:var(--ink);margin:0;line-height:1.62;background:#fff;-webkit-font-smoothing:antialiased;}
+  .wrap{max-width:178mm;margin:0 auto;padding:0 2mm;}
+  h1,h2,h3,h4{line-height:1.2;font-weight:700;}
+  h2{font-size:1.5rem;margin:0 0 .6rem;padding-bottom:.35rem;border-bottom:3px solid var(--teal);}
+  h2 .num{color:var(--teal);} h3{font-size:1.18rem;margin:1.25rem 0 .35rem;color:var(--indigo-d);}
+  h4{font-size:1rem;margin:.9rem 0 .25rem;color:var(--teal-d);}
+  p{margin:.6rem 0;text-align:justify;hyphens:auto;} a{color:var(--indigo);text-decoration:none;}
+  code{font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace;font-size:.85em;background:var(--bg-card);padding:.05em .35em;border-radius:4px;color:#0b3b36;}
+  .muted{color:var(--muted);} .small{font-size:.88rem;}
+  .lead-in{font-weight:700;color:var(--teal-d);}
+  section{break-inside:avoid;} .page{break-before:page;} h2{break-after:avoid;}
+  table{border-collapse:collapse;width:100%;margin:.6rem 0;font-size:.85rem;}
+  th,td{border:1px solid var(--line);padding:.34rem .55rem;text-align:left;vertical-align:top;}
+  th{background:var(--bg-card);font-weight:700;} tbody tr:nth-child(even){background:var(--bg-tint);}
+  td.c,th.c{text-align:center;} .good{background:#dcfce7 !important;color:#166534;font-weight:700;} .mid{background:#fef9c3 !important;color:#854d0e;font-weight:700;} .bad{background:#fee2e2 !important;color:#991b1b;font-weight:700;}
+  .tag{display:inline-block;font-size:.71rem;font-weight:700;padding:.08em .5em;border-radius:20px;}
+  .t-ok{background:#dcfce7;color:#166534;} .t-info{background:#e0e7ff;color:#3730a3;} .t-teal{background:#ccfbf1;color:#115e59;} .t-warn{background:#fef3c7;color:#92400e;} .t-bad{background:#fee2e2;color:#991b1b;}
+  pre{background:var(--code-bg);color:var(--code-fg);padding:.6rem .85rem;border-radius:8px;overflow:auto;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.74rem;line-height:1.5;margin:.6rem 0;}
+  .callout{border-left:4px solid var(--teal);background:var(--bg-tint);padding:.6rem .9rem;border-radius:0 8px 8px 0;margin:.7rem 0;}
+  .callout p{text-align:left;margin:.3rem 0;}
+  .callout.key{border-color:var(--indigo);background:#eef2ff;} .callout.warn{border-color:var(--warn);background:#fffbeb;}
+  .fig{margin:.8rem 0 1rem;text-align:center;break-inside:avoid;}
+  .fig svg{max-width:100%;height:auto;border:1px solid var(--line);border-radius:10px;background:#fff;}
+  .fig .cap{font-size:.8rem;color:var(--muted);margin-top:.35rem;font-style:italic;text-align:center;}
+  ul,ol{margin:.45rem 0 .6rem 1.15rem;padding:0;} li{margin:.28rem 0;}
+  svg text{font-family:-apple-system,"Segoe UI",Inter,sans-serif;}
+  .cover{height:262mm;display:flex;flex-direction:column;justify-content:center;position:relative;padding:0 6mm;}
+  .cover .eyebrow{color:var(--teal);font-weight:800;letter-spacing:.28em;font-size:.92rem;text-transform:uppercase;}
+  .cover h1{font-size:2.5rem;margin:.4rem 0 .2rem;line-height:1.1;} .cover .sub{font-size:1.28rem;color:var(--muted);margin-bottom:1.2rem;}
+  .cover .tagline{font-size:1.04rem;color:var(--ink);max-width:160mm;border-left:4px solid var(--teal);padding-left:1rem;font-style:italic;text-align:left;}
+  .cover .meta{position:absolute;bottom:6mm;left:6mm;right:6mm;display:flex;justify-content:space-between;border-top:1px solid var(--line);padding-top:.7rem;font-size:.82rem;color:var(--soft);}
+  .cover .pills{margin:1.1rem 0;} .cover .pills .tag{font-size:.8rem;margin-right:.35rem;}
+  .lede{font-size:1.06rem;color:#1e293b;text-align:left;} .mono{font-family:ui-monospace,Menlo,Consolas,monospace;}
+  hr{border:none;border-top:1px solid var(--line);margin:1rem 0;}
+  .toc{font-size:.92rem;columns:2;column-gap:2rem;} .toc div{margin:.18rem 0;break-inside:avoid;} .toc .n{color:var(--teal);font-weight:700;display:inline-block;width:1.8em;}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:.9rem;margin:.7rem 0;}
+  .box{border:1px solid var(--line);border-radius:10px;padding:.7rem .9rem;background:var(--bg-tint);}
+  .box h4{margin-top:0;}
+  .eq{font-family:ui-monospace,Menlo,Consolas,monospace;background:#eef2ff;border:1px solid #c7d2fe;border-radius:8px;padding:.5rem .8rem;margin:.55rem 0;font-size:.82rem;color:#1e1b4b;text-align:center;}
+</style>
+</head>
+<body>
+
+<!-- COVER -->
+<div class="wrap"><div class="cover">
+  <div class="eyebrow">Architecture · avant code · lire la mémoire sans gouverner le run</div>
+  <h1>Les deux lectures-retour de la mémoire</h1>
+  <div class="sub">Quand l'essaim doit <b>laisser son passé changer sa décision</b> — sans cesser d'être re-prouvable.</div>
+  <div class="tagline">La mémoire inter-runs (ADR-019) sait déjà <b>amorcer la taille</b> d'un essaim (warm-start de
+   <span class="mono">k_min</span>) et <b>injecter</b> les gagnants passés en few-shot. Restent deux lectures que les
+   incréments précédents ont délibérément laissées ouvertes parce qu'elles n'étaient <b>pas du câblage</b> : faire que le
+   prior de <b>pattern</b> d'agrégation <b>biaise</b> le choix Vote/Borda/Condorcet, et que la <b>réputation par-agent</b>
+   <b>route</b> l'exécution. Les deux partagent un même danger — changer <i>quelle méthode décide</i> ou <i>quels agents
+   tournent</i> menace frontalement le moat : déterminisme (ADR-007), re-preuve (ADR-017), et la règle d'or de la mémoire
+   (« <b>amorcer, jamais gouverner</b> », I-MEM4). Ce document conçoit la <b>structure neuve</b> que chacune exige, sous un
+   <b>seul principe</b> : <b>l'influence bornée re-prouvable</b> — la mémoire déplace une frontière de décision dans une
+   <b>bande clampée</b>, échelonnée par sa propre <b>confiance</b>, le <b>signal du run gardant un droit de veto</b>, et
+   l'<b>influence dérivée étant tracée dans la racine</b>.</div>
+  <div class="pills">
+    <span class="tag t-teal">PatternSpec adaptatif</span>
+    <span class="tag t-teal">id par-variante ancré profil</span>
+    <span class="tag t-info">influence bornée re-prouvable</span>
+    <span class="tag t-info">exploration déterministe (UCB sans aléa)</span>
+    <span class="tag t-ok">I-PAT1–5 · I-REP1–6</span>
+  </div>
+  <div class="meta">
+    <span><b>EFE — Essaim Fluide Éphémère</b> · Architecture des lectures-retour mémoire</span>
+    <span>2026-06-18 · proposé (avant code) · extension d'ADR-019</span>
+  </div>
+</div></div>
+
+<div class="wrap">
+
+<!-- TOC -->
+<section class="page">
+<h2><span class="num">§0</span> &nbsp;Le problème commun &amp; ce qui a été laissé ouvert</h2>
+<div class="toc">
+  <div><span class="n">§1</span> Le principe unificateur : l'influence bornée re-prouvable</div>
+  <div><span class="n">§2</span> État précis du code — les structures réelles</div>
+  <div><span class="n">§3</span> Read-back A — le biais du sélecteur de pattern</div>
+  <div><span class="n">§4</span> Read-back B — le routage par réputation</div>
+  <div><span class="n">§5</span> Les invariants (I-PAT, I-REP) et leur rattachement à I-MEM</div>
+  <div><span class="n">§6</span> Robustesse adversariale — dégrader l'efficacité, jamais la correction</div>
+  <div><span class="n">§7</span> Re-provabilité unifiée &amp; /replay — le pin couvre les deux</div>
+  <div><span class="n">§8</span> Plan d'incréments &amp; harnais-gates</div>
+  <div><span class="n">§9</span> Périmètre honnête — ce que le 1ᵉʳ incrément NE fait pas</div>
+  <div><span class="n">§A</span> Annexe — signatures de types proposées</div>
+</div>
+
+<p class="lede">Un essaim EFE résout une <b>famille de tâches</b> (même forme, mêmes agents) des centaines de fois. La mémoire
+inter-runs lui donne déjà deux capacités : <b>amorcer la taille</b> (un prior d'histogramme suggère le <span class="mono">k_min</span>
+de départ, borné aux bornes du run, I-MEM4) et <b>relire ses gagnants</b> (injection few-shot d'exemplaires en Mode C).
+Ces deux lectures partagent une propriété confortable : <b>elles ne changent ni la méthode de décision, ni l'ensemble des
+agents</b>. Le warm-start déplace un <i>point de départ</i> ; le few-shot enrichit un <i>prompt</i>. Le squelette du run —
+quels agents, quelle agrégation — reste intact.</p>
+
+<p>Les deux lectures qui restaient sont d'une <b>autre nature</b>. Elles ne déplacent pas un paramètre : elles changent
+<b>la forme exécutée du run</b>.</p>
+
+<div class="grid2">
+  <div class="box">
+    <h4>A · Biais du sélecteur de pattern</h4>
+    <p class="small">Le prior de pattern sait <i>quelle méthode d'agrégation a gagné</i> (Vote / Borda / Condorcet) et
+     <i>à quel taux le run a escaladé</i> vers les juges, pour cette famille. La lecture manquante : que ce prior
+     <b>biaise le CHOIX de la méthode</b>. Or aujourd'hui la spec ne propose qu'un pattern <b>FIXE</b> — il n'existe
+     <b>aucune surface</b> pour dire « choisis pour moi », et le sélecteur adaptatif existant ne lit que les candidats.</p>
+  </div>
+  <div class="box">
+    <h4>B · Routage par réputation</h4>
+    <p class="small">La cellule de réputation sait <i>quel agent vérifie / gagne</i>. La lecture manquante : que la
+     réputation <b>route l'exécution</b> (pondérer, prioriser, voire écarter des agents). Or sur le chemin consensus, les
+     <span class="mono">k</span> candidats partagent <b>un seul id métré</b> (« <span class="mono">generator</span> ») —
+     la réputation par-agent y est <b>dégénérée</b> (un seul agent, qui « gagne » toujours).</p>
+  </div>
+</div>
+
+<p>Pourquoi étaient-elles « <b>pas du câblage</b> » ? Parce qu'aucune n'est branchable telle quelle. <b>A</b> exige une
+<b>surface de spec neuve</b> (exprimer « pattern adaptatif ») <i>et</i> un <b>mécanisme de biais</b> qui ne soit ni
+candidat-aveugle ni gouvernant. <b>B</b> exige une <b>identité par-variante</b> stable (sans laquelle la réputation
+n'accumule rien de sensé), une <b>attribution</b> honnête, <i>et</i> une <b>politique de routage</b> qui n'effondre pas
+l'exploration. Chacune touche le cœur du moat. Ce document conçoit ces structures — et montre qu'<b>une seule idée</b> les
+gouverne toutes les deux.</p>
+
+<div class="callout key"><p><b>Le paradoxe de l'influence.</b> Pour être <i>utile</i>, la mémoire doit changer ce que le run
+<b>décide</b> (quelle méthode) ou <b>fait</b> (quels agents). Pour rester <i>honnête</i>, le moat exige que chaque run soit
+(i) <b>re-prouvable</b> (R0 : la racine se re-scelle), (ii) <b>reproductible sachant l'instantané</b> (R1 : ré-épingler le
+snapshot → mêmes sorties), et (iii) <b>borné</b> (la mémoire amorce, ne gouverne jamais). Le warm-start <span class="mono">k_min</span>
+a résolu une version <i>faible</i> de ce paradoxe (déplacer un point de départ). A et B en sont la version <i>forte</i> —
+et appellent le même remède, généralisé.</p></div>
+</section>
+
+<!-- §1 PRINCIPE -->
+<section class="page">
+<h2><span class="num">§1</span> &nbsp;Le principe unificateur : l'influence bornée re-prouvable</h2>
+
+<p class="lede">Les deux lectures sont deux instances d'<b>un seul patron</b>, que nous nommons <b>l'influence bornée
+re-prouvable</b>. C'est la généralisation directe du warm-start <span class="mono">k_min</span> à des décisions d'ordre
+supérieur (quelle méthode, quels poids d'agent). Le poser explicitement évite de réinventer — et de re-justifier — la
+sûreté à chaque lecture.</p>
+
+<p>Le warm-start <span class="mono">k_min</span> obéit déjà, sans le nommer, à quatre temps. Une lecture mémoire qui
+respecte ces quatre temps est <b>sûre par construction</b> : elle hérite des invariants I-MEM. Les voici, en toute
+généralité.</p>
+
+<div class="callout"><p><b>① ENTRÉE épinglée.</b> La lecture part d'un <b>instantané GELÉ</b> de la mémoire — la même
+<span class="mono">MemorySnapshot</span> que le recall, identifiée par son <span class="mono">content_hash</span> (BLAKE3,
+l'épingle d'ADR-017). Cet instantané est déjà <b>ancré dans la racine</b> par le record <span class="mono">MemoryRead</span>
+(I-MEM2). Toute influence n'a donc le droit de dépendre que de cette entrée pinnée — jamais d'un état mutable, jamais de
+l'horloge.</p></div>
+
+<div class="callout"><p><b>② TRANSFERT clampé + échelonné par la confiance.</b> Une fonction <b>pure et déterministe</b>
+transforme le prior en un <b>paramètre effectif</b> (un seuil θ, un vecteur de poids, un ordre). Cette fonction est
+<b>bornée</b> à une <b>bande sans dégénérescence</b> (jamais une valeur qui forcerait toujours-A ou jamais-B), et son
+amplitude est <b>multipliée par la confiance du prior</b> — le nombre d'observations. Deux runs de prior ⇒ presque aucun
+déplacement ; mille runs ⇒ déplacement plein, mais toujours dans la bande. <b>Sans donnée, transfert nul</b> — la lecture
+se réduit <i>octet pour octet</i> au comportement sans mémoire (I-MEM8 / I-MEM4).</p></div>
+
+<div class="callout"><p><b>③ VETO du signal de run.</b> Le paramètre effectif <b>module</b> ; il ne <b>tranche</b> pas. Le
+signal propre du run — l'accord des candidats pour A, la vérification des juges pour B — conserve un <b>droit de veto</b> :
+sur un signal <i>non ambigu</i>, la mémoire est <b>écrasée</b>. Des candidats quasi-unanimes vont au Vote même si le prior
+adore les juges ; un agent qui produit le seul candidat vérifié gagne même si sa réputation est basse. La mémoire ne
+gouverne que la <b>zone ambiguë</b> — précisément là où, sans elle, le choix serait arbitraire.</p></div>
+
+<div class="callout"><p><b>④ TRACE dans la racine.</b> L'<b>influence dérivée</b> (le θ effectif, les poids appliqués) est
+<b>enregistrée dans la sortie du record <span class="mono">MemoryRead</span></b> — donc liée à la <span class="mono">provenance_root</span>.
+La racine ne dépend plus seulement de <i>ce qui a été lu</i> mais de <i>ce qui en a été dérivé</i>. R0 re-scelle cette
+dérivation ; R1, en ré-épinglant le snapshot, recalcule la <b>même</b> dérivation → <b>même décision</b> → sorties
+reproduites. Le pin d'ADR-017, étendu à l'influence.</p></div>
+
+<div class="eq">paramètre_effectif = clamp<sub>[lo,hi]</sub>( base + κ · confiance(total) · signal_prior )
+&nbsp;&nbsp;&nbsp; avec confiance(0) = 0,&nbsp; et le veto du run prioritaire sur tout signal non ambigu</div>
+
+<p>C'est tout. Les §3 et §4 ne font qu'<b>instancier</b> ce patron — une fois pour le pattern (le paramètre effectif est
+un seuil de vote + un choix de méthode de dispersion), une fois pour la réputation (le paramètre effectif est un vecteur
+de poids par-candidat). La même équation, la même borne, la même trace. Le lecteur qui a compris §1 a compris l'essentiel ;
+§3 et §4 en sont la mise en œuvre chirurgicale.</p>
+
+<div class="callout key"><p><b>Pourquoi ce patron préserve le moat — l'argument en une phrase.</b> Parce que le paramètre
+effectif est une <b>fonction déterministe et pure de l'instantané pinné</b>, et que cet instantané est <b>dans la racine</b> :
+ré-épingler le snapshot (R1) recalcule le même paramètre, donc la même décision, donc les mêmes sorties — exactement comme
+n'importe quelle autre entrée du run. La mémoire devient une <b>entrée de plus</b>, pas un état caché.</p></div>
+</section>
+
+<!-- §2 ÉTAT -->
+<section class="page">
+<h2><span class="num">§2</span> &nbsp;État précis du code — les structures réelles</h2>
+
+<p>La conception qui suit s'ancre sur des types existants, pas sur des intentions. Voici l'état exact, vérifié dans le
+dépôt, des deux surfaces.</p>
+
+<h3>2.1 — Le sélecteur de pattern (côté A)</h3>
+<p>Le consensus décide sa méthode d'agrégation via une <span class="mono">AggregatorPolicy</span> à trois variantes
+(<span class="mono">consensus_topology.rs</span>) :</p>
+<pre>enum AggregatorPolicy {
+    Fixed(Pattern),                                   // méthode imposée (Vote|Borda|Condorcet)
+    Adaptive(PatternSelector),                        // ← EXISTE, mais INATTEIGNABLE depuis la spec
+    Escalating { vote_confidence_threshold: f64, escalate_to: Pattern },
+}</pre>
+<p>Le <span class="mono">PatternSelector</span> (<span class="mono">consensus/selector.rs</span>) est <b>candidat-seul</b> :
+il regarde l'<i>accord</i> des candidats et rien d'autre.</p>
+<pre>impl PatternSelector {
+    fn select(&self, candidates: &[Value]) -> Pattern {
+        if agreement(candidates) >= self.vote_threshold { Pattern::Vote }   // quasi-unanimité → Vote gratuit
+        else if self.use_condorcet { Pattern::Condorcet } else { Pattern::Borda }   // dispersion → juges
+    }
+}</pre>
+<p class="small"><b>Le fait dur :</b> la spec (<span class="mono">spec.rs</span>) construit toujours
+<span class="mono">with_pattern(pattern)</span> (⇒ <span class="mono">Fixed</span>) ou <span class="mono">with_escalation(0.9, pattern)</span>
+(⇒ <span class="mono">Escalating</span>). La branche <span class="mono">Adaptive(PatternSelector)</span> n'est que le
+<i>défaut</i> de <span class="mono">ConsensusTopology::new</span>, <b>immédiatement écrasé</b>. Elle est donc <b>code mort
+par construction</b> : aucune entrée publique n'y mène, et même si l'on y menait, elle ne lirait pas la mémoire.</p>
+
+<h3>2.2 — L'attribution du consensus (côté B)</h3>
+<p>L'agrégateur renvoie un <span class="mono">AggOutcome</span> riche (<span class="mono">consensus/mod.rs</span>) — qui
+contient <b>exactement</b> les deux signaux d'attribution dont la réputation a besoin :</p>
+<pre>struct AggOutcome {
+    selected: Value,
+    selected_index: usize,   // ← QUEL candidat (variante) a GAGNÉ  — l'attribution « won »
+    scores: Vec&lt;f64&gt;,        // ← score consensuel PAR candidat     — l'attribution « verified »
+    confidence: f64, method: &'static str, cycle_detected: bool,
+}</pre>
+<p>Les juges produisent des <span class="mono">Ballot { judge, scores: Vec&lt;f64&gt; }</span> — <b>un score par
+candidat</b>. Le signal par-variante existe donc déjà <i>dans</i> le consensus ; il n'est simplement jamais <b>attribué à
+une identité d'agent stable</b>, parce que :</p>
+<pre>// consensus_topology.rs — TOUS les k candidats sont écrits sous le MÊME id :
+let gid = AgentId::new("generator").unwrap();
+for (i, c) in cands.iter().enumerate() { bb.write(&format!("/cand/{i}"), c.clone(), gid.clone()); }
+// spec.rs — et le générateur est métré sous un id FIXE :
+let gen = r.generator(&generator, "generator")?;   // un seul agent « generator » pour les k variantes</pre>
+
+<h3>2.3 — La cellule de réputation (déjà bâtie, jamais nourrie en prod)</h3>
+<pre>struct AgentRep { verified: u64, won: u64, total: u64 }   // + verified_rate_milli(), win_rate_milli()
+struct Reputation { agents: BTreeMap&lt;String, AgentRep&gt; }   // .of(agent) → Option&lt;&AgentRep&gt;
+// Le fold consomme déjà des AgentStat { agent_id, verified, won } (fold_into ④) ; mais
+// summary_from_run renvoie agents: Vec::new() — la dégénérescence de l'id partagé l'impose.</pre>
+
+<div class="callout"><p><b>Lecture de §2 :</b> les <b>réceptacles</b> existent des deux côtés (la branche
+<span class="mono">Adaptive</span>, la cellule <span class="mono">Reputation</span>, l'<span class="mono">AggOutcome</span>
+riche). Ce qui manque n'est pas un tuyau de plus, mais (A) une <b>surface de spec</b> + un <b>biais mémoire</b>, et (B) une
+<b>identité par-variante</b> + une <b>attribution</b> + une <b>politique de routage</b>. Le reste de ce document conçoit
+exactement ces pièces.</p></div>
+</section>
+
+<!-- §3 READ-BACK A -->
+<section class="page">
+<h2><span class="num">§3</span> &nbsp;Read-back A — le biais du sélecteur de pattern</h2>
+
+<h3>3.1 — Le problème, posé exactement</h3>
+<p>Deux manques distincts. <b>(A1)</b> Il n'existe aucune façon, depuis la spec ou le DTO, de demander « <i>choisis la
+méthode d'agrégation pour moi</i> » : le champ <span class="mono">pattern</span> est un <span class="mono">Pattern</span>
+concret. <b>(A2)</b> Le seul sélecteur adaptatif est <b>candidat-aveugle</b> à la mémoire : il décide sur l'accord des
+candidats du run courant, sans rien savoir de l'histoire de la famille. Combler A sans combler B serait inutile (un
+adaptatif atteignable mais amnésique) ; combler B sans A serait impossible (rien où brancher le biais). Les deux vont
+ensemble.</p>
+
+<h3>3.2 — A1 · la surface de spec : <span class="mono">PatternSpec</span></h3>
+<p>On remplace, dans la spec du consensus, le champ <span class="mono">pattern: Pattern</span> par un
+<span class="mono">PatternSpec</span> qui porte l'<b>intention de politique</b>, pas seulement une méthode :</p>
+<pre>enum PatternSpec {
+    Fixed(Pattern),                                   // « impose Borda »  — le comportement historique, le défaut
+    Adaptive { vote_threshold: f64, use_condorcet: bool },   // « choisis pour moi », base du sélecteur
+}</pre>
+<p>Le DTO accepte un token de fil : <span class="mono">"borda"|"vote"|"condorcet"</span> → <span class="mono">Fixed</span>,
+et <span class="mono">"adaptive"</span> (ou <span class="mono">"auto"</span>) → <span class="mono">Adaptive{…}</span> avec
+les défauts. La résolution (<span class="mono">spec.rs</span>) mappe alors <span class="mono">PatternSpec::Adaptive</span>
+vers <span class="mono">AggregatorPolicy::Adaptive(selector)</span> — <b>rendant la branche morte enfin atteignable</b>.
+C'est le seul morceau « câblage » du read-back ; il est nécessaire mais pas suffisant.</p>
+
+<div class="callout"><p><b>Un nettoyage architectural en prime.</b> La politique <span class="mono">Escalating</span> (tente le
+Vote, escalade si peu confiant) est un <b>cas particulier</b> de l'adaptatif : un sélecteur à seuil fixe, sans Condorcet.
+Une fois l'adaptatif <i>memory-informed</i>, <span class="mono">Escalating</span> en devient une instance — le nouveau
+sélecteur <b>unifie</b> Fixed/Escalating/Adaptive sous une seule abstraction, dont le seuil d'escalade n'est plus une
+constante magique (0.9) mais une valeur informée par la famille.</p></div>
+
+<h3>3.3 — A2 · le mécanisme de biais (la structure neuve)</h3>
+<p>Le prior de pattern d'une famille expose deux signaux utiles, déjà stockés dans la cellule :</p>
+<ul>
+  <li><b>Le taux d'escalade</b> <span class="mono">escalation_rate = escalations / total</span> : à quelle fréquence,
+   sur cette famille, l'accord des candidats s'est révélé <b>insuffisant</b> et il a fallu payer les juges. Élevé ⇒ la
+   famille est <i>piégeuse</i> (l'accord partiel y est souvent un cluster de leurres — le piège S1) ; bas ⇒ l'accord y est
+   <i>fiable</i>, les juges sont rarement nécessaires.</li>
+  <li><b>Le pattern dominant en dispersion</b> et sa marge : parmi les runs qui ont escaladé, Borda ou Condorcet a-t-il
+   gagné plus souvent, et avec quelle netteté ? Signale si la famille a une <i>structure de préférence pairwise</i>
+   (Condorcet) ou non (Borda).</li>
+</ul>
+
+<p>La cellule expose ces deux signaux via un accesseur de lecture <b>pur</b> (côté <span class="mono">cells.rs</span>) :</p>
+<pre>struct PatternBias {
+    escalation_rate_milli: u32,        // [0,1000]
+    dominant_dispersion: Option&lt;Pattern&gt;,   // Borda | Condorcet | None (pas de marge nette)
+    total: u64,                        // la CONFIANCE
+}
+impl PatternPrior { fn bias(&self) -> PatternBias { /* pur, déterministe */ } }</pre>
+
+<p>Le transfert <b>(temps ② du patron §1)</b> est calculé <b>au resolve</b>, avant que les candidats existent — ce qui est
+correct, car les deux paramètres biaisés (seuil, méthode de dispersion) sont des <b>paramètres</b>, pas des fonctions des
+candidats. Le sélecteur reste <b>pur</b> ; c'est sa <b>construction</b> qui devient memory-informed :</p>
+
+<div class="eq">θ_eff = clamp<sub>[θ_lo, θ_hi]</sub>( θ_base + κ · conf · (escalation_rate − ρ) )
+&nbsp;&nbsp;avec conf = min(1, total / N_conf),&nbsp; ρ = taux de référence</div>
+
+<p><b>Direction et sens.</b> Un taux d'escalade <i>au-dessus</i> de la référence ρ signifie : « sur cette famille, l'accord
+des candidats a souvent trompé ; sois <b>plus exigeant</b> avant de faire confiance au Vote » → θ_eff <b>monte</b> (on
+escalade plus volontiers, on paie les juges). Un taux <i>en dessous</i> : « l'accord y est fiable, économise les juges »
+→ θ_eff <b>descend</b>. La méthode de dispersion suit le dominant : <span class="mono">use_condorcet = (dominant == Condorcet)</span>,
+mais <b>seulement</b> si <span class="mono">conf</span> dépasse un plancher (sinon on garde le défaut <span class="mono">Borda</span>).</p>
+
+<p><b>Les trois bornes qui rendent le biais sûr</b> — chacune un mot du patron §1 :</p>
+<ol>
+  <li><b>Le clamp</b> <span class="mono">[θ_lo, θ_hi]</span> (p. ex. <span class="mono">[0,70 ; 0,97]</span>) interdit toute
+   dégénérescence : la mémoire ne peut <b>jamais</b> pousser le seuil à 0 (toujours-Vote, jamais de juges) ni à 1
+   (toujours-juges). La frontière bouge ; elle ne bascule pas.</li>
+  <li><b>L'échelle de confiance</b> <span class="mono">conf = min(1, total/N_conf)</span> : un prior de 3 runs déplace θ
+   de presque rien ; il faut <span class="mono">N_conf</span> runs (p. ex. 30) pour le plein effet. <b>Zéro donnée ⇒
+   conf = 0 ⇒ θ_eff = θ_base</b> — byte-identique au sélecteur sans mémoire (I-PAT2).</li>
+  <li><b>Le veto des candidats</b> (temps ③, §3.4) : θ n'agit que dans la <b>zone ambiguë</b>.</li>
+</ol>
+
+<h3>3.4 — Le veto des candidats : la borne dure</h3>
+<p>Le point cardinal. Le seuil biaisé <b>module</b> la frontière, mais l'<b>accord réel des candidats du run</b> reste
+souverain aux extrêmes. Concrètement :</p>
+<ul>
+  <li><b>Candidats quasi-unanimes</b> (accord ≈ 1,0, au-dessus même de θ_hi) → <b>Vote</b>, quoi que dise le prior. La
+   mémoire ne peut pas forcer des juges sur des candidats qui s'accordent manifestement — ce serait gouverner.</li>
+  <li><b>Candidats pleinement dispersés</b> (accord ≈ 0, sous θ_lo) → <b>juges</b> (Borda/Condorcet), quoi que dise le
+   prior. La mémoire ne peut pas forcer un Vote sur du désaccord manifeste.</li>
+  <li><b>Zone ambiguë</b> (accord proche de θ_base) → c'est <b>ici seulement</b> que θ_eff penche la décision. Sans
+   mémoire, ce choix serait arbitraire (un seuil magique) ; avec mémoire, il est informé par l'histoire de la famille.</li>
+</ul>
+<div class="callout key"><p>« <b>Amorcer, jamais gouverner</b> » réalisé pour le pattern : la mémoire déplace une frontière
+de décision <b>à l'intérieur d'une bande clampée</b>, et n'a voix qu'<b>au point où le signal du run est lui-même
+ambigu</b>. Sur tout signal franc, le run écrase la mémoire.</p></div>
+
+<h3>3.5 — Re-provabilité &amp; trace</h3>
+<p>θ_eff et le choix de dispersion sont des fonctions <b>déterministes et pures</b> de l'instantané <b>pinné</b> (via
+<span class="mono">PatternBias</span>) et de la base. On <b>étend la sortie du record <span class="mono">MemoryRead</span></b>
+pour y consigner l'<b>influence dérivée</b> — pas seulement ce qui a été lu :</p>
+<pre>MemoryRead.output += {
+    "pattern_bias": { "theta_eff_milli": …, "use_condorcet": …, "confidence_milli": … }
+}</pre>
+<p>La racine dépend donc du θ <b>appliqué</b>. <b>R0</b> re-scelle ce record → racine reproduite. <b>R1</b>, en
+ré-épinglant le snapshot (<span class="mono">pin_version</span>), recalcule <span class="mono">bias()</span> → même θ_eff →
+même politique → même décision d'agrégation → mêmes sorties (Mode A déterministe ; Mode C rejouable via N17). Et le pattern
+finalement décidé est déjà porté par <span class="mono">SwarmRun::decided_pattern</span> (MEM-2.b), observable et replié
+dans le prior — la boucle se ferme.</p>
+
+<h3>3.6 — Stabilité de la boucle (anti écho-chambre)</h3>
+<p>Une crainte légitime : un run biaisé, s'il est propre, replie <b>sa propre décision</b> dans le prior — la boucle
+peut-elle s'emballer (le prior se renforce jusqu'à verrouiller une méthode) ? <b>Non</b>, pour deux raisons composées.
+<b>Primo</b>, chaque run ne déplace le prior que de <span class="mono">1/total</span> — l'effet d'un run décroît à mesure
+que l'histoire grandit. <b>Secundo et surtout</b>, le <b>veto des candidats</b> est un correcteur permanent : une famille
+<i>réellement</i> dispersée continuera d'escalader quoi que « préfère » le prior (les candidats sont dispersés → sous
+θ_lo → juges), et ce fait sera replié, ramenant le taux d'escalade vers sa vérité. Le prior ne peut pas <b>mentir</b>
+durablement sur la nature de la famille, parce que le signal du run le contredit et que ce contredit est, lui aussi,
+appris. La boucle est <b>auto-corrigée</b>, pas auto-renforcée.</p>
+
+<div class="fig">
+<svg viewBox="0 0 720 290" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Pipeline du biais de pattern">
+  <defs><marker id="ar" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="#475569"/></marker></defs>
+  <rect x="14" y="40" width="150" height="58" rx="9" fill="#eef2ff" stroke="#c7d2fe"/>
+  <text x="89" y="62" text-anchor="middle" font-size="12" font-weight="700" fill="#3730a3">Instantané GELÉ</text>
+  <text x="89" y="79" text-anchor="middle" font-size="10" fill="#475569">PatternPrior · pinné</text>
+  <text x="89" y="92" text-anchor="middle" font-size="9" fill="#64748b">content_hash → racine</text>
+
+  <rect x="196" y="30" width="172" height="78" rx="9" fill="#f1f5f9" stroke="#cbd5e1"/>
+  <text x="282" y="50" text-anchor="middle" font-size="12" font-weight="700" fill="#0f766e">TRANSFERT clampé</text>
+  <text x="282" y="68" text-anchor="middle" font-size="9.5" fill="#334155">θ_eff = clamp(θ_base +</text>
+  <text x="282" y="82" text-anchor="middle" font-size="9.5" fill="#334155">κ·conf·(escal−ρ))</text>
+  <text x="282" y="99" text-anchor="middle" font-size="9" fill="#64748b">conf=min(1,total/N) · borné</text>
+
+  <rect x="400" y="30" width="150" height="78" rx="9" fill="#f1f5f9" stroke="#cbd5e1"/>
+  <text x="475" y="50" text-anchor="middle" font-size="12" font-weight="700" fill="#0f766e">PatternSelector</text>
+  <text x="475" y="68" text-anchor="middle" font-size="9.5" fill="#334155">accord ≥ θ_eff → Vote</text>
+  <text x="475" y="82" text-anchor="middle" font-size="9.5" fill="#334155">sinon → Borda/Condorcet</text>
+  <text x="475" y="99" text-anchor="middle" font-size="9" fill="#64748b">memory-informed, pur</text>
+
+  <rect x="582" y="40" width="124" height="58" rx="9" fill="#ccfbf1" stroke="#5eead4"/>
+  <text x="644" y="62" text-anchor="middle" font-size="12" font-weight="700" fill="#115e59">Décision</text>
+  <text x="644" y="79" text-anchor="middle" font-size="10" fill="#475569">pattern + escalade</text>
+  <text x="644" y="92" text-anchor="middle" font-size="9" fill="#64748b">→ SwarmRun.decided</text>
+
+  <line x1="164" y1="69" x2="192" y2="69" stroke="#475569" stroke-width="1.6" marker-end="url(#ar)"/>
+  <line x1="368" y1="69" x2="396" y2="69" stroke="#475569" stroke-width="1.6" marker-end="url(#ar)"/>
+  <line x1="550" y1="69" x2="578" y2="69" stroke="#475569" stroke-width="1.6" marker-end="url(#ar)"/>
+
+  <rect x="360" y="150" width="230" height="56" rx="9" fill="#fffbeb" stroke="#fde68a"/>
+  <text x="475" y="171" text-anchor="middle" font-size="11.5" font-weight="700" fill="#92400e">VETO des candidats (temps ③)</text>
+  <text x="475" y="188" text-anchor="middle" font-size="9.5" fill="#78350f">accord≈1 → Vote · accord≈0 → juges</text>
+  <text x="475" y="201" text-anchor="middle" font-size="9" fill="#92400e">la mémoire n'agit que dans la zone ambiguë</text>
+  <line x1="475" y1="150" x2="475" y2="110" stroke="#d97706" stroke-width="1.6" stroke-dasharray="4 3" marker-end="url(#ar)"/>
+
+  <rect x="40" y="160" width="250" height="40" rx="9" fill="#f8fafc" stroke="#e2e8f0"/>
+  <text x="165" y="178" text-anchor="middle" font-size="10" font-weight="700" fill="#0f172a">TRACE → MemoryRead.output.pattern_bias</text>
+  <text x="165" y="193" text-anchor="middle" font-size="9" fill="#64748b">θ_eff lié à la racine · R1 le recalcule</text>
+  <line x1="282" y1="108" x2="200" y2="158" stroke="#475569" stroke-width="1.3" stroke-dasharray="3 3" marker-end="url(#ar)"/>
+
+  <rect x="14" y="236" width="692" height="40" rx="9" fill="#eef2ff" stroke="#c7d2fe"/>
+  <text x="360" y="254" text-anchor="middle" font-size="10.5" font-weight="700" fill="#3730a3">Boucle auto-corrigée : decided_pattern + escalade repliés → prior (1/total) ; une famille vraiment dispersée ré-escalade quoi que dise le prior</text>
+  <text x="360" y="269" text-anchor="middle" font-size="9" fill="#475569">le veto du run nourrit le prior de sa propre contradiction → pas d'emballement</text>
+</svg>
+<div class="cap">Figure A — Le biais de pattern comme instance du patron §1 : entrée pinnée → transfert clampé/confiant → sélecteur informé → décision, sous veto des candidats, le tout tracé dans la racine et bouclé sans emballement.</div>
+</div>
+</section>
+
+<!-- §4 READ-BACK B -->
+<section class="page">
+<h2><span class="num">§4</span> &nbsp;Read-back B — le routage par réputation</h2>
+
+<h3>4.1 — Le problème, posé exactement</h3>
+<p>Sur le chemin consensus, les <span class="mono">k</span> candidats sont produits par un <b>unique agent métré</b>
+(« <span class="mono">generator</span> »). Une réputation par-agent y est <b>dégénérée</b> : un seul agent, qui « gagne »
+chaque run par construction. La cellule reste donc vide en production (et c'est l'<b>honnêteté</b> du code actuel : il ne
+fabrique pas une réputation trompeuse). Combler B exige <b>trois</b> structures : une <b>identité par-variante</b> stable
+(B1), une <b>attribution</b> honnête (B2), une <b>politique de routage</b> bornée (B3).</p>
+
+<h3>4.2 — B1 · l'identité par-variante (la crux)</h3>
+<p>La question profonde : <b>qu'est-ce qui fait que « la variante i » est le même agent d'un run à l'autre</b>, pour que sa
+réputation accumule un sens ? Si l'id était tiré au hasard à chaque run, la réputation n'agrégerait que du bruit.</p>
+<p>La réponse est déjà dans le code, latente. La variante <span class="mono">i</span> n'est pas un agent arbitraire : c'est
+le générateur échantillonné selon un <b>profil déterministe en i</b> — en Mode C, <span class="mono">température = 0,2 + 0,3·i</span>,
+<span class="mono">graine = 42 + i</span> ; en Mode A, la variante <span class="mono">i</span> du générateur de flotte. Le
+<b>profil d'échantillonnage est une fonction stable de i</b>. Donc « la variante i » <b>est déjà</b> une identité stable
+d'un run à l'autre — au sein d'une famille, « <span class="mono">generator#0</span> » désigne toujours « la variante basse
+température », « <span class="mono">generator#3</span> » toujours « une variante plus chaude ». La réputation de
+<span class="mono">generator#0</span> sur la famille F répond à une question <b>bien posée</b> : <i>la variante basse
+température réussit-elle, sur cette famille ?</i></p>
+
+<div class="callout key"><p><b>L'insight central.</b> L'identité par-variante <b>n'a pas à être inventée</b> — elle est
+<b>déjà déterministe</b> (le profil d'échantillonnage en <span class="mono">i</span>). Il suffit de la <b>rendre
+visible</b> : métrer la variante <span class="mono">i</span> sous l'id <span class="mono">generator#{i}</span> au lieu de
+l'écraser sous un id partagé. La « structure neuve » de B1 est une <b>désagrégation d'id</b>, ancrée dans un profil qui
+était déjà stable — jamais une identité aléatoire ou par-run.</p></div>
+
+<p>Mise en œuvre : le consensus métrise chaque appel de variante sous <span class="mono">generator#{i}</span> (et écrit
+<span class="mono">/cand/{i}</span> sous ce même id, pour la cohérence d'ancrage). Le resolver fournit
+<span class="mono">generator_variant(name, i)</span> → un générateur métré sous l'id indexé. C'est la seule pièce qui
+touche la couche topologie ; elle est mécanique mais essentielle.</p>
+
+<h3>4.3 — B2 · l'attribution (depuis l'AggOutcome)</h3>
+<p>Après un run propre, deux signaux par-variante, <b>directement lisibles</b> sur l'<span class="mono">AggOutcome</span> :</p>
+<ul>
+  <li><b>Gagné</b> — exact : <span class="mono">won(i) = (i == selected_index)</span>. La variante qui a produit le
+   candidat retenu.</li>
+  <li><b>Vérifié</b> — depuis les scores réels : <span class="mono">verified(i) = scores[i] ≥ barre</span>, où la barre est
+   dérivée de la <b>distribution des scores du run</b> (p. ex. la moyenne, ou la médiane des ballots). Jamais une valeur
+   fabriquée : le score vient des juges réels.</li>
+</ul>
+<p>Le consensus expose ces contributions sur le <span class="mono">TopologyOutput</span> (un
+<span class="mono">Vec&lt;AgentContribution { agent_id, won, verified }&gt;</span>, miroir de la façon dont
+<span class="mono">decided_pattern</span> et <span class="mono">produced_acceptable</span> y sont déjà portés). Le SDK
+(<span class="mono">summary_from_run</span>) les transforme en <span class="mono">Vec&lt;AgentStat&gt;</span> — remplaçant
+enfin le <span class="mono">Vec::new()</span> honnête de MEM-2.c par une attribution <b>réelle</b>. Un run sans gagnant
+clair (échec, MEM-2.c) ne nourrit aucune victoire — il alimente la mémoire d'échec, pas la réputation.</p>
+
+<h3>4.4 — B3 · la lecture-routage, en trois niveaux d'agressivité</h3>
+<p>La réputation peuplée, comment la <b>lire</b> pour influencer un run, borné + re-prouvable ? Trois niveaux, du plus sûr
+au plus invasif. Nous <b>recommandons le niveau 1</b> comme premier incrément ; les niveaux 2–3 sont des extensions
+bornées explicitement esquissées.</p>
+
+<table>
+  <thead><tr><th style="width:21%">Niveau</th><th>Mécanisme</th><th style="width:28%">Coût pour le moat</th></tr></thead>
+  <tbody>
+    <tr><td><b>R-a · Pondération d'agrégation</b> <span class="tag t-ok">recommandé</span></td>
+      <td>Chaque candidat contribue à l'agrégation (Vote/Borda/Condorcet) avec un <b>poids</b> fonction de la réputation
+       de sa variante. Une bonne variante pèse un peu plus. <b>Ne change ni l'ensemble ni le nombre d'agents.</b></td>
+      <td>Minimal — c'est l'analogue exact du biais de pattern : déplacer la décision, borné, sans toucher la structure
+       du run. Coût budgétaire <b>inchangé</b> (mêmes k+juges).</td></tr>
+    <tr><td><b>R-b · Priorisation de sizing</b></td>
+      <td>Dans le sizer adaptatif, générer d'abord les profils à <b>haute réputation</b> ; un arrêt anticipé garde alors
+       les meilleurs. Change l'<b>ordre</b>, et le <b>multiset</b> seulement si l'on s'arrête tôt.</td>
+      <td>Modéré — le multiset peut changer (run tronqué) ; acceptable <b>si tracé</b>. Exige l'exploration déterministe (§4.5).</td></tr>
+    <tr><td><b>R-c · Gating de sélection</b></td>
+      <td>Écarter les variantes sous un plancher de réputation (ne pas les exécuter). Change l'<b>ensemble</b> d'agents.</td>
+      <td>Élevé — risque d'<b>effondrement</b> de réputation. N'est sûr qu'avec un plancher d'exploration (§4.6) et la
+       garantie de ne <b>jamais</b> écarter totalement une variante.</td></tr>
+  </tbody>
+</table>
+
+<p><b>R-a en détail.</b> On dérive un vecteur de poids par-candidat depuis la réputation des variantes, clampé et
+échelonné par la confiance — strictement le patron §1, instancié sur des poids au lieu d'un seuil :</p>
+<div class="eq">w<sub>i</sub> = clamp<sub>[w_lo, w_hi]</sub>( 1 + λ · conf<sub>i</sub> · (rep_score<sub>i</sub> − ρ) )
+&nbsp;&nbsp;conf<sub>i</sub> = min(1, total<sub>i</sub> / N_conf)</div>
+<p>Les poids modulent l'agrégation par méthode : pour le Vote, <span class="mono">w<sub>i</sub></span> pondère la
+multiplicité du candidat dans le compte ; pour Borda/Condorcet, il échelonne la contribution de chaque ballot sur ce
+candidat. On étend le trait <span class="mono">Aggregator</span> d'une méthode <span class="mono">aggregate_weighted(…, weights)</span>
+de <b>défaut uniforme</b> (les implémentations existantes restent valides sans poids) ; Vote/Borda/Condorcet la surchargent
+pour honorer les poids. <b>Poids uniformes ⇒ décision byte-identique</b> à aujourd'hui (I-REP2 / I-MEM8).</p>
+
+<h3>4.5 — L'exploration déterministe : explore/exploit sans aléa, sans horloge</h3>
+<p>Toute politique qui <i>exploite</i> la réputation (surtout R-b/R-c) doit aussi <b>explorer</b>, sous peine de figer
+prématurément. La littérature répond « ε-greedy / UCB » — mais ε-greedy invoque l'<b>aléa</b>, et l'aléa <b>casse le
+déterminisme</b> (ADR-007 interdit l'horloge <i>et</i> le hasard non-semé dans la décision). La structure neuve clé de B
+est donc : une <b>exploration entièrement déterministe</b>.</p>
+<p>L'astuce : faire dépendre le calendrier d'exploration d'une quantité <b>re-dérivable et pinnée</b> — le
+<span class="mono">total</span> de replis de l'instantané. Par exemple, « explorer la variante
+<span class="mono">total mod k</span> à pleine chance ce run-ci ». Comme <span class="mono">total</span> est une propriété de
+l'<b>instantané gelé</b> (donc pinnée, donc dans la racine via <span class="mono">MemoryRead</span>), <b>R1 ré-épingle le
+même <span class="mono">total</span> → même variante explorée → même multiset → reproduit</b>. On obtient le bénéfice
+statistique d'une rotation d'exploration <b>sans jamais</b> tirer un nombre au hasard ni lire l'horloge. C'est la
+réconciliation, propre à EFE, entre apprentissage par renforcement et re-provabilité.</p>
+
+<h3>4.6 — Anti-effondrement : optimisme sous incertitude (UCB déterministe)</h3>
+<p>Un écueil de tout routage par réputation : une variante qui a <i>un</i> mauvais run tôt voit sa réputation chuter et
+n'est plus jamais choisie — elle ne peut pas se racheter, et le système se fige sur un optimum local. La parade est
+l'<b>optimisme sous incertitude</b> : on ne classe pas les variantes sur leur taux brut, mais sur un score qui <b>récompense
+la rareté d'observations</b> — une variante peu vue reçoit un <b>bonus d'exploration</b> :</p>
+<div class="eq">rep_score<sub>i</sub> = win_rate<sub>i</sub> + c · √( ln(total_famille) / total<sub>i</sub> )</div>
+<p>Le second terme (UCB) est grand quand <span class="mono">total<sub>i</sub></span> est petit : <b>une variante presque
+jamais essayée est traitée comme prometteuse</b>, donc explorée. Il est <b>entièrement déterministe</b> (fonction des
+compteurs pinnés) — donc re-prouvable. Conjugué au clamp de poids (jamais zéro) et à la rotation déterministe (§4.5),
+il garantit qu'<b>aucune variante n'est jamais condamnée</b> : le cold-start est favorisé, pas pénalisé, et un mauvais
+départ se rachète. La réputation <b>amorce</b> ; elle ne <b>gouverne</b> pas (I-REP2).</p>
+
+<h3>4.7 — Re-provabilité &amp; trace</h3>
+<p>Comme pour A, l'<b>influence dérivée</b> est consignée dans la sortie du record <span class="mono">MemoryRead</span> :
+le vecteur de poids appliqué (R-a), ou l'ordre/variante explorée (R-b/R-c). La racine lie donc le routage. R0 le re-scelle ;
+R1, en ré-épinglant l'instantané (mêmes compteurs, même <span class="mono">total</span>), recalcule les <b>mêmes</b> poids
+et la <b>même</b> rotation → mêmes candidats pondérés → mêmes ballots pondérés → même décision → mêmes sorties. Le pin
+d'ADR-017 couvre le routage <b>sans aucune structure de replay neuve</b> — c'est l'objet du §7.</p>
+
+<div class="fig">
+<svg viewBox="0 0 720 300" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Pipeline du routage par réputation">
+  <defs><marker id="ar2" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="#475569"/></marker></defs>
+
+  <rect x="14" y="20" width="180" height="74" rx="9" fill="#eef2ff" stroke="#c7d2fe"/>
+  <text x="104" y="40" text-anchor="middle" font-size="11.5" font-weight="700" fill="#3730a3">B1 · id par-variante</text>
+  <text x="104" y="57" text-anchor="middle" font-size="9.3" fill="#475569">generator#0 (t=0,2)…#k</text>
+  <text x="104" y="70" text-anchor="middle" font-size="9.3" fill="#475569">profil déterministe en i</text>
+  <text x="104" y="85" text-anchor="middle" font-size="8.6" fill="#64748b">stable d'un run à l'autre</text>
+
+  <rect x="226" y="20" width="180" height="74" rx="9" fill="#f1f5f9" stroke="#cbd5e1"/>
+  <text x="316" y="40" text-anchor="middle" font-size="11.5" font-weight="700" fill="#0f766e">B2 · attribution</text>
+  <text x="316" y="57" text-anchor="middle" font-size="9.3" fill="#334155">won = (i==selected_index)</text>
+  <text x="316" y="70" text-anchor="middle" font-size="9.3" fill="#334155">verified = scores[i] ≥ barre</text>
+  <text x="316" y="85" text-anchor="middle" font-size="8.6" fill="#64748b">depuis l'AggOutcome réel</text>
+
+  <rect x="438" y="20" width="180" height="74" rx="9" fill="#ccfbf1" stroke="#5eead4"/>
+  <text x="528" y="40" text-anchor="middle" font-size="11.5" font-weight="700" fill="#115e59">Cellule Reputation</text>
+  <text x="528" y="57" text-anchor="middle" font-size="9.3" fill="#475569">AgentRep{verified,won,total}</text>
+  <text x="528" y="70" text-anchor="middle" font-size="9.3" fill="#475569">par (famille, variante)</text>
+  <text x="528" y="85" text-anchor="middle" font-size="8.6" fill="#64748b">repliée des runs propres</text>
+
+  <line x1="194" y1="57" x2="222" y2="57" stroke="#475569" stroke-width="1.6" marker-end="url(#ar2)"/>
+  <line x1="406" y1="57" x2="434" y2="57" stroke="#475569" stroke-width="1.6" marker-end="url(#ar2)"/>
+
+  <rect x="438" y="126" width="270" height="70" rx="9" fill="#f1f5f9" stroke="#cbd5e1"/>
+  <text x="573" y="146" text-anchor="middle" font-size="11.5" font-weight="700" fill="#0f766e">TRANSFERT clampé (UCB déterministe)</text>
+  <text x="573" y="163" text-anchor="middle" font-size="9.2" fill="#334155">rep_score = win_rate + c·√(ln T / tᵢ)</text>
+  <text x="573" y="177" text-anchor="middle" font-size="9.2" fill="#334155">wᵢ = clamp(1 + λ·confᵢ·(rep_score−ρ))</text>
+  <text x="573" y="190" text-anchor="middle" font-size="8.6" fill="#64748b">jamais zéro · cold-start favorisé</text>
+  <line x1="528" y1="94" x2="555" y2="124" stroke="#475569" stroke-width="1.6" marker-end="url(#ar2)"/>
+
+  <rect x="438" y="222" width="270" height="62" rx="9" fill="#ccfbf1" stroke="#5eead4"/>
+  <text x="573" y="242" text-anchor="middle" font-size="11.5" font-weight="700" fill="#115e59">R-a · agrégation pondérée</text>
+  <text x="573" y="259" text-anchor="middle" font-size="9.2" fill="#475569">poids uniformes ⇒ décision byte-identique</text>
+  <text x="573" y="272" text-anchor="middle" font-size="8.6" fill="#64748b">R-b/R-c : sizing/gating (extensions)</text>
+  <line x1="573" y1="196" x2="573" y2="220" stroke="#475569" stroke-width="1.6" marker-end="url(#ar2)"/>
+
+  <rect x="14" y="150" width="380" height="56" rx="9" fill="#fffbeb" stroke="#fde68a"/>
+  <text x="204" y="170" text-anchor="middle" font-size="11" font-weight="700" fill="#92400e">VETO de vérification + exploration déterministe</text>
+  <text x="204" y="187" text-anchor="middle" font-size="9.2" fill="#78350f">le candidat vérifié gagne quelle que soit la réputation</text>
+  <text x="204" y="200" text-anchor="middle" font-size="8.8" fill="#92400e">rotation keyée sur total (pinné) — ni aléa ni horloge</text>
+
+  <rect x="14" y="226" width="380" height="58" rx="9" fill="#f8fafc" stroke="#e2e8f0"/>
+  <text x="204" y="246" text-anchor="middle" font-size="10.5" font-weight="700" fill="#0f172a">TRACE → MemoryRead.output.routing_weights</text>
+  <text x="204" y="263" text-anchor="middle" font-size="9.2" fill="#64748b">poids + variante explorée liés à la racine</text>
+  <text x="204" y="276" text-anchor="middle" font-size="8.8" fill="#475569">R1 ré-épingle (même total) → mêmes poids → reproduit</text>
+</svg>
+<div class="cap">Figure B — Le routage par réputation : id par-variante ancré profil (B1) → attribution réelle (B2) → cellule → transfert UCB déterministe clampé → agrégation pondérée, sous veto de vérification, exploration déterministe et trace dans la racine.</div>
+</div>
+</section>
+
+<!-- §5 INVARIANTS -->
+<section class="page">
+<h2><span class="num">§5</span> &nbsp;Les invariants — I-PAT &amp; I-REP, rattachés à I-MEM</h2>
+<p>Chaque invariant neuf est une <b>spécialisation</b> d'un invariant I-MEM d'ADR-019. C'est voulu : les deux lectures ne
+créent pas un nouveau régime de sûreté, elles étendent celui de la mémoire.</p>
+
+<h3>5.1 — Biais de pattern (I-PAT)</h3>
+<table>
+  <thead><tr><th style="width:16%">Invariant</th><th>Énoncé</th><th style="width:20%">Hérite de</th></tr></thead>
+  <tbody>
+    <tr><td><b>I-PAT1</b><br>frontière bornée</td><td>Le biais ne déplace le seuil que dans <span class="mono">[θ_lo, θ_hi]</span>
+     et ne choisit la méthode de dispersion ; il <b>n'écrase jamais</b> un accord de candidats non ambigu (quasi-unanime → Vote,
+     pleinement dispersé → juges).</td><td>I-MEM4 (amorcer, jamais gouverner)</td></tr>
+    <tr><td><b>I-PAT2</b><br>sans donnée, sans biais</td><td>Un prior vide ou sous le seuil de confiance ⇒
+     <span class="mono">θ_eff = θ_base</span> + dispersion par défaut ⇒ décision <b>byte-identique</b> au sélecteur sans mémoire.</td>
+     <td>I-MEM8 (mémoire OFF = chemin historique)</td></tr>
+    <tr><td><b>I-PAT3</b><br>tracé + re-prouvable</td><td>Le biais effectif (θ_eff, dispersion) est dans la sortie
+     <span class="mono">MemoryRead</span> → lié à la racine ; ré-épingler l'instantané (R1) recalcule la même décision.</td>
+     <td>I-MEM2 / I-MEM7</td></tr>
+    <tr><td><b>I-PAT4</b><br>boucle gardée</td><td>Le prior de pattern n'est replié que des runs <b>propres</b> ; chaque run
+     ne le déplace que de <span class="mono">1/total</span> et le veto des candidats le ramène à la vérité de la famille.</td>
+     <td>I-MEM3 (porte clean)</td></tr>
+    <tr><td><b>I-PAT5</b><br>opt-in</td><td>L'adaptatif est demandé explicitement (<span class="mono">PatternSpec::Adaptive</span>) ;
+     le défaut reste <span class="mono">Fixed</span> — zéro changement pour les appelants existants.</td><td>I-MEM8</td></tr>
+  </tbody>
+</table>
+
+<h3>5.2 — Routage par réputation (I-REP)</h3>
+<table>
+  <thead><tr><th style="width:16%">Invariant</th><th>Énoncé</th><th style="width:20%">Hérite de</th></tr></thead>
+  <tbody>
+    <tr><td><b>I-REP1</b><br>identité ancrée</td><td>L'id <span class="mono">generator#{i}</span> est <b>ancré dans le profil
+     d'échantillonnage déterministe</b> en <span class="mono">i</span> → stable d'un run à l'autre → la réputation par
+     (famille, variante) a un sens. <b>Jamais</b> un id aléatoire ou par-run.</td><td>ADR-007 (déterminisme)</td></tr>
+    <tr><td><b>I-REP2</b><br>influence bornée + anti-effondrement</td><td>La réputation module des poids dans
+     <span class="mono">[w_lo, w_hi]</span> (jamais zéro) ; les variantes peu observées reçoivent un bonus d'optimisme (UCB) ;
+     <b>aucune n'est jamais écartée totalement</b>, ni forcée gagnante.</td><td>I-MEM4</td></tr>
+    <tr><td><b>I-REP3</b><br>exploration déterministe</td><td>Tout calendrier explore/exploit est une fonction
+     <b>déterministe</b> de l'instantané pinné (rotation keyée sur <span class="mono">total</span>) — <b>jamais</b> l'horloge,
+     <b>jamais</b> l'aléa.</td><td>ADR-007</td></tr>
+    <tr><td><b>I-REP4</b><br>tracé + re-prouvable</td><td>Les poids/le routage appliqués sont dans la sortie
+     <span class="mono">MemoryRead</span> → liés à la racine ; ré-épingler (mêmes compteurs) reproduit.</td><td>I-MEM2 / I-MEM7</td></tr>
+    <tr><td><b>I-REP5</b><br>attribution honnête</td><td><span class="mono">won = (i==selected_index)</span> [exact] ;
+     <span class="mono">verified = scores[i] ≥ barre</span> [depuis les ballots réels]. Jamais fabriqué ; un run sans gagnant
+     clair ne nourrit aucune victoire (il nourrit la mémoire d'échec).</td><td>I-MEM3 + honnêteté MEM-2.c</td></tr>
+    <tr><td><b>I-REP6</b><br>gardé + opt-in</td><td>La réputation n'est repliée que des runs propres ; le routage est
+     opt-in, défaut <b>uniforme</b>.</td><td>I-MEM3 / I-MEM8</td></tr>
+  </tbody>
+</table>
+
+<div class="callout key"><p><b>La symétrie I-PAT ↔ I-REP n'est pas cosmétique.</b> I-PAT1 et I-REP2 sont le <b>même</b> énoncé
+(borne + clamp) sur deux paramètres ; I-PAT3 et I-REP4 sont la <b>même</b> trace ; I-PAT2 et I-REP6 le <b>même</b>
+opt-in. C'est la preuve, au niveau des invariants, que les deux read-backs sont une seule idée (§1) — et que tout futur
+read-back mémoire devra exhiber le même sextuor pour être accepté.</p></div>
+</section>
+
+<!-- §6 ADVERSARIAL -->
+<section>
+<h2><span class="num">§6</span> &nbsp;Robustesse adversariale — dégrader l'efficacité, jamais la correction</h2>
+<p>La question de sécurité décisive : un adversaire (ou une dérive) peut-il <b>empoisonner</b> le prior de pattern ou la
+réputation pour faire prendre à l'essaim de <b>mauvaises décisions</b> ? L'architecture répond <b>non sur la correction</b>,
+au plus <b>oui sur l'efficacité</b> — et c'est exactement la garantie qu'on veut.</p>
+<p><b>Trois remparts composés.</b> D'abord, l'<b>isolation tenant</b> (I-MEM6) : un tenant ne peut empoisonner que sa
+propre mémoire, jamais celle d'autrui — la clé HKDF par tenant scelle des racines disjointes. Ensuite, la <b>porte
+clean</b> (I-MEM3) : seuls les runs <b>re-prouvés</b> replient ; fabriquer un prior biaisé exige de produire des runs dont
+la provenance se vérifie — coûteux et tracé. Enfin, et c'est le rempart structurel, le <b>veto du signal de run</b> : même
+sous un prior maximalement empoisonné, le biais reste <b>clampé</b> et la <b>décision finale appartient au run</b> — des
+candidats vérifiés gagnent, des candidats unanimes vont au Vote, indépendamment de ce que « préfère » la mémoire.</p>
+<p>La conséquence est nette : un prior empoisonné peut <b>gaspiller du budget</b> (escalader plus que nécessaire, pondérer
+sous-optimalement) — une dégradation d'<b>efficacité</b>, bornée et observable (les compteurs d'escalade, les poids tracés
+le révèlent). Il ne peut pas faire <b>élire une mauvaise réponse</b> : la <b>correction</b> reste gouvernée par les
+candidats et les juges du run, que la mémoire ne touche jamais. C'est la traduction, au plan de la sécurité, du principe
+« amorcer, jamais gouverner » : on accepte que la mémoire puisse se tromper sur le <i>combien</i>, jamais sur le <i>quoi</i>.</p>
+<div class="callout warn"><p><b>Le coin d'auto-empoisonnement, désamorcé.</b> Sans précaution, une boucle pourrait se renforcer
+(le prior favorise A → A est replié → le prior favorise plus A). Les deux conceptions l'interdisent : le <b>veto</b>
+(une famille vraiment dispersée ré-escalade, et ce fait est appris — §3.6) et l'<b>optimisme UCB</b> (les variantes
+sous-observées sont ré-explorées — §4.6). Les boucles sont <b>auto-corrigées</b>, pas auto-renforcées.</p></div>
+</section>
+
+<!-- §7 REPROVABILITÉ -->
+<section>
+<h2><span class="num">§7</span> &nbsp;Re-provabilité unifiée &amp; /replay — le pin couvre les deux</h2>
+<p>Un point qui mérite d'être souligné parce qu'il évite une fausse complexité : <b>aucune des deux lectures n'exige une
+structure de replay neuve</b>. Le mécanisme de pin d'ADR-019/ADR-017 les couvre déjà, par construction.</p>
+<p>L'argument tient en trois pas. <b>(1)</b> Chaque influence (θ_eff de A, poids/rotation de B) est une <b>fonction pure
+déterministe de l'instantané gelé</b> lu au recall. <b>(2)</b> Cet instantané est <b>épinglé</b> : son
+<span class="mono">content_hash</span> est dans le record <span class="mono">MemoryRead</span>, donc dans la
+<span class="mono">provenance_root</span> ; et <span class="mono">snapshot_at(version)</span> sait reconstruire l'instantané
+<b>passé exact</b> (I-MEM7, déjà testé). <b>(3)</b> Le rejeu R1, qui <b>honore déjà la mémoire avec <span class="mono">learn=false</span></b>
+(corrigé lors de la vérification MEM-1→3) et accepte <span class="mono">pin_version</span>, ré-lit le <b>même</b> instantané
+→ recalcule les <b>mêmes</b> influences → reproduit les sorties. On <b>étend</b> seulement la <b>sortie tracée</b> du
+record <span class="mono">MemoryRead</span> (y consigner θ_eff et les poids) — un enrichissement de trace, pas un nouveau
+chemin de rejeu.</p>
+<p>La seule subtilité honnête : R1 ne reproduit que <b>sachant l'instantané ré-épinglé</b>. Sans <span class="mono">pin_version</span>,
+sur une mémoire qui a évolué, R1 lit l'instantané <b>courant</b> → influences différentes → pas de reproduction — et le
+guard de <span class="mono">task_mismatch</span> le signale honnêtement (gardien
+<span class="mono">replay_r1_without_repinning…</span> déjà en place). « Re-prouvable » (R0, toujours) reste distinct de
+« reproductible » (R1, sachant le pin) — la doctrine d'ADR-017, inchangée.</p>
+</section>
+
+<!-- §8 PLAN -->
+<section class="page">
+<h2><span class="num">§8</span> &nbsp;Plan d'incréments &amp; harnais-gates</h2>
+<p>Découpage en lots minces, chacun compilable, testé, et — comme tout lot EFE — scellé par un <b>harnais-gate</b> qui
+écrit des chiffres réels dans <span class="mono">scripts/swarm/</span>.</p>
+<table>
+  <thead><tr><th style="width:14%">Lot</th><th>Contenu</th><th style="width:26%">Gate (preuve chiffrée)</th></tr></thead>
+  <tbody>
+    <tr><td><b>PAT-1</b></td><td>Surface de spec <span class="mono">PatternSpec</span> + DTO <span class="mono">"adaptive"</span> ;
+     l'<span class="mono">Adaptive</span> devient atteignable ; <span class="mono">PatternBias::bias()</span> côté cellule ;
+     biais θ_eff/dispersion au resolver, clampé + confiant ; trace dans <span class="mono">MemoryRead</span>.</td>
+     <td><span class="mono">lot_pattern_bias</span> : sur une famille à structure connue (séparable vs piégeuse), le biais
+      <b>réduit le taux d'escalade</b> à iso-qualité quand le prior est fiable, et le <b>monte</b> quand la famille piège ;
+      I-PAT2 (sans donnée = byte-identique) vérifié.</td></tr>
+    <tr><td><b>PAT-2</b></td><td>Veto + bornes durcis ; gardiens I-PAT1 (candidats francs écrasent le prior) ;
+     unification <span class="mono">Escalating</span> ⊂ adaptatif.</td>
+     <td>Tests : un prior « tout-Vote » n'empêche pas l'escalade sur candidats dispersés ; un prior « tout-juges » ne force
+      pas de juges sur candidats unanimes.</td></tr>
+    <tr><td><b>REP-1</b></td><td>Id par-variante <span class="mono">generator#{i}</span> (B1) ; attribution
+     <span class="mono">AgentContribution</span> sur <span class="mono">TopologyOutput</span> (B2) ;
+     <span class="mono">summary_from_run</span> peuple <span class="mono">agents</span>.</td>
+     <td>Test Mode A : un consensus à variantes distinctes peuple une réputation par-variante <b>non dégénérée</b> ;
+      <span class="mono">won</span> == <span class="mono">selected_index</span>.</td></tr>
+    <tr><td><b>REP-2</b></td><td>Lecture R-a : <span class="mono">routing_weights()</span> côté cellule (UCB clampé) ;
+     <span class="mono">aggregate_weighted</span> sur les trois agrégateurs ; trace dans <span class="mono">MemoryRead</span>.</td>
+     <td><span class="mono">lot_reputation</span> : poids uniformes ⇒ décision byte-identique (I-REP2) ; un prior
+      réputationnel net déplace la décision en zone ambiguë <b>sans</b> écarter de candidat ; cold-start favorisé (UCB).</td></tr>
+    <tr><td><b>REP-3</b><br><span class="tag t-warn">extension</span></td><td>Lectures R-b/R-c : priorisation/gating de
+     sizing avec <b>exploration déterministe</b> (rotation keyée sur <span class="mono">total</span>) + plancher anti-effondrement.</td>
+     <td>Test : R1 ré-épingle <span class="mono">total</span> → même variante explorée → même multiset → reproduit ; aucune
+      variante jamais écartée sur ≥ N runs.</td></tr>
+  </tbody>
+</table>
+<p class="small">Les deux harnais (<span class="mono">lot_pattern_bias</span>, <span class="mono">lot_reputation</span>)
+suivent la doctrine des lots existants (<span class="mono">lot_memory</span>, <span class="mono">lot_kadapt</span>) :
+agents purs synthétiques <b>clairement étiquetés</b> (Mode A), crypto réelle, chiffres mesurés, verdict GO/NO-GO,
+artefact <span class="mono">EFE_SWARM_*.json</span>.</p>
+</section>
+
+<!-- §9 PÉRIMÈTRE HONNÊTE -->
+<section>
+<h2><span class="num">§9</span> &nbsp;Périmètre honnête — ce que le 1ᵉʳ incrément NE fait pas</h2>
+<p>Fidèle à la discipline EFE de ne jamais sur-vendre, voici ce que cette architecture <b>laisse</b> explicitement à des
+incréments ultérieurs, avec la raison <b>structurelle</b> de chaque report.</p>
+<ul>
+  <li><b>La calibration empirique des gains.</b> Les constantes (<span class="mono">κ, λ, θ_lo/hi, w_lo/hi, N_conf, c</span>)
+   ont des <b>valeurs de départ raisonnées</b>, pas <b>optimales</b>. Les fixer demande de faire tourner
+   <span class="mono">lot_pattern_bias</span>/<span class="mono">lot_reputation</span> sur des familles à structure connue
+   et de mesurer le compromis coût/qualité. L'architecture fournit le <b>cadre borné</b> ; les bonnes constantes sont un
+   travail de mesure, pas de conception.</li>
+  <li><b>La réputation en Mode C mono-instruction.</b> Quand le générateur Mode C est <b>une seule instruction</b>, les
+   variantes ne diffèrent que par la <b>température</b> ; la réputation par-variante y est une réputation <b>par profil de
+   température</b> — significative mais d'une granularité différente du Mode A multi-agents. Le rendre pleinement utile
+   (router entre profils de température) est un raffinement Mode-C, testable seulement avec un harnais Ollama
+   <span class="mono">#[ignore]</span>.</li>
+  <li><b>Le gating de sélection (R-c) en production.</b> Recommandé <b>après</b> R-a (pondération) éprouvé : R-c change
+   l'ensemble d'agents, donc le coût, donc l'interaction avec le pré-vol budgétaire (ADR-018) et le sizer adaptatif
+   (ADR-014). Sa sûreté tient entièrement à l'exploration déterministe + plancher (§4.5–4.6) ; on le veut mesuré avant
+   de l'activer par défaut.</li>
+  <li><b>La décroissance des priors.</b> Comme pour la mémoire d'échec, une décroissance <b>temporelle</b> briserait le
+   déterminisme octet ; une décroissance <b>par-compte</b> (oublier les plus vieux replis) est compatible mais reste
+   différée — ni A ni B n'en dépendent pour leur correction (seulement pour leur fraîcheur à très long terme).</li>
+</ul>
+<div class="callout"><p>Ces reports ne sont pas des trous : ce sont les <b>frontières mesurées</b> de ce qu'une <i>conception</i>
+peut garantir sans <i>données</i>. La structure neuve — surface de spec, id par-variante, transfert borné, exploration
+déterministe, trace dans la racine — est, elle, <b>complète</b> dans ce document.</p></div>
+</section>
+
+<!-- §A ANNEXE -->
+<section class="page">
+<h2><span class="num">§A</span> &nbsp;Annexe — signatures de types proposées</h2>
+<p class="small">Esquisses (avant code), pour fixer les surfaces. Les noms définitifs suivront les conventions du dépôt.</p>
+<pre>// ── A · biais de pattern ──────────────────────────────────────────────
+// spec.rs
+enum PatternSpec { Fixed(Pattern), Adaptive { vote_threshold: f64, use_condorcet: bool } }
+// (le champ `pattern: Pattern` du Consensus devient `pattern: PatternSpec`)
+
+// cells.rs  (lecture pure de la cellule déjà peuplée)
+struct PatternBias { escalation_rate_milli: u32, dominant_dispersion: Option&lt;Pattern&gt;, total: u64 }
+impl PatternPrior { fn bias(&self) -> PatternBias; }
+
+// resolver.rs  (le transfert clampé + confiant — temps ② du patron §1)
+struct Resolver&lt;'a&gt; { /* … */ memory_pattern_bias: Option&lt;PatternBias&gt; }
+impl Resolver&lt;'_&gt; {
+    fn biased_selector(&self, base: PatternSelector) -> PatternSelector;  // θ_eff + use_condorcet, clampés
+}
+
+// memory.rs  (trace dans la racine — temps ④)
+MemoryRead.output["pattern_bias"] = { theta_eff_milli, use_condorcet, confidence_milli }
+
+// ── B · routage par réputation ───────────────────────────────────────
+// topology  (B1 : id par-variante ; B2 : attribution exposée)
+struct AgentContribution { agent_id: String, won: bool, verified: bool }
+TopologyOutput.agent_contributions: Vec&lt;AgentContribution&gt;   // depuis selected_index + scores
+// resolver : generator_variant(name, i) -> métré sous `generator#{i}`
+
+// cells.rs  (lecture R-a : UCB déterministe, clampé, jamais zéro)
+impl Reputation {
+    fn routing_weights(&self, variant_ids: &[&str], total_family: u64, c: f64) -> Vec&lt;u32&gt;;  // poids milli
+}
+
+// consensus  (agrégation pondérée — défaut uniforme = byte-identique)
+trait Aggregator {
+    fn aggregate(&self, t: &Value, c: &[Value], b: &[Ballot]) -> AggOutcome;
+    fn aggregate_weighted(&self, t: &Value, c: &[Value], b: &[Ballot], w: &[f64]) -> AggOutcome {
+        let _ = w; self.aggregate(t, c, b)          // défaut : ignore les poids → comportement actuel
+    }
+}
+
+// memory.rs  (trace + exploration déterministe keyée sur le total pinné)
+MemoryRead.output["routing"] = { weights_milli: [...], explored_variant: total % k }</pre>
+
+<hr>
+<p class="small muted">EFE — Essaim Fluide Éphémère · Architecture des deux lectures-retour de la mémoire (biais de pattern + routage
+par réputation) · proposé (avant code), extension d'ADR-019 · 2026-06-18. Un seul principe — <b>l'influence bornée
+re-prouvable</b> — gouverne les deux : la mémoire déplace une frontière de décision dans une bande clampée, échelonnée par
+sa confiance, le signal du run gardant un droit de veto, l'influence dérivée tracée dans la racine. La mémoire devient une
+<b>entrée</b> de plus ; jamais un état caché.</p>
+</section>
+
+</div>
+</body>
+</html>
