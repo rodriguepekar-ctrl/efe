@@ -1,0 +1,551 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>EFE — Architecture : admission (runs concurrents) + deadline run</title>
+<style>
+  :root{--ink:#0f172a;--muted:#475569;--soft:#64748b;--line:#e2e8f0;--teal:#0d9488;--teal-d:#0f766e;--indigo:#4f46e5;--indigo-d:#4338ca;--ok:#16a34a;--warn:#d97706;--bad:#dc2626;--bg-tint:#f8fafc;--bg-card:#f1f5f9;--code-bg:#0f172a;--code-fg:#e2e8f0;}
+  *{box-sizing:border-box;} html{font-size:11.4px;}
+  body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,Arial,sans-serif;color:var(--ink);margin:0;line-height:1.62;background:#fff;-webkit-font-smoothing:antialiased;}
+  .wrap{max-width:178mm;margin:0 auto;padding:0 2mm;}
+  h1,h2,h3,h4{line-height:1.2;font-weight:700;}
+  h2{font-size:1.5rem;margin:0 0 .6rem;padding-bottom:.35rem;border-bottom:3px solid var(--teal);}
+  h2 .num{color:var(--teal);} h3{font-size:1.18rem;margin:1.25rem 0 .35rem;color:var(--indigo-d);}
+  h4{font-size:1rem;margin:.9rem 0 .25rem;color:var(--teal-d);}
+  p{margin:.6rem 0;text-align:justify;hyphens:auto;} a{color:var(--indigo);text-decoration:none;}
+  code{font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace;font-size:.85em;background:var(--bg-card);padding:.05em .35em;border-radius:4px;color:#0b3b36;}
+  .muted{color:var(--muted);} .small{font-size:.88rem;}
+  .lead-in{font-weight:700;color:var(--teal-d);}
+  section{break-inside:avoid;} .page{break-before:page;} h2{break-after:avoid;}
+  table{border-collapse:collapse;width:100%;margin:.6rem 0;font-size:.85rem;}
+  th,td{border:1px solid var(--line);padding:.34rem .55rem;text-align:left;vertical-align:top;}
+  th{background:var(--bg-card);font-weight:700;} tbody tr:nth-child(even){background:var(--bg-tint);}
+  td.c,th.c{text-align:center;} .good{background:#dcfce7 !important;color:#166534;font-weight:700;} .mid{background:#fef9c3 !important;color:#854d0e;font-weight:700;} .bad{background:#fee2e2 !important;color:#991b1b;font-weight:700;}
+  .tag{display:inline-block;font-size:.71rem;font-weight:700;padding:.08em .5em;border-radius:20px;}
+  .t-ok{background:#dcfce7;color:#166534;} .t-info{background:#e0e7ff;color:#3730a3;} .t-teal{background:#ccfbf1;color:#115e59;} .t-warn{background:#fef3c7;color:#92400e;} .t-bad{background:#fee2e2;color:#991b1b;}
+  pre{background:var(--code-bg);color:var(--code-fg);padding:.6rem .85rem;border-radius:8px;overflow:auto;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.74rem;line-height:1.5;margin:.6rem 0;}
+  .callout{border-left:4px solid var(--teal);background:var(--bg-tint);padding:.6rem .9rem;border-radius:0 8px 8px 0;margin:.7rem 0;}
+  .callout p{text-align:left;margin:.3rem 0;}
+  .callout.key{border-color:var(--indigo);background:#eef2ff;} .callout.warn{border-color:var(--warn);background:#fffbeb;}
+  .fig{margin:.8rem 0 1rem;text-align:center;break-inside:avoid;}
+  .fig svg{max-width:100%;height:auto;border:1px solid var(--line);border-radius:10px;background:#fff;}
+  .fig .cap{font-size:.8rem;color:var(--muted);margin-top:.35rem;font-style:italic;text-align:center;}
+  ul,ol{margin:.45rem 0 .6rem 1.15rem;padding:0;} li{margin:.28rem 0;}
+  svg text{font-family:-apple-system,"Segoe UI",Inter,sans-serif;}
+  .cover{height:262mm;display:flex;flex-direction:column;justify-content:center;position:relative;padding:0 6mm;}
+  .cover .eyebrow{color:var(--teal);font-weight:800;letter-spacing:.28em;font-size:.92rem;text-transform:uppercase;}
+  .cover h1{font-size:2.5rem;margin:.4rem 0 .2rem;line-height:1.1;} .cover .sub{font-size:1.28rem;color:var(--muted);margin-bottom:1.2rem;}
+  .cover .tagline{font-size:1.04rem;color:var(--ink);max-width:160mm;border-left:4px solid var(--teal);padding-left:1rem;font-style:italic;text-align:left;}
+  .cover .meta{position:absolute;bottom:6mm;left:6mm;right:6mm;display:flex;justify-content:space-between;border-top:1px solid var(--line);padding-top:.7rem;font-size:.82rem;color:var(--soft);}
+  .cover .pills{margin:1.1rem 0;} .cover .pills .tag{font-size:.8rem;margin-right:.35rem;}
+  .lede{font-size:1.06rem;color:#1e293b;text-align:left;} .mono{font-family:ui-monospace,Menlo,Consolas,monospace;}
+  hr{border:none;border-top:1px solid var(--line);margin:1rem 0;}
+  .toc{font-size:.92rem;columns:2;column-gap:2rem;} .toc div{margin:.18rem 0;break-inside:avoid;} .toc .n{color:var(--teal);font-weight:700;display:inline-block;width:1.8em;}
+</style>
+</head>
+<body>
+
+<!-- COVER -->
+<div class="wrap"><div class="cover">
+  <div class="eyebrow">Architecture · avant code · borner les runs sur trois axes</div>
+  <h1>Admission &amp; Deadline</h1>
+  <div class="sub">Trois plafonds, un principe : <b>concurrence</b>, <b>temps</b>, <b>coût</b> — borner visiblement, sceller le partiel.</div>
+  <div class="tagline">Un run EFE est borné en <b>coût</b> (le <code>BudgetGuard</code> atomique, I13 — <code>OnExceed::Stop</code>)
+   et en <b>concurrence</b> (l'admission process d'ADR-014 CP-2 : un sémaphore global FIFO, <code>429 + Retry-After</code>
+   quand la passerelle est pleine). Mais il manque le troisième plafond — le <b>temps</b> : rien ne borne la durée
+   wall-clock d'un run, et un agent lent ou un backend qui traîne peut produire un <b>run zombie</b> qui tient un permis
+   d'admission indéfiniment. Et l'admission, aujourd'hui <b>globale</b>, laisse un <b>seul tenant monopoliser</b> tous les
+   permits (ADR-014 a explicitement laissé la fairness par-tenant ouverte). Ce document complète la gouvernance des runs :
+   ① <b>admission équitable</b> (aucun tenant n'affame les autres) sur <b>tous</b> les chemins de run ; ② un <b>deadline
+   par run</b> — le <b>jumeau temporel du budget</b> : une sonde coopérative (comme <code>BudgetProbe</code>) qui arrête
+   l'essaim entre vagues et <b>scelle la provenance partielle</b> (toujours vérifiable), doublée d'un backstop
+   <code>tokio::timeout</code> dur contre les hangs. Et — honnêteté héritée d'ADR-017 — un run tronqué par deadline est
+   <b>re-prouvable (R0) mais non reproductible (R1)</b> : le point de troncature est wall-clock, donc hors du moat.</div>
+  <div class="pills">
+    <span class="tag t-info">coût : Budget/OnExceed (existe) · concurrence : admission CP-2 (existe, global)</span>
+    <span class="tag t-warn">manque : deadline run · fairness par-tenant</span>
+    <span class="tag t-teal">deadline = sonde coopérative + scellement du partiel</span>
+    <span class="tag t-ok">backstop dur · re-prouvable mais non reproductible (ADR-017)</span>
+  </div>
+  <div class="meta"><span><b>Fondations :</b> admission (state.rs, ADR-014 CP-2) · Budget/OnExceed (budget.rs) · sonde de vagues (sizing.rs) · moat (ADR-006/007/016/017)</span><span><b>Réf. :</b> <span class="mono">main @ 9444e02</span> · 2026-06-17</span></div>
+</div></div>
+
+<!-- TOC -->
+<div class="wrap page">
+  <h2><span class="num">§0</span> Plan &amp; statut du document</h2>
+  <p class="lede">Architecture <b>avant code</b> de la gouvernance complète des runs : compléter l'<b>admission</b>
+  (fairness par-tenant, tous les chemins) et ajouter le <b>deadline</b> (plafond temps). Statut :
+  <span class="tag t-info">proposé</span>. Ce texte fixe la <b>thèse des trois plafonds</b>, la <b>frontière coopératif
+  vs dur</b>, les <b>invariants</b> (famille I-AD), le <b>modèle de menace</b>, le <b>harnais de gate</b> et le squelette
+  d'<b>ADR-SWARM-018</b>.</p>
+  <div class="toc">
+    <div><span class="n">§1</span>Le problème — un run non borné est une ardoise ouverte</div>
+    <div><span class="n">1.1</span>Le temps n'est borné nulle part — le run zombie</div>
+    <div><span class="n">1.2</span>L'admission est globale — la monopolisation par tenant</div>
+    <div><span class="n">1.3</span>Pourquoi un <code>tokio::timeout</code> naïf détruit la preuve</div>
+    <div><span class="n">§2</span>État des lieux — ce qui borne déjà, ce qui manque</div>
+    <div><span class="n">2.1</span>Le coût : <code>Budget</code>/<code>OnExceed</code> + la sonde coopérative</div>
+    <div><span class="n">2.2</span>La concurrence : l'admission process (ADR-014 CP-2)</div>
+    <div><span class="n">2.3</span>Le temps : seulement des timeouts par-batch (T2/T3), pas de deadline run</div>
+    <div><span class="n">§3</span>La thèse — trois plafonds, un principe</div>
+    <div><span class="n">3.1</span>Le deadline est le jumeau temporel du budget</div>
+    <div><span class="n">3.2</span>Borner visiblement, sceller le partiel</div>
+    <div><span class="n">3.3</span>Re-prouvable, pas reproductible (l'écho d'ADR-017)</div>
+    <div><span class="n">§4</span>Architecture A — admission équitable, tous les chemins</div>
+    <div><span class="n">4.1</span>Fairness par-tenant : un tenant n'affame pas les autres</div>
+    <div><span class="n">4.2</span>Tous les chemins de run sont gardés</div>
+    <div><span class="n">§5</span>Architecture B — le deadline run</div>
+    <div><span class="n">5.1</span>La sonde coopérative <code>DeadlineProbe</code> (dans la boucle de vagues)</div>
+    <div><span class="n">5.2</span>Le backstop dur <code>tokio::timeout</code> (contre les hangs)</div>
+    <div><span class="n">5.3</span>Sceller le partiel · le statut du run · la composition des plafonds</div>
+    <div><span class="n">§6</span>Les invariants — famille I-AD (Admission/Deadline)</div>
+    <div><span class="n">§7</span>Le modèle de menace — ce que les plafonds attrapent</div>
+    <div><span class="n">§8</span>Le harnais — Lot ADMIT-DEADLINE</div>
+    <div><span class="n">§9</span>Plan de construction — lots, fichiers, ADR-018</div>
+    <div><span class="n">§10</span>Risques honnêtes &amp; hors-périmètre</div>
+    <div><span class="n">§A</span>Annexe — schémas, signatures, glossaire</div>
+  </div>
+</div>
+
+<!-- §1 -->
+<div class="wrap page">
+  <section>
+  <h2><span class="num">§1</span> Le problème — un run non borné est une ardoise ouverte</h2>
+  <p>Un run d'essaim consomme trois ressources : du <b>CPU/concurrence</b> (les agents en parallèle), du <b>temps</b>
+  wall-clock (la durée jusqu'au verdict), et de l'<b>argent</b> (les appels LLM payants en Mode C). Le système borne
+  déjà deux des trois — le coût (<code>BudgetGuard</code>) et la concurrence (l'admission process). Le <b>temps</b> reste
+  une ardoise ouverte, et l'admission, globale, a un angle mort de fairness.</p>
+
+  <h3>1.1 — Le temps n'est borné nulle part — le run zombie</h3>
+  <p>Rien ne plafonne la durée d'un run. Un agent Mode A peut entrer dans une boucle pathologique ; un backend self-host
+  (Ollama) ou le routeur Network peut traîner, se bloquer, ou répondre au goutte-à-goutte. Le run continue alors
+  d'occuper un <b>permit d'admission</b> (ADR-014) <b>sans limite de temps</b> — un <b>run zombie</b> qui ne rend jamais
+  son permit. Quelques zombies suffisent à saturer le cap d'admission : la passerelle commence à répondre
+  <code>429</code> à des requêtes parfaitement légitimes, non par charge réelle, mais parce que des runs morts-vivants
+  tiennent les places. Le budget ne sauve pas : un run peut être <b>lent sans être cher</b> (Mode A keyless = 0¢, mais
+  potentiellement long), ou cher-mais-bloqué (un appel LLM qui pend avant de facturer). Le temps est une dimension
+  <b>orthogonale</b> au coût, et elle n'a pas de garde.</p>
+
+  <h3>1.2 — L'admission est globale — la monopolisation par tenant</h3>
+  <p>L'admission process (<code>state.rs</code> : <code>admission: Arc&lt;Semaphore&gt;</code>) est un <b>sémaphore
+  global FIFO</b> : un seul compteur de permits pour <b>toute</b> la passerelle, tous tenants confondus. ADR-014 l'a
+  posé comme une borne process honnête — mais a <b>explicitement laissé ouverte</b> la fairness par-tenant (« les
+  tiers/files par tenant restent ouverts »). Conséquence : un tenant qui lance une rafale de runs peut <b>consommer
+  tous les permits</b> et faire passer <b>tous les autres tenants en 429</b>. Le backpressure est visible (bien), mais
+  il n'est <b>pas équitable</b> : la famine d'un tenant par un autre est possible. Pour une passerelle multi-tenant,
+  c'est un trou de gouvernance.</p>
+
+  <h3>1.3 — Pourquoi un <code>tokio::timeout</code> naïf détruit la preuve</h3>
+  <p>La tentation, pour le deadline, est d'envelopper <code>run_traced</code> dans un <code>tokio::time::timeout</code>
+  et de laisser tomber le futur à l'échéance. C'est faux pour EFE. <code>run_traced</code> (<code>sdk.rs</code>)
+  <b>exécute la topologie, PUIS scelle</b> la provenance (<code>recorder.seal_with_key</code>) — le scellement est la
+  <b>dernière</b> étape. Si l'on <i>drop</i> le futur au milieu, on perd le recorder, les <code>AgentCallRecord</code>
+  capturés, et donc <b>toute trace du run</b> : pas de <code>provenance_root</code>, rien à vérifier, rien à rejouer.
+  Un timeout dur naïf transforme un run lent en <b>trou noir</b> — l'opposé du moat. Le deadline doit donc être
+  <b>coopératif</b> : l'essaim doit <b>cesser d'émettre du travail</b> à l'échéance, <b>finaliser</b> ce qu'il a, et
+  laisser <code>run_traced</code> sceller la provenance <b>partielle</b> — qui reste un run vérifiable, juste tronqué.</p>
+  <div class="callout key"><p><b>Le gap en une phrase.</b> Le <b>temps</b> n'est borné nulle part (run zombie), et
+  l'admission <b>globale</b> laisse un tenant en affamer d'autres. Il faut un <b>deadline coopératif</b> (qui scelle le
+  partiel, pas un <code>timeout</code> qui détruit la preuve) et une <b>admission équitable</b> — les deux plafonds
+  manquants de la gouvernance des runs.</p></div>
+  </section>
+</div>
+
+<!-- §2 -->
+<div class="wrap page">
+  <section>
+  <h2><span class="num">§2</span> État des lieux — ce qui borne déjà, ce qui manque</h2>
+
+  <h3>2.1 — Le coût : <code>Budget</code>/<code>OnExceed</code> + la sonde coopérative</h3>
+  <p>Le coût est borné par un <code>BudgetGuard</code> <b>atomique</b> (invariant I13) avec trois politiques
+  (<code>budget.rs</code>) : <code>Error</code> (pré-vol : refuse si le coût estimé dépasse le plafond),
+  <code>Degrade</code> (pré-vol : réduit K et rogne les juges pour tenir), et <code>Stop</code> (en vol : facture chaque
+  appel, et à l'épuisement les agents <b>cessent</b>). Le mécanisme de <code>Stop</code> est exactement le patron que le
+  deadline réutilisera : une <b>sonde coopérative</b>. La taille adaptative (ADR-014) consulte une
+  <code>BudgetProbe = Arc&lt;dyn Fn(usize) -&gt; bool&gt;</code> (<code>sizing.rs</code>) <b>entre les vagues</b> —
+  <code>run_waves_pure</code> n'émet une vague que si la sonde dit « tu peux la payer ». Quand le budget est épuisé, la
+  boucle s'arrête, <code>k_used &lt; k_max</code>, et le run finalise proprement sur ce qu'il a généré. C'est un
+  arrêt <b>propre et scellé</b>, pas un crash.</p>
+
+  <h3>2.2 — La concurrence : l'admission process (ADR-014 CP-2)</h3>
+  <p>L'admission (<code>state.rs</code>) est un <code>Arc&lt;Semaphore&gt;</code> de <code>admission_max</code> permits.
+  Chaque handler de run fait <code>s.admission.clone().try_acquire_owned()</code> <b>en tête</b> ; un échec renvoie
+  <code>429 + Retry-After</code> et incrémente <code>admission_rejected</code>. Le permit (FIFO, <i>owned</i>) <b>suit
+  le run</b> jusqu'à sa fin (tenu dans la tâche du job pour les runs asynchrones). Les jauges
+  <code>/metrics</code> exposent <code>inflight = max − disponibles</code>, <code>inflight_max</code>, et
+  <code>admission_rejected_total</code>. C'est du backpressure <b>visible</b> — la doctrine ADR-014 : « refuser
+  vite plutôt qu'une file invisible qui finit en timeouts ». <b>Déjà gardés</b> : <code>POST /run</code> (sync ET job),
+  et <code>POST /replay/:id</code> R1 (ajouté en ADR-017 — la re-exécution est un run en vol). <b>Manque</b> : la
+  fairness par-tenant (le sémaphore est global).</p>
+
+  <h3>2.3 — Le temps : seulement des timeouts par-batch (T2/T3), pas de deadline run</h3>
+  <p>Le seul mécanisme temporel existant est un <code>timeout: Duration</code> au niveau des <b>batches de sous-tâches</b>
+  des topologies T2 (pipeline) et T3 (hierarchical) — <code>pipeline.rs</code> : <code>run_batch(inputs, timeout)</code>,
+  <code>hierarchical.rs</code> : défaut 30 s. Il borne le temps d'une <b>vague de sous-tâches</b>, pas le <b>run entier</b>.
+  Il n'y a <b>aucun</b> plafond wall-clock au niveau du run, ni de champ <code>deadline</code> sur la requête, ni de
+  statut « tronqué par le temps ». C'est précisément la pièce neuve.</p>
+  <table>
+    <thead><tr><th>Plafond</th><th class="c">Axe</th><th class="c">Existe ?</th><th>Mécanisme</th></tr></thead>
+    <tbody>
+      <tr><td><b>Budget</b></td><td class="c">coût (¢)</td><td class="c good">OUI</td><td><code>BudgetGuard</code> (I13) + sonde coopérative entre vagues (<code>OnExceed::Stop</code>)</td></tr>
+      <tr><td><b>Admission</b></td><td class="c">concurrence</td><td class="c mid">PARTIEL</td><td>sémaphore global FIFO + 429 ; <b>fairness par-tenant manquante</b></td></tr>
+      <tr><td><b>Deadline</b></td><td class="c">temps (ms)</td><td class="c bad">NON</td><td>seulement des timeouts par-batch T2/T3 ; <b>aucun deadline run</b></td></tr>
+    </tbody>
+  </table>
+  </section>
+</div>
+
+<!-- §3 -->
+<div class="wrap page">
+  <section>
+  <h2><span class="num">§3</span> La thèse — trois plafonds, un principe</h2>
+
+  <h3>3.1 — Le deadline est le jumeau temporel du budget</h3>
+  <p>La thèse centrale : <b>le temps se borne exactement comme le coût</b>. Le budget a un <code>BudgetGuard</code>
+  (état atomique : dépensé / plafond) et une <code>BudgetProbe</code> (« puis-je payer la prochaine vague ? ») consultée
+  entre les vagues. Le deadline aura un <code>DeadlineGuard</code> (état : instant de départ / durée max) et une
+  <code>DeadlineProbe</code> (« reste-t-il du temps pour la prochaine vague ? ») consultée <b>au même point</b> de la
+  boucle <code>run_waves_pure</code>. Les deux sondes <b>composent</b> trivialement : une vague n'est émise que si
+  <b>budget ET deadline</b> l'autorisent. Quand l'une dit non, l'essaim s'arrête, scelle, et le statut dit <b>laquelle</b>
+  a mordu. Aucune nouvelle machinerie de contrôle de flux : on greffe une seconde sonde sur le chemin coopératif déjà
+  prouvé d'ADR-014.</p>
+  <div class="fig">
+    <svg viewBox="0 0 720 210" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Trois plafonds">
+      <text x="360" y="22" text-anchor="middle" font-size="13" font-weight="700" fill="#0f172a">Trois plafonds orthogonaux, un seul run borné</text>
+      <!-- run box -->
+      <rect x="280" y="84" width="160" height="62" rx="10" fill="#eef2ff" stroke="#4f46e5"/>
+      <text x="360" y="110" text-anchor="middle" font-size="12" font-weight="700" fill="#3730a3">run d'essaim</text>
+      <text x="360" y="130" text-anchor="middle" font-size="10" fill="#475569">vagues bornées (sizer)</text>
+      <!-- three ceilings -->
+      <rect x="40" y="60" width="170" height="44" rx="9" fill="#dcfce7" stroke="#16a34a"/>
+      <text x="125" y="78" text-anchor="middle" font-size="11" font-weight="700" fill="#166534">COÛT — Budget</text>
+      <text x="125" y="94" text-anchor="middle" font-size="9.5" fill="#475569">BudgetProbe (existe, I13)</text>
+      <rect x="40" y="126" width="170" height="44" rx="9" fill="#ccfbf1" stroke="#0d9488"/>
+      <text x="125" y="144" text-anchor="middle" font-size="11" font-weight="700" fill="#115e59">TEMPS — Deadline</text>
+      <text x="125" y="160" text-anchor="middle" font-size="9.5" fill="#475569">DeadlineProbe (NEUF, jumeau)</text>
+      <rect x="510" y="93" width="170" height="44" rx="9" fill="#fef3c7" stroke="#d97706"/>
+      <text x="595" y="111" text-anchor="middle" font-size="11" font-weight="700" fill="#92400e">CONCURRENCE</text>
+      <text x="595" y="127" text-anchor="middle" font-size="9.5" fill="#475569">admission (pré-run, 429)</text>
+      <!-- arrows: budget & deadline probe the wave loop -->
+      <line x1="210" y1="82" x2="278" y2="100" stroke="#16a34a" stroke-width="1.6" marker-end="url(#a)"/>
+      <line x1="210" y1="148" x2="278" y2="124" stroke="#0d9488" stroke-width="1.6" marker-end="url(#a)"/>
+      <line x1="510" y1="115" x2="442" y2="115" stroke="#d97706" stroke-width="1.6" marker-end="url(#a)"/>
+      <defs><marker id="a" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 Z" fill="#475569"/></marker></defs>
+      <text x="125" y="190" text-anchor="middle" font-size="9.5" fill="#475569" font-style="italic">sondes coopératives, entre vagues → arrêt PROPRE + scellé</text>
+      <text x="595" y="158" text-anchor="middle" font-size="9.5" fill="#475569" font-style="italic">garde l'ENTRÉE (avant le run)</text>
+      <text x="360" y="170" text-anchor="middle" font-size="9.5" fill="#3730a3">s'arrête au PREMIER plafond atteint</text>
+    </svg>
+    <div class="cap">Coût et temps bornent la DURÉE (sondes coopératives entre vagues) ; la concurrence borne l'ENTRÉE (admission, avant le run). Trois axes, un principe.</div>
+  </div>
+
+  <h3>3.2 — Borner visiblement, sceller le partiel</h3>
+  <p>Deux règles non négociables, héritées de la doctrine du projet. <b>(1) Visibilité</b> : un refus est un
+  <code>429</code> explicite avec <code>Retry-After</code> (admission), un arrêt est un <b>statut</b> nommé dans le
+  <code>SwarmRun</code> (<code>budget_stopped</code> / <code>deadline_exceeded</code>), jamais une file silencieuse ni un
+  timeout opaque. <b>(2) Scellement du partiel</b> : un run tronqué — par budget OU par deadline — n'est <b>pas</b> un
+  échec qui perd tout ; c'est un run <b>plus court</b> dont les <code>AgentCallRecord</code> produits sont scellés
+  normalement et restent <b>pleinement vérifiables</b> (<code>verify/:id</code> passe sur le partiel). La preuve survit
+  à la troncature. C'est ce qui distingue un deadline coopératif (qui scelle) d'un <code>tokio::timeout</code> dur (qui
+  détruit, §1.3) — ce dernier n'est gardé que comme <b>backstop</b> de dernier recours contre un hang.</p>
+
+  <h3>3.3 — Re-prouvable, pas reproductible (l'écho d'ADR-017)</h3>
+  <p>Le deadline introduit une dépendance au <b>wall-clock</b> — et ADR-017 a établi que le wall-clock est <b>hors du
+  moat</b>. Conséquence honnête, gravée d'emblée : un run tronqué par deadline est <b>re-prouvable</b> (R0 : re-sceller
+  ses records partiels reproduit son <code>provenance_root</code>) mais <b>non reproductible</b> (R1 : re-exécuté sur une
+  machine plus rapide, il atteindrait peut-être <code>k+1</code> vagues avant l'échéance ; plus lente, <code>k−1</code>
+  — le <b>point de troncature dépend du temps</b>, comme <code>wall_at</code>). Le statut <code>deadline_exceeded</code>
+  signale cette frontière : le rejeu R1 d'un run deadliné peut diverger au point de troncature <b>sans que ce soit une
+  faute</b>. C'est exactement la leçon d'ADR-017 (« la computation se reproduit, l'empreinte non »), appliquée au temps.</p>
+  </section>
+</div>
+
+<!-- §4 -->
+<div class="wrap page">
+  <section>
+  <h2><span class="num">§4</span> Architecture A — admission équitable, tous les chemins</h2>
+
+  <h3>4.1 — Fairness par-tenant : un tenant n'affame pas les autres</h3>
+  <p>On conserve le sémaphore global (le plafond process dur, contre l'écroulement mémoire/CPU) et on lui <b>superpose</b>
+  une borne par-tenant. Le design retenu — minimal et sans file invisible : un <b>cap par-tenant</b>
+  (<code>per_tenant_max</code>, configurable, défaut = une fraction du global, ex. <code>⌈admission_max / 2⌉</code>) plus
+  un compteur d'inflight par-tenant (<code>HashMap&lt;TenantId, AtomicUsize&gt;</code> sous le verrou d'état, ou un
+  <code>Semaphore</code> par-tenant créé à la demande). L'admission devient un <b>double permit</b> : le run doit
+  acquérir <b>(a)</b> un permit global ET <b>(b)</b> rester sous son cap tenant ; sinon <code>429</code>. Ainsi un tenant
+  ne peut prendre plus de <code>per_tenant_max</code> places, garantissant que les autres gardent
+  <code>admission_max − per_tenant_max</code> places <b>toujours disponibles</b>. Le <code>429</code> distingue les deux
+  causes (<code>"reason": "gateway_full"</code> vs <code>"tenant_quota"</code>) pour un diagnostic honnête. La fairness
+  reste du <b>rejet visible</b>, pas une file — fidèle à ADR-014.</p>
+
+  <h3>4.2 — Tous les chemins de run sont gardés</h3>
+  <p>Un plafond troué ne vaut rien. L'invariant I-AD7 exige que <b>tout</b> chemin qui exécute un essaim acquière un
+  permit : <code>POST /run</code> sync, <code>POST /run?stream=true</code> (job détaché — le permit suit la tâche),
+  et <code>POST /replay/:id</code> R1 (la re-exécution, gardée en ADR-017). Les endpoints de <b>lecture/re-preuve</b> qui
+  n'exécutent rien — <code>GET /verify/:id</code>, <code>GET /replay/:id</code> (R0), <code>GET /runs/:id/*</code> — ne
+  prennent <b>pas</b> de permit (ils ne sont pas des runs). La fairness par-tenant s'applique uniformément à tous les
+  chemins gardés. Un test de couverture énumère les routes et vérifie que chaque exécution d'essaim passe par la garde.</p>
+  </section>
+</div>
+
+<!-- §5 -->
+<div class="wrap page">
+  <section>
+  <h2><span class="num">§5</span> Architecture B — le deadline run</h2>
+
+  <h3>5.1 — La sonde coopérative <code>DeadlineProbe</code> (dans la boucle de vagues)</h3>
+  <p>Le cœur du deadline est une sonde, jumelle de <code>BudgetProbe</code>. Un <code>DeadlineGuard</code> capture un
+  <code>start: Instant</code> et une <code>budget: Duration</code> ; <code>remaining()</code> et
+  <code>expired()</code> sont des lectures atomiques bon marché. Une <code>DeadlineProbe = Arc&lt;dyn Fn() -&gt;
+  bool&gt;</code> (« reste-t-il du temps ? ») est passée au sizer à côté de la <code>BudgetProbe</code> ; dans
+  <code>run_waves_pure</code>, une vague n'est émise que si <code>budget_probe(n) &amp;&amp; deadline_probe()</code>.
+  Quand le temps est écoulé, la boucle s'arrête (comme pour le budget), <code>k_used</code> reflète les vagues faites, le
+  run finalise et <b>scelle le partiel</b>. La granularité est <b>la vague</b> : pour le Mode A (vagues en µs), le
+  deadline est quasi-exact ; pour le Mode C (vagues en secondes), il est approché à la vague près — acceptable, et le
+  backstop (§5.2) couvre une vague qui déraille. Pour les topologies <b>sans vagues</b> (T2 pipeline, T3 hierarchical),
+  on réutilise leur <code>timeout</code> par-batch existant, dérivé du deadline restant.</p>
+
+  <h3>5.2 — Le backstop dur <code>tokio::timeout</code> (contre les hangs)</h3>
+  <p>La sonde coopérative ne se déclenche qu'<b>entre</b> les vagues ; une vague (ou un appel LLM) qui <b>pend</b> ne la
+  consulterait jamais. D'où un <b>backstop</b> : la passerelle enveloppe <code>run_traced</code> dans
+  <code>tokio::time::timeout(deadline + grâce, …)</code>. En fonctionnement normal, la sonde coopérative mord
+  <b>avant</b> le backstop (la grâce, ex. +5 s, garantit l'ordre) → provenance partielle scellée. Le backstop n'est
+  atteint que par un <b>hang pathologique</b> ; là, le futur est abandonné, la provenance partielle est <b>perdue</b>
+  (§1.3, assumé), et le run échoue proprement en <code>deadline_hard_abort</code> — un échec net, jamais un zombie.
+  Le permit d'admission est <b>libéré</b> dans tous les cas (le <i>drop</i> du futur libère le permit owned).</p>
+
+  <h3>5.3 — Sceller le partiel · le statut du run · la composition des plafonds</h3>
+  <p>La requête gagne un champ <code>deadline_ms: Option&lt;u64&gt;</code>, <b>plafonné serveur</b> (clamp à
+  <code>deadline_max_ms</code>, parité avec la largeur d'I-CP1 : le client peut demander <b>plus strict</b>, jamais plus
+  large ; défaut = le max serveur). Le <code>SwarmRun</code> gagne un statut de terminaison —
+  <code>Completed</code> / <code>BudgetStopped</code> / <code>DeadlineExceeded</code> / <code>DeadlineHardAbort</code> —
+  exposé sur le fil et en métrique. <b>Composition</b> : les deux sondes coopératives s'évaluent au même point ; le run
+  s'arrête au <b>premier</b> plafond atteint, et le statut dit lequel. Un run <code>DeadlineExceeded</code> reste
+  <b>vérifiable</b> (I-AD3) et porte le caveat de reproductibilité (I-AD6, §3.3). Métriques neuves :
+  <code>deadline_exceeded_total</code>, <code>deadline_hard_abort_total</code>, histogramme de durée de run.</p>
+  <div class="fig">
+    <svg viewBox="0 0 720 220" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Flux deadline">
+      <text x="360" y="20" text-anchor="middle" font-size="13" font-weight="700" fill="#0f172a">Deadline : coopératif (scelle le partiel) + backstop dur (contre le hang)</text>
+      <rect x="20" y="44" width="150" height="40" rx="9" fill="#eef2ff" stroke="#4f46e5"/>
+      <text x="95" y="62" text-anchor="middle" font-size="10.5" font-weight="700" fill="#3730a3">POST /run</text>
+      <text x="95" y="77" text-anchor="middle" font-size="9" fill="#475569">deadline_ms (clampé)</text>
+      <!-- wave loop -->
+      <rect x="210" y="40" width="230" height="92" rx="10" fill="#ccfbf1" stroke="#0d9488"/>
+      <text x="325" y="58" text-anchor="middle" font-size="10.5" font-weight="700" fill="#115e59">boucle de vagues (sizer)</text>
+      <text x="325" y="76" text-anchor="middle" font-size="9.5" fill="#0f766e">émettre vague SSI</text>
+      <text x="325" y="90" text-anchor="middle" font-size="9.5" fill="#0f766e">budget_probe ∧ deadline_probe</text>
+      <text x="325" y="108" text-anchor="middle" font-size="9" fill="#475569">échéance → STOP, k_used vagues</text>
+      <text x="325" y="122" text-anchor="middle" font-size="9" fill="#475569">→ scelle le PARTIEL (vérifiable)</text>
+      <!-- backstop -->
+      <rect x="210" y="150" width="230" height="48" rx="10" fill="#fffbeb" stroke="#d97706"/>
+      <text x="325" y="168" text-anchor="middle" font-size="10.5" font-weight="700" fill="#92400e">backstop : tokio::timeout(deadline+grâce)</text>
+      <text x="325" y="184" text-anchor="middle" font-size="9" fill="#475569">hang → abort dur → échec net (partiel perdu)</text>
+      <!-- outcomes -->
+      <rect x="480" y="44" width="220" height="40" rx="9" fill="#dcfce7" stroke="#16a34a"/>
+      <text x="590" y="62" text-anchor="middle" font-size="10" font-weight="700" fill="#166534">Completed / DeadlineExceeded</text>
+      <text x="590" y="77" text-anchor="middle" font-size="9" fill="#475569">scellé · vérifiable (R0) · caveat R1</text>
+      <rect x="480" y="156" width="220" height="36" rx="9" fill="#fee2e2" stroke="#dc2626"/>
+      <text x="590" y="172" text-anchor="middle" font-size="10" font-weight="700" fill="#991b1b">DeadlineHardAbort</text>
+      <text x="590" y="186" text-anchor="middle" font-size="9" fill="#475569">échec net, permit libéré</text>
+      <line x1="170" y1="64" x2="208" y2="70" stroke="#475569" stroke-width="1.4" marker-end="url(#b)"/>
+      <line x1="440" y1="80" x2="478" y2="66" stroke="#16a34a" stroke-width="1.4" marker-end="url(#b)"/>
+      <line x1="440" y1="174" x2="478" y2="174" stroke="#dc2626" stroke-width="1.4" marker-end="url(#b)"/>
+      <defs><marker id="b" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 Z" fill="#475569"/></marker></defs>
+    </svg>
+    <div class="cap">Le chemin coopératif (normal) scelle le partiel et reste vérifiable ; le backstop dur (pathologique) abandonne proprement. Dans les deux cas, le permit d'admission est libéré.</div>
+  </div>
+  </section>
+</div>
+
+<!-- §6 -->
+<div class="wrap page">
+  <section>
+  <h2><span class="num">§6</span> Les invariants — famille I-AD (Admission/Deadline)</h2>
+  <p>Huit invariants, la grammaire du projet : une phrase vérifiable, un gardien nommé. Les gardiens se testent
+  <b>keyless</b> (admission + deadline coopératif Mode A) ; un volet Mode C réel (deadline sur Ollama lent) est
+  ignoré-sans-modèle.</p>
+  <table>
+    <thead><tr><th style="width:7%">Inv.</th><th>Énoncé</th><th style="width:30%">Gardien</th></tr></thead>
+    <tbody>
+      <tr><td><b>I-AD1</b></td><td><b>Concurrence bornée</b> : au plus <code>admission_max</code> runs en vol ; au-delà, <code>429 + Retry-After</code> et <code>admission_rejected</code> incrémenté — jamais une file invisible.</td><td><code>admission_caps_inflight_and_429s</code></td></tr>
+      <tr><td><b>I-AD2</b></td><td><b>Fairness par-tenant</b> : un tenant saturant son cap reçoit <code>429</code> tandis que les places restantes demeurent disponibles aux <b>autres</b> tenants (pas de famine).</td><td><code>tenant_quota_prevents_starvation</code></td></tr>
+      <tr><td><b>I-AD3</b></td><td><b>Deadline coopératif → partiel scellé &amp; vérifiable</b> : un run qui atteint son deadline cesse d'émettre, scelle la provenance partielle, et <code>verify/:id</code> passe dessus (le moat survit à la troncature).</td><td><code>deadline_seals_partial_and_stays_verifiable</code></td></tr>
+      <tr><td><b>I-AD4</b></td><td><b>Backstop dur</b> : un run qui pend au-delà de <code>deadline + grâce</code> est abandonné (<code>tokio::timeout</code>) → <code>DeadlineHardAbort</code>, permit libéré, pas de zombie.</td><td><code>hung_run_hits_hard_backstop_and_frees_permit</code></td></tr>
+      <tr><td><b>I-AD5</b></td><td><b>Composition au premier plafond</b> : budget ET deadline cohabitent ; le run s'arrête au premier atteint, et le statut (<code>BudgetStopped</code> / <code>DeadlineExceeded</code>) dit lequel.</td><td><code>first_ceiling_wins_and_is_named</code></td></tr>
+      <tr><td><b>I-AD6</b></td><td><b>Re-prouvable, pas reproductible</b> : un run <code>DeadlineExceeded</code> se re-prouve (R0 reproduit son root partiel) ; son rejeu R1 peut diverger au point de troncature (wall-clock) <b>sans faute</b> — le statut le signale (ADR-017).</td><td><code>deadlined_run_reproves_r0_but_flags_r1_caveat</code></td></tr>
+      <tr><td><b>I-AD7</b></td><td><b>Tous les chemins gardés</b> : <code>/run</code> (sync + job) ET <code>/replay</code> R1 acquièrent un permit ; les chemins de lecture/re-preuve (verify, R0, runs/*) n'en prennent pas.</td><td><code>every_run_path_acquires_a_permit</code></td></tr>
+      <tr><td><b>I-AD8</b></td><td><b>Bornes server-side</b> : <code>deadline_ms</code> et la concurrence sont plafonnés serveur ; le client peut demander <b>plus strict</b>, jamais plus large (parité I-CP1 width).</td><td><code>deadline_is_clamped_server_side</code></td></tr>
+    </tbody>
+  </table>
+  <p>Le couple <b>I-AD3 / I-AD4</b> est le cœur : ensemble, ils tranchent la frontière coopératif/dur — le cas normal
+  <b>scelle</b> (la preuve survit), le cas pathologique <b>abandonne proprement</b> (jamais de zombie). I-AD6 est la
+  dette d'honnêteté envers ADR-017 : un deadline est wall-clock, donc hors du moat, et le rejeu le dit.</p>
+  </section>
+</div>
+
+<!-- §7 -->
+<div class="wrap page">
+  <section>
+  <h2><span class="num">§7</span> Le modèle de menace — ce que les plafonds attrapent</h2>
+  <table>
+    <thead><tr><th>Scénario</th><th>Borné par</th></tr></thead>
+    <tbody>
+      <tr><td>Flot de runs concurrents → écroulement CPU/mémoire</td><td class="good">admission (sémaphore global, 429) — existe</td></tr>
+      <tr><td>Un tenant lance une rafale → famine des autres tenants</td><td class="good">fairness par-tenant (cap + 429 « tenant_quota ») — NEUF (§4.1)</td></tr>
+      <tr><td>Run zombie : agent/backend lent tient un permit indéfiniment</td><td class="good">deadline coopératif → arrêt scellé ; backstop dur si hang — NEUF</td></tr>
+      <tr><td>Run lent mais pas cher (Mode A long, ou LLM qui pend avant de facturer)</td><td class="good">deadline (le budget ne le voit pas — axe orthogonal) — NEUF</td></tr>
+      <tr><td>Run coûteux qui s'emballe</td><td class="good">budget <code>OnExceed::Stop</code> (sonde coopérative) — existe</td></tr>
+      <tr><td><code>/replay</code> R1 en rafale contourne l'admission</td><td class="good">R1 gardé par l'admission (ADR-017) — existe</td></tr>
+    </tbody>
+  </table>
+  <p><b>Ce que les plafonds n'attrapent PAS (honnêteté).</b> Le deadline coopératif a une granularité de <b>vague</b> :
+  une vague unique très longue dépasse l'échéance jusqu'à son terme (ou jusqu'au backstop) — il n'interrompt pas un appel
+  LLM en cours. Le backstop dur, lui, <b>perd la provenance partielle</b> (le futur est abandonné) — assumé pour le seul
+  cas pathologique. La fairness par-tenant est <b>statique</b> (un cap), pas une part équitable pondérée dynamique (un
+  ordonnanceur fair-share serait un autre chantier). Et un run deadliné n'est <b>pas reproductible</b> au point de
+  troncature (I-AD6) — c'est une borne physique du wall-clock, pas un bug.</p>
+  </section>
+</div>
+
+<!-- §8 -->
+<div class="wrap page">
+  <section>
+  <h2><span class="num">§8</span> Le harnais — Lot ADMIT-DEADLINE</h2>
+  <p>Gate <b>mixte</b> : correction (admission équitable, le prior est favorable — le sémaphore existe) + capacité neuve
+  mesurée (deadline). Artefact daté <code>scripts/swarm/EFE_SWARM_ADMITDL_2026-06-17.json</code>.</p>
+  <h3>8.1 — Les volets éprouvés</h3>
+  <p><b>① Admission &amp; fairness.</b> Saturer le cap global → les runs suivants reçoivent <code>429 + Retry-After</code>,
+  <code>admission_rejected</code> monte (I-AD1). Saturer le cap d'un tenant A → A reçoit <code>429</code> alors qu'un
+  tenant B obtient encore un permit (I-AD2, pas de famine). <b>Critère GO</b> : cap respecté, 429 visible, B non affamé.</p>
+  <p><b>② Deadline coopératif + scellement.</b> Un run keyless avec une charge volontairement large (K élevé, agents
+  ralentis par un sink de test) et un <code>deadline_ms</code> court → le run s'arrête à <code>k_used &lt; K</code>,
+  statut <code>DeadlineExceeded</code>, et <code>verify/:id</code> sur le partiel <b>passe</b> (I-AD3). Un run dont une
+  vague pend au-delà de <code>deadline + grâce</code> → <code>DeadlineHardAbort</code>, permit re-disponible (I-AD4).
+  <b>Critère GO</b> : partiel scellé+vérifié ; backstop ferme net ; permit toujours libéré.</p>
+  <p><b>③ Composition + honnêteté de rejeu.</b> Budget court + deadline long → <code>BudgetStopped</code> ; l'inverse →
+  <code>DeadlineExceeded</code> (I-AD5, le premier plafond nommé). Un run <code>DeadlineExceeded</code> : R0 reproduit
+  son root partiel ; R1 porte le caveat (I-AD6). <code>deadline_ms</code> au-delà du max serveur est clampé (I-AD8).
+  <b>Critère GO</b> : le bon statut, R0 tient, le clamp mord.</p>
+  <h3>8.2 — Le volet Mode C réel (ignoré sans Ollama)</h3>
+  <p>Un run Mode C self-host avec un <code>deadline_ms</code> plus court que la latence d'un tour de juges → le run
+  s'arrête coopérativement entre vagues, scelle les appels LLM déjà faits (forensique N17 intacte), et
+  <code>verify_run_offline</code> passe sur le partiel. Preuve honnête que le deadline tient en conditions réelles —
+  y compris que la troncature N'EST PAS reproductible (le statut le dit).</p>
+  </section>
+</div>
+
+<!-- §9 -->
+<div class="wrap page">
+  <section>
+  <h2><span class="num">§9</span> Plan de construction — lots, fichiers, ADR-018</h2>
+  <p>Trois lots, chaque commit laissant la suite verte. ≈ 650 LoC — composition de patrons existants (la sonde
+  coopérative du budget, le sémaphore d'admission, le clamp de largeur), pas d'invention de contrôle de flux.</p>
+  <table>
+    <thead><tr><th style="width:7%">Lot</th><th>Contenu</th><th>Fichiers (exhaustif)</th><th class="c">LoC≈</th></tr></thead>
+    <tbody>
+      <tr><td><b>AD-1</b><br>admission équitable</td><td>cap par-tenant (double permit global + tenant) ; 429 distinguant <code>gateway_full</code>/<code>tenant_quota</code> ; jauges <code>/metrics</code> par-tenant ; couverture « tous les chemins »</td><td>gateway : <code>state.rs</code> (per_tenant), <code>routes/run.rs</code> + <code>routes/replay.rs</code> (double garde), <code>routes/metrics.rs</code> · tests : I-AD1/2/7</td><td class="c">~230</td></tr>
+      <tr><td><b>AD-2</b><br>deadline coopératif</td><td><code>DeadlineGuard</code> + <code>DeadlineProbe</code> (jumeau de Budget) ; greffe dans <code>run_waves_pure</code> (vague SSI budget∧deadline) ; <code>SwarmRun</code> gagne <code>termination</code> ; scellement du partiel ; clamp server-side de <code>deadline_ms</code></td><td>topology : <code>sizing.rs</code> (DeadlineProbe) · sdk : <code>budget.rs</code>/nouveau <code>deadline.rs</code>, <code>sdk.rs</code> (run_traced), <code>result.rs</code> (termination) · gateway : <code>dto.rs</code> (deadline_ms), <code>state.rs</code> (deadline_max) · tests : I-AD3/5/6/8</td><td class="c">~280</td></tr>
+      <tr><td><b>AD-3</b><br>backstop &amp; mesure</td><td>backstop <code>tokio::timeout(deadline+grâce)</code> au gateway → <code>DeadlineHardAbort</code> ; métriques (deadline_exceeded/hard_abort, histo durée) ; <code>lot_admit_deadline.rs</code> ; volet Mode C réel ignoré ; ADR-018</td><td>gateway : <code>routes/run.rs</code>, <code>routes/replay.rs</code>, <code>routes/metrics.rs</code> · examples : <code>lot_admit_deadline.rs</code> · <code>scripts/swarm/EFE_SWARM_ADMITDL_2026-06-17.json</code> · <code>docs/docs/adr/ADR-SWARM-018-…md</code> · tests : I-AD4</td><td class="c">~140</td></tr>
+    </tbody>
+  </table>
+  <h3>9.1 — La suite de tests nominative (les gardiens prévus)</h3>
+  <p><b>Admission (3)</b> : <code>admission_caps_inflight_and_429s</code> (I-AD1) ·
+  <code>tenant_quota_prevents_starvation</code> (I-AD2) · <code>every_run_path_acquires_a_permit</code> (I-AD7).
+  <b>Deadline (4)</b> : <code>deadline_seals_partial_and_stays_verifiable</code> (I-AD3) ·
+  <code>hung_run_hits_hard_backstop_and_frees_permit</code> (I-AD4) · <code>first_ceiling_wins_and_is_named</code> (I-AD5) ·
+  <code>deadline_is_clamped_server_side</code> (I-AD8). <b>Moat (1)</b> :
+  <code>deadlined_run_reproves_r0_but_flags_r1_caveat</code> (I-AD6). <b>Mode C réel (1, ignoré)</b> :
+  <code>real_mode_c_deadline_seals_partial_n17</code>.</p>
+  <h3>9.2 — ADR-SWARM-018, le squelette</h3>
+  <p><b>Titre</b> : « Gouvernance des runs — admission équitable par-tenant + deadline coopératif (scelle le partiel,
+  backstop dur), trois plafonds composables ». <b>Contexte</b> : le coût (Budget) et la concurrence (admission CP-2) sont
+  bornés ; le temps ne l'est pas (run zombie) et l'admission globale autorise la famine par tenant. <b>Décision</b> :
+  ① fairness par-tenant (cap + double permit, 429 distinct) ; ② deadline = jumeau temporel du budget (sonde coopérative
+  dans la boucle de vagues) ; ③ scellement du partiel (le run tronqué reste vérifiable) ; ④ backstop
+  <code>tokio::timeout</code> contre les hangs (échec net, partiel perdu assumé) ; ⑤ statut de terminaison nommé +
+  composition au premier plafond ; ⑥ <code>deadline_ms</code> clampé serveur (parité width I-CP1) ; ⑦ admission sur
+  tous les chemins de run. <b>Hors-périmètre versionné</b> : ordonnanceur fair-share pondéré dynamique ; interruption
+  intra-vague d'un appel LLM en cours ; persistance d'une file (la doctrine est le rejet visible). <b>Verdict</b> : Lot
+  ADMIT-DEADLINE — GO sur admission équitable (correction) + deadline (partiel scellé+vérifié, backstop, composition).
+  <b>Related</b> : ADR-014 (admission CP-2, budget I13), ADR-006/016 (moat, partiel vérifiable), ADR-017 (wall-clock hors
+  moat → caveat de rejeu). <b>Conséquences</b> : plus de run zombie, plus de famine par tenant ; les trois plafonds
+  (coût/temps/concurrence) composent ; le partiel reste prouvable, et le rejeu reste honnête.</p>
+  </section>
+</div>
+
+<!-- §10 -->
+<div class="wrap page">
+  <section>
+  <h2><span class="num">§10</span> Risques honnêtes &amp; hors-périmètre</h2>
+  <table>
+    <thead><tr><th style="width:26%">Risque / limite</th><th>Réalité, sans fard</th><th style="width:28%">Tenue</th></tr></thead>
+    <tbody>
+      <tr><td>Granularité de vague du deadline</td><td>une vague unique longue (ou un appel LLM en cours) dépasse l'échéance jusqu'à son terme — la sonde ne mord qu'entre vagues</td><td>backstop dur en filet (deadline+grâce) ; granularité fine pour le Mode A (vagues µs) ; l'interruption intra-appel est un chantier futur, scopé dehors</td></tr>
+      <tr><td>Le backstop dur perd le partiel</td><td>un <code>tokio::timeout</code> abandonne le futur → recorder perdu, pas de provenance</td><td>par conception : c'est le dernier recours (hang pathologique) ; le chemin NORMAL est coopératif et scelle (la grâce garantit qu'il mord d'abord)</td></tr>
+      <tr><td>Run deadliné non reproductible</td><td>le point de troncature dépend du wall-clock → R1 peut diverger</td><td>par conception (ADR-017) : R0 re-prouve le partiel ; le statut <code>DeadlineExceeded</code> signale le caveat — jamais traité comme une faute (I-AD6)</td></tr>
+      <tr><td>Fairness par-tenant statique</td><td>un cap fixe par tenant, pas une part équitable pondérée dynamique</td><td>suffit contre la famine (l'angle mort d'ADR-014) ; un ordonnanceur fair-share est un autre lot, scopé dehors</td></tr>
+      <tr><td>Doctrine du rejet (pas de file)</td><td>à saturation, on renvoie 429 — on ne met pas en file</td><td>choix assumé d'ADR-014 (backpressure visible &gt; file invisible qui finit en timeouts) ; <code>Retry-After</code> guide le client</td></tr>
+      <tr><td>Compat ascendante</td><td><code>deadline_ms</code> absent = comportement actuel (deadline = max serveur)</td><td>champ optionnel ; un run sans deadline explicite se comporte comme aujourd'hui, borné par le seul max serveur</td></tr>
+    </tbody>
+  </table>
+  <p class="small"><b>Synthèse de décision.</b> ≈ 650 LoC, zéro nouvelle machinerie de contrôle de flux (on greffe une
+  seconde sonde sur la boucle de vagues d'ADR-014, et un cap par-tenant sur le sémaphore existant). En face : plus de run
+  zombie, plus de famine par tenant, et les <b>trois plafonds</b> — coût, temps, concurrence — composent sous un seul
+  principe : <b>borner visiblement, sceller le partiel, dire ce qui reste reproductible</b>. Le deadline est le jumeau
+  temporel du budget ; l'admission équitable ferme l'angle mort qu'ADR-014 avait nommé.</p>
+  </section>
+</div>
+
+<!-- §A -->
+<div class="wrap page">
+  <section>
+  <h2><span class="num">§A</span> Annexe — schémas, signatures, glossaire</h2>
+
+  <h3>A.1 — Signatures (l'API proposée)</h3>
+  <pre>// efe-swarm-sdk — le deadline, jumeau du Budget (budget.rs / nouveau deadline.rs)
+pub struct DeadlineGuard { start: Instant, budget: Duration }   // état atomique bon marché
+impl DeadlineGuard {
+    pub fn remaining(&amp;self) -&gt; Duration;     // budget − écoulé (0 si dépassé)
+    pub fn expired(&amp;self) -&gt; bool;            // écoulé ≥ budget
+    pub fn probe(self: &amp;Arc&lt;Self&gt;) -&gt; DeadlineProbe;  // Arc&lt;dyn Fn() -&gt; bool&gt;  (« reste-t-il du temps ? »)
+}
+// efe-swarm-topology — la boucle de vagues consulte les DEUX sondes (sizing.rs)
+fn run_waves_pure(.., budget_probe: Option&lt;&amp;BudgetProbe&gt;, deadline_probe: Option&lt;&amp;DeadlineProbe&gt;) -&gt; (Vec&lt;Value&gt;, SizingTrace);
+//   émettre une vague SSI : budget_probe(n) &amp;&amp; deadline_probe()
+
+// efe-swarm-sdk — le run rapporte sa terminaison (result.rs)
+pub enum RunTermination { Completed, BudgetStopped, DeadlineExceeded, DeadlineHardAbort }
+//   SwarmRun.termination : RunTermination
+
+// efe-swarm-gateway — admission équitable + backstop (state.rs / routes)
+struct Admission { global: Arc&lt;Semaphore&gt;, per_tenant_max: usize, inflight: Mutex&lt;HashMap&lt;TenantId, usize&gt;&gt; }
+//   acquire(tenant) -&gt; Result&lt;AdmissionPermit, AdmitReject>   // AdmitReject = GatewayFull | TenantQuota → 429
+//   handler : tokio::time::timeout(deadline_ms + GRACE, swarm.run_traced(..))  // backstop dur</pre>
+
+  <h3>A.2 — Le contrat HTTP (additif)</h3>
+  <pre>POST /v1/swarm/run        { task, topology, budget, width?, deadline_ms? }   // deadline_ms clampé ≤ deadline_max_ms
+  → 200 RunResponse { run_id, run: { …, termination: "completed"|"deadline_exceeded"|… } }
+  → 429 { error:"too_many_requests", reason:"gateway_full"|"tenant_quota", inflight_max, retry_after }
+GET  /v1/swarm/metrics    → … efe_swarm_gateway_deadline_exceeded_total · _deadline_hard_abort_total · run_duration_ms (histo)
+                              efe_swarm_gateway_inflight_runs{tenant="…"} (par-tenant)</pre>
+
+  <h3>A.3 — Glossaire</h3>
+  <table class="small">
+    <tbody>
+      <tr><td><b>admission (process)</b></td><td>borne le NOMBRE de runs en vol (sémaphore global FIFO, ADR-014 CP-2). Rejet = 429 + Retry-After.</td></tr>
+      <tr><td><b>fairness par-tenant</b></td><td>cap par-tenant superposé au global → aucun tenant n'affame les autres (NEUF).</td></tr>
+      <tr><td><b>deadline (run)</b></td><td>plafond wall-clock d'un run. Coopératif (sonde entre vagues, scelle le partiel) + backstop dur (tokio::timeout contre les hangs).</td></tr>
+      <tr><td><b>DeadlineProbe</b></td><td>jumelle de <code>BudgetProbe</code> : « reste-t-il du temps pour la prochaine vague ? », consultée au même point.</td></tr>
+      <tr><td><b>sceller le partiel</b></td><td>un run tronqué (budget OU deadline) scelle ses records produits → reste pleinement vérifiable (R0/verify).</td></tr>
+      <tr><td><b>RunTermination</b></td><td>statut de fin : Completed · BudgetStopped · DeadlineExceeded · DeadlineHardAbort.</td></tr>
+      <tr><td><b>les trois plafonds</b></td><td>coût (Budget), temps (Deadline), concurrence (Admission) — orthogonaux, composables, le run s'arrête au premier atteint.</td></tr>
+    </tbody>
+  </table>
+  <hr>
+  <p class="small muted">EFE — Architecture : admission (runs concurrents) + deadline run · 2026-06-17 ·
+  <span class="mono">main @ 9444e02</span> · lignée ADR-014 (admission CP-2 + budget I13) → 016/017 (moat partiel
+  vérifiable, wall-clock hors moat) → <b>018 (gouvernance des runs : trois plafonds)</b> · <i>borner visiblement,
+  sceller le partiel, dire ce qui reste reproductible.</i></p>
+  </section>
+</div>
+
+</body>
+</html>
