@@ -816,4 +816,44 @@ mod tests {
         assert!(run.provenance.enabled, "provenance toujours scellée (le moat survit au drop)");
         assert_eq!(run.output["reason"], json!("deadline_hard_abort"), "sortie tronquée honnête");
     }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn run_termination_names_the_winning_ceiling() {
+        // I-AD5 (composition) bout-en-bout : le STATUT du run NOMME le plafond atteint. La
+        // précédence run-level (sdk.rs) est hard_abort > deadline.tripped > budget_stopped >
+        // Completed — déterministe, jamais « premier dans le temps ». Jumeau, au niveau run,
+        // du gardien `first_ceiling_wins_and_is_named` (niveau sizing).
+        //
+        // (a) Plafond COÛT — budget Stop épuisé, AUCUN deadline → `BudgetStopped`.
+        let budget_run = Swarm::keyless()
+            .run(
+                json!({ "text": "x" }),
+                TopologySpec::Consensus {
+                    generator: "echo_generator".into(),
+                    judges: vec!["consistency".into(), "length_band".into(), "j_non_empty".into()],
+                    k: 7.into(),
+                    pattern: Pattern::Borda,
+                    escalate: false,
+                },
+                Budget::cents(4).with_policy(OnExceed::Stop), // 10 appels @ 1¢ > 4¢ → épuisé
+            )
+            .await
+            .unwrap();
+        assert_eq!(budget_run.termination, RunTermination::BudgetStopped, "plafond coût → BudgetStopped");
+        assert!(!budget_run.is_clean(), "budget-stoppé = partiel");
+
+        // (b) Plafond TEMPS — deadline serré, budget LARGE → un variant deadline, JAMAIS
+        //     confondu avec le coût (le statut distingue les plafonds).
+        let deadline_run = swarm_with_slow_gen(80, Some(std::time::Duration::from_millis(30)))
+            .run(
+                json!({ "text": "x" }),
+                TopologySpec::consensus_adaptive("slow_gen", &["j_non_empty", "consistency"], 2, 24, 0.999),
+                Budget::cents(1_000_000), // budget large : seul le TEMPS peut mordre
+            )
+            .await
+            .unwrap();
+        assert!(deadline_run.termination.is_deadline(), "plafond temps → variant deadline : {:?}", deadline_run.termination);
+        assert_ne!(deadline_run.termination, RunTermination::BudgetStopped, "le temps n'est pas confondu avec le coût");
+        assert_ne!(deadline_run.termination, RunTermination::Completed, "le run a bien été tronqué");
+    }
 }

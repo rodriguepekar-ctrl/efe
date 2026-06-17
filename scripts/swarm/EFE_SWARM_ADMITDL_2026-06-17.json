@@ -10,6 +10,13 @@
     "rejections_counted": 2
   },
   "adr": "ADR-SWARM-018",
+  "composition_naming": {
+    "cost_ceiling_termination": "budget_stopped",
+    "go": true,
+    "names_distinct_deterministic_precedence": true,
+    "note": "premier plafond = précédence déterministe (budget avant deadline dans la vague ; hard_abort > deadline > budget au niveau run), jamais wall-clock-first",
+    "time_ceiling_termination": "deadline_exceeded"
+  },
   "control_no_deadline": {
     "clean": true,
     "go": true,
@@ -34,7 +41,7 @@
     "sealed_even_after_drop": true,
     "termination": "deadline_hard_abort",
     "topology": "consensus_fixed_k (non coopératif)",
-    "wall_ms": 273
+    "wall_ms": 272
   },
   "lot": "ADMIT-DEADLINE",
   "thesis": "trois plafonds orthogonaux (coût/concurrence/temps), un principe : borner visiblement, sceller le partiel, dire ce qui reste reproductible",

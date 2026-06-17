@@ -83,11 +83,17 @@ dilemme « tuer vs prouver » : on peut tuer **et** prouver.
    `Completed`, run `clean`. L'admission par-tenant à `per_tenant = global` redevient l'admission
    globale ADR-014. Additif, jamais une régression.
 
-## Invariants introduits (famille I-AD — 8 gardiens ; + socle `sizing.rs`/`deadline.rs`)
+## Invariants introduits (famille I-AD — 8 invariants, gardiens dédiés ; + socle `sizing.rs`/`deadline.rs`)
 
-- **I-AD1** — *Trois plafonds composables sans interférence* : coût, temps et concurrence
-  coexistent ; dans la boucle, émettre SSI `budget ∧ deadline`. Gardien :
-  `budget_and_deadline_compose_without_interference` (sizing) · témoin harnais §D.
+- **I-AD1** — *Trois plafonds composables ; le PREMIER atteint arrête et est NOMMÉ* : coût,
+  temps et concurrence coexistent ; dans la boucle on émet SSI `budget ∧ deadline`, et le premier
+  plafond atteint arrête la vague **en nommant sa cause**. **« Premier » = précédence
+  DÉTERMINISTE**, pas « premier dans le temps » : les deux sondes sont consultées **au même
+  instant**, avant la même vague — l'ordre est fixé par le code (budget testé avant deadline dans
+  la vague ; au niveau run, `hard_abort > deadline > budget > completed`). Gardiens :
+  `first_ceiling_wins_and_is_named` (sizing — les DEUX directions `budget`/`deadline` + le cas
+  double-plafond) · `run_termination_names_the_winning_ceiling` (SDK — `RunTermination` nomme le
+  plafond : `BudgetStopped` vs variant deadline, jamais confondus) · témoins harnais §D/§E.
 - **I-AD2** — *Deadline coopératif sur frontière de vague* : la sonde refuse une vague ENTIÈRE
   avant de l'émettre (jumeau de I-AK4) — jamais de demi-vague, zéro sentinelle ; à l'extrême,
   tronque sous `k_min` (le temps prime la borne basse). Gardiens :

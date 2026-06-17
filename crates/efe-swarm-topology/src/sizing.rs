@@ -552,17 +552,35 @@ mod tests {
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-    async fn budget_and_deadline_compose_without_interference() {
-        // Les DEUX plafonds coopératifs coexistent dans la même boucle. Le budget est testé
-        // en premier (ordre du code) : à sec, il l'emporte ; le temps, ouvert, n'interfère
-        // pas. La composition est un ET — émettre SSI budget ∧ deadline (architecture §AD).
+    async fn first_ceiling_wins_and_is_named() {
+        // I-AD5 (composition) — les DEUX plafonds coopératifs vivent dans la même boucle :
+        // émettre SSI budget ∧ deadline. Le PREMIER plafond atteint arrête la vague, et la
+        // RAISON le NOMME. « Premier » = précédence DÉTERMINISTE (le budget est testé avant
+        // le deadline dans le code), PAS « premier dans le temps » : les deux sondes sont
+        // consultées au même instant, avant la même vague. Ce gardien couvre les DEUX
+        // directions + le cas double (jadis seul le sens budget-gagne était testé).
         let gen: Arc<dyn Generator> = Arc::new(AllDistinct);
         let p = plan(4, 16, 4, StopRule::Agreement { threshold: 0.9 });
-        let budget: BudgetProbe = Arc::new(|_n| false); // budget à sec
-        let dl: DeadlineProbe = Arc::new(|| true); // temps OK
-        let (cands, trace) = run_waves_pure(&gen, &json!({}), &p, 8, Some(&budget), Some(&dl)).await;
-        assert_eq!(trace.stop_reason, StopReason::Budget, "budget testé avant deadline");
-        assert!(cands.is_empty());
+        let open_b: BudgetProbe = Arc::new(|_n| true);
+        let dry_b: BudgetProbe = Arc::new(|_n| false);
+        let open_d: DeadlineProbe = Arc::new(|| true);
+        let closed_d: DeadlineProbe = Arc::new(|| false);
+
+        // ① plafond COÛT atteint, temps ouvert → la raison est `budget`.
+        let (c, t) = run_waves_pure(&gen, &json!({}), &p, 8, Some(&dry_b), Some(&open_d)).await;
+        assert_eq!(t.stop_reason, StopReason::Budget, "plafond coût → nommé budget");
+        assert!(c.is_empty());
+
+        // ② plafond TEMPS atteint, budget ouvert → la raison est `deadline` (direction inverse,
+        //    auparavant NON couverte — c'est le cœur de l'écart fermé).
+        let (c, t) = run_waves_pure(&gen, &json!({}), &p, 8, Some(&open_b), Some(&closed_d)).await;
+        assert_eq!(t.stop_reason, StopReason::Deadline, "plafond temps → nommé deadline");
+        assert!(c.is_empty());
+
+        // ③ les DEUX fermés au même instant → précédence déterministe : le budget, testé en
+        //    premier dans la boucle, l'emporte (jamais d'ambiguïté wall-clock).
+        let (_c, t) = run_waves_pure(&gen, &json!({}), &p, 8, Some(&dry_b), Some(&closed_d)).await;
+        assert_eq!(t.stop_reason, StopReason::Budget, "double plafond → budget prime (testé avant)");
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]

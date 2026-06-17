@@ -184,11 +184,32 @@ async fn main() {
     println!("    terminaison : {} · clean : {} · vérifié : {}", term_d.as_str(), outcome.run.is_clean(), outcome.run.provenance.verified);
     println!("    → §D {}", if plain_go { "GO" } else { "NO-GO" });
 
+    // ─────────────────────────────────────────────────────────────────────────
+    //  §E — COMPOSITION NOMMÉE (I-AD5) : le statut DISTINGUE le plafond atteint
+    // ─────────────────────────────────────────────────────────────────────────
+    println!("\n §E — Composition : le STATUT nomme le plafond (coût vs temps), précédence déterministe");
+    // Plafond COÛT : budget Stop épuisé (7 gén. + 3 juges = 10 appels @ 1¢ > 4¢), AUCUN
+    // deadline → BudgetStopped. À comparer au plafond TEMPS de §B (deadline_exceeded).
+    let budget_run = Swarm::keyless()
+        .run_traced(
+            json!({ "text": "x" }),
+            TopologySpec::consensus("echo_generator", &["consistency", "length_band", "j_non_empty"], 7),
+            Budget::cents(4),
+        )
+        .await
+        .unwrap();
+    let term_cost = budget_run.run.termination;
+    let names_distinct = term_cost == RunTermination::BudgetStopped && term_b.is_deadline() && term_cost != term_b;
+    println!("    plafond COÛT → {} · plafond TEMPS (§B) → {}", term_cost.as_str(), term_b.as_str());
+    println!("    noms distincts (jamais confondus) : {names_distinct}");
+    let compose_go = names_distinct;
+    println!("    → §E {}", if compose_go { "GO" } else { "NO-GO" });
+
     // ── Verdict global ─────────────────────────────────────────────────────────
-    let verdict = if admission_go && deadline_b_go && hard_c_go && plain_go { "GO" } else { "NO-GO" };
+    let verdict = if admission_go && deadline_b_go && hard_c_go && plain_go && compose_go { "GO" } else { "NO-GO" };
     println!("\n  VERDICT ADMIT-DEADLINE : {verdict}");
     println!(
-        "    (§A équité={admission_go} · §B coopératif={deadline_b_go} · §C backstop={hard_c_go} · §D témoin={plain_go})"
+        "    (§A équité={admission_go} · §B coopératif={deadline_b_go} · §C backstop={hard_c_go} · §D témoin={plain_go} · §E composition={compose_go})"
     );
 
     let report = json!({
@@ -216,6 +237,13 @@ async fn main() {
             "partial_reproven_offline_R0": ok_b,
             "root_reproduces": root_match_b,
             "go": deadline_b_go
+        },
+        "composition_naming": {
+            "cost_ceiling_termination": term_cost.as_str(),
+            "time_ceiling_termination": term_b.as_str(),
+            "names_distinct_deterministic_precedence": names_distinct,
+            "note": "premier plafond = précédence déterministe (budget avant deadline dans la vague ; hard_abort > deadline > budget au niveau run), jamais wall-clock-first",
+            "go": compose_go
         },
         "deadline_hard_backstop": {
             "topology": "consensus_fixed_k (non coopératif)",
