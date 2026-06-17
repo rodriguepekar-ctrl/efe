@@ -190,6 +190,9 @@ members = [
     # docs/architecture/EFE_SWARM_PHASE4_PROVENANCE_ARCHITECTURE.md.
     "crates/efe-audit-core",      # socle crypto partagé (HMAC chaîné + HKDF par tenant)
     "crates/efe-swarm-provenance", # l'atome AgentCallRecord + la chaîne HMAC par-swarm
+    # ADR-SWARM-019 (MEM-1) — mémoire/apprentissage inter-runs : la mémoire est une ENTRÉE
+    # épinglée/hachée/tracée (recall gelé, learn post-run gardé), chaîne memory_root re-prouvable.
+    "crates/efe-swarm-memory",     # MemoryStore + cellules + fold + chaîne memory_root
     # Phase 5 — SDK unifié : swarm.run(task, topology, budget). Cf.
     # docs/architecture/EFE_SWARM_PHASE5_PRODUCTIZATION_ARCHITECTURE.md.
     "crates/efe-swarm-sdk",

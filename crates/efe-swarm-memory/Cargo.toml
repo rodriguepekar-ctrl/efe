@@ -1,0 +1,28 @@
+[package]
+name = "efe-swarm-memory"
+version = "0.0.1"
+edition = { workspace = true }
+rust-version = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
+description = "ADR-SWARM-019 (MEM-1) — mémoire/apprentissage inter-runs : la mémoire est une ENTRÉE épinglée/hachée/tracée. Store versionné tenant-scopé, cellules (priors taille/pattern, exemplaires, réputation, échec), fold pur gardé, chaîne memory_root re-prouvable (jumeau de seal_n17)."
+publish = false
+
+[lib]
+name = "efe_swarm_memory"
+path = "src/lib.rs"
+
+[dependencies]
+# Le moat réutilisé : chain_hmac + HKDF (HmacKeySource), sha256, canonical_bytes — la chaîne
+# memory_root est le JUMEAU EXACT de la chaîne N17 (seal_n17), même crypto, même clé tenant.
+efe-swarm-provenance = { path = "../efe-swarm-provenance", version = "0.0.1" }
+efe-nano-sdk         = { path = "../efe-nano-sdk", version = "0.0.1" }    # TenantId (clé par tenant)
+
+serde       = { workspace = true }
+serde_json  = { workspace = true }
+uuid        = { workspace = true }
+async-trait = { workspace = true }  # le trait MemoryStore (impl Postgres en MEM-3)
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
