@@ -1,0 +1,32 @@
+{
+  "_note": "Agents PURS synthétiques (Mode A) ; crypto (BLAKE3+HMAC+HKDF) + replay/replay_root/replay_outputs RÉELS. La racine lie l'identité par-run (swarm_id, record_id) → re-provable par R0, non reproductible par re-exécution ; R1 re-dérive les SORTIES.",
+  "budgets": {
+    "verify_us_per_record": 2000.0
+  },
+  "cost": {
+    "r0_us_per_record": 21.0076925,
+    "r0_us_per_run": 168.06154,
+    "r1_us_per_record": 1.1382658333333333,
+    "r1_us_per_run": 9.106126666666666
+  },
+  "go": true,
+  "identity_asymmetry": {
+    "outputs_identical": true,
+    "roots_differ": true
+  },
+  "k": 8,
+  "r0_reseal": {
+    "content_intact": true,
+    "root_reproduced": true
+  },
+  "r1_outputs": {
+    "checked": 8,
+    "matched": 8,
+    "rederived": true
+  },
+  "tamper_localized": {
+    "r0_content_break": true,
+    "r1_output_mismatch": true
+  },
+  "verdict": "GO ✅ — R0 re-prouve la racine · R1 re-dérive les sorties · asymétrie identité honnête · divergence localisée"
+}

@@ -1,0 +1,730 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>EFE — Architecture : endpoint /replay déterministe (re-dériver vs re-prouver)</title>
+<style>
+  :root{--ink:#0f172a;--muted:#475569;--soft:#64748b;--line:#e2e8f0;--teal:#0d9488;--teal-d:#0f766e;--indigo:#4f46e5;--indigo-d:#4338ca;--ok:#16a34a;--warn:#d97706;--bad:#dc2626;--bg-tint:#f8fafc;--bg-card:#f1f5f9;--code-bg:#0f172a;--code-fg:#e2e8f0;}
+  *{box-sizing:border-box;} html{font-size:11.4px;}
+  body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,Arial,sans-serif;color:var(--ink);margin:0;line-height:1.62;background:#fff;-webkit-font-smoothing:antialiased;}
+  .wrap{max-width:178mm;margin:0 auto;padding:0 2mm;}
+  h1,h2,h3,h4{line-height:1.2;font-weight:700;}
+  h2{font-size:1.5rem;margin:0 0 .6rem;padding-bottom:.35rem;border-bottom:3px solid var(--teal);}
+  h2 .num{color:var(--teal);} h3{font-size:1.18rem;margin:1.25rem 0 .35rem;color:var(--indigo-d);}
+  h4{font-size:1rem;margin:.9rem 0 .25rem;color:var(--teal-d);}
+  p{margin:.6rem 0;text-align:justify;hyphens:auto;} a{color:var(--indigo);text-decoration:none;}
+  code{font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace;font-size:.85em;background:var(--bg-card);padding:.05em .35em;border-radius:4px;color:#0b3b36;}
+  .muted{color:var(--muted);} .small{font-size:.88rem;}
+  .lead-in{font-weight:700;color:var(--teal-d);}
+  section{break-inside:avoid;} .page{break-before:page;} h2{break-after:avoid;}
+  table{border-collapse:collapse;width:100%;margin:.6rem 0;font-size:.85rem;}
+  th,td{border:1px solid var(--line);padding:.34rem .55rem;text-align:left;vertical-align:top;}
+  th{background:var(--bg-card);font-weight:700;} tbody tr:nth-child(even){background:var(--bg-tint);}
+  td.c,th.c{text-align:center;} .good{background:#dcfce7 !important;color:#166534;font-weight:700;} .mid{background:#fef9c3 !important;color:#854d0e;font-weight:700;} .bad{background:#fee2e2 !important;color:#991b1b;font-weight:700;}
+  .tag{display:inline-block;font-size:.71rem;font-weight:700;padding:.08em .5em;border-radius:20px;}
+  .t-ok{background:#dcfce7;color:#166534;} .t-info{background:#e0e7ff;color:#3730a3;} .t-teal{background:#ccfbf1;color:#115e59;} .t-warn{background:#fef3c7;color:#92400e;} .t-bad{background:#fee2e2;color:#991b1b;}
+  pre{background:var(--code-bg);color:var(--code-fg);padding:.6rem .85rem;border-radius:8px;overflow:auto;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.74rem;line-height:1.5;margin:.6rem 0;}
+  .callout{border-left:4px solid var(--teal);background:var(--bg-tint);padding:.6rem .9rem;border-radius:0 8px 8px 0;margin:.7rem 0;}
+  .callout p{text-align:left;margin:.3rem 0;}
+  .callout.key{border-color:var(--indigo);background:#eef2ff;} .callout.warn{border-color:var(--warn);background:#fffbeb;}
+  .fig{margin:.8rem 0 1rem;text-align:center;break-inside:avoid;}
+  .fig svg{max-width:100%;height:auto;border:1px solid var(--line);border-radius:10px;background:#fff;}
+  .fig .cap{font-size:.8rem;color:var(--muted);margin-top:.35rem;font-style:italic;text-align:center;}
+  ul,ol{margin:.45rem 0 .6rem 1.15rem;padding:0;} li{margin:.28rem 0;}
+  svg text{font-family:-apple-system,"Segoe UI",Inter,sans-serif;}
+  .cover{height:262mm;display:flex;flex-direction:column;justify-content:center;position:relative;padding:0 6mm;}
+  .cover .eyebrow{color:var(--teal);font-weight:800;letter-spacing:.28em;font-size:.92rem;text-transform:uppercase;}
+  .cover h1{font-size:2.5rem;margin:.4rem 0 .2rem;line-height:1.1;} .cover .sub{font-size:1.28rem;color:var(--muted);margin-bottom:1.2rem;}
+  .cover .tagline{font-size:1.04rem;color:var(--ink);max-width:160mm;border-left:4px solid var(--teal);padding-left:1rem;font-style:italic;text-align:left;}
+  .cover .meta{position:absolute;bottom:6mm;left:6mm;right:6mm;display:flex;justify-content:space-between;border-top:1px solid var(--line);padding-top:.7rem;font-size:.82rem;color:var(--soft);}
+  .cover .pills{margin:1.1rem 0;} .cover .pills .tag{font-size:.8rem;margin-right:.35rem;}
+  .lede{font-size:1.06rem;color:#1e293b;text-align:left;} .mono{font-family:ui-monospace,Menlo,Consolas,monospace;}
+  hr{border:none;border-top:1px solid var(--line);margin:1rem 0;}
+  .toc{font-size:.92rem;columns:2;column-gap:2rem;} .toc div{margin:.18rem 0;break-inside:avoid;} .toc .n{color:var(--teal);font-weight:700;display:inline-block;width:1.8em;}
+</style>
+</head>
+<body>
+
+<!-- COVER -->
+<div class="wrap"><div class="cover">
+  <div class="eyebrow">Architecture · avant code · le rejeu déterministe comme produit</div>
+  <h1>Endpoint <code>/replay</code> déterministe</h1>
+  <div class="sub"><b>Re-dériver</b> n'est pas <b>re-prouver</b> — répondre à « si je relance, j'obtiens la même chose ? »</div>
+  <div class="tagline">EFE prouve déjà, hors ligne, qu'un run d'essaim n'a pas été altéré : <code>GET /v1/swarm/verify/:id</code>
+   re-calcule la chaîne HMAC, le DAG causal et la forensique N17 depuis les seuls records persistés + la clé tenant. Mais
+   <code>verify</code> répond à <i>« ces records sont-ils intègres ? »</i> — pas à <i>« cette computation est-elle
+   reproductible ? »</i>. Un record peut être <b>parfaitement auto-cohérent</b> (son <code>output_hash</code> correspond à
+   son propre corps scellé) tout en portant une sortie que l'agent <b>n'aurait jamais produite</b>. Le socle pour combler
+   cet écart existe pourtant déjà : ADR-SWARM-007 grave que l'ordre de scellement se clave sur les coordonnées du substrat
+   (version, pointeur), <b>pas</b> sur l'horloge, et <code>replay.rs</code> offre <code>replay_root</code> /
+   <code>replay</code> / <code>replay_outputs</code>. Ce document est l'architecture de l'endpoint <code>/replay</code> :
+   <b>re-dériver</b> un run — re-sceller ses records (R0, hors-ligne, gratuit) et <b>re-exécuter</b> son squelette
+   déterministe (R1, Mode A bit-exact) — et comparer au scellé. Le déterminisme est <b>asymétrique</b> et on le dit
+   sans fard : Mode A (essaim Rust pur) re-dérive ses <b>sorties bit-à-bit</b> (la <code>provenance_root</code>, elle, lie l'identité par-run → re-prouvée par R0, non reproduite) ; Mode C (LLM) ne l'est que par
+   <code>cache_hit</code>/<code>replay_of</code>, sinon honnêtement classé — jamais faussement « identique ».</div>
+  <div class="pills">
+    <span class="tag t-info">aujourd'hui : /verify re-prouve l'intégrité (pas la reproductibilité)</span>
+    <span class="tag t-teal">demain : /replay re-dérive (Mode A bit-exact)</span>
+    <span class="tag t-ok">socle ADR-007 : ordre canonique sur (version, pointeur)</span>
+    <span class="tag t-warn">déterminisme ASYMÉTRIQUE assumé : Mode C best-effort honnête</span>
+  </div>
+  <div class="meta"><span><b>Fondations :</b> ADR-007 (ordre canonique) · replay.rs (replay_root/replay/replay_outputs) · DeterminismLevel (nano) · verify_run_offline (ADR-016)</span><span><b>Réf. :</b> <span class="mono">main @ e6cdbb9</span> · 2026-06-17</span></div>
+</div></div>
+
+<!-- TOC -->
+<div class="wrap page">
+  <h2><span class="num">§0</span> Plan &amp; statut du document</h2>
+  <p class="lede">Architecture <b>avant code</b> d'un nouvel endpoint du moat — <code>/v1/swarm/replay/:id</code> — sœur
+  de <code>/verify/:id</code>. Statut : <span class="tag t-info">proposé</span>, prêt à découper en lots. Aucune ligne
+  de production écrite ; ce texte fixe la <b>thèse</b>, la <b>frontière de déterminisme</b>, les <b>invariants</b>
+  (famille I-RP), le <b>modèle de menace</b>, le <b>harnais de gate</b> et le squelette d'<b>ADR-SWARM-017</b>.</p>
+  <div class="toc">
+    <div><span class="n">§1</span>Le problème — <i>verify</i> prouve l'intégrité, pas la reproductibilité</div>
+    <div><span class="n">1.1</span>Ce que <code>/verify</code> établit (et ce qu'il NE dit pas)</div>
+    <div><span class="n">1.2</span>La question sans réponse : « si je relance, j'obtiens la même chose ? »</div>
+    <div><span class="n">1.3</span>Le déterminisme est <b>asymétrique</b> — et c'est honnête de le dire</div>
+    <div><span class="n">§2</span>État des lieux — ce qui existe déjà</div>
+    <div><span class="n">2.1</span>Le socle ADR-007 : <code>OrderKey</code>, <code>deterministic_order</code>, <code>replay_root</code></div>
+    <div><span class="n">2.2</span>La taxonomie <code>DeterminismLevel</code> (déjà codée, nano)</div>
+    <div><span class="n">2.3</span>Ce qui est persisté — et ce qui <b>manque</b> (la task, la spec)</div>
+    <div><span class="n">§3</span>La thèse — re-dériver ≠ re-prouver</div>
+    <div><span class="n">3.1</span>Deux endpoints, deux questions</div>
+    <div><span class="n">3.2</span>Le déterminisme asymétrique, gravé</div>
+    <div><span class="n">3.3</span>Le prior est favorable — le genre du gate</div>
+    <div><span class="n">§4</span>Architecture A — R0 : rejeu hors-ligne depuis les records scellés</div>
+    <div><span class="n">4.1</span>Re-sceller en ordre canonique → la racine se reproduit</div>
+    <div><span class="n">4.2</span>Classifier chaque record par <code>DeterminismLevel</code></div>
+    <div><span class="n">4.3</span>Pourquoi R0 est plus fort que <code>/verify</code></div>
+    <div><span class="n">§5</span>Architecture B — R1 : re-exécuter le squelette</div>
+    <div><span class="n">5.1</span>Le contrat : la task n'est pas persistée → le caller la re-fournit</div>
+    <div><span class="n">5.2</span>Re-exécuter les agents purs (Mode A) → comparer</div>
+    <div><span class="n">5.3</span>Mode C : <code>cache_hit</code>/<code>replay_of</code>, sinon <code>MatchOutcome</code> honnête</div>
+    <div><span class="n">5.4</span>N17 : <b>re-prouvée</b>, pas <b>re-produite</b></div>
+    <div><span class="n">§6</span>Les invariants — famille I-RP (Replay)</div>
+    <div><span class="n">§7</span>Le modèle de menace — ce que le rejeu attrape que <i>verify</i> n'attrape pas</div>
+    <div><span class="n">§8</span>Le harnais — Lot REPLAY</div>
+    <div><span class="n">§9</span>Plan de construction — lots, fichiers, ADR-017</div>
+    <div><span class="n">§10</span>Risques honnêtes &amp; hors-périmètre</div>
+    <div><span class="n">§A</span>Annexe — schémas, signatures, glossaire</div>
+  </div>
+</div>
+
+<!-- §1 -->
+<div class="wrap page">
+  <section>
+  <h2><span class="num">§1</span> Le problème — <i>verify</i> prouve l'intégrité, pas la reproductibilité</h2>
+
+  <h3>1.1 — Ce que <code>/verify</code> établit (et ce qu'il NE dit pas)</h3>
+  <p><code>GET /v1/swarm/verify/:id</code> (ADR-SWARM-009) est le cœur du moat : il appelle
+  <code>verify_run_offline(records, llm_records, n17_leaves, n17_root, key)</code>
+  (<code>routes/verify.rs:31-37</code>) et recompose, depuis les seuls éléments persistés plus la clé tenant, quatre
+  faits — <code>chain_intact</code> (la chaîne HMAC se rejoue sans rupture), <code>content_intact</code> (chaque
+  <code>payload_hash</code> se recalcule depuis le corps du record), <code>dag_consistent</code> (les parents causaux
+  existent, aucune lecture fantôme — <code>verify.rs:118-149</code>) et <code>traced_pct</code> (la couverture
+  d'ancrage). À cela s'ajoute, depuis ADR-016, la chaîne forensique N17 et le pont Mode A↔Mode C. C'est une machine de
+  preuve remarquable : un tiers, sans process vivant, sans provider, sans réseau, établit que <b>rien n'a bougé</b>
+  depuis le scellement.</p>
+  <p>Mais observons exactement <b>ce que <code>verify</code> tient pour acquis</b>. Le contrôle <code>content_intact</code>
+  recalcule le <code>payload_hash</code> du record <b>à partir des champs du record lui-même</b> — y compris son
+  <code>output_hash</code> stocké. Il prouve que le record est <b>auto-cohérent</b> : la signature scelle bien ce corps-ci.
+  Il ne prouve <b>pas</b> que l'<code>output_hash</code> scellé est celui que l'agent <b>aurait réellement produit</b> à
+  partir de son <code>input_hash</code>. Autrement dit : <code>verify</code> atteste l'<b>intégrité</b> de l'évidence,
+  jamais sa <b>fidélité à une exécution</b>. Un opérateur de mauvaise foi — ou un bug — qui scelle un record
+  syntaxiquement parfait mais dont la sortie ne correspond à aucune exécution réelle de l'agent passe <code>verify</code>
+  sans broncher. La signature HMAC garantit « personne n'a touché ce record après coup » ; elle ne garantit pas
+  « ce record est le produit honnête de la computation annoncée ».</p>
+
+  <h3>1.2 — La question sans réponse : « si je relance, j'obtiens la même chose ? »</h3>
+  <p>C'est la question d'un régulateur, d'un auditeur tiers, d'un client qui conteste une décision automatisée. Elle est
+  d'une autre nature que celle de <code>verify</code> : non pas <i>« cet enregistrement a-t-il été falsifié ? »</i> mais
+  <i>« cette computation est-elle <b>reproductible</b> — re-exécutée dans les mêmes conditions, redonne-t-elle exactement
+  ce verdict ? »</i>. C'est la définition opérationnelle de l'<b>auditabilité</b> d'un système automatisé : pouvoir
+  rejouer le calcul et retrouver la même réponse, bit pour bit, est ce qui distingue une décision <b>déterministe et
+  défendable</b> d'une boîte noire dont la sortie n'engage personne.</p>
+  <p>Le système porte déjà, en germe, la réponse — mais elle n'est <b>pas exposée comme produit</b>.
+  <code>crates/efe-swarm-provenance/src/replay.rs</code> offre trois fonctions : <code>replay_root(records, key)</code>
+  (<code>l.88-100</code>) re-scelle l'ensemble des records en ordre canonique et retourne la racine recomposée ;
+  <code>replay(records, key)</code> (<code>l.128-155</code>) y ajoute la vérification de chaque <code>payload_hash</code>
+  et localise la première rupture de contenu ; <code>replay_outputs(records, reproduce)</code> (<code>l.182-200</code>)
+  <b>re-exécute</b> chaque agent via une closure et compare l'<code>output_hash</code> fraîchement calculé à celui
+  scellé. La troisième est la vraie « re-dérivation » — mais elle vit comme bibliothèque (tests, <code>examples/replay.rs</code>),
+  invisible sur le fil HTTP. Ce document propose de l'<b>élever au rang d'endpoint</b>, avec la rigueur de scope qu'exige
+  une promesse aussi forte que « reproductible ».</p>
+
+  <h3>1.3 — Le déterminisme est <b>asymétrique</b> — et c'est honnête de le dire</h3>
+  <p>La difficulté centrale, qui modèle toute l'architecture, est que la reproductibilité d'un run EFE n'est <b>pas
+  uniforme</b>. Elle dépend du <b>mode</b> de chaque agent. Un agent <b>Mode A</b> (essaim keyless : générateurs et juges
+  Rust purs — <code>EchoGenerator</code>, <code>ConstGenerator</code>, <code>catalog.rs:501-521</code> ; les cinq juges de
+  <code>consensus/judges.rs:27-130</code>) est une <b>fonction pure</b> de son entrée : <code>generate(task, variant)</code>
+  redonne mot pour mot le même <code>Value</code>, sans état, sans RNG, sans réseau. Un agent <b>Mode C</b> (appel LLM via
+  self-host ou routeur) est <b>stochastique</b> : même prompt, même graine (<code>sampling.seed</code>), le provider
+  n'offre <b>aucune garantie documentée de déterminisme bit-à-bit</b>. Entre les deux, un <b>Mode B</b> « graine épinglée »
+  est best-effort. Cette asymétrie n'est pas un défaut à cacher : c'est une <b>propriété physique</b> du système qu'il
+  faut <b>graver dans le contrat</b> de l'endpoint. Un <code>/replay</code> honnête ne ment pas en promettant « identique »
+  là où il ne peut qu'observer « plausiblement proche » ; il <b>classe</b> chaque record et <b>localise</b> chaque
+  divergence.</p>
+  <div class="callout key"><p><b>Le gap en une phrase.</b> <code>/verify</code> prouve qu'un run <b>n'a pas été altéré</b> ;
+  il ne dit rien de sa <b>reproductibilité</b>. <code>/replay</code> répond à « si je relance, j'obtiens la même chose ? » —
+  <b>bit-à-bit pour le Mode A</b>, et <b>honnêtement classé</b> pour le Mode C — en re-dérivant la computation, pas en se
+  contentant de re-signer l'évidence.</p></div>
+  </section>
+</div>
+
+<!-- §2 -->
+<div class="wrap page">
+  <section>
+  <h2><span class="num">§2</span> État des lieux — ce qui existe déjà</h2>
+  <p>Le rejeu déterministe n'est pas une invention à partir de rien : c'est l'<b>exposition</b> d'un socle déjà bâti,
+  déjà testé, déjà gravé en ADR. Le travail d'architecture consiste surtout à <b>assembler des pièces vérifiées</b> et à
+  trancher les tensions de scope — pas à inventer de la cryptographie.</p>
+
+  <h3>2.1 — Le socle ADR-007 : <code>OrderKey</code>, <code>deterministic_order</code>, <code>replay_root</code></h3>
+  <p>ADR-SWARM-007 (« deterministic replay keys on version ») établit le fait fondateur : l'ordre dans lequel les records
+  scellent la chaîne HMAC est une <b>fonction pure de l'ensemble des records</b>, indépendante de l'ordre d'exécution
+  concurrente et de l'horloge murale. La clé d'ordre (<code>replay.rs:37-74</code>) est le 4-uplet
+  <code>OrderKey(has_write: bool, version: u64, pointer: String, payload_hash: [u8;32])</code> : on trie sur les
+  coordonnées du Blackboard (version, pointeur de la cellule écrite minimale), avec le <code>payload_hash</code> de
+  contenu comme départage. <code>deterministic_order(records)</code> (<code>l.80-86</code>) est <b>commutative</b> au sens
+  mathématique — les tests (<code>l.242-261</code>) prouvent que toute permutation, tout <i>reverse</i>, tout <i>shuffle</i>
+  de l'entrée produit le <b>même</b> vecteur de sortie.</p>
+  <p>Sur ce tri, <code>replay_root(records, key)</code> crée une <code>SwarmChain</code> vierge et ré-enfile chaque record
+  réordonné — recalculant son <code>payload_hash</code>, le liant au HMAC parent — pour retrouver le <code>tip</code>.
+  Le test <code>replay_matches_live_recorder_root</code> (<code>replay.rs</code>) verrouille la propriété cardinale :
+  le <b>scellement vivant</b> (<code>ProvenanceRecorder::seal_with_key</code>, <code>recorder.rs:195-262</code>, qui appelle
+  <code>SwarmChain::append_all_canonical</code>, <code>chain.rs:111-131</code>) et le <b>rejeu</b> partagent
+  <b>exactement la même fonction de tri</b> (<code>key_of</code>) : impossible que le provider scelle l'ordre A mais que
+  le vérificateur reconstruise l'ordre B. La conséquence, c'est le moat : un tiers reçoit les records <b>en désordre</b>,
+  appelle <code>replay_root</code>, et retrouve le <code>provenance_root</code> du scellement vivant — la preuve qu'il a
+  reçu exactement les mêmes records, rien d'altéré, rien de manquant.</p>
+  <p>Point décisif pour l'honnêteté du design : <code>wall_at</code> (l'horloge de capture) est <b>exclu</b> du
+  <code>payload_hash</code> (<code>record.rs:137-168</code> énumère les 11 champs du corps canonique ; <code>wall_at</code>
+  n'en fait pas partie ; test <code>payload_hash_excludes_wall_at</code>, <code>l.586-590</code>). Deux agents qui finissent
+  à des instants différents, mêmes entrées/sorties, produisent un <code>payload_hash</code> identique. Le rejeu peut donc
+  ignorer le temps : la racine est <b>clavée sur la sémantique du substrat</b>, pas sur le timing.</p>
+
+  <h3>2.2 — La taxonomie <code>DeterminismLevel</code> (déjà codée, nano)</h3>
+  <p>La couche nano (le runtime mono-agent sous l'essaim) possède déjà une <b>taxonomie de reproductibilité</b> :
+  <code>efe-nano/src/replay/determinism.rs</code> définit <code>DeterminismLevel</code> avec cinq niveaux —
+  <code>FullDeterministic</code> (Rust pur, Mode A : reproductible bit-à-bit), <code>Seeded</code> (modèle local à graine
+  épinglée : best-effort), <code>LlmReplayable</code> (rejouable <b>tant que le cache est chaud</b>),
+  <code>LlmEphemeral</code> (appel LLM sans cache ni graine : <b>jamais</b> rejouable) et <code>SideEffect</code> (effet de
+  bord : jamais rejouable). Côté nano-SDK, <code>types/replay.rs</code> porte déjà un <code>ReplayRequest</code> (acteur,
+  ticket, raison, mode, tolérance) et un <code>MatchOutcome</code> (Match / Tolerated / Mismatch / SkippedNonDeterministic).
+  L'endpoint d'essaim <b>réutilise cette taxonomie</b> : il ne réinvente pas la notion de « jusqu'où ce record est-il
+  rejouable » — il la <b>projette</b> sur les records d'essaim et la <b>publie</b> sur le fil.</p>
+  <div class="callout"><p><b>Deux couches de rejeu, à ne pas confondre.</b> Le rejeu <b>mono-agent</b> (N16, nano :
+  re-jouer un appel LLM individuel avec attribution de coût, acteur, politique de tolérance) est un système distinct.
+  Cette architecture porte sur le rejeu d'<b>essaim</b> — <code>/v1/swarm/replay/:id</code>, sœur de
+  <code>/verify/:id</code> — qui rejoue un <b>run complet</b>. Il <b>emprunte</b> la taxonomie <code>DeterminismLevel</code>
+  et délègue le rejeu mono-appel au moteur nano là où il faut (Mode C). Le moteur de rejeu multi-région nano reste
+  hors-périmètre (§10).</p></div>
+
+  <h3>2.3 — Ce qui est persisté — et ce qui <b>manque</b> (la task, la spec)</h3>
+  <p>C'est la contrainte qui sculpte tout le reste. <code>StoredRun</code> (<code>store.rs:24-40</code>) persiste :
+  <code>records</code> (les <code>AgentCallRecord</code> bruts), <code>root</code>, <code>llm_records</code> +
+  <code>n17_leaves</code> + <code>n17_root</code> (la forensique N17, ADR-016), <code>output</code> (le résultat final),
+  <code>topology</code> (<b>le nom seul</b>, ex. <code>"T1:generate-verify"</code> — <code>store.rs:55</code>),
+  <code>created_at</code>, <code>tenant</code>. Sont <b>absents</b> : la <b>task d'entrée</b> (le JSON de la requête
+  <code>POST /run</code> est désérialisé puis <b>jeté</b> — <code>run.rs:66</code> ; jamais persisté), la
+  <code>TopologySpec</code> <b>complète</b> (K, noms des juges, prompts, pattern, escalade — seul le nom survit), et le
+  <code>Budget</code> d'origine (seul un <i>snapshot</i> de dépense est gardé). Enfin, chaque <code>AgentCallRecord</code>
+  stocke des <b>hash</b> d'entrée/sortie (<code>input_hash</code>, <code>output_hash</code>) et des <b>pointeurs</b> de
+  cellules (<code>reads</code>, <code>writes</code>) — <b>pas les valeurs</b> elles-mêmes (<code>record.rs:364-390</code>).</p>
+  <p>Conséquence chirurgicale, qu'on assume au lieu de la masquer : <b>on ne peut pas re-exécuter un run « à partir de
+  rien » depuis le seul store</b> — il manque la task et les valeurs d'entrée. Cette contrainte n'est pas un obstacle à
+  contourner par une migration lourde ; c'est un <b>fait de conception</b> qui dicte la forme de l'endpoint (§5.1) : R0
+  (re-sceller depuis les records) ne demande <b>rien</b> ; R1 (re-exécuter) demande au caller de <b>re-fournir la task</b>
+  qu'il détient déjà.</p>
+  <table>
+    <thead><tr><th>Élément</th><th class="c">Persisté ?</th><th>Disponible au rejeu</th></tr></thead>
+    <tbody>
+      <tr><td><code>records</code> (AgentCallRecord, hash + pointeurs)</td><td class="c good">OUI</td><td>R0 et R1 (l'évidence à re-sceller / comparer)</td></tr>
+      <tr><td><code>root</code>, <code>n17_leaves</code>, <code>n17_root</code></td><td class="c good">OUI</td><td>cible de comparaison ; N17 re-vérifiée (pas recomputée)</td></tr>
+      <tr><td><code>output</code> (résultat final), <code>topology</code> (nom)</td><td class="c good">OUI</td><td>comparaison de sortie ; ré-instanciation partielle</td></tr>
+      <tr><td><code>sampling.seed</code> (par appel Mode C)</td><td class="c mid">si posée</td><td>graine de rejeu Mode C (best-effort)</td></tr>
+      <tr><td>task d'entrée (JSON de <code>/run</code>)</td><td class="c bad">NON</td><td>R1 exige que le caller la re-fournisse (§5.1)</td></tr>
+      <tr><td><code>TopologySpec</code> complète (K, juges, prompts)</td><td class="c bad">nom seul</td><td>R1 : reconstruite depuis le nom + re-fournie</td></tr>
+      <tr><td>valeurs de cellules (<code>/cand/*</code>, <code>/ballot/*</code>)</td><td class="c bad">hash seul</td><td>re-dérivées par re-exécution (R1), pas relues</td></tr>
+    </tbody>
+  </table>
+  </section>
+</div>
+
+<!-- §3 -->
+<div class="wrap page">
+  <section>
+  <h2><span class="num">§3</span> La thèse — re-dériver ≠ re-prouver</h2>
+
+  <h3>3.1 — Deux endpoints, deux questions</h3>
+  <p>La thèse tient en une distinction nette, qu'on refuse de brouiller : <code>/verify</code> <b>re-prouve</b>,
+  <code>/replay</code> <b>re-dérive</b>. <code>/verify/:id</code> répond <i>« l'évidence est-elle intègre ? »</i> en
+  recalculant des hash et des HMAC <b>depuis les champs stockés</b> — il fait confiance à l'<code>output_hash</code>
+  scellé comme vérité de terrain. <code>/replay/:id</code> répond <i>« la computation est-elle reproductible ? »</i> en
+  <b>re-faisant le calcul</b> et en comparant le résultat <b>fraîchement obtenu</b> au scellé. La différence est exactement
+  celle entre <i>« ce reçu n'a pas été raturé »</i> et <i>« si je refais l'addition, je retrouve le total »</i>. Le second
+  attrape une classe de fautes que le premier ne peut pas voir (§7.1) : le record <b>auto-cohérent mais non-reproductible</b>.</p>
+  <p>Parce que la promesse de <code>/replay</code> est plus forte, son architecture offre <b>deux tiers de fidélité</b>,
+  explicitement nommés, jamais confondus :</p>
+  <ul>
+    <li><b>R0 — re-sceller depuis les records scellés</b> (<code>GET /v1/swarm/replay/:id</code>, zéro-input, gratuit,
+    ∞-reproductible). On charge les records persistés, on les ré-ordonne (<code>deterministic_order</code>) et on
+    <b>re-scelle</b> (<code>replay</code>) : la racine recomposée doit égaler la racine stockée, le contenu se recalculer,
+    la première divergence être localisée. On classe en outre chaque record par <code>DeterminismLevel</code> (quels
+    records <i>pourraient</i> être re-exécutés). C'est l'exposition directe de la propriété ADR-007 « désordre/transmission
+    → même racine » — sans task, sans provider, sans réseau.</li>
+    <li><b>R1 — re-exécuter le squelette déterministe</b> (<code>POST /v1/swarm/replay/:id</code> avec
+    <code>{ task, [topology] }</code>). Le caller <b>re-fournit la task</b> (qu'il détient — elle n'est pas stockée, §2.3).
+    L'endpoint ré-instancie la topologie sur un Blackboard <b>vierge</b>, re-exécute les agents <b>purs</b>, et compare les
+    <b>sorties</b> (<code>output_hash</code> + flux de données) à celles scellées — <b>pas</b> la racine, qui lie
+    l'identité par-run (§5.2). Mode A : sorties re-dérivées <b>bit-à-bit</b>. Mode C : par appel,
+    <code>cache_hit</code>/<code>replay_of</code> (déterministe) ou <code>MatchOutcome</code> honnête.</li>
+  </ul>
+
+  <h3>3.2 — Le déterminisme asymétrique, gravé</h3>
+  <p>L'architecture refuse de prétendre à un déterminisme uniforme. Elle <b>publie</b> l'asymétrie comme une donnée de
+  sortie. Chaque opération rejouée porte un <code>DeterminismLevel</code> et un <code>MatchOutcome</code> : un Mode A qui
+  <b>doit</b> matcher (et casse le gate s'il ne matche pas) ; un Mode C qui matche <b>si et seulement si</b> il fut un
+  <code>cache_hit</code> ou pointe un <code>replay_of</code> relisible, et qui est sinon marqué
+  <code>SkippedNonDeterministic</code> — jamais faussement « Match ». C'est l'honnêteté coûteuse en UX dont parle la
+  doctrine EFE : il est plus simple de mentir « tout est identique » ; il est plus juste de dire « ces 7 agents Rust
+  reproduisent à l'octet, ces 3 appels LLM sont hors de portée du déterminisme bit-à-bit, voici lesquels et pourquoi ».</p>
+  <div class="fig">
+    <svg viewBox="0 0 720 188" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="L'échelle de déterminisme">
+      <text x="360" y="22" text-anchor="middle" font-size="13" font-weight="700" fill="#0f172a">L'échelle de reproductibilité (DeterminismLevel) — du bit-exact à l'éphémère</text>
+      <!-- 5 boxes -->
+      <g font-size="10.5">
+        <rect x="14" y="44" width="132" height="92" rx="9" fill="#dcfce7" stroke="#16a34a"/>
+        <text x="80" y="63" text-anchor="middle" font-weight="700" fill="#166534">FullDeterministic</text>
+        <text x="80" y="80" text-anchor="middle" fill="#166534">Mode A — Rust pur</text>
+        <text x="80" y="96" text-anchor="middle" fill="#475569">generate(task,v)</text>
+        <text x="80" y="111" text-anchor="middle" fill="#475569">→ bit-à-bit</text>
+        <text x="80" y="128" text-anchor="middle" font-weight="700" fill="#166534">match EXIGÉ</text>
+
+        <rect x="156" y="44" width="132" height="92" rx="9" fill="#ecfccb" stroke="#65a30d"/>
+        <text x="222" y="63" text-anchor="middle" font-weight="700" fill="#3f6212">Seeded</text>
+        <text x="222" y="80" text-anchor="middle" fill="#3f6212">Mode B — local</text>
+        <text x="222" y="96" text-anchor="middle" fill="#475569">graine épinglée</text>
+        <text x="222" y="111" text-anchor="middle" fill="#475569">best-effort</text>
+        <text x="222" y="128" text-anchor="middle" font-weight="700" fill="#3f6212">match attendu</text>
+
+        <rect x="298" y="44" width="132" height="92" rx="9" fill="#cffafe" stroke="#0891b2"/>
+        <text x="364" y="63" text-anchor="middle" font-weight="700" fill="#155e75">LlmReplayable</text>
+        <text x="364" y="80" text-anchor="middle" fill="#155e75">Mode C + cache</text>
+        <text x="364" y="96" text-anchor="middle" fill="#475569">relit Redis/store</text>
+        <text x="364" y="111" text-anchor="middle" fill="#475569">si cache chaud</text>
+        <text x="364" y="128" text-anchor="middle" font-weight="700" fill="#155e75">match (déterm.)</text>
+
+        <rect x="440" y="44" width="132" height="92" rx="9" fill="#fef3c7" stroke="#d97706"/>
+        <text x="506" y="63" text-anchor="middle" font-weight="700" fill="#92400e">LlmEphemeral</text>
+        <text x="506" y="80" text-anchor="middle" fill="#92400e">Mode C, no cache</text>
+        <text x="506" y="96" text-anchor="middle" fill="#475569">no replay_of</text>
+        <text x="506" y="111" text-anchor="middle" fill="#475569">jamais rejouable</text>
+        <text x="506" y="128" text-anchor="middle" font-weight="700" fill="#92400e">Skipped (honnête)</text>
+
+        <rect x="582" y="44" width="124" height="92" rx="9" fill="#fee2e2" stroke="#dc2626"/>
+        <text x="644" y="63" text-anchor="middle" font-weight="700" fill="#991b1b">SideEffect</text>
+        <text x="644" y="80" text-anchor="middle" fill="#991b1b">effet de bord</text>
+        <text x="644" y="96" text-anchor="middle" fill="#475569">irréversible</text>
+        <text x="644" y="111" text-anchor="middle" fill="#475569">hors-périmètre</text>
+        <text x="644" y="128" text-anchor="middle" font-weight="700" fill="#991b1b">jamais</text>
+      </g>
+      <text x="80" y="160" text-anchor="middle" font-size="10" fill="#16a34a" font-weight="700">◄ I-RP1 : casse le gate si mismatch</text>
+      <text x="560" y="160" text-anchor="middle" font-size="10" fill="#92400e" font-weight="700">I-RP6 : classé, jamais faussement « Match » ►</text>
+      <text x="360" y="180" text-anchor="middle" font-size="9.5" fill="#64748b" font-style="italic">taxonomie réutilisée telle quelle de efe-nano/src/replay/determinism.rs</text>
+    </svg>
+    <div class="cap">Le rejeu ne promet pas un déterminisme uniforme : il classe chaque opération et n'exige le bit-exact que là où il est physiquement garanti (Mode A).</div>
+  </div>
+
+  <h3>3.3 — Le prior est favorable — le genre du gate</h3>
+  <p>Comme pour la persistance N17, le <b>prior est favorable</b> : le socle déterministe (ADR-007) est déjà prouvé en
+  réel (Lot P4, 2026-06-09 : <code>provenance_root</code> reproductible), <code>replay.rs</code> est testé
+  (permutations, <i>wall_at</i> advisory, falsification détectée, live/replay matching), et la taxonomie
+  <code>DeterminismLevel</code> existe. Le gate de <code>/replay</code> n'est donc <b>pas</b> un gate de découverte
+  (« le levier existe-t-il ? ») mais un gate de <b>correction</b> : assembler les pièces sans régression, prouver que
+  R1 reproduit le Mode A <b>bit-à-bit</b>, que toute divergence est <b>détectée et localisée</b>, que R0 tient
+  <b>hors-ligne</b>, et que le coût est <b>borné</b>. GO si ces quatre tiennent ; sinon, c'est un bug, pas un NO-GO de
+  thèse.</p>
+  </section>
+</div>
+
+<!-- §4 -->
+<div class="wrap page">
+  <section>
+  <h2><span class="num">§4</span> Architecture A — R0 : rejeu hors-ligne depuis les records scellés</h2>
+  <p>R0 est le tier <b>gratuit, sans entrée, infiniment reproductible</b>. Il répond à la forme la plus pure de la
+  question : <i>« l'ensemble des records scellés se recompose-t-il, à lui seul, en la racine annoncée — et que pourrait-on
+  re-exécuter ? »</i>. Il n'exécute <b>aucun agent</b> ; il <b>re-scelle</b>.</p>
+
+  <h3>4.1 — Re-sceller en ordre canonique → la racine se reproduit</h3>
+  <p>Le handler charge le <code>StoredRun</code> (tenant-scopé), dérive la clé tenant (HKDF, server-side), puis appelle
+  <code>replay(&amp;stored.records, &amp;key)</code> — la fonction existante de <code>replay.rs:128-155</code>. Celle-ci
+  ré-ordonne par <code>deterministic_order</code>, re-chaîne, vérifie chaque <code>payload_hash</code> au passage, et
+  retourne un <code>ReplayReport { replayed, content_intact, first_content_break, root }</code>. La garde cardinale (I-RP3) :
+  la <b>racine recomposée</b> doit égaler la <b>racine stockée</b> (<code>stored.root</code>). Si oui, l'ensemble des
+  records — dans <b>n'importe quel</b> ordre de transmission — <b>commet</b> bien la racine annoncée. C'est la propriété
+  ADR-007 (« <i>shuffle → same root</i> ») élevée au rang de réponse HTTP.</p>
+  <p>R0 est délibérément plus exigeant que la simple lecture : il exerce le <b>chemin de scellement complet</b>
+  (<code>deterministic_order</code> + <code>append</code> + HMAC), pas seulement le chemin de vérification. Là où
+  <code>verify_swarm</code> recompose la chaîne pour la <i>juger</i>, R0 la <b>reconstruit ex nihilo</b> et exige
+  l'égalité avec la racine de référence — c'est le geste qu'un tiers pose quand il refuse de croire le serveur.</p>
+
+  <h3>4.2 — Classifier chaque record par <code>DeterminismLevel</code></h3>
+  <p>R0 attache à chaque record un <code>DeterminismLevel</code> : <code>FullDeterministic</code> pour un Mode A (aucun
+  <code>llm_provenance_id</code>) ; pour un Mode C, <code>LlmReplayable</code> si le <code>LlmProvenanceRecord</code> lié
+  porte un <code>cache_hit</code> ou un <code>replay_of</code> résolvable, <code>Seeded</code> si une
+  <code>sampling.seed</code> est posée, sinon <code>LlmEphemeral</code>. Cette classification est <b>l'inventaire de
+  rejouabilité</b> du run : avant même de payer une re-exécution (R1), l'auditeur sait <b>quelle fraction</b> du run est
+  reproductible bit-à-bit, quelle fraction l'est sous condition de cache, et quelle fraction est hors de portée. C'est
+  une réponse honnête et instantanée à « jusqu'où ce run est-il rejouable ? ».</p>
+
+  <h3>4.3 — Pourquoi R0 est plus fort que <code>/verify</code></h3>
+  <p><code>/verify</code> et R0 partagent la couche de re-preuve, mais R0 ajoute deux faits que <code>/verify</code>
+  n'exprime pas : (1) il <b>reconstruit</b> la racine par re-scellement (et pas seulement « la chaîne stockée se
+  re-vérifie »), confirmant que l'<b>ensemble</b> des records — indépendamment de l'ordre — est exactement celui qui
+  produit cette racine ; (2) il publie l'<b>inventaire de déterminisme</b>. R0 ne remplace pas <code>/verify</code> (qui
+  reste le contrôle d'intégrité de référence) ; il en est la <b>face « reproductibilité »</b>, à coût nul. Pour un run
+  <b>Mode A</b>, R0 est déjà une réponse quasi-complète à « est-ce reproductible ? » — il ne reste qu'à confirmer que les
+  agents purs re-dérivent les mêmes sorties, ce que fait R1.</p>
+  <div class="callout"><p><b>Frontière R0.</b> R0 re-dérive l'<b>ordre</b> et la <b>chaîne</b> (la racine se reproduit, le
+  contenu est intègre, la divergence est localisée), et <b>inventorie</b> la rejouabilité. Il ne re-dérive <b>pas</b> les
+  <b>sorties d'agents</b> — c'est l'objet de R1. R0 ne touche jamais le store en écriture (I-RP4) et ne sort jamais du
+  tenant (I-RP5).</p></div>
+  </section>
+</div>
+
+<!-- §5 -->
+<div class="wrap page">
+  <section>
+  <h2><span class="num">§5</span> Architecture B — R1 : re-exécuter le squelette déterministe</h2>
+  <p>R1 est la vraie re-dérivation : on <b>refait le calcul</b> et on compare. C'est là que « si je relance, j'obtiens la
+  même chose ? » reçoit sa réponse la plus forte — pour le Mode A, un <b>oui bit-à-bit</b> opposable.</p>
+
+  <h3>5.1 — Le contrat : la task n'est pas persistée → le caller la re-fournit</h3>
+  <p>Puisque la task d'entrée n'est <b>pas</b> stockée (§2.3), R1 ne peut pas la deviner — et l'architecture refuse la
+  parade coûteuse (persister chaque task + spec complète, +Ko par run, migration de schéma). Le contrat est explicite et
+  assumé : <code>POST /v1/swarm/replay/:id</code> prend un corps <code>{ task: Value, topology?: TopologyDto, budget?:
+  Budget }</code>. Le caller <b>re-fournit la task qu'il détient déjà</b> (c'est sa requête d'origine). L'endpoint
+  reconstruit la topologie depuis le <code>topology</code> nommé du <code>StoredRun</code> (et/ou la spec re-fournie),
+  l'instancie sur un Blackboard <b>vierge</b>, et re-exécute. La garde anti-confusion : avant comparaison, R1 re-vérifie
+  que la <b>task fournie</b> produit les <code>input_hash</code> attendus aux feuilles du DAG — si le caller fournit une
+  <b>autre</b> task, les <code>input_hash</code> divergent immédiatement et R1 refuse (400 <code>TaskMismatch</code>)
+  plutôt que de produire un faux « non-reproductible ».</p>
+
+  <h3>5.2 — Re-exécuter les agents purs (Mode A) → comparer</h3>
+  <p>Pour un run <b>Mode A</b>, R1 re-dérive les <b>sorties</b> à l'octet. Les générateurs (<code>EchoGenerator</code>,
+  <code>ConstGenerator</code>, et les 34 agents purs du catalogue) sont des fonctions pures : <code>generate(task,
+  variant)</code> redonne le même <code>Value</code>. Les juges (<code>VerifierJudge</code>, <code>LengthBandJudge</code>,
+  <code>ConsistencyJudge</code>, …) notent par évaluation déterministe. L'agrégation (Vote / Borda / Condorcet) est une
+  fonction pure des bulletins. R1 implémente la closure <code>reproduce</code> de <code>replay_outputs</code>
+  (<code>replay.rs:182-200</code>) : pour chaque record, re-jouer l'agent, re-hasher la sortie (BLAKE3 canonique), comparer
+  à l'<code>output_hash</code> scellé.</p>
+  <div class="callout warn"><p><b>Correction post-build : R1 compare les SORTIES, PAS la racine.</b> Le build a établi
+  empiriquement (deux <code>POST /run</code> identiques → <b>deux racines différentes</b>) que la <code>provenance_root</code>
+  <b>lie l'identité par-run</b> : <code>body_value</code> (record.rs:137-168) hashe <code>record_id</code> (UUID v4 par
+  record), <code>swarm_id</code> (frais par run) et <code>causal_parents</code>. La racine est donc de <b>même nature que
+  <code>n17_root</code></b> — <b>re-provable par R0</b> (re-sceller les mêmes records → même racine) mais <b>non
+  reproductible par re-exécution</b>. R1 ne compare donc <b>jamais</b> <code>fresh_root == stored.root</code> ; il compare
+  l'<b>empreinte de calcul identité-libre</b> de chaque record <code>(agent, rôle, mode, variant, input_hash, output_hash,
+  lectures, écritures)</code> — tout sauf l'identité par-run. Verdict R1 = <code>outputs_reproduced</code>.</p></div>
+  <p>La largeur d'exécution est sans effet (I-RP8, héritée d'I-CP1, ADR-014) — R1 peut rejouer à <code>w=1</code> ce qui fut
+  exécuté à <code>w=32</code> et re-dériver les mêmes sorties.</p>
+
+  <h3>5.3 — Mode C : <code>cache_hit</code>/<code>replay_of</code>, sinon <code>MatchOutcome</code> honnête</h3>
+  <p>Pour un run <b>Mode C</b>, R1 ne tente <b>jamais</b> de garantir un bit-à-bit qu'il ne peut pas tenir. Par appel LLM,
+  trois chemins, dans l'ordre de préférence : (1) si le <code>LlmProvenanceRecord</code> porte un <code>cache_hit</code>
+  (<code>llm_provenance.rs:698</code>, <code>CacheProvenance</code>), R1 relit le cache (clé déterministe = sha256 du
+  prompt + modèle + params canoniques) → <code>Match</code> déterministe ; (2) si l'appel pointe un <code>replay_of</code>
+  (<code>l.696</code>) ou si l'on relit simplement le record persisté, R1 prend la sortie scellée comme dérivation par
+  identité → <code>Match</code> ; (3) sinon (appel éphémère, pas de cache, pas de graine garantie), R1 marque
+  <code>SkippedNonDeterministic</code> — et <b>ne casse pas</b> le verdict global pour autant : un Mode C non-rejouable
+  n'est pas une faute, c'est une <b>limite physique honnêtement publiée</b>. Le re-appel du provider (option « Full »,
+  payante et non garantie même à graine épinglée) est <b>hors-périmètre</b> du MVP (§10) : on ne propose pas une
+  reproductibilité qu'on ne peut pas honorer.</p>
+
+  <h3>5.4 — N17 : <b>re-prouvée</b>, pas <b>re-produite</b></h3>
+  <p>Tension cruciale, tranchée nettement. La feuille N17 est <code>sha256(canonical_bytes(record))</code> sur le record
+  <b>complet</b> (ADR-016), lequel contient <code>recorded_at: SystemTime</code> et <code>trace_id</code> (UUID v4) —
+  deux champs <b>par-run</b>. Donc <code>n17_root</code> <b>diverge</b> à chaque rejeu (timestamps neufs) : ADR-016 le dit
+  déjà, « <code>n17_root</code> est par-run, une empreinte re-prouvable, <b>pas</b> une racine déterministe ». R1 ne doit
+  donc <b>jamais</b> recalculer <code>n17_root</code> ni le comparer. À la place, il <b>relit les feuilles N17 originales</b>
+  du store et appelle <code>verify_run_offline</code> (ADR-016) pour re-vérifier la chaîne N17 <b>scellée</b> et le pont
+  (I-RP7). Autrement dit : la chaîne d'essaim est <b>reproductible</b> (clavée sur le substrat) ; la forensique N17 est
+  <b>re-prouvable mais non reproductible</b> (clavée sur le temps). L'endpoint expose les deux faits sans les confondre.</p>
+  <div class="fig">
+    <svg viewBox="0 0 720 250" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="R0 vs R1">
+      <text x="360" y="20" text-anchor="middle" font-size="13" font-weight="700" fill="#0f172a">Deux tiers de rejeu — R0 (re-sceller) et R1 (re-exécuter)</text>
+      <!-- store -->
+      <rect x="22" y="44" width="120" height="150" rx="9" fill="#f1f5f9" stroke="#94a3b8"/>
+      <text x="82" y="64" text-anchor="middle" font-size="11" font-weight="700" fill="#334155">StoredRun</text>
+      <text x="82" y="84" text-anchor="middle" font-size="9.5" fill="#475569">records[]</text>
+      <text x="82" y="100" text-anchor="middle" font-size="9.5" fill="#475569">root, output</text>
+      <text x="82" y="116" text-anchor="middle" font-size="9.5" fill="#475569">llm_records[]</text>
+      <text x="82" y="132" text-anchor="middle" font-size="9.5" fill="#475569">n17_leaves/root</text>
+      <text x="82" y="148" text-anchor="middle" font-size="9.5" fill="#475569">topology (nom)</text>
+      <text x="82" y="170" text-anchor="middle" font-size="9" fill="#dc2626">✗ task ✗ spec</text>
+      <text x="82" y="184" text-anchor="middle" font-size="9" fill="#dc2626">✗ valeurs</text>
+      <!-- R0 -->
+      <rect x="200" y="44" width="220" height="68" rx="9" fill="#ccfbf1" stroke="#0d9488"/>
+      <text x="310" y="63" text-anchor="middle" font-size="11" font-weight="700" fill="#115e59">R0 · GET /replay/:id (zéro-input)</text>
+      <text x="310" y="80" text-anchor="middle" font-size="9.5" fill="#0f766e">deterministic_order → re-seal (replay)</text>
+      <text x="310" y="95" text-anchor="middle" font-size="9.5" fill="#0f766e">root reproduit ? + DeterminismLevel/record</text>
+      <text x="310" y="107" text-anchor="middle" font-size="9" fill="#475569" font-style="italic">hors-ligne · gratuit · ∞-reproductible</text>
+      <!-- R1 -->
+      <rect x="200" y="126" width="220" height="84" rx="9" fill="#e0e7ff" stroke="#4f46e5"/>
+      <text x="310" y="145" text-anchor="middle" font-size="11" font-weight="700" fill="#3730a3">R1 · POST /replay/:id { task }</text>
+      <text x="310" y="162" text-anchor="middle" font-size="9.5" fill="#4338ca">re-exécute agents purs (Mode A)</text>
+      <text x="310" y="177" text-anchor="middle" font-size="9.5" fill="#4338ca">→ output_hash + fresh_root vs scellé</text>
+      <text x="310" y="192" text-anchor="middle" font-size="9" fill="#475569" font-style="italic">Mode C : cache_hit/replay_of, sinon Skipped</text>
+      <text x="310" y="205" text-anchor="middle" font-size="9" fill="#475569" font-style="italic">task RE-FOURNIE par le caller</text>
+      <!-- arrows -->
+      <line x1="142" y1="90" x2="198" y2="78" stroke="#0d9488" stroke-width="1.6" marker-end="url(#ah)"/>
+      <line x1="142" y1="150" x2="198" y2="165" stroke="#4f46e5" stroke-width="1.6" marker-end="url(#ah)"/>
+      <!-- verdict -->
+      <rect x="470" y="60" width="230" height="134" rx="9" fill="#f8fafc" stroke="#94a3b8"/>
+      <text x="585" y="80" text-anchor="middle" font-size="11" font-weight="700" fill="#334155">ReplayReport</text>
+      <text x="585" y="99" text-anchor="middle" font-size="9.5" fill="#16a34a">root_reproduced: bool</text>
+      <text x="585" y="114" text-anchor="middle" font-size="9.5" fill="#475569">content_intact + first_break</text>
+      <text x="585" y="129" text-anchor="middle" font-size="9.5" fill="#475569">per_op: [{level, MatchOutcome}]</text>
+      <text x="585" y="144" text-anchor="middle" font-size="9.5" fill="#475569">mode_a: matched/total</text>
+      <text x="585" y="159" text-anchor="middle" font-size="9.5" fill="#0891b2">mode_c: replayable/skipped</text>
+      <text x="585" y="174" text-anchor="middle" font-size="9.5" fill="#0f766e">n17_reverified (pas recompute)</text>
+      <line x1="420" y1="80" x2="468" y2="100" stroke="#0d9488" stroke-width="1.6" marker-end="url(#ah)"/>
+      <line x1="420" y1="168" x2="468" y2="150" stroke="#4f46e5" stroke-width="1.6" marker-end="url(#ah)"/>
+      <defs><marker id="ah" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 Z" fill="#475569"/></marker></defs>
+      <text x="360" y="234" text-anchor="middle" font-size="9.5" fill="#64748b" font-style="italic">R0 et R1 sont lecture-seule sur le store ; R1 s'exécute sur un Blackboard vierge. La forensique N17 est re-vérifiée, jamais re-produite.</text>
+    </svg>
+    <div class="cap">R0 répond gratuitement « les records commettent-ils la racine ? » ; R1 répond, task en main, « la re-exécution reproduit-elle les sorties ? ».</div>
+  </div>
+  </section>
+</div>
+
+<!-- §6 -->
+<div class="wrap page">
+  <section>
+  <h2><span class="num">§6</span> Les invariants — famille I-RP (Replay)</h2>
+  <p>Huit invariants, la grammaire du projet : une phrase vérifiable, un gardien nommé. <b>Note de méthode</b> : ces
+  gardiens se testent <b>keyless, sans Ollama</b>, en re-exécutant des essaims Mode A (générateurs/juges purs) et en
+  fabriquant des <code>LlmProvenanceRecord</code> synthétiques pour les cas Mode C ; le Mode C <b>réel</b> est un test
+  ignoré-sans-modèle, comme ses pairs (parité ADR-016).</p>
+  <table>
+    <thead><tr><th style="width:7%">Inv.</th><th>Énoncé</th><th style="width:30%">Gardien (keyless)</th></tr></thead>
+    <tbody>
+      <tr><td><b>I-RP1</b></td><td><b>Reproductibilité Mode A des SORTIES</b> : un run keyless re-exécuté (R1) sur la task d'origine re-dérive <b>exactement</b> chaque <code>output_hash</code> + le flux de données (DAG). La <code>provenance_root</code>, elle, lie l'identité par-run (<code>swarm_id</code>/<code>record_id</code>) → <b>re-prouvée par R0, non reproduite</b> par re-exécution.</td><td><code>replay_reexecutes_mode_a_to_identical_outputs</code></td></tr>
+      <tr><td><b>I-RP2</b></td><td><b>Divergence détectée et localisée</b> : toute non-reproduction (output altéré, agent rendu impur) casse le rejeu, identifie le <b>premier</b> record divergent et la raison (<code>MatchOutcome</code>) ; aucun faux « identique ».</td><td><code>replay_detects_and_localizes_divergence</code></td></tr>
+      <tr><td><b>I-RP3</b></td><td><b>R0 hors-ligne, zéro-input</b> : <code>GET /replay/:id</code> re-scelle les records scellés en ordre canonique → racine reproduite, sans task, sans provider, sans réseau (ADR-007 exposé).</td><td><code>replay_r0_reseals_to_same_root_offline</code></td></tr>
+      <tr><td><b>I-RP4</b></td><td><b>Intégrité préservée</b> : le rejeu est <b>lecture-seule</b> sur le store ; R1 s'exécute sur un Blackboard vierge ; aucun record persisté n'est jamais muté.</td><td><code>replay_never_mutates_the_store</code></td></tr>
+      <tr><td><b>I-RP5</b></td><td><b>Isolation tenant à la relecture</b> : un run d'un autre tenant est invisible (404) ; la clé tenant re-dérive identique (HKDF) ; un rejeu cross-tenant ne reproduit jamais la racine.</td><td><code>replay_is_tenant_scoped</code></td></tr>
+      <tr><td><b>I-RP6</b></td><td><b>Mode C honnêtement classé</b> : chaque appel LLM est rejoué par <code>cache_hit</code>/<code>replay_of</code> (déterministe) OU marqué <code>SkippedNonDeterministic</code> — jamais faussement <code>Match</code>.</td><td><code>replay_classifies_mode_c_honestly</code></td></tr>
+      <tr><td><b>I-RP7</b></td><td><b>N17 re-prouvée, pas re-produite</b> : le rejeu re-vérifie la chaîne N17 <b>scellée</b> (<code>verify_run_offline</code>, feuilles relues) et ne recompute <b>jamais</b> <code>n17_root</code> (qui dépend de <code>recorded_at</code>).</td><td><code>replay_reverifies_n17_without_recomputing_root</code></td></tr>
+      <tr><td><b>I-RP8</b></td><td><b>Largeur/concurrence neutre</b> (I-CP1 héritée) : rejouer à une largeur d'exécution différente (w ∈ {1, 4, 32}) produit la <b>même</b> racine et les mêmes sorties.</td><td><code>replay_is_width_invariant</code></td></tr>
+    </tbody>
+  </table>
+  <p>Le couple <b>I-RP1 / I-RP2</b> est le cœur : ensemble, ils énoncent la version « reproductibilité » de la doctrine du
+  projet — la preuve ne se demande pas, elle se <b>recalcule</b>, et toute divergence se <b>localise</b>. Le test d'I-RP1
+  (re-exécuter un essaim Mode A et exiger la racine identique) est le plus court qui distingue un système <b>auditable</b>
+  (« relancez, vous retrouverez ») d'un système qui se contente de signer ses propres affirmations.</p>
+  </section>
+</div>
+
+<!-- §7 -->
+<div class="wrap page">
+  <section>
+  <h2><span class="num">§7</span> Le modèle de menace — ce que le rejeu attrape que <i>verify</i> n'attrape pas</h2>
+  <p>Une architecture de preuve se juge à son modèle de menace explicite. Le point clé : <code>/replay</code> couvre une
+  classe d'attaque <b>orthogonale</b> à <code>/verify</code>.</p>
+  <table>
+    <thead><tr><th>Scénario d'attaque / de corruption</th><th>Détecté par</th></tr></thead>
+    <tbody>
+      <tr><td>Muter un record après scellement (raturer une sortie)</td><td class="good">verify_swarm + R0 (la chaîne casse) — existant</td></tr>
+      <tr><td><b>Forger un record auto-cohérent</b> : sortie jamais produite par l'agent, mais <code>output_hash</code> et HMAC parfaitement scellés</td><td class="good"><b>R1 (Mode A)</b> — la re-exécution donne un <code>output_hash</code> ≠ scellé → <b>NEUF, c'est le gain</b></td></tr>
+      <tr><td>Rendre un agent « pur » impur (dépendance cachée, RNG) entre run et rejeu</td><td class="good">R1 — <code>output_hash</code> diverge, localisé (I-RP2)</td></tr>
+      <tr><td>Réordonner / retirer / injecter des records</td><td class="good">R0 — la racine recomposée ≠ stockée (ADR-007)</td></tr>
+      <tr><td>Rejouer un run d'un autre tenant sous une fausse clé</td><td class="good">la clé HKDF par tenant ne dérive pas → racine ≠ (I-RP5)</td></tr>
+      <tr><td>Falsifier la forensique N17 d'un appel Mode C</td><td class="good">R1 délègue à <code>verify_run_offline</code> (chaîne N17, pont) — ADR-016</td></tr>
+    </tbody>
+  </table>
+
+  <h3>7.1 — Le record auto-cohérent mais non-reproductible (le gain)</h3>
+  <p>C'est la faille que <code>verify</code> ne peut pas voir et que <code>/replay</code> ferme. Un opérateur scelle un
+  record dont la sortie est <b>fabriquée</b> — disons un juge qui « approuve » un candidat qu'il aurait en réalité rejeté.
+  Le record est syntaxiquement parfait : son <code>payload_hash</code> recouvre son <code>output_hash</code> fabriqué, son
+  HMAC est valide, le DAG est cohérent. <code>verify</code> dit « intègre ». Mais <b>R1 re-exécute le juge</b> sur les
+  mêmes candidats et obtient un <code>output_hash</code> <b>différent</b> : le verdict réel du juge n'est pas celui scellé.
+  R1 localise le record fautif et déclare le run <b>non-reproductible</b>. C'est la différence entre « ce reçu n'a pas été
+  raturé » et « les chiffres du reçu sont faux ». Pour le Mode A, cette garde est <b>totale</b> : aucune sortie fabriquée
+  ne survit à une re-exécution pure.</p>
+
+  <h3>7.2 — Ce que le rejeu n'attrape PAS (scopé dehors, sans fard)</h3>
+  <p>La deuxième colonne du modèle de menace est aussi importante que la première. Le rejeu <b>ne prouve pas la
+  reproductibilité bit-à-bit d'un appel Mode C éphémère</b> : un LLM hébergé, sans cache et sans garantie de graine, peut
+  produire une sortie différente à chaque appel — c'est une <b>limite physique</b>, pas un bug. R1 ne « rattrape » pas un
+  Mode C fabriqué par re-appel du provider (le re-appel est hors-périmètre, et de toute façon non concluant). Il le
+  <b>signale</b> (<code>SkippedNonDeterministic</code>) au lieu de prétendre. De même, le rejeu n'atteste pas l'<b>identité
+  du modèle à la source</b> (un backend menteur déclarant <code>gemma3:12b</code> tout en appelant autre chose) — c'est la
+  limite déjà assumée d'ADR-016 (<code>model_hash_verified: false</code>), héritée ici. Enfin, le rejeu ne reproduit pas
+  le <b>timing</b> (latences, ordre d'achèvement Tokio, <code>wall_at</code>) : par conception ADR-007, le timing est hors
+  du moat, donc hors du rejeu déterministe.</p>
+  </section>
+</div>
+
+<!-- §8 -->
+<div class="wrap page">
+  <section>
+  <h2><span class="num">§8</span> Le harnais — Lot REPLAY</h2>
+  <p>Le gate est de catégorie <b>correction</b> (le prior est favorable, §3.3). Trois volets éprouvés, exécutés le jour du
+  build, artefact daté <code>scripts/swarm/EFE_SWARM_REPLAY_2026-06-17.json</code>.</p>
+
+  <h3>8.1 — Les trois volets éprouvés</h3>
+  <p><b>① Reproductibilité Mode A (le cœur).</b> Assembler un run keyless réel (générateurs <code>echo</code>/<code>const</code>
+  + consensus + juges purs, K et largeur variés), le sceller → <code>root₀</code>. <b>R0</b> : re-sceller les records →
+  <code>root₀</code> reproduit hors-ligne (I-RP3). <b>R1</b> : re-exécuter sur la <b>même task</b> et comparer les
+  <b>empreintes de calcul</b> (mêmes <code>output_hash</code> + flux de données) pour w ∈ {1, 4, 32}. <b>Critère GO</b> :
+  R0 reproduit <code>root₀</code> ∧ R1 re-dérive toutes les sorties (<code>outputs_reproduced</code>). <b>Note honnête</b> :
+  la racine <b>fraîche</b> de R1 diffère forcément de <code>root₀</code> (elle lie <code>swarm_id</code>/<code>record_id</code>
+  par-run) — on ne compare donc <b>jamais</b> les racines en R1, on compare les sorties (I-RP1, I-RP8).</p>
+  <p><b>② Divergence toujours attrapée et localisée.</b> Pour chaque vecteur — (a) muter un <code>output</code> d'un
+  record relu, (b) substituer un agent pur par une version impure, (c) injecter/retirer un record — re-jouer et exiger :
+  rejeu cassé, <b>premier</b> record divergent identifié, raison renseignée (<code>MatchOutcome</code>). <b>Critère GO</b> :
+  chaque mutation est détectée ET localisée ; <b>aucun faux négatif</b> (I-RP2).</p>
+  <p><b>③ Mode C honnête + N17 re-prouvée + coût borné.</b> Sur des records Mode C synthétiques : un appel avec
+  <code>cache_hit</code> rejoue en <code>Match</code> ; un appel éphémère (sans cache, sans graine) est
+  <code>SkippedNonDeterministic</code> et <b>ne casse pas</b> le verdict ; la chaîne N17 est re-vérifiée par
+  <code>verify_run_offline</code> sans recomputer <code>n17_root</code> (I-RP6, I-RP7). <b>Coût</b> : R0 ≈ coût de
+  <code>verify</code> (re-scellement, µs–dizaines de µs/record) ; R1 Mode A ≈ coût d'un run keyless (pas d'appel provider).
+  <b>Critère GO</b> : classification correcte, N17 intacte, coût mesuré et borné.</p>
+
+  <h3>8.2 — Le volet Mode C réel (ignoré sans Ollama)</h3>
+  <p>Un test ignoré-sans-modèle (<code>#[ignore]</code>, parité ADR-016) exécute un vrai run Mode C self-host (Ollama,
+  graine déterministe posée par le SDK : <code>llm.rs:73</code>), le persiste, puis le rejoue par R1. Il <b>n'exige pas</b>
+  un bit-à-bit des sorties LLM (impossible à garantir) : il exige que (a) le squelette Mode A intercalé reproduise, (b)
+  les appels Mode C avec cache rejouent en <code>Match</code>, (c) les appels éphémères soient honnêtement
+  <code>Skipped</code>, (d) la chaîne N17 et le pont se re-vérifient. C'est la preuve honnête que le rejeu <b>fonctionne en
+  conditions réelles</b> — y compris quand le déterminisme s'arrête.</p>
+  </section>
+</div>
+
+<!-- §9 -->
+<div class="wrap page">
+  <section>
+  <h2><span class="num">§9</span> Plan de construction — lots, fichiers, ADR-017</h2>
+  <p>Trois lots, chaque commit laissant la suite verte. Total estimé ≈ 700 LoC (code + tests + harnais) — petit, car
+  l'essentiel est de la <b>composition</b> de pièces vérifiées (<code>replay.rs</code>, <code>DeterminismLevel</code>,
+  <code>verify_run_offline</code>), pas de l'invention.</p>
+  <table>
+    <thead><tr><th style="width:7%">Lot</th><th>Contenu</th><th>Fichiers (exhaustif)</th><th class="c">LoC ≈</th></tr></thead>
+    <tbody>
+      <tr><td><b>RP-1</b><br>R0 + DTO</td><td>handler <code>GET /v1/swarm/replay/:id</code> : charge le run, appelle <code>replay()</code>, exige <code>root</code> reproduit + <code>content_intact</code>, classe chaque record (<code>DeterminismLevel</code>), re-vérifie N17 (<code>verify_run_offline</code>). DTO <code>ReplayReport</code> + bloc <code>per_op</code></td><td>gateway : <code>routes/replay.rs</code> (nouveau), <code>routes/mod.rs</code>, <code>dto.rs</code> · provenance : ré-export <code>replay</code>/<code>ReplayReport</code> · tests : I-RP3/4/5</td><td class="c">~240</td></tr>
+      <tr><td><b>RP-2</b><br>R1 re-exécution</td><td><code>POST /v1/swarm/replay/:id { task, topology? }</code> : reconstruit la topologie, re-exécute sur Blackboard vierge via une closure <code>reproduce</code> (fleet du catalogue), compare <code>output_hash</code> + <code>fresh_root</code> ; garde <code>TaskMismatch</code> ; Mode C → <code>MatchOutcome</code></td><td>gateway : <code>routes/replay.rs</code>, <code>dto.rs</code> · sdk : seam <code>replay_outputs</code> wiring · provenance : <code>replay_outputs</code> (existe) · tests : I-RP1/2/6/7/8</td><td class="c">~300</td></tr>
+      <tr><td><b>RP-3</b><br>mesure &amp; tiers</td><td><code>lot_replay.rs</code> (Mode A round-trip bit-exact + divergence localisée + coût, artefact daté) ; volet Mode C réel ignoré-sans-Ollama ; ADR-017 ; exécution le jour même</td><td>provenance/examples : <code>lot_replay.rs</code> · sdk/tests : <code>replay_real.rs</code> · <code>scripts/swarm/EFE_SWARM_REPLAY_2026-06-17.json</code> · <code>docs/docs/adr/ADR-SWARM-017-…md</code></td><td class="c">~160</td></tr>
+    </tbody>
+  </table>
+
+  <h3>9.1 — La suite de tests nominative (les gardiens prévus)</h3>
+  <p><b>Reproductibilité (3)</b> : <code>replay_reexecutes_mode_a_to_identical_outputs</code> (I-RP1) ·
+  <code>replay_r0_reseals_to_same_root_offline</code> (I-RP3) · <code>replay_is_width_invariant</code> (I-RP8, w ∈ {1,4,32}).
+  <b>Détection (2)</b> : <code>replay_detects_and_localizes_divergence</code> (I-RP2) ·
+  <code>replay_rejects_task_mismatch</code> (garde du contrat R1). <b>Honnêteté Mode C / N17 (2)</b> :
+  <code>replay_classifies_mode_c_honestly</code> (I-RP6, cache→Match, éphémère→Skipped) ·
+  <code>replay_reverifies_n17_without_recomputing_root</code> (I-RP7). <b>Isolation / intégrité (2)</b> :
+  <code>replay_is_tenant_scoped</code> (I-RP5) · <code>replay_never_mutates_the_store</code> (I-RP4). <b>HTTP (2)</b> :
+  <code>get_replay_reports_r0_verdict</code> · <code>post_replay_reexecutes_and_compares</code>. <b>Mode C réel (1,
+  ignoré)</b> : <code>replay_real_mode_c_skeleton_reproduces</code>.</p>
+
+  <h3>9.2 — ADR-SWARM-017, le squelette</h3>
+  <p><b>Titre</b> : « Rejeu déterministe — re-dériver vs re-prouver, Mode A bit-exact, Mode C honnêtement classé ».
+  <b>Contexte</b> : <code>/verify</code> prouve l'intégrité, pas la reproductibilité ; la question « si je relance, j'obtiens
+  la même chose ? » reste sans réponse ; le socle (ADR-007, <code>replay.rs</code>, <code>DeterminismLevel</code>) existe
+  mais n'est pas exposé. <b>Décision</b> : ① réutiliser l'ordre canonique ADR-007 (<code>OrderKey</code>), sans nouvelle
+  coordonnée ; ② R0 <code>GET /replay/:id</code> re-scelle les records scellés (hors-ligne, gratuit) ; ③ R1
+  <code>POST /replay/:id { task }</code> re-exécute le squelette (Mode A bit-exact) — la task est <b>re-fournie</b> (non
+  persistée, contrat assumé) ; ④ Mode C : <code>cache_hit</code>/<code>replay_of</code> ou <code>MatchOutcome</code>
+  honnête ; ⑤ N17 <b>re-prouvée</b> (<code>verify_run_offline</code>), jamais re-produite ; ⑥ format de record <b>GELÉ</b>,
+  largeur neutre (I-CP1). <b>Hors-périmètre versionné</b> : re-appel provider en Mode C (non garanti même à graine) ;
+  persistance automatique de la task/spec ; rejeu de sous-ensemble ; UI opérateur. <b>Verdict</b> : Lot REPLAY — GO sur
+  correction (Mode A bit-exact + divergence localisée) + coût chiffré. <b>Related</b> : ADR-006, ADR-007, ADR-009,
+  ADR-014, ADR-016. <b>Conséquences</b> : le moat répond enfin à « est-ce reproductible ? », pas seulement « est-ce
+  intègre ? » ; 8 invariants I-RP gardés ; l'auditabilité — relancer et retrouver — devient un endpoint.</p>
+  </section>
+</div>
+
+<!-- §10 -->
+<div class="wrap page">
+  <section>
+  <h2><span class="num">§10</span> Risques honnêtes &amp; hors-périmètre</h2>
+  <table>
+    <thead><tr><th style="width:26%">Risque / limite</th><th>Réalité, sans fard</th><th style="width:30%">Tenue</th></tr></thead>
+    <tbody>
+      <tr><td>Task d'entrée non persistée</td><td>R1 ne peut pas re-exécuter « à partir de rien » — il manque la task et les valeurs d'entrée</td><td>par conception : R0 ne demande rien ; R1 <b>exige</b> que le caller re-fournisse la task (contrat API explicite), pas une migration de schéma. Garde <code>TaskMismatch</code> si mauvaise task</td></tr>
+      <tr><td>Mode C non déterministe</td><td>un LLM hébergé sans cache/graine ne reproduit pas bit-à-bit, même graine posée (aucune garantie provider)</td><td>honnêteté gravée : <code>SkippedNonDeterministic</code>, jamais faux <code>Match</code> ; le re-appel provider est <b>hors-périmètre</b> (coûteux, non concluant)</td></tr>
+      <tr><td>N17 non reproductible</td><td><code>n17_root</code> dépend de <code>recorded_at</code>/<code>trace_id</code> par-run → diverge à chaque rejeu</td><td>par conception (ADR-016) : on <b>re-prouve</b> la chaîne N17 scellée (feuilles relues), on ne la <b>re-produit</b> pas (I-RP7) ; asymétrie documentée</td></tr>
+      <tr><td>Coût de R1</td><td>re-exécuter un essaim coûte du CPU (Mode A) ; un re-appel provider coûterait 2× (Mode C)</td><td>R1 Mode A = coût d'un run keyless (pas de provider) ; Mode C par cache/identité (zéro appel) ; le re-appel payant est exclu du MVP</td></tr>
+      <tr><td>Confusion <code>replay</code> ↔ <code>verify</code></td><td>les deux re-calculent ; le risque est de croire que <code>verify</code> prouve la reproductibilité</td><td>thèse explicite (§3.1) : <code>verify</code> re-prouve l'intégrité, <code>replay</code> re-dérive la reproductibilité ; R0 ajoute le re-scellement + l'inventaire de déterminisme</td></tr>
+      <tr><td>Couplage avec le rejeu nano (N16)</td><td>il existe déjà un moteur de rejeu mono-agent multi-région</td><td>on <b>réutilise</b> <code>DeterminismLevel</code>/<code>MatchOutcome</code> et on <b>délègue</b> le rejeu mono-appel ; le moteur multi-région nano reste hors-périmètre</td></tr>
+    </tbody>
+  </table>
+  <p class="small"><b>Synthèse de décision.</b> ≈ 700 LoC, zéro primitive cryptographique nouvelle, zéro champ ajouté au
+  format d'essaim, ordre canonique ADR-007 réutilisé tel quel. En face : le moat répond enfin à la question d'auditabilité
+  qui compte le plus pour un régulateur — <b>« relancez, et vous retrouverez le même verdict »</b> — bit-à-bit pour le
+  Mode A, honnêtement classé pour le Mode C. <code>/verify</code> prouvait que l'évidence n'a pas bougé ;
+  <code>/replay</code> prouve que la computation est reproductible. C'est la moitié manquante de la promesse d'auditabilité,
+  et elle devient une simple requête HTTP.</p>
+  </section>
+</div>
+
+<!-- §A -->
+<div class="wrap page">
+  <section>
+  <h2><span class="num">§A</span> Annexe — schémas, signatures, glossaire</h2>
+
+  <h3>A.1 — Le contrat de l'endpoint (les deux tiers)</h3>
+  <pre>GET  /v1/swarm/replay/:id            → ReplayReport         // R0 : re-sceller (zéro-input, hors-ligne)
+POST /v1/swarm/replay/:id { task, topology?, budget? }     // R1 : re-exécuter (task re-fournie)
+
+ReplayReport {
+    run_id, tier,                     // "R0" | "R1"
+    root_reproduced: bool,            // R0 : re-sceller les records → racine == scellée (re-PREUVE)
+    reproduced_root, stored_root,     // (hex) pour comparaison transparente
+    content_intact:  bool,            // chaque payload_hash se recalcule
+    first_divergence: { position, record_id, agent_id, reason },  // localisation (I-RP2)
+    determinism: { full_deterministic, seeded, llm_replayable, llm_ephemeral },  // inventaire
+    per_op:  [ { record_id, agent_id, kind, level: DeterminismLevel, outcome: MatchOutcome } ],
+    n17:     N17VerifyView,           // I-RP7 : verify_run_offline, PAS de recompute de n17_root
+    execution: Option { ran, outputs_reproduced: bool, fresh_root, note },  // R1 : la COMPUTATION
+}   // outputs_reproduced (R1) = sorties re-dérivées ; fresh_root DIFFÈRE par conception (identité par-run)</pre>
+
+  <h3>A.2 — Signatures (l'API réutilisée — tout existe déjà)</h3>
+  <pre>// efe-swarm-provenance — le socle ADR-007, réutilisé tel quel :
+pub fn deterministic_order(records: &amp;[AgentCallRecord]) -&gt; Vec&lt;AgentCallRecord&gt;;   // replay.rs:80
+pub fn replay_root(records: &amp;[AgentCallRecord], key: &amp;[u8]) -&gt; Option&lt;[u8;32]&gt;;     // replay.rs:88
+pub fn replay(records: &amp;[AgentCallRecord], key: &amp;[u8]) -&gt; ReplayReport;            // replay.rs:128  (R0)
+pub fn replay_outputs&lt;F&gt;(records: &amp;[AgentCallRecord], reproduce: F)                 // replay.rs:182  (R1)
+    -&gt; OutputReplayReport where F: Fn(&amp;AgentCallRecord) -&gt; Value;
+// efe-nano — la taxonomie réutilisée :
+enum DeterminismLevel { FullDeterministic, Seeded, LlmReplayable, LlmEphemeral, SideEffect }
+enum MatchOutcome     { Match, Tolerated(f64), Mismatch, SkippedNonDeterministic }
+// efe-swarm-provenance — la re-preuve N17 (ADR-016), pour I-RP7 :
+pub fn verify_run_offline(swarm, n17, n17_leaves, n17_root, key) -&gt; OfflineVerdict;</pre>
+
+  <h3>A.3 — Glossaire des termes</h3>
+  <table class="small">
+    <tbody>
+      <tr><td><b>re-prouver</b> (<code>/verify</code>)</td><td>recalculer hash &amp; HMAC depuis les champs stockés → l'évidence est intègre (non altérée). Fait confiance à l'<code>output_hash</code> scellé.</td></tr>
+      <tr><td><b>re-dériver</b> (<code>/replay</code>)</td><td>refaire le calcul (re-sceller en R0, re-exécuter en R1) et comparer au scellé → la computation est reproductible.</td></tr>
+      <tr><td><b>R0</b></td><td>tier <code>GET</code> : re-sceller les records (ordre canonique ADR-007) → racine reproduite ; zéro-input, gratuit, hors-ligne, ∞-reproductible.</td></tr>
+      <tr><td><b>R1</b></td><td>tier <code>POST</code> : re-exécuter le squelette (agents purs Mode A) sur la task re-fournie → comparer <code>output_hash</code> + racine.</td></tr>
+      <tr><td><b>OrderKey</b></td><td>clé d'ordre canonique <code>(has_write, version, pointer, payload_hash)</code> — clavée sur le substrat, pas l'horloge (ADR-007).</td></tr>
+      <tr><td><b>DeterminismLevel</b></td><td>échelle de rejouabilité d'un record : FullDeterministic (Mode A) → Seeded → LlmReplayable → LlmEphemeral → SideEffect.</td></tr>
+      <tr><td><b>MatchOutcome</b></td><td>verdict par-opération du rejeu : Match · Tolerated(score) · Mismatch · SkippedNonDeterministic.</td></tr>
+      <tr><td><b>asymétrie de déterminisme</b></td><td>la chaîne d'essaim est <b>reproductible</b> (substrat) ; la forensique N17 est <b>re-prouvable mais non reproductible</b> (temps).</td></tr>
+    </tbody>
+  </table>
+  <hr>
+  <p class="small muted">EFE — Architecture : endpoint <code>/replay</code> déterministe (re-dériver vs re-prouver) ·
+  2026-06-17 · <span class="mono">main @ e6cdbb9</span> · lignée ADR-006 (moat) → 007 (ordre canonique) → 009 (verify =
+  produit) → 016 (N17 persisté) → <b>017 (rejeu déterministe)</b> · <i>la preuve ne se demande pas, elle se recalcule —
+  et, désormais, se re-exécute.</i></p>
+  </section>
+</div>
+
+</body>
+</html>

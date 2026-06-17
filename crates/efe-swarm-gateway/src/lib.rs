@@ -769,4 +769,154 @@ mod tests {
             .unwrap();
         assert_eq!(resp.status(), StatusCode::NOT_FOUND);
     }
+
+    // ── ADR-017 : rejeu déterministe (/replay) — gardiens I-RP ─────────────────────────
+
+    /// Un run keyless DÉTERMINISTE (echo_generator + juges purs) : re-exécuté à l'identique,
+    /// il reproduit la racine bit-à-bit.
+    fn keyless_run_body(task: Value) -> Value {
+        json!({
+            "task": task,
+            "topology": { "kind": "consensus", "generator": "echo_generator",
+                          "judges": ["consistency", "length_band", "j_non_empty"], "k": 5 },
+            "budget": { "max_cents": 1000 }
+        })
+    }
+    fn replay_post(id: &str, body: Value) -> Request<Body> {
+        Request::builder()
+            .method("POST")
+            .uri(format!("/v1/swarm/replay/{id}"))
+            .header("content-type", "application/json")
+            .body(Body::from(body.to_string()))
+            .unwrap()
+    }
+    fn replay_get(id: &str) -> Request<Body> {
+        Request::builder().uri(format!("/v1/swarm/replay/{id}")).body(Body::empty()).unwrap()
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn replay_r0_reseals_to_same_root_offline() {
+        // I-RP3 : GET /replay/:id re-scelle les records scellés (ordre canonique ADR-007) →
+        // la racine se reproduit, hors-ligne, sans re-exécuter aucun agent.
+        let (app, _s) = app();
+        let run = body_json(app.clone().oneshot(post_run(keyless_run_body(json!({ "text": "x", "expected": "x" })))).await.unwrap()).await;
+        let id = run["run_id"].as_str().unwrap().to_string();
+        let v = body_json(app.oneshot(replay_get(&id)).await.unwrap()).await;
+        assert_eq!(v["tier"], json!("R0"));
+        assert_eq!(v["root_reproduced"], json!(true), "I-RP3 : racine reproduite depuis les records scellés");
+        assert_eq!(v["content_intact"], json!(true));
+        assert_eq!(v["reproduced_root"], v["stored_root"], "racine re-dérivée == racine scellée");
+        assert!(v["determinism"]["full_deterministic"].as_u64().unwrap() >= 1, "Mode A → FullDeterministic");
+        assert_eq!(v["n17"]["records"], json!(0), "run keyless → 0 forensique N17");
+        assert!(v["execution"].is_null(), "R0 ne re-exécute pas");
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn replay_reexecutes_mode_a_to_identical_outputs() {
+        // I-RP1 : R1 re-exécute le squelette Mode A sur la MÊME task → re-dérive les MÊMES
+        // SORTIES (output_hash + flux de données). La racine, elle, lie l'identité par-run
+        // (swarm_id/record_id) → re-prouvée par R0 (root_reproduced), NON reproduite par
+        // re-exécution. C'est l'asymétrie honnête : la computation se reproduit, l'empreinte non.
+        let (app, _s) = app();
+        let body = keyless_run_body(json!({ "text": "hello", "expected": "hello" }));
+        let run = body_json(app.clone().oneshot(post_run(body.clone())).await.unwrap()).await;
+        let id = run["run_id"].as_str().unwrap().to_string();
+        let v = body_json(app.oneshot(replay_post(&id, body)).await.unwrap()).await;
+        assert_eq!(v["tier"], json!("R1"));
+        assert_eq!(v["root_reproduced"], json!(true), "R0 base : les records scellés re-prouvent la racine");
+        assert_eq!(v["execution"]["ran"], json!(true), "Mode A re-exécuté (keyless, sans provider)");
+        assert_eq!(v["execution"]["outputs_reproduced"], json!(true), "I-RP1 : sorties re-dérivées à l'identique");
+        assert!(v["first_divergence"].is_null(), "aucune divergence de sortie");
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn replay_is_width_invariant() {
+        // I-RP8 (I-CP1 héritée) : rejouer à une largeur DIFFÉRENTE re-dérive les mêmes sorties.
+        let (app, _s) = app();
+        let mut narrow = keyless_run_body(json!({ "text": "w", "expected": "w" }));
+        narrow["width"] = json!(1);
+        let run = body_json(app.clone().oneshot(post_run(narrow)).await.unwrap()).await;
+        let id = run["run_id"].as_str().unwrap().to_string();
+        let mut wide = keyless_run_body(json!({ "text": "w", "expected": "w" }));
+        wide["width"] = json!(8);
+        let v = body_json(app.oneshot(replay_post(&id, wide)).await.unwrap()).await;
+        assert_eq!(v["execution"]["outputs_reproduced"], json!(true), "I-RP8 : largeur neutre aux sorties");
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn replay_detects_and_localizes_divergence() {
+        // I-RP2 : muter un record stocké → R0 ne reproduit plus la racine, et LOCALISE la faute.
+        let (app, store) = app_with_store();
+        let run = body_json(app.clone().oneshot(post_run(keyless_run_body(json!({ "text": "x", "expected": "x" })))).await.unwrap()).await;
+        let id: Uuid = run["run_id"].as_str().unwrap().parse().unwrap();
+        assert!(store.tamper_first_output(id), "un record stocké est muté");
+        let v = body_json(app.oneshot(replay_get(&id.to_string())).await.unwrap()).await;
+        assert_eq!(v["root_reproduced"], json!(false), "I-RP2 : rejeu cassé par la mutation");
+        assert_eq!(v["content_intact"], json!(false));
+        assert!(v["first_divergence"].is_object(), "1ʳᵉ divergence localisée");
+        assert_eq!(v["first_divergence"]["reason"], json!("content_break"));
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn replay_rejects_task_mismatch() {
+        // R1 garde : re-fournir une AUTRE task → la re-exécution NE reproduit PAS (localisé).
+        let (app, _s) = app();
+        let run = body_json(app.clone().oneshot(post_run(keyless_run_body(json!({ "text": "original", "expected": "original" })))).await.unwrap()).await;
+        let id = run["run_id"].as_str().unwrap().to_string();
+        let v = body_json(app.oneshot(replay_post(&id, keyless_run_body(json!({ "text": "DIFFERENT", "expected": "DIFFERENT" })))).await.unwrap()).await;
+        assert_eq!(v["execution"]["outputs_reproduced"], json!(false), "task différente → sorties non re-dérivées");
+        assert!(v["first_divergence"].is_object(), "divergence localisée (output_mismatch)");
+        assert_eq!(v["first_divergence"]["reason"], json!("output_mismatch"));
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn replay_classifies_mode_c_honestly_and_reverifies_n17() {
+        // I-RP6 + I-RP7 : un run Mode C synthétique — R0 classe (Seeded) + re-vérifie la chaîne
+        // N17 (sans la recomputer) ; R1 ne re-exécute PAS le provider (hors-périmètre) et classe
+        // honnêtement (Seeded → SkippedNonDeterministic, jamais faux Match).
+        let (app, store) = app_with_store();
+        let (_r, stored) = synthetic_mode_c_run("gemma3:12b");
+        let id = Uuid::new_v4();
+        store.insert_stored(id, stored);
+        let v = body_json(app.clone().oneshot(replay_get(&id.to_string())).await.unwrap()).await;
+        assert_eq!(v["records"], json!(1));
+        assert_eq!(v["determinism"]["seeded"], json!(1), "le record Mode C (graine posée) → Seeded");
+        assert_eq!(v["root_reproduced"], json!(true), "la chaîne d'ESSAIM se reproduit (même Mode C)");
+        assert_eq!(v["n17"]["chain_intact"], json!(true), "I-RP7 : chaîne N17 re-vérifiée");
+        assert_eq!(v["n17"]["records"], json!(1));
+        // R1 : Mode C → re-exécution provider hors-périmètre, classé honnêtement.
+        let v1 = body_json(app.oneshot(replay_post(&id.to_string(), keyless_run_body(json!({ "value": "ok" })))).await.unwrap()).await;
+        assert_eq!(v1["execution"]["ran"], json!(false), "I-RP6 : pas de re-exécution provider en aveugle");
+        assert_eq!(v1["per_op"][0]["outcome"], json!("skipped_non_deterministic"), "Seeded → Skipped, jamais faux Match");
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn replay_is_tenant_scoped() {
+        // I-RP5 : un run d'un autre tenant est invisible au rejeu (404).
+        let (app, _s) = app();
+        let mut req = post_run(keyless_run_body(json!({ "text": "x", "expected": "x" })));
+        req.headers_mut().insert("x-efe-tenant", HeaderValue::from_static(TENANT_A));
+        let run = body_json(app.clone().oneshot(req).await.unwrap()).await;
+        let id = run["run_id"].as_str().unwrap().to_string();
+        let mut vreq = replay_get(&id);
+        vreq.headers_mut().insert("x-efe-tenant", HeaderValue::from_static(TENANT_B));
+        let resp = app.oneshot(vreq).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::NOT_FOUND, "I-RP5 : isolation tenant à la relecture");
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn replay_never_mutates_the_store() {
+        // I-RP4 : le rejeu est lecture-seule — après rejeu, le run reste intègre et idempotent.
+        let (app, store) = app_with_store();
+        let (_r, stored) = synthetic_mode_c_run("gemma3:12b");
+        let id = Uuid::new_v4();
+        store.insert_stored(id, stored);
+        let _ = app.clone().oneshot(replay_get(&id.to_string())).await.unwrap();
+        // verify passe encore (le rejeu n'a rien altéré).
+        let v = body_json(app.clone().oneshot(Request::builder().uri(format!("/v1/swarm/verify/{id}")).body(Body::empty()).unwrap()).await.unwrap()).await;
+        assert_eq!(v["verified"], json!(true), "I-RP4 : rejeu sans effet de bord (verify intact)");
+        // R0 idempotent.
+        let v2 = body_json(app.oneshot(replay_get(&id.to_string())).await.unwrap()).await;
+        assert_eq!(v2["root_reproduced"], json!(true), "rejeu idempotent");
+    }
 }

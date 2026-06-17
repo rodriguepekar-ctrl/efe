@@ -6,6 +6,7 @@ pub mod dashboard;
 pub mod events;
 pub mod metrics;
 pub mod records;
+pub mod replay;
 pub mod run;
 pub mod verify;
 
@@ -20,6 +21,8 @@ pub fn routes() -> Router<SwarmGatewayState> {
     Router::new()
         .route("/run", post(run::run))
         .route("/verify/:id", get(verify::verify))
+        // ADR-017 : rejeu déterministe — R0 (GET, re-sceller) + R1 (POST, re-exécuter).
+        .route("/replay/:id", get(replay::get_replay).post(replay::post_replay))
         .route("/runs/:id", get(records::get_run))
         .route("/runs/:id/records", get(records::get_records))
         .route("/runs/:id/n17", get(records::get_n17)) // ADR-016 : export forensique offline

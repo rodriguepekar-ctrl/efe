@@ -418,6 +418,116 @@ pub struct N17VerifyView {
     pub first_break: Option<String>,
 }
 
+// ── ADR-017 — rejeu déterministe (/replay) ────────────────────────────────────
+
+/// **ADR-017** — l'échelle de rejouabilité d'un record, projetée sur le fil (taxonomie
+/// `DeterminismLevel` de la couche nano, ré-exprimée localement à la passerelle).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum DeterminismLevel {
+    /// Mode A — agent Rust pur : reproductible **bit-à-bit** (la re-exécution DOIT matcher).
+    FullDeterministic,
+    /// Mode C avec graine épinglée : best-effort (le provider ne garantit pas le bit-à-bit).
+    Seeded,
+    /// Mode C rejouable par identité : `cache_hit` ou `replay_of` relisible (déterministe).
+    LlmReplayable,
+    /// Mode C éphémère : ni cache, ni graine, ni `replay_of` → **jamais** rejouable bit-à-bit.
+    LlmEphemeral,
+}
+
+/// **ADR-017** — le verdict par-opération d'un rejeu.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum MatchOutcome {
+    /// Sortie rejouée == sortie scellée (bit-à-bit).
+    Match,
+    /// Sortie rejouée ≠ scellée (divergence réelle).
+    Mismatch,
+    /// Non rejoué honnêtement (Mode C éphémère) — ni « match » ni « mismatch ».
+    SkippedNonDeterministic,
+    /// Non exercé par ce tier (R0 ne re-exécute pas).
+    NotReexecuted,
+}
+
+/// **ADR-017** — une opération (record) dans le rapport de rejeu.
+#[derive(Debug, Clone, Serialize)]
+pub struct ReplayOpView {
+    pub record_id: String,
+    pub agent_id: String,
+    /// `"mode_a"` ou `"mode_c"`.
+    pub kind: String,
+    pub level: DeterminismLevel,
+    pub outcome: MatchOutcome,
+}
+
+/// **ADR-017** — la 1ʳᵉ divergence localisée (position en ordre canonique).
+#[derive(Debug, Clone, Serialize)]
+pub struct DivergenceView {
+    /// Position dans l'ordre canonique (ADR-007).
+    pub position: usize,
+    pub record_id: String,
+    pub agent_id: String,
+    /// `"content_break"` (R0 : payload_hash ne recalcule pas) ou `"output_mismatch"` (R1).
+    pub reason: String,
+}
+
+/// **ADR-017** — le résumé du tier R1 (re-exécution), absent en R0.
+#[derive(Debug, Clone, Serialize)]
+pub struct ExecutionReplayView {
+    /// La re-exécution a-t-elle eu lieu ? (false si Mode C scopé-dehors, ou erreur).
+    pub ran: bool,
+    /// **Le verdict de reproductibilité de la COMPUTATION** (I-RP1) : la re-exécution
+    /// re-dérive-t-elle les MÊMES sorties d'agents (`output_hash`) + le MÊME flux de données
+    /// (`input_hash`, lectures/écritures de cellules) ? `true` pour un Mode A honnête.
+    pub outputs_reproduced: Option<bool>,
+    /// Nombre d'agents Mode A dont la sortie a été re-dérivée et comparée.
+    pub mode_a_records: usize,
+    pub mode_c_records: usize,
+    /// Racine fraîche (hex) — **diffère forcément** de la scellée : la racine lie l'**identité
+    /// par-run** (`swarm_id`, `record_id`, parents causaux). Purement informatif ; le verdict
+    /// est `outputs_reproduced`, **jamais** une égalité de racine (re-provable par R0, pas
+    /// reproductible par re-exécution — même nature que `n17_root`).
+    pub fresh_root: Option<String>,
+    /// Note honnête (ex. « mode_a : sorties re-dérivées à l'identique » / « mode_c hors-périmètre »).
+    pub note: String,
+}
+
+/// **ADR-017** — le rapport de rejeu déterministe (`/v1/swarm/replay/:id`).
+#[derive(Debug, Clone, Serialize)]
+pub struct ReplayReport {
+    pub run_id: Uuid,
+    /// `"R0"` (re-sceller, GET) ou `"R1"` (re-exécuter, POST).
+    pub tier: &'static str,
+    /// La racine re-dérivée == la racine scellée ? (R0 : re-scellement ; R1 : re-exécution).
+    pub root_reproduced: bool,
+    /// Racine re-dérivée (hex) et racine scellée (hex) — pour comparaison transparente.
+    pub reproduced_root: Option<String>,
+    pub stored_root: Option<String>,
+    /// Chaque `payload_hash` se recalcule (intégrité de contenu des records scellés).
+    pub content_intact: bool,
+    /// Nombre de records (essaim).
+    pub records: usize,
+    /// La 1ʳᵉ divergence localisée (si rejeu non reproduit).
+    pub first_divergence: Option<DivergenceView>,
+    /// Inventaire de rejouabilité : combien de records par niveau de déterminisme.
+    pub determinism: ReplayDeterminismSummary,
+    /// Le détail par-opération.
+    pub per_op: Vec<ReplayOpView>,
+    /// La forensique N17 re-vérifiée (PAS re-produite — I-RP7).
+    pub n17: N17VerifyView,
+    /// Le tier R1 (re-exécution), présent en POST uniquement.
+    pub execution: Option<ExecutionReplayView>,
+}
+
+/// **ADR-017** — l'inventaire de rejouabilité d'un run (compte par niveau).
+#[derive(Debug, Clone, Default, Serialize)]
+pub struct ReplayDeterminismSummary {
+    pub full_deterministic: usize,
+    pub seeded: usize,
+    pub llm_replayable: usize,
+    pub llm_ephemeral: usize,
+}
+
 /// Vue d'un run (`GET /v1/swarm/runs/:id`) — **terminé** (dans le store) **ou en cours**
 /// (un job live encore en exécution). Tagué par `status`.
 #[derive(Debug, Clone, Serialize)]
