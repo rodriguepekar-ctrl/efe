@@ -51,7 +51,9 @@ pub use cells::{
     AgentRep, Exemplar, FailRec, FailureMemory, MemoryCells, MemorySnapshot, PatternPrior,
     Reputation, SizePrior,
 };
-pub use chain::{seal_memory, verify_memory, FoldRecord, MemoryBreak, MemoryChainVerdict, SealedMemory};
+pub use chain::{
+    seal_memory, verify_memory, FoldRecord, MemoryBreak, MemoryChainVerdict, MemoryWitness, SealedMemory,
+};
 pub use family::{family_key, FamilyKey, FamilyMode};
 pub use fold::{materialize, AgentStat, RunSummary};
 pub use store::{FoldOutcome, InMemoryMemoryStore, MemError, MemoryStore, MemoryUpdate};
@@ -67,11 +69,27 @@ pub(crate) fn hex32(b: &[u8; 32]) -> String {
     s
 }
 
-/// Le hash de contenu **déterministe** d'une valeur sérialisable : SHA-256 de sa forme JSON
+/// Le hash de contenu **déterministe** d'une valeur sérialisable : **BLAKE3** de sa forme JSON
 /// **canonique** (clés triées, sans espace — `efe_swarm_provenance::canonical_bytes`). C'est
-/// la primitive partagée par la feuille de chaîne et le `content_hash` d'instantané : insensible
-/// à l'ordre de sérialisation, donc reproductible par un tiers.
+/// l'épingle d'ADR-017 appliquée à la mémoire (ADR-019 §P1.5), et la primitive partagée par la
+/// feuille de chaîne et le `content_hash` d'instantané : insensible à l'ordre de sérialisation,
+/// donc reproductible par un tiers. **BLAKE3** (et non SHA-256) pour rester COHÉRENT avec tout le
+/// reste de la couche provenance — `input_hash`/`output_hash` (`blake3_value`) et l'adresse de
+/// contenu des exemplaires (`Exemplar.content_hash`) sont déjà BLAKE3 : un tiers re-dérivant
+/// « l'épingle » selon l'ADR calcule BLAKE3 et retrouve la MÊME valeur.
 pub(crate) fn content_hash_of<T: serde::Serialize>(value: &T) -> [u8; 32] {
+    let v = serde_json::to_value(value).expect("type sérialisable → Value total");
+    efe_swarm_provenance::blake3_value(&v).0
+}
+
+/// Le hash **SHA-256** du contenu canonique — la **feuille** de la chaîne `memory_root`. Distinct
+/// de [`content_hash_of`] (BLAKE3) À DESSEIN : la chaîne mémoire est le **jumeau exact** de la
+/// chaîne N17 (ADR-016), dont la feuille est `SHA-256(canonical_bytes(record))`
+/// (`efe_swarm_provenance::seal_n17`). Garder la MÊME crypto de feuille rend le « jumeau exact »
+/// littéralement vrai. Règle de la couche : les **adresses de contenu** (épingle d'instantané,
+/// clé de famille, hash d'exemplaire) sont en BLAKE3 ; les **feuilles de chaîne tamper-evidentes**
+/// (N17, mémoire) sont en SHA-256.
+pub(crate) fn sha256_content_of<T: serde::Serialize>(value: &T) -> [u8; 32] {
     let v = serde_json::to_value(value).expect("type sérialisable → Value total");
     efe_swarm_provenance::sha256(&efe_swarm_provenance::canonical_bytes(&v))
 }

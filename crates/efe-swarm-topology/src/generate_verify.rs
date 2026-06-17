@@ -198,4 +198,41 @@ mod tests {
         let r = gv.run(&json!({}), Arc::new(AllWrongGen), &DetVer { truth: 0 }).await;
         assert_eq!(r.candidates.len(), 3);
     }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn gv_topology_marks_unverified_run_unacceptable_despite_best_any() {
+        // MEM-2.c (revue adversariale) : GV renvoie `best_any` (NON-nul) même quand AUCUN candidat
+        // ne passe. La sortie est donc non-nulle, mais `produced_acceptable` doit être FAUX (sans
+        // quoi le SDK, devinant l'échec depuis la forme du gagnant, manquerait cet échec réel →
+        // sous-comptage de la mémoire d'échec). C'est exactement le bug HIGH que la revue a trouvé.
+        use crate::fleet::AgentFleet;
+        use crate::topology::{GvTopology, SwarmContext, Topology};
+        let topo = GvTopology {
+            gv: GenerateVerify::new(5, 2),
+            gen: Arc::new(AllWrongGen),
+            ver: Arc::new(DetVer { truth: 42 }),
+        };
+        let ctx = SwarmContext::new(Arc::new(AgentFleet::standard()));
+        let out = topo.run(&json!({}), &ctx).await;
+        assert!(!out.output.is_null(), "best_any : un gagnant NON-NUL est tout de même renvoyé");
+        assert_eq!(out.quality.verified, 0, "aucun candidat vérifié");
+        assert!(!out.produced_acceptable, "MEM-2.c : non vérifié → NON acceptable (→ failed=true en mémoire)");
+    }
+
+    #[test]
+    fn answer_is_present_is_shape_aware() {
+        // MEM-2.c (revue) : la présence d'une réponse est testée sur `value` | `text` | la valeur
+        // NUE, avec la VACUITÉ (null, chaîne vide/blanche, objet/tableau vide) → absente. Corrige
+        // le faux négatif des sorties `{text:""}` (pipeline/merger) que le test `value`-only manquait.
+        use crate::topology::answer_is_present;
+        assert!(answer_is_present(&json!({ "value": "tech" })));
+        assert!(answer_is_present(&json!({ "text": "résumé" })));
+        assert!(answer_is_present(&json!("réponse nue")));
+        assert!(answer_is_present(&json!(42)));
+        assert!(!answer_is_present(&json!(null)), "null → absente");
+        assert!(!answer_is_present(&json!({ "text": "" })), "text vide → absente (LE faux négatif corrigé)");
+        assert!(!answer_is_present(&json!({ "value": "  " })), "value blanche → absente");
+        assert!(!answer_is_present(&json!("")), "chaîne nue vide → absente");
+        assert!(!answer_is_present(&json!({})), "objet vide → absente");
+    }
 }

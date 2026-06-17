@@ -22,7 +22,7 @@ use tokio::task::JoinSet;
 
 use super::round_driver::{RoundCell, RoundDriver, RoundWave};
 use super::{num_of, ConvergenceMetric, Refiner};
-use crate::topology::{QualitySignals, SwarmContext, Topology, TopologyOutput};
+use crate::topology::{answer_is_present, QualitySignals, SwarmContext, Topology, TopologyOutput};
 use crate::traits::Stage;
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -203,6 +203,7 @@ impl Topology for GossipTopology {
         }
 
         let calls = self.k * rep.rounds;
+        let acceptable = answer_is_present(&output); // MEM-2.c : réponse convergée présente ?
         TopologyOutput {
             output,
             agents_used: calls,
@@ -215,6 +216,7 @@ impl Topology for GossipTopology {
             },
             decided_pattern: None, // gossip : convergence par raffinement, pas d'agrégation (ADR-019)
             escalated: false,
+            produced_acceptable: acceptable,
         }
     }
 }

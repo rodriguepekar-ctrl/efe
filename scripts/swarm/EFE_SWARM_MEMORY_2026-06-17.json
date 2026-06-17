@@ -1,0 +1,39 @@
+{
+  "A_cold_warm": {
+    "cold_k": 4,
+    "iso_quality_both_clean": true,
+    "ok": true,
+    "warm_k": 6,
+    "warm_start_k_min": 6
+  },
+  "B_reprove": {
+    "journal_intact": true,
+    "ok": true,
+    "records": 5,
+    "root": "c7aea1067438ebc6eefbb4b507139f402d81e85db6131420d34b2858bdf79c3c",
+    "root_reproduced": true,
+    "tamper_localized": true
+  },
+  "C_clean_gate": {
+    "clean_folded": true,
+    "dirty_folded": false,
+    "ok": true,
+    "version": 1
+  },
+  "D_pin_repro": {
+    "ok": true,
+    "snapshot_at_matches_past_pin": true
+  },
+  "_note": "Agents PURS synthétiques (Mode A, keyless) ; crypto RÉELLE (BLAKE3 épingle content_hash · SHA-256 feuille de chaîne · HMAC memory_root · HKDF clé tenant) + seal_memory/verify_memory RÉELS. Le warm-start AMORCE k_min, borné aux bornes du run (I-MEM4).",
+  "budgets": {
+    "verify_us_per_record": 2000.0
+  },
+  "cost": {
+    "cost_ok": true,
+    "seal_us": 17.783333333333335,
+    "verify_us": 18.05,
+    "verify_us_per_record": 3.6100000000000003
+  },
+  "go": true,
+  "verdict": "GO ✅ — la mémoire apprend (warm-start borné) · se re-prouve · localise une falsification · la porte clean tient · le pin reproduit"
+}

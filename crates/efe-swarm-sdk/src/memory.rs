@@ -34,6 +34,16 @@
 //! granulaire exige des ids par-variante (chirurgie d'ids de topologie) + un routage qui les
 //! lise — faible valeur sur le chemin principal, laissé à un incrément topologie dédié. Jamais
 //! fabriqué (`agents` reste vide) plutôt que rempli d'une donnée trompeuse.
+//!
+//! **MEM-2.c** ferme la 5ᵉ cellule, la **mémoire d'échec** (auparavant bâtie mais jamais
+//! alimentée) : chaque run propre compte au niveau **FAMILLE** (`failure_key` = la famille), et
+//! `failed = !produced_acceptable` — où **la topologie** décide l'acceptabilité (`TopologyOutput`),
+//! seule à connaître sa sémantique : GV/T1 ⇒ un candidat a passé le vérificateur (≠ `best_any` non
+//! vérifié) ; consensus/pipeline/… ⇒ la réponse est présente (`value`|`text`|nue, non vide). Le SDK
+//! ne **devine** plus l'échec depuis la forme du gagnant (faux négatifs GV + sorties `text` vides
+//! corrigés, revue adversariale). Un échec n'est PAS déposé comme exemplaire few-shot. La cellule
+//! est observable via `GET /memory/:family` (`failures`). La **décroissance temporelle** du
+//! compteur reste différée (une décroissance horloge briserait le déterminisme octet — différé sain).
 
 use std::sync::Arc;
 
@@ -156,15 +166,26 @@ pub(crate) fn memory_read_capture(
 /// granulaire exige des ids par-variante (chirurgie d'ids de topologie), hors périmètre ici.
 /// `clean` reflète `is_clean()` ; sur le chemin learn (gardé), toujours vrai, mais porté pour
 /// la traçabilité.
-pub(crate) fn summary_from_run(run: &SwarmRun, escalated: bool) -> RunSummary {
+pub(crate) fn summary_from_run(run: &SwarmRun, escalated: bool, produced_acceptable: bool, family: &FamilyKey) -> RunSummary {
     // Le gagnant : la valeur agrégée (`output.value` pour consensus/T1 ; sinon la sortie nue).
     let winner = run.output.get("value").cloned().unwrap_or_else(|| run.output.clone());
-    let exemplar = Exemplar {
-        content_hash: blake3_value(&winner).to_hex(),
-        preview: preview_of(&winner),
-        // Un run propre : son gagnant est la réponse acceptée → pleine qualité. La graduation
-        // fine (confiance d'agrégation) viendra quand `SwarmRun` l'exposera (MEM-3).
-        quality_milli: 1000,
+    // **Mémoire d'échec (MEM-2.c)** : a-t-il produit une réponse ACCEPTABLE ? Décidé PAR la
+    // topologie (`TopologyOutput::produced_acceptable`), qui seule connaît sa sémantique : GV/T1
+    // ⇒ un candidat a passé le vérificateur (≠ `best_any` non vérifié, non-nul mais faux) ;
+    // consensus/pipeline/… ⇒ la réponse est présente (`value`|`text`|nue, non vide). Le SDK ne
+    // DEVINE plus l'échec depuis la forme du gagnant (faux négatifs corrigés : revue adversariale).
+    let failed = !produced_acceptable;
+    // On ne dépose un exemplaire few-shot QUE pour un vrai gagnant : on ne few-shot jamais un échec.
+    let exemplars = if failed {
+        Vec::new()
+    } else {
+        vec![Exemplar {
+            content_hash: blake3_value(&winner).to_hex(),
+            preview: preview_of(&winner),
+            // Un run propre : son gagnant est la réponse acceptée → pleine qualité. La graduation
+            // fine (confiance d'agrégation) viendra quand `SwarmRun` l'exposera (MEM-3).
+            quality_milli: 1000,
+        }]
     };
     RunSummary {
         clean: run.is_clean(),
@@ -173,10 +194,14 @@ pub(crate) fn summary_from_run(run: &SwarmRun, escalated: bool) -> RunSummary {
         // ignore simplement la cellule pattern (cf. `fold_into` ②).
         winning_pattern: run.decided_pattern.clone(),
         escalated,
-        exemplars: vec![exemplar],
+        exemplars,
+        // Réputation par-agent : différée (cf. doc module — agent métré unique sur le chemin
+        // consensus). La mémoire d'échec, elle, est comptée au niveau **FAMILLE** : `failure_key`
+        // = la famille → `runs` compte chaque run propre de la famille, `fails` ceux sans réponse
+        // utilisable (fold ⑤) → un taux d'échec par famille, observable + re-prouvable.
         agents: Vec::new(),
-        failed: false,
-        failure_key: None,
+        failed,
+        failure_key: Some(family.as_str().to_string()),
     }
 }
 

@@ -288,10 +288,11 @@ impl Swarm {
                         cost_units: 0.0,
                         elapsed_ms: run_t0.elapsed().as_millis() as u64,
                         quality: QualitySignals::default(),
-                        // Backstop dur : run inachevé → aucun pattern décidé (et `is_clean()` faux
-                        // ⇒ jamais de learn de toute façon). ADR-019.
+                        // Backstop dur : run inachevé → aucun pattern décidé, aucune réponse
+                        // acceptable (et `is_clean()` faux ⇒ jamais de learn de toute façon). ADR-019.
                         decided_pattern: None,
                         escalated: false,
+                        produced_acceptable: false,
                     },
                     true,
                 ),
@@ -390,9 +391,11 @@ impl Swarm {
                     let update = efe_swarm_memory::MemoryUpdate {
                         run_id: swarm_id.as_uuid(),
                         family: family.clone(),
-                        // MEM-2.b : `escalated` vient du `TopologyOutput` (consensus) — `out`
-                        // n'est que partiellement déplacé (output/quality), ce champ Copy reste lisible.
-                        summary: crate::memory::summary_from_run(&run, out.escalated),
+                        // MEM-2.b/c : `escalated` + `produced_acceptable` viennent du
+                        // `TopologyOutput` (champs Copy, lisibles malgré le move partiel de `out`).
+                        // `produced_acceptable` (calculé PAR la topologie) pilote la mémoire d'ÉCHEC
+                        // (niveau famille) ; le SDK ne devine plus l'échec depuis la forme du gagnant.
+                        summary: crate::memory::summary_from_run(&run, out.escalated, out.produced_acceptable, family),
                     };
                     if let Ok(outcome) = h.store.fold(&tenant_str, update).await {
                         learned = outcome.folded;
@@ -1149,5 +1152,83 @@ mod tests {
         let recalled = crate::memory::recalled_exemplars(&snap);
         assert_eq!(recalled.len(), 1, "le gagnant du run propre est recall-able (few-shot)");
         assert!(!recalled[0].is_empty(), "l'aperçu d'exemplaire n'est pas vide");
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn failure_memory_counts_empty_winner_runs_and_skips_their_exemplars() {
+        // MEM-2.c : la 5ᵉ cellule (FailureMemory) est désormais ALIMENTÉE depuis un vrai run.
+        // Un run PROPRE dont le gagnant est nul/vide (const_generator → Null) compte un ÉCHEC
+        // (fails++) SANS déposer d'exemplaire (on ne few-shot jamais un échec) ; un run à gagnant
+        // réel (echo) compte un run SANS échec (runs++, fails inchangé) et dépose son exemplaire.
+        let tenant = efe_nano_sdk::TenantId::system().to_string();
+        let task = json!({ "text": "x", "expected": "x" });
+        let judges = ["consistency", "j_non_empty"];
+
+        // ① run ÉCHOUÉ : gagnant Null (const_generator).
+        let store_f = std::sync::Arc::new(InMemoryMemoryStore::new());
+        let fam_f = consensus_family(&task, "const_generator", &judges);
+        let swarm_f = Swarm::builder().memory(MemoryHandle::new(store_f.clone())).build().unwrap();
+        let run_f = swarm_f
+            .run(task.clone(), TopologySpec::consensus("const_generator", &judges, 3), Budget::cents(1000))
+            .await
+            .unwrap();
+        assert!(run_f.is_clean(), "le run complète proprement (le gagnant nul ne le rend pas non-clean)");
+        assert!(run_f.memory.as_ref().unwrap().learned, "un run propre replie (même s'il a échoué)");
+        let snap_f = store_f.snapshot(&tenant, &fam_f).await.unwrap();
+        let rec_f = snap_f.cells.failure.of(fam_f.as_str()).expect("la famille a une entrée d'échec");
+        assert_eq!(rec_f.runs, 1, "un run observé");
+        assert_eq!(rec_f.fails, 1, "gagnant nul → un échec compté (fold ⑤)");
+        assert_eq!(rec_f.fail_rate_milli(), 1000, "taux d'échec = 100%");
+        assert!(snap_f.cells.exemplars.items.is_empty(), "on ne few-shot JAMAIS un échec");
+
+        // ② run RÉUSSI : gagnant réel (echo_generator).
+        let store_ok = std::sync::Arc::new(InMemoryMemoryStore::new());
+        let fam_ok = consensus_family(&task, "echo_generator", &judges);
+        let swarm_ok = Swarm::builder().memory(MemoryHandle::new(store_ok.clone())).build().unwrap();
+        let run_ok = swarm_ok
+            .run(task.clone(), TopologySpec::consensus("echo_generator", &judges, 3), Budget::cents(1000))
+            .await
+            .unwrap();
+        assert!(run_ok.is_clean());
+        let snap_ok = store_ok.snapshot(&tenant, &fam_ok).await.unwrap();
+        let rec_ok = snap_ok.cells.failure.of(fam_ok.as_str()).expect("entrée d'échec présente");
+        assert_eq!(rec_ok.runs, 1, "un run observé");
+        assert_eq!(rec_ok.fails, 0, "gagnant réel → aucun échec");
+        assert!(!snap_ok.cells.exemplars.items.is_empty(), "un gagnant réel dépose son exemplaire");
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn real_escalation_is_folded_into_the_pattern_prior() {
+        // MEM-2.b (moitié POSITIVE de l'escalade) : un run qui escalade RÉELLEMENT — echo →
+        // candidats non unanimes (chacun porte son `variant`) → vote peu confiant → juges payés —
+        // replie `escalations == 1` dans le prior de pattern. Le pendant du cas négatif déjà
+        // couvert (Borda fixe → escalations == 0), via le bout-en-bout SDK→TopologyOutput→fold.
+        let store = std::sync::Arc::new(InMemoryMemoryStore::new());
+        let tenant = efe_nano_sdk::TenantId::system().to_string();
+        let task = json!({ "text": "x", "expected": "x" });
+        let judges = ["consistency", "j_non_empty"];
+        let family = consensus_family(&task, "echo_generator", &judges);
+        let swarm = Swarm::builder().memory(MemoryHandle::new(store.clone())).build().unwrap();
+
+        let run = swarm
+            .run(
+                task.clone(),
+                TopologySpec::Consensus {
+                    generator: "echo_generator".into(),
+                    judges: judges.iter().map(|s| s.to_string()).collect(),
+                    k: 3.into(),
+                    pattern: Pattern::Borda, // escalate_to
+                    escalate: true,
+                },
+                Budget::cents(100_000),
+            )
+            .await
+            .unwrap();
+        assert!(run.is_clean());
+        assert!(run.decided_pattern.is_some(), "un pattern est décidé + exposé");
+
+        let snap = store.snapshot(&tenant, &family).await.unwrap();
+        assert_eq!(snap.cells.pattern.total, 1, "un run de pattern observé");
+        assert_eq!(snap.cells.pattern.escalations, 1, "l'escalade RÉELLE est comptée (≠ 0)");
     }
 }

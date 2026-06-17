@@ -10,7 +10,7 @@
 //! 5. [`FailureMemory`] — les familles/agents qui échouent.
 //!
 //! ## Pourquoi tout est en ENTIERS (et jamais en `f64`)
-//! Le `content_hash` d'un instantané est `SHA-256(canonical_json(cellules))`. Un `f64` dans le
+//! Le `content_hash` d'un instantané est `BLAKE3(canonical_json(cellules))`. Un `f64` dans le
 //! contenu haché menacerait la **stabilité octet-à-octet** (représentations, précision). Toutes
 //! les grandeurs « fractionnaires » (qualité, taux) sont donc des **milli-unités** `u32`
 //! (`x ∈ [0, 1000]`), calculées de façon déterministe. Le `content_hash` est ainsi reproductible
@@ -256,7 +256,7 @@ pub struct MemoryCells {
 }
 
 impl MemoryCells {
-    /// Le `content_hash` **déterministe** des cellules (SHA-256 du JSON canonique). L'épingle
+    /// Le `content_hash` **déterministe** des cellules (BLAKE3 du JSON canonique). L'épingle
     /// d'ADR-017, appliquée à la mémoire : il identifie l'état EXACT lu par un run (I-MEM1).
     pub fn content_hash(&self) -> [u8; 32] {
         content_hash_of(self)
@@ -312,6 +312,20 @@ mod tests {
         // Un changement de contenu change le hash.
         b.size.histogram.insert(8, 1);
         assert_ne!(a.content_hash(), b.content_hash(), "contenu différent → hash différent");
+    }
+
+    #[test]
+    fn snapshot_pin_is_blake3_not_sha256() {
+        // ADR-019 §P1.5 : l'épingle d'instantané est BLAKE3 du contenu canonique — cohérent avec
+        // tout le reste de la couche (input/output hash, adresse d'exemplaire). VERROUILLE
+        // l'algorithme : une régression vers SHA-256 (l'ancien état) échouerait ici.
+        let mut c = MemoryCells::default();
+        c.size.histogram.insert(6, 2);
+        let v = serde_json::to_value(&c).expect("cellules sérialisables");
+        let blake3 = efe_swarm_provenance::blake3_value(&v).0;
+        let sha256 = efe_swarm_provenance::sha256(&efe_swarm_provenance::canonical_bytes(&v));
+        assert_eq!(c.content_hash(), blake3, "l'épingle == BLAKE3(canonical) — l'ADR-017 appliqué");
+        assert_ne!(c.content_hash(), sha256, "ce n'est PLUS du SHA-256 (anti-régression)");
     }
 
     #[test]

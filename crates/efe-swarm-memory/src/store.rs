@@ -28,13 +28,18 @@ use efe_swarm_provenance::HmacKeySource;
 use uuid::Uuid;
 
 use crate::cells::MemorySnapshot;
-use crate::chain::{seal_memory, FoldRecord};
+use crate::chain::{seal_memory, FoldRecord, MemoryWitness};
 use crate::family::FamilyKey;
 use crate::fold::{materialize, RunSummary};
 
 /// Le journal des replis, indexé par `(tenant, family)` — l'isolation tenant est structurelle
 /// (un tenant n'indexe que ses propres entrées). Alias pour lisibilité du champ du store.
 type TenantJournals = Mutex<HashMap<(String, FamilyKey), Vec<FoldRecord>>>;
+
+/// Les **témoins racine** persistés (root + feuilles du dernier repli), indexés comme le journal
+/// mais conservés SÉPARÉMENT — c'est l'écart entre le journal courant et CE témoin qui détecte une
+/// falsification hors-bande (MEM-3.b, I-MEM5). Cf. [`MemoryWitness`].
+type TenantWitnesses = Mutex<HashMap<(String, FamilyKey), MemoryWitness>>;
 
 /// Erreurs du store mémoire.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -106,6 +111,17 @@ pub trait MemoryStore: Send + Sync {
 
     /// Le journal des replis (l'évidence pour re-prouver la chaîne hors ligne), tenant-scopé.
     async fn journal(&self, tenant: &str, family: &FamilyKey) -> Result<Vec<FoldRecord>, MemError>;
+
+    /// **ADR-019 (MEM-3.b, I-MEM5)** : le **témoin racine persisté** de la famille (root + feuilles
+    /// du dernier repli), conservé SÉPARÉMENT du journal. `None` si la famille n'a jamais replié.
+    /// `/verify` compare la re-dérivation du journal courant à CE témoin → détecte + localise une
+    /// falsification **hors-bande** (≠ re-sceller le journal contre lui-même, qui est une
+    /// tautologie). Défaut `Ok(None)` : un store sans témoin retombe honnêtement sur la
+    /// re-dérivation (non tamper-détectante) — mais les deux stores réels (InMemory, Pg) le fournissent.
+    async fn witness(&self, tenant: &str, family: &FamilyKey) -> Result<Option<MemoryWitness>, MemError> {
+        let _ = (tenant, family);
+        Ok(None)
+    }
 }
 
 /// Store mémoire **en mémoire** (dev / tests / standalone souverain). Le journal par
@@ -115,6 +131,8 @@ pub struct InMemoryMemoryStore {
     keys: HmacKeySource,
     /// Journal des replis, indexé par `(tenant, family)` — l'isolation tenant est structurelle.
     journals: TenantJournals,
+    /// Témoins racine persistés (MEM-3.b) — SÉPARÉS du journal pour la détection hors-bande.
+    witnesses: TenantWitnesses,
 }
 
 impl Default for InMemoryMemoryStore {
@@ -126,12 +144,25 @@ impl Default for InMemoryMemoryStore {
 impl InMemoryMemoryStore {
     /// Store dev : clé de test, journal vide.
     pub fn new() -> Self {
-        Self { keys: HmacKeySource::test_key(), journals: Mutex::new(HashMap::new()) }
+        Self { keys: HmacKeySource::test_key(), journals: Mutex::new(HashMap::new()), witnesses: Mutex::new(HashMap::new()) }
     }
 
     /// Store avec une source de clé explicite (prod : `EnvHkdf` server-side).
     pub fn with_keys(keys: HmacKeySource) -> Self {
-        Self { keys, journals: Mutex::new(HashMap::new()) }
+        Self { keys, journals: Mutex::new(HashMap::new()), witnesses: Mutex::new(HashMap::new()) }
+    }
+
+    /// **Réservé aux tests** : remplace le journal d'une famille **sans** toucher au témoin —
+    /// simule une **falsification hors-bande** du store durable (éditer une ligne en base sans
+    /// pouvoir recalculer le témoin HMAC, qui exige la clé tenant). Sert à prouver que `/verify`
+    /// compare au **témoin persisté** (et casse), au lieu de re-sceller le journal contre
+    /// lui-même (tautologie). Hors test, aucun usage légitime — d'où `#[doc(hidden)]`.
+    #[doc(hidden)]
+    pub fn overwrite_journal_for_test(&self, tenant: &str, family: &FamilyKey, journal: Vec<FoldRecord>) {
+        self.journals
+            .lock()
+            .expect("verrou journal")
+            .insert((tenant.to_string(), family.clone()), journal);
     }
 
     /// Dérive la clé HKDF du tenant (miroir de `SwarmGatewayState::derive_key`) : `"system"`
@@ -172,8 +203,9 @@ impl MemoryStore for InMemoryMemoryStore {
     async fn fold(&self, tenant: &str, update: MemoryUpdate) -> Result<FoldOutcome, MemError> {
         // La clé tenant scelle le memory_root (I-MEM6) ; dérivée hors du verrou (échec net).
         let key = self.derive(tenant)?;
+        let family = update.family.clone();
         let mut journals = self.journals.lock().map_err(|_| MemError::Poisoned)?;
-        let journal = journals.entry((tenant.to_string(), update.family.clone())).or_default();
+        let journal = journals.entry((tenant.to_string(), family.clone())).or_default();
 
         // ① La PORTE (I-MEM3) : un run non-propre ne replie pas — no-op, état inchangé.
         // ② Idempotence : un run_id déjà plié ne replie pas — no-op.
@@ -189,17 +221,34 @@ impl MemoryStore for InMemoryMemoryStore {
 
         let cells = materialize(journal);
         let sealed = seal_memory(journal, &key);
-        Ok(FoldOutcome {
+        let outcome = FoldOutcome {
             version: journal.len() as u64,
             content_hash: cells.content_hash(),
             memory_root: sealed.memory_root,
             folded,
-        })
+        };
+        // **ATOMICITÉ (revue adversariale)** : on écrit le témoin EN TENANT le verrou du journal.
+        // Sinon deux folds concurrents sur la même famille peuvent réordonner journal-push et
+        // témoin-insert (le témoin « retarde » le journal → `/verify` lèverait une fausse alarme
+        // CountMismatch sur un journal honnête). Ordre de verrou stable journals→witnesses (aucun
+        // chemin n'acquiert l'inverse) → pas d'inter-blocage ; aucun `.await` sous les verrous.
+        if let Some(w) = MemoryWitness::from_sealed(&sealed) {
+            self.witnesses
+                .lock()
+                .map_err(|_| MemError::Poisoned)?
+                .insert((tenant.to_string(), family), w);
+        }
+        Ok(outcome)
     }
 
     async fn journal(&self, tenant: &str, family: &FamilyKey) -> Result<Vec<FoldRecord>, MemError> {
         let journals = self.journals.lock().map_err(|_| MemError::Poisoned)?;
         Ok(journals.get(&(tenant.to_string(), family.clone())).cloned().unwrap_or_default())
+    }
+
+    async fn witness(&self, tenant: &str, family: &FamilyKey) -> Result<Option<MemoryWitness>, MemError> {
+        let witnesses = self.witnesses.lock().map_err(|_| MemError::Poisoned)?;
+        Ok(witnesses.get(&(tenant.to_string(), family.clone())).cloned())
     }
 }
 
@@ -319,5 +368,97 @@ mod tests {
         assert_eq!((g.total, g.verified, g.won), (3, 3, 1), "réputation cumulée sur 3 runs");
         assert_eq!(g.verified_rate_milli(), 1000);
         assert_eq!(g.win_rate_milli(), 333);
+    }
+
+    #[tokio::test]
+    async fn witness_detects_out_of_band_journal_tampering() {
+        // MEM-3.b / I-MEM5 : le store persiste un TÉMOIN racine (root + feuilles), SÉPARÉ du
+        // journal. Re-dériver le journal courant et le comparer à CE témoin détecte une édition
+        // HORS-BANDE d'une ligne — la falsification CASSE la chaîne et est LOCALISÉE (≠ re-sceller
+        // le journal contre lui-même, qui serait une tautologie : intact toujours vrai).
+        let store = InMemoryMemoryStore::new();
+        for run in 1u128..=3 {
+            store.fold(TA, clean(run, 6)).await.unwrap();
+        }
+        let key = HmacKeySource::test_key().derive(TenantId::system()).unwrap();
+        let witness = store.witness(TA, &fam()).await.unwrap().expect("un témoin existe après repli");
+        assert_eq!(witness.leaf_hashes.len(), 3, "le témoin couvre les 3 replis");
+
+        // ① journal intact → re-dérivation == témoin (intact).
+        let journal = store.journal(TA, &fam()).await.unwrap();
+        let ok = verify_memory(&journal, &witness.leaf_hashes, Some(witness.memory_root), &key);
+        assert!(ok.intact, "journal non touché → la chaîne se re-prouve contre le témoin");
+
+        // ② falsification HORS-BANDE : on édite le contenu d'un repli, on laisse le témoin.
+        let mut tampered = journal.clone();
+        tampered[1].summary.k_used = 999; // un k_used impossible — l'édition de ligne en base
+        store.overwrite_journal_for_test(TA, &fam(), tampered.clone());
+        let bad = verify_memory(&tampered, &witness.leaf_hashes, Some(witness.memory_root), &key);
+        assert!(!bad.intact, "édition hors-bande → la chaîne CASSE contre le témoin");
+        assert_eq!(
+            bad.reason,
+            Some(crate::chain::MemoryBreak::RecordContentMutated),
+            "rupture localisée au CONTENU (≠ count/forge)"
+        );
+        assert!(bad.first_break.is_some(), "le repli fautif est LOCALISÉ (run_id)");
+        // le témoin, lui, ne bouge pas : sans la clé tenant, il n'est pas re-forgeable.
+        assert_eq!(store.witness(TA, &fam()).await.unwrap().unwrap().memory_root, witness.memory_root);
+    }
+
+    #[tokio::test]
+    async fn snapshot_at_reconstructs_a_genuinely_past_prefix() {
+        // I-MEM7 : snapshot_at(N) reconstruit l'état APRÈS les N premiers replis — un préfixe
+        // RÉELLEMENT passé, distinct du courant. C'est ce que R1 ré-épingle pour reproduire un run.
+        let store = InMemoryMemoryStore::new();
+        store.fold(TA, clean(1, 6)).await.unwrap();
+        let h1 = store.snapshot(TA, &fam()).await.unwrap().content_hash; // l'épingle à v1
+        store.fold(TA, clean(2, 4)).await.unwrap();
+        store.fold(TA, clean(3, 8)).await.unwrap();
+        let current = store.snapshot(TA, &fam()).await.unwrap();
+        assert_eq!(current.version, 3);
+
+        // snapshot_at(1) == l'état historique à v1 (PAS le courant) — la RÉTENTION, pas un repli.
+        let past = store.snapshot_at(TA, &fam(), 1).await.unwrap();
+        assert_eq!(past.version, 1, "version du préfixe");
+        assert_eq!(past.content_hash, h1, "content_hash == l'épingle d'alors (reproductible, I-MEM7)");
+        assert_ne!(past.content_hash, current.content_hash, "≠ courant : c'est un PASSÉ distinct");
+
+        // version ≥ courant → clampé au courant (jamais d'erreur, jamais au-delà).
+        let clamped = store.snapshot_at(TA, &fam(), 99).await.unwrap();
+        assert_eq!(clamped.version, 3, "version ≥ courant → instantané courant (clampé)");
+        assert_eq!(clamped.content_hash, current.content_hash);
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn concurrent_folds_keep_witness_in_sync_with_journal() {
+        // RÉGRESSION (revue adversariale) : sous folds CONCURRENTS sur la MÊME famille, le témoin
+        // persisté reste EXACTEMENT synchrone avec le journal — le témoin est écrit SOUS le verrou
+        // du journal. Sinon une course ferait « retarder » le témoin (moins de feuilles que le
+        // journal) et /verify lèverait une FAUSSE alarme CountMismatch sur un journal honnête.
+        let store = std::sync::Arc::new(InMemoryMemoryStore::new());
+        let mut tasks = Vec::new();
+        for run in 0u128..32 {
+            let s = store.clone();
+            tasks.push(tokio::spawn(async move {
+                s.fold(TA, clean(run, 6)).await.unwrap();
+            }));
+        }
+        for t in tasks {
+            t.await.unwrap();
+        }
+
+        let journal = store.journal(TA, &fam()).await.unwrap();
+        let witness = store.witness(TA, &fam()).await.unwrap().expect("témoin présent");
+        assert_eq!(journal.len(), 32, "32 replis distincts pliés");
+        assert_eq!(
+            witness.leaf_hashes.len(),
+            journal.len(),
+            "le témoin couvre EXACTEMENT le journal (aucun retard de course)"
+        );
+        let key = HmacKeySource::test_key().derive(TenantId::system()).unwrap();
+        assert!(
+            verify_memory(&journal, &witness.leaf_hashes, Some(witness.memory_root), &key).intact,
+            "journal honnête → intègre (pas de fausse alarme de falsification)"
+        );
     }
 }

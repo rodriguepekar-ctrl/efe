@@ -28,7 +28,7 @@ use tokio::task::JoinSet;
 use crate::consensus::selector::{aggregator_for, Pattern, PatternSelector};
 use crate::consensus::{Aggregator, Ballot, Judge, MajorityVote};
 use crate::sizing::{run_waves_pure, BudgetProbe, DeadlineProbe, KPlan, SizingTrace};
-use crate::topology::{QualitySignals, SwarmContext, Topology, TopologyOutput};
+use crate::topology::{answer_is_present, QualitySignals, SwarmContext, Topology, TopologyOutput};
 use crate::traits::Generator;
 
 /// Politique de choix d'agrégateur.
@@ -371,6 +371,7 @@ impl Topology for ConsensusTopology {
             None => outcome.selected,
             Some((plan, trace)) => json!({ "value": outcome.selected, "sizing": trace.to_json(plan) }),
         };
+        let acceptable = answer_is_present(&output); // MEM-2.c : le consensus a-t-il une réponse présente ?
         TopologyOutput {
             output,
             // K réellement dépensé (= self.k en fixe ; = K_used ≤ k_max en adaptatif).
@@ -390,6 +391,7 @@ impl Topology for ConsensusTopology {
             // verdict que l'event `consensus.decided`, désormais porté aussi par `SwarmRun`.
             decided_pattern: Some(format!("{pattern:?}").to_lowercase()),
             escalated,
+            produced_acceptable: acceptable,
         }
     }
 }

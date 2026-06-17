@@ -144,6 +144,22 @@ mod tests {
         (router(state), store)
     }
 
+    /// État de test avec un `InMemoryMemoryStore` **concret** conservé (pour le testkit de
+    /// falsification du journal mémoire), injecté comme `Arc<dyn MemoryStore>` dans l'état. Clé
+    /// `test_key` côté store ET côté état → le témoin re-vérifie (cohérence de clé).
+    fn app_with_memory_store() -> (Router, Arc<efe_swarm_memory::InMemoryMemoryStore>) {
+        let mem = Arc::new(efe_swarm_memory::InMemoryMemoryStore::new());
+        let state = SwarmGatewayState::new(
+            Arc::new(AgentFleet::standard()),
+            HmacKeySource::test_key(),
+            Arc::new(InMemoryRunStore::new()),
+            ProvenanceMetrics::new(),
+            Arc::new(SubstrateMetrics::default()),
+        )
+        .with_memory_store(mem.clone());
+        (router(state), mem)
+    }
+
     async fn body_json(resp: axum::response::Response) -> Value {
         let bytes = resp.into_body().collect().await.unwrap().to_bytes();
         serde_json::from_slice(&bytes).unwrap()
@@ -668,6 +684,75 @@ mod tests {
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn memory_verify_detects_out_of_band_tampering_over_http() {
+        // MEM-3.b / I-MEM5 : après apprentissage, éditer une ligne du journal HORS-BANDE (sans
+        // pouvoir recalculer le témoin HMAC, qui exige la clé tenant) fait passer /verify à
+        // `intact:false` + LOCALISE le repli. Le jumeau mémoire de `verify_detects_tampering`
+        // (chaîne N17). Prouve que l'endpoint compare au TÉMOIN persisté, pas au journal re-scellé.
+        use efe_swarm_memory::MemoryStore; // pour appeler `journal()` sur le store concret
+        let (app, mem) = app_with_memory_store();
+
+        // ① un run apprend (replie 1 record + écrit le témoin racine).
+        let resp = app.clone().oneshot(post_run(mem_run_body())).await.unwrap();
+        let v = body_json(resp).await;
+        assert_eq!(v["run"]["memory"]["learned"], json!(true), "run propre → replié");
+        let family_hex = v["run"]["memory"]["family"].as_str().unwrap().to_string();
+
+        // /verify INTÈGRE avant falsification.
+        let ok = app
+            .clone()
+            .oneshot(Request::builder().uri(format!("/v1/swarm/memory/{family_hex}/verify")).body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        assert_eq!(body_json(ok).await["intact"], json!(true), "intègre avant falsification");
+
+        // ② FALSIFICATION hors-bande : on édite le contenu du repli ; le témoin, lui, reste.
+        let tenant = efe_nano_sdk::TenantId::system().to_string();
+        let fam = efe_swarm_memory::FamilyKey::from_hex(family_hex.clone());
+        let mut journal = mem.journal(&tenant, &fam).await.unwrap();
+        assert_eq!(journal.len(), 1, "un repli en journal");
+        journal[0].summary.k_used = 999; // édition de ligne (impossible légitimement)
+        mem.overwrite_journal_for_test(&tenant, &fam, journal);
+
+        // ③ /verify DÉTECTE + localise (≠ tautologie « toujours intact »).
+        let bad = app
+            .oneshot(Request::builder().uri(format!("/v1/swarm/memory/{family_hex}/verify")).body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        assert_eq!(bad.status(), StatusCode::OK, "verdict dans le corps, toujours 200");
+        let vv = body_json(bad).await;
+        assert_eq!(vv["intact"], json!(false), "falsification hors-bande DÉTECTÉE (témoin persisté)");
+        assert!(vv["localized_break"].is_string(), "le repli fautif est LOCALISÉ (run_id)");
+        assert_eq!(vv["unanchored"], json!(false), "témoin présent → ce n'est PAS un cas non-ancré");
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn memory_verify_reports_unanchored_when_witness_missing_not_tampering() {
+        // Revue adversariale (LOW) : un journal NON vide SANS témoin (table des témoins tronquée /
+        // témoin perdu) → /verify dit `unanchored:true` (perte de donnée), PAS une falsification
+        // localisée. On distingue honnêtement la PERTE d'une ATTAQUE.
+        use efe_swarm_memory::{family_key, FamilyMode, FoldRecord, MemoryStore, RunSummary as MR};
+        let (app, mem) = app_with_memory_store();
+        let tenant = efe_nano_sdk::TenantId::system().to_string();
+        let task = json!({ "text": "x" });
+        let fam = family_key(&task, "consensus", &["g".into()], FamilyMode::Structural);
+
+        // pose un journal DIRECTEMENT (aucun fold → aucun témoin écrit) : l'état « non ancré ».
+        let rec = FoldRecord { run_id: uuid::Uuid::from_u128(1), family: fam.clone(), summary: MR::clean(6) };
+        mem.overwrite_journal_for_test(&tenant, &fam, vec![rec]);
+        assert!(mem.witness(&tenant, &fam).await.unwrap().is_none(), "aucun témoin pour cette famille");
+
+        let resp = app
+            .oneshot(Request::builder().uri(format!("/v1/swarm/memory/{}/verify", fam.as_str())).body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        let v = body_json(resp).await;
+        assert_eq!(v["unanchored"], json!(true), "journal non vide sans témoin → NON ANCRÉ");
+        assert_eq!(v["intact"], json!(false), "non prouvable → intact:false");
+        assert_eq!(v["localized_break"], json!(null), "mais AUCUN repli fautif localisé (≠ attaque)");
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     async fn memory_is_tenant_scoped_over_http() {
         // I-MEM6 : le tenant A apprend ; le tenant B ne voit RIEN sur la même famille.
         let (app, _s) = app();
@@ -783,6 +868,61 @@ mod tests {
             v["execution"]["outputs_reproduced"],
             json!(true),
             "R1 ré-épingle l'instantané → reproduit le run warm-starté (I-MEM7)"
+        );
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn replay_r1_without_repinning_memory_does_not_falsely_reproduce() {
+        // I-MEM7 (moitié HONNÊTETÉ) : un run warm-starté par la mémoire (k=6) NE se reproduit PAS
+        // si R1 ne RÉ-ÉPINGLE pas l'instantané — sans bloc mémoire, R1 repart du k_min par défaut
+        // (4) → multiset de générateurs DIFFÉRENT → task_mismatch, donc PAS de reproduction. La
+        // reproductibilité EXIGE le ré-épinglage (≠ la re-provabilité R0, toujours vraie). Le
+        // pendant NÉGATIF de replay_r1_repins_memory_and_reproduces_warm_started_run.
+        use efe_swarm_memory::{family_key, FamilyMode, MemoryUpdate, RunSummary as MR};
+        let (app, state) = app();
+        let tenant = efe_nano_sdk::TenantId::system().to_string();
+        let task = json!({ "text": "x", "expected": "x" });
+        let family = family_key(
+            &task,
+            "consensus",
+            &["const_generator".into(), "consistency".into(), "j_non_empty".into()],
+            FamilyMode::Structural,
+        );
+        for r in 0u128..4 {
+            state
+                .memory
+                .fold(&tenant, MemoryUpdate { run_id: uuid::Uuid::from_u128(0x8000 + r), family: family.clone(), summary: MR::clean(6) })
+                .await
+                .unwrap();
+        }
+        let topo = json!({
+            "kind": "consensus", "generator": "const_generator",
+            "judges": ["consistency", "j_non_empty"],
+            "k": { "min": 4, "max": 24, "agreement": 0.9 }
+        });
+        let run_resp = app
+            .clone()
+            .oneshot(post_run(json!({ "task": task, "topology": topo, "memory": { "recall": true, "learn": false } })))
+            .await
+            .unwrap();
+        let rv = body_json(run_resp).await;
+        let run_id = rv["run_id"].as_str().unwrap().to_string();
+        assert_eq!(rv["run"]["memory"]["warm_start_k_min"], json!(6), "le run original est warm-starté (K=6)");
+
+        // R1 SANS bloc mémoire → aucun recall → k_min par défaut (4) → multiset ≠ → task_mismatch.
+        let r1 = app.oneshot(replay_post(&run_id, json!({ "task": task, "topology": topo }))).await.unwrap();
+        assert_eq!(r1.status(), StatusCode::OK);
+        let v = body_json(r1).await;
+        assert_eq!(v["execution"]["ran"], json!(true), "R1 a re-exécuté");
+        assert_eq!(
+            v["execution"]["task_mismatch"],
+            json!(true),
+            "sans ré-épinglage → multiset de générateurs DIFFÉRENT (k=4 vs 6) — I-MEM7"
+        );
+        assert_ne!(
+            v["execution"]["outputs_reproduced"],
+            json!(true),
+            "donc PAS de reproduction sans le pin (l'honnêteté de R1)"
         );
     }
 

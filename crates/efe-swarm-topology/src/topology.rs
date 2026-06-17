@@ -48,6 +48,30 @@ pub struct TopologyOutput {
     /// `true` uniquement sur la branche d'escalade d'une politique `Escalating` ; `false` en
     /// pattern fixe/adaptatif et hors consensus. Replié dans `PatternPrior::escalations`.
     pub escalated: bool,
+    /// **ADR-019 (MEM-2.c)** : la topologie a-t-elle produit une **réponse acceptable** ? Calculé
+    /// PAR la topologie (qui seule connaît sa sémantique d'acceptation) : GV/T1 ⇒ au moins un
+    /// candidat a **passé le vérificateur** (`passed > 0`) — sans quoi le `best_any` non-nul mais
+    /// NON vérifié masquerait un échec ; consensus/pipeline/hiérarchique/gossip/débat ⇒ la
+    /// **réponse est présente** ([`answer_is_present`], non nulle/vide, forme `value`|`text`|nue).
+    /// `false` ⇒ la mémoire d'échec compte un échec (`RunSummary::failed`). Le SDK ne **devine**
+    /// plus l'échec depuis la forme du gagnant (faux négatifs sur GV `best_any` + sorties `text` vides).
+    pub produced_acceptable: bool,
+}
+
+/// **ADR-019 (MEM-2.c)** — la sortie d'une topologie porte-t-elle une **réponse présente** (non
+/// nulle, non vide) ? On lit la réponse là où chaque grammaire la loge — `value` (consensus/GV),
+/// `text` (pipeline/mergers), ou la valeur **nue** — puis on teste la vacuité (null, chaîne vide,
+/// tableau/objet vide). Les topologies **sans** notion de vérification par-candidat s'en servent
+/// pour renseigner [`TopologyOutput::produced_acceptable`] (le producteur connaît sa forme).
+pub fn answer_is_present(output: &Value) -> bool {
+    let w = output.get("value").or_else(|| output.get("text")).unwrap_or(output);
+    match w {
+        Value::Null => false,
+        Value::String(s) => !s.trim().is_empty(),
+        Value::Array(a) => !a.is_empty(),
+        Value::Object(o) => !o.is_empty(),
+        Value::Bool(_) | Value::Number(_) => true,
+    }
 }
 
 /// Contexte partagé injecté aux topologies (services : flotte d'agents + provenance).
@@ -147,6 +171,9 @@ impl Topology for GvTopology {
             quality: QualitySignals { candidates: n, verified: r.passed, subtasks: 0 },
             decided_pattern: None, // T1/GV : aucune notion de pattern d'agrégation (ADR-019)
             escalated: false,
+            // MEM-2.c : ACCEPTABLE ⇔ au moins un candidat a passé le vérificateur. `best_any`
+            // (le repli non vérifié) est non-nul mais NE compte PAS comme réponse acceptée.
+            produced_acceptable: r.passed > 0,
         }
     }
 }
@@ -228,6 +255,7 @@ impl Topology for AdaptiveGvTopology {
             quality: QualitySignals { candidates: k_used, verified: r.passed, subtasks: 0 },
             decided_pattern: None, // T1 adaptatif : pas de pattern non plus (ADR-019)
             escalated: false,
+            produced_acceptable: r.passed > 0, // MEM-2.c : ≥ 1 candidat vérifié
         }
     }
 }
@@ -262,14 +290,17 @@ impl Topology for PipelineTopology {
             )
             .await;
         let produced = outs.len();
+        let output = outs.into_iter().next().unwrap_or(Value::Null);
+        let acceptable = answer_is_present(&output); // MEM-2.c : sortie présente (≠ {text:""} vide)
         TopologyOutput {
-            output: outs.into_iter().next().unwrap_or(Value::Null),
+            output,
             agents_used: self.pipeline.len(),
             cost_units: self.pipeline.len() as f64,
             elapsed_ms: t0.elapsed().as_millis() as u64,
             quality: QualitySignals { candidates: 0, verified: 0, subtasks: produced },
             decided_pattern: None, // T2 pipeline : pas d'agrégation par pattern (ADR-019)
             escalated: false,
+            produced_acceptable: acceptable,
         }
     }
 }
@@ -292,6 +323,7 @@ impl Topology for HierTopology {
     async fn run(&self, task: &Value, _ctx: &SwarmContext) -> TopologyOutput {
         let t0 = Instant::now();
         let r = self.inner.run(task).await;
+        let acceptable = answer_is_present(&r.output); // MEM-2.c : réponse présente (≠ décompo vide)
         TopologyOutput {
             output: r.output,
             agents_used: r.subtasks,
@@ -300,6 +332,7 @@ impl Topology for HierTopology {
             quality: QualitySignals { candidates: 0, verified: 0, subtasks: r.subtasks },
             decided_pattern: None, // T3 hiérarchique : pas de pattern d'agrégation (ADR-019)
             escalated: false,
+            produced_acceptable: acceptable,
         }
     }
 }

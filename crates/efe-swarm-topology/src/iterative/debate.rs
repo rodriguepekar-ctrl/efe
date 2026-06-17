@@ -30,7 +30,7 @@ use super::ConvergenceMetric;
 use crate::consensus::selector::aggregator_for;
 use crate::consensus::{Aggregator, Ballot, Judge, MajorityVote};
 use crate::consensus::Pattern;
-use crate::topology::{QualitySignals, SwarmContext, Topology, TopologyOutput};
+use crate::topology::{answer_is_present, QualitySignals, SwarmContext, Topology, TopologyOutput};
 use crate::traits::Generator;
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -415,6 +415,7 @@ impl DebateTopology {
             });
         }
         let calls = self.k + 2 * self.k * rounds_done + judges_total;
+        let acceptable = answer_is_present(&outcome.selected); // MEM-2.c : réponse finale présente ?
         TopologyOutput {
             output: outcome.selected,
             agents_used: calls,
@@ -423,6 +424,7 @@ impl DebateTopology {
             quality: QualitySignals { candidates: k, verified: rounds_done, subtasks: judges_total },
             decided_pattern: None, // débat : juge final, pas de pattern d'agrégation de vote (ADR-019)
             escalated: false,
+            produced_acceptable: acceptable,
         }
     }
 }

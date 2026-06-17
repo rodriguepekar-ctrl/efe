@@ -20,7 +20,7 @@ use uuid::Uuid;
 
 use crate::family::FamilyKey;
 use crate::fold::RunSummary;
-use crate::{content_hash_of, hex32};
+use crate::{hex32, sha256_content_of};
 
 /// Un **repli** : l'enregistrement, chaîné par HMAC, qu'un run propre a plié son résultat dans
 /// la mémoire. Self-contained — il porte la projection (`summary`) que [`crate::materialize`]
@@ -36,9 +36,11 @@ pub struct FoldRecord {
     pub summary: RunSummary,
 }
 
-/// Le hash de contenu **déterministe** d'un repli : SHA-256 de sa forme JSON canonique.
+/// Le hash de contenu **déterministe** d'un repli : SHA-256 de sa forme JSON canonique — la MÊME
+/// crypto de feuille que la chaîne N17 (le « jumeau exact »). Distinct de l'épingle d'instantané
+/// (BLAKE3) : cf. [`crate::sha256_content_of`].
 fn leaf_hash(rec: &FoldRecord) -> [u8; 32] {
-    content_hash_of(rec)
+    sha256_content_of(rec)
 }
 
 /// **Ordre canonique** des replis : par `run_id` (déterministe, stable à la relecture — chaque
@@ -82,6 +84,31 @@ pub fn seal_memory(journal: &[FoldRecord], key: &[u8]) -> SealedMemory {
         leaf_hashes.push(leaf);
     }
     SealedMemory { leaf_hashes, memory_root: tip }
+}
+
+/// Le **témoin racine persisté** d'une famille (ADR-019 §6.2, MEM-3.b) : la `memory_root` + les
+/// feuilles SCELLÉES au dernier repli, conservées **séparément du journal**. C'est ce qui rend
+/// `/verify` honnête : on re-dérive le journal courant et on le compare à CE témoin — une édition
+/// **hors-bande** d'une ligne (le journal n'est plus celui qui a produit le témoin) casse la
+/// chaîne et est **localisée** (I-MEM5). Sans témoin, re-sceller le journal contre lui-même est
+/// une **tautologie** (intact toujours vrai). Le jumeau, côté mémoire, de `n17_root` persisté.
+/// La racine n'est PAS `Option` : un témoin n'existe que pour un journal **non vide** (≥ 1 repli).
+/// `Serialize`/`Deserialize` (les `[u8;32]` → tableaux JSON) pour la persistance durable (Pg JSONB).
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct MemoryWitness {
+    pub memory_root: [u8; 32],
+    pub leaf_hashes: Vec<[u8; 32]>,
+}
+
+impl MemoryWitness {
+    /// Construit le témoin depuis un scellement (`None` si le journal scellé était vide — pas de
+    /// racine à attester). À appeler au repli, sur le résultat de [`seal_memory`].
+    pub fn from_sealed(sealed: &SealedMemory) -> Option<Self> {
+        sealed.memory_root.map(|root| Self { memory_root: root, leaf_hashes: sealed.leaf_hashes.clone() })
+    }
+    pub fn root_hex(&self) -> String {
+        hex32(&self.memory_root)
+    }
 }
 
 /// Pourquoi la chaîne mémoire casse (jumeau de `N17Break`).
