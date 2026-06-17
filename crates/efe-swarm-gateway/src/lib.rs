@@ -859,14 +859,15 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     async fn replay_rejects_task_mismatch() {
-        // R1 garde : re-fournir une AUTRE task → la re-exécution NE reproduit PAS (localisé).
+        // Garde anti-confusion (§5.1) : re-fournir une AUTRE task ne doit PAS produire un faux
+        // `outputs_reproduced: false` (qui ferait croire le run non reproductible) ; c'est une
+        // ERREUR D'OPÉRATEUR signalée `task_mismatch`, distincte d'une vraie non-reproduction.
         let (app, _s) = app();
         let run = body_json(app.clone().oneshot(post_run(keyless_run_body(json!({ "text": "original", "expected": "original" })))).await.unwrap()).await;
         let id = run["run_id"].as_str().unwrap().to_string();
         let v = body_json(app.oneshot(replay_post(&id, keyless_run_body(json!({ "text": "DIFFERENT", "expected": "DIFFERENT" })))).await.unwrap()).await;
-        assert_eq!(v["execution"]["outputs_reproduced"], json!(false), "task différente → sorties non re-dérivées");
-        assert!(v["first_divergence"].is_object(), "divergence localisée (output_mismatch)");
-        assert_eq!(v["first_divergence"]["reason"], json!("output_mismatch"));
+        assert_eq!(v["execution"]["task_mismatch"], json!(true), "task différente → erreur d'opérateur signalée");
+        assert!(v["execution"]["outputs_reproduced"].is_null(), "PAS de faux verdict de (non-)reproductibilité");
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
@@ -888,6 +889,25 @@ mod tests {
         let v1 = body_json(app.oneshot(replay_post(&id.to_string(), keyless_run_body(json!({ "value": "ok" })))).await.unwrap()).await;
         assert_eq!(v1["execution"]["ran"], json!(false), "I-RP6 : pas de re-exécution provider en aveugle");
         assert_eq!(v1["per_op"][0]["outcome"], json!("skipped_non_deterministic"), "Seeded → Skipped, jamais faux Match");
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn replay_reverifies_n17_without_recomputing_root() {
+        // I-RP7 : la forensique N17 est RE-PROUVÉE, pas RE-PRODUITE. Muter un record N17 persisté
+        // → le rejeu R0 signale `n17.chain_intact=false` (verify_run_offline relit les feuilles
+        // scellées) ET localise le record fautif, ALORS QUE la racine d'ESSAIM reste reproduite
+        // (chaîne d'essaim intacte) — preuve que la N17 est re-vérifiée SÉPARÉMENT, jamais
+        // repliée dans la racine (qui, elle, est seulement re-prouvée par re-scellement).
+        let (app, store) = app_with_store();
+        let (_r, mut stored) = synthetic_mode_c_run("gemma3:12b");
+        stored.llm_records[0].model_identity =
+            efe_nano_sdk::ModelIdentity::hosted("ollama", "MENTEUR:70b", "local");
+        let id = Uuid::new_v4();
+        store.insert_stored(id, stored);
+        let v = body_json(app.oneshot(replay_get(&id.to_string())).await.unwrap()).await;
+        assert_eq!(v["n17"]["chain_intact"], json!(false), "I-RP7 : forensique N17 falsifiée DÉTECTÉE au rejeu");
+        assert!(v["n17"]["first_break"].is_string(), "le record N17 muté est localisé");
+        assert_eq!(v["root_reproduced"], json!(true), "la racine d'ESSAIM reste reproduite — N17 re-vérifiée À PART, jamais recomputée dans la racine");
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]

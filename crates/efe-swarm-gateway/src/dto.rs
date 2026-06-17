@@ -478,8 +478,15 @@ pub struct ExecutionReplayView {
     pub ran: bool,
     /// **Le verdict de reproductibilité de la COMPUTATION** (I-RP1) : la re-exécution
     /// re-dérive-t-elle les MÊMES sorties d'agents (`output_hash`) + le MÊME flux de données
-    /// (`input_hash`, lectures/écritures de cellules) ? `true` pour un Mode A honnête.
+    /// (`input_hash`, lectures/écritures de cellules) ? `true` pour un Mode A honnête. `null`
+    /// si aucun verdict n'a pu être émis (Mode C scopé-dehors, ou `task_mismatch`).
     pub outputs_reproduced: Option<bool>,
+    /// **Garde anti-confusion (§5.1)** : la task re-fournie ne correspond PAS aux entrées
+    /// scellées du run (les `input_hash` des générateurs divergent). On NE produit alors PAS
+    /// un faux `outputs_reproduced: false` (qui laisserait croire le run non reproductible) :
+    /// `outputs_reproduced` reste `null`, et ce drapeau dit « erreur d'opérateur : mauvaise
+    /// task », distinct d'une vraie non-reproduction.
+    pub task_mismatch: bool,
     /// Nombre d'agents Mode A dont la sortie a été re-dérivée et comparée.
     pub mode_a_records: usize,
     pub mode_c_records: usize,

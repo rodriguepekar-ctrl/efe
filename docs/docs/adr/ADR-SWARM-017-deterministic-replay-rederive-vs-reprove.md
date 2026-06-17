@@ -53,14 +53,19 @@ build l'a réfuté empiriquement et a tranché pour le modèle honnête ci-desso
 4. **N17 re-prouvée, pas re-produite** — R0/R1 re-vérifient la chaîne N17 **scellée**
    (`verify_run_offline`, feuilles relues) et ne recomputent **jamais** `n17_root` (qui dépend de
    `recorded_at`). Même asymétrie que la racine d'essaim.
-5. **La task n'est pas persistée → R1 la re-fournit** — `StoredRun` ne garde ni la task, ni la
-   `TopologySpec` complète (nom seul) ; R1 prend un `RunRequest` (le caller re-soumet ce qu'il
-   détient) plutôt qu'une migration de schéma lourde.
+5. **La task n'est pas persistée → R1 la re-fournit, avec garde anti-confusion** — `StoredRun`
+   ne garde ni la task, ni la `TopologySpec` complète (nom seul) ; R1 prend un `RunRequest` (le
+   caller re-soumet ce qu'il détient) plutôt qu'une migration de schéma lourde. **Garde §5.1** :
+   si la task re-fournie ne correspond pas aux entrées scellées (les `input_hash` des
+   générateurs divergent), R1 **ne produit PAS** un faux `outputs_reproduced: false` (qui
+   laisserait croire le run non reproductible) — il signale `task_mismatch: true` avec
+   `outputs_reproduced: null` (erreur d'opérateur, distincte d'une vraie non-reproduction).
+   *(Affinement du build : un drapeau dans le rapport, plus diagnostique qu'un 400 opaque.)*
 6. **Lecture-seule, tenant-scopé, largeur neutre** — le rejeu ne mute jamais le store (R1
    s'exécute sur un Blackboard vierge, ne persiste rien) ; un run d'un autre tenant est invisible
    (404) ; rejouer à une largeur différente re-dérive les mêmes sorties (I-CP1 héritée).
 
-## Invariants introduits (famille I-RP — 9 gardiens : 8 passerelle · 1 Mode C réel ignoré ; + socle `replay.rs`)
+## Invariants introduits (famille I-RP — 10 gardiens : 9 passerelle · 1 Mode C réel ignoré ; + socle `replay.rs`)
 
 - **I-RP1** — *Reproductibilité Mode A des SORTIES* : R1 re-exécute le squelette Mode A sur la
   task re-fournie → re-dérive les mêmes `output_hash` + flux de données. La racine, identité
@@ -76,14 +81,16 @@ build l'a réfuté empiriquement et a tranché pour le modèle honnête ci-desso
 - **I-RP5** — *Isolation tenant* : run d'un autre tenant invisible (404). Gardien :
   `replay_is_tenant_scoped`.
 - **I-RP6** — *Mode C honnêtement classé* : `cache_hit`/`replay_of` → `Match` ; éphémère/seeded →
-  `SkippedNonDeterministic`, jamais faux `Match`. Gardien (avec I-RP7) :
+  `SkippedNonDeterministic`, jamais faux `Match`. Gardien :
   `replay_classifies_mode_c_honestly_and_reverifies_n17`.
-- **I-RP7** — *N17 re-prouvée, pas re-produite* : `verify_run_offline` re-vérifie la chaîne N17
-  scellée, sans recomputer `n17_root`.
+- **I-RP7** — *N17 re-prouvée, pas re-produite* : muter un record N17 persisté → le rejeu signale
+  `n17.chain_intact=false` et localise la faute (`verify_run_offline` relit les feuilles), ALORS
+  QUE la racine d'essaim reste **reproduite** — preuve que la N17 est re-vérifiée à part, jamais
+  recomputée dans la racine. Gardien : `replay_reverifies_n17_without_recomputing_root`.
 - **I-RP8** — *Largeur neutre* (I-CP1) : rejouer à une largeur différente re-dérive les mêmes
   sorties. Gardien : `replay_is_width_invariant`.
-- **Garde du contrat R1** : `replay_rejects_task_mismatch` (une autre task → sorties non
-  re-dérivées, localisé).
+- **Garde du contrat R1** : `replay_rejects_task_mismatch` (une autre task → `task_mismatch: true`,
+  `outputs_reproduced: null` — erreur d'opérateur, jamais un faux « non reproductible »).
 - **Mode C RÉEL** (`replay_real.rs`, ignoré sans Ollama) : `replay_r0_reproves_root_of_real_mode_c_run`
   — sur un run `gemma3:12b` authentique, R0 re-prouve la racine + re-vérifie N17 (le provider
   n'est pas rejoué). Socle : `replay.rs` (9 unités — ordre déterministe, racine reproductible,

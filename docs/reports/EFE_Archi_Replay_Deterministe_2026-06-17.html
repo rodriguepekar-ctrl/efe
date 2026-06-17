@@ -405,10 +405,13 @@
   assumé : <code>POST /v1/swarm/replay/:id</code> prend un corps <code>{ task: Value, topology?: TopologyDto, budget?:
   Budget }</code>. Le caller <b>re-fournit la task qu'il détient déjà</b> (c'est sa requête d'origine). L'endpoint
   reconstruit la topologie depuis le <code>topology</code> nommé du <code>StoredRun</code> (et/ou la spec re-fournie),
-  l'instancie sur un Blackboard <b>vierge</b>, et re-exécute. La garde anti-confusion : avant comparaison, R1 re-vérifie
-  que la <b>task fournie</b> produit les <code>input_hash</code> attendus aux feuilles du DAG — si le caller fournit une
-  <b>autre</b> task, les <code>input_hash</code> divergent immédiatement et R1 refuse (400 <code>TaskMismatch</code>)
-  plutôt que de produire un faux « non-reproductible ».</p>
+  l'instancie sur un Blackboard <b>vierge</b>, et re-exécute. <b>La garde anti-confusion</b> : R1 compare les
+  <code>input_hash</code> des <b>générateurs</b> (dont l'entrée dérive de la task) entre le run scellé et la re-exécution —
+  si le caller a re-fourni une <b>autre</b> task, ces <code>input_hash</code> divergent, et R1 signale
+  <code>task_mismatch: true</code> avec <code>outputs_reproduced: null</code> (erreur d'opérateur) <b>plutôt que</b> un
+  faux <code>outputs_reproduced: false</code> qui laisserait croire le run non reproductible. <i>(Affinement du build :
+  un drapeau diagnostique dans le rapport, retenu sur un 400 opaque — le verdict de (non-)reproductibilité n'est jamais
+  émis à tort.)</i></p>
 
   <h3>5.2 — Re-exécuter les agents purs (Mode A) → comparer</h3>
   <p>Pour un run <b>Mode A</b>, R1 re-dérive les <b>sorties</b> à l'octet. Les générateurs (<code>EchoGenerator</code>,
@@ -689,7 +692,7 @@ ReplayReport {
     determinism: { full_deterministic, seeded, llm_replayable, llm_ephemeral },  // inventaire
     per_op:  [ { record_id, agent_id, kind, level: DeterminismLevel, outcome: MatchOutcome } ],
     n17:     N17VerifyView,           // I-RP7 : verify_run_offline, PAS de recompute de n17_root
-    execution: Option { ran, outputs_reproduced: bool, fresh_root, note },  // R1 : la COMPUTATION
+    execution: Option { ran, outputs_reproduced: bool|null, task_mismatch: bool, fresh_root, note },  // R1
 }   // outputs_reproduced (R1) = sorties re-dérivées ; fresh_root DIFFÈRE par conception (identité par-run)</pre>
 
   <h3>A.2 — Signatures (l'API réutilisée — tout existe déjà)</h3>

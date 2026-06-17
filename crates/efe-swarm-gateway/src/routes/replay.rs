@@ -18,7 +18,7 @@ use std::collections::HashMap;
 
 use axum::extract::{Path, State};
 use axum::Json;
-use efe_swarm_provenance::{deterministic_order, replay, verify_run_offline, AgentCallRecord, AgentKind};
+use efe_swarm_provenance::{deterministic_order, replay, verify_run_offline, AgentCallRecord, AgentKind, AgentRole};
 use efe_swarm_sdk::LlmProvenanceRecord;
 use uuid::Uuid;
 
@@ -188,6 +188,7 @@ pub async fn post_replay(
         report.execution = Some(ExecutionReplayView {
             ran: false,
             outputs_reproduced: None,
+            task_mismatch: false,
             mode_a_records: report.determinism.full_deterministic,
             mode_c_records: stored.llm_records.len(),
             fresh_root: None,
@@ -209,62 +210,88 @@ pub async fn post_replay(
                 let fresh = outcome.records();
                 let fresh_root = replay(fresh, &key).root_hex();
 
-                // ── La COMPUTATION se reproduit-elle ? On compare les empreintes de calcul
-                //    IDENTITÉ-LIBRES (output_hash + input_hash + cellules + variant + agent),
-                //    PAS la racine : la racine lie swarm_id/record_id/parents (frais par-run),
-                //    donc elle DIFFÈRE forcément — re-provable par R0, pas reproductible ici.
-                //    Comparaison par multiset (robuste au ré-ordonnancement concurrent).
-                let mut stored_fps: HashMap<String, usize> = HashMap::new();
-                for r in &stored.records {
-                    *stored_fps.entry(compute_fp(r)).or_insert(0) += 1;
-                }
-                let mut fresh_fps: HashMap<String, usize> = HashMap::new();
-                for r in fresh {
-                    *fresh_fps.entry(compute_fp(r)).or_insert(0) += 1;
-                }
-                let outputs_reproduced = stored_fps == fresh_fps;
+                // ── GARDE ANTI-CONFUSION (§5.1) : la task re-fournie correspond-elle aux entrées
+                //    scellées ? Les générateurs ont input_hash = hash(task, variant) ; si le
+                //    multiset de leurs input_hash diverge, le caller a re-soumis une AUTRE task
+                //    → on N'ÉMET PAS un faux `outputs_reproduced: false` (qui ferait croire le
+                //    run non reproductible) ; on signale une erreur d'opérateur (task_mismatch).
+                let gen_inputs = |recs: &[AgentCallRecord]| -> std::collections::BTreeMap<String, usize> {
+                    let mut m = std::collections::BTreeMap::new();
+                    for r in recs.iter().filter(|r| matches!(r.agent_role, AgentRole::Generator)) {
+                        *m.entry(r.input_hash.to_hex()).or_insert(0) += 1;
+                    }
+                    m
+                };
+                if gen_inputs(&stored.records) != gen_inputs(fresh) {
+                    ExecutionReplayView {
+                        ran: true,
+                        outputs_reproduced: None,
+                        task_mismatch: true,
+                        mode_a_records: fresh.len(),
+                        mode_c_records: 0,
+                        fresh_root,
+                        note: "task_mismatch : la task re-fournie ne correspond PAS aux entrées scellées du run (input_hash des générateurs divergents) — re-fournissez la task d'origine. Aucun verdict de reproductibilité émis (≠ run non reproductible).".into(),
+                    }
+                } else {
+                    // ── La COMPUTATION se reproduit-elle ? On compare les empreintes de calcul
+                    //    IDENTITÉ-LIBRES (output_hash + input_hash + cellules + variant + agent),
+                    //    PAS la racine : la racine lie swarm_id/record_id/parents (frais par-run),
+                    //    donc elle DIFFÈRE forcément — re-provable par R0, pas reproductible ici.
+                    //    Comparaison par multiset (robuste au ré-ordonnancement concurrent).
+                    let mut stored_fps: HashMap<String, usize> = HashMap::new();
+                    for r in &stored.records {
+                        *stored_fps.entry(compute_fp(r)).or_insert(0) += 1;
+                    }
+                    let mut fresh_fps: HashMap<String, usize> = HashMap::new();
+                    for r in fresh {
+                        *fresh_fps.entry(compute_fp(r)).or_insert(0) += 1;
+                    }
+                    let outputs_reproduced = stored_fps == fresh_fps;
 
-                // localisation : 1ʳᵉ empreinte scellée (ordre canonique) absente côté frais.
-                if !outputs_reproduced {
-                    let mut remaining = fresh_fps.clone();
-                    for (pos, r) in deterministic_order(&stored.records).iter().enumerate() {
-                        let fp = compute_fp(r);
-                        match remaining.get_mut(&fp) {
-                            Some(n) if *n > 0 => *n -= 1,
-                            _ => {
-                                report.first_divergence = Some(DivergenceView {
-                                    position: pos,
-                                    record_id: r.record_id.to_string(),
-                                    agent_id: r.agent_id.as_str().to_string(),
-                                    reason: "output_mismatch".into(),
-                                });
-                                break;
+                    // localisation : 1ʳᵉ empreinte scellée (ordre canonique) absente côté frais.
+                    if !outputs_reproduced {
+                        let mut remaining = fresh_fps.clone();
+                        for (pos, r) in deterministic_order(&stored.records).iter().enumerate() {
+                            let fp = compute_fp(r);
+                            match remaining.get_mut(&fp) {
+                                Some(n) if *n > 0 => *n -= 1,
+                                _ => {
+                                    report.first_divergence = Some(DivergenceView {
+                                        position: pos,
+                                        record_id: r.record_id.to_string(),
+                                        agent_id: r.agent_id.as_str().to_string(),
+                                        reason: "output_mismatch".into(),
+                                    });
+                                    break;
+                                }
                             }
                         }
                     }
-                }
-                // outcomes par-op (Mode A) : Match si son empreinte se re-dérive, sinon Mismatch.
-                for op in &mut report.per_op {
-                    if op.level == DeterminismLevel::FullDeterministic {
-                        op.outcome = if outputs_reproduced { MatchOutcome::Match } else { MatchOutcome::Mismatch };
+                    // outcomes par-op (Mode A) : Match si son empreinte se re-dérive, sinon Mismatch.
+                    for op in &mut report.per_op {
+                        if op.level == DeterminismLevel::FullDeterministic {
+                            op.outcome = if outputs_reproduced { MatchOutcome::Match } else { MatchOutcome::Mismatch };
+                        }
                     }
-                }
-                ExecutionReplayView {
-                    ran: true,
-                    outputs_reproduced: Some(outputs_reproduced),
-                    mode_a_records: fresh.len(),
-                    mode_c_records: 0,
-                    fresh_root,
-                    note: if outputs_reproduced {
-                        "mode_a : sorties + flux de données re-dérivés à l'identique (I-RP1). La racine fraîche diffère par CONCEPTION (identité par-run) ; la racine scellée est re-prouvée par R0.".into()
-                    } else {
-                        "mode_a : la re-exécution NE re-dérive PAS les mêmes sorties (task/topologie différentes, ou non-reproductibilité) — 1ʳᵉ divergence localisée.".into()
-                    },
+                    ExecutionReplayView {
+                        ran: true,
+                        outputs_reproduced: Some(outputs_reproduced),
+                        task_mismatch: false,
+                        mode_a_records: fresh.len(),
+                        mode_c_records: 0,
+                        fresh_root,
+                        note: if outputs_reproduced {
+                            "mode_a : sorties + flux de données re-dérivés à l'identique (I-RP1). La racine fraîche diffère par CONCEPTION (identité par-run) ; la racine scellée est re-prouvée par R0.".into()
+                        } else {
+                            "mode_a : la re-exécution NE re-dérive PAS les mêmes sorties (non-reproductibilité réelle) — 1ʳᵉ divergence localisée.".into()
+                        },
+                    }
                 }
             }
             Err(e) => ExecutionReplayView {
                 ran: false,
                 outputs_reproduced: None,
+                task_mismatch: false,
                 mode_a_records: report.determinism.full_deterministic,
                 mode_c_records: 0,
                 fresh_root: None,
@@ -274,6 +301,7 @@ pub async fn post_replay(
         Err(e) => ExecutionReplayView {
             ran: false,
             outputs_reproduced: None,
+            task_mismatch: false,
             mode_a_records: report.determinism.full_deterministic,
             mode_c_records: 0,
             fresh_root: None,
