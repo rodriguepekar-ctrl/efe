@@ -1,0 +1,68 @@
+{
+  "A_dormancy_cold": {
+    "k_used": 12,
+    "ok": true,
+    "variants_identity": true,
+    "verified": true
+  },
+  "B_prioritization": {
+    "k_used_cold": 12,
+    "k_used_warm": 4,
+    "ok": true,
+    "winner_cold": "GOLD",
+    "winner_warm": "GOLD"
+  },
+  "C_attribution_irep7": {
+    "generator_000_uncredited": true,
+    "generator_001_won": 2,
+    "ok": true
+  },
+  "D_reproof_irep8": {
+    "R0_verify_swarm": true,
+    "R1_replay_matched": 4,
+    "R1_replay_mismatched": 0,
+    "ok": true,
+    "schedule_applied_live": true,
+    "warm_variants": [
+      1,
+      2,
+      3,
+      4
+    ]
+  },
+  "E_weight_order_irep6": {
+    "ok": true,
+    "schedule_non_identity": true,
+    "schedule_pos0": 1,
+    "weight_at_pos0_milli": 1500
+  },
+  "_note": "OUVERTURE de R-b/R-c sur le VRAI chemin de production : recall (réputation apprise via fold, Mode A étiqueté) → resolver.reputation_schedule_for → ConsensusTopology generate_adaptive ORDONNANCÉ → attribution generator_{schedule[i]:03} → poids w[schedule[i]] → scellement → verify_swarm + replay_outputs. Le moat est PRÉSERVÉ car (I-REP8) le métré enregistre le variant RÉEL (schedule[p]) et l'auteur d'écriture reste l'unique 'generator' : R0 re-hash inchangé, R1 reproduit depuis le variant enregistré. total=version=4 → exploration e=4 ∈ GOOD (isole la priorisation ; REP-3 §B couvre la rotation). Dormance : sans mémoire → identité → byte-identique (I-REP10).",
+  "go": true,
+  "policy": {
+    "batch": 4,
+    "good_profiles": [
+      1,
+      2,
+      3,
+      4
+    ],
+    "k_max": 12,
+    "k_min": 4,
+    "seed_version": 4
+  },
+  "schedule_warm": [
+    1,
+    2,
+    3,
+    4,
+    0,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11
+  ],
+  "verdict": "GO ✅ — froid=identité re-prouvé · chaud ↓K_used (iso-qualité) · crédit au PROFIL pas à la position · RACINE re-prouvée après permutation (R0+R1) · poids w[schedule[i]]"
+}

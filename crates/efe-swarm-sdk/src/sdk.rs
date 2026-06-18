@@ -157,6 +157,8 @@ impl Swarm {
         // ⇒ aucune influence (sélecteur = base, agrégation uniforme — byte-identique, I-PAT2/I-REP2).
         let mut mem_pattern_bias: Option<efe_swarm_memory::PatternBias> = None;
         let mut mem_reputation: Option<efe_swarm_memory::Reputation> = None;
+        // read-back B (R-b/R-c) : la version pinnée = clé de rotation de l'ordonnancement de profils.
+        let mut mem_version: Option<u64> = None;
         if let Some(h) = &mem {
             let family = crate::memory::family_for(&task, &spec, &h.config);
             if h.config.recall {
@@ -175,6 +177,9 @@ impl Swarm {
                     mem_pattern_bias = Some(snap.cells.pattern.bias());
                     // read-back B : la cellule de réputation (le resolver calcule les poids /k_max).
                     mem_reputation = Some(snap.cells.reputation.clone());
+                    // read-back B (R-b/R-c) : la version (= nb de folds) — clé de rotation, lue AVANT
+                    // le move du snapshot (u64 Copy) pour rester atomique avec la réputation ci-dessus.
+                    mem_version = Some(snap.version);
                     mem_snapshot = Some(snap);
                 }
             }
@@ -273,6 +278,8 @@ impl Swarm {
             // bruts depuis l'instantané (l'épingle content_hash les lie déjà à la racine).
             memory_pattern_bias: mem_pattern_bias,
             memory_reputation: mem_reputation,
+            // read-back B (R-b/R-c) : version pinnée = clé de rotation de l'ordonnancement (adaptatif).
+            memory_version: mem_version,
         };
         let topo = spec.resolve(&resolver)?;
         let topo_name = topo.name().to_string();

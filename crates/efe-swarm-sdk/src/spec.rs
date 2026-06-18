@@ -443,6 +443,14 @@ impl TopologySpec {
                 if let KSpec::Adaptive { k_min, k_max, batch, stop } = k {
                     // ADR-019 (I-MEM4) : warm-start de k_min, borné aux bornes du run.
                     let k_min = r.warm_start_k_min(k_min, k_max);
+                    // ADR-019 (read-back B, R-b/R-c) : ordonnancement réputationnel des profils du
+                    // sizer — ADAPTATIF SEULEMENT (le gain est l'arrêt anticipé ; le K-fixe l'ignore).
+                    // Calculé avec le k_min EFFECTIF (warm-starté) pour que la région garantie de la
+                    // rotation coïncide avec celle du sizer. Absent (pas de mémoire) ⇒ identité
+                    // (variant = position, I-AK3 / dormance I-REP10).
+                    if let Some(schedule) = r.reputation_schedule_for(k_min, k_max) {
+                        topo = topo.with_reputation_schedule(schedule);
+                    }
                     topo = topo
                         .with_k_plan(KPlan { k_min, k_max, batch, stop })
                         .with_budget_probe(r.budget_probe());

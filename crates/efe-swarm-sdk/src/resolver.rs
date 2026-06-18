@@ -54,6 +54,11 @@ pub(crate) struct Resolver<'a> {
     /// **ADR-019 (read-back B)** : la cellule de réputation (depuis l'instantané pinné), pour
     /// calculer les poids de routage par-variante. `None` ⇒ agrégation uniforme (I-REP2).
     pub memory_reputation: Option<efe_swarm_memory::Reputation>,
+    /// **ADR-019 (read-back B, R-b/R-c)** : la **version** de l'instantané pinné (= nombre de folds
+    /// repliés dans la famille) — la **clé de rotation** de l'ordonnancement de profils. Pinnée avec
+    /// la réputation depuis le MÊME `MemorySnapshot` (cohérence atomique). `None` ⇒ pas de mémoire ⇒
+    /// `total = 0` ⇒ ordonnancement identité (dormance, I-REP10).
+    pub memory_version: Option<u64>,
 }
 
 fn aid(s: &str) -> AgentId {
@@ -92,6 +97,19 @@ impl Resolver<'_> {
         let rep = self.memory_reputation.as_ref()?;
         let ids: Vec<String> = (0..k_max).map(|i| format!("generator_{i:03}")).collect();
         Some(rep.routing_weights(&ids).into_iter().map(|w| w as f64 / 1000.0).collect())
+    }
+
+    /// **ADR-019 (read-back B, R-b/R-c)** : l'**ordonnancement de profils** du sizer adaptatif —
+    /// une permutation de `[0, k_max)` où `schedule[p]` = le profil à exécuter à la position `p`
+    /// (priorisation réputationnelle R-b + rotation d'exploration déterministe R-c, keyée sur la
+    /// **version** pinnée). Jumeau de [`reputation_weights_for`](Self::reputation_weights_for) :
+    /// même réputation pinnée, même indexation par profil (`generator_{i:03}`). `None` ⇒ pas de
+    /// mémoire ⇒ le consensus prend son chemin **identité** (byte-identique, I-REP10). Déterministe
+    /// (fonction de l'instantané pinné + bornes spec) ⇒ re-prouvable (I-AK3′, I-REP8). Le SDK
+    /// pré-calcule pour `0..k_max` ; le sizer lit `schedule[0..k_used]` au vol.
+    pub fn reputation_schedule_for(&self, k_min: usize, k_max: usize) -> Option<Vec<usize>> {
+        let rep = self.memory_reputation.as_ref()?;
+        Some(rep.profile_schedule(self.memory_version.unwrap_or(0), k_min, k_max))
     }
 }
 

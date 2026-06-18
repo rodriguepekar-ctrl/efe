@@ -27,7 +27,7 @@ use tokio::task::JoinSet;
 
 use crate::consensus::selector::{aggregator_for, Pattern, PatternSelector};
 use crate::consensus::{AggOutcome, Aggregator, Ballot, Judge, MajorityVote};
-use crate::sizing::{run_waves_pure, BudgetProbe, DeadlineProbe, KPlan, SizingTrace};
+use crate::sizing::{run_waves_pure_scheduled, BudgetProbe, DeadlineProbe, KPlan, SizingTrace};
 use crate::topology::{answer_is_present, AgentContribution, QualitySignals, SwarmContext, Topology, TopologyOutput};
 use crate::traits::Generator;
 
@@ -77,6 +77,16 @@ pub struct ConsensusTopology {
     /// (`aggregate_weighted`). `None` ⇒ agrégation uniforme (chemin historique, byte-identique).
     /// Longueur ≥ `k_max` (le SDK pré-calcule pour `0..k_max`) ; on tranche `[0..k_used]` au vol.
     reputation_weights: Option<Vec<f64>>,
+    /// **ADR-019 (read-back B, R-b/R-c)** : `Some(schedule)` ⇒ **ordonnancement de profils** du sizer
+    /// adaptatif — une permutation de `[0, k_max)` où `schedule[p]` = le profil exécuté à la position
+    /// `p` (pré-calculé par le SDK depuis l'instantané pinné, cf. `Reputation::profile_schedule`).
+    /// La génération adaptative passe alors les bons profils en premier (R-b) sous rotation
+    /// d'exploration ; l'attribution crédite `generator_{schedule[i]:03}` (I-REP7) et le poids R-a de
+    /// la position `i` devient `w[schedule[i]]` (I-REP6). **L'auteur d'écriture reste "generator"** —
+    /// la provenance enregistre le variant réel, le moat est transparent à la permutation (I-REP8).
+    /// `None` ⇒ identité (`variant = position`, chemin historique byte-identique, I-AK3 / I-REP10).
+    /// N'agit qu'en ADAPTATIF (le gain est l'arrêt anticipé) ; le chemin K-fixe l'ignore.
+    reputation_schedule: Option<Vec<usize>>,
 }
 
 impl std::fmt::Debug for ConsensusTopology {
@@ -105,6 +115,7 @@ impl ConsensusTopology {
             budget_probe: None,
             deadline_probe: None,
             reputation_weights: None,
+            reputation_schedule: None,
         }
     }
 
@@ -113,6 +124,16 @@ impl ConsensusTopology {
     /// Vides/absents ⇒ uniforme (byte-identique, I-REP2).
     pub fn with_reputation_weights(mut self, weights: Vec<f64>) -> Self {
         self.reputation_weights = Some(weights);
+        self
+    }
+
+    /// **ADR-019 (read-back B, R-b/R-c)** : branche l'**ordonnancement de profils** (permutation de
+    /// `[0, k_max)`, pré-calculée par le SDK depuis l'instantané pinné). La génération adaptative
+    /// exécute alors `schedule[p]` à la position `p` (priorisation R-b + rotation R-c) ; l'attribution
+    /// et les poids R-a suivent (I-REP6/7). Absent ⇒ identité (byte-identique, I-AK3 / I-REP10).
+    /// N'a d'effet qu'avec un `k_plan` adaptatif (le chemin K-fixe ignore l'ordonnancement).
+    pub fn with_reputation_schedule(mut self, schedule: Vec<usize>) -> Self {
+        self.reputation_schedule = Some(schedule);
         self
     }
 
@@ -192,18 +213,25 @@ impl ConsensusTopology {
     /// **ADR-014** : génération par **vagues bornées** (le sizer, `crate::sizing`) —
     /// vague → observation **pure** (I-AK2) → décision dans `[k_min, k_max]` (I-AK1),
     /// sous sonde de budget (I-AK4). Les cellules `/cand/<i>` sont écrites en indices
-    /// **continus** (variant = i, I-AK3) : juges, agrégation, ancrage et DAG ne voient
-    /// aucune différence avec un run fixe de même K.
+    /// **continus de POSITION**. **ADR-019 (R-b/R-c)** : sous `reputation_schedule`, le profil
+    /// exécuté à la position `i` est `schedule[i]` (I-AK3′) — sans ordonnancement, `variant = i`
+    /// (I-AK3 historique). Le point CLÉ du moat (I-REP8) : **l'auteur d'écriture reste l'unique
+    /// `"generator"`** quel que soit le profil — la provenance enregistre le variant réel via le
+    /// métré, l'ancrage se fait par valeur ; juges, agrégation et DAG ne voient aucune différence.
     async fn generate_adaptive(&self, task: &Value, bb: &Blackboard, plan: &KPlan) -> (Vec<Value>, SizingTrace) {
-        let (cands, trace) = run_waves_pure(
+        let (cands, trace) = run_waves_pure_scheduled(
             &self.generator,
             task,
             plan,
             self.max_concurrency,
             self.budget_probe.as_ref(),
             self.deadline_probe.as_ref(),
+            self.reputation_schedule.as_deref(), // R-b/R-c : profil[position] ; None ⇒ identité (I-AK3)
         )
         .await;
+        // I-REP8 (linchpin) : auteur INVARIANT "generator" — jamais par-variante. Le variant réel
+        // (schedule[i]) est capté par le métré du générateur ; l'ancrage matche par valeur, pas par
+        // position. La permutation est donc transparente à la provenance (R0/R1 inchangés).
         let gid = AgentId::new("generator").unwrap();
         for (i, c) in cands.iter().enumerate() {
             let _ = bb.write(&format!("/cand/{i}"), c.clone(), gid.clone());
@@ -361,11 +389,22 @@ impl Topology for ConsensusTopology {
         //    SINON uniforme (chemin historique, byte-identique). Les poids sont indexés par variante
         //    (`generator_{i:03}` = candidat i) ; on tranche `[0..k_used]` (le SDK pré-calcule 0..k_max).
         let agg = aggregator_for(pattern);
-        let outcome = match &self.reputation_weights {
-            Some(w) if w.len() >= candidates.len() => {
-                agg.aggregate_weighted(task, &candidates, &ballots, &w[..candidates.len()])
-            }
-            _ => agg.aggregate(task, &candidates, &ballots),
+        // ADR-019 (read-back B) : poids R-a **par POSITION**. Sous ordonnancement (R-b/R-c), la
+        // position `i` a exécuté le profil `schedule[i]` → son poids est `w[schedule[i]]` (I-REP6) ;
+        // sans ordonnancement, `w[i]` (identité). UNE seule source — le même `reputation_schedule`
+        // pilote attribution ET poids, impossible à désynchroniser. Hors-borne (jamais en pratique :
+        // |w| = k_max ≥ k_used, schedule ∈ [0,k_max)) ⇒ poids neutre 1,0 (repli sûr, I-REP2).
+        let pos_weights: Option<Vec<f64>> = self.reputation_weights.as_ref().map(|w| {
+            (0..candidates.len())
+                .map(|i| {
+                    let profil = self.reputation_schedule.as_deref().and_then(|s| s.get(i).copied()).unwrap_or(i);
+                    w.get(profil).copied().unwrap_or(1.0)
+                })
+                .collect()
+        });
+        let outcome = match &pos_weights {
+            Some(w) => agg.aggregate_weighted(task, &candidates, &ballots, w),
+            None => agg.aggregate(task, &candidates, &ballots),
         };
 
         // Inc.3 : l'agrégateur annonce son verdict à l'observateur (topic réservé) — pattern
@@ -388,7 +427,7 @@ impl Topology for ConsensusTopology {
         // read-back B (B2) : l'ATTRIBUTION par-variante, depuis la décision (`selected_index` +
         // `scores`). Calculée AVANT que `output` ne déplace `outcome.selected`. Le SDK la replie en
         // réputation (auparavant dégénérée : un seul agent « generator »).
-        let agent_contributions = variant_contributions(&candidates, &outcome);
+        let agent_contributions = variant_contributions(&candidates, &outcome, self.reputation_schedule.as_deref());
 
         // ADR-014 : en adaptatif, la sortie est ENVELOPPÉE `{value, sizing}` — la même
         // grammaire de diagnostic que le gossip (`{value, gossip:{…}}`) : on rend
@@ -424,21 +463,34 @@ impl Topology for ConsensusTopology {
     }
 }
 
-/// **ADR-019 (read-back B, B2)** : l'attribution par-variante d'une décision consensuelle. `won` =
-/// la variante a produit le candidat retenu (`selected_index`, exact) ; `verified` = son score
-/// consensuel atteint la **barre** (la moyenne des scores du run) — un signal pris des juges
+/// **ADR-019 (read-back B, B2 + R-b/R-c)** : l'attribution par-variante d'une décision consensuelle.
+/// `won` = la variante a produit le candidat retenu (`selected_index`, exact) ; `verified` = son
+/// score consensuel atteint la **barre** (la moyenne des scores du run) — un signal pris des juges
 /// RÉELS, jamais fabriqué (I-REP5). Le gagnant (score max ≥ moyenne) est toujours « vérifié ».
 /// Scores incohérents (repli sans juge dégénéré) ⇒ vide.
-fn variant_contributions(candidates: &[Value], outcome: &AggOutcome) -> Vec<AgentContribution> {
+///
+/// **I-REP7 (cohérence attribution↔ordre)** : sous `schedule`, la position `i` a été produite par le
+/// profil `schedule[i]` ; le crédit va donc à `generator_{schedule[i]:03}`. Les signaux `won` /
+/// `verified` restent lus sur la décision **position-indexée** (`outcome`) — seule l'**étiquette** du
+/// contributeur suit l'ordonnancement. Sans `schedule` (`None`) ⇒ `generator_{i:03}` (identité).
+fn variant_contributions(
+    candidates: &[Value],
+    outcome: &AggOutcome,
+    schedule: Option<&[usize]>,
+) -> Vec<AgentContribution> {
     if candidates.is_empty() || outcome.scores.len() != candidates.len() {
         return Vec::new();
     }
     let bar = outcome.scores.iter().sum::<f64>() / candidates.len() as f64;
     (0..candidates.len())
-        .map(|i| AgentContribution {
-            agent_id: format!("generator_{i:03}"),
-            won: i == outcome.selected_index,
-            verified: outcome.scores[i] >= bar,
+        .map(|i| {
+            // le profil RÉEL exécuté à la position i (identité si pas d'ordonnancement, I-AK3).
+            let profil = schedule.and_then(|s| s.get(i).copied()).unwrap_or(i);
+            AgentContribution {
+                agent_id: format!("generator_{profil:03}"),
+                won: i == outcome.selected_index,
+                verified: outcome.scores[i] >= bar,
+            }
         })
         .collect()
 }
@@ -473,6 +525,25 @@ mod tests {
                 Arc::new(VerifierJudge::new(format!("j{i}"), v)) as Arc<dyn Judge>
             })
             .collect()
+    }
+
+    #[test]
+    fn variant_contributions_credit_the_scheduled_profile_not_the_position() {
+        // ADR-019 R-b/R-c (I-REP7) : sous ordonnancement, la position `i` a exécuté le profil
+        // `schedule[i]` → le crédit va à `generator_{schedule[i]:03}`, PAS `generator_{i:03}`.
+        // Les signaux won/verified restent lus sur la décision position-indexée.
+        let cands = vec![json!("a"), json!("a"), json!("b")]; // scores Vote [2,2,1], gagnant index 0
+        let outcome = MajorityVote.aggregate(&json!({}), &cands, &[]);
+        let schedule = [5usize, 3, 7];
+        let c = variant_contributions(&cands, &outcome, Some(&schedule));
+        assert_eq!(c[0].agent_id, "generator_005", "position 0 (gagnante) → profil schedule[0]=5");
+        assert!(c[0].won, "la position gagnante gagne, étiquetée par son profil");
+        assert_eq!(c[1].agent_id, "generator_003", "position 1 → profil schedule[1]=3");
+        assert_eq!(c[2].agent_id, "generator_007", "position 2 → profil schedule[2]=7");
+        // identité (None) ⇒ generator_{position} (comportement historique).
+        let id = variant_contributions(&cands, &outcome, None);
+        assert_eq!(id[0].agent_id, "generator_000");
+        assert_eq!(id[2].agent_id, "generator_002");
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
