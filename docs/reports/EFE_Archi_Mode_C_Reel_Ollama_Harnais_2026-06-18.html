@@ -1,0 +1,651 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>EFE — Architecture : le Mode C réel (LLM Ollama, harnais #[ignore])</title>
+<style>
+  :root{--ink:#0f172a;--muted:#475569;--soft:#64748b;--line:#e2e8f0;--teal:#0d9488;--teal-d:#0f766e;--indigo:#4f46e5;--indigo-d:#4338ca;--ok:#16a34a;--warn:#d97706;--bad:#dc2626;--bg-tint:#f8fafc;--bg-card:#f1f5f9;--code-bg:#0f172a;--code-fg:#e2e8f0;}
+  *{box-sizing:border-box;} html{font-size:11.4px;}
+  body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,Arial,sans-serif;color:var(--ink);margin:0;line-height:1.62;background:#fff;-webkit-font-smoothing:antialiased;}
+  .wrap{max-width:178mm;margin:0 auto;padding:0 2mm;}
+  h1,h2,h3,h4{line-height:1.2;font-weight:700;}
+  h2{font-size:1.5rem;margin:0 0 .6rem;padding-bottom:.35rem;border-bottom:3px solid var(--teal);}
+  h2 .num{color:var(--teal);} h3{font-size:1.18rem;margin:1.25rem 0 .35rem;color:var(--indigo-d);}
+  h4{font-size:1rem;margin:.9rem 0 .25rem;color:var(--teal-d);}
+  p{margin:.6rem 0;text-align:justify;hyphens:auto;} a{color:var(--indigo);text-decoration:none;}
+  code{font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace;font-size:.85em;background:var(--bg-card);padding:.05em .35em;border-radius:4px;color:#0b3b36;}
+  .muted{color:var(--muted);} .small{font-size:.88rem;}
+  .lead-in{font-weight:700;color:var(--teal-d);}
+  section{break-inside:avoid;} .page{break-before:page;} h2{break-after:avoid;}
+  table{border-collapse:collapse;width:100%;margin:.6rem 0;font-size:.85rem;}
+  th,td{border:1px solid var(--line);padding:.34rem .55rem;text-align:left;vertical-align:top;}
+  th{background:var(--bg-card);font-weight:700;} tbody tr:nth-child(even){background:var(--bg-tint);}
+  td.c,th.c{text-align:center;} .good{background:#dcfce7 !important;color:#166534;font-weight:700;} .mid{background:#fef9c3 !important;color:#854d0e;font-weight:700;} .bad{background:#fee2e2 !important;color:#991b1b;font-weight:700;}
+  .tag{display:inline-block;font-size:.71rem;font-weight:700;padding:.08em .5em;border-radius:20px;}
+  .t-ok{background:#dcfce7;color:#166534;} .t-info{background:#e0e7ff;color:#3730a3;} .t-teal{background:#ccfbf1;color:#115e59;} .t-warn{background:#fef3c7;color:#92400e;} .t-bad{background:#fee2e2;color:#991b1b;}
+  pre{background:var(--code-bg);color:var(--code-fg);padding:.6rem .85rem;border-radius:8px;overflow:auto;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.74rem;line-height:1.5;margin:.6rem 0;}
+  .callout{border-left:4px solid var(--teal);background:var(--bg-tint);padding:.6rem .9rem;border-radius:0 8px 8px 0;margin:.7rem 0;}
+  .callout p{text-align:left;margin:.3rem 0;}
+  .callout.key{border-color:var(--indigo);background:#eef2ff;} .callout.warn{border-color:var(--warn);background:#fffbeb;}
+  .fig{margin:.8rem 0 1rem;text-align:center;break-inside:avoid;}
+  .fig svg{max-width:100%;height:auto;border:1px solid var(--line);border-radius:10px;background:#fff;}
+  .fig .cap{font-size:.8rem;color:var(--muted);margin-top:.35rem;font-style:italic;text-align:center;}
+  ul,ol{margin:.45rem 0 .6rem 1.15rem;padding:0;} li{margin:.28rem 0;}
+  svg text{font-family:-apple-system,"Segoe UI",Inter,sans-serif;}
+  .cover{height:262mm;display:flex;flex-direction:column;justify-content:center;position:relative;padding:0 6mm;}
+  .cover .eyebrow{color:var(--teal);font-weight:800;letter-spacing:.28em;font-size:.92rem;text-transform:uppercase;}
+  .cover h1{font-size:2.5rem;margin:.4rem 0 .2rem;line-height:1.1;} .cover .sub{font-size:1.28rem;color:var(--muted);margin-bottom:1.2rem;}
+  .cover .tagline{font-size:1.04rem;color:var(--ink);max-width:160mm;border-left:4px solid var(--teal);padding-left:1rem;font-style:italic;text-align:left;}
+  .cover .meta{position:absolute;bottom:6mm;left:6mm;right:6mm;display:flex;justify-content:space-between;border-top:1px solid var(--line);padding-top:.7rem;font-size:.82rem;color:var(--soft);}
+  .cover .pills{margin:1.1rem 0;} .cover .pills .tag{font-size:.8rem;margin-right:.35rem;}
+  .lede{font-size:1.06rem;color:#1e293b;text-align:left;} .mono{font-family:ui-monospace,Menlo,Consolas,monospace;}
+  hr{border:none;border-top:1px solid var(--line);margin:1rem 0;}
+  .toc{font-size:.92rem;columns:2;column-gap:2rem;} .toc div{margin:.18rem 0;break-inside:avoid;} .toc .n{color:var(--teal);font-weight:700;display:inline-block;width:1.8em;}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:.9rem;margin:.7rem 0;}
+  .box{border:1px solid var(--line);border-radius:10px;padding:.7rem .9rem;background:var(--bg-tint);}
+  .box h4{margin-top:0;}
+  .eq{font-family:ui-monospace,Menlo,Consolas,monospace;background:#eef2ff;border:1px solid #c7d2fe;border-radius:8px;padding:.5rem .8rem;margin:.55rem 0;font-size:.82rem;color:#1e1b4b;text-align:center;}
+  @page{size:A4;margin:14mm 12mm;}
+</style>
+</head>
+<body>
+
+<!-- COVER -->
+<div class="wrap"><div class="cover">
+  <div class="eyebrow">Architecture · avant code · le moat quand l'agent n'est plus déterministe</div>
+  <h1>Le Mode C réel</h1>
+  <div class="sub">De vrais agents LLM (Ollama local), re-prouvables non par <b>reproduction</b> mais par <b>attestation</b> — et le harnais <span class="mono">#[ignore]</span> qui le mesure honnêtement.</div>
+  <div class="tagline">EFE tourne aujourd'hui sa flotte <b>Mode A</b> : des agents <i>déterministes</i>, fonction pure de
+   <span class="mono">(tâche, variant)</span> — d'où la re-preuve par <b>reproduction</b> (R1 : on rejoue, on retrouve
+   l'octet). Le <b>Mode C</b> branche un <i>vrai modèle de langage</i> : stochastique, non rejouable. Le moat ne disparaît
+   pas — il <b>bascule</b>. La sortie n'est plus reproduite ; elle est <b>attestée</b> par un record forensique signé et
+   chaîné (N17), pris en sandwich entre un <b>prompt re-prouvable</b> et une <b>chaîne re-prouvable</b>. Ce document fixe
+   cette bascule, montre pourquoi <b>quatre des cinq lectures-retour de la mémoire « marchent déjà »</b> en Mode C (elles
+   sont agnostiques au mode), pourquoi le <b>few-shot</b> est la seule qui touche le prompt — donc la seule à mesurer — et
+   ce que le harnais <span class="mono">#[ignore]</span> doit prouver pour l'ouvrir.</div>
+  <div class="pills">
+    <span class="tag t-teal">Mode C · Ollama local</span>
+    <span class="tag t-info">N17 forensique</span>
+    <span class="tag t-info">ADR-019 few-shot</span>
+    <span class="tag t-info">souveraineté G2/G3</span>
+    <span class="tag t-info">ADR-017 R0/R1</span>
+    <span class="tag t-ok">zéro clé</span>
+  </div>
+  <div class="meta">
+    <span>EFE — Essaim Fluide Éphémère</span>
+    <span>2026-06-18 · architecture, code à venir</span>
+  </div>
+</div></div>
+
+<!-- TOC -->
+<div class="wrap page">
+  <h2><span class="num">§0</span> Plan</h2>
+  <div class="toc">
+    <div><span class="n">1.</span> Le principe : reproduire → attester</div>
+    <div><span class="n">2.</span> L'état actuel — ce qui tourne déjà</div>
+    <div><span class="n">3.</span> La structure : entrée re-prouvable → [LLM] → sortie attestée</div>
+    <div><span class="n">4.</span> Le pont N17 : l'attestation forensique par-appel</div>
+    <div><span class="n">5.</span> La stratification des lectures-retour par mode</div>
+    <div><span class="n">6.</span> Le few-shot vivant : la seule lecture qui touche le prompt</div>
+    <div><span class="n">7.</span> R-b/R-c en Mode C : le profil EST la (température, graine)</div>
+    <div><span class="n">8.</span> Le déterminisme borné : sizing auditable, non re-dérivable</div>
+    <div><span class="n">9.</span> La souveraineté : Ollama local, zéro clé, G2/G3</div>
+    <div><span class="n">10.</span> Le harnais <span class="mono">#[ignore]</span> : honnête parce que gated</div>
+    <div><span class="n">11.</span> Le gate Mode C des lectures-retour (M-§A…F)</div>
+    <div><span class="n">12.</span> Séquence + ce qui reste fermé</div>
+  </div>
+
+  <div class="callout key">
+    <p><b>Thèse du document.</b> Le Mode C ne demande <b>aucune nouvelle structure de preuve</b> : la chaîne d'essaim, le
+    pont N17, la souveraineté locale et l'injection few-shot <b>existent et tournent</b> (harnais Ollama
+    <span class="mono">#[ignore]</span>). Ce qu'il demande, c'est une <b>compréhension exacte de la bascule du moat</b>
+    (reproduction → attestation) et une <b>seule mesure manquante</b> : l'<i>influence du few-shot</i> sur un vrai modèle.
+    Les quatre autres lectures-retour (taille, pattern, réputation-agrégation, réputation-sizing) sont <b>agnostiques au
+    mode</b> — elles opèrent sur des candidats opaques, déjà chiffrées en Mode A, et un run Mode C les <i>confirme
+    actives</i> sans rien à re-mesurer. Le harnais <span class="mono">#[ignore]</span> n'est pas un aveu de faiblesse :
+    c'est la réponse honnête à « on ne simule pas un LLM ».</p>
+  </div>
+</div>
+
+<!-- 1 -->
+<div class="wrap page">
+<section>
+  <h2><span class="num">§1</span> Le principe : reproduire → attester</h2>
+
+  <p>Tout le moat d'EFE repose sur une idée : la sortie d'un essaim doit être <b>re-prouvable hors-ligne</b> par un tiers
+  qui ne fait pas confiance à l'opérateur. En Mode A, cette re-preuve a une forme forte et rare — la <b>reproduction</b>.
+  Les agents de la flotte sont des fonctions pures de <span class="mono">(tâche, variant)</span> ; un vérificateur qui
+  connaît le code peut, depuis l'instantané scellé, <b>rejouer</b> chaque agent et retrouver l'octet exact (ADR-017, mode
+  <b>R1</b> ; c'est ce que mesure <span class="mono">replay_outputs</span>). La preuve ne demande pas de confiance : elle
+  re-calcule.</p>
+
+  <p>Le Mode C casse cette possibilité, et il faut le dire sans détour. Un vrai modèle de langage est <b>stochastique</b> :
+  deux appels au même prompt, même à température basse, peuvent diverger (échantillonnage, non-déterminisme matériel,
+  versions de modèle). On ne peut donc pas « rejouer le LLM et retrouver l'octet ». La reproduction (R1) <b>n'est pas
+  disponible</b> en Mode C — et prétendre le contraire serait malhonnête.</p>
+
+  <p>Mais le moat ne s'effondre pas : il <b>bascule</b>. Là où le Mode A <i>reproduit</i> la sortie, le Mode C l'<b>atteste</b>.
+  Chaque appel LLM produit un <b>record forensique signé</b> — un <span class="mono">LlmProvenanceRecord</span> (le « N17 »)
+  — qui fige le prompt, la sortie, le modèle et les paramètres, <b>chaîné et lié</b> au record d'essaim correspondant. Le
+  vérificateur ne re-calcule pas la sortie ; il <b>constate</b>, preuve cryptographique à l'appui, <i>exactement ce que le
+  modèle a produit</i>, lié à <i>exactement ce run</i>, pour <i>exactement ce tenant</i>. La non-confiance est préservée
+  par une voie différente : non « je refais », mais « je tiens une attestation infalsifiable de ce qui fut fait ».</p>
+
+  <div class="fig">
+    <svg viewBox="0 0 720 226" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Bifurcation du moat par mode">
+      <text x="360" y="24" text-anchor="middle" font-size="13" font-weight="700" fill="#0f172a">Le moat bifurque par mode — mais R0 est universel</text>
+
+      <!-- R0 universal -->
+      <rect x="220" y="40" width="280" height="34" rx="8" fill="#ecfdf5" stroke="#16a34a" stroke-width="2"/>
+      <text x="360" y="61" text-anchor="middle" font-size="11.5" fill="#14532d" font-weight="700">R0 — re-prouver la chaîne (re-hash des records scellés)</text>
+      <text x="360" y="86" text-anchor="middle" font-size="9.5" fill="#475569" font-style="italic">∀ mode · verify_swarm · ne dépend que des records, jamais de l'agent</text>
+
+      <!-- split -->
+      <line x1="360" y1="96" x2="200" y2="124" stroke="#94a3b8"/>
+      <line x1="360" y1="96" x2="520" y2="124" stroke="#94a3b8"/>
+
+      <!-- Mode A -->
+      <rect x="70" y="126" width="260" height="74" rx="8" fill="#eef2ff" stroke="#4f46e5"/>
+      <text x="200" y="146" text-anchor="middle" font-size="11.5" fill="#3730a3" font-weight="700">Mode A — REPRODUCTION (R1)</text>
+      <text x="200" y="165" text-anchor="middle" font-size="9.5" fill="#475569">agent = f(tâche, variant), déterministe</text>
+      <text x="200" y="179" text-anchor="middle" font-size="9.5" fill="#475569">on rejoue → on retrouve l'octet</text>
+      <text x="200" y="193" text-anchor="middle" font-size="9" fill="#64748b" font-style="italic">replay_outputs · CI rapide</text>
+
+      <!-- Mode C -->
+      <rect x="392" y="126" width="260" height="74" rx="8" fill="#fffbeb" stroke="#d97706"/>
+      <text x="522" y="146" text-anchor="middle" font-size="11.5" fill="#92400e" font-weight="700">Mode C — ATTESTATION (N17)</text>
+      <text x="522" y="165" text-anchor="middle" font-size="9.5" fill="#475569">LLM stochastique, NON rejouable</text>
+      <text x="522" y="179" text-anchor="middle" font-size="9.5" fill="#475569">record forensique signé + chaîné + lié</text>
+      <text x="522" y="193" text-anchor="middle" font-size="9" fill="#64748b" font-style="italic">verify_n17_chain · harnais #[ignore]</text>
+    </svg>
+    <div class="cap">R0 (re-prouver la chaîne) vaut pour les deux modes. La reproduction exacte (R1) est le privilège du déterminisme Mode A ; le Mode C la remplace par l'attestation forensique N17.</div>
+  </div>
+
+  <div class="callout">
+    <p><b>Le mot juste.</b> En Mode C, le run reste <i>auditable</i> et <i>infalsifiable</i> ; il n'est pas
+    <i>rejouable</i>. La distinction n'est pas une concession — c'est la nature de la chose. Un régulateur ne demande pas
+    « refaites tourner le modèle » ; il demande « prouvez-moi ce que le modèle a produit, et que vous n'avez pas falsifié
+    après coup ». Le N17 répond exactement à cette question.</p>
+  </div>
+</section>
+</div>
+
+<!-- 2 -->
+<div class="wrap page">
+<section>
+  <h2><span class="num">§2</span> L'état actuel — ce qui tourne déjà</h2>
+
+  <p>Le Mode C n'est pas une page blanche. Quatre pièces sont en place et exercées par des harnais Ollama
+  <span class="mono">#[ignore]</span> (lancés à la demande sur un modèle local) :</p>
+
+  <table>
+    <thead><tr><th style="width:26%">Pièce</th><th>État</th></tr></thead>
+    <tbody>
+      <tr><td><b>Le backend local</b><br><span class="small muted">backend/mod.rs</span></td>
+        <td><span class="mono">ClientMode::SelfHost{endpoint, model}</span> → <span class="mono">build_local_backend</span> ;
+        client Ollama (compat OpenAI) ; <b>aucune clé</b>. Santé sondée avant le run.</td></tr>
+      <tr><td><b>Les agents LLM</b><br><span class="small muted">llm.rs</span></td>
+        <td><span class="mono">LlmGen</span> (générateur), juges LLM ; prompt <b>pur</b> et testable
+        (<span class="mono">gen_prompt</span>), température/graine fonction du <span class="mono">variant</span>.</td></tr>
+      <tr><td><b>Le pont N17</b><br><span class="small muted">bridge.rs</span></td>
+        <td>chaque appel Mode C → <span class="mono">LlmProvenanceRecord</span>, lié au record d'essaim via
+        <span class="mono">llm_provenance_id</span> ; <span class="mono">classify_link</span> + <span class="mono">verify_n17_chain</span>
+        ; résumé <span class="mono">N17Summary{calls, unlinked, broken, all_consistent}</span>.</td></tr>
+      <tr><td><b>Le few-shot</b><br><span class="small muted">llm.rs · memory.rs</span></td>
+        <td>exemplaires recall-és injectés dans le prompt (<span class="mono">gen_prompt(... exemplars)</span>), bornés
+        (<span class="mono">FEWSHOT_N</span>), tracés (MemoryRead, I-MEM2).</td></tr>
+    </tbody>
+  </table>
+
+  <p>Les harnais existants prouvent le Mode C <b>de bout en bout</b> sur des axes <i>structurels</i> :
+  <span class="mono">swarm_all_phases_real.rs</span> (toutes les topologies sur Ollama → <span class="mono">verify_swarm</span>) ;
+  <span class="mono">adaptive_keyless::n17_consistent_under_adaptive_k</span> (la cohérence N17 tient <b>même quand K varie en
+  vol</b>) ; <span class="mono">replay_real.rs</span> et <span class="mono">n17_persist_real.rs</span> (re-preuve et
+  persistance des records LLM). Tous portent la même garde : <span class="mono">#[ignore = "nécessite un Ollama local"]</span>.</p>
+
+  <div class="callout warn">
+    <p><b>La mesure qui manque.</b> Aucun de ces harnais ne mesure l'<b>influence du few-shot</b> : <i>injecter des
+    exemplaires change-t-il, de façon mesurable et bornée, ce que le modèle produit ?</i> C'est l'unique lecture-retour
+    d'ADR-019 qui touche le prompt du LLM — donc la seule dont l'effet ne peut PAS être chiffré en Mode A (où il n'y a pas
+    de prompt, I-MEM8). C'est précisément l'objet du gate Mode C proposé au §11.</p>
+  </div>
+</section>
+</div>
+
+<!-- 3 -->
+<div class="wrap page">
+<section>
+  <h2><span class="num">§3</span> La structure : entrée re-prouvable → [LLM] → sortie attestée</h2>
+
+  <p>La clé pour raisonner sur le Mode C est de voir où, exactement, le non-déterminisme entre — et de constater qu'il est
+  <b>encerclé des deux côtés</b> par du re-prouvable. Un appel de générateur Mode C se décompose en trois temps :</p>
+
+  <div class="fig">
+    <svg viewBox="0 0 720 168" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Le sandwich Mode C">
+      <defs><marker id="ar2" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="#475569"/></marker></defs>
+
+      <rect x="24" y="58" width="196" height="60" rx="8" fill="#eef2ff" stroke="#4f46e5"/>
+      <text x="122" y="80" text-anchor="middle" font-size="11" fill="#3730a3" font-weight="700">① PROMPT — re-prouvable</text>
+      <text x="122" y="96" text-anchor="middle" font-size="9" fill="#475569">instruction + tâche + exemplaires</text>
+      <text x="122" y="108" text-anchor="middle" font-size="9" fill="#475569">(température, graine) = f(variant)</text>
+
+      <rect x="262" y="58" width="196" height="60" rx="8" fill="#fffbeb" stroke="#d97706" stroke-dasharray="5 3"/>
+      <text x="360" y="82" text-anchor="middle" font-size="11" fill="#92400e" font-weight="700">② LLM — stochastique</text>
+      <text x="360" y="99" text-anchor="middle" font-size="9" fill="#475569">le SEUL maillon non rejouable</text>
+      <text x="360" y="111" text-anchor="middle" font-size="9" fill="#475569">(Ollama local, souverain)</text>
+
+      <rect x="500" y="58" width="196" height="60" rx="8" fill="#ecfdf5" stroke="#16a34a"/>
+      <text x="598" y="80" text-anchor="middle" font-size="11" fill="#14532d" font-weight="700">③ SORTIE — attestée</text>
+      <text x="598" y="96" text-anchor="middle" font-size="9" fill="#475569">N17 : prompt_hash, output_hash,</text>
+      <text x="598" y="108" text-anchor="middle" font-size="9" fill="#475569">modèle, params · lié au record d'essaim</text>
+
+      <line x1="220" y1="88" x2="262" y2="88" stroke="#475569" marker-end="url(#ar2)"/>
+      <line x1="458" y1="88" x2="500" y2="88" stroke="#475569" marker-end="url(#ar2)"/>
+      <text x="360" y="146" text-anchor="middle" font-size="10" fill="#475569" font-style="italic">Le non-déterminisme est ISOLÉ au ②. R1 re-pinne l'instantané → reconstruit le ① à l'identique ; le ③ fige le résultat. R0 re-hash toute la chaîne.</text>
+    </svg>
+    <div class="cap">Le « sandwich » Mode C : un prompt re-prouvable, un LLM stochastique encerclé, une sortie attestée. La preuve mord aux deux extrémités du maillon non-déterministe.</div>
+  </div>
+
+  <p><b>Le prompt (①) est re-prouvable.</b> Il est une fonction <i>déterministe</i> de l'instantané pinné :
+  <span class="mono">gen_prompt(instruction, task, exemplars)</span> où les exemplaires viennent de la cellule mémoire
+  épinglée (R1 ré-épingle le même instantané → mêmes exemplaires → <b>même prompt octet</b>, llm.rs), et où la température
+  et la graine sont <span class="mono">0,2 + 0,3·variant</span> et <span class="mono">42 + variant</span> — pures fonctions
+  du variant. Un tiers reconstruit le prompt exact sans toucher au modèle.</p>
+
+  <p><b>La sortie (③) est attestée.</b> Le record N17 fige le <span class="mono">prompt_hash</span> et l'
+  <span class="mono">output_hash</span> ; le record d'essaim le référence par <span class="mono">llm_provenance_id</span>.
+  Le vérificateur lie l'entrée re-prouvée (①) à la sortie attestée (③) et constate la cohérence : <i>ce prompt-ci a
+  produit cette sortie-là, signée, à cet instant, dans ce run</i>.</p>
+
+  <p><b>Le LLM (②) est le seul maillon non rejouable</b> — et il est <i>encerclé</i>. C'est la structure élégante du Mode C :
+  on n'élimine pas le non-déterminisme (impossible), on le <b>confine</b> à un segment unique, borné des deux côtés par du
+  re-prouvable et du signé. La chaîne entière (R0) re-prouve ; seule la <i>flèche du milieu</i> échappe à R1, et le N17
+  est précisément ce qui la rend néanmoins infalsifiable après coup.</p>
+</section>
+</div>
+
+<!-- 4 -->
+<div class="wrap page">
+<section>
+  <h2><span class="num">§4</span> Le pont N17 : l'attestation forensique par-appel</h2>
+
+  <p>Le pont (bridge.rs) lie chaque record d'essaim à son record LLM. Sa fonction-pivot,
+  <span class="mono">classify_link</span>, est un <b>oracle de cohérence</b> qui ne laisse passer aucune ambiguïté entre les
+  modes. Sa logique mérite d'être lue telle quelle, car c'est elle qui définit ce que « N17 cohérent » veut dire :</p>
+
+  <pre>match record.agent_kind {
+    ModeA =&gt; if record.llm_provenance_id.is_some() { <b>UnexpectedLinkOnModeA</b> } // un agent déterministe NE DOIT PAS avoir de N17
+             else { ModeA },
+    ModeC =&gt; match record.llm_provenance_id {
+        None        =&gt; <b>Unlinked</b>,            // lacune : l'agent LLM n'a pas exposé son id N17
+        Some(id)    =&gt; match resolver.resolve(id) {
+            None        =&gt; <b>Missing</b>,          // pointeur PENDANT : id présent, record introuvable
+            Some(view)  =&gt; if view.tenant_id != record.tenant_id        { <b>TenantMismatch</b> }   // fuite inter-tenant
+                           else if view.swarm_request_id != record.swarm_id { <b>SwarmMismatch</b> }  // record d'un AUTRE run
+                           else                                            { <b>Consistent</b> },
+        },
+    },
+}</pre>
+
+  <p>Sept statuts, dont un seul — <span class="mono">Consistent</span> — est acceptable pour un appel Mode C. Les six
+  autres sont des <b>défauts nommés</b> : un Mode A qui porte un lien (contamination), un Mode C sans lien (lacune
+  d'instrumentation), un pointeur pendant (record perdu ou falsifié), une fuite inter-tenant, un record emprunté à un autre
+  run. Le résumé du run agrège ces verdicts : <span class="mono">N17Summary{calls, mode_c_records, unlinked, broken,
+  all_consistent}</span> (result.rs). Le contrat est binaire et dur : <span class="mono">all_consistent</span> exige
+  <span class="mono">unlinked == 0 ∧ broken == 0</span> et chaque Mode C lié, tenant et run vérifiés.</p>
+
+  <div class="callout key">
+    <p><b>Pourquoi c'est le moat de Mode C.</b> Le N17 ne reproduit rien — il <b>atteste</b>. Mais il atteste sous une
+    triple contrainte cryptographique : le record est <i>signé</i> (HKDF tenant-scopé), <i>chaîné</i> (chaque N17 lie le
+    précédent), et <i>lié</i> au bon run et au bon tenant (les vérifications <span class="mono">TenantMismatch</span> /
+    <span class="mono">SwarmMismatch</span>). Falsifier ce qu'un modèle a produit demanderait de re-signer toute la chaîne
+    N17 ET la chaîne d'essaim ET de faire coïncider tenant et run — exactement l'effort que le moat rend infaisable sans le
+    secret maître. Le non-déterminisme du LLM ne donne donc <b>aucune marge</b> à la falsification.</p>
+  </div>
+
+  <p>La parité avec Mode A est exacte sur le seul point qui compte : <b>R0 ne change pas</b>. <span class="mono">verify_swarm</span>
+  re-hash la chaîne d'essaim de la même façon, que les records soient Mode A ou Mode C — il ne connaît que des hash
+  d'entrée/sortie et un ordre canonique (ADR-007). Le N17 est une <i>seconde</i> chaîne, forensique, que
+  <span class="mono">verify_n17_chain</span> vérifie en plus. Mode C = Mode A pour R0, + l'attestation N17 là où R1 ne peut
+  plus mordre.</p>
+</section>
+</div>
+
+<!-- 5 -->
+<div class="wrap page">
+<section>
+  <h2><span class="num">§5</span> La stratification des lectures-retour par mode</h2>
+
+  <p>Voici l'observation qui rend le Mode C bien plus simple qu'il n'en a l'air. Les cinq lectures-retour de la mémoire
+  d'ADR-019 n'ont <b>pas le même rapport au mode</b>. Quatre opèrent sur la couche <i>consensus/sizer</i>, qui traite les
+  candidats comme des <b>valeurs opaques</b> — elle ne sait pas, ne veut pas savoir, si un candidat vient d'une fonction
+  Mode A ou d'un LLM. Une seule, le few-shot, touche le <i>prompt</i> — donc le LLM lui-même.</p>
+
+  <table>
+    <thead><tr><th style="width:24%">Lecture-retour</th><th class="c" style="width:14%">Couche</th><th class="c" style="width:16%">Rapport au mode</th><th>En Mode C</th></tr></thead>
+    <tbody>
+      <tr><td>Taille (warm-start k_min)<br><span class="small muted">MEM-2</span></td><td class="c">sizer</td><td class="c good">agnostique</td>
+        <td>identique : amorce <span class="mono">k_min</span> sur des candidats opaques.</td></tr>
+      <tr><td>Biais de pattern<br><span class="small muted">read-back A</span></td><td class="c">sélecteur</td><td class="c good">agnostique</td>
+        <td>identique : biaise Vote/Borda selon l'accord — l'accord se calcule sur des valeurs, quel qu'en soit l'émetteur.</td></tr>
+      <tr><td>Routage agrégation (R-a)<br><span class="small muted">read-back B</span></td><td class="c">agrégateur</td><td class="c good">agnostique</td>
+        <td>identique : pondère des candidats opaques sous veto.</td></tr>
+      <tr><td>Ordonnancement sizer (R-b/R-c)<br><span class="small muted">read-back B</span></td><td class="c">sizer</td><td class="c mid">agnostique*</td>
+        <td>identique <i>en structure</i> ; mais le « profil » réordonné est ici la <b>(température, graine)</b> — §7.</td></tr>
+      <tr><td><b>Few-shot exemplaires</b><br><span class="small muted">MEM-2.b</span></td><td class="c">prompt LLM</td><td class="c bad">spécifique C</td>
+        <td><b>la seule</b> qui touche le LLM : injecte les gagnants passés dans le prompt. No-op en Mode A (I-MEM8).</td></tr>
+    </tbody>
+  </table>
+
+  <p>La conséquence est libératrice. Les quatre lectures agnostiques sont <b>déjà chiffrées</b> (gates Mode A : PATBIAS,
+  REPUTATION, SIZER_REPUTATION, le warm-start) et un run Mode C les exerce <b>sans rien de neuf à mesurer</b> — la couche
+  consensus/sizer ne distingue pas l'émetteur des candidats, donc une preuve faite sur des candidats Mode A vaut sur des
+  candidats Mode C (mêmes types, mêmes fonctions, même véto). Un harnais Mode C les <i>confirme actives</i> (elles tournent
+  vraiment dans le pipeline LLM), mais ne re-démontre pas leur logique.</p>
+
+  <p>Reste le few-shot, <b>seul cas à mesurer</b>, précisément parce qu'il est le seul dont l'effet n'existe pas en Mode A :
+  sans prompt, injecter des exemplaires ne fait rien (I-MEM8, vérifié). Son influence — change-t-elle, et de combien, la
+  sortie d'un vrai modèle ? — ne peut se chiffrer que sur un vrai modèle. D'où le harnais <span class="mono">#[ignore]</span>.</p>
+
+  <div class="callout">
+    <p><b>Ce n'est pas un hasard, c'est une conception.</b> Si quatre des cinq lectures « marchent déjà » en Mode C, c'est
+    parce qu'elles ont été <i>conçues agnostiques</i> dès le départ — elles vivent dans la couche topologie, qui manipule
+    des <span class="mono">Value</span> opaques. Cette discipline (la mémoire amorce le <i>consensus</i>, pas l'<i>agent</i>)
+    est ce qui rend le passage en Mode C presque gratuit. Le few-shot est l'exception assumée : il amorce l'agent, donc il
+    dépend de la nature de l'agent.</p>
+  </div>
+</section>
+</div>
+
+<!-- 6 -->
+<div class="wrap page">
+<section>
+  <h2><span class="num">§6</span> Le few-shot vivant : la seule lecture qui touche le prompt</h2>
+
+  <p>Le few-shot est, en Mode C, là où la mémoire <i>parle</i> au modèle. Sa mécanique est volontairement minimale et
+  testable sans backend (<span class="mono">gen_prompt</span> est pure) :</p>
+
+  <pre>fn gen_prompt(instruction, task, exemplars) -&gt; String {
+    if exemplars.is_empty() {
+        // I-MEM8 : forme HISTORIQUE exacte — byte-identique au chemin sans mémoire.
+        format!("{instruction} Text: \"{task}\". Answer with only the result, no preamble.")
+    } else {
+        // bloc few-shot : les aperçus de gagnants passés, recall-és de l'instantané pinné.
+        format!("{instruction} Examples of good past answers:\n{- e1\n- e2 …}\n\nText: \"{task}\". …")
+    }
+}</pre>
+
+  <p>Trois propriétés en font une lecture <b>bornée et re-prouvable</b>, fidèle à la colonne vertébrale d'ADR-019
+  (« amorcer sans gouverner ») :</p>
+  <ul>
+    <li><b>Re-prouvable (l'entrée)</b> — les exemplaires viennent de l'instantané <i>pinné</i> ; R1 ré-épingle le même
+    instantané → mêmes exemplaires → <b>même prompt octet</b>. L'influence du few-shot est donc une fonction déterministe
+    de la mémoire passée, anchorée dans le record MemoryRead (I-MEM2 : la <span class="mono">version</span> et le
+    <span class="mono">content_hash</span> de l'instantané lu entrent dans la racine). Un prompt <i>influencé par un recall
+    non tracé</i> serait invalide — il ne peut pas exister.</li>
+    <li><b>Bornée</b> — au plus <span class="mono">FEWSHOT_N</span> exemplaires ; ce sont des <i>aperçus</i> de gagnants
+    passés, pas la réponse. Le modèle reste libre de répondre à la tâche ; les exemplaires <i>orientent</i>, ils
+    n'<i>imposent</i> pas.</li>
+    <li><b>Dormante sans donnée</b> — exemplaires vides ⇒ prompt strictement historique (I-MEM8). En Mode A, il n'y a
+    jamais de prompt : le few-shot y est un no-op honnête (l'extraction se fait, sans effet). La lecture ne « s'éveille »
+    qu'en Mode C, et seulement quand la mémoire a des gagnants à montrer.</li>
+  </ul>
+
+  <p>La <b>sortie</b>, elle, est attestée (N17) — comme toute sortie Mode C. Donc le few-shot hérite exactement de la
+  structure du §3 : un prompt <i>re-prouvable</i> (incluant les exemplaires anchorés) → un LLM <i>stochastique</i> → une
+  sortie <i>attestée</i>. La seule chose neuve qu'un harnais doit établir est <b>empirique</b> : sur un vrai modèle, ce bloc
+  d'exemplaires <i>déplace</i>-t-il la sortie dans le bon sens, et de façon bornée ? C'est une question de mesure, pas de
+  structure — et c'est pourquoi elle exige un vrai modèle (§10–11).</p>
+</section>
+</div>
+
+<!-- 7 -->
+<div class="wrap page">
+<section>
+  <h2><span class="num">§7</span> R-b/R-c en Mode C : le profil EST la (température, graine)</h2>
+
+  <p>Une subtilité mérite un développement, car elle <b>renforce</b> la valeur de l'ouverture R-b/R-c qu'on vient de livrer.
+  En Mode A, le « profil » <span class="mono">variant = i</span> désigne une variante de flotte — une fonction déterministe
+  distincte. En Mode C, le variant pilote l'<b>échantillonnage</b> : la température et la graine sont
+  <span class="mono">0,2 + 0,3·variant</span> et <span class="mono">42 + variant</span> (llm.rs). Le profil
+  <span class="mono">generator_{i:03}</span> est donc, en Mode C, une <b>configuration d'échantillonnage</b> — une façon
+  particulière de tirer le modèle (plus ou moins créative, avec telle graine).</p>
+
+  <p>Cela donne à R-b/R-c un sens <i>plus riche</i> en Mode C qu'en Mode A. La réputation par-profil y apprend « quelle
+  température, quelle graine tend à produire le candidat gagnant pour cette famille de tâches » — une connaissance
+  authentiquement utile (les tâches factuelles aiment les basses températures ; les tâches créatives, les hautes).
+  L'ordonnancement réputationnel fait alors tourner d'abord les configurations d'échantillonnage qui ont historiquement
+  gagné, et l'arrêt adaptatif en récolte l'économie. C'est la même structure qu'en Mode A — mais ce qu'elle exploite n'est
+  plus un artefact synthétique, c'est une vraie diversité de sampling.</p>
+
+  <p>Le moat tient à l'identique, et pour la <b>même raison</b> (I-REP8). Le variant — donc la (température, graine) — est
+  enregistré : en Mode C, il l'est dans le record d'essaim <i>et</i> dans le record N17 (les paramètres
+  <span class="mono">SamplingParams</span> font partie de l'attestation). L'auteur d'écriture reste l'unique
+  <span class="mono">"generator"</span>. Donc R0 re-prouve la chaîne inchangé, et l'attestation N17 fige <i>quel sampling</i>
+  a produit <i>quelle sortie</i> à <i>quelle position</i>. La permutation des profils est transparente au moat en Mode C
+  exactement comme en Mode A — sauf qu'ici, le « variant enregistré » qui sert de pivot porte une information physique réelle
+  (les paramètres de tirage), ce qui rend l'audit encore plus parlant.</p>
+
+  <div class="callout key">
+    <p><b>Conséquence.</b> L'ouverture R-b/R-c, déjà chiffrée et re-prouvée en Mode A (gate REP-4), se transpose en Mode C
+    <b>sans changement de structure</b> — c'est une lecture agnostique (§5). Un harnais Mode C la <i>confirmerait active</i>
+    sur de vrais samplings (et l'attestation N17 montrerait la (température, graine) gagnante remontée en tête), mais sa
+    correction est déjà acquise. Le Mode C n'ouvre pas une nouvelle dette de preuve pour R-b/R-c ; il en révèle la
+    pertinence physique.</p>
+  </div>
+</section>
+</div>
+
+<!-- 8 -->
+<div class="wrap page">
+<section>
+  <h2><span class="num">§8</span> Le déterminisme borné : sizing auditable, non re-dérivable</h2>
+
+  <p>Une honnêteté de plus, sur le sizer adaptatif (ADR-014). En Mode A, la trajectoire du sizer — « après k candidats,
+  l'accord valait x ; on s'arrête / on continue » — est une <b>fonction pure des candidats</b>, eux-mêmes reproductibles ;
+  donc un tiers la <b>re-dérive entièrement</b> hors-ligne (c'est le test
+  <span class="mono">sizing_trace_matches_offline_rederivation</span> : on reconstruit les candidats, on recalcule l'accord
+  par préfixe de vague, on exige l'égalité). En Mode C, les candidats ne sont pas reproductibles — l'accord observé dépend
+  des sorties <i>réelles</i> du modèle. La trajectoire <b>n'est donc plus re-dérivable de zéro</b>.</p>
+
+  <p>Mais elle reste <b>auditable</b>, et c'est suffisant. Les candidats réels sont figés dans les records N17 ; un
+  vérificateur lit <i>ce que le modèle a produit à chaque vague</i>, recalcule l'observable (l'accord) sur <i>ces</i>
+  candidats attestés, et confirme que la décision d'arrêt était <b>correcte étant donné ce que le modèle a produit</b>. La
+  différence est précise : en Mode A, on re-dérive la trajectoire <i>sans</i> les records (on refait tout) ; en Mode C, on
+  la vérifie <i>avec</i> les records (on constate la cohérence). C'est exactement la formule du commentaire de
+  <span class="mono">n17_consistent_under_adaptive_k</span> : « la trajectoire adaptative reste <b>auditable même non
+  rejouable</b> ».</p>
+
+  <div class="callout">
+    <p><b>La règle générale, énoncée une fois.</b> En Mode C, tout ce qui en Mode A se <i>re-dérive</i> (R1, trace de
+    sizing, sorties d'agents) se <i>vérifie-étant-donné-les-records</i> (N17). La preuve passe de « je refais et je
+    compare » à « je tiens l'attesté et je vérifie sa cohérence interne ». Le moat ne perd pas en force — il change de
+    <i>nature de garantie</i>, du reproductible à l'infalsifiable.</p>
+  </div>
+</section>
+</div>
+
+<!-- 9 -->
+<div class="wrap page">
+<section>
+  <h2><span class="num">§9</span> La souveraineté : Ollama local, zéro clé, G2/G3</h2>
+
+  <p>Le Mode C d'EFE est <b>souverain par défaut</b> : il parle à un modèle <i>local</i>, jamais à une API tierce, et ne
+  manipule <b>aucune clé</b>. C'est une propriété de sécurité, pas un détail de déploiement, et elle est gardée par deux
+  gardes-fous (backend/mod.rs).</p>
+
+  <p><b>G2 — le garde d'egress.</b> <span class="mono">build_local_backend</span> consulte
+  <span class="mono">is_local_endpoint</span> (vrai pour <span class="mono">localhost</span>, <span class="mono">::1</span>,
+  <span class="mono">127.*</span>). Un endpoint <b>non-local</b> avec <span class="mono">allow_remote == false</span> est
+  <b>refusé net</b> — <span class="mono">SwarmError::RemoteBackendDenied</span>. Par défaut, le Mode C ne peut donc pas
+  sortir de la machine : aucune donnée de tâche, aucun prompt, aucune sortie ne traverse le réseau. Le self-host est, au
+  sens fort, <i>sur site</i>.</p>
+
+  <p><b>G3 — le disjoncteur.</b> Le seul chemin qui assume l'egress (le routeur Network,
+  <span class="mono">allow_remote == true</span>) enveloppe les appels d'un <span class="mono">Breaker</span>
+  (circuit-breaker) + re-tentatives à jitter — pour la résilience, jamais pour la souveraineté. Le self-host souverain
+  (loopback), lui, reste <b>sans re-tentative</b> : un appel local qui échoue échoue franchement (pas de masquage). La
+  santé du backend est sondée <i>avant</i> le run (échec net plutôt que N timeouts).</p>
+
+  <p>Et surtout : <b>zéro clé</b>. Là où la plupart des piles LLM exigent une clé d'API (un secret à protéger, à faire
+  tourner, à ne jamais logger), le Mode C souverain d'EFE n'en a <i>aucune</i>. Le seul secret de tout le système reste le
+  <b>maître de provenance</b> (HKDF, qui scelle les chaînes) — signé côté serveur, jamais exposé à l'agent ni au prompt. Le
+  modèle local ne s'authentifie pas ; il <i>est</i> sur la machine. Cette absence de clé n'est pas une lacune : c'est la
+  conséquence directe du choix souverain, et elle élimine d'un coup toute une classe de risques (fuite de clé, exfiltration
+  par prompt, dépendance à un tiers).</p>
+
+  <div class="callout key">
+    <p><b>Le lien avec le moat.</b> Souveraineté et re-preuve se renforcent. Parce que le modèle est local, le prompt
+    re-prouvable (§3①) et la sortie attestée (§3③) <b>ne quittent jamais le périmètre</b> ; l'attestation N17 est produite
+    <i>sur la machine qui a fait l'inférence</i>, sans intermédiaire de confiance. Un Mode C qui appellerait une API
+    distante introduirait un tiers entre le prompt et la sortie — exactement le maillon que la souveraineté supprime.</p>
+  </div>
+</section>
+</div>
+
+<!-- 10 -->
+<div class="wrap page">
+<section>
+  <h2><span class="num">§10</span> Le harnais <span class="mono">#[ignore]</span> : honnête parce que gated</h2>
+
+  <p>Vient la question de méthode : comment <i>prouver en chiffres</i> une lecture qui n'existe que sur un vrai modèle, dans
+  un dépôt dont la CI n'a pas de modèle ? La réponse d'EFE est le harnais <span class="mono">#[ignore]</span> — et il faut
+  défendre ce choix, car il a l'air d'une dérobade et n'en est pas une.</p>
+
+  <p><b>On ne simule pas un LLM.</b> Un gate Mode A est synthétique <i>par honnêteté</i> : les agents sont des fonctions
+  étiquetées, déterministes, et la preuve porte sur la <i>logique de production</i> (les vraies fonctions du consensus, du
+  sizer, de la mémoire). On ne peut pas faire l'équivalent pour le few-shot : « simuler » la réponse d'un modèle à un prompt
+  enrichi reviendrait à <b>inventer le résultat qu'on prétend mesurer</b> — la pire des malhonnêtetés. La seule mesure
+  honnête de l'influence du few-shot passe par un <i>vrai</i> modèle.</p>
+
+  <p><b>Donc : le harnais est réel, mais gardé.</b> Il porte <span class="mono">#[ignore = "nécessite un Ollama local"]</span>
+  — il ne tourne pas en CI (qui n'a pas de modèle, et où un LLM serait lent et instable), mais se lance <b>à la demande</b>
+  (<span class="mono">cargo test -- --ignored</span>) sur un Ollama local. C'est le pendant exact de la discipline Mode A :
+  là, des agents synthétiques mais honnêtes en CI ; ici, un vrai modèle mais gardé hors CI. Les deux refusent de
+  <i>fabriquer</i> le résultat ; ils diffèrent seulement sur ce qui est <i>simulable honnêtement</i>.</p>
+
+  <p>Le dépôt suit déjà ce patron pour les axes structurels : <span class="mono">adaptive_keyless::n17_consistent_under_adaptive_k</span>,
+  <span class="mono">replay_real.rs</span>, <span class="mono">n17_persist_real.rs</span>, et les tests Mode C de la
+  passerelle, tous <span class="mono">#[ignore]</span> sur <span class="mono">gemma3:12b</span> local. Le harnais few-shot
+  proposé (§11) <b>rejoint cette famille</b> : même garde, même modèle, même posture — réel, gated, lancé quand on veut la
+  preuve empirique.</p>
+
+  <div class="callout warn">
+    <p><b>La limite à nommer.</b> Un harnais <span class="mono">#[ignore]</span> ne garde PAS contre la régression en CI (il
+    ne tourne pas). C'est assumé : il prouve une propriété <i>empirique</i> (l'influence d'un modèle), pas une invariance de
+    code. Les invariants de structure du few-shot (prompt re-prouvable, borné, dormant sans donnée, I-MEM8) sont, eux,
+    gardés en CI par des tests <i>purs</i> sur <span class="mono">gen_prompt</span> (sans backend) — déjà présents. La
+    division est nette : <b>la structure se garde en CI (pur) ; l'effet empirique se mesure à la demande (Ollama)</b>.</p>
+  </div>
+</section>
+</div>
+
+<!-- 11 -->
+<div class="wrap page">
+<section>
+  <h2><span class="num">§11</span> Le gate Mode C des lectures-retour (M-§A…F)</h2>
+
+  <p>Le harnais proposé — <span class="mono">lot_fewshot_modec</span> (<span class="mono">#[ignore]</span>, Ollama local) —
+  est le pendant Mode C des gates de mémoire. Sa cible unique et neuve est <b>l'influence mesurée du few-shot</b> ; il
+  exerce au passage la cohérence N17 et la re-preuve R0 d'un vrai run LLM. Six sections.</p>
+
+  <table>
+    <thead><tr><th style="width:14%">Section</th><th>Ce qui est prouvé, sur un VRAI modèle</th></tr></thead>
+    <tbody>
+      <tr><td><b>M-§A</b><br><span class="small muted">prompt re-prouvable</span></td>
+        <td>le prompt <i>froid</i> (sans mémoire) est byte-identique à la forme historique (I-MEM8) ; le prompt <i>chaud</i>
+        re-pinne l'instantané → mêmes exemplaires → même prompt (R1 de l'<b>entrée</b>). Vérifiable <b>sans backend</b>
+        (test pur) — la moitié « structure » du gate, gardée en CI.</td></tr>
+      <tr><td class="good"><b>M-§B</b><br><span class="small muted">influence mesurée</span></td>
+        <td><b>le cœur.</b> Sur une famille de tâches où des gagnants passés aident (p. ex. un format de réponse stable,
+        un vocabulaire de domaine), le run <i>chaud</i> (exemplaires injectés) produit une sortie <b>mieux conforme</b> que
+        le run <i>froid</i> — un delta mesuré (taux de bonne forme, exactitude, ou distance à l'attendu). Honnête : exige
+        Ollama.</td></tr>
+      <tr><td><b>M-§C</b><br><span class="small muted">influence bornée</span></td>
+        <td>au plus <span class="mono">FEWSHOT_N</span> exemplaires ; le modèle répond toujours à la <i>tâche</i> (il ne
+        recopie pas un exemplaire ni n'ignore l'entrée) — la mémoire oriente, ne gouverne pas.</td></tr>
+      <tr><td><b>M-§D</b><br><span class="small muted">N17 cohérent</span></td>
+        <td>chaque appel Mode C attesté et lié : <span class="mono">all_consistent</span>, <span class="mono">unlinked==0</span>,
+        <span class="mono">broken==0</span>, tenant et run vérifiés (§4).</td></tr>
+      <tr><td><b>M-§E</b><br><span class="small muted">R0 re-prouve</span></td>
+        <td>la chaîne d'essaim du vrai run LLM re-prouve (<span class="mono">verify_swarm</span>) — auditable, même non
+        rejouable (§8).</td></tr>
+      <tr><td><b>M-§F</b><br><span class="small muted">souveraineté</span></td>
+        <td>le backend est local (loopback) ; aucun egress ; aucune clé (§9) — le run souverain est la condition du gate.</td></tr>
+    </tbody>
+  </table>
+
+  <p>M-§B est la seule section qui n'a aucun équivalent ailleurs, et c'est elle qui justifie le harnais. Sa construction
+  honnête : choisir une famille où les exemplaires <i>devraient</i> aider (un signal mesurable — format, domaine,
+  contrainte de sortie), exécuter froid puis chaud <b>sur le même modèle local</b>, et exiger un delta dans le bon sens,
+  reproductible <i>statistiquement</i> (sur quelques répétitions, pour absorber la stochasticité — on ne mesure pas un octet,
+  on mesure une <i>tendance</i>). Le gate ne prétend pas que le few-shot aide <i>toujours</i> (ce serait faux) ; il prouve
+  qu'<i>il peut aider, de façon bornée et re-prouvable-en-entrée</i>, sur une famille où c'est attendu — exactement la
+  promesse d'ADR-019, ni plus ni moins.</p>
+
+  <div class="callout">
+    <p><b>Les quatre autres lectures, au passage.</b> Le même run Mode C peut <i>confirmer actives</i> les lectures
+    agnostiques (§5) : le warm-start de <span class="mono">k_min</span>, le biais de pattern, le routage R-a et
+    l'ordonnancement R-b/R-c tournent dans le pipeline LLM et leur trace apparaît (k_min amorcé, pattern décidé, poids
+    appliqués, profils réordonnés). Mais leur <i>correction</i> est déjà acquise (gates Mode A) ; le harnais Mode C les
+    montre vivantes, il ne les re-démontre pas. Une seule dette de mesure — M-§B — et elle est nommée.</p>
+  </div>
+</section>
+</div>
+
+<!-- 12 -->
+<div class="wrap page">
+<section>
+  <h2><span class="num">§12</span> Séquence + ce qui reste fermé</h2>
+
+  <p>La séquence de livraison est courte, parce que l'essentiel existe. Elle se réduit à <b>combler la mesure manquante</b>
+  et à <b>verrouiller la structure en CI</b>.</p>
+
+  <table>
+    <thead><tr><th style="width:8%">Étape</th><th style="width:34%">Geste</th><th>Garde</th></tr></thead>
+    <tbody>
+      <tr><td class="c">1</td><td>Tests <b>purs</b> sur <span class="mono">gen_prompt</span> : froid=historique (I-MEM8),
+        chaud=bloc few-shot borné, déterminisme du prompt</td><td>CI (sans backend) — la structure M-§A/C</td></tr>
+      <tr><td class="c">2</td><td>Harnais <span class="mono">lot_fewshot_modec</span> <span class="mono">#[ignore]</span> :
+        froid vs chaud sur Ollama, delta mesuré + N17 + R0 + souveraineté</td><td>à la demande — l'effet M-§B/D/E/F</td></tr>
+      <tr><td class="c">3</td><td>(option) confirmation des lectures agnostiques actives dans un run Mode C</td>
+        <td>à la demande — illustratif, non load-bearing</td></tr>
+    </tbody>
+  </table>
+
+  <p>Restent <b>honnêtement fermées</b> — chacune un acte distinct, nommée pour ne pas planer :</p>
+  <ul>
+    <li><b>Le routeur Network (egress assumé)</b> reste hors souveraineté par défaut : G2 le refuse sauf
+    <span class="mono">allow_remote</span> explicite, sous disjoncteur. L'architecture d'un Mode C <i>distant</i>
+    re-prouvable (où l'attestation N17 viendrait d'une machine tierce) est une question ouverte, distincte, plus délicate
+    pour la chaîne de confiance.</li>
+    <li><b>La reproduction approchée</b> (R1 « à ε près » : re-tirer le modèle et mesurer une distance plutôt qu'une
+    égalité) n'est pas l'objet — le Mode C s'en tient à l'attestation exacte (N17), pas à une reproduction floue dont la
+    sémantique de preuve serait fragile.</li>
+    <li><b>Le few-shot multi-tour / la sélection adaptative d'exemplaires</b> (choisir <i>quels</i> gagnants montrer selon
+    la tâche courante) est une extension de la cellule Exemplaires, pas du Mode C — à mesurer séparément le jour venu.</li>
+  </ul>
+
+  <div class="callout key">
+    <p><b>En une phrase.</b> Le Mode C réel ne réclame aucune nouvelle structure de preuve : il <b>bascule</b> la re-preuve
+    de la <i>reproduction</i> (R1, Mode A) vers l'<i>attestation</i> (N17, Mode C), en confinant le non-déterminisme du LLM
+    à un maillon encerclé de re-prouvable. Quatre des cinq lectures-retour, agnostiques au mode, y tournent déjà chiffrées ;
+    la seule à mesurer est le <b>few-shot</b>, et la seule mesure honnête de son influence passe par un <i>vrai</i> modèle —
+    d'où le harnais <span class="mono">#[ignore]</span>, réel et gardé. La structure se verrouille en CI ; l'effet se mesure
+    à la demande. Souverain, sans clé, infalsifiable.</p>
+  </div>
+
+  <hr>
+  <p class="small muted">EFE — Essaim Fluide Éphémère · Architecture du Mode C réel (Ollama, harnais #[ignore]) ·
+  2026-06-18. Document d'architecture, code à venir. Références au dépôt :
+  <span class="mono">bridge.rs (classify_link, llm_provenance_id)</span>,
+  <span class="mono">llm.rs (gen_prompt, LlmGen, temp/seed = f(variant))</span>,
+  <span class="mono">backend/mod.rs (is_local_endpoint, build_local_backend, RemoteBackendDenied, Breaker)</span>,
+  <span class="mono">result.rs (N17Summary)</span>,
+  <span class="mono">adaptive_keyless.rs:227 / replay_real.rs / n17_persist_real.rs (#[ignore] Ollama)</span>,
+  <span class="mono">swarm_all_phases_real.rs (toutes phases, Ollama)</span>.</p>
+</section>
+</div>
+
+</body>
+</html>
