@@ -7,10 +7,15 @@ use efe_bench_harness::scenario::Scenario;
 fn every_scenario_loads() {
     let scenarios = Scenario::discover(std::path::Path::new("../../bench/scenarios"))
         .expect("discover scenarios");
-    assert_eq!(scenarios.len(), 10, "PR #21 commits 10 scenarios (STABILITY_CONTRACT v1.3 § 11.2)");
-
-    // Stable IDs (STABILITY_CONTRACT v1.3 § 11.2).
     let ids: Vec<_> = scenarios.iter().map(|s| s.id.as_str()).collect();
+
+    // STABILITY_CONTRACT v1.3 § 11.2 : la série **S** est GELÉE à 10 scénarios (PR #21). La série
+    // **CB** (control benchmarks, PR D) s'y ajoute SANS toucher au contrat S — on vérifie les deux
+    // ensembles séparément (un golden par série), pas un total fragile.
+    let s_count = ids.iter().filter(|id| id.starts_with('S')).count();
+    assert_eq!(s_count, 10, "la série S est gelée à 10 (STABILITY_CONTRACT v1.3 § 11.2)");
+
+    // IDs S stables (STABILITY_CONTRACT v1.3 § 11.2).
     let expected = [
         "S01_baseline_100qps_5min",
         "S02_canary_1000qps_15min",
@@ -26,6 +31,10 @@ fn every_scenario_loads() {
     for id in expected {
         assert!(ids.contains(&id), "missing scenario : {id}");
     }
+
+    // Série CB (PR D) : 35 control benchmarks, tous chargés + validés (cf. `d_bo` dans engine.rs).
+    let cb_count = ids.iter().filter(|id| id.starts_with("CB-")).count();
+    assert_eq!(cb_count, 35, "la série CB compte 35 control benchmarks (PR D)");
 }
 
 #[test]
@@ -67,12 +76,18 @@ fn baseline_files_match_scenarios() {
     let scenarios = Scenario::discover(std::path::Path::new("../../bench/scenarios"))
         .expect("discover");
     let baseline_dir = std::path::Path::new("../../bench_baselines/v0.6.0/L2");
-    for s in &scenarios {
+    // Les baselines committées couvrent la série **S** (PR #21). La série **CB** (PR D, control
+    // benchmarks) n'a PAS de baselines committées : elles proviendraient de **vrais runs**
+    // (concern séparé) — on ne fabrique pas de chiffres. On vérifie donc la correspondance pour S.
+    let mut checked = 0;
+    for s in scenarios.iter().filter(|s| s.id.starts_with('S')) {
         let baseline_path = baseline_dir.join(format!("{}.json", s.id));
         assert!(
             baseline_path.exists(),
             "missing baseline : {}",
             baseline_path.display()
         );
+        checked += 1;
     }
+    assert_eq!(checked, 10, "les 10 baselines de la série S doivent toutes exister");
 }

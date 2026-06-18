@@ -55,14 +55,28 @@ pub enum ProvisionerYaml {
     Kind,
     K3s,
     External,
+    /// **CB-series (PR D)** : provisionné par un runner GPU externe — **validable** au chargement,
+    /// mais **pas monté** par ce harnais (il n'a pas de cluster GPU à provisionner).
+    #[serde(rename = "gpu-runner")]
+    GpuRunner,
+    /// **CB-series (PR D)** : aucun provisioning — bench contre une cible existante. Validable,
+    /// non monté par ce harnais.
+    None,
 }
 
-impl From<ProvisionerYaml> for ProvisionerKind {
-    fn from(p: ProvisionerYaml) -> Self {
-        match p {
-            ProvisionerYaml::Kind => Self::Kind,
-            ProvisionerYaml::K3s => Self::K3s,
-            ProvisionerYaml::External => Self::External,
+impl ProvisionerYaml {
+    /// Le [`ProvisionerKind`] CLI **runnable** correspondant, si ce harnais sait le provisionner.
+    ///
+    /// `None` pour `gpu-runner`/`none` : ces scénarios CB-series se **chargent et se valident**, mais
+    /// le harnais ne les monte pas — le `ProvisionerKind` partagé est **gelé** à
+    /// `{kind, k3s, external}` (STABILITY_CONTRACT v1.5 § 23.6), on n'y ajoute donc rien. Le chemin
+    /// d'exécution réel utilise de toute façon l'argument CLI `--provisioner`, pas ce champ scénario.
+    pub fn to_runnable_kind(self) -> Option<ProvisionerKind> {
+        match self {
+            ProvisionerYaml::Kind => Some(ProvisionerKind::Kind),
+            ProvisionerYaml::K3s => Some(ProvisionerKind::K3s),
+            ProvisionerYaml::External => Some(ProvisionerKind::External),
+            ProvisionerYaml::GpuRunner | ProvisionerYaml::None => None,
         }
     }
 }
@@ -232,8 +246,21 @@ mod tests {
     }
 
     #[test]
-    fn provisioner_yaml_to_cli() {
-        assert_eq!(ProvisionerKind::from(ProvisionerYaml::Kind), ProvisionerKind::Kind);
-        assert_eq!(ProvisionerKind::from(ProvisionerYaml::External), ProvisionerKind::External);
+    fn provisioner_yaml_to_runnable_kind() {
+        // les 3 provisioners montables par le harnais → Some(kind gelé).
+        assert_eq!(ProvisionerYaml::Kind.to_runnable_kind(), Some(ProvisionerKind::Kind));
+        assert_eq!(ProvisionerYaml::External.to_runnable_kind(), Some(ProvisionerKind::External));
+        assert_eq!(ProvisionerYaml::K3s.to_runnable_kind(), Some(ProvisionerKind::K3s));
+        // CB-series : validables au chargement, mais pas montées par ce harnais → None.
+        assert_eq!(ProvisionerYaml::GpuRunner.to_runnable_kind(), None);
+        assert_eq!(ProvisionerYaml::None.to_runnable_kind(), None);
+    }
+
+    #[test]
+    fn cb_series_provisioners_deserialize() {
+        // les valeurs YAML exactes des scénarios CB-* doivent se désérialiser.
+        assert_eq!(serde_yaml::from_str::<ProvisionerYaml>("gpu-runner").unwrap(), ProvisionerYaml::GpuRunner);
+        assert_eq!(serde_yaml::from_str::<ProvisionerYaml>("none").unwrap(), ProvisionerYaml::None);
+        assert_eq!(serde_yaml::from_str::<ProvisionerYaml>("kind").unwrap(), ProvisionerYaml::Kind);
     }
 }

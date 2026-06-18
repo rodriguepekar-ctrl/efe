@@ -39,10 +39,10 @@ impl Scenario {
             });
         }
 
-        // ID shape : ^S[0-9]{2}_[a-z0-9_]+$
+        // ID shape : ^S[0-9]{2}_[a-z0-9_]+$ (S-series) ou ^CB-[0-9]{2}_[a-z0-9_]+$ (CB-series, PR D).
         if !is_valid_id(&s.id) {
             return Err(BenchError::InvalidScenario(format!(
-                "id '{}' must match ^S[0-9]{{2}}_[a-z0-9_]+$",
+                "id '{}' must match ^S[0-9]{{2}}_[a-z0-9_]+$ or ^CB-[0-9]{{2}}_[a-z0-9_]+$",
                 s.id
             )));
         }
@@ -98,15 +98,41 @@ impl Scenario {
     }
 }
 
-/// Returns true if `id` matches `^S[0-9]{2}_[a-z0-9_]+$`.
+/// Returns true if `id` is a valid scenario id : `^S[0-9]{2}_[a-z0-9_]+$` (S-series) **or**
+/// `^CB-[A-Z0-9]+_[a-z0-9_]+$` (CB-series — PR D control benchmarks, codes numériques `01..30`
+/// **et** lettrés `A1..A5`).
 fn is_valid_id(id: &str) -> bool {
-    let bytes = id.as_bytes();
-    bytes.len() >= 5
-        && bytes[0] == b'S'
-        && bytes[1].is_ascii_digit()
-        && bytes[2].is_ascii_digit()
-        && bytes[3] == b'_'
-        && bytes[4..].iter().all(|&c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == b'_')
+    is_s_id(id) || is_cb_id(id)
+}
+
+/// `^S[0-9]{2}_[a-z0-9_]+$` — la série S historique (deux chiffres, strict).
+fn is_s_id(id: &str) -> bool {
+    let b = id.as_bytes();
+    b.len() >= 5
+        && b[0] == b'S'
+        && b[1].is_ascii_digit()
+        && b[2].is_ascii_digit()
+        && b[3] == b'_'
+        && b[4..].iter().all(|&c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == b'_')
+}
+
+/// `^CB-[A-Z0-9]+_[a-z0-9_]+$` — la série CB (control benchmarks, PR D). Code amont en
+/// MAJUSCULES/chiffres (espace ouvert : numérique `01..30` ou lettré `A1..A5`), un `_`, puis une
+/// queue `[a-z0-9_]+` non vide.
+fn is_cb_id(id: &str) -> bool {
+    let rest = match id.strip_prefix("CB-") {
+        Some(r) => r,
+        None => return false,
+    };
+    // le code est le segment avant le PREMIER '_' ; la queue suit (et peut contenir des '_').
+    let underscore = match rest.find('_') {
+        Some(i) if i > 0 => i, // code non vide
+        _ => return false,
+    };
+    let (code, tail) = (&rest[..underscore], &rest[underscore + 1..]);
+    !tail.is_empty()
+        && code.bytes().all(|c| c.is_ascii_uppercase() || c.is_ascii_digit())
+        && tail.bytes().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == b'_')
 }
 
 #[cfg(test)]
@@ -178,11 +204,23 @@ tolerance: {}
 
     #[test]
     fn id_regex_strict() {
+        // S-series.
         assert!(is_valid_id("S01_x"));
         assert!(is_valid_id("S99_baseline_100qps_5min"));
         assert!(!is_valid_id("s01_x"));
         assert!(!is_valid_id("S1_x"));
         assert!(!is_valid_id("S01-x"));
         assert!(!is_valid_id("S01_X"));
+        // CB-series (PR D) — codes numériques ET lettrés (les deux sous-séries shippées).
+        assert!(is_valid_id("CB-01_events_append_throughput"));
+        assert!(is_valid_id("CB-30_dr_drill_simulator"));
+        assert!(is_valid_id("CB-A1_harness_cli_cold_start"));
+        assert!(is_valid_id("CB-A5_docker_image_build_time"));
+        assert!(!is_valid_id("cb-01_x")); // préfixe minuscule
+        assert!(!is_valid_id("CB-01-x")); // '-' au lieu de '_' (pas de queue)
+        assert!(!is_valid_id("CB-01_X")); // queue majuscule
+        assert!(!is_valid_id("CB01_x")); // '-' manquant après CB
+        assert!(!is_valid_id("CB-_x")); // code vide
+        assert!(!is_valid_id("CB-a1_x")); // code minuscule
     }
 }
