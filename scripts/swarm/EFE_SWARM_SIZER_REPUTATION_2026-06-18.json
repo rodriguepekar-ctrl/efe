@@ -1,0 +1,67 @@
+{
+  "A_determinism_genesis": {
+    "genesis_identity": true,
+    "ok": true,
+    "pure_stable": true
+  },
+  "B_exploration_rotation": {
+    "k_max": 12,
+    "ok": true,
+    "profiles_covered": 12,
+    "rotation_always_guaranteed": true
+  },
+  "C_prioritization_sizer": {
+    "cold_stop": "k_max",
+    "k_used_cold": 12,
+    "k_used_warm": 4,
+    "ok": true,
+    "warm_stop": "target",
+    "winner_cold": "GOLD",
+    "winner_warm": "GOLD"
+  },
+  "D_budget_safety": {
+    "ceiling_unreachable_k_used": 12,
+    "envelope_unchanged": true,
+    "k_max": 12,
+    "ok": true,
+    "warm_le_cold_le_kmax": true
+  },
+  "E_no_collapse": {
+    "is_permutation": true,
+    "loser_present": true,
+    "loser_reached_by_rotation": true,
+    "ok": true
+  },
+  "_note": "Chemin RÉEL Reputation::profile_schedule + run_waves_pure_scheduled (la boucle de sizer ADR-014 RÉELLE) sur des profils Mode A pur synthétique (étiquetés). R-b ordonne les profils par poids de routage décroissant (mêmes poids UCB que R-a) ; R-c gate par arrêt anticipé (le bas de classement n'est pas atteint, JAMAIS supprimé) ; l'exploration force le profil total mod k_max dans la région garantie (rotation déterministe keyée sur total — re-prouvable, ADR-007). L'ordonnancement est une PERMUTATION de [0,k_max) : enveloppe budgétaire (ADR-018) et plafond k_max (I-AK1) intacts ; l'ordre ne fait que converger plus tôt. §C prend total=6 (exploration ∈ GOOD) pour isoler l'exploitation ; §B couvre la rotation sur tous les total. Live: le sizer de prod reste en IDENTITÉ (extension bornée, à ouvrir une fois cette interaction mesurée).",
+  "cost": {
+    "profile_schedule_ns_per_call": 978.9771
+  },
+  "go": true,
+  "policy": {
+    "batch": 4,
+    "good_profiles": [
+      6,
+      7,
+      8,
+      9
+    ],
+    "k_max": 12,
+    "k_min": 4,
+    "stop_agreement": 0.9
+  },
+  "verdict": "GO ✅ — déterministe+genèse-identité · rotation couvre tout · chaud ↓K_used (iso-qualité) · enveloppe/plafond intacts · jamais d'effondrement",
+  "warm_schedule": [
+    6,
+    7,
+    8,
+    9,
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    10,
+    11
+  ]
+}

@@ -254,15 +254,20 @@ fn round6(x: f64) -> Value {
 //  run_waves — la boucle vague → observation pure → décision bornée
 // ─────────────────────────────────────────────────────────────────────────────
 
-/// Une vague indexée : `variants ∈ [from, from+want)`, exécutée sur `min(want, width)`
-/// voies. Les résultats sont **placés par variant** (ordre déterministe, I-AK3) — le
-/// motif exact de `ConsensusTopology::generate`.
+/// Une vague indexée couvrant les **positions** `[from, from+want)`, exécutée sur
+/// `min(want, width)` voies. Les résultats sont **placés par position** (ordre déterministe) — le
+/// motif exact de `ConsensusTopology::generate`. Le **profil** (variant d'échantillonnage) exécuté
+/// à la position `p` est `schedule[p]` ; sans ordonnancement (`None`) ou hors-borne ⇒
+/// `variant = p` — l'identité, soit le comportement historique I-AK3 (le candidat à la position
+/// `p` ne dépend que de `(task, variant = p)`). L'ordonnancement (ADR-019 R-b/R-c) ne fait que
+/// **réassigner quel profil tombe à quelle position** ; il n'injecte rien dans la tâche.
 async fn spawn_wave(
     gen: &Arc<dyn Generator>,
     task: &Value,
     from: usize,
     want: usize,
     width: usize,
+    schedule: Option<&[usize]>,
 ) -> Vec<Value> {
     let sem = Arc::new(Semaphore::new(width.max(1)));
     let mut set: JoinSet<(usize, Value)> = JoinSet::new();
@@ -270,7 +275,10 @@ async fn spawn_wave(
         let g = gen.clone();
         let task = task.clone();
         let sem = sem.clone();
-        let variant = from + i;
+        let pos = from + i;
+        // R-b/R-c (ADR-019) : le profil exécuté à la position `pos` est `schedule[pos]` ; `None`
+        // ou hors-borne ⇒ `variant = pos` (identité, I-AK3 historique — byte-identique).
+        let variant = schedule.and_then(|s| s.get(pos).copied()).unwrap_or(pos);
         set.spawn(async move {
             let _p = sem.acquire_owned().await.expect("semaphore");
             (i, g.generate(&task, variant).await)
@@ -305,6 +313,34 @@ pub async fn run_waves(
     deadline: Option<&DeadlineProbe>,
     observe: &(dyn Fn(&[Value]) -> f64 + Sync),
 ) -> (Vec<Value>, SizingTrace) {
+    // Délégation à profil **identité** (`variant = position`) — strictement le comportement
+    // historique (I-AK3). L'ordonnancement réputationnel passe par [`run_waves_scheduled`].
+    run_waves_scheduled(gen, task, plan, width, probe, deadline, None, observe).await
+}
+
+/// [`run_waves`] avec **ordonnancement de profils** (ADR-019 read-back B, R-b/R-c) : `schedule[p]`
+/// impose le **profil d'échantillonnage** exécuté à la **position** `p` de la séquence de vagues
+/// (cf. `Reputation::profile_schedule` — un ordre réputation-décroissant à rotation d'exploration
+/// keyée sur `total`). `schedule == None` ⇒ identité (`variant = position`), strictement
+/// [`run_waves`].
+///
+/// Le sizer choisit toujours **COMBIEN** de candidats (I-AK5 inchangé) ; l'ordonnancement choisit,
+/// **à bornes et budget identiques**, **dans quel ordre** les profils sont tentés — donc lesquels
+/// survivent à un arrêt anticipé (R-c, **gating doux** : les profils du bas de classement ne sont
+/// pas atteints, jamais supprimés). `schedule` étant une **permutation de `[0, k_max)`**, le
+/// plafond `k_max` (I-AK1) et l'enveloppe budgétaire (ADR-018) restent **intacts** : l'ordre ne
+/// peut que faire **converger plus tôt** (moins de vagues), jamais dépasser le plafond.
+#[allow(clippy::too_many_arguments)]
+pub async fn run_waves_scheduled(
+    gen: &Arc<dyn Generator>,
+    task: &Value,
+    plan: &KPlan,
+    width: usize,
+    probe: Option<&BudgetProbe>,
+    deadline: Option<&DeadlineProbe>,
+    schedule: Option<&[usize]>,
+    observe: &(dyn Fn(&[Value]) -> f64 + Sync),
+) -> (Vec<Value>, SizingTrace) {
     let plan = plan.clone().normalized();
     let mut cands: Vec<Value> = Vec::with_capacity(plan.k_min);
     let mut batches: Vec<BatchPoint> = Vec::new();
@@ -333,8 +369,9 @@ pub async fn run_waves(
                 break StopReason::Deadline;
             }
         }
-        // ③ la vague (∥ bornée par width — l'exécution, jamais la sémantique).
-        let wave = spawn_wave(gen, task, cands.len(), want, width).await;
+        // ③ la vague (∥ bornée par width — l'exécution, jamais la sémantique). `schedule` réassigne
+        //    quel profil tombe à quelle position ; `None` ⇒ identité (variant = position, I-AK3).
+        let wave = spawn_wave(gen, task, cands.len(), want, width, schedule).await;
         cands.extend(wave);
         // ④ observation PURE sur la vérité présente (I-AK2).
         let observed = observe(&cands);
@@ -359,9 +396,26 @@ pub async fn run_waves_pure(
     probe: Option<&BudgetProbe>,
     deadline: Option<&DeadlineProbe>,
 ) -> (Vec<Value>, SizingTrace) {
+    run_waves_pure_scheduled(gen, task, plan, width, probe, deadline, None).await
+}
+
+/// [`run_waves_pure`] avec **ordonnancement de profils** (ADR-019 R-b/R-c) : `schedule[p]` impose le
+/// profil exécuté à la position `p` (cf. `Reputation::profile_schedule`). `schedule == None` ⇒
+/// identité, strictement [`run_waves_pure`]. C'est l'entrée des règles **pures**
+/// ([`StopRule::Agreement`] / [`StopRule::StdError`]) sous priorisation réputationnelle.
+#[allow(clippy::too_many_arguments)]
+pub async fn run_waves_pure_scheduled(
+    gen: &Arc<dyn Generator>,
+    task: &Value,
+    plan: &KPlan,
+    width: usize,
+    probe: Option<&BudgetProbe>,
+    deadline: Option<&DeadlineProbe>,
+    schedule: Option<&[usize]>,
+) -> (Vec<Value>, SizingTrace) {
     let stop = plan.stop.clone();
     let observe = move |c: &[Value]| stop.observe_candidates(c).unwrap_or(f64::NAN);
-    run_waves(gen, task, plan, width, probe, deadline, &observe).await
+    run_waves_scheduled(gen, task, plan, width, probe, deadline, schedule, &observe).await
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -469,6 +523,37 @@ mod tests {
         for (i, c) in cands.iter().enumerate() {
             assert_eq!(c, &json!({ "value": format!("v{i}") }), "candidat {i} = variant {i}");
         }
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn schedule_reassigns_profile_per_position_and_keeps_k_max_ceiling() {
+        // ADR-019 R-b/R-c : `schedule[p]` impose le profil exécuté à la position p. Sur AllDistinct
+        // (chaque variant ⇒ valeur distincte), on LIT directement quel profil a tourné à chaque
+        // position. L'identité (None) reste byte-identique au comportement historique (I-AK3) ; une
+        // permutation conserve le MÊME plafond k_max (I-AK1) et le MÊME multiset (enveloppe budget
+        // intacte, ADR-018) — l'ordre ne fait que réassigner, jamais dépasser ni inventer.
+        let gen: Arc<dyn Generator> = Arc::new(AllDistinct);
+        let p = plan(4, 8, 4, StopRule::Agreement { threshold: 0.9 }); // accord impossible → court à k_max
+
+        let (id_cands, id_trace) = run_waves_pure_scheduled(&gen, &json!({}), &p, 8, None, None, None).await;
+        assert_eq!(id_trace.k_used, 8, "cible inatteignable → plafond k_max");
+        for (i, c) in id_cands.iter().enumerate() {
+            assert_eq!(c, &json!({ "value": format!("v{i}") }), "None ⇒ identité : position {i} = variant {i}");
+        }
+
+        let schedule = [7usize, 6, 5, 4, 3, 2, 1, 0]; // permutation explicite des 8 profils
+        let (sc_cands, sc_trace) =
+            run_waves_pure_scheduled(&gen, &json!({}), &p, 8, None, None, Some(&schedule)).await;
+        assert_eq!(sc_trace.k_used, 8, "permutation ⇒ MÊME plafond k_max (I-AK1, enveloppe inchangée)");
+        for (pos, c) in sc_cands.iter().enumerate() {
+            let prof = schedule[pos];
+            assert_eq!(c, &json!({ "value": format!("v{prof}") }), "position {pos} = profil schedule[{pos}]={prof}");
+        }
+        let mut a: Vec<_> = id_cands.iter().map(|c| c["value"].as_str().unwrap().to_owned()).collect();
+        let mut b: Vec<_> = sc_cands.iter().map(|c| c["value"].as_str().unwrap().to_owned()).collect();
+        a.sort();
+        b.sort();
+        assert_eq!(a, b, "ordonnancement = permutation : même multiset de profils, rien d'inventé ni supprimé");
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]

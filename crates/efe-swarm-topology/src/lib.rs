@@ -48,8 +48,8 @@ pub use generate_verify::{GenerateVerify, GvResult};
 pub use hierarchical::{FnSolver, GvSolver, HierResult, HierSolver, Hierarchical};
 pub use pipeline::Pipeline;
 pub use sizing::{
-    run_waves, run_waves_pure, BatchPoint, BudgetProbe, DeadlineProbe, KPlan, SizingTrace,
-    StopReason, StopRule, DEFAULT_BATCH,
+    run_waves, run_waves_pure, run_waves_pure_scheduled, run_waves_scheduled, BatchPoint,
+    BudgetProbe, DeadlineProbe, KPlan, SizingTrace, StopReason, StopRule, DEFAULT_BATCH,
 };
 pub use topology::{
     answer_is_present, AdaptiveGvTopology, AgentContribution, GvTopology, HierTopology,

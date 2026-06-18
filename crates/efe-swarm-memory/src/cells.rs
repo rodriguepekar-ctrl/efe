@@ -278,6 +278,55 @@ impl Reputation {
             })
             .collect()
     }
+
+    /// **ADR-019 (read-back B, R-b/R-c)** : l'**ordonnancement de profils** du sizer adaptatif —
+    /// quel profil d'échantillonnage `generator_{i:03}` essayer à quelle **position de vague**, pour
+    /// que l'arrêt séquentiel (ADR-014) garde **d'abord les meilleurs** (R-b, priorisation) et
+    /// n'atteigne le bas du classement **que s'il le faut** (R-c, gating implicite par arrêt
+    /// anticipé — JAMAIS de suppression dure). Renvoie une **permutation** de `[0, k_max)` :
+    /// `schedule[p]` = le profil exécuté à la position `p` de la séquence de vagues.
+    ///
+    /// Fonction **pure** de `(self, total, k_min, k_max)` — tous **pinnés dans l'instantané** (la
+    /// réputation pour les poids, `total` pour la rotation, les bornes pour la spec) : la même
+    /// entrée re-dérive le même ordonnancement hors-ligne (R1, ADR-007 — ni horloge, ni aléa).
+    ///
+    /// Garanties :
+    /// - **permutation totale** — chaque profil exactement une fois ⇒ R-c ne **supprime jamais** un
+    ///   profil : il le repousse au-delà de l'arrêt probable ; un run ultérieur (réputation qui
+    ///   bouge) ou la rotation le **ré-atteint** ;
+    /// - **priorisation (R-b)** — profils triés par **poids de routage décroissant**
+    ///   ([`Self::routing_weights`], la même réputation/UCB que R-a) : les meilleurs d'abord ⇒
+    ///   accord plus tôt ⇒ `K_used` plus petit **à iso-qualité** ;
+    /// - **exploration déterministe** — le profil `e = total mod k_max` (**rotation keyée sur
+    ///   `total`**, le compteur de folds pinné) est **forcé dans la région garantie-atteinte** (les
+    ///   `k_min` premières positions) s'il n'y est pas déjà : AUCUN profil — fût-il éprouvé-perdant —
+    ///   n'est affamé plus de `k_max` runs (couverture cyclique complète) ;
+    /// - **genèse = identité** — `total == 0` sur une réputation vide ⇒ poids tous neutres ⇒ ordre
+    ///   d'exploitation `[0,1,…)` et `e = 0` déjà en tête : ordonnancement = **identité**
+    ///   (`variant = position`, le comportement historique I-AK3 ; aucun biais sans donnée, parité
+    ///   avec I-REP2).
+    pub fn profile_schedule(&self, total: u64, k_min: usize, k_max: usize) -> Vec<usize> {
+        if k_max == 0 {
+            return Vec::new();
+        }
+        // poids par profil — réutilise EXACTEMENT la cellule R-a (même réputation, même UCB clampé).
+        let ids: Vec<String> = (0..k_max).map(|i| format!("generator_{i:03}")).collect();
+        let weights = self.routing_weights(&ids);
+        // ① EXPLOIT (R-b) : tri par poids DÉCROISSANT, départage par index CROISSANT (déterministe).
+        let mut order: Vec<usize> = (0..k_max).collect();
+        order.sort_by(|&a, &b| weights[b].cmp(&weights[a]).then(a.cmp(&b)));
+        // ② EXPLORE (rotation keyée sur `total`) : forcer `e` dans la région garantie SEULEMENT s'il
+        //    est relégué dans la queue gatée — sinon on ne perturbe rien (la genèse reste identité).
+        let e = (total % k_max as u64) as usize;
+        let k_min = k_min.clamp(1, k_max);
+        if let Some(pos) = order.iter().position(|&p| p == e) {
+            if pos >= k_min {
+                let prof = order.remove(pos);
+                order.insert(k_min - 1, prof); // dernière position garantie-atteinte (coût d'exploration minimal)
+            }
+        }
+        order
+    }
 }
 
 // ── read-back B : constantes de routage (milli) — la bande sans dégénérescence (I-REP2) ──
@@ -543,5 +592,57 @@ mod tests {
         assert!(w.iter().all(|&x| (500..=1500).contains(&x)), "borné [500,1500], jamais zéro : {w:?}");
         // toutes absentes → toutes neutres ⇒ agrégation pondérée byte-identique (I-REP2).
         assert!(Reputation::default().routing_weights(&ids).iter().all(|&x| x == 1000));
+    }
+
+    /// R-b/R-c : sans donnée (genèse), l'ordonnancement est l'**identité** — aucun biais, parité
+    /// avec I-REP2 (le sizer se comporte EXACTEMENT comme avant la mémoire).
+    #[test]
+    fn profile_schedule_genesis_is_identity() {
+        let sched = Reputation::default().profile_schedule(0, 4, 12);
+        assert_eq!(sched, (0..12).collect::<Vec<_>>(), "genèse total=0 + réput vide ⇒ identité");
+        // k_max == 0 → vide (pas de panique).
+        assert!(Reputation::default().profile_schedule(0, 1, 0).is_empty());
+    }
+
+    /// R-b : les profils **éprouvés-gagnants** passent en tête (exploitation) — accord plus tôt.
+    #[test]
+    fn profile_schedule_prioritizes_proven_winners_first() {
+        let mut rep = Reputation::default();
+        for i in [6, 7, 8, 9] {
+            rep.agents.insert(format!("generator_{i:03}"), AgentRep { verified: 20, won: 18, total: 20 });
+        }
+        for i in [0, 1, 2, 3, 4, 5, 10, 11] {
+            rep.agents.insert(format!("generator_{i:03}"), AgentRep { verified: 1, won: 1, total: 20 });
+        }
+        // total=6 → rotation e=6 (∈ gagnants, déjà en tête) : pas de perturbation, exploit pur.
+        let sched = rep.profile_schedule(6, 4, 12);
+        assert_eq!(&sched[..4], &[6, 7, 8, 9], "les 4 gagnants d'abord (R-b)");
+        let mut sorted = sched.clone();
+        sorted.sort_unstable();
+        assert_eq!(sorted, (0..12).collect::<Vec<_>>(), "permutation totale : aucun profil supprimé (R-c doux)");
+    }
+
+    /// R-c (exploration déterministe) : la rotation keyée sur `total` garantit que CHAQUE profil —
+    /// fût-il éprouvé-perdant relégué en queue — entre dans la région garantie-atteinte (`k_min`
+    /// premiers) au moins une fois par cycle de `k_max` runs : aucune famine, aucun effondrement.
+    #[test]
+    fn profile_schedule_rotation_reaches_every_profile_within_one_cycle() {
+        let (k_min, k_max) = (4usize, 12usize);
+        let mut rep = Reputation::default();
+        for i in [6, 7, 8, 9] {
+            rep.agents.insert(format!("generator_{i:03}"), AgentRep { verified: 20, won: 18, total: 20 });
+        }
+        // profil 0 est éprouvé-perdant → jamais dans le top par exploitation : seule la rotation l'atteint.
+        rep.agents.insert("generator_000".into(), AgentRep { verified: 0, won: 0, total: 50 });
+        let mut covered = std::collections::BTreeSet::new();
+        for total in 0..k_max as u64 {
+            let sched = rep.profile_schedule(total, k_min, k_max);
+            let e = (total % k_max as u64) as usize;
+            assert!(sched[..k_min].contains(&e), "rotation total={total} : profil {e} dans la région garantie");
+            // déterminisme : re-dériver donne le même ordonnancement (re-prouvable, R1).
+            assert_eq!(sched, rep.profile_schedule(total, k_min, k_max), "pur : même entrée → même sortie");
+            covered.extend(sched[..k_min].iter().copied());
+        }
+        assert_eq!(covered, (0..k_max).collect(), "couverture cyclique COMPLÈTE : aucun profil affamé");
     }
 }
