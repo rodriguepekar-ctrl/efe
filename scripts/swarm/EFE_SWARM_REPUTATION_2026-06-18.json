@@ -1,0 +1,56 @@
+{
+  "A_uniform_byte_identical": {
+    "decision_identical": true,
+    "ok": true,
+    "weights_all_neutral": true
+  },
+  "B_routing_shifts_ambiguous": {
+    "confidence": 0.16666666666666666,
+    "ok": true,
+    "weights": [
+      0.573,
+      0.573,
+      0.573,
+      1.423,
+      1.423,
+      1.0
+    ],
+    "with_rep_index": 3,
+    "with_rep_value": "B",
+    "without_rep_index": 0
+  },
+  "C_veto_protects_franc": {
+    "confidence": 0.5,
+    "extreme_weights_beyond_clamp": true,
+    "ok": true,
+    "with_extreme_weights_index": 0,
+    "without_index": 0
+  },
+  "D_no_collapse": {
+    "band": [
+      500,
+      1500
+    ],
+    "cold_start_milli": 1000,
+    "ok": true,
+    "proven_loser_milli": 573,
+    "proven_winner_milli": 1423
+  },
+  "E_end_to_end": {
+    "clean": true,
+    "ok": true,
+    "routing_weights_milli": [
+      1500,
+      750,
+      750
+    ],
+    "variants_learned": 3
+  },
+  "_note": "Chemin RÉEL Reputation::routing_weights + Aggregator::aggregate_weighted (MajorityVote) sur des candidats + réputations construits (Mode A pur synthétique, étiqueté). R-a pondère les candidats par la réputation de leur variante (generator_{i:03} = candidat i), SOUS VETO : ne re-décide que si la décision d'origine est AMBIGUË (confidence < veto_floor) ; un gagnant FRANC est immune. Poids UCB clampés [500,1500], jamais zéro (anti-effondrement), cold-start neutre.",
+  "cost": {
+    "routing_weights_ns_per_call_k6": 493.1542
+  },
+  "go": true,
+  "verdict": "GO ✅ — uniforme byte-identique · routage bascule l'ambigu · veto protège le franc · jamais d'effondrement · boucle bout-en-bout",
+  "veto_floor": 0.34
+}
