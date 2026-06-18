@@ -98,7 +98,7 @@ impl Resolver<'_> {
 /// **ADR-019 (read-back A, temps ② — PUR + testable)** : le transfert du prior de pattern vers un
 /// sélecteur biaisé. `θ_eff = clamp(θ_base + κ·conf·(escal − ρ), θ_lo, θ_hi)`, `conf = min(1,
 /// total/N)`. Sans prior (`None`) ⇒ base inchangée (I-PAT2). Bornes dures (I-PAT1). Déterministe.
-pub(crate) fn apply_pattern_bias(base: PatternSelector, bias: Option<&efe_swarm_memory::PatternBias>) -> PatternSelector {
+pub fn apply_pattern_bias(base: PatternSelector, bias: Option<&efe_swarm_memory::PatternBias>) -> PatternSelector {
     let Some(bias) = bias.filter(|b| b.total > 0) else {
         // pas de mémoire OU instantané genèse (total==0) → base RIGOUREUSEMENT inchangée (I-PAT2).
         // Sans ce garde, le `.clamp([θ_lo,θ_hi])` ci-dessous réécrirait une base hors-bande même à

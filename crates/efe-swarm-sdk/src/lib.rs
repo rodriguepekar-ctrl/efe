@@ -68,6 +68,7 @@ pub use result::{
     RunOutcome, RunTermination, SwarmError, SwarmRun,
 };
 pub use memory::{MemoryConfig, MemoryHandle};
+pub use resolver::apply_pattern_bias; // ADR-019 (read-back A) : transfert PUR du biais de pattern (gate)
 pub use sdk::{Swarm, SwarmBuilder};
 pub use spec::{KSpec, PatternSpec, TopologySpec};
 

@@ -1,0 +1,49 @@
+{
+  "A_reliable": {
+    "base_milli": 714,
+    "escalation_milli": 571,
+    "ok": true,
+    "theta_eff": 0.85,
+    "vote_winner_iso_quality": "A"
+  },
+  "B_trap": {
+    "base_milli": 714,
+    "escalation_milli": 857,
+    "ok": true,
+    "theta_eff": 0.97
+  },
+  "C_ipat2": {
+    "base_milli": 714,
+    "decisions_identical": true,
+    "genesis_milli": 714,
+    "ok": true
+  },
+  "D_clamp": {
+    "high_base_0_95_clamped_to": 0.97,
+    "low_base_0_72_clamped_to": 0.7,
+    "ok": true,
+    "theta_hi": 0.97,
+    "theta_lo": 0.7
+  },
+  "E_reachable": {
+    "clean": true,
+    "decided_pattern": "borda",
+    "ok": true
+  },
+  "_note": "Transfert RÉEL apply_pattern_bias + PatternSelector::select sur des sets de candidats à accord CONTRÔLÉ (Mode A pur synthétique, étiqueté). Le biais déplace la frontière de décision (θ_eff clampé), échelonnée par la confiance, sous VETO de l'accord réel. iso-qualité : famille fiable ⇒ l'accord est digne de confiance (Vote sûr, juges économisés, MÊME gagnant) ; famille piégeuse ⇒ l'accord est un leurre (escalade = les juges le démasquent).",
+  "base_vote_threshold": 0.9,
+  "cost": {
+    "bias_ns_per_call": 1.4917
+  },
+  "go": true,
+  "sweep_m": [
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30
+  ],
+  "verdict": "GO ✅ — fiable ↓escalade (iso-qualité) · piégeux ↑escalade · genèse byte-identique · clamp · adaptatif atteignable"
+}
