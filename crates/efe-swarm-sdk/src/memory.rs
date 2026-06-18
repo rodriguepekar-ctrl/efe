@@ -262,3 +262,43 @@ pub(crate) const FEWSHOT_N: usize = 3;
 pub(crate) fn recalled_exemplars(snap: &MemorySnapshot) -> Vec<String> {
     snap.cells.exemplars.top(FEWSHOT_N).iter().map(|e| e.preview.clone()).collect()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use efe_swarm_memory::{Exemplar, MemoryCells};
+
+    /// Un instantané gelé portant des exemplaires DÉJÀ normalisés (qualité décroissante — l'état
+    /// post-`fold`, où `top(n)` renvoie les meilleurs).
+    fn snapshot_with(items: Vec<Exemplar>) -> MemorySnapshot {
+        let mut cells = MemoryCells::default();
+        cells.exemplars.items = items;
+        MemorySnapshot { version: 7, content_hash: [0u8; 32], cells }
+    }
+
+    /// **M-§A (la moitié « structure », re-prouvable — gardée en CI).** Les exemplaires recall-és
+    /// sont une fonction **PURE** de l'instantané pinné : **déterministes** (même instantané →
+    /// mêmes exemplaires, donc R1 ré-épingle → même prompt) et **bornés** à `FEWSHOT_N`. C'est le
+    /// pendant chaud de `gen_prompt_without_exemplars_is_the_historical_form` (I-MEM8, forme froide).
+    #[test]
+    fn recalled_exemplars_warm_form_is_deterministic_and_bounded() {
+        // 5 exemplaires (> FEWSHOT_N = 3), qualité décroissante (état post-normalize).
+        let items: Vec<Exemplar> = (0..5)
+            .map(|i| Exemplar {
+                content_hash: format!("{i:064x}"),
+                preview: format!("answer{i}"),
+                quality_milli: 1000 - i as u32 * 10,
+            })
+            .collect();
+        let snap = snapshot_with(items);
+
+        let a = recalled_exemplars(&snap);
+        let b = recalled_exemplars(&snap);
+        assert_eq!(a, b, "déterministe : même instantané pinné → mêmes exemplaires (R1 re-prouvable)");
+        assert_eq!(a.len(), FEWSHOT_N, "borné à FEWSHOT_N (3), pas 5 — l'influence est plafonnée (I-MEM4)");
+        assert_eq!(a, vec!["answer0", "answer1", "answer2"], "les 3 MEILLEURS (qualité desc), déterministe");
+
+        // Genèse (aucun exemplaire) ⇒ vide ⇒ prompt chaud = forme historique (I-MEM8).
+        assert!(recalled_exemplars(&snapshot_with(Vec::new())).is_empty(), "sans exemplaire : aucune injection");
+    }
+}

@@ -19,7 +19,8 @@
       "finance",
       "vaccine",
       "health"
-    ]
+    ],
+    "warm_recall_live": true
   },
   "M_D_n17_consistent": true,
   "M_E_r0_reproves": true,

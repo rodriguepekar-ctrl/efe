@@ -153,6 +153,11 @@ async fn fewshot_influence_on_real_ollama() {
     let mut all_n17_consistent = true;
     let mut all_verified = true;
     let mut local_endpoint = true;
+    // LIVENESS du few-shot (revue adversariale) : sans ça, un câblage cassé (exemplaires jamais
+    // recall-és) donnerait warm == cold et passerait l'assertion warm ≥ cold VACUEUSEMENT. On exige
+    // donc que CHAQUE run chaud ait LU un instantané semé (recalled ∧ version > 0) — l'entrée du
+    // few-shot était bien vivante. (Le câblage exemplaires→prompt est gardé en CI, llm.rs::tests.)
+    let mut warm_recalled = true;
 
     for (n, (task, _expected)) in tasks().into_iter().enumerate() {
         // FROID
@@ -161,10 +166,14 @@ async fn fewshot_influence_on_real_ollama() {
 
         // SEED la famille de CETTE tâche (robuste au partage structurel) puis CHAUD.
         let family = family_key(&task, &kind, &agents, FamilyMode::Structural);
+        // ISOLATION du few-shot : on ne sème QUE des exemplaires. `winning_pattern: None` (pas de
+        // PatternPrior) et `agents: vide` (pas de Réputation) ⇒ aucune autre lecture-retour ne peut
+        // confondre la mesure. (Le spec est de toute façon Fixed(Borda), donc le biais de pattern ne
+        // s'appliquerait pas — mais on rend l'isolation EXPLICITE plutôt que dépendante de ce détail.)
         let summary = RunSummary {
             clean: true,
             k_used: 3,
-            winning_pattern: Some("borda".into()),
+            winning_pattern: None,
             escalated: false,
             exemplars: exemplars.clone(),
             agents: Vec::new(),
@@ -177,6 +186,9 @@ async fn fewshot_influence_on_real_ollama() {
             .expect("seed exemplaires");
         let w = warm.run_traced(task, spec(), budget).await.expect("run chaud");
         warm_outs.push(winner_label(&w.run.output));
+
+        // LIVENESS : le run chaud a-t-il LU l'instantané semé (recall actif, version non-genèse) ?
+        warm_recalled &= w.run.memory.as_ref().map(|m| m.recalled && m.version > 0).unwrap_or(false);
 
         // M-§D/E/F sur le run chaud (Mode C réel).
         if let Some(n17) = &w.run.n17 {
@@ -193,14 +205,15 @@ async fn fewshot_influence_on_real_ollama() {
     let cold_rate = conformance_milli(&cold_outs, &LABELS);
     let warm_rate = conformance_milli(&warm_outs, &LABELS);
 
-    // M-§B : le few-shot aide la forme OU est neutre (jamais nuit) — claim honnête, borné.
-    let b_ok = warm_rate >= cold_rate;
+    // M-§B : le few-shot aide la forme OU est neutre (jamais nuit) — claim honnête, borné — ET son
+    // entrée était vivante (warm_recalled), sinon l'assertion serait vacueuse (revue adversariale).
+    let b_ok = warm_rate >= cold_rate && warm_recalled;
     let d_ok = all_n17_consistent; // M-§D
     let e_ok = all_verified; // M-§E
     let f_ok = local_endpoint; // M-§F
     let go = b_ok && d_ok && e_ok && f_ok;
 
-    println!("\n M-§B INFLUENCE   : conformité chaud {warm_rate}‰ ≥ froid {cold_rate}‰ (Δ {}‰)  → B_ok={b_ok}", warm_rate as i32 - cold_rate as i32);
+    println!("\n M-§B INFLUENCE   : conformité chaud {warm_rate}‰ ≥ froid {cold_rate}‰ (Δ {}‰) · recall vivant={warm_recalled}  → B_ok={b_ok}", warm_rate as i32 - cold_rate as i32);
     println!("   froid : {cold_outs:?}");
     println!("   chaud : {warm_outs:?}");
     println!(" M-§D N17         : tous cohérents + liés (unlinked=0, broken=0)  → D_ok={d_ok}");
@@ -218,7 +231,7 @@ async fn fewshot_influence_on_real_ollama() {
     let payload = json!({
         "_note": "Few-shot Mode C mesuré sur un VRAI modèle (Ollama gemma3:12b local). Froid (sans mémoire) vs chaud (exemplaires propres semés via le vrai fold, Mode A étiqueté). Conformité = sortie EXACTEMENT une étiquette valide (forme propre). Claim honnête et borné : warm ≥ cold (le few-shot aide la forme ou est neutre, jamais ne nuit) ; la stochasticité est absorbée sur plusieurs tâches. N17/R0/souveraineté pris des runs chauds. On ne SIMULE pas le LLM : la logique de mesure est gardée en CI (test pur), l'effet est mesuré ici à la demande.",
         "model": MODEL, "endpoint": ENDPOINT, "labels": LABELS, "tasks": cold_outs.len(),
-        "M_B_influence": { "cold_conformance_milli": cold_rate, "warm_conformance_milli": warm_rate, "delta_milli": warm_rate as i32 - cold_rate as i32, "cold_outputs": cold_outs, "warm_outputs": warm_outs, "ok": b_ok },
+        "M_B_influence": { "cold_conformance_milli": cold_rate, "warm_conformance_milli": warm_rate, "delta_milli": warm_rate as i32 - cold_rate as i32, "warm_recall_live": warm_recalled, "cold_outputs": cold_outs, "warm_outputs": warm_outs, "ok": b_ok },
         "M_D_n17_consistent": d_ok,
         "M_E_r0_reproves": e_ok,
         "M_F_sovereign_local": f_ok,
