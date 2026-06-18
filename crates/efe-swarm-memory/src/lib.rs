@@ -48,8 +48,8 @@ pub mod fold;
 pub mod store;
 
 pub use cells::{
-    AgentRep, Exemplar, FailRec, FailureMemory, MemoryCells, MemorySnapshot, PatternPrior,
-    Reputation, SizePrior,
+    AgentRep, Exemplar, FailRec, FailureMemory, MemoryCells, MemorySnapshot, PatternBias,
+    PatternPrior, Reputation, SizePrior,
 };
 pub use chain::{
     seal_memory, verify_memory, FoldRecord, MemoryBreak, MemoryChainVerdict, MemoryWitness, SealedMemory,

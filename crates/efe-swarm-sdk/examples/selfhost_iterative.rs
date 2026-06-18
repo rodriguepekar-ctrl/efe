@@ -81,7 +81,7 @@ async fn main() {
         pro: "Argue FOR the candidate risk: cite its strongest concrete consequence.".into(),
         contra: "Argue AGAINST the candidate risk: name a stronger competing risk.".into(),
         k: 3,
-        pattern: Pattern::Borda,
+        pattern: Pattern::Borda, // Debate : pattern fixe (l'adaptatif est consensus-only, ADR-019)
         rounds: 1,
         escalate: true, // Vote → jury → débat : l'argumentation n'est payée qu'à l'hésitation.
     };

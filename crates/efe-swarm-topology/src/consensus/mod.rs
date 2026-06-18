@@ -96,6 +96,52 @@ pub(crate) fn empty_outcome(method: &'static str) -> AggOutcome {
 pub trait Aggregator: Send + Sync {
     fn aggregate(&self, task: &Value, candidates: &[Value], ballots: &[Ballot]) -> AggOutcome;
     fn method(&self) -> &'static str;
+
+    /// **ADR-019 (read-back B, R-a)** : agrège puis pondère par la réputation des variantes,
+    /// SOUS VETO (cf. [`apply_reputation_weights`]). Défaut **uniforme** pour TOUTE méthode — un
+    /// post-traitement des scores + ré-argmax, jamais un refactor de la math d'agrégation. Poids
+    /// vides/uniformes ⇒ strictement `aggregate` (byte-identique, I-REP2).
+    fn aggregate_weighted(&self, task: &Value, candidates: &[Value], ballots: &[Ballot], weights: &[f64]) -> AggOutcome {
+        let mut out = self.aggregate(task, candidates, ballots);
+        apply_reputation_weights(&mut out, candidates, weights);
+        out
+    }
+}
+
+/// Confiance en deçà de laquelle la décision consensuelle est jugée **ambiguë** : c'est la SEULE
+/// zone où la réputation a voix (§1 temps ③). Au-dessus, le gagnant est FRANC et immune.
+const REPUTATION_VETO_FLOOR: f64 = 0.34;
+
+/// **ADR-019 (read-back B, R-a)** : pondère une décision d'agrégation par la réputation des
+/// variantes, **sous veto**. Multiplie chaque score consensuel par le poids de sa variante et ne
+/// **ré-élit** le gagnant QUE si la décision d'origine était **peu confiante**
+/// (`confidence < REPUTATION_VETO_FLOOR`) — un gagnant FRANC (forte marge) reste **immune** : le
+/// signal du run garde son droit de veto. Poids **vides / uniformes / de longueur incohérente** ⇒
+/// **NO-OP** → décision **byte-identique** (I-REP2). Pur, déterministe.
+pub fn apply_reputation_weights(out: &mut AggOutcome, candidates: &[Value], weights: &[f64]) {
+    use std::cmp::Ordering;
+    let k = candidates.len();
+    // Garde de neutralité : longueur incohérente, ou tous poids ≈ 1.0 → aucune influence.
+    if k == 0 || weights.len() != k || out.scores.len() != k || weights.iter().all(|&w| (w - 1.0).abs() < 1e-9) {
+        return;
+    }
+    let weighted: Vec<f64> = (0..k).map(|i| out.scores[i] * weights[i]).collect();
+    // ré-argmax stable : score pondéré max, égalité → index le plus petit (comme les agrégateurs).
+    let new_winner = (0..k)
+        .max_by(|&a, &b| weighted[a].partial_cmp(&weighted[b]).unwrap_or(Ordering::Equal).then(b.cmp(&a)))
+        .unwrap_or(out.selected_index);
+    // VETO : n'adopter le re-choix que si l'agrégation d'origine était ambiguë.
+    if out.confidence < REPUTATION_VETO_FLOOR && new_winner != out.selected_index {
+        out.selected_index = new_winner;
+        out.selected = candidates[new_winner].clone();
+        // marge normalisée recomposée sur les scores pondérés (transparence).
+        let mut s = weighted.clone();
+        s.sort_by(|a, b| b.partial_cmp(a).unwrap_or(Ordering::Equal));
+        let top = s.first().copied().unwrap_or(0.0);
+        let second = s.get(1).copied().unwrap_or(0.0);
+        out.confidence = if top > 0.0 { ((top - second) / top).clamp(0.0, 1.0) } else { 0.0 };
+        out.scores = weighted;
+    }
 }
 
 #[cfg(test)]
@@ -136,5 +182,36 @@ mod tests {
         ];
         let names: Vec<&str> = aggs.iter().map(|a| a.method()).collect();
         assert_eq!(names, vec!["vote", "borda", "condorcet"]);
+    }
+
+    #[test]
+    fn reputation_weights_respect_veto_and_uniform_is_noop() {
+        // read-back B (R-a) : la réputation ne re-décide que dans la zone AMBIGUË ; un gagnant
+        // FRANC est immune ; poids uniformes ⇒ NO-OP (byte-identique, I-REP2).
+        let cands = vec![json!("A"), json!("B")];
+        let base = || AggOutcome {
+            selected: json!("A"), selected_index: 0, scores: vec![3.0, 2.0],
+            confidence: 0.5, method: "test", cycle_detected: false,
+        };
+
+        // ① poids uniformes → NO-OP.
+        let mut o = base();
+        apply_reputation_weights(&mut o, &cands, &[1.0, 1.0]);
+        assert_eq!((o.selected_index, o.scores.clone()), (0, vec![3.0, 2.0]), "uniforme → byte-identique");
+
+        // ② poids favorisant B mais décision FRANCHE (0.5 ≥ floor) → VETO : A reste gagnant.
+        let mut o = base();
+        apply_reputation_weights(&mut o, &cands, &[0.5, 1.5]); // pondéré [1.5, 3.0] → B... mais franc
+        assert_eq!(o.selected_index, 0, "gagnant franc IMMUNE à la réputation (veto)");
+
+        // ③ mêmes poids, décision AMBIGUË (0.1 < floor) → B ré-élu.
+        let mut o = AggOutcome { confidence: 0.1, ..base() };
+        apply_reputation_weights(&mut o, &cands, &[0.5, 1.5]);
+        assert_eq!((o.selected_index, o.selected.clone()), (1, json!("B")), "ambiguë → la réputation re-décide");
+
+        // ④ longueur de poids incohérente → NO-OP (sécurité).
+        let mut o = base();
+        apply_reputation_weights(&mut o, &cands, &[0.5]); // len != k
+        assert_eq!(o.selected_index, 0, "poids incohérents → ignorés");
     }
 }

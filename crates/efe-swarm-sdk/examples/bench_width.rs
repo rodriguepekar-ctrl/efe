@@ -32,7 +32,7 @@ fn consensus(k: usize) -> TopologySpec {
         generator: "echo_generator".into(),
         judges: JUDGES.iter().map(|s| s.to_string()).collect(),
         k: k.into(),
-        pattern: efe_swarm_sdk::Pattern::Borda,
+        pattern: efe_swarm_sdk::PatternSpec::Fixed(efe_swarm_sdk::Pattern::Borda),
         escalate: false,
     }
 }

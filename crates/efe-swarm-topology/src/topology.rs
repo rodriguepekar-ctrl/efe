@@ -56,6 +56,21 @@ pub struct TopologyOutput {
     /// `false` ⇒ la mémoire d'échec compte un échec (`RunSummary::failed`). Le SDK ne **devine**
     /// plus l'échec depuis la forme du gagnant (faux négatifs sur GV `best_any` + sorties `text` vides).
     pub produced_acceptable: bool,
+    /// **ADR-019 (read-back B, B2)** : l'**attribution par-variante** d'un run consensus — qui a
+    /// gagné (`won = i == selected_index`), qui a été vérifié (`verified = score_i ≥ barre`), sous
+    /// l'id stable `generator_{i:03}`. Vide pour les topologies sans notion de variantes attribuables.
+    /// Le SDK le replie en réputation (`RunSummary::agents`) — auparavant dégénéré (un seul agent).
+    pub agent_contributions: Vec<AgentContribution>,
+}
+
+/// **ADR-019 (read-back B)** : la contribution d'UNE variante à un run — son id stable + a-t-elle
+/// gagné / été vérifiée. Calculé PAR la topologie (qui seule connaît `selected_index` + les scores),
+/// replié en réputation par le SDK. Jamais fabriqué (I-REP5).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AgentContribution {
+    pub agent_id: String,
+    pub won: bool,
+    pub verified: bool,
 }
 
 /// **ADR-019 (MEM-2.c)** — la sortie d'une topologie porte-t-elle une **réponse présente** (non
@@ -174,6 +189,7 @@ impl Topology for GvTopology {
             // MEM-2.c : ACCEPTABLE ⇔ au moins un candidat a passé le vérificateur. `best_any`
             // (le repli non vérifié) est non-nul mais NE compte PAS comme réponse acceptée.
             produced_acceptable: r.passed > 0,
+            agent_contributions: Vec::new(), // GV : pas d'attribution par-variante (read-back B = consensus)
         }
     }
 }
@@ -256,6 +272,7 @@ impl Topology for AdaptiveGvTopology {
             decided_pattern: None, // T1 adaptatif : pas de pattern non plus (ADR-019)
             escalated: false,
             produced_acceptable: r.passed > 0, // MEM-2.c : ≥ 1 candidat vérifié
+            agent_contributions: Vec::new(),
         }
     }
 }
@@ -301,6 +318,7 @@ impl Topology for PipelineTopology {
             decided_pattern: None, // T2 pipeline : pas d'agrégation par pattern (ADR-019)
             escalated: false,
             produced_acceptable: acceptable,
+            agent_contributions: Vec::new(),
         }
     }
 }
@@ -333,6 +351,7 @@ impl Topology for HierTopology {
             decided_pattern: None, // T3 hiérarchique : pas de pattern d'agrégation (ADR-019)
             escalated: false,
             produced_acceptable: acceptable,
+            agent_contributions: Vec::new(),
         }
     }
 }

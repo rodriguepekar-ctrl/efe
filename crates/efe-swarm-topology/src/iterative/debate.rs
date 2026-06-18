@@ -425,6 +425,7 @@ impl DebateTopology {
             decided_pattern: None, // débat : juge final, pas de pattern d'agrégation de vote (ADR-019)
             escalated: false,
             produced_acceptable: acceptable,
+            agent_contributions: Vec::new(), // débat pro/contra : pas l'attribution par-variante du consensus
         }
     }
 }

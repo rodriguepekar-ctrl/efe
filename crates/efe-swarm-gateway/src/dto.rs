@@ -9,7 +9,7 @@ use uuid::Uuid;
 
 use efe_swarm_sdk::{
     Budget, ClientMode, ConvergenceMetric, FamilyKey, FamilyMode, KSpec, MemoryConfig, OnExceed,
-    Pattern, StopRule, SwarmRun, TopologySpec, DEFAULT_BATCH,
+    Pattern, PatternSpec, StopRule, SwarmRun, TopologySpec, DEFAULT_BATCH,
 };
 
 use crate::error::GatewayError;
@@ -350,6 +350,14 @@ impl TopologyDto {
                         ));
                     }
                 }
+                // ADR-019 (read-back A) : `escalate` est subsumé par `pattern: adaptive` (le
+                // sélecteur adaptatif décide lui-même l'escalade) → un combo ignoré silencieusement
+                // est un 400 NET (revue), comme verified_quota au-dessus.
+                if matches!(pattern, PatternDto::Adaptive) && escalate {
+                    return Err(GatewayError::BadRequest(
+                        "topology.consensus : `escalate` est ignoré par `pattern: adaptive` (le sélecteur adaptatif subsume l'escalade) — retirez `escalate` ou utilisez un pattern fixe".into(),
+                    ));
+                }
                 TopologySpec::Consensus { generator, judges, k, pattern: pattern.into(), escalate }
             }
             TopologyDto::Gossip { refiner, k, max_rounds, epsilon, metric } => {
@@ -359,6 +367,14 @@ impl TopologyDto {
                 if judges.is_empty() {
                     return Err(GatewayError::BadRequest("topology.debate : `judges` vide".into()));
                 }
+                // ADR-019 (read-back A) : le pattern adaptatif est CONSENSUS-only. Sur le débat, le
+                // token `adaptive` retomberait silencieusement sur Borda (`From<PatternDto> for
+                // Pattern`) → on REFUSE net (revue) plutôt que de trahir l'intention de l'appelant.
+                if matches!(pattern, PatternDto::Adaptive) {
+                    return Err(GatewayError::BadRequest(
+                        "topology.debate : `pattern: adaptive` n'existe que pour le consensus — choisissez vote/borda/condorcet".into(),
+                    ));
+                }
                 TopologySpec::Debate { generator, judges, pro, contra, k, pattern: pattern.into(), rounds, escalate }
             }
             TopologyDto::Auto => TopologySpec::Auto,
@@ -366,7 +382,8 @@ impl TopologyDto {
     }
 }
 
-/// Pattern de consensus de fil.
+/// Pattern de consensus de fil. `adaptive` (ADR-019, read-back A) ⇒ pattern **adaptatif** biaisé
+/// par la mémoire (consensus seulement). Token de fil : `vote`/`borda`/`condorcet`/`adaptive`.
 #[derive(Debug, Clone, Copy, Default, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum PatternDto {
@@ -374,14 +391,29 @@ pub enum PatternDto {
     #[default]
     Borda,
     Condorcet,
+    /// **ADR-019 (read-back A)** : « choisis pour moi » — sélecteur adaptatif biaisé par le prior.
+    Adaptive,
 }
 
 impl From<PatternDto> for Pattern {
+    /// Pour le **débat** (pas de pattern adaptatif) : `Adaptive` retombe gracieusement sur Borda.
     fn from(p: PatternDto) -> Self {
         match p {
             PatternDto::Vote => Pattern::Vote,
-            PatternDto::Borda => Pattern::Borda,
+            PatternDto::Borda | PatternDto::Adaptive => Pattern::Borda,
             PatternDto::Condorcet => Pattern::Condorcet,
+        }
+    }
+}
+
+impl From<PatternDto> for PatternSpec {
+    /// Pour le **consensus** : `adaptive` → sélecteur biaisé par la mémoire ; sinon pattern fixe.
+    fn from(p: PatternDto) -> Self {
+        match p {
+            PatternDto::Vote => PatternSpec::Fixed(Pattern::Vote),
+            PatternDto::Borda => PatternSpec::Fixed(Pattern::Borda),
+            PatternDto::Condorcet => PatternSpec::Fixed(Pattern::Condorcet),
+            PatternDto::Adaptive => PatternSpec::adaptive_default(),
         }
     }
 }
@@ -683,7 +715,7 @@ mod tests {
             TopologySpec::Consensus { k, judges, pattern, .. } => {
                 assert_eq!(k, KSpec::Fixed(3), "k par défaut (nombre nu → Fixed)");
                 assert_eq!(judges.len(), 2);
-                assert_eq!(pattern, Pattern::Borda, "pattern par défaut");
+                assert_eq!(pattern, PatternSpec::Fixed(Pattern::Borda), "pattern par défaut (fixe Borda)");
             }
             other => panic!("attendu consensus, eu {other:?}"),
         }
@@ -816,6 +848,34 @@ mod tests {
         }))
         .unwrap();
         assert!(req.topology.into_spec().is_ok(), "agreement = 1.0 (unanimité stricte) est légal");
+    }
+
+    #[test]
+    fn adaptive_pattern_combinations_are_validated_at_the_wire() {
+        // read-back A (revue) : `pattern: adaptive` est CONSENSUS-only et SUBSUME l'escalade —
+        // les combos qui seraient silencieusement trahis sont des 400 NETS.
+        let rejected = |topo: serde_json::Value| {
+            let req: RunRequest = serde_json::from_value(json!({ "task": {}, "topology": topo })).unwrap();
+            matches!(req.topology.into_spec(), Err(GatewayError::BadRequest(_)))
+        };
+        // ① adaptive sur DÉBAT → 400 (ne pas retomber silencieusement sur Borda).
+        assert!(
+            rejected(json!({ "kind": "debate", "generator": "g", "judges": ["j"], "pro": "p",
+                             "contra": "c", "k": 3, "pattern": "adaptive", "rounds": 1, "escalate": false })),
+            "adaptive sur débat → 400"
+        );
+        // ② adaptive + escalate sur CONSENSUS → 400 (`escalate` ignoré silencieusement sinon).
+        assert!(
+            rejected(json!({ "kind": "consensus", "generator": "g", "judges": ["j"], "k": 3,
+                             "pattern": "adaptive", "escalate": true })),
+            "adaptive + escalate → 400"
+        );
+        // ③ adaptive sur CONSENSUS sans escalate → LÉGAL (la surface même du read-back A).
+        let ok: RunRequest = serde_json::from_value(json!({
+            "task": {}, "topology": { "kind": "consensus", "generator": "g", "judges": ["j"], "k": 3, "pattern": "adaptive" }
+        }))
+        .unwrap();
+        assert!(ok.topology.into_spec().is_ok(), "adaptive sur consensus (sans escalate) est légal");
     }
 
     #[test]

@@ -26,9 +26,9 @@ use tokio::sync::Semaphore;
 use tokio::task::JoinSet;
 
 use crate::consensus::selector::{aggregator_for, Pattern, PatternSelector};
-use crate::consensus::{Aggregator, Ballot, Judge, MajorityVote};
+use crate::consensus::{AggOutcome, Aggregator, Ballot, Judge, MajorityVote};
 use crate::sizing::{run_waves_pure, BudgetProbe, DeadlineProbe, KPlan, SizingTrace};
-use crate::topology::{answer_is_present, QualitySignals, SwarmContext, Topology, TopologyOutput};
+use crate::topology::{answer_is_present, AgentContribution, QualitySignals, SwarmContext, Topology, TopologyOutput};
 use crate::traits::Generator;
 
 /// Politique de choix d'agrégateur.
@@ -71,6 +71,12 @@ pub struct ConsensusTopology {
     /// SDK ; la topologie ignore l'horloge. Consultée au MÊME point de la boucle de
     /// vagues : l'arrêt tombe sur une frontière de vague, le partiel reste scellable.
     deadline_probe: Option<DeadlineProbe>,
+    /// **ADR-019 (read-back B, R-a)** : `Some(weights)` ⇒ poids de routage par-variante (indice
+    /// `i` = variante `i` = `generator_{i:03}`), pré-calculés par le SDK depuis l'instantané
+    /// mémoire (bornés, jamais zéro). L'agrégation pondère alors les candidats SOUS VETO
+    /// (`aggregate_weighted`). `None` ⇒ agrégation uniforme (chemin historique, byte-identique).
+    /// Longueur ≥ `k_max` (le SDK pré-calcule pour `0..k_max`) ; on tranche `[0..k_used]` au vol.
+    reputation_weights: Option<Vec<f64>>,
 }
 
 impl std::fmt::Debug for ConsensusTopology {
@@ -98,7 +104,16 @@ impl ConsensusTopology {
             k_plan: None,
             budget_probe: None,
             deadline_probe: None,
+            reputation_weights: None,
         }
+    }
+
+    /// **ADR-019 (read-back B, R-a)** : branche les poids de routage par-variante (pré-calculés par
+    /// le SDK depuis l'instantané mémoire, indice = variante). L'agrégation pondère alors sous veto.
+    /// Vides/absents ⇒ uniforme (byte-identique, I-REP2).
+    pub fn with_reputation_weights(mut self, weights: Vec<f64>) -> Self {
+        self.reputation_weights = Some(weights);
+        self
     }
 
     /// **Phase 4** : branche un exutoire d'écritures (ex. `ProvenanceSink`) sur le
@@ -342,9 +357,16 @@ impl Topology for ConsensusTopology {
         };
         let judges_run = ballots.len();
 
-        // 4. agrégation.
+        // 4. agrégation — pondérée par la réputation (read-back B, R-a) si des poids sont branchés,
+        //    SINON uniforme (chemin historique, byte-identique). Les poids sont indexés par variante
+        //    (`generator_{i:03}` = candidat i) ; on tranche `[0..k_used]` (le SDK pré-calcule 0..k_max).
         let agg = aggregator_for(pattern);
-        let outcome = agg.aggregate(task, &candidates, &ballots);
+        let outcome = match &self.reputation_weights {
+            Some(w) if w.len() >= candidates.len() => {
+                agg.aggregate_weighted(task, &candidates, &ballots, &w[..candidates.len()])
+            }
+            _ => agg.aggregate(task, &candidates, &ballots),
+        };
 
         // Inc.3 : l'agrégateur annonce son verdict à l'observateur (topic réservé) — pattern
         // + confiance, non dérivables des seuls ballots. Coût nul si aucun tap n'est branché.
@@ -362,6 +384,11 @@ impl Topology for ConsensusTopology {
                 published_at: SystemTime::now(),
             });
         }
+
+        // read-back B (B2) : l'ATTRIBUTION par-variante, depuis la décision (`selected_index` +
+        // `scores`). Calculée AVANT que `output` ne déplace `outcome.selected`. Le SDK la replie en
+        // réputation (auparavant dégénérée : un seul agent « generator »).
+        let agent_contributions = variant_contributions(&candidates, &outcome);
 
         // ADR-014 : en adaptatif, la sortie est ENVELOPPÉE `{value, sizing}` — la même
         // grammaire de diagnostic que le gossip (`{value, gossip:{…}}`) : on rend
@@ -392,8 +419,28 @@ impl Topology for ConsensusTopology {
             decided_pattern: Some(format!("{pattern:?}").to_lowercase()),
             escalated,
             produced_acceptable: acceptable,
+            agent_contributions,
         }
     }
+}
+
+/// **ADR-019 (read-back B, B2)** : l'attribution par-variante d'une décision consensuelle. `won` =
+/// la variante a produit le candidat retenu (`selected_index`, exact) ; `verified` = son score
+/// consensuel atteint la **barre** (la moyenne des scores du run) — un signal pris des juges
+/// RÉELS, jamais fabriqué (I-REP5). Le gagnant (score max ≥ moyenne) est toujours « vérifié ».
+/// Scores incohérents (repli sans juge dégénéré) ⇒ vide.
+fn variant_contributions(candidates: &[Value], outcome: &AggOutcome) -> Vec<AgentContribution> {
+    if candidates.is_empty() || outcome.scores.len() != candidates.len() {
+        return Vec::new();
+    }
+    let bar = outcome.scores.iter().sum::<f64>() / candidates.len() as f64;
+    (0..candidates.len())
+        .map(|i| AgentContribution {
+            agent_id: format!("generator_{i:03}"),
+            won: i == outcome.selected_index,
+            verified: outcome.scores[i] >= bar,
+        })
+        .collect()
 }
 
 #[cfg(test)]

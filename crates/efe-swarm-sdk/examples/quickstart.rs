@@ -43,7 +43,7 @@ async fn main() {
     let tight = || TopologySpec::Consensus {
         generator: "echo_generator".into(),
         judges: vec!["consistency".into(), "length_band".into(), "j_non_empty".into()],
-        k: 7.into(), pattern: efe_swarm_sdk::Pattern::Borda, escalate: false,
+        k: 7.into(), pattern: efe_swarm_sdk::PatternSpec::Fixed(efe_swarm_sdk::Pattern::Borda), escalate: false,
     };
     let err = swarm.run(json!({"text":"x"}), tight(), Budget::cents(3).with_policy(OnExceed::Error)).await;
     println!("   Error   → {}", err.err().map(|e| e.to_string()).unwrap_or_else(|| "ok".into()));

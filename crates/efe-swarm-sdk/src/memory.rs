@@ -23,17 +23,21 @@
 //! - **Pattern (populate)** — le **pattern gagnant** + l'**escalade** sont désormais portés par
 //!   `SwarmRun::decided_pattern` (alimenté par le consensus via `TopologyOutput`), donc repliés
 //!   dans un **vrai** `PatternPrior` (auparavant `None`/vide). Sa lecture-retour (biaiser le
-//!   sélecteur de pattern) reste bornée par le DTO, qui pose un pattern FIXE — documentée à part.
+//!   sélecteur de pattern) — désormais BÂTIE (read-back A) : `PatternSpec::Adaptive` rend
+//!   atteignable le sélecteur, et `Resolver::biased_selector` le biaise (θ_eff clampé, I-PAT1).
 //! - **Exemplaires (read)** — les meilleurs exemplaires recall-és sont **injectés en few-shot**
 //!   dans le prompt des générateurs **Mode C** (`llm.rs::gen_prompt`), bornés à [`FEWSHOT_N`] et
 //!   re-prouvables (l'instantané d'où ils viennent est épinglé + tracé, I-MEM2/I-MEM7).
 //!
-//! Reste différée — **réputation par-agent** : sur le chemin **consensus** (celui du DTO), les
-//! `k` candidats sont produits par un SEUL agent métré (`"generator"`), donc une réputation
-//! par-agent y serait **dégénérée** (un seul agent, qui « gagne » toujours). Une attribution
-//! granulaire exige des ids par-variante (chirurgie d'ids de topologie) + un routage qui les
-//! lise — faible valeur sur le chemin principal, laissé à un incrément topologie dédié. Jamais
-//! fabriqué (`agents` reste vide) plutôt que rempli d'une donnée trompeuse.
+//! **Read-backs A & B (les deux structures neuves)** ferment les deux lectures qui restaient :
+//! - **A — biais de pattern** : `PatternSpec::Adaptive` (spec/DTO `"adaptive"`) + le sélecteur
+//!   biaisé par le prior d'escalade/dispersion (clampé, sous veto des candidats, I-PAT1-5).
+//! - **B — routage par réputation** : la **réputation par-variante** n'est plus dégénérée —
+//!   l'identité d'une variante est son **INDICE** (`generator_{i:03}`, un profil d'échantillonnage
+//!   stable), calculée à l'attribution (`TopologyOutput::agent_contributions` → `agents`), SANS
+//!   toucher au métrage/ancrage (le record porte déjà le marqueur `variant`, moat préservé). La
+//!   lecture R-a pondère l'agrégation (poids UCB clampés, sous veto), byte-identique à l'uniforme
+//!   (I-REP1-6). Jamais fabriqué : hors consensus, `agents` reste vide.
 //!
 //! **MEM-2.c** ferme la 5ᵉ cellule, la **mémoire d'échec** (auparavant bâtie mais jamais
 //! alimentée) : chaque run propre compte au niveau **FAMILLE** (`failure_key` = la famille), et
@@ -146,6 +150,13 @@ pub(crate) fn memory_read_capture(
         // générateurs Mode C (l'épingle content_hash ci-dessus les couvre déjà ; ce compte rend
         // l'INFLUENCE explicitement visible dans la racine, sans jamais fabriquer de donnée).
         "exemplars_recalled": exemplars_recalled,
+        // read-backs A/B : les SIGNAUX BRUTS lus pour biaiser le pattern + router par réputation.
+        // L'épingle content_hash ci-dessus les couvre déjà (les influences DÉRIVÉES — θ_eff, poids —
+        // sont des fonctions déterministes de l'instantané, donc re-dérivables, I-PAT3/I-REP4) ; on
+        // les rend ici EXPLICITES dans la racine, sans jamais fabriquer de donnée.
+        "pattern_escalation_rate_milli": snap.cells.pattern.escalation_rate_milli(),
+        "pattern_total": snap.cells.pattern.total,
+        "reputation_agents": snap.cells.reputation.agents.len(),
     });
     CallCapture::new(
         AgentId::new("memory_recall").expect("agent id mémoire valide"),
@@ -160,13 +171,19 @@ pub(crate) fn memory_read_capture(
 /// **fiablement exposé** : `k_used` (le K, via `quality.candidates`), le **gagnant** comme
 /// exemplaire few-shot (content-addressed), et — depuis MEM-2.b — le **pattern gagnant** +
 /// l'**escalade** (désormais portés par `SwarmRun::decided_pattern` / le param `escalated`,
-/// alimentés par le consensus via `TopologyOutput`). La **réputation par-agent** reste vide :
-/// sur le chemin consensus (celui du DTO), les `k` candidats partagent un SEUL agent métré
-/// (`"generator"`), donc une réputation par-agent y serait dégénérée — une attribution
-/// granulaire exige des ids par-variante (chirurgie d'ids de topologie), hors périmètre ici.
+/// alimentés par le consensus via `TopologyOutput`). La **réputation par-variante** (read-back B)
+/// vient de `contributions` (`TopologyOutput::agent_contributions`) : l'identité d'une variante est
+/// son INDICE (`generator_{i:03}`, profil d'échantillonnage stable) — non plus dégénérée. Vide hors
+/// consensus (pas de variantes attribuables) → le fold ④ ne touche rien.
 /// `clean` reflète `is_clean()` ; sur le chemin learn (gardé), toujours vrai, mais porté pour
 /// la traçabilité.
-pub(crate) fn summary_from_run(run: &SwarmRun, escalated: bool, produced_acceptable: bool, family: &FamilyKey) -> RunSummary {
+pub(crate) fn summary_from_run(
+    run: &SwarmRun,
+    escalated: bool,
+    produced_acceptable: bool,
+    contributions: &[efe_swarm_topology::AgentContribution],
+    family: &FamilyKey,
+) -> RunSummary {
     // Le gagnant : la valeur agrégée (`output.value` pour consensus/T1 ; sinon la sortie nue).
     let winner = run.output.get("value").cloned().unwrap_or_else(|| run.output.clone());
     // **Mémoire d'échec (MEM-2.c)** : a-t-il produit une réponse ACCEPTABLE ? Décidé PAR la
@@ -195,11 +212,20 @@ pub(crate) fn summary_from_run(run: &SwarmRun, escalated: bool, produced_accepta
         winning_pattern: run.decided_pattern.clone(),
         escalated,
         exemplars,
-        // Réputation par-agent : différée (cf. doc module — agent métré unique sur le chemin
-        // consensus). La mémoire d'échec, elle, est comptée au niveau **FAMILLE** : `failure_key`
-        // = la famille → `runs` compte chaque run propre de la famille, `fails` ceux sans réponse
-        // utilisable (fold ⑤) → un taux d'échec par famille, observable + re-prouvable.
-        agents: Vec::new(),
+        // **read-back B (B2 + I-REP5)** : la réputation par-variante, depuis l'attribution exposée
+        // par le consensus (`won = selected_index`, `verified = score ≥ barre`). On ne crédite QUE
+        // pour un run RÉUSSI — **symétrique de l'exemplaire** (`failed` plus haut) : un run dégénéré
+        // (gagnant nul ⇒ tous les candidats « identiques », donc tous « vérifiés » et
+        // `generator_000` « gagne ») FABRIQUERAIT des victoires/vérifications, ce qu'I-REP5 interdit,
+        // et empoisonnerait le routage. `failed` ⇒ aucune attribution. Vide hors consensus aussi.
+        agents: if failed {
+            Vec::new()
+        } else {
+            contributions
+                .iter()
+                .map(|c| efe_swarm_memory::AgentStat { agent_id: c.agent_id.clone(), verified: c.verified, won: c.won })
+                .collect()
+        },
         failed,
         failure_key: Some(family.as_str().to_string()),
     }

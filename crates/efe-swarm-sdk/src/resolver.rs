@@ -11,7 +11,7 @@ use std::sync::Arc;
 use efe_nano_sdk::AgentId;
 use efe_swarm_topology::{
     builtin_arguers, builtin_refiner, AgentFleet, BudgetProbe, DeadlineProbe, Decomposer,
-    Generator, Judge, Merger, Refiner, Solver, Stage, StageRefiner, Verifier,
+    Generator, Judge, Merger, PatternSelector, Refiner, Solver, Stage, StageRefiner, Verifier,
 };
 
 use crate::agents::{
@@ -48,6 +48,12 @@ pub(crate) struct Resolver<'a> {
     /// (flotte keyless), il n'y a pas de prompt → ignorés (extraction sans effet, honnête). Vide
     /// ⇒ prompt historique inchangé (I-MEM8). Bornés en amont (≤ `memory::FEWSHOT_N`).
     pub memory_exemplars: Vec<String>,
+    /// **ADR-019 (read-back A)** : signaux bruts du prior de pattern (depuis l'instantané pinné),
+    /// pour BIAISER le sélecteur adaptatif. `None` ⇒ aucun biais (sélecteur = base, I-PAT2).
+    pub memory_pattern_bias: Option<efe_swarm_memory::PatternBias>,
+    /// **ADR-019 (read-back B)** : la cellule de réputation (depuis l'instantané pinné), pour
+    /// calculer les poids de routage par-variante. `None` ⇒ agrégation uniforme (I-REP2).
+    pub memory_reputation: Option<efe_swarm_memory::Reputation>,
 }
 
 fn aid(s: &str) -> AgentId {
@@ -65,7 +71,62 @@ impl Resolver<'_> {
             None => k_min,
         }
     }
+
+    /// **ADR-019 (read-back A, temps ② du patron §1)** : le sélecteur de pattern **biaisé** par la
+    /// mémoire. `θ_eff = clamp(θ_base + κ·conf·(escal − ρ), θ_lo, θ_hi)` — un taux d'escalade
+    /// historique élevé (famille piégeuse) **monte** le seuil (exiger plus d'accord avant le Vote) ;
+    /// bas, il le **descend** (économiser les juges). `use_condorcet` suit la dispersion dominante
+    /// **si** la confiance dépasse un plancher. **Sans prior ⇒ base inchangée** (I-PAT2). Tout est
+    /// déterministe (fonction du prior PINNÉ) → la décision est re-prouvable (I-PAT3). Le **veto des
+    /// candidats** (le sélecteur reste piloté par l'accord réel) garde la borne dure (I-PAT1).
+    pub fn biased_selector(&self, base: PatternSelector) -> PatternSelector {
+        apply_pattern_bias(base, self.memory_pattern_bias.as_ref())
+    }
+
+    /// **ADR-019 (read-back B, R-a)** : les **poids de routage** par-variante pour `0..k_max`
+    /// (f64 dans la bande `[W_LO,W_HI]/1000`), depuis la cellule de réputation **pinnée**. L'indice
+    /// `i` ↔ la variante `generator_{i:03}`. `None` ⇒ aucun routage (agrégation uniforme, I-REP2).
+    /// Déterministe → re-prouvable (I-REP4). Le SDK pré-calcule pour `0..k_max` ; le consensus
+    /// tranche `[0..k_used]` au vol.
+    pub fn reputation_weights_for(&self, k_max: usize) -> Option<Vec<f64>> {
+        let rep = self.memory_reputation.as_ref()?;
+        let ids: Vec<String> = (0..k_max).map(|i| format!("generator_{i:03}")).collect();
+        Some(rep.routing_weights(&ids).into_iter().map(|w| w as f64 / 1000.0).collect())
+    }
 }
+
+/// **ADR-019 (read-back A, temps ② — PUR + testable)** : le transfert du prior de pattern vers un
+/// sélecteur biaisé. `θ_eff = clamp(θ_base + κ·conf·(escal − ρ), θ_lo, θ_hi)`, `conf = min(1,
+/// total/N)`. Sans prior (`None`) ⇒ base inchangée (I-PAT2). Bornes dures (I-PAT1). Déterministe.
+pub(crate) fn apply_pattern_bias(base: PatternSelector, bias: Option<&efe_swarm_memory::PatternBias>) -> PatternSelector {
+    let Some(bias) = bias.filter(|b| b.total > 0) else {
+        // pas de mémoire OU instantané genèse (total==0) → base RIGOUREUSEMENT inchangée (I-PAT2).
+        // Sans ce garde, le `.clamp([θ_lo,θ_hi])` ci-dessous réécrirait une base hors-bande même à
+        // confiance nulle (p. ex. 0,50 → 0,70) : une violation latente de l'inertie sans donnée.
+        return base;
+    };
+    let conf = (bias.total.min(PATTERN_N_CONF) as f64) / PATTERN_N_CONF as f64; // min(1, total/N)
+    let escal = bias.escalation_rate_milli as f64 / 1000.0;
+    let theta = (base.vote_threshold + PATTERN_KAPPA * conf * (escal - PATTERN_RHO)).clamp(THETA_LO, THETA_HI);
+    let use_condorcet = match (&bias.dominant_dispersion, conf >= PATTERN_CONF_FLOOR) {
+        (Some(d), true) => d == "condorcet",
+        _ => base.use_condorcet, // pas de marge nette / confiance insuffisante → base
+    };
+    PatternSelector::new(theta, use_condorcet)
+}
+
+// ── read-back A : constantes du biais de pattern (le clamp + l'échelle de confiance) ──
+/// Nombre de runs pour atteindre la pleine confiance (`conf = min(1, total/N)`).
+const PATTERN_N_CONF: u64 = 30;
+/// Gain du biais sur le seuil de vote (amplitude maximale du déplacement de θ).
+const PATTERN_KAPPA: f64 = 0.2;
+/// Taux d'escalade de référence (au-dessus ⇒ plus exigeant ; en dessous ⇒ plus permissif).
+const PATTERN_RHO: f64 = 0.3;
+/// Plancher de confiance pour adopter la méthode de dispersion dominante de la mémoire.
+const PATTERN_CONF_FLOOR: f64 = 0.5;
+/// Bornes du seuil de vote effectif — la bande sans dégénérescence (jamais toujours-Vote/toujours-juges).
+const THETA_LO: f64 = 0.70;
+const THETA_HI: f64 = 0.97;
 
 impl Resolver<'_> {
     /// **I-AK4 (ADR-014)** : la sonde de budget coopérative du sizer — enveloppe le
@@ -180,5 +241,48 @@ impl Resolver<'_> {
             None => self.fleet.judge(name).ok_or_else(|| SwarmError::UnknownAgent { role: "judge", name: name.to_string() })?,
         };
         Ok(meter_judge(j, self.meter.clone(), aid(id)))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use efe_swarm_memory::PatternBias;
+
+    #[test]
+    fn pattern_bias_transfer_is_bounded_and_inert_without_data() {
+        let base = PatternSelector::new(0.9, false);
+
+        // sans prior → base inchangée (I-PAT2).
+        let s = apply_pattern_bias(base.clone(), None);
+        assert_eq!((s.vote_threshold, s.use_condorcet), (0.9, false));
+
+        // famille PIÉGEUSE (escalade haute, pleine confiance) → seuil MONTE, clampé à θ_hi (I-PAT1).
+        let trap = PatternBias { escalation_rate_milli: 900, dominant_dispersion: None, total: 100 };
+        let s = apply_pattern_bias(base.clone(), Some(&trap));
+        assert!(s.vote_threshold > 0.9, "piégeuse → plus exigeant : {}", s.vote_threshold);
+        assert!(s.vote_threshold <= THETA_HI, "clampé à θ_hi (jamais toujours-juges)");
+
+        // famille FIABLE (escalade basse) → seuil DESCEND, clampé à θ_lo.
+        let safe = PatternBias { escalation_rate_milli: 0, dominant_dispersion: None, total: 100 };
+        let s = apply_pattern_bias(base.clone(), Some(&safe));
+        assert!(s.vote_threshold < 0.9, "fiable → trust agreement : {}", s.vote_threshold);
+        assert!(s.vote_threshold >= THETA_LO, "clampé à θ_lo (jamais toujours-Vote)");
+
+        // PEU de confiance (total faible) → biais minime (échelle de confiance).
+        let weak = PatternBias { escalation_rate_milli: 900, dominant_dispersion: None, total: 1 };
+        let s = apply_pattern_bias(base.clone(), Some(&weak));
+        assert!((s.vote_threshold - 0.9).abs() < 0.05, "faible confiance → quasi-base : {}", s.vote_threshold);
+
+        // total==0 (instantané GENÈSE) → base RIGOUREUSEMENT inchangée, MÊME hors-bande (I-PAT2) —
+        // le clamp ne doit pas mordre à confiance nulle (le défaut que la revue a trouvé).
+        let oob = PatternSelector::new(0.50, true);
+        let genesis = PatternBias { escalation_rate_milli: 900, dominant_dispersion: Some("condorcet".into()), total: 0 };
+        let s = apply_pattern_bias(oob, Some(&genesis));
+        assert_eq!((s.vote_threshold, s.use_condorcet), (0.50, true), "genèse (total==0) → base inchangée, hors-bande comprise");
+
+        // dispersion dominante condorcet (pleine confiance) → use_condorcet.
+        let cond = PatternBias { escalation_rate_milli: 500, dominant_dispersion: Some("condorcet".into()), total: 100 };
+        assert!(apply_pattern_bias(base, Some(&cond)).use_condorcet, "condorcet dominant → use_condorcet");
     }
 }

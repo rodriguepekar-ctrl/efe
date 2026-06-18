@@ -153,6 +153,10 @@ impl Swarm {
         // MEM-2.b : exemplaires few-shot recall-és (aperçus des meilleurs gagnants passés), à
         // injecter dans les prompts Mode C. Bornés (≤ FEWSHOT_N). Vide ⇒ aucune injection (I-MEM8).
         let mut mem_exemplars: Vec<String> = Vec::new();
+        // read-backs A/B : signaux du prior pour BIAISER le pattern + ROUTER par réputation. `None`
+        // ⇒ aucune influence (sélecteur = base, agrégation uniforme — byte-identique, I-PAT2/I-REP2).
+        let mut mem_pattern_bias: Option<efe_swarm_memory::PatternBias> = None;
+        let mut mem_reputation: Option<efe_swarm_memory::Reputation> = None;
         if let Some(h) = &mem {
             let family = crate::memory::family_for(&task, &spec, &h.config);
             if h.config.recall {
@@ -167,6 +171,10 @@ impl Swarm {
                         .and_then(|(lo, hi)| snap.cells.size.suggested_k_min(lo as u32, hi as u32))
                         .map(|k| k as usize);
                     mem_exemplars = crate::memory::recalled_exemplars(&snap);
+                    // read-back A : signaux bruts du prior de pattern (le resolver clampe).
+                    mem_pattern_bias = Some(snap.cells.pattern.bias());
+                    // read-back B : la cellule de réputation (le resolver calcule les poids /k_max).
+                    mem_reputation = Some(snap.cells.reputation.clone());
                     mem_snapshot = Some(snap);
                 }
             }
@@ -260,6 +268,11 @@ impl Swarm {
             // ADR-019 (MEM-2.b) : few-shot recall-é (déjà compté dans MemoryRead ci-dessus) —
             // injecté dans les prompts Mode C par `generator()`. Mode A : ignoré (aucun prompt).
             memory_exemplars: mem_exemplars,
+            // read-back A/B : biais de pattern (clampé dans `biased_selector`) + réputation (poids
+            // calculés dans `reputation_weights_for`). Le record MemoryRead a déjà tracé les signaux
+            // bruts depuis l'instantané (l'épingle content_hash les lie déjà à la racine).
+            memory_pattern_bias: mem_pattern_bias,
+            memory_reputation: mem_reputation,
         };
         let topo = spec.resolve(&resolver)?;
         let topo_name = topo.name().to_string();
@@ -293,6 +306,7 @@ impl Swarm {
                         decided_pattern: None,
                         escalated: false,
                         produced_acceptable: false,
+                        agent_contributions: Vec::new(), // run inachevé → aucune attribution
                     },
                     true,
                 ),
@@ -395,7 +409,10 @@ impl Swarm {
                         // `TopologyOutput` (champs Copy, lisibles malgré le move partiel de `out`).
                         // `produced_acceptable` (calculé PAR la topologie) pilote la mémoire d'ÉCHEC
                         // (niveau famille) ; le SDK ne devine plus l'échec depuis la forme du gagnant.
-                        summary: crate::memory::summary_from_run(&run, out.escalated, out.produced_acceptable, family),
+                        // read-back B : `out.agent_contributions` (attribution par-variante) est
+                        // replié en réputation. `out` n'est que partiellement déplacé (output/quality),
+                        // ce champ y reste lisible.
+                        summary: crate::memory::summary_from_run(&run, out.escalated, out.produced_acceptable, &out.agent_contributions, family),
                     };
                     if let Ok(outcome) = h.store.fold(&tenant_str, update).await {
                         learned = outcome.folded;
@@ -600,6 +617,7 @@ impl SwarmBuilder {
 mod tests {
     use super::*;
     use crate::client::ClientMode;
+    use crate::spec::PatternSpec;
     use efe_swarm_topology::Pattern;
     use serde_json::json;
 
@@ -670,7 +688,7 @@ mod tests {
         let err = swarm
             .run(
                 json!({ "text": "x" }),
-                TopologySpec::Consensus { generator: "echo_generator".into(), judges: vec!["consistency".into(), "length_band".into(), "j_non_empty".into()], k: 7.into(), pattern: Pattern::Borda, escalate: false },
+                TopologySpec::Consensus { generator: "echo_generator".into(), judges: vec!["consistency".into(), "length_band".into(), "j_non_empty".into()], k: 7.into(), pattern: PatternSpec::Fixed(Pattern::Borda), escalate: false },
                 Budget::cents(3).with_policy(OnExceed::Error),
             )
             .await;
@@ -684,7 +702,7 @@ mod tests {
         let run = swarm
             .run(
                 json!({ "text": "x", "expected": "x" }),
-                TopologySpec::Consensus { generator: "echo_generator".into(), judges: vec!["consistency".into(), "length_band".into(), "j_non_empty".into()], k: 7.into(), pattern: Pattern::Borda, escalate: false },
+                TopologySpec::Consensus { generator: "echo_generator".into(), judges: vec!["consistency".into(), "length_band".into(), "j_non_empty".into()], k: 7.into(), pattern: PatternSpec::Fixed(Pattern::Borda), escalate: false },
                 Budget::cents(3).with_policy(OnExceed::Degrade),
             )
             .await
@@ -699,7 +717,7 @@ mod tests {
         let run = swarm
             .run(
                 json!({ "text": "x" }),
-                TopologySpec::Consensus { generator: "echo_generator".into(), judges: vec!["consistency".into(), "length_band".into(), "j_non_empty".into()], k: 7.into(), pattern: Pattern::Borda, escalate: false },
+                TopologySpec::Consensus { generator: "echo_generator".into(), judges: vec!["consistency".into(), "length_band".into(), "j_non_empty".into()], k: 7.into(), pattern: PatternSpec::Fixed(Pattern::Borda), escalate: false },
                 Budget::cents(4).with_policy(OnExceed::Stop),
             )
             .await
@@ -777,7 +795,7 @@ mod tests {
                     generator: "Classify the topic in one word from {technology,finance,health,legal}.".into(),
                     judges: vec!["Judge how well the label fits.".into()],
                     k: 3.into(),
-                    pattern: Pattern::Borda,
+                    pattern: PatternSpec::Fixed(Pattern::Borda),
                     escalate: false,
                 },
                 Budget::cents(1000),
@@ -952,7 +970,7 @@ mod tests {
                     generator: "echo_generator".into(),
                     judges: vec!["consistency".into(), "length_band".into(), "j_non_empty".into()],
                     k: 7.into(),
-                    pattern: Pattern::Borda,
+                    pattern: PatternSpec::Fixed(Pattern::Borda),
                     escalate: false,
                 },
                 Budget::cents(4).with_policy(OnExceed::Stop), // 10 appels @ 1¢ > 4¢ → épuisé
@@ -1108,7 +1126,7 @@ mod tests {
                     generator: "echo_generator".into(),
                     judges: vec!["consistency".into(), "length_band".into(), "j_non_empty".into()],
                     k: 7.into(),
-                    pattern: Pattern::Borda,
+                    pattern: PatternSpec::Fixed(Pattern::Borda),
                     escalate: false,
                 },
                 Budget::cents(4).with_policy(OnExceed::Stop),
@@ -1180,6 +1198,10 @@ mod tests {
         assert_eq!(rec_f.fails, 1, "gagnant nul → un échec compté (fold ⑤)");
         assert_eq!(rec_f.fail_rate_milli(), 1000, "taux d'échec = 100%");
         assert!(snap_f.cells.exemplars.items.is_empty(), "on ne few-shot JAMAIS un échec");
+        // read-back B (I-REP5, revue) : un run ÉCHOUÉ ne crédite AUCUNE réputation — sinon le run
+        // dégénéré (candidats nuls « identiques » → tous « vérifiés », generator_000 « gagne »)
+        // FABRIQUERAIT victoires/vérifications et empoisonnerait le routage.
+        assert!(snap_f.cells.reputation.agents.is_empty(), "un échec ne FABRIQUE aucune réputation (I-REP5)");
 
         // ② run RÉUSSI : gagnant réel (echo_generator).
         let store_ok = std::sync::Arc::new(InMemoryMemoryStore::new());
@@ -1217,7 +1239,7 @@ mod tests {
                     generator: "echo_generator".into(),
                     judges: judges.iter().map(|s| s.to_string()).collect(),
                     k: 3.into(),
-                    pattern: Pattern::Borda, // escalate_to
+                    pattern: PatternSpec::Fixed(Pattern::Borda), // escalate_to
                     escalate: true,
                 },
                 Budget::cents(100_000),
@@ -1230,5 +1252,49 @@ mod tests {
         let snap = store.snapshot(&tenant, &family).await.unwrap();
         assert_eq!(snap.cells.pattern.total, 1, "un run de pattern observé");
         assert_eq!(snap.cells.pattern.escalations, 1, "l'escalade RÉELLE est comptée (≠ 0)");
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn consensus_populates_per_variant_reputation_not_degenerate() {
+        // read-back B (B1/B2) : un consensus propre replie une réputation PAR-VARIANTE — plusieurs
+        // ids stables `generator_NNN`, un seul gagnant attribué. Plus l'agent métré unique dégénéré.
+        let store = std::sync::Arc::new(InMemoryMemoryStore::new());
+        let tenant = efe_nano_sdk::TenantId::system().to_string();
+        let task = json!({ "text": "x", "expected": "x" });
+        let judges = ["consistency", "length_band", "j_non_empty"];
+        let family = consensus_family(&task, "echo_generator", &judges);
+        let swarm = Swarm::builder().memory(MemoryHandle::new(store.clone())).build().unwrap();
+        let run = swarm
+            .run(task.clone(), TopologySpec::consensus("echo_generator", &judges, 3), Budget::cents(1000))
+            .await
+            .unwrap();
+        assert!(run.is_clean());
+
+        let snap = store.snapshot(&tenant, &family).await.unwrap();
+        let rep = &snap.cells.reputation;
+        assert!(
+            rep.agents.len() >= 2,
+            "réputation par-variante NON dégénérée : {:?}",
+            rep.agents.keys().collect::<Vec<_>>()
+        );
+        assert!(rep.agents.contains_key("generator_000"), "id par-variante stable (I-REP1)");
+        let winners: u64 = rep.agents.values().map(|a| a.won).sum();
+        assert_eq!(winners, 1, "exactement UN gagnant attribué par run (I-REP5)");
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn consensus_pattern_adaptive_is_reachable_and_clean() {
+        // read-back A : le pattern ADAPTATIF (jadis code mort, inatteignable depuis la spec) est
+        // désormais ATTEIGNABLE, tourne proprement, et décide un pattern selon l'accord des candidats.
+        let run = Swarm::keyless()
+            .run(
+                json!({ "text": "x", "expected": "x" }),
+                TopologySpec::consensus_pattern_adaptive("echo_generator", &["consistency", "j_non_empty"], 3),
+                Budget::cents(1000),
+            )
+            .await
+            .unwrap();
+        assert!(run.is_clean(), "le consensus à pattern adaptatif tourne proprement");
+        assert!(run.decided_pattern.is_some(), "le sélecteur adaptatif a décidé un pattern");
     }
 }

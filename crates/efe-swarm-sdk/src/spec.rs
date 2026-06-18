@@ -7,8 +7,8 @@ use std::sync::Arc;
 
 use efe_swarm_topology::{
     AdaptiveGvTopology, ConsensusTopology, ConvergenceMetric, DebateTopology, GenerateVerify,
-    GossipTopology, GvTopology, HierTopology, Hierarchical, KPlan, Pattern, Pipeline,
-    PipelineTopology, StopRule, Topology, DEFAULT_BATCH,
+    GossipTopology, GvTopology, HierTopology, Hierarchical, KPlan, Pattern, PatternSelector,
+    Pipeline, PipelineTopology, StopRule, Topology, DEFAULT_BATCH,
 };
 use serde_json::Value;
 
@@ -62,6 +62,27 @@ impl KSpec {
     }
 }
 
+/// **ADR-019 (read-back A)** : l'intention de POLITIQUE de pattern d'un consensus — **fixe** ou
+/// **adaptatif**. Le mode adaptatif rend ATTEIGNABLE (depuis la spec/DTO) le `PatternSelector`
+/// (jusque-là code mort), que le resolver **biaise** par le prior de pattern de la famille
+/// (θ effectif clampé, I-PAT1). Il **subsume** `Escalating` : un seuil informé par la mémoire au
+/// lieu d'une constante magique. Défaut : `Fixed` (aucun changement pour les appelants existants).
+#[derive(Debug, Clone, PartialEq)]
+pub enum PatternSpec {
+    /// Méthode d'agrégation IMPOSÉE (le comportement historique).
+    Fixed(Pattern),
+    /// « Choisis pour moi » : sélecteur adaptatif (accord des candidats), BIAISÉ par la mémoire.
+    Adaptive { vote_threshold: f64, use_condorcet: bool },
+}
+
+impl PatternSpec {
+    /// Base adaptative (quasi-unanimité requise pour le Vote, Borda en dispersion) — c'est CETTE
+    /// base que le biais mémoire déplace (jamais au-delà des bornes [θ_lo, θ_hi]).
+    pub fn adaptive_default() -> Self {
+        Self::Adaptive { vote_threshold: 0.9, use_condorcet: false }
+    }
+}
+
 /// Spécification d'une topologie + ses agents (résolus depuis la flotte).
 #[derive(Debug, Clone)]
 pub enum TopologySpec {
@@ -75,7 +96,7 @@ pub enum TopologySpec {
     Hierarchical { decomposer: String, solver: String, merger: String },
     /// **T-Consensus** : K générateurs + panel de juges → Vote/Borda/Condorcet.
     /// `k` adaptatif (Agreement / StdError) ⇒ génération par vagues bornées (ADR-014).
-    Consensus { generator: String, judges: Vec<String>, k: KSpec, pattern: Pattern, escalate: bool },
+    Consensus { generator: String, judges: Vec<String>, k: KSpec, pattern: PatternSpec, escalate: bool },
     /// **T4 — Gossip** (itératif, ADR-003) : K refiners × tours, arrêt à ε ou r_max.
     /// L'influence mutuelle — chaque agent lit les pairs du tour précédent et révise.
     Gossip { refiner: String, k: usize, max_rounds: usize, epsilon: f64, metric: ConvergenceMetric },
@@ -134,7 +155,7 @@ impl TopologySpec {
             generator: generator.into(),
             judges: judges.iter().map(|s| s.to_string()).collect(),
             k: k.into(),
-            pattern: Pattern::Borda,
+            pattern: PatternSpec::Fixed(Pattern::Borda),
             escalate: false,
         }
     }
@@ -151,7 +172,20 @@ impl TopologySpec {
                 batch: DEFAULT_BATCH,
                 stop: StopRule::Agreement { threshold },
             },
-            pattern: Pattern::Borda,
+            pattern: PatternSpec::Fixed(Pattern::Borda),
+            escalate: false,
+        }
+    }
+
+    /// **ADR-019 (read-back A)** : un consensus à **pattern ADAPTATIF** — le sélecteur (accord des
+    /// candidats) est BIAISÉ par le prior de pattern de la famille (θ effectif clampé, I-PAT1). K
+    /// fixe ; orthogonal au K-adaptatif. C'est la surface qui rendait le read-back A possible.
+    pub fn consensus_pattern_adaptive(generator: &str, judges: &[&str], k: usize) -> Self {
+        TopologySpec::Consensus {
+            generator: generator.into(),
+            judges: judges.iter().map(|s| s.to_string()).collect(),
+            k: k.into(),
+            pattern: PatternSpec::adaptive_default(),
             escalate: false,
         }
     }
@@ -236,7 +270,7 @@ impl TopologySpec {
                             "Assess the relevance and correctness of the answer.".into(),
                         ],
                         k: 3.into(),
-                        pattern: Pattern::Borda,
+                        pattern: PatternSpec::Fixed(Pattern::Borda),
                         escalate: false,
                     }
                 }
@@ -374,15 +408,37 @@ impl TopologySpec {
                     }
                 }
                 // agent_id "generator" / "judge_{i:03}" → matchent /cand/* + /ballot/* (ancrage).
+                // ADR-019 (read-back B, B1) : l'identité PAR-VARIANTE pour la réputation est l'INDICE
+                // (`generator_{i:03}` = la variante i = un profil d'échantillonnage stable) — calculée
+                // à l'attribution (`variant_contributions`), sans toucher au métrage/ancrage (le
+                // record porte déjà le marqueur `variant`). Provenance inchangée, moat préservé.
                 let gen = r.generator(&generator, "generator")?;
                 let mut jv = Vec::with_capacity(judges.len());
                 for (i, name) in judges.iter().enumerate() {
                     jv.push(r.judge(name, &format!("judge_{i:03}"))?);
                 }
-                let mut topo =
-                    ConsensusTopology::new(gen, k.max_k(), jv).with_pattern(pattern).with_concurrency(width);
-                if escalate {
-                    topo = topo.with_escalation(0.9, pattern);
+                let mut topo = ConsensusTopology::new(gen, k.max_k(), jv).with_concurrency(width);
+                // ADR-019 (read-back A) : dispatch de la POLITIQUE de pattern.
+                topo = match pattern {
+                    // FIXE : méthode imposée ; `escalate` ⇒ Escalating (Vote d'abord, juges si peu confiant).
+                    PatternSpec::Fixed(p) => {
+                        if escalate {
+                            topo.with_escalation(0.9, p)
+                        } else {
+                            topo.with_pattern(p)
+                        }
+                    }
+                    // ADAPTATIF : sélecteur (accord) BIAISÉ par le prior de pattern (θ_eff clampé,
+                    // I-PAT1). Subsume Escalating — le seuil est informé par la mémoire, pas figé.
+                    PatternSpec::Adaptive { vote_threshold, use_condorcet } => {
+                        let base = PatternSelector::new(vote_threshold, use_condorcet);
+                        topo.with_selector(r.biased_selector(base))
+                    }
+                };
+                // ADR-019 (read-back B, R-a) : poids de routage par-variante (pré-calculés depuis
+                // l'instantané pour `0..k_max`). Absents ⇒ agrégation uniforme (byte-identique, I-REP2).
+                if let Some(weights) = r.reputation_weights_for(k.max_k()) {
+                    topo = topo.with_reputation_weights(weights);
                 }
                 if let KSpec::Adaptive { k_min, k_max, batch, stop } = k {
                     // ADR-019 (I-MEM4) : warm-start de k_min, borné aux bornes du run.

@@ -217,6 +217,7 @@ impl Topology for GossipTopology {
             decided_pattern: None, // gossip : convergence par raffinement, pas d'agrégation (ADR-019)
             escalated: false,
             produced_acceptable: acceptable,
+            agent_contributions: Vec::new(),
         }
     }
 }

@@ -52,8 +52,8 @@ pub use sizing::{
     StopReason, StopRule, DEFAULT_BATCH,
 };
 pub use topology::{
-    AdaptiveGvTopology, GvTopology, HierTopology, PipelineTopology, QualitySignals, SwarmContext,
-    Topology, TopologyOutput,
+    answer_is_present, AdaptiveGvTopology, AgentContribution, GvTopology, HierTopology,
+    PipelineTopology, QualitySignals, SwarmContext, Topology, TopologyOutput,
 };
 pub use traits::{Decomposer, Generator, Merger, Solver, Stage, Verifier};
 

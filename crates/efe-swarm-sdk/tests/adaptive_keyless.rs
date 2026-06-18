@@ -179,7 +179,7 @@ async fn sizing_trace_matches_offline_rederivation() {
         generator: "echo_generator".into(),
         judges: vec!["consistency".into()],
         k: KSpec::Adaptive { k_min: 2, k_max: 6, batch: 2, stop: StopRule::Agreement { threshold: 0.9 } },
-        pattern: efe_swarm_sdk::Pattern::Borda,
+        pattern: efe_swarm_sdk::PatternSpec::Fixed(efe_swarm_sdk::Pattern::Borda),
         escalate: false,
     };
     let out = swarm.run_traced(task.clone(), spec, Budget::cents(100)).await.expect("run");
@@ -211,7 +211,7 @@ async fn sizing_trace_matches_offline_rederivation() {
         generator: "echo_generator".into(),
         judges: vec!["consistency".into()],
         k: KSpec::Adaptive { k_min: 2, k_max: 6, batch: 2, stop: StopRule::Agreement { threshold: 0.9 } },
-        pattern: efe_swarm_sdk::Pattern::Borda,
+        pattern: efe_swarm_sdk::PatternSpec::Fixed(efe_swarm_sdk::Pattern::Borda),
         escalate: false,
     };
     let out2 = swarm.run_traced(task, spec2, Budget::cents(100)).await.expect("run 2");
@@ -269,7 +269,7 @@ async fn adaptive_composes_with_judge_escalation() {
         generator: "const_generator".into(),
         judges: vec!["consistency".into(), "length_band".into()],
         k: KSpec::Adaptive { k_min: 4, k_max: 24, batch: 4, stop: StopRule::Agreement { threshold: 0.9 } },
-        pattern: efe_swarm_sdk::Pattern::Borda,
+        pattern: efe_swarm_sdk::PatternSpec::Fixed(efe_swarm_sdk::Pattern::Borda),
         escalate: true, // Vote gratuit d'abord ; juges seulement si hésitation
     };
     let out = swarm.run_traced(json!({ "text": "t" }), spec, Budget::cents(100)).await.expect("run");

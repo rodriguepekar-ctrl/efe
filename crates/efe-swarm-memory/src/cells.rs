@@ -106,7 +106,54 @@ impl PatternPrior {
         }
         ((self.escalations.saturating_mul(1000)) / self.total) as u32
     }
+
+    /// **ADR-019 (read-back A)** : les signaux BRUTS du prior pour le biais de pattern — purs,
+    /// déterministes, sans politique (le clamp/échelle vit au resolver, qui connaît la base du
+    /// sélecteur). `escalation_rate_milli` dit à quelle fréquence l'accord des candidats s'est
+    /// révélé insuffisant (famille piégeuse vs fiable) ; `dominant_dispersion` dit, parmi les
+    /// méthodes de DISPERSION (borda/condorcet — jamais le vote), laquelle a gagné nettement
+    /// (marge ≥ `DISPERSION_MARGIN_MILLI`), ou `None` si aucune ne se détache ; `total` est la
+    /// CONFIANCE. Sans donnée (`total == 0`) ⇒ tout à zéro/`None` → le resolver n'applique aucun
+    /// biais (I-PAT2).
+    pub fn bias(&self) -> PatternBias {
+        let b = self.wins.get("borda").copied().unwrap_or(0);
+        let c = self.wins.get("condorcet").copied().unwrap_or(0);
+        let dom = self.dominant_dispersion(b, c);
+        PatternBias { escalation_rate_milli: self.escalation_rate_milli(), dominant_dispersion: dom, total: self.total }
+    }
+
+    /// Méthode de dispersion dominante (borda vs condorcet) si la marge relative est NETTE.
+    /// Déterministe ; égalité ou marge faible ⇒ `None` (la mémoire ne tranche pas, I-MEM4).
+    fn dominant_dispersion(&self, borda: u64, condorcet: u64) -> Option<String> {
+        let sum = borda + condorcet;
+        if sum == 0 {
+            return None;
+        }
+        let (lead, name) = if borda >= condorcet { (borda, "borda") } else { (condorcet, "condorcet") };
+        let margin_milli = ((2 * lead).saturating_sub(sum).saturating_mul(1000)) / sum; // |b−c|/sum en milli
+        if margin_milli >= DISPERSION_MARGIN_MILLI as u64 {
+            Some(name.to_string())
+        } else {
+            None
+        }
+    }
 }
+
+/// **ADR-019 (read-back A)** : les signaux bruts du prior de pattern lus par le resolver pour
+/// calculer le seuil de vote effectif (clampé) et le choix de méthode de dispersion. Données
+/// pures — aucune politique, aucun flottant (déterminisme octet).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PatternBias {
+    /// Taux d'escalade historique en milli — élevé ⇒ famille piégeuse (exiger plus d'accord).
+    pub escalation_rate_milli: u32,
+    /// Méthode de dispersion historiquement dominante (`"borda"`/`"condorcet"`), si marge nette.
+    pub dominant_dispersion: Option<String>,
+    /// Nombre de runs observés (la CONFIANCE qui échelonne le biais ; 0 ⇒ aucun biais).
+    pub total: u64,
+}
+
+/// Marge relative minimale (milli) pour qu'une méthode de dispersion soit déclarée dominante.
+const DISPERSION_MARGIN_MILLI: u32 = 200; // 20 % d'écart relatif borda↔condorcet
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  ③ Exemplars — les candidats few-shot (bornés, quality-weighted)
@@ -206,7 +253,44 @@ impl Reputation {
     pub fn of(&self, agent: &str) -> Option<&AgentRep> {
         self.agents.get(agent)
     }
+
+    /// **ADR-019 (read-back B, R-a)** : les **poids de routage** par-variante (milli), pour
+    /// pondérer l'agrégation. Entier, déterministe, byte-stable (aucun flottant) — l'optimisme
+    /// sous incertitude est rendu par un bonus **hyperbolique** `ROUTE_OPTIMISM/(total+1)` qui
+    /// remplace le `√(ln T / tᵢ)` d'UCB (incalculable sans flottant) en gardant sa vertu : une
+    /// variante **peu observée** n'est pas pénalisée, donc explorée. Garanties (I-REP2) :
+    /// - poids **clampé** à `[ROUTE_W_LO, ROUTE_W_HI]` — **jamais zéro**, aucune variante éliminée ;
+    /// - **cold-start neutre** : une variante absente/jamais vue ⇒ poids `1000` (neutre) ;
+    /// - **éprouvée gagnante** favorisée ; **éprouvée perdante** down-weightée, jamais supprimée.
+    ///
+    /// Poids uniformes (toutes neutres) ⇒ l'agrégation pondérée est **byte-identique** (I-REP2).
+    pub fn routing_weights(&self, variant_ids: &[String]) -> Vec<u32> {
+        variant_ids
+            .iter()
+            .map(|id| {
+                let (win_rate, total_v) = self.of(id).map(|r| (r.win_rate_milli(), r.total)).unwrap_or((0, 0));
+                // bonus d'optimisme : grand quand peu observé (cold-start exploré, pas puni).
+                let optimism = (ROUTE_OPTIMISM_MILLI as u64 / (total_v + 1)) as i64;
+                let rep_score = win_rate as i64 + optimism; // « bonté » de la variante, en milli
+                let delta = rep_score - ROUTE_REF_MILLI as i64; // écart au neutre (peut être négatif)
+                let w = 1000 + (ROUTE_LAMBDA_MILLI as i64 * delta) / 1000;
+                w.clamp(ROUTE_W_LO_MILLI as i64, ROUTE_W_HI_MILLI as i64) as u32
+            })
+            .collect()
+    }
 }
+
+// ── read-back B : constantes de routage (milli) — la bande sans dégénérescence (I-REP2) ──
+/// Référence « neutre » du score de réputation (= cold-start : poids 1000).
+const ROUTE_REF_MILLI: u32 = 500;
+/// Bonus d'optimisme à zéro observation (décroît en `1/(total+1)` — explore le peu-vu).
+const ROUTE_OPTIMISM_MILLI: u32 = 500;
+/// Gain : un écart plein au neutre atteint la borne de la bande (mappe l'écart sur `[W_LO,W_HI]`).
+const ROUTE_LAMBDA_MILLI: u32 = 1000;
+/// Plancher de poids — **jamais zéro** : aucune variante n'est jamais éliminée (anti-effondrement).
+const ROUTE_W_LO_MILLI: u32 = 500;
+/// Plafond de poids — la mémoire amorce, ne gouverne pas (une bonne variante ne peut tout rafler).
+const ROUTE_W_HI_MILLI: u32 = 1500;
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  ⑤ FailureMemory — ce qui échoue systématiquement
@@ -421,5 +505,43 @@ mod tests {
         assert_eq!(g.version, 0);
         assert_eq!(g.cells, MemoryCells::default());
         assert_eq!(g.content_hash, MemoryCells::default().content_hash());
+    }
+
+    #[test]
+    fn pattern_bias_exposes_raw_signals_and_no_data_is_inert() {
+        // read-back A : sans donnée → aucun signal (I-PAT2 ; le resolver n'appliquera aucun biais).
+        let b0 = PatternPrior::default().bias();
+        assert_eq!((b0.escalation_rate_milli, b0.total), (0, 0));
+        assert_eq!(b0.dominant_dispersion, None);
+        // avec donnée : taux d'escalade + dispersion dominante NETTE.
+        let mut p = PatternPrior { total: 10, escalations: 3, ..Default::default() };
+        p.wins.insert("borda".into(), 8);
+        p.wins.insert("condorcet".into(), 2);
+        let b = p.bias();
+        assert_eq!(b.escalation_rate_milli, 300);
+        assert_eq!(b.dominant_dispersion.as_deref(), Some("borda"), "borda nettement dominant");
+        assert_eq!(b.total, 10);
+        // marge faible (égalité) → aucune dominante (la mémoire ne tranche pas, I-MEM4).
+        let mut q = PatternPrior::default();
+        q.wins.insert("borda".into(), 5);
+        q.wins.insert("condorcet".into(), 5);
+        assert_eq!(q.bias().dominant_dispersion, None, "égalité → aucun dominant");
+    }
+
+    #[test]
+    fn routing_weights_are_clamped_optimistic_and_never_zero() {
+        // read-back B (I-REP2) : éprouvée-gagnante favorisée, éprouvée-perdante down-weightée,
+        // jamais-vue NEUTRE (cold-start), tout clampé [500,1500] (jamais zéro).
+        let mut rep = Reputation::default();
+        rep.agents.insert("generator_000".into(), AgentRep { verified: 20, won: 18, total: 20 }); // win 900
+        rep.agents.insert("generator_001".into(), AgentRep { verified: 20, won: 1, total: 20 }); // win 50
+        let ids = vec!["generator_000".to_string(), "generator_001".to_string(), "generator_002".to_string()];
+        let w = rep.routing_weights(&ids);
+        assert!(w[0] > 1000, "éprouvée gagnante favorisée : {}", w[0]);
+        assert!(w[1] < 1000, "éprouvée perdante down-weightée : {}", w[1]);
+        assert_eq!(w[2], 1000, "jamais vue → NEUTRE (cold-start, anti-effondrement)");
+        assert!(w.iter().all(|&x| (500..=1500).contains(&x)), "borné [500,1500], jamais zéro : {w:?}");
+        // toutes absentes → toutes neutres ⇒ agrégation pondérée byte-identique (I-REP2).
+        assert!(Reputation::default().routing_weights(&ids).iter().all(|&x| x == 1000));
     }
 }

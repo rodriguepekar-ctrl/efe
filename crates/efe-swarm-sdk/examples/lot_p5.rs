@@ -78,7 +78,7 @@ fn llm_consensus() -> TopologySpec {
             "Assess the relevance of the topic to the text.".into(),
         ],
         k: 3.into(),
-        pattern: Pattern::Borda,
+        pattern: efe_swarm_sdk::PatternSpec::Fixed(Pattern::Borda),
         escalate: false,
     }
 }
