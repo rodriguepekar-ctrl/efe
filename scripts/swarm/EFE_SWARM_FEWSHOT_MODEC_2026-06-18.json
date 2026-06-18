@@ -1,0 +1,38 @@
+{
+  "M_B_influence": {
+    "cold_conformance_milli": 0,
+    "cold_outputs": [
+      "GPU",
+      "Kubernetes",
+      "Interest rates",
+      "Earnings",
+      "Vaccine",
+      "Sepsis"
+    ],
+    "delta_milli": 500,
+    "ok": true,
+    "warm_conformance_milli": 500,
+    "warm_outputs": [
+      "hardware",
+      "cloud computing",
+      "finance",
+      "finance",
+      "vaccine",
+      "health"
+    ]
+  },
+  "M_D_n17_consistent": true,
+  "M_E_r0_reproves": true,
+  "M_F_sovereign_local": true,
+  "_note": "Few-shot Mode C mesuré sur un VRAI modèle (Ollama gemma3:12b local). Froid (sans mémoire) vs chaud (exemplaires propres semés via le vrai fold, Mode A étiqueté). Conformité = sortie EXACTEMENT une étiquette valide (forme propre). Claim honnête et borné : warm ≥ cold (le few-shot aide la forme ou est neutre, jamais ne nuit) ; la stochasticité est absorbée sur plusieurs tâches. N17/R0/souveraineté pris des runs chauds. On ne SIMULE pas le LLM : la logique de mesure est gardée en CI (test pur), l'effet est mesuré ici à la demande.",
+  "endpoint": "http://127.0.0.1:11434",
+  "go": true,
+  "labels": [
+    "technology",
+    "finance",
+    "health"
+  ],
+  "model": "gemma3:12b",
+  "tasks": 6,
+  "verdict": "GO ✅ — few-shot ≥ froid (forme) · N17 cohérent · R0 re-prouve · souverain local"
+}
