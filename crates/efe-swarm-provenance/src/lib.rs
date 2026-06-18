@@ -65,6 +65,7 @@
 #![deny(unsafe_code)]
 #![warn(rust_2018_idioms)]
 
+pub mod attest;
 pub mod bridge;
 pub mod canon;
 pub mod chain;
@@ -83,6 +84,7 @@ pub use bridge::{
     classify_link, resolve_llm, verify_bridge, BridgeLink, BridgeReport, LinkStatus, LlmResolver,
     LlmProvenanceView, MapResolver,
 };
+pub use attest::{attest_remote_call, ChallengeIssuer, FreshnessError};
 pub use canon::{canonical_bytes, canonical_json};
 pub use chain::{verify_chain, BreakReason, ChainBreak, ChainVerdict, SwarmChain};
 pub use cosign::{
