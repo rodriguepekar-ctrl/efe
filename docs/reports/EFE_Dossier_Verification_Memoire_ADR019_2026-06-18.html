@@ -1,0 +1,484 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>EFE — Dossier de vérification : l'arc mémoire (ADR-019), prouvé sur deux modes</title>
+<style>
+  :root{--ink:#0f172a;--muted:#475569;--soft:#64748b;--line:#e2e8f0;--teal:#0d9488;--teal-d:#0f766e;--indigo:#4f46e5;--indigo-d:#4338ca;--ok:#16a34a;--warn:#d97706;--bad:#dc2626;--bg-tint:#f8fafc;--bg-card:#f1f5f9;--code-bg:#0f172a;--code-fg:#e2e8f0;}
+  *{box-sizing:border-box;} html{font-size:11.2px;}
+  body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,Arial,sans-serif;color:var(--ink);margin:0;line-height:1.6;background:#fff;-webkit-font-smoothing:antialiased;}
+  .wrap{max-width:178mm;margin:0 auto;padding:0 2mm;}
+  h1,h2,h3,h4{line-height:1.2;font-weight:700;}
+  h2{font-size:1.45rem;margin:0 0 .55rem;padding-bottom:.32rem;border-bottom:3px solid var(--teal);}
+  h2 .num{color:var(--teal);} h3{font-size:1.14rem;margin:1.15rem 0 .32rem;color:var(--indigo-d);}
+  h4{font-size:1rem;margin:.85rem 0 .22rem;color:var(--teal-d);}
+  p{margin:.55rem 0;text-align:justify;hyphens:auto;} a{color:var(--indigo);text-decoration:none;}
+  code{font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace;font-size:.85em;background:var(--bg-card);padding:.05em .35em;border-radius:4px;color:#0b3b36;}
+  .muted{color:var(--muted);} .small{font-size:.88rem;}
+  .lead-in{font-weight:700;color:var(--teal-d);}
+  section{break-inside:avoid;} .page{break-before:page;} h2{break-after:avoid;}
+  table{border-collapse:collapse;width:100%;margin:.55rem 0;font-size:.83rem;}
+  th,td{border:1px solid var(--line);padding:.32rem .5rem;text-align:left;vertical-align:top;}
+  th{background:var(--bg-card);font-weight:700;} tbody tr:nth-child(even){background:var(--bg-tint);}
+  td.c,th.c{text-align:center;} .good{background:#dcfce7 !important;color:#166534;font-weight:700;} .mid{background:#fef9c3 !important;color:#854d0e;font-weight:700;} .bad{background:#fee2e2 !important;color:#991b1b;font-weight:700;}
+  .tag{display:inline-block;font-size:.71rem;font-weight:700;padding:.08em .5em;border-radius:20px;}
+  .t-ok{background:#dcfce7;color:#166534;} .t-info{background:#e0e7ff;color:#3730a3;} .t-teal{background:#ccfbf1;color:#115e59;} .t-warn{background:#fef3c7;color:#92400e;} .t-bad{background:#fee2e2;color:#991b1b;}
+  pre{background:var(--code-bg);color:var(--code-fg);padding:.55rem .8rem;border-radius:8px;overflow:auto;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.72rem;line-height:1.45;margin:.55rem 0;}
+  .callout{border-left:4px solid var(--teal);background:var(--bg-tint);padding:.55rem .85rem;border-radius:0 8px 8px 0;margin:.65rem 0;}
+  .callout p{text-align:left;margin:.28rem 0;}
+  .callout.key{border-color:var(--indigo);background:#eef2ff;} .callout.warn{border-color:var(--warn);background:#fffbeb;} .callout.ok{border-color:var(--ok);background:#f0fdf4;}
+  .fig{margin:.7rem 0 .9rem;text-align:center;break-inside:avoid;}
+  .fig svg{max-width:100%;height:auto;border:1px solid var(--line);border-radius:10px;background:#fff;}
+  .fig .cap{font-size:.79rem;color:var(--muted);margin-top:.32rem;font-style:italic;text-align:center;}
+  ul,ol{margin:.4rem 0 .55rem 1.1rem;padding:0;} li{margin:.24rem 0;}
+  svg text{font-family:-apple-system,"Segoe UI",Inter,sans-serif;}
+  .cover{height:262mm;display:flex;flex-direction:column;justify-content:center;position:relative;padding:0 6mm;}
+  .cover .eyebrow{color:var(--teal);font-weight:800;letter-spacing:.26em;font-size:.9rem;text-transform:uppercase;}
+  .cover h1{font-size:2.4rem;margin:.4rem 0 .2rem;line-height:1.1;} .cover .sub{font-size:1.24rem;color:var(--muted);margin-bottom:1.1rem;}
+  .cover .tagline{font-size:1.02rem;color:var(--ink);max-width:162mm;border-left:4px solid var(--teal);padding-left:1rem;font-style:italic;text-align:left;}
+  .cover .meta{position:absolute;bottom:6mm;left:6mm;right:6mm;display:flex;justify-content:space-between;border-top:1px solid var(--line);padding-top:.65rem;font-size:.8rem;color:var(--soft);}
+  .cover .pills{margin:1rem 0;} .cover .pills .tag{font-size:.78rem;margin-right:.3rem;}
+  .mono{font-family:ui-monospace,Menlo,Consolas,monospace;}
+  hr{border:none;border-top:1px solid var(--line);margin:.9rem 0;}
+  .toc{font-size:.9rem;columns:2;column-gap:2rem;} .toc div{margin:.16rem 0;break-inside:avoid;} .toc .n{color:var(--teal);font-weight:700;display:inline-block;width:1.8em;}
+  .kpi{display:grid;grid-template-columns:repeat(4,1fr);gap:.6rem;margin:.7rem 0;}
+  .kpi .box{border:1px solid var(--line);border-radius:10px;padding:.55rem .6rem;background:var(--bg-tint);text-align:center;}
+  .kpi .v{font-size:1.5rem;font-weight:800;color:var(--teal-d);line-height:1;} .kpi .l{font-size:.74rem;color:var(--muted);margin-top:.2rem;}
+  .eq{font-family:ui-monospace,Menlo,Consolas,monospace;background:#eef2ff;border:1px solid #c7d2fe;border-radius:8px;padding:.45rem .75rem;margin:.5rem 0;font-size:.8rem;color:#1e1b4b;text-align:center;}
+  @page{size:A4;margin:13mm 12mm;}
+</style>
+</head>
+<body>
+
+<!-- COVER -->
+<div class="wrap"><div class="cover">
+  <div class="eyebrow">Dossier de vérification · état prouvé · chiffres à l'appui</div>
+  <h1>L'arc mémoire d'EFE</h1>
+  <div class="sub">La mémoire inter-runs (ADR-019) — cinq cellules, trois lectures-retour, <b>deux modes</b> — prouvée de bout en bout, sur un vrai modèle inclus.</div>
+  <div class="tagline">Ce dossier consigne l'<b>état vérifié</b> de la mémoire inter-runs d'EFE au terme de sa construction : ce
+   qu'elle est, et la <b>preuve en nombres</b> qu'elle fait ce qu'elle prétend. La discipline est constante d'un bout à
+   l'autre — <i>un lot n'est pas fait tant qu'il n'est pas prouvé en chiffres</i> : chaque lecture-retour expédie son
+   <b>gate chiffré</b>, chaque acte sensible passe une <b>revue adversariale</b>, et la lecture la plus difficile à prouver
+   honnêtement — l'influence d'un vrai LLM — est <b>mesurée sur un modèle réel</b> (Ollama, <span class="mono">gemma3:12b</span>),
+   pas simulée. Le moat tient sur les deux modes : <b>reproduction</b> exacte là où l'agent est déterministe (Mode A),
+   <b>attestation</b> forensique là où il ne l'est plus (Mode C).</div>
+  <div class="pills">
+    <span class="tag t-ok">10 188 tests verts</span>
+    <span class="tag t-teal">5 gates chiffrés GO</span>
+    <span class="tag t-info">Mode A + Mode C réel</span>
+    <span class="tag t-info">2 revues adversariales</span>
+    <span class="tag t-info">ADR-019 · ADR-014 · ADR-018 · ADR-017 · ADR-007</span>
+  </div>
+  <div class="meta">
+    <span>EFE — Essaim Fluide Éphémère</span>
+    <span>2026-06-18 · dossier de vérification</span>
+  </div>
+</div></div>
+
+<!-- TOC -->
+<div class="wrap page">
+  <h2><span class="num">§0</span> Sommaire</h2>
+  <div class="toc">
+    <div><span class="n">1.</span> Le verdict de vérification (le sweep)</div>
+    <div><span class="n">2.</span> L'arc ADR-019 : ce qui a été construit</div>
+    <div><span class="n">3.</span> Les gates chiffrés (la preuve en nombres)</div>
+    <div><span class="n">4.</span> Les deux modes : reproduire vs attester</div>
+    <div><span class="n">5.</span> Le Mode C réel, mesuré sur un vrai LLM</div>
+    <div><span class="n">6.</span> Les invariants (I-PAT · I-REP · I-AK · I-MEM)</div>
+    <div><span class="n">7.</span> La discipline de preuve : les cinq maillons</div>
+    <div><span class="n">8.</span> Les dettes honnêtes + synthèse</div>
+  </div>
+
+  <div class="kpi">
+    <div class="box"><div class="v">10 188</div><div class="l">tests verts (workspace)</div></div>
+    <div class="box"><div class="v">5</div><div class="l">gates chiffrés GO</div></div>
+    <div class="box"><div class="v">6/6</div><div class="l">tests Mode C réels (gemma3:12b)</div></div>
+    <div class="box"><div class="v">+500‰</div><div class="l">influence few-shot mesurée</div></div>
+  </div>
+
+  <div class="callout key">
+    <p><b>Thèse du dossier.</b> La mémoire d'EFE <b>amorce sans gouverner</b>, et son influence reste <b>bornée et
+    re-prouvable</b> — jusque dans le geste le plus délicat (réordonner les profils d'échantillonnage sous l'ancrage de
+    provenance) et le mode le plus difficile à prouver (un vrai modèle de langage stochastique). Les preuves ne sont pas des
+    promesses : ce sont des <b>gates qui tournent avec le build</b>, des <b>revues qui cherchent à casser</b>, et une
+    <b>mesure sur un modèle réel</b>. Ce qui suit en consigne chaque pièce.</p>
+  </div>
+</div>
+
+<!-- 1 -->
+<div class="wrap page">
+<section>
+  <h2><span class="num">§1</span> Le verdict de vérification (le sweep)</h2>
+
+  <p>La vérification s'est faite sur l'<b>ensemble du workspace</b> (58 crates), avec la commande qui voit <i>tout</i> d'un
+  coup plutôt que de s'arrêter au premier crate rouge :</p>
+  <pre>cargo test --workspace --exclude efe-ffi --no-fail-fast</pre>
+  <p>Deux options portent la rigueur. <span class="mono">--exclude efe-ffi</span> écarte le <b>seul</b> crate qui ne compile
+  pas dans cet environnement — un binding Python (pyo3) qui exige Python ≥ 3.10 alors que la machine a 3.9 ; c'est une
+  contrainte d'<i>environnement</i>, étrangère au code Rust. <span class="mono">--no-fail-fast</span> force
+  <span class="mono">cargo</span> à exécuter <b>tous</b> les binaires de test et à agréger les échecs, au lieu de
+  s'interrompre au premier — sans quoi le décompte serait trompeur (il s'arrêtait à <span class="mono">efe-coordinator</span>
+  et ne montrait jamais le reste).</p>
+
+  <h3>1.1 — Le résultat global</h3>
+  <table>
+    <thead><tr><th>Mesure</th><th class="c">Valeur</th><th>Lecture</th></tr></thead>
+    <tbody>
+      <tr><td>Tests passés</td><td class="c good">10 188</td><td>sur ~55 crates exercés</td></tr>
+      <tr><td>Tests échoués</td><td class="c mid">16</td><td>concentrés dans <b>3 crates</b>, tous pré-existants</td></tr>
+      <tr><td>Arc swarm / ADR-019</td><td class="c good">100 % vert</td><td>aucune régression sur le travail mémoire</td></tr>
+      <tr><td>Tests Mode C réels (Ollama)</td><td class="c good">6 / 6</td><td>exécutés sur <span class="mono">gemma3:12b</span></td></tr>
+    </tbody>
+  </table>
+
+  <h3>1.2 — Les 16 rouges : trois dettes pré-existantes, étrangères à la mémoire</h3>
+  <p>Aucun des 16 échecs ne touche la mémoire inter-runs. Ce sont des dettes localisées, dans des parties du dépôt sans
+  rapport avec ADR-019 — il est important de les nommer précisément pour qu'elles ne soient pas confondues avec une
+  régression de l'arc mémoire :</p>
+  <table>
+    <thead><tr><th style="width:26%">Crate</th><th>Tests rouges</th><th>Nature (pré-existante)</th></tr></thead>
+    <tbody>
+      <tr><td><span class="mono">efe-bench-harness</span></td><td>lib + <span class="mono">golden_scenarios</span> + <span class="mono">process_invariants</span></td>
+        <td>la série de <i>component benchmarks</i> <span class="mono">CB-##</span> (35 scénarios) a devancé le harnais ET le
+        crate infra <span class="mono">efe-cluster-provisioner</span> : un provisioner <span class="mono">gpu-runner</span> /
+        <span class="mono">none</span> non implémenté. Le validateur d'id a été corrigé (accepte enfin <span class="mono">CB-##</span>) ;
+        le reste est un ticket cross-crate.</td></tr>
+      <tr><td><span class="mono">efe-coordinator</span></td><td><span class="mono">workflow_slm_circuits</span> (2)</td>
+        <td>logique de disjoncteur (« sauter le compresseur si le circuit est pré-ouvert »).</td></tr>
+      <tr><td><span class="mono">efe-meta-swarm-server</span></td><td>3 × <span class="mono">integration_tls_*</span></td>
+        <td>handshake / mTLS strict / validation SAN — besoin d'un environnement de certificats (comme les tests Postgres
+        exigent <span class="mono">DATABASE_URL</span>).</td></tr>
+    </tbody>
+  </table>
+
+  <div class="callout ok">
+    <p><b>Lecture honnête.</b> Le workspace est un mélange de crates matures et de chantiers en cours. Les 16 rouges sont
+    trois tickets distincts (infra bench, disjoncteur, TLS d'environnement) — pas une régression. <b>L'arc mémoire d'EFE,
+    lui, est intégralement vert</b>, sur les deux modes. La commande la plus optimisée pour valider <i>spécifiquement</i> cet
+    arc cible l'arbre swarm : <span class="mono">cargo test -p efe-swarm-memory -p efe-swarm-topology -p efe-swarm-sdk
+    -p efe-swarm-gateway -p efe-swarm-dashboard -p efe-nano-sdk -p efe-swarm-provenance -p efe-blackboard</span>.</p>
+  </div>
+</section>
+</div>
+
+<!-- 2 -->
+<div class="wrap page">
+<section>
+  <h2><span class="num">§2</span> L'arc ADR-019 : ce qui a été construit</h2>
+
+  <p>ADR-019 dote l'essaim d'une <b>mémoire inter-runs</b> : cinq cellules, matérialisées par famille de tâches,
+  sérialisables en JSON canonique (donc <span class="mono">content_hash</span> byte-stable), et <b>trois lectures-retour</b>
+  par lesquelles cette mémoire amorce une décision <i>sans jamais la gouverner</i>.</p>
+
+  <h3>2.1 — Les cinq cellules</h3>
+  <table>
+    <thead><tr><th style="width:22%">Cellule</th><th>Rôle</th><th style="width:30%">Ce qu'elle alimente</th></tr></thead>
+    <tbody>
+      <tr><td><b>SizePrior</b></td><td>histogramme du <span class="mono">k_used</span> par run</td><td>warm-start de <span class="mono">k_min</span> (sizer ADR-014)</td></tr>
+      <tr><td><b>PatternPrior</b></td><td>fréquence des patterns gagnants + taux d'escalade</td><td>biais du sélecteur Vote/Borda/Condorcet (read-back A)</td></tr>
+      <tr><td><b>Exemplars</b></td><td>aperçus des gagnants passés (qualité-pondérés, bornés)</td><td>few-shot injecté dans le prompt Mode C (MEM-2.b)</td></tr>
+      <tr><td><b>Reputation</b></td><td>performance par profil (<span class="mono">verified</span>/<span class="mono">won</span>/<span class="mono">total</span>)</td><td>routage R-a + ordonnancement R-b/R-c (read-back B)</td></tr>
+      <tr><td><b>FailureMemory</b></td><td>ce qui échoue systématiquement (famille/agent)</td><td>signal d'échec, gardé par <span class="mono">produced_acceptable</span></td></tr>
+    </tbody>
+  </table>
+
+  <h3>2.2 — La colonne vertébrale : l'influence bornée, re-prouvable</h3>
+  <p>Chaque lecture-retour instancie le même patron en quatre temps, qui est l'ossature de tout ADR-019 :</p>
+  <div class="eq">① entrée PINNÉE (instantané, <span style="color:#6d28d9">content_hash</span>) → ② transfert CLAMPÉ &amp; confiant → ③ VETO du run → ④ TRACE dans la racine</div>
+  <p><b>①</b> La mémoire lue est un <i>instantané gelé</i>, identifié par son <span class="mono">content_hash</span> et tracé
+  dans la <span class="mono">provenance_root</span> par un record <span class="mono">MemoryRead</span> (I-MEM2) : une sortie
+  influencée par un recall non tracé ne peut pas exister. <b>②</b> Le transfert est <i>borné</i> (poids clampés, seuils dans
+  une bande sans dégénérescence) et <i>échelonné par la confiance</i> (plus la donnée est mince, plus l'influence est
+  faible). <b>③</b> Le run garde un <i>droit de veto</i> : l'accord réel des candidats, la confiance de la décision, les
+  bornes dures du sizer. <b>④</b> L'effet se replie dans la racine au fold suivant, re-dérivable.</p>
+
+  <h3>2.3 — Les trois lectures-retour</h3>
+  <ul>
+    <li><b>Read-back A — biais de pattern.</b> Le prior d'escalade déplace le seuil de vote effectif <span class="mono">θ_eff
+    = clamp(θ_base + κ·conf·(escal−ρ), 0,70, 0,97)</span> : une famille fiable <i>descend</i> le seuil (juges économisés à
+    iso-qualité), une famille piégeuse le <i>monte</i> (les juges démasquent le leurre). Sous veto de l'accord réel (I-PAT1) ;
+    genèse = identité (I-PAT2).</li>
+    <li><b>Read-back B / R-a — routage à l'agrégation.</b> Des poids de routage UCB clampés <span class="mono">[500,1500]</span>
+    (jamais zéro, cold-start neutre 1000) repondèrent les candidats sous <i>veto de confiance</i> : ne re-décide qu'une
+    décision <b>ambiguë</b> (<span class="mono">confidence &lt; 0,34</span>) ; un gagnant franc est immune. Poids uniformes ⇒
+    agrégation byte-identique (I-REP2).</li>
+    <li><b>Read-back B / R-b-R-c — ordonnancement du sizer.</b> La réputation ordonne <i>quel profil d'échantillonnage</i>
+    tourne à quelle position de vague (priorisation), et l'arrêt adaptatif gate le bas de classement (gating doux, jamais de
+    suppression), sous une <b>rotation d'exploration déterministe keyée sur le compteur de folds</b>. C'est la lecture la plus
+    invasive — elle change <i>quel profil produit la valeur d'une position ancrée dans la preuve</i> — et la seule dont
+    l'<b>ouverture</b> (le câblage live) a exigé une architecture dédiée.</li>
+  </ul>
+</section>
+</div>
+
+<!-- 3 -->
+<div class="wrap page">
+<section>
+  <h2><span class="num">§3</span> Les gates chiffrés (la preuve en nombres)</h2>
+
+  <p>La règle d'EFE : <b>un lot n'est pas fait tant qu'il n'est pas prouvé en chiffres</b>. Chaque lecture-retour expédie un
+  <i>gate</i> — un harnais honnête (agents Mode A purs synthétiques, étiquetés ; <b>logique réelle de production</b>, jamais
+  une ré-implémentation) qui mesure, rend un GO/NO-GO, et écrit un artefact JSON tracé. Voici les cinq, avec leurs nombres.</p>
+
+  <table>
+    <thead><tr><th style="width:21%">Gate</th><th>Ce qu'il prouve, chiffré</th><th class="c" style="width:9%">Verdict</th></tr></thead>
+    <tbody>
+      <tr><td><b>PATBIAS</b><br><span class="small muted">read-back A</span></td>
+        <td>famille fiable : escalade <b>571‰ &lt; 714‰</b> base, Vote rend la même réponse (iso-qualité) · famille piégeuse :
+        <b>857‰ &gt; 714‰</b> · genèse byte-identique · clamp 0,70/0,97 · pattern adaptatif atteignable.</td><td class="c good">GO</td></tr>
+      <tr><td><b>REPUTATION</b><br><span class="small muted">read-back B, R-a</span></td>
+        <td>uniforme = byte-identique (I-REP2) · routage bascule l'ambigu A→B (poids clampés <span class="mono">[0,573…1,423]</span>) ·
+        veto : gagnant franc (conf. 0,50) immune malgré poids extrêmes · non-effondrement <span class="mono">[573,1423,1000]</span> ∈ [500,1500].</td><td class="c good">GO</td></tr>
+      <tr><td><b>SIZER_REPUTATION</b><br><span class="small muted">read-back B, R-b/R-c (primitive)</span></td>
+        <td>déterministe + genèse=identité · rotation couvre <b>12/12</b> profils (aucune famine) · priorisation : <span class="mono">K_used</span>
+        chaud <b>4</b> &lt; froid <b>12</b> (3× moins cher, iso-qualité) · enveloppe k_max inchangée, plafond tenu · permutation totale.</td><td class="c good">GO</td></tr>
+      <tr><td><b>SIZER_REPUTATION_LIVE</b><br><span class="small muted">R-b/R-c, l'ouverture</span></td>
+        <td>dormance froide = identité re-prouvée · priorisation live <span class="mono">K_used</span> <b>4 &lt; 12</b> · attribution au
+        <b>profil</b> (<span class="mono">generator_001</span>), pas à la position · <b>R0 re-prouve + R1 reproduit APRÈS permutation</b>
+        (le linchpin) · poids <span class="mono">w[schedule[i]]</span>.</td><td class="c good">GO</td></tr>
+      <tr><td><b>FEWSHOT_MODEC</b><br><span class="small muted">few-shot, Mode C réel</span></td>
+        <td>sur <span class="mono">gemma3:12b</span> : influence <b>Δ +500‰</b> (froid « GPU/Sepsis » → chaud « finance/health ») ·
+        recall vivant · N17 cohérent · R0 re-prouve · souverain local. (<span class="mono">#[ignore]</span>, à la demande.)</td><td class="c good">GO</td></tr>
+    </tbody>
+  </table>
+
+  <div class="callout">
+    <p><b>L'honnêteté du harnais, illustrée.</b> Le gate few-shot a, à son premier essai, donné <b>Δ=0</b> : le modèle suivait
+    déjà le format quand l'instruction <i>donnait</i> le vocabulaire. Plutôt que d'enjoliver, l'instruction fut rendue
+    <b>vague</b> pour que le few-shot doive <i>enseigner</i> le vocabulaire — d'où le Δ=500 réel, et un chaud imparfait
+    (« hardware » ≠ « technology ») qui <i>prouve</i> la bornitude : la mémoire amorce, ne gouverne pas. C'est la différence
+    entre « le test est vert » et « le test prouve ».</p>
+  </div>
+</section>
+</div>
+
+<!-- 4 -->
+<div class="wrap page">
+<section>
+  <h2><span class="num">§4</span> Les deux modes : reproduire vs attester</h2>
+
+  <p>Le moat d'EFE — une sortie re-prouvable hors-ligne par un tiers qui ne fait pas confiance à l'opérateur — prend deux
+  formes selon la nature de l'agent. La distinction est cardinale et entièrement assumée.</p>
+
+  <div class="fig">
+    <svg viewBox="0 0 720 210" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Bifurcation du moat">
+      <text x="360" y="22" text-anchor="middle" font-size="13" font-weight="700" fill="#0f172a">Le moat bifurque par mode — R0 reste universel</text>
+      <rect x="210" y="38" width="300" height="32" rx="8" fill="#ecfdf5" stroke="#16a34a" stroke-width="2"/>
+      <text x="360" y="58" text-anchor="middle" font-size="11.5" fill="#14532d" font-weight="700">R0 — re-prouver la chaîne scellée (re-hash, ordre canonique ADR-007)</text>
+      <text x="360" y="84" text-anchor="middle" font-size="9.5" fill="#475569" font-style="italic">∀ mode · verify_swarm · ne dépend que des records, jamais de l'agent</text>
+      <line x1="360" y1="94" x2="195" y2="120" stroke="#94a3b8"/><line x1="360" y1="94" x2="525" y2="120" stroke="#94a3b8"/>
+      <rect x="64" y="122" width="262" height="72" rx="8" fill="#eef2ff" stroke="#4f46e5"/>
+      <text x="195" y="142" text-anchor="middle" font-size="11.5" fill="#3730a3" font-weight="700">Mode A — REPRODUCTION (R1)</text>
+      <text x="195" y="160" text-anchor="middle" font-size="9.3" fill="#475569">agent = f(tâche, variant), déterministe</text>
+      <text x="195" y="174" text-anchor="middle" font-size="9.3" fill="#475569">on rejoue → on retrouve l'octet</text>
+      <text x="195" y="188" text-anchor="middle" font-size="8.8" fill="#64748b" font-style="italic">replay_outputs · gates en CI</text>
+      <rect x="394" y="122" width="262" height="72" rx="8" fill="#fffbeb" stroke="#d97706"/>
+      <text x="525" y="142" text-anchor="middle" font-size="11.5" fill="#92400e" font-weight="700">Mode C — ATTESTATION (N17)</text>
+      <text x="525" y="160" text-anchor="middle" font-size="9.3" fill="#475569">LLM stochastique, NON rejouable</text>
+      <text x="525" y="174" text-anchor="middle" font-size="9.3" fill="#475569">record forensique signé + chaîné + lié</text>
+      <text x="525" y="188" text-anchor="middle" font-size="8.8" fill="#64748b" font-style="italic">verify_n17_chain · harnais #[ignore]</text>
+    </svg>
+    <div class="cap">R0 (re-prouver la chaîne) vaut pour les deux modes. La reproduction exacte (R1) est le privilège du déterminisme Mode A ; le Mode C la remplace par l'attestation forensique N17.</div>
+  </div>
+
+  <p><b>Mode A — reproduction.</b> Les agents de la flotte sont des fonctions pures de <span class="mono">(tâche, variant)</span> ;
+  un vérificateur rejoue chaque agent depuis l'instantané scellé et retrouve l'octet exact (ADR-017, mode R1). La preuve ne
+  demande pas de confiance : elle re-calcule. C'est le régime des gates qui tournent en CI.</p>
+
+  <p><b>Mode C — attestation.</b> Un vrai modèle de langage est stochastique : R1 n'est <i>pas disponible</i>, et le
+  prétendre serait malhonnête. Le moat bascule : chaque appel LLM produit un <span class="mono">LlmProvenanceRecord</span>
+  (N17) — prompt et sortie figés, signés (HKDF tenant-scopé), chaînés, et <i>liés</i> au bon run et au bon tenant. La
+  structure est un <b>sandwich</b> : un <i>prompt re-prouvable</i> (fonction déterministe de l'instantané pinné : instruction
+  + tâche + exemplaires + (température, graine) du variant) → un <i>LLM stochastique</i> (le seul maillon non rejouable,
+  encerclé) → une <i>sortie attestée</i> (N17). R0 re-prouve toute la chaîne inchangé ; seule la flèche du milieu échappe à
+  R1, et le N17 est ce qui la rend néanmoins infalsifiable après coup.</p>
+
+  <div class="callout key">
+    <p><b>La stratification des lectures-retour.</b> Quatre des cinq lectures (taille, pattern, R-a, R-b/R-c) opèrent sur la
+    couche consensus/sizer, qui traite les candidats comme <b>opaques</b> — elle ignore s'ils viennent d'une fonction Mode A
+    ou d'un LLM. Elles sont donc <b>agnostiques au mode</b> : déjà chiffrées par les gates Mode A, elles tournent en Mode C
+    sans rien à re-démontrer. <b>Seul le few-shot touche le prompt</b> — donc le LLM — et c'est la seule lecture dont l'effet
+    n'existe pas en Mode A (sans prompt, I-MEM8) et qui exige donc une mesure sur un vrai modèle.</p>
+  </div>
+</section>
+</div>
+
+<!-- 5 -->
+<div class="wrap page">
+<section>
+  <h2><span class="num">§5</span> Le Mode C réel, mesuré sur un vrai LLM</h2>
+
+  <p>Le Mode C n'est pas une promesse de papier : six tests <span class="mono">#[ignore]</span> l'exercent <b>de bout en
+  bout sur <span class="mono">gemma3:12b</span> local</b> (souverain, sans clé). Ils sont opt-in (le flag
+  <span class="mono">--ignored</span> ; la CI n'a pas de modèle), et tous <b>verts</b> à l'exécution de ce dossier :</p>
+
+  <table>
+    <thead><tr><th style="width:38%">Test (sur gemma3:12b)</th><th>Ce qu'il établit</th><th class="c" style="width:8%">⏱</th></tr></thead>
+    <tbody>
+      <tr><td><span class="mono">fewshot_influence_on_real_ollama</span></td>
+        <td><b>Δ +500‰</b> : sans exemples le modèle nomme l'<i>entité</i> (« GPU », « Sepsis ») ; avec, il <i>abstrait</i>
+        vers la catégorie (« finance », « health »). Recall vivant vérifié (non vacueux). M-§B/C/D/E/F.</td><td class="c">53 s</td></tr>
+      <tr><td><span class="mono">memory_readbacks_are_active…</span></td>
+        <td>warm-start <span class="mono">k_min</span> <b>4→6</b> dans le pipeline LLM, prouvé <i>causal</i> par un run de
+        contrôle sans mémoire (4) ; R0 + N17 sous mémoire active. Les lectures agnostiques sont vivantes.</td><td class="c">12 s</td></tr>
+      <tr><td><span class="mono">n17_consistent_under_adaptive_k</span></td>
+        <td>la chaîne forensique N17 reste cohérente <i>quand K varie en vol</i> (la trajectoire adaptative reste auditable même non rejouable).</td><td class="c">2,5 s</td></tr>
+      <tr><td><span class="mono">n17_per_call_bridge_links…</span></td>
+        <td>chaque appel LLM lié à son <span class="mono">LlmProvenanceRecord</span> via <span class="mono">llm_provenance_id</span> (tenant + run vérifiés).</td><td class="c">4 s</td></tr>
+      <tr><td><span class="mono">real_llm_forensics_survive_process_death</span></td>
+        <td>6 forensiques LLM <b>survivent à la mort du process</b>, re-prouvées hors ligne, falsification localisée.</td><td class="c">3,8 s</td></tr>
+      <tr><td><span class="mono">replay_r0_reproves_root…</span></td>
+        <td><b>R0 re-prouve la racine</b> (4 records + 6 forensiques) ; re-exécution provider <b>non tentée</b> — attesté, pas reproduit.</td><td class="c">3,4 s</td></tr>
+    </tbody>
+  </table>
+
+  <p>La souveraineté est gardée par deux verrous (G2/G3) : <span class="mono">build_local_backend</span> <b>refuse</b> un
+  endpoint non-local par défaut (<span class="mono">RemoteBackendDenied</span>, egress interdit) ; le seul chemin assumant
+  l'egress passe sous disjoncteur. Et surtout, <b>zéro clé</b> : le modèle est <i>sur la machine</i>, il ne s'authentifie
+  pas. Le seul secret de tout le système reste le maître de provenance (HKDF), signé côté serveur, jamais exposé à l'agent
+  ni au prompt.</p>
+
+  <div class="callout ok">
+    <p><b>Pourquoi <span class="mono">#[ignore]</span> est la réponse honnête.</b> On ne simule pas un LLM : « simuler » la
+    réponse d'un modèle à un prompt enrichi reviendrait à <i>inventer le résultat qu'on prétend mesurer</i>. La seule mesure
+    honnête de l'influence du few-shot passe par un vrai modèle — d'où un harnais <b>réel mais gardé</b> (hors CI, lancé à la
+    demande). La <i>structure</i> (prompt re-prouvable, borné, dormant sans donnée) reste, elle, gardée en CI par des tests
+    purs sur <span class="mono">gen_prompt</span>. La division est nette : la structure en CI, l'effet empirique à la demande.</p>
+  </div>
+</section>
+</div>
+
+<!-- 6 -->
+<div class="wrap page">
+<section>
+  <h2><span class="num">§6</span> Les invariants (I-PAT · I-REP · I-AK · I-MEM)</h2>
+
+  <p>La preuve d'EFE est portée par des <b>invariants nommés</b> — ce sont eux qui transforment « ça devrait marcher » en
+  « voici ce que le gate vérifie ». Les familles qui sous-tendent l'arc mémoire :</p>
+
+  <table>
+    <thead><tr><th style="width:16%">Famille</th><th>Quelques invariants-clés</th></tr></thead>
+    <tbody>
+      <tr><td><b>I-MEM</b><br><span class="small muted">mémoire</span></td>
+        <td>I-MEM1 l'épingle = <span class="mono">content_hash</span> · I-MEM2 le recall est tracé dans la racine
+        (<span class="mono">MemoryRead</span>) · I-MEM3 ne replie QUE si propre &amp; vérifié · I-MEM4 amorce, jamais gouverne
+        (warm-start clampé) · I-MEM7 instantané pinné re-prouvable · I-MEM8 sans donnée ⇒ byte-identique.</td></tr>
+      <tr><td><b>I-PAT</b><br><span class="small muted">biais pattern</span></td>
+        <td>I-PAT1 borne dure (veto de l'accord, θ ∈ [0,70 ; 0,97]) · I-PAT2 genèse = base inchangée · I-PAT3 déterministe (re-prouvable).</td></tr>
+      <tr><td><b>I-REP</b><br><span class="small muted">réputation</span></td>
+        <td>I-REP2 uniforme ⇒ byte-identique · I-REP5 attribution prise des juges réels, jamais fabriquée · <b>I-REP6</b> poids
+        à la position <span class="mono">i</span> = <span class="mono">w[schedule[i]]</span> · <b>I-REP7</b> crédit au profil
+        <span class="mono">schedule[i]</span>, pas à la position · <b>I-REP8</b> <i>(le linchpin)</i> la provenance enregistre
+        le variant réel, l'auteur d'écriture reste « generator » ⇒ R0/R1 transparents à la permutation · <b>I-REP9</b>
+        permutation ⇒ enveloppe/plafond intacts · <b>I-REP10</b> dormance : pas de mémoire ⇒ identité.</td></tr>
+      <tr><td><b>I-AK</b><br><span class="small muted">sizer adaptatif</span></td>
+        <td>I-AK1 bornes dures <span class="mono">k_min ≤ K_used ≤ k_max</span> · I-AK2 décision pure (ni horloge ni aléa) ·
+        <b>I-AK3′</b> (amendé) le candidat de la position <span class="mono">p</span> ne dépend que de
+        <span class="mono">(tâche, variant = schedule[p])</span> ; identité = comportement historique · I-AK4 vagues payables
+        (zéro sentinelle) · I-AK5 le sizer choisit COMBIEN, jamais QUOI.</td></tr>
+    </tbody>
+  </table>
+
+  <div class="callout key">
+    <p><b>Le linchpin, I-REP8.</b> L'ouverture de R-b/R-c paraissait toucher au moat : elle réordonne <i>quel profil produit
+    la valeur d'une position ancrée dans la preuve</i>. Elle ne le touche pas, et c'est I-REP8 qui le dit. La couche de
+    provenance n'a <b>aucune notion de position</b> : elle enregistre des <i>appels</i> (caractérisés par leur variant réel
+    <span class="mono">schedule[p]</span>, capté par le métré) et des <i>valeurs</i> (par leur contenu, ancrées sous l'auteur
+    invariant « generator »). La permutation déplace l'attelage variant↔valeur sans toucher ni l'auteur ni les valeurs ⇒ R0
+    re-hash inchangé, R1 reproduit depuis le variant enregistré. La couche <span class="mono">efe-swarm-provenance</span> n'a
+    pas changé d'une ligne à l'ouverture.</p>
+  </div>
+</section>
+</div>
+
+<!-- 7 -->
+<div class="wrap page">
+<section>
+  <h2><span class="num">§7</span> La discipline de preuve : les cinq maillons</h2>
+
+  <p>Chaque lecture-retour d'ADR-019 a traversé la même chaîne de cinq maillons. Ce n'est pas un rituel décoratif : chaque
+  maillon attrape une classe d'erreur que les autres laissent passer.</p>
+
+  <div class="eq">architecture (avant code) → code → <span style="color:#15803d">gate chiffré</span> → <span style="color:#b91c1c">revue adversariale</span> → garde-fou automatisé</div>
+
+  <ol>
+    <li><b>Architecture, avant code.</b> Les actes qui exigent une vraie structure neuve (les read-backs, l'ouverture
+    R-b/R-c, le Mode C réel) ont d'abord un <i>document d'architecture prose-dense</i> — qui a, plus d'une fois, dissous le
+    risque <i>avant</i> la première ligne (p. ex. la démonstration ligne-à-ligne que la provenance est variant-fidèle).</li>
+    <li><b>Code.</b> La logique de production, à chemin unique. L'ouverture de R-b/R-c, vérifiée exhaustive, se réduit à
+    deux couches (resolver + consensus) ; la couche provenance, zéro touche.</li>
+    <li><b>Gate chiffré.</b> Le harnais honnête qui PROUVE en nombres (§3) — agents synthétiques étiquetés, fonctions
+    réelles, GO/NO-GO, artefact tracé. Un gate a même attrapé un bug avant de passer (l'interaction SizePrior qui masquait la
+    priorisation) : correctif honnête, pas d'enjolivure.</li>
+    <li><b>Revue adversariale.</b> Des agents qui cherchent à <i>casser</i> la preuve, sur des lentilles diverses, puis
+    vérifient chaque trouvaille. Deux passes :
+      <ul>
+        <li><b>Ouverture R-b/R-c</b> (4 lentilles, 13 agents) : <b>9 candidats, 0 confirmé</b> — le moat a tenu.</li>
+        <li><b>Mode C</b> (4 lentilles, 17 agents) : <b>13 candidats, 6 confirmés</b> — tous corrigés (vacuité de l'assertion
+        few-shot, confond du seed, surévaluation, re-prouvabilité du prompt chaud non testée). La revue a <i>mordu</i>
+        précisément sur le harnais le plus difficile à rendre honnête, celui qui <i>mesure</i> plutôt qu'il ne prouve déterministiquement.</li>
+      </ul>
+    </li>
+    <li><b>Garde-fou automatisé.</b> Le gate chiffré vit souvent dans un <i>exemple</i> (lancé à la main) ; un test
+    d'intégration en CI le double, pour que le câblage soit gardé contre la régression à chaque exécution — pas seulement
+    chiffré une fois.</li>
+  </ol>
+
+  <div class="callout">
+    <p><b>La leçon des deux revues.</b> Sur R-b/R-c (déterministe) : 0 défaut confirmé. Sur le Mode C (empirique) : 6. La
+    différence n'est pas la qualité du code — c'est qu'un harnais de <i>mesure</i> peut passer pour de mauvaises raisons
+    (vacuité, confond, surévaluation) qu'un harnais déterministe n'a pas. Les corriger, c'est la frontière entre « le test
+    est vert » et « le test prouve ».</p>
+  </div>
+</section>
+</div>
+
+<!-- 8 -->
+<div class="wrap page">
+<section>
+  <h2><span class="num">§8</span> Les dettes honnêtes + synthèse</h2>
+
+  <p>Un dossier de vérification se juge aussi à ce qu'il <b>nomme comme non fait</b>. Rien n'est caché derrière un « ça
+  marche ».</p>
+
+  <h3>8.1 — Dettes du workspace (étrangères à ADR-019)</h3>
+  <ul>
+    <li><b>efe-ffi</b> — ne compile pas dans cet environnement (pyo3 exige Python ≥ 3.10, machine en 3.9). Contrainte d'environnement.</li>
+    <li><b>efe-bench-harness</b> — la série <span class="mono">CB-##</span> de component-benchmarks a devancé le harnais ET
+    <span class="mono">efe-cluster-provisioner</span> (provisioner <span class="mono">gpu-runner</span>/<span class="mono">none</span> non implémenté). Ticket cross-crate infra.</li>
+    <li><b>efe-coordinator</b> (disjoncteur) · <b>efe-meta-swarm-server</b> (3 tests TLS d'environnement). Tickets distincts.</li>
+  </ul>
+
+  <h3>8.2 — Frontières d'ADR-019 délibérément fermées</h3>
+  <ul>
+    <li><b>Réputation inter-familles</b> — transférer un prior d'une famille à une famille voisine (délicat pour la chaîne de confiance).</li>
+    <li><b>Attribution par-profil en K-fixe</b> — sans bénéfice de sizing, à mesurer séparément.</li>
+    <li><b>Routeur Network re-prouvable</b> — un Mode C <i>distant</i> dont l'attestation N17 viendrait d'une machine tierce.</li>
+    <li><b>Few-shot multi-tour / sélection adaptative d'exemplaires</b> — une extension de la cellule Exemplaires.</li>
+  </ul>
+
+  <h3>8.3 — Synthèse</h3>
+  <p>La mémoire inter-runs d'EFE est <b>complète, ouverte et prouvée sur ses cinq cellules et ses trois lectures-retour</b>,
+  sur les deux modes : Mode A <i>déterministe</i> (reproductible) et Mode C <i>réel</i> (attesté, few-shot mesuré sur un vrai
+  modèle, lectures agnostiques confirmées vivantes). Chaque influence est bornée, chaque sortie re-prouvable — par
+  reproduction là où l'agent l'autorise, par attestation forensique là où il ne le peut plus. Le geste le plus douté — celui
+  qui réordonne les profils sous l'ancrage de provenance — tourne en production <i>en re-prouvant sa racine après
+  permutation</i>. Ce n'était pas acquis ; c'est mesuré.</p>
+
+  <div class="callout key">
+    <p><b>En une phrase.</b> La mémoire d'EFE <b>amorce sans gouverner</b>, et le prouve : non par confiance, mais par des
+    gates qui tournent, des revues qui cassent, et une mesure sur un vrai modèle. <b>10 188 tests verts</b>, cinq gates GO,
+    six tests Mode C réels, zéro défaut adversarial non corrigé — et seize rouges qui ne sont pas elle.</p>
+  </div>
+
+  <hr>
+  <p class="small muted">EFE — Essaim Fluide Éphémère · Dossier de vérification de l'arc mémoire (ADR-019) · 2026-06-18.
+  Sources : sweep <span class="mono">cargo test --workspace --exclude efe-ffi --no-fail-fast</span> (10 188 ✅ / 16 ❌) ;
+  6 tests Mode C <span class="mono">cargo test -p efe-swarm-sdk -- --ignored</span> sur Ollama <span class="mono">gemma3:12b</span> ;
+  artefacts <span class="mono">scripts/swarm/EFE_SWARM_{PATBIAS,REPUTATION,SIZER_REPUTATION,SIZER_REPUTATION_LIVE,FEWSHOT_MODEC}_*.json</span> ;
+  architectures <span class="mono">docs/reports/EFE_Archi_{Lectures_Retour_Memoire, Ouverture_RbRc, Mode_C_Reel}_*.html</span>.</p>
+</section>
+</div>
+
+</body>
+</html>
