@@ -129,6 +129,8 @@ pub fn workspace_root() -> PathBuf {
 ///   * `tests/`         (integration tests — never declare canonical consts)
 ///   * `examples/`      (example code — same rationale)
 ///   * `benches/`       (criterion benches — same)
+///   * **tout dir gitignoré** (`git check-ignore`) — p. ex. un mirror `efe-restored/` ou un
+///     backup : on ne scanne que la source vivante et suivie, jamais une copie ignorée.
 ///
 /// **Policy** : canonical SOT-eligible consts live ONLY in `*/src/`
 /// trees.  Test / example / bench files MAY contain string literals
@@ -166,11 +168,30 @@ fn walk(dir: &Path, out: &mut Vec<PathBuf>) {
             continue;
         }
         if p.is_dir() {
+            // Honore `.gitignore` : on saute les arbres ignorés (p. ex. un mirror `efe-restored/`
+            // ou tout backup gitignoré). Le détecteur SOT ne doit scanner que la source vivante et
+            // suivie — pas une copie ignorée, qui produirait des doublons à 100 % entièrement faux.
+            if is_git_ignored(&p) {
+                continue;
+            }
             walk(&p, out);
         } else if p.extension().and_then(|s| s.to_str()) == Some("rs") {
             out.push(p);
         }
     }
+}
+
+/// `true` si `path` est ignoré par git (`.gitignore`). On délègue à `git check-ignore -q` (exit 0
+/// ⇒ ignoré). Si git est indisponible (exit ≠ 0/1 ou échec de spawn), on **ne saute pas** (repli
+/// sûr : mieux vaut scanner un dir de trop que rater de la source vivante).
+fn is_git_ignored(path: &Path) -> bool {
+    std::process::Command::new("git")
+        .arg("check-ignore")
+        .arg("-q")
+        .arg(path)
+        .status()
+        .map(|s| s.success())
+        .unwrap_or(false)
 }
 
 // ───────────────────────────────────────────────────────────────────
