@@ -638,6 +638,9 @@ fn build_record(
         retry_count: 0,
         retry_outcome: efe_nano_sdk::RetryOutcome::NoRetry,
         time_to_first_token_ms: None,
+        // **RC-1** : ce collecteur autonome n'asserte pas (encore) de barreau
+        // de confiance Mode C distant ; défaut honnête (strictement < R4).
+        compute_attestation: efe_nano_sdk::ComputeAttestation::default(),
     }
 }
 

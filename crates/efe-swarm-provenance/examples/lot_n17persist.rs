@@ -95,6 +95,7 @@ fn synth_n17(prov_u128: u128, tenant: TenantId, swarm: SwarmId, model: &str) -> 
         retry_count: 0,
         retry_outcome: RetryOutcome::NoRetry,
         time_to_first_token_ms: None,
+        compute_attestation: efe_nano_sdk::ComputeAttestation::default(),
     }
 }
 

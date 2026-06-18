@@ -58,9 +58,10 @@ pub use gold::{
 pub use identifier::NanoAgentId;
 pub use limits::ResourceLimits;
 pub use llm_provenance::{
-    AbortReason, Blake3Hash, CacheProvenance, Completeness, CostAccounting, FinishReason,
-    LlmProvenanceRecord, ModelIdentity, ProvenanceError, ProvenanceId, RetryOutcome,
-    SafetyCategory, SafetyFlag, SamplingParams, TokenUsage, ToolCallRecord, ToolCallResultKind,
+    AbortReason, Blake3Hash, CacheProvenance, Completeness, ComputeAttestation, CoSignatureScheme,
+    CostAccounting, EndpointIdentity, FinishReason, LlmProvenanceRecord, ModelIdentity,
+    NodeCoSignature, ProvenanceError, ProvenanceId, RetryOutcome, SafetyCategory, SafetyFlag,
+    SamplingParams, TokenUsage, ToolCallRecord, ToolCallResultKind,
 };
 pub use publisher::{
     CandidateError, CoPublishingError, CoPublishingPolicy, HistoricalKey, Iso3166, IsoError,

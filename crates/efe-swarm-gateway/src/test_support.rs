@@ -68,6 +68,7 @@ pub(crate) fn synthetic_mode_c_run(model: &str) -> (Vec<efe_swarm_provenance::Ag
         retry_count: 0,
         retry_outcome: RetryOutcome::NoRetry,
         time_to_first_token_ms: None,
+        compute_attestation: efe_nano_sdk::ComputeAttestation::default(),
     };
 
     // l'AgentCallRecord Mode C qui RÉFÉRENCE la forensique (le lien), scellé en chaîne.

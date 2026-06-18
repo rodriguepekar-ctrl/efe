@@ -11,6 +11,8 @@ use std::time::Instant;
 use async_trait::async_trait;
 use serde_json::json;
 
+use efe_nano_sdk::ComputeAttestation;
+
 use super::{curl_json, BackendDescriptor, BackendKind, LocalBackend, SamplingParams};
 use crate::n17::{push_pending, PendingLlmCall};
 
@@ -21,11 +23,13 @@ const MAX_TIME_S: u32 = 120;
 pub(crate) struct OpenAiLocalBackend {
     endpoint: String,
     model: String,
+    /// **RC-1** : le barreau de confiance estampillé sur chaque record (cf. `build_local_backend`).
+    attestation: ComputeAttestation,
 }
 
 impl OpenAiLocalBackend {
-    pub fn new(endpoint: String, model: String) -> Arc<Self> {
-        Arc::new(Self { endpoint, model })
+    pub fn new(endpoint: String, model: String, attestation: ComputeAttestation) -> Arc<Self> {
+        Arc::new(Self { endpoint, model, attestation })
     }
 
     /// URL `/v1/chat/completions` (tolère un endpoint déjà suffixé `/v1`).
@@ -73,6 +77,7 @@ impl LocalBackend for OpenAiLocalBackend {
             response: response.clone(),
             latency_ms,
             retry_count: 0, // self-host local nu : le Retrier (routeur Network) écrasera si besoin.
+            compute_attestation: self.attestation.clone(), // RC-1 : barreau scellé (local R2 / distant R4).
         });
         response
     }
@@ -88,9 +93,9 @@ mod tests {
 
     #[test]
     fn url_handles_v1_suffix() {
-        let a = OpenAiLocalBackend { endpoint: "http://127.0.0.1:8080".into(), model: "m".into() };
+        let a = OpenAiLocalBackend { endpoint: "http://127.0.0.1:8080".into(), model: "m".into(), attestation: ComputeAttestation::R2LocalWitnessed };
         assert_eq!(a.url(), "http://127.0.0.1:8080/v1/chat/completions");
-        let b = OpenAiLocalBackend { endpoint: "http://127.0.0.1:8080/v1/".into(), model: "m".into() };
+        let b = OpenAiLocalBackend { endpoint: "http://127.0.0.1:8080/v1/".into(), model: "m".into(), attestation: ComputeAttestation::R2LocalWitnessed };
         assert_eq!(b.url(), "http://127.0.0.1:8080/v1/chat/completions");
     }
 }

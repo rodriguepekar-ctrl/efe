@@ -99,6 +99,8 @@ impl From<SwarmError> for GatewayError {
             SwarmError::UnknownAgent { .. } | SwarmError::EmptySpec(_) => GatewayError::BadRequest(e.to_string()),
             // Garde-fou souveraineté : endpoint self-host non-local refusé → requête invalide.
             SwarmError::RemoteBackendDenied { .. } => GatewayError::BadRequest(e.to_string()),
+            // G2-remote (RC-1) : endpoint distant non épinglé → requête invalide (misconfiguration).
+            SwarmError::RemoteEndpointNotPinned { .. } => GatewayError::BadRequest(e.to_string()),
             // Backend local injoignable (health-check) → 503.
             SwarmError::BackendUnavailable { .. } => GatewayError::Unavailable(e.to_string()),
             SwarmError::BudgetTooLow { .. } | SwarmError::BudgetExceeded { .. } => GatewayError::Budget(e.to_string()),

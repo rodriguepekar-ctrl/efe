@@ -66,6 +66,7 @@ pub use types::{
     GoldErrorKind, GoldExpectedOutput, GoldFieldDiff, GoldGateError, GoldOverallVerdict,
     GoldReport, GoldRunId, GoldSet, GoldSetError, GoldSetId, GoldSetRef, GoldSetStatus,
     HistoricalKey, IdempotencyPolicy, Iso3166, IsoError, JsonSchema, KeyId, KycTier,
+    ComputeAttestation, CoSignatureScheme, EndpointIdentity, NodeCoSignature,
     LlmProvenanceRecord, MatchOutcome,
     MatchPolicy, McpToolMetadata, ModelIdentity, NanoAgent, NanoAgentId, NanoAgentRef,
     NanoAgentVersion, NewPublisherCandidate, OpStatus, OpStatusCounts, Operation,

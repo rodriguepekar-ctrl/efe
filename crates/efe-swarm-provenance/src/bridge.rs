@@ -298,6 +298,7 @@ mod tests {
             retry_count: 0,
             retry_outcome: RetryOutcome::NoRetry,
             time_to_first_token_ms: None,
+            compute_attestation: efe_nano_sdk::ComputeAttestation::default(),
         }
     }
 

@@ -7,6 +7,8 @@ use std::time::Instant;
 use async_trait::async_trait;
 use serde_json::json;
 
+use efe_nano_sdk::ComputeAttestation;
+
 use super::{curl_json, BackendDescriptor, BackendKind, LocalBackend, SamplingParams};
 use crate::n17::{push_pending, PendingLlmCall};
 
@@ -18,11 +20,14 @@ const MAX_TIME_S: u32 = 120;
 pub(crate) struct OllamaBackend {
     endpoint: String,
     model: String,
+    /// **RC-1** : le barreau de confiance estampillé sur chaque record (calculé par
+    /// `build_local_backend` depuis la localité de l'endpoint + l'épingle).
+    attestation: ComputeAttestation,
 }
 
 impl OllamaBackend {
-    pub fn new(endpoint: String, model: String) -> Arc<Self> {
-        Arc::new(Self { endpoint, model })
+    pub fn new(endpoint: String, model: String, attestation: ComputeAttestation) -> Arc<Self> {
+        Arc::new(Self { endpoint, model, attestation })
     }
 }
 
@@ -51,6 +56,7 @@ impl LocalBackend for OllamaBackend {
             response: response.clone(),
             latency_ms,
             retry_count: 0, // self-host local nu : le Retrier (routeur Network) écrasera si besoin.
+            compute_attestation: self.attestation.clone(), // RC-1 : barreau scellé (local R2 / distant R4).
         });
         response
     }

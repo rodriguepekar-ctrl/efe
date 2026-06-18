@@ -11,7 +11,7 @@ use efe_swarm_provenance::{
 use efe_swarm_topology::{AgentFleet, QualitySignals, SwarmContext, TopologyOutput};
 
 use crate::agents::Meter;
-use crate::backend::{build_local_backend, LocalBackend};
+use crate::backend::{build_local_backend, EndpointPin, LocalBackend};
 use crate::budget::{Budget, BudgetGuard, OnExceed};
 use crate::deadline::DeadlineGuard;
 use crate::n17::LlmProvenanceCollector;
@@ -39,6 +39,10 @@ pub struct Swarm {
     /// **Garde-fou souveraineté (G2)** : autorise un backend self-host **non-local**
     /// (egress). `false` par défaut — un endpoint non-`127.0.0.1`/`localhost` est refusé.
     allow_remote_backend: bool,
+    /// **RC-1 (G2-remote)** : épingles d'endpoints distants (host → empreinte cert/SPKI). Un
+    /// backend distant autorisé mais **absent** de cette liste est refusé
+    /// ([`SwarmError::RemoteEndpointNotPinned`]). Vide par défaut (souverain : aucun distant).
+    remote_pins: Vec<EndpointPin>,
     /// **Health-check (S.a)** : sonde le backend self-host au démarrage (échec rapide si
     /// injoignable). `false` par défaut (compatibilité).
     require_healthy_backend: bool,
@@ -192,7 +196,7 @@ impl Swarm {
         let (backend, kind): (Option<Arc<dyn LocalBackend>>, AgentKind) = match &self.mode {
             ClientMode::Keyless => (None, AgentKind::ModeA),
             ClientMode::SelfHost { endpoint, model } => {
-                (Some(build_local_backend(endpoint, model, self.allow_remote_backend)?), AgentKind::ModeC)
+                (Some(build_local_backend(endpoint, model, self.allow_remote_backend, &self.remote_pins)?), AgentKind::ModeC)
             }
             ClientMode::Network { .. } => unreachable!("écarté en tête de run"),
         };
@@ -480,6 +484,7 @@ pub struct SwarmBuilder {
     substrate_metrics: Option<Arc<SubstrateMetrics>>,
     observer: Option<Arc<dyn SwarmObserver>>,
     allow_remote_backend: bool,
+    remote_pins: Vec<EndpointPin>,
     require_healthy_backend: bool,
     width: WidthSpec,
     deadline: Option<std::time::Duration>,
@@ -499,6 +504,7 @@ impl Default for SwarmBuilder {
             substrate_metrics: None,
             observer: None,
             allow_remote_backend: false, // souverain par défaut : egress interdit
+            remote_pins: Vec::new(), // RC-1 : aucune épingle ⇒ aucun distant autorisé
             require_healthy_backend: false,
             width: WidthSpec::Auto, // ADR-014 : cœurs (Mode A) / backend déclaré (Mode C)
             deadline: None, // ADR-018 : aucun deadline par défaut (chemin historique)
@@ -567,6 +573,17 @@ impl SwarmBuilder {
         self
     }
 
+    /// **RC-1 (G2-remote)** : **épingle** un endpoint distant — l'opérateur déclare, hors-bande,
+    /// le couple `(host, empreinte cert/SPKI attendue)`. Un backend distant autorisé
+    /// (`allow_remote_backend(true)`) mais **non épinglé** est refusé
+    /// ([`SwarmError::RemoteEndpointNotPinned`]) : *aucun distant en clair, aucun distant non
+    /// pinné*. L'empreinte (pas le hostname — TOCTOU) est la racine de confiance du canal, et
+    /// elle est **enregistrée** dans le record N17 (barreau R4). Cumulable (appels multiples).
+    pub fn pin_remote_endpoint(mut self, host: impl Into<String>, spki_fingerprint: impl Into<String>) -> Self {
+        self.remote_pins.push(EndpointPin::new(host, spki_fingerprint));
+        self
+    }
+
     /// **Health-check (S.a)** : sonde le backend self-host au démarrage du run ; renvoie
     /// `SwarmError::BackendUnavailable` s'il est injoignable (échec rapide). `false` par défaut.
     pub fn require_healthy_backend(mut self, require: bool) -> Self {
@@ -612,6 +629,7 @@ impl SwarmBuilder {
             substrate_metrics: self.substrate_metrics,
             observer: self.observer,
             allow_remote_backend: self.allow_remote_backend,
+            remote_pins: self.remote_pins,
             require_healthy_backend: self.require_healthy_backend,
             width: self.width,
             deadline: self.deadline,
@@ -782,6 +800,33 @@ mod tests {
         let _ = Swarm::builder()
             .mode(ClientMode::SelfHost { endpoint: "http://10.0.0.5:11434".into(), model: "m".into() })
             .allow_remote_backend(true)
+            .build()
+            .unwrap();
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn remote_backend_without_pin_is_refused_even_with_egress_allowed() {
+        // G2-remote (RC-1) : egress AUTORISÉ mais endpoint NON ÉPINGLÉ → refusé avant tout appel
+        // réseau. *Aucun distant en clair, aucun distant non pinné* — le gate mord dans `run`.
+        let swarm = Swarm::builder()
+            .mode(ClientMode::SelfHost { endpoint: "http://gpu.internal:11434".into(), model: "gemma3:12b".into() })
+            .allow_remote_backend(true) // egress autorisé… mais aucune épingle déclarée.
+            .build()
+            .unwrap();
+        let err = swarm.run(json!({ "text": "x", "expected": "x" }), TopologySpec::Auto, Budget::unlimited()).await;
+        assert!(
+            matches!(err, Err(SwarmError::RemoteEndpointNotPinned { .. })),
+            "un distant autorisé mais non épinglé doit être refusé"
+        );
+    }
+
+    #[test]
+    fn pin_remote_endpoint_is_accepted_by_the_builder() {
+        // l'API publique d'épinglage chaîne et construit (le gate s'applique au run).
+        let _ = Swarm::builder()
+            .mode(ClientMode::SelfHost { endpoint: "http://gpu.internal:11434".into(), model: "m".into() })
+            .allow_remote_backend(true)
+            .pin_remote_endpoint("gpu.internal", "sha256/SIMULATED-REMOTE-PIN")
             .build()
             .unwrap();
     }

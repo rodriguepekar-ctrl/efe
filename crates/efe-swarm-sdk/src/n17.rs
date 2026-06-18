@@ -23,9 +23,9 @@ use std::sync::{Arc, Mutex};
 use std::time::SystemTime;
 
 use efe_nano_sdk::{
-    AgentId, Blake3Hash, Completeness, CostAccounting, FinishReason, LlmProvenanceRecord,
-    ModelIdentity, NanoAgentId, NanoAgentVersion, PiiStrategy, ProvenanceId, RetryOutcome,
-    SamplingParams as N17Sampling, SwarmId, TenantId, TokenUsage,
+    AgentId, Blake3Hash, Completeness, ComputeAttestation, CostAccounting, FinishReason,
+    LlmProvenanceRecord, ModelIdentity, NanoAgentId, NanoAgentVersion, PiiStrategy, ProvenanceId,
+    RetryOutcome, SamplingParams as N17Sampling, SwarmId, TenantId, TokenUsage,
 };
 use efe_swarm_provenance::{blake3_bytes, AgentRole};
 
@@ -43,6 +43,10 @@ pub(crate) struct PendingLlmCall {
     /// du premier coup). Renseigné par le `Retrier` (chemin routeur Network) ; 0 pour le
     /// self-host local nu. Alimente `retry_count`/`retry_outcome` du record N17.
     pub retry_count: u32,
+    /// **RC-1** : le barreau de confiance de computation (calculé par `build_local_backend`
+    /// depuis la localité de l'endpoint) que le backend estampille sur cet appel. Traverse le
+    /// `Retrier` intact (capté → ré-émis). Scellé dans le record N17 par `assemble`.
+    pub compute_attestation: ComputeAttestation,
 }
 
 tokio::task_local! {
@@ -108,6 +112,14 @@ impl LlmProvenanceCollector {
             (_, true) => RetryOutcome::RetriedSucceeded,
             (_, false) => RetryOutcome::RetriedExhausted,
         };
+        // **RC-1** : la région du descripteur reflète la localité réelle — plus de « local »
+        // menteur pour un appel distant. Défense en profondeur à côté du barreau SCELLÉ
+        // (`compute_attestation`), qui reste l'autorité de localité re-prouvée.
+        let region = match &call.compute_attestation {
+            ComputeAttestation::R3RemoteCosigned { endpoint, .. }
+            | ComputeAttestation::R4RemoteChannel { endpoint, .. } => endpoint.host.clone(),
+            _ => "local".to_string(),
+        };
 
         let record = LlmProvenanceRecord {
             // identité
@@ -118,8 +130,10 @@ impl LlmProvenanceCollector {
             tenant_id: tenant,
             agent_id: NanoAgentId::new(agent_id.as_str()).unwrap_or_else(|_| NanoAgentId::new("swarm_agent").unwrap()),
             agent_version: NanoAgentVersion::new("1.0.0").unwrap(),
-            // modèle (self-host local : provider = moteur, version = "local")
-            model_identity: ModelIdentity::hosted(&call.engine, &call.model, "local"),
+            // modèle (provider = moteur ; région = localité réelle, cf. `region` ci-dessus).
+            model_identity: ModelIdentity::hosted(&call.engine, &call.model, &region),
+            // RC-1/I-RC7 : remotement on n'a PAS inspecté les poids → reste `false` (ne peut
+            // monter que via une co-signature attestant l'empreinte-modèle, palier R3).
             model_hash_verified: false,
             // provenance du prompt (pas de gabarit : user = final ; système/inputs vides)
             prompt_template_id: "swarm.selfhost".into(),
@@ -171,6 +185,9 @@ impl LlmProvenanceCollector {
             retry_count: call.retry_count.min(u8::MAX as u32) as u8,
             retry_outcome,
             time_to_first_token_ms: None,
+            // **RC-1** : le barreau de confiance, SCELLÉ dans le leaf N17 (le réécrire casse
+            // `verify_n17_chain`). C'est ce qui rend la localité visible+signée dans les octets.
+            compute_attestation: call.compute_attestation,
         };
         self.records.lock().expect("n17 collector lock").push(record);
         provenance_id
@@ -206,6 +223,7 @@ mod tests {
             response: resp.map(String::from),
             latency_ms: 1234,
             retry_count: 0,
+            compute_attestation: ComputeAttestation::R2LocalWitnessed,
         }
     }
 

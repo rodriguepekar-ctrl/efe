@@ -149,6 +149,7 @@ fn audit_a2_llm_provenance_record_carries_publisher_id_field() {
         retry_count: 0,
         retry_outcome: efe_nano_sdk::RetryOutcome::NoRetry,
         time_to_first_token_ms: None,
+        compute_attestation: efe_nano_sdk::ComputeAttestation::default(),
     };
     let json = serde_json::to_string(&record).unwrap();
     // Workflow E (audit EU) needs to JOIN provenance with registry on
@@ -217,6 +218,7 @@ fn audit_a2_llm_provenance_record_backward_compat_no_publisher_fields() {
         retry_count: 0,
         retry_outcome: efe_nano_sdk::RetryOutcome::NoRetry,
         time_to_first_token_ms: None,
+        compute_attestation: efe_nano_sdk::ComputeAttestation::default(),
     };
     let json = serde_json::to_string(&record).unwrap();
     // Skip-serializing-if-None must omit the two fields from the
@@ -728,6 +730,7 @@ async fn audit_a6_workflow_e_join_consistency_kyc_tier_string_match() {
         retry_count: 0,
         retry_outcome: efe_nano_sdk::RetryOutcome::NoRetry,
         time_to_first_token_ms: None,
+        compute_attestation: efe_nano_sdk::ComputeAttestation::default(),
     };
     let provenance_json = serde_json::to_string(&record).unwrap();
 

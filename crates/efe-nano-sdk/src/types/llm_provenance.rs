@@ -627,6 +627,177 @@ pub struct CacheProvenance {
 }
 
 // ─────────────────────────────────────────────────────────────────────
+//  RC-1 — l'attestation de computation (le Mode C distant re-prouvable)
+// ─────────────────────────────────────────────────────────────────────
+
+/// **RC-1** — l'identité PINNÉE de l'endpoint distant qui a servi l'inférence.
+///
+/// On pinne l'EMPREINTE de certificat / SPKI (`pin_fingerprint`), **pas** le
+/// hostname : DNS/routage peuvent dériver sous un hostname entre `health()` et
+/// `complete()` (TOCTOU, architecture §5.2) ; une empreinte de clé stable, elle,
+/// ne dérive pas. `host` est conservé à titre **diagnostique** — il n'est jamais
+/// la racine de confiance du canal.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct EndpointIdentity {
+    /// L'hôte tel que configuré (diagnostic ; PAS la racine de confiance).
+    pub host: String,
+    /// L'empreinte du certificat / SPKI pinné — la racine de confiance du canal.
+    pub pin_fingerprint: String,
+}
+
+impl EndpointIdentity {
+    /// Construit une identité d'endpoint pinnée.
+    pub fn new(host: impl Into<String>, pin_fingerprint: impl Into<String>) -> Self {
+        Self { host: host.into(), pin_fingerprint: pin_fingerprint.into() }
+    }
+}
+
+/// **RC-1** — le schéma de la co-signature de nœud (T-WITNESS). `ed25519` à v1
+/// (asymétrique : le vérifieur contrôle la signature contre une **clé publique**
+/// pinnée, sans détenir aucun secret — c'est la propriété du moat généralisée).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum CoSignatureScheme {
+    /// Ed25519 — signature asymétrique, vérifiable hors-ligne contre la pubkey pinnée.
+    #[default]
+    Ed25519,
+}
+
+/// **RC-1** — la co-signature d'un nœud distant PINNÉ sur sa propre computation
+/// (T-WITNESS / barreau R3).
+///
+/// C'est une **seconde signature indépendante**, à côté de la chaîne N17
+/// keyée-tenant, produite par la **propre clé** du nœud — jamais une part du
+/// maître tenant (I-RC2). Elle est vérifiée contre la pubkey pinnée du nœud
+/// (I-RC6) sur le tuple `blake3(node_id ‖ final_prompt_hash ‖ output_hash ‖
+/// nonce)`. Le `nonce` ferme le rejeu (§7). Elle rend le nœud **responsable**,
+/// pas nécessairement honnête (cf. modèle de menace).
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct NodeCoSignature {
+    /// L'identité enrôlée + pinnée du nœud (façon registre `publisher_id`).
+    pub node_id: String,
+    /// Le schéma de signature.
+    pub scheme: CoSignatureScheme,
+    /// La signature, encodée hex.
+    pub signature_hex: String,
+    /// Le tuple signé, hex : `blake3(node_id ‖ final_prompt_hash ‖ output_hash ‖ nonce)`.
+    pub signed_tuple_hash: String,
+    /// Le nonce anti-rejeu (hex), lié à *ce* run.
+    pub nonce: String,
+}
+
+/// **RC-1 — l'attestation de computation.** Le barreau de confiance qu'EFE peut
+/// *honnêtement* tenir pour ce record Mode C, **scellé dans le leaf N17**.
+///
+/// C'est le cœur du Mode C distant re-prouvable. Aujourd'hui la localité est
+/// *invisible* dans les octets scellés : un record produit à distance serait
+/// byte-identique à un local. Ce champ rend le niveau de confiance **explicite,
+/// signé** (donc inviolable : comme `leaf_hash = sha256(canonical_bytes(record))`,
+/// le réécrire casse `verify_n17_chain` → `RecordContentMutated`) et **lu par le
+/// vérifieur** (`held_strength`). Aucune nouvelle primitive cryptographique.
+///
+/// L'échelle est **totale et décroissante** (cf. [`strength_rank`]) :
+/// `R1 > R2 > R3 > R4 > LegacyUnspecified`. Le défaut serde est
+/// [`ComputeAttestation::LegacyUnspecified`] — **strictement plus faible que
+/// R4** — pour qu'un record pré-RC1 ne mente *jamais* en se faisant passer pour
+/// local ; il force un backfill explicite. Voir l'architecture §3.
+///
+/// [`strength_rank`]: ComputeAttestation::strength_rank
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum ComputeAttestation {
+    /// Record antérieur à RC-1 : le barreau n'est pas asserti. Traité comme
+    /// **strictement < R4** — le vérifieur ne peut rien affirmer sur la localité.
+    #[default]
+    LegacyUnspecified,
+    /// **R1** — Mode A déterministe : la sortie est `f(tâche, variant)`,
+    /// re-RUN-able à l'octet via `replay_outputs`. Le plus fort.
+    R1LocalDeterministic,
+    /// **R2** — Mode C co-localisé (T-LOCAL) : l'inférence a tourné sur la boucle
+    /// **loopback**, le récepteur de provenance a témoigné de la computation. Le
+    /// cas prouvé aujourd'hui. Exige un endpoint loopback (I-RC3).
+    R2LocalWitnessed,
+    /// **R3** — Mode C distant **co-signé** (T-WITNESS) : un nœud distant pinné a
+    /// co-signé sa propre computation avec sa propre clé. Responsable, pas
+    /// nécessairement honnête (§7).
+    R3RemoteCosigned {
+        /// Le canal authentifié + pinné par lequel l'appel a transité.
+        endpoint: EndpointIdentity,
+        /// La co-signature du nœud, vérifiée contre sa pubkey pinnée (I-RC6).
+        cosignature: NodeCoSignature,
+    },
+    /// **R4** — Mode C distant, **canal seul** (T-CHANNEL) : l'orchestrateur
+    /// atteste la *transaction* (« j'ai envoyé ce prompt, reçu cette sortie, sur
+    /// ce canal pinné »), jamais la computation. Couvre le self-host distant
+    /// zéro-clé ET le routeur keyé `Network`. Le plus faible — *et le record le dit*.
+    R4RemoteChannel {
+        /// Le canal authentifié + pinné.
+        endpoint: EndpointIdentity,
+        /// `true` si le canal a porté un credential (routeur keyé `Network`) ; le
+        /// credential lui-même n'est **JAMAIS** enregistré (I-RC5).
+        keyed: bool,
+    },
+}
+
+impl ComputeAttestation {
+    /// Rang de force (plus haut = plus fort). L'échelle est **totale**.
+    /// Le vérifieur rapporte le **minimum** sur le run (`held_strength`).
+    pub fn strength_rank(&self) -> u8 {
+        match self {
+            ComputeAttestation::R1LocalDeterministic => 4,
+            ComputeAttestation::R2LocalWitnessed => 3,
+            ComputeAttestation::R3RemoteCosigned { .. } => 2,
+            ComputeAttestation::R4RemoteChannel { .. } => 1,
+            ComputeAttestation::LegacyUnspecified => 0,
+        }
+    }
+
+    /// `true` si l'inférence a quitté la boîte souveraine (R3 ou R4).
+    pub fn is_remote(&self) -> bool {
+        matches!(
+            self,
+            ComputeAttestation::R3RemoteCosigned { .. } | ComputeAttestation::R4RemoteChannel { .. }
+        )
+    }
+
+    /// `true` si le barreau EXIGE un endpoint loopback (R1/R2 ; I-RC3).
+    pub fn requires_loopback(&self) -> bool {
+        matches!(
+            self,
+            ComputeAttestation::R1LocalDeterministic | ComputeAttestation::R2LocalWitnessed
+        )
+    }
+
+    /// L'identité d'endpoint pinnée, si le barreau est distant.
+    pub fn endpoint(&self) -> Option<&EndpointIdentity> {
+        match self {
+            ComputeAttestation::R3RemoteCosigned { endpoint, .. }
+            | ComputeAttestation::R4RemoteChannel { endpoint, .. } => Some(endpoint),
+            _ => None,
+        }
+    }
+
+    /// La co-signature du nœud, si le barreau est R3.
+    pub fn cosignature(&self) -> Option<&NodeCoSignature> {
+        match self {
+            ComputeAttestation::R3RemoteCosigned { cosignature, .. } => Some(cosignature),
+            _ => None,
+        }
+    }
+
+    /// Un libellé stable pour les rapports / la forensique.
+    pub fn rung_label(&self) -> &'static str {
+        match self {
+            ComputeAttestation::R1LocalDeterministic => "R1-LOCAL-DETERMINISTE",
+            ComputeAttestation::R2LocalWitnessed => "R2-LOCAL-TEMOIN",
+            ComputeAttestation::R3RemoteCosigned { .. } => "R3-DISTANT-COSIGNE",
+            ComputeAttestation::R4RemoteChannel { .. } => "R4-DISTANT-CANAL",
+            ComputeAttestation::LegacyUnspecified => "LEGACY-NON-ASSERTI",
+        }
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────
 //  LlmProvenanceRecord — the comprehensive trace
 // ─────────────────────────────────────────────────────────────────────
 
@@ -767,9 +938,27 @@ pub struct LlmProvenanceRecord {
     /// (`ttft <= total_latency`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub time_to_first_token_ms: Option<u32>,
+
+    /// **RC-1** : le barreau de confiance de computation tenu pour ce record,
+    /// **scellé dans le leaf N17** (donc inviolable). Défaut
+    /// [`ComputeAttestation::LegacyUnspecified`] (strictement < R4) pour les
+    /// records pré-RC1 — pas de mensonge par omission. C'est ce qui rend la
+    /// localité *visible et signée* dans les octets : le Mode C distant
+    /// re-prouvable. Voir [`ComputeAttestation`] et l'architecture §3/§6.
+    #[serde(default)]
+    pub compute_attestation: ComputeAttestation,
 }
 
 impl LlmProvenanceRecord {
+    /// **RC-1** : le barreau de confiance de computation de ce record.
+    pub fn compute_attestation(&self) -> &ComputeAttestation {
+        &self.compute_attestation
+    }
+
+    /// **RC-1** : `true` si l'inférence de ce record a quitté la boîte souveraine.
+    pub fn is_remote_compute(&self) -> bool {
+        self.compute_attestation.is_remote()
+    }
     /// **N17** : True if this record describes a cache hit (no
     /// real LLM call happened).
     pub fn is_cache_hit(&self) -> bool {
@@ -935,6 +1124,7 @@ mod tests {
             retry_count: 0,
             retry_outcome: RetryOutcome::NoRetry,
             time_to_first_token_ms: None,
+            compute_attestation: ComputeAttestation::default(),
         }
     }
 
@@ -1316,6 +1506,92 @@ mod tests {
         // Round-trip must restore the same record.
         let back: LlmProvenanceRecord = serde_json::from_str(&json).unwrap();
         assert_eq!(back, r);
+    }
+
+    // ── RC-1 : l'attestation de computation (le Mode C distant re-prouvable) ──────────
+
+    #[test]
+    fn compute_attestation_defaults_to_legacy_when_absent_from_json() {
+        // Un record pré-RC1 (JSON SANS `compute_attestation`) doit se désérialiser en
+        // `LegacyUnspecified` — strictement < R4 : pas de mensonge par omission, backfill forcé.
+        let r = sample_record();
+        let mut v: serde_json::Value = serde_json::to_value(&r).unwrap();
+        v.as_object_mut().unwrap().remove("compute_attestation");
+        assert!(v.get("compute_attestation").is_none(), "champ retiré (simule le legacy)");
+        let back: LlmProvenanceRecord = serde_json::from_value(v).unwrap();
+        assert_eq!(back.compute_attestation, ComputeAttestation::LegacyUnspecified);
+        assert_eq!(back.compute_attestation.strength_rank(), 0, "legacy strictement < R4 (rang 1)");
+    }
+
+    #[test]
+    fn compute_attestation_strength_is_total_and_strictly_decreasing() {
+        // L'échelle est TOTALE et décroissante : R1 > R2 > R3 > R4 > Legacy.
+        let ep = EndpointIdentity::new("node.lan", "sha256/PIN");
+        let cosig = NodeCoSignature {
+            node_id: "node-1".into(),
+            scheme: CoSignatureScheme::Ed25519,
+            signature_hex: "ab".into(),
+            signed_tuple_hash: "cd".into(),
+            nonce: "ef".into(),
+        };
+        let ranks = [
+            ComputeAttestation::R1LocalDeterministic.strength_rank(),
+            ComputeAttestation::R2LocalWitnessed.strength_rank(),
+            ComputeAttestation::R3RemoteCosigned { endpoint: ep.clone(), cosignature: cosig }.strength_rank(),
+            ComputeAttestation::R4RemoteChannel { endpoint: ep, keyed: false }.strength_rank(),
+            ComputeAttestation::LegacyUnspecified.strength_rank(),
+        ];
+        for w in ranks.windows(2) {
+            assert!(w[0] > w[1], "rang strictement décroissant : {} > {}", w[0], w[1]);
+        }
+    }
+
+    #[test]
+    fn compute_attestation_round_trips_every_rung_and_seals_into_the_record() {
+        // Chaque barreau (y compris R3/R4 avec leurs données) round-trip en JSON, ET change
+        // les octets sérialisés du record → donc le leaf_hash (scellé, infalsifiable).
+        let ep = EndpointIdentity::new("gpu.internal", "sha256/REMOTEPIN");
+        let rungs = vec![
+            ComputeAttestation::R1LocalDeterministic,
+            ComputeAttestation::R2LocalWitnessed,
+            ComputeAttestation::R4RemoteChannel { endpoint: ep.clone(), keyed: true },
+            ComputeAttestation::R3RemoteCosigned {
+                endpoint: ep,
+                cosignature: NodeCoSignature {
+                    node_id: "gpu-1".into(),
+                    scheme: CoSignatureScheme::Ed25519,
+                    signature_hex: "deadbeef".into(),
+                    signed_tuple_hash: "00ff".into(),
+                    nonce: "1234".into(),
+                },
+            },
+        ];
+        let baseline = serde_json::to_string(&sample_record()).unwrap();
+        for rung in rungs {
+            // round-trip de l'enum seul
+            let j = serde_json::to_string(&rung).unwrap();
+            let back: ComputeAttestation = serde_json::from_str(&j).unwrap();
+            assert_eq!(back, rung);
+            // scellement : un record portant ce barreau diffère des octets du défaut.
+            let mut r = sample_record();
+            r.compute_attestation = rung.clone();
+            let with = serde_json::to_string(&r).unwrap();
+            assert_ne!(with, baseline, "le barreau {:?} doit changer les octets scellés", rung.rung_label());
+        }
+    }
+
+    #[test]
+    fn only_remote_rungs_report_remote_and_carry_an_endpoint() {
+        let ep = EndpointIdentity::new("h", "fp");
+        assert!(!ComputeAttestation::R1LocalDeterministic.is_remote());
+        assert!(!ComputeAttestation::R2LocalWitnessed.is_remote());
+        assert!(!ComputeAttestation::LegacyUnspecified.is_remote());
+        let r4 = ComputeAttestation::R4RemoteChannel { endpoint: ep.clone(), keyed: false };
+        assert!(r4.is_remote());
+        assert_eq!(r4.endpoint().map(|e| e.pin_fingerprint.as_str()), Some("fp"));
+        // I-RC3 : seuls R1/R2 exigent le loopback ; les distants ne le peuvent pas.
+        assert!(ComputeAttestation::R2LocalWitnessed.requires_loopback());
+        assert!(!r4.requires_loopback());
     }
 
     #[test]

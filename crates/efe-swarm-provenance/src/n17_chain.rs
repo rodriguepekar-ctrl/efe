@@ -39,7 +39,7 @@
 //! (clé tenant, non forgeable) casse au niveau chaîne — détecté sans localisation fine.
 
 use efe_audit_core::chain_hmac;
-use efe_nano_sdk::{LlmProvenanceRecord, ProvenanceId};
+use efe_nano_sdk::{ComputeAttestation, LlmProvenanceRecord, ProvenanceId};
 
 use crate::hash::sha256;
 use crate::record::hex32;
@@ -192,6 +192,43 @@ use crate::bridge::{verify_bridge, BridgeReport, MapResolver};
 use crate::record::AgentCallRecord;
 use crate::verify::{verify_swarm, SwarmProvenanceReport};
 
+/// **RC-1** — le barreau de confiance de computation **le plus faible** tenu par le run, sur
+/// tous ses records Mode C. Le vérifieur le rapporte **toujours**, à côté de `fully_proven`
+/// (jamais replié dedans — exactement le patron de `traced_pct`) : c'est la forme opérationnelle
+/// d'**I-RC8**. Un run propre contenant un record R4 se lit « transaction re-prouvée au barreau
+/// R4 ; computation **non** témoignée », jamais comme une re-preuve de la computation.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HeldStrength {
+    /// Rang du barreau le plus faible (0 = legacy/non-asserti … 4 = R1-déterministe).
+    /// `None` ⇒ aucun record Mode C dans le run (rien à attester côté computation).
+    pub weakest_rank: Option<u8>,
+    /// Libellé du barreau le plus faible (forensique), p.ex. `"R4-DISTANT-CANAL"`.
+    pub weakest_label: Option<String>,
+    /// Au moins un record a quitté la boîte souveraine (barreau R3 ou R4).
+    pub any_remote: bool,
+}
+
+impl HeldStrength {
+    /// Le barreau le plus faible parmi les records Mode C (le « maillon faible » du run).
+    pub fn from_records(records: &[LlmProvenanceRecord]) -> Self {
+        let mut weakest: Option<&ComputeAttestation> = None;
+        let mut any_remote = false;
+        for r in records {
+            let a = &r.compute_attestation;
+            any_remote |= a.is_remote();
+            weakest = match weakest {
+                Some(w) if w.strength_rank() <= a.strength_rank() => Some(w),
+                _ => Some(a),
+            };
+        }
+        HeldStrength {
+            weakest_rank: weakest.map(ComputeAttestation::strength_rank),
+            weakest_label: weakest.map(|a| a.rung_label().to_string()),
+            any_remote,
+        }
+    }
+}
+
 /// Le verdict d'une re-preuve complète hors ligne.
 #[derive(Debug, Clone)]
 pub struct OfflineVerdict {
@@ -202,7 +239,11 @@ pub struct OfflineVerdict {
     /// Pont Mode A ↔ Mode C (chaque Mode C résout-il en cohérent ?).
     pub bridge: BridgeReport,
     /// Tout est re-prouvé : essaim OK, chaîne N17 intacte, pont sans lacune ni rupture.
+    /// **Garantie de la couche TRANSACTION** — distincte du barreau de *computation* ci-dessous.
     pub fully_proven: bool,
+    /// **RC-1 / I-RC8** : le barreau de computation le plus faible tenu par le run. Toujours
+    /// rapporté ; jamais replié dans `fully_proven`. Voir [`HeldStrength`].
+    pub held_strength: HeldStrength,
 }
 
 /// **Re-prouve TOUT** depuis les seuls records persistés (essaim + N17) + feuilles +
@@ -221,16 +262,19 @@ pub fn verify_run_offline(
     let resolver = MapResolver::from_records(n17_records.iter());
     let bridge = verify_bridge(swarm_records, &resolver);
     let fully_proven = swarm.ok() && n17_chain.intact && bridge.all_mode_c_consistent();
-    OfflineVerdict { swarm, n17_chain, bridge, fully_proven }
+    // RC-1/I-RC8 : le vérifieur apprend TOUJOURS le barreau le plus faible — la transaction est
+    // re-prouvée (`fully_proven`), mais on dit explicitement quelle confiance de computation tient.
+    let held_strength = HeldStrength::from_records(n17_records);
+    OfflineVerdict { swarm, n17_chain, bridge, fully_proven, held_strength }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use efe_nano_sdk::{
-        AgentId, Blake3Hash, Completeness, CostAccounting, FinishReason, ModelIdentity,
-        NanoAgentId, NanoAgentVersion, PiiStrategy, RetryOutcome, SamplingParams, SwarmId,
-        TenantId, TokenUsage,
+        AgentId, Blake3Hash, Completeness, ComputeAttestation, CostAccounting, EndpointIdentity,
+        FinishReason, ModelIdentity, NanoAgentId, NanoAgentVersion, PiiStrategy, RetryOutcome,
+        SamplingParams, SwarmId, TenantId, TokenUsage,
     };
     use std::time::SystemTime;
     use uuid::Uuid;
@@ -284,6 +328,7 @@ mod tests {
             retry_count: 0,
             retry_outcome: RetryOutcome::NoRetry,
             time_to_first_token_ms: None,
+            compute_attestation: ComputeAttestation::default(),
         }
     }
 
@@ -432,6 +477,82 @@ mod tests {
         assert!(v.swarm.ok());
         assert!(v.n17_chain.intact);
         assert_eq!(v.bridge.consistent, 1, "le Mode C résout en cohérent depuis le store N17");
+        // RC-1 : ce run est LOCAL (n17() ⇒ défaut Legacy ici) — held_strength le rapporte.
+        assert!(!v.held_strength.any_remote);
+    }
+
+    // ── RC-1 : le gate du Mode C distant re-prouvable (CI-pur, distant SIMULÉ) ────────
+
+    /// Construit un record N17 estampillé d'un barreau distant R4 (canal pinné), comme le
+    /// ferait `build_local_backend` pour un endpoint distant épinglé.
+    fn n17_remote(prov: u128, tenant: TenantId, swarm: Uuid, host: &str) -> LlmProvenanceRecord {
+        let mut r = n17(prov, tenant, swarm, "gemma3:12b");
+        r.compute_attestation = ComputeAttestation::R4RemoteChannel {
+            endpoint: EndpointIdentity::new(host, "sha256/SIMULATED-REMOTE-PIN"),
+            keyed: false,
+        };
+        r
+    }
+
+    #[test]
+    fn remote_run_reproves_at_r4_but_held_strength_is_reported_not_folded() {
+        use crate::record::{AgentCallDraft, AgentKind, AgentRole};
+        // [SIMULATED REMOTE] — l'inférence a (conceptuellement) quitté la boîte : un record R4.
+        // I-RC8 : la TRANSACTION re-prouve (fully_proven), MAIS le vérifieur apprend que le
+        // barreau de computation tenu est R4 — jamais replié dans un `true` nu.
+        let tenant = TenantId::system();
+        let swarm = SwarmId::from_uuid(swarm_uuid());
+        let n17_recs = vec![n17_remote(1, tenant, swarm_uuid(), "gpu.internal")];
+        let sealed = seal_n17(&n17_recs, &key());
+        let draft = AgentCallDraft::new(
+            swarm, tenant, AgentId::new("generator").unwrap(), AgentRole::Generator,
+            AgentKind::ModeC, Blake3Hash::from_bytes([1u8; 32]), Blake3Hash::from_bytes([2u8; 32]),
+        )
+        .with_llm_provenance(n17_recs[0].provenance_id);
+        let mut chain = crate::chain::SwarmChain::new(tenant, swarm, key());
+        let swarm_recs = chain.append_all(std::iter::once(draft));
+
+        let v = verify_run_offline(&swarm_recs, &n17_recs, &sealed.leaf_hashes, sealed.n17_root, &key());
+        assert!(v.fully_proven, "la TRANSACTION distante re-prouve (R0)");
+        assert_eq!(v.held_strength.weakest_rank, Some(1), "barreau tenu = R4 (rang 1)");
+        assert_eq!(v.held_strength.weakest_label.as_deref(), Some("R4-DISTANT-CANAL"));
+        assert!(v.held_strength.any_remote, "l'inférence a quitté la boîte souveraine");
+    }
+
+    #[test]
+    fn held_strength_is_the_weakest_link_across_mixed_rungs() {
+        // Un run mixte (un appel local R2 + un appel distant R4) tient la confiance du MAILLON
+        // LE PLUS FAIBLE : R4. (Le « held_strength » est un minimum, pas une moyenne.)
+        let tenant = TenantId::system();
+        let mut local = n17(1, tenant, swarm_uuid(), "gemma3:12b");
+        local.compute_attestation = ComputeAttestation::R2LocalWitnessed;
+        let remote = n17_remote(2, tenant, swarm_uuid(), "gpu.internal");
+        let hs = HeldStrength::from_records(&[local, remote]);
+        assert_eq!(hs.weakest_rank, Some(1), "le maillon faible (R4) gouverne");
+        assert_eq!(hs.weakest_label.as_deref(), Some("R4-DISTANT-CANAL"));
+        assert!(hs.any_remote);
+    }
+
+    #[test]
+    fn downgrading_a_sealed_remote_rung_to_local_breaks_the_chain() {
+        // LE test anti-downgrade (I-RC3 / §7). Un attaquant scelle un record DISTANT (R4) puis
+        // tente de le faire passer pour LOCAL (R2) après coup pour sur-prétendre. Comme le
+        // barreau est dans le corps canonique → dans le leaf, la réécriture casse la chaîne N17
+        // et LOCALISE le record fautif. Aucun downgrade silencieux possible.
+        let tenant = TenantId::system();
+        let recs = vec![
+            n17(1, tenant, swarm_uuid(), "gemma3:12b"),
+            n17_remote(2, tenant, swarm_uuid(), "gpu.internal"),
+            n17(3, tenant, swarm_uuid(), "gemma3:12b"),
+        ];
+        let sealed = seal_n17(&recs, &key());
+        // l'attaque : R4-DISTANT-CANAL → R2-LOCAL-TEMOIN (mensonge de localité).
+        let mut tampered = recs.clone();
+        tampered[1].compute_attestation = ComputeAttestation::R2LocalWitnessed;
+        let v = verify_n17_chain(&tampered, &sealed.leaf_hashes, sealed.n17_root, &key());
+        assert!(!v.intact, "le downgrade de localité doit casser la chaîne");
+        assert_eq!(v.reason, Some(N17Break::RecordContentMutated));
+        assert_eq!(v.first_break, Some(recs[1].provenance_id), "le record downgradé est localisé");
     }
 
     #[test]

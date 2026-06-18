@@ -259,6 +259,11 @@ pub enum SwarmError {
     /// (egress interdit par défaut). Utilisez un endpoint `127.0.0.1`/`localhost`, ou
     /// activez explicitement `SwarmBuilder::allow_remote_backend(true)`.
     RemoteBackendDenied { endpoint: String },
+    /// **Garde-fou G2-remote (RC-1)** : un backend distant a été autorisé (`allow_remote_backend`)
+    /// mais son endpoint n'est **pas épinglé**. Tout distant doit être épinglé (empreinte
+    /// cert/SPKI) — aucun distant en clair, aucun distant non pinné. Déclarez l'épingle via
+    /// `SwarmBuilder::pin_remote_endpoint(host, spki_fingerprint)`. Voir l'architecture §5.
+    RemoteEndpointNotPinned { endpoint: String },
     /// **Health-check (S.a)** : le backend self-host est **injoignable** (sonde au démarrage,
     /// activée par `require_healthy_backend(true)`). Échec rapide plutôt que N timeouts.
     BackendUnavailable { endpoint: String },
@@ -281,6 +286,9 @@ impl std::fmt::Display for SwarmError {
             }
             SwarmError::RemoteBackendDenied { endpoint } => {
                 write!(f, "backend self-host non-local refusé (souveraineté/egress) : « {endpoint} » ; utilisez 127.0.0.1/localhost ou allow_remote_backend(true)")
+            }
+            SwarmError::RemoteEndpointNotPinned { endpoint } => {
+                write!(f, "backend distant NON ÉPINGLÉ refusé (G2-remote) : « {endpoint} » ; épinglez-le via pin_remote_endpoint(host, empreinte cert/SPKI) — aucun distant non pinné")
             }
             SwarmError::BackendUnavailable { endpoint } => {
                 write!(f, "backend self-host injoignable (health-check) : « {endpoint} » ; démarrez le modèle local (ex. `ollama serve`)")

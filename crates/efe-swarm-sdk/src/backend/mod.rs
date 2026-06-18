@@ -23,6 +23,7 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use async_trait::async_trait;
+use efe_nano_sdk::{ComputeAttestation, EndpointIdentity};
 use serde_json::Value;
 
 use crate::n17::{push_pending, scoped, PendingLlmCall};
@@ -155,6 +156,59 @@ pub(crate) fn is_local_endpoint(endpoint: &str) -> bool {
     }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+//  RC-1 — épinglage d'endpoint distant (G2-remote) + barreau de confiance
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// **RC-1** — une **épingle** d'endpoint distant : l'opérateur déclare, hors-bande, le couple
+/// (hôte, empreinte cert/SPKI attendue). On épingle l'**empreinte**, pas le hostname (TOCTOU,
+/// architecture §5.2) ; `host` ne sert qu'à **apparier** un endpoint à son épingle, et c'est
+/// `spki_fingerprint` — la racine de confiance du canal — qui est **enregistrée** dans le record.
+#[derive(Debug, Clone)]
+pub(crate) struct EndpointPin {
+    pub host: String,
+    pub spki_fingerprint: String,
+}
+
+impl EndpointPin {
+    pub fn new(host: impl Into<String>, spki_fingerprint: impl Into<String>) -> Self {
+        Self { host: host.into(), spki_fingerprint: spki_fingerprint.into() }
+    }
+}
+
+/// **RC-1** — l'empreinte épinglée pour `endpoint`, si son hôte figure dans `pins`. `None` ⇒
+/// **non épinglé** (le gate G2-remote refusera). Apparie sur l'hôte ; renvoie l'empreinte à
+/// enregistrer. (La vérification mTLS réelle — l'empreinte présentée par le serveur == celle
+/// épinglée — est l'infra de canal, hors de cet incrément ; ici on pose le schéma + le gate.)
+pub(crate) fn matched_pin(endpoint: &str, pins: &[EndpointPin]) -> Option<String> {
+    let host = host_of(endpoint)?;
+    pins.iter().find(|p| p.host == host).map(|p| p.spki_fingerprint.clone())
+}
+
+/// **RC-1** — le **barreau de confiance de computation** d'un endpoint, calculé *avant* l'appel
+/// et estampillé (scellé) sur chaque record N17 que ce backend produira.
+///
+/// - **Loopback** ⇒ [`ComputeAttestation::R2LocalWitnessed`] : le récepteur de provenance est
+///   co-localisé avec l'inférence, il témoigne de la computation (I-RC3 : R2 exige loopback).
+/// - **Distant épinglé** ⇒ [`ComputeAttestation::R4RemoteChannel`] : on atteste la *transaction*
+///   sur un canal pinné, jamais la computation. `keyed` distingue le routeur à credential.
+///
+/// R3 (co-signature T-WITNESS) est un palier **additif** (cf. `NodeCoSignature`) : un nœud pinné
+/// hisse R4→R3 en co-signant sa computation. Sa production/vérification ed25519 est l'incrément suivant.
+fn attestation_for(endpoint: &str, matched_fingerprint: Option<String>, keyed: bool) -> ComputeAttestation {
+    if is_local_endpoint(endpoint) {
+        ComputeAttestation::R2LocalWitnessed
+    } else {
+        ComputeAttestation::R4RemoteChannel {
+            endpoint: EndpointIdentity::new(
+                host_of(endpoint).unwrap_or_default(),
+                matched_fingerprint.unwrap_or_default(),
+            ),
+            keyed,
+        }
+    }
+}
+
 /// Construit le backend local idoine, **en appliquant le garde-fou souveraineté**.
 ///
 /// - Endpoint non-local + `allow_remote == false` ⇒ [`SwarmError::RemoteBackendDenied`].
@@ -171,16 +225,33 @@ pub(crate) fn build_local_backend(
     endpoint: &str,
     model: &str,
     allow_remote: bool,
+    pins: &[EndpointPin],
 ) -> Result<Arc<dyn LocalBackend>, SwarmError> {
-    if !allow_remote && !is_local_endpoint(endpoint) {
+    let local = is_local_endpoint(endpoint);
+    // G2 souveraineté : non-local refusé par défaut (egress interdit).
+    if !allow_remote && !local {
         return Err(SwarmError::RemoteBackendDenied { endpoint: endpoint.to_string() });
     }
-    let inner: Arc<dyn LocalBackend> = if let Some(m) = model.strip_prefix("openai:") {
-        OpenAiLocalBackend::new(endpoint.to_string(), m.to_string())
-    } else if endpoint.contains("/v1") {
-        OpenAiLocalBackend::new(endpoint.to_string(), model.to_string())
+    // G2-remote (RC-1) : un distant autorisé DOIT être épinglé — sinon refus. Aucun distant
+    // non pinné ne peut produire un record (la racine de confiance du canal serait inconnue).
+    let matched_fingerprint = if local {
+        None
     } else {
-        OllamaBackend::new(endpoint.to_string(), model.to_string())
+        match matched_pin(endpoint, pins) {
+            Some(fp) => Some(fp),
+            None => return Err(SwarmError::RemoteEndpointNotPinned { endpoint: endpoint.to_string() }),
+        }
+    };
+    // RC-1 : le barreau de confiance, scellé sur chaque record. `keyed = false` ici — le chemin
+    // SDK est self-host (zéro-clé) ; le routeur keyé (Network) est résolu côté passerelle, où
+    // l'estampillage `keyed = true` est un incrément ultérieur.
+    let attestation = attestation_for(endpoint, matched_fingerprint, false);
+    let inner: Arc<dyn LocalBackend> = if let Some(m) = model.strip_prefix("openai:") {
+        OpenAiLocalBackend::new(endpoint.to_string(), m.to_string(), attestation)
+    } else if endpoint.contains("/v1") {
+        OpenAiLocalBackend::new(endpoint.to_string(), model.to_string(), attestation)
+    } else {
+        OllamaBackend::new(endpoint.to_string(), model.to_string(), attestation)
     };
     // Routeur Network (egress) : re-tentatives transitoires par-appel. Souverain local : non.
     let resilient = if allow_remote {
@@ -393,22 +464,32 @@ mod tests {
 
     #[test]
     fn build_denies_remote_by_default_and_allows_with_flag() {
-        // garde-fou souveraineté : non-local refusé par défaut.
-        let err = build_local_backend("http://example.com:11434", "gemma3:12b", false);
+        // garde-fou souveraineté (G2) : non-local refusé par défaut.
+        let err = build_local_backend("http://example.com:11434", "gemma3:12b", false, &[]);
         assert!(matches!(err, Err(SwarmError::RemoteBackendDenied { .. })));
-        // opt-in explicite → autorisé (construit, sans appel réseau).
-        assert!(build_local_backend("http://example.com:11434", "gemma3:12b", true).is_ok());
-        // local : toujours OK.
-        assert!(build_local_backend("http://127.0.0.1:11434", "gemma3:12b", false).is_ok());
+        // G2-remote (RC-1) : egress autorisé MAIS endpoint non épinglé → refusé.
+        let unpinned = build_local_backend("http://example.com:11434", "gemma3:12b", true, &[]);
+        assert!(
+            matches!(unpinned, Err(SwarmError::RemoteEndpointNotPinned { .. })),
+            "un distant non pinné doit être refusé (aucun distant en clair)"
+        );
+        // egress autorisé + endpoint ÉPINGLÉ → autorisé (construit, sans appel réseau).
+        let pins = [EndpointPin::new("example.com", "sha256/PINTEST")];
+        assert!(
+            build_local_backend("http://example.com:11434", "gemma3:12b", true, &pins).is_ok(),
+            "un distant épinglé doit être autorisé"
+        );
+        // local : toujours OK, sans épingle.
+        assert!(build_local_backend("http://127.0.0.1:11434", "gemma3:12b", false, &[]).is_ok());
     }
 
     #[test]
     fn build_selects_engine_by_endpoint_and_model_prefix() {
-        let ollama = build_local_backend("http://127.0.0.1:11434", "gemma3:12b", false).unwrap();
+        let ollama = build_local_backend("http://127.0.0.1:11434", "gemma3:12b", false, &[]).unwrap();
         assert_eq!(ollama.descriptor().kind, BackendKind::Ollama);
-        let openai_by_path = build_local_backend("http://127.0.0.1:8080/v1", "qwen", false).unwrap();
+        let openai_by_path = build_local_backend("http://127.0.0.1:8080/v1", "qwen", false, &[]).unwrap();
         assert_eq!(openai_by_path.descriptor().kind, BackendKind::OpenAiLocal);
-        let openai_by_prefix = build_local_backend("http://127.0.0.1:8000", "openai:llama3", false).unwrap();
+        let openai_by_prefix = build_local_backend("http://127.0.0.1:8000", "openai:llama3", false, &[]).unwrap();
         assert_eq!(openai_by_prefix.descriptor().kind, BackendKind::OpenAiLocal);
         assert_eq!(openai_by_prefix.descriptor().model, "llama3", "préfixe retiré");
     }
@@ -478,6 +559,7 @@ mod tests {
                 response: response.clone(),
                 latency_ms: 1,
                 retry_count: 0,
+                compute_attestation: ComputeAttestation::R2LocalWitnessed,
             });
             response
         }
@@ -534,8 +616,9 @@ mod tests {
     #[test]
     fn build_remote_wraps_retrier_and_delegates_descriptor() {
         // allow_remote=true (routeur Network) : Breaker(Retrier(OpenAiLocal)). Le descripteur
-        // doit traverser les deux enveloppes intactes (forensique N17 fidèle).
-        let b = build_local_backend("http://router.internal:8080/v1", "anthropic/claude-3-5-sonnet", true).unwrap();
+        // doit traverser les deux enveloppes intactes (forensique N17 fidèle). Endpoint ÉPINGLÉ.
+        let pins = [EndpointPin::new("router.internal", "sha256/ROUTERPIN")];
+        let b = build_local_backend("http://router.internal:8080/v1", "anthropic/claude-3-5-sonnet", true, &pins).unwrap();
         assert_eq!(b.descriptor().kind, BackendKind::OpenAiLocal);
         assert_eq!(b.descriptor().model, "anthropic/claude-3-5-sonnet");
     }
