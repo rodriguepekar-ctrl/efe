@@ -68,6 +68,7 @@
 pub mod bridge;
 pub mod canon;
 pub mod chain;
+pub mod cosign;
 pub mod decorator;
 pub mod hash;
 pub mod metrics;
@@ -84,12 +85,16 @@ pub use bridge::{
 };
 pub use canon::{canonical_bytes, canonical_json};
 pub use chain::{verify_chain, BreakReason, ChainBreak, ChainVerdict, SwarmChain};
+pub use cosign::{
+    cosign_stamp, cosign_tuple, verify_cosignature, Attestor, CosignDowngrade, MockAttestor,
+    NodeRegistry, NodeStatus, PinnedNode,
+};
 pub use decorator::ProvenancedAgent;
 pub use hash::{blake3_bytes, blake3_value, payload_hash_of, sha256};
 pub use metrics::{ProvenanceMetrics, ProvenanceMetricsSnapshot};
 pub use n17_chain::{
-    seal_n17, verify_n17_chain, verify_run_offline, N17Break, N17ChainVerdict, OfflineVerdict,
-    SealedN17,
+    seal_n17, verify_n17_chain, verify_run_offline, verify_run_offline_with_nodes, CosignAnomaly,
+    HeldStrength, N17Break, N17ChainVerdict, OfflineVerdict, SealedN17,
 };
 pub use record::{
     hex32, AgentCallDraft, AgentCallRecord, AgentKind, AgentRole, CellRef,

@@ -2957,6 +2957,7 @@ version = "0.0.1"
 dependencies = [
  "async-trait",
  "blake3",
+ "ed25519-dalek",
  "efe-audit-core",
  "efe-blackboard",
  "efe-nano-sdk",

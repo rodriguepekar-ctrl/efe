@@ -38,9 +38,12 @@
 //! record muté ; si les feuilles ont elles aussi été éditées pour coller, le repli HMAC
 //! (clé tenant, non forgeable) casse au niveau chaîne — détecté sans localisation fine.
 
+use std::collections::HashMap;
+
 use efe_audit_core::chain_hmac;
 use efe_nano_sdk::{ComputeAttestation, LlmProvenanceRecord, ProvenanceId};
 
+use crate::cosign::{verify_cosignature, CosignDowngrade, NodeRegistry};
 use crate::hash::sha256;
 use crate::record::hex32;
 
@@ -229,6 +232,19 @@ impl HeldStrength {
     }
 }
 
+/// **RC-2/R3** — un écart revendiqué↔vérifié signalé par le vérifieur : un record qui REVENDIQUE
+/// R3 mais dont la co-signature n'a pas pu être vérifiée (donc redescendu à R4). Jamais silencieux
+/// (I-RC9). Le `node_id` et la `reason` rendent la dégradation auditable.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CosignAnomaly {
+    /// Le record concerné (localisation).
+    pub provenance_id: ProvenanceId,
+    /// Le nœud revendiqué par la co-signature.
+    pub node_id: String,
+    /// Pourquoi la co-signature n'a pas été honorée (→ redescente R4).
+    pub reason: CosignDowngrade,
+}
+
 /// Le verdict d'une re-preuve complète hors ligne.
 #[derive(Debug, Clone)]
 pub struct OfflineVerdict {
@@ -244,6 +260,9 @@ pub struct OfflineVerdict {
     /// **RC-1 / I-RC8** : le barreau de computation le plus faible tenu par le run. Toujours
     /// rapporté ; jamais replié dans `fully_proven`. Voir [`HeldStrength`].
     pub held_strength: HeldStrength,
+    /// **RC-2/R3 / I-RC9** : les revendications R3 non honorées (redescendues à R4), avec leur
+    /// raison. Vide ⇒ aucune sur-prétention détectée. Jamais silencieux.
+    pub cosign_anomalies: Vec<CosignAnomaly>,
 }
 
 /// **Re-prouve TOUT** depuis les seuls records persistés (essaim + N17) + feuilles +
@@ -256,21 +275,115 @@ pub fn verify_run_offline(
     n17_root: Option<[u8; 32]>,
     key: &[u8],
 ) -> OfflineVerdict {
+    // Sans registre de nœuds : aucune clé pinnée ⇒ toute revendication R3 est invérifiable et
+    // redescend à R4 (I-RC9, défaut honnête). Pour HONORER R3, passer un NodeRegistry (ci-dessous).
+    verify_run_offline_with_nodes(swarm_records, n17_records, n17_leaves, n17_root, key, &NodeRegistry::empty())
+}
+
+/// **RC-2/R3** — `verify_run_offline` conscient des nœuds : vérifie les co-signatures R3 contre le
+/// `node_registry` (clés publiques pinnées + statut). Une revendication R3 **honorée** tient le
+/// record à R3 ; une revendication **invérifiable** le redescend à R4 et l'ajoute aux
+/// `cosign_anomalies` (I-RC9 : aucune élévation sans preuve, jamais silencieux). Le registre ne
+/// contient que du **public** → la re-preuve reste **hors ligne**, sans coopération de personne.
+pub fn verify_run_offline_with_nodes(
+    swarm_records: &[AgentCallRecord],
+    n17_records: &[LlmProvenanceRecord],
+    n17_leaves: &[[u8; 32]],
+    n17_root: Option<[u8; 32]>,
+    key: &[u8],
+    node_registry: &NodeRegistry,
+) -> OfflineVerdict {
     let swarm = verify_swarm(swarm_records, key);
     let n17_chain = verify_n17_chain(n17_records, n17_leaves, n17_root, key);
     // Le seam déjà prévu : un résolveur pré-chargé depuis les records N17 persistés.
     let resolver = MapResolver::from_records(n17_records.iter());
     let bridge = verify_bridge(swarm_records, &resolver);
     let fully_proven = swarm.ok() && n17_chain.intact && bridge.all_mode_c_consistent();
-    // RC-1/I-RC8 : le vérifieur apprend TOUJOURS le barreau le plus faible — la transaction est
-    // re-prouvée (`fully_proven`), mais on dit explicitement quelle confiance de computation tient.
-    let held_strength = HeldStrength::from_records(n17_records);
-    OfflineVerdict { swarm, n17_chain, bridge, fully_proven, held_strength }
+    // RC-1/RC-2 (I-RC8/I-RC9) : le barreau tenu est le plus faible des barreaux VÉRIFIÉS — une
+    // revendication R3 non prouvée redescend à R4 — et tout écart est signalé, jamais sur parole.
+    // Un R3 n'est honoré que sur un run dont la chaîne N17 est INTÈGRE (sinon le record n'est pas
+    // prouvé appartenir au run) : `held_strength` n'est jamais découplé de l'intégrité de chaîne.
+    let (held_strength, cosign_anomalies) =
+        assess_held_strength(n17_records, node_registry, n17_chain.intact);
+    OfflineVerdict { swarm, n17_chain, bridge, fully_proven, held_strength, cosign_anomalies }
+}
+
+/// **RC-2/R3** — évalue le barreau de computation **vérifié** de chaque record. Une revendication R3
+/// n'est honorée (rang 2) que si TOUTES ces conditions tiennent ; sinon elle **redescend à R4** et
+/// l'anomalie est collectée (I-RC9, jamais silencieux) :
+///  1. la chaîne N17 du run est **intègre** (`chain_intact`) — sinon le record n'est pas prouvé du run ;
+///  2. son nonce-défi n'est pas **réutilisé** par un autre record R3 du run (rejeu intra-run) ;
+///  3. le record a une **sortie** (pas de substitution `ZERO` pour un `output_hash` absent) ;
+///  4. la co-signature **vérifie** (ed25519, tuple recalculé, clé pinnée non révoquée).
+///
+/// Pur, hors ligne. (La fraîcheur INTER-run du nonce — défi unique jamais rejoué d'un run passé —
+/// reste hors de portée hors ligne ; c'est la garantie d'émission orchestrateur, cf. I-RC12.)
+fn assess_held_strength(
+    records: &[LlmProvenanceRecord],
+    registry: &NodeRegistry,
+    chain_intact: bool,
+) -> (HeldStrength, Vec<CosignAnomaly>) {
+    // Pré-passe : compter les nonces-défis des records R3 — un nonce réutilisé dans le run signale
+    // un rejeu intra-run. Indépendant de l'ordre (déterministe) ; degrade TOUS les doublons.
+    let mut nonce_counts: HashMap<&str, usize> = HashMap::new();
+    for r in records {
+        if let ComputeAttestation::R3RemoteCosigned { cosignature, .. } = &r.compute_attestation {
+            *nonce_counts.entry(cosignature.nonce.as_str()).or_insert(0) += 1;
+        }
+    }
+
+    let mut weakest_rank: Option<u8> = None;
+    let mut weakest_label: Option<String> = None;
+    let mut any_remote = false;
+    let mut anomalies = Vec::new();
+    for r in records {
+        let a = &r.compute_attestation;
+        any_remote |= a.is_remote();
+        let (eff_rank, eff_label): (u8, &'static str) = match a {
+            ComputeAttestation::R3RemoteCosigned { cosignature, .. } => {
+                // Cascade « aucune élévation sans preuve » (I-RC9) : le premier obstacle gagne.
+                let downgrade: Option<CosignDowngrade> = if !chain_intact {
+                    Some(CosignDowngrade::ChainNotIntact)
+                } else if nonce_counts.get(cosignature.nonce.as_str()).copied().unwrap_or(0) > 1 {
+                    Some(CosignDowngrade::NonceReused)
+                } else {
+                    match r.output_hash {
+                        None => Some(CosignDowngrade::MissingOutput),
+                        Some(oh) => {
+                            verify_cosignature(&r.final_prompt_hash, &oh, cosignature, registry).err()
+                        }
+                    }
+                };
+                match downgrade {
+                    None => (2, "R3-DISTANT-COSIGNE"),
+                    Some(reason) => {
+                        anomalies.push(CosignAnomaly {
+                            provenance_id: r.provenance_id,
+                            node_id: cosignature.node_id.clone(),
+                            reason,
+                        });
+                        (1, "R4-DISTANT-CANAL") // redescendu (I-RC9), jamais silencieux
+                    }
+                }
+            }
+            other => (other.strength_rank(), other.rung_label()),
+        };
+        let lower = match weakest_rank {
+            Some(w) => eff_rank < w,
+            None => true,
+        };
+        if lower {
+            weakest_rank = Some(eff_rank);
+            weakest_label = Some(eff_label.to_string());
+        }
+    }
+    (HeldStrength { weakest_rank, weakest_label, any_remote }, anomalies)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::cosign::Attestor; // les méthodes cosign()/public_key_hex() du MockAttestor
     use efe_nano_sdk::{
         AgentId, Blake3Hash, Completeness, ComputeAttestation, CostAccounting, EndpointIdentity,
         FinishReason, ModelIdentity, NanoAgentId, NanoAgentVersion, PiiStrategy, RetryOutcome,
@@ -553,6 +666,177 @@ mod tests {
         assert!(!v.intact, "le downgrade de localité doit casser la chaîne");
         assert_eq!(v.reason, Some(N17Break::RecordContentMutated));
         assert_eq!(v.first_break, Some(recs[1].provenance_id), "le record downgradé est localisé");
+    }
+
+    // ── RC-2 / R3 : la co-signature T-WITNESS, bout-en-bout [SIMULATED ATTESTOR] ──────
+
+    /// Construit un record N17 estampillé R3, co-signé par `att` sur les hashes RÉELS du record.
+    fn n17_r3(prov: u128, tenant: TenantId, att: &crate::cosign::MockAttestor, nonce: &str) -> LlmProvenanceRecord {
+        let mut r = n17(prov, tenant, swarm_uuid(), "gemma3:12b");
+        let output_hash = r.output_hash.unwrap_or(Blake3Hash::ZERO);
+        let cosig = att.cosign(&r.final_prompt_hash, &output_hash, nonce);
+        r.compute_attestation = ComputeAttestation::R3RemoteCosigned {
+            endpoint: EndpointIdentity::new("gpu.internal", "sha256/CHANNELPIN"),
+            cosignature: cosig,
+        };
+        r
+    }
+
+    /// Un run Mode C minimal (1 agent lié à 1 record N17), scellé essaim + N17 — pour exercer
+    /// `verify_run_offline*` de bout en bout.
+    fn run_with(n17_rec: LlmProvenanceRecord) -> (Vec<AgentCallRecord>, Vec<LlmProvenanceRecord>, SealedN17) {
+        use crate::record::{AgentCallDraft, AgentKind, AgentRole};
+        let tenant = TenantId::system();
+        let swarm = SwarmId::from_uuid(swarm_uuid());
+        let n17_recs = vec![n17_rec];
+        let sealed = seal_n17(&n17_recs, &key());
+        let draft = AgentCallDraft::new(
+            swarm, tenant, AgentId::new("generator").unwrap(), AgentRole::Generator,
+            AgentKind::ModeC, Blake3Hash::from_bytes([1u8; 32]), Blake3Hash::from_bytes([2u8; 32]),
+        )
+        .with_llm_provenance(n17_recs[0].provenance_id);
+        let mut chain = crate::chain::SwarmChain::new(tenant, swarm, key());
+        let swarm_recs = chain.append_all(std::iter::once(draft));
+        (swarm_recs, n17_recs, sealed)
+    }
+
+    #[test]
+    fn r3_run_holds_at_r3_when_the_cosignature_verifies() {
+        // Nominal : un nœud pinné co-signe → le vérifieur HONORE R3 (rang 2), zéro anomalie.
+        let att = crate::cosign::MockAttestor::from_seed("gpu-1", [7u8; 32]);
+        let registry = NodeRegistry::empty().with_node("gpu-1", att.public_key_hex());
+        let (sw, n17r, sealed) = run_with(n17_r3(1, TenantId::system(), &att, "challenge-0001"));
+        let v = verify_run_offline_with_nodes(&sw, &n17r, &sealed.leaf_hashes, sealed.n17_root, &key(), &registry);
+        assert!(v.fully_proven, "la transaction re-prouve (R0)");
+        assert_eq!(v.held_strength.weakest_rank, Some(2), "co-signature vérifiée → R3 (rang 2)");
+        assert_eq!(v.held_strength.weakest_label.as_deref(), Some("R3-DISTANT-COSIGNE"));
+        assert!(v.held_strength.any_remote);
+        assert!(v.cosign_anomalies.is_empty(), "aucune sur-prétention");
+    }
+
+    #[test]
+    fn r3_claim_without_a_node_registry_degrades_to_r4() {
+        // I-RC9 : sans registre (verify_run_offline nu), R3 est invérifiable → redescend à R4,
+        // anomalie NodeNotPinned. La transaction re-prouve toujours.
+        let att = crate::cosign::MockAttestor::from_seed("gpu-1", [7u8; 32]);
+        let (sw, n17r, sealed) = run_with(n17_r3(1, TenantId::system(), &att, "c"));
+        let v = verify_run_offline(&sw, &n17r, &sealed.leaf_hashes, sealed.n17_root, &key());
+        assert!(v.fully_proven);
+        assert_eq!(v.held_strength.weakest_rank, Some(1), "aucune clé pinnée → R3 non tenu → R4");
+        assert_eq!(v.cosign_anomalies.len(), 1);
+        assert_eq!(v.cosign_anomalies[0].reason, CosignDowngrade::NodeNotPinned);
+        assert_eq!(v.cosign_anomalies[0].node_id, "gpu-1");
+    }
+
+    #[test]
+    fn r3_forged_cosignature_degrades_to_r4_with_anomaly() {
+        // Sur-prétention : le record porte une co-signature d'un IMPOSTEUR (même node_id, autre
+        // clé) ; le vérifieur pinne la VRAIE clé → la signature ne vérifie pas → R4 + anomalie.
+        let real = crate::cosign::MockAttestor::from_seed("gpu-1", [7u8; 32]);
+        let imposter = crate::cosign::MockAttestor::from_seed("gpu-1", [9u8; 32]);
+        let registry = NodeRegistry::empty().with_node("gpu-1", real.public_key_hex());
+        let (sw, n17r, sealed) = run_with(n17_r3(1, TenantId::system(), &imposter, "c"));
+        let v = verify_run_offline_with_nodes(&sw, &n17r, &sealed.leaf_hashes, sealed.n17_root, &key(), &registry);
+        assert!(v.fully_proven, "la transaction re-prouve, mais le témoin est rejeté");
+        assert_eq!(v.held_strength.weakest_rank, Some(1), "signature forgée → R4");
+        assert_eq!(v.cosign_anomalies[0].reason, CosignDowngrade::SignatureInvalid);
+    }
+
+    #[test]
+    fn r3_revoked_node_degrades_to_r4() {
+        // I-RC13 : un nœud dont la clé est révoquée ne hisse plus ses records — redescente R4.
+        let att = crate::cosign::MockAttestor::from_seed("gpu-1", [7u8; 32]);
+        let mut registry = NodeRegistry::empty().with_node("gpu-1", att.public_key_hex());
+        registry.revoke("gpu-1", "clé compromise");
+        let (sw, n17r, sealed) = run_with(n17_r3(1, TenantId::system(), &att, "c"));
+        let v = verify_run_offline_with_nodes(&sw, &n17r, &sealed.leaf_hashes, sealed.n17_root, &key(), &registry);
+        assert_eq!(v.held_strength.weakest_rank, Some(1), "nœud révoqué → R4");
+        assert_eq!(v.cosign_anomalies[0].reason, CosignDowngrade::NodeRevoked);
+    }
+
+    #[test]
+    fn sealed_r3_cosignature_cannot_be_stripped() {
+        // Défense en profondeur : la co-signature est DANS le leaf (RC-1). La retirer (R3 → R4 nu)
+        // pour effacer le témoin casse la chaîne N17 et localise le record.
+        let att = crate::cosign::MockAttestor::from_seed("gpu-1", [7u8; 32]);
+        let recs = vec![n17_r3(1, TenantId::system(), &att, "c")];
+        let sealed = seal_n17(&recs, &key());
+        let mut tampered = recs.clone();
+        tampered[0].compute_attestation = ComputeAttestation::R4RemoteChannel {
+            endpoint: EndpointIdentity::new("gpu.internal", "sha256/CHANNELPIN"),
+            keyed: false,
+        };
+        let v = verify_n17_chain(&tampered, &sealed.leaf_hashes, sealed.n17_root, &key());
+        assert!(!v.intact, "retirer la co-signature scellée casse la chaîne");
+        assert_eq!(v.reason, Some(N17Break::RecordContentMutated));
+        assert_eq!(v.first_break, Some(recs[0].provenance_id));
+    }
+
+    // ── RC-2 (revue adversariale) : les durcissements de la passe de vérification ─────
+
+    #[test]
+    fn r3_with_missing_output_degrades_to_r4_no_zero_substitution() {
+        // Un record R3 SANS sortie ne doit pas voir sa co-signature liée à un contenu ZERO fabriqué
+        // (findings no-elevation / tuple-binding) : il redescend à R4 + anomalie MissingOutput.
+        let att = crate::cosign::MockAttestor::from_seed("gpu-1", [7u8; 32]);
+        let registry = NodeRegistry::empty().with_node("gpu-1", att.public_key_hex());
+        let mut rec = n17_r3(1, TenantId::system(), &att, "challenge-1");
+        rec.output_hash = None; // pas de sortie
+        let (sw, n17r, sealed) = run_with(rec);
+        let v = verify_run_offline_with_nodes(&sw, &n17r, &sealed.leaf_hashes, sealed.n17_root, &key(), &registry);
+        assert_eq!(v.held_strength.weakest_rank, Some(1), "sortie absente → pas de R3");
+        assert_eq!(v.cosign_anomalies[0].reason, CosignDowngrade::MissingOutput);
+    }
+
+    #[test]
+    fn r3_replayed_nonce_within_a_run_degrades_both_to_r4() {
+        // I-RC12 (volet hors-ligne) : deux records R3 partageant le MÊME nonce-défi = rejeu
+        // intra-run. AUCUN des deux n'est honoré (on ne sait pas lequel est légitime).
+        let att = crate::cosign::MockAttestor::from_seed("gpu-1", [7u8; 32]);
+        let registry = NodeRegistry::empty().with_node("gpu-1", att.public_key_hex());
+        // deux records distincts, MÊME nonce "REUSED" — chacun co-signé valablement.
+        let recs = vec![
+            n17_r3(1, TenantId::system(), &att, "REUSED"),
+            n17_r3(2, TenantId::system(), &att, "REUSED"),
+        ];
+        let sealed = seal_n17(&recs, &key());
+        // (les deux records sont liés à la chaîne d'essaim pour fully_proven ; ici on cible held_strength)
+        let v = verify_run_offline_with_nodes(&[], &recs, &sealed.leaf_hashes, sealed.n17_root, &key(), &registry);
+        assert_eq!(v.held_strength.weakest_rank, Some(1), "nonce rejoué intra-run → R4 pour les deux");
+        assert_eq!(v.cosign_anomalies.len(), 2, "les DEUX doublons sont signalés");
+        assert!(v.cosign_anomalies.iter().all(|a| a.reason == CosignDowngrade::NonceReused));
+    }
+
+    #[test]
+    fn distinct_nonces_in_a_run_are_both_honored() {
+        // Contrôle : deux R3 à nonces DISTINCTS sont tous deux honorés (pas de faux positif).
+        let att = crate::cosign::MockAttestor::from_seed("gpu-1", [7u8; 32]);
+        let registry = NodeRegistry::empty().with_node("gpu-1", att.public_key_hex());
+        let recs = vec![
+            n17_r3(1, TenantId::system(), &att, "challenge-1"),
+            n17_r3(2, TenantId::system(), &att, "challenge-2"),
+        ];
+        let sealed = seal_n17(&recs, &key());
+        let v = verify_run_offline_with_nodes(&[], &recs, &sealed.leaf_hashes, sealed.n17_root, &key(), &registry);
+        assert_eq!(v.held_strength.weakest_rank, Some(2), "nonces distincts → R3 tenu");
+        assert!(v.cosign_anomalies.is_empty());
+    }
+
+    #[test]
+    fn r3_is_not_honored_when_the_n17_chain_is_broken() {
+        // Couplage chaîne↔témoin : même avec une co-signature VALIDE, un R3 sur un run dont la
+        // chaîne N17 est rompue n'est PAS honoré (le record n'est pas prouvé appartenir au run).
+        let att = crate::cosign::MockAttestor::from_seed("gpu-1", [7u8; 32]);
+        let registry = NodeRegistry::empty().with_node("gpu-1", att.public_key_hex());
+        let recs = vec![n17_r3(1, TenantId::system(), &att, "challenge-1")];
+        let sealed = seal_n17(&recs, &key());
+        // on mute un champ HORS tuple (op_id) : la co-signature vérifierait encore, MAIS la chaîne casse.
+        let mut tampered = recs.clone();
+        tampered[0].op_id = "swarm.tampered".into();
+        let v = verify_run_offline_with_nodes(&[], &tampered, &sealed.leaf_hashes, sealed.n17_root, &key(), &registry);
+        assert!(!v.n17_chain.intact, "la chaîne est rompue");
+        assert_eq!(v.held_strength.weakest_rank, Some(1), "chaîne rompue → R3 non honoré");
+        assert_eq!(v.cosign_anomalies[0].reason, CosignDowngrade::ChainNotIntact);
     }
 
     #[test]

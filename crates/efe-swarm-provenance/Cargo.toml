@@ -26,6 +26,7 @@ async-trait = { workspace = true }  # impl async des traits d'agent (décorateur
 
 blake3 = "1.5"   # input/output content hashes (aligné efe-llm-provenance N17)
 sha2   = "0.10"  # payload_hash SHA-256 (aligné la chaîne HMAC efe-nano::audit)
+ed25519-dalek = "2.1"  # RC-2/R3 — co-signature T-WITNESS (même lib qu'N18 publisher-identity)
 
 [dev-dependencies]
 serde_json = { workspace = true }
