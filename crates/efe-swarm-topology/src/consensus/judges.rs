@@ -42,6 +42,17 @@ impl Judge for VerifierJudge {
     fn name(&self) -> &str {
         &self.name
     }
+    /// **ADR-019 v2** : si le vérificateur sous-jacent est un ORACLE DE CORRECTION, on expose son
+    /// `passes()` ABSOLU par candidat (le PASS jeté par `assess`, qui ne garde que le score relatif).
+    /// Sinon `None` (un vérificateur de FORME — non-vide, est-objet, longueur — n'atteste pas la
+    /// justesse). C'est ce verdict que le consensus gate pour « vérification = acceptation ».
+    fn correctness_verdict(&self, task: &Value, candidates: &[Value]) -> Option<Vec<bool>> {
+        if self.ver.is_correctness_oracle() {
+            Some(candidates.iter().map(|c| self.ver.passes(task, c)).collect())
+        } else {
+            None
+        }
+    }
 }
 
 /// Préfère les candidats dont la longueur de texte est proche d'`ideal`.

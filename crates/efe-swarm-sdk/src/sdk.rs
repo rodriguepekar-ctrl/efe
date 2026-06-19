@@ -1429,6 +1429,53 @@ mod tests {
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn v2_consensus_credits_only_verified_answers() {
+        // ════ ADR-019 v2 « vérification = acceptation » — bout-en-bout via la mémoire. ════
+        // AVEC un oracle de correction (j_equals_expected) dans le panneau, l'acceptation suit le PASS
+        // ABSOLU du gagnant vs la vérité-terrain (task.expected), PAS l'accord. Conséquence sur les 5
+        // cellules : un essaim unanimement FAUX ne crédite NI réputation NI few-shot ET compte un ÉCHEC
+        // (→ read-back k_min↑) ; un essaim CORRECT crédite. Opt-in PAR COMPOSITION : c'est la présence
+        // de l'oracle dans le panneau qui arme le gate (les panneaux 100 % heuristiques sont inchangés).
+        use efe_swarm_topology::catalog::ConstGenerator;
+        let tenant = efe_nano_sdk::TenantId::system().to_string();
+        let task = json!({ "text": "x", "expected": "x" });
+        let judges = ["j_equals_expected", "consistency"]; // un ORACLE + une heuristique
+
+        // ── (a) FAUX unanime : tous "DEGENERATE_WRONG" ≠ expected → l'oracle ÉCHOUE le gagnant. ──
+        let store_w = std::sync::Arc::new(InMemoryMemoryStore::new());
+        let fam_w = consensus_family(&task, "const_wrong", &judges);
+        let mut fleet_w = AgentFleet::standard();
+        fleet_w.register_generator("const_wrong", std::sync::Arc::new(ConstGenerator { value: json!("DEGENERATE_WRONG") }));
+        let swarm_w = Swarm::builder().fleet(std::sync::Arc::new(fleet_w)).memory(MemoryHandle::new(store_w.clone())).build().unwrap();
+        let run_w = swarm_w
+            .run(task.clone(), TopologySpec::consensus("const_wrong", &judges, 3), Budget::cents(1000))
+            .await
+            .unwrap();
+        assert!(run_w.is_clean(), "le run complète proprement (l'échec de vérification ne le rend pas non-clean)");
+        let snap_w = store_w.snapshot(&tenant, &fam_w).await.unwrap();
+        assert!(snap_w.cells.reputation.agents.is_empty(), "FAUX unanime non-vérifié → AUCUNE réputation (v2) : {:?}", snap_w.cells.reputation.agents.keys().collect::<Vec<_>>());
+        assert!(snap_w.cells.exemplars.items.is_empty(), "FAUX unanime → AUCUN few-shot (anti-poison v2)");
+        let rec_w = snap_w.cells.failure.of(fam_w.as_str()).expect("entrée d'échec présente");
+        assert_eq!(rec_w.fails, 1, "non-vérifié → ÉCHEC compté (compose avec le read-back k_min↑)");
+
+        // ── (b) CORRECT : tous "x" == expected → l'oracle PASSE → ACCEPTÉ + crédité. ──
+        let store_ok = std::sync::Arc::new(InMemoryMemoryStore::new());
+        let fam_ok = consensus_family(&task, "const_right", &judges);
+        let mut fleet_ok = AgentFleet::standard();
+        fleet_ok.register_generator("const_right", std::sync::Arc::new(ConstGenerator { value: json!("x") }));
+        let swarm_ok = Swarm::builder().fleet(std::sync::Arc::new(fleet_ok)).memory(MemoryHandle::new(store_ok.clone())).build().unwrap();
+        let run_ok = swarm_ok
+            .run(task.clone(), TopologySpec::consensus("const_right", &judges, 3), Budget::cents(1000))
+            .await
+            .unwrap();
+        let snap_ok = store_ok.snapshot(&tenant, &fam_ok).await.unwrap();
+        assert!(!snap_ok.cells.reputation.agents.is_empty(), "CORRECT vérifié → réputation créditée");
+        assert!(!snap_ok.cells.exemplars.items.is_empty(), "CORRECT vérifié → exemplaire déposé (few-shot)");
+        let rec_ok = snap_ok.cells.failure.of(fam_ok.as_str()).expect("entrée d'échec présente");
+        assert_eq!(rec_ok.fails, 0, "CORRECT vérifié → aucun échec");
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     async fn consensus_pattern_adaptive_is_reachable_and_clean() {
         // read-back A : le pattern ADAPTATIF (jadis code mort, inatteignable depuis la spec) est
         // désormais ATTEIGNABLE, tourne proprement, et décide un pattern selon l'accord des candidats.

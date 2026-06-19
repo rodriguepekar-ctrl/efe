@@ -39,6 +39,16 @@ pub trait Judge: Send + Sync {
     /// `scores[i]` = qualité du candidat i selon ce juge.
     async fn assess(&self, task: &Value, candidates: &[Value]) -> Vec<f64>;
     fn name(&self) -> &str;
+
+    /// **VERDICT DE CORRECTION (ADR-019 v2)** : si ce juge enveloppe un **oracle de correction**
+    /// (cf. [`crate::traits::Verifier::is_correctness_oracle`]), renvoie `Some(passes[i])` — le
+    /// verdict ABSOLU pass/fail par candidat, par rapport à la vérité-terrain de la tâche. Sinon
+    /// `None` : un juge heuristique (accord/forme) n'atteste PAS la justesse et ne gate donc jamais
+    /// l'acceptation. Déterministe et synchrone (pas d'appel réseau) : le consensus l'évalue
+    /// TOUJOURS, indépendamment de la machinerie de vote/escalade. Défaut `None`.
+    fn correctness_verdict(&self, _task: &Value, _candidates: &[Value]) -> Option<Vec<bool>> {
+        None
+    }
 }
 
 /// L'avis d'UN juge : un score par candidat.

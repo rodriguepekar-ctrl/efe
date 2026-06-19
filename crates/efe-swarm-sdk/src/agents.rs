@@ -304,6 +304,12 @@ impl Judge for MeteredJudge {
     fn name(&self) -> &str {
         self.inner.name()
     }
+    /// **ADR-019 v2** : transparent au verdict de correction du juge enveloppé — sinon le consensus
+    /// ne verrait jamais l'oracle (il opère sur des `MeteredJudge`). Pas de métrage : déterministe,
+    /// sans appel LLM (le `passes()` du vérificateur sous-jacent).
+    fn correctness_verdict(&self, task: &Value, candidates: &[Value]) -> Option<Vec<bool>> {
+        self.inner.correctness_verdict(task, candidates)
+    }
 }
 pub(crate) fn meter_judge(inner: Arc<dyn Judge>, meter: Meter, id: AgentId) -> Arc<dyn Judge> {
     Arc::new(MeteredJudge { inner, meter, id })

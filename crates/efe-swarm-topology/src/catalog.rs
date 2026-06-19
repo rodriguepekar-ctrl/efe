@@ -396,6 +396,12 @@ impl Verifier for EqualsExpected {
             0.0
         }
     }
+
+    /// Oui : c'est l'unique oracle qui compare à la **vérité-terrain de la tâche** (`task.expected`)
+    /// — son `passes()` atteste la JUSTESSE, pas la forme (ADR-019 v2 : « vérification = acceptation »).
+    fn is_correctness_oracle(&self) -> bool {
+        true
+    }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

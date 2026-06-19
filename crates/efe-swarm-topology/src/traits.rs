@@ -26,6 +26,16 @@ pub trait Verifier: Send + Sync {
     fn passes(&self, task: &Value, candidate: &Value) -> bool {
         self.score(task, candidate) >= 0.5
     }
+
+    /// **ORACLE DE CORRECTION (ADR-019 v2)** : ce vérificateur juge-t-il la **justesse** d'un
+    /// candidat par rapport à la **vérité-terrain de la tâche** (p. ex. `== task.expected`), par
+    /// opposition à un contrôle de **forme/présence** (non-vide, est-objet, longueur) ? Seul un
+    /// oracle de correction autorise le consensus à conclure « vérification = acceptation » : son
+    /// `passes()` sur le gagnant GATE alors l'acceptabilité (cf. `ConsensusTopology`). Par défaut
+    /// `false` (un contrôle de forme n'atteste PAS la justesse).
+    fn is_correctness_oracle(&self) -> bool {
+        false
+    }
 }
 
 /// Une étape de pipeline (T2) : transforme un item en 0..N items pour l'étage

@@ -424,10 +424,27 @@ impl Topology for ConsensusTopology {
             });
         }
 
+        // **ADR-019 v2 — « vérification = acceptation » (opt-in par composition du panneau).** Si le
+        // panneau contient un ORACLE DE CORRECTION (un juge dont `correctness_verdict` renvoie Some),
+        // on l'évalue ICI, TOUJOURS — indépendamment de la machinerie de vote/escalade (les ballots
+        // peuvent être VIDES sur un vote confiant). `oracle_pass[i]` = le candidat i a passé TOUS les
+        // oracles présents (PASS ABSOLU vs la vérité-terrain). `None` ⇒ aucun oracle ⇒ repli sur le
+        // comportement historique (présence/accord). Déterministe, sans réseau (sync).
+        let oracle_pass: Option<Vec<bool>> = {
+            let verdicts: Vec<Vec<bool>> =
+                self.judges.iter().filter_map(|j| j.correctness_verdict(task, &candidates)).collect();
+            (!verdicts.is_empty()).then(|| {
+                (0..candidates.len()).map(|i| verdicts.iter().all(|v| v.get(i).copied().unwrap_or(false))).collect()
+            })
+        };
+        let selected_index = outcome.selected_index;
+
         // read-back B (B2) : l'ATTRIBUTION par-variante, depuis la décision (`selected_index` +
         // `scores`). Calculée AVANT que `output` ne déplace `outcome.selected`. Le SDK la replie en
-        // réputation (auparavant dégénérée : un seul agent « generator »).
-        let agent_contributions = variant_contributions(&candidates, &outcome, self.reputation_schedule.as_deref());
+        // réputation (auparavant dégénérée : un seul agent « generator »). `verified` suit l'ORACLE
+        // s'il est présent (PASS absolu), sinon la barre relative (historique).
+        let agent_contributions =
+            variant_contributions(&candidates, &outcome, self.reputation_schedule.as_deref(), oracle_pass.as_deref());
 
         // ADR-014 : en adaptatif, la sortie est ENVELOPPÉE `{value, sizing}` — la même
         // grammaire de diagnostic que le gossip (`{value, gossip:{…}}`) : on rend
@@ -437,22 +454,20 @@ impl Topology for ConsensusTopology {
             None => outcome.selected,
             Some((plan, trace)) => json!({ "value": outcome.selected, "sizing": trace.to_json(plan) }),
         };
-        // MEM-2.c : le consensus a-t-il une réponse présente ?
-        //
-        // **LIMITE INHÉRENTE, par design (revue adversariale ADR-019).** Pour le consensus, l'accept-
-        // abilité = PRÉSENCE (non-null/non-vide), PAS correction : *l'accord EST le signal*. Un essaim
-        // unanimement FAUX (mode d'échec corrélé — K sorties identiques, p. ex. une hallucination
-        // commune) produit une réponse « présente » ⇒ acceptée ⇒ crédite réputation + exemplaire
-        // few-shot, comme s'il avait raison. La topologie n'a AUCUN oracle de correction : « accord
-        // correct » et « accord faux » sont structurellement INDISTINGUABLES ici (le gate `warm_reputation`
-        // l'atteste — bons profils unanimes sur « GOLD » = candidats identiques, légitimes). Ce n'est donc
-        // PAS un bug local corrigible chirurgicalement : le distinguer EXIGE une vérification réelle.
-        // MITIGATION (déjà disponible) : monter un juge-VÉRIFICATEUR (p. ex. `j_equals_expected`) dans le
-        // panneau quand la correction compte — ou GV/T1, qui gatent `produced_acceptable` sur un candidat
-        // RÉELLEMENT vérifié (`r.passed > 0`). V2 NOMMÉ : faire de « vérification = acceptation » le défaut
-        // du consensus (crédit conditionné à un vérificateur absolu), un changement de parti pris qui
-        // touche le scoring + plusieurs gates — hors de ce lot.
-        let acceptable = answer_is_present(&output);
+        // **ADR-019 v2 — « vérification = acceptation ».** Acceptabilité du consensus :
+        // - AVEC un ORACLE DE CORRECTION dans le panneau (`oracle_pass = Some`) : la réponse n'est
+        //   acceptée QUE si le GAGNANT a réellement PASSÉ la vérification (PASS absolu vs la
+        //   vérité-terrain). Un accord unanimement FAUX échoue l'oracle ⇒ NON accepté ⇒ ni réputation
+        //   ni few-shot, et la cellule d'échec compte (→ read-back k_min↑). C'est le patron de GV/T1
+        //   (`produced_acceptable = passed > 0`) porté au consensus — « accord » ne fabrique plus
+        //   d'acceptation, seule la JUSTESSE vérifiée l'autorise.
+        // - SANS oracle (panneau 100 % heuristique) : repli sur la PRÉSENCE — comportement historique
+        //   inchangé. Sans vérité-terrain, « accord correct » et « accord faux » restent indécidables
+        //   (cf. la mémoire-projet) ; l'opt-in EST la composition du panneau.
+        let acceptable = match &oracle_pass {
+            Some(pass) => answer_is_present(&output) && pass.get(selected_index).copied().unwrap_or(false),
+            None => answer_is_present(&output),
+        };
         TopologyOutput {
             output,
             // K réellement dépensé (= self.k en fixe ; = K_used ≤ k_max en adaptatif).
@@ -479,19 +494,22 @@ impl Topology for ConsensusTopology {
 }
 
 /// **ADR-019 (read-back B, B2 + R-b/R-c)** : l'attribution par-variante d'une décision consensuelle.
-/// `won` = la variante a produit le candidat retenu (`selected_index`, exact) ; `verified` = son
-/// score consensuel atteint la **barre** (la moyenne des scores du run) — un signal pris des juges
-/// RÉELS, jamais fabriqué (I-REP5). Le gagnant (score max ≥ moyenne) est toujours « vérifié ».
+/// `won` = la variante a produit le candidat retenu (`selected_index`, exact). `verified` :
+/// - **AVEC oracle (v2, `oracle_pass = Some`)** : le PASS ABSOLU du candidat vs la vérité-terrain —
+///   la JUSTESSE, pas l'accord. Un essaim unanime-FAUX échoue l'oracle ⇒ AUCUN « vérifié » fabriqué.
+/// - **SANS oracle** : le score consensuel atteint la **barre** (moyenne du run) — signal des juges
+///   RÉELS, jamais fabriqué (I-REP5) ; le gagnant (score max ≥ moyenne) est « vérifié ».
 /// Scores incohérents (repli sans juge dégénéré) ⇒ vide.
 ///
 /// **I-REP7 (cohérence attribution↔ordre)** : sous `schedule`, la position `i` a été produite par le
 /// profil `schedule[i]` ; le crédit va donc à `generator_{schedule[i]:03}`. Les signaux `won` /
-/// `verified` restent lus sur la décision **position-indexée** (`outcome`) — seule l'**étiquette** du
-/// contributeur suit l'ordonnancement. Sans `schedule` (`None`) ⇒ `generator_{i:03}` (identité).
+/// `verified` restent lus sur la décision **position-indexée** (`outcome`/`oracle_pass`) — seule
+/// l'**étiquette** du contributeur suit l'ordonnancement. Sans `schedule` (`None`) ⇒ `generator_{i:03}`.
 fn variant_contributions(
     candidates: &[Value],
     outcome: &AggOutcome,
     schedule: Option<&[usize]>,
+    oracle_pass: Option<&[bool]>,
 ) -> Vec<AgentContribution> {
     if candidates.is_empty() || outcome.scores.len() != candidates.len() {
         return Vec::new();
@@ -504,7 +522,11 @@ fn variant_contributions(
             AgentContribution {
                 agent_id: format!("generator_{profil:03}"),
                 won: i == outcome.selected_index,
-                verified: outcome.scores[i] >= bar,
+                // v2 : avec oracle, `verified` = PASS ABSOLU (justesse) ; sinon, barre relative.
+                verified: match oracle_pass {
+                    Some(pass) => pass.get(i).copied().unwrap_or(false),
+                    None => outcome.scores[i] >= bar,
+                },
             }
         })
         .collect()
@@ -550,13 +572,13 @@ mod tests {
         let cands = vec![json!("a"), json!("a"), json!("b")]; // scores Vote [2,2,1], gagnant index 0
         let outcome = MajorityVote.aggregate(&json!({}), &cands, &[]);
         let schedule = [5usize, 3, 7];
-        let c = variant_contributions(&cands, &outcome, Some(&schedule));
+        let c = variant_contributions(&cands, &outcome, Some(&schedule), None);
         assert_eq!(c[0].agent_id, "generator_005", "position 0 (gagnante) → profil schedule[0]=5");
         assert!(c[0].won, "la position gagnante gagne, étiquetée par son profil");
         assert_eq!(c[1].agent_id, "generator_003", "position 1 → profil schedule[1]=3");
         assert_eq!(c[2].agent_id, "generator_007", "position 2 → profil schedule[2]=7");
         // identité (None) ⇒ generator_{position} (comportement historique).
-        let id = variant_contributions(&cands, &outcome, None);
+        let id = variant_contributions(&cands, &outcome, None, None);
         assert_eq!(id[0].agent_id, "generator_000");
         assert_eq!(id[2].agent_id, "generator_002");
     }
@@ -575,6 +597,37 @@ mod tests {
         assert_eq!(out.output, json!({ "value": "tech" }), "Borda extrait le correct (vote échouerait)");
         assert_eq!(out.agents_used, 7 + 5);
         assert_eq!(out.quality.subtasks, 5, "5 ballots reconstruits depuis le Blackboard");
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn v2_oracle_gates_acceptance_on_real_verification() {
+        // ADR-019 v2 « vérification = acceptation » : AVEC un ORACLE de correction (EqualsExpected)
+        // dans le panneau, l'acceptation suit le PASS ABSOLU du gagnant vs la vérité-terrain — PAS
+        // l'accord ni la présence. C'est la fermeture du poison « présent-mais-faux » là où la
+        // correction compte (le patron GV/T1 porté au consensus).
+        let task = json!({ "expected": "tech" });
+
+        // (a) GAGNANT CORRECT : tous produisent l'attendu → l'oracle PASSE → ACCEPTÉ + vérifié.
+        let ok = ConsensusTopology::new(
+            Arc::new(TestGen { expected: json!("tech"), correct_variants: (0..5).collect() }),
+            5,
+            discerning_judges(3),
+        );
+        let out_ok = ok.run(&task, &SwarmContext::standard()).await;
+        assert!(out_ok.produced_acceptable, "gagnant correct → l'oracle passe → ACCEPTÉ");
+        assert!(out_ok.agent_contributions.iter().any(|c| c.won && c.verified), "le gagnant est vérifié (PASS absolu)");
+
+        // (b) ESSAIM UNANIMEMENT FAUX (mais PRÉSENT) : tous « __lure__ » ≠ attendu → l'oracle ÉCHOUE
+        //     → NON accepté, AUCUNE vérification fabriquée. AVANT le v2, answer_is_present (présence)
+        //     aurait dit « acceptable » et empoisonné réputation + few-shot.
+        let wrong = ConsensusTopology::new(
+            Arc::new(TestGen { expected: json!("tech"), correct_variants: vec![] }),
+            5,
+            discerning_judges(3),
+        );
+        let out_wrong = wrong.run(&task, &SwarmContext::standard()).await;
+        assert!(!out_wrong.produced_acceptable, "unanime-FAUX présent → oracle échoue → NON accepté (v2 : accord ≠ acceptation)");
+        assert!(out_wrong.agent_contributions.iter().all(|c| !c.verified), "aucune vérification fabriquée sur un faux unanime");
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
