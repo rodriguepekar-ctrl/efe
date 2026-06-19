@@ -172,10 +172,18 @@ impl Swarm {
                     None => h.store.snapshot(&tenant_str, &family).await,
                 };
                 if let Ok(snap) = snap_read {
-                    mem_warm_k_min = spec
-                        .adaptive_bounds()
-                        .and_then(|(lo, hi)| snap.cells.size.suggested_k_min(lo as u32, hi as u32))
-                        .map(|k| k as usize);
+                    // read-back ⑤ (ADR-019, k_min ↑) : la mémoire a DEUX amorces de k_min sur le MÊME
+                    // bouton — la TAILLE (le k où cette famille a GAGNÉ, percentile des k_used) et
+                    // l'ÉCHEC (à quel point elle PEINE, fail_rate → k_min ↑). Elles ne se contredisent
+                    // pas : on les COMPOSE par le MAX (l'amorce la plus prudente l'emporte ; chaque
+                    // opérande est déjà bornée à [lo,hi] → pas de double-comptage au plafond). Le
+                    // resolver re-clampe ensuite (I-MEM4 en défense de profondeur). `None` des deux ⇒
+                    // aucune amorce ⇒ byte-identique au chemin sans-mémoire (I-MEM8).
+                    mem_warm_k_min = spec.adaptive_bounds().and_then(|(lo, hi)| {
+                        let size_k = snap.cells.size.suggested_k_min(lo as u32, hi as u32);
+                        let fail_k = snap.cells.failure.suggested_k_min(family.as_str(), lo as u32, hi as u32);
+                        [size_k, fail_k].into_iter().flatten().max()
+                    }).map(|k| k as usize);
                     mem_exemplars = crate::memory::recalled_exemplars(&snap);
                     // read-back A : signaux bruts du prior de pattern (le resolver clampe).
                     mem_pattern_bias = Some(snap.cells.pattern.bias());
@@ -1145,6 +1153,66 @@ mod tests {
             .unwrap();
         assert_eq!(run2.memory.as_ref().unwrap().warm_start_k_min, Some(24), "amorce BORNÉE à k_max (I-MEM4)");
         assert_eq!(run2.quality.candidates, 24, "jamais au-delà de k_max, quoi que dise la mémoire");
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn recall_warm_starts_k_min_from_failures() {
+        // ════ Gate FAILBIAS (ADR-019 read-back ⑤ / I-MEM-FAIL) — jumelle du gate de taille. ════
+        // Une famille qui ÉCHOUE souvent reçoit, re-provablement et de façon bornée, PLUS de tirages :
+        // fail_rate → k_min ↑. Le gate isole la CAUSALITÉ par construction — les deux bras ne diffèrent
+        // QUE par le drapeau `failed`. Tout le reste (k_used=4 semé, famille, N, config) est identique :
+        // - la cellule TAILLE reçoit k_used=4 dans LES DEUX bras (fold_into ① ignore `failed`) → elle
+        //   suggère le plancher (4) des deux côtés → elle ne peut pas expliquer l'écart ;
+        // - seule la cellule ÉCHEC bouge (fr=0 vs fr=1000). L'écart 4→24 ne vient donc QUE du read-back
+        //   d'échec, composé par le max avec la taille (l'échec l'emporte).
+        let task = json!({ "text": "x", "expected": "x" });
+        let tenant = efe_nano_sdk::TenantId::system().to_string();
+        let family = consensus_family(&task, "const_generator", &["consistency", "j_non_empty"]);
+        // Un résumé PROPRE (donc replié — I-MEM3) dont SEUL `failed` varie ; k_used=4 = le plancher du
+        // spec (la taille reste muette au plancher). `failure_key = famille` (comme MEM-2.c en prod).
+        let mk = |failed: bool| MemRunSummary {
+            clean: true,
+            k_used: 4,
+            winning_pattern: None,
+            escalated: false,
+            exemplars: Vec::new(),
+            agents: Vec::new(),
+            failed,
+            failure_key: Some(family.as_str().to_string()),
+        };
+        let spec = || TopologySpec::consensus_adaptive("const_generator", &["consistency", "j_non_empty"], 4, 24, 0.9);
+
+        // ── CONTRÔLE : 4 runs PROPRES NON-échoués (fail_rate=0). La cellule échec se tait (None) ; la
+        //    taille suggère le plancher (4). warm-start = 4 = plancher du spec : AUCUNE amorce d'échec. ──
+        let ctrl = std::sync::Arc::new(InMemoryMemoryStore::new());
+        for r in 0u128..4 {
+            let up = MemoryUpdate { run_id: uuid::Uuid::from_u128(0xFA11_0000 + r), family: family.clone(), summary: mk(false) };
+            ctrl.fold(&tenant, up).await.unwrap();
+        }
+        let cold = Swarm::builder()
+            .memory(MemoryHandle::with_config(ctrl, crate::memory::MemoryConfig::recall_only()))
+            .build()
+            .unwrap();
+        let cold_run = cold.run(task.clone(), spec(), Budget::cents(1_000_000)).await.unwrap();
+        assert_eq!(cold_run.memory.as_ref().unwrap().warm_start_k_min, Some(4), "CONTRÔLE : fail_rate=0 → aucune amorce d'échec → plancher (4)");
+        assert_eq!(cold_run.quality.candidates, 4, "CONTRÔLE : echo agree → arrêt au plancher (4)");
+
+        // ── SEMÉ : 4 runs PROPRES ÉCHOUÉS (fail_rate=1000). fail_rate → k_min ↑ ; max(taille=4, échec=24)
+        //    = 24 = k_max. L'écart 4→24 ne peut venir QUE du drapeau `failed` — c'est la CAUSALITÉ. ──
+        let seeded = std::sync::Arc::new(InMemoryMemoryStore::new());
+        for r in 0u128..4 {
+            let up = MemoryUpdate { run_id: uuid::Uuid::from_u128(0xFA11_F000 + r), family: family.clone(), summary: mk(true) };
+            seeded.fold(&tenant, up).await.unwrap();
+        }
+        let warm = Swarm::builder()
+            .memory(MemoryHandle::with_config(seeded, crate::memory::MemoryConfig::recall_only()))
+            .build()
+            .unwrap();
+        let warm_run = warm.run(task, spec(), Budget::cents(1_000_000)).await.unwrap();
+        let warm_k = warm_run.memory.as_ref().unwrap().warm_start_k_min;
+        assert_eq!(warm_k, Some(24), "SEMÉ : fail_rate=1000 → k_min ↑ amorcé à k_max (24), BORNÉ (I-MEM4)");
+        assert_eq!(warm_run.quality.candidates, 24, "le k_min effectif MONTE à cause des échecs (causalité bout-en-bout)");
+        assert!(warm_k.unwrap() > 4, "MONOTONIE : l'échec ne peut que MONTER k_min vs le contrôle (I-MEM-FAIL)");
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]

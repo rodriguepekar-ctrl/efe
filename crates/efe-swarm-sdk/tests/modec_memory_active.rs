@@ -129,3 +129,91 @@ async fn memory_readbacks_are_active_on_a_real_mode_c_run() {
         n17.calls, out.run.decided_pattern
     );
 }
+
+/// **ADR-019 read-back ⑤ (k_min ↑) — l'apprentissage d'ÉCHEC est-il VIVANT sur un vrai LLM ?**
+/// Jumelle de `memory_readbacks_are_active_on_a_real_mode_c_run`, focalisée sur la 5ᵉ cellule (la
+/// dernière à boucler). Le read-back d'échec est **agnostique au mode** comme la taille : il opère
+/// sur le sizer (k_min ↑), qui ignore d'où viennent les candidats. Sa *correction* est acquise par
+/// le gate Mode A `recall_warm_starts_k_min_from_failures` (contrôle-vs-semé, causalité isolée au
+/// drapeau `failed`). Ce harnais le montre **vivant ET re-prouvant** dans le pipeline LLM : une
+/// famille semée d'ÉCHECS (via le vrai `fold`) warm-starte `k_min` vers le HAUT — un run de contrôle
+/// sans mémoire le laisse au plancher. L'écart ne peut venir que du read-back d'échec.
+///
+/// Ignoré par défaut. Lancer :
+///   cargo test -p efe-swarm-sdk --test modec_memory_active -- --ignored --nocapture
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+#[ignore = "nécessite un Ollama local (ollama serve + gemma3:12b)"]
+async fn failure_readback_warm_starts_k_min_on_a_real_mode_c_run() {
+    let tenant = TenantId::system().to_string();
+    let task = json!({ "text": "The central bank raised its benchmark interest rate.", "expected": "finance" });
+
+    // Bornes SERRÉES [4,8] (rapides en Mode C) : fail_rate=1000 sur span 4 → k_min amorcé = 8 = k_max.
+    let spec = || TopologySpec::Consensus {
+        generator: "Identify the single most relevant topic word for this text.".into(),
+        judges: vec!["Judge how well the one-word topic label fits the text.".into()],
+        k: KSpec::Adaptive { k_min: 4, k_max: 8, batch: 2, stop: StopRule::Agreement { threshold: 0.9 } },
+        pattern: PatternSpec::adaptive_default(),
+        escalate: false,
+    };
+
+    // SEED — une famille qui ÉCHOUE systématiquement, via le vrai `fold` (Mode A étiqueté) : 4 runs
+    // PROPRES (donc repliés, I-MEM3) mais ÉCHOUÉS, k_used=4 (la taille reste au plancher), failure_key
+    // = la famille (comme MEM-2.c). fail_rate=1000 → la cellule échec warm-startera k_min vers k_max.
+    let store = Arc::new(InMemoryMemoryStore::new());
+    let (kind, agents) = spec().family_signature();
+    let family = family_key(&task, &kind, &agents, FamilyMode::Structural);
+    for n in 0..4u128 {
+        let summary = RunSummary {
+            clean: true, // PROPRE → replié (la porte I-MEM3) ; l'échec n'est compté que sur des runs propres
+            k_used: 4,   // = le plancher du spec : la cellule TAILLE reste muette → seul l'échec amorce
+            winning_pattern: None,
+            escalated: false,
+            exemplars: Vec::new(),
+            agents: Vec::new(),
+            failed: true, // → fails += 1 sur la clé famille (fail_rate → 1000)
+            failure_key: Some(family.as_str().to_string()),
+        };
+        store
+            .fold(&tenant, MemoryUpdate { run_id: Uuid::from_u128(0xFA11_C000 + n), family: family.clone(), summary })
+            .await
+            .expect("seed fold (échec)");
+    }
+
+    // CONTRÔLE — Mode C réel SANS mémoire : k_min doit valoir le DÉFAUT du spec (4).
+    let cold = Swarm::builder()
+        .mode(ClientMode::SelfHost { endpoint: ENDPOINT.into(), model: MODEL.into() })
+        .require_healthy_backend(true)
+        .build()
+        .expect("backend Ollama sain (contrôle)");
+    let cold_out = cold.run_traced(task.clone(), spec(), Budget::cents(100_000)).await.expect("run contrôle");
+    let cold_k_min = cold_out.run.output["sizing"]["policy"]["k_min"].as_u64().expect("trace sizing (contrôle)");
+    assert_eq!(cold_k_min, 4, "CONTRÔLE : sans mémoire d'échec, k_min = défaut du spec (4)");
+
+    // RUN — Mode C réel AVEC la mémoire d'échec branchée (recall ON).
+    let swarm = Swarm::builder()
+        .mode(ClientMode::SelfHost { endpoint: ENDPOINT.into(), model: MODEL.into() })
+        .require_healthy_backend(true)
+        .memory(MemoryHandle::new(store.clone()))
+        .build()
+        .expect("backend Ollama sain");
+    let out = swarm.run_traced(task, spec(), Budget::cents(100_000)).await.expect("run Mode C avec mémoire d'échec");
+
+    // ── ① le read-back d'ÉCHEC a FIRÉ dans le pipeline LLM : k_min ↑ (borné à k_max). ──
+    let k_min_eff = out.run.output["sizing"]["policy"]["k_min"].as_u64().expect("trace de sizing présente");
+    assert_eq!(k_min_eff, 8, "k_min ↑ EN MODE C : contrôle={cold_k_min} → chaud={k_min_eff} = k_max (fail_rate=1000, borné I-MEM4)");
+    assert!(k_min_eff > cold_k_min, "l'échec ne peut que MONTER k_min (I-MEM-FAIL : monotone, jamais moins d'effort)");
+    let k_used = out.run.output["sizing"]["k_used"].as_u64().unwrap();
+    assert!(k_used >= 8, "I-AK1 : K_used ≥ k_min warm-starté par l'échec (= {k_used})");
+
+    // ── ② le moat Mode C tient SOUS read-back d'échec actif : R0 re-prouve + N17 cohérent. ──
+    assert!(out.run.provenance.verified, "R0 : la chaîne re-prouve (le read-back d'échec n'altère pas la preuve)");
+    let n17 = out.run.n17.as_ref().expect("résumé N17 (run Mode C)");
+    assert!(n17.all_consistent && n17.unlinked == 0 && n17.broken == 0, "N17 cohérent : {n17:?}");
+
+    println!(
+        "✅ Mode C + read-back ÉCHEC : k_min contrôle={cold_k_min}→chaud={k_min_eff} (=k_max, borné) · \
+         K_used={k_used} · R0 re-prouve · N17 cohérent ({} appels). La 5ᵉ cellule est VIVANTE dans le \
+         pipeline LLM, re-provante — sa correction restant acquise par le gate Mode A.",
+        n17.calls
+    );
+}

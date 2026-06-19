@@ -359,6 +359,11 @@ impl FailRec {
     }
 }
 
+/// **ADR-019 (read-back ⑤)** — seuil d'évidence : en-dessous de N runs sur une clé, le read-back
+/// d'échec se TAIT (`None`). Un ou deux runs ne suffisent pas à conclure « famille difficile » ; le
+/// verrou évite la sur-réaction (un prior a besoin de données). Const, sans horloge → re-prouvable.
+const FAILBIAS_MIN_RUNS: u64 = 3;
+
 /// Mémoire d'échec (clé → compteur). Décroissance temporelle = hors MEM-1 (le temps est
 /// non-déterministe ; une décroissance par-compte viendra plus tard).
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -369,6 +374,29 @@ pub struct FailureMemory {
 impl FailureMemory {
     pub fn of(&self, key: &str) -> Option<&FailRec> {
         self.keys.get(key)
+    }
+
+    /// **Warm-start BORNÉ de `k_min` par l'ÉCHEC (I-MEM4, jumelle de [`SizePrior::suggested_k_min`]).**
+    /// Là où la taille apprend des VICTOIRES (le `k` qui a gagné), l'échec pousse depuis les PERTES sur
+    /// le MÊME bouton `k_min`. Mappe le taux d'échec de la clé `key` (la famille) sur `[floor, ceil]` —
+    /// les bornes dures du run (`k_min`, `k_max`) — par interpolation linéaire bornée :
+    /// `fr=0 → floor` (aucune amorce), `fr=1000 → ceil` (effort max). `None` ⇒ **aucune amorce**, dans
+    /// trois cas : la clé n'a aucun compte, l'évidence est insuffisante (`runs < FAILBIAS_MIN_RUNS`), ou
+    /// le bump est nul (auto-seuillé par l'entier — un faible taux ne déplace pas `k` d'un cran). Le
+    /// `None` au plancher rend le chemin **byte-identique** au sans-mémoire (I-MEM8). MONOTONE : plus
+    /// d'échecs ⇒ jamais MOINS d'effort (I-MEM-FAIL). La mémoire **amorce**, ne **gouverne** jamais
+    /// (le resolver re-clampe — I-MEM4 en défense de profondeur).
+    pub fn suggested_k_min(&self, key: &str, floor: u32, ceil: u32) -> Option<u32> {
+        let rec = self.of(key)?; // None si la clé n'a aucun compte
+        if rec.runs < FAILBIAS_MIN_RUNS {
+            return None; // évidence insuffisante → pas d'amorce
+        }
+        let fr = rec.fail_rate_milli(); // [0,1000]
+        // interpolation linéaire bornée : fr=0 → floor (aucune amorce) ; fr=1000 → ceil (effort max).
+        let span = ceil.saturating_sub(floor);
+        let bump = (floor + (fr.saturating_mul(span)) / 1000).clamp(floor.min(ceil), ceil.max(floor));
+        // None si l'amorce ne déplace PAS k au-delà du plancher : pas de warm-start fantôme (I-MEM8).
+        (bump > floor).then_some(bump)
     }
 }
 
@@ -477,6 +505,44 @@ mod tests {
         assert_eq!(s.suggested_k_min(4, 5), Some(5), "clampé au k_max du run — jamais au-delà (I-MEM4)");
         // Pas de données → pas d'amorce (départ standard).
         assert_eq!(SizePrior::default().suggested_k_min(4, 24), None);
+    }
+
+    #[test]
+    fn failure_warm_start_is_bounded_thresholded_and_monotone() {
+        // ADR-019 (read-back ⑤ / I-MEM-FAIL), jumelle de size_prior_percentile_and_bounded_warm_start.
+        // `one` : une FailureMemory à clé unique "k" — lecture isolée, sans emprunt croisé.
+        fn one(fails: u64, runs: u64) -> FailureMemory {
+            let mut m = FailureMemory::default();
+            m.keys.insert("k".into(), FailRec { fails, runs });
+            m
+        }
+
+        // ── Verrou d'évidence : runs < FAILBIAS_MIN_RUNS (=3) ⇒ None, même à 100 % d'échec. ──
+        assert_eq!(one(2, 2).suggested_k_min("k", 4, 24), None, "runs<MIN → pas d'amorce (sur-réaction interdite)");
+
+        // ── Clé inconnue ⇒ None (aucune donnée → départ standard). ──
+        assert_eq!(one(5, 5).suggested_k_min("absent", 4, 24), None, "clé sans compte → None");
+
+        // ── fail_rate = 0 (que des succès) ⇒ None : byte-identique au sans-mémoire (I-MEM8). ──
+        assert_eq!(one(0, 8).suggested_k_min("k", 4, 24), None, "fail_rate=0 → aucune amorce (I-MEM8)");
+
+        // ── Interpolation BORNÉE : fr=1000 sur [4,24] (span 20) → 4+⌊1000×20/1000⌋ = 24 = ceil. ──
+        assert_eq!(one(5, 5).suggested_k_min("k", 4, 24), Some(24), "fr=1000 → ceil (effort max), jamais au-delà");
+        // ZÉRO dépassement du k_max du run, quoi que dise la mémoire (I-MEM4).
+        assert_eq!(one(5, 5).suggested_k_min("k", 4, 8), Some(8), "clampé au k_max serré du run (I-MEM4)");
+
+        // ── Auto-seuillé par l'entier : un faible taux ne déplace pas k d'un cran. ──
+        // fr=200 (1/5) sur [4,8] (span 4) → ⌊200×4/1000⌋ = 0 → bump=floor → None (bruit faible muet).
+        assert_eq!(one(1, 5).suggested_k_min("k", 4, 8), None, "faible fail_rate sur petit intervalle → aucun cran (None)");
+        // Le MÊME taux sur un grand intervalle [4,104] (span 100) → ⌊200×100/1000⌋ = 20 → 24.
+        assert_eq!(one(1, 5).suggested_k_min("k", 4, 104), Some(24), "même taux, intervalle large → un cran réel");
+
+        // ── MONOTONIE (I-MEM-FAIL) : plus d'échecs ⇒ JAMAIS moins d'effort. ──
+        let bump = |fails: u64| one(fails, 10).suggested_k_min("k", 4, 24).unwrap_or(4);
+        let (lo, mid, hi) = (bump(3), bump(6), bump(9)); // 30 % < 60 % < 90 % d'échec
+        assert!(lo <= mid && mid <= hi, "k_min amorcé non-décroissant en fail_rate : {lo}≤{mid}≤{hi}");
+        // Défense : intervalle dégénéré (floor==ceil) ⇒ aucune marge ⇒ None.
+        assert_eq!(one(9, 9).suggested_k_min("k", 6, 6), None, "span nul → aucune amorce possible");
     }
 
     #[test]

@@ -48,6 +48,15 @@
 //! corrigés, revue adversariale). Un échec n'est PAS déposé comme exemplaire few-shot. La cellule
 //! est observable via `GET /memory/:family` (`failures`). La **décroissance temporelle** du
 //! compteur reste différée (une décroissance horloge briserait le déterminisme octet — différé sain).
+//!
+//! **Read-back ⑤ (k_min ↑) — la dernière lecture-retour** ferme ADR-019 : la mémoire d'échec, jusqu'ici
+//! écrite et observable mais **jamais lue**, influence désormais un run. `FailureMemory::suggested_k_min`
+//! (jumelle de `SizePrior::suggested_k_min`) mappe le `fail_rate` d'une famille sur `k_min ↑`, **borné**
+//! à `[k_min, k_max]` et **composé par le MAX** avec le prior de taille dans le bloc recall (`run_traced`) :
+//! la mémoire apprend des **gains** (la taille) ET des **pertes** (l'échec) sur le **même bouton** `k`.
+//! BORNÉE (I-MEM4, re-clampée par le resolver), MONOTONE (plus d'échecs ⇒ jamais moins d'effort —
+//! I-MEM-FAIL), re-prouvable (snapshot pinné, sans horloge), byte-identique sans données (I-MEM8).
+//! **Amorce, ne gouverne jamais.** Les **cinq** cellules bouclent désormais — ADR-019 est clos.
 
 use std::sync::Arc;
 
