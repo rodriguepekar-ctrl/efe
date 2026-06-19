@@ -1,0 +1,449 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>EFE — Architecture : l'attestation-modèle (R3+) — fermer I-RC7, du « a produit X » au « a fait tourner CE modèle »</title>
+<style>
+  :root{--ink:#0f172a;--muted:#475569;--soft:#64748b;--line:#e2e8f0;--teal:#0d9488;--teal-d:#0f766e;--indigo:#4f46e5;--indigo-d:#4338ca;--violet:#7c3aed;--violet-d:#6d28d9;--ok:#16a34a;--warn:#d97706;--bad:#dc2626;--bg-tint:#f8fafc;--bg-card:#f1f5f9;--code-bg:#0f172a;--code-fg:#e2e8f0;}
+  *{box-sizing:border-box;} html{font-size:11.2px;}
+  body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,Arial,sans-serif;color:var(--ink);margin:0;line-height:1.6;background:#fff;-webkit-font-smoothing:antialiased;}
+  .wrap{max-width:178mm;margin:0 auto;padding:0 2mm;}
+  h1,h2,h3,h4{line-height:1.2;font-weight:700;}
+  h2{font-size:1.45rem;margin:0 0 .55rem;padding-bottom:.32rem;border-bottom:3px solid var(--violet);}
+  h2 .num{color:var(--violet);} h3{font-size:1.13rem;margin:1.1rem 0 .3rem;color:var(--indigo-d);}
+  h4{font-size:1rem;margin:.8rem 0 .2rem;color:var(--teal-d);}
+  p{margin:.55rem 0;text-align:justify;hyphens:auto;} a{color:var(--indigo);text-decoration:none;}
+  code{font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace;font-size:.85em;background:var(--bg-card);padding:.05em .35em;border-radius:4px;color:#5b21b6;}
+  .muted{color:var(--muted);} .small{font-size:.88rem;}
+  section{break-inside:avoid;} .page{break-before:page;} h2{break-after:avoid;}
+  table{border-collapse:collapse;width:100%;margin:.55rem 0;font-size:.82rem;}
+  th,td{border:1px solid var(--line);padding:.32rem .5rem;text-align:left;vertical-align:top;}
+  th{background:var(--bg-card);font-weight:700;} tbody tr:nth-child(even){background:var(--bg-tint);}
+  td.c,th.c{text-align:center;} .good{background:#dcfce7 !important;color:#166534;font-weight:700;} .mid{background:#fef9c3 !important;color:#854d0e;font-weight:700;} .bad{background:#fee2e2 !important;color:#991b1b;font-weight:700;}
+  .tag{display:inline-block;font-size:.71rem;font-weight:700;padding:.08em .5em;border-radius:20px;}
+  .t-ok{background:#dcfce7;color:#166534;} .t-info{background:#e0e7ff;color:#3730a3;} .t-teal{background:#ccfbf1;color:#115e59;} .t-warn{background:#fef3c7;color:#92400e;} .t-bad{background:#fee2e2;color:#991b1b;} .t-violet{background:#ede9fe;color:#5b21b6;}
+  pre{background:var(--code-bg);color:var(--code-fg);padding:.55rem .8rem;border-radius:8px;overflow:auto;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.72rem;line-height:1.45;margin:.55rem 0;}
+  pre code{background:none;color:inherit;padding:0;}
+  .callout{border-left:4px solid var(--violet);background:var(--bg-tint);padding:.55rem .85rem;border-radius:0 8px 8px 0;margin:.65rem 0;}
+  .callout p{text-align:left;margin:.28rem 0;}
+  .callout.key{border-color:var(--indigo);background:#eef2ff;} .callout.warn{border-color:var(--warn);background:#fffbeb;} .callout.ok{border-color:var(--ok);background:#f0fdf4;} .callout.bad{border-color:var(--bad);background:#fef2f2;}
+  .fig{margin:.7rem 0 .9rem;text-align:center;break-inside:avoid;}
+  .fig svg{max-width:100%;height:auto;border:1px solid var(--line);border-radius:10px;background:#fff;}
+  .fig .cap{font-size:.79rem;color:var(--muted);margin-top:.32rem;font-style:italic;text-align:center;}
+  ul,ol{margin:.4rem 0 .55rem 1.1rem;padding:0;} li{margin:.24rem 0;}
+  svg text{font-family:-apple-system,"Segoe UI",Inter,sans-serif;}
+  .cover{height:262mm;display:flex;flex-direction:column;justify-content:center;position:relative;padding:0 6mm;}
+  .cover .eyebrow{color:var(--violet);font-weight:800;letter-spacing:.2em;font-size:.82rem;text-transform:uppercase;}
+  .cover h1{font-size:2.2rem;margin:.4rem 0 .2rem;line-height:1.08;} .cover .sub{font-size:1.15rem;color:var(--muted);margin-bottom:1.1rem;}
+  .cover .tagline{font-size:1.0rem;color:var(--ink);max-width:163mm;border-left:4px solid var(--violet);padding-left:1rem;font-style:italic;text-align:left;}
+  .cover .meta{position:absolute;bottom:6mm;left:6mm;right:6mm;display:flex;justify-content:space-between;border-top:1px solid var(--line);padding-top:.6rem;font-size:.8rem;color:var(--soft);}
+  .cover .pills{margin:1rem 0;} .cover .pills .tag{font-size:.77rem;margin-right:.3rem;}
+  .mono{font-family:ui-monospace,Menlo,Consolas,monospace;}
+  hr{border:none;border-top:1px solid var(--line);margin:.9rem 0;}
+  .toc{font-size:.9rem;columns:2;column-gap:2rem;} .toc div{margin:.16rem 0;break-inside:avoid;} .toc .n{color:var(--violet);font-weight:700;display:inline-block;width:1.8em;}
+  .eq{font-family:ui-monospace,Menlo,Consolas,monospace;background:#ede9fe;border:1px solid #ddd6fe;border-radius:8px;padding:.45rem .75rem;margin:.5rem 0;font-size:.78rem;color:#4c1d95;text-align:center;}
+  @page{size:A4;margin:13mm 12mm;}
+</style>
+</head>
+<body>
+
+<!-- COVER -->
+<div class="wrap"><div class="cover">
+  <div class="eyebrow">Architecture · avant code · le dernier invariant ouvert du moat distant</div>
+  <h1>L'attestation-modèle (R3+)</h1>
+  <div class="sub">Du « le nœud a produit X » au « le nœud a fait tourner <b>CE</b> modèle » — fermer <b>I-RC7</b> sans mentir sur ce qu'on prouve.</div>
+  <div class="tagline">R3 a rendu le distant <b>imputable</b> : un nœud pinné co-signe sa computation. Mais RC-1 et R3 ont laissé, en toutes lettres, <b>un</b> invariant ouvert : <span class="mono">model_hash_verified</span> reste <b>false</b> à distance (I-RC7) — « le nœud a produit cette sortie » n'est <i>pas</i> « le nœud a fait tourner le modèle M aux poids H ». L'attestation-modèle ferme ce trou par la seule voie honnête : faire <b>co-signer au nœud l'empreinte de ses poids</b> (le <span class="mono">content_hash</span> qui existe déjà, vide, dans <span class="mono">ModelIdentity</span>), et ne hisser <span class="mono">model_hash_verified</span> que si cette empreinte <b>correspond à celle pinnée</b> pour ce nœud. Aucune nouvelle cryptographie : on étend le tuple co-signé d'un champ. Et le plafond reste dit sans détour — c'est une <b>attestation non-répudiable</b>, pas une <b>preuve d'exécution</b> (ça, c'est du matériel/TEE, hors-portée). Le moat gagne un cran, et continue de ne revendiquer que ce qu'il peut re-prouver.</div>
+  <div class="pills">
+    <span class="tag t-violet">R3+ · attestation-modèle</span>
+    <span class="tag t-info">ferme I-RC7</span>
+    <span class="tag t-info">content_hash co-signé</span>
+    <span class="tag t-info">empreinte pinnée</span>
+    <span class="tag t-info">attestation ≠ preuve d'exécution</span>
+  </div>
+  <div class="meta">
+    <span>EFE — Essaim Fluide Éphémère · suite de R3 (commit 0fc619c) + seam (3df7bad)</span>
+    <span>2026-06-19 · architecture, code à venir</span>
+  </div>
+</div></div>
+
+<!-- TOC -->
+<div class="wrap page">
+  <h2><span class="num">§0</span> Plan</h2>
+  <div class="toc">
+    <div><span class="n">1.</span> Le principe : le dernier invariant ouvert (I-RC7)</div>
+    <div><span class="n">2.</span> Ce que ça donne — et son plafond honnête</div>
+    <div><span class="n">3.</span> L'extension du tuple co-signé (content_hash)</div>
+    <div><span class="n">4.</span> L'empreinte attendue : le registre pinne par nœud</div>
+    <div><span class="n">5.</span> La vérification : hisser seulement contre la preuve</div>
+    <div><span class="n">6.</span> Le modèle de menace</div>
+    <div><span class="n">7.</span> Les invariants (I-RC7 fermé + nouveaux)</div>
+    <div><span class="n">8.</span> Le gate RC-3 + la séquence</div>
+    <div><span class="n">9.</span> Hors-portée + synthèse</div>
+  </div>
+  <div class="callout key">
+    <p><b>Thèse.</b> L'attestation-modèle n'ajoute <b>aucune primitive</b> : elle fait entrer une
+    <b>empreinte-modèle</b> (le <span class="mono">content_hash</span> des poids, déjà présent mais
+    vide dans <span class="mono">ModelIdentity</span>) dans le <b>tuple co-signé</b> par le nœud (R3,
+    ed25519). Le vérifieur ne hisse <span class="mono">model_hash_verified</span> à <b>true</b> que si
+    deux conditions tiennent : la co-signature <b>vérifie</b> (R3), <b>et</b> l'empreinte co-signée
+    <b>correspond à celle pinnée</b> pour ce nœud dans le registre. Sinon, le champ reste
+    <b>false</b> et l'écart est <b>signalé</b> — exactement la règle « aucune élévation sans preuve »
+    (I-RC9), appliquée cette fois à l'intégrité-modèle. Et la sémantique est dite sans flou :
+    <span class="mono">model_hash_verified=true</span> signifie « <b>un nœud pinné et responsable
+    atteste avoir chargé le modèle attendu</b> » — pas « l'exécution est cryptographiquement
+    prouvée ». La preuve d'exécution (TEE/attestation matérielle) reste hors-portée, et nommée.</p>
+  </div>
+</div>
+
+<!-- 1 -->
+<div class="wrap page">
+<section>
+  <h2><span class="num">§1</span> Le principe : le dernier invariant ouvert (I-RC7)</h2>
+
+  <p>Reprenons l'échelle du moat distant, marche par marche. <b>RC-1</b> a rendu la <i>localité</i>
+  visible et signée (le barreau R1→R4). <b>R3</b> a rendu le nœud distant <i>imputable</i> : il
+  co-signe, avec sa propre clé ed25519, qu'il a <b>produit cette sortie pour ce prompt</b>. La
+  <b>seam</b> a fermé la <i>fraîcheur</i> (I-RC12). À chaque marche, un invariant a été tenu — sauf
+  <b>un</b>, laissé ouvert <i>explicitement</i>, sans le cacher :</p>
+
+  <div class="callout warn">
+    <p><b>I-RC7, tel que RC-1/R3 l'ont gelé.</b> « <span class="mono">model_hash_verified=true</span>
+    est <b>interdit</b> sur R4 ; il ne peut monter que via une co-signature attestant l'empreinte-modèle
+    (R3+). » Aujourd'hui, dans le code, <span class="mono">n17.rs::assemble</span> écrit
+    <span class="mono">model_hash_verified: false</span> pour tout appel — et c'est <b>honnête</b> :
+    remotement, l'orchestrateur n'a <b>pas inspecté les poids</b>. R3 atteste la <i>production</i>
+    (« j'ai produit O pour P »), <b>pas</b> l'<i>identité du modèle</i> (« j'ai fait tourner M aux
+    poids H »). Un nœud pinné pourrait, sous R3, co-signer fidèlement une sortie produite par un
+    <i>autre</i> modèle que celui annoncé. R3 ne l'attrape pas. C'est le trou que ferme R3+.</p>
+  </div>
+
+  <p>La question dure, donc : <b>comment savoir que le nœud a fait tourner le modèle qu'il prétend ?</b>
+  La réponse honnête n'est pas « inspecter ses poids à distance » (impossible sans coopération), ni
+  « lui faire confiance » (ce que R3 refuse par principe). C'est : <b>lui faire co-signer l'empreinte
+  de ses poids</b>, et <b>confronter</b> cette empreinte à celle qu'on a <b>pinnée</b> pour lui. Le
+  nœud engage alors sa signature non-répudiable non plus seulement sur <i>ce qu'il a produit</i>, mais
+  sur <i>avec quoi</i> — et un mensonge sur le modèle devient soit détectable (empreinte ≠ attendue),
+  soit imputable (empreinte = attendue mais poids réels divergents ⇒ le nœud pinné a parjuré, et on
+  sait qui révoquer).</p>
+
+  <p><b>Le substrat existe déjà.</b> <span class="mono">ModelIdentity</span> porte un champ
+  <span class="mono">content_hash: Option&lt;Blake3Hash&gt;</span> — l'empreinte des poids — aujourd'hui
+  <span class="mono">None</span> (« non inspecté »). R3+ le <b>remplit</b> avec ce que le nœud co-signe,
+  et fait du booléen <span class="mono">model_hash_verified</span> le verdict de la confrontation.
+  Rien à inventer ; un champ à co-signer, un champ à confronter.</p>
+</section>
+</div>
+
+<!-- 2 -->
+<div class="wrap page">
+<section>
+  <h2><span class="num">§2</span> Ce que ça donne — et son plafond honnête</h2>
+
+  <p>Comme pour chaque cran du moat, il faut énoncer le gain <b>et</b> sa limite avec la même
+  rigueur, sinon on retombe dans la sur-prétention que ce design interdit.</p>
+
+  <table>
+    <thead><tr><th style="width:34%">Ce que R3+ ajoute sur R3</th><th>Ce que R3+ ne donne TOUJOURS pas</th></tr></thead>
+    <tbody>
+      <tr><td><b>Intégrité-modèle attestée</b> : le nœud co-signe l'empreinte de ses poids ; le record peut porter <span class="mono">model_hash_verified=true</span> — adossé à une preuve, jamais sur parole.</td>
+          <td><b>La preuve d'exécution.</b> R3+ atteste que le nœud <i>déclare sous signature</i> avoir chargé le modèle M ; il ne prouve pas <i>cryptographiquement</i> que M a produit la sortie. Ça, c'est l'attestation <b>matérielle</b> (TEE) — §9, hors-portée.</td></tr>
+      <tr><td><b>Détection du mauvais modèle</b> : si l'empreinte co-signée ≠ l'empreinte pinnée pour ce nœud, le bascule est <b>refusé</b> et l'écart <b>signalé</b> (model-mismatch).</td>
+          <td><b>L'honnêteté d'un nœud compromis</b> : un nœud dont la clé est volée peut co-signer l'empreinte <i>attendue</i> tout en faisant tourner autre chose. Même plafond que R3 : la signature donne l'<b>imputabilité</b> (qui révoquer), pas la vérité.</td></tr>
+      <tr><td><b>Non-répudiation étendue</b> : le nœud ne peut nier ni la sortie (R3) ni le modèle déclaré (R3+) — sa clé couvre les deux.</td>
+          <td><b>La confiance dans l'empreinte pinnée</b> : si l'opérateur pinne la mauvaise empreinte attendue, R3+ valide un faux. Root-of-trust de configuration — comme la pubkey pinnée de R3.</td></tr>
+    </tbody>
+  </table>
+
+  <div class="callout key">
+    <p><b>La phrase qui borne R3+.</b> <span class="mono">model_hash_verified=true</span> ne veut pas
+    dire « EFE a prouvé que le modèle M a calculé cette sortie ». Il veut dire « <b>le nœud N, dont tu
+    as pinné la clé ET l'empreinte-modèle attendue, jure sous sa signature non-répudiable avoir chargé
+    exactement ce modèle</b> ». C'est une attestation <b>imputable</b>, pas une preuve d'exécution. Le
+    saut de valeur est réel — du modèle <i>non vérifié</i> au modèle <i>attesté et confronté</i> — et
+    le mot « verified » est tenu à sa juste portée.</p>
+  </div>
+</section>
+</div>
+
+<!-- 3 -->
+<div class="wrap page">
+<section>
+  <h2><span class="num">§3</span> L'extension du tuple co-signé (content_hash)</h2>
+
+  <p>R3 fait co-signer au nœud le tuple <span class="mono">blake3(DOMAINE ‖ node_id ‖ prompt_hash ‖
+  output_hash ‖ nonce)</span>. R3+ y fait entrer une <b>cinquième composante</b> : l'empreinte-modèle
+  que le nœud déclare avoir chargée.</p>
+
+  <div class="eq">tuple_v2 = blake3( "EFE-RC3-COSIGN-v1" ‖ node_id ‖ prompt_hash ‖ output_hash ‖ <b>model_fingerprint</b> ‖ nonce )</div>
+
+  <p>Trois décisions de conception, pour que ça compose proprement avec R3 sans le casser :</p>
+  <ul>
+    <li><b>Champ additif, optionnel.</b> <span class="mono">NodeCoSignature</span> gagne un champ
+    <span class="mono">model_fingerprint: Option&lt;String&gt;</span> (<span class="mono">#[serde(default)]</span>).
+    Une co-signature <i>production-seule</i> (R3) le laisse <span class="mono">None</span> ; une
+    co-signature <i>attestant le modèle</i> (R3+) le renseigne. Le wire des records R3 existants reste
+    byte-identique (parité avec la discipline N27/RC-1).</li>
+    <li><b>Domaine versionné.</b> Quand le modèle est attesté, le tuple emploie le domaine
+    <span class="mono">EFE-RC3-COSIGN-v1</span> (distinct du <span class="mono">EFE-RC2-COSIGN-v1</span>
+    de R3) : un séparateur de domaine empêche qu'une co-signature production-seule soit re-interprétée
+    comme une attestation-modèle, ou l'inverse. Le vérifieur recompose le tuple <b>du bon domaine</b>
+    selon la présence de <span class="mono">model_fingerprint</span>.</li>
+    <li><b>Lié au record.</b> L'empreinte co-signée est écrite dans
+    <span class="mono">ModelIdentity.content_hash</span> du record ; comme tout le record, elle est
+    <b>scellée</b> dans le leaf N17 (HMAC tenant) — donc tamper-evident en plus d'être co-signée. Pour
+    forger un R3+ il faut, comme pour R3, les <b>deux</b> clés (tenant HMAC + nœud ed25519), et
+    désormais une <b>empreinte qui matche le pin</b>.</li>
+  </ul>
+
+  <div class="fig">
+    <svg viewBox="0 0 720 150" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Le tuple R3+ étendu">
+      <text x="360" y="18" text-anchor="middle" font-size="12" font-weight="700" fill="#0f172a">Le tuple R3 → R3+ : une composante de plus, co-signée par la clé du nœud</text>
+      <g font-size="8.5">
+        <rect x="20" y="40" width="120" height="30" rx="5" fill="#eef2ff" stroke="#4f46e5"/><text x="80" y="59" text-anchor="middle" fill="#3730a3">node_id</text>
+        <rect x="148" y="40" width="120" height="30" rx="5" fill="#eef2ff" stroke="#4f46e5"/><text x="208" y="59" text-anchor="middle" fill="#3730a3">prompt_hash</text>
+        <rect x="276" y="40" width="120" height="30" rx="5" fill="#eef2ff" stroke="#4f46e5"/><text x="336" y="59" text-anchor="middle" fill="#3730a3">output_hash</text>
+        <rect x="404" y="40" width="150" height="30" rx="5" fill="#ede9fe" stroke="#7c3aed" stroke-width="2"/><text x="479" y="55" text-anchor="middle" fill="#5b21b6" font-weight="700">model_fingerprint</text><text x="479" y="66" text-anchor="middle" fill="#7c3aed" font-size="7">★ R3+ (content_hash)</text>
+        <rect x="562" y="40" width="80" height="30" rx="5" fill="#eef2ff" stroke="#4f46e5"/><text x="602" y="59" text-anchor="middle" fill="#3730a3">nonce</text>
+      </g>
+      <text x="331" y="95" text-anchor="middle" font-size="9" fill="#475569">→ blake3 (domaine EFE-RC3-COSIGN-v1) →</text>
+      <rect x="250" y="104" width="220" height="24" rx="5" fill="#f5f3ff" stroke="#7c3aed"/>
+      <text x="360" y="120" text-anchor="middle" font-size="9" font-weight="700" fill="#5b21b6">ed25519_sign(clé privée nœud, tuple)</text>
+      <text x="360" y="142" text-anchor="middle" font-size="8" fill="#64748b" font-style="italic">l'empreinte écrite dans ModelIdentity.content_hash → scellée dans le leaf N17 (HMAC tenant) en plus de la co-signature</text>
+    </svg>
+    <div class="cap">R3+ = R3 + une composante <span class="mono">model_fingerprint</span> dans le tuple co-signé. Champ additif (<span class="mono">Option</span>, serde-default) ⇒ les co-signatures R3 production-seules restent valides ; domaine versionné ⇒ pas de confusion entre les deux usages.</div>
+  </div>
+</section>
+</div>
+
+<!-- 4 -->
+<div class="wrap page">
+<section>
+  <h2><span class="num">§4</span> L'empreinte attendue : le registre pinne par nœud</h2>
+
+  <p>Co-signer une empreinte ne prouve rien si l'on ne sait pas <b>quelle</b> empreinte attendre : un
+  nœud pourrait co-signer l'empreinte d'un modèle quelconque. Il faut une <b>référence</b> — et,
+  fidèle au moat, une référence <b>pinnée hors-bande</b>, sans secret.</p>
+
+  <p>Le <span class="mono">NodeRegistry</span> de R3 (qui mappe <span class="mono">node_id → { pubkey
+  pinnée, statut }</span>) s'étend d'un troisième attribut : <b>l'ensemble des empreintes-modèles
+  attendues</b> pour ce nœud.</p>
+
+  <pre><code>PinnedNode {
+    pubkey_hex: String,                       // R3 — la clé publique ed25519 pinnée
+    status: NodeStatus,                       // R3 — Active | Revoked{reason}
+    expected_models: Vec&lt;String&gt;,            // R3+ — empreintes-modèles attendues (hex), pinnées hors-bande
+}</code></pre>
+
+  <p>L'opérateur déclare, par acte hors-bande (comme l'enrôlement de la pubkey), « le nœud N est
+  censé faire tourner les modèles d'empreintes {H₁, H₂, …} ». Le registre ne contient toujours que du
+  <b>public</b> (clés + empreintes) — un tiers peut donc détenir registre + records + clé tenant et
+  <b>tout re-prouver hors ligne</b>, sans rien de secret. <span class="mono">expected_models</span>
+  vide ⇒ le nœud n'attest pas de modèle (R3 production-seule) ; non vide ⇒ R3+ est armé pour lui.</p>
+
+  <div class="callout">
+    <p><b>Pourquoi un ensemble, pas une seule empreinte.</b> Un nœud peut légitimement servir
+    plusieurs modèles (un pool), ou tourner sur des versions de poids successives pendant une
+    rotation. L'ensemble <span class="mono">expected_models</span> autorise ces cas sans relâcher la
+    contrainte : l'empreinte co-signée doit appartenir à l'ensemble <i>déclaré</i> — toute empreinte
+    hors-ensemble est un <b>mismatch</b> signalé. La gestion de cet ensemble (ajout/retrait lors d'une
+    mise à jour de modèle) est l'analogue, côté modèle, de la rotation de clé de R3.</p>
+  </div>
+</section>
+</div>
+
+<!-- 5 -->
+<div class="wrap page">
+<section>
+  <h2><span class="num">§5</span> La vérification : hisser seulement contre la preuve</h2>
+
+  <p>Le cœur, et la continuité directe de la règle de fer de R3 (« aucune élévation sans preuve »,
+  I-RC9) — appliquée ici au champ <span class="mono">model_hash_verified</span>.</p>
+
+  <h3>5.1 — Qui pose le booléen, qui le contrôle</h3>
+  <p>Deux temps, deux responsabilités (comme pour le barreau R3) :</p>
+  <ul>
+    <li><b>À l'estampillage</b> (orchestrateur, production) : après avoir obtenu une co-signature R3+
+    valide dont l'empreinte appartient aux <span class="mono">expected_models</span> du nœud,
+    l'orchestrateur écrit <span class="mono">content_hash = Some(empreinte)</span> et
+    <span class="mono">model_hash_verified = true</span> dans le record. Sinon, il laisse
+    <span class="mono">false</span> (le défaut honnête d'aujourd'hui).</li>
+    <li><b>À la vérification</b> (hors ligne, le moat) : le vérifieur <b>ne fait jamais confiance</b>
+    au booléen. Si un record porte <span class="mono">model_hash_verified=true</span>, il <b>exige</b>
+    une co-signature R3+ qui (a) <b>vérifie</b> (ed25519, clé pinnée non révoquée), (b) couvre le
+    tuple incluant <span class="mono">content_hash</span>, et (c) dont l'empreinte <b>appartient aux
+    <span class="mono">expected_models</span></b> du registre. Tout manquement ⇒ le vérifieur traite
+    le record comme <b>model non vérifié</b> (booléen effectif <span class="mono">false</span>) et
+    lève une anomalie. <b>Jamais d'intégrité-modèle sur parole.</b></li>
+  </ul>
+
+  <div class="fig">
+    <svg viewBox="0 0 720 180" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="La cascade de vérification R3+">
+      <text x="360" y="16" text-anchor="middle" font-size="12" font-weight="700" fill="#0f172a">Un record qui REVENDIQUE model_hash_verified=true → vérifié ?</text>
+      <rect x="270" y="28" width="180" height="22" rx="5" fill="#ede9fe" stroke="#7c3aed"/><text x="360" y="43" text-anchor="middle" font-size="8.5" fill="#5b21b6" font-weight="700">model_hash_verified == true ?</text>
+      <rect x="255" y="60" width="210" height="22" rx="5" fill="#fff" stroke="#cbd5e1"/><text x="360" y="75" text-anchor="middle" font-size="8" fill="#475569">co-signature R3 valide (clé pinnée, non révoquée) ?</text>
+      <line x1="360" y1="50" x2="360" y2="60" stroke="#94a3b8" marker-end="url(#a)"/>
+      <rect x="255" y="92" width="210" height="22" rx="5" fill="#fff" stroke="#cbd5e1"/><text x="360" y="107" text-anchor="middle" font-size="8" fill="#475569">tuple couvre content_hash (domaine RC3) ?</text>
+      <line x1="360" y1="82" x2="360" y2="92" stroke="#94a3b8" marker-end="url(#a)"/>
+      <rect x="255" y="124" width="210" height="22" rx="5" fill="#fff" stroke="#cbd5e1"/><text x="360" y="139" text-anchor="middle" font-size="8" fill="#475569">empreinte ∈ expected_models[node] ?</text>
+      <line x1="360" y1="114" x2="360" y2="124" stroke="#94a3b8" marker-end="url(#a)"/>
+      <rect x="500" y="92" width="205" height="22" rx="5" fill="#dcfce7" stroke="#16a34a"/><text x="602" y="107" text-anchor="middle" font-size="8.5" fill="#166534" font-weight="700">tout OK → model_hash_verified TENU</text>
+      <line x1="465" y1="135" x2="500" y2="108" stroke="#16a34a" stroke-width="1.5" marker-end="url(#ag)"/>
+      <rect x="15" y="92" width="230" height="34" rx="5" fill="#fef9c3" stroke="#d97706"/><text x="130" y="106" text-anchor="middle" font-size="8.5" fill="#854d0e" font-weight="700">tout échec → model NON vérifié (false)</text><text x="130" y="118" text-anchor="middle" font-size="7.5" fill="#854d0e">+ anomalie (ModelClaimUnbacked / ModelMismatch)</text>
+      <line x1="255" y1="103" x2="245" y2="106" stroke="#d97706" stroke-width="1.5" marker-end="url(#ad)"/>
+      <text x="360" y="166" text-anchor="middle" font-size="8" fill="#64748b" font-style="italic">Le barreau R3 (le record a-t-il produit la sortie) et model_hash_verified (a-t-il tourné le modèle attendu) sont DEUX axes — rapportés séparément, jamais l'un pour l'autre.</text>
+      <defs>
+        <marker id="a" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto"><path d="M0,0 L7,3.5 L0,7 Z" fill="#94a3b8"/></marker>
+        <marker id="ag" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto"><path d="M0,0 L7,3.5 L0,7 Z" fill="#16a34a"/></marker>
+        <marker id="ad" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto"><path d="M0,0 L7,3.5 L0,7 Z" fill="#d97706"/></marker>
+      </defs>
+    </svg>
+    <div class="cap">La même discipline que R3 : le booléen est une <i>revendication</i> scellée ; la vérification le borne à ce que la preuve soutient. Un <span class="mono">model_hash_verified=true</span> non adossé redescend à <span class="mono">false</span> + anomalie — jamais accepté sur la foi du record.</div>
+  </div>
+
+  <h3>5.2 — Deux axes orthogonaux</h3>
+  <p>Le barreau de computation (R3 : « le nœud a produit O ») et l'intégrité-modèle (R3+ : « le nœud a
+  tourné M ») sont des <b>axes distincts</b> du verdict. Un record peut être R3-tenu mais
+  model-non-vérifié (le nœud a co-signé la production sans attester le modèle), ou les deux. Le
+  <span class="mono">OfflineVerdict</span> les rapporte <b>séparément</b> — exactement comme
+  <span class="mono">fully_proven</span> et <span class="mono">held_strength</span> sont distincts.
+  On ne replie jamais l'un dans l'autre.</p>
+</section>
+</div>
+
+<!-- 6 -->
+<div class="wrap page">
+<section>
+  <h2><span class="num">§6</span> Le modèle de menace</h2>
+  <table>
+    <thead><tr><th style="width:32%">Attaque</th><th class="c" style="width:14%">Statut</th><th>Mécanisme / honnêteté</th></tr></thead>
+    <tbody>
+      <tr><td>Le nœud co-signe une empreinte de modèle <b>arbitraire</b> (pas celui attendu)</td><td class="c good">détecté</td>
+        <td>empreinte ∉ <span class="mono">expected_models</span> → bascule refusé, model-mismatch signalé. Le nœud ne peut pas « inventer » un modèle vérifié.</td></tr>
+      <tr><td>Un orchestrateur force <span class="mono">model_hash_verified=true</span> sans preuve</td><td class="c good">détecté</td>
+        <td>le vérifieur exige la co-signature R3+ couvrant l'empreinte ∈ pinnée ; sinon → false + anomalie (§5). Sur-prétention attrapée.</td></tr>
+      <tr><td>MITM échange la sortie ET réécrit l'empreinte pour coller</td><td class="c good">défait</td>
+        <td>le tuple co-signé couvre <span class="mono">output_hash</span> ET <span class="mono">content_hash</span> ; toute mutation invalide la signature ed25519 (en plus de casser le leaf N17).</td></tr>
+      <tr><td>Rejeu d'une attestation-modèle d'un autre appel</td><td class="c good">défait</td>
+        <td>le nonce-défi (R3, fraîcheur I-RC12) est dans le tuple ; une vieille attestation porte un vieux nonce → écho faux → rejetée.</td></tr>
+      <tr><td>Nœud pinné qui co-signe l'empreinte attendue mais fait tourner <b>autre chose</b></td><td class="c bad">limite assumée</td>
+        <td>R3+ atteste une <i>déclaration signée</i>, pas l'exécution. Un nœud qui parjure produit un faux <i>imputable</i> — on sait qui révoquer. Plafond identique à R3 (responsable, pas honnête).</td></tr>
+      <tr><td>Clé de nœud compromise (signe de fausses attestations)</td><td class="c mid">mitigé</td>
+        <td>révocation (R3, I-RC13) : la clé révoquée fait retomber model_hash_verified à false + signale. Fenêtre avant détection = risque assumé.</td></tr>
+      <tr><td>Empreinte attendue mal pinnée (mauvaise référence)</td><td class="c bad">hors-portée</td>
+        <td>root-of-trust de configuration — comme la pubkey mal pinnée de R3. Le gate applique « matche le pin », pas « le pin est le bon ».</td></tr>
+    </tbody>
+  </table>
+  <div class="callout">
+    <p><b>La ligne de partage de R3+.</b> Tout ce qui touche <i>la déclaration signée du modèle</i>
+    (mauvais modèle déclaré, sur-prétention, MITM, rejeu) est <b>détecté</b>. Ce qui touche
+    <i>l'honnêteté intrinsèque d'un nœud pinné qui parjure</i> reste la <b>limite assumée</b> — et le
+    record la dit (R3+ = attestation, pas preuve d'exécution). La seule vraie preuve d'exécution
+    serait une attestation <b>matérielle</b> (TEE attestant le binaire + les poids chargés) — un cran
+    de plus, nommé en §9, qui se brancherait sur ce même tuple co-signé.</p>
+  </div>
+</section>
+</div>
+
+<!-- 7 -->
+<div class="wrap page">
+<section>
+  <h2><span class="num">§7</span> Les invariants (I-RC7 fermé + nouveaux)</h2>
+  <table>
+    <thead><tr><th style="width:15%">Invariant</th><th>Énoncé</th></tr></thead>
+    <tbody>
+      <tr><td><b>I-RC7</b><br><span class="small muted">fermé (raffiné)</span></td><td><span class="mono">model_hash_verified=true</span> n'est <b>tenu</b> par le vérifieur que si une co-signature <b>R3+</b> vérifie (ed25519, clé pinnée non révoquée), couvre le tuple incluant <span class="mono">content_hash</span>, et que cette empreinte <b>appartient aux <span class="mono">expected_models</span></b> pinnés du nœud. Sinon : <b>false</b> effectif + anomalie. Jamais sur R4, jamais sans co-signature, jamais sur parole.</td></tr>
+      <tr><td><b>I-RC14</b><br><span class="small muted">empreinte pinnée</span></td><td>l'empreinte-modèle de référence est <b>pinnée hors-bande</b> par l'opérateur dans le registre (que du public) ; le vérifieur confronte l'empreinte co-signée à cet ensemble, sans secret, hors ligne.</td></tr>
+      <tr><td><b>I-RC15</b><br><span class="small muted">deux axes</span></td><td>le barreau de computation (R3) et l'intégrité-modèle (R3+) sont <b>rapportés séparément</b> ; un record peut être R3-tenu et model-non-vérifié. On ne déduit jamais l'un de l'autre.</td></tr>
+      <tr><td><b>I-RC16</b><br><span class="small muted">attestation ≠ preuve</span></td><td><span class="mono">model_hash_verified=true</span> signifie « un nœud pinné <b>atteste</b> sous signature avoir chargé le modèle attendu » — <b>pas</b> « l'exécution est prouvée ». La sémantique est documentée au point d'usage ; aucune sur-lecture.</td></tr>
+      <tr><td><b>I-RC12</b><br><span class="small muted">fraîcheur (réutilisé)</span></td><td>l'attestation-modèle hérite du nonce-défi de R3 : une attestation porte le défi émis (anti-rejeu, anti-pré-signature) ; rien de neuf à fournir côté fraîcheur.</td></tr>
+    </tbody>
+  </table>
+  <p class="small muted">Composition : I-RC14..16 prolongent I-RC1..13 sans en relâcher aucun. R3+
+  ne change pas la frontière de clé (le maître tenant reste local, la privée du nœud reste sur le
+  nœud) ni la non-répudiation asymétrique (I-RC10/11) — il <b>étend la portée de la même
+  signature</b> à une composante de plus.</p>
+</section>
+</div>
+
+<!-- 8 -->
+<div class="wrap page">
+<section>
+  <h2><span class="num">§8</span> Le gate RC-3 + la séquence</h2>
+
+  <p>Le gate prouve, CI-pur, avec le <span class="mono">MockAttestor</span> de R3 (vraie clé ed25519,
+  transport in-process) étendu pour co-signer une empreinte-modèle.</p>
+
+  <table>
+    <thead><tr><th style="width:36%">Assertion (RC-3)</th><th>Mécanisme</th></tr></thead>
+    <tbody>
+      <tr><td>empreinte attendue co-signée → <b>model_hash_verified tenu</b></td><td>MockAttestor co-signe une empreinte ∈ <span class="mono">expected_models</span> pinnés ; le vérifieur tient le booléen.</td></tr>
+      <tr><td>empreinte <b>≠ attendue</b> → model non vérifié + anomalie</td><td>MockAttestor co-signe une autre empreinte → <span class="mono">ModelMismatch</span> ; <span class="mono">model_hash_verified</span> effectif = false.</td></tr>
+      <tr><td>booléen revendiqué <b>sans co-signature R3+</b> → false</td><td>record avec <span class="mono">model_hash_verified=true</span> mais co-signature production-seule (pas de <span class="mono">model_fingerprint</span>) → <span class="mono">ModelClaimUnbacked</span>.</td></tr>
+      <tr><td>empreinte altérée après co-signature → cassée</td><td>muter <span class="mono">content_hash</span> du record → le tuple recalculé diverge → signature invalide (+ leaf N17 cassé).</td></tr>
+      <tr><td>R3 production-seule (sans modèle) → inchangé</td><td>une co-signature R3 sans <span class="mono">model_fingerprint</span> reste R3-tenue, <span class="mono">model_hash_verified=false</span> — non-régression, byte-identique.</td></tr>
+      <tr><td>nœud révoqué → ni R3 ni model vérifié</td><td>héritage de I-RC13 : la révocation retombe les deux axes.</td></tr>
+    </tbody>
+  </table>
+
+  <h3>8.1 — La séquence de livraison</h3>
+  <p>Comme pour R3 : la <b>vérification d'abord</b> (c'est le moat), la production ensuite.</p>
+  <ol>
+    <li><b>Schéma</b> : <span class="mono">NodeCoSignature.model_fingerprint: Option&lt;String&gt;</span> (additif, serde-default) + <span class="mono">PinnedNode.expected_models</span> ; le <span class="mono">cosign_tuple</span> versionné (domaine RC3 quand l'empreinte est présente). + tests purs (serde défaut, round-trip, tuple v1≠v2).</li>
+    <li><b>Vérification</b> : <span class="mono">verify_cosignature</span> contrôle l'empreinte ∈ <span class="mono">expected_models</span> ; <span class="mono">assess</span> calcule <span class="mono">model_hash_verified</span> effectif + l'anomalie (<span class="mono">ModelMismatch</span>/<span class="mono">ModelClaimUnbacked</span>), rapporté à part du barreau.</li>
+    <li><b>MockAttestor + estampillage</b> : le MockAttestor co-signe une empreinte ; <span class="mono">attest_remote_call</span> (la seam) écrit <span class="mono">content_hash</span> + <span class="mono">model_hash_verified</span> ssi l'empreinte matche le pin.</li>
+    <li><b>Gate RC-3</b> : les assertions ci-dessus, CI-pures, + un volet <span class="mono">#[ignore]</span> où le vrai attestant fournit une empreinte réelle de poids.</li>
+  </ol>
+  <p class="small muted">Chemin par défaut inchangé : sans <span class="mono">expected_models</span> ni
+  <span class="mono">model_fingerprint</span>, on reste en R3 production-seule, <span class="mono">model_hash_verified=false</span>, byte-identique. R3+ est <b>dormant</b> jusqu'à pin d'une empreinte attendue.</p>
+</section>
+</div>
+
+<!-- 9 -->
+<div class="wrap page">
+<section>
+  <h2><span class="num">§9</span> Hors-portée + synthèse</h2>
+
+  <h3>9.1 — Honnêtement hors-portée</h3>
+  <ul>
+    <li><b>La preuve d'exécution (TEE / attestation matérielle)</b> : prouver <i>cryptographiquement</i>
+    que le binaire + les poids chargés ont produit la sortie exige une racine de confiance matérielle
+    (SGX/SEV/TPM attestant la mesure de l'environnement). C'est le cran au-dessus de R3+ — il se
+    brancherait sur <i>le même tuple co-signé</i> (l'empreinte deviendrait une mesure attestée par le
+    matériel plutôt que déclarée par le nœud). Nommé, non couvert.</li>
+    <li><b>La provenance de l'empreinte attendue</b> : comment l'opérateur obtient l'empreinte de
+    référence (build reproductible des poids, registre de modèles signé) est un concern amont — R3+
+    consomme un pin, il ne le fabrique pas.</li>
+    <li><b>Le calcul de <span class="mono">content_hash</span> côté nœud</b> : comment le nœud hache
+    ses poids chargés (ordre des tenseurs, quantification) doit être <b>canonique</b> et partagé avec
+    l'émetteur du pin — une spec d'empreinte, concern de déploiement.</li>
+  </ul>
+
+  <h3>9.2 — Synthèse</h3>
+  <p>L'attestation-modèle ferme le <b>dernier invariant que le moat distant avait laissé ouvert</b>
+  (I-RC7) <b>sans inventer de cryptographie</b> : elle fait entrer l'empreinte des poids — le
+  <span class="mono">content_hash</span> déjà prévu, vide, dans <span class="mono">ModelIdentity</span> —
+  dans le tuple que le nœud co-signe déjà sous R3, et fait du booléen
+  <span class="mono">model_hash_verified</span> le verdict d'une <b>confrontation à une empreinte
+  pinnée</b>. Le nœud engage sa signature non-répudiable non plus seulement sur ce qu'il a produit,
+  mais sur <i>avec quoi</i> ; le vérifieur n'accorde l'intégrité-modèle que <b>contre la preuve</b>,
+  jamais sur parole ; et la sémantique est tenue à sa juste portée — <b>attestation imputable, pas
+  preuve d'exécution</b>.</p>
+
+  <div class="callout key">
+    <p><b>En une phrase.</b> R3+ fait passer le distant de « le nœud, dont tu as pinné la clé, jure
+    avoir produit X » à « …jure l'avoir produit <b>avec le modèle que tu as pinné</b> » — et le moat,
+    une fois de plus, n'étend sa revendication qu'à hauteur exacte de ce qu'il peut re-prouver
+    hors ligne.</p>
+  </div>
+
+  <hr>
+  <p class="small muted">EFE — Architecture de l'attestation-modèle (R3+) · 2026-06-19 · document
+  d'architecture, code à venir. Suite de R3 (commit 0fc619c) + seam (3df7bad). Ancrages code :
+  <span class="mono">efe-nano-sdk : ModelIdentity.content_hash: Option&lt;Blake3Hash&gt; (existe, vide), model_hash_verified: bool (I-RC7, false), NodeCoSignature (+ model_fingerprint: Option), CoSignatureScheme::Ed25519</span> ·
+  <span class="mono">efe-swarm-provenance : cosign_tuple (→ domaine RC3 + content_hash), NodeRegistry/PinnedNode (+ expected_models), verify_cosignature, CosignDowngrade (+ ModelMismatch/ModelClaimUnbacked), attest_remote_call, ChallengeIssuer</span> ·
+  <span class="mono">efe-swarm-sdk : n17.rs::assemble (écrit content_hash + model_hash_verified)</span>.</p>
+</section>
+</div>
+
+</body>
+</html>
