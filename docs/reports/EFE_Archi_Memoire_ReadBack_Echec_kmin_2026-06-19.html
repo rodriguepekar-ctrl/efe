@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>EFE — Architecture : le read-back d'échec (k_min ↑) — fermer ADR-019, apprendre des pertes</title>
+<style>
+  :root{--ink:#0f172a;--muted:#475569;--soft:#64748b;--line:#e2e8f0;--teal:#0d9488;--teal-d:#0f766e;--indigo:#4f46e5;--indigo-d:#4338ca;--ok:#16a34a;--warn:#d97706;--bad:#dc2626;--bg-tint:#f6fbfa;--bg-card:#eef2f1;--code-bg:#0f172a;--code-fg:#e2e8f0;}
+  *{box-sizing:border-box;} html{font-size:11.2px;}
+  body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,Arial,sans-serif;color:var(--ink);margin:0;line-height:1.6;background:#fff;-webkit-font-smoothing:antialiased;}
+  .wrap{max-width:178mm;margin:0 auto;padding:0 2mm;}
+  h1,h2,h3,h4{line-height:1.2;font-weight:700;}
+  h2{font-size:1.45rem;margin:0 0 .55rem;padding-bottom:.32rem;border-bottom:3px solid var(--teal);}
+  h2 .num{color:var(--teal);} h3{font-size:1.13rem;margin:1.1rem 0 .3rem;color:var(--teal-d);}
+  h4{font-size:1rem;margin:.8rem 0 .2rem;color:var(--indigo-d);}
+  p{margin:.55rem 0;text-align:justify;hyphens:auto;} a{color:var(--indigo);text-decoration:none;}
+  code{font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace;font-size:.85em;background:var(--bg-card);padding:.05em .35em;border-radius:4px;color:#0b3b36;}
+  .muted{color:var(--muted);} .small{font-size:.88rem;}
+  section{break-inside:avoid;} .page{break-before:page;} h2{break-after:avoid;}
+  table{border-collapse:collapse;width:100%;margin:.55rem 0;font-size:.82rem;}
+  th,td{border:1px solid var(--line);padding:.32rem .5rem;text-align:left;vertical-align:top;}
+  th{background:var(--bg-card);font-weight:700;} tbody tr:nth-child(even){background:var(--bg-tint);}
+  td.c,th.c{text-align:center;} .good{background:#dcfce7 !important;color:#166534;font-weight:700;} .mid{background:#fef9c3 !important;color:#854d0e;font-weight:700;} .bad{background:#fee2e2 !important;color:#991b1b;font-weight:700;}
+  .tag{display:inline-block;font-size:.71rem;font-weight:700;padding:.08em .5em;border-radius:20px;}
+  .t-ok{background:#dcfce7;color:#166534;} .t-info{background:#e0e7ff;color:#3730a3;} .t-teal{background:#ccfbf1;color:#115e59;} .t-warn{background:#fef3c7;color:#92400e;} .t-bad{background:#fee2e2;color:#991b1b;}
+  pre{background:var(--code-bg);color:var(--code-fg);padding:.55rem .8rem;border-radius:8px;overflow:auto;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.72rem;line-height:1.45;margin:.55rem 0;}
+  pre code{background:none;color:inherit;padding:0;}
+  .callout{border-left:4px solid var(--teal);background:var(--bg-tint);padding:.55rem .85rem;border-radius:0 8px 8px 0;margin:.65rem 0;}
+  .callout p{text-align:left;margin:.28rem 0;}
+  .callout.key{border-color:var(--indigo);background:#eef2ff;} .callout.warn{border-color:var(--warn);background:#fffbeb;} .callout.ok{border-color:var(--ok);background:#f0fdf4;} .callout.bad{border-color:var(--bad);background:#fef2f2;}
+  .fig{margin:.7rem 0 .9rem;text-align:center;break-inside:avoid;}
+  .fig svg{max-width:100%;height:auto;border:1px solid var(--line);border-radius:10px;background:#fff;}
+  .fig .cap{font-size:.79rem;color:var(--muted);margin-top:.32rem;font-style:italic;text-align:center;}
+  ul,ol{margin:.4rem 0 .55rem 1.1rem;padding:0;} li{margin:.24rem 0;}
+  svg text{font-family:-apple-system,"Segoe UI",Inter,sans-serif;}
+  .cover{height:262mm;display:flex;flex-direction:column;justify-content:center;position:relative;padding:0 6mm;}
+  .cover .eyebrow{color:var(--teal);font-weight:800;letter-spacing:.2em;font-size:.83rem;text-transform:uppercase;}
+  .cover h1{font-size:2.25rem;margin:.4rem 0 .2rem;line-height:1.08;} .cover .sub{font-size:1.16rem;color:var(--muted);margin-bottom:1.1rem;}
+  .cover .tagline{font-size:1.0rem;color:var(--ink);max-width:163mm;border-left:4px solid var(--teal);padding-left:1rem;font-style:italic;text-align:left;}
+  .cover .meta{position:absolute;bottom:6mm;left:6mm;right:6mm;display:flex;justify-content:space-between;border-top:1px solid var(--line);padding-top:.6rem;font-size:.8rem;color:var(--soft);}
+  .cover .pills{margin:1rem 0;} .cover .pills .tag{font-size:.77rem;margin-right:.3rem;}
+  .mono{font-family:ui-monospace,Menlo,Consolas,monospace;}
+  hr{border:none;border-top:1px solid var(--line);margin:.9rem 0;}
+  .toc{font-size:.9rem;columns:2;column-gap:2rem;} .toc div{margin:.16rem 0;break-inside:avoid;} .toc .n{color:var(--teal);font-weight:700;display:inline-block;width:1.8em;}
+  .eq{font-family:ui-monospace,Menlo,Consolas,monospace;background:#ecfdf5;border:1px solid #a7f3d0;border-radius:8px;padding:.45rem .75rem;margin:.5rem 0;font-size:.79rem;color:#065f46;text-align:center;}
+  @page{size:A4;margin:13mm 12mm;}
+</style>
+</head>
+<body>
+
+<!-- COVER -->
+<div class="wrap"><div class="cover">
+  <div class="eyebrow">Architecture · avant code · la 5ᵉ cellule, du write-only au read-back</div>
+  <h1>Le read-back d'échec — <span style="white-space:nowrap">k_min ↑</span></h1>
+  <div class="sub">Apprendre des <b>pertes</b>, pas seulement des gains : fermer ADR-019 par la lecture-retour qui manquait.</div>
+  <div class="tagline">La mémoire inter-runs d'EFE a cinq cellules. Quatre bouclent : taille → warm-start, pattern → biais, réputation → routage, exemplaires → few-shot. La cinquième — la <b>mémoire d'échec</b> (<span class="mono">FailureMemory</span>) — est <b>écrite</b> à chaque run propre et <b>observable</b>, mais <b>rien ne la lit</b> : elle n'influence aucun run. C'est l'unique asymétrie qui empêche de dire ADR-019 « terminé ». Le geste qui la ferme est le plus fidèle au principe : le read-back <b>taille</b> apprend le bon <span class="mono">k</span> des <i>victoires</i> (le <span class="mono">k_used</span> gagnant) — mais une famille qui <i>échoue</i> n'a, par construction, aucun <span class="mono">k_used</span> à relire. Le read-back d'échec est le <b>complément exact</b> : une famille au fort taux d'échec voit son <span class="mono">k_min</span> <b>amorcé vers le haut</b> (plus de tirages), <b>borné</b> aux mêmes <span class="mono">[k_min, k_max]</span>, re-prouvable, byte-identique sans donnée. La mémoire converge alors vers le bon effort <b>par les deux bouts</b> — les gains <i>et</i> les pertes — sur le <b>même bouton</b>. Et le plafond est tenu : <span class="mono">k_min ↑</span> <b>amorce</b>, il ne <b>gouverne</b> jamais.</div>
+  <div class="pills">
+    <span class="tag t-teal">ADR-019 · 5ᵉ cellule</span>
+    <span class="tag t-info">read-back échec</span>
+    <span class="tag t-info">k_min ↑ borné (I-MEM4)</span>
+    <span class="tag t-info">byte-identique sans donnée (I-MEM8)</span>
+    <span class="tag t-info">gate FAILBIAS</span>
+  </div>
+  <div class="meta">
+    <span>EFE — Essaim Fluide Éphémère · clôture de l'arc Mémoire (ADR-SWARM-019)</span>
+    <span>2026-06-19 · architecture, code à venir</span>
+  </div>
+</div></div>
+
+<!-- TOC -->
+<div class="wrap page">
+  <h2><span class="num">§0</span> Plan</h2>
+  <div class="toc">
+    <div><span class="n">1.</span> Le principe : apprendre des pertes</div>
+    <div><span class="n">2.</span> Ce que ça donne — et la limite honnête</div>
+    <div><span class="n">3.</span> Le read-back : fail_rate → k_min ↑</div>
+    <div><span class="n">4.</span> La combinaison avec le prior de taille</div>
+    <div><span class="n">5.</span> Le câblage (recall → resolver → trace)</div>
+    <div><span class="n">6.</span> L'invariant I-MEM-FAIL</div>
+    <div><span class="n">7.</span> Le gate FAILBIAS + la séquence</div>
+    <div><span class="n">8.</span> Hors-portée + synthèse</div>
+  </div>
+  <div class="callout key">
+    <p><b>Thèse.</b> Fermer la 5ᵉ cellule ne demande <b>aucune structure neuve</b> : <span class="mono">FailureMemory</span>
+    existe (compteur <span class="mono">FailRec{fails, runs}</span> par famille, <span class="mono">fail_rate_milli()</span>
+    ∈ [0,1000]), il est <b>scellé</b> dans le snapshot pinné (I-MEM1). On ajoute une <b>lecture</b> —
+    <span class="mono">FailureMemory::suggested_k_min(family, floor, ceil)</span>, <i>jumelle</i> de
+    <span class="mono">SizePrior::suggested_k_min</span> — qui mappe le taux d'échec en un
+    <span class="mono">k_min</span> amorcé, clampé à <span class="mono">[floor, ceil]</span> ; on la
+    <b>combine</b> au prior de taille (le <b>max</b> des deux amorces) ; le resolver <b>re-clampe</b>
+    (la défense I-MEM4 déjà en place). Borné, re-prouvable, byte-identique sans données — et un seul
+    gate (<b>FAILBIAS</b>) le prouve, miroir du gate de taille.</p>
+  </div>
+</div>
+
+<!-- 1 -->
+<div class="wrap page">
+<section>
+  <h2><span class="num">§1</span> Le principe : apprendre des pertes</h2>
+
+  <p>ADR-019 a doté l'essaim d'une mémoire inter-runs à <b>cinq cellules</b>, chacune une espèce
+  d'apprentissage, toutes scellées dans un <b>snapshot pinné</b> (le <span class="mono">content_hash</span>
+  des cellules, I-MEM1) lu en tête de run et tracé (I-MEM2). Quatre cellules <b>bouclent</b> — elles
+  sont écrites <i>et</i> relues pour influencer un run :</p>
+
+  <table>
+    <thead><tr><th style="width:22%">Cellule</th><th>Read-back (ce qu'elle influence)</th><th class="c" style="width:12%">Bouclée</th></tr></thead>
+    <tbody>
+      <tr><td><b>① Taille</b></td><td>warm-start de <span class="mono">k_min</span> (clampé) depuis le <span class="mono">k_used</span> gagnant</td><td class="c good">✅</td></tr>
+      <tr><td><b>② Pattern</b></td><td>biais du sélecteur de pattern (read-back A)</td><td class="c good">✅</td></tr>
+      <tr><td><b>③ Exemplaires</b></td><td>injection few-shot dans les prompts Mode C</td><td class="c good">✅</td></tr>
+      <tr><td><b>④ Réputation</b></td><td>routage par-variante (R-a) + ordonnancement (R-b/R-c) — read-back B</td><td class="c good">✅</td></tr>
+      <tr><td><b>⑤ Échec</b> (<span class="mono">FailureMemory</span>)</td><td><b>— rien.</b> Écrite à chaque run propre (<span class="mono">failure_key</span> = la famille), observable via <span class="mono">GET /memory/:family</span>, mais <b>aucun read-back</b> ne la consomme</td><td class="c bad">❌</td></tr>
+    </tbody>
+  </table>
+
+  <p>La 5ᵉ cellule est <b>write-only</b>. C'est l'unique asymétrie qui empêche de dire ADR-019
+  « terminé » : la mémoire <i>compte</i> les échecs d'une famille mais n'en <i>fait rien</i>. La fermer,
+  c'est lui donner une lecture-retour bornée, re-prouvable — comme les quatre autres.</p>
+
+  <h3>1.1 — Pourquoi <span class="mono">k_min ↑</span>, et pas un autre levier</h3>
+  <p>Le read-back <b>taille</b> apprend le bon <span class="mono">k</span> depuis les <b>victoires</b> :
+  <span class="mono">SizePrior::suggested_k_min</span> relit le 25ᵉ percentile des <span class="mono">k_used</span>
+  des runs <i>propres</i>. Mais une famille qui <b>échoue</b> n'a, <b>par construction, aucun
+  <span class="mono">k_used</span> gagnant</b> à relire — la cellule taille est <b>muette</b> sur elle (les
+  échecs ne nourrissent pas le prior de taille, réservé aux runs propres). Le read-back d'échec est le
+  <b>complément exact</b> : il pousse <b>plus</b> d'effort depuis les <b>pertes</b>, sur le <b>même
+  bouton</b> (<span class="mono">k</span>). Ensemble, la mémoire converge vers le bon effort <b>par les
+  deux bouts</b> — apprendre des gains <i>et</i> des pertes. C'est la lecture la plus fidèle à I-MEM4
+  (« la mémoire AMORCE, ne gouverne jamais ») : <span class="mono">k_min ↑</span> amorce (plus de
+  tirages, clampé), là où une escalade <i>gouvernerait</i> (changerait le chemin) — voir §8.</p>
+</section>
+</div>
+
+<!-- 2 -->
+<div class="wrap page">
+<section>
+  <h2><span class="num">§2</span> Ce que ça donne — et la limite honnête</h2>
+
+  <table>
+    <thead><tr><th style="width:34%">Ce que le read-back d'échec ajoute</th><th>Ce qu'il ne fait pas</th></tr></thead>
+    <tbody>
+      <tr><td><b>Effort proportionné à la difficulté</b> : une famille au fort taux d'échec reçoit plus de tirages (<span class="mono">k_min ↑</span>), donc plus de chances qu'un candidat passe le vérificateur.</td>
+          <td><b>Soigner une difficulté SYSTÉMATIQUE.</b> Si la famille échoue parce que l'<i>approche</i> est mauvaise (mauvais pattern/modèle), plus de tirages du même n'aident pas — il faudrait l'<b>escalade</b> (§8, v2 déférée).</td></tr>
+      <tr><td><b>La mémoire apprend des deux bouts</b> : la cellule taille converge par les gains, la cellule échec pousse par les pertes — sur le même <span class="mono">k</span>.</td>
+          <td><b>Gouverner.</b> Bornée à <span class="mono">[k_min, k_max]</span> : la mémoire ne peut jamais pousser <span class="mono">k_min</span> au-delà de <span class="mono">k_max</span> ni sous le plancher du run (I-MEM4, re-clampé par le resolver).</td></tr>
+      <tr><td><b>Re-prouvable + déterministe</b> : <span class="mono">fail_rate</span> est un ratio entier stocké, dans le snapshot pinné — aucune horloge, aucun aléa.</td>
+          <td><b>Réagir à un seul échec.</b> Un seuil de runs (<span class="mono">FAILBIAS_MIN_RUNS</span>) exige assez d'évidence avant d'amorcer — pas de sur-réaction au bruit d'un run isolé.</td></tr>
+    </tbody>
+  </table>
+
+  <div class="callout key">
+    <p><b>La phrase qui borne ce geste.</b> Le read-back d'échec ne <i>résout</i> pas les familles
+    difficiles — il leur <b>alloue plus de budget de calcul</b>, borné, re-prouvable, à hauteur de leur
+    taux d'échec mesuré. Il referme la boucle d'apprentissage (toutes les cellules bouclent) sans jamais
+    franchir le plafond d'ADR-019 : <b>amorcer, pas gouverner</b>. La difficulté systématique (qui
+    appellerait l'escalade) est nommée et déférée — on ne sur-prétend pas que plus de tirages la règlent.</p>
+  </div>
+</section>
+</div>
+
+<!-- 3 -->
+<div class="wrap page">
+<section>
+  <h2><span class="num">§3</span> Le read-back : fail_rate → k_min ↑</h2>
+
+  <p>Le geste central est une <b>lecture jumelle</b> de celle de la taille, sur la cellule d'échec.</p>
+
+  <pre><code>// efe-swarm-memory/src/cells.rs — jumelle de SizePrior::suggested_k_min
+impl FailureMemory {
+    /// **ADR-019 (read-back ⑤)** : k_min amorcé par le taux d'échec de la famille, borné
+    /// à [floor, ceil]. None ⇒ pas assez d'évidence (ou aucune) ⇒ AUCUNE amorce (I-MEM8).
+    pub fn suggested_k_min(&self, key: &str, floor: u32, ceil: u32) -> Option&lt;u32&gt; {
+        let rec = self.of(key)?;                      // None si la famille n'a aucun compte
+        if rec.runs &lt; FAILBIAS_MIN_RUNS { return None; }   // évidence insuffisante → pas d'amorce
+        let fr = rec.fail_rate_milli();               // [0,1000]
+        // interpolation linéaire bornée : fr=0 → floor (aucune amorce) ; fr=1000 → ceil (effort max)
+        let span = ceil.saturating_sub(floor);
+        let bump = floor + (fr.saturating_mul(span)) / 1000;
+        Some(bump.clamp(floor.min(ceil), ceil.max(floor)))
+    }
+}</code></pre>
+
+  <div class="eq">k_min_échec = floor + ⌊ fail_rate × (ceil − floor) / 1000 ⌋,  borné à [floor, ceil]</div>
+
+  <p>Trois propriétés, par construction :</p>
+  <ul>
+    <li><b>Bornée (I-MEM4).</b> Le résultat est dans <span class="mono">[floor, ceil]</span> = les bornes
+    adaptatives du run. <span class="mono">fail_rate = 0</span> ⇒ <span class="mono">floor</span> (aucune
+    amorce) ; <span class="mono">fail_rate = 1000</span> ⇒ <span class="mono">ceil</span> (effort max). La
+    mémoire ne peut jamais dépasser <span class="mono">k_max</span>.</li>
+    <li><b>Auto-seuillée par l'entier.</b> Pour un petit intervalle (p. ex. <span class="mono">k_min=4,
+    k_max=8</span>, span 4), un faible <span class="mono">fail_rate</span> (5 % → 50/1000) donne
+    <span class="mono">⌊50×4/1000⌋ = 0</span> : aucun bump. Seul un taux d'échec <b>substantiel</b> déplace
+    <span class="mono">k</span> d'un cran entier — le bruit faible ne perturbe rien.</li>
+    <li><b>Verrou d'évidence.</b> <span class="mono">runs &lt; FAILBIAS_MIN_RUNS</span> ⇒
+    <span class="mono">None</span> : un ou deux runs ne suffisent pas à conclure « famille difficile ». Le
+    seuil (const, p. ex. 3) évite la sur-réaction — comme un prior a besoin de données.</li>
+  </ul>
+
+  <p>La cellule reste inchangée dans sa <b>forme</b> (<span class="mono">FailRec{fails, runs}</span>,
+  byte-stable, déjà scellée) ; on ajoute une <b>méthode de lecture</b>, pure et déterministe. Rien dans
+  le chemin scellé ne bouge.</p>
+</section>
+</div>
+
+<!-- 4 -->
+<div class="wrap page">
+<section>
+  <h2><span class="num">§4</span> La combinaison avec le prior de taille</h2>
+
+  <p>Le run a, désormais, <b>deux amorces</b> de <span class="mono">k_min</span> issues de la mémoire :
+  la <b>taille</b> (« à quel <span class="mono">k</span> cette famille a gagné ») et l'<b>échec</b> (« à
+  quel point elle peine »). Elles ne se contredisent pas — elles se <b>composent</b> par le <b>maximum</b> :</p>
+
+  <div class="eq">mem_warm_k_min = max( size.suggested_k_min(lo,hi),  failure.suggested_k_min(family,lo,hi) )</div>
+
+  <div class="fig">
+    <svg viewBox="0 0 720 168" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="La composition taille + échec">
+      <text x="360" y="18" text-anchor="middle" font-size="12" font-weight="700" fill="#0f172a">Deux amorces, un seul bouton (k_min), bornées puis re-clampées</text>
+      <rect x="35" y="42" width="200" height="54" rx="8" fill="#ecfdf5" stroke="#0d9488"/>
+      <text x="135" y="62" text-anchor="middle" font-size="9.5" font-weight="700" fill="#0f766e">① Taille (les VICTOIRES)</text>
+      <text x="135" y="78" text-anchor="middle" font-size="8.5" fill="#475569">percentile(25) des k_used gagnants</text>
+      <text x="135" y="90" text-anchor="middle" font-size="8" fill="#64748b">muette si aucune victoire</text>
+      <rect x="35" y="104" width="200" height="50" rx="8" fill="#fff7ed" stroke="#d97706"/>
+      <text x="135" y="123" text-anchor="middle" font-size="9.5" font-weight="700" fill="#92400e">⑤ Échec (les PERTES)</text>
+      <text x="135" y="139" text-anchor="middle" font-size="8.5" fill="#475569">fail_rate → k_min ↑ (≥ MIN_RUNS)</text>
+      <text x="135" y="150" text-anchor="middle" font-size="8" fill="#64748b">amorce là où la taille est muette</text>
+      <line x1="237" y1="69" x2="300" y2="92" stroke="#0d9488" stroke-width="1.5" marker-end="url(#a)"/>
+      <line x1="237" y1="128" x2="300" y2="100" stroke="#d97706" stroke-width="1.5" marker-end="url(#a2)"/>
+      <rect x="302" y="80" width="120" height="28" rx="6" fill="#eef2ff" stroke="#4f46e5"/>
+      <text x="362" y="98" text-anchor="middle" font-size="9.5" font-weight="700" fill="#3730a3">max( … )</text>
+      <line x1="422" y1="94" x2="480" y2="94" stroke="#4f46e5" stroke-width="1.5" marker-end="url(#a3)"/>
+      <rect x="482" y="78" width="220" height="32" rx="6" fill="#f8fafc" stroke="#0f766e"/>
+      <text x="592" y="92" text-anchor="middle" font-size="8.5" font-weight="700" fill="#0f766e">resolver.warm_start_k_min(k_min,k_max)</text>
+      <text x="592" y="104" text-anchor="middle" font-size="8" fill="#64748b">re-clamp I-MEM4 (défense en profondeur)</text>
+      <text x="360" y="166" text-anchor="middle" font-size="8" fill="#64748b" font-style="italic">fail_rate=0 ET aucune victoire ⇒ les deux None ⇒ k_min inchangé ⇒ byte-identique (I-MEM8).</text>
+      <defs>
+        <marker id="a" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto"><path d="M0,0 L7,3.5 L0,7 Z" fill="#0d9488"/></marker>
+        <marker id="a2" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto"><path d="M0,0 L7,3.5 L0,7 Z" fill="#d97706"/></marker>
+        <marker id="a3" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto"><path d="M0,0 L7,3.5 L0,7 Z" fill="#4f46e5"/></marker>
+      </defs>
+    </svg>
+    <div class="cap">Le <b>max</b> est le bon opérateur : il prend la plus haute des deux amorces (on ne <i>baisse</i> jamais l'effort qu'une des deux justifie), reste borné (chaque amorce l'est déjà), et dégénère proprement (l'une <span class="mono">None</span> ⇒ l'autre seule ; les deux <span class="mono">None</span> ⇒ pas d'amorce).</div>
+  </div>
+
+  <p>Pourquoi le <b>max</b> et pas la somme ? La somme pourrait empiler deux amorces et frôler le plafond
+  artificiellement ; le <b>max</b> respecte « la plus forte raison d'élever <span class="mono">k</span> »
+  sans double-comptage, et chaque opérande étant déjà clampé à <span class="mono">[lo, hi]</span>, le max
+  l'est aussi. Le <span class="mono">warm_start_k_min</span> du resolver <b>re-clampe</b> de toute façon
+  (I-MEM4, défense en profondeur déjà en place — aucune modification du resolver requise).</p>
+</section>
+</div>
+
+<!-- 5 -->
+<div class="wrap page">
+<section>
+  <h2><span class="num">§5</span> Le câblage (recall → resolver → trace)</h2>
+
+  <p>Le branchement suit, à la lettre, le patron des quatre read-backs existants — dans le bloc
+  <b>recall</b> de <span class="mono">run_traced</span> (sdk.rs).</p>
+
+  <pre><code>// sdk.rs — bloc recall, à côté de mem_warm_k_min (read-back taille déjà en place)
+if let Ok(snap) = snap_read {
+    let size_k   = spec.adaptive_bounds()
+        .and_then(|(lo, hi)| snap.cells.size.suggested_k_min(lo as u32, hi as u32));
+    let fail_k   = spec.adaptive_bounds()        // ⑤ read-back échec (NOUVEAU)
+        .and_then(|(lo, hi)| snap.cells.failure.suggested_k_min(family.as_str(), lo as u32, hi as u32));
+    mem_warm_k_min = [size_k, fail_k].into_iter().flatten().max().map(|k| k as usize);
+    // … (pattern, réputation, exemplaires inchangés) …
+}</code></pre>
+
+  <p>Trois points d'attention, tous déjà résolus par l'infrastructure mémoire :</p>
+  <ul>
+    <li><b>Tracé (I-MEM2).</b> La lecture est tracée par le record <span class="mono">AgentRole::Memory</span>
+    (<span class="mono">memory_read_capture</span>), et le snapshot d'où vient <span class="mono">fail_rate</span>
+    est <b>pinné</b> (son <span class="mono">content_hash</span> entre dans la <span class="mono">provenance_root</span>) :
+    la <b>provenance dépend donc de ce qui a été lu côté échec</b>, exactement comme pour la taille. On
+    surface en plus le <span class="mono">fail_rate</span> et le <span class="mono">k_min</span> amorcé dans
+    la trace (forensique), sans changer la racine.</li>
+    <li><b>Re-preuve (I-MEM7).</b> Une version épinglée (<span class="mono">pin_version</span>) lit
+    l'instantané <i>passé</i> ⇒ même <span class="mono">fail_rate</span> ⇒ même amorce ⇒ reproductible.</li>
+    <li><b>Opt-in (I-MEM8).</b> Sans bloc mémoire, ou spec non-adaptative (pas de bornes), ou
+    <span class="mono">fail_rate</span> nul / sous le seuil : <span class="mono">fail_k = None</span> ⇒
+    le run est <b>byte-identique</b> au chemin historique.</li>
+  </ul>
+
+  <p>Côté <b>resolver</b> : <b>aucune modification</b>. <span class="mono">memory_k_min</span> reçoit la
+  composée, et <span class="mono">warm_start_k_min(k_min, k_max)</span> la re-clampe — le contrat I-MEM4
+  est déjà tenu pour <i>toute</i> amorce, quelle que soit sa source.</p>
+</section>
+</div>
+
+<!-- 6 -->
+<div class="wrap page">
+<section>
+  <h2><span class="num">§6</span> L'invariant I-MEM-FAIL</h2>
+
+  <table>
+    <thead><tr><th style="width:16%">Invariant</th><th>Énoncé</th></tr></thead>
+    <tbody>
+      <tr><td><b>I-MEM-FAIL</b><br><span class="small muted">read-back échec</span></td>
+        <td>Le read-back d'échec n'amorce <span class="mono">k_min</span> que (a) avec une évidence suffisante (<span class="mono">runs ≥ FAILBIAS_MIN_RUNS</span>), (b) <b>borné</b> à <span class="mono">[k_min, k_max]</span> (clampé à la lecture <b>et</b> re-clampé par le resolver), (c) de façon <b>monotone</b> au taux d'échec (plus d'échecs ⇒ jamais moins d'effort), (d) <b>re-prouvable</b> depuis le snapshot pinné (déterministe, sans horloge), (e) <b>byte-identique</b> au chemin sans-mémoire quand <span class="mono">fail_rate=0</span> / hors données / spec non-adaptative (I-MEM8). <b>Amorce, ne gouverne jamais.</b></td></tr>
+    </tbody>
+  </table>
+
+  <p><b>Composition</b> avec les invariants ADR-019 en place, sans en relâcher aucun :</p>
+  <ul>
+    <li><b>I-MEM1</b> (snapshot pinné) : la lecture porte sur le <span class="mono">content_hash</span> gelé — déjà couvert (la cellule échec est dans <span class="mono">MemoryCells</span>).</li>
+    <li><b>I-MEM2</b> (lecture tracée) : le read-back échec est dans le record <span class="mono">Memory</span> capturé → la racine en dépend.</li>
+    <li><b>I-MEM3</b> (learn ssi propre) : l'écriture de la cellule (MEM-2.c) est inchangée — chaque run propre compte <span class="mono">runs += 1</span>, <span class="mono">fails += !acceptable</span>.</li>
+    <li><b>I-MEM4</b> (amorce bornée) : <span class="mono">k_min ↑</span> est l'incarnation même de I-MEM4 ; le re-clamp du resolver est réutilisé tel quel.</li>
+    <li><b>I-MEM8</b> (opt-in byte-identique) : préservé — sans données d'échec, rien ne change.</li>
+  </ul>
+
+  <div class="callout key">
+    <p><b>Le point d'honnêteté.</b> La <b>monotonie</b> (plus d'échecs ⇒ jamais moins d'effort) est ce qui
+    fait du read-back un <i>apprentissage</i> et non un caprice : il ne peut que <b>monter</b>
+    <span class="mono">k_min</span> (vers <span class="mono">k_max</span>), jamais le baisser. Combiné au
+    plafond <span class="mono">k_max</span>, cela garantit que la mémoire d'échec <b>alloue plus de
+    budget</b> aux familles difficiles <b>sans jamais</b> pouvoir dégrader un run ni gouverner sa forme.</p>
+  </div>
+</section>
+</div>
+
+<!-- 7 -->
+<div class="wrap page">
+<section>
+  <h2><span class="num">§7</span> Le gate FAILBIAS + la séquence</h2>
+
+  <p>Un seul gate ferme la cellule, miroir exact du gate de taille (le patron contrôle-vs-chaud).</p>
+
+  <table>
+    <thead><tr><th style="width:34%">Assertion (FAILBIAS)</th><th>Mécanisme</th></tr></thead>
+    <tbody>
+      <tr><td><b>Pur (Mode A, déterministe)</b> : une famille semée d'échecs amorce <span class="mono">k_min ↑</span></td>
+        <td>via le vrai <span class="mono">fold</span> : N <span class="mono">RunSummary{failed:true}</span> sur une famille (au-delà de <span class="mono">FAILBIAS_MIN_RUNS</span>) → <span class="mono">failure.suggested_k_min(family, lo, hi) &gt; lo</span>.</td></tr>
+      <tr><td><b>Contrôle</b> : une famille sans échec ne bouge pas</td>
+        <td><span class="mono">fail_rate=0</span> (ou <span class="mono">runs &lt; MIN_RUNS</span>) → <span class="mono">None</span> → <span class="mono">k_min</span> = plancher du spec.</td></tr>
+      <tr><td><b>Causalité bout-en-bout</b> : le <span class="mono">k_min</span> effectif d'un run monte à cause des échecs</td>
+        <td>deux runs <span class="mono">run_traced</span> sur la même famille : l'un à mémoire vierge (<span class="mono">k_min</span>=plancher), l'autre après échecs semés (<span class="mono">k_min</span>↑) — l'écart ne peut venir que du read-back échec. <b>R0 re-prouve</b> les deux.</td></tr>
+      <tr><td><b>Borné (I-MEM4)</b> : jamais au-delà de <span class="mono">k_max</span></td>
+        <td>famille à <span class="mono">fail_rate=1000</span> + bornes serrées → <span class="mono">k_min</span> amorcé == <span class="mono">k_max</span>, jamais au-delà (clamp + re-clamp).</td></tr>
+      <tr><td><b>Composition</b> : max(taille, échec)</td>
+        <td>famille avec prior de taille bas + fort échec → l'amorce suit le <b>max</b> (l'échec gagne) ; prior de taille haut + sans échec → la taille gagne.</td></tr>
+      <tr><td><b>Byte-identique (I-MEM8)</b> : sans mémoire, inchangé</td>
+        <td>run sans bloc mémoire → racine + <span class="mono">k_min</span> identiques au chemin historique.</td></tr>
+      <tr><td><b>Aliveness Mode C</b> (<span class="mono">#[ignore]</span>)</td>
+        <td>le read-back échec FIRE dans le pipeline LLM réel (Ollama) — semé, vivant, re-prouvant — sa <i>correction</i> restant acquise par le gate Mode A (patron <span class="mono">modec_memory_active</span>).</td></tr>
+    </tbody>
+  </table>
+
+  <h3>7.1 — La séquence de livraison</h3>
+  <ol>
+    <li><b>La lecture</b> : <span class="mono">FailureMemory::suggested_k_min</span> + la const <span class="mono">FAILBIAS_MIN_RUNS</span> (efe-swarm-memory) — pure, + tests unitaires (interpolation bornée, seuil, monotonie, <span class="mono">fail_rate=0</span>→None).</li>
+    <li><b>Le câblage</b> : la composée <span class="mono">max(size_k, fail_k)</span> dans le recall de <span class="mono">run_traced</span> (sdk.rs) + le <span class="mono">fail_rate</span>/<span class="mono">k_min</span> amorcé dans la trace.</li>
+    <li><b>Le gate FAILBIAS</b> : le gate Mode A pur (contrôle vs semé) + le <span class="mono">#[ignore]</span> Mode C aliveness.</li>
+    <li><b>Le dossier</b> : mise à jour du dossier de vérification mémoire — les <b>cinq</b> cellules bouclent désormais (ADR-019 fermé).</li>
+  </ol>
+  <p class="small muted">Chemin par défaut inchangé : sans données d'échec, byte-identique. La cellule
+  reste <b>dormante</b> jusqu'à ce qu'une famille accumule des échecs au-delà du seuil.</p>
+</section>
+</div>
+
+<!-- 8 -->
+<div class="wrap page">
+<section>
+  <h2><span class="num">§8</span> Hors-portée + synthèse</h2>
+
+  <h3>8.1 — Honnêtement hors-portée</h3>
+  <ul>
+    <li><b>La décroissance temporelle du compteur d'échec</b> : <b>non-objectif délibéré</b> (« différé
+    sain », déjà noté dans le code). Une décroissance par horloge briserait le déterminisme octet
+    (ADR-007) ; une décroissance par-compte (oublier les vieux échecs après N runs) est une évolution
+    possible, mais ce n'est <b>pas</b> requis pour « fermer » la cellule — le read-back fonctionne sur le
+    ratio courant.</li>
+    <li><b>L'escalade (la difficulté SYSTÉMATIQUE)</b> : <span class="mono">k_min ↑</span> ne soigne que la
+    difficulté <i>de variance</i>. Une famille dont l'<i>approche</i> est mauvaise appellerait une
+    escalade (pattern/modèle plus fort) — un levier plus fort, moins borné (il <i>gouverne</i> le chemin),
+    donc un <b>v2 proportionné</b> nommé, pas un prérequis à la clôture.</li>
+    <li><b>Le « pattern-away »</b> (biaiser hors des patterns qui ont échoué) exigerait un compteur
+    d'échec <b>par-pattern</b> — une refonte de la cellule, hors « finir ».</li>
+  </ul>
+
+  <h3>8.2 — Synthèse</h3>
+  <p>Le read-back d'échec ferme la <b>dernière asymétrie</b> de la mémoire inter-runs : la 5ᵉ cellule,
+  jusqu'ici écrite et observable mais jamais lue, influence désormais un run — par la lecture la plus
+  fidèle au principe d'ADR-019. Aucune structure neuve, aucune cryptographie, aucun changement du
+  resolver : une <b>méthode de lecture</b> jumelle de celle de la taille, une <b>composition par le
+  max</b>, et le clamp I-MEM4 déjà en place. La mémoire apprend désormais des <b>gains</b> (la taille) et
+  des <b>pertes</b> (l'échec) sur le <b>même bouton</b>, bornée, re-prouvable, byte-identique sans
+  données — et <b>amorce</b> sans jamais <b>gouverner</b>. <b>ADR-019 est clos.</b></p>
+
+  <div class="callout key">
+    <p><b>En une phrase.</b> Une famille qui échoue souvent reçoit, re-provablement et de façon bornée,
+    <b>plus de tirages</b> — la mémoire d'EFE apprend enfin de ses pertes comme elle apprenait déjà de
+    ses gains, et les cinq cellules bouclent.</p>
+  </div>
+
+  <hr>
+  <p class="small muted">EFE — Architecture du read-back d'échec (k_min ↑) · 2026-06-19 · clôture
+  d'ADR-SWARM-019. Ancrages code :
+  <span class="mono">efe-swarm-memory : FailureMemory + FailRec{fails,runs} + fail_rate_milli() (cells.rs:349-373), SizePrior::suggested_k_min (la jumelle), MemoryCells.failure (388), MemorySnapshot</span> ·
+  <span class="mono">efe-swarm-sdk : run_traced (bloc recall, mem_warm_k_min), resolver.warm_start_k_min (re-clamp I-MEM4), memory_read_capture (trace)</span>.
+  Écriture de la cellule inchangée (MEM-2.c). Gate FAILBIAS = miroir du gate de taille.</p>
+</section>
+</div>
+
+</body>
+</html>
