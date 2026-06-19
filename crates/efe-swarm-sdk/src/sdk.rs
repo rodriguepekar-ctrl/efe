@@ -1440,6 +1440,9 @@ mod tests {
         let tenant = efe_nano_sdk::TenantId::system().to_string();
         let task = json!({ "text": "x", "expected": "x" });
         let judges = ["j_equals_expected", "consistency"]; // un ORACLE + une heuristique
+        // On monte la spec via le raccourci `consensus_verified` (A1) — l'oracle en tête + extra :
+        // c'est le chemin canonique d'armement du v2, ici exercé bout-en-bout.
+        let verified_spec = |gen: &str| TopologySpec::consensus_verified(gen, "j_equals_expected", &["consistency"], 3);
 
         // ── (a) FAUX unanime : tous "DEGENERATE_WRONG" ≠ expected → l'oracle ÉCHOUE le gagnant. ──
         let store_w = std::sync::Arc::new(InMemoryMemoryStore::new());
@@ -1448,7 +1451,7 @@ mod tests {
         fleet_w.register_generator("const_wrong", std::sync::Arc::new(ConstGenerator { value: json!("DEGENERATE_WRONG") }));
         let swarm_w = Swarm::builder().fleet(std::sync::Arc::new(fleet_w)).memory(MemoryHandle::new(store_w.clone())).build().unwrap();
         let run_w = swarm_w
-            .run(task.clone(), TopologySpec::consensus("const_wrong", &judges, 3), Budget::cents(1000))
+            .run(task.clone(), verified_spec("const_wrong"), Budget::cents(1000))
             .await
             .unwrap();
         assert!(run_w.is_clean(), "le run complète proprement (l'échec de vérification ne le rend pas non-clean)");
@@ -1465,9 +1468,10 @@ mod tests {
         fleet_ok.register_generator("const_right", std::sync::Arc::new(ConstGenerator { value: json!("x") }));
         let swarm_ok = Swarm::builder().fleet(std::sync::Arc::new(fleet_ok)).memory(MemoryHandle::new(store_ok.clone())).build().unwrap();
         let run_ok = swarm_ok
-            .run(task.clone(), TopologySpec::consensus("const_right", &judges, 3), Budget::cents(1000))
+            .run(task.clone(), verified_spec("const_right"), Budget::cents(1000))
             .await
             .unwrap();
+        assert!(run_ok.is_clean(), "le run correct complète proprement");
         let snap_ok = store_ok.snapshot(&tenant, &fam_ok).await.unwrap();
         assert!(!snap_ok.cells.reputation.agents.is_empty(), "CORRECT vérifié → réputation créditée");
         assert!(!snap_ok.cells.exemplars.items.is_empty(), "CORRECT vérifié → exemplaire déposé (few-shot)");

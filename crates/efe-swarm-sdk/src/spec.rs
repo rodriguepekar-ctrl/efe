@@ -160,6 +160,27 @@ impl TopologySpec {
         }
     }
 
+    /// **ADR-019 v2 — consensus « vérification = acceptation ».** Comme [`consensus`], mais GARANTIT
+    /// qu'un juge-ORACLE de correction (`verifier`, placé en TÊTE du panneau) est présent : l'essaim
+    /// n'est ACCEPTÉ (crédit réputation + few-shot) que si le gagnant PASSE réellement la vérification
+    /// — l'accord, même unanime, ne suffit plus (cf. `ConsensusTopology`, opt-in par composition). Arme
+    /// le v2 en un appel.
+    ///
+    /// **Portée — `verifier` doit être un vrai oracle de correction** (son `Verifier` renvoie
+    /// `is_correctness_oracle() = true`), sinon le panneau retombe silencieusement sur l'acceptation par
+    /// PRÉSENCE (comportement historique). Aujourd'hui le seul oracle du catalogue est
+    /// `"j_equals_expected"` (compare à `task.expected`) ⇒ adapté aux tâches **LABELLISÉES** (bench /
+    /// éval, où la vérité-terrain est connue). Pour une tâche de **PRODUCTION vérifiable** (compile,
+    /// schéma, calcul, SQL), enregistre dans la flotte un `Verifier` DÉTERMINISTE dédié avec
+    /// `is_correctness_oracle() = true` et passe son nom ici. Les tâches **NON-vérifiables** (Q&R
+    /// ouverte, sans vérité-terrain) n'ont pas d'oracle ⇒ utilise [`consensus`] (repli présence assumé).
+    pub fn consensus_verified(generator: &str, verifier: &str, extra_judges: &[&str], k: usize) -> Self {
+        let mut judges = Vec::with_capacity(1 + extra_judges.len());
+        judges.push(verifier);
+        judges.extend_from_slice(extra_judges);
+        Self::consensus(generator, &judges, k)
+    }
+
     /// Raccourci ADR-014 : un consensus Borda à **K adaptatif** — vagues de
     /// [`DEFAULT_BATCH`], arrêt à l'accord `threshold` (0,9 = parité sélecteur/escalades).
     pub fn consensus_adaptive(generator: &str, judges: &[&str], k_min: usize, k_max: usize, threshold: f64) -> Self {
@@ -496,6 +517,32 @@ impl TopologySpec {
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn consensus_verified_arms_the_v2_by_putting_the_oracle_in_the_panel() {
+        // ADR-019 v2 : consensus_verified place le juge-oracle EN TÊTE du panneau → le gate
+        // « vérification = acceptation » s'arme (cf. ConsensusTopology, opt-in par composition). Le
+        // comportement de bout en bout (faux unanime → non crédité ; correct → crédité) est couvert
+        // par sdk::tests::v2_consensus_credits_only_verified_answers.
+        let spec = TopologySpec::consensus_verified("g", "j_equals_expected", &["consistency", "j_non_empty"], 5);
+        match spec {
+            TopologySpec::Consensus { generator, judges, k, .. } => {
+                assert_eq!(generator, "g");
+                assert_eq!(k.max_k(), 5);
+                assert_eq!(
+                    judges,
+                    vec!["j_equals_expected".to_string(), "consistency".to_string(), "j_non_empty".to_string()],
+                    "l'oracle en tête, puis les juges heuristiques"
+                );
+            }
+            other => panic!("consensus_verified doit produire un Consensus, eu {other:?}"),
+        }
+        // Sans extra : juste l'oracle.
+        match TopologySpec::consensus_verified("g", "j_equals_expected", &[], 3) {
+            TopologySpec::Consensus { judges, .. } => assert_eq!(judges, vec!["j_equals_expected".to_string()]),
+            other => panic!("attendu Consensus, eu {other:?}"),
+        }
+    }
 
     #[test]
     fn auto_is_mode_aware() {
