@@ -47,6 +47,12 @@ pub(crate) struct PendingLlmCall {
     /// depuis la localité de l'endpoint) que le backend estampille sur cet appel. Traverse le
     /// `Retrier` intact (capté → ré-émis). Scellé dans le record N17 par `assemble`.
     pub compute_attestation: ComputeAttestation,
+    /// **R3+** : le **verdict** d'intégrité-modèle, décidé **en amont** (là où le registre des
+    /// modèles attendus est connu — l'orchestrateur ne fabrique jamais ce booléen dans `assemble`,
+    /// qui n'a pas le registre). `true` ssi le nœud a co-signé une empreinte ∈ les attendues pinnées.
+    /// L'empreinte elle-même (le `content_hash`) est **dérivée** de la co-signature R3+ par `assemble`
+    /// (source unique). `false` par défaut (production-seule, ou attestant non câblé).
+    pub model_hash_verified: bool,
 }
 
 tokio::task_local! {
@@ -72,6 +78,19 @@ where
 
 fn op_id_for(role: AgentRole) -> String {
     format!("swarm.{}", format!("{role:?}").to_lowercase())
+}
+
+/// **R3+** : parse une empreinte-modèle hex (64 caractères ⇒ 32 octets) en [`Blake3Hash`].
+/// `None` si la longueur ou l'encodage est invalide (on n'enregistre pas un `content_hash` malformé).
+fn parse_blake3_hex(s: &str) -> Option<Blake3Hash> {
+    if s.len() != 64 {
+        return None;
+    }
+    let mut bytes = [0u8; 32];
+    for (i, b) in bytes.iter_mut().enumerate() {
+        *b = u8::from_str_radix(s.get(i * 2..i * 2 + 2)?, 16).ok()?;
+    }
+    Some(Blake3Hash::from_bytes(bytes))
 }
 
 /// Estimation grossière de tokens (≈ 4 chars/token) — `is_estimated = true` (local, pas de
@@ -120,6 +139,16 @@ impl LlmProvenanceCollector {
             | ComputeAttestation::R4RemoteChannel { endpoint, .. } => endpoint.host.clone(),
             _ => "local".to_string(),
         };
+        // **R3+** : l'empreinte-modèle enregistrée (`content_hash`) EST celle que le nœud a
+        // co-signée — source unique, dérivée d'une co-signature R3 seulement. Le VERDICT
+        // `model_hash_verified` est, lui, **porté** par `call` (décidé en amont, là où le registre
+        // des modèles attendus est connu) : `assemble` n'invente ni l'empreinte ni le verdict.
+        let model_content_hash = match &call.compute_attestation {
+            ComputeAttestation::R3RemoteCosigned { cosignature, .. } => {
+                cosignature.model_fingerprint.as_deref().and_then(parse_blake3_hex)
+            }
+            _ => None,
+        };
 
         let record = LlmProvenanceRecord {
             // identité
@@ -130,11 +159,17 @@ impl LlmProvenanceCollector {
             tenant_id: tenant,
             agent_id: NanoAgentId::new(agent_id.as_str()).unwrap_or_else(|_| NanoAgentId::new("swarm_agent").unwrap()),
             agent_version: NanoAgentVersion::new("1.0.0").unwrap(),
-            // modèle (provider = moteur ; région = localité réelle, cf. `region` ci-dessus).
-            model_identity: ModelIdentity::hosted(&call.engine, &call.model, &region),
-            // RC-1/I-RC7 : remotement on n'a PAS inspecté les poids → reste `false` (ne peut
-            // monter que via une co-signature attestant l'empreinte-modèle, palier R3).
-            model_hash_verified: false,
+            // modèle (provider = moteur ; région = localité réelle ; content_hash = l'empreinte
+            // co-signée si R3+, cf. `model_content_hash`).
+            model_identity: {
+                let mut mi = ModelIdentity::hosted(&call.engine, &call.model, &region);
+                mi.content_hash = model_content_hash;
+                mi
+            },
+            // RC-1/I-RC7/R3+ : `false` par défaut (poids non inspectés) ; ne monte que pour une
+            // co-signature R3+ dont l'empreinte ∈ les attendues — verdict porté par `call`, ré-vérifié
+            // hors ligne par `assess_model_attestations` (jamais tenu sur parole).
+            model_hash_verified: call.model_hash_verified,
             // provenance du prompt (pas de gabarit : user = final ; système/inputs vides)
             prompt_template_id: "swarm.selfhost".into(),
             prompt_template_version: "1.0.0".into(),
@@ -224,6 +259,7 @@ mod tests {
             latency_ms: 1234,
             retry_count: 0,
             compute_attestation: ComputeAttestation::R2LocalWitnessed,
+            model_hash_verified: false,
         }
     }
 
@@ -278,6 +314,45 @@ mod tests {
         assert!(matches!(r.completeness, Completeness::Errored { .. }));
         assert_eq!(r.provider_finish_reason, FinishReason::Error);
         assert!(r.output_hash.is_none());
+    }
+
+    // ── R3+ : assemble dérive content_hash de l'empreinte co-signée + porte le verdict ─────
+    #[test]
+    fn assemble_records_model_attestation_when_cosigned() {
+        use efe_nano_sdk::{CoSignatureScheme, EndpointIdentity, NodeCoSignature};
+        let c = LlmProvenanceCollector::default();
+        let aid = AgentId::new("generator").unwrap();
+        let fp = Blake3Hash::from_bytes([0xA1u8; 32]);
+        let mut call = call("p", Some("o"));
+        // un appel R3+ : co-signé avec une empreinte-modèle ; verdict (décidé en amont) = vrai.
+        call.compute_attestation = ComputeAttestation::R3RemoteCosigned {
+            endpoint: EndpointIdentity::new("gpu.internal", "sha256/PIN"),
+            cosignature: NodeCoSignature {
+                node_id: "gpu-1".into(),
+                scheme: CoSignatureScheme::Ed25519,
+                signature_hex: "00".into(),
+                signed_tuple_hash: "00".into(),
+                nonce: "n".into(),
+                model_fingerprint: Some(fp.to_hex()),
+            },
+        };
+        call.model_hash_verified = true;
+        c.assemble(SwarmId::new(), TenantId::system(), &aid, AgentRole::Generator, call);
+        let r = &c.records()[0];
+        // content_hash DÉRIVÉ de l'empreinte co-signée (source unique) ; verdict PORTÉ.
+        assert_eq!(r.model_identity.content_hash, Some(fp), "content_hash = l'empreinte co-signée");
+        assert!(r.model_hash_verified, "le verdict porté est enregistré");
+    }
+
+    #[test]
+    fn assemble_leaves_model_unverified_for_production_only() {
+        // call() par défaut = R2 local, model_hash_verified false → pas d'intégrité-modèle (honnête).
+        let c = LlmProvenanceCollector::default();
+        let aid = AgentId::new("generator").unwrap();
+        c.assemble(SwarmId::new(), TenantId::system(), &aid, AgentRole::Generator, call("p", Some("o")));
+        let r = &c.records()[0];
+        assert_eq!(r.model_identity.content_hash, None);
+        assert!(!r.model_hash_verified);
     }
 
     #[test]

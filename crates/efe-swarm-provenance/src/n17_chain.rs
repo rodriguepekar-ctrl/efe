@@ -41,9 +41,9 @@
 use std::collections::HashMap;
 
 use efe_audit_core::chain_hmac;
-use efe_nano_sdk::{ComputeAttestation, LlmProvenanceRecord, ProvenanceId};
+use efe_nano_sdk::{Blake3Hash, ComputeAttestation, LlmProvenanceRecord, ProvenanceId};
 
-use crate::cosign::{verify_cosignature, CosignDowngrade, NodeRegistry};
+use crate::cosign::{model_attestation, verify_cosignature, CosignDowngrade, ModelAttestation, NodeRegistry};
 use crate::hash::sha256;
 use crate::record::hex32;
 
@@ -245,6 +245,42 @@ pub struct CosignAnomaly {
     pub reason: CosignDowngrade,
 }
 
+/// **R3+** — pourquoi une revendication `model_hash_verified=true` n'est PAS adossée (et donc
+/// rejetée par le vérifieur). Toujours rapportée (I-RC7/I-RC9, jamais silencieuse).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ModelDowngrade {
+    /// `model_hash_verified=true` mais aucune co-signature R3+ valide ne l'adosse (pas R3, co-sig
+    /// invalide, ou aucune empreinte-modèle co-signée).
+    ClaimUnbacked,
+    /// L'empreinte co-signée n'∈ pas les `expected_models` pinnés du nœud (mauvais modèle déclaré).
+    Mismatch,
+    /// L'empreinte co-signée ≠ le `content_hash` enregistré dans le record (incohérence interne).
+    ContentHashMismatch,
+}
+
+impl ModelDowngrade {
+    /// Libellé stable (forensique).
+    pub fn label(self) -> &'static str {
+        match self {
+            ModelDowngrade::ClaimUnbacked => "model-claim-unbacked",
+            ModelDowngrade::Mismatch => "model-mismatch",
+            ModelDowngrade::ContentHashMismatch => "model-content-hash-mismatch",
+        }
+    }
+}
+
+/// **R3+ / I-RC7** — une revendication d'intégrité-modèle (`model_hash_verified=true`) **non
+/// adossée**, signalée par le vérifieur. Vide ⇒ toute revendication d'intégrité-modèle est prouvée.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ModelAnomaly {
+    /// Le record concerné (localisation).
+    pub provenance_id: ProvenanceId,
+    /// Le nœud revendiqué (vide si aucune co-signature).
+    pub node_id: String,
+    /// Pourquoi la revendication d'intégrité-modèle n'a pas été tenue.
+    pub reason: ModelDowngrade,
+}
+
 /// Le verdict d'une re-preuve complète hors ligne.
 #[derive(Debug, Clone)]
 pub struct OfflineVerdict {
@@ -263,6 +299,10 @@ pub struct OfflineVerdict {
     /// **RC-2/R3 / I-RC9** : les revendications R3 non honorées (redescendues à R4), avec leur
     /// raison. Vide ⇒ aucune sur-prétention détectée. Jamais silencieux.
     pub cosign_anomalies: Vec<CosignAnomaly>,
+    /// **R3+ / I-RC7** : les revendications `model_hash_verified=true` non adossées (co-signature
+    /// d'empreinte-modèle absente, invalide, ou ∉ pinnée). **Axe distinct** du barreau (I-RC15) :
+    /// l'intégrité-modèle est rapportée à part. Vide ⇒ toute revendication d'intégrité-modèle est prouvée.
+    pub model_anomalies: Vec<ModelAnomaly>,
 }
 
 /// **Re-prouve TOUT** depuis les seuls records persistés (essaim + N17) + feuilles +
@@ -305,7 +345,74 @@ pub fn verify_run_offline_with_nodes(
     // prouvé appartenir au run) : `held_strength` n'est jamais découplé de l'intégrité de chaîne.
     let (held_strength, cosign_anomalies) =
         assess_held_strength(n17_records, node_registry, n17_chain.intact);
-    OfflineVerdict { swarm, n17_chain, bridge, fully_proven, held_strength, cosign_anomalies }
+    // R3+/I-RC7 (axe DISTINCT, I-RC15) : toute revendication model_hash_verified=true doit être
+    // adossée à une co-signature R3+ valide dont l'empreinte ∈ pinnée — sinon signalée. Honoré
+    // seulement sur chaîne intègre (cohérent avec le barreau).
+    let model_anomalies = if n17_chain.intact {
+        assess_model_attestations(n17_records, node_registry)
+    } else {
+        // chaîne rompue : les records ne sont pas prouvés du run → toute revendication-modèle est non adossée.
+        n17_records
+            .iter()
+            .filter(|r| r.model_hash_verified)
+            .map(|r| ModelAnomaly {
+                provenance_id: r.provenance_id,
+                node_id: String::new(),
+                reason: ModelDowngrade::ClaimUnbacked,
+            })
+            .collect()
+    };
+    OfflineVerdict { swarm, n17_chain, bridge, fully_proven, held_strength, cosign_anomalies, model_anomalies }
+}
+
+/// **R3+ / I-RC7** — vérifie hors ligne chaque revendication `model_hash_verified=true` : elle n'est
+/// **adossée** que par une co-signature R3+ valide (ed25519, clé pinnée non révoquée) dont
+/// l'empreinte ∈ les `expected_models` pinnés du nœud ET == le `content_hash` enregistré du record.
+/// Toute revendication non adossée est **signalée** (jamais sur parole). **Axe distinct** du barreau
+/// (I-RC15) : ne touche pas `held_strength`. Pur, hors ligne.
+fn assess_model_attestations(records: &[LlmProvenanceRecord], registry: &NodeRegistry) -> Vec<ModelAnomaly> {
+    let mut anomalies = Vec::new();
+    for r in records {
+        if !r.model_hash_verified {
+            continue; // aucune revendication d'intégrité-modèle → rien à enforcer (honnête).
+        }
+        // Une revendication model_hash_verified=true EXIGE une co-signature R3.
+        let cosig = match &r.compute_attestation {
+            ComputeAttestation::R3RemoteCosigned { cosignature, .. } => cosignature,
+            _ => {
+                anomalies.push(ModelAnomaly {
+                    provenance_id: r.provenance_id,
+                    node_id: String::new(),
+                    reason: ModelDowngrade::ClaimUnbacked,
+                });
+                continue;
+            }
+        };
+        let output_hash = r.output_hash.unwrap_or(Blake3Hash::ZERO);
+        // (a) la co-signature elle-même doit être R3-valide.
+        if verify_cosignature(&r.final_prompt_hash, &output_hash, cosig, registry).is_err() {
+            anomalies.push(ModelAnomaly {
+                provenance_id: r.provenance_id,
+                node_id: cosig.node_id.clone(),
+                reason: ModelDowngrade::ClaimUnbacked,
+            });
+            continue;
+        }
+        // (b) l'empreinte co-signée ∈ pinnée, ET (c) == le content_hash du record.
+        let reason = match model_attestation(cosig, registry) {
+            ModelAttestation::Verified => {
+                let recorded = r.model_identity.content_hash.map(|h| h.to_hex());
+                if recorded.as_deref() == cosig.model_fingerprint.as_deref() {
+                    continue; // adossé + cohérent → model_hash_verified légitimement tenu.
+                }
+                ModelDowngrade::ContentHashMismatch
+            }
+            ModelAttestation::Mismatch => ModelDowngrade::Mismatch,
+            ModelAttestation::NotAttested => ModelDowngrade::ClaimUnbacked,
+        };
+        anomalies.push(ModelAnomaly { provenance_id: r.provenance_id, node_id: cosig.node_id.clone(), reason });
+    }
+    anomalies
 }
 
 /// **RC-2/R3** — évalue le barreau de computation **vérifié** de chaque record. Une revendication R3
@@ -698,6 +805,84 @@ mod tests {
         let mut chain = crate::chain::SwarmChain::new(tenant, swarm, key());
         let swarm_recs = chain.append_all(std::iter::once(draft));
         (swarm_recs, n17_recs, sealed)
+    }
+
+    /// **R3+** — un record co-signé par `att` (qui doit attester le modèle `model_fp` via
+    /// `.with_model`), avec `content_hash` + `model_hash_verified=true` (la revendication).
+    fn n17_r3_model(prov: u128, tenant: TenantId, att: &crate::cosign::MockAttestor, nonce: &str, model_fp: Blake3Hash) -> LlmProvenanceRecord {
+        let mut r = n17_r3(prov, tenant, att, nonce);
+        r.model_identity.content_hash = Some(model_fp);
+        r.model_hash_verified = true;
+        r
+    }
+
+    #[test]
+    fn r3plus_model_attestation_verified_when_fingerprint_matches_pin() {
+        // Nominal R3+ : le nœud co-signe l'empreinte de SON modèle, ∈ les attendues pinnées ET
+        // == le content_hash enregistré → model_hash_verified légitimement tenu, zéro anomalie-modèle.
+        let fp = Blake3Hash::from_bytes([0xA1u8; 32]);
+        let att = crate::cosign::MockAttestor::from_seed("gpu-1", [7u8; 32]).with_model(fp.to_hex());
+        let mut registry = NodeRegistry::empty().with_node("gpu-1", att.public_key_hex());
+        registry.expect_model("gpu-1", fp.to_hex());
+        let (sw, n17r, sealed) = run_with(n17_r3_model(1, TenantId::system(), &att, "challenge", fp));
+        let v = verify_run_offline_with_nodes(&sw, &n17r, &sealed.leaf_hashes, sealed.n17_root, &key(), &registry);
+        assert_eq!(v.held_strength.weakest_rank, Some(2), "le barreau R3 tient");
+        assert!(v.model_anomalies.is_empty(), "intégrité-modèle adossée → aucune anomalie");
+    }
+
+    #[test]
+    fn r3plus_model_claim_unbacked_without_a_cosignature() {
+        // model_hash_verified=true sur un record R4 (aucune co-signature) → ClaimUnbacked.
+        let mut rec = n17(1, TenantId::system(), swarm_uuid(), "gemma3:12b");
+        rec.compute_attestation = ComputeAttestation::R4RemoteChannel {
+            endpoint: EndpointIdentity::new("gpu.internal", "sha256/PIN"),
+            keyed: false,
+        };
+        rec.model_hash_verified = true; // revendiqué sans rien pour l'adosser
+        let (sw, n17r, sealed) = run_with(rec);
+        let v = verify_run_offline_with_nodes(&sw, &n17r, &sealed.leaf_hashes, sealed.n17_root, &key(), &NodeRegistry::empty());
+        assert_eq!(v.model_anomalies.len(), 1);
+        assert_eq!(v.model_anomalies[0].reason, ModelDowngrade::ClaimUnbacked);
+    }
+
+    #[test]
+    fn r3plus_model_mismatch_when_fingerprint_not_pinned() {
+        // le nœud co-signe le modèle A, mais l'opérateur attendait B → mismatch, pas de lift.
+        let fp_a = Blake3Hash::from_bytes([0xAAu8; 32]);
+        let fp_b = Blake3Hash::from_bytes([0xBBu8; 32]);
+        let att = crate::cosign::MockAttestor::from_seed("gpu-1", [7u8; 32]).with_model(fp_a.to_hex());
+        let mut registry = NodeRegistry::empty().with_node("gpu-1", att.public_key_hex());
+        registry.expect_model("gpu-1", fp_b.to_hex()); // attend B, le nœud déclare A
+        let (sw, n17r, sealed) = run_with(n17_r3_model(1, TenantId::system(), &att, "c", fp_a));
+        let v = verify_run_offline_with_nodes(&sw, &n17r, &sealed.leaf_hashes, sealed.n17_root, &key(), &registry);
+        assert_eq!(v.model_anomalies[0].reason, ModelDowngrade::Mismatch);
+    }
+
+    #[test]
+    fn r3plus_content_hash_mismatch_when_record_disagrees_with_cosig() {
+        // le nœud co-signe A (∈ attendues), MAIS le record enregistre content_hash = B → incohérence.
+        let fp_a = Blake3Hash::from_bytes([0xAAu8; 32]);
+        let fp_b = Blake3Hash::from_bytes([0xBBu8; 32]);
+        let att = crate::cosign::MockAttestor::from_seed("gpu-1", [7u8; 32]).with_model(fp_a.to_hex());
+        let mut registry = NodeRegistry::empty().with_node("gpu-1", att.public_key_hex());
+        registry.expect_model("gpu-1", fp_a.to_hex());
+        let mut rec = n17_r3_model(1, TenantId::system(), &att, "c", fp_a);
+        rec.model_identity.content_hash = Some(fp_b); // ≠ ce que le nœud a co-signé
+        let (sw, n17r, sealed) = run_with(rec);
+        let v = verify_run_offline_with_nodes(&sw, &n17r, &sealed.leaf_hashes, sealed.n17_root, &key(), &registry);
+        assert_eq!(v.model_anomalies[0].reason, ModelDowngrade::ContentHashMismatch);
+    }
+
+    #[test]
+    fn r3plus_production_only_run_has_no_model_anomaly() {
+        // R3 production-seule (pas d'attestation-modèle, model_hash_verified=false) → rien à signaler
+        // côté modèle, et le barreau R3 tient quand même (axes distincts, I-RC15).
+        let att = crate::cosign::MockAttestor::from_seed("gpu-1", [7u8; 32]);
+        let registry = NodeRegistry::empty().with_node("gpu-1", att.public_key_hex());
+        let (sw, n17r, sealed) = run_with(n17_r3(1, TenantId::system(), &att, "c"));
+        let v = verify_run_offline_with_nodes(&sw, &n17r, &sealed.leaf_hashes, sealed.n17_root, &key(), &registry);
+        assert!(v.model_anomalies.is_empty(), "pas de revendication-modèle → rien à signaler");
+        assert_eq!(v.held_strength.weakest_rank, Some(2), "le barreau R3 tient");
     }
 
     #[test]

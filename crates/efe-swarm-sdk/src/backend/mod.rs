@@ -560,6 +560,7 @@ mod tests {
                 latency_ms: 1,
                 retry_count: 0,
                 compute_attestation: ComputeAttestation::R2LocalWitnessed,
+                model_hash_verified: false,
             });
             response
         }

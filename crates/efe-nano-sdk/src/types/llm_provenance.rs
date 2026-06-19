@@ -680,10 +680,16 @@ pub struct NodeCoSignature {
     pub scheme: CoSignatureScheme,
     /// La signature, encodée hex.
     pub signature_hex: String,
-    /// Le tuple signé, hex : `blake3(node_id ‖ final_prompt_hash ‖ output_hash ‖ nonce)`.
+    /// Le tuple signé, hex : `blake3(node_id ‖ final_prompt_hash ‖ output_hash ‖ [model_fp] ‖ nonce)`.
     pub signed_tuple_hash: String,
     /// Le nonce anti-rejeu (hex), lié à *ce* run.
     pub nonce: String,
+    /// **R3+** : l'empreinte-modèle (hex du `content_hash` des poids) **co-signée** par le nœud, s'il
+    /// atteste son modèle. `None` ⇒ co-signature production-seule (R3). Quand `Some`, le tuple co-signé
+    /// emploie le domaine `EFE-RC3-COSIGN-v1` et **inclut** cette empreinte (cf. `cosign_tuple`), et le
+    /// vérifieur peut tenir `model_hash_verified` **si** l'empreinte ∈ les modèles attendus pinnés (I-RC7).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model_fingerprint: Option<String>,
 }
 
 /// **RC-1 — l'attestation de computation.** Le barreau de confiance qu'EFE peut
@@ -1533,6 +1539,7 @@ mod tests {
             signature_hex: "ab".into(),
             signed_tuple_hash: "cd".into(),
             nonce: "ef".into(),
+            model_fingerprint: None,
         };
         let ranks = [
             ComputeAttestation::R1LocalDeterministic.strength_rank(),
@@ -1563,6 +1570,7 @@ mod tests {
                     signature_hex: "deadbeef".into(),
                     signed_tuple_hash: "00ff".into(),
                     nonce: "1234".into(),
+                    model_fingerprint: None,
                 },
             },
         ];

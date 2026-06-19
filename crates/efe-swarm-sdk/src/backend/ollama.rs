@@ -57,6 +57,7 @@ impl LocalBackend for OllamaBackend {
             latency_ms,
             retry_count: 0, // self-host local nu : le Retrier (routeur Network) écrasera si besoin.
             compute_attestation: self.attestation.clone(), // RC-1 : barreau scellé (local R2 / distant R4).
+            model_hash_verified: false, // R3+ : aucun attestant-modèle câblé sur ce chemin → non attesté.
         });
         response
     }

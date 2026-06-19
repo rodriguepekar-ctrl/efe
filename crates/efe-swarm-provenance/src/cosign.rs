@@ -75,11 +75,14 @@ pub(crate) fn hex_decode(s: &str) -> Option<Vec<u8>> {
 //  Le tuple co-signé
 // ─────────────────────────────────────────────────────────────────────────────
 
-/// **R3** — le tuple que le nœud signe : `blake3( DOMAINE ‖ |node_id| ‖ node_id ‖ prompt_hash ‖
-/// output_hash ‖ |nonce| ‖ nonce )`.
+/// **R3 / R3+** — le tuple que le nœud signe : `blake3( DOMAINE ‖ |node_id| ‖ node_id ‖ prompt_hash ‖
+/// output_hash ‖ [|model_fp| ‖ model_fp] ‖ |nonce| ‖ nonce )`. La composante **`model_fp`** (R3+)
+/// n'est présente que si le nœud atteste son modèle (`model_fingerprint = Some`), et le DOMAINE
+/// bascule alors de `EFE-RC2` à `EFE-RC3` — un `None` redonne exactement le tuple R3.
 ///
 /// Les champs sont précisément ceux que le nœud **peut connaître à l'instant du calcul** : son
-/// identité, le prompt reçu, la sortie produite, le nonce-défi reçu de l'orchestrateur. Il ne signe
+/// identité, le prompt reçu, la sortie produite, l'empreinte de ses poids (R3+), le nonce-défi reçu
+/// de l'orchestrateur. Il ne signe
 /// **pas** le `provenance_id` (assigné *après* par l'orchestrateur, inconnu du nœud) : la liaison au
 /// run est assurée par le `leaf_hash` (qui contient `provenance_id`/`tenant_id`). **Séparation de
 /// domaine** (préfixe constant) + **préfixes de longueur** sur les champs variables ⇒ aucune
@@ -88,14 +91,27 @@ pub fn cosign_tuple(
     node_id: &str,
     final_prompt_hash: &Blake3Hash,
     output_hash: &Blake3Hash,
+    model_fingerprint: Option<&str>,
     nonce: &str,
 ) -> Blake3Hash {
-    let mut buf = Vec::with_capacity(24 + node_id.len() + 64 + 8 + nonce.len());
-    buf.extend_from_slice(b"EFE-RC2-COSIGN-v1\x00"); // séparation de domaine (anti-collision inter-usages)
+    let mut buf = Vec::with_capacity(32 + node_id.len() + 64 + 8 + nonce.len());
+    // **R3+** : quand le nœud atteste un modèle (`Some`), le tuple emploie un domaine DISTINCT
+    // (`EFE-RC3-COSIGN-v1`) et **inclut** l'empreinte-modèle. Sans attestation (`None`), il est
+    // **byte-identique** au tuple R3 (`EFE-RC2-COSIGN-v1`, sans composante modèle) — les
+    // co-signatures production-seules restent valides. Le domaine versionné empêche qu'une
+    // co-signature d'un usage soit re-interprétée comme l'autre.
+    match model_fingerprint {
+        Some(_) => buf.extend_from_slice(b"EFE-RC3-COSIGN-v1\x00"),
+        None => buf.extend_from_slice(b"EFE-RC2-COSIGN-v1\x00"),
+    }
     buf.extend_from_slice(&(node_id.len() as u64).to_le_bytes());
     buf.extend_from_slice(node_id.as_bytes());
     buf.extend_from_slice(&final_prompt_hash.0);
     buf.extend_from_slice(&output_hash.0);
+    if let Some(mf) = model_fingerprint {
+        buf.extend_from_slice(&(mf.len() as u64).to_le_bytes());
+        buf.extend_from_slice(mf.as_bytes());
+    }
     buf.extend_from_slice(&(nonce.len() as u64).to_le_bytes());
     buf.extend_from_slice(nonce.as_bytes());
     blake3_bytes(&buf)
@@ -129,6 +145,10 @@ pub struct PinnedNode {
     pub pubkey_hex: String,
     /// Statut courant de la clé.
     pub status: NodeStatus,
+    /// **R3+** : les empreintes-modèles **attendues** pour ce nœud (hex), pinnées hors-bande par
+    /// l'opérateur. Le vérifieur ne tient `model_hash_verified` que si l'empreinte co-signée par le
+    /// nœud ∈ cet ensemble (I-RC7/I-RC14). Vide ⇒ le nœud n'atteste pas de modèle (R3 production-seule).
+    pub expected_models: Vec<String>,
 }
 
 /// Le registre des nœuds attestants pinnés : `node_id → PinnedNode`. Input de **vérification**
@@ -145,11 +165,12 @@ impl NodeRegistry {
         Self { nodes: HashMap::new() }
     }
 
-    /// Enrôle un nœud **actif** avec sa clé publique (hex). Builder cumulable.
+    /// Enrôle un nœud **actif** avec sa clé publique (hex). Builder cumulable. Aucune empreinte-modèle
+    /// attendue par défaut (R3 production-seule) ; pinner via [`expect_model`](NodeRegistry::expect_model).
     pub fn with_node(mut self, node_id: impl Into<String>, pubkey_hex: impl Into<String>) -> Self {
         self.nodes.insert(
             node_id.into(),
-            PinnedNode { pubkey_hex: pubkey_hex.into(), status: NodeStatus::Active },
+            PinnedNode { pubkey_hex: pubkey_hex.into(), status: NodeStatus::Active, expected_models: Vec::new() },
         );
         self
     }
@@ -163,6 +184,16 @@ impl NodeRegistry {
     pub fn revoke(&mut self, node_id: &str, reason: impl Into<String>) {
         if let Some(n) = self.nodes.get_mut(node_id) {
             n.status = NodeStatus::Revoked { reason: reason.into() };
+        }
+    }
+
+    /// **R3+** : pinne une **empreinte-modèle attendue** (hex) pour un nœud (acte d'opérateur,
+    /// hors-bande). Cumulable — un nœud peut servir plusieurs modèles (pool, rotation). Le vérifieur
+    /// ne tient `model_hash_verified` que si l'empreinte co-signée ∈ cet ensemble (I-RC14). Sans
+    /// effet si le nœud n'est pas (encore) enrôlé — la pubkey vient d'abord.
+    pub fn expect_model(&mut self, node_id: &str, fingerprint: impl Into<String>) {
+        if let Some(n) = self.nodes.get_mut(node_id) {
+            n.expected_models.push(fingerprint.into());
         }
     }
 
@@ -257,8 +288,16 @@ pub fn verify_cosignature(
     if cosig.scheme != CoSignatureScheme::Ed25519 {
         return Err(CosignDowngrade::UnsupportedScheme);
     }
-    // 3. Recalcule le tuple depuis les champs du record — et compare au tuple revendiqué.
-    let tuple = cosign_tuple(&cosig.node_id, final_prompt_hash, output_hash, &cosig.nonce);
+    // 3. Recalcule le tuple depuis les champs du record (et l'empreinte-modèle co-signée, R3+, qui
+    //    bascule le domaine en RC3) — et compare au tuple revendiqué. La signature couvre donc
+    //    l'empreinte-modèle quand elle est présente : la falsifier invalide la co-signature.
+    let tuple = cosign_tuple(
+        &cosig.node_id,
+        final_prompt_hash,
+        output_hash,
+        cosig.model_fingerprint.as_deref(),
+        &cosig.nonce,
+    );
     if tuple.to_hex() != cosig.signed_tuple_hash {
         return Err(CosignDowngrade::TupleMismatch);
     }
@@ -274,6 +313,41 @@ pub fn verify_cosignature(
     //    l'encodage canonique (défense contre la malléabilité de signature).
     vk.verify_strict(&tuple.0, &sig).map_err(|_| CosignDowngrade::SignatureInvalid)?;
     Ok(())
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  R3+ — l'attestation-modèle (axe distinct du barreau : I-RC15)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// **R3+** — le verdict d'attestation-modèle d'une co-signature **déjà vérifiée** (l'appelant a
+/// confirmé `verify_cosignature` = `Ok`). Décide si `model_hash_verified` peut être **tenu**.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ModelAttestation {
+    /// La co-signature ne porte **pas** d'empreinte-modèle (R3 production-seule) ⇒
+    /// `model_hash_verified` reste `false` (honnête : le modèle n'est pas attesté).
+    NotAttested,
+    /// L'empreinte co-signée ∈ les `expected_models` pinnés du nœud ⇒ `model_hash_verified` peut
+    /// être **tenu** : le nœud a co-signé avoir chargé un modèle **attendu**.
+    Verified,
+    /// L'empreinte co-signée n'est **pas** dans les `expected_models` du nœud (ou aucun n'est pinné)
+    /// ⇒ **pas** de lift ; l'écart est signalé (le nœud a déclaré un modèle non attendu).
+    Mismatch,
+}
+
+/// **R3+** — confronte l'empreinte-modèle co-signée aux `expected_models` pinnés du nœud.
+///
+/// Suppose que la co-signature a **déjà** été vérifiée (`verify_cosignature` = `Ok`) : c'est l'étape
+/// *en plus* qui décide `model_hash_verified` — un **axe distinct** du barreau R3 (I-RC15). Pur,
+/// hors ligne, sans secret. Ne **tient jamais** l'intégrité-modèle sans une empreinte ∈ pinnée (I-RC7).
+pub fn model_attestation(cosig: &NodeCoSignature, registry: &NodeRegistry) -> ModelAttestation {
+    let fp = match cosig.model_fingerprint.as_deref() {
+        Some(fp) => fp,
+        None => return ModelAttestation::NotAttested,
+    };
+    match registry.lookup(&cosig.node_id) {
+        Some(n) if n.expected_models.iter().any(|e| e == fp) => ModelAttestation::Verified,
+        _ => ModelAttestation::Mismatch,
+    }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -304,6 +378,9 @@ pub trait Attestor: Send + Sync {
 pub struct MockAttestor {
     node_id: String,
     signing: SigningKey,
+    /// **R3+** : l'empreinte-modèle que cet attestant **déclare** faire tourner (et co-signera).
+    /// `None` ⇒ co-signature production-seule (R3).
+    model_fingerprint: Option<String>,
 }
 
 impl std::fmt::Debug for MockAttestor {
@@ -315,8 +392,16 @@ impl std::fmt::Debug for MockAttestor {
 
 impl MockAttestor {
     /// Construit un attestant déterministe à partir d'une graine de 32 octets (la clé privée brute).
+    /// Production-seule par défaut (n'atteste pas de modèle) ; voir [`with_model`](MockAttestor::with_model).
     pub fn from_seed(node_id: impl Into<String>, seed: [u8; 32]) -> Self {
-        Self { node_id: node_id.into(), signing: SigningKey::from_bytes(&seed) }
+        Self { node_id: node_id.into(), signing: SigningKey::from_bytes(&seed), model_fingerprint: None }
+    }
+
+    /// **R3+** : déclare l'empreinte-modèle (hex) que cet attestant co-signera — le modèle qu'il
+    /// « fait tourner ». Les co-signatures produites emploient alors le tuple RC3 et portent l'empreinte.
+    pub fn with_model(mut self, fingerprint: impl Into<String>) -> Self {
+        self.model_fingerprint = Some(fingerprint.into());
+        self
     }
 }
 
@@ -328,7 +413,8 @@ impl Attestor for MockAttestor {
         hex_encode(self.signing.verifying_key().to_bytes().as_slice())
     }
     fn cosign(&self, final_prompt_hash: &Blake3Hash, output_hash: &Blake3Hash, nonce: &str) -> NodeCoSignature {
-        let tuple = cosign_tuple(&self.node_id, final_prompt_hash, output_hash, nonce);
+        let mf = self.model_fingerprint.as_deref();
+        let tuple = cosign_tuple(&self.node_id, final_prompt_hash, output_hash, mf, nonce);
         let sig: Signature = self.signing.sign(&tuple.0);
         NodeCoSignature {
             node_id: self.node_id.clone(),
@@ -336,6 +422,7 @@ impl Attestor for MockAttestor {
             signature_hex: hex_encode(&sig.to_bytes()),
             signed_tuple_hash: tuple.to_hex(),
             nonce: nonce.to_string(),
+            model_fingerprint: self.model_fingerprint.clone(),
         }
     }
 }
@@ -424,12 +511,12 @@ mod tests {
     #[test]
     fn tuple_is_deterministic_and_field_sensitive() {
         let (p, o) = hashes();
-        let base = cosign_tuple("node-1", &p, &o, "nonce-A");
-        assert_eq!(base, cosign_tuple("node-1", &p, &o, "nonce-A"), "déterministe");
-        assert_ne!(base, cosign_tuple("node-2", &p, &o, "nonce-A"), "node_id compte");
-        assert_ne!(base, cosign_tuple("node-1", &o, &o, "nonce-A"), "prompt compte");
-        assert_ne!(base, cosign_tuple("node-1", &p, &p, "nonce-A"), "output compte");
-        assert_ne!(base, cosign_tuple("node-1", &p, &o, "nonce-B"), "nonce compte");
+        let base = cosign_tuple("node-1", &p, &o, None, "nonce-A");
+        assert_eq!(base, cosign_tuple("node-1", &p, &o, None, "nonce-A"), "déterministe");
+        assert_ne!(base, cosign_tuple("node-2", &p, &o, None, "nonce-A"), "node_id compte");
+        assert_ne!(base, cosign_tuple("node-1", &o, &o, None, "nonce-A"), "prompt compte");
+        assert_ne!(base, cosign_tuple("node-1", &p, &p, None, "nonce-A"), "output compte");
+        assert_ne!(base, cosign_tuple("node-1", &p, &o, None, "nonce-B"), "nonce compte");
     }
 
     #[test]
@@ -438,10 +525,75 @@ mod tests {
         let (_, o) = hashes();
         let p = Blake3Hash::ZERO;
         assert_ne!(
-            cosign_tuple("ab", &p, &o, "c"),
-            cosign_tuple("a", &p, &o, "bc"),
+            cosign_tuple("ab", &p, &o, None, "c"),
+            cosign_tuple("a", &p, &o, None, "bc"),
             "les préfixes de longueur ferment l'ambiguïté de concaténation"
         );
+    }
+
+    // ── R3+ : le tuple modèle est distinct (domaine RC3 + empreinte), sensible à l'empreinte ──
+    #[test]
+    fn model_tuple_is_distinct_and_fingerprint_sensitive() {
+        let (p, o) = hashes();
+        let r3 = cosign_tuple("node-1", &p, &o, None, "n");
+        let r3p = cosign_tuple("node-1", &p, &o, Some("sha256/MODEL-A"), "n");
+        // R3 production-seule ≠ R3+ même contenu (domaine + composante modèle).
+        assert_ne!(r3, r3p, "R3 (sans modèle) ≠ R3+ (avec modèle) — domaines distincts");
+        // l'empreinte compte.
+        assert_ne!(r3p, cosign_tuple("node-1", &p, &o, Some("sha256/MODEL-B"), "n"), "l'empreinte compte");
+        // déterministe.
+        assert_eq!(r3p, cosign_tuple("node-1", &p, &o, Some("sha256/MODEL-A"), "n"), "déterministe");
+        // R3 (None) reste byte-identique au tuple R3 historique (domaine RC2) — non-régression.
+        assert_eq!(r3, cosign_tuple("node-1", &p, &o, None, "n"));
+    }
+
+    // ── R3+ : l'attestation-modèle (vérifie + confronte au pin) ────────────────
+    #[test]
+    fn model_attesting_cosig_verifies_and_matches_expected() {
+        let (p, o) = hashes();
+        let fp = "sha256/MODEL-A";
+        let att = MockAttestor::from_seed("gpu-1", [7u8; 32]).with_model(fp);
+        let mut reg = NodeRegistry::empty().with_node("gpu-1", att.public_key_hex());
+        reg.expect_model("gpu-1", fp);
+        let cosig = att.cosign(&p, &o, "challenge");
+        // la co-signature couvre l'empreinte (tuple RC3) ET vérifie ;
+        assert_eq!(verify_cosignature(&p, &o, &cosig, &reg), Ok(()));
+        // ET l'empreinte ∈ attendues → model_hash_verified peut être tenu.
+        assert_eq!(model_attestation(&cosig, &reg), ModelAttestation::Verified);
+    }
+
+    #[test]
+    fn model_attestation_mismatch_when_fingerprint_not_pinned() {
+        let (p, o) = hashes();
+        let att = MockAttestor::from_seed("gpu-1", [7u8; 32]).with_model("sha256/ACTUAL");
+        let mut reg = NodeRegistry::empty().with_node("gpu-1", att.public_key_hex());
+        reg.expect_model("gpu-1", "sha256/EXPECTED"); // ≠ ce que le nœud co-signe
+        let cosig = att.cosign(&p, &o, "challenge");
+        assert_eq!(verify_cosignature(&p, &o, &cosig, &reg), Ok(()), "la co-sig reste valide…");
+        assert_eq!(model_attestation(&cosig, &reg), ModelAttestation::Mismatch, "…mais mauvais modèle → pas de lift");
+    }
+
+    #[test]
+    fn production_only_cosig_is_not_attested() {
+        let (p, o) = hashes();
+        let att = MockAttestor::from_seed("gpu-1", [7u8; 32]); // pas de modèle (R3 production-seule)
+        let reg = NodeRegistry::empty().with_node("gpu-1", att.public_key_hex());
+        let cosig = att.cosign(&p, &o, "challenge");
+        assert!(cosig.model_fingerprint.is_none());
+        assert_eq!(verify_cosignature(&p, &o, &cosig, &reg), Ok(()));
+        assert_eq!(model_attestation(&cosig, &reg), ModelAttestation::NotAttested);
+    }
+
+    #[test]
+    fn tampering_the_model_fingerprint_breaks_the_cosignature() {
+        let (p, o) = hashes();
+        let att = MockAttestor::from_seed("gpu-1", [7u8; 32]).with_model("sha256/MODEL-A");
+        let reg = NodeRegistry::empty().with_node("gpu-1", att.public_key_hex());
+        let mut cosig = att.cosign(&p, &o, "challenge");
+        // un attaquant réécrit l'empreinte (faire croire à un autre modèle) → le tuple recalculé
+        // diffère du signed_tuple_hash → la signature ne couvre plus → rejet.
+        cosig.model_fingerprint = Some("sha256/FORGED".into());
+        assert_eq!(verify_cosignature(&p, &o, &cosig, &reg), Err(CosignDowngrade::TupleMismatch));
     }
 
     // ── nominal : co-signe → pin → vérifie → OK ────────────────────────────────
