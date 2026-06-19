@@ -220,9 +220,11 @@ async fn r3s2_mission_a_skips_analyzer_when_circuit_pre_open() {
 #[tokio::test]
 async fn r3s2_mission_a_skips_compressor_when_circuit_pre_open() {
     let coord = make_coord_with_slm_circuits(&[("compressor", true)]);
-    // user_text > 500 chars pour déclencher le compressor.
+    // `should_compress` gate sur estimate_tokens = ⌈chars/4⌉ ≥ COMPRESS_MIN_TOKENS (250) ⇒ il faut
+    // ≥ 1000 chars pour DÉCLENCHER le compressor (sinon il est skippé car inutile, pas pour cause de
+    // circuit). 1200 chars = 300 tokens, confortablement au-dessus du seuil.
     let mut req = make_mission_a_request();
-    req.user_text = "x".repeat(600);
+    req.user_text = "x".repeat(1200);
 
     let resp = run_mission_a(&coord, req)
         .await
@@ -443,7 +445,7 @@ async fn r3s2_mission_b_skips_compressor_when_circuit_pre_open() {
         .expect("OK");
 
     let mut req = make_mission_b_request();
-    req.user_text = "x".repeat(600); // > 500 → compressor activé.
+    req.user_text = "x".repeat(1200); // ≥ 1000 chars (⌈/4⌉ = 300 ≥ COMPRESS_MIN_TOKENS 250) → compressor activé.
 
     let resp = run_mission_b(&coord, req).await.expect("Mission B OK");
     let cm = resp.chewing_metrics.as_ref().expect("chewing_metrics");
