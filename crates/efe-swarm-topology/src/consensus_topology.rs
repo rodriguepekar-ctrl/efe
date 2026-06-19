@@ -437,7 +437,22 @@ impl Topology for ConsensusTopology {
             None => outcome.selected,
             Some((plan, trace)) => json!({ "value": outcome.selected, "sizing": trace.to_json(plan) }),
         };
-        let acceptable = answer_is_present(&output); // MEM-2.c : le consensus a-t-il une réponse présente ?
+        // MEM-2.c : le consensus a-t-il une réponse présente ?
+        //
+        // **LIMITE INHÉRENTE, par design (revue adversariale ADR-019).** Pour le consensus, l'accept-
+        // abilité = PRÉSENCE (non-null/non-vide), PAS correction : *l'accord EST le signal*. Un essaim
+        // unanimement FAUX (mode d'échec corrélé — K sorties identiques, p. ex. une hallucination
+        // commune) produit une réponse « présente » ⇒ acceptée ⇒ crédite réputation + exemplaire
+        // few-shot, comme s'il avait raison. La topologie n'a AUCUN oracle de correction : « accord
+        // correct » et « accord faux » sont structurellement INDISTINGUABLES ici (le gate `warm_reputation`
+        // l'atteste — bons profils unanimes sur « GOLD » = candidats identiques, légitimes). Ce n'est donc
+        // PAS un bug local corrigible chirurgicalement : le distinguer EXIGE une vérification réelle.
+        // MITIGATION (déjà disponible) : monter un juge-VÉRIFICATEUR (p. ex. `j_equals_expected`) dans le
+        // panneau quand la correction compte — ou GV/T1, qui gatent `produced_acceptable` sur un candidat
+        // RÉELLEMENT vérifié (`r.passed > 0`). V2 NOMMÉ : faire de « vérification = acceptation » le défaut
+        // du consensus (crédit conditionné à un vérificateur absolu), un changement de parti pris qui
+        // touche le scoring + plusieurs gates — hors de ce lot.
+        let acceptable = answer_is_present(&output);
         TopologyOutput {
             output,
             // K réellement dépensé (= self.k en fixe ; = K_used ≤ k_max en adaptatif).

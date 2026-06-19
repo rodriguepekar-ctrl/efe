@@ -417,9 +417,16 @@ impl Swarm {
         // — la même condition qu'ADR-018). Un run tronqué (budget/deadline) ou non re-prouvé
         // est mis en quarantaine : il ne pollue pas la mémoire. Un échec de repli est
         // best-effort (la mémoire n'est pas le moat) : il n'invalide pas le run.
+        //
+        // **STRUCTUREL (revue adversariale)** : on EXIGE en plus `provenance.verified`. `is_clean()`
+        // court-circuite le terme `verified` quand la provenance est DÉSACTIVÉE (`!enabled`) — un run
+        // simplement `Completed` mais jamais re-prouvé passerait alors la porte. Exiger `verified`
+        // rend I-MEM3 indépendant de la convention d'usage : provenance OFF ⇒ `verified=false` ⇒ aucun
+        // apprentissage (on n'apprend QUE d'un run effectivement re-prouvé). Sans effet quand la
+        // provenance est ON (un run `is_clean()` y est déjà `verified`).
         if let Some(h) = &mem {
             let mut learned = false;
-            if h.config.learn && run.is_clean() {
+            if h.config.learn && run.is_clean() && run.provenance.verified {
                 if let Some(family) = &mem_family {
                     let update = efe_swarm_memory::MemoryUpdate {
                         run_id: swarm_id.as_uuid(),
@@ -1208,11 +1215,30 @@ mod tests {
             .memory(MemoryHandle::with_config(seeded, crate::memory::MemoryConfig::recall_only()))
             .build()
             .unwrap();
-        let warm_run = warm.run(task, spec(), Budget::cents(1_000_000)).await.unwrap();
+        let warm_run = warm.run(task.clone(), spec(), Budget::cents(1_000_000)).await.unwrap();
         let warm_k = warm_run.memory.as_ref().unwrap().warm_start_k_min;
         assert_eq!(warm_k, Some(24), "SEMÉ : fail_rate=1000 → k_min ↑ amorcé à k_max (24), BORNÉ (I-MEM4)");
         assert_eq!(warm_run.quality.candidates, 24, "le k_min effectif MONTE à cause des échecs (causalité bout-en-bout)");
         assert!(warm_k.unwrap() > 4, "MONOTONIE : l'échec ne peut que MONTER k_min vs le contrôle (I-MEM-FAIL)");
+
+        // ── INTERMÉDIAIRE : fail_rate=500 (2 échecs / 4 runs) sur [4,24] (span 20) → k_min amorcé =
+        //    4 + ⌊500×20/1000⌋ = 14, STRICTEMENT à l'INTÉRIEUR de ]4,24[. Sépare la vraie INTERPOLATION
+        //    du simple clamp (le bras à 24 coïncidait avec k_max), et donne un 3ᵉ point de MONOTONIE. ──
+        let mid = std::sync::Arc::new(InMemoryMemoryStore::new());
+        for r in 0u128..4 {
+            let up = MemoryUpdate { run_id: uuid::Uuid::from_u128(0xFA11_5000 + r), family: family.clone(), summary: mk(r < 2) };
+            mid.fold(&tenant, up).await.unwrap();
+        }
+        let tepid = Swarm::builder()
+            .memory(MemoryHandle::with_config(mid, crate::memory::MemoryConfig::recall_only()))
+            .build()
+            .unwrap();
+        let mid_run = tepid.run(task, spec(), Budget::cents(1_000_000)).await.unwrap();
+        let mid_k = mid_run.memory.as_ref().unwrap().warm_start_k_min;
+        assert_eq!(mid_k, Some(14), "INTERPOLATION : fail_rate=500 → k_min STRICTEMENT interne (14 ∈ ]4,24[), pas un simple clamp à k_max");
+        assert_eq!(mid_run.quality.candidates, 14, "le k_min effectif suit l'interpolation (14), borné, re-prouvé");
+        let cold_k = cold_run.memory.as_ref().unwrap().warm_start_k_min;
+        assert!(cold_k < mid_k && mid_k < warm_k, "MONOTONIE sur 3 points : {cold_k:?} < {mid_k:?} < {warm_k:?} (fail_rate croissant)");
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
