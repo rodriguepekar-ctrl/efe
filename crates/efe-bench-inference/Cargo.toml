@@ -1,0 +1,34 @@
+[package]
+name = "efe-bench-inference"
+version = "0.0.1"
+edition = { workspace = true }
+rust-version = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
+description = "Axe B / B1 — harnais d'inférence : mesure la JUSTESSE (oracle-scoré) + le COÛT (jetons) d'une config d'essaim sur un dataset labellisé, compare cheap-parallèle vs gros modèle à dataset/scorer/budget identiques, et scelle un bundle re-prouvable. Pilote le SDK directement. Prouvé sur Mac via le seam (B0.3) ; le GPU (B2) ne change qu'une ligne (ClientMode::SelfHost)."
+publish = false
+
+[lib]
+name = "efe_bench_inference"
+path = "src/lib.rs"
+
+[features]
+# Active le seam Mode C du SDK (B0.3) pour exécuter le harnais COMPLET sur Mac contre un
+# `ScriptedBackend` (justesse contrôlable). Désactivé par défaut : le chemin réel
+# (ClientMode::SelfHost) est TOUJOURS compilé ; seul le chemin scripté + le test d'intégration
+# Mac sont gardés (I-BENCH-MAC / I-SEAM). Lancer le test : `--features test-util`.
+test-util = ["efe-swarm-sdk/test-util"]
+
+[dependencies]
+efe-swarm-sdk      = { path = "../efe-swarm-sdk", version = "0.0.1" }
+efe-swarm-topology = { path = "../efe-swarm-topology", version = "0.0.1" }  # oracle EqualsExpected + answer_is_present (noyau scorer partagé)
+
+serde       = { workspace = true }
+serde_json  = { workspace = true }
+tokio       = { workspace = true, features = ["sync", "rt", "macros"] }
+futures     = { workspace = true }  # concurrence bornée du runner (join_all + Semaphore)
+blake3      = "1.5"                  # empreinte du bundle (alignée sur efe-swarm-provenance N17)
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }

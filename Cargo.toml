@@ -205,6 +205,13 @@ members = [
     # docs/architecture/EFE_SWARM_PHASE5_INC3_DASHBOARD_LIVE_ARCHITECTURE.md.
     "crates/efe-swarm-dashboard",
     "crates/efe-swarm-orchestrator",
+    # Axe B, B1 — harnais d'inférence : mesure la JUSTESSE (oracle-scoré) + le COÛT (jetons)
+    # d'une config d'essaim sur un dataset labellisé, compare cheap-parallèle vs gros modèle à
+    # dataset/scorer/budget identiques, et scelle un bundle re-prouvable. Pilote le SDK
+    # directement (PAS le loadgen gRPC). Prouvé sur Mac via le seam (B0.3) ; le GPU (B2) ne
+    # change qu'une ligne (backend scripté → ClientMode::SelfHost). Cf.
+    # docs/reports/EFE_Archi_B1_Harnais_Inference_2026-06-21.html.
+    "crates/efe-bench-inference",
     "crates/efe-agentic-bridge",
     # Sprint 13 N21 § G11 : six reference pre-analysis agents.
     "crates/efe-nano-preanalysis",

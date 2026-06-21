@@ -1,0 +1,11 @@
+# Corpus de départ B1 — classification de sujet en un mot (réponse FERMÉE → scorer Exact).
+# Format : {id, task:{text}, label, scorer?}. Le label N'EST JAMAIS dans `task` (I-BENCH-BLIND).
+# Réponses fermées par construction (I-BENCH-TRUTH) : la notation par égalité a un sens ici.
+{"id": "t01", "task": {"text": "The central bank raised its benchmark interest rate to curb inflation."}, "label": "finance"}
+{"id": "t02", "task": {"text": "The striker scored a hat-trick in the cup final last night."}, "label": "sport"}
+{"id": "t03", "task": {"text": "Researchers reported promising results from the new vaccine trial."}, "label": "health"}
+{"id": "t04", "task": {"text": "The spacecraft entered orbit around the distant icy moon."}, "label": "science"}
+{"id": "t05", "task": {"text": "Shares of the chipmaker surged after strong quarterly earnings."}, "label": "finance"}
+{"id": "t06", "task": {"text": "The marathon runner set a new national record in the heat."}, "label": "sport"}
+{"id": "t07", "task": {"text": "Doctors warned of a rise in seasonal influenza cases this winter."}, "label": "health"}
+{"id": "t08", "task": {"text": "Physicists observed an unexpected particle decay at the collider."}, "label": "science"}

@@ -106,18 +106,44 @@ pub trait LocalBackend: Send + Sync {
 #[cfg(any(test, feature = "test-util"))]
 pub struct ScriptedBackend {
     response: Option<String>,
+    /// **B1 (harnais d'inférence)** : réponses **par-tâche** — `(aiguille, réponse)`. À chaque
+    /// `complete`, la PREMIÈRE règle dont l'aiguille est une sous-chaîne du prompt l'emporte. Le
+    /// prompt Mode C embarque le texte de la tâche (`gen_prompt` → `Text: "<texte>"`), donc une
+    /// aiguille = le texte (unique) d'une ligne de dataset cible exactement cette ligne. Vide ⇒ on
+    /// retombe sur `response` (comportement `responding`/`failing` inchangé, byte-identique).
+    rules: Vec<(String, String)>,
 }
 
 #[cfg(any(test, feature = "test-util"))]
 impl ScriptedBackend {
     /// Renvoie `response` à **chaque** appel (le générateur Mode C produira ce candidat).
     pub fn responding(response: impl Into<String>) -> Arc<Self> {
-        Arc::new(Self { response: Some(response.into()) })
+        Arc::new(Self { response: Some(response.into()), rules: Vec::new() })
     }
     /// **Échec injecté** : `complete()` renvoie toujours `None` ⇒ la couche transport replie en
     /// sentinel vide. C'est le scénario « GPU saturé » que le fix sentinel (B0.2) doit gérer.
     pub fn failing() -> Arc<Self> {
-        Arc::new(Self { response: None })
+        Arc::new(Self { response: None, rules: Vec::new() })
+    }
+    /// **B1 — justesse contrôlable par-tâche.** À chaque appel, renvoie la réponse de la première
+    /// règle `(aiguille, réponse)` dont l'aiguille est une sous-chaîne du prompt ; aucune règle ne
+    /// matche ⇒ `None` (échec injecté). Comme le prompt Mode C embarque le texte de la tâche, on
+    /// scripte « juste sur ces lignes, faux sur celles-là » en clé-ant les règles sur les textes
+    /// (uniques) des lignes — ce qui laisse le banc B1 **vérifier sa propre comptabilité
+    /// d'exactitude sur Mac**, sans aucun modèle (I-BENCH-MAC). I-SEAM : inerte/absent en prod.
+    pub fn matching(rules: Vec<(String, String)>) -> Arc<Self> {
+        Arc::new(Self { response: None, rules })
+    }
+    /// La réponse pour ce prompt : règle gagnante si des règles existent, sinon la réponse fixe.
+    fn pick(&self, prompt: &str) -> Option<String> {
+        if !self.rules.is_empty() {
+            return self
+                .rules
+                .iter()
+                .find(|(needle, _)| prompt.contains(needle.as_str()))
+                .map(|(_, r)| r.clone());
+        }
+        self.response.clone()
     }
 }
 
@@ -125,7 +151,8 @@ impl ScriptedBackend {
 #[async_trait]
 impl LocalBackend for ScriptedBackend {
     async fn complete(&self, prompt: &str, p: SamplingParams) -> Option<String> {
-        let response = self.response.clone();
+        // B1 : règle par-tâche si présente (justesse contrôlable), sinon la réponse fixe historique.
+        let response = self.pick(prompt);
         // Pont N17 par-appel — fidèle au backend feuille réel (le scellement Mode C est exercé).
         push_pending(PendingLlmCall {
             engine: BackendKind::OpenAiLocal.as_str().to_string(),
