@@ -184,10 +184,11 @@ async fn influence_graph_is_sealed_as_reads_and_dag_checked() {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn fleet_stage_serves_as_refiner_fallback() {
-    // Un nom NON réservé en keyless tombe sur l'adaptation d'une Stage de flotte
-    // (StageRefiner) : "trim" reçoit {task, own, peers} et rend sa 1ʳᵉ sortie —
-    // identique pour tous → l'Agreement converge au tour 1. Le chemin de repli
-    // est exercé de bout en bout, preuve comprise.
+    // Un nom NON réservé en keyless tombe sur l'adaptation d'une Stage de flotte (StageRefiner) :
+    // "trim" reçoit le wrapper gossip {task, own, peers} — qui n'a pas de champ `text` au top-niveau,
+    // donc sa sortie est {text:""}, un candidat ABSENT. Depuis le fix sentinel (B0.2/I-SENT), des
+    // candidats absents N'AGRÉENT PLUS : pas de fausse convergence au tour 1 → le gossip épuise
+    // max_rounds. Le chemin de repli StageRefiner est néanmoins exercé de bout en bout, preuve comprise.
     let swarm = Swarm::keyless();
     let spec = TopologySpec::Gossip {
         refiner: "trim".into(), // stage de flotte, pas un builtin
@@ -200,10 +201,11 @@ async fn fleet_stage_serves_as_refiner_fallback() {
         .run_traced(json!({ "text": "  x  " }), spec, Budget::cents(50))
         .await
         .expect("fallback StageRefiner");
-    assert!(out.run.provenance.verified);
-    assert_eq!(out.run.output.pointer("/gossip/converged"), Some(&json!(true)));
-    assert_eq!(out.run.output.pointer("/gossip/rounds"), Some(&json!(1)), "identiques dès le tour 0");
-    assert_eq!(out.run.accounting.agents_used, 3);
+    assert!(out.run.provenance.verified, "le chemin de repli StageRefiner se re-prouve");
+    // Sorties dégénérées (vides) ⇒ pas de fausse convergence (I-SENT) ⇒ épuise max_rounds.
+    assert_eq!(out.run.output.pointer("/gossip/converged"), Some(&json!(false)), "candidats vides → PAS de fausse convergence");
+    assert_eq!(out.run.output.pointer("/gossip/rounds"), Some(&json!(4)), "épuise max_rounds faute de vraie convergence");
+    assert_eq!(out.run.accounting.agents_used, 12, "3 refiners × 4 tours (plus d'arrêt prématuré au tour 1)");
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]

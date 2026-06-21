@@ -166,9 +166,16 @@ impl AgentFleet {
             .register_merger("majority_value", Arc::new(catalog::MajorityValue))
             .register_merger("first_result", Arc::new(catalog::FirstResult))
             .register_merger("max_by_score_field", Arc::new(catalog::MaxByScoreField));
-        // générateurs (2)
+        // générateurs (3)
         f.register_generator("echo_generator", Arc::new(catalog::EchoGenerator))
-            .register_generator("const_generator", Arc::new(catalog::ConstGenerator { value: serde_json::Value::Null }));
+            // `const_generator` : une CONSTANTE NON-NULLE identique à chaque variant → accord = 1.0 →
+            // l'essaim adaptatif s'arrête au plancher (la convergence est OBSERVABLE sur k_used). Depuis
+            // le fix sentinel (B0.2/I-SENT), un candidat ABSENT (dont Null) n'agrée plus : un générateur
+            // « constant » doit donc renvoyer une valeur PRÉSENTE pour servir de cas d'accord.
+            .register_generator("const_generator", Arc::new(catalog::ConstGenerator { value: serde_json::Value::String("CONST".into()) }))
+            // `null_generator` : sortie Null (ABSENTE) — pour le chemin « gagnant vide → échec »
+            // (produced_acceptable=false, la cellule d'échec compte). Ne converge PAS (I-SENT).
+            .register_generator("null_generator", Arc::new(catalog::ConstGenerator { value: serde_json::Value::Null }));
         // juges Mode A (9) — 4 critères orthogonaux + 5 vérificateurs-juges du catalogue.
         // `j_equals_expected` est le juge DISCRIMINANT (correct == attendu) : c'est lui que
         // la vitrine consensus monte PAR NOM (doctrine §3) au lieu de le bâtir à la main.
@@ -193,10 +200,10 @@ mod tests {
     #[test]
     fn standard_fleet_has_catalog_plus_judges() {
         let f = AgentFleet::standard();
-        // 34 agents du catalogue + 9 juges Mode A.
-        assert_eq!(f.len(), catalog::MODE_A_AGENT_COUNT + 9);
-        assert_eq!(f.len(), 43);
-        assert_eq!(f.names().len(), 43);
+        // 34 agents du catalogue + 9 juges Mode A + null_generator (B0.2, registré ici hors catalogue).
+        assert_eq!(f.len(), catalog::MODE_A_AGENT_COUNT + 9 + 1);
+        assert_eq!(f.len(), 44);
+        assert_eq!(f.names().len(), 44);
         assert!(f.judge("consistency").is_some(), "juge Mode A présent");
         assert!(f.judge("j_equals_expected").is_some(), "juge discriminant présent (§3)");
         assert!(f.stage("uppercase").is_some(), "agent catalogue présent");

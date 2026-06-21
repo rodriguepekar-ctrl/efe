@@ -33,8 +33,12 @@ pub(crate) use ollama::OllamaBackend;
 pub(crate) use openai_local::OpenAiLocalBackend;
 
 /// Paramètres d'échantillonnage (seed exposé → best-effort de reproductibilité).
+//
+// `pub` (et non `pub(crate)`) pour que le trait `LocalBackend` — exposé sous `feature = "test-util"`
+// (B0.3) — n'enfreigne pas « private-in-public ». Le module `backend` reste privé : sans la feature,
+// rien de tout ceci n'est atteignable hors crate.
 #[derive(Debug, Clone, Copy)]
-pub(crate) struct SamplingParams {
+pub struct SamplingParams {
     pub max_tokens: u32,
     pub temperature: f64,
     pub seed: u64,
@@ -42,7 +46,7 @@ pub(crate) struct SamplingParams {
 
 /// Moteur local sous-jacent (pour le descripteur forensique / pont N17).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum BackendKind {
+pub enum BackendKind {
     /// Ollama natif (`/api/generate`).
     Ollama,
     /// Serveur OpenAI-compatible **local** (llama.cpp-server, vLLM, TGI, LM Studio).
@@ -60,7 +64,7 @@ impl BackendKind {
 
 /// Descripteur d'un backend (alimente le pont N17 : *quel modèle, où*).
 #[derive(Debug, Clone)]
-pub(crate) struct BackendDescriptor {
+pub struct BackendDescriptor {
     pub kind: BackendKind,
     pub model: String,
     pub endpoint: String,
@@ -68,7 +72,7 @@ pub(crate) struct BackendDescriptor {
 
 /// Backend LLM local **keyless**.
 #[async_trait]
-pub(crate) trait LocalBackend: Send + Sync {
+pub trait LocalBackend: Send + Sync {
     /// Complète un prompt. `None` = échec (la couche appelante renvoie un sentinel neutre).
     async fn complete(&self, prompt: &str, params: SamplingParams) -> Option<String>;
     /// Descripteur (moteur + modèle + endpoint) — forensique, jamais une clé.
@@ -89,6 +93,60 @@ pub(crate) trait LocalBackend: Send + Sync {
     /// mesuré — le breaker (G3) encaisse les déclarations erronées.
     fn suggested_width(&self) -> usize {
         2
+    }
+}
+
+/// **B0.3 (seam CI)** — backend LOCAL **déterministe et sans réseau** : l'instrument qui rend le
+/// chemin Mode C COMPLET testable en CI (un vrai `run_traced` contre des réponses scriptées), sans
+/// Ollama ni GPU. [`responding`](ScriptedBackend::responding) renvoie une réponse fixe à chaque appel ;
+/// [`failing`](ScriptedBackend::failing) renvoie `None` (échec injecté — le cas que B0.2 doit attraper).
+/// Pousse une [`PendingLlmCall`] comme un vrai backend feuille, donc le pont N17 et le scellement Mode C
+/// sont réellement exercés. Disponible sous `cfg(test)` (tests inline) ou la feature `test-util` (tests
+/// d'intégration). **I-SEAM** : absent de la prod, aucun egress (il ne parle à rien).
+#[cfg(any(test, feature = "test-util"))]
+pub struct ScriptedBackend {
+    response: Option<String>,
+}
+
+#[cfg(any(test, feature = "test-util"))]
+impl ScriptedBackend {
+    /// Renvoie `response` à **chaque** appel (le générateur Mode C produira ce candidat).
+    pub fn responding(response: impl Into<String>) -> Arc<Self> {
+        Arc::new(Self { response: Some(response.into()) })
+    }
+    /// **Échec injecté** : `complete()` renvoie toujours `None` ⇒ la couche transport replie en
+    /// sentinel vide. C'est le scénario « GPU saturé » que le fix sentinel (B0.2) doit gérer.
+    pub fn failing() -> Arc<Self> {
+        Arc::new(Self { response: None })
+    }
+}
+
+#[cfg(any(test, feature = "test-util"))]
+#[async_trait]
+impl LocalBackend for ScriptedBackend {
+    async fn complete(&self, prompt: &str, p: SamplingParams) -> Option<String> {
+        let response = self.response.clone();
+        // Pont N17 par-appel — fidèle au backend feuille réel (le scellement Mode C est exercé).
+        push_pending(PendingLlmCall {
+            engine: BackendKind::OpenAiLocal.as_str().to_string(),
+            model: "scripted".into(),
+            temperature: p.temperature,
+            max_tokens: p.max_tokens,
+            seed: p.seed,
+            prompt: prompt.to_string(),
+            response: response.clone(),
+            latency_ms: 0,
+            retry_count: 0,
+            compute_attestation: ComputeAttestation::R2LocalWitnessed,
+            model_hash_verified: false,
+        });
+        response
+    }
+    fn descriptor(&self) -> BackendDescriptor {
+        BackendDescriptor { kind: BackendKind::OpenAiLocal, model: "scripted".into(), endpoint: "scripted://test".into() }
+    }
+    async fn health(&self) -> bool {
+        true // déterministe, sans réseau : toujours sain.
     }
 }
 

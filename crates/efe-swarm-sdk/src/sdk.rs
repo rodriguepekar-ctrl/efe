@@ -61,6 +61,10 @@ pub struct Swarm {
     /// `Some` ⇒ le run lit un instantané gelé (warm-start + trace MemoryRead) et replie s'il
     /// est propre. `None` (défaut) ⇒ mémoire OFF, run byte-identique au chemin historique (I-MEM8).
     memory: Option<crate::memory::MemoryHandle>,
+    /// **B0.3 (seam CI)** : backend LOCAL injecté pour test (court-circuite `build_local_backend`).
+    /// `None` en production — aucun setter n'existe hors `cfg(test)`/`feature="test-util"`, donc le
+    /// champ reste inerte (I-SEAM : la résolution retombe sur le `match self.mode` historique).
+    injected_backend: Option<Arc<dyn LocalBackend>>,
 }
 
 impl Swarm {
@@ -201,12 +205,18 @@ impl Swarm {
         // 1. mode → backend d'agents + nature (Mode A flotte / Mode C self-host). En
         //    self-host, le garde-fou souveraineté (G2) REFUSE un endpoint non-local par
         //    défaut (egress interdit) ; le backend est enveloppé d'un circuit-breaker (G3).
-        let (backend, kind): (Option<Arc<dyn LocalBackend>>, AgentKind) = match &self.mode {
-            ClientMode::Keyless => (None, AgentKind::ModeA),
-            ClientMode::SelfHost { endpoint, model } => {
-                (Some(build_local_backend(endpoint, model, self.allow_remote_backend, &self.remote_pins)?), AgentKind::ModeC)
-            }
-            ClientMode::Network { .. } => unreachable!("écarté en tête de run"),
+        //    B0.3 (seam CI) : un backend INJECTÉ (test) prime → Mode C, sans build_local_backend
+        //    (ni G2 ni circuit-breaker). En prod, `injected_backend` est toujours None (I-SEAM) :
+        //    la résolution retombe sur le `match self.mode` historique, byte-inchangée.
+        let (backend, kind): (Option<Arc<dyn LocalBackend>>, AgentKind) = match &self.injected_backend {
+            Some(b) => (Some(b.clone()), AgentKind::ModeC),
+            None => match &self.mode {
+                ClientMode::Keyless => (None, AgentKind::ModeA),
+                ClientMode::SelfHost { endpoint, model } => {
+                    (Some(build_local_backend(endpoint, model, self.allow_remote_backend, &self.remote_pins)?), AgentKind::ModeC)
+                }
+                ClientMode::Network { .. } => unreachable!("écarté en tête de run"),
+            },
         };
         // Health-check (S.a) : sonde rapide du backend local — échec net plutôt que N timeouts.
         if self.require_healthy_backend {
@@ -504,6 +514,9 @@ pub struct SwarmBuilder {
     width: WidthSpec,
     deadline: Option<std::time::Duration>,
     memory: Option<MemoryHandle>,
+    /// **B0.3 (seam CI)** : backend LOCAL injecté (test). `None` par défaut ; posé par
+    /// `with_local_backend` (gaté `cfg(test)`/`feature="test-util"`).
+    injected_backend: Option<Arc<dyn LocalBackend>>,
 }
 
 impl Default for SwarmBuilder {
@@ -524,6 +537,7 @@ impl Default for SwarmBuilder {
             width: WidthSpec::Auto, // ADR-014 : cœurs (Mode A) / backend déclaré (Mode C)
             deadline: None, // ADR-018 : aucun deadline par défaut (chemin historique)
             memory: None, // ADR-019 : mémoire OFF par défaut (chemin historique, I-MEM8)
+            injected_backend: None, // B0.3 : aucun backend injecté (prod) — inerte (I-SEAM)
         }
     }
 }
@@ -630,6 +644,18 @@ impl SwarmBuilder {
         self
     }
 
+    /// **B0.3 (seam CI)** : injecte un backend LOCAL déjà construit (typiquement un
+    /// [`crate::backend::ScriptedBackend`]) — le run s'exécute alors en **Mode C** contre lui, en
+    /// court-circuitant `build_local_backend` (donc le garde-fou souveraineté G2 et le health-check).
+    /// Rend le chemin Mode C COMPLET (recall → génération LLM → agrégation → scellement → re-preuve R0)
+    /// testable en CI, sans Ollama ni GPU. **Gaté** `cfg(test)`/`feature="test-util"` ⇒ ABSENT de la
+    /// prod (I-SEAM) ; aucun egress (l'injecté ne parle à rien).
+    #[cfg(any(test, feature = "test-util"))]
+    pub fn with_local_backend(mut self, backend: Arc<dyn LocalBackend>) -> Self {
+        self.injected_backend = Some(backend);
+        self
+    }
+
     /// Construit le `Swarm` (dérive la clé de provenance par tenant).
     pub fn build(self) -> Result<Swarm, SwarmError> {
         let key = self.key_source.derive(self.tenant).map_err(|e| SwarmError::KeyError(e.to_string()))?;
@@ -649,6 +675,7 @@ impl SwarmBuilder {
             width: self.width,
             deadline: self.deadline,
             memory: self.memory,
+            injected_backend: self.injected_backend,
         })
     }
 }
@@ -1123,8 +1150,10 @@ mod tests {
         // I-MEM4 : la mémoire AMORCE k_min depuis le prior de taille, CLAMPÉ aux bornes du run.
         let task = json!({ "text": "x", "expected": "x" });
         let tenant = efe_nano_sdk::TenantId::system().to_string();
-        // const_generator renvoie une valeur IDENTIQUE par variant → accord = 1.0 → l'essaim
-        // s'arrête au k_min (amorcé) ; c'est ce qui rend le warm-start OBSERVABLE sur k_used.
+        // `const_generator` renvoie une valeur NON-NULLE IDENTIQUE par variant (« CONST ») → accord =
+        // 1.0 → l'essaim s'arrête au k_min amorcé ; c'est ce qui rend le warm-start OBSERVABLE sur
+        // k_used. (Depuis le fix sentinel I-SENT, un candidat ABSENT n'agrée plus — d'où une valeur
+        // présente ; le cas « gagnant absent → échec » utilise désormais `null_generator`.)
         let family = consensus_family(&task, "const_generator", &["consistency", "j_non_empty"]);
 
         // (a) prior K=6 → warm-start = 6 (dans [4,24]) → accord → s'arrête à 6 (pas 4).
@@ -1142,7 +1171,7 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(run.memory.as_ref().unwrap().warm_start_k_min, Some(6), "warm-start = K historique");
-        assert_eq!(run.quality.candidates, 6, "echo agree → arrêt au k_min amorcé (6), pas au 4 d'origine");
+        assert_eq!(run.quality.candidates, 6, "accord → arrêt au k_min amorcé (6), pas au 4 d'origine");
 
         // (b) prior ABSURDE K=100 → warm-start CLAMPÉ à k_max=24 (la mémoire ne gouverne pas).
         let store2 = std::sync::Arc::new(InMemoryMemoryStore::new());
@@ -1321,19 +1350,19 @@ mod tests {
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     async fn failure_memory_counts_empty_winner_runs_and_skips_their_exemplars() {
         // MEM-2.c : la 5ᵉ cellule (FailureMemory) est désormais ALIMENTÉE depuis un vrai run.
-        // Un run PROPRE dont le gagnant est nul/vide (const_generator → Null) compte un ÉCHEC
+        // Un run PROPRE dont le gagnant est nul/vide (null_generator → Null) compte un ÉCHEC
         // (fails++) SANS déposer d'exemplaire (on ne few-shot jamais un échec) ; un run à gagnant
         // réel (echo) compte un run SANS échec (runs++, fails inchangé) et dépose son exemplaire.
         let tenant = efe_nano_sdk::TenantId::system().to_string();
         let task = json!({ "text": "x", "expected": "x" });
         let judges = ["consistency", "j_non_empty"];
 
-        // ① run ÉCHOUÉ : gagnant Null (const_generator).
+        // ① run ÉCHOUÉ : gagnant Null (null_generator — sortie ABSENTE, ≠ const_generator non-nul).
         let store_f = std::sync::Arc::new(InMemoryMemoryStore::new());
-        let fam_f = consensus_family(&task, "const_generator", &judges);
+        let fam_f = consensus_family(&task, "null_generator", &judges);
         let swarm_f = Swarm::builder().memory(MemoryHandle::new(store_f.clone())).build().unwrap();
         let run_f = swarm_f
-            .run(task.clone(), TopologySpec::consensus("const_generator", &judges, 3), Budget::cents(1000))
+            .run(task.clone(), TopologySpec::consensus("null_generator", &judges, 3), Budget::cents(1000))
             .await
             .unwrap();
         assert!(run_f.is_clean(), "le run complète proprement (le gagnant nul ne le rend pas non-clean)");
@@ -1477,6 +1506,90 @@ mod tests {
         assert!(!snap_ok.cells.exemplars.items.is_empty(), "CORRECT vérifié → exemplaire déposé (few-shot)");
         let rec_ok = snap_ok.cells.failure.of(fam_ok.as_str()).expect("entrée d'échec présente");
         assert_eq!(rec_ok.fails, 0, "CORRECT vérifié → aucun échec");
+    }
+
+    // ════════════════════════════════════════════════════════════════════════════════
+    //  B0 — readiness Mode C (seam CI · sentinel) : tests bout-en-bout via le seam injecté
+    // ════════════════════════════════════════════════════════════════════════════════
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn b0_2_failing_backend_does_not_fake_convergence() {
+        // **B0.2 e2e (via le seam B0.3).** Un endpoint qui ÉCHOUE tous ses appels (régime « GPU
+        // saturé » : OOM/timeouts) ne doit PAS produire une fausse économie. AVANT le fix : chaque
+        // appel échoué → "" ; agreement() par égalité exacte → "" identiques → 1.0 → le sizer s'arrête
+        // au plancher k_min en croyant à l'unanimité. APRÈS : un absent n'agrée jamais → agreement=0 →
+        // le sizer NE s'arrête PAS faussement (il monte jusqu'à k_max faute de vraie convergence), et le
+        // gagnant est ABSENT (run dégradé honnête, pas une économie propre).
+        use crate::backend::ScriptedBackend;
+        let swarm = Swarm::builder().with_local_backend(ScriptedBackend::failing()).build().unwrap();
+        let out = swarm
+            .run_traced(
+                json!({ "text": "x" }),
+                TopologySpec::consensus_adaptive("Donne le sujet en un mot.", &["consistency"], 4, 12, 0.9),
+                Budget::cents(1_000_000),
+            )
+            .await
+            .unwrap();
+        let k_used = out.run.output["sizing"]["k_used"].as_u64().expect("trace de sizing présente");
+        assert!(
+            k_used > 4,
+            "B0.2 : un échec corrélé (vides) ne déclenche plus d'arrêt au plancher — k_used={k_used} (attendu > 4, idéalement k_max=12)"
+        );
+        // Le gagnant n'est PAS une réponse présente : run dégradé honnête, pas une fausse économie.
+        // (Le gagnant est le candidat sélectionné `{value:""}` — on réutilise la sémantique canonique.)
+        let winner = out.run.output.get("value").cloned().unwrap_or_else(|| out.run.output.clone());
+        assert!(
+            !efe_swarm_topology::answer_is_present(&winner),
+            "le gagnant d'un essaim TOUT-échoué est ABSENT (pas une vraie réponse) : {winner:?}"
+        );
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn b0_3_oracle_v2_gates_acceptance_in_mode_c_via_seam() {
+        // **Ferme la dette de 9eb6553** : l'oracle v2 (j_equals_expected) gate-t-il réellement
+        // l'acceptation en MODE C ? Le seam injecte un backend scripté ; le générateur LLM renvoie
+        // {value: <réponse>} ; l'oracle DÉTERMINISTE (gardé déterministe même en Mode C depuis 9eb6553)
+        // le compare à task.expected. C'est le test e2e que la note d'honnêteté du fix attendait.
+        use crate::backend::ScriptedBackend;
+        let tenant = efe_nano_sdk::TenantId::system().to_string();
+        let task = json!({ "text": "q", "expected": "tech" });
+        let gen = "Donne le sujet en un mot.";
+        let judges = ["j_equals_expected"];
+        let spec = || TopologySpec::consensus_verified(gen, "j_equals_expected", &[], 3);
+
+        // (a) réponse CORRECTE ("tech" == expected) → l'oracle PASSE en Mode C → accepté → crédité.
+        let store_ok = std::sync::Arc::new(InMemoryMemoryStore::new());
+        let fam_ok = consensus_family(&task, gen, &judges);
+        let ok = Swarm::builder()
+            .with_local_backend(ScriptedBackend::responding("tech"))
+            .memory(MemoryHandle::new(store_ok.clone()))
+            .build()
+            .unwrap();
+        let run_ok = ok.run(task.clone(), spec(), Budget::cents(1_000_000)).await.unwrap();
+        assert!(run_ok.is_clean(), "le run Mode C complète proprement");
+        let snap_ok = store_ok.snapshot(&tenant, &fam_ok).await.unwrap();
+        assert!(!snap_ok.cells.reputation.agents.is_empty(), "MODE C : réponse correcte vérifiée → réputation créditée");
+        assert!(!snap_ok.cells.exemplars.items.is_empty(), "MODE C : correcte → exemplaire déposé");
+
+        // (b) réponse FAUSSE ("WRONG" != expected) → l'oracle ÉCHOUE en Mode C → NON accepté → 0 crédit
+        //     + échec compté. AVANT 9eb6553, l'oracle était un LlmJudge inerte ⇒ ceci aurait été crédité.
+        let store_w = std::sync::Arc::new(InMemoryMemoryStore::new());
+        let fam_w = consensus_family(&task, gen, &judges);
+        let wrong = Swarm::builder()
+            .with_local_backend(ScriptedBackend::responding("WRONG"))
+            .memory(MemoryHandle::new(store_w.clone()))
+            .build()
+            .unwrap();
+        let _run_w = wrong.run(task.clone(), spec(), Budget::cents(1_000_000)).await.unwrap();
+        let snap_w = store_w.snapshot(&tenant, &fam_w).await.unwrap();
+        assert!(
+            snap_w.cells.reputation.agents.is_empty(),
+            "MODE C : unanime-FAUX → AUCUNE réputation (l'oracle a bien tourné en Mode C — dette 9eb6553 fermée) : {:?}",
+            snap_w.cells.reputation.agents.keys().collect::<Vec<_>>()
+        );
+        assert!(snap_w.cells.exemplars.items.is_empty(), "MODE C : faux → AUCUN few-shot");
+        let rec_w = snap_w.cells.failure.of(fam_w.as_str()).expect("entrée d'échec présente");
+        assert_eq!(rec_w.fails, 1, "MODE C : non-vérifié → échec compté (read-back k_min↑)");
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]

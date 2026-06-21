@@ -72,6 +72,12 @@ pub use resolver::apply_pattern_bias; // ADR-019 (read-back A) : transfert PUR d
 pub use sdk::{Swarm, SwarmBuilder};
 pub use spec::{KSpec, PatternSpec, TopologySpec};
 
+// **B0.3 (seam CI)** : sous `feature = "test-util"`, expose le seam d'injection de backend pour les
+// tests d'INTÉGRATION (le trait `LocalBackend` + le `ScriptedBackend`). ABSENT du build par défaut :
+// la prod ne voit rien (I-SEAM). Les tests INLINE, eux, accèdent à `crate::backend::*` directement.
+#[cfg(feature = "test-util")]
+pub use backend::{LocalBackend, ScriptedBackend};
+
 // **ADR-019 (MEM-2)** : la mémoire inter-runs — réexports pratiques (la passerelle s'appuiera
 // dessus en MEM-3) pour brancher un store + re-prouver la chaîne sans dépendre du crate.
 pub use efe_swarm_memory::{

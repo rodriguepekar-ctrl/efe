@@ -9,6 +9,14 @@ repository = { workspace = true }
 description = "Phase 5 — SDK unifié : swarm.run(task, topology, budget). TopologySpec (T1/T2/T3/Consensus/Auto), ClientMode (Keyless/Self-host/Network), budget plafonné, provenance auto-câblée (provenance_root re-vérifiable)."
 publish = false
 
+[features]
+# B0.3 — seam de test CI Mode C. Expose le point d'injection de backend
+# (SwarmBuilder::with_local_backend) + ScriptedBackend (backend déterministe, sans réseau),
+# pour rendre le chemin Mode C COMPLET exécutable en CI sans Ollama ni GPU. DÉSACTIVÉ par
+# défaut : inerte et absent de la prod (I-SEAM). Les tests INLINE l'utilisent via cfg(test) ;
+# les tests d'INTÉGRATION via `--features test-util`.
+test-util = []
+
 [lib]
 name = "efe_swarm_sdk"
 path = "src/lib.rs"

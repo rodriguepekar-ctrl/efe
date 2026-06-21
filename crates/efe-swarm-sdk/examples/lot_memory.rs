@@ -47,7 +47,7 @@ async fn main() {
 
     // ── §A — K cold vs warm ──────────────────────────────────────────────────────────
     // FROID : aucune mémoire → le sizer adaptatif part du plancher (k_min = 4). const_generator
-    // est unanime (Null) → accord 1.0 → s'arrête au plancher → K = 4.
+    // est unanime (valeur constante « CONST », présente) → accord 1.0 → s'arrête au plancher → K = 4.
     let cold = Swarm::keyless()
         .run(
             task.clone(),

@@ -86,11 +86,32 @@ impl LocalBackend for OpenAiLocalBackend {
     fn descriptor(&self) -> BackendDescriptor {
         BackendDescriptor { kind: BackendKind::OpenAiLocal, model: self.model.clone(), endpoint: self.endpoint.clone() }
     }
+
+    /// **B0.1 (I-WIDTH)** : défaut de largeur **par-protocole**, plus haut que le `2` conservateur du
+    /// trait. Servir `/v1/chat/completions` IMPLIQUE un serveur de la famille *batching* (vLLM, TGI,
+    /// llama.cpp-server) — qui exploite le *continuous batching* sur des dizaines de séquences
+    /// concurrentes. Un défaut de `2` AFFAMERAIT un tel serveur (les K candidats partiraient deux par
+    /// deux). On part donc d'un défaut plus large. Ce n'est PAS un pari sur la capacité (le SDK ignore
+    /// le `--max-num-seqs` réel, et reste pur — G1 : il ne lit pas l'env) : c'est un meilleur point de
+    /// départ, déduit du PROTOCOLE. L'opérateur calibre la valeur exacte via `EFE_SWARM_WIDTH` (lu côté
+    /// passerelle → `WidthSpec::Fixed`), qui PRIME sur ce défaut. La concurrence reste bornée par le
+    /// sémaphore ; le breaker (G3) encaisse une déclaration trop haute.
+    fn suggested_width(&self) -> usize {
+        8
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn openai_local_suggests_a_wider_default_than_ollama() {
+        // B0.1 : OpenAI-compatible (vLLM/TGI) ⇒ batching ⇒ défaut plus large que le 2 conservateur ;
+        // Ollama reste à 2 (il sérialise à OLLAMA_NUM_PARALLEL). L'opérateur calibre via EFE_SWARM_WIDTH.
+        let oa = OpenAiLocalBackend { endpoint: "http://127.0.0.1:8000/v1".into(), model: "m".into(), attestation: ComputeAttestation::R2LocalWitnessed };
+        assert!(oa.suggested_width() > 2, "OpenAI-compatible doit suggérer plus large que le défaut 2 : got {}", oa.suggested_width());
+    }
 
     #[test]
     fn url_handles_v1_suffix() {
