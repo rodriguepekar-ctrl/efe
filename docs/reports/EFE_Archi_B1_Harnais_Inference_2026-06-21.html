@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>EFE — Architecture : B1, le harnais d'inférence (mesurer la thèse, sur Mac, avant le GPU)</title>
+<style>
+  :root{--ink:#0f172a;--muted:#475569;--soft:#64748b;--line:#e2e8f0;--teal:#0d9488;--teal-d:#0f766e;--indigo:#4f46e5;--indigo-d:#4338ca;--ok:#16a34a;--warn:#d97706;--bad:#dc2626;--bg-tint:#f6fbfa;--bg-card:#eef2f1;--code-bg:#0f172a;--code-fg:#e2e8f0;}
+  *{box-sizing:border-box;} html{font-size:11.2px;}
+  body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,Arial,sans-serif;color:var(--ink);margin:0;line-height:1.6;background:#fff;-webkit-font-smoothing:antialiased;}
+  .wrap{max-width:178mm;margin:0 auto;padding:0 2mm;}
+  h1,h2,h3,h4{line-height:1.2;font-weight:700;}
+  h2{font-size:1.45rem;margin:0 0 .55rem;padding-bottom:.32rem;border-bottom:3px solid var(--teal);}
+  h2 .num{color:var(--teal);} h3{font-size:1.13rem;margin:1.1rem 0 .3rem;color:var(--teal-d);}
+  h4{font-size:1rem;margin:.8rem 0 .2rem;color:var(--indigo-d);}
+  p{margin:.55rem 0;text-align:justify;hyphens:auto;} a{color:var(--indigo);text-decoration:none;}
+  code{font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace;font-size:.85em;background:var(--bg-card);padding:.05em .35em;border-radius:4px;color:#0b3b36;}
+  .muted{color:var(--muted);} .small{font-size:.88rem;}
+  section{break-inside:avoid;} .page{break-before:page;} h2{break-after:avoid;}
+  table{border-collapse:collapse;width:100%;margin:.55rem 0;font-size:.82rem;}
+  th,td{border:1px solid var(--line);padding:.32rem .5rem;text-align:left;vertical-align:top;}
+  th{background:var(--bg-card);font-weight:700;} tbody tr:nth-child(even){background:var(--bg-tint);}
+  td.c,th.c{text-align:center;} .good{background:#dcfce7 !important;color:#166534;font-weight:700;} .mid{background:#fef9c3 !important;color:#854d0e;font-weight:700;} .bad{background:#fee2e2 !important;color:#991b1b;font-weight:700;}
+  .tag{display:inline-block;font-size:.71rem;font-weight:700;padding:.08em .5em;border-radius:20px;}
+  .t-ok{background:#dcfce7;color:#166534;} .t-info{background:#e0e7ff;color:#3730a3;} .t-teal{background:#ccfbf1;color:#115e59;} .t-warn{background:#fef3c7;color:#92400e;} .t-bad{background:#fee2e2;color:#991b1b;}
+  pre{background:var(--code-bg);color:var(--code-fg);padding:.55rem .8rem;border-radius:8px;overflow:auto;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.72rem;line-height:1.45;margin:.55rem 0;}
+  pre code{background:none;color:inherit;padding:0;}
+  .callout{border-left:4px solid var(--teal);background:var(--bg-tint);padding:.55rem .85rem;border-radius:0 8px 8px 0;margin:.65rem 0;}
+  .callout p{text-align:left;margin:.28rem 0;}
+  .callout.key{border-color:var(--indigo);background:#eef2ff;} .callout.warn{border-color:var(--warn);background:#fffbeb;} .callout.ok{border-color:var(--ok);background:#f0fdf4;} .callout.bad{border-color:var(--bad);background:#fef2f2;}
+  .fig{margin:.7rem 0 .9rem;text-align:center;break-inside:avoid;}
+  .fig svg{max-width:100%;height:auto;border:1px solid var(--line);border-radius:10px;background:#fff;}
+  .fig .cap{font-size:.79rem;color:var(--muted);margin-top:.32rem;font-style:italic;text-align:center;}
+  ul,ol{margin:.4rem 0 .55rem 1.1rem;padding:0;} li{margin:.24rem 0;}
+  svg text{font-family:-apple-system,"Segoe UI",Inter,sans-serif;}
+  .cover{height:262mm;display:flex;flex-direction:column;justify-content:center;position:relative;padding:0 6mm;}
+  .cover .eyebrow{color:var(--teal);font-weight:800;letter-spacing:.2em;font-size:.83rem;text-transform:uppercase;}
+  .cover h1{font-size:2.25rem;margin:.4rem 0 .2rem;line-height:1.08;} .cover .sub{font-size:1.16rem;color:var(--muted);margin-bottom:1.1rem;}
+  .cover .tagline{font-size:1.0rem;color:var(--ink);max-width:163mm;border-left:4px solid var(--teal);padding-left:1rem;font-style:italic;text-align:left;}
+  .cover .meta{position:absolute;bottom:6mm;left:6mm;right:6mm;display:flex;justify-content:space-between;border-top:1px solid var(--line);padding-top:.6rem;font-size:.8rem;color:var(--soft);}
+  .cover .pills{margin:1rem 0;} .cover .pills .tag{font-size:.77rem;margin-right:.3rem;}
+  .mono{font-family:ui-monospace,Menlo,Consolas,monospace;}
+  hr{border:none;border-top:1px solid var(--line);margin:.9rem 0;}
+  .toc{font-size:.9rem;columns:2;column-gap:2rem;} .toc div{margin:.16rem 0;break-inside:avoid;} .toc .n{color:var(--teal);font-weight:700;display:inline-block;width:1.8em;}
+  .eq{font-family:ui-monospace,Menlo,Consolas,monospace;background:#ecfdf5;border:1px solid #a7f3d0;border-radius:8px;padding:.45rem .75rem;margin:.5rem 0;font-size:.79rem;color:#065f46;text-align:center;}
+  @page{size:A4;margin:13mm 12mm;}
+</style>
+</head>
+<body>
+
+<!-- COVER -->
+<div class="wrap"><div class="cover">
+  <div class="eyebrow">Architecture · avant code · transformer « ça tourne sur GPU » en « c'est plus juste et moins cher »</div>
+  <h1>B1 — Le harnais d'inférence, <span style="white-space:nowrap">le déblocage</span></h1>
+  <div class="sub">L'instrument de mesure de la thèse. Construit et prouvé sur Mac, sans GPU — pour que le GPU, quand il arrive, n'ait plus qu'à fournir des modèles réels à une mesure déjà validée.</div>
+  <div class="tagline">La thèse d'EFE est une affirmation <b>quantitative</b> : « beaucoup de très petits modèles en parallèle valent — voire battent — un gros modèle, pour moins cher ». Une affirmation quantitative ne se croit pas, elle se <b>mesure</b>. Or l'audit de readiness l'a établi sans ambiguïté : le banc d'essai actuel mesure du <b>débit</b> (requêtes/s, p99) contre un cluster, jamais de la <b>justesse</b> — il n'a ni vérité-terrain, ni client d'inférence orienté qualité, ni comparaison à coût égal. <b>Sans B1, allumer un GPU ne mesure rien</b> : on saurait qu'un essaim <i>tourne</i>, jamais s'il a <i>raison</i>, ni à quel coût relativement à l'alternative. B1 est le harnais qui répond aux trois questions à la fois — <b>est-ce juste ? à quel coût ? prouvable&nbsp;?</b> — sur un corpus labellisé, en re-jouant la comparaison cheap-parallèle contre gros-modèle à dataset, scorer et budget identiques. Le geste décisif : il se construit et se <b>prouve entièrement sur le Mac</b> via le seam (B0.3) et l'oracle (v2) ; le GPU ne change qu'<b>une ligne</b> — le backend scripté devient un vrai endpoint vLLM. On ne déboguera pas l'instrument sur la machine chère : on l'y branchera, déjà juste.</div>
+  <div class="pills">
+    <span class="tag t-teal">vérité-terrain (I-BENCH-TRUTH)</span>
+    <span class="tag t-info">générateurs aveugles (I-BENCH-BLIND)</span>
+    <span class="tag t-info">comparaison à coût égal (I-BENCH-FAIR)</span>
+    <span class="tag t-info">benchmark re-prouvable (I-BENCH-REPROVE)</span>
+    <span class="tag t-warn">prouvé sur Mac (I-BENCH-MAC)</span>
+  </div>
+  <div class="meta">
+    <span>EFE — Essaim Fluide Éphémère · Axe B, étape B1 · le déblocage de la mesure</span>
+    <span>2026-06-21 · architecture, code à venir</span>
+  </div>
+</div></div>
+
+<!-- TOC -->
+<div class="wrap page">
+  <h2><span class="num">§0</span> Plan</h2>
+  <div class="toc">
+    <div><span class="n">1.</span> Le mandat : pourquoi B1 est <i>le</i> déblocage</div>
+    <div><span class="n">2.</span> La thèse, rendue mesurable : trois axes, un seul scalaire trompeur</div>
+    <div><span class="n">3.</span> La vérité-terrain : le dataset labellisé, et l'aveuglement des générateurs</div>
+    <div><span class="n">4.</span> Le scorer : un seul noyau de comparaison, partagé avec l'oracle</div>
+    <div><span class="n">5.</span> Le runner : exécuter l'essaim via le SDK, lire le <span class="mono">RunOutcome</span></div>
+    <div><span class="n">6.</span> Le coût, honnêtement : zéro centime, donc des jetons</div>
+    <div><span class="n">7.</span> La comparaison : la thèse tranchée sur une courbe, pas un slogan</div>
+    <div><span class="n">8.</span> La re-prouvabilité : un benchmark qu'on ne peut pas truquer</div>
+    <div><span class="n">9.</span> La Mac-testabilité : l'instrument prouvé avant la machine chère</div>
+    <div><span class="n">10.</span> Le câblage endpoint réel : la seule ligne que B2 retournera</div>
+    <div><span class="n">11.</span> Les invariants de B1</div>
+    <div><span class="n">12.</span> Séquence de livraison (B1.1 → B1.7)</div>
+    <div><span class="n">13.</span> Hors-portée : ce que B1 n'est délibérément pas</div>
+    <div><span class="n">14.</span> Conclusion : ce que B1 débloque, exactement</div>
+  </div>
+
+  <h3>Le geste, en une phrase</h3>
+  <p>B1 ne fait pas tourner de modèle&nbsp;; B1 <b>mesure</b>. Il prend un corpus de tâches dont on connaît la <b>bonne réponse</b>, fait passer chaque tâche dans une configuration d'essaim donnée — <i>sans jamais montrer la réponse aux générateurs</i> —, compare la sortie de l'essaim à la vérité-terrain via le <b>même oracle</b> qui sert déjà de juge interne, et comptabilise ce que ça a coûté en <b>jetons</b> (le centime est nul en local, donc trompeur). Puis il rejoue le tout pour un <b>gros modèle de référence</b>, à dataset, scorer et budget identiques, et pose les deux sur la même courbe <b>justesse × coût</b>. Chaque run mesuré est <b>scellé et re-prouvable</b> : le benchmark n'est pas un CSV qu'on croit, c'est un faisceau de runs qu'on re-vérifie. Et tout cela — la justesse, la comptabilité-jetons, la comparaison, le scellement — se prouve <b>sur le Mac</b> contre un backend scripté à justesse contrôlable, <i>avant</i> qu'un GPU n'existe.</p>
+
+  <div class="callout key">
+    <p><b>L'asymétrie qui justifie l'ordre.</b> Un GPU sans B1 est une machine qui produit des réponses qu'on ne sait pas noter, à un coût qu'on ne sait pas comparer, sans preuve qu'on puisse opposer à un sceptique. B1 sans GPU est un instrument complet auquel il ne manque que des modèles réels à brancher. Construire l'instrument <b>d'abord</b>, le prouver sur Mac, puis ne lui fournir le GPU que <b>pour mesurer</b> — pas pour déboguer — est l'unique séquence où l'investissement matériel achète de la <b>vérité</b> et non de l'<b>illusion</b>.</p>
+  </div>
+</div>
+
+<!-- 1 -->
+<div class="wrap page">
+<section>
+  <h2><span class="num">§1</span> Le mandat : pourquoi B1 est <i>le</i> déblocage</h2>
+
+  <p>L'audit de readiness pré-GPU a séparé deux choses qu'on confond facilement : la capacité à <b>exécuter</b> des essaims Mode C sur GPU (à portée, moyennant les trois réglages de B0) et la capacité à <b>mesurer ce qu'ils valent</b>. Sur ce second axe, le verdict était net : le banc d'essai existant — le <span class="mono">loadgen</span> de <span class="mono">bench/</span>, ses scénarios <span class="mono">CB-01…</span>, son schéma <span class="mono">scenario-v1.json</span> — est un outil de <b>charge</b>. Il interroge le cluster via gRPC (<span class="mono">MetaSwarmService</span>), il mesure du débit et des latences de queue, il sait dire « le cluster tient 1&nbsp;200 req/s à p99 = 380&nbsp;ms ». Il ne sait <b>rien</b> dire de la justesse : ses scénarios n'ont pas de vérité-terrain, il ne parle pas le protocole d'inférence d'un SLM auto-hébergé orienté qualité, et il n'a aucune notion de comparaison à coût égal. C'est un excellent instrument — pour une autre question.</p>
+
+  <p>La conséquence est l'asymétrie de la couverture. Si l'on branchait un GPU aujourd'hui, on saurait répondre à « est-ce que ça tient la charge ? » et pas du tout à « est-ce que ça a <b>raison</b>, et est-ce <b>moins cher</b> que l'alternative ? ». Or c'est exactement cette seconde question qui <i>est</i> la thèse. La thèse d'EFE n'est pas « EFE sait orchestrer des essaims » (vrai, et déjà prouvé par le moat de provenance) ; elle est « <b>un essaim de très petits modèles en parallèle atteint la justesse d'un gros modèle pour un coût inférieur</b> ». C'est une affirmation économique et statistique. On ne la valide pas en regardant un essaim tourner ; on la valide en <b>mesurant</b> sa justesse et son coût, et en les <b>comparant</b> à la référence. B1 est l'instrument de cette mesure. C'est, littéralement, ce qui sépare « le GPU calcule » de « le GPU démontre ».</p>
+
+  <h3>1.1 — Ce que B0 a posé, et que B1 assemble</h3>
+
+  <p>B1 n'arrive pas sur table rase. Les deux pièces dont il a besoin ont été livrées par les frontières précédentes, et la lucidité de cette architecture est de le reconnaître : <b>B1 est surtout un assemblage</b>, pas une invention.</p>
+
+  <p>La première pièce est le <b>seam</b> (B0.3) : <span class="mono">Swarm::builder().with_local_backend(ScriptedBackend::…)</span>, gardé derrière la feature <span class="mono">test-util</span> (invariant I-SEAM : absent du build de production). Il rend le chemin Mode C <b>complet</b> — recall mémoire → génération LLM → agrégation → scellement → re-preuve R0 — exécutable sans Ollama ni GPU, contre un backend déterministe injecté. C'est ce qui rendra B1 testable sur Mac : on y branchera un SLM <i>scripté</i> au lieu d'un vrai. La seconde pièce est l'<b>oracle</b> (la v2 « vérification = acceptation ») : le vérificateur <span class="mono">EqualsExpected</span>, marqué <span class="mono">is_correctness_oracle() → true</span>, qui compare une réponse candidate à la vérité-terrain <span class="mono">task.expected</span>. C'est, à une extraction près, exactement la fonction dont B1 a besoin pour <b>noter</b> une réponse contre un label. B1 ne réinvente pas la comparaison de justesse : il <b>réutilise le noyau de l'oracle</b> (§4), ce qui garantit qu'« être noté juste par le banc » et « être accepté par le juge interne » sont une seule et même notion (I-BENCH-SAME-ORACLE).</p>
+
+  <div class="callout">
+    <p><b>Le malentendu à dissiper d'emblée : B1 n'écrit pas de client HTTP.</b> Le SDK <i>sait déjà</i> parler à un endpoint d'inférence local — c'est le Mode C, ses backends <span class="mono">OllamaBackend</span>/<span class="mono">OpenAiLocal</span>, construits par <span class="mono">build_local_backend(endpoint, model)</span>. Le « client d'inférence inexistant » de l'audit désignait le <b>loadgen gRPC</b>, pas le SDK. B1 <b>contourne</b> le loadgen : il pilote les essaims <i>directement par le SDK</i> sur un dataset labellisé. Il n'a donc pas à bâtir un client réseau&nbsp;; il a à bâtir le <b>dataset</b>, le <b>scorer</b>, le <b>runner</b>, la <b>comparaison</b>, le <b>bundle re-prouvable</b> — et à brancher le tout sur la plomberie d'inférence qui existe.</p>
+  </div>
+</section>
+</div>
+
+<!-- 2 -->
+<div class="wrap page">
+<section>
+  <h2><span class="num">§2</span> La thèse, rendue mesurable : trois axes, un scalaire trompeur</h2>
+
+  <p>Pour mesurer « aussi juste, moins cher », il faut nommer précisément les axes, et débusquer le piège du scalaire qui semble être le coût mais ne l'est pas.</p>
+
+  <h3>2.1 — Les trois axes</h3>
+  <p><b>Justesse.</b> Pour une tâche dont la bonne réponse est connue, l'essaim a-t-il produit cette réponse ? Agrégé sur un corpus, c'est une <b>exactitude</b> (fraction de tâches résolues correctement). C'est l'axe que le banc actuel ignore totalement, et le cœur de B1.</p>
+  <p><b>Coût.</b> Combien a coûté la production de cette réponse ? Pas en argent — on y vient — mais en <b>travail de calcul</b> : nombre d'appels au modèle (largeur de l'essaim), et surtout nombre de <b>jetons</b> consommés (entrée + sortie), qui est le proxy fidèle de la charge GPU. Un essaim de 24 petits modèles fait 24&nbsp;appels&nbsp;; un gros modèle en fait 1 — mais chaque jeton du gros modèle coûte beaucoup plus cher à produire. Le coût n'est comparable qu'en jetons pondérés par un prix par-modèle.</p>
+  <p><b>Latence.</b> En combien de temps de paroi ? C'est l'axe le plus intuitif et le plus traître à mesurer, car il dépend du <b>matériel</b> et du <b>parallélisme effectif</b> du serveur d'inférence. Sur Mac contre un backend scripté, la latence est quasi nulle et ne signifie rien. C'est, on le verra (§6, §9), un axe <b>exclusivement GPU</b> : B1 le <b>rend mesurable</b> (il chronomètre chaque run et étiquette la nature du backend), mais ne le <b>mesure pour de vrai</b> que branché sur un endpoint réel — donc en B2.</p>
+
+  <h3>2.2 — Le piège : le coût n'est pas <span class="mono">spent_cents</span></h3>
+  <p>Le SDK porte un budget en centimes (<span class="mono">BudgetSnapshot.spent_cents</span>, plafond <span class="mono">max_cost_cents</span>). On serait tenté d'y lire le coût économique. C'est une <b>erreur</b>, et il faut la nommer pour ne pas la commettre dans le rapport. En Mode C auto-hébergé, le compute local est facturé <b>zéro centime</b> par le SDK — et c'est correct&nbsp;: vous possédez le GPU, il n'y a pas de facture par-appel d'un fournisseur. <span class="mono">spent_cents</span> est donc un signal de <b>gouvernance de budget</b> (« reste-t-on sous le plafond d'appels ? »), pas un signal <b>économique</b>. Si B1 comparait des coûts en centimes, l'essaim local et le gros modèle local coûteraient tous deux 0 — la comparaison serait vide.</p>
+
+  <p>Le vrai signal de coût est ailleurs, et le SDK le porte déjà : ce sont les <b>jetons</b>, enregistrés <i>par appel</i> dans les records N17 scellés. Chaque <span class="mono">PendingLlmCall</span> devenu record porte <span class="mono">client_estimated_input</span> / <span class="mono">client_estimated_output</span> (estimation locale, ≈&nbsp;4&nbsp;caractères/jeton, drapeau <span class="mono">is_estimated = true</span>) et, quand le fournisseur les rapporte, <span class="mono">provider_reported_input</span> / <span class="mono">provider_reported_output</span> ; les accesseurs <span class="mono">effective_input()</span> / <span class="mono">effective_output()</span> donnent le compte effectif (rapporté s'il existe, sinon estimé). B1 <b>somme les jetons effectifs sur les records N17 scellés du run</b> pour obtenir le coût-jetons, et conserve le drapeau <span class="mono">is_estimated</span> agrégé : il <b>sait toujours dire si un chiffre de coût est un proxy (estimé) ou une mesure (rapportée)</b>. C'est l'honnêteté gratuite que le format N17 offre — et l'invariant I-BENCH-PROXY (§6) la rend explicite.</p>
+
+  <div class="callout key">
+    <p><b>Le scalaire unique n'existe pas — et c'est le point.</b> La thèse n'est pas « l'essaim est meilleur » (sur quel axe ?), elle est « l'essaim est <b>sur la frontière de Pareto</b> justesse × coût, là où le gros modèle ne l'est pas ». B1 ne produit donc pas un nombre, il produit une <b>courbe</b> (§7) : la justesse de l'essaim en fonction de sa largeur K et de son coût-jetons, avec le gros modèle comme <b>point de référence</b>. La thèse tient si la courbe de l'essaim domine le point du gros modèle — plus juste à coût égal, ou aussi juste à coût moindre.</p>
+  </div>
+</section>
+</div>
+
+<!-- 3 -->
+<div class="wrap page">
+<section>
+  <h2><span class="num">§3</span> La vérité-terrain : le dataset labellisé, et l'aveuglement des générateurs</h2>
+
+  <p>Aucune justesse ne se mesure sans une <b>réponse de référence</b>. Le premier composant de B1 est donc le corpus labellisé — et la première subtilité de B1, plus profonde qu'il n'y paraît, est <b>où vit le label</b> par rapport à ce que voit l'essaim.</p>
+
+  <h3>3.1 — Le format, et son orthogonalité au banc de charge</h3>
+  <p>Un dataset B1 est une suite de lignes — un fichier JSONL, une ligne par cas — de forme&nbsp;: <span class="mono">{ id, task, label, scorer }</span>. Le <span class="mono">task</span> est l'entrée que l'essaim recevra (par exemple <span class="mono">{ "text": "La banque centrale a relevé son taux directeur." }</span>) ; le <span class="mono">label</span> est la vérité-terrain (<span class="mono">"finance"</span>) ; <span class="mono">scorer</span> nomme la manière de comparer (exact, numérique-à-tolérance, ensembliste — §4). Ce format est <b>délibérément distinct</b> des scénarios <span class="mono">CB-*</span> de <span class="mono">bench/scenarios/</span> : ceux-ci décrivent une charge (taux d'arrivée, profil de requêtes) pour le loadgen gRPC ; un dataset B1 décrit un corpus de <b>jugement</b> pour le runner SDK. Mélanger les deux schémas embrouillerait deux questions orthogonales (charge vs justesse). Les datasets B1 vivront donc à part — sous les fixtures de la nouvelle crate (§12) — et le schéma <span class="mono">scenario-v1.json</span> reste intouché.</p>
+
+  <h3>3.2 — I-BENCH-BLIND : le label ne touche jamais le générateur</h3>
+  <p>Voici la subtilité qui décide de l'honnêteté de tout le reste. La tentation naturelle, vu la convention EFE existante (<span class="mono">task = {"text": …, "expected": …}</span>), est de mettre le label <i>dans</i> la tâche, sous la clé <span class="mono">expected</span>, et de laisser l'oracle interne le lire. Mais en Mode C, le prompt d'un générateur est construit à partir de son instruction <b>et de la tâche JSON</b>. Si la tâche contient <span class="mono">expected</span>, <b>le générateur voit la réponse</b> dans son prompt. Une exactitude mesurée ainsi serait <b>frauduleuse</b> : on ne mesurerait pas la capacité du modèle à trouver la réponse, mais sa capacité à recopier une réponse qu'on lui a soufflée.</p>
+
+  <p>L'invariant qui gouverne B1 est donc : <b>les générateurs ne voient jamais le label</b>. Concrètement, le runner construit la tâche remise à l'essaim en <b>retirant</b> toute trace du label ; le label reste détenu par le harnais et n'est appliqué qu'<b>après coup</b>, par le scorer, sur la réponse gagnante (§4, §5). C'est le chemin <b>aveugle</b>, et c'est le chemin de la mesure d'exactitude de tête d'affiche. Il n'a besoin d'aucun mécanisme nouveau : il suffit que la tâche soumise soit nettoyée et que la note soit calculée hors essaim.</p>
+
+  <p>Reste un cas particulier : l'expérience <b>anti-poison</b>, où l'on veut au contraire que l'<i>oracle interne</i> (<span class="mono">consensus_verified</span>) voie le label pour <b>fermer l'acceptation</b> sur un essaim unanime-mais-faux. Là, l'oracle a besoin de <span class="mono">task.expected</span> — mais le mettre dans la tâche le ferait fuiter aux générateurs, contaminant la mesure (sur un vrai modèle, un générateur qui lit la réponse cesse d'être unanime-faux). La résolution propre, qu'on propose comme petite convention SDK <b>optionnelle</b> (§12, B1.5), est une <b>clé réservée</b> — disons <span class="mono">__oracle_label__</span> — présente dans la tâche, <b>lue par le juge-oracle</b>, et <b>exclue par construction</b> du prompt de tout générateur et de tout juge non-oracle. L'oracle voit la vérité, les générateurs restent aveugles, et l'expérience anti-poison devient honnête y compris sur modèles réels. La mesure d'exactitude de tête d'affiche, elle, n'en a pas besoin : elle reste sur le scorer post-hoc, intégralement aveugle.</p>
+
+  <div class="callout warn">
+    <p><b>Le scorer doit correspondre au type de tâche — sinon le nombre ment.</b> La comparaison v1 est une égalité (après normalisation, §4). Elle convient aux réponses <b>fermées</b> : étiquettes de classification, nombres, extractions courtes. Elle <b>sous-compte</b> une réponse libre correcte mais reformulée (une bonne paraphrase serait notée fausse). Donc les datasets v1 doivent être <b>à réponse fermée</b>, par construction. Mesurer du texte libre exige le scorer flou de la v2 (similarité sémantique, juge-LLM-comme-scorer) — nommé, non livré en B1. Un dataset à réponse libre noté par égalité produirait une exactitude artificiellement basse : c'est l'erreur que I-BENCH-TRUTH interdit (le label <i>et</i> le scorer doivent matcher le type de tâche).</p>
+  </div>
+</section>
+</div>
+
+<!-- 4 -->
+<div class="wrap page">
+<section>
+  <h2><span class="num">§4</span> Le scorer : un seul noyau de comparaison, partagé avec l'oracle</h2>
+
+  <p>Le scorer répond à une question binaire par tâche : la réponse gagnante de l'essaim <b>égale-t-elle</b> le label ? Agrégé, il donne l'exactitude. Le principe directeur de sa conception est la <b>non-duplication</b> : il ne doit exister, dans tout EFE, qu'<b>une</b> définition de « cette réponse correspond à cette vérité-terrain ».</p>
+
+  <h3>4.1 — Réutiliser le noyau de l'oracle</h3>
+  <p>L'oracle interne <span class="mono">EqualsExpected</span> fait déjà précisément cela : il extrait la réponse d'un candidat (<span class="mono">c.value</span>, sinon <span class="mono">c.text</span>, sinon le candidat brut), prend <span class="mono">task.expected</span>, et renvoie 1.0 si elles sont égales, 0.0 sinon. Le scorer post-hoc de B1 réutilise <b>ce même noyau</b>, appliqué hors essaim&nbsp;: <span class="mono">extract(winner) == label</span>. Ce n'est pas une commodité d'implémentation, c'est une <b>garantie de cohérence</b> nommée I-BENCH-SAME-ORACLE : « noté juste par le banc » et « accepté par le juge-oracle interne » sont, à la lettre, la même comparaison. Sans ce partage, on risquerait une dérive insidieuse — un essaim que l'oracle interne accepte mais que le banc note faux, ou l'inverse — qui rendrait incohérentes la mesure de justesse et l'expérience anti-poison. On factorise donc le noyau (extraction + normalisation + égalité) en un point unique, consommé par le juge <span class="mono">EqualsExpected</span> <i>et</i> par le scorer de B1.</p>
+
+  <div class="eq">score(winner, label) = [ extract(winner) ≡ normalize(label) ] ∈ {correct, incorrect}</div>
+
+  <h3>4.2 — Un trait, pour que la v2 se branche sans réécriture</h3>
+  <p>La v1 livre un petit éventail de comparaisons fermées derrière un <b>trait</b> <span class="mono">Scorer</span> : <b>exact</b> (égalité JSON canonique après trim/casse), <b>numérique</b> (égalité à une tolérance, pour les réponses chiffrées), <b>ensembliste</b> (égalité d'ensembles, pour les réponses multi-étiquettes où l'ordre est indifférent). Le <span class="mono">scorer</span> nommé dans chaque ligne du dataset sélectionne l'implémentation. Le trait existe précisément pour que la v2 — similarité d'embeddings, tolérance regex, juge-LLM-comme-scorer — s'y insère plus tard <b>sans toucher</b> au runner ni au rapport. B1 ne livre pas le scorer flou ; il livre la <b>forme</b> qui l'accueillera, et les trois scorers fermés suffisants pour les premiers corpus (classification, arithmétique, extraction courte).</p>
+
+  <div class="callout">
+    <p><b>Pourquoi l'exactitude exacte est un bon point de départ, malgré sa rudesse.</b> Parce qu'elle est <b>incontestable</b> : sur un corpus à réponse fermée, « <span class="mono">"finance"</span> == <span class="mono">"finance"</span> » ne se discute pas, ne dépend d'aucun seuil, et se re-prouve trivialement. La thèse a d'abord besoin d'un signal <b>solide</b>, fût-il étroit, plutôt que d'un signal large mais contestable (un seuil de similarité que tout sceptique attaquera). On élargit ensuite le domaine avec la v2, une fois le signal de base établi et re-prouvable.</p>
+  </div>
+</section>
+</div>
+
+<!-- 5 -->
+<div class="wrap page">
+<section>
+  <h2><span class="num">§5</span> Le runner : exécuter l'essaim via le SDK, lire le <span class="mono">RunOutcome</span></h2>
+
+  <p>Le runner est le cœur procédural de B1 : il transforme un dataset + une configuration d'essaim en un faisceau de mesures. Sa conception est entièrement dictée par ce que le SDK <b>expose déjà</b> — il n'a presque rien à calculer lui-même, seulement à orchestrer, lire et enregistrer.</p>
+
+  <h3>5.1 — La boucle, par ligne de dataset</h3>
+  <p>Pour chaque ligne <span class="mono">{ id, task, label, scorer }</span>, le runner&nbsp;: <b>(a)</b> construit la tâche <b>aveugle</b> (I-BENCH-BLIND : il retire tout label de <span class="mono">task</span>) ; <b>(b)</b> appelle <span class="mono">swarm.run_traced(task_aveugle, spec, budget)</span> — c'est le SDK qui fait tout le Mode C (recall, génération, agrégation, scellement, re-preuve) ; <b>(c)</b> lit le <span class="mono">RunOutcome</span> ; <b>(d)</b> note via le scorer&nbsp;: <span class="mono">scorer.score(outcome.run.output, label)</span> ; <b>(e)</b> enregistre une <b>ligne de mesure</b>. Les lignes sont indépendantes — le runner les exécute donc en concurrence bornée (un sémaphore à N&nbsp;permis), ce qui sur GPU correspond à la profondeur de file que vLLM digère bien. La structure de la boucle est déterministe (ordre du dataset, comptabilité par-ligne) ; seule l'exécution est concurrente.</p>
+
+  <h3>5.2 — Ce que le runner lit dans le <span class="mono">RunOutcome</span> (et ce qu'il ne lit pas)</h3>
+  <p>Le SDK a la délicatesse d'exposer exactement ce dont une mesure a besoin. Le runner lit&nbsp;:</p>
+  <ul>
+    <li><b>La réponse</b> : <span class="mono">outcome.run.output</span> — donnée au scorer.</li>
+    <li><b>La largeur effective</b> : <span class="mono">outcome.run.accounting.agents_used</span> — le nombre d'appels réellement faits (après sizing adaptatif et arrêts précoces).</li>
+    <li><b>Le coût-jetons</b> : <b>pas</b> dans le résumé. <span class="mono">N17Summary</span> ne porte que l'intégrité des liens (<span class="mono">calls</span>, <span class="mono">consistent</span>, <span class="mono">unlinked</span>, <span class="mono">broken</span>, <span class="mono">all_consistent</span>). Les <b>jetons</b> vivent <i>par appel</i> dans les <b>records N17 scellés</b> (<span class="mono">outcome.n17_sealed</span>). Le runner <b>somme</b> <span class="mono">effective_input() + effective_output()</span> sur ces records → coût-jetons du run, et agrège <span class="mono">is_estimated</span> → drapeau proxy/mesuré (§6).</li>
+    <li><b>L'intégrité de la preuve</b> : <span class="mono">outcome.run.provenance.verified</span> (R0 re-prouve), <span class="mono">traced_pct</span>, le résumé N17 (<span class="mono">all_consistent</span>, <span class="mono">unlinked == 0</span>, <span class="mono">broken == 0</span>). Une ligne dont la preuve ne tient pas est <b>signalée</b>, pas comptée comme un succès silencieux.</li>
+    <li><b>La latence</b> : le runner chronomètre lui-même <span class="mono">run_traced</span> (paroi), et <b>étiquette le backend</b> (scripté vs réel) pour que personne ne lise une latence Mac comme une performance.</li>
+    <li><b>Le sceau</b> : <span class="mono">outcome.sealed</span> (la <span class="mono">SealedProvenance</span>, ses records) et <span class="mono">outcome.n17_sealed</span> — conservés tels quels dans le bundle (§8).</li>
+  </ul>
+  <p>Le point précis à retenir, parce qu'il serait facile de se tromper : <b>les jetons ne sont pas dans <span class="mono">N17Summary</span></b> ; il faut descendre dans les records scellés. Cette nuance est la seule subtilité d'implémentation du runner, et elle a une vertu — elle force le coût-jetons à provenir de la <b>même source scellée</b> qui est re-prouvée, donc le coût est <i>dans le moat</i>, pas un compteur parallèle non attesté.</p>
+
+  <div class="fig">
+  <svg viewBox="0 0 760 250" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Le pipeline de mesure B1, du dataset au bundle">
+    <defs>
+      <marker id="ar" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="#475569"/></marker>
+    </defs>
+    <!-- dataset -->
+    <rect x="14" y="98" width="104" height="54" rx="8" fill="#eef2ff" stroke="#4f46e5"/>
+    <text x="66" y="120" text-anchor="middle" font-size="12" font-weight="700" fill="#3730a3">Dataset</text>
+    <text x="66" y="136" text-anchor="middle" font-size="9.5" fill="#475569">id · task · label</text>
+    <!-- strip -->
+    <rect x="146" y="98" width="96" height="54" rx="8" fill="#fffbeb" stroke="#d97706"/>
+    <text x="194" y="118" text-anchor="middle" font-size="10.5" font-weight="700" fill="#92400e">Aveuglement</text>
+    <text x="194" y="134" text-anchor="middle" font-size="9" fill="#92400e">retire le label</text>
+    <text x="194" y="146" text-anchor="middle" font-size="8" fill="#b45309">(I-BENCH-BLIND)</text>
+    <!-- swarm -->
+    <rect x="270" y="78" width="150" height="94" rx="8" fill="#f0fdfa" stroke="#0d9488"/>
+    <text x="345" y="98" text-anchor="middle" font-size="12" font-weight="700" fill="#0f766e">Essaim (Mode C)</text>
+    <text x="345" y="114" text-anchor="middle" font-size="9" fill="#475569">run_traced(task, spec)</text>
+    <text x="345" y="130" text-anchor="middle" font-size="8.5" fill="#64748b">génère · agrège · scelle</text>
+    <line x1="278" y1="142" x2="412" y2="142" stroke="#cbd5e1"/>
+    <text x="345" y="156" text-anchor="middle" font-size="8.5" fill="#0f766e">backend ↓ (le seul aiguillage)</text>
+    <!-- backend fork -->
+    <rect x="270" y="196" width="72" height="40" rx="6" fill="#eef2f1" stroke="#64748b"/>
+    <text x="306" y="214" text-anchor="middle" font-size="8.5" font-weight="700" fill="#334155">Scripté</text>
+    <text x="306" y="226" text-anchor="middle" font-size="7.5" fill="#64748b">Mac · CI</text>
+    <rect x="350" y="196" width="72" height="40" rx="6" fill="#dcfce7" stroke="#16a34a"/>
+    <text x="386" y="214" text-anchor="middle" font-size="8.5" font-weight="700" fill="#166534">vLLM réel</text>
+    <text x="386" y="226" text-anchor="middle" font-size="7.5" fill="#166534">GPU · B2</text>
+    <line x1="306" y1="196" x2="330" y2="174" stroke="#94a3b8" stroke-dasharray="3 2"/>
+    <line x1="386" y1="196" x2="360" y2="174" stroke="#94a3b8" stroke-dasharray="3 2"/>
+    <!-- scorer -->
+    <rect x="448" y="78" width="104" height="54" rx="8" fill="#f0fdf4" stroke="#16a34a"/>
+    <text x="500" y="100" text-anchor="middle" font-size="11" font-weight="700" fill="#166534">Scorer</text>
+    <text x="500" y="116" text-anchor="middle" font-size="8.5" fill="#475569">winner ≟ label</text>
+    <text x="500" y="127" text-anchor="middle" font-size="7.5" fill="#16a34a">(noyau oracle)</text>
+    <!-- record -->
+    <rect x="448" y="146" width="104" height="62" rx="8" fill="#f8fafc" stroke="#64748b"/>
+    <text x="500" y="164" text-anchor="middle" font-size="9.5" font-weight="700" fill="#334155">Mesure</text>
+    <text x="500" y="178" text-anchor="middle" font-size="8" fill="#475569">correct · jetons</text>
+    <text x="500" y="189" text-anchor="middle" font-size="8" fill="#475569">latence · sceau</text>
+    <text x="500" y="200" text-anchor="middle" font-size="8" fill="#475569">R0 vérifié</text>
+    <!-- bundle -->
+    <rect x="588" y="98" width="158" height="62" rx="8" fill="#eef2ff" stroke="#4f46e5"/>
+    <text x="667" y="118" text-anchor="middle" font-size="11.5" font-weight="700" fill="#3730a3">Bundle re-prouvable</text>
+    <text x="667" y="134" text-anchor="middle" font-size="8.5" fill="#475569">dataset + runs scellés</text>
+    <text x="667" y="146" text-anchor="middle" font-size="8.5" fill="#475569">+ rapport · 1 racine</text>
+    <text x="667" y="156" text-anchor="middle" font-size="7.5" fill="#4f46e5">(I-BENCH-REPROVE)</text>
+    <!-- arrows -->
+    <line x1="118" y1="125" x2="144" y2="125" stroke="#475569" marker-end="url(#ar)"/>
+    <line x1="242" y1="125" x2="268" y2="125" stroke="#475569" marker-end="url(#ar)"/>
+    <line x1="420" y1="110" x2="446" y2="105" stroke="#475569" marker-end="url(#ar)"/>
+    <line x1="420" y1="150" x2="446" y2="168" stroke="#475569" marker-end="url(#ar)"/>
+    <line x1="552" y1="120" x2="586" y2="125" stroke="#475569" marker-end="url(#ar)"/>
+    <line x1="552" y1="178" x2="572" y2="178" stroke="#475569"/><line x1="572" y1="178" x2="572" y2="140" stroke="#475569"/><line x1="572" y1="140" x2="586" y2="140" stroke="#475569" marker-end="url(#ar)"/>
+  </svg>
+  <div class="cap">Le pipeline B1. Tout est invariant d'un bout à l'autre — sauf le <b>backend</b>, seul aiguillage entre la preuve-sur-Mac (scripté) et la mesure-sur-GPU (vLLM réel). C'est ce qui fait de B1 un instrument qu'on valide une fois, puis qu'on branche.</div>
+  </div>
+</section>
+</div>
+
+<!-- 6 -->
+<div class="wrap page">
+<section>
+  <h2><span class="num">§6</span> Le coût, honnêtement : zéro centime, donc des jetons</h2>
+
+  <p>Cette section explicite le modèle de coût, parce qu'un benchmark économique malhonnête sur le coût est pire qu'inutile : il fabrique une fausse confiance. B1 sera honnête par construction, et le drapeau N17 lui donne cette honnêteté presque gratuitement.</p>
+
+  <h3>6.1 — De quoi est fait le coût-jetons</h3>
+  <p>Le runner somme <span class="mono">effective_input() + effective_output()</span> sur les records N17 scellés d'un run. Chaque appel y contribue : un essaim de largeur K contribue K&nbsp;appels (plus les juges/raffinements selon la topologie), un gros modèle en contribue 1. Le coût-jetons <b>brut</b> d'un run est donc la charge de calcul totale qu'il a imposée. C'est le bon proxy de l'occupation GPU — un GPU passe son temps à produire des jetons.</p>
+
+  <h3>6.2 — Estimé vs mesuré : le drapeau qui sauve l'honnêteté</h3>
+  <p>Les jetons sont <b>estimés</b> (≈&nbsp;4&nbsp;car./jeton, <span class="mono">is_estimated = true</span>) tant que le fournisseur ne rapporte pas son propre décompte ; ils deviennent <b>mesurés</b> (<span class="mono">provider_reported_*</span>, <span class="mono">is_estimated = false</span>) dès qu'un vrai vLLM renvoie son <span class="mono">usage</span>. Le même champ <span class="mono">effective_*</span> unifie les deux ; le drapeau dit lequel. B1 <b>propage ce drapeau jusqu'au rapport</b> : tout chiffre de coût est marqué « estimé » ou « mesuré ». Sur Mac (backend scripté), tout est estimé — et le rapport le dit. Sur GPU (vLLM rapportant l'usage), tout devient mesuré — et le rapport le dit aussi. Personne ne peut confondre un proxy avec une mesure : c'est l'invariant <b>I-BENCH-PROXY</b>.</p>
+
+  <h3>6.3 — Du coût-jetons au coût comparable : le modèle de prix</h3>
+  <p>Les jetons bruts ne sont pas encore comparables entre un petit et un gros modèle : un jeton de petit modèle coûte bien moins à produire qu'un jeton de gros modèle (mémoire, FLOPs, temps GPU). Pour comparer, B1 applique un <b>modèle de prix</b> — une table <span class="mono">¢ / 1k jetons</span> <i>par modèle</i>, fournie en <b>paramètre</b> (ce n'est pas mesuré, c'est une hypothèse économique explicite). Le coût comparable d'un run = jetons × prix-du-modèle. Le rapport affiche le coût brut (jetons, attesté) <b>et</b> le coût pondéré (¢, sous l'hypothèse de prix nommée), pour qu'un lecteur puisse refaire le calcul avec sa propre table de prix. La validité de la conclusion économique dépend du réalisme de cette table : B1 la rend <b>visible et rejouable</b>, il ne la cache pas dans un agrégat.</p>
+
+  <div class="callout warn">
+    <p><b>Ce que B1 ne mesure pas, et le dit.</b> La <b>latence</b> et le <b>débit</b> réels sont propriété du matériel et du parallélisme du serveur : sur Mac scripté, ils ne signifient rien. Le <b>coût-dollar absolu</b> dépend d'amortissements (prix d'achat du GPU, électricité, taux d'occupation) hors du périmètre d'un harnais d'inférence. B1 mesure donc : exactitude (solide, sur Mac et GPU), coût-jetons (estimé sur Mac, mesuré sur GPU), et coût pondéré (sous hypothèse de prix). Il <b>rend mesurables</b> latence/débit (il chronomètre, il étiquette) sans les <b>mesurer pour de vrai</b> — c'est le travail du GPU, donc de B2. Cette frontière est nette et assumée.</p>
+  </div>
+</section>
+</div>
+
+<!-- 7 -->
+<div class="wrap page">
+<section>
+  <h2><span class="num">§7</span> La comparaison : la thèse tranchée sur une courbe, pas un slogan</h2>
+
+  <p>La justesse et le coût d'<i>une</i> configuration ne disent rien. La thèse est <b>comparative</b> ; B1 la tranche en exécutant le même dataset sous plusieurs configurations et en les posant sur la même frontière.</p>
+
+  <h3>7.1 — Les deux familles de configuration</h3>
+  <p><b>L'essaim (la thèse)</b> : un consensus de petits modèles, <span class="mono">TopologySpec::consensus(petit_modèle, juges, K)</span>, exécuté pour plusieurs largeurs K (4, 8, 16, 24, 32…). Chaque K donne un point (exactitude, coût-jetons). <b>La référence</b> : un gros modèle seul. La forme EFE naturelle est <span class="mono">GenerateVerify { generator: gros_modèle, verifier, k: 1 }</span> — une génération, éventuellement une vérification. C'est le « un gros modèle » auquel la thèse s'oppose. Les deux familles partagent <b>le même dataset, le même scorer, la même comptabilité de budget</b> : c'est l'invariant <b>I-BENCH-FAIR</b>. Toute asymétrie (un scorer plus indulgent pour l'essaim, un dataset différent) invaliderait la comparaison ; le harnais l'interdit en passant les mêmes objets aux deux chemins.</p>
+
+  <h3>7.2 — Le livrable n'est pas un nombre, c'est une frontière</h3>
+  <p>Balayer K produit une <b>courbe</b> exactitude × coût-jetons pour l'essaim, sur laquelle on pose le <b>point</b> du gros modèle. La thèse tient si la courbe de l'essaim <b>domine</b> le point de référence : à exactitude égale, l'essaim coûte moins (en jetons pondérés) ; ou à coût égal, il est plus exact. On lit aussi le <b>genou</b> de la courbe — le K au-delà duquel ajouter des modèles ne gagne plus d'exactitude — qui est précisément le réglage opérationnel que la width de B0.1 sert à atteindre. Le rapport tabule, par configuration : exactitude (%), appels moyens, jetons moyens (estimé/mesuré), coût pondéré, latence (étiquetée), et l'intégrité de preuve (fraction de runs R0-vérifiés — qui doit être 100&nbsp;%).</p>
+
+  <table>
+    <thead><tr><th>Configuration</th><th class="c">Exactitude</th><th class="c">Appels/tâche</th><th class="c">Jetons/tâche</th><th class="c">Coût pondéré</th><th class="c">Preuve R0</th></tr></thead>
+    <tbody>
+      <tr><td>Gros modèle (réf., K=1)</td><td class="c">forme : %</td><td class="c">1</td><td class="c">élevés (mesurés)</td><td class="c">× prix-gros</td><td class="c good">100 %</td></tr>
+      <tr><td>Essaim petit, K=8</td><td class="c">forme : %</td><td class="c">8</td><td class="c">∑ records N17</td><td class="c">× prix-petit</td><td class="c good">100 %</td></tr>
+      <tr><td>Essaim petit, K=24</td><td class="c">forme : %</td><td class="c">≤ 24 (sizing)</td><td class="c">∑ records N17</td><td class="c">× prix-petit</td><td class="c good">100 %</td></tr>
+    </tbody>
+  </table>
+  <p class="small muted">La table donne la <b>forme</b> du rapport, pas des chiffres : B1 produit la structure, le GPU (B2) remplit les pourcentages réels. « ≤ 24 » rappelle que le sizing adaptatif et les arrêts précoces réduisent souvent la largeur effective sous K_max — un gain de coût que le harnais mesure, ne suppose pas.</p>
+
+  <div class="callout key">
+    <p><b>Pourquoi la courbe, et pas un duel.</b> Un duel « essaim K=24 vs gros modèle » répond à une question mal posée (« lequel gagne ? »). La courbe répond à la bonne (« à quel coût l'essaim atteint-il la justesse du gros modèle, et y a-t-il un régime où il la dépasse ? »). C'est aussi la courbe qui révèlerait une <b>réfutation</b> honnête : si l'essaim plafonne sous le gros modèle quel que soit K, B1 le montrera aussi nettement qu'il montrerait un succès. Un instrument qui ne peut que confirmer la thèse n'est pas un instrument de mesure ; B1 peut la <b>réfuter</b>, et c'est ce qui rend sa confirmation crédible.</p>
+  </div>
+</section>
+</div>
+
+<!-- 8 -->
+<div class="wrap page">
+<section>
+  <h2><span class="num">§8</span> La re-prouvabilité : un benchmark qu'on ne peut pas truquer</h2>
+
+  <p>Ici B1 hérite directement du moat d'EFE, et c'est ce qui distingue son benchmark de tous les autres. Un benchmark ordinaire est un fichier de résultats qu'on demande au lecteur de <b>croire</b>. Le benchmark de B1 est un faisceau de runs qu'on invite le lecteur à <b>re-vérifier</b>.</p>
+
+  <h3>8.1 — Chaque run mesuré est déjà scellé et re-prouvable</h3>
+  <p>Le <span class="mono">RunOutcome</span> de chaque tâche porte sa <span class="mono">SealedProvenance</span> (les records), son <span class="mono">SealedN17</span> (la forensique par-appel, jetons compris), et <span class="mono">provenance.verified == true</span> atteste que la chaîne <b>re-prouve</b> (R0). B1 ne rajoute rien à la preuve d'un run : il la <b>conserve</b>. Le <b>bundle</b> B1 est un manifeste qui lie sous une <b>racine unique adressée par contenu</b> : le dataset (avec les labels et leurs empreintes), les <span class="mono">RunOutcome</span> scellés de chaque tâche, et le rapport agrégé. Re-vérifier le bundle, c'est re-prouver chaque run (les réponses notées sont <i>exactement</i> celles produites) et recalculer l'exactitude et le coût à partir de runs attestés — pas à partir d'un CSV de confiance.</p>
+
+  <h3>8.2 — Ce que la re-preuve atteste, et ce qu'elle n'atteste pas</h3>
+  <p>Distinction cardinale, à ne jamais confondre. La re-preuve atteste la <b>computation</b> : « l'essaim a bel et bien produit la réponse X, avec cette provenance, ces jetons, ce barreau d'attestation de compute ». Elle n'atteste <b>pas</b> que X est <b>correcte</b> — la correction vient du <b>label</b>, une vérité <b>externe</b> fournie par qui a constitué le corpus. Le bundle est donc : <b>computation attestée</b> (dans le moat) + <b>labels de confiance</b> (hors moat). Un lecteur re-prouve la computation et inspecte <b>séparément</b> la provenance des labels (qui a labellisé, comment). I-BENCH-REPROVE couvre la première&nbsp;; la confiance dans les labels relève de la <b>gouvernance du dataset</b> — nommée ici, déléguée à qui produit le corpus, et délibérément hors-portée de B1 (§13).</p>
+
+  <div class="callout ok">
+    <p><b>Le différenciateur, concrètement.</b> On ne peut pas <b>cueillir</b> les bons runs (retirer une ligne casse la racine du manifeste). On ne peut pas <b>retoucher</b> une réponse <i>a posteriori</i> (ça casse le sceau du run). On ne peut pas <b>inventer</b> un run qui n'a pas eu lieu (il n'a pas de record N17). Le benchmark est lui-même <b>dans le moat</b> : c'est, à notre connaissance, ce qu'aucun banc d'inférence concurrent n'offre — non pas « voici mes chiffres », mais « voici mes runs, re-prouvez-les ». Pour une thèse qu'on voudra opposer à des sceptiques, c'est la différence entre une affirmation et une démonstration.</p>
+  </div>
+</section>
+</div>
+
+<!-- 9 -->
+<div class="wrap page">
+<section>
+  <h2><span class="num">§9</span> La Mac-testabilité : l'instrument prouvé avant la machine chère</h2>
+
+  <p>C'est la raison d'être de la séquence « B1 avant B2 », et la garantie que le GPU ne servira qu'à <b>mesurer</b>, jamais à <b>déboguer le harnais</b>. Tout B1 — l'exactitude, la comptabilité-jetons, la comparaison, le scellement, le bundle — se prouve sur Mac via le seam, contre un SLM <b>scripté</b>.</p>
+
+  <h3>9.1 — Le seam, et l'extension que B1 lui apporte</h3>
+  <p>B0.3 a livré <span class="mono">with_local_backend(ScriptedBackend::responding(s))</span> et <span class="mono">::failing()</span>. Mais <span class="mono">responding(s)</span> renvoie la <b>même</b> chaîne à chaque appel : une exactitude mesurée ainsi serait triviale (tout juste, ou tout faux). Pour exercer la <b>logique de notation</b>, il faut une justesse <b>contrôlable par tâche</b>. B1 étend donc le seam — toujours sous <span class="mono">#[cfg(feature = "test-util")]</span>, toujours absent du build de production (I-SEAM) — d'un <span class="mono">ScriptedBackend::scripted(…)</span> qui renvoie la bonne réponse pour certaines tâches et une réponse fausse pour d'autres (réponses indexées par un discriminant de tâche, ou par séquence d'appel). C'est une addition mince et inerte en prod ; elle suffit à mettre le harnais sous tension.</p>
+
+  <h3>9.2 — Le test qui prouve que l'instrument mesure le vrai</h3>
+  <p>Le test d'intégration Mac de B1 est l'argument central de toute la frontière. On constitue un dataset de quelques lignes à labels connus ; on script le backend pour être <b>juste sur certaines, faux sur d'autres</b> — disons juste sur 2 des 3 ; on lance le harnais ; on <b>asserte</b> : exactitude = 2/3 (la notation marche), jetons comptés &gt; 0 et drapeau « estimé » (la comptabilité marche), table de comparaison cohérente entre deux configs (la comparaison marche), et le bundle <b>se scelle et re-prouve</b> (le moat marche). Ce test ne dépend d'aucun modèle, d'aucun réseau, d'aucun GPU. S'il passe, on <b>sait</b> que l'instrument mesure ce qu'il prétend mesurer — avant d'avoir dépensé une seconde de GPU. C'est l'invariant <b>I-BENCH-MAC</b> : tout sauf la latence/débit/coût-mesuré réels est vérifié sur Mac.</p>
+
+  <div class="callout key">
+    <p><b>Le livrable de B1, formulé exactement.</b> Ce n'est pas « un harnais qui marchera sur GPU ». C'est « un harnais <b>déjà prouvé correct sur Mac</b>, auquel il ne manque qu'un endpoint à brancher ». La nuance est tout : quand le GPU arrivera, on ne découvrira pas que le scorer a un bug ou que les jetons sont mal sommés — ces propriétés sont déjà attestées par le test Mac. Le GPU ne fournit que la seule chose que le Mac ne peut pas : des modèles réels, donc des chiffres réels, à un instrument dont on a déjà prouvé la justesse.</p>
+  </div>
+</section>
+</div>
+
+<!-- 10 -->
+<div class="wrap page">
+<section>
+  <h2><span class="num">§10</span> Le câblage endpoint réel : la seule ligne que B2 retournera</h2>
+
+  <p>B1 livre aussi — Mac-buildable, GPU-run — l'adaptateur d'endpoint réel, pour que le passage du scripté au vrai soit littéralement un aiguillage et non une réécriture.</p>
+
+  <h3>10.1 — Le même runner, un backend différent</h3>
+  <p>Le SDK construit un backend d'inférence réel par <span class="mono">build_local_backend(endpoint, model)</span> : un <span class="mono">OpenAiLocal</span>/<span class="mono">Ollama</span> qui parle HTTP à l'endpoint. Le runner de B1 prend une <b>fabrique de backend</b> : sur Mac, c'est <span class="mono">ScriptedBackend::scripted(…)</span> ; sur la box, c'est <span class="mono">build_local_backend("http://127.0.0.1:8000/v1", "Qwen2.5-…")</span>. Tout le reste — boucle, aveuglement, scorer, comptabilité, comparaison, bundle — est <b>identique</b>. Un drapeau de ligne de commande (<span class="mono">--endpoint</span>) choisit l'un ou l'autre. C'est, au sens propre, la seule ligne que B2 retournera.</p>
+
+  <h3>10.2 — Le garde-fou de souveraineté, et pourquoi il est satisfait sur la box</h3>
+  <p><span class="mono">build_local_backend</span> <b>refuse</b> par défaut un endpoint non-local (garde-fou d'egress G2 : <span class="mono">is_local_endpoint</span> n'accepte que la boucle locale). Ce n'est pas un obstacle, c'est exactement la posture voulue : sur la box GPU, vLLM écoute en <span class="mono">127.0.0.1:8000</span>, et le harnais tourne <b>sur la box</b> (ou sur la boucle locale) — le garde-fou est satisfait, et la souveraineté (aucune donnée ne sort) tient par construction. Bénéfice latéral, mais majeur pour le moat : un endpoint local fait estampiller aux appels le barreau <b>R2LocalWitnessed</b> (boucle locale, attesté), et un vrai vLLM qui rapporte son <span class="mono">usage</span> bascule les jetons en <b>mesurés</b>. Le bundle produit sur la box est donc un benchmark <b>mesuré, attesté et re-prouvable</b> à la fois — l'aboutissement.</p>
+
+  <div class="callout ok">
+    <p><b>Le point d'arrivée de l'Axe&nbsp;B, vu d'ici.</b> B1 + B2 produisent ensemble un artefact qu'on peut poser sur une table devant un sceptique : une courbe justesse × coût, issue de modèles réels, dont chaque point est un faisceau de runs <b>re-prouvables</b>, avec des jetons <b>mesurés</b> et une attestation de compute. La thèse cesse d'être un pari pour devenir une <b>démonstration vérifiable</b>. B1 est l'instrument&nbsp;; B2 lui donne les modèles&nbsp;; le moat rend le résultat indiscutable.</p>
+  </div>
+</section>
+</div>
+
+<!-- 11 -->
+<div class="wrap page">
+<section>
+  <h2><span class="num">§11</span> Les invariants de B1</h2>
+  <p>Comme à chaque frontière, on nomme les propriétés que le code devra rendre vraies et que les tests devront garder vraies. Elles sont la spécification compacte de B1.</p>
+  <table>
+    <thead><tr><th>Invariant</th><th>Énoncé</th><th>Pourquoi il existe</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">I-BENCH-TRUTH</td><td>Toute tâche mesurée porte un label de vérité-terrain ; l'exactitude = scorer(gagnant, label) ; aucun chiffre de justesse sans label ; le scorer doit correspondre au type de tâche.</td><td>Sans vérité-terrain, il n'y a pas de justesse à mesurer — c'est le vide exact du banc actuel.</td></tr>
+      <tr><td class="mono">I-BENCH-BLIND</td><td>Les générateurs ne voient jamais le label ; il n'atteint que le scorer post-hoc (toujours) et le juge-oracle interne (quand armé), par un canal exclu du prompt des générateurs.</td><td>Un générateur qui voit la réponse rend l'exactitude frauduleuse.</td></tr>
+      <tr><td class="mono">I-BENCH-SAME-ORACLE</td><td>Le scorer post-hoc et l'oracle interne partagent un unique noyau de comparaison.</td><td>« Noté juste » et « accepté par le juge » doivent être la même notion — sinon la mesure et l'anti-poison divergent.</td></tr>
+      <tr><td class="mono">I-BENCH-FAIR</td><td>Les comparaisons exécutent le même dataset, le même scorer, la même comptabilité de budget ; coût en jetons (+ modèle de prix externe), justesse via le même scorer.</td><td>Toute asymétrie entre l'essaim et la référence invaliderait la conclusion.</td></tr>
+      <tr><td class="mono">I-BENCH-PROXY</td><td>Le coût-jetons est estimé (proxy, ≈4 car./jeton) sur backend scripté, mesuré dès que le fournisseur rapporte l'usage ; le drapeau <span class="mono">is_estimated</span> est propagé jusqu'au rapport.</td><td>Confondre un proxy avec une mesure fabrique une fausse confiance économique.</td></tr>
+      <tr><td class="mono">I-BENCH-REPROVE</td><td>Chaque run mesuré est scellé + R0-re-prouvable ; le bundle (dataset + runs + rapport) est re-vérifiable hors-ligne sous une racine unique. Atteste la computation, pas la correction du label.</td><td>Le benchmark doit être démontrable, pas seulement affirmé — et infalsifiable.</td></tr>
+      <tr><td class="mono">I-BENCH-MAC</td><td>Le harnais est entièrement exercé sur Mac via le seam (justesse scriptée contrôlable) avant tout GPU ; latence/débit/coût-mesuré réels sont explicitement GPU-only (B2).</td><td>Le GPU doit mesurer, pas servir à déboguer l'instrument.</td></tr>
+    </tbody>
+  </table>
+</section>
+</div>
+
+<!-- 12 -->
+<div class="wrap page">
+<section>
+  <h2><span class="num">§12</span> Séquence de livraison (B1.1 → B1.7)</h2>
+  <p>L'ordre suit les dépendances : on bâtit les pièces inertes (dataset, scorer) d'abord, puis le runner qui les consomme, puis ce qui rend le runner prouvable sur Mac, et enfin l'adaptateur réel. Tout est Mac-buildable et Mac-testable, sauf la mesure finale sur modèles réels (B2). On recommande une <b>nouvelle crate</b> <span class="mono">efe-bench-inference</span> (lib + binaire CLI), dépendant de <span class="mono">efe-swarm-sdk</span> (feature <span class="mono">test-util</span> pour les tests Mac) et <span class="mono">efe-swarm-topology</span> — SDK-pure, sans GPU ni Python (donc hors <span class="mono">efe-ffi</span>), et nettement séparée du <span class="mono">bench/</span> gRPC.</p>
+  <table>
+    <thead><tr><th>Étape</th><th>Contenu</th><th class="c">Lieu</th><th class="c">Invariants</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">B1.1</td><td>Schéma de dataset <span class="mono">{id, task, label, scorer}</span> + loader JSONL + corpus de départ à réponse fermée (classification, arithmétique, extraction).</td><td class="c">Mac</td><td class="c mono">TRUTH</td></tr>
+      <tr><td class="mono">B1.2</td><td>Trait <span class="mono">Scorer</span> + scorers v1 (exact, numérique, ensembliste), partageant le noyau de <span class="mono">EqualsExpected</span>.</td><td class="c">Mac</td><td class="c mono">SAME-ORACLE</td></tr>
+      <tr><td class="mono">B1.3</td><td>Le runner : dataset → tâche aveugle → <span class="mono">run_traced</span> → score → ligne de mesure ; lecture des jetons via <span class="mono">n17_sealed</span> ; scellement par-ligne.</td><td class="c">Mac (seam)</td><td class="c mono">BLIND · PROXY</td></tr>
+      <tr><td class="mono">B1.4</td><td>Extension du seam : <span class="mono">ScriptedBackend::scripted(…)</span> à justesse contrôlable par tâche (sous <span class="mono">test-util</span>, inerte en prod).</td><td class="c">Mac</td><td class="c mono">MAC · SEAM</td></tr>
+      <tr><td class="mono">B1.5</td><td>Comparaison (balayage de K vs référence) + rapport (table + modèle de prix) + bundle re-prouvable (manifeste, racine unique). Option : convention <span class="mono">__oracle_label__</span> pour l'anti-poison aveugle.</td><td class="c">Mac</td><td class="c mono">FAIR · REPROVE</td></tr>
+      <tr><td class="mono">B1.6</td><td>Le test d'intégration Mac : dataset scripté juste/faux → exactitude assertée (2/3), coût présent, bundle re-prouvé. La preuve que l'instrument mesure le vrai.</td><td class="c">Mac (seam)</td><td class="c mono">MAC (tous)</td></tr>
+      <tr><td class="mono">B1.7</td><td>Adaptateur endpoint réel : fabrique de backend + <span class="mono">build_local_backend(endpoint, model)</span> + drapeau <span class="mono">--endpoint</span> ; garde-fou de souveraineté respecté.</td><td class="c">Mac-build, GPU-run</td><td class="c mono">PROXY→mesuré</td></tr>
+    </tbody>
+  </table>
+  <div class="callout">
+    <p><b>Le point de bascule.</b> À l'issue de B1.6, le harnais est complet et prouvé sans qu'aucun GPU n'ait été touché. B1.7 ajoute l'unique aiguillage vers le réel, compilable et testable (la construction du backend, le garde-fou) sur Mac, mais qui ne <b>mesure</b> qu'une fois branché sur un vLLM réel — ce qui est, par définition, B2.</p>
+  </div>
+</section>
+</div>
+
+<!-- 13 -->
+<div class="wrap page">
+<section>
+  <h2><span class="num">§13</span> Hors-portée : ce que B1 n'est délibérément pas</h2>
+  <p>Nommer les frontières évite que B1 enfle et qu'on lui reproche de ne pas faire ce qu'il n'a jamais promis.</p>
+  <ul>
+    <li><b>La box GPU (B2).</b> Provisionner la machine, déployer vLLM, mesurer la latence/débit/coût réels : c'est B2. B1 produit l'instrument que B2 branche.</li>
+    <li><b>Un nouveau client HTTP.</b> Le SDK parle déjà aux endpoints d'inférence (Mode C). B1 réutilise <span class="mono">build_local_backend</span> ; il n'écrit pas de couche réseau.</li>
+    <li><b>La latence, le débit, le coût-dollar réels.</b> Propriété du matériel et de l'amortissement. B1 les <b>rend mesurables</b> (chronomètre, étiquette, drapeau estimé/mesuré) sans les <b>mesurer</b> hors d'un endpoint réel.</li>
+    <li><b>La justesse de texte libre.</b> Le scorer v1 est à réponse fermée (exact/numérique/ensembliste). La notation floue/sémantique (embeddings, juge-LLM) est la v2 — nommée, non livrée.</li>
+    <li><b>La gouvernance des labels.</b> Qui labellise, et la confiance qu'on accorde au label, relèvent du producteur du corpus. B1 atteste la <b>computation</b> (I-BENCH-REPROVE), pas la correction du label.</li>
+    <li><b>Le loadgen gRPC (<span class="mono">bench/</span>).</b> Orthogonal : c'est le test de <b>charge</b> du cluster (m25+). B1 ne le touche pas et ne s'y substitue pas.</li>
+  </ul>
+</section>
+
+<section>
+  <h2><span class="num">§14</span> Conclusion : ce que B1 débloque, exactement</h2>
+  <p>B1 transforme une intention — « allumer un GPU pour valider la thèse » — en une opération <b>déterminée et honnête</b>. Avant B1, un GPU produit des réponses qu'on ne sait pas noter, à un coût qu'on ne sait pas comparer, sans preuve à opposer. Après B1, il ne manque au GPU qu'un rôle : <b>fournir des modèles réels à un instrument déjà prouvé juste sur Mac</b>. L'instrument note via le même oracle qui juge en interne (I-BENCH-SAME-ORACLE), n'expose jamais la réponse aux générateurs (I-BENCH-BLIND), mesure le coût là où il vit réellement — les jetons, pas les centimes — en distinguant proxy et mesure (I-BENCH-PROXY), tranche la thèse sur une courbe à coût égal (I-BENCH-FAIR), et scelle chaque run en un benchmark qu'on ne peut ni cueillir, ni retoucher, ni inventer (I-BENCH-REPROVE).</p>
+  <p>La phrase de couverture tient donc à la lettre : <b>sans B1, le GPU ne mesure rien</b>. Avec B1, le GPU ne fait plus que confirmer — ou réfuter, ce qui est tout aussi précieux — une thèse devenue, grâce au moat, <b>vérifiable par quiconque</b>. C'est le déblocage : non pas la capacité de calculer, mais la capacité de <b>démontrer</b>.</p>
+  <div class="callout key">
+    <p><b>En une ligne.</b> B1 est l'instrument de mesure de la thèse — vérité-terrain, scorer-oracle, coût-jetons, comparaison à coût égal, benchmark re-prouvable — construit et <b>prouvé entièrement sur Mac</b> via le seam, de sorte que le GPU (B2) ne change qu'une ligne (backend scripté → vLLM réel) et ne serve qu'à mesurer du vrai.</p>
+  </div>
+</section>
+</div>
+
+</body>
+</html>
