@@ -310,6 +310,9 @@ impl Judge for MeteredJudge {
     fn correctness_verdict(&self, task: &Value, candidates: &[Value]) -> Option<Vec<bool>> {
         self.inner.correctness_verdict(task, candidates)
     }
+    fn is_correctness_oracle(&self) -> bool {
+        self.inner.is_correctness_oracle()
+    }
 }
 pub(crate) fn meter_judge(inner: Arc<dyn Judge>, meter: Meter, id: AgentId) -> Arc<dyn Judge> {
     Arc::new(MeteredJudge { inner, meter, id })

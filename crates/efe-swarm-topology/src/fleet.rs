@@ -229,6 +229,19 @@ mod tests {
     }
 
     #[test]
+    fn only_the_correctness_oracle_judge_self_identifies() {
+        // ADR-019 v2 (readiness Mode C) : seul j_equals_expected (VerifierJudge enveloppant
+        // EqualsExpected, oracle de correction) se déclare is_correctness_oracle() — c'est ce que le
+        // resolver lit pour le garder DÉTERMINISTE même en Mode C (sinon le gate v2 serait inerte).
+        // Les juges heuristiques (accord/forme) et les autres VerifierJudge (forme) ne le sont PAS.
+        let f = AgentFleet::standard();
+        assert!(f.judge("j_equals_expected").unwrap().is_correctness_oracle(), "l'oracle de correction se déclare");
+        for heur in ["consistency", "length_band", "keyword_overlap", "groundedness", "j_non_empty", "j_is_object", "j_length"] {
+            assert!(!f.judge(heur).unwrap().is_correctness_oracle(), "{heur} n'est PAS un oracle de correction (accord/forme)");
+        }
+    }
+
+    #[test]
     fn custom_registration() {
         let mut f = AgentFleet::new();
         f.register_stage("up", Arc::new(catalog::Uppercase));

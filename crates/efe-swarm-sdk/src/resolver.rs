@@ -255,7 +255,16 @@ impl Resolver<'_> {
 
     pub fn judge(&self, name: &str, id: &str) -> Result<Arc<dyn Judge>, SwarmError> {
         let j = match &self.backend {
-            Some(b) => llm_judge(b.clone(), name.to_string()),
+            // **ADR-019 v2 (correctif readiness Mode C).** Un juge-ORACLE de correction est
+            // DÉTERMINISTE — il CHECKE la réponse contre la vérité-terrain (`task.expected`), ce n'est
+            // PAS un avis LLM. On le garde donc tel quel MÊME en Mode C : sinon le `LlmJudge` l'écrase
+            // (son `correctness_verdict` → None), `oracle_pass` redevient None, et le gate
+            // « vérification = acceptation » est INERTE exactement là où il importe le plus (essaims de
+            // petits modèles, accord-faux corrélé → poison de la mémoire). Tout autre juge → LLM.
+            Some(b) => match self.fleet.judge(name) {
+                Some(fj) if fj.is_correctness_oracle() => fj,
+                _ => llm_judge(b.clone(), name.to_string()),
+            },
             None => self.fleet.judge(name).ok_or_else(|| SwarmError::UnknownAgent { role: "judge", name: name.to_string() })?,
         };
         Ok(meter_judge(j, self.meter.clone(), aid(id)))

@@ -49,6 +49,15 @@ pub trait Judge: Send + Sync {
     fn correctness_verdict(&self, _task: &Value, _candidates: &[Value]) -> Option<Vec<bool>> {
         None
     }
+
+    /// **ADR-019 v2** : ce juge est-il un ORACLE de correction DÉTERMINISTE (il enveloppe un
+    /// [`crate::traits::Verifier`] avec `is_correctness_oracle() = true`) ? Détection sans candidats,
+    /// pour que le **resolver** garde un tel juge DÉTERMINISTE même en Mode C (sinon un juge-LLM
+    /// l'écraserait et le gate « vérification = acceptation » deviendrait inerte là où il importe le
+    /// plus — petits modèles, accord-faux corrélé). Défaut `false`.
+    fn is_correctness_oracle(&self) -> bool {
+        false
+    }
 }
 
 /// L'avis d'UN juge : un score par candidat.

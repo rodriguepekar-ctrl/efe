@@ -149,6 +149,17 @@ impl<J: Judge> Judge for ProvenancedAgent<J> {
     fn name(&self) -> &str {
         self.inner.name()
     }
+    /// **ADR-019 v2** : le décorateur est un **drop-in** (« l'agent interne ignore tout de la
+    /// provenance ») — il doit donc rester TRANSPARENT à l'identité/au verdict d'ORACLE de correction
+    /// du juge enveloppé. Sans ce forward, envelopper un oracle ici le rendrait muet (`None`/`false` par
+    /// défaut) et le gate « vérification = acceptation » deviendrait inerte sous capture. Aucune
+    /// capture de provenance : ce sont des verdicts DÉTERMINISTES (pas une sortie LLM à hasher).
+    fn correctness_verdict(&self, task: &Value, candidates: &[Value]) -> Option<Vec<bool>> {
+        self.inner.correctness_verdict(task, candidates)
+    }
+    fn is_correctness_oracle(&self) -> bool {
+        self.inner.is_correctness_oracle()
+    }
 }
 
 #[cfg(test)]
@@ -180,6 +191,24 @@ mod tests {
         }
         fn name(&self) -> &str {
             "one_judge"
+        }
+    }
+
+    /// Juge-ORACLE de correction de test (déclare `is_correctness_oracle` + un verdict par-candidat).
+    struct OracleJudge;
+    #[async_trait]
+    impl Judge for OracleJudge {
+        async fn assess(&self, _task: &Value, candidates: &[Value]) -> Vec<f64> {
+            candidates.iter().map(|_| 1.0).collect()
+        }
+        fn name(&self) -> &str {
+            "oracle_judge"
+        }
+        fn correctness_verdict(&self, _task: &Value, candidates: &[Value]) -> Option<Vec<bool>> {
+            Some(candidates.iter().map(|_| true).collect())
+        }
+        fn is_correctness_oracle(&self) -> bool {
+            true
         }
     }
 
@@ -223,6 +252,25 @@ mod tests {
         let sealed = r.seal_with_key(HmacKeySource::test_key().derive(TenantId::system()).unwrap());
         assert_eq!(sealed.records[0].agent_role, AgentRole::Judge);
         assert_eq!(sealed.records[0].agent_kind, AgentKind::ModeC);
+    }
+
+    #[tokio::test]
+    async fn judge_decorator_is_transparent_to_the_correctness_oracle() {
+        // ADR-019 v2 : le décorateur de provenance est un DROP-IN — il ne doit PAS avaler l'identité
+        // ni le verdict d'ORACLE du juge enveloppé (sinon le gate « vérification = acceptation »
+        // deviendrait inerte sous capture). Forward des deux méthodes.
+        let r = rec();
+        let oracle = ProvenancedAgent::mode_a(OracleJudge, r.clone(), AgentId::new("oracle").unwrap());
+        assert!(oracle.is_correctness_oracle(), "oracle enveloppé → reste un oracle (forward)");
+        assert_eq!(
+            oracle.correctness_verdict(&json!({}), &[json!("a"), json!("b")]),
+            Some(vec![true, true]),
+            "verdict par-candidat forwardé"
+        );
+        // contrôle : un juge NON-oracle (OneJudge) reste muet à travers le décorateur (défaut).
+        let plain = ProvenancedAgent::mode_a(OneJudge, r.clone(), AgentId::new("plain").unwrap());
+        assert!(!plain.is_correctness_oracle());
+        assert_eq!(plain.correctness_verdict(&json!({}), &[json!("a")]), None);
     }
 
     #[tokio::test]

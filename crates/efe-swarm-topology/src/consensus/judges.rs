@@ -53,6 +53,9 @@ impl Judge for VerifierJudge {
             None
         }
     }
+    fn is_correctness_oracle(&self) -> bool {
+        self.ver.is_correctness_oracle()
+    }
 }
 
 /// Préfère les candidats dont la longueur de texte est proche d'`ideal`.
