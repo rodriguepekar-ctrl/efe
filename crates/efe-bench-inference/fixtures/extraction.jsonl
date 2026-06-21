@@ -1,0 +1,6 @@
+# Corpus de départ B1 — extraction d'ensemble (réponse FERMÉE multi-étiquettes → scorer Set).
+# Exerce la branche ensembliste : la réponse (un tableau) doit égaler le label en tant qu'ENSEMBLE
+# (ordre indifférent). Réponse fermée par construction (I-BENCH-TRUTH).
+{"id": "e01", "task": {"text": "List the colors mentioned, as a JSON array: the red car and the blue sky."}, "label": ["blue", "red"], "scorer": "set"}
+{"id": "e02", "task": {"text": "List the animals mentioned, as a JSON array: a cat chased a dog past a fox."}, "label": ["cat", "dog", "fox"], "scorer": "set"}
+{"id": "e03", "task": {"text": "List the cities mentioned, as a JSON array: flights from Paris to Tokyo via Dubai."}, "label": ["Dubai", "Paris", "Tokyo"], "scorer": "set"}

@@ -19,13 +19,18 @@ use std::collections::BTreeMap;
 
 use serde::Serialize;
 
+use efe_swarm_sdk::verify_run_offline;
+
 use crate::dataset::Dataset;
-use crate::runner::RunRecord;
+use crate::runner::{RunEvidence, RunRecord};
 
 /// Le rapport agrégé d'une configuration sur le dataset.
 #[derive(Debug, Clone, Serialize)]
 pub struct ConfigReport {
     pub config: String,
+    /// Étiquette du backend (`scripted` / `selfhost:model@endpoint`) — **contextualise la latence**
+    /// (I-BENCH-PROXY) : `mean_elapsed_ms` n'a de sens que pour un self-host réel.
+    pub backend: String,
     pub cases: usize,
     pub correct: usize,
     /// Exactitude = correct / cases ∈ [0, 1]. La mesure de tête d'affiche (I-BENCH-TRUTH).
@@ -58,6 +63,7 @@ impl ConfigReport {
         let denom = cases.max(1) as f64;
         Self {
             config,
+            backend: String::new(), // posé par run_config_with_evidence (la source réelle).
             cases,
             correct,
             accuracy: correct as f64 / denom,
@@ -144,7 +150,87 @@ impl Comparison {
                 weighted,
             ));
         }
+        // I-BENCH-PROXY : la latence n'est pas tabulée ici car elle n'a de sens que sur self-host réel.
+        if let Some(first) = self.reports.first() {
+            out.push_str(&format!(
+                "backend : {} · jetons {} · latence significative seulement en self-host réel\n",
+                first.backend,
+                if self.reports.iter().any(|r| r.tokens_estimated) { "estimés (proxy)" } else { "mesurés" },
+            ));
+        }
         out
+    }
+
+    /// **La thèse tranchée (archi §7).** Pour chaque config d'essaim, **domine-t-elle** la référence ?
+    /// — exactitude **≥** celle de la référence ET coût pondéré **<** celui de la référence (Pareto).
+    /// Nécessite un modèle de prix (le coût comparable). Renvoie `(config, domine)` par config non-réf ;
+    /// vide si la référence est absente ou sans prix. La thèse tient si au moins une domine.
+    pub fn dominates_baseline(&self, baseline: &str) -> Vec<(String, bool)> {
+        let price = match &self.price {
+            Some(p) => p,
+            None => return Vec::new(),
+        };
+        let base = match self.reports.iter().find(|r| r.config == baseline) {
+            Some(b) => b,
+            None => return Vec::new(),
+        };
+        let base_cost = match price.weighted_cost_cents(base) {
+            Some(c) => c,
+            None => return Vec::new(),
+        };
+        self.reports
+            .iter()
+            .filter(|r| r.config != baseline)
+            .map(|r| {
+                let dominates = price
+                    .weighted_cost_cents(r)
+                    .map(|c| r.accuracy >= base.accuracy && c < base_cost)
+                    .unwrap_or(false);
+                (r.config.clone(), dominates)
+            })
+            .collect()
+    }
+}
+
+/// Le verdict d'une **re-preuve hors-ligne indépendante** (archi §8.1) : on n'a lu AUCUN drapeau
+/// `verified` stocké — chaque run a été re-dérivé depuis ses records bruts + la clé tenant.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ReproofVerdict {
+    /// Nombre de runs (avec évidence) soumis à re-preuve.
+    pub rows: usize,
+    /// Combien ont re-prouvé intégralement (transaction : essaim + N17 + pont).
+    pub fully_proven: usize,
+    /// Tous les runs (≥ 1) re-prouvent.
+    pub all_proven: bool,
+    /// Le barreau d'attestation de computation **le plus faible** re-vérifié sur l'ensemble
+    /// (0 = legacy … 4 = R1 déterministe ; R2-loopback = 3).
+    pub weakest_rank: Option<u8>,
+}
+
+/// **Re-prouve l'évidence d'un bundle, indépendamment et hors-ligne** (I-BENCH-REPROVE réalisé).
+///
+/// Pour chaque [`RunEvidence`], re-exécute `verify_run_offline(records, n17, leaves, root, key)` — la
+/// re-preuve cryptographique COMPLÈTE de la transaction, sans réseau, sans re-inférence, **sans faire
+/// confiance** à un quelconque drapeau enregistré. Une clé erronée ⇒ aucune re-preuve (c'est une vraie
+/// vérification HMAC, pas un booléen). Atteste la **computation** (le run a bien produit cette
+/// réponse, avec cette provenance) ; la **correction du label** reste une confiance externe.
+pub fn reprove(evidence: &[RunEvidence], key: &[u8]) -> ReproofVerdict {
+    let mut fully_proven = 0usize;
+    let mut weakest: Option<u8> = None;
+    for ev in evidence {
+        let verdict = verify_run_offline(&ev.swarm_records, &ev.llm_records, &ev.n17_leaves, ev.n17_root, key);
+        if verdict.fully_proven {
+            fully_proven += 1;
+        }
+        if let Some(rank) = verdict.held_strength.weakest_rank {
+            weakest = Some(weakest.map_or(rank, |w| w.min(rank)));
+        }
+    }
+    ReproofVerdict {
+        rows: evidence.len(),
+        fully_proven,
+        all_proven: !evidence.is_empty() && fully_proven == evidence.len(),
+        weakest_rank: weakest,
     }
 }
 
@@ -286,6 +372,29 @@ mod tests {
         assert!(table.contains("swarm-k8"));
         assert!(table.contains("baseline-k1"));
         assert!(table.contains("exactitude"));
+    }
+
+    #[test]
+    fn dominates_baseline_is_accuracy_ge_and_cost_lt() {
+        // L'essaim : aussi juste (2/3) que la référence, mais moins de jetons sous un prix favorable.
+        let swarm = ConfigReport::aggregate("swarm-k8".to_string(), vec![rec("a", true, 800, 8, true), rec("b", false, 800, 8, true), rec("c", true, 800, 8, true)]);
+        // La référence : même justesse (2/3), bien plus de jetons (gros modèle).
+        let base = ConfigReport::aggregate("baseline-k1".to_string(), vec![rec("a", true, 5000, 1, true), rec("b", false, 5000, 1, true), rec("c", true, 5000, 1, true)]);
+        // Prix : petit modèle 0.2¢/1k, gros 4¢/1k → essaim 2400×0.2/1k vs réf 15000×4/1k.
+        let price = PriceModel::new().with("swarm-k8", 0.2).with("baseline-k1", 4.0);
+        let cmp = Comparison::new(vec![swarm, base]).with_price(price);
+        let verdict = cmp.dominates_baseline("baseline-k1");
+        assert_eq!(verdict, vec![("swarm-k8".to_string(), true)], "≥ justesse ET coût pondéré moindre → domine");
+        // Sans prix → pas de verdict de coût (vide, honnête).
+        assert!(Comparison::new(vec![]).dominates_baseline("baseline-k1").is_empty());
+    }
+
+    #[test]
+    fn reprove_on_empty_evidence_is_not_proven() {
+        // Re-prouver « rien » n'est pas une réussite (all_proven exige ≥ 1 run).
+        let v = crate::report::reprove(&[], b"key");
+        assert_eq!(v.rows, 0);
+        assert!(!v.all_proven);
     }
 
     #[test]

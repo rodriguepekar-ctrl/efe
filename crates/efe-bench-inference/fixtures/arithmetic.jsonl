@@ -1,0 +1,6 @@
+# Corpus de départ B1 — arithmétique (réponse FERMÉE chiffrée → scorer Numeric, tolérance 0).
+# Exerce la branche numérique du scorer : la réponse du modèle, parsée en nombre, doit égaler le label.
+{"id": "a01", "task": {"text": "What is 12 plus 30? Reply with the number only."}, "label": 42, "scorer": {"numeric": {"tolerance": 0.0}}}
+{"id": "a02", "task": {"text": "What is 7 times 6? Reply with the number only."}, "label": 42, "scorer": {"numeric": {"tolerance": 0.0}}}
+{"id": "a03", "task": {"text": "What is 100 minus 58? Reply with the number only."}, "label": 42, "scorer": {"numeric": {"tolerance": 0.0}}}
+{"id": "a04", "task": {"text": "What is 84 divided by 2? Reply with the number only."}, "label": 42, "scorer": {"numeric": {"tolerance": 0.0}}}

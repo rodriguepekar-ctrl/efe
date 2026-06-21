@@ -1892,6 +1892,7 @@ name = "efe-bench-inference"
 version = "0.0.1"
 dependencies = [
  "blake3",
+ "efe-nano-sdk",
  "efe-swarm-sdk",
  "efe-swarm-topology",
  "futures",

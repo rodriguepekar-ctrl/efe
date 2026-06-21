@@ -58,6 +58,8 @@ pub mod runner;
 pub mod scorer;
 
 pub use dataset::{BenchCase, Dataset, DatasetError};
-pub use report::{BenchBundle, BundleVerdict, Comparison, ConfigReport, PriceModel};
-pub use runner::{consensus_sweep, run_config, BenchBackend, BenchConfig, RunRecord};
+pub use report::{reprove, BenchBundle, BundleVerdict, Comparison, ConfigReport, PriceModel, ReproofVerdict};
+pub use runner::{
+    consensus_sweep, run_config, run_config_with_evidence, BenchBackend, BenchConfig, RunEvidence, RunRecord,
+};
 pub use scorer::ScorerKind;

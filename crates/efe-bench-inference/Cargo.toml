@@ -32,3 +32,5 @@ blake3      = "1.5"                  # empreinte du bundle (alignée sur efe-swa
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+# Re-dérive la clé tenant (test_key ∘ TenantId::system) pour la re-preuve hors-ligne indépendante du bundle.
+efe-nano-sdk = { path = "../efe-nano-sdk", version = "0.0.1" }

@@ -15,9 +15,11 @@
 #![cfg(feature = "test-util")]
 
 use efe_bench_inference::{
-    run_config, BenchBackend, BenchBundle, BenchCase, BenchConfig, Comparison, Dataset, PriceModel, ScorerKind,
+    reprove, run_config, run_config_with_evidence, BenchBackend, BenchBundle, BenchCase, BenchConfig, Comparison,
+    Dataset, PriceModel, ScorerKind,
 };
-use efe_swarm_sdk::{KSpec, ScriptedBackend, TopologySpec};
+use efe_nano_sdk::TenantId;
+use efe_swarm_sdk::{HmacKeySource, KSpec, ScriptedBackend, TopologySpec};
 use serde_json::json;
 
 /// Dataset à réponse fermée (classification de sujet), textes à préfixe UNIQUE pour le scriptage.
@@ -117,6 +119,36 @@ async fn comparison_is_fair_and_bundle_reproves_via_seam() {
     assert!(verdict.manifest_root_matches, "racine de manifeste cohérente");
     assert_eq!(bundle.manifest_root.len(), 64, "racine blake3 (hex 32 octets)");
     assert_eq!(bundle.cases, 3, "le bundle connaît le compte de cas du dataset");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn the_bundle_is_independently_reprovable_not_just_flagged() {
+    // Archi §8.1 réalisé : « re-vérifier le bundle, c'est RE-PROUVER chaque run ». On ne lit AUCUN
+    // drapeau `verified` stocké — on re-dérive la preuve cryptographique de chaque run depuis ses
+    // records bruts + la clé tenant (verify_run_offline). C'est la différence entre « crois mes
+    // chiffres » et « voici mes runs, re-prouve-les ».
+    let ds = dataset();
+    let backend = scripted_slm();
+    let cfg = BenchConfig::new("swarm-k4", TopologySpec::consensus(CLASSIFY, &["consistency"], 4));
+
+    let (report, evidence) =
+        run_config_with_evidence(&ds, &cfg, &backend, 1_000_000, 4).await.expect("run + évidence");
+    assert_eq!(evidence.len(), 3, "une évidence re-prouvable par cas");
+    assert_eq!(report.backend, "scripted", "la source est étiquetée (latence contextualisée)");
+
+    // La clé que le seam a utilisée = celle du builder par défaut : test_key ∘ TenantId::system.
+    let key = HmacKeySource::test_key().derive(TenantId::system()).expect("clé tenant re-dérivée");
+
+    let verdict = reprove(&evidence, &key);
+    assert_eq!(verdict.rows, 3);
+    assert!(verdict.all_proven, "chaque run re-prouve hors-ligne (transaction complète) : {verdict:?}");
+    assert_eq!(verdict.fully_proven, 3);
+    assert_eq!(verdict.weakest_rank, Some(3), "R2LocalWitnessed (loopback témoin) = rang 3");
+
+    // PREUVE que c'est une vraie vérification HMAC et pas un booléen : une MAUVAISE clé ne re-prouve PAS.
+    let wrong_key = vec![0u8; 32];
+    let bad = reprove(&evidence, &wrong_key);
+    assert!(!bad.all_proven, "mauvaise clé → la re-preuve échoue (la preuve est réelle, pas un drapeau)");
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]

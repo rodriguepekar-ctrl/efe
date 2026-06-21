@@ -205,6 +205,24 @@ mod tests {
     }
 
     #[test]
+    fn starter_corpora_cover_the_three_v1_scorers() {
+        // Archi §12 B1.1 : classification (exact) + arithmétique (numeric) + extraction (set).
+        let topics = Dataset::from_jsonl(include_str!("../fixtures/topics.jsonl")).expect("topics");
+        assert!(!topics.is_empty() && topics.cases.iter().all(|c| c.scorer == ScorerKind::Exact));
+        let arith = Dataset::from_jsonl(include_str!("../fixtures/arithmetic.jsonl")).expect("arith");
+        assert!(!arith.is_empty() && arith.cases.iter().all(|c| matches!(c.scorer, ScorerKind::Numeric { .. })));
+        let extr = Dataset::from_jsonl(include_str!("../fixtures/extraction.jsonl")).expect("extraction");
+        assert!(!extr.is_empty() && extr.cases.iter().all(|c| c.scorer == ScorerKind::Set));
+        // Et aucun label ne fuite dans la tâche aveugle (I-BENCH-BLIND), tous corpus confondus.
+        for ds in [&topics, &arith, &extr] {
+            for c in &ds.cases {
+                let blind = c.blind_task();
+                assert!(blind.get("expected").is_none() && blind.get("label").is_none());
+            }
+        }
+    }
+
+    #[test]
     fn digest_is_order_independent_and_label_sensitive() {
         let a = BenchCase::new("a", json!({ "text": "x" }), json!("finance"), ScorerKind::Exact);
         let b = BenchCase::new("b", json!({ "text": "y" }), json!("sport"), ScorerKind::Exact);

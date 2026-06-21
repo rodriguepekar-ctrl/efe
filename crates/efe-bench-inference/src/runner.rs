@@ -24,10 +24,31 @@ use serde::Serialize;
 use serde_json::Value;
 use tokio::sync::Semaphore;
 
-use efe_swarm_sdk::{Budget, ClientMode, OnExceed, RunOutcome, Swarm, SwarmError, TopologySpec};
+use efe_swarm_sdk::{
+    AgentCallRecord, Budget, ClientMode, LlmProvenanceRecord, OnExceed, RunOutcome, Swarm, SwarmError, TopologySpec,
+};
 
 use crate::dataset::{BenchCase, Dataset};
 use crate::report::ConfigReport;
+
+/// **L'évidence brute re-prouvable d'un run** (I-BENCH-REPROVE, archi §8.1). Tout ce qu'il faut pour
+/// que **n'importe quel détenteur de la clé tenant** re-dérive la preuve hors-ligne via
+/// `verify_run_offline` — sans rien re-exécuter, sans réseau, sans faire confiance à un drapeau
+/// `verified` stocké. C'est la différence entre « voici mes chiffres » et « voici mes runs,
+/// re-prouvez-les ». Non `Serialize` (les `AgentCallRecord` se persistent à part, comme dans la
+/// passerelle) ; `Clone` pour être conservé puis re-prouvé. Cf. [`crate::reprove`].
+#[derive(Debug, Clone)]
+pub struct RunEvidence {
+    pub case_id: String,
+    /// La chaîne d'essaim scellée (les `AgentCallRecord`).
+    pub swarm_records: Vec<AgentCallRecord>,
+    /// La forensique N17 par-appel.
+    pub llm_records: Vec<LlmProvenanceRecord>,
+    /// Les feuilles SHA-256 de la chaîne N17 (ordre canonique).
+    pub n17_leaves: Vec<[u8; 32]>,
+    /// La racine HMAC de la chaîne N17 (clé tenant). `None` si vide.
+    pub n17_root: Option<[u8; 32]>,
+}
 
 /// La source d'inférence — **le seul aiguillage** entre la preuve-sur-Mac et la mesure-sur-GPU.
 pub enum BenchBackend {
@@ -64,6 +85,19 @@ impl BenchConfig {
     pub fn with_oracle_label(mut self) -> Self {
         self.inject_oracle_label = true;
         self
+    }
+}
+
+impl BenchBackend {
+    /// Étiquette forensique du backend — **contextualise la latence** (I-BENCH-PROXY / archi §6.3) :
+    /// `mean_elapsed_ms` n'est significatif que pour un `selfhost` réel ; sur `scripted` il est
+    /// quasi nul et ne doit pas être lu comme une performance. Jamais une clé, jamais un secret.
+    pub fn label(&self) -> String {
+        match self {
+            BenchBackend::SelfHost { endpoint, model } => format!("selfhost:{model}@{endpoint}"),
+            #[cfg(feature = "test-util")]
+            BenchBackend::Scripted(_) => "scripted".to_string(),
+        }
     }
 }
 
@@ -112,7 +146,7 @@ pub struct RunRecord {
 impl RunRecord {
     /// Lit le `RunOutcome` et note la réponse contre le label (post-hoc, aveugle au sens où le label
     /// n'a jamais touché les générateurs).
-    fn from_outcome(case: &BenchCase, outcome: RunOutcome) -> Self {
+    fn from_outcome(case: &BenchCase, outcome: &RunOutcome) -> Self {
         let winner = outcome.run.output.clone();
         let correct = case.scorer.is_correct(&winner, &case.label);
 
@@ -170,6 +204,20 @@ impl RunRecord {
     }
 }
 
+/// Extrait l'évidence re-prouvable d'un `RunOutcome` scellé. `None` si la provenance est désactivée
+/// (pas de records scellés à re-prouver). Tout est cloné depuis le `RunOutcome` avant qu'il ne soit
+/// abandonné — l'évidence devient autonome.
+fn evidence_from(case_id: &str, outcome: &RunOutcome) -> Option<RunEvidence> {
+    let swarm_records = outcome.sealed.as_ref()?.records.clone();
+    Some(RunEvidence {
+        case_id: case_id.to_string(),
+        swarm_records,
+        llm_records: outcome.llm_records.clone(),
+        n17_leaves: outcome.n17_sealed.leaf_hashes.clone(),
+        n17_root: outcome.n17_sealed.n17_root,
+    })
+}
+
 /// Construit le `Swarm` pour un backend donné. C'est ici, et nulle part ailleurs, que le chemin
 /// scripté (Mac) et le chemin réel (GPU) divergent.
 fn build_swarm(backend: &BenchBackend) -> Result<Swarm, SwarmError> {
@@ -182,24 +230,26 @@ fn build_swarm(backend: &BenchBackend) -> Result<Swarm, SwarmError> {
     }
 }
 
-/// Exécute UN cas et le mesure. Une erreur SDK par-cas est capturée en [`RunRecord::failed`] (un
-/// run brisé ne fait pas tomber tout le banc).
-async fn run_case(swarm: &Swarm, case: &BenchCase, config: &BenchConfig, budget_cents: u32) -> RunRecord {
+/// Exécute UN cas et le mesure. Renvoie la mesure ET l'évidence re-prouvable (None sur échec ou si la
+/// provenance est désactivée). Une erreur SDK par-cas est capturée en [`RunRecord::failed`] (un run
+/// brisé ne fait pas tomber tout le banc).
+async fn run_case(
+    swarm: &Swarm,
+    case: &BenchCase,
+    config: &BenchConfig,
+    budget_cents: u32,
+) -> (RunRecord, Option<RunEvidence>) {
     // I-BENCH-BLIND : aveugle par défaut ; oracle-task seulement sur le chemin opt-in.
     let task = if config.inject_oracle_label { case.oracle_task() } else { case.blind_task() };
     let budget = Budget::cents(budget_cents).with_policy(OnExceed::Stop);
     match swarm.run_traced(task, config.spec.clone(), budget).await {
-        Ok(outcome) => RunRecord::from_outcome(case, outcome),
-        Err(e) => RunRecord::failed(case, &e),
+        Ok(outcome) => (RunRecord::from_outcome(case, &outcome), evidence_from(&case.id, &outcome)),
+        Err(e) => (RunRecord::failed(case, &e), None),
     }
 }
 
-/// **Mesure une configuration sur tout le dataset.** Construit un essaim (un seul aiguillage de
-/// backend), exécute chaque cas en concurrence bornée, et agrège en [`ConfigReport`].
-///
-/// - `budget_cents` : plafond par-run (gouvernance ; en self-host le coût réel est en jetons).
-/// - `concurrency` : nombre de cas exécutés simultanément (sur GPU, la profondeur de file que vLLM
-///   digère bien ; ramené à ≥ 1).
+/// **Mesure une configuration sur tout le dataset** (rapport SEUL). Voir
+/// [`run_config_with_evidence`] pour aussi obtenir l'évidence re-prouvable.
 pub async fn run_config(
     dataset: &Dataset,
     config: &BenchConfig,
@@ -207,6 +257,23 @@ pub async fn run_config(
     budget_cents: u32,
     concurrency: usize,
 ) -> Result<ConfigReport, SwarmError> {
+    Ok(run_config_with_evidence(dataset, config, backend, budget_cents, concurrency).await?.0)
+}
+
+/// **Mesure une configuration + conserve l'évidence re-prouvable.** Construit un essaim (un seul
+/// aiguillage de backend), exécute chaque cas en concurrence bornée, agrège en [`ConfigReport`], et
+/// renvoie l'évidence brute par-run pour une re-preuve hors-ligne indépendante (archi §8.1).
+///
+/// - `budget_cents` : plafond par-run (gouvernance ; en self-host le coût réel est en jetons).
+/// - `concurrency` : nombre de cas exécutés simultanément (sur GPU, la profondeur de file que vLLM
+///   digère bien ; ramené à ≥ 1).
+pub async fn run_config_with_evidence(
+    dataset: &Dataset,
+    config: &BenchConfig,
+    backend: &BenchBackend,
+    budget_cents: u32,
+    concurrency: usize,
+) -> Result<(ConfigReport, Vec<RunEvidence>), SwarmError> {
     let swarm = build_swarm(backend)?;
     let sem = Arc::new(Semaphore::new(concurrency.max(1)));
 
@@ -220,8 +287,18 @@ pub async fn run_config(
         }
     });
 
-    let records = futures::future::join_all(futures_iter).await;
-    Ok(ConfigReport::aggregate(config.name.clone(), records))
+    let pairs = futures::future::join_all(futures_iter).await;
+    let mut records = Vec::with_capacity(pairs.len());
+    let mut evidence = Vec::with_capacity(pairs.len());
+    for (rec, ev) in pairs {
+        records.push(rec);
+        if let Some(e) = ev {
+            evidence.push(e);
+        }
+    }
+    let mut report = ConfigReport::aggregate(config.name.clone(), records);
+    report.backend = backend.label(); // I-BENCH-PROXY : étiquette la source (contextualise la latence).
+    Ok((report, evidence))
 }
 
 #[cfg(test)]
