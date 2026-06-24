@@ -29,6 +29,8 @@ pub(crate) struct Resolver<'a> {
     /// keyless (Ollama ou OpenAI-compatible local), enveloppé d'un circuit-breaker.
     pub backend: Option<Arc<dyn LocalBackend>>,
     pub meter: Meter,
+    /// Plafond de jetons des générateurs LLM Mode C (16 par défaut ; relevé pour le CoT).
+    pub gen_max_tokens: u32,
     /// **ADR-014 (CP-1)** : largeur d'exécution du run, résolue par `run_traced`
     /// (cœurs Mode A / backend déclaré Mode C / env / spec) — descendue dans chaque
     /// topologie par `TopologySpec::resolve`. Jamais une sémantique (I-CP1).
@@ -178,7 +180,7 @@ impl Resolver<'_> {
         let g = match &self.backend {
             // ADR-019 (MEM-2.b) : en Mode C, le générateur reçoit les exemplaires few-shot
             // recall-és (cf. `memory_exemplars`). Vides ⇒ prompt historique (I-MEM8).
-            Some(b) => llm_gen(b.clone(), name.to_string(), self.memory_exemplars.clone()),
+            Some(b) => llm_gen(b.clone(), name.to_string(), self.memory_exemplars.clone(), self.gen_max_tokens),
             None => self.fleet.generator(name).ok_or_else(|| SwarmError::UnknownAgent { role: "generator", name: name.to_string() })?,
         };
         Ok(meter_gen(g, self.meter.clone(), aid(id)))
@@ -247,7 +249,10 @@ impl Resolver<'_> {
             // Débat : PAS de few-shot mémoire — l'exemplaire recall-é est un gagnant de
             // CONSENSUS (réponse agrégée), de forme étrangère à un argument pro/contra. On ne
             // l'injecte donc que dans `generator()`. (ADR-019, périmètre honnête.)
-            Some(b) => (llm_gen(b.clone(), pro.to_string(), Vec::new()), llm_gen(b.clone(), contra.to_string(), Vec::new())),
+            Some(b) => (
+                llm_gen(b.clone(), pro.to_string(), Vec::new(), self.gen_max_tokens),
+                llm_gen(b.clone(), contra.to_string(), Vec::new(), self.gen_max_tokens),
+            ),
             None => builtin_arguers(false),
         };
         (meter_gen(p, self.meter.clone(), aid("pro")), meter_gen(c, self.meter.clone(), aid("contra")))

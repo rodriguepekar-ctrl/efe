@@ -79,6 +79,12 @@ pub(crate) fn llm_refiner(backend: Arc<dyn LocalBackend>, instruction: String) -
     Arc::new(LlmRefiner { backend, instruction })
 }
 
+/// Seuil de jetons au-delà duquel le générateur passe en **mode raisonnement** (chain-of-thought) :
+/// prompt SANS le suffixe terse « only the result » (qui supprimerait le CoT). En-dessous (le défaut
+/// 16, et les agents terses), comportement historique **byte-inchangé**. Choisi nettement au-dessus
+/// des plafonds terses (16/48/64) pour qu'aucun agent historique ne bascule par accident.
+const COT_TOKEN_THRESHOLD: u32 = 96;
+
 struct LlmGen {
     backend: Arc<dyn LocalBackend>,
     instruction: String,
@@ -86,12 +92,21 @@ struct LlmGen {
     /// gagnants passés de la MÊME famille (instantané gelé, épingle tracée dans la racine via le
     /// record MemoryRead, I-MEM2). Vides ⇒ prompt **byte-identique** au chemin historique (I-MEM8).
     exemplars: Vec<String>,
+    /// Plafond de jetons de génération. 16 = défaut terse (chemin historique) ; relevé (≥ seuil) ⇒
+    /// raisonnement en chaîne (prompt non-terse + budget de jetons suffisant).
+    max_tokens: u32,
 }
 #[async_trait]
 impl Generator for LlmGen {
     async fn generate(&self, task: &Value, variant: usize) -> Value {
-        let prompt = gen_prompt(&self.instruction, task, &self.exemplars);
-        let out = ask(&self.backend, prompt, 16, 0.2 + 0.3 * variant as f64, 42 + variant as u64).await;
+        // Au-delà du seuil, l'opérateur a explicitement demandé un budget de raisonnement → prompt CoT
+        // (sans « only the result »). Sinon, le prompt terse historique (B0/B1 byte-inchangés).
+        let prompt = if self.max_tokens >= COT_TOKEN_THRESHOLD {
+            gen_prompt_cot(&self.instruction, task, &self.exemplars)
+        } else {
+            gen_prompt(&self.instruction, task, &self.exemplars)
+        };
+        let out = ask(&self.backend, prompt, self.max_tokens, 0.2 + 0.3 * variant as f64, 42 + variant as u64).await;
         json!({ "value": out })
     }
 }
@@ -114,8 +129,24 @@ fn gen_prompt(instruction: &str, task: &Value, exemplars: &[String]) -> String {
     )
 }
 
-pub(crate) fn llm_gen(backend: Arc<dyn LocalBackend>, instruction: String, exemplars: Vec<String>) -> Arc<dyn Generator> {
-    Arc::new(LlmGen { backend, instruction, exemplars })
+/// Prompt du générateur en **mode raisonnement** (CoT) : on laisse l'**instruction** guider le format
+/// (elle demande typiquement « think step by step, then the final answer ») SANS le suffixe terse
+/// « only the result, no preamble » qui couperait court au raisonnement. Pur + déterministe.
+fn gen_prompt_cot(instruction: &str, task: &Value, exemplars: &[String]) -> String {
+    if exemplars.is_empty() {
+        return format!("{instruction}\n\nProblem: \"{}\"", text_of(task));
+    }
+    let examples = exemplars.iter().map(|e| format!("- {e}")).collect::<Vec<_>>().join("\n");
+    format!("{instruction}\n\nExamples of good past answers:\n{examples}\n\nProblem: \"{}\"", text_of(task))
+}
+
+pub(crate) fn llm_gen(
+    backend: Arc<dyn LocalBackend>,
+    instruction: String,
+    exemplars: Vec<String>,
+    max_tokens: u32,
+) -> Arc<dyn Generator> {
+    Arc::new(LlmGen { backend, instruction, exemplars, max_tokens })
 }
 
 struct LlmStage {
@@ -304,7 +335,7 @@ mod tests {
         // les fait bien PARVENIR au backend dans le prompt — la preuve que le câblage
         // resolver→llm_gen→prompt tient, indépendamment d'un vrai LLM (harnais honnête, labellisé).
         let be = Arc::new(Scripted { reply: "tech".into(), prompts: Mutex::new(Vec::new()) });
-        let g = llm_gen(be.clone(), "Classify.".into(), vec!["tech".into(), "sport".into()]);
+        let g = llm_gen(be.clone(), "Classify.".into(), vec!["tech".into(), "sport".into()], 16);
         let _ = g.generate(&json!({ "text": "article sur les GPU" }), 0).await;
         let prompts = be.prompts.lock().unwrap();
         assert!(prompts[0].contains("Examples of good past answers:"), "few-shot émis au backend");

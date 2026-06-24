@@ -65,6 +65,11 @@ pub struct Swarm {
     /// `None` en production — aucun setter n'existe hors `cfg(test)`/`feature="test-util"`, donc le
     /// champ reste inerte (I-SEAM : la résolution retombe sur le `match self.mode` historique).
     injected_backend: Option<Arc<dyn LocalBackend>>,
+    /// **Plafond de jetons des GÉNÉRATEURs Mode C** (`LlmGen`/arguers de débat). **16 par défaut**
+    /// (chemin historique inchangé — réponses terses) ; relevable (p.ex. 512) pour autoriser un
+    /// raisonnement en chaîne (chain-of-thought). N'affecte QUE les générateurs LLM réels ; les agents
+    /// scriptés/Mode A l'ignorent. Posé via [`SwarmBuilder::max_gen_tokens`].
+    gen_max_tokens: u32,
 }
 
 impl Swarm {
@@ -302,6 +307,8 @@ impl Swarm {
             memory_reputation: mem_reputation,
             // read-back B (R-b/R-c) : version pinnée = clé de rotation de l'ordonnancement (adaptatif).
             memory_version: mem_version,
+            // Plafond de jetons des générateurs (16 par défaut ; relevé pour le CoT).
+            gen_max_tokens: self.gen_max_tokens,
         };
         let topo = spec.resolve(&resolver)?;
         let topo_name = topo.name().to_string();
@@ -517,6 +524,8 @@ pub struct SwarmBuilder {
     /// **B0.3 (seam CI)** : backend LOCAL injecté (test). `None` par défaut ; posé par
     /// `with_local_backend` (gaté `cfg(test)`/`feature="test-util"`).
     injected_backend: Option<Arc<dyn LocalBackend>>,
+    /// Plafond de jetons des générateurs Mode C. `None` ⇒ 16 (défaut historique).
+    gen_max_tokens: Option<u32>,
 }
 
 impl Default for SwarmBuilder {
@@ -538,6 +547,7 @@ impl Default for SwarmBuilder {
             deadline: None, // ADR-018 : aucun deadline par défaut (chemin historique)
             memory: None, // ADR-019 : mémoire OFF par défaut (chemin historique, I-MEM8)
             injected_backend: None, // B0.3 : aucun backend injecté (prod) — inerte (I-SEAM)
+            gen_max_tokens: None, // 16 par défaut (terse) ; relevable pour le CoT
         }
     }
 }
@@ -644,6 +654,15 @@ impl SwarmBuilder {
         self
     }
 
+    /// Relève le **plafond de jetons des générateurs Mode C** (défaut 16 — réponses terses). À
+    /// poser (p.ex. 512) pour autoriser un **raisonnement en chaîne** (chain-of-thought) : sans cela,
+    /// la génération est tronquée et aucun raisonnement ne tient. N'affecte que les générateurs LLM
+    /// réels (Mode C) ; les agents scriptés/Mode A l'ignorent. Sans cet appel : 16 (inchangé).
+    pub fn max_gen_tokens(mut self, n: u32) -> Self {
+        self.gen_max_tokens = Some(n.max(1));
+        self
+    }
+
     /// **B0.3 (seam CI)** : injecte un backend LOCAL déjà construit (typiquement un
     /// [`crate::backend::ScriptedBackend`]) — le run s'exécute alors en **Mode C** contre lui, en
     /// court-circuitant `build_local_backend` (donc le garde-fou souveraineté G2 et le health-check).
@@ -676,6 +695,7 @@ impl SwarmBuilder {
             deadline: self.deadline,
             memory: self.memory,
             injected_backend: self.injected_backend,
+            gen_max_tokens: self.gen_max_tokens.unwrap_or(16), // défaut historique inchangé
         })
     }
 }

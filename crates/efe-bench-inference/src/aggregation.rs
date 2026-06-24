@@ -509,8 +509,11 @@ pub fn verdict_sup_k(
 //  Primitives (déterministes, sans dépendance)
 // ─────────────────────────────────────────────────────────────────────────────
 
-/// Extrait un f64 d'une réponse (nombre JSON, ou dernier nombre d'une chaîne).
+/// Extrait un f64 d'une réponse (nombre JSON, ou dernier nombre d'une chaîne). **Pèle d'abord
+/// l'enveloppe `{value|text}`** — les sorties réelles des générateurs sont `{value: "…CoT… 142"}`,
+/// pas des nombres nus (sans ça la médiane lit `None` partout → 0 %, le bug attrapé par la mesure HB.2).
 fn parse_num(v: &Value) -> Option<f64> {
+    let v = v.get("value").or_else(|| v.get("text")).unwrap_or(v);
     if let Some(f) = v.as_f64() {
         return Some(f);
     }
@@ -611,6 +614,21 @@ mod tests {
             let ps = pass_at_k(&s, k);
             assert!(!sc || ps, "SC correct ⇒ pass@k correct (mode ⊆ tirées) à k={k}");
         }
+    }
+
+    #[test]
+    fn median_peels_value_wrapper_like_real_generator_output() {
+        // Régression (mesure HB.2) : les réponses réelles sont {value: "…CoT… 142"}, pas des nombres
+        // nus. parse_num doit peler l'enveloppe — sinon la médiane lit None partout → 0 %.
+        let s = SampleSet::new(
+            "a",
+            json!({}),
+            vec![json!({"value": "reasoning... = 141"}), json!({"value": "...so 143"})],
+            json!(142),
+            ScorerKind::Numeric { tolerance: 0.0 },
+        );
+        // médiane(141, 143) = 142 = label → correct, même sous enveloppe {value}.
+        assert!(mech_correct(&s, 2, Mechanism::Median, None), "médiane sur {{value:…}} = 142 (enveloppe pelée)");
     }
 
     #[test]
