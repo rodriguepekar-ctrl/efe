@@ -52,6 +52,7 @@
 //! # Ok(()) }
 //! ```
 
+pub mod corpus;
 pub mod dataset;
 pub mod report;
 pub mod runner;
