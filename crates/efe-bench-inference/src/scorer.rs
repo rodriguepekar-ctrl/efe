@@ -119,6 +119,44 @@ fn unwrap_diag(v: &Value) -> &Value {
     v
 }
 
+impl ScorerKind {
+    /// **Clé canonique d'équivalence** (H-B / I-HB-ANSWER) : deux réponses que CE scorer juge
+    /// équivalentes ont la MÊME clé — de sorte que le vote majoritaire (le mode) groupe exactement
+    /// comme le scoring note, sans biaiser la self-consistency. `None` si la réponse est inexploitable
+    /// (absente/illisible) → elle ne vote pas (comptée « dégénérée »). NB : pour `Numeric` à tolérance
+    /// &gt; 0, l'égalité de clé est exacte (pas à tolérance) — exact pour le corpus maths (tolérance 0).
+    pub fn canonical_key(&self, answer: &Value) -> Option<String> {
+        match self {
+            ScorerKind::Numeric { .. } => as_number(answer).map(|n| {
+                if n.fract() == 0.0 {
+                    format!("{}", n as i64)
+                } else {
+                    format!("{n:.6}")
+                }
+            }),
+            ScorerKind::Set => as_set(answer).map(|s| s.into_iter().collect::<Vec<_>>().join(",")),
+            ScorerKind::Exact => {
+                let v = extract(answer);
+                let s = value_text(v);
+                let t = s.trim();
+                if t.is_empty() {
+                    None
+                } else {
+                    Some(t.to_string())
+                }
+            }
+            ScorerKind::Lenient => {
+                let n = lenient_norm(&value_text(extract(answer)));
+                if n.is_empty() {
+                    None
+                } else {
+                    Some(n)
+                }
+            }
+        }
+    }
+}
+
 /// Extraction de la réponse — **même ordre que l'oracle** : `value` → `text` → valeur brute,
 /// après avoir pelé un éventuel emballage de diagnostic.
 fn extract(v: &Value) -> &Value {
