@@ -56,6 +56,7 @@ pub mod dataset;
 pub mod report;
 pub mod runner;
 pub mod scorer;
+pub mod substitution;
 
 pub use dataset::{BenchCase, Dataset, DatasetError};
 pub use report::{reprove, BenchBundle, BundleVerdict, Comparison, ConfigReport, PriceModel, ReproofVerdict};
@@ -63,3 +64,8 @@ pub use runner::{
     consensus_sweep, run_config, run_config_with_evidence, BenchBackend, BenchConfig, RunEvidence, RunRecord,
 };
 pub use scorer::ScorerKind;
+pub use substitution::{
+    achieved_power, analyze_cell, condition_on_present, discordance, mcnemar, non_inferiority, normal_cdf,
+    pair_by_case, probit, required_n, wilson_ci, Discordance, GapCell, GapMap, McNemar, NonInferiority, PairedItem,
+    SubstitutionError, Verdict,
+};
