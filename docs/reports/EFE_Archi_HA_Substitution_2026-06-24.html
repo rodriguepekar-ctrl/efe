@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>EFE — Architecture : H-A, la Substitution (un petit modèle vaut-il un gros ?)</title>
+<style>
+  :root{--ink:#0f172a;--muted:#475569;--soft:#64748b;--line:#e2e8f0;--teal:#0d9488;--teal-d:#0f766e;--indigo:#4f46e5;--indigo-d:#4338ca;--ok:#16a34a;--warn:#d97706;--bad:#dc2626;--bg-tint:#f6fbfa;--bg-card:#eef2f1;--code-bg:#0f172a;--code-fg:#e2e8f0;}
+  *{box-sizing:border-box;} html{font-size:11.2px;}
+  body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,Arial,sans-serif;color:var(--ink);margin:0;line-height:1.6;background:#fff;-webkit-font-smoothing:antialiased;}
+  .wrap{max-width:178mm;margin:0 auto;padding:0 2mm;}
+  h1,h2,h3,h4{line-height:1.2;font-weight:700;}
+  h2{font-size:1.45rem;margin:0 0 .55rem;padding-bottom:.32rem;border-bottom:3px solid var(--teal);}
+  h2 .num{color:var(--teal);} h3{font-size:1.13rem;margin:1.1rem 0 .3rem;color:var(--teal-d);}
+  h4{font-size:1rem;margin:.8rem 0 .2rem;color:var(--indigo-d);}
+  p{margin:.55rem 0;text-align:justify;hyphens:auto;} a{color:var(--indigo);text-decoration:none;}
+  code{font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace;font-size:.85em;background:var(--bg-card);padding:.05em .35em;border-radius:4px;color:#0b3b36;}
+  .muted{color:var(--muted);} .small{font-size:.88rem;}
+  section{break-inside:avoid;} .page{break-before:page;} h2{break-after:avoid;}
+  table{border-collapse:collapse;width:100%;margin:.55rem 0;font-size:.82rem;}
+  th,td{border:1px solid var(--line);padding:.32rem .5rem;text-align:left;vertical-align:top;}
+  th{background:var(--bg-card);font-weight:700;} tbody tr:nth-child(even){background:var(--bg-tint);}
+  td.c,th.c{text-align:center;} .good{background:#dcfce7 !important;color:#166534;font-weight:700;} .mid{background:#fef9c3 !important;color:#854d0e;font-weight:700;} .bad{background:#fee2e2 !important;color:#991b1b;font-weight:700;}
+  .tag{display:inline-block;font-size:.71rem;font-weight:700;padding:.08em .5em;border-radius:20px;}
+  .t-ok{background:#dcfce7;color:#166534;} .t-info{background:#e0e7ff;color:#3730a3;} .t-teal{background:#ccfbf1;color:#115e59;} .t-warn{background:#fef3c7;color:#92400e;} .t-bad{background:#fee2e2;color:#991b1b;}
+  pre{background:var(--code-bg);color:var(--code-fg);padding:.55rem .8rem;border-radius:8px;overflow:auto;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.72rem;line-height:1.45;margin:.55rem 0;}
+  pre code{background:none;color:inherit;padding:0;}
+  .callout{border-left:4px solid var(--teal);background:var(--bg-tint);padding:.55rem .85rem;border-radius:0 8px 8px 0;margin:.65rem 0;}
+  .callout p{text-align:left;margin:.28rem 0;}
+  .callout.key{border-color:var(--indigo);background:#eef2ff;} .callout.warn{border-color:var(--warn);background:#fffbeb;} .callout.ok{border-color:var(--ok);background:#f0fdf4;} .callout.bad{border-color:var(--bad);background:#fef2f2;}
+  .fig{margin:.7rem 0 .9rem;text-align:center;break-inside:avoid;}
+  .fig svg{max-width:100%;height:auto;border:1px solid var(--line);border-radius:10px;background:#fff;}
+  .fig .cap{font-size:.79rem;color:var(--muted);margin-top:.32rem;font-style:italic;text-align:center;}
+  ul,ol{margin:.4rem 0 .55rem 1.1rem;padding:0;} li{margin:.24rem 0;}
+  svg text{font-family:-apple-system,"Segoe UI",Inter,sans-serif;}
+  .cover{height:262mm;display:flex;flex-direction:column;justify-content:center;position:relative;padding:0 6mm;}
+  .cover .eyebrow{color:var(--teal);font-weight:800;letter-spacing:.2em;font-size:.83rem;text-transform:uppercase;}
+  .cover h1{font-size:2.25rem;margin:.4rem 0 .2rem;line-height:1.08;} .cover .sub{font-size:1.16rem;color:var(--muted);margin-bottom:1.1rem;}
+  .cover .tagline{font-size:1.0rem;color:var(--ink);max-width:163mm;border-left:4px solid var(--teal);padding-left:1rem;font-style:italic;text-align:left;}
+  .cover .meta{position:absolute;bottom:6mm;left:6mm;right:6mm;display:flex;justify-content:space-between;border-top:1px solid var(--line);padding-top:.6rem;font-size:.8rem;color:var(--soft);}
+  .cover .pills{margin:1rem 0;} .cover .pills .tag{font-size:.77rem;margin-right:.3rem;}
+  .mono{font-family:ui-monospace,Menlo,Consolas,monospace;}
+  hr{border:none;border-top:1px solid var(--line);margin:.9rem 0;}
+  .toc{font-size:.9rem;columns:2;column-gap:2rem;} .toc div{margin:.16rem 0;break-inside:avoid;} .toc .n{color:var(--teal);font-weight:700;display:inline-block;width:1.8em;}
+  .eq{font-family:ui-monospace,Menlo,Consolas,monospace;background:#ecfdf5;border:1px solid #a7f3d0;border-radius:8px;padding:.45rem .75rem;margin:.5rem 0;font-size:.79rem;color:#065f46;text-align:center;}
+  @page{size:A4;margin:13mm 12mm;}
+</style>
+</head>
+<body>
+
+<!-- COVER -->
+<div class="wrap"><div class="cover">
+  <div class="eyebrow">Architecture · le plancher de la thèse · mesurer la substitution sans se mentir</div>
+  <h1>H-A — La Substitution</h1>
+  <div class="sub">« Un petit modèle vaut-il un gros ? » n'est pas une comparaison de deux pourcentages. C'est un <b>test de non-infériorité apparié</b> — et tout se joue dans cette nuance.</div>
+  <div class="tagline">H-A est le <b>plancher</b> de la thèse : s'il n'existe <i>aucune</i> classe de tâches utile où un petit modèle atteint la qualité d'un gros, le critère de réfutation <b>K1</b> tombe et la thèse n'a pas de socle. Mais « atteint la qualité » est un piège statistique. Comparer <span class="mono">87,5 %</span> à <span class="mono">86,0 %</span> sur huit exemples ne <i>prouve</i> rien — ni l'égalité, ni la différence. La question correcte n'est pas « le petit est-il <b>meilleur</b> ? » (supériorité) ni « y a-t-il une <b>différence significative</b> ? » (dont l'absence ne prouve <b>jamais</b> l'égalité — l'erreur cardinale), mais : « peut-on être <b>confiant</b> que le petit n'est <b>pas pire</b> que le gros de plus d'une marge δ ? » C'est un <b>test de non-infériorité</b>, mené <b>par paires</b> (les deux modèles sur les <i>mêmes</i> items, scorés par le <i>même</i> oracle), avec un <b>corpus dimensionné pour la puissance</b> — sinon le verdict n'est pas « non-inférieur » mais « <b>indéterminé</b> ». Cette architecture pose ce cœur statistique, les garde-fous d'équité qui empêchent de sur- ou sous-mesurer la substitution, le module logiciel qui l'implémente <b>de façon déterministe et re-prouvable</b> par-dessus B1, et le livrable : une <b>carte des écarts</b> {modèle × tâche} qui dit où le petit substitue déjà, où il en est proche (et donc où H-B peut combler), et où il ne peut pas — qui <b>dirige</b> tout le reste du programme.</div>
+  <div class="pills">
+    <span class="tag t-teal">non-infériorité, pas supériorité</span>
+    <span class="tag t-info">apparié (McNemar / bootstrap)</span>
+    <span class="tag t-info">puissance ⇒ corpus dimensionné</span>
+    <span class="tag t-warn">capacité ≠ format (présent %)</span>
+    <span class="tag t-ok">stats déterministes re-prouvables</span>
+  </div>
+  <div class="meta">
+    <span>EFE — Essaim Fluide Éphémère · roadmap thèse, claim H-A · architecture avant code</span>
+    <span>2026-06-24 · architecture</span>
+  </div>
+</div></div>
+
+<!-- TOC -->
+<div class="wrap page">
+  <h2><span class="num">§0</span> Plan</h2>
+  <div class="toc">
+    <div><span class="n">1.</span> Ce qu'est H-A, et pourquoi c'est le plancher</div>
+    <div><span class="n">2.</span> Le cœur : non-infériorité appariée (le piège évité)</div>
+    <div><span class="n">3.</span> La puissance : dimensionner le corpus, ou conclure « indéterminé »</div>
+    <div><span class="n">4.</span> Les conditions équitables : ni sur- ni sous-mesurer</div>
+    <div><span class="n">5.</span> La carte des écarts : le livrable qui dirige H-B</div>
+    <div><span class="n">6.</span> L'architecture logicielle : le module <span class="mono">substitution</span> sur B1</div>
+    <div><span class="n">7.</span> Le corpus : sourcing, contamination, gouvernance</div>
+    <div><span class="n">8.</span> Menaces à la validité</div>
+    <div><span class="n">9.</span> Les invariants de H-A</div>
+    <div><span class="n">10.</span> Séquence, Mac vs GPU, et le passage à H-B</div>
+  </div>
+
+  <h3>Le geste, en une phrase</h3>
+  <p>H-A ne demande pas « quel modèle gagne ? » mais « <b>de combien, au pire, le petit est-il en retard sur le gros — et puis-je l'affirmer avec confiance ?</b> » On score les deux modèles sur les <b>mêmes</b> items avec le <b>même</b> oracle (apparié), on calcule la <b>borne de confiance supérieure</b> de l'écart (gros − petit), et on déclare la substitution établie ssi cette borne est <b>sous la marge δ</b>. Si le corpus est trop petit pour resserrer la borne, le verdict honnête n'est pas « non-inférieur » — c'est « <b>indéterminé</b> », et on le dit. Le tout est calculé de façon <b>déterministe</b> (bootstrap à graine fixe) et scellé <b>re-prouvable</b>, comme le reste d'EFE.</p>
+
+  <div class="callout key">
+    <p><b>Pourquoi H-A décide de tout.</b> H-A ne prouve pas la thèse à elle seule (il manque la « quantité », H-B, et le « moins cher », H-C). Mais il en est la <b>condition nécessaire</b> et la <b>boussole</b> : la <b>carte des écarts</b> qu'il produit dit exactement <i>où</i> attaquer ensuite. Là où le petit substitue déjà (écart ≤ δ), la thèse est gagnée sans même H-B. Là où l'écart est <b>petit mais non nul</b>, c'est le budget précis que l'agrégation de H-B doit combler. Là où l'écart est <b>grand</b> (recall pur), on n'y va pas — H-A nous épargne d'y gaspiller H-B et le GPU.</p>
+  </div>
+</div>
+
+<!-- 1 -->
+<div class="wrap page">
+<section>
+  <h2><span class="num">§1</span> Ce qu'est H-A, et pourquoi c'est le plancher</h2>
+  <p>La thèse se décompose en trois claims emboîtés (cf. la roadmap) : <b>H-A</b> substitution (un petit suffit-il&nbsp;?), <b>H-B</b> agrégation (la quantité ajoute-t-elle&nbsp;?), <b>H-C</b> économie (à coût moindre&nbsp;?). H-A est le premier, et le fondement : si aucun petit modèle ne s'approche du gros sur aucune tâche utile, il n'y a rien à agréger ni à rendre moins cher.</p>
+
+  <h3>1.1 — H-A isole la substitution d'un petit modèle SEUL</h3>
+  <p>Pour ne pas confondre H-A avec H-B, on définit H-A sur le <b>petit modèle seul</b> (K=1), pas sur un essaim. La raison est méthodologique : si l'on mesurait d'emblée un essaim, on ne saurait plus si la qualité vient de la <i>taille</i> du modèle (H-A) ou de l'<i>agrégation</i> (H-B). H-A mesure donc, par classe de tâches et par taille de petit modèle, l'<b>écart de substitution</b> :</p>
+  <div class="eq">écart(petit, tâche) = exactitude(gros, K=1) − exactitude(petit, K=1)</div>
+  <p>et demande : cet écart est-il <b>≤ δ</b> avec confiance ? Si oui, le petit <b>substitue déjà</b> (et la thèse est gagnée sur cette tâche, sans H-B). Si non, l'écart résiduel est le <b>budget exact</b> que l'agrégation de H-B devra combler. <b>H-A mesure le plancher ET dimensionne le problème de H-B</b> — c'est sa double fonction.</p>
+
+  <h3>1.2 — La relation aux autres claims</h3>
+  <table>
+    <thead><tr><th>Claim</th><th>Question</th><th>Ce que H-A lui fournit</th></tr></thead>
+    <tbody>
+      <tr><td><b>H-A</b></td><td>Le petit SEUL substitue-t-il ?</td><td>— (c'est lui)</td></tr>
+      <tr><td><b>H-B</b></td><td>L'agrégation comble-t-elle l'écart ?</td><td>L'<b>écart résiduel</b> à combler, par tâche → cible chiffrée</td></tr>
+      <tr><td><b>H-C</b></td><td>À coût moindre ?</td><td>Le <b>point de qualité</b> de référence (la justesse du gros à égaler)</td></tr>
+    </tbody>
+  </table>
+  <p>Cette dépendance impose un ordre : <b>H-A d'abord</b>, parce qu'il fixe la cible (la justesse du gros) et le déficit (l'écart du petit) que tout le reste vise. Sans H-A, H-B agrégerait à l'aveugle et H-C comparerait des coûts sans point de qualité commun.</p>
+</section>
+</div>
+
+<!-- 2 -->
+<div class="wrap page">
+<section>
+  <h2><span class="num">§2</span> Le cœur : non-infériorité appariée</h2>
+  <p>Voici la section qui sépare une mesure honnête d'un benchmark trompeur. Trois erreurs guettent, et H-A les évite par construction.</p>
+
+  <h3>2.1 — Erreur n°1 : tester la supériorité au lieu de la non-infériorité</h3>
+  <p>La thèse ne dit pas « le petit est <b>meilleur</b> » ; elle dit « le petit est <b>aussi bon</b> (à δ près) ». Ce sont deux tests différents. On ne veut pas rejeter « petit ≤ gros » ; on veut établir « petit ≥ gros − δ ». C'est un <b>test de non-infériorité</b> : on fixe une <b>marge d'indifférence</b> δ (la perte de qualité maximale qu'on accepte d'appeler « substituable », p.ex. 2 points), et on cherche à montrer que le petit n'est pas en retard de plus de δ.</p>
+
+  <h3>2.2 — Erreur n°2 : lire « pas de différence significative » comme « égalité »</h3>
+  <p>L'erreur cardinale des comparaisons de modèles. Un test de supériorité qui <b>échoue à rejeter</b> H0 (« pas de différence significative ») ne <b>prouve pas</b> l'égalité — l'absence de preuve n'est pas la preuve de l'absence. Sur 8 exemples, <i>rien</i> n'est significatif : ce n'est pas de l'égalité, c'est de l'ignorance. La non-infériorité corrige cela : on conclut « substituable » seulement si la <b>borne de confiance supérieure</b> de l'écart est <b>strictement sous δ</b> — une affirmation positive, pas un défaut de réfutation.</p>
+
+  <h3>2.3 — Erreur n°3 : traiter les deux modèles comme indépendants</h3>
+  <p>Les deux modèles sont scorés sur les <b>mêmes</b> items. Les traiter comme deux échantillons indépendants <b>jette de la puissance</b> : la variance item-à-item (certains items sont durs pour tous) s'annule dans une comparaison <b>appariée</b>. On apparie donc par item. Seules les <b>paires discordantes</b> portent l'information :</p>
+  <table>
+    <thead><tr><th></th><th>petit correct</th><th>petit faux</th></tr></thead>
+    <tbody>
+      <tr><td><b>gros correct</b></td><td class="c">a (concordant ✓)</td><td class="c mid">b (gros gagne)</td></tr>
+      <tr><td><b>gros faux</b></td><td class="c mid">c (petit gagne)</td><td class="c">d (concordant ✗)</td></tr>
+    </tbody>
+  </table>
+  <p>L'écart est <span class="mono">Δ = (b − c) / n</span>. Les paires concordantes (a, d) — où les deux ont raison, ou les deux ont tort — n'y contribuent <b>pas</b> : un petit modèle qui a raison <i>exactement là où</i> le gros a raison est le substitut idéal. La variance de Δ est portée par les <b>discordants</b> (b + c). C'est le test de <b>McNemar</b>, et sa version « intervalle de confiance sur Δ » (méthode de Tango, recommandée pour la non-infériorité de proportions appariées) donne la borne dont on a besoin.</p>
+
+  <h3>2.4 — La règle de décision</h3>
+  <div class="eq">Substitution établie (à δ, niveau 1−α) ⇔ borne_sup<sub>1−α</sub>(Δ) &lt; δ</div>
+  <p>où Δ = exactitude(gros) − exactitude(petit). On lit aussi les autres cas dans la même image (figure) : borne_sup &lt; 0 ⇒ le petit est en fait <b>supérieur</b> ; borne_inf &gt; δ ⇒ le petit est <b>inférieur</b> de plus de δ (substitution réfutée sur cette tâche) ; l'intervalle <b>chevauche δ</b> ⇒ <b>indéterminé</b> (cf. §3).</p>
+
+  <div class="fig">
+  <svg viewBox="0 0 720 220" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Diagramme de non-infériorité : intervalles de confiance vs marge delta">
+    <line x1="60" y1="180" x2="690" y2="180" stroke="#334155" stroke-width="1.5"/>
+    <line x1="300" y1="30" x2="300" y2="190" stroke="#64748b" stroke-dasharray="4 3"/>
+    <text x="300" y="205" text-anchor="middle" font-size="10" fill="#334155">Δ = 0 (égalité)</text>
+    <line x1="470" y1="30" x2="470" y2="190" stroke="#d97706" stroke-width="1.4" stroke-dasharray="5 3"/>
+    <text x="470" y="205" text-anchor="middle" font-size="10" font-weight="700" fill="#92400e">δ (marge)</text>
+    <text x="120" y="24" font-size="9.5" fill="#64748b">← petit MEILLEUR        Δ = exactitude(gros) − exactitude(petit)        petit PIRE →</text>
+    <!-- case 1: non-inferior (CI entirely below delta) -->
+    <line x1="250" y1="58" x2="430" y2="58" stroke="#16a34a" stroke-width="3"/>
+    <circle cx="340" cy="58" r="3.5" fill="#16a34a"/>
+    <text x="600" y="61" font-size="9.5" font-weight="700" fill="#166534">NON-INFÉRIEUR ✓</text>
+    <text x="442" y="52" font-size="8" fill="#166534">borne sup &lt; δ</text>
+    <!-- case 2: superior (CI below 0) -->
+    <line x1="180" y1="90" x2="285" y2="90" stroke="#0d9488" stroke-width="3"/>
+    <circle cx="232" cy="90" r="3.5" fill="#0d9488"/>
+    <text x="600" y="93" font-size="9.5" font-weight="700" fill="#0f766e">SUPÉRIEUR ✓✓</text>
+    <text x="120" y="86" font-size="8" fill="#0f766e">borne sup &lt; 0</text>
+    <!-- case 3: inconclusive (straddles delta) -->
+    <line x1="360" y1="122" x2="560" y2="122" stroke="#d97706" stroke-width="3"/>
+    <circle cx="460" cy="122" r="3.5" fill="#d97706"/>
+    <text x="600" y="125" font-size="9.5" font-weight="700" fill="#92400e">INDÉTERMINÉ</text>
+    <text x="362" y="116" font-size="8" fill="#92400e">chevauche δ → plus de données</text>
+    <!-- case 4: inferior (CI entirely above delta) -->
+    <line x1="500" y1="154" x2="660" y2="154" stroke="#dc2626" stroke-width="3"/>
+    <circle cx="580" cy="154" r="3.5" fill="#dc2626"/>
+    <text x="600" y="146" font-size="9.5" font-weight="700" fill="#991b1b" text-anchor="end">INFÉRIEUR ✗</text>
+    <text x="500" y="170" font-size="8" fill="#991b1b">borne inf &gt; δ → substitution réfutée</text>
+  </svg>
+  <div class="cap">Le verdict de H-A se lit sur la position de l'<b>intervalle de confiance</b> de l'écart Δ par rapport à <b>0</b> et à la <b>marge δ</b>. « Non-inférieur » exige que la borne SUPÉRIEURE passe sous δ — pas seulement que le point estimé y soit. Un intervalle qui chevauche δ n'est pas un échec : c'est un appel à plus de données (§3).</div>
+  </div>
+
+  <h3>2.5 — La méthode primaire : bootstrap apparié déterministe</h3>
+  <p>Plutôt qu'une formule fermée fragile aux hypothèses, la méthode <b>primaire</b> est un <b>bootstrap apparié</b> : on ré-échantillonne les items avec remise B fois, on recalcule Δ* à chaque tirage, et la borne supérieure est le quantile (1−α) des Δ*. Avantages : <b>agnostique au scorer</b> (marche pour un vérificateur de code comme pour une égalité), <b>sans hypothèse de normalité</b>, et — crucial pour EFE — <b>déterministe</b> si la graine du PRNG est fixée. La même évidence donne le même intervalle, donc le verdict statistique est lui-même <b>re-prouvable</b> (I-HA-REPROVE). La formule fermée de Tango/McNemar sert de <b>contre-vérification</b>.</p>
+</section>
+</div>
+
+<!-- 3 -->
+<div class="wrap page">
+<section>
+  <h2><span class="num">§3</span> La puissance : dimensionner le corpus, ou conclure « indéterminé »</h2>
+  <p>Un test de non-infériorité ne vaut que par sa <b>puissance</b> : la capacité à conclure « non-inférieur » <i>quand c'est vrai</i>. Un corpus trop petit produit des intervalles larges qui chevauchent toujours δ → toujours « indéterminé ». Il faut donc <b>dimensionner le corpus à l'avance</b>.</p>
+
+  <h3>3.1 — La taille requise</h3>
+  <p>Pour une non-infériorité appariée à marge δ, niveau α, puissance 1−β, la taille d'échantillon dépend du <b>taux de discordance</b> attendu ψ = p<sub>b</sub> + p<sub>c</sub> (la fraction d'items où les deux modèles divergent) et de la marge :</p>
+  <div class="eq">n ≈ (z<sub>α</sub> + z<sub>β</sub>)² · [ψ − (p<sub>b</sub> − p<sub>c</sub>)²] / (δ − Δ<sub>0</sub>)²</div>
+  <p>où Δ<sub>0</sub> est l'écart vrai supposé (souvent 0 si l'on croit le petit réellement à parité). La leçon opérationnelle : <b>plus δ est petit (claim fort), plus n explose</b> (en 1/δ²) ; et <b>plus les modèles discordent, plus il faut d'items</b>. Pour δ = 5 points et une discordance modérée, quelques centaines d'items suffisent (faisable sur Mac) ; pour δ = 1 point, il en faut des milliers (GPU). H-A <b>calcule n d'avance</b> et choisit δ en conscience du budget.</p>
+
+  <h3>3.2 — L'honnêteté du verdict « indéterminé »</h3>
+  <div class="callout warn">
+    <p><b>I-HA-POWER.</b> Si le corpus n'atteint pas la taille requise pour la marge visée, le verdict n'est <b>jamais</b> « non-inférieur » par défaut — c'est <b>« indéterminé »</b>, explicitement. C'est la garde contre l'erreur n°2 (§2.2) : on ne déguise pas un manque de données en parité. Le rapport affiche, pour chaque cellule, la <b>puissance atteinte</b> et le <b>n requis</b> — un lecteur voit immédiatement si « indéterminé » veut dire « égalité non prouvable » ou « pas encore assez mesuré ».</p>
+  </div>
+
+  <h3>3.3 — Plusieurs marges, un balayage</h3>
+  <p>δ n'est pas une valeur unique mais un <b>balayage</b> : on rapporte le verdict à δ ∈ {1, 2, 5} points. « Substituable à 5 points mais indéterminé à 1 point » est un énoncé riche et honnête ; il dit exactement la <b>force</b> de la substitution. Un claim de financement solide précise sa marge — « le petit égale le gros à 2 points près, p&lt;0,05, sur 1 200 items » — pas un « ils sont pareils » nu.</p>
+</section>
+</div>
+
+<!-- 4 -->
+<div class="wrap page">
+<section>
+  <h2><span class="num">§4</span> Les conditions équitables : ni sur- ni sous-mesurer</h2>
+  <p>Un écart mesuré ne vaut que si les deux modèles ont été traités <b>identiquement</b> — et si le petit a eu une <b>chance équitable</b>. Deux biais opposés guettent.</p>
+
+  <h3>4.1 — Sous-mesurer la substitution (injuste au petit)</h3>
+  <p>Donner au petit un prompt bâclé, un format qu'il ne suit pas, ou un budget de décodage trop serré <b>gonfle artificiellement l'écart</b> : on mesure une faiblesse de <i>prompting</i>, pas de <i>capacité</i>. Garde-fou <b>I-HA-FAIR</b> : les deux modèles reçoivent la <b>même</b> instruction, le <b>même</b> scorer, le <b>même</b> budget ; et l'instruction est un <b>prompt raisonnable</b> (clair, avec le format attendu). Si l'on optimise le prompt, on l'optimise pour <b>les deux</b>, ou pour aucun — jamais asymétriquement.</p>
+
+  <h3>4.2 — Capacité vs format : la métrique <i>présent</i></h3>
+  <p>Un petit modèle qui <b>ne répond pas</b> dans le format (sortie vide, hors-sujet) n'est pas « faux sur le fond » — c'est un échec de <b>forme</b>. Les confondre fait passer un problème de prompt pour un déficit de capacité. H-A sépare les deux via la métrique <b>présent %</b> (déjà dans B1) : on rapporte l'exactitude <b>conditionnée à la présence</b> ET l'exactitude brute. Un petit à « présent 60 %, exact-si-présent 95 % » a un problème de <i>format</i> (corrigeable au prompt), pas de <i>substitution</i> — distinction que la non-infériorité brute masquerait.</p>
+
+  <h3>4.3 — Sur-mesurer la substitution (le scorer trop indulgent)</h3>
+  <p>À l'inverse, un scorer <b>permissif</b> (le <span class="mono">lenient</span> par appartenance de mot) peut <b>gonfler les deux</b> exactitudes et rapprocher faussement le petit du gros. Garde-fou : rapporter le verdict sous le scorer <b>approprié strict</b> (vérificateur de tests pour le code, égalité numérique pour les maths) <b>et</b> sous le permissif, et signaler tout écart de verdict entre les deux. Une substitution qui n'existe que sous scoring laxiste n'est pas une substitution (c'est l'esprit du critère K3 de la roadmap).</p>
+
+  <div class="callout key">
+    <p><b>L'équité est symétrique, et c'est tout.</b> H-A n'avantage personne : ni le gros (en bâclant le prompt du petit), ni le petit (en relâchant le scorer). Mêmes items, même instruction raisonnable, même budget, scorer strict <b>et</b> permissif rapportés, capacité séparée du format. Toute asymétrie est soit interdite, soit déclarée. C'est ce qui rend le verdict opposable à un sceptique.</p>
+  </div>
+</section>
+</div>
+
+<!-- 5 -->
+<div class="wrap page">
+<section>
+  <h2><span class="num">§5</span> La carte des écarts : le livrable qui dirige H-B</h2>
+  <p>H-A ne produit pas un nombre, mais une <b>carte</b> : pour chaque (taille de petit modèle × classe de tâches), le verdict de non-infériorité et l'<b>écart résiduel</b> (avec intervalle). C'est la sortie qui oriente tout le programme.</p>
+
+  <table>
+    <thead><tr><th>petit \ tâche</th><th class="c">T-MATH</th><th class="c">T-CODE</th><th class="c">T-EXTRACT</th><th class="c">T-CLASS</th><th class="c">T-KNOW</th></tr></thead>
+    <tbody>
+      <tr><td><b>~3 Md</b></td><td class="c good">substitue (forme)</td><td class="c mid">écart 6 pts → H-B</td><td class="c good">substitue</td><td class="c mid">écart 3 pts → H-B</td><td class="c bad">écart 30 pts</td></tr>
+      <tr><td><b>~1 Md</b></td><td class="c mid">écart 9 pts → H-B</td><td class="c bad">écart 22 pts</td><td class="c mid">écart 8 pts → H-B</td><td class="c bad">≈ hasard</td><td class="c bad">écart 40 pts</td></tr>
+      <tr><td><b>~0,5 Md</b></td><td class="c bad">écart 18 pts</td><td class="c bad">écart 30 pts</td><td class="c mid">écart 12 pts</td><td class="c bad">≈ hasard</td><td class="c bad">écart 45 pts</td></tr>
+    </tbody>
+  </table>
+  <p class="small muted">Forme illustrative (les chiffres seront mesurés, pas supposés). Lecture : <span class="good">vert</span> = substitue déjà (thèse gagnée sans H-B) ; <span class="mid">jaune</span> = écart petit, <b>budget chiffré pour H-B à combler</b> ; <span class="bad">rouge</span> = écart grand (probable bord négatif, recall — on n'y envoie pas H-B).</p>
+
+  <div class="callout ok">
+    <p><b>Ce que la carte décide.</b> Les cellules <span class="mono">vertes</span> sont des victoires immédiates de la thèse (un petit suffit, moins cher — H-C n'a qu'à confirmer le coût). Les <span class="mono">jaunes</span> sont le terrain de H-B : un écart de 3–9 points est exactement ce que l'agrégation vérifiée peut combler, et la carte donne la <b>cible chiffrée</b> (« il faut +6 points sur T-CODE@3Md »). Les <span class="mono">rouges</span> sont écartées avec preuve — on ne gaspille ni H-B ni GPU sur un déficit de 30 points qu'aucune agrégation ne récupère. <b>H-A transforme « essayons partout » en « voici les trois cases qui valent le GPU ».</b></p>
+  </div>
+</section>
+</div>
+
+<!-- 6 -->
+<div class="wrap page">
+<section>
+  <h2><span class="num">§6</span> L'architecture logicielle : le module <span class="mono">substitution</span> sur B1</h2>
+  <p>H-A n'exige pas de nouveau moteur : il ajoute une <b>couche d'analyse</b> par-dessus B1, qui produit déjà, par run, la justesse <b>par item</b> (<span class="mono">RunRecord{case_id, correct, present…}</span>) et un rapport agrégé. Le module <span class="mono">substitution</span> apparie deux rapports et calcule la non-infériorité.</p>
+
+  <h3>6.1 — L'appariement par item</h3>
+  <p>B1 garde les <span class="mono">RunRecord</span> par cas ; on apparie <b>par <span class="mono">case_id</span></b> les deux rapports (petit, gros) exécutés sur le <b>même</b> dataset (I-HA-PAIRED). Pour les graines multiples, on moyenne la justesse par item sur les graines (justesse ∈ [0,1] par item), puis on bootstrappe sur les items (variance inter-graines rapportée à part).</p>
+
+  <pre><code>// Couche d'analyse (pure, déterministe) — aucune ré-inférence.
+pub struct PairedItem { pub case_id: String, pub small: f64, pub big: f64 } // justesse ∈ [0,1]
+
+pub fn pair_by_case(small: &[ConfigReport], big: &[ConfigReport]) -> Vec&lt;PairedItem&gt;;
+//   moyenne par item sur les graines, jointure stricte par case_id (panique si désalignés).
+
+pub struct McNemar { pub a: usize, pub b: usize, pub c: usize, pub d: usize } // concordants/discordants
+
+pub struct NonInferiority {
+    pub delta: f64,            // marge d'indifférence
+    pub diff_point: f64,       // Δ = acc(big) − acc(small)
+    pub ci_upper: f64,         // borne sup (1−α) de Δ, bootstrap apparié déterministe
+    pub ci_lower: f64,
+    pub verdict: Verdict,      // Superieur | NonInferieur | Indetermine | Inferieur
+    pub power: f64,            // puissance atteinte au n observé
+    pub n_required: usize,     // n requis pour conclure à cette δ
+    pub discordant: usize,     // b + c (le moteur de la variance)
+    pub boot_seed: u64,        // graine du bootstrap → CI re-dérivable (I-HA-REPROVE)
+}
+
+pub fn non_inferiority(pairs: &[PairedItem], delta: f64, alpha: f64, seed: u64) -> NonInferiority;
+pub fn required_n(delta: f64, alpha: f64, beta: f64, p_b: f64, p_c: f64) -> usize;
+pub fn wilson_ci(correct: f64, n: usize, alpha: f64) -> (f64, f64); // IC d'exactitude par rapport</code></pre>
+
+  <h3>6.2 — Le bootstrap déterministe</h3>
+  <p>Le ré-échantillonnage utilise un <b>PRNG à graine fixe</b> (un petit générateur déterministe interne — pas d'entropie système), de sorte que la même évidence produise la <b>même</b> borne de confiance, byte-pour-byte. La graine est <b>scellée dans le bundle</b> : un tiers re-calcule l'intervalle et obtient le verdict identique. La statistique rejoint le moat — on ne re-prouve pas seulement les <i>runs</i>, mais le <b>verdict</b> qu'on en tire.</p>
+
+  <h3>6.3 — La carte des écarts &amp; le verdict multi-cellules</h3>
+  <p><span class="mono">GapMap</span> agrège les <span class="mono">NonInferiority</span> sur la grille {modèle × tâche}, applique une <b>correction de multiplicité</b> (Holm-Bonferroni sur la famille de tests — I-HA-MULTIPLE) pour ne pas déclarer une fausse substitution par hasard sur des dizaines de cellules, et émet la carte §5. Tout est <b>sérialisable</b> et <b>scellé</b> dans le bundle re-prouvable de B1.</p>
+
+  <div class="callout">
+    <p><b>Coût d'ingénierie : faible.</b> Tout le module est du calcul <b>pur</b> sur des données que B1 produit déjà — pas d'inférence, pas de réseau, pas de GPU. Il est entièrement <b>testable sur Mac</b> avec des paires synthétiques (vérifier que le verdict bascule correctement aux frontières 0 et δ, que « indéterminé » sort quand n est petit, que le bootstrap est déterministe à graine fixe). C'est la même philosophie que B1 : la rigueur se code et se teste sans le GPU ; le GPU n'apporte que les <i>chiffres</i> à une analyse déjà prouvée correcte.</p>
+  </div>
+</section>
+</div>
+
+<!-- 7 -->
+<div class="wrap page">
+<section>
+  <h2><span class="num">§7</span> Le corpus : sourcing, contamination, gouvernance</h2>
+  <p>La non-infériorité ne vaut que sur un corpus <b>adéquat</b> et <b>propre</b>. Trois exigences.</p>
+  <ul>
+    <li><b>Taille</b> : ≥ le n requis (§3) pour la marge visée — typiquement quelques centaines/classe en pilote (δ = 5 pts), milliers en définitif (δ = 1–2 pts).</li>
+    <li><b>Scorabilité fermée</b> : des classes où le scorer n'est <b>pas</b> le goulot — vérité-terrain vérifiable (maths : nombre ; code : tests ; extraction : schéma). On évite le texte libre où le scorer lui-même introduit du bruit (le terrain de la v2 floue, hors H-A).</li>
+    <li><b>Provenance des labels</b> : qui a labellisé, et la confiance qu'on y accorde, sont une <b>gouvernance de dataset</b> (le moat atteste la <i>computation</i>, pas la <i>correction</i> du label). On source des jeux établis (familles GSM8K / MBPP / etc.) en notant leur origine, et le bundle lie l'empreinte du dataset.</li>
+  </ul>
+
+  <h3>7.1 — La contamination : la menace qui gonfle H-A</h3>
+  <div class="callout warn">
+    <p><b>I-HA-CONTAM.</b> Un modèle (petit OU gros) qui a <b>mémorisé</b> le benchmark pendant son entraînement affiche une justesse <b>artificielle</b> — et la substitution mesurée est un mirage. Sur des modèles ouverts dont on ignore le mélange d'entraînement, c'est un risque réel et asymétrique (le gros, plus entraîné, peut avoir plus mémorisé — ou l'inverse). Mitigations, par ordre de force : <b>(a)</b> items <b>nouveaux/held-out</b> (générés ou postérieurs aux cutoffs connus) ; <b>(b)</b> perturbations (reformulation, valeurs numériques changées) qui cassent la mémorisation sans changer la difficulté ; <b>(c)</b> à défaut, <b>déclarer</b> le risque et le borner. Un H-A crédible <b>nomme</b> sa stratégie anti-contamination — l'ignorer est la faille n°1 des benchmarks de SLM.</p>
+  </div>
+</section>
+</div>
+
+<!-- 8 -->
+<div class="wrap page">
+<section>
+  <h2><span class="num">§8</span> Menaces à la validité (récapitulatif)</h2>
+  <table>
+    <thead><tr><th>Menace</th><th>Effet</th><th>Garde-fou</th></tr></thead>
+    <tbody>
+      <tr><td><b>Test de supériorité</b> au lieu de non-infériorité</td><td>Question mal posée</td><td>I-HA-NONINF (borne sup &lt; δ)</td></tr>
+      <tr><td><b>« Non significatif » lu comme « égal »</b></td><td>Ignorance déguisée en parité</td><td>I-HA-NONINF + I-HA-POWER (verdict « indéterminé »)</td></tr>
+      <tr><td><b>Comparaison non appariée</b></td><td>Puissance gaspillée</td><td>I-HA-PAIRED (McNemar / bootstrap apparié)</td></tr>
+      <tr><td><b>Sous-puissance</b></td><td>Toujours « indéterminé », ou faux « non-inférieur »</td><td>I-HA-POWER (n dimensionné, puissance rapportée)</td></tr>
+      <tr><td><b>Prompt/budget asymétrique</b></td><td>Écart de prompting pris pour un écart de capacité</td><td>I-HA-FAIR (conditions identiques, prompt raisonnable)</td></tr>
+      <tr><td><b>Format confondu avec capacité</b></td><td>Déficit de forme lu comme déficit de fond</td><td>I-HA-PRESENT (présent % + exact-si-présent)</td></tr>
+      <tr><td><b>Scorer permissif</b></td><td>Substitution gonflée</td><td>Scorer strict ET permissif rapportés (esprit K3)</td></tr>
+      <tr><td><b>Contamination du benchmark</b></td><td>Justesse mémorisée, substitution-mirage</td><td>I-HA-CONTAM (held-out / perturbations / déclaration)</td></tr>
+      <tr><td><b>Comparaisons multiples</b></td><td>Fausse substitution par hasard sur ≥1 cellule</td><td>I-HA-MULTIPLE (Holm-Bonferroni sur la famille)</td></tr>
+      <tr><td><b>Statistique non reproductible</b></td><td>Verdict non re-prouvable</td><td>I-HA-REPROVE (bootstrap à graine scellée)</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<section>
+  <h2><span class="num">§9</span> Les invariants de H-A</h2>
+  <table>
+    <thead><tr><th>Invariant</th><th>Énoncé</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">I-HA-PAIRED</td><td>Les deux modèles sont scorés sur les MÊMES items avec le MÊME scorer ; le test est apparié (la variance vient des discordants).</td></tr>
+      <tr><td class="mono">I-HA-NONINF</td><td>Substitution = non-infériorité à marge δ (borne sup de Δ &lt; δ) ; jamais « pas de différence significative ⇒ égal ».</td></tr>
+      <tr><td class="mono">I-HA-POWER</td><td>Corpus dimensionné pour δ ; sous-puissance ⇒ verdict « indéterminé » explicite, jamais « non-inférieur » par défaut.</td></tr>
+      <tr><td class="mono">I-HA-FAIR</td><td>Mêmes instruction, scorer, budget pour les deux ; prompt raisonnable ; toute optimisation symétrique ou nulle.</td></tr>
+      <tr><td class="mono">I-HA-PRESENT</td><td>Capacité (présent + faux) séparée du format (absent) ; exactitude brute ET conditionnée à la présence rapportées.</td></tr>
+      <tr><td class="mono">I-HA-CONTAM</td><td>Risque de mémorisation du benchmark nommé et mitigé (held-out / perturbations / déclaration bornée).</td></tr>
+      <tr><td class="mono">I-HA-MULTIPLE</td><td>La famille de tests {modèle × tâche} est corrigée pour la multiplicité (Holm-Bonferroni).</td></tr>
+      <tr><td class="mono">I-HA-REPROVE</td><td>Le bootstrap est déterministe (graine scellée) ; le verdict statistique est re-dérivable, comme les runs.</td></tr>
+    </tbody>
+  </table>
+</section>
+</div>
+
+<!-- 10 -->
+<div class="wrap page">
+<section>
+  <h2><span class="num">§10</span> Séquence, Mac vs GPU, et le passage à H-B</h2>
+  <p>H-A est, par chance, <b>largement Mac-faisable</b> : la substitution se mesure à K=1 (petit seul vs gros seul) — pas d'essaim, donc pas de parallélisme à exploiter, donc l'inférence sérialisée d'Ollama n'est pas un handicap (seul le débit le serait, et le débit est l'affaire de H-C/B2, pas de H-A). Le module statistique est du <b>code pur</b>, testable et prouvé sur Mac.</p>
+  <table>
+    <thead><tr><th>Étape</th><th>Contenu</th><th class="c">Lieu</th></tr></thead>
+    <tbody>
+      <tr><td><b>HA.1</b></td><td>Module <span class="mono">substitution</span> : appariement, McNemar, bootstrap déterministe, Wilson, <span class="mono">required_n</span>, verdicts ; tests sur paires synthétiques (frontières 0/δ, « indéterminé », déterminisme).</td><td class="c">Mac (pur)</td></tr>
+      <tr><td><b>HA.2</b></td><td>Corpus pilote (≥ 300/classe, δ = 5 pts) sur T-MATH + T-EXTRACT ; anti-contamination ; chargeurs JSONL.</td><td class="c">Mac</td></tr>
+      <tr><td><b>HA.3</b></td><td>Mesure pilote : petit (3 Md, 1 Md) vs gros (12 Md), K=1, scorer strict + lenient, présent % ; première <b>carte des écarts</b>.</td><td class="c">Mac/Ollama</td></tr>
+      <tr><td><b>HA.4</b></td><td>Mesure définitive : corpus ≥ 1 000/classe (δ = 1–2 pts), toutes classes (dont T-KNOW), graines multiples, multiplicité corrigée, bundle re-prouvable.</td><td class="c">GPU (B2)</td></tr>
+    </tbody>
+  </table>
+  <div class="callout key">
+    <p><b>Ce que H-A remet à H-B.</b> Une <b>carte des écarts</b> chiffrée et re-prouvable : pour chaque (petit modèle × tâche), « substitue déjà » / « écart résiduel de X points → cible H-B » / « hors de portée ». H-B ne part plus à l'aveugle : il sait <b>exactement</b> quelles cellules valent l'agrégation et de combien de points il doit la faire gagner. Et le point de qualité du gros — la cible commune — est fixé pour H-C. H-A est court, surtout statistique, presque tout Mac — mais c'est lui qui rend le reste du programme <b>dirigé</b> plutôt que spéculatif.</p>
+  </div>
+
+  <h3>En une phrase</h3>
+  <p>H-A répond à « un petit vaut-il un gros ? » par la seule méthode qui résiste à un sceptique : un <b>test de non-infériorité apparié</b>, à marge déclarée, sur un corpus <b>dimensionné pour la puissance</b>, séparant capacité et format, sous scorer strict et permissif, immunisé contre la contamination et la multiplicité, calculé de façon <b>déterministe et re-prouvable</b> — et il en sort non pas un verdict, mais une <b>carte</b> qui dit au reste de la thèse exactement où porter l'effort.</p>
+</section>
+</div>
+
+</body>
+</html>

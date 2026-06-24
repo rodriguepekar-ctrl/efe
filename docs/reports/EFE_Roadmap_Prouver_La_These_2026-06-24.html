@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>EFE — Roadmap : prouver la thèse (essaim de petits modèles vs gros modèle)</title>
+<style>
+  :root{--ink:#0f172a;--muted:#475569;--soft:#64748b;--line:#e2e8f0;--teal:#0d9488;--teal-d:#0f766e;--indigo:#4f46e5;--indigo-d:#4338ca;--ok:#16a34a;--warn:#d97706;--bad:#dc2626;--bg-tint:#f6fbfa;--bg-card:#eef2f1;--code-bg:#0f172a;--code-fg:#e2e8f0;}
+  *{box-sizing:border-box;} html{font-size:11.2px;}
+  body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,Arial,sans-serif;color:var(--ink);margin:0;line-height:1.6;background:#fff;-webkit-font-smoothing:antialiased;}
+  .wrap{max-width:178mm;margin:0 auto;padding:0 2mm;}
+  h1,h2,h3,h4{line-height:1.2;font-weight:700;}
+  h2{font-size:1.45rem;margin:0 0 .55rem;padding-bottom:.32rem;border-bottom:3px solid var(--teal);}
+  h2 .num{color:var(--teal);} h3{font-size:1.13rem;margin:1.1rem 0 .3rem;color:var(--teal-d);}
+  h4{font-size:1rem;margin:.8rem 0 .2rem;color:var(--indigo-d);}
+  p{margin:.55rem 0;text-align:justify;hyphens:auto;} a{color:var(--indigo);text-decoration:none;}
+  code{font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace;font-size:.85em;background:var(--bg-card);padding:.05em .35em;border-radius:4px;color:#0b3b36;}
+  .muted{color:var(--muted);} .small{font-size:.88rem;}
+  section{break-inside:avoid;} .page{break-before:page;} h2{break-after:avoid;}
+  table{border-collapse:collapse;width:100%;margin:.55rem 0;font-size:.82rem;}
+  th,td{border:1px solid var(--line);padding:.32rem .5rem;text-align:left;vertical-align:top;}
+  th{background:var(--bg-card);font-weight:700;} tbody tr:nth-child(even){background:var(--bg-tint);}
+  td.c,th.c{text-align:center;} .good{background:#dcfce7 !important;color:#166534;font-weight:700;} .mid{background:#fef9c3 !important;color:#854d0e;font-weight:700;} .bad{background:#fee2e2 !important;color:#991b1b;font-weight:700;}
+  .tag{display:inline-block;font-size:.71rem;font-weight:700;padding:.08em .5em;border-radius:20px;}
+  .t-ok{background:#dcfce7;color:#166534;} .t-info{background:#e0e7ff;color:#3730a3;} .t-teal{background:#ccfbf1;color:#115e59;} .t-warn{background:#fef3c7;color:#92400e;} .t-bad{background:#fee2e2;color:#991b1b;}
+  pre{background:var(--code-bg);color:var(--code-fg);padding:.55rem .8rem;border-radius:8px;overflow:auto;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.72rem;line-height:1.45;margin:.55rem 0;}
+  pre code{background:none;color:inherit;padding:0;}
+  .callout{border-left:4px solid var(--teal);background:var(--bg-tint);padding:.55rem .85rem;border-radius:0 8px 8px 0;margin:.65rem 0;}
+  .callout p{text-align:left;margin:.28rem 0;}
+  .callout.key{border-color:var(--indigo);background:#eef2ff;} .callout.warn{border-color:var(--warn);background:#fffbeb;} .callout.ok{border-color:var(--ok);background:#f0fdf4;} .callout.bad{border-color:var(--bad);background:#fef2f2;}
+  .fig{margin:.7rem 0 .9rem;text-align:center;break-inside:avoid;}
+  .fig svg{max-width:100%;height:auto;border:1px solid var(--line);border-radius:10px;background:#fff;}
+  .fig .cap{font-size:.79rem;color:var(--muted);margin-top:.32rem;font-style:italic;text-align:center;}
+  ul,ol{margin:.4rem 0 .55rem 1.1rem;padding:0;} li{margin:.24rem 0;}
+  svg text{font-family:-apple-system,"Segoe UI",Inter,sans-serif;}
+  .cover{height:262mm;display:flex;flex-direction:column;justify-content:center;position:relative;padding:0 6mm;}
+  .cover .eyebrow{color:var(--teal);font-weight:800;letter-spacing:.2em;font-size:.83rem;text-transform:uppercase;}
+  .cover h1{font-size:2.25rem;margin:.4rem 0 .2rem;line-height:1.08;} .cover .sub{font-size:1.16rem;color:var(--muted);margin-bottom:1.1rem;}
+  .cover .tagline{font-size:1.0rem;color:var(--ink);max-width:163mm;border-left:4px solid var(--teal);padding-left:1rem;font-style:italic;text-align:left;}
+  .cover .meta{position:absolute;bottom:6mm;left:6mm;right:6mm;display:flex;justify-content:space-between;border-top:1px solid var(--line);padding-top:.6rem;font-size:.8rem;color:var(--soft);}
+  .cover .pills{margin:1rem 0;} .cover .pills .tag{font-size:.77rem;margin-right:.3rem;}
+  .mono{font-family:ui-monospace,Menlo,Consolas,monospace;}
+  hr{border:none;border-top:1px solid var(--line);margin:.9rem 0;}
+  .toc{font-size:.9rem;columns:2;column-gap:2rem;} .toc div{margin:.16rem 0;break-inside:avoid;} .toc .n{color:var(--teal);font-weight:700;display:inline-block;width:1.8em;}
+  .eq{font-family:ui-monospace,Menlo,Consolas,monospace;background:#ecfdf5;border:1px solid #a7f3d0;border-radius:8px;padding:.45rem .75rem;margin:.5rem 0;font-size:.79rem;color:#065f46;text-align:center;}
+  @page{size:A4;margin:13mm 12mm;}
+</style>
+</head>
+<body>
+
+<!-- COVER -->
+<div class="wrap"><div class="cover">
+  <div class="eyebrow">Roadmap scientifique · prouver — ou réfuter honnêtement — la thèse</div>
+  <h1>Prouver la thèse, <span style="white-space:nowrap">par la mesure</span></h1>
+  <div class="sub">Un programme expérimental falsifiable : où, comment, et à quel coût réel un essaim de petits modèles bat un gros modèle — et comment le démontrer de façon re-prouvable.</div>
+  <div class="tagline">Le premier PoC a fait son travail : il a <b>raffiné</b> la thèse au lieu de la flatter. Le <i>cœur</i> est crédible — un modèle de 3,8 Md de paramètres seul a égalé un 12 Md (87,5 %) pour moins cher. Mais la <b>mécanique de la « quantité »</b> — agréger beaucoup de petits en parallèle pour récupérer la qualité — a <b>échoué en consensus naïf</b> : voter sur K échantillons d'un petit modèle n'aide pas, et peut nuire. Ce résultat n'est pas un échec, c'est une <b>boussole</b> : la forme naïve de la thèse est déjà réfutée, donc le pari se déplace vers l'<b>agrégation vérifiée et collaborative</b> — précisément là où EFE est différencié (oracle de correction, substrat de partage). Cette roadmap décompose la thèse en <b>claims falsifiables</b>, choisit les <b>classes de tâches</b> où elle <i>peut</i> tenir (et nomme celles où elle ne le peut pas), définit le <b>coût réel</b> (GPU-secondes, jetons mesurés — pas un prix supposé), et livre la preuve sous la seule forme qu'un sceptique ne peut pas balayer : un <b>benchmark re-prouvable</b>. Le signal décisif arrive <b>tôt et pas cher</b> (sur Mac, en semaines) — <i>avant</i> d'engager le GPU.</div>
+  <div class="pills">
+    <span class="tag t-teal">thèse décomposée (A·B·C)</span>
+    <span class="tag t-info">agrégation vérifiée &gt; vote naïf</span>
+    <span class="tag t-info">coût réel (GPU-s, mesuré)</span>
+    <span class="tag t-warn">critères de réfutation (K1·K2·K3)</span>
+    <span class="tag t-ok">benchmark re-prouvable</span>
+  </div>
+  <div class="meta">
+    <span>EFE — Essaim Fluide Éphémère · roadmap de validation de la thèse · post-PoC</span>
+    <span>2026-06-24 · programme expérimental</span>
+  </div>
+</div></div>
+
+<!-- TOC -->
+<div class="wrap page">
+  <h2><span class="num">§0</span> Plan</h2>
+  <div class="toc">
+    <div><span class="n">1.</span> Le point de départ exact : ce que le PoC a établi</div>
+    <div><span class="n">2.</span> La thèse, décomposée en claims falsifiables (A·B·C)</div>
+    <div><span class="n">3.</span> La taxonomie des tâches : où la thèse <i>peut</i> tenir</div>
+    <div><span class="n">4.</span> Les mécanismes de « quantité », classés par espérance</div>
+    <div><span class="n">5.</span> Le coût, fait correctement (jetons → GPU-s → €)</div>
+    <div><span class="n">6.</span> La rigueur du benchmark (échelle, scorers, stats, re-preuve)</div>
+    <div><span class="n">7.</span> Le programme phasé T0 → T4 (avec portes de décision)</div>
+    <div><span class="n">8.</span> Ce qu'il faut construire, mappé aux phases</div>
+    <div><span class="n">9.</span> Réfutation &amp; honnêteté : ce qui tue la thèse, et le repli vrai</div>
+    <div><span class="n">10.</span> Le fil stratégique : moat × thèse, jalons de financement</div>
+    <div><span class="n">11.</span> Calendrier &amp; l'unique expérience décisive</div>
+  </div>
+
+  <h3>La thèse, énoncée pour pouvoir être prouvée OU réfutée</h3>
+  <p>On ne prouve pas un slogan. On énonce d'abord la thèse sous une forme assez précise pour être <b>fausse</b>. Forme naïve (déjà réfutée par le PoC) : « beaucoup de petits modèles en parallèle, agrégés par vote, valent un gros modèle ». Forme <b>raffinée</b> que cette roadmap entreprend de prouver :</p>
+  <div class="callout key">
+    <p><b>La thèse, version falsifiable.</b> Sur les classes de tâches admettant un <b>signal de correction bon marché</b> (vérifiables : code, maths, extraction structurée) ou une <b>décomposition propre</b>, un essaim de <b>petits</b> modèles (≤ 3 Md) doté d'une <b>agrégation vérifiée ou collaborative</b> atteint la justesse d'un <b>gros</b> modèle (≥ 12 Md) pour un <b>coût d'inférence réel strictement inférieur</b> (GPU-secondes / € mesurés, coût du vérificateur inclus). La forme par <b>vote naïf</b> (self-consistency) ne tient PAS en général — le PoC l'a montré ; le pari repose donc sur la <b>sélection vérifiée</b> et le <b>partage d'information</b>, exactement le terrain d'EFE.</p>
+  </div>
+  <p>C'est volontairement plus <b>étroit</b> que « petit bat gros partout » — parce que la version universelle est <b>probablement fausse</b> (on ne vote pas sa route vers un fait qu'un petit modèle ignore), et qu'une thèse étroite mais <b>vraie et démontrée</b> vaut infiniment mieux qu'une large et invérifiable.</p>
+</div>
+
+<!-- 1 -->
+<div class="wrap page">
+<section>
+  <h2><span class="num">§1</span> Le point de départ exact : ce que le PoC a établi</h2>
+  <p>Toute roadmap honnête part des données, pas des espoirs. Le premier run sur modèles réels (Ollama : petit vs <span class="mono">gemma3:12b</span>, classification de sujet, scorer tolérant, corpus de 8) a livré trois faits, qu'il faut tenir ensemble :</p>
+  <table>
+    <thead><tr><th>Observation</th><th>Ce qu'elle établit</th><th>Ce qu'elle n'établit pas</th></tr></thead>
+    <tbody>
+      <tr><td>Un modèle ~3,8 Md <b>seul</b> égale le 12 Md (87,5 %)</td><td>La <b>substitution</b> est plausible : « petit décent ≈ gros » sur tâche facile, moins cher</td><td>Que la substitution tienne sur tâche <b>dure</b> ou à « très peu de paramètres »</td></tr>
+      <tr><td>Le consensus <b>Borda/vote</b> n'aide pas (87,5 → 75 % ; 1 Md à 25 % ≈ hasard)</td><td>La <b>quantité par vote naïf</b> ne paie pas — souvent elle nuit</td><td>Que la quantité ne paie <b>jamais</b> : la sélection <i>vérifiée</i> n'a pas été testée</td></tr>
+      <tr><td>présent 100 %, R0 100 %, re-preuve indépendante 40/40</td><td>L'<b>instrument</b> mesure du réel, honnêtement, re-prouvablement</td><td>—</td></tr>
+    </tbody>
+  </table>
+  <p>La leçon n'est pas « la thèse échoue » ; c'est que la thèse a <b>deux moteurs distincts</b> qu'on avait confondus : la <i>substitution</i> (un petit suffit-il ?) et l'<i>agrégation</i> (la quantité ajoute-t-elle ?). Le PoC valide directionnellement le premier et réfute la <b>forme naïve</b> du second. Toute la suite consiste à tester la <b>bonne</b> forme du second — et à le faire à une échelle et avec une rigueur que 8 exemples n'autorisent pas.</p>
+  <div class="callout warn">
+    <p><b>Pourquoi le vote naïf devait échouer (et ce que ça nous dit).</b> Le vote (self-consistency) ne gagne que si le modèle a raison <b>plus souvent que le hasard</b> ET que ses erreurs sont <b>diverses</b> (la bonne réponse est le mode). Un petit modèle <b>biaisé</b> produit K échantillons <b>corrélément faux</b> — l'unanimité-fausse, le poison déjà identifié dans le travail consensus. Donc : la quantité ne paie que si l'agrégation sait <b>distinguer</b> le correct (un vérificateur) ou si les agents sont <b>réellement diversifiés/spécialisés</b>. C'est la thèse raffinée — et c'est testable.</p>
+  </div>
+</section>
+</div>
+
+<!-- 2 -->
+<div class="wrap page">
+<section>
+  <h2><span class="num">§2</span> La thèse, décomposée en claims falsifiables</h2>
+  <p>On ne prouve pas « la thèse » d'un bloc ; on prouve (ou réfute) trois claims emboîtés, chacun avec son critère.</p>
+
+  <h3>H-A — Substitution</h3>
+  <p><b>Claim.</b> Il existe un petit modèle (ou un petit ensemble) dont la justesse ≥ celle du gros modèle, sur une classe de tâches donnée. <b>Mesure.</b> exactitude(petit) ≥ exactitude(gros) − δ, δ marge d'indifférence (p.ex. 1 point), avec intervalle de confiance. <b>État.</b> Plausible (PoC), à confirmer à l'échelle et sur tâches dures.</p>
+
+  <h3>H-B — Agrégation (le vrai pari)</h3>
+  <p><b>Claim.</b> Agréger N sorties de petits modèles via un mécanisme <b>vérifié/collaboratif</b> récupère une justesse que le petit <b>seul</b> n'a pas : exactitude(essaim-N) &gt; exactitude(petit-1), <b>et</b> exactitude(essaim-N) croît avec N jusqu'à un genou. <b>Mesure.</b> la <b>pente</b> exactitude vs N (positive et significative) ; et essaim-N atteint le gros. <b>État.</b> RÉFUTÉ en vote naïf ; <b>non testé</b> en sélection vérifiée — c'est l'objet central de la roadmap.</p>
+
+  <h3>H-C — Économie</h3>
+  <p><b>Claim.</b> Le coût réel de l'essaim-N (au point où il égale le gros) est <b>strictement inférieur</b> à celui du gros : coût(essaim-N) &lt; coût(gros-1), coût du <b>vérificateur inclus</b>. <b>Mesure.</b> GPU-secondes / € par tâche résolue, mesurés (§5). <b>État.</b> Non établi (le PoC n'avait qu'un prix <i>supposé</i>).</p>
+
+  <div class="eq">Thèse prouvée ⇔ ∃ classe de tâches, ∃ mécanisme : H-A ∧ H-B ∧ H-C, avec significativité statistique, re-prouvablement.</div>
+
+  <p>Le « ∃ » est essentiel : la thèse n'a pas besoin de tenir <b>partout</b> (elle ne le peut pas, §3). Elle a besoin de tenir sur une <b>région non triviale et utile</b> du plan {tâches} × {mécanismes}, et qu'on la <b>cartographie honnêtement</b> — y compris ses bords où elle casse.</p>
+</section>
+</div>
+
+<!-- 3 -->
+<div class="wrap page">
+<section>
+  <h2><span class="num">§3</span> La taxonomie des tâches : où la thèse <i>peut</i> tenir</h2>
+  <p>La thèse est <b>dépendante de la tâche</b>, et le nier serait fatal en diligence. Le facteur décisif : <b>existe-t-il un signal de correction bon marché</b>, et la tâche est-elle <b>décomposable</b> ? Ces deux axes prédisent où l'agrégation paie.</p>
+
+  <table>
+    <thead><tr><th>Classe</th><th>Vérificateur bon marché ?</th><th>Pari a priori</th><th>Mécanisme attendu gagnant</th></tr></thead>
+    <tbody>
+      <tr><td><b>T-CODE</b> — synthèse de fonctions (style MBPP/HumanEval)</td><td class="c good">OUI (tests unitaires)</td><td class="c good">FORT</td><td>best-of-N <b>vérifié</b> : garder le candidat qui passe les tests</td></tr>
+      <tr><td><b>T-MATH</b> — problèmes arithmétiques (style GSM8K)</td><td class="c good">OUI (réponse chiffrée vérifiable)</td><td class="c good">FORT</td><td>best-of-N vérifié + vote sur réponses finales</td></tr>
+      <tr><td><b>T-EXTRACT</b> — extraction structurée (schéma/ensemble)</td><td class="c mid">PARTIEL (validation de schéma)</td><td class="c mid">MOYEN</td><td>vérif. de contrainte + décomposition par champ</td></tr>
+      <tr><td><b>T-CLASS</b> — classification / sentiment (contraste)</td><td class="c bad">NON (pas d'oracle bon marché)</td><td class="c bad">FAIBLE</td><td>self-consistency <b>diversifiée</b> (le test du PoC, durci)</td></tr>
+      <tr><td><b>T-KNOW</b> — recall de faits obscurs (frontière)</td><td class="c bad">NON</td><td class="c bad">NUL attendu</td><td><i>aucun</i> — on ne vote pas un savoir absent (bord négatif assumé)</td></tr>
+    </tbody>
+  </table>
+
+  <div class="callout key">
+    <p><b>Stratégie : mener par les tâches vérifiables, rapporter les bords.</b> On attaque d'abord <b>T-CODE</b> et <b>T-MATH</b> (vérificateur fort, bon marché, déterministe — et le best-of-N vérifié y a une base théorique solide : la justesse de best-of-N croît avec N tant que le générateur a un taux de passage non nul et que le vérificateur a du signal). On inclut <b>T-CLASS</b> (le terrain du PoC) et <b>T-KNOW</b> (bord négatif) <i>exprès</i> : montrer <b>où la thèse casse</b> est ce qui rend crédible <b>où elle tient</b>. Une thèse qui ne prétend gagner que là où elle gagne réellement est défendable ; une qui prétend gagner partout meurt au premier contre-exemple.</p>
+  </div>
+</section>
+</div>
+
+<!-- 4 -->
+<div class="wrap page">
+<section>
+  <h2><span class="num">§4</span> Les mécanismes de « quantité », classés par espérance</h2>
+  <p>« Beaucoup de petits en parallèle » n'est pas un seul mécanisme — c'en est une famille, et le PoC a éliminé le plus naïf. Voici les candidats, du plus prometteur au plus spéculatif, chacun déjà porté (ou portable) par une topologie EFE.</p>
+
+  <table>
+    <thead><tr><th>#</th><th>Mécanisme</th><th>Topologie EFE</th><th>Pourquoi la quantité paierait</th></tr></thead>
+    <tbody>
+      <tr><td>1</td><td><b>Best-of-N vérifié</b> — générer K, <b>sélectionner</b> celui qui passe l'oracle</td><td class="mono">consensus_verified · GenerateVerify</td><td>La sélection vérifiée transforme « voter » en « garder le correct » : monotone en N si pass-rate &gt; 0. <b>Le plus fort.</b></td></tr>
+      <tr><td>2</td><td><b>Self-consistency diversifiée</b> — K <i>prompts/personas</i> distincts, vote</td><td class="mono">Consensus (Borda) + variité forcée</td><td>Décorrèle les erreurs (le PoC échouait par corrélation). Paie sans vérificateur si la diversité est réelle.</td></tr>
+      <tr><td>3</td><td><b>Décomposition + spécialistes</b> — découper, petits experts en parallèle, fusion</td><td class="mono">Hierarchical · Pipeline</td><td>« Faire passer l'information entre agents » : chaque petit ne fait qu'un sous-problème à sa portée. Le cœur de la vision.</td></tr>
+      <tr><td>4</td><td><b>Débat / raffinement</b> — agents critiquent et révisent (itératif)</td><td class="mono">Debate (pro/contra) · Gossip</td><td>Le partage d'arguments corrige les erreurs individuelles (mixture-of-agents).</td></tr>
+      <tr><td>0</td><td><i>Vote naïf (contrôle)</i> — K échantillons, même prompt, majorité</td><td class="mono">Consensus (vote)</td><td><i>La baseline déjà réfutée — conservée comme témoin négatif.</i></td></tr>
+    </tbody>
+  </table>
+
+  <p>Les mécanismes 1 et 3 portent l'essentiel de l'espérance, et ce n'est pas un hasard : ce sont ceux où la <b>structure</b> (un vérificateur, une décomposition) fait le travail que le nombre seul ne fait pas. C'est aussi exactement ce qu'EFE a construit et que des appels d'API « K-fois-le-même-modèle » n'ont pas — donc, si la thèse tient, elle tient <b>via la structure d'EFE</b>, ce qui la lie au moat plutôt que de l'en détacher.</p>
+
+  <div class="callout">
+    <p><b>L'expérience pivot (mécanisme 1 vs 0 vs gros).</b> Sur <b>T-MATH</b> (réponse vérifiable, oracle déjà disponible : <span class="mono">EqualsExpected</span> / scorer numérique), comparer : <b>(0)</b> vote naïf K=1..7 sur un petit modèle, <b>(1)</b> best-of-N <b>vérifié</b> K=1..7 sur le même petit, <b>(réf)</b> le gros K=1. Hypothèse : (1) a une <b>pente positive</b> et rejoint la référence là où (0) stagne. C'est le test qui ressuscite la thèse — ou la condamne au repli moat. Et il tourne <b>sur Mac</b> (§7, T1).</p>
+  </div>
+</section>
+</div>
+
+<!-- 5 -->
+<div class="wrap page">
+<section>
+  <h2><span class="num">§5</span> Le coût, fait correctement</h2>
+  <p>C'est la section où les thèses meurent. Un coût mal défini retourne le verdict ; le PoC ne portait qu'un prix <b>supposé</b> (≈ 12×). Voici la discipline.</p>
+
+  <h3>5.1 — Le bon dénominateur : coût par tâche RÉSOLUE</h3>
+  <p>Pas « coût par appel » ni « par run » : <b>coût par tâche correctement résolue</b>. Un essaim qui résout 90 % à coût C n'est pas comparable à un gros qui résout 90 % à coût C′ sans normaliser par les tâches résolues. On compare des <b>frontières</b> exactitude × coût, pas des points.</p>
+
+  <h3>5.2 — La bonne unité : GPU-secondes, pas le compte de jetons brut</h3>
+  <p>Le compte de jetons brut <b>défavorise injustement</b> l'essaim (plus d'appels) et <b>masque</b> l'avantage réel : un modèle de 1 Md sert <b>bien plus</b> de jetons/seconde qu'un 12 Md sur le même GPU. L'unité honnête est la <b>GPU-seconde</b> (ou le débit jetons/s par modèle, mesuré sur le matériel cible), convertie en € au tarif GPU réel. B1 mesure déjà les jetons <b>mesurés</b> (quand vLLM rapporte l'usage, <span class="mono">is_estimated=false</span>) ; B2 ajoute le <b>débit par modèle</b> → GPU-s par tâche.</p>
+
+  <h3>5.3 — Le coût du vérificateur compte</h3>
+  <p>Best-of-N vérifié = N générations <b>+</b> le vérificateur. Si le vérificateur est une <b>fonction</b> (exécuter des tests, vérifier un nombre, valider un schéma) → quasi gratuit, l'économie tient. Si c'est un <b>autre LLM</b> → son coût s'ajoute et peut effacer le gain. La roadmap <b>compte</b> le vérificateur dans coût(essaim) — sinon l'économie est truquée. Les tâches vérifiables (T-CODE/T-MATH) sont privilégiées précisément parce que leur vérificateur est une fonction, pas un modèle.</p>
+
+  <h3>5.4 — L'analyse de sensibilité au prix</h3>
+  <p>La conclusion ne doit pas être l'otage d'un ratio de prix. On rapporte le verdict de domination sur une <b>plage</b> de ratios petit:gros (de conservateur ~3× à agressif ~15×), et on nomme le <b>seuil de bascule</b>. « L'essaim domine dès que le petit coûte ≤ X× le gros par jeton » est un énoncé robuste ; « l'essaim domine à 12× » ne l'est pas.</p>
+
+  <div class="callout warn">
+    <p><b>Le piège du débit local.</b> Sur Mac/Ollama, l'inférence est <b>sérialisée</b> (un appel à la fois) : le parallélisme de l'essaim n'a aucun avantage de débit, et la latence ne signifie rien. C'est pourquoi la <b>mesure de coût définitive exige B2</b> (vLLM <i>batche</i> réellement les K appels). Le Mac sert à la <b>justesse</b> et au <b>signal de mécanisme</b> ; le GPU sert au <b>coût</b> et à l'<b>échelle</b>. Ne jamais conclure « moins cher » depuis une mesure Mac.</p>
+  </div>
+</section>
+</div>
+
+<!-- 6 -->
+<div class="wrap page">
+<section>
+  <h2><span class="num">§6</span> La rigueur du benchmark</h2>
+  <p>Huit exemples sont une anecdote. Une preuve exige une discipline statistique et de couverture qu'il faut nommer d'avance (pré-enregistrer), pour ne pas déplacer les poteaux après coup.</p>
+  <ul>
+    <li><b>Échelle</b> : ≥ 300 exemples/classe en pilote (Mac), ≥ 1 000/classe en définitif (GPU) — assez pour des <b>intervalles de confiance</b> resserrés et détecter un écart de quelques points.</li>
+    <li><b>Couverture</b> : ≥ 3–4 classes de tâches (§3), incluant <b>au moins un bord négatif</b> (T-KNOW) — la carte, pas le point gagnant.</li>
+    <li><b>Scorers appropriés</b> : vérificateur de tests (T-CODE), égalité numérique (T-MATH), schéma/ensemble (T-EXTRACT), exact/normalisé (T-CLASS) — chaque scorer <b>ajusté au type</b>, et ses biais <b>déclarés</b> (le <span class="mono">lenient</span> est permissif : on rapporte aussi le strict).</li>
+    <li><b>Variance</b> : ≥ 3 graines/seeds par config ; rapporter moyenne ± écart, pas un run.</li>
+    <li><b>Modèles</b> : ≥ 2 tailles de <b>petits</b> (p.ex. 0,5–1 Md et 3 Md) + ≥ 1 <b>gros</b> (12 Md), même famille quand possible (contrôle de l'entraînement) ; idéalement un gros « frontière » comme borne haute.</li>
+    <li><b>Re-prouvabilité</b> : <b>tout</b> le benchmark scellé en un bundle re-prouvable — chaque run re-dérivable hors-ligne (le moat appliqué à la preuve elle-même). C'est ce qu'aucun concurrent ne peut produire.</li>
+  </ul>
+  <div class="callout ok">
+    <p><b>Le benchmark EST le moat en action.</b> N'importe qui peut publier un CSV « nos petits modèles gagnent ». Toi seul livres un <b>faisceau de runs re-prouvables</b> qu'un sceptique re-vérifie lui-même (clé fausse → échec). La rigueur statistique rend la thèse <b>crédible</b> ; la re-prouvabilité la rend <b>incontestable</b>. Prouver la thèse, c'est donc <i>aussi</i> démontrer le moat — les deux livrables n'en font qu'un.</p>
+  </div>
+</section>
+</div>
+
+<!-- 7 -->
+<div class="wrap page">
+<section>
+  <h2><span class="num">§7</span> Le programme phasé T0 → T4</h2>
+  <p>Séquencé pour obtenir le <b>signal décisif tôt et pas cher</b> (Mac), puis n'engager le GPU que pour <b>mesurer</b>, jamais pour découvrir si ça marche.</p>
+
+  <table>
+    <thead><tr><th>Phase</th><th>But</th><th>Lieu</th><th>Porte de décision</th></tr></thead>
+    <tbody>
+      <tr><td><b>T0 — Cadrer &amp; pré-enregistrer</b></td><td>Énoncé falsifiable, taxonomie, scorers, critères de réfutation (K1·K2·K3), sourcing des corpus. Aucune mesure.</td><td class="c">bureau</td><td>Hypothèses figées avant de mesurer (anti-déplacement de poteaux)</td></tr>
+      <tr><td><b>T1 — Pilote mécanisme (Mac)</b></td><td>Corpus ~300/classe sur T-MATH + T-CODE. <b>L'expérience pivot</b> : best-of-N vérifié vs vote naïf vs gros. Construire les scorers vérificateurs + les stats.</td><td class="c">Mac</td><td class="bad"><b>GO/NO-GO</b> : si l'agrégation vérifiée ne montre AUCUNE pente ni domination directionnelle → thèse en grave doute → repli moat</td></tr>
+      <tr><td><b>T2 — Banc GPU + coût mesuré</b></td><td>Box 5090, vLLM multi-modèles (petits + gros), jetons <b>mesurés</b>, débit par modèle → GPU-s. B1 SelfHost à l'échelle.</td><td class="c">GPU</td><td>Inférence réelle parallèle + coût mesurable débloqués</td></tr>
+      <tr><td><b>T3 — Benchmark définitif</b></td><td>Matrice complète {classes}×{mécanismes}×{tailles}×{K}, corpus ≥1 000/classe, graines, intervalles de confiance, frontières Pareto. Bundle re-prouvable global.</td><td class="c">GPU</td><td>La thèse est <b>prouvée</b> ssi H-A∧H-B∧H-C, significatif, sur ≥1 classe utile</td></tr>
+      <tr><td><b>T4 — Validation adverse &amp; paquet</b></td><td>Attaquer le résultat (artefact de scorer ? avantage de prompt ? prix biaisé ?), re-preuve indépendante, comparaison à la littérature, write-up + bundle.</td><td class="c">mixte</td><td>Proof-point finançable : benchmark re-prouvable + récit</td></tr>
+    </tbody>
+  </table>
+
+  <div class="fig">
+  <svg viewBox="0 0 760 150" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Le programme T0 à T4 avec la porte GO/NO-GO en T1">
+    <defs><marker id="ar" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="#475569"/></marker></defs>
+    <rect x="10" y="54" width="118" height="42" rx="8" fill="#eef2f1" stroke="#64748b"/>
+    <text x="69" y="72" text-anchor="middle" font-size="11" font-weight="700" fill="#334155">T0 · Cadrer</text>
+    <text x="69" y="86" text-anchor="middle" font-size="8.5" fill="#64748b">bureau · jours</text>
+    <rect x="150" y="46" width="140" height="58" rx="8" fill="#fffbeb" stroke="#d97706"/>
+    <text x="220" y="64" text-anchor="middle" font-size="11" font-weight="700" fill="#92400e">T1 · Pilote (Mac)</text>
+    <text x="220" y="79" text-anchor="middle" font-size="8.5" fill="#92400e">best-of-N vérifié</text>
+    <text x="220" y="92" text-anchor="middle" font-size="8" fill="#b45309">★ GO / NO-GO ★</text>
+    <rect x="338" y="10" width="150" height="40" rx="8" fill="#fef2f2" stroke="#dc2626"/>
+    <text x="413" y="27" text-anchor="middle" font-size="9.5" font-weight="700" fill="#991b1b">NO-GO → repli MOAT</text>
+    <text x="413" y="40" text-anchor="middle" font-size="8" fill="#991b1b">(produit défendable, sans la thèse)</text>
+    <rect x="338" y="60" width="118" height="42" rx="8" fill="#f0fdfa" stroke="#0d9488"/>
+    <text x="397" y="78" text-anchor="middle" font-size="11" font-weight="700" fill="#0f766e">T2 · GPU</text>
+    <text x="397" y="92" text-anchor="middle" font-size="8.5" fill="#0f766e">coût mesuré</text>
+    <rect x="478" y="60" width="128" height="42" rx="8" fill="#f0fdfa" stroke="#0d9488"/>
+    <text x="542" y="78" text-anchor="middle" font-size="11" font-weight="700" fill="#0f766e">T3 · Benchmark</text>
+    <text x="542" y="92" text-anchor="middle" font-size="8.5" fill="#0f766e">matrice + Pareto</text>
+    <rect x="628" y="60" width="124" height="42" rx="8" fill="#eef2ff" stroke="#4f46e5"/>
+    <text x="690" y="78" text-anchor="middle" font-size="11" font-weight="700" fill="#3730a3">T4 · Preuve</text>
+    <text x="690" y="92" text-anchor="middle" font-size="8" fill="#4f46e5">re-prouvable</text>
+    <line x1="128" y1="75" x2="148" y2="75" stroke="#475569" marker-end="url(#ar)"/>
+    <line x1="290" y1="62" x2="336" y2="40" stroke="#dc2626" marker-end="url(#ar)"/>
+    <line x1="290" y1="82" x2="336" y2="81" stroke="#16a34a" marker-end="url(#ar)"/>
+    <text x="312" y="58" font-size="7.5" fill="#16a34a">GO</text>
+    <line x1="456" y1="81" x2="476" y2="81" stroke="#475569" marker-end="url(#ar)"/>
+    <line x1="606" y1="81" x2="626" y2="81" stroke="#475569" marker-end="url(#ar)"/>
+  </svg>
+  <div class="cap">Tout converge vers la porte <b>T1</b> : le signal décisif s'obtient sur Mac, en semaines, <i>avant</i> l'engagement GPU. NO-GO n'est pas un échec — c'est une réorientation vers le produit déjà défendable (le moat).</div>
+  </div>
+</section>
+</div>
+
+<!-- 8 -->
+<div class="wrap page">
+<section>
+  <h2><span class="num">§8</span> Ce qu'il faut construire, mappé aux phases</h2>
+  <p>B1 fournit déjà le harnais de mesure (dataset, scorers, runner, comparaison, bundle re-prouvable). Voici les <b>incréments</b>, par phase — la plupart petits, sur Mac.</p>
+  <table>
+    <thead><tr><th>Phase</th><th>À construire</th><th>S'appuie sur</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">T0</td><td>Doc d'énoncé + pré-enregistrement ; chargeurs de corpus (sous-ensembles GSM8K/MBPP/etc. en JSONL labellisé).</td><td>Format dataset B1 (JSONL <span class="mono">{id,task,label,scorer}</span>)</td></tr>
+      <tr><td class="mono">T1</td><td><b>Scorer-vérificateur de code</b> (exécution sandboxée + tests) — nouveau ; <b>scorer maths</b> (≈ numérique/égalité, existe) ; <b>variété forcée</b> (prompts/personas par variante) ; <b>stats</b> (intervalles de confiance, significativité) dans le rapport ; câbler <span class="mono">consensus_verified</span> avec un vrai oracle de tâche.</td><td>B1 scorer trait · EqualsExpected · Debate/personas</td></tr>
+      <tr><td class="mono">T2</td><td>Provisionner la box 5090 ; vLLM servant N petits + 1 gros ; capture du <b>débit/modèle</b> → GPU-s ; concurrence réelle (batch vLLM) ; jetons <b>mesurés</b>.</td><td>B1 <span class="mono">BenchBackend::SelfHost</span> · garde-fou loopback</td></tr>
+      <tr><td class="mono">T3</td><td>Orchestrateur de matrice (balayage classes×mécanismes×tailles×K×graines) ; agrégation Pareto ; bundle re-prouvable global ; export du benchmark.</td><td>B1 <span class="mono">consensus_sweep</span> · Comparison · BenchBundle</td></tr>
+      <tr><td class="mono">T4</td><td>Suite de validation adverse (re-scoring strict, sensibilité au prix, re-preuve tierce) ; write-up.</td><td>B1 <span class="mono">reprove</span> · dominates_baseline</td></tr>
+    </tbody>
+  </table>
+  <p>Le seul morceau d'ingénierie <b>non trivial</b> est le <b>vérificateur de code sandboxé</b> (T1) — exécuter du code généré en isolation, contre des tests, sans risque. Tout le reste est de l'extension du harnais existant ou de la mise à l'échelle. C'est cohérent avec la philosophie : B1 a été conçu pour que prouver la thèse soit surtout <b>mesurer</b>, pas <b>reconstruire</b>.</p>
+</section>
+</div>
+
+<!-- 9 -->
+<div class="wrap page">
+<section>
+  <h2><span class="num">§9</span> Réfutation &amp; honnêteté : ce qui tue la thèse</h2>
+  <p>Un programme qui ne peut que confirmer n'est pas une preuve. On nomme d'avance ce qui <b>réfute</b> — c'est ce qui rendra la confirmation crédible.</p>
+  <table>
+    <thead><tr><th>Critère</th><th>Condition de réfutation</th><th>Conséquence</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">K1 — substitution</td><td>Aucune config petit-essaim n'atteint la justesse du gros (dans l'IC) sur AUCUNE classe utile.</td><td>H-A tombe → la thèse n'a pas de socle.</td></tr>
+      <tr><td class="mono">K2 — économie</td><td>Là où la justesse est atteinte, le coût réel (GPU-s mesuré, vérificateur inclus) ≥ celui du gros.</td><td>H-C tombe → « pareil mais pas moins cher » : pas de thèse.</td></tr>
+      <tr><td class="mono">K3 — artefact</td><td>Les gains n'existent que sous scorer permissif ou prix généreux ; ils s'évaporent en scoring strict / prix conservateur.</td><td>Le résultat est un artefact, pas un fait.</td></tr>
+    </tbody>
+  </table>
+  <div class="callout bad">
+    <p><b>Si K1 ∧ K2 sur tout le plan</b> — aucune région où petit-essaim ≥ gros à coût moindre — alors la thèse <b>générale est réfutée</b>. Ce n'est pas une catastrophe : c'est un <b>résultat</b>, obtenu pour le coût d'un pilote Mac, et il <b>oriente</b> — on cesse de vendre « 10× moins cher » et on mène <b>tout</b> par le moat (provenance re-prouvable), qui ne dépendait jamais de la thèse. Savoir tôt qu'on n'a <i>pas</i> la thèse vaut mieux que lever dessus et se faire percer en diligence.</p>
+  </div>
+  <div class="callout ok">
+    <p><b>Le repli VRAI (probable, et bon).</b> Le résultat le plus probable n'est ni « gagne partout » ni « perd partout », mais : <b>gagne nettement sur les tâches vérifiables/décomposables, perd sur le recall pur</b>. C'est une thèse <b>étroite, vraie, démontrée et défendable</b> — « pour le code, les maths, l'extraction, l'agentique vérifiable, un essaim vérifié de petits modèles bat un gros, moins cher, et on le prouve ». C'est un excellent énoncé de financement, et il est honnête.</p>
+  </div>
+</section>
+</div>
+
+<!-- 10 -->
+<div class="wrap page">
+<section>
+  <h2><span class="num">§10</span> Le fil stratégique : moat × thèse</h2>
+  <p>La roadmap technique sert une décision stratégique, et il faut la garder en vue à chaque porte.</p>
+  <ul>
+    <li><b>Le moat est le plancher</b> — défendable, déjà construit, indépendant de la thèse. Il borne le risque : même K1∧K2, tu as un produit (provenance/audit vérifiable).</li>
+    <li><b>La thèse est l'upside</b> — l'histoire « 10× moins cher ». Non finançable tant qu'elle n'est pas prouvée (la diligence la percerait), <b>très</b> finançable une fois prouvée.</li>
+    <li><b>Le benchmark re-prouvable les unit</b> — prouver la thèse <i>via</i> un bundle re-prouvable démontre le moat dans le même geste. Tu ne livres pas « des chiffres » ; tu livres « des runs que vous re-vérifiez ».</li>
+  </ul>
+  <table>
+    <thead><tr><th>Jalon</th><th>Débloque</th><th>Quand</th></tr></thead>
+    <tbody>
+      <tr><td>Démo moat + récit</td><td>Subvention / angel pré-seed (histoire provenance)</td><td>Maintenant (indépendant de la roadmap)</td></tr>
+      <tr><td><b>Porte T1 (GO)</b></td><td>Signal de thèse crédible → la conversation passe de « provenance » à « provenance + coût »</td><td>Fin T1 (semaines, Mac)</td></tr>
+      <tr><td><b>T3/T4 (thèse prouvée)</b></td><td>Seed costaud : moat + benchmark re-prouvable montrant la domination</td><td>Après le GPU (mois)</td></tr>
+    </tbody>
+  </table>
+  <p>L'ordre des opérations est donc : <b>(a)</b> ouvrir la piste moat <i>tout de suite</i> (elle ne dépend de rien) ; <b>(b)</b> courir T0→T1 en parallèle pour le verdict pas cher ; <b>(c)</b> n'engager le capital GPU (T2+) qu'après un GO en T1. Le risque est borné à chaque pas, et la meilleure histoire de financement se révèle d'elle-même.</p>
+</section>
+</div>
+
+<!-- 11 -->
+<div class="wrap page">
+<section>
+  <h2><span class="num">§11</span> Calendrier &amp; l'unique expérience décisive</h2>
+  <table>
+    <thead><tr><th>Phase</th><th>Effort</th><th>Dépendance</th></tr></thead>
+    <tbody>
+      <tr><td>T0 — cadrer &amp; corpus</td><td>~1 semaine</td><td>aucune</td></tr>
+      <tr><td><b>T1 — pilote mécanisme (GO/NO-GO)</b></td><td><b>~2–3 semaines</b></td><td>vérificateur code + stats ; Mac/Ollama</td></tr>
+      <tr><td>T2 — box GPU + coût</td><td>~2–4 semaines</td><td>achat/montage matériel ; vLLM</td></tr>
+      <tr><td>T3 — benchmark définitif</td><td>~3–6 semaines</td><td>T2</td></tr>
+      <tr><td>T4 — validation &amp; paquet</td><td>~2 semaines</td><td>T3</td></tr>
+    </tbody>
+  </table>
+  <p class="small muted">Délais d'ingénierie, hors approvisionnement matériel. Le chemin critique vers une preuve <b>défendable</b> est ~3–4 mois ; mais le <b>verdict de viabilité</b> tombe à la <b>fin de T1</b> (~3–4 semaines, sur Mac, pour un coût négligeable).</p>
+
+  <div class="callout key">
+    <p><b>L'unique expérience décisive, à lancer en premier.</b> Sur <b>T-MATH</b> (réponse vérifiable, oracle <span class="mono">EqualsExpected</span> déjà là), corpus ~200–300, petit modèle ~3 Md : comparer <b>best-of-N vérifié</b> (mécanisme 1, K=1..7) contre <b>vote naïf</b> (mécanisme 0, témoin) contre le <b>gros</b> K=1 — coût en jetons mesurés, exactitude avec IC, le tout scellé re-prouvable. <b>Si la courbe vérifiée monte avec K et rejoint le gros là où le vote stagne, la thèse est ressuscitée</b> et T2+ se justifie. Sinon, on a la réponse — tôt, et pas cher.</p>
+  </div>
+
+  <h3>En une phrase</h3>
+  <p>Prouver la thèse n'est pas « espérer que beaucoup de petits gagnent » ; c'est <b>cartographier précisément où l'agrégation vérifiée d'un essaim de petits bat un gros à coût réel moindre</b>, le mesurer avec rigueur statistique, le sceller de façon re-prouvable — et nommer d'avance ce qui la réfuterait. Le PoC a éliminé la version naïve ; cette roadmap teste la version structurée, là où EFE est seul à pouvoir le faire — et le verdict décisif s'achète pour trois semaines de Mac.</p>
+</section>
+</div>
+
+</body>
+</html>
