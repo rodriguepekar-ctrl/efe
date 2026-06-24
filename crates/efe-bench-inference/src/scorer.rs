@@ -126,18 +126,52 @@ fn extract(v: &Value) -> &Value {
     v.get("value").or_else(|| v.get("text")).unwrap_or(v)
 }
 
-/// Interprète une réponse comme un nombre : nombre JSON, ou chaîne parsable (tolérante au trim).
+/// Interprète une réponse comme un nombre (I-HA-FAIR : on mesure la **capacité**, pas le format) :
+/// nombre JSON, chaîne directement parsable, ou — à défaut — **le dernier nombre extrait** de la
+/// chaîne (« The answer is 96. » → 96). Symétrique pour les deux modèles ; un calcul juste enrobé de
+/// mots ne doit pas être noté faux. `None` si aucun nombre n'est trouvable.
 fn as_number(v: &Value) -> Option<f64> {
     let a = extract(v);
-    a.as_f64().or_else(|| a.as_str().and_then(|s| s.trim().parse::<f64>().ok()))
+    if let Some(f) = a.as_f64() {
+        return Some(f);
+    }
+    let s = a.as_str()?;
+    if let Ok(f) = s.trim().parse::<f64>() {
+        return Some(f);
+    }
+    last_number(s)
 }
 
-/// Interprète une réponse comme un ensemble : un tableau JSON → ensemble de représentations canoniques.
-fn as_set(v: &Value) -> Option<BTreeSet<String>> {
-    match extract(v) {
-        Value::Array(items) => Some(items.iter().map(|x| x.to_string()).collect()),
-        _ => None,
+/// Le **dernier** jeton numérique parsable d'une chaîne (chiffres + `.`, virgules de milliers
+/// retirées). Heuristique d'éval équitable pour une réponse enrobée de texte.
+fn last_number(s: &str) -> Option<f64> {
+    let mut last = None;
+    for tok in s.split_whitespace() {
+        let digits: String = tok.chars().filter(|c| c.is_ascii_digit() || *c == '.').collect();
+        let cleaned = digits.trim_matches('.');
+        if !cleaned.is_empty() {
+            if let Ok(f) = cleaned.parse::<f64>() {
+                last = Some(f);
+            }
+        }
     }
+    last
+}
+
+/// Interprète une réponse comme un **ensemble** (I-HA-FAIR : forme tolérée) : un tableau JSON, une
+/// chaîne contenant un tableau JSON, ou — à défaut — une chaîne découpée en mots alphanumériques.
+/// Chaque élément est minusculé/rogné (insensible à la casse). `None` seulement si rien d'exploitable.
+fn as_set(v: &Value) -> Option<BTreeSet<String>> {
+    let a = extract(v);
+    let raw: Vec<String> = match a {
+        Value::Array(items) => items.iter().map(value_text).collect(),
+        Value::String(s) => match serde_json::from_str::<Value>(s) {
+            Ok(Value::Array(items)) => items.iter().map(value_text).collect(),
+            _ => s.split(|c: char| !c.is_alphanumeric()).filter(|w| !w.is_empty()).map(String::from).collect(),
+        },
+        _ => return None,
+    };
+    Some(raw.iter().map(|w| w.trim().to_lowercase()).filter(|w| !w.is_empty()).collect())
 }
 
 #[cfg(test)]
@@ -180,11 +214,28 @@ mod tests {
     }
 
     #[test]
-    fn set_is_order_insensitive() {
+    fn numeric_extracts_a_number_from_enrobed_text() {
+        // I-HA-FAIR : un calcul juste enrobé de mots n'est pas noté faux (capacité ≠ format).
+        let s = ScorerKind::Numeric { tolerance: 0.0 };
+        assert!(s.is_correct(&json!({ "value": "The answer is 96." }), &json!(96)));
+        assert!(s.is_correct(&json!({ "value": "= 54 stickers" }), &json!(54)));
+        assert!(s.is_correct(&json!({ "value": "1,234" }), &json!(1234)), "virgule de milliers tolérée");
+        // Heuristique « dernier nombre » : assumée et symétrique.
+        assert!(s.is_correct(&json!({ "value": "first 3 then total 8" }), &json!(8)));
+        assert!(!s.is_correct(&json!({ "value": "no digits here" }), &json!(8)));
+    }
+
+    #[test]
+    fn set_is_order_and_format_tolerant() {
         let s = ScorerKind::Set;
-        assert!(s.is_correct(&json!({ "value": ["b", "a"] }), &json!(["a", "b"])));
-        assert!(!s.is_correct(&json!({ "value": ["a"] }), &json!(["a", "b"])));
-        assert!(!s.is_correct(&json!({ "value": "a" }), &json!(["a"])), "non-tableau → faux");
+        assert!(s.is_correct(&json!({ "value": ["b", "a"] }), &json!(["a", "b"])), "ordre indifférent");
+        assert!(!s.is_correct(&json!({ "value": ["a"] }), &json!(["a", "b"])), "ensemble incomplet → faux");
+        // I-HA-FAIR : forme tolérée — casse, tableau-dans-une-chaîne, liste par virgules.
+        assert!(s.is_correct(&json!({ "value": ["Apple", "PEAR"] }), &json!(["apple", "pear"])), "casse ignorée");
+        assert!(s.is_correct(&json!({ "value": "[\"apple\",\"pear\"]" }), &json!(["apple", "pear"])), "tableau JSON dans une chaîne");
+        assert!(s.is_correct(&json!({ "value": "pear, apple" }), &json!(["apple", "pear"])), "liste par virgules");
+        // Mais l'égalité d'ENSEMBLE reste exigée : des mots en trop (phrase) → faux (pas exploitable).
+        assert!(!s.is_correct(&json!({ "value": "the fruits are apple and pear" }), &json!(["apple", "pear"])), "mots parasites → faux");
     }
 
     #[test]
