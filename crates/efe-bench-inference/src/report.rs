@@ -35,6 +35,10 @@ pub struct ConfigReport {
     pub correct: usize,
     /// Exactitude = correct / cases ∈ [0, 1]. La mesure de tête d'affiche (I-BENCH-TRUTH).
     pub accuracy: f64,
+    /// Fraction de runs ayant produit une réponse **présente** (non vide). Un `present_pct` bas
+    /// révèle un échec d'**infra** (modèle introuvable, backend saturé) — l'exactitude n'est alors
+    /// pas une mesure de qualité. À lire AVANT l'exactitude.
+    pub present_pct: f64,
     pub total_tokens: u64,
     pub mean_tokens: f64,
     /// `true` si **au moins un** run a un coût-jetons estimé (proxy). `false` ⇒ tout est mesuré
@@ -53,6 +57,7 @@ impl ConfigReport {
     pub fn aggregate(config: String, records: Vec<RunRecord>) -> Self {
         let cases = records.len();
         let correct = records.iter().filter(|r| r.correct).count();
+        let present = records.iter().filter(|r| r.present).count();
         let total_tokens: u64 = records.iter().map(|r| r.tokens).sum();
         let verified = records.iter().filter(|r| r.verified).count();
         let total_agents: usize = records.iter().map(|r| r.agents_used).sum();
@@ -67,6 +72,7 @@ impl ConfigReport {
             cases,
             correct,
             accuracy: correct as f64 / denom,
+            present_pct: present as f64 / denom,
             total_tokens,
             mean_tokens: total_tokens as f64 / denom,
             tokens_estimated,
@@ -127,10 +133,10 @@ impl Comparison {
     pub fn table(&self) -> String {
         let mut out = String::new();
         out.push_str(&format!(
-            "{:<22} {:>9} {:>8} {:>11} {:>6} {:>9} {:>12}\n",
-            "config", "exactitude", "agents", "jetons/moy", "est?", "R0 vérif", "coût pondéré"
+            "{:<20} {:>9} {:>8} {:>7} {:>10} {:>5} {:>8} {:>11}\n",
+            "config", "exactitude", "présent", "agents", "jetons/moy", "est?", "R0", "coût pondéré"
         ));
-        out.push_str(&"-".repeat(82));
+        out.push_str(&"-".repeat(84));
         out.push('\n');
         for r in &self.reports {
             let weighted = self
@@ -140,9 +146,10 @@ impl Comparison {
                 .map(|c| format!("{c:.3}¢"))
                 .unwrap_or_else(|| "—".to_string());
             out.push_str(&format!(
-                "{:<22} {:>8.1}% {:>8.1} {:>11.1} {:>6} {:>8.0}% {:>12}\n",
-                truncate(&r.config, 22),
+                "{:<20} {:>8.1}% {:>7.0}% {:>7.1} {:>10.1} {:>5} {:>7.0}% {:>11}\n",
+                truncate(&r.config, 20),
                 r.accuracy * 100.0,
+                r.present_pct * 100.0,
                 r.mean_agents,
                 r.mean_tokens,
                 if r.tokens_estimated { "est" } else { "mes" },
@@ -326,6 +333,7 @@ mod tests {
         RunRecord {
             case_id: case_id.to_string(),
             correct,
+            present: true,
             agents_used: agents,
             n17_calls: agents,
             tokens,

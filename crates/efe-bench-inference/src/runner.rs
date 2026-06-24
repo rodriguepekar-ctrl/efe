@@ -117,6 +117,10 @@ pub struct RunRecord {
     pub case_id: String,
     /// Le scorer a-t-il jugé la réponse gagnante correcte (post-hoc, aveugle) ?
     pub correct: bool,
+    /// L'essaim a-t-il produit une réponse **présente** (non vide/nulle) ? Distingue « a répondu
+    /// faux » (présent + incorrect = faiblesse du modèle) de « n'a pas répondu » (absent = échec
+    /// d'infra : modèle introuvable, backend saturé). Sans ça, un 0 % d'exactitude est ambigu.
+    pub present: bool,
     /// Largeur effective (appels d'agent réellement faits, après sizing/arrêts).
     pub agents_used: usize,
     /// Nombre d'appels LLM forensiques (records N17 ; 0 en keyless / hors Mode C).
@@ -149,6 +153,7 @@ impl RunRecord {
     fn from_outcome(case: &BenchCase, outcome: &RunOutcome) -> Self {
         let winner = outcome.run.output.clone();
         let correct = case.scorer.is_correct(&winner, &case.label);
+        let present = efe_swarm_topology::answer_is_present(&winner);
 
         // Coût-jetons : depuis les records N17 par-appel (PAS le N17Summary, qui ne porte que
         // l'intégrité des liens). `total_tokens()` = provider si rapporté, sinon estimation client.
@@ -168,6 +173,7 @@ impl RunRecord {
         Self {
             case_id: case.id.clone(),
             correct,
+            present,
             agents_used: outcome.run.accounting.agents_used,
             n17_calls,
             tokens,
@@ -189,6 +195,7 @@ impl RunRecord {
         Self {
             case_id: case.id.clone(),
             correct: false,
+            present: false,
             agents_used: 0,
             n17_calls: 0,
             tokens: 0,

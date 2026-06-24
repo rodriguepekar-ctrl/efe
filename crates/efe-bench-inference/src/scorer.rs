@@ -41,6 +41,12 @@ pub enum ScorerKind {
     Numeric { tolerance: f64 },
     /// Égalité d'ensembles (réponses multi-étiquettes, ordre indifférent).
     Set,
+    /// **Texte TOLÉRANT** (éval de vrais modèles) : casse/espaces/ponctuation ignorés, et le label
+    /// compte comme correct s'il **apparaît comme un mot** de la réponse (« Finance. », « the topic
+    /// is finance » → `finance`). Mesure le FOND, pas la forme. **Permissif** par construction (une
+    /// réponse bavarde contenant le mot compte) ; à n'employer qu'avec un prompt strict (« un seul
+    /// mot »). Distinct de l'oracle exact (I-BENCH-SAME-ORACLE ne s'applique qu'à `Exact`).
+    Lenient,
 }
 
 impl ScorerKind {
@@ -50,6 +56,7 @@ impl ScorerKind {
             ScorerKind::Exact => "exact",
             ScorerKind::Numeric { .. } => "numeric",
             ScorerKind::Set => "set",
+            ScorerKind::Lenient => "lenient",
         }
     }
 
@@ -73,8 +80,29 @@ impl ScorerKind {
                 (Some(got), Some(exp)) => got == exp,
                 _ => false,
             },
+            ScorerKind::Lenient => {
+                let label_n = lenient_norm(&value_text(label));
+                if label_n.is_empty() {
+                    return false;
+                }
+                let answer = value_text(extract(winner));
+                lenient_norm(&answer) == label_n || answer.split_whitespace().any(|t| lenient_norm(t) == label_n)
+            }
         }
     }
+}
+
+/// Le texte d'une valeur JSON : la chaîne nue si c'en est une, sinon sa forme sérialisée.
+fn value_text(v: &Value) -> String {
+    match v {
+        Value::String(s) => s.clone(),
+        other => other.to_string(),
+    }
+}
+
+/// Normalisation tolérante : minuscule, espaces rognés, ponctuation de bord retirée.
+fn lenient_norm(s: &str) -> String {
+    s.trim().to_lowercase().trim_matches(|c: char| !c.is_alphanumeric()).to_string()
 }
 
 /// Pèle un **emballage de diagnostic** : le consensus adaptatif rend `{ value, sizing }`, le gossip
@@ -157,6 +185,19 @@ mod tests {
         assert!(s.is_correct(&json!({ "value": ["b", "a"] }), &json!(["a", "b"])));
         assert!(!s.is_correct(&json!({ "value": ["a"] }), &json!(["a", "b"])));
         assert!(!s.is_correct(&json!({ "value": "a" }), &json!(["a"])), "non-tableau → faux");
+    }
+
+    #[test]
+    fn lenient_ignores_form_and_finds_the_word() {
+        let s = ScorerKind::Lenient;
+        // Casse + ponctuation ignorées.
+        assert!(s.is_correct(&json!({ "value": "Finance." }), &json!("finance")));
+        assert!(s.is_correct(&json!({ "value": "  FINANCE  " }), &json!("finance")));
+        // Le mot apparaît dans une réponse bavarde (prompt strict supposé, mais robuste).
+        assert!(s.is_correct(&json!({ "value": "The topic is finance." }), &json!("finance")));
+        // Un vrai écart reste faux.
+        assert!(!s.is_correct(&json!({ "value": "sports" }), &json!("sport")), "sports ≠ sport");
+        assert!(!s.is_correct(&json!({ "value": "health" }), &json!("finance")));
     }
 
     #[test]
