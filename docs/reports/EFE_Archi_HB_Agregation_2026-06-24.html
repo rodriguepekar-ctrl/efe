@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>EFE — Architecture : H-B, l'Agrégation (la quantité vérifiée paie-t-elle ?)</title>
+<style>
+  :root{--ink:#0f172a;--muted:#475569;--soft:#64748b;--line:#e2e8f0;--teal:#0d9488;--teal-d:#0f766e;--indigo:#4f46e5;--indigo-d:#4338ca;--ok:#16a34a;--warn:#d97706;--bad:#dc2626;--bg-tint:#f6fbfa;--bg-card:#eef2f1;--code-bg:#0f172a;--code-fg:#e2e8f0;}
+  *{box-sizing:border-box;} html{font-size:11.2px;}
+  body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,Arial,sans-serif;color:var(--ink);margin:0;line-height:1.6;background:#fff;-webkit-font-smoothing:antialiased;}
+  .wrap{max-width:178mm;margin:0 auto;padding:0 2mm;}
+  h1,h2,h3,h4{line-height:1.2;font-weight:700;}
+  h2{font-size:1.45rem;margin:0 0 .55rem;padding-bottom:.32rem;border-bottom:3px solid var(--teal);}
+  h2 .num{color:var(--teal);} h3{font-size:1.13rem;margin:1.1rem 0 .3rem;color:var(--teal-d);}
+  h4{font-size:1rem;margin:.8rem 0 .2rem;color:var(--indigo-d);}
+  p{margin:.55rem 0;text-align:justify;hyphens:auto;} a{color:var(--indigo);text-decoration:none;}
+  code{font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace;font-size:.85em;background:var(--bg-card);padding:.05em .35em;border-radius:4px;color:#0b3b36;}
+  .muted{color:var(--muted);} .small{font-size:.88rem;}
+  section{break-inside:avoid;} .page{break-before:page;} h2{break-after:avoid;}
+  table{border-collapse:collapse;width:100%;margin:.55rem 0;font-size:.82rem;}
+  th,td{border:1px solid var(--line);padding:.32rem .5rem;text-align:left;vertical-align:top;}
+  th{background:var(--bg-card);font-weight:700;} tbody tr:nth-child(even){background:var(--bg-tint);}
+  td.c,th.c{text-align:center;} .good{background:#dcfce7 !important;color:#166534;font-weight:700;} .mid{background:#fef9c3 !important;color:#854d0e;font-weight:700;} .bad{background:#fee2e2 !important;color:#991b1b;font-weight:700;}
+  .tag{display:inline-block;font-size:.71rem;font-weight:700;padding:.08em .5em;border-radius:20px;}
+  .t-ok{background:#dcfce7;color:#166534;} .t-info{background:#e0e7ff;color:#3730a3;} .t-teal{background:#ccfbf1;color:#115e59;} .t-warn{background:#fef3c7;color:#92400e;} .t-bad{background:#fee2e2;color:#991b1b;}
+  pre{background:var(--code-bg);color:var(--code-fg);padding:.55rem .8rem;border-radius:8px;overflow:auto;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.72rem;line-height:1.45;margin:.55rem 0;}
+  pre code{background:none;color:inherit;padding:0;}
+  .callout{border-left:4px solid var(--teal);background:var(--bg-tint);padding:.55rem .85rem;border-radius:0 8px 8px 0;margin:.65rem 0;}
+  .callout p{text-align:left;margin:.28rem 0;}
+  .callout.key{border-color:var(--indigo);background:#eef2ff;} .callout.warn{border-color:var(--warn);background:#fffbeb;} .callout.ok{border-color:var(--ok);background:#f0fdf4;} .callout.bad{border-color:var(--bad);background:#fef2f2;}
+  .fig{margin:.7rem 0 .9rem;text-align:center;break-inside:avoid;}
+  .fig svg{max-width:100%;height:auto;border:1px solid var(--line);border-radius:10px;background:#fff;}
+  .fig .cap{font-size:.79rem;color:var(--muted);margin-top:.32rem;font-style:italic;text-align:center;}
+  ul,ol{margin:.4rem 0 .55rem 1.1rem;padding:0;} li{margin:.24rem 0;}
+  svg text{font-family:-apple-system,"Segoe UI",Inter,sans-serif;}
+  .cover{height:262mm;display:flex;flex-direction:column;justify-content:center;position:relative;padding:0 6mm;}
+  .cover .eyebrow{color:var(--teal);font-weight:800;letter-spacing:.2em;font-size:.83rem;text-transform:uppercase;}
+  .cover h1{font-size:2.25rem;margin:.4rem 0 .2rem;line-height:1.08;} .cover .sub{font-size:1.16rem;color:var(--muted);margin-bottom:1.1rem;}
+  .cover .tagline{font-size:1.0rem;color:var(--ink);max-width:163mm;border-left:4px solid var(--teal);padding-left:1rem;font-style:italic;text-align:left;}
+  .cover .meta{position:absolute;bottom:6mm;left:6mm;right:6mm;display:flex;justify-content:space-between;border-top:1px solid var(--line);padding-top:.6rem;font-size:.8rem;color:var(--soft);}
+  .cover .pills{margin:1rem 0;} .cover .pills .tag{font-size:.77rem;margin-right:.3rem;}
+  .mono{font-family:ui-monospace,Menlo,Consolas,monospace;}
+  hr{border:none;border-top:1px solid var(--line);margin:.9rem 0;}
+  .toc{font-size:.9rem;columns:2;column-gap:2rem;} .toc div{margin:.16rem 0;break-inside:avoid;} .toc .n{color:var(--teal);font-weight:700;display:inline-block;width:1.8em;}
+  .eq{font-family:ui-monospace,Menlo,Consolas,monospace;background:#ecfdf5;border:1px solid #a7f3d0;border-radius:8px;padding:.45rem .75rem;margin:.5rem 0;font-size:.79rem;color:#065f46;text-align:center;}
+  @page{size:A4;margin:13mm 12mm;}
+</style>
+</head>
+<body>
+
+<!-- COVER -->
+<div class="wrap"><div class="cover">
+  <div class="eyebrow">Architecture · l'expérience pivot · la quantité paie-t-elle, et comment</div>
+  <h1>H-B — L'Agrégation</h1>
+  <div class="sub">« Beaucoup de petits en parallèle » n'est un fait que si l'agrégation récupère ce qu'un petit seul n'a pas. Le PoC a réfuté le vote naïf. Reste à tester les bonnes formes — et à ne pas se mentir sur le plafond ni sur le coût.</div>
+  <div class="tagline">C'est l'expérience la plus décisive de la roadmap. H-A a établi, re-prouvablement, qu'aucun petit modèle ne substitue un gros <b>seul</b> (K=1) — mais il a <b>chiffré l'écart à combler</b> : ≈ 8 points sur <span class="mono">phi4-mini × T-MATH</span> (à ré-évaluer sous raisonnement). H-B demande : l'<b>agrégation</b> de K échantillons comble-t-elle cet écart ? Le piège — celui qui ruine la moitié des études « best-of-N » — est de confondre des mécanismes de natures différentes et de prendre <span class="mono">pass@K</span> pour un plafond universel. Cette architecture (corrigée après revue adversariale) les sépare rigoureusement : les mécanismes <b>déployables bon marché</b> (self-consistency par vote majoritaire, vote <b>pondéré</b> par confiance, vérificateurs-fonction comme le <i>plug-back</i> arithmétique) ; le <b>plafond pass@K</b>, qui n'est le plafond que des mécanismes de <b>sélection parmi les K</b> (et que des agrégateurs <b>synthétiseurs</b> — médiane, fusion — peuvent dépasser) ; et qui, croissant par construction, ne sert qu'à <b>réfuter</b> (un plafond qui ne monte pas) et à <b>chiffrer la valeur d'un vérificateur</b>. On vote sur la <b>réponse extraite</b> (jamais la prose — la cause de l'échec du PoC), on autorise le <b>raisonnement</b> symétriquement (la leçon de HA.3), on <b>pré-enregistre</b> δ, n, la référence et le K-cible (pas de pêche au ∃K), et on tranche le coût en <b>jetons entrée/sortie séparés</b> sous deux scénarios de cache — en suspendant tout verdict de coût <b>de déploiement</b> à la mesure GPU-secondes (B2). Le but : un verdict qui dit non seulement <i>si</i> la quantité paie, mais <i>pourquoi</i> et <i>quoi faire ensuite</i> — sans artefact.</div>
+  <div class="pills">
+    <span class="tag t-teal">SC / vote pondéré / vérificateur — déployables</span>
+    <span class="tag t-info">pass@K = plafond de SÉLECTION (pas universel)</span>
+    <span class="tag t-info">verdict pré-enregistré, multiplicité contrôlée</span>
+    <span class="tag t-warn">coût jetons entrée/sortie ; GPU-s ⇒ B2</span>
+    <span class="tag t-ok">extraction par rôle générateur ; re-prouvable</span>
+  </div>
+  <div class="meta">
+    <span>EFE — Essaim Fluide Éphémère · roadmap thèse, claim H-B · architecture v2 (post-revue adversariale)</span>
+    <span>2026-06-24 · architecture</span>
+  </div>
+</div></div>
+
+<!-- TOC -->
+<div class="wrap page">
+  <h2><span class="num">§0</span> Plan</h2>
+  <div class="toc">
+    <div><span class="n">1.</span> Ce que H-A a posé, et ce que H-B doit trancher</div>
+    <div><span class="n">2.</span> L'espace des mécanismes — et la portée exacte du plafond</div>
+    <div><span class="n">3.</span> Pourquoi le vote naïf a échoué (et les conditions pour réussir)</div>
+    <div><span class="n">4.</span> La métrique &amp; le verdict : courbe justesse × K, sans pêche au ∃K</div>
+    <div><span class="n">5.</span> Le coût, honnêtement : entrée/sortie, cache, et GPU-s ⇒ B2</div>
+    <div><span class="n">6.</span> L'intégration EFE : extraction par rôle, température bornée, pré-enregistrement</div>
+    <div><span class="n">7.</span> Les lectures décisives &amp; les critères de réfutation</div>
+    <div><span class="n">8.</span> Menaces à la validité</div>
+    <div><span class="n">9.</span> Les invariants de H-B</div>
+    <div><span class="n">10.</span> Séquence, Mac vs GPU, et ce que H-B décide</div>
+  </div>
+
+  <h3>Le geste, en une phrase</h3>
+  <p>H-B fait produire à un <b>petit</b> modèle <b>K raisonnements</b> par problème, en <b>extrait la réponse</b> de chacun (par rôle générateur, jamais des juges), puis trace plusieurs courbes en fonction de K : les mécanismes <b>déployables</b> (self-consistency, vote pondéré, vérificateur-fonction) et le <b>plafond pass@K</b>. Il les compare à la justesse du <b>gros</b> modèle sous la <b>même</b> affordance de raisonnement — une référence <b>scellée d'avance</b> — à <b>coût-jetons</b> apparié, et tranche par un test à <b>erreur de famille contrôlée</b> sur un K <b>pré-spécifié</b>. La thèse, sur cette cellule, tient si un mécanisme déployable rejoint le gros à coût-jetons moindre ; et l'écart entre le <b>meilleur déployable</b> et pass@K chiffre exactement la valeur d'un vérificateur.</p>
+
+  <div class="callout key">
+    <p><b>Pourquoi c'est l'expérience pivot — et pourquoi sa rigueur compte.</b> Tout le reste de la roadmap en dépend, et un design naïf produirait un verdict <b>trompeur</b> (artefacts de monotonie, de multiplicité, de coût). Si un mécanisme déployable comble les ≈8 points, la thèse passe d'« upside » à <b>preuve de coût-jetons</b> (la preuve de déploiement attendant B2). Si seul le plafond les comble, la prochaine brique est <b>un vérificateur</b> (gratuit en code). Si aucun, la « quantité » est réfutée sur le terrain le plus favorable. <b>H-B est le point où « beaucoup de petits » cesse d'être un slogan pour devenir un fait mesuré — à condition de ne pas se mentir sur le plafond, la statistique, ni le coût.</b></p>
+  </div>
+</div>
+
+<!-- 1 -->
+<div class="wrap page">
+<section>
+  <h2><span class="num">§1</span> Ce que H-A a posé, et ce que H-B doit trancher</h2>
+  <p>H-A a livré une carte des écarts re-prouvable et un verdict net : <b>aucun petit modèle ne substitue gemma3:12b seul</b> (K=1). Loin d'enterrer la thèse, il l'a <b>armée</b> en chiffrant où l'attaquer.</p>
+  <table>
+    <thead><tr><th>Cellule (petit × tâche)</th><th class="c">écart Δ (K=1, sans CoT)</th><th>statut pour H-B</th></tr></thead>
+    <tbody>
+      <tr><td><b>phi4-mini × T-MATH</b></td><td class="c mid">≈ 8 pts (indéterminé)</td><td class="good">la cible — petit écart, l'agrégation a une chance</td></tr>
+      <tr><td>phi4-mini × T-EXTRACT</td><td class="c">≈ 17 pts</td><td class="mid">secondaire — écart plus large</td></tr>
+      <tr><td>llama-1B × tout</td><td class="c bad">24–69 pts</td><td class="bad">hors de portée — on n'y envoie pas H-B</td></tr>
+    </tbody>
+  </table>
+
+  <h4>1.1 — Le raisonnement est rouvert — et la cible est donc RE-MESURÉE et FIGÉE</h4>
+  <p>HA.3 avait <b>supprimé</b> le chain-of-thought (« reply with ONLY the number »), déprimant l'arithmétique des deux modèles (gemma à 48,5 %, qui calculait <b>142</b> juste « step by step » mais répondait <b>122</b> faux sans). H-B <b>rouvre</b> le raisonnement, <b>symétriquement</b> (petit ET gros — I-HB-FAIR). <b>Conséquence critique</b> : l'écart de 8 points était sous CoT-suppression ; sous CoT, la justesse du gros <b>monte</b>, donc la cible <b>bouge</b>. Pour éviter le <i>garden-of-forking-paths</i> (un verdict sensible à un nombre lu après coup), H-B <b>pré-enregistre la référence</b> : on mesure <span class="mono">justesse(gros, K=1, CoT)</span> <b>avec son intervalle bootstrap</b>, on la <b>scelle</b>, et on fixe δ <b>avant</b> de regarder la moindre courbe d'agrégation (I-HB-PREREG). La barre que les mécanismes doivent franchir n'est jamais ajustée ensuite.</p>
+
+  <h4>1.2 — Le vote naïf est déjà réfuté — il faut les bonnes agrégations</h4>
+  <p>Le PoC a montré que voter sur les sorties brutes n'aide pas. H-B garde le vote naïf comme <b>témoin</b> et teste les formes à base théorique : voter sur la <b>réponse extraite</b> (self-consistency), <b>pondérer</b> ce vote (confiance), <b>vérifier</b> par une fonction quand elle existe, et — distinct des trois — <b>synthétiser</b> (médiane). §2 cartographie cet espace ; §3 explique précisément les conditions de succès.</p>
+</section>
+</div>
+
+<!-- 2 -->
+<div class="wrap page">
+<section>
+  <h2><span class="num">§2</span> L'espace des mécanismes — et la portée exacte du plafond</h2>
+  <p>Confondre ces familles est l'erreur qui ruine les études « best-of-N ». H-B les tient séparées, et — correction centrale par rapport à une première intuition — <b>ne traite pas <span class="mono">pass@K</span> comme un plafond universel</b>.</p>
+
+  <table>
+    <thead><tr><th>Famille</th><th>Mécanisme</th><th>Déployable ?</th><th>Borné par pass@K ?</th></tr></thead>
+    <tbody>
+      <tr><td rowspan="3"><b>Sélection parmi les K</b></td><td>Self-consistency (vote majoritaire sur la réponse)</td><td class="c good">OUI (sans label)</td><td class="c">OUI (mode ⊆ réponses tirées)</td></tr>
+      <tr><td>Vote <b>pondéré</b> (confiance / probabilité / universal-SC)</td><td class="c good">OUI</td><td class="c">OUI</td></tr>
+      <tr><td>Best-of-N par <b>vérificateur-fonction</b> (plug-back, sanité de plage/unités)</td><td class="c good">OUI</td><td class="c">OUI</td></tr>
+      <tr><td><b>Sélection oracle</b></td><td><b>pass@K</b> : garde un candidat correct s'il en existe</td><td class="c bad">NON (utilise le label)</td><td class="c">= le plafond de cette colonne</td></tr>
+      <tr><td><b>Synthèse</b></td><td>Agrégateur qui <b>fabrique</b> une réponse (médiane numérique, fusion générative des K brouillons)</td><td class="c good">OUI</td><td class="c bad">NON — peut DÉPASSER pass@K</td></tr>
+    </tbody>
+  </table>
+
+  <div class="callout key">
+    <p><b>La portée exacte de « SC ≤ pass@K ».</b> L'inégalité <span class="mono">justesse(sélection) ≤ pass@K</span> ne vaut que pour les mécanismes qui <b>choisissent l'un des K candidats</b> (le mode est l'une des réponses tirées). Un <b>synthétiseur</b> n'est pas contraint : la <b>médiane</b> de {140, 142, 144} vaut <b>142</b> même si « 142 » n'a été tiré par <i>aucun</i> échantillon — il peut donc <b>dépasser</b> pass@K. Conséquence directe : <b>pass@K n'est PAS « ce qu'un vérificateur parfait achèverait » dans l'absolu</b> ; c'est le plafond de la <i>sélection</i>. Et « la réponse est absente des K → aucune agrégation ne peut » (qu'on serait tenté d'écrire) est <b>faux</b> pour les synthétiseurs. H-B mesure donc les deux : la sélection (bornée par pass@K) <b>et</b> au moins un synthétiseur (médiane), sans présupposer de plafond commun.</p>
+  </div>
+
+  <h4>2.1 — La valeur d'un vérificateur, correctement définie</h4>
+  <p>L'écart entre la self-consistency <b>nue</b> et pass@K <b>sur-estime</b> la valeur d'un vérificateur : une partie de cet écart se récolte <b>gratuitement</b> par le vote <b>pondéré</b> ou un vérificateur-fonction. La quantité honnête est donc :</p>
+  <div class="eq">valeur(vérificateur) = pass@K − justesse(MEILLEUR mécanisme déployable bon marché)</div>
+  <p>où le « meilleur déployable » inclut SC pondéré <b>et</b> les vérificateurs-fonction. En maths, contrairement à une première intuition, des vérificateurs déployables bon marché <b>existent</b> : <b>plug-back</b> (substituer la réponse dans la contrainte — vérifier coûte moins que résoudre), <b>sanité de plage/type</b> (un compte est un entier ≥ 0, une probabilité ∈ [0,1]), <b>cohérence d'unités</b>. Imparfaits, mais déployables — ils relèvent le best-of-N réaliste <b>au-dessus</b> du SC nu. On en instancie au moins un (plug-back/sanité) dans la couche d'agrégation, pour ne pas attribuer faussement au seul « pivot code » un gain déjà accessible en maths.</p>
+
+  <h4>2.2 — La correspondance aux primitives EFE (vérifiée)</h4>
+  <ul>
+    <li><b>pass@K</b> ≡ <span class="mono">GenerateVerify</span> avec vérificateur = l'oracle <span class="mono">equals_expected</span> (<span class="mono">select_from</span> garde « le passant de meilleur score »). <b>Mais</b> l'oracle utilise le label → <b>interdit sur le chemin déployable</b> ; il ne sert qu'à calculer le plafond, côté banc (I-HB-DEPLOYABLE).</li>
+    <li><b>Sélection déployable &amp; synthèse</b> : calculées <b>côté banc</b> sur les K réponses <b>extraites des seuls agents générateurs</b> (§6, I-HB-GENONLY) — le <span class="mono">Consensus</span> du SDK vote sur l'égalité des candidats bruts (verbeux → jamais d'accord), donc on n'utilise pas son agrégation.</li>
+  </ul>
+</section>
+</div>
+
+<!-- 3 -->
+<div class="wrap page">
+<section>
+  <h2><span class="num">§3</span> Pourquoi le vote naïf a échoué (et les conditions pour réussir)</h2>
+
+  <h4>3.1 — On votait sur la prose, pas sur la réponse (granularité)</h4>
+  <p>Le <span class="mono">Consensus</span> agrège par <b>égalité de candidats</b>. Deux raisonnements corrects mais formulés autrement (« 70 + 72 = 142 » vs « total is 142 ») sont des candidats <b>distincts</b> → aucun accord. C'est un défaut de <b>granularité</b>, pas de principe. <b>I-HB-ANSWER</b> : l'agrégation opère sur la <b>réponse extraite</b> (le nombre), où « 142 » et « 142 » s'accordent.</p>
+
+  <h4>3.2 — Les conditions statistiques, et le diagnostic à trois régimes (qualifié)</h4>
+  <p>Bien posée, la self-consistency ne gagne que si <b>(a)</b> la bonne réponse est le mode (le modèle a raison plus souvent que toute erreur particulière) et <b>(b)</b> les erreurs sont <b>diverses</b>. Deux échecs symétriques guettent : une diversité <b>nulle</b> (K échantillons identiques → SC = K=1) <b>et</b> une diversité <b>explosive</b> (cf. §6 : la rampe de température du SDK diverge → générations dégénérées → le mode se disperse, SC chute, pendant que pass@K gonfle par tirages chanceux). Le plafond <b>pass@K</b> révèle si la bonne réponse est <b>présente</b> parmi les K (même minoritaire), d'où le diagnostic — <b>qualifié</b> par la portée du plafond (§2) :</p>
+  <table>
+    <thead><tr><th>Régime</th><th>pass@K</th><th>meilleur déployable</th><th>Interprétation (et sa limite)</th></tr></thead>
+    <tbody>
+      <tr><td><b>La quantité paie</b></td><td class="c">↑ rejoint le gros</td><td class="c good">↑ rejoint le gros</td><td>Bonne réponse présente ET récupérable sans label → <b>thèse de coût-jetons prouvée (cellule)</b>.</td></tr>
+      <tr><td><b>Un vérificateur paierait</b></td><td class="c good">↑ rejoint le gros</td><td class="c mid">plafonne sous le gros</td><td>Présente mais minoritaire → un vérificateur la sélectionnerait. Écart à mesurer vs le <b>meilleur</b> déployable, pas SC nu.</td></tr>
+      <tr><td><b>Sélection hors de portée</b></td><td class="c bad">plafonne sous le gros</td><td class="c bad">plafonne</td><td>Absente des K → aucune <b>sélection</b> ne peut. <b>Mais</b> un <b>synthétiseur</b> (médiane/fusion) pourrait encore — on le teste avant de conclure « réfutée ».</td></tr>
+    </tbody>
+  </table>
+  <div class="callout">
+    <p><b>C'est ce diagnostic — impossible sans le plafond — qui fait la valeur de H-B</b>, à condition de ne pas le sur-lire. <span class="mono">pass@K</span> étant <b>monotone croissant par construction</b> (ajouter un échantillon ne peut qu'augmenter « ∃ correcte »), sa <b>pente positive n'est jamais une découverte</b> : on ne l'utilise que pour <b>réfuter</b> (un plafond qui <i>ne</i> monte <i>pas</i> vers le gros est informatif — K-B2) et pour l'écart au déployable. Toute affirmation positive (« la quantité paie ») doit reposer sur un mécanisme <b>déployable</b>, jamais sur pass@K seul.</p>
+  </div>
+</section>
+</div>
+
+<!-- 4 -->
+<div class="wrap page">
+<section>
+  <h2><span class="num">§4</span> La métrique &amp; le verdict : courbe justesse × K, sans pêche au ∃K</h2>
+  <p>Le livrable est une <b>courbe</b> justesse × K par mécanisme, posée contre la <b>référence scellée</b> du gros — mais le <b>verdict</b> exige une discipline statistique que la naïveté « ∃K qui franchit » trahirait.</p>
+
+  <div class="fig">
+  <svg viewBox="0 0 720 320" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Justesse vs K : pass@K (plafond), meilleur déployable, self-consistency, et la ligne du gros">
+    <line x1="70" y1="270" x2="680" y2="270" stroke="#334155" stroke-width="1.5"/>
+    <line x1="70" y1="40" x2="70" y2="270" stroke="#334155" stroke-width="1.5"/>
+    <text x="375" y="298" text-anchor="middle" font-size="11" fill="#334155">K (échantillons) — K-cible pré-spécifié (le « genou »)</text>
+    <text x="22" y="160" text-anchor="middle" font-size="11" fill="#334155" transform="rotate(-90 22 160)">justesse</text>
+    <line x1="70" y1="95" x2="680" y2="95" stroke="#4f46e5" stroke-width="1.6" stroke-dasharray="6 4"/>
+    <text x="676" y="89" text-anchor="end" font-size="9.5" font-weight="700" fill="#3730a3">gros (réf. scellée, K=1, CoT) ± IC</text>
+    <rect x="70" y="88" width="610" height="14" fill="#4f46e5" opacity="0.08"/>
+    <text x="90" y="285" text-anchor="middle" font-size="8.5" fill="#64748b">1</text>
+    <text x="500" y="285" text-anchor="middle" font-size="8.5" fill="#64748b">K*</text>
+    <line x1="500" y1="40" x2="500" y2="270" stroke="#64748b" stroke-dasharray="3 3" opacity="0.6"/>
+    <!-- pass@K (ceiling) -->
+    <path d="M90,210 C200,150 320,95 500,68 S650,55 650,52" fill="none" stroke="#16a34a" stroke-width="2.4" stroke-dasharray="2 2"/>
+    <text x="505" y="58" font-size="9" font-weight="700" fill="#166534">pass@K (plafond, monotone — réfute seulement)</text>
+    <!-- best deployable (between SC and pass) -->
+    <path d="M90,210 C210,165 330,120 500,100 S650,96 650,95" fill="none" stroke="#0d9488" stroke-width="2.6"/>
+    <text x="505" y="116" font-size="9" font-weight="700" fill="#0f766e">meilleur déployable (SC pondéré + vérif.-fonction)</text>
+    <!-- naive SC -->
+    <path d="M90,210 C210,180 330,150 500,138 S650,135 650,134" fill="none" stroke="#64748b" stroke-width="2"/>
+    <text x="505" y="150" font-size="9" fill="#475569">self-consistency nue</text>
+    <circle cx="90" cy="210" r="3.5" fill="#334155"/>
+    <text x="96" y="226" font-size="8" fill="#475569">K=1 = justesse brute (≠ agrégation)</text>
+    <text x="305" y="58" font-size="8.5" fill="#92400e" font-style="italic">verdict TESTÉ à K* seul, ou sup-K via bootstrap couplé</text>
+  </svg>
+  <div class="cap">Quatre tracés, des rôles distincts. La <b>ligne du gros</b> (indigo, avec IC) est la cible scellée. Le <b>meilleur déployable</b> (sarcelle) est ce qui décide la thèse ; le <b>SC nu</b> (gris) est un témoin ; <b>pass@K</b> (vert pointillé) est un plafond monotone qui ne sert qu'à réfuter et à chiffrer l'écart. Le verdict est testé à un <b>K* pré-spécifié</b> (le genou), ou sur le sup-K via un bootstrap <b>couplé</b> — jamais par « ∃K qui franchit ».</div>
+  </div>
+
+  <h4>4.1 — Définitions, et le point de départ honnête</h4>
+  <div class="eq">SC@K = justesse(mode des K réponses)   ·   pass@K = justesse(∃ k ≤ K : réponse_k correcte)   ·   K=1 ⇒ SC@1 = pass@1 = justesse BRUTE</div>
+  <p>À K=1 il n'y a pas d'agrégation : c'est la <b>justesse brute</b> du petit (sous CoT), point de départ commun — pas « de la self-consistency ». <b>Égalités du mode</b> (fréquentes à K pair, ou sans majorité claire) : la règle est <b>déterministe et conservatrice</b> — <b>une absence de majorité compte comme un échec</b> (abstention = faux), jamais un tie-break aléatoire (qui casserait la re-prouvabilité) ni « le premier arrivé » (qui se corrèle à la rampe de température). Fixé dans I-HB-ANSWER, testé explicitement aux K pairs.</p>
+
+  <h4>4.2 — Le verdict, à erreur de famille contrôlée</h4>
+  <p>Tester la non-infériorité du déployable vs le gros à <b>plusieurs</b> K et conclure dès qu'<b>un</b> franchit la ligne est une <b>pêche au faux positif</b> (multiplicité), <b>aggravée</b> par la corrélation : les points incrémentaux partagent les mêmes tirages (les k premiers ⊂ les K), donc les tests ne sont ni indépendants (Bonferroni/Holm naïfs invalides) ni séparés. Deux procédures admissibles, pré-enregistrées :</p>
+  <ul>
+    <li><b>K* unique pré-spécifié</b> (recommandé) : on fixe d'avance le K-cible par une règle a priori (le « genou » : premier K où le gain marginal &lt; τ) et l'on teste la non-infériorité <b>à ce seul K</b> → <b>aucune multiplicité</b>.</li>
+    <li><b>Sup-K via bootstrap COUPLÉ</b> : un unique ré-échantillonnage qui <b>re-tire les items</b> et <b>recalcule toute la courbe</b> à chaque réplicat (respectant la covariance inter-K), donnant un IC valide pour <span class="mono">sup_K [déployable@K − (gros − δ)]</span>. Graine scellée (I-HB-REPROVE).</li>
+  </ul>
+  <p>δ, n (nombre d'items), et la <b>puissance</b> de la non-infériorité sont <b>pré-enregistrés</b> (I-HB-PREREG) — un δ permissif ou un n faible rendrait la non-infériorité trivialement « gagnée » par manque de puissance (hérité de I-HA-POWER : sous-puissance ⇒ <b>indéterminé</b>, jamais « égal »).</p>
+</section>
+</div>
+
+<!-- 5 -->
+<div class="wrap page">
+<section>
+  <h2><span class="num">§5</span> Le coût, honnêtement : entrée/sortie, cache, et GPU-s ⇒ B2</h2>
+  <p>La thèse est économique ; le verdict de coût exige trois disciplines que la version naïve omettait.</p>
+
+  <h4>5.1 — Jetons d'entrée vs sortie (le tarif unique est faux)</h4>
+  <p>Un prix unique par jeton (entrée = sortie) <b>fausse</b> le verdict : la self-consistency <b>répète le même prompt K fois</b> → coût d'<b>entrée</b> ×K, alors que sous <b>prompt-caching / batch</b> (vLLM) ces copies sont <b>quasi gratuites</b>. On sépare donc <span class="mono">(¢/1k entrée, ¢/1k sortie)</span> par modèle (la machinerie existe déjà côté registre), et l'on rapporte <b>deux scénarios bornants</b> : <b>cache OFF</b> (entrée ×K plein tarif — borne <b>haute</b> du coût SC) et <b>cache ON</b> (entrée comptée 1× — borne <b>basse</b>). <b>Le verdict de domination doit tenir sur la borne DÉFAVORABLE à l'essaim</b> pour être robuste.</p>
+
+  <h4>5.2 — Jetons mesurés, pas estimés</h4>
+  <p>Sur Ollama, les jetons sont souvent <b>client-estimés</b> (<span class="mono">is_estimated=true</span>, un proxy ≈ 4 car./jeton), pas rapportés par le fournisseur. Un énoncé de domination exige <span class="mono">is_estimated=false</span> des <b>deux</b> côtés ; à défaut, on <b>propage l'incertitude</b> du coût (bootstrap cluster du coût, comme <span class="mono">substitution</span> le fait pour la justesse) et l'on exige que la domination tienne entre la borne <b>haute</b> du coût déployable et la borne <b>basse</b> du coût gros — un test de Pareto avec <b>intervalles sur les deux axes</b>, pas un point.</p>
+
+  <h4>5.3 — Jetons ≠ GPU-secondes : le verdict de déploiement est suspendu à B2</h4>
+  <div class="callout warn">
+    <p><b>L'angle mort à ne pas commettre.</b> La thèse vendue est « beaucoup de petits <b>en parallèle</b> » — un coût de <b>déploiement</b> qui se facture en <b>GPU-secondes</b>. Or le mapping jetons → GPU-s n'est <b>ni linéaire ni identique</b> entre un petit modèle (qui <b>sous-occupe</b> le GPU → coût/jeton effectif <b>élevé</b>) et un gros (qui sature mieux le compute). Le coût-jetons peut donc déclarer « le déployable domine » alors que le GPU-s réel l'<b>inverse</b>. <b>H-B sur Mac établit une domination en COÛT-JETONS</b> (sous l'hypothèse explicite jetons ∝ coût) ; il <b>n'écrit jamais « thèse prouvée, déployable »</b> sur cette seule base. Le verdict <b>économique de déploiement</b> est <b>suspendu à la mesure GPU-secondes de B2</b> (vLLM batché, occupation réelle). La latence/débit, de même, sont GPU-only (Ollama sérialise).</p>
+  </div>
+  <div class="eq">Domination coût-jetons (cellule) ⇔ ∃ déployable, K* : justesse@K* ≥ gros − δ  ET  coût-jetons@K* &lt; coût-jetons(gros), aux bornes défavorables — <b>GPU-s à confirmer en B2</b></div>
+</section>
+</div>
+
+<!-- 6 -->
+<div class="wrap page">
+<section>
+  <h2><span class="num">§6</span> L'intégration EFE : extraction par rôle, température bornée, pré-enregistrement</h2>
+  <p>La revue a établi, code à l'appui, trois pièges d'intégration que l'architecture doit neutraliser <b>avant</b> le code.</p>
+
+  <h4>6.1 — Extraire par RÔLE GÉNÉRATEUR, jamais depuis <span class="mono">llm_records</span> brut</h4>
+  <p>En Mode C (self-host), le résolveur du SDK <b>promeut silencieusement</b> tout juge non-oracle (p.ex. <span class="mono">consistency</span>) en <b>juge LLM</b> qui émet ses propres records N17. Donc <span class="mono">llm_records</span> = K générations <b>+</b> (#juges-LLM × K notations) — lire « les K réponses depuis <span class="mono">llm_records</span> » <b>mélangerait</b> des sorties de juge (scores) avec les générations. <b>I-HB-GENONLY</b> : on extrait les candidats des <b>AgentCallRecord de rôle Générateur</b> (les <span class="mono">/cand/i</span> sous <span class="mono">gid=generator</span>), jamais des records de juge — et ce filtre est <b>testé</b>. H-B tourne donc avec une <b>liste de juges VIDE</b> (<span class="mono">consensus(gen, &amp;[], K)</span> ou un GenerateVerify pur) pour que la self-consistency soit calculée <b>100 % côté banc</b> ; <span class="mono">j_equals_expected</span> est <b>interdit</b> sur le chemin déployable (il lit le label → fuite, viole I-BENCH-BLIND). Les générations échouées (slot vide) sont comptées <b>faux</b> et l'on rapporte leur fraction.</p>
+
+  <h4>6.2 — Borner la température (la rampe diverge)</h4>
+  <p>Le SDK fixe <span class="mono">T = 0,2 + 0,3·variant</span> (variant <b>non modulo</b>) : à variant 4 → T = 1,4 ; à variant ≥ 6 → T ≥ 2,0 — au-delà de ~K=4 la diversité devient du <b>bruit</b> (répétitions, charabia), ce qui <b>déprime</b> la self-consistency et <b>gonfle</b> pass@K (tirages chanceux), contaminant l'écart. H-B <b>borne</b> la température (fixe ~0,7–0,8, graine = f(variant), plafond T ≤ 1,0) pour que la diversité vienne de l'échantillonnage, pas d'une rampe divergente ; on <b>rapporte</b> à chaque K la diversité observée (réponses distinctes / K) <b>et</b> la dégénérescence (fraction vide/charabia).</p>
+
+  <h4>6.3 — L'extraction de réponse, et sa sensibilité</h4>
+  <p>L'extracteur <span class="mono">last_number</span> prend le <b>dernier</b> nombre : « 142 ou peut-être 138 » → 138 (faux). Ce bruit frappe <b>SC plus que pass@K</b> (il déplace le mode ; il ne nuit à pass@K que s'il corrompt le seul échantillon correct) → il <b>gonfle</b> l'écart SC↔pass et se re-confond avec « un vérificateur paierait ». H-B fait une <b>analyse de sensibilité de l'extracteur</b> (re-calcul avec une extraction alternative : nombre après « = » / « answer »), <b>audite</b> un échantillon de désaccords, et rapporte la <b>stabilité du verdict</b> à l'extracteur — séparément pour SC et pass.</p>
+
+  <h4>6.4 — La couche d'agrégation (banc, pure, déterministe)</h4>
+  <pre><code>// Pure ; consomme les K réponses extraites des SEULS générateurs (I-HB-GENONLY) + le label.
+pub struct SampleSet { pub case_id: String, pub answers: Vec&lt;Value&gt;, pub label: Value, pub scorer: ScorerKind }
+pub struct CurvePoint { pub k: usize, pub sc: f64, pub sc_weighted: f64, pub verifier_bon: f64, pub pass_at_k: f64,
+                        pub in_tokens: f64, pub out_tokens: f64, pub distinct_frac: f64, pub degenerate_frac: f64 }
+
+pub fn curve(samples: &[SampleSet], ks: &[usize]) -> Vec&lt;CurvePoint&gt;;          // tie-break abstention=faux ; K=1 = brut
+pub fn knee(curve: &[CurvePoint], tau: f64) -> usize;                          // K* a priori
+// Verdict : non-infériorité (réutilise substitution, apparié) du meilleur déployable @K* vs gros-CoT scellé,
+// + Pareto coût aux bornes défavorables (cache OFF / is_estimated). Bootstrap COUPLÉ si sup-K. Graine scellée.
+pub fn hb_verdict(curve: &[CurvePoint], big: &NonInfRef, delta: f64, price: &PriceModel, k_target: KTarget) -> HbVerdict;</code></pre>
+  <p>Le verdict <b>réutilise la non-infériorité appariée</b> de <span class="mono">substitution</span> (déployable@K* vs le gros, apparié par item, IC bootstrap), et le test de coût en Pareto à <b>intervalles</b>. Chaque génération est scellée + re-prouvable ; la courbe se re-dérive (graine scellée). I-HB-REPROVE.</p>
+</section>
+</div>
+
+<!-- 7 -->
+<div class="wrap page">
+<section>
+  <h2><span class="num">§7</span> Les lectures décisives &amp; les critères de réfutation</h2>
+  <p>Pré-enregistré. Les issues se lisent dans {meilleur déployable rejoint le gros ?} × {pass@K rejoint le gros ?}, la cible et δ étant <b>scellés d'avance</b> (§1.1, §4.2).</p>
+  <table>
+    <thead><tr><th></th><th>pass@K rejoint le gros</th><th>pass@K plafonne sous le gros</th></tr></thead>
+    <tbody>
+      <tr><td><b>déployable rejoint</b></td><td class="good">DOMINATION COÛT-JETONS (cellule) — la quantité vérifiée paie sans label. → confirmer GPU-s (B2), puis échelle (HA.4).</td><td class="c">(impossible pour la SÉLECTION ; à vérifier si c'est un synthétiseur qui dépasse pass@K — alors d'autant plus fort)</td></tr>
+      <tr><td><b>déployable plafonne</b></td><td class="mid">UN VÉRIFICATEUR PAIERAIT — réponse présente, minoritaire. Écart = pass@K − meilleur déployable. → bâtir un vérificateur (code = gratuit). Pas un échec.</td><td class="bad">SÉLECTION RÉFUTÉE — réponse absente des K. → tester un SYNTHÉTISEUR (médiane/fusion) ; s'il échoue aussi, repli moat pour cette tâche.</td></tr>
+    </tbody>
+  </table>
+
+  <h4>7.1 — Les critères de réfutation (pré-enregistrés)</h4>
+  <ul>
+    <li><b>K-B1 (gain nul)</b> : le meilleur déployable est <b>plat</b> en K (pente non significative) — la diversité est nulle ou les erreurs corrélées. La « quantité » n'ajoute rien sur cette cellule.</li>
+    <li><b>K-B2 (plafond insuffisant)</b> : <b>pass@K</b> lui-même reste sous le gros à K-cible — la bonne réponse est <b>absente</b> ; ni sélection ni (sauf surprise) synthèse ne comblent.</li>
+    <li><b>K-B3 (coût prohibitif)</b> : le déployable rejoint le gros, mais à un K* tel que coût-jetons@K* ≥ coût(gros) à la borne <b>défavorable</b> — pareil-mais-pas-moins-cher (esprit K2). Et même une domination coût-jetons <b>ne clôt pas</b> le verdict de déploiement (GPU-s, B2).</li>
+  </ul>
+  <div class="callout bad">
+    <p><b>Si K-B1 ∧ K-B2 sur la cellule la plus favorable (phi4×math)</b>, la mécanique de « quantité » est en grave doute pour les tâches non-vérifiables ; on bascule vers le <b>code</b> (vérificateur gratuit) ou le <b>moat seul</b>. Su tôt, pas cher, re-prouvablement.</p>
+  </div>
+</section>
+</div>
+
+<!-- 8 -->
+<div class="wrap page">
+<section>
+  <h2><span class="num">§8</span> Menaces à la validité</h2>
+  <table>
+    <thead><tr><th>Menace</th><th>Effet</th><th>Garde-fou</th></tr></thead>
+    <tbody>
+      <tr><td>Voter sur la prose, pas la réponse</td><td>Faux échec du vote (le PoC)</td><td>I-HB-ANSWER (réponse extraite)</td></tr>
+      <tr><td><b>pass@K pris pour plafond universel</b></td><td>Régime « réfutée » faux (un synthétiseur dépasse)</td><td>Portée bornée à la sélection (§2) ; on teste un synthétiseur</td></tr>
+      <tr><td><b>Monotonie de pass@K</b></td><td>Pente positive lue comme signal</td><td>pass@K ⇒ réfutation (K-B2) &amp; écart seulement ; jamais d'affirmation positive</td></tr>
+      <tr><td><b>Multiplicité sur K</b></td><td>Faux positif « ∃K franchit »</td><td>K* unique pré-spécifié OU sup-K via bootstrap COUPLÉ (§4.2)</td></tr>
+      <tr><td><b>Corrélation inter-K</b></td><td>Holm/Bonferroni naïfs invalides</td><td>Bootstrap qui recalcule toute la courbe par réplicat</td></tr>
+      <tr><td>Égalités du mode non réglées</td><td>SC biaisé (K pairs)</td><td>Abstention = faux (déterministe, conservateur), testé</td></tr>
+      <tr><td><b>Diversité explosive (T &gt; 1)</b></td><td>SC déprimé, pass@K gonflé → écart artefact</td><td>Température bornée ≤ 1,0 ; diversité/dégénérescence rapportées (§6.2)</td></tr>
+      <tr><td>Diversité nulle</td><td>SC = K=1</td><td>Idem ; réponses distinctes/K rapportées</td></tr>
+      <tr><td><b>Extraction asymétrique</b> (<span class="mono">last_number</span>)</td><td>Gonfle l'écart SC↔pass</td><td>Sensibilité d'extracteur + audit (§6.3)</td></tr>
+      <tr><td><b>llm_records ≠ K en Mode C</b></td><td>Juges-LLM mêlés aux générations</td><td>I-HB-GENONLY (extraction par rôle ; juges vides)</td></tr>
+      <tr><td><b>Prix entrée=sortie</b></td><td>SC pénalisée du prompt répété</td><td>Tarif entrée/sortie séparé ; bornes cache OFF/ON (§5.1)</td></tr>
+      <tr><td>Jetons estimés (Ollama)</td><td>Coût proxy biaisé</td><td>is_estimated=false exigé, sinon IC de coût (§5.2)</td></tr>
+      <tr><td><b>Jetons ≠ GPU-secondes</b></td><td>Coût-jetons optimiste pour l'essaim</td><td>Verdict de déploiement suspendu à B2 (§5.3)</td></tr>
+      <tr><td><b>Référence CoT mouvante</b></td><td>Garden-of-forking-paths</td><td>I-HB-PREREG (gros-CoT scellé + δ figés d'avance)</td></tr>
+    </tbody>
+  </table>
+</section>
+</div>
+
+<!-- 9 -->
+<div class="wrap page">
+<section>
+  <h2><span class="num">§9</span> Les invariants de H-B</h2>
+  <table>
+    <thead><tr><th>Invariant</th><th>Énoncé</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">I-HB-ANSWER</td><td>L'agrégation opère sur la RÉPONSE extraite, jamais sur la sortie brute ; les égalités du mode comptent comme un échec (déterministe, conservateur).</td></tr>
+      <tr><td class="mono">I-HB-GENONLY</td><td>SC/pass@K n'agrègent que les sorties d'agents de rôle GÉNÉRATEUR (pas <span class="mono">llm_records</span> brut, qui mêle des juges-LLM en Mode C) ; juges vides ; <span class="mono">j_equals_expected</span> interdit sur le chemin déployable (fuite de label).</td></tr>
+      <tr><td class="mono">I-HB-CEILING</td><td>pass@K est le plafond de la SÉLECTION-parmi-K seulement (un synthétiseur peut le dépasser) ; monotone par construction → sert à RÉFUTER et à chiffrer l'écart, jamais à affirmer un gain.</td></tr>
+      <tr><td class="mono">I-HB-DEPLOYABLE</td><td>On distingue les mécanismes déployables (SC, vote pondéré, vérificateur-fonction, synthèse) du plafond oracle (pass@K, utilise le label) ; pass@K n'est jamais rapporté comme justesse de production.</td></tr>
+      <tr><td class="mono">I-HB-CURVE</td><td>Le verdict est testé à un K* UNIQUE pré-spécifié (le genou), ou sur le sup-K via un bootstrap COUPLÉ (recalcule la courbe par réplicat) ; jamais « ∃K qui franchit » (multiplicité).</td></tr>
+      <tr><td class="mono">I-HB-PREREG</td><td>La référence gros-sous-CoT (avec IC), δ, n, la puissance et le K-cible sont SCELLÉS avant de lire la moindre courbe d'agrégation. Sous-puissance ⇒ indéterminé (hérité I-HA-POWER).</td></tr>
+      <tr><td class="mono">I-HB-COT</td><td>Raisonnement autorisé, symétriquement petit/gros ; coût du CoT compté des deux côtés.</td></tr>
+      <tr><td class="mono">I-HB-COST</td><td>Coût en jetons ENTRÉE/SORTIE séparés ; K générations + vérificateur (gratuit ssi fonction) ; bornes cache OFF/ON ; verdict sur la borne défavorable à l'essaim ; <b>domination de DÉPLOIEMENT (GPU-s) suspendue à B2</b>.</td></tr>
+      <tr><td class="mono">I-HB-REPROVE</td><td>Chaque génération scellée + re-prouvable ; la courbe et le verdict se re-dérivent (graine de bootstrap scellée) ; bundle re-prouvable.</td></tr>
+    </tbody>
+  </table>
+</section>
+</div>
+
+<!-- 10 -->
+<div class="wrap page">
+<section>
+  <h2><span class="num">§10</span> Séquence, Mac vs GPU, et ce que H-B décide</h2>
+  <p>Comme H-A, H-B est largement <b>Mac-faisable</b> pour la <b>justesse</b> et le <b>coût-jetons</b> ; le coût de <b>déploiement</b> (GPU-s, débit) est B2. L'agrégation est du <b>code pur</b>.</p>
+  <table>
+    <thead><tr><th>Étape</th><th>Contenu</th><th class="c">Lieu</th></tr></thead>
+    <tbody>
+      <tr><td><b>HB.1</b></td><td>Module <span class="mono">aggregation</span> : extraction par rôle générateur, SC / SC-pondéré / vérificateur-fonction (plug-back) / synthèse (médiane) / pass@K, courbe + genou, verdict (K* ou sup-K bootstrap couplé), coût entrée/sortie. Tests synthétiques : SC monte si majoritaire, pass ≥ sélection, médiane peut dépasser pass, égalités=échec, K pairs.</td><td class="c">Mac (pur)</td></tr>
+      <tr><td><b>HB.2</b></td><td>Driver : <b>scelle d'abord</b> la référence gros-CoT (IC) + fige δ/K* ; génère K échantillons CoT de phi4-mini (température bornée, juges vides), extrait par rôle, trace les courbes + diversité/dégénérescence + coût borné ; bundle re-prouvable.</td><td class="c">Mac/Ollama</td></tr>
+      <tr><td><b>HB.3</b></td><td>Le verdict pivot sur phi4×math : un déployable rejoint-il le gros, à coût-jetons moindre (bornes défavorables) ? sinon, pass@K le fait-il (→ vérificateur) ? sensibilité d'extracteur. → une case du tableau §7, re-prouvable.</td><td class="c">Mac → B2 (GPU-s)</td></tr>
+      <tr><td><b>HB.4</b></td><td>(si signal) extension <b>T-CODE</b> : vérificateur = tests exécutés → best-of-N vérifié <b>déployable</b>, le cas le plus fort ; à l'échelle GPU (B2), avec le coût GPU-s réel.</td><td class="c">GPU</td></tr>
+    </tbody>
+  </table>
+  <div class="callout key">
+    <p><b>Ce que H-B remet au reste de la roadmap.</b> Une décision honnête, pas un artefact. <b>Un déployable rejoint le gros</b> → domination coût-jetons prouvée (cellule), le verdict de déploiement passant par B2 (GPU-s). <b>Seul pass@K rejoint</b> → la prochaine brique est un vérificateur, chiffrée par l'écart au meilleur déployable. <b>Ni l'un ni l'autre</b> → on teste la synthèse, puis l'on bascule code ou moat. Dans tous les cas, on le sait <b>tôt, pas cher, re-prouvablement, et sans se mentir</b> sur le plafond, la statistique ou le coût — la promesse d'EFE appliquée à sa propre thèse.</p>
+  </div>
+
+  <h3>En une phrase</h3>
+  <p>H-B fait raisonner K fois un petit modèle, agrège la <b>réponse</b> (extraite des seuls générateurs) par plusieurs mécanismes <b>déployables</b>, les lit contre un plafond pass@K <b>correctement borné</b> et une référence <b>scellée d'avance</b>, à un K <b>pré-spécifié</b> et à coût-jetons <b>entrée/sortie</b> — un dispositif qui tranche, re-prouvablement et sans artefact, l'unique pari qui sépare encore la thèse d'EFE de son moat, en suspendant honnêtement le verdict de déploiement à la mesure GPU.</p>
+</section>
+</div>
+
+</body>
+</html>
