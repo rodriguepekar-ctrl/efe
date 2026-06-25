@@ -221,7 +221,14 @@ pub(crate) fn as_set(v: &Value) -> Option<BTreeSet<String>> {
         Value::Array(items) => items.iter().map(value_text).collect(),
         Value::String(s) => match serde_json::from_str::<Value>(s) {
             Ok(Value::Array(items)) => items.iter().map(value_text).collect(),
-            _ => s.split(|c: char| !c.is_alphanumeric()).filter(|w| !w.is_empty()).map(String::from).collect(),
+            // Repli mots : on écarte les jetons PUREMENT NUMÉRIQUES (la numérotation « 1) dog, 2) cat »
+            // n'est PAS un élément — I-HA-FAIR, confondant de format attrapé par le Terrain). Le chemin
+            // tableau-JSON est intact (un nombre voulu y est conservé).
+            _ => s
+                .split(|c: char| !c.is_alphanumeric())
+                .filter(|w| !w.is_empty() && !w.chars().all(|c| c.is_ascii_digit()))
+                .map(String::from)
+                .collect(),
         },
         _ => return None,
     };
@@ -290,6 +297,18 @@ mod tests {
         assert!(s.is_correct(&json!({ "value": "pear, apple" }), &json!(["apple", "pear"])), "liste par virgules");
         // Mais l'égalité d'ENSEMBLE reste exigée : des mots en trop (phrase) → faux (pas exploitable).
         assert!(!s.is_correct(&json!({ "value": "the fruits are apple and pear" }), &json!(["apple", "pear"])), "mots parasites → faux");
+    }
+
+    #[test]
+    fn set_tolerates_numbered_list_format() {
+        // Régression (confondant attrapé par le Terrain) : « 1) dog, 2) cat » est un format d'ensemble
+        // LÉGITIME — les jetons purement numériques (la numérotation) ne sont pas des éléments (I-HA-FAIR).
+        let s = ScorerKind::Set;
+        assert!(s.is_correct(&json!({ "value": "1) dog, 2) cat" }), &json!(["cat", "dog"])), "numérotation ')' ignorée");
+        assert!(s.is_correct(&json!({ "value": "1. apple\n2. pear" }), &json!(["apple", "pear"])), "numérotation '.' + saut de ligne");
+        assert!(s.is_correct(&json!({ "value": "dog, cat" }), &json!(["cat", "dog"])), "liste nue inchangée");
+        // Un tableau JSON conserve un nombre VOULU (chemin intact).
+        assert!(s.is_correct(&json!({ "value": ["7", "x"] }), &json!(["7", "x"])), "nombre voulu dans un tableau JSON conservé");
     }
 
     #[test]
