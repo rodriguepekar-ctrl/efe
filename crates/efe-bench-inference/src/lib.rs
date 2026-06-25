@@ -55,6 +55,7 @@
 pub mod aggregation;
 pub mod corpus;
 pub mod dataset;
+pub mod reexec;
 pub mod report;
 pub mod runner;
 pub mod scorer;
@@ -62,8 +63,9 @@ pub mod substitution;
 
 pub use aggregation::{
     curve, knee, verdict_at_k, verdict_sup_k, CurvePoint, DeployableVerifier, HbVerdict, IoPrice, Mechanism,
-    PositiveInteger, SampleSet, SupVerdict,
+    PositiveInteger, ReasoningWeigher, SampleSet, SupVerdict,
 };
+pub use reexec::ReExecAudit;
 pub use dataset::{BenchCase, Dataset, DatasetError};
 pub use report::{reprove, BenchBundle, BundleVerdict, Comparison, ConfigReport, PriceModel, ReproofVerdict};
 pub use runner::{

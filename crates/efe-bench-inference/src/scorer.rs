@@ -158,24 +158,38 @@ impl ScorerKind {
 }
 
 /// Extraction de la réponse — **même ordre que l'oracle** : `value` → `text` → valeur brute,
-/// après avoir pelé un éventuel emballage de diagnostic.
-fn extract(v: &Value) -> &Value {
+/// après avoir pelé un éventuel emballage de diagnostic. `pub(crate)` : noyau partagé (le scorer, la
+/// clé canonique, l'agrégation et le vérificateur de re-exécution lisent TOUS la réponse de la même
+/// façon — une seule définition, I-HB-REPROVE).
+pub(crate) fn extract(v: &Value) -> &Value {
     let v = unwrap_diag(v);
     v.get("value").or_else(|| v.get("text")).unwrap_or(v)
+}
+
+/// Le **texte** de la réponse d'un candidat (la chaîne de raisonnement brute), après extraction. Le
+/// vérificateur de re-exécution ([`crate::reexec`]) l'audite ; un seul « texte de la réponse » dans EFE.
+pub(crate) fn answer_text(v: &Value) -> String {
+    value_text(extract(v))
 }
 
 /// Interprète une réponse comme un nombre (I-HA-FAIR : on mesure la **capacité**, pas le format) :
 /// nombre JSON, chaîne directement parsable, ou — à défaut — **le dernier nombre extrait** de la
 /// chaîne (« The answer is 96. » → 96). Symétrique pour les deux modèles ; un calcul juste enrobé de
-/// mots ne doit pas être noté faux. `None` si aucun nombre n'est trouvable.
-fn as_number(v: &Value) -> Option<f64> {
+/// mots ne doit pas être noté faux. `None` si aucun nombre n'est trouvable. `pub(crate)` : c'est LE
+/// noyau « dernier nombre » que l'agrégation ([`crate::aggregation`]) partage aussi (guardrail revue :
+/// une seule définition, pas de quatrième parseur de nombre).
+pub(crate) fn as_number(v: &Value) -> Option<f64> {
     let a = extract(v);
     if let Some(f) = a.as_f64() {
-        return Some(f);
+        return Some(f); // un nombre JSON ne peut être NaN/Inf (JSON n'en a pas)
     }
     let s = a.as_str()?;
+    // Garde NON-FINI (revue) : `"nan"`/`"inf"` parsent en f64 non-fini ; on les REJETTE ici plutôt que
+    // de propager un NaN qui ferait paniquer le tri de la médiane. Une réponse « nan » = pas un nombre.
     if let Ok(f) = s.trim().parse::<f64>() {
-        return Some(f);
+        if f.is_finite() {
+            return Some(f);
+        }
     }
     last_number(s)
 }

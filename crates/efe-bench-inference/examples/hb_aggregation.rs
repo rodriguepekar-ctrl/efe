@@ -23,7 +23,7 @@ use std::sync::Arc;
 
 use efe_bench_inference::{
     aggregation::{curve, knee, verdict_at_k, verdict_sup_k, Mechanism, PositiveInteger, SampleSet},
-    Dataset, IoPrice, ScorerKind,
+    Dataset, IoPrice, ReExecAudit, ScorerKind,
 };
 use efe_swarm_sdk::{
     AgentCall, AgentRole, Budget, ClientMode, KSpec, OnExceed, Swarm, SwarmObserver, TopologySpec,
@@ -66,6 +66,10 @@ fn est(s: &str) -> u32 {
 fn text_of(task: &Value) -> String {
     task.get("text").and_then(|t| t.as_str()).map(String::from).unwrap_or_default()
 }
+/// Texte d'un candidat pour l'ESTIMATION de jetons. Ne pèle que `{value}` — suffisant ici car le driver
+/// utilise la topologie `GenerateVerify` (réponses `{value: texte}`, jamais d'emballage diagnostic). NB
+/// (revue) : si l'on branchait gossip/débat (qui emballent), il faudrait `scorer::extract` pour rester
+/// aligné sur `reexec::audit_candidate` ; sous `GenerateVerify`, les deux voient le même texte.
 fn cand_text(c: &Value) -> String {
     match c.get("value").unwrap_or(c) {
         Value::String(s) => s.clone(),
@@ -155,21 +159,25 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let (small_s, small_v) = run_model(&endpoint, &small, &dataset, instruction, k_max, cot_tokens).await?;
 
     // ── Courbe justesse × K. ──
-    let ver = PositiveInteger::default();
-    let cur = curve(&small_s, &ks, Some(&ver));
-    println!("\n── courbe justesse × K (petit) · plafond pass@K · diversité/dégén. · jetons ──");
-    println!("{:>4} {:>6} {:>6} {:>6} {:>6} {:>7} {:>7} {:>7} {:>8}", "K", "SC", "pond", "vérif", "méd", "pass@K", "div%", "dégén%", "out/moy");
+    let ver = PositiveInteger::default(); // sanité (filtre) — alimente `Verified`
+    let weigher = ReExecAudit::default(); // HB.3 : re-exécution (pondérateur) — alimente `ReExecWeighted`
+    let cur = curve(&small_s, &ks, Some(&ver), Some(&weigher));
+    println!("\n── courbe justesse × K (petit) · RXW(re-exéc) · plafond pass@K · couverture/override · jetons ──");
+    println!(
+        "{:>4} {:>6} {:>6} {:>6} {:>6} {:>6} {:>7} {:>6} {:>6} {:>8}",
+        "K", "SC", "pond", "vérif", "RXW", "méd", "pass@K", "vér%", "ovr%", "out/moy"
+    );
     for p in &cur {
         println!(
-            "{:>4} {:>5.1}% {:>5.1}% {:>5.1}% {:>5.1}% {:>6.1}% {:>6.0}% {:>6.0}% {:>8.1}",
-            p.k, p.self_consistency * 100.0, p.weighted * 100.0, p.verified * 100.0,
-            if p.median.is_nan() { 0.0 } else { p.median * 100.0 },
-            p.pass_at_k * 100.0, p.mean_distinct_frac * 100.0, p.mean_degenerate_frac * 100.0, p.mean_out
+            "{:>4} {:>5.1}% {:>5.1}% {:>5.1}% {:>5.1}% {:>5.1}% {:>6.1}% {:>5.0}% {:>5.0}% {:>8.1}",
+            p.k, p.self_consistency * 100.0, p.weighted * 100.0, p.verified * 100.0, p.re_exec_weighted * 100.0,
+            if p.median.is_nan() { 0.0 } else { p.median * 100.0 }, p.pass_at_k * 100.0,
+            p.verifiable_frac * 100.0, p.override_rate * 100.0, p.mean_out
         );
     }
     let big_acc = {
         // SC@1 du gros = sa justesse brute (un échantillon).
-        let c = curve(&big_s, &[1], None);
+        let c = curve(&big_s, &[1], None, None);
         c[0].self_consistency
     };
     println!("référence gros (K=1) : exactitude {:.1}%  ·  R0 {}/{}", big_acc * 100.0, big_v, big_s.len());
@@ -180,19 +188,26 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let price_small = IoPrice { in_per_1k: 0.1, out_per_1k: 0.1 };
     let price_big = IoPrice { in_per_1k: 1.2, out_per_1k: 1.2 };
     println!("\n── verdict (la cellule phi4×math) ──");
-    for mech in [Mechanism::SelfConsistency, Mechanism::Verified, Mechanism::Median] {
-        let v = verdict_at_k(&small_s, &big_s, mech, k_star, Some(&ver), delta, alpha, boot, 0x4842_3200u64 ^ k_star as u64, price_small, price_big);
+    for mech in [Mechanism::SelfConsistency, Mechanism::Verified, Mechanism::ReExecWeighted, Mechanism::Median] {
+        // On passe les DEUX seams (filtre + pondérateur) ; `aggregate` n'utilise que celui du mécanisme.
+        let v = verdict_at_k(
+            &small_s, &big_s, mech, k_star, Some(&ver), Some(&weigher), delta, alpha, boot,
+            0x4842_3200u64 ^ k_star as u64, price_small, price_big,
+        );
         println!(
             "  {:?}@K{}  petit {:.1}% vs gros {:.1}%  →  {}  ·  coût-jetons domine (cacheOFF/ON) {}/{}",
             mech, k_star, v.small_acc * 100.0, v.big_acc * 100.0, v.nin.verdict.label(),
             v.cost_dominates_cache_off, v.cost_dominates_cache_on
         );
     }
-    let sup = verdict_sup_k(&small_s, &big_s, Mechanism::SelfConsistency, &ks, Some(&ver), delta, alpha, boot, 0x5402);
-    println!(
-        "  sup-K (max-t, FWER) : sup={:+.1}pts à K={} · borne inf {:+.1}pts → ∃K non-inférieur : {}",
-        sup.sup_stat * 100.0, sup.argmax_k, sup.sup_lower * 100.0, sup.non_inferior_some_k
-    );
+    // Le sup-K (FWER contrôlé) sur les DEUX mécanismes déployables clés : SC nu, et RXW (re-exécution).
+    for (label, mech) in [("SC", Mechanism::SelfConsistency), ("RXW", Mechanism::ReExecWeighted)] {
+        let sup = verdict_sup_k(&small_s, &big_s, mech, &ks, Some(&ver), Some(&weigher), delta, alpha, boot, 0x5402);
+        println!(
+            "  sup-K [{label}] (max-t, FWER) : sup={:+.1}pts à K={} · borne inf {:+.1}pts → ∃K non-inférieur : {}",
+            sup.sup_stat * 100.0, sup.argmax_k, sup.sup_lower * 100.0, sup.non_inferior_some_k
+        );
+    }
     println!("\n  rappel I-HB-COST : domination en COÛT-JETONS seulement ; GPU-secondes (déploiement) → B2.");
     Ok(())
 }
