@@ -265,5 +265,38 @@
   </div>
 </div>
 
+<!-- 11 -->
+<div class="wrap page">
+  <h2><span class="num">§11</span> Compléments : la théorie de la précondition &amp; la frontière T-CODE</h2>
+  <p class="small muted">Cette section <b>réconcilie</b> dans ce document canonique (durci par panel) les deux apports d'un brouillon parallèle — « Changer de Terrain » — qui explorait la même frontière sans revue. Le brouillon est <b>retiré du dossier</b> ; ses deux idées de valeur — la <b>théorie de la précondition</b> (§11.1) et la <b>frontière T-CODE</b> (§11.2) — sont reprises ici. Rien de l'architecture des §1–§10 n'est modifié ; §11 l'<b>étend</b>.</p>
+
+  <h3>11.1 — La théorie de la précondition (pourquoi la dispersion prédit)</h3>
+  <p>Le prédicteur du §6 (dispersion + symétrie) et la règle d'opérateur du §5 reposent sur une fondation précise : chaque <b>famille</b> d'agrégation paie sous <b>une</b> précondition exacte. Un terrain est favorable ssi <b>au moins une</b> tient — et le diagnostic mesure laquelle.</p>
+  <table>
+    <thead><tr><th>Famille</th><th>Précondition (quand elle paie)</th><th>Ce qui la mesure / la viole</th></tr></thead>
+    <tbody>
+      <tr><td><b>VOTE</b> (sélection)</td><td><b>Condorcet</b> : la bonne réponse est la <b>pluralité</b> et les erreurs sont <b>décorrélées</b> → le mode converge vers le vrai quand K croît.</td><td>Mesuré par la <b>fraction distincte</b> (diversité). T-MATH viole (erreurs corrélées par la misconception → le mode converge vers le faux). T-EXTRACT teste cette condition <b>par élément</b> (via SetVote, §5).</td></tr>
+      <tr><td><b>SYNTHÈSE</b> (médiane/moyenne)</td><td>Erreurs <b>~symétriques / non biaisées</b> autour du vrai → la moyenne/médiane converge (sagesse des foules).</td><td>Mesuré par <span class="mono">symmetry_test</span> (biais, asymétrie). T-MATH viole nettement (skew +8,72).</td></tr>
+      <tr><td><b>VÉRIFICATION</b> (sélection par oracle)</td><td>Il existe un vérificateur <b>DÉPLOYABLE et GROUND-TRUTH</b> (pas une heuristique).</td><td>C'est une propriété du <b>terrain</b>, pas de la dispersion. T-MATH viole (RXW heuristique, a échoué) ; T-EXTRACT aussi (pas d'équations → RXW ≡ SC). → §11.2.</td></tr>
+    </tbody>
+  </table>
+  <div class="callout key"><p><b>La conséquence, qui justifie le statut « nécessaire-non-suffisant » du prédicteur.</b> La dispersion/symétrie mesure les conditions <b>1 et 2</b> (diversité, non-biais) — c'est pourquoi elle prédit la récupération par <b>vote</b> ou <b>synthèse</b>. Mais la condition <b>3</b> (existence d'un oracle ground-truth) n'est <b>pas</b> lisible dans la dispersion : c'est une propriété structurelle du terrain. Aucune des trois cellules pré-enregistrées ne la satisfait — d'où le besoin de nommer la frontière où elle, seule, pourrait tenir.</p></div>
+
+  <h3>11.2 — La frontière T-CODE (la condition 3 — hors famille fermée)</h3>
+  <p>La précondition la plus prometteuse pour <b>récupérer</b> un écart est un <b>oracle ground-truth déployable</b> — exactement ce que le régime (b) appelait (« un vérificateur paierait ») et ce que RXW, <b>heuristique</b>, n'a pas su être. Or il existe un terrain où cet oracle est réel : le <b>code avec tests exécutables</b>. <b>T-CODE</b> est donc nommé ici comme la <b>prochaine frontière</b> (sharpening de l'issue (b), §8.2), <b>EXPLICITEMENT HORS</b> de la famille fermée à 3 cellules (I-TERRAIN-PREREG/I-TERRAIN-FWER) — un <b>claim futur</b>, jamais un 4ᵉ test FWER rétroactif qui violerait la fermeture de la famille.</p>
+  <p>Pourquoi T-CODE peut <b>renverser</b> le défaut « aucune récupération » là où les 3 cellules échoueront probablement : (1) des bugs <b>divers</b> → erreurs <b>décorrélées</b> (la condition VOTE/diversité tient, contrairement à la misconception unique de T-MATH) ; (2) les tests <b>SONT</b> un oracle ground-truth déployable → la condition VÉRIFICATION tient <b>enfin</b> (le régime (b) honnête). C'est, a priori, le candidat le plus fort de tout le programme — et s'il échoue <b>même là</b>, le négatif devient considérable.</p>
+  <p>Ses invariants propres, à <b>geler le jour où T-CODE est ouvert</b> (il n'entre pas dans le verdict de famille de ce document) :</p>
+  <ul>
+    <li><b>Anti-fuite (le label-leak du code)</b> : sélection sur les tests <b>VISIBLES</b>, score sur les tests <b>CACHÉS</b>, <b>disjoints</b>. L'écart « passe-visibles ↔ passe-cachés » = l'<b>overfit aux visibles</b>, rapporté — l'analogue exact de l'écart vérifié↔<span class="mono">pass@K</span> de HB.1.</li>
+    <li><b>Bac à sable dur</b> (exécuter du code <b>généré</b> est dangereux) : réseau coupé, FS jetable, <b>timeouts</b> par test, limites CPU/mémoire, processus isolé et tué — <b>local</b> (le garde-fou de souveraineté), exerçable sur Mac via le seam (tests scriptés) avant le GPU.</li>
+    <li><b>Coût d'exécution</b> (I-TERRAIN-COST étendu) : K candidats × T tests ajoutent un coût <b>CPU-secondes</b> au coût-jetons ; compté <b>séparément</b> ; le gros n'exécute rien ; domination de déploiement (GPU-s + exécution) suspendue à B2.</li>
+    <li><b>Opérateur</b> : la sélection-par-tests <b>est</b> l'opérateur loyal pour le code (best-of-K parmi les passants des visibles), comme SetVote l'est pour les ensembles (§5) ; le plafond de sélection reste <span class="mono">pass@K</span> (un candidat passe les cachés).</li>
+  </ul>
+  <div class="callout warn"><p><b>Pourquoi T-CODE est documenté mais PAS dans la famille.</b> Il exige un corpus visible/caché <b>neuf</b> et un bac à sable — un investissement réel, structurellement différent des 3 cellules à corpus existant. L'y glisser comme 4ᵉ cellule violerait la <b>fermeture pré-enregistrée</b> de la famille (la racine du garde anti-∃cellule). On le <b>nomme</b> pour que la frontière la plus forte — la seule à oracle ground-truth — ne soit ni oubliée ni cueillie a posteriori ; on l'ouvrira comme une <b>nouvelle famille pré-enregistrée</b>, avec ses propres seuils gelés.</p></div>
+
+  <h3>11.3 — Note de mise en œuvre (T-MATH-HARD)</h3>
+  <p>Vérifié contre le code : <span class="mono">corpus::math(n, seed)</span> entrelace les tiers (<span class="mono">tier = idx % 3 + 1</span>, ids <span class="mono">m{tier}-{idx}</span>), donc seuls <b>~1/3</b> des items sont tier-3. Pour atteindre <b>n=300 tier-3</b> sur T-MATH-HARD, générer <span class="mono">math(900, seed)</span> et <b>filtrer les ids <span class="mono">m3-*</span></b> (sinon ~100 items → puissance moindre, à rapporter via <span class="mono">achieved_power</span>). <span class="mono">corpus::extract</span> et le scorer <span class="mono">Set</span> de T-EXTRACT sont, eux, conformes au §2 tels quels. Détail d'implémentation, sans effet sur l'architecture.</p>
+</div>
+
 </body>
 </html>
