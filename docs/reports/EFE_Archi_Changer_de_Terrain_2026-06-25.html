@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>EFE — Architecture : Changer de Terrain (la précondition de l'agrégation, et comment trouver le terrain où l'essaim gagne — sans tricher)</title>
+<style>
+  :root{--ink:#0f172a;--muted:#475569;--soft:#64748b;--line:#e2e8f0;--teal:#0d9488;--teal-d:#0f766e;--indigo:#4f46e5;--indigo-d:#4338ca;--ok:#16a34a;--warn:#d97706;--bad:#dc2626;--bg-tint:#f6fbfa;--bg-card:#eef2f1;--code-bg:#0f172a;--code-fg:#e2e8f0;}
+  *{box-sizing:border-box;} html{font-size:11.2px;}
+  body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,Arial,sans-serif;color:var(--ink);margin:0;line-height:1.6;background:#fff;-webkit-font-smoothing:antialiased;}
+  .wrap{max-width:178mm;margin:0 auto;padding:0 2mm;}
+  h1,h2,h3,h4{line-height:1.2;font-weight:700;}
+  h2{font-size:1.45rem;margin:0 0 .55rem;padding-bottom:.32rem;border-bottom:3px solid var(--teal);}
+  h2 .num{color:var(--teal);} h3{font-size:1.13rem;margin:1.1rem 0 .3rem;color:var(--teal-d);}
+  h4{font-size:1rem;margin:.8rem 0 .2rem;color:var(--indigo-d);}
+  p{margin:.55rem 0;text-align:justify;hyphens:auto;} a{color:var(--indigo);text-decoration:none;}
+  code{font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace;font-size:.85em;background:var(--bg-card);padding:.05em .35em;border-radius:4px;color:#0b3b36;}
+  .muted{color:var(--muted);} .small{font-size:.88rem;}
+  section{break-inside:avoid;} .page{break-before:page;} h2{break-after:avoid;}
+  table{border-collapse:collapse;width:100%;margin:.55rem 0;font-size:.82rem;}
+  th,td{border:1px solid var(--line);padding:.32rem .5rem;text-align:left;vertical-align:top;}
+  th{background:var(--bg-card);font-weight:700;} tbody tr:nth-child(even){background:var(--bg-tint);}
+  td.c,th.c{text-align:center;} .good{background:#dcfce7 !important;color:#166534;font-weight:700;} .mid{background:#fef9c3 !important;color:#854d0e;font-weight:700;} .bad{background:#fee2e2 !important;color:#991b1b;font-weight:700;}
+  .tag{display:inline-block;font-size:.71rem;font-weight:700;padding:.08em .5em;border-radius:20px;}
+  .t-ok{background:#dcfce7;color:#166534;} .t-info{background:#e0e7ff;color:#3730a3;} .t-teal{background:#ccfbf1;color:#115e59;} .t-warn{background:#fef3c7;color:#92400e;} .t-bad{background:#fee2e2;color:#991b1b;}
+  pre{background:var(--code-bg);color:var(--code-fg);padding:.55rem .8rem;border-radius:8px;overflow:auto;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.72rem;line-height:1.45;margin:.55rem 0;}
+  pre code{background:none;color:inherit;padding:0;}
+  .callout{border-left:4px solid var(--teal);background:var(--bg-tint);padding:.55rem .85rem;border-radius:0 8px 8px 0;margin:.65rem 0;}
+  .callout p{text-align:left;margin:.28rem 0;}
+  .callout.key{border-color:var(--indigo);background:#eef2ff;} .callout.warn{border-color:var(--warn);background:#fffbeb;} .callout.ok{border-color:var(--ok);background:#f0fdf4;} .callout.bad{border-color:var(--bad);background:#fef2f2;}
+  .fig{margin:.7rem 0 .9rem;text-align:center;break-inside:avoid;}
+  .fig svg{max-width:100%;height:auto;border:1px solid var(--line);border-radius:10px;background:#fff;}
+  .fig .cap{font-size:.79rem;color:var(--muted);margin-top:.32rem;font-style:italic;text-align:center;}
+  ul,ol{margin:.4rem 0 .55rem 1.1rem;padding:0;} li{margin:.24rem 0;}
+  svg text{font-family:-apple-system,"Segoe UI",Inter,sans-serif;}
+  .cover{height:262mm;display:flex;flex-direction:column;justify-content:center;position:relative;padding:0 6mm;}
+  .cover .eyebrow{color:var(--teal);font-weight:800;letter-spacing:.2em;font-size:.83rem;text-transform:uppercase;}
+  .cover h1{font-size:2.2rem;margin:.4rem 0 .2rem;line-height:1.08;} .cover .sub{font-size:1.16rem;color:var(--muted);margin-bottom:1.1rem;}
+  .cover .tagline{font-size:1.0rem;color:var(--ink);max-width:163mm;border-left:4px solid var(--teal);padding-left:1rem;font-style:italic;text-align:left;}
+  .cover .meta{position:absolute;bottom:6mm;left:6mm;right:6mm;display:flex;justify-content:space-between;border-top:1px solid var(--line);padding-top:.6rem;font-size:.8rem;color:var(--soft);}
+  .cover .pills{margin:1rem 0;} .cover .pills .tag{font-size:.77rem;margin-right:.3rem;}
+  .mono{font-family:ui-monospace,Menlo,Consolas,monospace;}
+  hr{border:none;border-top:1px solid var(--line);margin:.9rem 0;}
+  .toc{font-size:.9rem;columns:2;column-gap:2rem;} .toc div{margin:.16rem 0;break-inside:avoid;} .toc .n{color:var(--teal);font-weight:700;display:inline-block;width:1.8em;}
+  .eq{font-family:ui-monospace,Menlo,Consolas,monospace;background:#ecfdf5;border:1px solid #a7f3d0;border-radius:8px;padding:.45rem .75rem;margin:.5rem 0;font-size:.79rem;color:#065f46;text-align:center;}
+  @page{size:A4;margin:13mm 12mm;}
+</style>
+</head>
+<body>
+
+<!-- COVER -->
+<div class="wrap"><div class="cover">
+  <div class="eyebrow">Architecture · après l'arc H-B · la précondition de l'agrégation, et le routeur qu'elle cache</div>
+  <h1>Changer de Terrain</h1>
+  <div class="sub">L'arc H-B n'a pas prouvé « l'agrégation ne marche pas ». Il a prouvé qu'elle a une <b>précondition</b> que l'arithmétique viole. Changer de terrain, c'est tester la contraposée — et le faire <b>sans</b> tomber dans le piège du cherry-pick de terrain.</div>
+  <div class="tagline">HB.1→HB.4 ont établi, re-prouvablement, qu'<b>aucune agrégation déployable</b> — vote, vérification, synthèse — ne ferme l'écart au gros sur <span class="mono">phi4-mini × T-MATH</span>. Mais ce négatif est un <b>théorème conditionnel</b> : l'instrument a montré <b>pourquoi</b> (les erreurs du petit sont <b>systématiques</b> — un mauvais montage partagé —, d'asymétrie +8,72, pas du bruit moyennable). La contraposée est une <b>promesse falsifiable</b> : là où les erreurs sont <b>diverses et ~non biaisées</b>, l'agrégation <b>devrait</b> payer. Et le plus précieux : HB.4 a livré le <b>détecteur</b> de cette condition — <span class="mono">dispersion_index</span> (déployable, sans label) et <span class="mono">symmetry_test</span> (recherche). « Changer de terrain » n'est donc <b>pas</b> du dataset-shopping ; c'est une <b>recherche dirigée par le diagnostic</b>, avec une discipline anti-multiplicité escaladée : chercher dix terrains et rapporter celui qui gagne serait <b>∃terrain</b>, pire que ∃K. La parade : <b>pré-enregistrer</b>, sur le seul diagnostic <b>déployable</b> (sans label), la <b>prédiction</b> de favorabilité de chaque terrain <b>avant</b> de mesurer la thèse — transformant la pêche en <b>prédiction</b>. Le vrai résultat visé n'est pas « un terrain marche » mais « le diagnostic <b>prédit</b> quels terrains marchent » — car alors EFE détient un <b>routeur de production</b> : « ici l'essaim de petits suffit, là il faut le gros ». La thèse se reformule, honnêtement et plus fort : non pas « petit ≥ gros partout » (réfuté), mais « <b>petit-essaim ≥ gros sur un sous-ensemble PRÉDICTIBLE, moins cher</b> ». On commence par le test <b>bon marché</b> (les terrains existants — math, extraction, classification — le diagnostic les classe-t-il ?), puis le terrain <b>le plus fort</b> : <span class="mono">T-CODE</span>, où existe enfin un <b>vérificateur GROUND-TRUTH déployable</b> (exécuter les tests) — la réalisation honnête du régime (b) que RXW, heuristique, n'a pas pu être.</div>
+  <div class="pills">
+    <span class="tag t-teal">précondition d'agrégation : diversité + non-biais</span>
+    <span class="tag t-info">le diagnostic comme PRÉDICTEUR (pas pêche)</span>
+    <span class="tag t-info">le routeur déployable = la thèse reformulée</span>
+    <span class="tag t-warn">∃terrain : le cherry-pick escaladé, à museler</span>
+    <span class="tag t-ok">T-CODE : un vérificateur ground-truth (régime b honnête)</span>
+  </div>
+  <div class="meta">
+    <span>EFE — Essaim Fluide Éphémère · roadmap thèse · après l'arc H-B (HB.1–HB.4)</span>
+    <span>2026-06-25 · architecture</span>
+  </div>
+</div></div>
+
+<!-- TOC -->
+<div class="wrap page">
+  <h2><span class="num">§0</span> Plan</h2>
+  <div class="toc">
+    <div><span class="n">1.</span> Ce que l'arc H-B a VRAIMENT prouvé (un théorème conditionnel)</div>
+    <div><span class="n">2.</span> La précondition de l'agrégation, rendue précise</div>
+    <div><span class="n">3.</span> Le détecteur existe déjà — et c'est lui le produit (le routeur)</div>
+    <div><span class="n">4.</span> Taxonomie : terrains × structure d'erreur × mécanisme qui paie</div>
+    <div><span class="n">5.</span> Le piège escaladé : le cherry-pick de TERRAIN (∃terrain)</div>
+    <div><span class="n">6.</span> Le test bon marché d'abord : les terrains existants</div>
+    <div><span class="n">7.</span> T-CODE : le vérificateur ground-truth (le régime b honnête)</div>
+    <div><span class="n">8.</span> T-ESTIM : le terrain natif de la synthèse</div>
+    <div><span class="n">9.</span> Métrique, verdict, &amp; la corrélation diagnostic↔gain</div>
+    <div><span class="n">10.</span> Menaces, invariants, &amp; ce que « changer de terrain » décide</div>
+  </div>
+
+  <h3>Le geste, en une phrase</h3>
+  <p>« Changer de terrain » prend le <b>détecteur de favorabilité</b> que HB.4 a livré, l'applique d'abord aux <b>terrains déjà en main</b> (arithmétique, extraction, classification) pour vérifier — bon marché — qu'il <b>prédit</b> où l'agrégation paie, puis construit le terrain <b>le plus prometteur a priori</b> (<span class="mono">T-CODE</span>, avec son vérificateur exécutable ground-truth) ; le tout sous une <b>discipline anti-∃terrain</b> (prédiction pré-enregistrée sur le diagnostic déployable, FWER inter-terrains) — pour décider non pas « la thèse marche quelque part » mais « <b>on sait prédire, déployablement, où elle marche</b> ».</p>
+
+  <div class="callout key">
+    <p><b>Pourquoi c'est la suite juste, et pas une fuite en avant.</b> Après quatre « non » re-prouvés, la tentation paresseuse serait de chercher un dataset complaisant et de crier victoire. C'est exactement ce que cette architecture <b>interdit</b>. Le négatif H-B a une <b>valeur</b> : il a identifié la précondition et bâti son détecteur. La seule continuation honnête est de <b>tester la précondition comme une prédiction</b>. Si le diagnostic déployable prédit la favorabilité, EFE n'a pas « trouvé un terrain » — il a trouvé un <b>routeur</b>, et la thèse économique renaît sur une base mesurée. Si même les terrains a-priori favorables échouent, la thèse est bornée bien plus durement — un résultat fort aussi. Dans les deux cas : un fait, pas un slogan.</p>
+  </div>
+</div>
+
+<!-- 1 -->
+<div class="wrap page">
+  <h2><span class="num">§1</span> Ce que l'arc H-B a VRAIMENT prouvé (un théorème conditionnel)</h2>
+  <p>Il faut lire l'arc H-B avec exactitude, car son négatif est précieux et sa portée est <b>conditionnelle</b>, pas universelle. HB.2 a établi le régime (b) : sur <span class="mono">phi4-mini × T-MATH</span>, sous raisonnement réel, la bonne réponse <b>est présente</b> dans les K candidats (<span class="mono">pass@K</span>=100 %) mais <b>minoritaire</b> ; la self-consistency plafonne (94 %) sous le gros (100 %). HB.3 a construit le vérificateur de re-exécution le plus défendable — et il <b>n'a pas payé</b> (92 %), parce que l'erreur des items durs est un <b>mauvais montage</b> (le modèle additionne au lieu de soustraire, <i>puis calcule juste</i>) : la re-exécution valide le calcul, jamais la modélisation. HB.4 a construit la synthèse — et elle <b>n'a pas payé non plus</b> (médiane/moyenne ≤ 85 %, fusion à 70 %), parce que les erreurs sont <b>systématiquement asymétriques</b> (skewness +8,72) et truffées d'outliers : moyenner suit la mauvaise distribution.</p>
+  <p>La conclusion n'est donc <b>pas</b> « l'agrégation est inutile ». C'est, mot pour mot : <b>« sur une cellule où les erreurs du petit sont systématiques (une misconception partagée par tous les échantillons), aucune agrégation déployable ne les récupère, parce qu'il n'y a rien à moyenner — l'erreur est dans la prémisse, pas dans le bruit. »</b> C'est un théorème <b>conditionnel</b>, et sa <b>contraposée</b> est une promesse :</p>
+  <div class="eq">erreurs DIVERSES &amp; ~NON BIAISÉES  ⇒  l'agrégation DEVRAIT récupérer la justesse d'un grand</div>
+  <p>« Changer de terrain » teste cette contraposée. Et la chose la plus importante que HB.4 a produite n'est pas le « non » — c'est le <b>détecteur</b> qui l'a <b>expliqué</b> : <span class="mono">dispersion_index</span> et <span class="mono">symmetry_test</span>. Un négatif qui livre l'instrument pour trouver le positif n'est pas une impasse ; c'est une <b>boussole</b>.</p>
+  <div class="callout warn"><p><b>Le danger immédiat.</b> Cette même boussole peut servir à se mentir : essayer des terrains jusqu'à en trouver un favorable, puis le présenter comme « la thèse marche ». Tout le §5 existe pour l'empêcher. La règle de fer posée dès maintenant : le terrain favorable doit être <b>prédit</b> (par le diagnostic, sans label) <b>avant</b> que la thèse n'y soit mesurée — sinon ce n'est pas une découverte, c'est une sélection sur le résultat.</p></div>
+</div>
+
+<!-- 2 -->
+<div class="wrap page">
+  <h2><span class="num">§2</span> La précondition de l'agrégation, rendue précise</h2>
+  <p>« L'agrégation paie » n'est pas une intuition vague ; c'est trois conditions précises, une par famille de mécanisme. Un terrain est <b>favorable</b> ssi <b>au moins une</b> tient — et le diagnostic mesure laquelle.</p>
+  <table>
+    <thead><tr><th>Mécanisme</th><th>Précondition (quand il paie)</th><th>Pourquoi T-MATH la viole</th></tr></thead>
+    <tbody>
+      <tr><td><b>VOTE</b> (sélection / self-consistency)</td><td><b>Condition de Condorcet</b> : chaque échantillon est correct avec une probabilité qui fait de la bonne réponse la <b>pluralité</b>, et les erreurs sont <b>décorrélées</b> entre échantillons → quand K croît, le mode converge vers le vrai.</td><td>Erreurs <b>corrélées</b> : tous les échantillons partagent la misconception de montage → le mode converge vers le <b>faux</b> (le « poison du consensus » déjà documenté).</td></tr>
+      <tr><td><b>SYNTHÈSE</b> (médiane / moyenne)</td><td><b>Erreurs ~non biaisées &amp; symétriques</b> autour du vrai (sagesse des foules) → la médiane/moyenne de K estimations bruitées tend vers la vérité.</td><td>Erreurs <b>asymétriques</b> (skew +8,72) et <b>biaisées</b> (biais +3,65), avec outliers catastrophiques → la médiane suit la mauvaise distribution.</td></tr>
+      <tr><td><b>VÉRIFICATION</b> (sélection par un vérificateur)</td><td>Il existe un vérificateur <b>DÉPLOYABLE et GROUND-TRUTH</b> (pas une heuristique) qui sépare le correct du faux parmi les K.</td><td>Pas d'oracle déployable : RXW <b>audite le calcul</b> (heuristique), pas la modélisation → il valide des montages faux mais bien calculés.</td></tr>
+    </tbody>
+  </table>
+  <p>Cette grille est le cœur conceptuel. Elle dit que la favorabilité d'un terrain n'est pas une qualité floue mais une propriété <b>mesurable</b> de la <b>structure d'erreur</b> du petit modèle sur ce terrain : la <b>diversité effective</b> des échantillons (décorrélation), le <b>biais/asymétrie</b> de leurs erreurs, et l'<b>existence d'un oracle exécutable</b>. Un terrain peut être favorable à un mécanisme et pas à un autre — d'où la nécessité de mesurer les trois et de laisser le diagnostic dire <b>lequel</b> devrait payer.</p>
+  <div class="fig">
+  <svg viewBox="0 0 700 250" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="L'arbre de précondition">
+    <rect x="250" y="10" width="200" height="40" rx="9" fill="#eef2ff" stroke="#4f46e5"/>
+    <text x="350" y="28" text-anchor="middle" font-size="12" font-weight="700" fill="#3730a3">Structure d'erreur du petit</text>
+    <text x="350" y="43" text-anchor="middle" font-size="10" fill="#475569">(mesurée par le diagnostic, sans label)</text>
+    <!-- three branches -->
+    <rect x="20" y="100" width="200" height="56" rx="9" fill="#ecfdf5" stroke="#0d9488"/>
+    <text x="120" y="121" text-anchor="middle" font-size="11" font-weight="700" fill="#0f766e">décorrélée, plurality-juste</text>
+    <text x="120" y="137" text-anchor="middle" font-size="10" fill="#475569">→ le VOTE paie</text>
+    <text x="120" y="150" text-anchor="middle" font-size="9.5" fill="#64748b">(Condorcet)</text>
+    <rect x="250" y="100" width="200" height="56" rx="9" fill="#ecfdf5" stroke="#0d9488"/>
+    <text x="350" y="121" text-anchor="middle" font-size="11" font-weight="700" fill="#0f766e">~symétrique, non biaisée</text>
+    <text x="350" y="137" text-anchor="middle" font-size="10" fill="#475569">→ la SYNTHÈSE paie</text>
+    <text x="350" y="150" text-anchor="middle" font-size="9.5" fill="#64748b">(sagesse des foules)</text>
+    <rect x="480" y="100" width="200" height="56" rx="9" fill="#ecfdf5" stroke="#0d9488"/>
+    <text x="580" y="121" text-anchor="middle" font-size="11" font-weight="700" fill="#0f766e">oracle exécutable</text>
+    <text x="580" y="137" text-anchor="middle" font-size="10" fill="#475569">→ la VÉRIFICATION paie</text>
+    <text x="580" y="150" text-anchor="middle" font-size="9.5" fill="#64748b">(ground-truth)</text>
+    <line x1="320" y1="50" x2="120" y2="98" stroke="#475569"/>
+    <line x1="350" y1="50" x2="350" y2="98" stroke="#475569"/>
+    <line x1="380" y1="50" x2="580" y2="98" stroke="#475569"/>
+    <rect x="180" y="200" width="340" height="40" rx="9" fill="#fef2f2" stroke="#dc2626"/>
+    <text x="350" y="220" text-anchor="middle" font-size="11" font-weight="700" fill="#991b1b">misconception PARTAGÉE (T-MATH)</text>
+    <text x="350" y="234" text-anchor="middle" font-size="9.5" fill="#7f1d1d">aucune précondition ne tient → aucune agrégation ne paie</text>
+  </svg>
+  <div class="cap">Un terrain est favorable ssi au moins une précondition tient. T-MATH n'en satisfait aucune (erreur systématique partagée). Le diagnostic dit laquelle, le cas échéant, est satisfaite — avant de mesurer la thèse.</div>
+  </div>
+</div>
+
+<!-- 3 -->
+<div class="wrap page">
+  <h2><span class="num">§3</span> Le détecteur existe déjà — et c'est lui le produit (le routeur)</h2>
+  <p>HB.4 a livré deux instruments de structure d'erreur, et leur statut — déployable vs recherche — est ce qui transforme « changer de terrain » d'une curiosité en une <b>capacité</b>.</p>
+  <ul>
+    <li><b><span class="mono">dispersion_index</span> (DÉPLOYABLE, sans label)</b> — par item, la <b>variance numérique</b> des candidats, la <b>fraction distincte</b> (diversité effective), et l'<b>entropie des poids d'audit</b>. Il ne lit <b>jamais</b> le label → il est calculable <b>en production, à l'inférence</b>. C'est le signal qui dit « ici les K échantillons sont diversement répartis » sans connaître la réponse.</li>
+    <li><b><span class="mono">symmetry_test</span> (RECHERCHE, label-using, cloisonné)</b> — biais signé, asymétrie, fraction dans l'enveloppe. Il touche le label pour <b>expliquer</b> (les erreurs sont-elles vraiment symétriques ?), jamais pour décider. C'est l'instrument de <b>validation a posteriori</b> du diagnostic déployable.</li>
+  </ul>
+  <p>La distinction est <b>load-bearing</b>. Si le signal <b>déployable</b> (sans label) prédit la favorabilité que le signal <b>label-using</b> confirme, alors EFE peut, <b>à l'inférence et sans oracle</b>, décider quand l'essaim de petits suffit. C'est un <b>routeur</b> :</p>
+  <div class="callout key">
+    <p><b>La thèse, reformulée — et c'est sa forme la plus forte.</b> L'arc H-B a réfuté « beaucoup de petits valent un gros <b>partout</b> ». Mais « changer de terrain » vise une affirmation que H-B n'a <b>pas</b> réfutée et qui est <b>économiquement supérieure</b> : <b>« beaucoup de petits valent un gros sur un sous-ensemble d'entrées PRÉDICTIBLE par un signal déployable, à coût moindre — et on route le reste vers le gros. »</b> Un système qui <b>sait quand il sait</b> est plus précieux qu'un système uniformément médiocre. Le diagnostic déployable est le mécanisme de ce « savoir quand ». « Changer de terrain » est, au fond, le test de l'existence de ce routeur.</p>
+  </div>
+  <p>Note d'honnêteté sur la généralisation du détecteur : <span class="mono">dispersion_index</span> est numérique (variance, diversité de clés). Sur un terrain <b>non numérique</b> (code, classification), la « dispersion » s'instancie autrement — diversité des <b>patterns de pass/fail</b> des tests (code), entropie du <b>vote</b> sur les classes (classification). Le <b>principe</b> (diversité effective + faible biais systématique) est invariant ; sa <b>mesure</b> est par-terrain. L'architecture exige donc, pour chaque terrain, un détecteur déployable explicite et pré-enregistré (§4–§8).</p>
+</div>
+
+<!-- 4 -->
+<div class="wrap page">
+  <h2><span class="num">§4</span> Taxonomie : terrains × structure d'erreur × mécanisme qui paie</h2>
+  <p>La grille de §2 ordonne les terrains candidats par leur structure d'erreur <b>attendue</b> — une prédiction a priori, à confirmer par le diagnostic <b>avant</b> la mesure de thèse.</p>
+  <table>
+    <thead><tr><th>Terrain</th><th>Structure d'erreur attendue</th><th>Mécanisme qui devrait payer</th><th>A&nbsp;priori</th></tr></thead>
+    <tbody>
+      <tr><td><b>T-MATH</b> arithmétique <span class="muted">(existe)</span></td><td>misconception de montage <b>partagée</b> → systématique, asymétrique</td><td>aucun</td><td class="bad">négatif (mesuré)</td></tr>
+      <tr><td><b>T-CODE</b> code + tests exécutables <span class="muted">(à bâtir)</span></td><td>bugs <b>divers</b> (implémentations différentes échouent différemment) → décorrélé ; <b>oracle exécutable</b></td><td><b>VÉRIFICATION</b> (ground-truth)</td><td class="good">fort</td></tr>
+      <tr><td><b>T-ESTIM</b> estimation / Fermi <span class="muted">(à bâtir)</span></td><td>bruit ~<b>symétrique</b> autour d'une magnitude (si pas de biais systématique)</td><td><b>SYNTHÈSE</b> (médiane/moyenne)</td><td class="mid">moyen-fort</td></tr>
+      <tr><td><b>T-EXTRACT</b> extraction multi-champs <span class="muted">(existe : <span class="mono">corpus::extract</span>, scorer Set)</span></td><td>slips <b>indépendants par champ</b> → décorrélés au niveau champ</td><td><b>VOTE par champ</b> (Condorcet local)</td><td class="mid">moyen</td></tr>
+      <tr><td><b>T-CLASS</b> classification fine <span class="muted">(existe : <span class="mono">topics</span>)</span></td><td>confusion <b>dispersée</b> sur classes voisines (si le petit est compétent-mais-bruité)</td><td><b>VOTE</b> (Condorcet)</td><td class="mid">moyen (dépend de la finesse)</td></tr>
+    </tbody>
+  </table>
+  <p>Trois de ces terrains <b>existent déjà</b> dans l'instrument (<span class="mono">math</span>, <span class="mono">extract</span>, <span class="mono">topics</span>) — ce qui rend le premier test <b>bon marché</b> (§6) : balayer le diagnostic dessus pour vérifier qu'il <b>classe</b> correctement leur favorabilité (math en bas, extraction/classification au-dessus). Deux terrains sont <b>à bâtir</b> (T-CODE, T-ESTIM) parce qu'ils incarnent les préconditions les plus pures (oracle exécutable ; bruit symétrique). T-CODE est le plus fort a priori, et pour une raison précise développée en §7.</p>
+</div>
+
+<!-- 5 -->
+<div class="wrap page">
+  <h2><span class="num">§5</span> Le piège escaladé : le cherry-pick de TERRAIN (∃terrain)</h2>
+  <p>H-B v2 a discipliné le <b>∃K</b> (ne pas cueillir le K qui pique). « Changer de terrain » fait face à la version <b>escaladée</b> et plus pernicieuse : le <b>∃terrain</b>. Essayer N terrains, en trouver un où l'agrégation gagne, et le présenter — c'est pire que ∃K, car les terrains sont <b>hétérogènes</b> et leur nombre est <b>non borné</b> : avec assez de datasets, un gain « significatif » apparaît par pur hasard. Sans discipline, « changer de terrain » est une <b>machine à faux positifs</b>.</p>
+  <div class="callout bad"><p><b>La faute à ne JAMAIS commettre.</b> Mesurer la thèse sur dix terrains, puis écrire « sur T-X, l'essaim bat le gros ». Même avec un test par terrain valide, le <b>maximum sur les terrains</b> est biaisé à la hausse. C'est exactement le péché de multiplicité, transposé d'un axe (K) à un autre (le terrain), où il est plus difficile à voir et plus dévastateur.</p></div>
+  <p>La parade tient en trois engagements, gelés <b>avant</b> toute mesure de thèse :</p>
+  <ol>
+    <li><b>La prédiction précède la mesure.</b> Pour chaque terrain, on calcule le <b>diagnostic déployable</b> (sans label) et l'on <b>pré-enregistre une PRÉDICTION binaire</b> de favorabilité (« ce terrain passera / ne passera pas »), avec son seuil, <b>avant</b> de mesurer la justesse d'agrégation. La thèse n'est testée que sur les terrains <b>prédits favorables</b>.</li>
+    <li><b>Le vrai test est la PRÉDICTION, pas le gain.</b> Le résultat décisif n'est pas « le terrain T-X gagne » mais « le diagnostic <b>prédit</b> correctement quels terrains gagnent et lesquels perdent ». On mesure la <b>corrélation pré-enregistrée</b> entre le signal déployable de favorabilité et le gain d'agrégation <b>réellement observé</b>, à travers <b>tous</b> les terrains (gagnants ET perdants). Une pêche au terrain ne peut pas produire cette corrélation ; seul un vrai mécanisme le peut. C'est ce qui transforme ∃terrain (pêche) en une <b>hypothèse falsifiable</b> (prédiction).</li>
+    <li><b>FWER inter-terrains &amp; rapport exhaustif.</b> Si plusieurs terrains sont testés, on contrôle l'erreur de famille <b>à travers les terrains</b> (le bootstrap couplé / Romano-Wolf max-t de <span class="mono">verdict_sup_k</span> s'y transpose), et l'on <b>rapporte TOUS</b> les terrains tentés — y compris les perdants — jamais le seul gagnant.</li>
+  </ol>
+  <p>Cette discipline a un effet libérateur : elle rend l'exploration de <b>nombreux</b> terrains <b>honnête</b>, parce que le livrable n'est plus « le gagnant » mais « la <b>loi</b> diagnostic→gain ». Plus on teste de terrains (gagnants et perdants), plus la loi est <b>forte</b> — l'opposé exact du cherry-pick.</p>
+</div>
+
+<!-- 6 -->
+<div class="wrap page">
+  <h2><span class="num">§6</span> Le test bon marché d'abord : les terrains existants</h2>
+  <p>Avant de bâtir quoi que ce soit, on exploite ce que l'instrument a déjà : trois terrains (<span class="mono">corpus::math</span>, <span class="mono">corpus::extract</span>, <span class="mono">topics</span>), trois structures d'erreur supposées différentes, le <b>même</b> harnais HB (courbe justesse×K, mécanismes, plafonds, verdict) et les <b>mêmes</b> diagnostics. Le protocole minimal et décisif :</p>
+  <ol>
+    <li><b>Phase A — prédiction (déployable, sans label).</b> Sur chaque terrain, faire produire au petit K échantillons, calculer le diagnostic déployable (dispersion / diversité de vote selon le type), et <b>pré-enregistrer</b> le classement de favorabilité attendu : math &lt; (extraction, classification). On gèle cette prédiction.</li>
+    <li><b>Phase B — mesure (la thèse).</b> Sur chaque terrain, mesurer le gain d'agrégation réel (meilleur mécanisme déployable vs le gros, non-infériorité + sup-K + puissance), avec la référence du gros figée d'avance.</li>
+    <li><b>Phase C — la loi.</b> Confronter prédiction (A) et gain (B). <b>Le diagnostic déployable a-t-il classé les terrains comme l'a fait la mesure ?</b> C'est le test de l'existence du routeur, sur des données déjà en main, pour un coût d'inférence modeste.</li>
+  </ol>
+  <div class="callout ok"><p><b>Pourquoi commencer là.</b> Ce test ne « cherche pas un terrain qui gagne » — il <b>valide (ou réfute) le détecteur</b>. Si le diagnostic prédit correctement que l'extraction/classification sont plus favorables que l'arithmétique (même si <b>aucune</b> ne bat le gros dans l'absolu), le <b>routeur existe</b> en principe, et l'on a gagné le droit de bâtir T-CODE pour chercher un terrain qui <b>franchit</b>. S'il échoue à prédire, on a appris — bon marché — que la favorabilité n'est pas captée par ce signal, et l'on révise le détecteur <b>avant</b> d'investir dans de nouveaux corpus.</p></div>
+  <p>Caveat d'interprétation pré-enregistré : ces terrains existants peuvent être <b>trop faciles</b> (le petit déjà près du gros → peu de marge → la favorabilité y est indétectable) ou <b>trop durs</b>. On rapporte l'écart petit↔gros par terrain pour situer chaque cellule, et l'on ne lit la « loi » que là où il y a un écart à combler.</p>
+</div>
+
+<!-- 7 -->
+<div class="wrap page">
+  <h2><span class="num">§7</span> T-CODE : le vérificateur ground-truth (le régime b honnête)</h2>
+  <p>T-CODE est le terrain a-priori le plus fort, pour une raison que l'arc H-B rend limpide. Le régime (b) disait « un vérificateur paierait » ; HB.3 a échoué parce que son vérificateur était <b>heuristique</b> (RXW audite le calcul, pas la vérité). En <b>code</b>, il existe un vérificateur <b>ground-truth et déployable</b> : <b>exécuter les tests</b>. C'est la réalisation honnête du régime (b) — et la diversité des échantillons (des implémentations différentes échouent par des bugs <b>différents</b>) satisfait la décorrélation que T-MATH violait.</p>
+
+  <h3>7.1 — La construction, et l'invariant anti-fuite (le label-leak du code)</h3>
+  <p>Chaque problème porte deux jeux de tests : <b>VISIBLES</b> (donnés au vérificateur déployable) et <b>CACHÉS</b> (le scorer de vérité). Le sélecteur déployable garde, parmi les K candidats, ceux qui <b>passent les tests visibles</b> ; le scorer note sur les tests <b>cachés</b>. <b>Confondre les deux est le label-leak du code</b> : sélectionner et scorer sur les mêmes tests, c'est l'oracle déguisé (l'équivalent de <span class="mono">pass@K</span> relabellisé). On rapporte l'<b>écart</b> « passe-visibles » vs « passe-cachés » : c'est l'<b>overfitting aux tests visibles</b>, mesuré — l'analogue exact de l'écart vérifié↔pass@K de HB.1.</p>
+  <div class="eq">déployable = best-of-K parmi {passe les VISIBLES} ;  plafond/score = passe les CACHÉS ;  écart = overfit aux visibles</div>
+
+  <h3>7.2 — La sécurité d'exécution (exigence dure)</h3>
+  <p>Exécuter du code <b>généré</b> est intrinsèquement dangereux. L'architecture <b>exige</b> un bac à sable : <b>aucun réseau</b>, système de fichiers en lecture seule / <span class="mono">tmp</span> jetable, <b>timeouts</b> par test, limites mémoire/CPU, pas d'appels système dangereux, processus isolé et tué après chaque test. C'est une condition de l'instrument, pas une option — et elle reste <b>locale</b> (le garde-fou de souveraineté d'EFE), exerçable sur Mac via le seam (tests scriptés) avant le GPU.</p>
+
+  <h3>7.3 — Ce que la thèse devient sur T-CODE, et le nouveau coût</h3>
+  <p>Essaim de K petits + <b>best-of-K-par-tests-visibles</b> vs gros K=1, scoré sur les tests cachés. Le plafond de sélection est <span class="mono">pass@K</span> (un candidat passe les cachés) ; le déployable est la sélection-par-visibles. La favorabilité se mesure par la <b>diversité des patterns de pass/fail</b> (différents candidats passent différents sous-ensembles → décorrélé → la vérification a de quoi trancher) — l'instanciation « code » du diagnostic déployable. <b>Nouveau terme de coût</b> (I-CT-COST) : exécuter K candidats × T tests a un coût (CPU-secondes d'exécution) <b>en plus</b> des jetons ; il doit entrer dans la comparaison économique (le gros, lui, n'exécute rien). On le rapporte séparément, et la domination de déploiement (GPU-s + exécution) reste, comme toujours, à confirmer en B2.</p>
+  <div class="callout key"><p><b>Pourquoi T-CODE peut franchir là où T-MATH a échoué.</b> Trois préconditions s'alignent : (1) <b>décorrélation</b> — des bugs divers, pas une misconception unique ; (2) <b>oracle ground-truth</b> — les tests <i>sont</i> la spécification, pas une heuristique ; (3) <b>marge réelle</b> — un petit modèle de code échoue souvent par un détail qu'un autre échantillon corrige, exactement le cas où best-of-K paie. Si la thèse doit gagner <b>quelque part</b>, c'est ici. Et si elle <b>échoue même ici</b>, c'est un négatif d'une force considérable.</p></div>
+</div>
+
+<!-- 8 -->
+<div class="wrap page">
+  <h2><span class="num">§8</span> T-ESTIM : le terrain natif de la synthèse</h2>
+  <p>HB.4 a bâti la synthèse (médiane, moyenne tronquée) et a montré qu'elle <b>échoue sur l'arithmétique</b> parce que les erreurs y sont asymétriques. Mais la synthèse a un terrain <b>natif</b> : l'<b>estimation</b>. Sur des questions de <b>magnitude</b> (problèmes de Fermi, comptages approximatifs, ordres de grandeur), un modèle compétent-mais-incertain produit des estimations qui <b>scattent autour</b> de la vérité — et là, médiane/moyenne convergent (la sagesse des foules opère vraiment). La différence cruciale avec T-MATH : une estimation est un <b>continuum bruité</b>, pas une <b>logique discrète</b> où une erreur de montage donne une valeur confiante-mais-fausse.</p>
+  <p>La construction : un corpus d'estimation à <b>paramètres aléatoires</b> (anti-contamination par construction, comme <span class="mono">corpus::math</span>), où la vérité est une magnitude calculable et où le petit n'a pas de raison d'avoir un <b>biais systématique</b>. Le <b>prédicteur pré-enregistré</b> est exactement <span class="mono">symmetry_test</span> : si, sur ce terrain, l'asymétrie est faible et le biais signé proche de zéro, on <b>prédit</b> (avant de mesurer la thèse) que la synthèse paie. C'est falsifiable au premier degré.</p>
+  <div class="callout warn"><p><b>Le piège propre à T-ESTIM.</b> Si le petit modèle a un <b>biais systématique</b> (il sous-estime toujours les grands nombres, par exemple), la médiane <b>suit le biais</b> et la synthèse échoue — exactement comme sur T-MATH, mais pour une raison différente (biais, pas misconception discrète). Le <span class="mono">symmetry_test</span> le détecte (biais signé ≠ 0) <b>avant</b> qu'on ne se trompe. C'est précisément pour cela que le diagnostic précède la mesure : il distingue « bruit moyennable » de « biais que la moyenne propage ».</p></div>
+</div>
+
+<!-- 9 -->
+<div class="wrap page">
+  <h2><span class="num">§9</span> Métrique, verdict, &amp; la corrélation diagnostic↔gain</h2>
+  <p>« Changer de terrain » <b>réutilise</b> l'instrument H-B sans le réinventer : par terrain, la <b>courbe justesse × K</b>, les <b>mécanismes</b> (vote, vérifié, synthèse, fusion) avec leurs <b>plafonds</b> adaptés (sélection ≤ <span class="mono">pass@K</span> ; synthèse ≤ enveloppe ; T-CODE : passe-cachés vs passe-visibles), le <b>verdict</b> de non-infériorité à un K\* pré-spécifié, le <b>sup-K</b> à FWER contrôlé, et la <b>puissance</b> rapportée — cette fois avec un <b>n pré-dimensionné</b> (via <span class="mono">required_n</span>) pour atteindre 80 % de puissance sur l'écart visé, afin d'<b>éviter l'« indéterminé »</b> qui a limité HB.3/HB.4.</p>
+  <p>Mais le <b>résultat distinctif</b> de cette phase n'est aucun verdict par-terrain isolé. C'est la <b>loi inter-terrains</b> :</p>
+  <div class="eq">le DIAGNOSTIC DÉPLOYABLE (sans label) de favorabilité  PRÉDIT-il  le GAIN d'agrégation mesuré, à travers les terrains ?</div>
+  <p>On reporte, pour chaque terrain : (diagnostic déployable de favorabilité, gain d'agrégation réel, écart petit↔gros, plafond, verdict, puissance). Puis la <b>corrélation pré-enregistrée</b> entre la colonne diagnostic et la colonne gain. Une corrélation forte et pré-enregistrée est la preuve du <b>routeur</b> : on peut, sans label, anticiper où l'essaim suffit. C'est le seul résultat qui <b>survit</b> à l'objection du cherry-pick, parce qu'il inclut les terrains <b>perdants</b> et qu'une pêche ne saurait le fabriquer.</p>
+  <div class="callout ok">
+    <p><b>Les trois issues, toutes informatives.</b> (1) <b>Le diagnostic prédit ET un terrain franchit</b> (ex. T-CODE non-inférieur au gros, coût compris) → la thèse renaît, <b>routée</b> : double victoire. (2) <b>Le diagnostic prédit mais aucun terrain ne franchit</b> dans l'absolu → le routeur existe (on sait où l'essaim est <i>relativement</i> meilleur) mais l'essaim ne rejoint pas le gros sur ces cellules → thèse économique à rejouer sous le coût réel (B2). (3) <b>Le diagnostic ne prédit rien</b> → la favorabilité n'est pas captée par ce signal ; on a réfuté le routeur naïf et borné la thèse — un négatif fort, bon marché.</p>
+  </div>
+</div>
+
+<!-- 10 -->
+<div class="wrap page">
+  <h2><span class="num">§10</span> Menaces, invariants, &amp; ce que « changer de terrain » décide</h2>
+  <h3>Menaces à la validité</h3>
+  <ul>
+    <li><b>Contamination</b> : le petit a mémorisé un corpus public → faux gain. Parade : terrains <b>synthétiques à paramètres aléatoires</b> (math/estim) ou perturbés/récents (code), re-dérivables par graine.</li>
+    <li><b>Cherry-pick de terrain (∃terrain)</b> : la menace centrale. Parade : §5 (prédiction pré-enregistrée sur le diagnostic déployable, la loi diagnostic→gain, FWER inter-terrains, rapport exhaustif des perdants).</li>
+    <li><b>Fuite tests visibles↔cachés (T-CODE)</b> : sélection et score sur les mêmes tests = oracle déguisé. Parade : séparation stricte, écart d'overfit rapporté.</li>
+    <li><b>Plafond/écart inadéquat</b> : terrain trop facile (pas de marge) ou trop dur (les deux modèles à terre). Parade : rapporter l'écart petit↔gros, ne lire la loi que là où il y a un écart réel.</li>
+    <li><b>Sécurité d'exécution (T-CODE)</b> : exécuter du code non fiable. Parade : bac à sable dur (§7.2), local.</li>
+    <li><b>Coût d'exécution (T-CODE)</b> : K×T exécutions changent l'économie. Parade : le compter séparément (I-CT-COST), déploiement → B2.</li>
+  </ul>
+  <h3>Invariants de « Changer de Terrain »</h3>
+  <table>
+    <thead><tr><th>Invariant</th><th>Énoncé</th></tr></thead>
+    <tbody>
+      <tr><td><b>I-CT-PREDICT</b></td><td>la favorabilité d'un terrain est <b>prédite</b> par le diagnostic <b>déployable</b> (sans label), <b>pré-enregistrée</b>, AVANT toute mesure de thèse.</td></tr>
+      <tr><td><b>I-CT-LAW</b></td><td>le résultat est la <b>corrélation diagnostic→gain à travers TOUS les terrains</b> (gagnants et perdants), pas un verdict par-terrain isolé.</td></tr>
+      <tr><td><b>I-CT-NOPICK</b></td><td>jamais rapporter le seul terrain gagnant ; FWER inter-terrains ; tous les terrains tentés sont rapportés.</td></tr>
+      <tr><td><b>I-CT-GROUNDTRUTH</b></td><td>un vérificateur n'est « déployable » que s'il est <b>ground-truth</b> (T-CODE : exécution de tests), pas une heuristique (la leçon de RXW).</td></tr>
+      <tr><td><b>I-CT-NOLEAK</b></td><td>sélection et scoring sur des oracles <b>disjoints</b> (T-CODE : visibles vs cachés) ; l'écart est l'overfit, rapporté.</td></tr>
+      <tr><td><b>I-CT-POWER</b></td><td>n <b>pré-dimensionné</b> (required_n) pour 80 % de puissance sur l'écart visé ; éviter l'« indéterminé ».</td></tr>
+      <tr><td><b>I-CT-COST</b></td><td>coût-jetons ET coût-exécution comptés ; domination de déploiement (GPU-s + exécution) suspendue à B2.</td></tr>
+      <tr><td><b>I-CT-SANDBOX</b></td><td>tout code généré s'exécute en bac à sable local dur (réseau coupé, FS jetable, timeouts, limites).</td></tr>
+    </tbody>
+  </table>
+  <h3>Séquence &amp; ce que ça décide</h3>
+  <p>Séquence : (0) <b>test bon marché</b> sur les terrains existants — le diagnostic classe-t-il math &lt; extraction/classification ? (valide le détecteur) ; (1) <b>T-CODE</b> — bâtir le corpus visibles/cachés + le bac à sable, mesurer (le terrain le plus fort) ; (2) <b>T-ESTIM</b> — le terrain natif de la synthèse ; (3) la <b>loi diagnostic→gain</b> sur l'ensemble. Tout est exerçable sur <b>Mac via le seam</b> (modèles scriptés à structure d'erreur contrôlée, tests scriptés) avant le GPU — on peut <b>prouver le détecteur et la discipline</b> avant d'engager le calcul réel.</p>
+  <div class="callout key"><p><b>Ce que « Changer de Terrain » décide.</b> Pas « la thèse marche enfin », mais quelque chose de plus solide : <b>« sait-on PRÉDIRE, déployablement et sans tricher, où l'essaim de petits égale le gros ? »</b>. Si oui, EFE détient un <b>routeur</b> et la thèse économique renaît sur une base mesurée — c'est la victoire la plus forte que l'arc H-B avait gardée ouverte. Si non, on aura <b>borné</b> la thèse encore plus durement, et appris — bon marché — que la favorabilité d'agrégation n'est pas un signal accessible. Comme toujours dans EFE : le but n'est pas que la réponse soit <i>oui</i>, mais qu'elle soit <b>vraie</b>, re-prouvable, et utile pour la décision suivante.</p></div>
+</div>
+
+</body>
+</html>
