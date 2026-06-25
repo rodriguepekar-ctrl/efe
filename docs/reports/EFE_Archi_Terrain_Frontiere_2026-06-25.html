@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>EFE — Architecture : Le Terrain (où la thèse de l'essaim tient — et où elle meurt)</title>
+<style>
+  :root{--ink:#0f172a;--muted:#475569;--soft:#64748b;--line:#e2e8f0;--teal:#0d9488;--teal-d:#0f766e;--indigo:#4f46e5;--indigo-d:#4338ca;--ok:#16a34a;--warn:#d97706;--bad:#dc2626;--bg-tint:#f6fbfa;--bg-card:#eef2f1;--code-bg:#0f172a;--code-fg:#e2e8f0;}
+  *{box-sizing:border-box;} html{font-size:11.2px;}
+  body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,Arial,sans-serif;color:var(--ink);margin:0;line-height:1.6;background:#fff;-webkit-font-smoothing:antialiased;}
+  .wrap{max-width:178mm;margin:0 auto;padding:0 2mm;}
+  h1,h2,h3,h4{line-height:1.2;font-weight:700;}
+  h2{font-size:1.45rem;margin:0 0 .55rem;padding-bottom:.32rem;border-bottom:3px solid var(--teal);}
+  h2 .num{color:var(--teal);} h3{font-size:1.13rem;margin:1.1rem 0 .3rem;color:var(--teal-d);}
+  h4{font-size:1rem;margin:.8rem 0 .2rem;color:var(--indigo-d);}
+  p{margin:.55rem 0;text-align:justify;hyphens:auto;} a{color:var(--indigo);text-decoration:none;}
+  code{font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace;font-size:.85em;background:var(--bg-card);padding:.05em .35em;border-radius:4px;color:#0b3b36;}
+  .muted{color:var(--muted);} .small{font-size:.88rem;}
+  section{break-inside:avoid;} .page{break-before:page;} h2{break-after:avoid;}
+  table{border-collapse:collapse;width:100%;margin:.55rem 0;font-size:.82rem;}
+  th,td{border:1px solid var(--line);padding:.32rem .5rem;text-align:left;vertical-align:top;}
+  th{background:var(--bg-card);font-weight:700;} tbody tr:nth-child(even){background:var(--bg-tint);}
+  td.c,th.c{text-align:center;} .good{background:#dcfce7 !important;color:#166534;font-weight:700;} .mid{background:#fef9c3 !important;color:#854d0e;font-weight:700;} .bad{background:#fee2e2 !important;color:#991b1b;font-weight:700;}
+  .tag{display:inline-block;font-size:.71rem;font-weight:700;padding:.08em .5em;border-radius:20px;}
+  .t-ok{background:#dcfce7;color:#166534;} .t-info{background:#e0e7ff;color:#3730a3;} .t-teal{background:#ccfbf1;color:#115e59;} .t-warn{background:#fef3c7;color:#92400e;} .t-bad{background:#fee2e2;color:#991b1b;}
+  pre{background:var(--code-bg);color:var(--code-fg);padding:.55rem .8rem;border-radius:8px;overflow:auto;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.72rem;line-height:1.45;margin:.55rem 0;}
+  pre code{background:none;color:inherit;padding:0;}
+  .callout{border-left:4px solid var(--teal);background:var(--bg-tint);padding:.55rem .85rem;border-radius:0 8px 8px 0;margin:.65rem 0;}
+  .callout p{text-align:left;margin:.28rem 0;}
+  .callout.key{border-color:var(--indigo);background:#eef2ff;} .callout.warn{border-color:var(--warn);background:#fffbeb;} .callout.ok{border-color:var(--ok);background:#f0fdf4;} .callout.bad{border-color:var(--bad);background:#fef2f2;}
+  .fig{margin:.7rem 0 .9rem;text-align:center;break-inside:avoid;}
+  .fig svg{max-width:100%;height:auto;border:1px solid var(--line);border-radius:10px;background:#fff;}
+  .fig .cap{font-size:.79rem;color:var(--muted);margin-top:.32rem;font-style:italic;text-align:center;}
+  ul,ol{margin:.4rem 0 .55rem 1.1rem;padding:0;} li{margin:.24rem 0;}
+  svg text{font-family:-apple-system,"Segoe UI",Inter,sans-serif;}
+  .cover{height:262mm;display:flex;flex-direction:column;justify-content:center;position:relative;padding:0 6mm;}
+  .cover .eyebrow{color:var(--teal);font-weight:800;letter-spacing:.2em;font-size:.83rem;text-transform:uppercase;}
+  .cover h1{font-size:2.25rem;margin:.4rem 0 .2rem;line-height:1.08;} .cover .sub{font-size:1.16rem;color:var(--muted);margin-bottom:1.1rem;}
+  .cover .tagline{font-size:1.0rem;color:var(--ink);max-width:163mm;border-left:4px solid var(--teal);padding-left:1rem;font-style:italic;text-align:left;}
+  .cover .meta{position:absolute;bottom:6mm;left:6mm;right:6mm;display:flex;justify-content:space-between;border-top:1px solid var(--line);padding-top:.6rem;font-size:.8rem;color:var(--soft);}
+  .cover .pills{margin:1rem 0;} .cover .pills .tag{font-size:.77rem;margin-right:.3rem;}
+  .mono{font-family:ui-monospace,Menlo,Consolas,monospace;}
+  hr{border:none;border-top:1px solid var(--line);margin:.9rem 0;}
+  .toc{font-size:.9rem;columns:2;column-gap:2rem;} .toc div{margin:.16rem 0;break-inside:avoid;} .toc .n{color:var(--teal);font-weight:700;display:inline-block;width:1.8em;}
+  .eq{font-family:ui-monospace,Menlo,Consolas,monospace;background:#ecfdf5;border:1px solid #a7f3d0;border-radius:8px;padding:.45rem .75rem;margin:.5rem 0;font-size:.79rem;color:#065f46;text-align:center;}
+  @page{size:A4;margin:13mm 12mm;}
+</style>
+</head>
+<body>
+
+<!-- COVER -->
+<div class="wrap"><div class="cover">
+  <div class="eyebrow">Architecture · la frontière de la thèse · un harnais de FALSIFICATION, pas une victoire</div>
+  <h1>Le Terrain</h1>
+  <div class="sub">L'arc H-B a montré qu'aucune agrégation ne récupère l'écart sur l'arithmétique. La vraie question n'est pas « où est-ce que je gagne ? » — c'est : <b>l'agrégation récupère-t-elle un vrai écart sur QUELQUE terrain que ce soit ?</b> Construit pour pouvoir répondre <b>non</b>.</div>
+  <div class="tagline">Quatre briques (HB.1→HB.4) ont établi, re-prouvablement, qu'aucune agrégation déployable — sélection, vérification, synthèse — ne ferme l'écart du petit au gros sur <span class="mono">phi4-mini × T-MATH</span> : la bonne réponse est <b>présente</b> (pass@K=100 %) mais <b>non récupérable</b>, car les erreurs sont <b>systématiques</b> (asymétrie +8,72), pas du bruit moyennable. Le piège, ici, serait d'aller <b>chercher la cellule où l'essaim gagne</b> et de n'en rapporter que la frontière — du cherry-pick déguisé en science. Le Terrain fait l'<b>inverse</b> : c'est un <b>harnais de falsification</b> dont l'issue attendue par défaut est « <b>aucune cellule ne récupère</b> » — un négatif <b>plus fort</b> que la perte sur l'arithmétique seule. Trois cellules sont <b>pré-enregistrées sur des bases de TYPE de tâche</b> (jamais sur l'issue espérée) : <span class="mono">T-MATH</span> (le contrôle, perte connue), <span class="mono">T-EXTRACT</span> (extraction d'ensembles — modalité d'erreur différente, candidat à la récupération) et <span class="mono">T-MATH-HARD</span> (l'escalade gelée d'avance). Chaque cellule passe d'abord un <b>écran de gap</b> (le petit-seul &lt; 90 % ET écart au gros ≥ 5 pts) qui désarme le confondant <b>plafond</b> : « essaim = gros parce que tout est trivial » ne peut PAS se faire passer pour une récupération. La <b>récupération</b> est définie en <b>six conditions</b> (gap réel + non-infériorité à un K\* gelé + mécanisme déployable + pas un artefact de fabrication + puissance ≥ 70 % + survie de Holm), sous <b>contrôle d'erreur de famille</b> inter-cellules (Holm-Bonferroni). Le <b>prédicteur</b> (dispersion, sans label) est une <b>prédiction directionnelle pré-enregistrée</b> — une démonstration sur 3 points + une théorie, <b>jamais</b> un classifieur ajusté. Le <b>routeur</b> est <b>au niveau du TYPE de tâche</b>, jamais par item (le routage par item EST le problème de vérification que HB.3 a déjà échoué). Et les <b>trois issues</b> — récupération / pas de récupération / plafond — sont <b>écrites d'avance</b>, pour qu'aucune ne puisse être esquivée.</div>
+  <div class="pills">
+    <span class="tag t-teal">3 cellules pré-enregistrées · type de tâche, pas l'issue</span>
+    <span class="tag t-info">écran de gap ⇒ pas de confondant plafond</span>
+    <span class="tag t-info">récupération en 6 conditions · FWER inter-cellules</span>
+    <span class="tag t-info">routeur TYPE-de-tâche, jamais par item (= HB.3)</span>
+    <span class="tag t-warn">issue par défaut : AUCUNE récupération · 3 issues pré-écrites</span>
+  </div>
+  <div class="meta">
+    <span>EFE — Essaim Fluide Éphémère · roadmap thèse · le Terrain (post-panel de méthodologie)</span>
+    <span>2026-06-25 · architecture</span>
+  </div>
+</div></div>
+
+<!-- TOC -->
+<div class="wrap page">
+  <h2><span class="num">§0</span> Plan</h2>
+  <div class="toc">
+    <div><span class="n">1.</span> Ce que l'arc H-B a établi — et la VRAIE question du terrain</div>
+    <div><span class="n">2.</span> Les trois cellules pré-enregistrées (par type, pas par issue)</div>
+    <div><span class="n">3.</span> L'écran de gap : désarmer le confondant plafond</div>
+    <div><span class="n">4.</span> La définition de RÉCUPÉRATION (six conditions)</div>
+    <div><span class="n">5.</span> L'opérateur d'agrégation doit épouser la structure de la réponse</div>
+    <div><span class="n">6.</span> Le prédicteur (sans label) &amp; le routeur (par TYPE, jamais par item)</div>
+    <div><span class="n">7.</span> La discipline inter-cellules : FWER, n, et l'honnêteté du « 3 points »</div>
+    <div><span class="n">8.</span> L'échelle de revendication &amp; les trois issues pré-écrites</div>
+    <div><span class="n">9.</span> Menaces à la validité &amp; critères de réfutation</div>
+    <div><span class="n">10.</span> Invariants, intégration, et ce que le Terrain décide (→ B2)</div>
+  </div>
+
+  <h3>Le geste, en une phrase</h3>
+  <p>Le Terrain prend l'instrument H-A/H-B <b>tel quel</b>, le déploie sur <b>trois cellules pré-enregistrées</b> (types de tâche contrastés), <b>écrante</b> chacune pour un <b>vrai écart K=1</b> (sans quoi il n'y a rien à récupérer), puis demande, sous <b>contrôle d'erreur de famille</b> et avec la <b>puissance rapportée</b> : existe-t-il <b>une</b> cellule où une agrégation <b>déployable</b> hisse un petit modèle <b>réellement inférieur au gros</b> jusqu'à la <b>non-infériorité</b> ? Il rapporte la dispersion <b>sans label</b> (le prédicteur) et la symétrie <b>cloisonnée</b> (l'explication), et il <b>écrit d'avance</b> le titre de chaque issue — y compris « aucune cellule ne récupère », le négatif le plus fort.</p>
+
+  <div class="callout key">
+    <p><b>Pourquoi ce cadrage est le seul honnête.</b> Après quatre briques négatives sur l'arithmétique, la tentation est de « sauver » la thèse en exhibant un terrain favorable. Le Terrain refuse ce mouvement : son <b>issue par défaut, attendue, est le négatif</b> — « aucune agrégation ne récupère sur aucun type ». S'il trouve une cellule qui récupère, c'est un résultat <b>d'autant plus crédible</b> qu'il a été cherché à se réfuter ; s'il n'en trouve aucune, c'est un négatif <b>qui borne la thèse globalement</b> (et non plus seulement sur l'arithmétique). La valeur est la <b>décidabilité</b> : trois engagements gelés <i>avant</i> toute issue — les cellules, les seuils d'écran, la définition de récupération — rendent les trois verdicts également publiables, et donc inesquivables.</p>
+  </div>
+</div>
+
+<!-- 1 -->
+<div class="wrap page">
+  <h2><span class="num">§1</span> Ce que l'arc H-B a établi — et la VRAIE question du terrain</h2>
+  <p>Récapitulons, re-prouvablement, sur <span class="mono">phi4-mini × T-MATH</span> (CoT réel, R0) : <b>H-A</b> — aucun petit modèle ne <b>substitue</b> le gros <b>seul</b> (K=1), écart ~6–8 pts. <b>H-B</b> — la bonne réponse est <b>présente</b> dans les K (pass@K=100 %) mais <b>minoritaire</b>, et <b>aucune agrégation déployable</b> ne la récupère : self-consistency 94 %, vérificateur de re-exécution (RXW) 92 % (<i>sous</i> SC), synthèse (médiane/tronquée/pondérée) ≤ 85 % (fusion <b>inférieure</b> à 70 %). La cause, <b>mesurée</b> : les erreurs sont <b>systématiques</b> (<span class="mono">symmetry_test</span> : asymétrie +8,72, biais +3,65, outliers catastrophiques) — l'écart résiduel est un <b>écart de modélisation</b> (mauvais montage, bon calcul), irréductible par re-pondération, vote, ou moyenne.</p>
+  <div class="callout key">
+    <p><b>La question que cela pose — et qui porte tout.</b> L'arc H-B a réfuté la récupération <b>sur l'arithmétique</b>. Mais l'arithmétique est-elle un <b>cas particulier</b> (erreurs systématiques) ou le <b>cas général</b> ? Autrement dit : <b>existe-t-il un type de tâche où l'agrégation récupère un VRAI écart K=1 ?</b> Si <b>oui</b>, la thèse se précise — « l'essaim marche quand les erreurs sont du bruit divers, pas quand elles sont systématiques », avec le prédicteur de dispersion pour le dire. Si <b>non</b>, la jambe « la quantité récupère la qualité » est <b>largement réfutée</b> (pas seulement sur l'arithmétique) — un négatif bien plus lourd. Le Terrain est conçu pour trancher <b>cette</b> question, et pour la trancher <b>même quand la réponse déçoit</b>.</p>
+  </div>
+  <p>Trois conditions de décidabilité, gelées <b>avant</b> de regarder la moindre issue sur les nouvelles cellules : les <b>cellules</b> (§2), les <b>seuils de l'écran de gap</b> (§3), la <b>définition de récupération</b> (§4). Le verdict de famille est rendu au niveau du <b>collectif</b> (Holm/Romano-Wolf sur les cellules, §7), de sorte qu'une victoire chanceuse sur une cellule isolée est <b>déclassée</b>, et que le titre « aucune cellule ne récupère » est <b>écrit d'avance</b> (§8).</p>
+</div>
+
+<!-- 2 -->
+<div class="wrap page">
+  <h2><span class="num">§2</span> Les trois cellules pré-enregistrées (par type, pas par issue)</h2>
+  <p>Le choix des cellules est l'endroit où le cherry-pick s'infiltre. Garde-fou : on choisit sur des <b>bases de type de tâche</b> (diversité des structures de réponse et des modalités d'erreur), <b>jamais</b> sur l'issue espérée, et on <b>gèle les trois d'avance</b> — la famille est <b>fermée</b> (pas de 4ᵉ cellule post-hoc). On <b>rapporte les trois</b>, perte comprise.</p>
+  <table>
+    <thead><tr><th>Cellule</th><th>Type &amp; corpus</th><th>Rôle (pré-enregistré)</th></tr></thead>
+    <tbody>
+      <tr><td><b>1 · T-MATH</b><br><span class="tag t-bad">contrôle (perte)</span></td><td>raisonnement numérique fermé · <span class="mono">corpus::math(300, 20260624)</span> · scorer <span class="mono">Numeric</span></td><td><b>Contrôle négatif.</b> Écart K=1 réel (~6–8 pts), pass@K=100 %, mais aucune récupération (erreurs systématiques, skew +8,72). Sa signature de dispersion DOIT lire « pas de récupération » — sinon le prédicteur s'auto-contredit.</td></tr>
+      <tr><td><b>2 · T-EXTRACT</b><br><span class="tag t-info">candidat</span></td><td>extraction d'<b>ensembles</b> compositionnelle (« liste les {animaux} ») · <span class="mono">corpus::extract(300, 20260624)</span> · scorer <span class="mono">Set</span> (égalité d'ensembles exacte, <b>pas</b> Lenient)</td><td><b>Candidat à la récupération.</b> Modalité d'erreur <b>différente</b> : appartenance partielle (oublier/ajouter un élément), plausiblement plus <b>diverse/indépendante</b> entre échantillons qu'une unique erreur de montage numérique. Doit passer l'écran de gap avant ouverture.</td></tr>
+      <tr><td><b>3 · T-MATH-HARD</b><br><span class="tag t-warn">escalade gelée</span></td><td>même famille numérique, <b>tier-3</b> seulement (3 opérations, ids <span class="mono">m3-*</span>) · scorer <span class="mono">Numeric</span></td><td><b>Repli pré-enregistré</b> (déjà DANS la famille FWER) si T-EXTRACT plafonne. Teste si un écart K=1 <b>plus grand</b> se comporte différemment sous agrégation. Si 2 et 3 échouent/plafonnent, le titre « aucune récupération » s'allume.</td></tr>
+    </tbody>
+  </table>
+  <div class="callout warn">
+    <p><b>Pourquoi <span class="mono">topics.jsonl</span> est EXCLU comme cellule.</b> Le fixture de classification n'a que <b>8 items</b> (puissance &lt; 0,7, fatale) et la classification mono-mot sur texte court est <b>plafond-risquée</b> (phi4 la résout probablement à froid). On le mentionne <b>uniquement</b> pour documenter pourquoi il n'est pas une cellule — pas pour s'en servir.</p>
+  </div>
+</div>
+
+<!-- 3 -->
+<div class="wrap page">
+  <h2><span class="num">§3</span> L'écran de gap : désarmer le confondant plafond</h2>
+  <p>Le confondant le plus insidieux : « essaim = gros » <b>parce que la tâche est triviale</b> (les deux à 100 %) n'est <b>pas</b> une récupération. Avant d'ouvrir la courbe H-B d'une cellule, on passe un <b>écran de gap</b> pré-enregistré, sur les <b>mêmes</b> items et le <b>même</b> scorer que le verdict final.</p>
+  <div class="eq">VALIDE ⟺ small_alone &lt; 0,90  ET  Δ_screen = big − small_alone ≥ 0,05  ET  pass@K &gt; best_deployable@K=1</div>
+  <ul>
+    <li><b>small_alone</b> = justesse de phi4-mini à <b>K=1</b> (une seule génération, <b>non</b> agrégée, <b>non</b> pass@K) : la fraction d'items où la clé canonique du premier candidat égale le label.</li>
+    <li><b>big</b> = justesse de gemma3:12b à K=1 (sa réponse brute, exactement la référence de <span class="mono">verdict_at_k</span>).</li>
+    <li><b>Δ_screen</b> = l'écart apparié — l'amplitude qu'une agrégation aurait à combler.</li>
+  </ul>
+  <p>L'écran <b>EST</b> la mesure de substitution H-A : c'est <span class="mono">substitution::analyze_cell</span> à K=1 (il rend small_acc, big_acc, l'écart, <span class="mono">achieved_power</span>, <span class="mono">required_n</span>), avec les seuils gelés appliqués à sa sortie. Il <b>utilise le label</b> — mais c'est de la <b>caractérisation hors-ligne</b>, pas du déploiement (exactement comme H-A). Décisions, gelées :</p>
+  <table>
+    <thead><tr><th>Résultat de l'écran</th><th>Conséquence (pré-enregistrée)</th></tr></thead>
+    <tbody>
+      <tr><td><b>VALIDE</b> (gap réel)</td><td>on ouvre la courbe H-B et le verdict de récupération.</td></tr>
+      <tr><td><b>PLAFOND</b> (small_alone ≥ 0,90)</td><td>cellule <b>déclassée</b> en « diagnostic d'échauffement, non informative » ; l'escalade (T-MATH-HARD) s'active. <b>Ce n'est ni une récupération ni une victoire.</b></td></tr>
+      <tr><td><b>PAS DE GAP</b> (Δ_screen &lt; 0,05)</td><td>idem : pas d'écart à combler → déclassée. Rapportée comme telle (donnée, pas re-tirage).</td></tr>
+    </tbody>
+  </table>
+  <p>Une cellule qui échoue à l'écran est <b>rapportée comme échouée</b> dans le tableau de famille (jamais silencieusement remplacée) — le dénominateur reste toujours les <b>trois</b> cellules pré-enregistrées.</p>
+</div>
+
+<!-- 4 -->
+<div class="wrap page">
+  <h2><span class="num">§4</span> La définition de RÉCUPÉRATION (six conditions)</h2>
+  <p>« Récupération » est défini <b>précisément et d'avance</b>, pour le distinguer du trivial, du plafond, de l'artefact de scorer, et de l'illusion de l'oracle pass@K. Une cellule <b>récupère</b> ssi <b>TOUTES</b> :</p>
+  <ol>
+    <li><b>Pré-condition de gap</b> — la cellule a passé l'écran (small_alone &lt; 0,90, Δ_screen ≥ 0,05). Sans écart réel, il n'y a <b>rien</b> à récupérer.</li>
+    <li><b>Non-infériorité à un K\* gelé</b> — <span class="mono">verdict_at_k</span> pour un mécanisme déployable <b>pré-engagé</b> M à un K\* <b>pré-engagé</b> rend <span class="mono">NonInférieur</span> ou <span class="mono">Supérieur</span> (borne sup &lt; δ), δ=0,05, α=0,05, boot=10 000, graine=42, sur les items <b>appariés</b> vs gros@1. C'est le test H-A réutilisé verbatim.</li>
+    <li><b>Déployabilité</b> — M est déployable (SC / pondéré / vérifié / RXW / médiane / tronquée / AWM), <b>jamais</b> pass@K (oracle, utilise le label, monotone par construction ; il ne sert qu'à chiffrer l'écart et à réfuter).</li>
+    <li><b>Pas un artefact de fabrication</b> — si M est une synthèse, <span class="mono">fabrication_frac</span> est rapporté ; &gt; 0,20 ⇒ la « récupération » est étiquetée « synthétique, peut ne pas généraliser » (la médiane invente des réponses absentes des K, épousant la géométrie d'erreur du corpus).</li>
+    <li><b>Puissance</b> — <span class="mono">achieved_power</span> ≥ 0,70 au n observé ; en dessous, le verdict est <b>Indéterminé</b>, <b>pas</b> récupération (sous-puissance ≠ égalité).</li>
+    <li><b>Survie FWER</b> — la p-valeur de non-infériorité survit à Holm-Bonferroni / Romano-Wolf sur la famille des 3 cellules (§7).</li>
+  </ol>
+  <div class="callout key">
+    <p><b>Ce que récupération N'EST PAS.</b> Ni « battre le petit-K=1 » (l'essaim peut s'améliorer tout en restant sous le gros), ni « la bonne réponse est présente » (pass@K=100 % est le résultat HB.1, déjà connu pour être <b>non récoltable</b> sur T-MATH). Récupération = <b>l'agrégation FERME un écart K=1 mesuré jusqu'à la non-infériorité avec le gros</b>. Toute non-infériorité <b>marginale</b> (93 % vs 94 % à δ=5 pts) est rapportée avec <span class="mono">diff_point</span>, bornes IC, δ, n, discordants, puissance — la portée pratique vs technique est au lecteur de juger.</p>
+  </div>
+</div>
+
+<!-- 5 -->
+<div class="wrap page">
+  <h2><span class="num">§5</span> L'opérateur d'agrégation doit épouser la structure de la réponse</h2>
+  <p>Un point d'architecture <b>décisif</b> pour la <b>loyauté</b> du test, et que le Terrain met au jour : tester « l'agrégation récupère-t-elle ? » exige d'employer l'<b>opérateur d'agrégation qui correspond à la structure de la réponse</b>. Employer le mauvais opérateur confondrait « l'agrégation ne peut pas » avec « j'ai utilisé le mauvais outil ».</p>
+  <table>
+    <thead><tr><th>Cellule</th><th>Structure de réponse</th><th>Opérateur naturel</th></tr></thead>
+    <tbody>
+      <tr><td>T-MATH / HARD</td><td>scalaire (un entier)</td><td>mode (SC), médiane/moyenne (synthèse) — <b>déjà</b> dans l'instrument.</td></tr>
+      <tr><td>T-EXTRACT</td><td><b>ensemble</b> (multi-étiquettes)</td><td><b>vote par ÉLÉMENT</b> : inclure <i>e</i> ssi il apparaît dans ≥ moitié des K candidats. <span class="mono">Median/Trimmed/AWM</span> sont <b>NaN</b> (non numérique) ; le mode-d'ensemble-exact (SC actuel sur la clé canonique d'ensemble) est <b>tout-ou-rien</b> — le <b>mauvais</b> opérateur pour des ensembles partiels divers.</td></tr>
+    </tbody>
+  </table>
+  <div class="callout key">
+    <p><b>La seule addition de code principielle : <span class="mono">SetVote</span> (vote par élément).</b> Sur T-EXTRACT, des erreurs <b>diverses</b> sont des ensembles partiels différents : le mode-exact n'aura souvent <b>aucune majorité</b> (chaque candidat un ensemble distinct) → SC abstient → échec — mais un <b>échec d'opérateur</b>, pas un échec de l'agrégation. Le vote <b>par élément</b> est l'opérateur loyal : il agrège élément par élément, exactement comme le mode agrège la réponse scalaire. Le reste du Terrain est de l'<b>analyse pure</b> (aucun nouveau mécanisme, aucune inférence) ; <span class="mono">SetVote</span> est l'unique mécanisme ajouté, parce que sans lui le test de la cellule-ensemble serait <b>déloyal</b>. C'est, en soi, un résultat : <b>l'agrégation paie ssi (a) les erreurs sont diverses ET (b) l'opérateur épouse la structure</b>.</p>
+  </div>
+  <p>Conséquence honnête à inscrire : sur T-EXTRACT, la <b>vérification</b> RXW est <b>structurellement inapplicable</b> (l'auditeur de re-exécution lit de l'<b>arithmétique écrite</b> ; il n'y a pas d'équations dans une extraction → <span class="mono">verifiable_frac</span> ≈ 0, <span class="mono">override_rate</span> ≈ 0, RXW ≡ SC par construction). On le rapporte structurellement — on ne présente pas RXW comme un levier là où il ne s'applique pas.</p>
+</div>
+
+<!-- 6 -->
+<div class="wrap page">
+  <h2><span class="num">§6</span> Le prédicteur (sans label) &amp; le routeur (par TYPE, jamais par item)</h2>
+  <h3>6.1 — Le prédicteur : une prédiction directionnelle, pas un classifieur</h3>
+  <p>Le prédicteur est la <b>signature de dispersion sans label</b> déjà bâtie (<span class="mono">dispersion_index</span> : variance numérique, fraction distincte, entropie des poids d'audit) — pour T-EXTRACT, l'analogue ensembliste (accord par élément / dispersion de Jaccard entre candidats). Le <b>diagnostic</b> est <span class="mono">symmetry_test</span> (biais, asymétrie), <b>cloisonné</b> (jamais dans un verdict). <b>L'honnêteté décisive</b> : avec <b>3 cellules</b>, on ne <b>valide</b> aucun classifieur (3 points = sur-ajustement au bruit). Le prédicteur est donc une <b>prédiction directionnelle pré-enregistrée</b>, gelée avant toute issue :</p>
+  <div class="eq">Récupère ⇒ fraction distincte ÉLEVÉE (erreurs diverses, votables) ET (si numérique) |asymétrie| &lt; 0,5 ;
+Échoue ⇒ |asymétrie| &gt; 0,5 (erreur systématique, ex. T-MATH +8,72), indépendamment de la variance.</div>
+  <p>On rapporte la signature brute <b>côte à côte</b> avec le verdict de récupération et l'on déclare <b>PASS/FAIL</b> de cette <b>unique</b> prédiction — une <b>démonstration</b> cohérente-avec ou <b>falsifiant</b> la théorie, <b>jamais</b> « précision du routeur = X » ni « seuil optimal = Y ».</p>
+  <h3>6.2 — Le routeur : par TYPE de tâche, jamais par item</h3>
+  <div class="callout bad">
+    <p><b>Le routage par ITEM est interdit — c'est le problème de vérification que HB.3 a échoué.</b> « Pour CET input, essaim ou gros ? » exige de prédire la justesse par item <b>sans le label</b> — précisément ce que RXW n'a pas su faire (92 % &lt; 94 %). <span class="mono">dispersion_index</span> se calcule par item <b>en interne</b> mais est <b>agrégé</b> en une métrique de cellule/type ; <b>aucune logique de décision par item n'existe, par conception.</b></p>
+  </div>
+  <p>La ligne déployable <b>honnête</b> : <b>hors-ligne</b>, on caractérise un <b>TYPE de charge</b> connu avec labels (écran de gap + symétrie sur un échantillon labellisé du type) ; au <b>déploiement</b>, pour un <b>lot connu de ce type</b>, on calcule la dispersion <b>sans label</b> sur les K candidats et on <b>aiguille le lot entier</b> vers l'essaim ou le gros selon la règle de type pré-enregistrée. Le produit honnête est sans doute aussi simple que : « router l'arithmétique vers le gros, l'extraction vers l'essaim — <b>si</b> l'extraction récupère ». Le routeur est livré <span class="mono">DEMO_ONLY_3CELLS</span> et « exige une re-validation sur des types tenus à l'écart avant production ».</p>
+</div>
+
+<!-- 7 -->
+<div class="wrap page">
+  <h2><span class="num">§7</span> La discipline inter-cellules : FWER, n, et l'honnêteté du « 3 points »</h2>
+  <p>La multiplicité <b>inter-cellules</b> est le même péché ∃-cellule que H-B interdisait pour ∃-K. Deux couches :</p>
+  <ul>
+    <li><b>Intra-cellule</b> (sur la grille K) — déjà géré par <span class="mono">verdict_sup_k</span> (Romano-Wolf / max-t, taux de faux positifs à la frontière borné ≤ 0,20, prouvé par <span class="mono">sup_k_controls_false_positive</span>). <b>Recommandé</b> : verdict primaire à un <b>K\* unique gelé</b> (aucune multiplicité en K).</li>
+    <li><b>Inter-cellules</b> — <b>Holm-Bonferroni</b> sur les 3 p-valeurs de non-infériorité, <b>exactement</b> comme <span class="mono">GapMap::build</span> le fait déjà pour la famille H-A {modèle×tâche} (pas-à-pas descendant ; <span class="mono">holm_passes</span> exige <b>à la fois</b> la substitution brute ET la survie de Holm). Une cellule « récupère » <b>seulement</b> si <span class="mono">holm_passes</span>.</li>
+  </ul>
+  <div class="callout warn">
+    <p><b>L'honnêteté du petit nombre de cellules, dite platement.</b> 3 cellules ne sont <b>pas</b> un paysage validé — c'est une <b>démonstration</b>. On <b>CONCLUT</b> (inférentiellement, FWER-contrôlé) uniquement les verdicts de récupération <b>par cellule</b> et l'énoncé de famille « <b>X des 3</b> cellules pré-enregistrées récupèrent ». On <b>DÉMONTRE</b> (descriptivement, non validé) la correspondance dispersion → récupération ; on ne conclut <b>ni</b> un routeur généralisable, <b>ni</b> un seuil ajusté, <b>ni</b> « la thèse tient/échoue universellement ». Règle de puissance pré-enregistrée : la famille n'est robuste que si <b>≥ 2 cellules sont « réglées »</b> (puissance ≥ 0,70 ET verdict ≠ Indéterminé) ; si une seule l'est, le résultat est étiqueté <b>« exploratoire, 1 cellule réglée »</b>. Les cellules plafond/échec sont <b>dans le dénominateur</b>, jamais retirées.</p>
+  </div>
+  <p>Avec 3 cellules, le FWER de famille non corrigé est déjà ~0,14 ; Holm le ramène à ≤ 0,05. Tout est <b>scellé et déterministe</b> (corpus, bootstrap, écran à graine fixe) — re-dérivable à l'octet (I-TERRAIN-REPROVE).</p>
+</div>
+
+<!-- 8 -->
+<div class="wrap page">
+  <h2><span class="num">§8</span> L'échelle de revendication &amp; les trois issues pré-écrites</h2>
+  <h3>8.1 — L'échelle (une phrase ne grimpe d'un barreau que si elle en remplit l'exigence)</h3>
+  <ul>
+    <li><b>Descriptif</b> (aucune inférence, toutes cellules, inconditionnel) : small_alone@K1, big@1, pass@K, within_range, best_deployable@K\*, best_synthesis@K\*, dispersion (var/distincte/entropie), fabrication_frac, coûts cache OFF/ON.</li>
+    <li><b>Inférentiel</b> (FWER-contrôlé — le seul barreau où « récupération » est assertable) : non-infériorité par cellule à K\* gelé, puissance gatant l'Indéterminé, survie de Holm ; plus « X des 3 récupèrent ». Chaque assertion porte diff_point, IC, δ, n, discordants, puissance.</li>
+    <li><b>Déployable</b> (le plus prudent) : le routeur comme <b>théorie + démonstration 3-cellules</b> (<span class="mono">DEMO_ONLY</span>, pas par item, re-validation requise) ; coût limité aux <b>jetons</b> sous bornes de cache, la domination <b>GPU-secondes suspendue à B2</b> (I-HB-COST), jamais conclue ici.</li>
+  </ul>
+  <h3>8.2 — Les trois issues, écrites d'avance (aucune ne peut être esquivée)</h3>
+  <div class="callout ok"><p><b>(a) Au moins une cellule récupère.</b> Titre : « L'agrégation récupère un vrai écart K=1 sur [l'extraction d'ensembles] mais PAS sur l'arithmétique ; la thèse est <b>dépendante du type de tâche</b>. La signature de dispersion (fraction distincte élevée, erreurs ~symétriques sur la cellule gagnante vs skew +8,72 sur la perdante) est cohérente avec la théorie : l'agrégation récupère ssi les erreurs sont diverses/indépendantes, pas systématiques. » Le résultat le plus scruté — on le stresse (stabilité par sous-échantillon, fabrication_frac, artefact de scorer). <b>Ouvre un B2 SIGNIFICATIF</b> (mesurer les GPU-secondes sur la cellule gagnante, là où « moins cher » a enfin un sens).</p></div>
+  <div class="callout bad"><p><b>(b) AUCUNE cellule ne récupère</b> (à traiter comme le défaut attendu). Titre : « Aucune agrégation déployable ne récupère un vrai écart K=1 sur AUCUN type pré-enregistré (arithmétique, extraction, arithmétique-dure). La bonne réponse est présente (pass@K élevé) mais non récoltable ; la jambe quantité-récupère-qualité est <b>largement réfutée</b>. Ce qui survit : H-A — les petits substituent le gros <b>seuls</b> sur certaines cellules. Prochain test-frontière : familles structurellement différentes (multi-saut, génératif). » Un <b>négatif fort et publiable</b> — le rôle du Terrain est de le rendre <b>inesquivable</b>, pas de l'éviter.</p></div>
+  <div class="callout warn"><p><b>(c) Les cellules trivialisent</b> (plafond). Titre : « Écart absent sur ces cellules (le petit-seul suffit déjà) — NI récupération, NI victoire ; l'écart informatif vit dans des domaines plus durs. La portée est bornée, la thèse n'est pas confirmée. » Le repli (T-MATH-HARD) est <b>automatique et pré-enregistré</b> — le plafond est une donnée, pas un re-tirage.</p></div>
+</div>
+
+<!-- 9 -->
+<div class="wrap page">
+  <h2><span class="num">§9</span> Menaces à la validité &amp; critères de réfutation</h2>
+  <h3>9.1 — Menaces (chacune mitigée par construction)</h3>
+  <ul>
+    <li><b>Confondant plafond</b> sur T-EXTRACT (lister des mots depuis un texte court est peut-être sous le plancher de phi4) → <b>écran de gap</b> avant ouverture ; T-MATH-HARD en repli.</li>
+    <li><b>Mauvais opérateur</b> sur les ensembles (le mode-exact n'est pas le bon outil) → <b>SetVote</b> (vote par élément), l'opérateur loyal (§5).</li>
+    <li><b>RXW à signal nul</b> sur T-EXTRACT (pas d'équations) → rapporté structurellement ; RXW ≡ SC, pas présenté comme un levier.</li>
+    <li><b>Diversité ≠ indépendance</b> : le vote ne récupère que si les erreurs sont indépendantes ; une fraction distincte élevée peut être <b>diverse-mais-fausse</b> → on rapporte symétrie/within_range à côté de la fraction distincte (nécessaire, non suffisant).</li>
+    <li><b>Artefact de scorer</b> : un gain T-EXTRACT pourrait venir de la permissivité du Set → Set <b>exact</b> (pas Lenient) ; vérification ponctuelle d'une variante stricte.</li>
+    <li><b>Circularité du K\*</b> : choisir K\* sur le genou de la même courbe = double-trempage → K\* <b>gelé</b> sur des bases d'infra/prior, ou Romano-Wolf.</li>
+    <li><b>Sous-puissance</b> : n=300/cellule est correct mais la discordance peut être faible → puissance &amp; n_required rapportés ; Indéterminé gaté ; règle ≥ 2 cellules réglées.</li>
+    <li><b>Sur-revendication de coût</b> : jetons ≠ GPU-secondes → coûts aux bornes de cache seulement ; GPU-s à B2.</li>
+  </ul>
+  <h3>9.2 — Critères de réfutation (l'échec est un résultat)</h3>
+  <ol>
+    <li><b>Aucune cellule ne récupère</b> → la jambe d'agrégation est largement réfutée (issue b).</li>
+    <li><b>La prédiction de dispersion échoue</b> (une cellule récupère malgré |skew|&gt;0,5, ou échoue malgré forte diversité + symétrie) → la théorie directionnelle est falsifiée ; le routeur est <b>retiré</b>.</li>
+    <li><b>Récupération = artefact</b> de fabrication (fab&gt;0,20), de plafond (écran échoué), de scorer (s'évapore en strict), ou de sous-puissance (&lt;0,70) → disqualifiée.</li>
+    <li><b>Le routeur dérive vers l'item</b> → toute la revendication de routeur est nulle (c'est l'échec de vérification de HB.3).</li>
+    <li><b>Cherry-pick inter-cellules</b> (rapporter une cellule hors famille, ou ajouter une 4ᵉ post-hoc) → l'énoncé de famille est nul.</li>
+  </ol>
+</div>
+
+<!-- 10 -->
+<div class="wrap page">
+  <h2><span class="num">§10</span> Invariants, intégration, et ce que le Terrain décide</h2>
+  <table>
+    <thead><tr><th>Invariant</th><th>Énoncé</th></tr></thead>
+    <tbody>
+      <tr><td><b>I-TERRAIN-PREREG</b></td><td>les 3 cellules, K\*, δ=0,05, α=0,05, boot=10 000, graine=42, les seuils d'écran et l'unique prédiction directionnelle sont <b>gelés (signés/datés) avant</b> toute issue sur les cellules 2-3 ; cellules choisies par TYPE, jamais par victoire espérée.</td></tr>
+      <tr><td><b>I-TERRAIN-GAP</b></td><td>aucune récupération sur une cellule qui n'a pas passé l'écran K=1 (small_alone&lt;0,90 ET Δ≥0,05) ; le plafond n'est pas une récupération.</td></tr>
+      <tr><td><b>I-TERRAIN-RECOVERY</b></td><td>récupération == non-infériorité (borne sup &lt; δ) d'un mécanisme déployable à K\* gelé vs gros@1, puissance ≥ 0,70, survie de Holm ; jamais pass@K, jamais « bat K=1 », jamais un artefact de fabrication.</td></tr>
+      <tr><td><b>I-TERRAIN-FWER</b></td><td>la revendication ∃-récupération est FWER-contrôlée (Holm via <span class="mono">GapMap::build</span>, ou Romano-Wolf) sur la famille fermée ; les cellules échec/plafond restent au dénominateur.</td></tr>
+      <tr><td><b>I-TERRAIN-OPERATEUR</b></td><td>l'opérateur d'agrégation épouse la structure de la réponse (scalaire→mode/médiane ; ensemble→vote par élément) ; tester avec le mauvais opérateur est déloyal.</td></tr>
+      <tr><td><b>I-TERRAIN-LABELFENCE</b></td><td>prédicteur déployable = dispersion sans label seule ; <span class="mono">symmetry_test</span> recherche-seulement, hors verdict (hérite I-HB4-LABELFENCE).</td></tr>
+      <tr><td><b>I-TERRAIN-ROUTE-TYPE</b></td><td>routage par TYPE de tâche (caractérisation hors-ligne labellisée → décision par type sur la dispersion sans label d'un lot de type connu) ; routage par item interdit (= échec de vérification HB.3) ; routeur <span class="mono">DEMO_ONLY_3CELLS</span>.</td></tr>
+      <tr><td><b>I-TERRAIN-NOFIT</b></td><td>≤ 3 cellules ⇒ la signature est une démonstration + théorie, jamais un classifieur ajusté ; aucun seuil réglé sur les issues, aucune « précision de routeur ».</td></tr>
+      <tr><td><b>I-TERRAIN-CLAIMLADDER</b></td><td>descriptif / inférentiel / déployable distincts ; aucune phrase ne grimpe sans remplir l'exigence du barreau ; GPU-s suspendu à B2.</td></tr>
+    </tbody>
+  </table>
+  <h3>Intégration : presque tout est déjà là</h3>
+  <p><b>Réutilisé tel quel</b> : <span class="mono">curve</span> (CurvePoint porte déjà tous les champs), <span class="mono">verdict_at_k</span> (le test de récupération), <span class="mono">verdict_sup_k</span>, <span class="mono">dispersion_index</span>, <span class="mono">symmetry_test</span>, <span class="mono">substitution::{non_inferiority, analyze_cell, achieved_power, required_n}</span> (l'écran <b>EST</b> analyze_cell@K1), <span class="mono">GapMap::build</span> (Holm, verbatim), <span class="mono">scorer</span> (Numeric, Set), <span class="mono">corpus::{math, extract}</span> (re-dérivables). <b>Petit code neuf</b> : (1) <span class="mono">SetVote</span> — l'opérateur ensembliste loyal (§5) ; (2) un <b>écran de gap</b> (wrapper sur analyze_cell@K1 + seuils gelés + filtre tier-3 pour HARD) ; (3) un <b>harnais inter-cellules</b> (boucle les 3 cellules → collecte les p-valeurs → <span class="mono">GapMap::build</span> → table de famille « X des 3 ») ; (4) le <b>document de pré-enregistrement</b> ; (5) un <b>croquis de routeur</b> documenté (heuristique, pas modèle ajusté). Aucune inférence : analyse pure sur les sorties B1.</p>
+  <div class="callout key">
+    <p><b>Ce que le Terrain décide.</b> Il transforme l'arc négatif de l'arithmétique en la <b>question générale</b> : l'agrégation récupère-t-elle <b>jamais</b> un vrai écart ? S'il trouve une cellule (avec le bon opérateur, sous écran, sous FWER, avec puissance), la thèse devient <b>« vraie pour les workloads à erreurs diverses », avec un prédicteur de dispersion pour le dire</b> — et un B2 enfin signifiant sur la cellule gagnante. S'il n'en trouve aucune, il livre le <b>négatif le plus fort du programme</b> — « la quantité ne récupère pas la qualité, largement » — proprement borné, FWER-contrôlé, inesquivable. Dans les deux cas, EFE aura, encore, produit le <b>diagnostic avant la conclusion</b>, et refusé de se sauver par le cherry-pick. C'est la brique qui dit <b>où</b> la thèse vit — et, si nécessaire, qu'elle ne vit nulle part de déployable sur ce qu'on a su mesurer.</p>
+  </div>
+</div>
+
+</body>
+</html>
