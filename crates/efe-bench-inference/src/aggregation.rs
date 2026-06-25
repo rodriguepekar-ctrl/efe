@@ -139,6 +139,11 @@ pub enum Mechanism {
     /// pondérateur → `median_numeric` nu. Re-pondère l'ORDRE statistique (continûment), là où RXW
     /// re-pondérait le mode sous un garde à seuil.
     AuditWeightedMedian,
+    /// **HB.T (le Terrain)** — vote par **ÉLÉMENT** pour les réponses-ENSEMBLES : inclure un élément ssi
+    /// il apparaît dans ≥ la moitié des K candidats. L'opérateur **loyal** pour la structure-ensemble (le
+    /// mode-d'ensemble-exact est tout-ou-rien → mauvais outil) ; agrège élément par élément comme le mode
+    /// agrège le scalaire. Cf. [`crate::terrain`].
+    SetVote,
 }
 
 /// Le **mode** (réponse la plus fréquente) par clé canonique du scorer, pondéré ou non. `None` =
@@ -247,6 +252,34 @@ fn audit_weighted_median(
     weighted_median_value(pairs).map(|v| json!(v))
 }
 
+/// **HB.T — vote par ÉLÉMENT** (l'opérateur loyal pour les ensembles) : compte la fréquence de chaque
+/// élément parmi les `kk` candidats (les illisibles ne votent pour rien), et retient les éléments
+/// présents dans **≥ la moitié** des candidats (`2·count ≥ kk`). Renvoie l'ensemble trié (déterministe).
+/// `None` si **aucun** candidat n'est lisible comme ensemble (abstention). Partage le noyau `as_set`.
+fn set_vote(answers: &[Value]) -> Option<Value> {
+    let kk = answers.len();
+    if kk == 0 {
+        return None;
+    }
+    let mut tally: BTreeMap<String, usize> = BTreeMap::new();
+    let mut parsed = 0usize;
+    for a in answers {
+        if let Some(set) = crate::scorer::as_set(a) {
+            parsed += 1;
+            for e in set {
+                *tally.entry(e).or_insert(0) += 1;
+            }
+        }
+    }
+    if parsed == 0 {
+        return None; // aucun ensemble lisible → abstention (échec, comme le mode)
+    }
+    // Majorité par élément (denominateur = TOUS les k candidats — un illisible compte contre). BTreeMap
+    // ordonné → sortie triée → clé canonique stable, re-prouvable.
+    let selected: Vec<String> = tally.into_iter().filter(|(_, c)| 2 * c >= kk).map(|(e, _)| e).collect();
+    Some(json!(selected))
+}
+
 /// **HB.4 — plafond-oracle de la SYNTHÈSE** : le label tombe-t-il dans l'**enveloppe** [min, max] des
 /// candidats numériques ? Une médiane/moyenne ne peut atteindre le label que s'il y est. Utilise le label
 /// (plafond-oracle, comme pass@K) ; on a toujours `pass@K ≤ within_range`.
@@ -309,6 +342,7 @@ fn aggregate(
         },
         Mechanism::TrimmedMeanNumeric => trimmed_mean_numeric(ans),
         Mechanism::AuditWeightedMedian => audit_weighted_median(&s.task, ans, weigher),
+        Mechanism::SetVote => set_vote(ans),
     }
 }
 
@@ -401,6 +435,8 @@ pub struct CurvePoint {
     pub trimmed_mean: f64,
     /// **HB.4 — la fusion** — justesse de la médiane pondérée par l'audit. `NaN` si non numérique.
     pub audit_weighted_median: f64,
+    /// **HB.T** — justesse du vote par élément (ensembles). `NaN` si la tâche n'est pas ensembliste.
+    pub set_vote: f64,
     /// **Plafond de SÉLECTION** (monotone par construction — ne sert qu'à réfuter / chiffrer l'écart).
     pub pass_at_k: f64,
     /// **HB.4 — plafond de SYNTHÈSE** : fraction d'items où le label est dans l'enveloppe [min,max] des
@@ -448,10 +484,12 @@ pub fn curve(
 ) -> Vec<CurvePoint> {
     let n = samples.len().max(1) as f64;
     let numeric = samples.iter().all(|s| matches!(s.scorer, ScorerKind::Numeric { .. })) && !samples.is_empty();
+    let set_scored = samples.iter().all(|s| matches!(s.scorer, ScorerKind::Set)) && !samples.is_empty();
     ks.iter()
         .map(|&k| {
             let (mut sc, mut wt, mut vf, mut rxw) = (0usize, 0usize, 0usize, 0usize);
             let (mut md, mut tm, mut awm, mut ps, mut wr, mut fab) = (0usize, 0usize, 0usize, 0usize, 0usize, 0usize);
+            let mut sv = 0usize; // HB.T : vote par élément (ensembles)
             let (mut in_off, mut in_on, mut out, mut distinct, mut degen) = (0.0, 0.0, 0.0, 0.0, 0.0);
             let (mut verif_frac, mut override_n) = (0.0, 0usize);
             let (mut disp_var, mut disp_dist, mut disp_ent) = (0.0, 0.0, 0.0);
@@ -495,6 +533,9 @@ pub fn curve(
                     disp_dist += dd;
                     disp_ent += de;
                 }
+                if set_scored && mech_correct(s, k, Mechanism::SetVote, None, None) {
+                    sv += 1;
+                }
                 if pass_at_k(s, k) {
                     ps += 1;
                 }
@@ -536,6 +577,7 @@ pub fn curve(
                 median,
                 trimmed_mean: nan_if_not(tm),
                 audit_weighted_median: nan_if_not(awm),
+                set_vote: if set_scored { sv as f64 / n } else { f64::NAN },
                 pass_at_k: ps as f64 / n,
                 within_range: nan_if_not(wr),
                 fabrication_frac: if numeric { fab as f64 / n } else { f64::NAN },
@@ -771,6 +813,20 @@ fn pair_correct(
             })
         })
         .collect()
+}
+
+/// **Exposé** : la comparaison appariée (petit `mechanism`@`k` vs gros@1) par item, pour les harnais
+/// externes (le Terrain) qui construisent leurs propres `GapCell` / tests de famille. Mêmes items
+/// appariés par `case_id` que [`verdict_at_k`].
+pub fn paired_correctness(
+    small: &[SampleSet],
+    big: &[SampleSet],
+    mechanism: Mechanism,
+    k: usize,
+    verifier: Option<&dyn DeployableVerifier>,
+    weigher: Option<&dyn ReasoningWeigher>,
+) -> Vec<PairedItem> {
+    pair_correct(small, big, mechanism, k, verifier, weigher)
 }
 
 /// **Le verdict à K\* unique** (pré-spécifié, pas de multiplicité). Non-infériorité du `mechanism`
@@ -1482,5 +1538,55 @@ mod tests {
         // Corpus biaisé : médianes systématiquement trop hautes vs label → biais signé > 0.
         let biased = vec![num_sample("a", &[50, 60], 40), num_sample("b", &[50, 60], 40)];
         assert!(symmetry_test(&biased).signed_bias > 0.0, "biais systématique détecté");
+    }
+
+    // ── HB.T : le vote par élément (SetVote), l'opérateur loyal pour les ensembles ──
+
+    fn set_sample(case: &str, cands: &[&[&str]], label: &[&str]) -> SampleSet {
+        SampleSet::new(
+            case,
+            json!({}),
+            cands.iter().map(|c| json!(c.iter().collect::<Vec<_>>())).collect(),
+            json!(label.iter().collect::<Vec<_>>()),
+            ScorerKind::Set,
+        )
+    }
+
+    #[test]
+    fn set_vote_is_per_element_majority() {
+        // {a,b},{a,c},{a,b} → a×3, b×2, c×1 sur 3 (2·c≥3) → {a,b} = label.
+        let s = set_sample("x", &[&["a", "b"], &["a", "c"], &["a", "b"]], &["a", "b"]);
+        assert!(mech_correct(&s, 3, Mechanism::SetVote, None, None), "vote par élément → {{a,b}}");
+    }
+
+    #[test]
+    fn set_vote_recovers_diverse_errors_where_exact_mode_abstains() {
+        // LE cas §5 : erreurs DIVERSES (chaque candidat oublie un élément différent). {a,b},{b,c},{a,c},
+        // label {a,b,c}. Mode-exact : 3 ensembles DISTINCTS → aucune majorité → SC abstient → faux. Vote
+        // par élément : a,b,c chacun dans 2/3 (2·2≥3) → {a,b,c} = label → SetVote RÉCUPÈRE.
+        let s = set_sample("x", &[&["a", "b"], &["b", "c"], &["a", "c"]], &["a", "b", "c"]);
+        assert!(!mech_correct(&s, 3, Mechanism::SelfConsistency, None, None), "mode-exact : 3 ensembles distincts → abstention");
+        assert!(mech_correct(&s, 3, Mechanism::SetVote, None, None), "vote par élément → {{a,b,c}} (récupère la diversité)");
+    }
+
+    #[test]
+    fn set_vote_drops_minority_noise() {
+        // Un intrus minoritaire (z dans 1/5) est rejeté ; les cibles (dans ≥3/5) sont retenues.
+        let s = set_sample(
+            "x",
+            &[&["a", "b"], &["a", "b"], &["a", "b", "z"], &["a", "b"], &["a"]],
+            &["a", "b"],
+        );
+        assert!(mech_correct(&s, 5, Mechanism::SetVote, None, None), "z minoritaire écarté, {{a,b}} retenu");
+        // a×5, b×4, z×1 → a:10≥5, b:8≥5, z:2≥5 ✗.
+    }
+
+    #[test]
+    fn set_vote_appears_in_curve_for_set_scored() {
+        // La courbe peuple `set_vote` (et NaN pour les mécanismes numériques) quand le scorer est Set.
+        let s = set_sample("x", &[&["a", "b"], &["b", "c"], &["a", "c"]], &["a", "b", "c"]);
+        let c = curve(std::slice::from_ref(&s), &[3], None, None);
+        assert!((c[0].set_vote - 1.0).abs() < 1e-9, "SetVote récupère cet item → 100 %");
+        assert!(c[0].median.is_nan(), "médiane NaN sur une tâche ensembliste");
     }
 }

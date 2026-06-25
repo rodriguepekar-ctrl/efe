@@ -60,12 +60,15 @@ pub mod report;
 pub mod runner;
 pub mod scorer;
 pub mod substitution;
+pub mod terrain;
 
 pub use aggregation::{
-    curve, dispersion_index, knee, symmetry_test, verdict_at_k, verdict_sup_k, CurvePoint, DeployableVerifier,
-    HbVerdict, IoPrice, Mechanism, PositiveInteger, ReasoningWeigher, SampleSet, SupVerdict, SymmetryReport,
+    curve, dispersion_index, knee, paired_correctness, symmetry_test, verdict_at_k, verdict_sup_k, CurvePoint,
+    DeployableVerifier, HbVerdict, IoPrice, Mechanism, PositiveInteger, ReasoningWeigher, SampleSet, SupVerdict,
+    SymmetryReport,
 };
 pub use reexec::ReExecAudit;
+pub use terrain::{gap_screen, run_family, Cell, CellResult, FamilyVerdict, GapScreen, ScreenVerdict};
 pub use dataset::{BenchCase, Dataset, DatasetError};
 pub use report::{reprove, BenchBundle, BundleVerdict, Comparison, ConfigReport, PriceModel, ReproofVerdict};
 pub use runner::{

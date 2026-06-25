@@ -213,7 +213,9 @@ fn last_number(s: &str) -> Option<f64> {
 /// Interprète une réponse comme un **ensemble** (I-HA-FAIR : forme tolérée) : un tableau JSON, une
 /// chaîne contenant un tableau JSON, ou — à défaut — une chaîne découpée en mots alphanumériques.
 /// Chaque élément est minusculé/rogné (insensible à la casse). `None` seulement si rien d'exploitable.
-fn as_set(v: &Value) -> Option<BTreeSet<String>> {
+/// `pub(crate)` : le vote par élément (`SetVote`, HB.T) partage CE noyau d'extraction d'ensemble — une
+/// seule définition de « cette réponse comme ensemble » dans EFE (I-TERRAIN-OPERATEUR / I-HB4-1NOYAU).
+pub(crate) fn as_set(v: &Value) -> Option<BTreeSet<String>> {
     let a = extract(v);
     let raw: Vec<String> = match a {
         Value::Array(items) => items.iter().map(value_text).collect(),
