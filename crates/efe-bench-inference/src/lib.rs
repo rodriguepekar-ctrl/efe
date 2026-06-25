@@ -62,8 +62,8 @@ pub mod scorer;
 pub mod substitution;
 
 pub use aggregation::{
-    curve, knee, verdict_at_k, verdict_sup_k, CurvePoint, DeployableVerifier, HbVerdict, IoPrice, Mechanism,
-    PositiveInteger, ReasoningWeigher, SampleSet, SupVerdict,
+    curve, dispersion_index, knee, symmetry_test, verdict_at_k, verdict_sup_k, CurvePoint, DeployableVerifier,
+    HbVerdict, IoPrice, Mechanism, PositiveInteger, ReasoningWeigher, SampleSet, SupVerdict, SymmetryReport,
 };
 pub use reexec::ReExecAudit;
 pub use dataset::{BenchCase, Dataset, DatasetError};

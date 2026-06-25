@@ -23,7 +23,7 @@ use std::sync::Arc;
 
 use efe_bench_inference::{
     aggregation::{curve, knee, verdict_at_k, verdict_sup_k, Mechanism, PositiveInteger, SampleSet},
-    Dataset, IoPrice, ReExecAudit, ScorerKind,
+    achieved_power, symmetry_test, Dataset, IoPrice, ReExecAudit, ScorerKind,
 };
 use efe_swarm_sdk::{
     AgentCall, AgentRole, Budget, ClientMode, KSpec, OnExceed, Swarm, SwarmObserver, TopologySpec,
@@ -133,9 +133,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let small = arg("--small").unwrap_or_else(|| "phi4-mini-local".to_string());
     let big = arg("--big").unwrap_or_else(|| "gemma3:12b".to_string());
     let n: usize = arg("--n").and_then(|s| s.parse().ok()).unwrap_or(30);
-    let ks: Vec<usize> = arg("--ks").unwrap_or_else(|| "1,3,5,7".to_string()).split(',').filter_map(|s| s.trim().parse().ok()).collect();
-    let k_max = *ks.iter().max().unwrap_or(&7);
-    let k_star: usize = arg("--kstar").and_then(|s| s.parse().ok()).unwrap_or(5);
+    // HB.4 : grille IMPAIRE **et** PAIRE (la synthèse n'a lieu qu'à K pair). K* pré-spécifié = 4 (plus
+    // petit K pair au-dessus du genou de coût HB.3, justifié par la latence — JAMAIS par « où ça pique »).
+    let ks: Vec<usize> = arg("--ks").unwrap_or_else(|| "1,2,3,4,5,6".to_string()).split(',').filter_map(|s| s.trim().parse().ok()).collect();
+    let k_max = *ks.iter().max().unwrap_or(&6);
+    let k_star: usize = arg("--kstar").and_then(|s| s.parse().ok()).unwrap_or(4);
     let cot_tokens: u32 = arg("--cot-tokens").and_then(|s| s.parse().ok()).unwrap_or(512);
     let delta: f64 = arg("--delta").and_then(|s| s.parse().ok()).unwrap_or(0.05);
     let (alpha, boot) = (0.05, 2000);
@@ -148,8 +150,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     for c in &mut dataset.cases {
         c.scorer = ScorerKind::Numeric { tolerance: 0.0 };
     }
-    println!("HB.2 — agrégation MESURÉE  ·  petit {small} (K≤{k_max} CoT)  vs  gros {big} (K=1 CoT)");
-    println!("  T-MATH n={n} · δ={delta} · K* pré-spécifié={k_star} · ks={ks:?} · max_gen_tokens={cot_tokens} (CoT)\n");
+    println!("HB.4 — SYNTHÈSE MESURÉE  ·  petit {small} (K≤{k_max} CoT)  vs  gros {big} (K=1 CoT)");
+    println!("  T-MATH n={n} · δ={delta} · K* pré-spécifié={k_star} (pair) · ks={ks:?} (impairs+pairs) · max_gen_tokens={cot_tokens} (CoT)\n");
 
     // ── I-HB-PREREG : la référence du gros est mesurée et FIGÉE d'abord. ──
     println!("[1/2] référence du gros ({big}, K=1, CoT)…");
@@ -162,19 +164,23 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let ver = PositiveInteger::default(); // sanité (filtre) — alimente `Verified`
     let weigher = ReExecAudit::default(); // HB.3 : re-exécution (pondérateur) — alimente `ReExecWeighted`
     let cur = curve(&small_s, &ks, Some(&ver), Some(&weigher));
-    println!("\n── courbe justesse × K (petit) · RXW(re-exéc) · plafond pass@K · couverture/override · jetons ──");
+    let pct = |x: f64| if x.is_nan() { 0.0 } else { x * 100.0 };
+    println!("\n── SÉLECTION (plafond pass@K)  vs  SYNTHÈSE (plafond env=enveloppe) · fabrication% · dispersion ──");
     println!(
-        "{:>4} {:>6} {:>6} {:>6} {:>6} {:>6} {:>7} {:>6} {:>6} {:>8}",
-        "K", "SC", "pond", "vérif", "RXW", "méd", "pass@K", "vér%", "ovr%", "out/moy"
+        "{:>3} {:>6} {:>6} {:>6} │ {:>6} {:>6} {:>6} {:>6} │ {:>6} {:>5} │ {:>6} {:>5} {:>5}",
+        "K", "SC", "RXW", "pass@K", "méd", "tronq", "AWM", "env", "fab%", "out", "var", "div%", "ent"
     );
     for p in &cur {
         println!(
-            "{:>4} {:>5.1}% {:>5.1}% {:>5.1}% {:>5.1}% {:>5.1}% {:>6.1}% {:>5.0}% {:>5.0}% {:>8.1}",
-            p.k, p.self_consistency * 100.0, p.weighted * 100.0, p.verified * 100.0, p.re_exec_weighted * 100.0,
-            if p.median.is_nan() { 0.0 } else { p.median * 100.0 }, p.pass_at_k * 100.0,
-            p.verifiable_frac * 100.0, p.override_rate * 100.0, p.mean_out
+            "{:>3} {:>5.1}% {:>5.1}% {:>5.1}% │ {:>5.1}% {:>5.1}% {:>5.1}% {:>5.1}% │ {:>5.0}% {:>5.0} │ {:>6.1} {:>4.0}% {:>5.2}",
+            p.k, pct(p.self_consistency), pct(p.re_exec_weighted), pct(p.pass_at_k),
+            pct(p.median), pct(p.trimmed_mean), pct(p.audit_weighted_median), pct(p.within_range),
+            pct(p.fabrication_frac), p.mean_out,
+            if p.dispersion_var.is_nan() { 0.0 } else { p.dispersion_var },
+            pct(p.dispersion_distinct), if p.dispersion_entropy.is_nan() { 0.0 } else { p.dispersion_entropy }
         );
     }
+    println!("  (fab% = la médiane fabrique-t-elle ? ≈0 ⇒ SÉLECTION lue au plafond pass@K ; >0 ⇒ SYNTHÈSE au plafond env)");
     let big_acc = {
         // SC@1 du gros = sa justesse brute (un échantillon).
         let c = curve(&big_s, &[1], None, None);
@@ -184,30 +190,68 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("petit : R0 {}/{}  (la mesure est scellée + re-prouvable)", small_v, small_s.len());
     println!("genou (τ=2pts) ≈ K={}", knee(&cur, 0.02));
 
-    // ── Verdict : à K* pré-spécifié, et sur le sup-K (FWER contrôlé). ──
+    // ── Verdict : à K* PRÉ-SPÉCIFIÉ (=4), avec PUISSANCE rapportée (I-HB4-MULTIPLICITÉ, I-HB4-PUISSANCE). ──
     let price_small = IoPrice { in_per_1k: 0.1, out_per_1k: 0.1 };
     let price_big = IoPrice { in_per_1k: 1.2, out_per_1k: 1.2 };
-    println!("\n── verdict (la cellule phi4×math) ──");
-    for mech in [Mechanism::SelfConsistency, Mechanism::Verified, Mechanism::ReExecWeighted, Mechanism::Median] {
-        // On passe les DEUX seams (filtre + pondérateur) ; `aggregate` n'utilise que celui du mécanisme.
+    // (mécanisme, étiquette, synthèse ?) — la synthèse a pour plafond l'enveloppe, pas pass@K.
+    let mechs = [
+        (Mechanism::SelfConsistency, "SC   ", false),
+        (Mechanism::ReExecWeighted, "RXW  ", false),
+        (Mechanism::Median, "méd  ", true),
+        (Mechanism::TrimmedMeanNumeric, "tronq", true),
+        (Mechanism::AuditWeightedMedian, "AWM  ", true),
+    ];
+    println!("\n── verdict @K*={k_star} (pré-spécifié sur base de coût, JAMAIS sur le pic) · puissance rapportée ──");
+    for (mech, name, is_synth) in mechs {
         let v = verdict_at_k(
             &small_s, &big_s, mech, k_star, Some(&ver), Some(&weigher), delta, alpha, boot,
             0x4842_3200u64 ^ k_star as u64, price_small, price_big,
         );
+        // Puissance atteinte : reconstruit (big_better, small_better) depuis la discordance McNemar.
+        // diff_point = exactitude(gros) − exactitude(petit) = p_b − p_c ; psi = p_b + p_c. REVUE HB.4 :
+        // `achieved_power(n, δ, α, p_b, p_c)` attend p_b = **gros mieux**, p_c = **petit mieux** (son
+        // delta0 = p_b − p_c = le vrai écart gros−petit). Il faut donc passer les rôles DANS CET ORDRE —
+        // l'ancien code les inversait (delta0 = −diff_point), gonflant la puissance affichée.
+        let psi = v.nin.discordant as f64 / v.nin.n.max(1) as f64;
+        let big_better = ((psi + v.nin.diff_point) / 2.0).max(0.0);
+        let small_better = ((psi - v.nin.diff_point) / 2.0).max(0.0);
+        let pw = achieved_power(v.nin.n, delta, alpha, big_better, small_better);
+        let ceil = if is_synth { "plafond=env" } else { "plafond=pass@K" };
         println!(
-            "  {:?}@K{}  petit {:.1}% vs gros {:.1}%  →  {}  ·  coût-jetons domine (cacheOFF/ON) {}/{}",
-            mech, k_star, v.small_acc * 100.0, v.big_acc * 100.0, v.nin.verdict.label(),
+            "  {name}@K{k_star}  {:.1}% vs gros {:.1}%  →  {:<12} puissance {:>3.0}%  ·  {ceil}  ·  coût domine {}/{}",
+            v.small_acc * 100.0, v.big_acc * 100.0, v.nin.verdict.label(), pw * 100.0,
             v.cost_dominates_cache_off, v.cost_dominates_cache_on
         );
     }
-    // Le sup-K (FWER contrôlé) sur les DEUX mécanismes déployables clés : SC nu, et RXW (re-exécution).
-    for (label, mech) in [("SC", Mechanism::SelfConsistency), ("RXW", Mechanism::ReExecWeighted)] {
-        let sup = verdict_sup_k(&small_s, &big_s, mech, &ks, Some(&ver), Some(&weigher), delta, alpha, boot, 0x5402);
+
+    // ── sup-K PARITÉ-PURE (FWER max-t) : sélection sur K impairs (plafond pass@K), synthèse sur K pairs. ──
+    let ks_odd: Vec<usize> = ks.iter().cloned().filter(|k| k % 2 == 1).collect();
+    let ks_even: Vec<usize> = ks.iter().cloned().filter(|k| k % 2 == 0).collect();
+    println!("\n── sup-K parité-pure (jamais mélanger les plafonds, I-HB4-PARITÉ) ──");
+    for (mech, name, is_synth) in mechs {
+        let kset = if is_synth { &ks_even } else { &ks_odd };
+        if kset.is_empty() {
+            continue;
+        }
+        let sup = verdict_sup_k(&small_s, &big_s, mech, kset, Some(&ver), Some(&weigher), delta, alpha, boot, 0x5402);
         println!(
-            "  sup-K [{label}] (max-t, FWER) : sup={:+.1}pts à K={} · borne inf {:+.1}pts → ∃K non-inférieur : {}",
+            "  sup-K [{name}] sur {:?} ({}) : sup={:+.1}pts à K={} · borne inf {:+.1}pts → ∃K non-inférieur : {}",
+            kset, if is_synth { "synthèse" } else { "sélection" },
             sup.sup_stat * 100.0, sup.argmax_k, sup.sup_lower * 100.0, sup.non_inferior_some_k
         );
     }
-    println!("\n  rappel I-HB-COST : domination en COÛT-JETONS seulement ; GPU-secondes (déploiement) → B2.");
+
+    // ── ANALYSE label-using (HORS verdict — explique POURQUOI, jamais ne décide ; I-HB4-LABELFENCE). ──
+    let sym = symmetry_test(&small_s);
+    println!("\n── ANALYSE (utilise le label pour EXPLIQUER, hors de tout verdict) ──");
+    println!(
+        "  symétrie des erreurs : biais signé {:+.2} · asymétrie {:+.2} · label∈enveloppe {:.0}% (n={})",
+        sym.signed_bias, sym.skewness, sym.within_range_frac * 100.0, sym.n_items
+    );
+    println!("  lecture : |biais|≈0 & |asym|<0.1 ⇒ erreurs ~symétriques (la synthèse DEVRAIT payer si dispersée) ;");
+    println!("            |asym|>0.5 ⇒ erreur systématique ⇒ tout gain de synthèse à un K est chance/bruit.");
+
+    println!("\n  rappels : I-HB-COST (domination COÛT-JETONS seulement ; GPU-s → B2) ;");
+    println!("  I-HB4-PUISSANCE : puissance < 70% ⇒ verdict « indéterminé », à reporter à n≥200 (jamais converti en conclusion).");
     Ok(())
 }

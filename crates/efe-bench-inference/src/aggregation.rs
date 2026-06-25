@@ -110,6 +110,10 @@ pub trait ReasoningWeigher: Send + Sync {
 //  Les mécanismes (sur les k premières réponses)
 // ─────────────────────────────────────────────────────────────────────────────
 
+/// **HB.4 — constante PRÉ-ENREGISTRÉE** : fraction tronquée à CHAQUE queue de la moyenne tronquée. Gelée
+/// AVANT toute mesure (la régler sur le jeu scellé serait pass@K fuyant par l'expérimentateur, I-HB4-PREREG).
+pub(crate) const TRIM_FRAC: f64 = 0.25;
+
 /// Le mécanisme d'agrégation testé (chacun bien défini PAR ITEM).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -127,6 +131,14 @@ pub enum Mechanism {
     /// audité de la minorité dépasse un seuil pré-enregistré (sinon rend le mode SC, à l'octet). C'est
     /// une **sélection** (≤ pass@K), pas une synthèse. Cf. [`crate::reexec`].
     ReExecWeighted,
+    /// **HB.4** — moyenne **tronquée** des réponses numériques (synthèse robuste : fabrique une valeur
+    /// absente des K à K pair). Plafond = l'**enveloppe** des candidats (`within_range`), pas pass@K.
+    TrimmedMeanNumeric,
+    /// **HB.4 — la fusion HB.3×HB.4** : médiane **pondérée par l'audit de re-exécution**. À traversée
+    /// nette → un candidat (sélection) ; à frontière exacte de masse → médiane des deux (synthèse). Sans
+    /// pondérateur → `median_numeric` nu. Re-pondère l'ORDRE statistique (continûment), là où RXW
+    /// re-pondérait le mode sous un garde à seuil.
+    AuditWeightedMedian,
 }
 
 /// Le **mode** (réponse la plus fréquente) par clé canonique du scorer, pondéré ou non. `None` =
@@ -165,6 +177,103 @@ fn median_numeric(answers: &[Value]) -> Option<Value> {
     Some(json!(med))
 }
 
+/// **HB.4** — moyenne **tronquée** : retire `⌊TRIM_FRAC·k⌋` de CHAQUE queue, moyenne le reste. Repli
+/// médiane si la troncature viderait tout (k petit). Synthèse : à k≥3 la moyenne tombe en général hors
+/// des candidats. Sœur robuste de la médiane (tronquer la mauvaise queue tire vers le vrai sous bimodalité).
+fn trimmed_mean_numeric(answers: &[Value]) -> Option<Value> {
+    let mut nums: Vec<f64> = answers.iter().filter_map(parse_num).filter(|f| f.is_finite()).collect();
+    if nums.is_empty() {
+        return None;
+    }
+    nums.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+    let m = nums.len();
+    let tc = (TRIM_FRAC * m as f64).floor() as usize;
+    if 2 * tc >= m {
+        // troncature trop agressive → repli médiane (jamais de tranche vide / panic).
+        let med = if m % 2 == 1 { nums[m / 2] } else { (nums[m / 2 - 1] + nums[m / 2]) / 2.0 };
+        return Some(json!(med));
+    }
+    let kept = &nums[tc..m - tc];
+    Some(json!(kept.iter().sum::<f64>() / kept.len() as f64))
+}
+
+/// Médiane **pondérée** d'une liste (valeur, poids) : trie par valeur, marche la masse cumulée jusqu'à
+/// `W/2`. Traversée nette → la valeur qui enjambe (sélection) ; frontière exacte (masse partagée entre
+/// deux voisines) → leur moyenne (synthèse). Déterministe (tri stable + bande 1e-9 documentée).
+fn weighted_median_value(mut pairs: Vec<(f64, f64)>) -> Option<f64> {
+    pairs.retain(|(v, w)| v.is_finite() && w.is_finite() && *w > 0.0);
+    if pairs.is_empty() {
+        return None;
+    }
+    pairs.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
+    let total: f64 = pairs.iter().map(|(_, w)| *w).sum();
+    let half = total / 2.0;
+    let mut cum = 0.0;
+    for i in 0..pairs.len() {
+        cum += pairs[i].1;
+        if (cum - half).abs() <= 1e-9 {
+            // frontière exacte → synthèse : moyenne avec la voisine de droite (ou soi-même si dernière).
+            let next = pairs.get(i + 1).map(|p| p.0).unwrap_or(pairs[i].0);
+            return Some((pairs[i].0 + next) / 2.0);
+        }
+        if cum > half {
+            return Some(pairs[i].0); // ce candidat enjambe la moitié → sélection
+        }
+    }
+    pairs.last().map(|p| p.0)
+}
+
+/// **HB.4 — la fusion HB.3×HB.4** : médiane pondérée par l'audit de re-exécution. Sans pondérateur, repli
+/// sur la médiane numérique nue (donc déterministe et toujours défini). Sans label par signature (l'audit
+/// ne voit que l'énoncé + le candidat).
+fn audit_weighted_median(
+    task: &Value,
+    ans: &[Value],
+    weigher: Option<&dyn ReasoningWeigher>,
+) -> Option<Value> {
+    let weigher = match weigher {
+        Some(w) => w,
+        None => return median_numeric(ans),
+    };
+    let prompt_ints = crate::reexec::ints_in_text(task.get("text").and_then(|v| v.as_str()).unwrap_or(""));
+    let pairs: Vec<(f64, f64)> = ans
+        .iter()
+        .filter_map(|a| {
+            let v = parse_num(a).filter(|f| f.is_finite())?;
+            let sc = crate::reexec::audit_candidate(&prompt_ints, &crate::scorer::answer_text(a));
+            Some((v, crate::reexec::weight_from(&sc, weigher.w_min(), weigher.w_max())))
+        })
+        .collect();
+    weighted_median_value(pairs).map(|v| json!(v))
+}
+
+/// **HB.4 — plafond-oracle de la SYNTHÈSE** : le label tombe-t-il dans l'**enveloppe** [min, max] des
+/// candidats numériques ? Une médiane/moyenne ne peut atteindre le label que s'il y est. Utilise le label
+/// (plafond-oracle, comme pass@K) ; on a toujours `pass@K ≤ within_range`.
+fn within_range(s: &SampleSet, k: usize) -> bool {
+    let kk = k.min(s.answers.len());
+    let nums: Vec<f64> = s.answers[..kk].iter().filter_map(parse_num).filter(|f| f.is_finite()).collect();
+    if nums.is_empty() {
+        return false;
+    }
+    let lab = match parse_num(&s.label) {
+        Some(l) if l.is_finite() => l,
+        _ => return false,
+    };
+    let lo = nums.iter().cloned().fold(f64::INFINITY, f64::min);
+    let hi = nums.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+    lab >= lo && lab <= hi
+}
+
+/// **HB.4 — l'anti-mensonge** : la valeur émise est-elle FABRIQUÉE (sa clé n'est celle d'AUCUN candidat
+/// tiré) ? Une « synthèse » qui rend un candidat est une sélection déguisée et doit être lue comme telle.
+fn is_fabricated(emitted: &Value, ans: &[Value], scorer: &ScorerKind) -> bool {
+    match scorer.canonical_key(emitted) {
+        Some(ek) => !ans.iter().any(|a| scorer.canonical_key(a).as_deref() == Some(ek.as_str())),
+        None => false,
+    }
+}
+
 /// La réponse agrégée d'un mécanisme sur les `k` premières réponses (None = abstention).
 fn aggregate(
     s: &SampleSet,
@@ -198,6 +307,8 @@ fn aggregate(
             Some(w) => reexec_select(&s.task, ans, &s.scorer, w.w_min(), w.w_max()),
             None => mode(ans, &s.scorer, None), // pas de pondérateur → SC nu (repli déployable)
         },
+        Mechanism::TrimmedMeanNumeric => trimmed_mean_numeric(ans),
+        Mechanism::AuditWeightedMedian => audit_weighted_median(&s.task, ans, weigher),
     }
 }
 
@@ -286,15 +397,34 @@ pub struct CurvePoint {
     pub re_exec_weighted: f64,
     /// Justesse de la médiane ; `NaN` si la tâche n'est pas numérique (médiane inapplicable).
     pub median: f64,
-    /// **Plafond** (monotone par construction — ne sert qu'à réfuter / chiffrer l'écart).
+    /// **HB.4** — justesse de la moyenne tronquée (synthèse). `NaN` si non numérique.
+    pub trimmed_mean: f64,
+    /// **HB.4 — la fusion** — justesse de la médiane pondérée par l'audit. `NaN` si non numérique.
+    pub audit_weighted_median: f64,
+    /// **Plafond de SÉLECTION** (monotone par construction — ne sert qu'à réfuter / chiffrer l'écart).
     pub pass_at_k: f64,
+    /// **HB.4 — plafond de SYNTHÈSE** : fraction d'items où le label est dans l'enveloppe [min,max] des
+    /// candidats (la médiane/moyenne ne peut l'atteindre que là). Plafond-oracle ; `pass@K ≤ within_range`.
+    pub within_range: f64,
+    /// **HB.4 — l'anti-mensonge** : fraction d'items où la médiane FABRIQUE (sortie ∉ candidats). ≈0 ⇒ la
+    /// médiane *sélectionne* (lire au plafond pass@K), &gt;0 ⇒ vraie synthèse (lire au plafond within_range).
+    pub fabrication_frac: f64,
+    /// **HB.4** — dispersion déployable (sans label) : variance numérique moyenne des candidats par item.
+    pub dispersion_var: f64,
+    /// **HB.4** — dispersion : fraction distincte moyenne (= `mean_distinct_frac`, redite pour le bundle).
+    pub dispersion_distinct: f64,
+    /// **HB.4** — dispersion : entropie de Shannon normalisée moyenne des poids d'audit (1.0 sans pondérateur).
+    pub dispersion_entropy: f64,
+    /// **HB.4** — meilleur mécanisme de SYNTHÈSE (médiane/tronquée/pondérée). Plafond = within_range, PAS pass@K.
+    pub best_synthesis: f64,
     /// **Couverture** RXH : fraction moyenne de candidats **vérifiables** (≥1 équation auditée) parmi les
     /// k. Plafonne le gain atteignable (un candidat sans équation vote au plancher). `0` si pas de pondérateur.
     pub verifiable_frac: f64,
     /// **Taux d'override** : fraction d'items où le garde a laissé RXW **dévier** de la self-consistency.
     /// Si ≈ 0, RXW ≈ SC — la conclusion honnête est « plat, mais avec télémétrie d'audit ». `0` si pas de pondérateur.
     pub override_rate: f64,
-    /// Max des mécanismes DÉPLOYABLES applicables (pour le genou).
+    /// Max des mécanismes de **SÉLECTION** purs (SC/pondéré/vérifié/RXW) — toujours ≤ pass@K, monotone ;
+    /// **seul** ce champ alimente le genou (HB.4 : les mécanismes de synthèse sont dans `best_synthesis`).
     pub best_deployable: f64,
     /// Coût-jetons d'ENTRÉE moyen, borne **cache OFF** (prompt répété k×).
     pub mean_in_cache_off: f64,
@@ -320,9 +450,11 @@ pub fn curve(
     let numeric = samples.iter().all(|s| matches!(s.scorer, ScorerKind::Numeric { .. })) && !samples.is_empty();
     ks.iter()
         .map(|&k| {
-            let (mut sc, mut wt, mut vf, mut rxw, mut md, mut ps) = (0usize, 0usize, 0usize, 0usize, 0usize, 0usize);
+            let (mut sc, mut wt, mut vf, mut rxw) = (0usize, 0usize, 0usize, 0usize);
+            let (mut md, mut tm, mut awm, mut ps, mut wr, mut fab) = (0usize, 0usize, 0usize, 0usize, 0usize, 0usize);
             let (mut in_off, mut in_on, mut out, mut distinct, mut degen) = (0.0, 0.0, 0.0, 0.0, 0.0);
             let (mut verif_frac, mut override_n) = (0.0, 0usize);
+            let (mut disp_var, mut disp_dist, mut disp_ent) = (0.0, 0.0, 0.0);
             for s in samples {
                 // Borné aux réponses RÉELLES (sans `.max(1)` qui ferait paniquer un item à 0 réponse —
                 // état légitime : K appels tous illisibles, ou K=0).
@@ -339,8 +471,29 @@ pub fn curve(
                 if mech_correct(s, k, Mechanism::ReExecWeighted, None, weigher) {
                     rxw += 1;
                 }
-                if numeric && mech_correct(s, k, Mechanism::Median, None, None) {
-                    md += 1;
+                if numeric {
+                    if mech_correct(s, k, Mechanism::Median, None, None) {
+                        md += 1;
+                    }
+                    if mech_correct(s, k, Mechanism::TrimmedMeanNumeric, None, None) {
+                        tm += 1;
+                    }
+                    if mech_correct(s, k, Mechanism::AuditWeightedMedian, None, weigher) {
+                        awm += 1;
+                    }
+                    if within_range(s, k) {
+                        wr += 1;
+                    }
+                    // Taux de fabrication : la médiane fabrique-t-elle (sortie ∉ candidats) ? (anti-mensonge)
+                    if let Some(emitted) = aggregate(s, k, Mechanism::Median, None, None) {
+                        if is_fabricated(&emitted, &s.answers[..kk], &s.scorer) {
+                            fab += 1;
+                        }
+                    }
+                    let (dv, dd, de) = dispersion_index(s, k, weigher);
+                    disp_var += dv;
+                    disp_dist += dd;
+                    disp_ent += de;
                 }
                 if pass_at_k(s, k) {
                     ps += 1;
@@ -368,12 +521,12 @@ pub fn curve(
                     degen += deg as f64 / kk as f64;
                 }
             }
-            let median = if numeric { md as f64 / n } else { f64::NAN };
-            // RXW entre dans le « meilleur déployable » (le genou) au même titre que SC/vote/vérifié.
-            let mut best = (sc.max(wt).max(vf).max(rxw)) as f64 / n;
-            if numeric {
-                best = best.max(median);
-            }
+            let nan_if_not = |x: usize| if numeric { x as f64 / n } else { f64::NAN };
+            let median = nan_if_not(md);
+            // SÉLECTION pure (le genou) : SC/pondéré/vérifié/RXW seulement — toujours ≤ pass@K, monotone.
+            let best_selection = (sc.max(wt).max(vf).max(rxw)) as f64 / n;
+            // SYNTHÈSE : médiane/tronquée/pondérée — plafond within_range, PAS pass@K (jamais mêlé au genou).
+            let best_synthesis = if numeric { (md.max(tm).max(awm)) as f64 / n } else { f64::NAN };
             CurvePoint {
                 k,
                 self_consistency: sc as f64 / n,
@@ -381,8 +534,16 @@ pub fn curve(
                 verified: vf as f64 / n,
                 re_exec_weighted: rxw as f64 / n,
                 median,
+                trimmed_mean: nan_if_not(tm),
+                audit_weighted_median: nan_if_not(awm),
                 pass_at_k: ps as f64 / n,
-                best_deployable: best,
+                within_range: nan_if_not(wr),
+                fabrication_frac: if numeric { fab as f64 / n } else { f64::NAN },
+                dispersion_var: if numeric { disp_var / n } else { f64::NAN },
+                dispersion_distinct: if numeric { disp_dist / n } else { f64::NAN },
+                dispersion_entropy: if numeric { disp_ent / n } else { f64::NAN },
+                best_synthesis,
+                best_deployable: best_selection,
                 verifiable_frac: verif_frac / n,
                 override_rate: override_n as f64 / n,
                 mean_in_cache_off: in_off / n,
@@ -393,6 +554,117 @@ pub fn curve(
             }
         })
         .collect()
+}
+
+/// **HB.4 — diagnostic de DISPERSION (déployable, sans label)** d'un item : (variance numérique des k
+/// candidats, fraction distincte = clés distinctes / k, entropie de Shannon normalisée des poids d'audit).
+/// Prédit quand la synthèse PEUT aider (forte dispersion non biaisée) ; **nécessaire, non suffisant**.
+/// Sans pondérateur, l'entropie vaut 1.0 (uniforme). Ne lit JAMAIS le label (I-HB4-LABELFENCE).
+pub fn dispersion_index(s: &SampleSet, k: usize, weigher: Option<&dyn ReasoningWeigher>) -> (f64, f64, f64) {
+    let kk = k.min(s.answers.len());
+    if kk == 0 {
+        return (0.0, 0.0, 1.0);
+    }
+    let ans = &s.answers[..kk];
+    let nums: Vec<f64> = ans.iter().filter_map(parse_num).filter(|f| f.is_finite()).collect();
+    let var = if nums.len() >= 2 {
+        let mean = nums.iter().sum::<f64>() / nums.len() as f64;
+        nums.iter().map(|x| (x - mean).powi(2)).sum::<f64>() / nums.len() as f64
+    } else {
+        0.0
+    };
+    let distinct: std::collections::BTreeSet<String> = ans.iter().filter_map(|a| s.scorer.canonical_key(a)).collect();
+    let distinct_frac = distinct.len() as f64 / kk as f64;
+    // Entropie normalisée des poids d'audit (concentration de la confiance). 1.0 = uniforme (sans pondérateur).
+    let entropy = match weigher {
+        None => 1.0,
+        Some(w) => {
+            let prompt_ints = crate::reexec::ints_in_text(s.task.get("text").and_then(|v| v.as_str()).unwrap_or(""));
+            let ws: Vec<f64> = ans
+                .iter()
+                .map(|a| {
+                    let sc = crate::reexec::audit_candidate(&prompt_ints, &crate::scorer::answer_text(a));
+                    crate::reexec::weight_from(&sc, w.w_min(), w.w_max())
+                })
+                .collect();
+            let total: f64 = ws.iter().sum();
+            if total <= 0.0 || ws.len() < 2 {
+                1.0
+            } else {
+                let h: f64 = ws
+                    .iter()
+                    .map(|&x| x / total)
+                    .filter(|&p| p > 0.0)
+                    .map(|p| -p * p.ln())
+                    .sum();
+                (h / (ws.len() as f64).ln()).clamp(0.0, 1.0)
+            }
+        }
+    };
+    (var, distinct_frac, entropy)
+}
+
+/// **HB.4 — rapport de SYMÉTRIE** (recherche, label-using, cloisonné).
+#[derive(Debug, Clone, Serialize)]
+pub struct SymmetryReport {
+    /// Biais signé moyen : `médiane_item − label`. ≈ 0 ⇒ médiane non biaisée (la synthèse DEVRAIT payer si
+    /// dispersée) ; ≠ 0 ⇒ la médiane systématiquement trop haute/basse (synthèse vaine ou corpus-fragile).
+    pub signed_bias: f64,
+    /// Asymétrie (skewness) des écarts `candidat − médiane_item` agrégés. |skew| &lt; 0,1 ⇒ erreurs ~symétriques ;
+    /// &gt; 0,5 ⇒ erreur systématique (tout gain de synthèse à un K est chance/bruit).
+    pub skewness: f64,
+    /// Fraction d'items où `label ∈ [min,max]` candidats — le **plafond global de la synthèse** (label-using).
+    pub within_range_frac: f64,
+    /// Items effectivement comptés (numériques, label lisible).
+    pub n_items: usize,
+}
+
+/// **HB.4 — test de SYMÉTRIE (RECHERCHE, utilise le LABEL, CLOISONNÉ).** Explique POURQUOI la synthèse paie
+/// ou non : les erreurs du petit modèle sont-elles ~symétriques/non biaisées (la médiane/moyenne devrait
+/// tomber juste si dispersée) ou systématiques (tout gain est coïncidence) ? Il touche le label UNIQUEMENT
+/// pour EXPLIQUER — il n'est **jamais** appelé par `aggregate`/`curve`/`verdict` (I-HB4-LABELFENCE), et ne
+/// renvoie qu'un rapport, jamais une décision. Utilise TOUS les candidats de chaque item.
+pub fn symmetry_test(small: &[SampleSet]) -> SymmetryReport {
+    let mut devs: Vec<f64> = Vec::new(); // candidat − médiane_item (label-free, pour l'asymétrie)
+    let (mut signed, mut within, mut counted) = (0.0, 0usize, 0usize);
+    for s in small {
+        let mut nums: Vec<f64> = s.answers.iter().filter_map(parse_num).filter(|f| f.is_finite()).collect();
+        if nums.is_empty() {
+            continue;
+        }
+        let lab = match parse_num(&s.label) {
+            Some(l) if l.is_finite() => l,
+            _ => continue,
+        };
+        counted += 1;
+        nums.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+        let m = nums.len();
+        let med = if m % 2 == 1 { nums[m / 2] } else { (nums[m / 2 - 1] + nums[m / 2]) / 2.0 };
+        for &x in &nums {
+            devs.push(x - med);
+        }
+        signed += med - lab; // label-using : biais de la médiane vs vérité
+        let (lo, hi) = (nums[0], nums[m - 1]);
+        if lab >= lo && lab <= hi {
+            within += 1;
+        }
+    }
+    let n = counted.max(1) as f64;
+    SymmetryReport { signed_bias: signed / n, skewness: skewness(&devs), within_range_frac: within as f64 / n, n_items: counted }
+}
+
+/// Asymétrie (moment standardisé d'ordre 3) d'un échantillon. 0 si &lt; 3 points ou variance nulle.
+fn skewness(xs: &[f64]) -> f64 {
+    if xs.len() < 3 {
+        return 0.0;
+    }
+    let n = xs.len() as f64;
+    let mean = xs.iter().sum::<f64>() / n;
+    let sd = (xs.iter().map(|x| (x - mean).powi(2)).sum::<f64>() / n).sqrt();
+    if sd <= 1e-12 {
+        return 0.0;
+    }
+    xs.iter().map(|x| ((x - mean) / sd).powi(3)).sum::<f64>() / n
 }
 
 /// Télémétrie RXW d'**un** item : (fraction de candidats vérifiables parmi les k, RXW a-t-il dévié de SC ?).
@@ -1077,5 +1349,138 @@ mod tests {
         // RXW préfère le 68 audité (mauvais montage) → faux. On ENCODE la limite, on ne l'assène pas en prose.
         assert!(!mech_correct(&s, 3, Mechanism::SelfConsistency, None, None), "SC → 68 (majorité)");
         assert!(!mech_correct(&s, 3, Mechanism::ReExecWeighted, None, Some(&w)), "RXW mal-sélectionne 68 (calcul juste, montage faux)");
+    }
+
+    // ── HB.4 : la synthèse (fabriquer vs sélectionner) ──
+
+    #[test]
+    fn trim_frac_is_frozen_constant() {
+        // Garde de pré-enregistrement (I-HB4-PREREG) : tout re-réglage silencieux casse CI.
+        assert!((TRIM_FRAC - 0.25).abs() < 1e-12, "TRIM_FRAC gelé à 0.25");
+    }
+
+    #[test]
+    fn trimmed_mean_synthesizes_a_value_absent_from_candidates() {
+        // {141,143} : tc=⌊0.25·2⌋=0 → moyenne(141,143)=142 = label, ABSENT des tirages → SYNTHÈSE > pass@K.
+        let s = num_sample("a", &[141, 143], 142);
+        assert!(!pass_at_k(&s, 2), "142 absent → pass@2 faux (sélection ne peut l'atteindre)");
+        assert!(mech_correct(&s, 2, Mechanism::TrimmedMeanNumeric, None, None), "moyenne tronquée fabrique 142");
+        // ... et c'est bien une fabrication (anti-mensonge).
+        let emitted = aggregate(&s, 2, Mechanism::TrimmedMeanNumeric, None, None).unwrap();
+        assert!(is_fabricated(&emitted, &s.answers, &s.scorer), "142 ∉ candidats → fabriqué");
+    }
+
+    #[test]
+    fn trimmed_mean_no_panic_on_small_k() {
+        // k=1 et k=2 : pas de tranche vide / panic (repli médiane si sur-troncature).
+        let s = num_sample("a", &[142], 142);
+        assert!(mech_correct(&s, 1, Mechanism::TrimmedMeanNumeric, None, None));
+        let s2 = num_sample("b", &[140, 144], 142);
+        assert!(aggregate(&s2, 2, Mechanism::TrimmedMeanNumeric, None, None).is_some());
+    }
+
+    #[test]
+    fn within_range_is_the_synthesis_ceiling() {
+        // label dans l'enveloppe → atteignable par synthèse ; hors enveloppe → inatteignable.
+        let inside = num_sample("a", &[141, 143], 142);
+        assert!(within_range(&inside, 2), "142 ∈ [141,143]");
+        let outside = num_sample("b", &[141, 143], 200);
+        assert!(!within_range(&outside, 2), "200 ∉ [141,143] → synthèse ne peut l'atteindre");
+        // pass@K ≤ within_range toujours : ici 142 absent (pass@2 faux) mais dans l'enveloppe (within vrai).
+        assert!(!pass_at_k(&inside, 2) && within_range(&inside, 2));
+    }
+
+    #[test]
+    fn audit_weighted_median_without_weigher_is_plain_median() {
+        // Repli déployable : sans pondérateur, AWM ≡ médiane numérique (déterministe, jamais de panic).
+        for answers in [&[141i64, 143][..], &[7, 50, 50][..], &[1, 2, 3, 4][..]] {
+            let s = num_sample("a", answers, 0);
+            let awm = aggregate(&s, answers.len(), Mechanism::AuditWeightedMedian, None, None);
+            let med = aggregate(&s, answers.len(), Mechanism::Median, None, None);
+            assert_eq!(
+                awm.and_then(|v| s.scorer.canonical_key(&v)),
+                med.and_then(|v| s.scorer.canonical_key(&v)),
+                "AWM sans pondérateur = médiane"
+            );
+        }
+    }
+
+    #[test]
+    fn audit_weighted_median_pulls_toward_audited_candidate() {
+        // La fusion HB.3×HB.4 : la médiane NUE dirait 50 (majorité), mais l'audit pèse le 45 bien-calculé →
+        // la médiane PONDÉRÉE bascule vers 45. C'est la récupération que ni RXW ni la médiane nue n'avaient.
+        let w = ReExecAudit::default();
+        let s = cot_sample("a", "4 rows of 17 minus 23", &["4 * 17 = 68 ; 68 - 23 = 45", "about 50", "about 50"], 45);
+        assert!(!mech_correct(&s, 3, Mechanism::Median, None, None), "médiane nue → 50 (faux)");
+        assert!(mech_correct(&s, 3, Mechanism::AuditWeightedMedian, None, Some(&w)), "médiane pondérée → 45 (juste)");
+    }
+
+    #[test]
+    fn audit_weighted_median_does_not_cure_modeling_error() {
+        // HONNÊTETÉ : la fusion hérite de la limite de HB.3 — un montage faux proprement calculé (68) est
+        // audité valide → la médiane pondérée s'y déplace → mal-sélectionne. Encodé, pas assené.
+        let w = ReExecAudit::default();
+        let s = cot_sample("a", "4 rows of 17 minus 23", &["4 * 17 = 68", "4 * 17 = 68", "the answer is 45"], 45);
+        assert!(!mech_correct(&s, 3, Mechanism::AuditWeightedMedian, None, Some(&w)), "AWM se déplace vers 68 (montage faux)");
+    }
+
+    #[test]
+    fn audit_weighted_median_selection_bounded_by_pass_at_k_at_odd_k() {
+        // À K impair la médiane pondérée enjambe → un candidat (sélection) ⇒ correct ⇒ pass@k.
+        let w = ReExecAudit::default();
+        let s = cot_sample("a", "4 rows of 17 minus 23", &["50", "50", "4 * 17 = 68 ; 68 - 23 = 45"], 45);
+        for k in [1usize, 3, 5] {
+            let awm = mech_correct(&s, k, Mechanism::AuditWeightedMedian, None, Some(&w));
+            // À K impair une médiane (même pondérée à traversée nette) rend un candidat tiré.
+            if awm {
+                assert!(pass_at_k(&s, k), "AWM correct à K impair ⇒ pass@k (sélection) à k={k}");
+            }
+        }
+    }
+
+    #[test]
+    fn dispersion_index_separates_scatter_from_cluster() {
+        // Diagnostic déployable : forte dispersion (variance, diversité) vs cluster.
+        let scatter = num_sample("a", &[140, 141, 142, 143, 144], 142);
+        let cluster = num_sample("b", &[50, 50, 50, 50], 50);
+        let (sv, sd, se) = dispersion_index(&scatter, 5, None);
+        let (cv, cd, _) = dispersion_index(&cluster, 4, None);
+        assert!(sv > cv, "variance dispersée {sv} > cluster {cv}");
+        assert!(sd > cd, "diversité dispersée {sd} > cluster {cd}");
+        assert!((se - 1.0).abs() < 1e-12, "entropie = 1.0 sans pondérateur (uniforme)");
+        // L'entropie des poids d'audit est bornée [0,1] avec un pondérateur (pas de NaN/inf).
+        let w = ReExecAudit::default();
+        let (_, _, e2) = dispersion_index(&scatter, 5, Some(&w));
+        assert!((0.0..=1.0).contains(&e2), "entropie ∈ [0,1] : {e2}");
+    }
+
+    #[test]
+    fn curve_splits_selection_ceiling_from_synthesis() {
+        // best_deployable (sélection) ≤ pass@K à tout K (invariant monotone préservé) ; la synthèse peut
+        // dépasser pass@K (elle fabrique). Jeu où la médiane @K2 synthétise le label absent.
+        let samples = vec![num_sample("a", &[141, 143], 142), num_sample("b", &[7, 9], 8)];
+        let c = curve(&samples, &[2], None, None);
+        assert!(c[0].best_deployable <= c[0].pass_at_k + 1e-9, "sélection bornée par pass@K");
+        assert!(c[0].within_range >= c[0].pass_at_k - 1e-9, "within_range ≥ pass@K");
+        // médiane @K2 : (141,143)→142 juste, (7,9)→8 juste → 100 % > pass@2 (0 %, ni 142 ni 8 tirés).
+        assert!(c[0].best_synthesis > c[0].pass_at_k, "synthèse dépasse pass@K : {} > {}", c[0].best_synthesis, c[0].pass_at_k);
+        assert!(c[0].fabrication_frac > 0.0, "la médiane a fabriqué");
+    }
+
+    #[test]
+    fn symmetry_test_is_label_using_research_only() {
+        // Corpus à erreurs symétriques autour du vrai → biais signé ≈ 0, label dans l'enveloppe.
+        let small = vec![
+            num_sample("a", &[140, 144], 142), // médiane 142 = label, symétrique
+            num_sample("b", &[8, 12], 10),
+            num_sample("c", &[19, 21], 20),
+        ];
+        let r = symmetry_test(&small);
+        assert_eq!(r.n_items, 3);
+        assert!(r.signed_bias.abs() < 1e-9, "médianes non biaisées : {}", r.signed_bias);
+        assert!((r.within_range_frac - 1.0).abs() < 1e-9, "tous les labels dans l'enveloppe");
+        // Corpus biaisé : médianes systématiquement trop hautes vs label → biais signé > 0.
+        let biased = vec![num_sample("a", &[50, 60], 40), num_sample("b", &[50, 60], 40)];
+        assert!(symmetry_test(&biased).signed_bias > 0.0, "biais systématique détecté");
     }
 }
