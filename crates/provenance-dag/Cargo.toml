@@ -1,0 +1,24 @@
+# SPDX-License-Identifier: UNLICENSED
+# Kovant P1 / S0 — provenance-dag : le DAG scellé re-prouvable (le « cœur de confiance »).
+# Principe : tout le trust-critique (SHA-256, HMAC, chaîne, re-preuve) est écrit À LA MAIN, ZÉRO
+# dépendance crypto externe → auditable et *trustless* (un tiers peut le re-lire et le re-compiler).
+# Seules dépendances : serde/serde_json, et UNIQUEMENT pour la sérialisation JSONL de stockage —
+# le SCEAU, lui, est calculé sur un encodage canonique binaire fait main, pas sur le JSON.
+[package]
+name = "provenance-dag"
+version = { workspace = true }
+edition = { workspace = true }
+rust-version = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
+description = "Kovant P1/S0 — le DAG scellé re-prouvable : nœuds typés (acte/arête/évidence/humain), encodage canonique, chaîne HMAC-SHA256 écrite à la main (zéro dépendance crypto externe → trustless), manifest-root et reprove_dag. Atteste l'INTÉGRITÉ (ce qui s'est passé), jamais la CORRECTION."
+publish = false
+
+[lib]
+name = "provenance_dag"
+path = "src/lib.rs"
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }

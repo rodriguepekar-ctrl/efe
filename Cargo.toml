@@ -242,6 +242,10 @@ members = [
     # + Borda/Condorcet + BudgetTracker + tenant isolation + 8 SSE events.
     # Cf. `EFE_PROJET/03_a_construire/PHASE_3_MULTI_LLM.pdf` (22 pages).
     "crates/efe-multi-llm",
+    # Kovant P1 / S0 — provenance-dag : le DAG scellé re-prouvable (cœur de confiance, crypto
+    # SHA-256 + HMAC écrite à la main, zéro dépendance crypto externe → auditable/trustless).
+    # Cf. docs/reports/EFE_Kovant_P1_Code_Roadmap_2026-06-29.html (S0).
+    "crates/provenance-dag",
 ]
 
 [workspace.package]
