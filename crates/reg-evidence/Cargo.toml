@@ -22,8 +22,11 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 
 # Tests d'intégration (tests/) : l'export S2 (ExportContent) alimente la dérivation S6, et on RE-DÉRIVE
-# comme le ferait un tiers (trust-light : zéro confiance neuve, re-dérivation octet-à-octet).
+# comme le ferait un tiers (trust-light : zéro confiance neuve, re-dérivation octet-à-octet). forensic-export
+# (S4) est en dev-dep UNIQUEMENT (pas de dépendance runtime, pas de cycle) : l'e2e assemble un VRAI bundle
+# forensic et re-dérive l'artefact reg/ hors-process depuis records.sealed.jsonl sur le disque (archi S6 §9).
 [dev-dependencies]
 provenance-dag = { path = "../provenance-dag" }
 provenance-capture = { path = "../provenance-capture" }
 audit-api = { path = "../audit-api" }
+forensic-export = { path = "../forensic-export" }

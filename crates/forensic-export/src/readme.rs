@@ -15,11 +15,15 @@ pub struct ReadmeCtx<'a> {
     pub vendored_lines: usize,
     /// La preuve d'ancrage structurée, si présente (cf. [`crate::anchor`]).
     pub anchor: Option<&'a crate::anchor::AnchorProof>,
+    /// Vrai si le bundle embarque le **guide de re-dérivation** `reg/REDERIVE.md` (produit par S6) → le
+    /// README gagne une section qui pointe vers lui (« outillé ≠ conforme »). **Gaté sur la présence
+    /// RÉELLE du guide** pour ne jamais annoncer un fichier absent (sur-promesse).
+    pub reg_present: bool,
 }
 
 /// Rend le README.md du bundle.
 pub fn render(ctx: &ReadmeCtx) -> String {
-    let ReadmeCtx { tenant_label, manifest_root, n_records, sealed_scope, report_cases, vendored_lines, anchor } = *ctx;
+    let ReadmeCtx { tenant_label, manifest_root, n_records, sealed_scope, report_cases, vendored_lines, anchor, reg_present } = *ctx;
     let anchor_block = if let Some(p) = anchor {
         if p.method == crate::anchor::AnchorMethod::Declared {
             // **Déclaration interne** : aucune force probante externe → NE PAS prétendre la non-fabrication.
@@ -54,6 +58,19 @@ record (voir « Ce que ça NE prouve PAS »). Pour une preuve opposable au déte
         String::new()
     } else {
         format!("\n- **Dossiers du récit** : {}\n", report_cases.join(", "))
+    };
+
+    // Section réglementaire (S6) — n'apparaît QUE si le bundle embarque un dossier `reg/`. Elle pointe
+    // vers `reg/REDERIVE.md` et porte l'honnêteté « outillé ≠ conforme » au niveau du README du bundle.
+    let reg_block = if reg_present {
+        "\n## Évidence réglementaire (`reg/`)\n\nCe bundle embarque une **évidence réglementaire** dérivée du DAG (dossier `reg/`) : \
+l'artefact rendu (`reg/<cadre>.md`), la **lecture versionnée** qui l'a produite (`reg/mapping.<version>.json`), et son mode \
+d'emploi (`reg/REDERIVE.md`). C'est une **VUE re-dérivable** : re-prouvez les records (ci-dessus), puis re-dérivez l'artefact \
+sous cette lecture — vous obtenez le même fichier, **octet pour octet**. **Outillé ≠ conforme** : cette évidence **fournit et \
+mappe** ce que l'exigence réclame ; elle ne **prononce PAS** la conformité (une conclusion juridique). Voir `reg/REDERIVE.md`.\n"
+            .to_string()
+    } else {
+        String::new()
     };
 
     format!(
@@ -119,7 +136,7 @@ est la **traçabilité par node_id** ci-dessus. Ne faites jamais confiance au te
 `MANIFEST.sha256` liste le `sha256` de chaque fichier — une intégrité de **transport** (détecter une \
 corruption), **pas** une frontière de sécurité (il n'est pas signé ; la sécurité vient de la re-preuve). \
 Tout est ici : données, vérifieur (source), spéc, guide — rien à télécharger, personne à appeler. \
-Le bundle se vérifie **hors-ligne**, et **survit au vendeur**.\n"
+Le bundle se vérifie **hors-ligne**, et **survit au vendeur**.\n{reg_block}"
     )
 }
 
@@ -130,7 +147,7 @@ mod tests {
     use crate::anchor::{AnchorMethod, AnchorProof};
 
     fn ctx<'a>(root: &'a str, cases: &'a [String], anchor: Option<&'a AnchorProof>) -> ReadmeCtx<'a> {
-        ReadmeCtx { tenant_label: "acme", manifest_root: root, n_records: 6, sealed_scope: "full-tenant-dag", report_cases: cases, vendored_lines: 400, anchor }
+        ReadmeCtx { tenant_label: "acme", manifest_root: root, n_records: 6, sealed_scope: "full-tenant-dag", report_cases: cases, vendored_lines: 400, anchor, reg_present: false }
     }
 
     #[test]
@@ -165,5 +182,21 @@ mod tests {
         assert!(!with_declared.contains("engagé avant tout litige"), "declared n'emploie pas la formule de non-fabrication");
         assert!(without.contains("n'inclut pas"), "bloc sans-ancrage honnête");
         assert_ne!(with, without);
+    }
+
+    #[test]
+    fn reg_section_appears_only_when_reg_present() {
+        // La section réglementaire (S6) n'apparaît QUE si le bundle embarque un dossier reg/.
+        let root = "ab".repeat(32);
+        let cases: Vec<String> = vec![];
+        let without = render(&ctx(&root, &cases, None));
+        assert!(!without.contains("Évidence réglementaire"), "aucune section reg sans dossier reg/");
+        let mut with_reg = ctx(&root, &cases, None);
+        with_reg.reg_present = true;
+        let with = render(&with_reg);
+        assert!(with.contains("## Évidence réglementaire"), "la section reg apparaît");
+        assert!(with.contains("reg/REDERIVE.md"), "elle pointe vers le mode d'emploi");
+        assert!(with.to_lowercase().contains("outillé ≠ conforme"), "elle porte l'honnêteté");
+        assert!(with.contains("octet pour octet"), "VUE re-dérivable énoncée");
     }
 }

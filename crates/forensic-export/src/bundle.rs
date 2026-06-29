@@ -40,6 +40,12 @@ pub struct BundleOpts {
     pub expected_binary_sha256: Option<String>,
     /// Étiquette du tenant pour le README (PAS la clé).
     pub tenant_label: String,
+    /// **Pièces jointes réglementaires** (S6) — paires `(chemin-relatif, contenu)` **opaques**, p. ex. la
+    /// sortie de `reg_evidence::reg_subtree`. forensic-export ne **dépend pas** de S6 : il reçoit des octets.
+    /// Chaque chemin DOIT être sous `reg/` (namespacé, anti-collision) et sans traversée (validé, frontière
+    /// de sécurité). Écrites dans le staging **avant** le MANIFEST → **couvertes par `MANIFEST.sha256`** et
+    /// atomiques ; quand non vide, le README gagne une section pointant vers `reg/REDERIVE.md`. Vide = aucune.
+    pub reg_attachments: Vec<(String, String)>,
 }
 
 /// Erreur d'assemblage.
@@ -63,6 +69,9 @@ pub enum ExportError {
     /// La preuve d'ancrage est **mal formée** (émetteur vide, caractère de contrôle, reçu manquant pour
     /// une méthode cryptographique…) — on n'empaquette pas un ancrage non vérifiable.
     AnchorMalformed(String),
+    /// Une **pièce jointe réglementaire** (`reg/…`) a un chemin invalide (hors `reg/`, traversée « .. »,
+    /// absolu, caractère de contrôle/antislash, ou doublon) — refusée pour ne **jamais** écrire hors du bundle.
+    RegAttachment(String),
 }
 impl std::fmt::Display for ExportError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -84,6 +93,7 @@ impl std::fmt::Display for ExportError {
                 write!(f, "ancrage non probant : commet « {bound} » ≠ root du DAG « {expected} »")
             }
             ExportError::AnchorMalformed(m) => write!(f, "ancrage mal formé : {m}"),
+            ExportError::RegAttachment(m) => write!(f, "pièce jointe réglementaire invalide : {m}"),
         }
     }
 }
@@ -213,9 +223,69 @@ fn write_all(dir: &Path, input: &BundleInput, opts: &BundleOpts, n_records: usiz
         report_cases: &input.report_cases,
         vendored_lines: vendor::vendored_line_count(),
         anchor: opts.anchor.as_ref(),
+        // Le README n'annonce la re-dérivation QUE si le guide reg/REDERIVE.md voyage RÉELLEMENT (sinon il
+        // sur-promettrait un fichier absent — honnêteté). Les autres pièces reg/ voyagent quand même.
+        reg_present: opts.reg_attachments.iter().any(|(p, _)| p == "reg/REDERIVE.md"),
     });
     std::fs::write(dir.join("README.md"), readme)?;
+    // Pièces jointes réglementaires (S6) — écrites AVANT le MANIFEST (donc couvertes par lui) et après
+    // validation stricte des chemins (anti-traversée). La clé n'y figure jamais (S6 ne l'écrit pas).
+    write_reg_attachments(dir, &opts.reg_attachments)?;
     manifest::write_manifest(dir).map_err(ExportError::Io)
+}
+
+/// Valide le chemin relatif d'une pièce jointe réglementaire : sous `reg/`, **sans** traversée, absolu, ni
+/// caractère hostile. C'est une **frontière de sécurité** (on écrit un chemin fourni par l'appelant).
+fn validate_reg_path(rel: &str) -> Result<(), ExportError> {
+    let bad = |m: &str| ExportError::RegAttachment(format!("« {rel} » : {m}"));
+    if rel.is_empty() {
+        return Err(bad("chemin vide"));
+    }
+    if rel.starts_with('/') {
+        return Err(bad("chemin absolu interdit"));
+    }
+    if rel.bytes().any(|b| b < 0x20 || b == b'\\') {
+        return Err(bad("caractère de contrôle ou antislash interdit"));
+    }
+    let comps: Vec<&str> = rel.split('/').collect();
+    if comps.first() != Some(&"reg") {
+        return Err(bad("doit être sous reg/"));
+    }
+    if comps.len() < 2 {
+        return Err(bad("doit être un fichier sous reg/ (pas le dossier lui-même)"));
+    }
+    for c in &comps {
+        if c.is_empty() || *c == "." || *c == ".." {
+            return Err(bad("composant de chemin invalide (vide, « . » ou « .. »)"));
+        }
+    }
+    Ok(())
+}
+
+/// Écrit les pièces jointes réglementaires sous `dir`. Rejette tout chemin invalide et tout **doublon**
+/// (un même chemin deux fois est une ambiguïté, pas un écrasement silencieux).
+fn write_reg_attachments(dir: &Path, attachments: &[(String, String)]) -> Result<(), ExportError> {
+    let mut seen: HashSet<&str> = HashSet::new();
+    for (rel, content) in attachments {
+        validate_reg_path(rel)?;
+        if !seen.insert(rel.as_str()) {
+            return Err(ExportError::RegAttachment(format!("« {rel} » : chemin dupliqué")));
+        }
+        let path = dir.join(rel);
+        // Collision au niveau du SYSTÈME DE FICHIERS (casse / normalisation NFC↔NFD) : sur un FS insensible
+        // à la casse (APFS/NTFS) deux chemins distincts en octets visent le MÊME fichier. Le staging est
+        // neuf et vide → un fichier reg/ déjà présent ne peut venir QUE d'une pièce ANTÉRIEURE de ce lot.
+        // On REFUSE (jamais d'écrasement silencieux — vérité du FS, pas une canonicalisation de chaîne qui
+        // raterait NFC/NFD). Sur un FS sensible à la casse, ce sont deux fichiers distincts (les deux voyagent).
+        if path.exists() {
+            return Err(ExportError::RegAttachment(format!("« {rel} » : collision de chemin (casse/normalisation) avec une pièce antérieure")));
+        }
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        std::fs::write(&path, content)?;
+    }
+    Ok(())
 }
 
 /// Extrait les `node_id` cités dans le récit : les tokens entre backticks contenant « :: » (la convention
@@ -378,5 +448,105 @@ mod tests {
         let mut input = good_input();
         input.report = "- contrôle bidon _[`SUP-A::fantome`]_\n".into();
         assert!(matches!(assemble(&input, &key(), &BundleOpts::default(), &dir), Err(ExportError::ReportCitation(ref n)) if n == "SUP-A::fantome"));
+    }
+
+    #[test]
+    fn carries_reg_attachments_in_manifest_and_readme() {
+        // S6 × S4 : les pièces reg/ voyagent dans le bundle, sont couvertes par le MANIFEST, et le README
+        // gagne sa section qui pointe vers reg/REDERIVE.md. Sans pièces reg/, la section n'apparaît pas.
+        let dir = fresh_dir("reg");
+        let rederive_content = "# Re-dériver vous-même\n";
+        let opts = BundleOpts {
+            tenant_label: "acme".into(),
+            reg_attachments: vec![
+                ("reg/eu_ai_act.md".into(), "# Évidence — EU AI Act\n".into()),
+                ("reg/mapping.2026-06.json".into(), "{}\n".into()),
+                ("reg/REDERIVE.md".into(), rederive_content.into()),
+            ],
+            ..Default::default()
+        };
+        assemble(&good_input(), &key(), &opts, &dir).unwrap();
+        for f in ["reg/eu_ai_act.md", "reg/mapping.2026-06.json", "reg/REDERIVE.md"] {
+            assert!(dir.join(f).exists(), "pièce reg manquante : {f}");
+        }
+        let man = std::fs::read_to_string(dir.join("MANIFEST.sha256")).unwrap();
+        assert!(man.contains("reg/eu_ai_act.md"), "le MANIFEST couvre l'artefact reg");
+        assert!(man.contains("reg/REDERIVE.md"), "le MANIFEST couvre le mode d'emploi reg");
+        // Le hash listé est bien celui du contenu (intégrité de transport effective).
+        assert!(man.contains(&crate::manifest::sha256_hex(rederive_content.as_bytes())), "le hash reg est correct");
+        let readme = std::fs::read_to_string(dir.join("README.md")).unwrap();
+        assert!(readme.contains("## Évidence réglementaire"), "le README gagne la section reg");
+        assert!(readme.contains("reg/REDERIVE.md"));
+        let _ = std::fs::remove_dir_all(&dir);
+
+        // Sans pièces reg/ → pas de section (et pas de dossier reg/).
+        let dir2 = fresh_dir("noreg");
+        assemble(&good_input(), &key(), &BundleOpts::default(), &dir2).unwrap();
+        assert!(!dir2.join("reg").exists(), "aucun dossier reg/ sans pièce");
+        assert!(!std::fs::read_to_string(dir2.join("README.md")).unwrap().contains("Évidence réglementaire"));
+        let _ = std::fs::remove_dir_all(&dir2);
+    }
+
+    #[test]
+    fn rejects_unsafe_reg_attachment_paths() {
+        // Frontière de sécurité : traversée, absolu, hors-reg/, dossier-lui-même sont refusés — rien n'est
+        // finalisé hors du bundle (le staging est effacé sur erreur).
+        for (rel, why) in [
+            ("reg/../escape.md", "traversee"),
+            ("/etc/passwd", "absolu"),
+            ("evil.md", "hors_reg"),
+            ("reg/", "dossier"),
+            ("reg/sub/../../x", "traversee_profonde"),
+            ("reg/a\\b.md", "antislash"),
+        ] {
+            let dir = fresh_dir(&format!("regbad-{why}"));
+            let opts = BundleOpts { reg_attachments: vec![(rel.into(), "x".into())], ..Default::default() };
+            let r = assemble(&good_input(), &key(), &opts, &dir);
+            assert!(matches!(r, Err(ExportError::RegAttachment(_))), "chemin « {rel} » ({why}) doit être refusé : {r:?}");
+            assert!(!dir.exists() || std::fs::read_dir(&dir).map(|mut d| d.next().is_none()).unwrap_or(true), "rien de finalisé pour {rel}");
+        }
+        // Doublon explicite → refusé (pas d'écrasement silencieux).
+        let dir = fresh_dir("regdup");
+        let opts = BundleOpts { reg_attachments: vec![("reg/a.md".into(), "1".into()), ("reg/a.md".into(), "2".into())], ..Default::default() };
+        assert!(matches!(assemble(&good_input(), &key(), &opts, &dir), Err(ExportError::RegAttachment(_))), "doublon refusé");
+    }
+
+    #[test]
+    fn reg_attachment_filesystem_collision_is_rejected_not_silently_merged() {
+        // Collision casse/normalisation : deux chemins distincts en octets visant le MÊME fichier sur un FS
+        // insensible à la casse (APFS/NTFS) → REFUSÉ (jamais d'écrasement silencieux). Sur un FS sensible à
+        // la casse (Linux), ce sont deux fichiers distincts → les deux voyagent. On détecte le FS et adapte.
+        let probe = std::env::temp_dir().join(format!("s4-fscase-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&probe);
+        std::fs::create_dir_all(&probe).unwrap();
+        std::fs::write(probe.join("Probe"), b"x").unwrap();
+        let case_insensitive = probe.join("probe").exists();
+        let _ = std::fs::remove_dir_all(&probe);
+
+        let dir = fresh_dir("regcase");
+        let opts = BundleOpts { reg_attachments: vec![("reg/Frame.md".into(), "UP\n".into()), ("reg/frame.md".into(), "low\n".into())], ..Default::default() };
+        let r = assemble(&good_input(), &key(), &opts, &dir);
+        if case_insensitive {
+            assert!(matches!(r, Err(ExportError::RegAttachment(_))), "FS insensible à la casse → collision refusée (pas d'écrasement silencieux) : {r:?}");
+            assert!(!dir.exists() || std::fs::read_dir(&dir).map(|mut d| d.next().is_none()).unwrap_or(true), "rien de finalisé");
+        } else {
+            assert!(r.is_ok(), "FS sensible à la casse → deux fichiers distincts : {r:?}");
+            assert!(dir.join("reg/Frame.md").exists() && dir.join("reg/frame.md").exists(), "les deux voyagent");
+            let _ = std::fs::remove_dir_all(&dir);
+        }
+    }
+
+    #[test]
+    fn readme_reg_section_requires_the_rederive_guide() {
+        // Honnêteté : le README n'annonce la re-dérivation QUE si reg/REDERIVE.md voyage réellement. Une
+        // pièce reg/ arbitraire SANS guide → elle voyage (et est dans le MANIFEST) mais le README ne
+        // sur-promet pas un fichier absent.
+        let dir = fresh_dir("regnoguide");
+        let opts = BundleOpts { reg_attachments: vec![("reg/note.md".into(), "juste une note\n".into())], ..Default::default() };
+        assemble(&good_input(), &key(), &opts, &dir).unwrap();
+        assert!(dir.join("reg/note.md").exists(), "la pièce reg/ voyage quand même");
+        assert!(std::fs::read_to_string(dir.join("MANIFEST.sha256")).unwrap().contains("reg/note.md"), "et elle est dans le MANIFEST");
+        assert!(!std::fs::read_to_string(dir.join("README.md")).unwrap().contains("Évidence réglementaire"), "mais le README n'annonce PAS un guide absent");
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

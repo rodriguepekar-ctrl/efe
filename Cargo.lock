@@ -6876,6 +6876,7 @@ name = "reg-evidence"
 version = "0.0.1"
 dependencies = [
  "audit-api",
+ "forensic-export",
  "provenance-capture",
  "provenance-dag",
  "serde",
