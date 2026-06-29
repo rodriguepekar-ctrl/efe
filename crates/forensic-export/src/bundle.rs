@@ -7,8 +7,10 @@
 //! **README** du sceptique. La **clé** sert à re-prouver mais n'est **JAMAIS** écrite (I-S4-SANS-CLÉ,
 //! structurel : aucun chemin de code n'écrit la clé).
 
+use crate::anchor::{self, AnchorProof};
 use crate::{manifest, readme, vendor};
-use provenance_dag::{reprove_dag, verify_against_root, SealedDag, TenantKey};
+use provenance_dag::{reprove_dag, verify_against_root, Record, SealedDag, TenantKey};
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
 /// L'entrée de l'assembleur — le **contenu** d'export (mappé depuis l'`ExportContent` de S2 par l'appelant ;
@@ -30,9 +32,10 @@ pub struct BundleInput {
 /// Les options d'assemblage.
 #[derive(Debug, Clone, Default)]
 pub struct BundleOpts {
-    /// **Preuve d'ancrage** externe (jeton RFC 3161 / reçu de log de transparence) — obtenue par le
-    /// déploiement et **portée** ici (forensic-export ne fait PAS l'appel réseau). `None` = pas d'ancrage.
-    pub anchor: Option<Vec<u8>>,
+    /// **Preuve d'ancrage** STRUCTURÉE (§6) — obtenue par le déploiement (forensic-export ne fait PAS
+    /// l'appel réseau). On la **vérifie** (liaison de root) avant de l'écrire ; un ancrage qui commet un
+    /// AUTRE root est refusé. `None` = pas d'ancrage. Cf. [`crate::anchor`].
+    pub anchor: Option<AnchorProof>,
     /// Hash du binaire de référence (build reproductible côté déploiement) — optionnel ; le tiers re-compile.
     pub expected_binary_sha256: Option<String>,
     /// Étiquette du tenant pour le README (PAS la clé).
@@ -52,6 +55,14 @@ pub enum ExportError {
     RootMismatch { expected: String, got: String },
     /// Le dossier de sortie existe déjà et n'est **pas vide** (on refuse de polluer le bundle).
     DirNotEmpty(PathBuf),
+    /// Le récit cite un `node_id` **absent** des records re-prouvés (récit non adossé — RÉCIT=VUE imposé
+    /// à l'assemblage : aucune citation fantôme ne part dans un bundle).
+    ReportCitation(String),
+    /// La preuve d'ancrage commet un **autre** root que le DAG empaqueté (ancrage non probant — refusé).
+    AnchorRootMismatch { bound: String, expected: String },
+    /// La preuve d'ancrage est **mal formée** (émetteur vide, caractère de contrôle, reçu manquant pour
+    /// une méthode cryptographique…) — on n'empaquette pas un ancrage non vérifiable.
+    AnchorMalformed(String),
 }
 impl std::fmt::Display for ExportError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -68,6 +79,11 @@ impl std::fmt::Display for ExportError {
                 write!(f, "manifest-root annoncé « {expected} » ≠ re-dérivé « {got} »")
             }
             ExportError::DirNotEmpty(p) => write!(f, "dossier de sortie non vide : {}", p.display()),
+            ExportError::ReportCitation(node) => write!(f, "le récit cite un nœud absent des records : « {node} »"),
+            ExportError::AnchorRootMismatch { bound, expected } => {
+                write!(f, "ancrage non probant : commet « {bound} » ≠ root du DAG « {expected} »")
+            }
+            ExportError::AnchorMalformed(m) => write!(f, "ancrage mal formé : {m}"),
         }
     }
 }
@@ -112,6 +128,23 @@ pub fn assemble(
     }
     // (cohérence belt-and-suspenders : verify_against_root rend le même verdict)
     debug_assert!(verify_against_root(&records, key, &input.manifest_root).ok);
+
+    // ── 3bis. Garde ANTI-CITATION-FANTÔME : aucune citation vers un nœud absent ne part dans un bundle
+    //    (les records sont re-prouvés, donc l'ensemble des node_id est de confiance). N.B. : ceci ne
+    //    vérifie PAS la justesse des affirmations du récit — la régénération exacte « récit = vue » est
+    //    la propriété du rendeur S2 (cf. tests/recit_is_a_view.rs), obtenu séparément. ──
+    validate_report_citations(&records, &input.report)?;
+
+    // ── 3ter. ANCRAGE (§6) : s'il est fourni, il doit être PROBANT pour CE DAG — on refuse un ancrage
+    //    qui commet un autre root (RootMismatch) ET un ancrage mal formé (Malformed). Match exhaustif :
+    //    une future variante d'AnchorOutcome casserait la compilation plutôt que de filer en douce. ──
+    if let Some(proof) = &opts.anchor {
+        match anchor::verify_anchor(proof, &input.manifest_root) {
+            anchor::AnchorOutcome::Bound { .. } => {}
+            anchor::AnchorOutcome::RootMismatch { bound, expected } => return Err(ExportError::AnchorRootMismatch { bound, expected }),
+            anchor::AnchorOutcome::Malformed(m) => return Err(ExportError::AnchorMalformed(m)),
+        }
+    }
 
     // ── 4. garde : out_dir doit être absent ou VIDE. On **propage** l'erreur de `read_dir` (un échec
     //    de lecture ne vaut PAS « vide » — sinon on écrirait par-dessus un dossier illisible). ──
@@ -163,8 +196,10 @@ fn write_all(dir: &Path, input: &BundleInput, opts: &BundleOpts, n_records: usiz
     std::fs::write(dir.join("manifest.root"), format!("{}\n", input.manifest_root))?;
     std::fs::write(dir.join("report.md"), &input.report)?;
     vendor::write_verify_src(&dir.join("verify"))?;
-    if let Some(anchor) = &opts.anchor {
-        std::fs::write(dir.join("anchor.proof"), anchor)?;
+    if let Some(proof) = &opts.anchor {
+        // (assemble a déjà validé l'ancrage ; encode peut néanmoins refuser un champ de contrôle.)
+        let encoded = proof.encode().map_err(|e| ExportError::AnchorMalformed(e.to_string()))?;
+        std::fs::write(dir.join("anchor.proof"), encoded)?; // preuve STRUCTURÉE (cf. anchor.rs)
     }
     if let Some(hash) = &opts.expected_binary_sha256 {
         std::fs::write(dir.join("EXPECTED_BINARY.sha256"), format!("{hash}\n"))?;
@@ -177,10 +212,32 @@ fn write_all(dir: &Path, input: &BundleInput, opts: &BundleOpts, n_records: usiz
         sealed_scope: &input.sealed_scope,
         report_cases: &input.report_cases,
         vendored_lines: vendor::vendored_line_count(),
-        has_anchor: opts.anchor.is_some(),
+        anchor: opts.anchor.as_ref(),
     });
     std::fs::write(dir.join("README.md"), readme)?;
     manifest::write_manifest(dir).map_err(ExportError::Io)
+}
+
+/// Extrait les `node_id` cités dans le récit : les tokens entre backticks contenant « :: » (la convention
+/// de citation de S2, ex. `` `SUP-A::sanction` ``). On ne filtre **pas** sur l'espace — un `node_id` PEUT
+/// en contenir (S1 n'interdit que « :: » et le vide dans un segment), donc une citation à espace doit être
+/// validée, pas ignorée.
+fn extract_cited_node_ids(report: &str) -> impl Iterator<Item = &str> {
+    report.split('`').filter(|t| t.contains("::"))
+}
+
+/// **Garde anti-citation-fantôme** : tout `node_id` cité par le récit doit exister dans les records
+/// re-prouvés — aucune citation vers un nœud absent ne part dans un bundle. (Ceci NE vérifie PAS la
+/// justesse des affirmations ; la régénération exacte « récit = vue » est la propriété du rendeur S2,
+/// obtenu séparément — cf. `tests/recit_is_a_view.rs` et le README.)
+fn validate_report_citations(records: &[Record], report: &str) -> Result<(), ExportError> {
+    let ids: HashSet<&str> = records.iter().map(|r| r.node.id()).collect();
+    for cited in extract_cited_node_ids(report) {
+        if !ids.contains(cited) {
+            return Err(ExportError::ReportCitation(cited.to_string()));
+        }
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -276,12 +333,50 @@ mod tests {
     }
 
     #[test]
-    fn anchor_is_carried_when_present() {
+    fn structured_anchor_is_carried_and_root_bound() {
         let dir = fresh_dir("anchor");
-        let opts = BundleOpts { anchor: Some(b"RFC3161-TOKEN-BYTES".to_vec()), ..Default::default() };
-        assemble(&good_input(), &key(), &opts, &dir).unwrap();
-        assert_eq!(std::fs::read(dir.join("anchor.proof")).unwrap(), b"RFC3161-TOKEN-BYTES");
-        assert!(std::fs::read_to_string(dir.join("README.md")).unwrap().contains("anchor.proof"), "le README documente l'ancrage présent");
+        let input = good_input();
+        let proof = AnchorProof {
+            method: anchor::AnchorMethod::Rfc3161,
+            issuer: "acme-tsa".into(),
+            bound_root: input.manifest_root.clone(), // ancre CE root
+            timestamp: 1_700_000_000,
+            receipt: vec![0xde, 0xad, 0xbe, 0xef],
+        };
+        let opts = BundleOpts { anchor: Some(proof.clone()), ..Default::default() };
+        assemble(&input, &key(), &opts, &dir).unwrap();
+        // anchor.proof est la preuve STRUCTURÉE, re-décodable à l'identique.
+        let written = std::fs::read(dir.join("anchor.proof")).unwrap();
+        assert_eq!(AnchorProof::decode(&written).unwrap(), proof);
+        assert!(std::fs::read_to_string(dir.join("README.md")).unwrap().contains("rfc3161"), "le README décrit l'ancrage");
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn refuses_an_anchor_committing_a_different_root() {
+        // Cœur de l'attaque « ancrer un autre DAG » : un ancrage qui ne commet pas CE root est refusé.
+        let dir = fresh_dir("anchor-bad");
+        let proof = AnchorProof { method: anchor::AnchorMethod::Declared, issuer: "x".into(), bound_root: "00".repeat(32), timestamp: 1, receipt: vec![] };
+        let opts = BundleOpts { anchor: Some(proof), ..Default::default() };
+        assert!(matches!(assemble(&good_input(), &key(), &opts, &dir), Err(ExportError::AnchorRootMismatch { .. })));
+    }
+
+    #[test]
+    fn refuses_a_malformed_anchor() {
+        // Pas seulement RootMismatch : un ancrage MAL FORMÉ (méthode crypto sans reçu) est aussi refusé.
+        let dir = fresh_dir("anchor-malformed");
+        let input = good_input();
+        let proof = AnchorProof { method: anchor::AnchorMethod::Rfc3161, issuer: "tsa".into(), bound_root: input.manifest_root.clone(), timestamp: 1, receipt: vec![] };
+        let opts = BundleOpts { anchor: Some(proof), ..Default::default() };
+        assert!(matches!(assemble(&input, &key(), &opts, &dir), Err(ExportError::AnchorMalformed(_))), "rfc3161 sans reçu → refusé");
+    }
+
+    #[test]
+    fn refuses_a_report_citing_a_phantom_node() {
+        // RÉCIT=VUE à l'assemblage : un récit qui cite un nœud absent des records est refusé.
+        let dir = fresh_dir("phantom");
+        let mut input = good_input();
+        input.report = "- contrôle bidon _[`SUP-A::fantome`]_\n".into();
+        assert!(matches!(assemble(&input, &key(), &BundleOpts::default(), &dir), Err(ExportError::ReportCitation(ref n)) if n == "SUP-A::fantome"));
     }
 }

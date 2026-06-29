@@ -57,6 +57,49 @@ cargo build --release --offline 2>/dev/null || cargo build --release\n\
 echo \"binaire : $(pwd)/target/release/provenance-verify\"\n\
 echo \"usage   : ./provenance-verify ../../records.sealed.jsonl --key-hex <K_tenant> --root <manifest.root>\"\n";
 
+/// **La spécification math**, langage-neutre, pour ré-implémenter le vérifieur dans N'IMPORTE quel langage
+/// (et donc survivre même à Rust). Pure DATA — pas de parser, pas de crypto. Couvre la récurrence de
+/// chaîne, l'encodage canonique BINAIRE des nœuds (la part qui DOIT être byte-exacte), et des vecteurs de
+/// test SHA-256 / HMAC-SHA256 pour valider une ré-implémentation.
+const SPEC_MD: &str = "# Spécification du vérifieur (langage-neutre)\n\n\
+But : permettre de **ré-implémenter** la re-preuve dans tout langage et d'obtenir le **même** verdict —\n\
+sans dépendre de Rust ni de nous. Tout ci-dessous est public et standard.\n\n\
+## 1. Récurrence de chaîne\n\n\
+```\n\
+chain_0   = SHA256(\"efe-prov-dag:v1:genesis\")             (32 octets ; GENESIS = ces octets ASCII)\n\
+seal_i    = HMAC-SHA256(K_tenant, chain_{i-1} || canonical(node_i))\n\
+chain_i   = seal_i\n\
+manifest_root = hex(chain_last)\n\
+```\n\
+La re-preuve recalcule chaque `seal_i` et le compare (temps constant) au sceau stocké (hex) du record i.\n\
+Intégrité structurelle : les références d'un nœud doivent exister parmi les nœuds ANTÉRIEURS ; ids uniques.\n\n\
+## 2. Encodage canonique BINAIRE d'un nœud (byte-exact — la part critique)\n\n\
+Helpers : `put_str(s)` = `u32_be(longueur_octets(s)) || octets_utf8(s)` ; `put_u64(v)` = `v` en big-endian (8 octets).\n\
+Chaque nœud = un octet de TYPE, puis ses champs dans CET ordre :\n\
+```\n\
+AgentAct (type 1) : put_str(node_id) put_str(agent_role) put_str(inputs_hash) put_str(model)\n\
+                    put_str(version) put_str(output) u32_be(N) [put_str(evidence_ref) ×N] put_u64(timestamp)\n\
+Edge     (type 2) : put_str(edge_id) put_str(from_node) put_str(to_node) put_str(artifact_hash)\n\
+                    put_str(artifact_type) put_u64(timestamp)\n\
+Evidence (type 3) : put_str(evidence_id) put_str(tool) put_str(query_hash) put_str(retrieved_ref)\n\
+                    put_str(content_hash) put_str(consumed_by_node) put_u64(timestamp)\n\
+Human    (type 4) : put_str(node_id) put_str(human_id) u8(action) put_str(target_node)\n\
+                    put_str(justification) put_u64(timestamp)\n\
+                    action : Approve=1 Override=2 Escalate=3 Comment=4\n\
+```\n\
+(Le JSONL ne sert qu'au stockage ; le sceau est calculé sur cet encodage binaire, non sur le JSON.)\n\n\
+## 3. Vecteurs de test (validez votre ré-implémentation)\n\n\
+SHA-256 (FIPS 180-4) :\n\
+```\n\
+SHA256(\"\")    = e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\n\
+SHA256(\"abc\") = ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad\n\
+```\n\
+HMAC-SHA256 (RFC 4231, test 1 ; clé = 0x0b ×20, message = \"Hi There\") :\n\
+```\n\
+HMAC = b0344c61d8db38535ca8afceaf0bf12b881dc200c9833da726e9376c2e32cff7\n\
+```\n\
+Les modules de test du cœur (`sha256.rs`, `hmac.rs`) contiennent davantage de vecteurs (deux-blocs, million de 'a', RFC 4231 #4/#6).\n";
+
 /// README du sous-dossier `verify/` (comment re-compiler &amp; exécuter).
 const VERIFY_README: &str = "# Le vérifieur autonome (à re-compiler vous-même)\n\n\
 Vous n'avez **rien** à nous faire confiance. La procédure :\n\n\
@@ -88,9 +131,10 @@ pub fn write_verify_src(verify_dir: &Path) -> std::io::Result<()> {
     fs::create_dir_all(&pv_src)?;
     fs::write(verify_dir.join("provenance-verify/Cargo.toml"), VERIFY_CARGO)?;
     fs::write(pv_src.join("main.rs"), VERIFY_MAIN)?;
-    // Build + guide.
+    // Build + guide + spéc math (langage-neutre).
     fs::write(verify_dir.join("build.sh"), BUILD_SH)?;
     fs::write(verify_dir.join("README.md"), VERIFY_README)?;
+    fs::write(verify_dir.join("SPEC.md"), SPEC_MD)?;
     Ok(())
 }
 
@@ -148,6 +192,36 @@ mod tests {
         let pv_cargo = std::fs::read_to_string(dir.join("provenance-verify/Cargo.toml")).unwrap();
         assert!(pv_cargo.contains("path = \"../provenance-dag\""));
         assert!(!pv_cargo.contains("workspace = true"), "Cargo.toml autonome (pas d'héritage workspace)");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn vendored_core_deps_are_exactly_serde() {
+        // I-S4-ZÉRO-DÉP : le Cargo.toml du cœur vendoré ne déclare QUE serde/serde_json (aucune crate
+        // crypto, aucune autre) — garde build-breaking contre une dérive de dépendance du fossé.
+        let deps: std::collections::BTreeSet<&str> = DAG_CARGO
+            .lines()
+            .skip_while(|l| l.trim() != "[dependencies]")
+            .skip(1)
+            .take_while(|l| !l.trim_start().starts_with('['))
+            .filter_map(|l| l.split('=').next().map(str::trim))
+            .filter(|n| !n.is_empty())
+            .collect();
+        assert_eq!(deps, ["serde", "serde_json"].into_iter().collect(), "cœur = exactement {{serde, serde_json}} : {deps:?}");
+        assert!(VERIFY_CARGO.contains("provenance-dag = { path = \"../provenance-dag\" }"));
+        assert!(!VERIFY_CARGO.contains("serde"), "le CLI lui-même ne déclare pas serde directement");
+    }
+
+    #[test]
+    fn spec_md_is_written_and_describes_the_recurrence() {
+        let dir = std::env::temp_dir().join(format!("s4-spec-test-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        write_verify_src(&dir).unwrap();
+        let spec = std::fs::read_to_string(dir.join("SPEC.md")).unwrap();
+        assert!(spec.contains("efe-prov-dag:v1:genesis"), "la genèse est spécifiée");
+        assert!(spec.contains("HMAC-SHA256"), "la récurrence HMAC est spécifiée");
+        assert!(spec.contains("canonical"), "l'encodage canonique est spécifié");
+        assert!(spec.contains("ba7816bf8f01cfea"), "vecteur SHA-256(abc) présent pour valider une ré-impl");
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

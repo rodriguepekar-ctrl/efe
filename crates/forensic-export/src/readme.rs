@@ -13,18 +13,35 @@ pub struct ReadmeCtx<'a> {
     pub sealed_scope: &'a str,
     pub report_cases: &'a [String],
     pub vendored_lines: usize,
-    pub has_anchor: bool,
+    /// La preuve d'ancrage structurée, si présente (cf. [`crate::anchor`]).
+    pub anchor: Option<&'a crate::anchor::AnchorProof>,
 }
 
 /// Rend le README.md du bundle.
 pub fn render(ctx: &ReadmeCtx) -> String {
-    let ReadmeCtx { tenant_label, manifest_root, n_records, sealed_scope, report_cases, vendored_lines, has_anchor } = *ctx;
-    let anchor_block = if has_anchor {
-        "Ce bundle inclut **`anchor.proof`** : une preuve d'**ancrage externe** du `manifest.root` (p. ex. \
-un jeton d'horodatage RFC 3161, ou un reçu de log de transparence). Elle atteste que **ce root existait \
-au temps T** — donc que le record a été **engagé avant tout litige**, et n'a pas pu être fabriqué \
-a posteriori. Vérifiez `anchor.proof` auprès de l'autorité d'ancrage indiquée, **indépendamment** de nous."
-            .to_string()
+    let ReadmeCtx { tenant_label, manifest_root, n_records, sealed_scope, report_cases, vendored_lines, anchor } = *ctx;
+    let anchor_block = if let Some(p) = anchor {
+        if p.method == crate::anchor::AnchorMethod::Declared {
+            // **Déclaration interne** : aucune force probante externe → NE PAS prétendre la non-fabrication.
+            format!(
+                "Ce bundle inclut **`anchor.proof`** de méthode **declared** (émetteur « {} », temps T = {}) : \
+une **déclaration interne**, **sans force probante externe** par construction. Elle **n'établit PAS** que le \
+record n'a pas été fabriqué a posteriori (le déclarant et le détenteur de la clé peuvent être la même partie). \
+Pour une preuve **opposable au détenteur**, exigez un ancrage à **reçu externe vérifiable** (RFC 3161 / log de \
+transparence / dépôt régulateur).",
+                p.issuer, p.timestamp
+            )
+        } else {
+            // Reçu d'un tiers → non-fabrication, **sous réserve** de vérifier ce reçu auprès de l'émetteur.
+            format!(
+                "Ce bundle inclut **`anchor.proof`** : un ancrage du `manifest.root` (méthode **{}**, émetteur \
+« {} », temps T = {}). Contrôle **immédiat, sans nous** : `bound_root` dans `anchor.proof` doit **égaler** \
+`manifest.root` (la preuve commet bien CE DAG). **Sous réserve de vérifier le reçu auprès de l'autorité \
+d'ancrage** (jeton RFC 3161 / signature / inclusion dans un log), elle atteste que **ce root existait au temps \
+T** — le record a été **engagé avant tout litige** et n'a pas pu être fabriqué a posteriori.",
+                p.method.as_str(), p.issuer, p.timestamp
+            )
+        }
     } else {
         "Ce bundle **n'inclut pas** de preuve d'ancrage externe. La re-preuve atteste alors l'intégrité et \
 la **non-répudiation par le détenteur de la clé** — mais **pas** que ce détenteur n'a pas **fabriqué** le \
@@ -110,15 +127,17 @@ Le bundle se vérifie **hors-ligne**, et **survit au vendeur**.\n"
 mod tests {
     use super::*;
 
-    fn ctx<'a>(root: &'a str, cases: &'a [String], anchor: bool) -> ReadmeCtx<'a> {
-        ReadmeCtx { tenant_label: "acme", manifest_root: root, n_records: 6, sealed_scope: "full-tenant-dag", report_cases: cases, vendored_lines: 400, has_anchor: anchor }
+    use crate::anchor::{AnchorMethod, AnchorProof};
+
+    fn ctx<'a>(root: &'a str, cases: &'a [String], anchor: Option<&'a AnchorProof>) -> ReadmeCtx<'a> {
+        ReadmeCtx { tenant_label: "acme", manifest_root: root, n_records: 6, sealed_scope: "full-tenant-dag", report_cases: cases, vendored_lines: 400, anchor }
     }
 
     #[test]
     fn readme_carries_the_integrite_neq_inforgeable_statement() {
         let root = "ab".repeat(32);
         let cases = vec!["SUP-A".to_string()];
-        let md = render(&ctx(&root, &cases, false));
+        let md = render(&ctx(&root, &cases, None));
         // I-S4-INTÈGRE≠INFORGEABLE : le libellé est présent (les deux distinctions).
         assert!(md.contains("≠ correct"), "intègre ≠ correct énoncé");
         assert!(md.contains("≠ inforgeable"), "intègre ≠ inforgeable énoncé");
@@ -129,11 +148,21 @@ mod tests {
     }
 
     #[test]
-    fn anchor_block_changes_with_presence() {
+    fn anchor_block_is_method_dependent_and_honest() {
         let none: Vec<String> = vec![];
-        let with = render(&ctx("r", &none, true));
-        let without = render(&ctx("r", &none, false));
-        assert!(with.contains("anchor.proof"), "bloc ancrage présent");
+        let rfc = AnchorProof { method: AnchorMethod::Rfc3161, issuer: "acme-tsa".into(), bound_root: "r".into(), timestamp: 42, receipt: vec![1] };
+        let declared = AnchorProof { method: AnchorMethod::Declared, issuer: "interne".into(), bound_root: "r".into(), timestamp: 42, receipt: vec![] };
+        let with = render(&ctx("r", &none, Some(&rfc)));
+        let with_declared = render(&ctx("r", &none, Some(&declared)));
+        let without = render(&ctx("r", &none, None));
+        // RFC 3161 : non-fabrication, mais SOUS RÉSERVE de vérifier le reçu.
+        assert!(with.contains("rfc3161") && with.contains("acme-tsa"), "le bloc décrit la méthode/émetteur");
+        assert!(with.to_lowercase().contains("sous réserve"), "non-fabrication conditionnée au reçu");
+        assert!(with.contains("engagé avant tout litige"));
+        // Declared : self-attesté → AUCUNE prétention de non-fabrication (corrige l'over-claim HIGH).
+        assert!(with_declared.contains("sans force probante"), "declared est honnêtement self-attesté");
+        assert!(with_declared.contains("n'établit PAS"), "declared n'affirme pas la non-fabrication");
+        assert!(!with_declared.contains("engagé avant tout litige"), "declared n'emploie pas la formule de non-fabrication");
         assert!(without.contains("n'inclut pas"), "bloc sans-ancrage honnête");
         assert_ne!(with, without);
     }

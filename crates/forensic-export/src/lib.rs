@@ -36,11 +36,13 @@
 //! let _ = std::fs::remove_dir_all(&out);
 //! ```
 
+pub mod anchor;
 pub mod bundle;
 pub mod manifest;
 pub mod readme;
 pub mod vendor;
 
+pub use anchor::{verify_anchor, AnchorError, AnchorMethod, AnchorOutcome, AnchorProof};
 pub use bundle::{assemble, BundleInput, BundleManifest, BundleOpts, ExportError};
 pub use manifest::{list_files, sha256_hex, write_manifest};
 pub use readme::ReadmeCtx;
