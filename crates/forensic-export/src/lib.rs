@@ -30,7 +30,7 @@
 //! let out = std::env::temp_dir().join("efe-s4-doctest-bundle");
 //! let _ = std::fs::remove_dir_all(&out);
 //! let m = assemble(&input, &k, &BundleOpts::default(), &out).unwrap();
-//! assert!(out.join("verify/provenance-verify/src/main.rs").exists()); // source vendorée, re-compilable
+//! assert!(out.join("verify/verify-mini/src/main.rs").exists()); // source vendorée (zéro-dép), re-compilable
 //! assert!(out.join("README.md").exists());                            // le guide du sceptique
 //! assert_eq!(m.n_records, 1);
 //! let _ = std::fs::remove_dir_all(&out);

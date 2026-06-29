@@ -79,7 +79,7 @@ fn export_tar_is_extractable_and_keyless() {
     match Command::new("tar").args(["-xf", tar_path.to_str().unwrap(), "-C", dir.to_str().unwrap()]).status() {
         Ok(s) if s.success() => {
             assert!(dir.join("records.sealed.jsonl").exists(), "le record scellé est dans le bundle");
-            assert!(dir.join("verify/provenance-verify/src/main.rs").exists(), "la source du vérifieur (à re-compiler)");
+            assert!(dir.join("verify/verify-mini/src/main.rs").exists(), "la source du vérifieur zéro-dép (à re-compiler)");
             assert!(dir.join("reg/eu_ai_act.md").exists(), "l'évidence réglementaire (S6) voyage");
             assert!(dir.join("MANIFEST.sha256").exists() && dir.join("README.md").exists());
             // Aucun fichier extrait ne contient la clé.

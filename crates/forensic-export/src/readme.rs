@@ -88,14 +88,15 @@ plus dans dix ans.\n\
 ## Comment vérifier VOUS-MÊME (sans nous faire confiance)\n\
 \n\
 1. **Lisez** la source du vérifieur dans `verify/` (~{vendored_lines} lignes : SHA-256 + HMAC écrits à la \
-main, prouvés par vecteurs NIST/RFC, et le CLI). Lisible en une heure.\n\
+main, prouvés par vecteurs NIST/RFC, parseur JSONL fait main, et le CLI). **ZÉRO dépendance** (cargo tree = \
+verify-mini seul). Lisible attentivement en une à deux heures.\n\
 2. **Re-compilez-la** : `cd verify && ./build.sh` — vous obtenez **VOTRE** binaire, pas le nôtre (un \
 binaire livré pourrait mentir ; le vôtre ne le peut pas).\n\
 3. **Obtenez la clé tenant** `K_tenant` auprès du **responsable de traitement** (elle n'est **PAS** dans \
 ce bundle — voir « La clé »).\n\
 4. **Vérifiez** :\n\
    ```\n\
-   ./verify/provenance-verify/target/release/provenance-verify \\\n\
+   ./verify/verify-mini/target/release/verify-mini \\\n\
        records.sealed.jsonl --key-hex <K_tenant> --root {manifest_root}\n\
    ```\n\
    Code de sortie **0** ⇔ « ces records sont **authentiques &amp; non-altérés**, scellés sous K_tenant ».\n\

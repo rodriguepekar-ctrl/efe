@@ -4,10 +4,11 @@
 //! **comme le ferait un tiers**, on **re-compile la source vendorée** du vérifieur (hors du dépôt) et on la
 //! **fait tourner** sur les records : exit **0** sur l'authentique, exit **1** sur l'altéré.
 //!
-//! Caveat de cache honnête : la build standalone tire `serde` du cache cargo. On compile en `--offline`
-//! (cache chaud) ; si le cache est **froid** (CI air-gappée sans cache), on **saute** proprement le test
-//! (sans le faire échouer). Mais une **erreur de compilation** de la source vendorée (régression réelle du
-//! fossé) fait, elle, **échouer** le test — c'est exactement la garde qui manquait.
+//! Le vérifieur vendoré est désormais `verify-mini` : arbre de dépendances **LITTÉRALEMENT VIDE** (plus de
+//! `serde`). Donc `cargo build --offline` réussit **toujours** — même sur une machine air-gappée **sans
+//! cache** (il n'y a rien à télécharger). Plus de « skip sur cache froid » : toute erreur de compilation de
+//! la source vendorée est une **régression du fossé** et fait **échouer** le test. (On ne saute que si
+//! `cargo` lui-même est introuvable.) Le swap renforce donc cette garde au lieu de l'affaiblir.
 
 use forensic_export::{assemble, BundleInput, BundleOpts};
 use provenance_dag::{Node, SealedDag, TenantKey};
@@ -42,7 +43,7 @@ fn third_party_recompiles_vendored_verify_and_reproves_offline() {
     let root = build_bundle(&bundle);
 
     // 1. RE-COMPILER la source vendorée, hors-process, hors workspace (cible temporaire dédiée).
-    let pv_manifest = bundle.join("verify/provenance-verify/Cargo.toml");
+    let pv_manifest = bundle.join("verify/verify-mini/Cargo.toml");
     let target = base.join("target");
     let build = Command::new("cargo")
         .args(["build", "--release", "--offline", "--manifest-path"])
@@ -59,20 +60,12 @@ fn third_party_recompiles_vendored_verify_and_reproves_offline() {
     };
     if !build.status.success() {
         let err = String::from_utf8_lossy(&build.stderr);
-        // Une vraie erreur de COMPILATION (diagnostic rustc) est une régression du fossé → ÉCHEC DUR,
-        // **prioritaire** sur le heuristique de cache (qui ne doit jamais masquer un code qui ne compile plus).
-        let real_compile_error = err.contains("error[E") || err.contains("could not compile") || err.contains("error: expected") || err.contains("cannot find");
-        let cache_miss = ["offline", "download", "no matching package", "registry index", "not available", "failed to get"]
-            .iter()
-            .any(|m| err.contains(m));
-        if cache_miss && !real_compile_error {
-            eprintln!("SKIP trustless-e2e : build offline indisponible (cache froid) — {}", err.lines().next().unwrap_or(""));
-            let _ = std::fs::remove_dir_all(&base);
-            return;
-        }
-        panic!("RÉGRESSION DU FOSSÉ : la source vendorée NE COMPILE PAS hors du dépôt :\n{err}");
+        // Le vérifieur vendoré (verify-mini) a un arbre de dépendances VIDE → `--offline` réussit TOUJOURS
+        // (rien à télécharger, même air-gappé sans cache). Donc plus de « skip sur cache froid » : il n'y a
+        // pas de cache à manquer. Tout échec de compilation est une RÉGRESSION DU FOSSÉ → échec dur.
+        panic!("RÉGRESSION DU FOSSÉ : la source vendorée (zéro-dép) NE COMPILE PAS hors du dépôt en --offline :\n{err}");
     }
-    let bin = target.join("release/provenance-verify");
+    let bin = target.join("release/verify-mini");
     assert!(bin.exists(), "le vérifieur re-compilé est produit");
 
     // 2. RE-PROUVER le bundle authentique → exit 0.

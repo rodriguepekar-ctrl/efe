@@ -348,13 +348,13 @@ mod tests {
         let dir = fresh_dir("ok");
         let m = assemble(&good_input(), &key(), &BundleOpts { tenant_label: "acme".into(), ..Default::default() }, &dir).unwrap();
         assert_eq!(m.n_records, 1);
-        for f in ["records.sealed.jsonl", "manifest.root", "report.md", "README.md", "MANIFEST.sha256", "verify/provenance-verify/src/main.rs", "verify/provenance-dag/src/dag.rs", "verify/build.sh"] {
+        for f in ["records.sealed.jsonl", "manifest.root", "report.md", "README.md", "MANIFEST.sha256", "verify/verify-mini/src/main.rs", "verify/verify-mini/src/verify.rs", "verify/build.sh"] {
             assert!(dir.join(f).exists(), "manquant : {f}");
         }
         // le MANIFEST couvre les fichiers (récursivement) et pas lui-même.
         let man = std::fs::read_to_string(dir.join("MANIFEST.sha256")).unwrap();
         assert!(man.contains("records.sealed.jsonl"));
-        assert!(man.contains("verify/provenance-dag/src/dag.rs"), "le MANIFEST couvre la source vendorée");
+        assert!(man.contains("verify/verify-mini/src/record.rs"), "le MANIFEST couvre la source vendorée");
         assert!(!man.contains("MANIFEST.sha256"), "le MANIFEST ne se hache pas lui-même");
         let _ = std::fs::remove_dir_all(&dir);
     }
