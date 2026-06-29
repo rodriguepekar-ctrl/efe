@@ -1,0 +1,25 @@
+# SPDX-License-Identifier: UNLICENSED
+# Kovant P1 / S4a — forensic-export : l'ASSEMBLEUR du bundle trustless (le fossé).
+# Consomme le seam d'export de S2 + RE-PROUVE (défense en profondeur, ne fait pas confiance à un flag),
+# vendore la SOURCE du vérifieur (provenance-verify + provenance-dag, embarquée par include_str!) pour que
+# le tiers la re-compile, écrit le récit (une vue), le MANIFEST de hachages, et le README du sceptique.
+# La clé sert à re-prouver mais n'est JAMAIS écrite. Dépend du seul provenance-dag (cohérent avec le fossé).
+[package]
+name = "forensic-export"
+version = { workspace = true }
+edition = { workspace = true }
+rust-version = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
+description = "Kovant P1/S4a — assembleur du bundle forensic trustless : re-prouve les records, vendore la source du vérifieur (à re-compiler par un tiers), écrit records scellés + root + récit + MANIFEST + README du sceptique. La clé re-prouve mais n'est jamais écrite. Le bundle se vérifie hors-ligne, sans Kovant/EFE."
+publish = false
+
+[dependencies]
+provenance-dag = { path = "../provenance-dag" }
+
+# Tests d'intégration (tests/) : produire un ExportContent via S2 + re-rendre le récit (récit = vue).
+[dev-dependencies]
+provenance-dag = { path = "../provenance-dag" }
+provenance-capture = { path = "../provenance-capture" }
+audit-api = { path = "../audit-api" }

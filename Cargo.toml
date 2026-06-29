@@ -258,6 +258,10 @@ members = [
     # surfaces S3/S4/S6. Projection pure + intégrité-à-la-lecture + enveloppe « intègre ≠ correct »
     # + isolation tenant + gate d'écriture humaine. Dépend de provenance-dag/-capture + serde.
     "crates/audit-api",
+    # Kovant P1 / S4a — forensic-export : l'assembleur du bundle trustless (le fossé). Re-prouve, vendore
+    # la SOURCE du vérifieur (à re-compiler par un tiers), écrit records scellés + root + récit + MANIFEST
+    # + README du sceptique (« intègre ≠ inforgeable »). La clé re-prouve mais n'est jamais écrite.
+    "crates/forensic-export",
 ]
 
 [workspace.package]
