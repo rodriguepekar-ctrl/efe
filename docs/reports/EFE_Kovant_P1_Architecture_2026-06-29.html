@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>EFE × Kovant — P1 : Architecture du Coin de Provenance (le moteur d'évidence de conformité)</title>
+<style>
+  :root{--ink:#0f172a;--muted:#475569;--soft:#64748b;--line:#e2e8f0;--teal:#0d9488;--teal-d:#0f766e;--indigo:#4f46e5;--indigo-d:#4338ca;--ok:#16a34a;--warn:#d97706;--bad:#dc2626;--bg-tint:#f6fbfa;--bg-card:#eef2f1;--code-bg:#0f172a;--code-fg:#e2e8f0;}
+  *{box-sizing:border-box;} html{font-size:11.2px;}
+  body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,Arial,sans-serif;color:var(--ink);margin:0;line-height:1.6;background:#fff;-webkit-font-smoothing:antialiased;}
+  .wrap{max-width:178mm;margin:0 auto;padding:0 2mm;}
+  h1,h2,h3,h4{line-height:1.2;font-weight:700;}
+  h2{font-size:1.45rem;margin:0 0 .55rem;padding-bottom:.32rem;border-bottom:3px solid var(--teal);}
+  h2 .num{color:var(--teal);} h3{font-size:1.13rem;margin:1.1rem 0 .3rem;color:var(--teal-d);}
+  h4{font-size:1rem;margin:.8rem 0 .2rem;color:var(--indigo-d);}
+  p{margin:.55rem 0;text-align:justify;hyphens:auto;} a{color:var(--indigo);text-decoration:none;}
+  code{font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace;font-size:.85em;background:var(--bg-card);padding:.05em .35em;border-radius:4px;color:#0b3b36;}
+  .muted{color:var(--muted);} .small{font-size:.88rem;}
+  section{break-inside:avoid;} .page{break-before:page;} h2{break-after:avoid;}
+  table{border-collapse:collapse;width:100%;margin:.55rem 0;font-size:.8rem;}
+  th,td{border:1px solid var(--line);padding:.32rem .5rem;text-align:left;vertical-align:top;}
+  th{background:var(--bg-card);font-weight:700;} tbody tr:nth-child(even){background:var(--bg-tint);}
+  td.c,th.c{text-align:center;} .good{background:#dcfce7 !important;color:#166534;font-weight:700;} .mid{background:#fef9c3 !important;color:#854d0e;font-weight:700;} .bad{background:#fee2e2 !important;color:#991b1b;font-weight:700;}
+  .tag{display:inline-block;font-size:.71rem;font-weight:700;padding:.08em .5em;border-radius:20px;}
+  .t-ok{background:#dcfce7;color:#166534;} .t-info{background:#e0e7ff;color:#3730a3;} .t-teal{background:#ccfbf1;color:#115e59;} .t-warn{background:#fef3c7;color:#92400e;} .t-bad{background:#fee2e2;color:#991b1b;}
+  pre{background:var(--code-bg);color:var(--code-fg);padding:.55rem .8rem;border-radius:8px;overflow:auto;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.72rem;line-height:1.45;margin:.55rem 0;}
+  pre code{background:none;color:inherit;padding:0;}
+  .callout{border-left:4px solid var(--teal);background:var(--bg-tint);padding:.55rem .85rem;border-radius:0 8px 8px 0;margin:.65rem 0;}
+  .callout p{text-align:left;margin:.28rem 0;}
+  .callout.key{border-color:var(--indigo);background:#eef2ff;} .callout.warn{border-color:var(--warn);background:#fffbeb;} .callout.ok{border-color:var(--ok);background:#f0fdf4;} .callout.bad{border-color:var(--bad);background:#fef2f2;}
+  .fig{margin:.7rem 0 .9rem;text-align:center;break-inside:avoid;}
+  .fig svg{max-width:100%;height:auto;border:1px solid var(--line);border-radius:10px;background:#fff;}
+  .fig .cap{font-size:.79rem;color:var(--muted);margin-top:.32rem;font-style:italic;text-align:center;}
+  ul,ol{margin:.4rem 0 .55rem 1.1rem;padding:0;} li{margin:.24rem 0;}
+  svg text{font-family:-apple-system,"Segoe UI",Inter,sans-serif;}
+  .cover{height:262mm;display:flex;flex-direction:column;justify-content:center;position:relative;padding:0 6mm;}
+  .cover .eyebrow{color:var(--teal);font-weight:800;letter-spacing:.2em;font-size:.83rem;text-transform:uppercase;}
+  .cover h1{font-size:2.05rem;margin:.4rem 0 .2rem;line-height:1.08;} .cover .sub{font-size:1.16rem;color:var(--muted);margin-bottom:1.1rem;}
+  .cover .tagline{font-size:1.0rem;color:var(--ink);max-width:163mm;border-left:4px solid var(--teal);padding-left:1rem;font-style:italic;text-align:left;}
+  .cover .meta{position:absolute;bottom:6mm;left:6mm;right:6mm;display:flex;justify-content:space-between;border-top:1px solid var(--line);padding-top:.6rem;font-size:.8rem;color:var(--soft);}
+  .cover .pills{margin:1rem 0;} .cover .pills .tag{font-size:.77rem;margin-right:.3rem;}
+  .mono{font-family:ui-monospace,Menlo,Consolas,monospace;}
+  hr{border:none;border-top:1px solid var(--line);margin:.9rem 0;}
+  .toc{font-size:.9rem;columns:2;column-gap:2rem;} .toc div{margin:.16rem 0;break-inside:avoid;} .toc .n{color:var(--teal);font-weight:700;display:inline-block;width:1.8em;}
+  .eq{font-family:ui-monospace,Menlo,Consolas,monospace;background:#ecfdf5;border:1px solid #a7f3d0;border-radius:8px;padding:.45rem .75rem;margin:.5rem 0;font-size:.79rem;color:#065f46;text-align:center;}
+  @page{size:A4;margin:13mm 12mm;}
+</style>
+</head>
+<body>
+
+<!-- COVER -->
+<div class="wrap"><div class="cover">
+  <div class="eyebrow">P1 · le coin de provenance · la confiance vendable, indépendante de la thèse</div>
+  <h1>P1 — Le Moteur d'Évidence de Conformité</h1>
+  <div class="sub">Transformer les frontières que P0 a posées en un <b>produit qu'une équipe conformité achète</b> : un journal d'audit re-prouvable, défendable devant un régulateur EU — qui se vend même si la thèse de l'essaim échoue.</div>
+  <div class="tagline">P0 a prouvé que chaque décision d'agent et chaque message se scellent en un DAG re-prouvable, localement. P1 en fait un <b>produit</b> — et c'est le <b>coin commercial le plus sûr</b>, parce qu'il vend <b>indépendamment</b> de la réussite de la piste B : que les agents soient des petits SLM ou un gros modèle, l'<b>auditabilité re-prouvable</b> et le <b>déploiement souverain</b> restent ce que l'industriel européen achète. L'architecture repose sur une idée structurelle forte : <b>l'audit N'EST PAS un journal à côté — c'est le record scellé lui-même</b>, donc il ne peut pas diverger de la réalité. De ce <b>substrat unique</b> partent <b>deux surfaces</b> à deux modèles de confiance : la <b>console opérationnelle</b> (l'agent de conformité revoit les décisions, les exceptions, les citations d'évidence, avec un statut de re-preuve en langage clair) et l'<b>export forensic</b> (un bundle autonome — DAG scellé + rapport + vérifieur — qu'un régulateur ou un auditeur externe re-prouve <b>sans avoir à faire confiance ni à Kovant ni à EFE</b>, avec la seule clé tenant du client). On enrichit le DAG d'une <b>couche d'évidence</b> (les appels d'outil/retrieval captés comme nœuds — la clause de politique, le document fournisseur cités) et de l'<b>oversight humain comme provenance</b> (l'approbation/override d'un humain, scellée — l'exigence de supervision de l'EU AI Act). Le tout sous une honnêteté <b>légalement nécessaire</b> : « vérifié <b>intègre</b> » (le record est authentique, non-altéré) n'est <b>jamais</b> « vérifié <b>correct</b> » (la justesse est une autre couche). Le produit <b>auto-produit l'évidence</b> que le réglementaire exige (tenue de registres EU AI Act, dossier de devoir de vigilance CSDDD/LkSG) — l'heure de dossier assemblé à la main devient une minute, re-prouvable. La <b>porte</b> est commerciale : le design-partner <b>convertit</b> ; le <b>critère d'arrêt</b> est l'usabilité — si un agent de conformité non-cryptographe ne peut pas, seul, revoir-faire-confiance-exporter, on simplifie avant de scaler.</div>
+  <div class="pills">
+    <span class="tag t-teal">l'audit EST le record scellé (ne diverge pas)</span>
+    <span class="tag t-info">1 substrat → 2 surfaces (opérationnel + forensic trustless)</span>
+    <span class="tag t-info">couche d'évidence + oversight humain scellés</span>
+    <span class="tag t-warn">vérifié INTÈGRE ≠ vérifié CORRECT</span>
+    <span class="tag t-ok">se vend même si la thèse de l'essaim échoue</span>
+  </div>
+  <div class="meta">
+    <span>EFE × Kovant · roadmap produit — P1 (le coin de provenance) · architecture — proposition</span>
+    <span>2026-06-29 · architecture</span>
+  </div>
+</div></div>
+
+<!-- TOC -->
+<div class="wrap page">
+  <h2><span class="num">§0</span> Plan</h2>
+  <div class="toc">
+    <div><span class="n">1.</span> De P0 à P1 : du spike au produit (&amp; l'indépendance de la thèse)</div>
+    <div><span class="n">2.</span> Un substrat scellé, deux modèles de confiance</div>
+    <div><span class="n">3.</span> La couche d'ÉVIDENCE : le 3ᵉ tap (outil/retrieval)</div>
+    <div><span class="n">4.</span> La console opérationnelle de conformité</div>
+    <div><span class="n">5.</span> La re-preuve pour non-cryptographe &amp; l'export forensic</div>
+    <div><span class="n">6.</span> L'oversight humain comme provenance (EU AI Act)</div>
+    <div><span class="n">7.</span> Le mapping réglementaire (le moteur d'évidence)</div>
+    <div><span class="n">8.</span> L'honnêteté légalement nécessaire : intègre ≠ correct</div>
+    <div><span class="n">9.</span> Porte commerciale, critère d'arrêt, ROI</div>
+    <div><span class="n">10.</span> Invariants, réutilisé-vs-neuf, séquence, ce que P1 décide</div>
+  </div>
+
+  <h3>Le geste, en une phrase</h3>
+  <p>P1 rend <b>consommable et vendable</b> le DAG scellé re-prouvable de P0 : il l'enrichit des <b>évidences</b> (citations) et de l'<b>oversight humain</b>, le rend lisible par un agent de conformité (la <b>console</b>) et vérifiable par un tiers <b>sans confiance</b> (l'<b>export forensic</b>), le mappe sur le <b>réglementaire EU</b> (le moteur d'évidence), et tient une <b>honnêteté légale stricte</b> (intègre ≠ correct) — pour décrocher la <b>conversion</b> du design-partner et le revenu dé-risqué.</p>
+
+  <div class="callout key">
+    <p><b>Pourquoi P1 est le coin, et pas un sous-produit.</b> Le marché agentique vend de la capacité ; le fossé défendable est la <b>confiance vérifiable</b>. P1 livre exactement ce que personne ne livre bien : un audit qui <b>ne peut pas mentir</b> (il EST le record scellé), <b>re-prouvable par le client lui-même</b>, et qui <b>produit l'évidence réglementaire</b> automatiquement. C'est sellable <b>tout de suite</b>, à l'industriel européen, <b>sans dépendre</b> de la réussite des petits modèles. C'est ce qui dé-risque le revenu et l'histoire au board.</p>
+  </div>
+</div>
+
+<!-- 1 -->
+<div class="wrap page">
+  <h2><span class="num">§1</span> De P0 à P1 : du spike au produit (&amp; l'indépendance de la thèse)</h2>
+  <table>
+    <thead><tr><th></th><th>P0 (fait)</th><th>P1 (à faire)</th></tr></thead>
+    <tbody>
+      <tr><td><b>Nature</b></td><td>spike technique : les frontières tiennent</td><td>produit : une équipe conformité l'utilise et l'achète</td></tr>
+      <tr><td><b>Public</b></td><td>un ingénieur / cryptographe (démo de re-preuve)</td><td>un <b>agent de conformité</b> non-technique, et un <b>régulateur/auditeur externe</b></td></tr>
+      <tr><td><b>Re-preuve</b></td><td>une commande qui vérifie une chaîne HMAC</td><td>un statut « <b>vérifié intègre</b> » en langage clair + un export que le tiers re-prouve seul</td></tr>
+      <tr><td><b>DAG</b></td><td>actes + arêtes scellés</td><td>+ <b>évidences</b> (citations) + <b>oversight humain</b> ; rendu et exportable</td></tr>
+      <tr><td><b>Valeur</b></td><td>« les frontières marchent »</td><td>« la conformité, automatique et re-prouvable » (le ROI)</td></tr>
+    </tbody>
+  </table>
+  <div class="callout ok">
+    <p><b>La propriété stratégique : MODÈLE-AGNOSTIQUE.</b> P1 observe/scelle/audite <b>quels que soient</b> les agents — petits SLM (la thèse) ou gros modèle. L'architecture <b>ne se couple pas</b> à l'essaim. Conséquence commerciale : le coin de provenance <b>se vend même si la piste B (économie de l'essaim) échoue</b>. C'est <b>la</b> raison de mener par P1 : il borne le risque produit. L'acheteur n'achète pas « des petits modèles », il achète « un audit re-prouvable et souverain » — et ça, c'est livrable maintenant.</p>
+  </div>
+</div>
+
+<!-- 2 -->
+<div class="wrap page">
+  <h2><span class="num">§2</span> Un substrat scellé, deux modèles de confiance</h2>
+  <p>L'idée d'architecture centrale de P1, et son avantage structurel : <b>il n'y a pas de “journal d'audit” séparé qui pourrait diverger de ce qui s'est réellement passé.</b> L'audit <b>est</b> le DAG scellé de P0. On en dérive <b>deux surfaces</b>, pour <b>deux modèles de confiance distincts</b> — depuis le <b>même</b> substrat infalsifiable.</p>
+  <div class="fig">
+  <svg viewBox="0 0 720 300" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Un substrat, deux surfaces">
+    <defs><marker id="a1" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto"><path d="M0,0 L9,4.5 L0,9 Z" fill="#475569"/></marker></defs>
+    <!-- substrate -->
+    <rect x="250" y="120" width="220" height="80" rx="10" fill="#f6fbfa" stroke="#0f766e"/>
+    <text x="360" y="143" text-anchor="middle" font-size="11.5" font-weight="700" fill="#0f766e">Le DAG scellé re-prouvable</text>
+    <text x="360" y="160" text-anchor="middle" font-size="9" fill="#475569">actes + arêtes + ÉVIDENCES + oversight humain</text>
+    <text x="360" y="175" text-anchor="middle" font-size="9" fill="#475569">chaîne HMAC · clé tenant · manifest-root</text>
+    <text x="360" y="190" text-anchor="middle" font-size="9" fill="#0f766e">« l'audit EST le record — il ne diverge pas »</text>
+    <!-- operational surface -->
+    <rect x="20" y="30" width="200" height="70" rx="9" fill="#eef2ff" stroke="#4f46e5"/>
+    <text x="120" y="52" text-anchor="middle" font-size="11" font-weight="700" fill="#3730a3">Console opérationnelle</text>
+    <text x="120" y="68" text-anchor="middle" font-size="9" fill="#475569">agent de conformité (interne)</text>
+    <text x="120" y="82" text-anchor="middle" font-size="9" fill="#475569">confiance = il est dans le tenant</text>
+    <line x1="250" y1="150" x2="218" y2="95" stroke="#475569" marker-end="url(#a1)"/>
+    <!-- forensic surface -->
+    <rect x="500" y="30" width="200" height="70" rx="9" fill="#fffbeb" stroke="#d97706"/>
+    <text x="600" y="52" text-anchor="middle" font-size="11" font-weight="700" fill="#92400e">Export forensic</text>
+    <text x="600" y="68" text-anchor="middle" font-size="9" fill="#475569">régulateur / auditeur EXTERNE</text>
+    <text x="600" y="82" text-anchor="middle" font-size="9" fill="#92400e">confiance = AUCUNE requise (re-preuve)</text>
+    <line x1="470" y1="150" x2="502" y2="95" stroke="#475569" marker-end="url(#a1)"/>
+    <!-- evidence + human in -->
+    <rect x="250" y="240" width="100" height="40" rx="7" fill="#ccfbf1" stroke="#0d9488"/>
+    <text x="300" y="258" text-anchor="middle" font-size="9" font-weight="700" fill="#0f766e">évidence</text>
+    <text x="300" y="271" text-anchor="middle" font-size="8" fill="#475569">(outil/retrieval)</text>
+    <rect x="370" y="240" width="100" height="40" rx="7" fill="#ccfbf1" stroke="#0d9488"/>
+    <text x="420" y="258" text-anchor="middle" font-size="9" font-weight="700" fill="#0f766e">oversight humain</text>
+    <text x="420" y="271" text-anchor="middle" font-size="8" fill="#475569">(approbation/override)</text>
+    <line x1="300" y1="238" x2="320" y2="202" stroke="#0d9488" marker-end="url(#a1)"/>
+    <line x1="420" y1="238" x2="400" y2="202" stroke="#0d9488" marker-end="url(#a1)"/>
+  </svg>
+  <div class="cap">Le moat est la surface de DROITE : un tiers vérifie l'intégrité <b>sans faire confiance</b> à Kovant ni à EFE — avec la seule clé tenant du client. Les deux surfaces dérivent du même DAG scellé, donc l'audit ne peut pas mentir.</div>
+  </div>
+  <ul>
+    <li><b>Confiance opérationnelle</b> (la console) : l'agent de conformité est <b>dans</b> le tenant ; il fait confiance à l'affichage parce qu'il est à l'intérieur. Usage quotidien : revoir, filtrer les exceptions, citer.</li>
+    <li><b>Confiance forensic</b> (l'export) : un tiers <b>externe</b> (régulateur, auditeur, tribunal) ne fait confiance à <b>personne</b> ; il re-prouve l'intégrité avec la clé tenant. C'est le <b>vrai</b> fossé — la vérification <b>sans confiance</b>.</li>
+  </ul>
+</div>
+
+<!-- 3 -->
+<div class="wrap page">
+  <h2><span class="num">§3</span> La couche d'ÉVIDENCE : le 3ᵉ tap (outil/retrieval)</h2>
+  <p>Un audit qui dit « l'agent a tourné » est inutile. Un audit défendable dit « l'exigence X a été contrôlée contre la <b>clause 4.2</b> à partir du <b>document SUP-2024 §3</b>, conclusion PASS ». Pour cela, il faut capter ce que l'agent a <b>consulté</b>, pas seulement ce qu'il a généré. P0 captait deux choses (appels modèle via la passerelle ; arêtes via le hook) ; P1 ajoute le <b>3ᵉ tap</b> : les <b>appels d'outil/retrieval</b> (RAG, lookups base, recherches de politique) comme <b>nœuds d'évidence</b> du DAG.</p>
+  <pre><code>Nœud d'évidence (un acte de consultation)
+  evidence_id
+  tool / source         (ex. "policy_db", "supplier_doc_store")
+  query_hash            (ce qui a été cherché)
+  retrieved_ref         (ex. "policy://4.2", "doc://SUP-2024#p3")
+  content_hash          (intégrité du contenu cité au moment T)
+  consumed_by_node      (quel acte d'agent l'a utilisé)
+  seal = HMAC(chain_prev ‖ fields, K_tenant)</code></pre>
+  <div class="callout key"><p><b>Pourquoi c'est ce qui rend l'audit VENDABLE.</b> Le <span class="mono">content_hash</span> fige l'évidence <b>telle qu'elle était au moment de la décision</b> — si la politique change après, l'audit montre toujours la version <b>réellement utilisée</b>. Le <span class="mono">retrieved_ref</span> + le lien <span class="mono">consumed_by_node</span> reconstruisent la <b>chaîne de raisonnement vérifiable</b> qu'un régulateur exige. Sans cette couche, on a un journal ; avec, on a une <b>preuve de diligence</b>.</p></div>
+</div>
+
+<!-- 4 -->
+<div class="wrap page">
+  <h2><span class="num">§4</span> La console opérationnelle de conformité</h2>
+  <p>La surface quotidienne de l'agent de conformité. Conçue pour qu'un <b>non-technicien</b> revoie, comprenne, et agisse — la cryptographie est <b>cachée</b>, le verdict est montré.</p>
+  <ul>
+    <li><b>Vue décision.</b> Par dossier (ex. un fournisseur) : le verdict (PASS / FAIL / exceptions), et le <b>« pourquoi » lisible</b> — chaque exigence, son évidence citée (clause + document, §3), l'agent qui a conclu, l'horodatage.</li>
+    <li><b>Statut de re-preuve, en langage clair.</b> Un badge par décision : « <b>Vérifié — record authentique et non-altéré</b> » (vert) ou « <b>Altération détectée</b> » (rouge). Un clic « vérifier » exécute <span class="mono">reprove(records, K_tenant)</span> sous le capot ; l'utilisateur voit un mot, pas un digest.</li>
+    <li><b>File d'exceptions.</b> Les cas FAIL/ambigus remontés pour <b>revue humaine</b> (qui devient elle-même de la provenance, §6).</li>
+    <li><b>Recherche &amp; filtre.</b> Par fournisseur, exigence, période, statut — pour répondre « montre-moi toutes les décisions de criblage sanctions du T2 ».</li>
+    <li><b>RBAC.</b> Qui voit quoi (la gouvernance d'accès, exigence GDPR/sécurité).</li>
+  </ul>
+  <div class="callout warn"><p><b>La contrainte d'usabilité (le critère d'arrêt de P1, §9).</b> Tout ici doit être faisable par un agent de conformité <b>seul</b>, sans ingénieur. Si « vérifier » ou « exporter » exige une explication technique, la surface est trop crue — on simplifie <b>avant</b> de scaler. La re-preuve doit se ressentir comme un cadenas vert, pas comme une preuve mathématique.</p></div>
+</div>
+
+<!-- 5 -->
+<div class="wrap page">
+  <h2><span class="num">§5</span> La re-preuve pour non-cryptographe &amp; l'export forensic</h2>
+  <h3>5.1 — Le ressenti de la re-preuve</h3>
+  <p>Pour l'<b>opérationnel</b> : un bouton, un mot (« Vérifié »). Pour le <b>forensic</b> : le sérieux complet, mais autonome.</p>
+  <h3>5.2 — L'export forensic (le bundle trustless)</h3>
+  <p>Un <b>artefact autonome</b> que le client remet à <b>son</b> auditeur ou à un régulateur, et que ce tiers vérifie <b>sans rien installer de Kovant ni d'EFE en qui croire</b> :</p>
+  <pre><code>audit_bundle/
+  dag.sealed.jsonl      — les records bruts scellés (actes, arêtes, évidences, humain)
+  manifest.root         — la racine de manifeste
+  report.html           — le récit humain, par décision (lisible sans outil)
+  verify               — un vérifieur AUTONOME (statique) : reprend dag + K_tenant
+                          → re-dérive le manifeste, compare à manifest.root, rend PASS/FAIL
+  README                — « comment vérifier vous-même, sans nous faire confiance »</code></pre>
+  <div class="eq">tiers + dag.sealed + K_tenant  →  verify  →  PASS  ⇔  « ce récit est authentique &amp; non-altéré »</div>
+  <p>Le client <b>détient sa clé tenant</b> (P0/§souveraineté) : il peut donc <b>re-prouver lui-même</b>, ou la confier à son auditeur. Kovant et EFE sont <b>hors de la boucle de confiance</b> — c'est précisément ce qui rend l'audit crédible devant un régulateur, et difficile à copier.</p>
+</div>
+
+<!-- 6 -->
+<div class="wrap page">
+  <h2><span class="num">§6</span> L'oversight humain comme provenance (EU AI Act)</h2>
+  <p>L'EU AI Act exige une <b>supervision humaine</b> des systèmes opérationnels (selon classification). Architecturalement, cela veut dire : quand un humain <b>revoit, approuve, ou outrepasse</b> une décision d'agent, cet acte humain doit <b>lui-même</b> entrer dans la provenance — sinon l'audit est incomplet (« qui a validé ce FAIL transformé en exception ? »).</p>
+  <pre><code>Nœud humain (un acte de supervision)
+  human_id (rôle/identité, pseudonymisable)
+  action  (APPROVE | OVERRIDE | ESCALATE | COMMENT)
+  target_node  (la décision d'agent visée)
+  justification  (le motif saisi)
+  timestamp
+  seal = HMAC(chain_prev ‖ fields, K_tenant)</code></pre>
+  <div class="callout key"><p><b>Ce que ça complète.</b> Le DAG ne dit plus seulement « ce que les agents ont fait » mais « <b>ce que l'humain a décidé à leur sujet</b> » — re-prouvablement. C'est l'audit <b>complet</b> du système socio-technique, et c'est <b>exactement</b> ce qu'un déployeur doit démontrer au régulateur : que l'oversight humain a eu lieu, traçablement. Un override non scellé serait un trou d'audit ; ici, il est une <b>preuve</b>.</p></div>
+</div>
+
+<!-- 7 -->
+<div class="wrap page">
+  <h2><span class="num">§7</span> Le mapping réglementaire (le moteur d'évidence)</h2>
+  <p>P1 ne « facilite » pas la conformité — il <b>auto-produit l'évidence</b> que des cadres précis exigent. C'est l'argument de vente, et le travail neuf de packaging.</p>
+  <table>
+    <thead><tr><th>Cadre (selon classification du système)</th><th>Exigence</th><th>Ce que le DAG fournit, automatiquement</th></tr></thead>
+    <tbody>
+      <tr><td><b>EU AI Act</b></td><td>tenue de registres / journalisation des événements (art. 12) ; transparence/traçabilité (art. 13) ; supervision humaine (art. 14) ; obligations du déployeur (art. 26)</td><td>le DAG scellé EST le registre d'événements ; les évidences = la traçabilité ; les nœuds humains = l'oversight démontré</td></tr>
+      <tr><td><b>GDPR</b></td><td>décision automatisée (art. 22) ; minimisation (art. 5) ; registre des traitements (art. 30)</td><td>chaîne de décision auditable ; on scelle des <b>hachages</b> d'entrée (minimisation native) ; le DAG = un registre vérifiable</td></tr>
+      <tr><td><b>Devoir de vigilance</b> (CSDDD / LkSG)</td><td>documenter la diligence raisonnable sur les fournisseurs</td><td>le dossier de conformité fournisseur, re-prouvable, généré par le workflow lui-même</td></tr>
+    </tbody>
+  </table>
+  <div class="callout warn"><p><b>Honnêteté du périmètre.</b> Le produit <b>adresse</b> et <b>outille</b> ces exigences — il <b>ne garantit pas</b> la conformité (qui dépend de la classification du système, du juriste du client, et de l'usage). On vend un <b>moteur d'évidence</b> et un <b>argument défendable</b>, pas un avis juridique. Cette précision protège Kovant autant qu'elle crédibilise.</p></div>
+</div>
+
+<!-- 8 -->
+<div class="wrap page">
+  <h2><span class="num">§8</span> L'honnêteté légalement nécessaire : intègre ≠ correct</h2>
+  <p>La distinction la plus importante de P1 — et un risque légal si on la rate. Elle doit être <b>imposée dans l'UX et l'export</b>, pas seulement « comprise ».</p>
+  <div class="eq">« Vérifié »  ≜  record AUTHENTIQUE &amp; NON-ALTÉRÉ (ce qui s'est passé)
+            ≠  décision CORRECTE  ≠  ré-exécutable bit-à-bit</div>
+  <ul>
+    <li>La console n'affiche <b>jamais</b> « décision vérifiée » seul (ambigu) — toujours « <b>record vérifié intègre</b> ». La justesse (« la décision était-elle bonne ? ») est une <b>autre couche</b> (la mesure, P2), affichée séparément si présente.</li>
+    <li>L'export <b>énonce</b> sa sémantique : « ce bundle atteste l'intégrité du record, pas la correction de la décision ni sa reproductibilité ».</li>
+    <li>Pourquoi c'est <b>nécessaire</b> : prétendre « vérifié correct » serait (a) <b>faux</b> (un LLM peut se tromper proprement), (b) une <b>responsabilité</b> si une décision auditée-« correcte » cause un dommage. La rigueur honnête est ici une <b>protection</b>, et le prolongement direct de la discipline EFE.</li>
+  </ul>
+</div>
+
+<!-- 9 -->
+<div class="wrap page">
+  <h2><span class="num">§9</span> Porte commerciale, critère d'arrêt, ROI</h2>
+  <div class="callout ok"><p><b>PORTE (passe → P2/scale).</b> Le design-partner <b>convertit</b> (payant ou référence nommée) sur la seule valeur d'auditabilité ; un de ses agents de conformité revoit, fait confiance, et <b>exporte</b> une évidence <b>seul</b> ; son auditeur (ou un test régulateur) <b>re-prouve</b> le bundle de façon autonome.</p></div>
+  <div class="callout bad"><p><b>ARRÊT (simplifier avant de scaler).</b> Si la re-preuve / l'export n'est pas <b>compréhensible et actionnable par un non-cryptographe</b> sans aide → la surface est trop technique : on simplifie l'UX (le « cadenas vert », le récit lisible) <b>avant</b> d'embarquer d'autres workflows. Un audit que personne ne sait lire n'a aucune valeur.</p></div>
+  <h3>Le ROI qui déclenche la conversion</h3>
+  <p>Le levier concret : <b>avant</b>, un agent de conformité assemble à la main un dossier de diligence fournisseur (collecte des contrôles, des preuves, mise en forme — des <b>heures</b>, error-prone). <b>Après</b>, le workflow le produit <b>automatiquement</b>, <b>re-prouvable</b>, exportable en un clic (des <b>minutes</b>). Le gain n'est pas « l'IA fait le travail » (tout le monde le dit) — c'est « l'IA <b>produit l'évidence défendable</b> du travail », ce que personne ne fait. C'est ça qu'on facture.</p>
+</div>
+
+<!-- 10 -->
+<div class="wrap page">
+  <h2><span class="num">§10</span> Invariants, réutilisé-vs-neuf, séquence, ce que P1 décide</h2>
+  <table>
+    <thead><tr><th>Invariant</th><th>Énoncé</th></tr></thead>
+    <tbody>
+      <tr><td><b>I-P1-AUDIT=RECORD</b></td><td>l'audit n'est pas un journal séparé ; c'est le DAG scellé lui-même → il ne peut diverger de la réalité.</td></tr>
+      <tr><td><b>I-P1-2SURFACES</b></td><td>une console opérationnelle (confiance interne) ET un export forensic <b>trustless</b> (vérifiable sans confiance), du même substrat.</td></tr>
+      <tr><td><b>I-P1-ÉVIDENCE</b></td><td>les consultations (outil/retrieval) sont captées comme nœuds d'évidence à <span class="mono">content_hash</span> figé → chaîne de raisonnement vérifiable.</td></tr>
+      <tr><td><b>I-P1-HUMAIN</b></td><td>tout acte de supervision humaine est scellé dans le DAG → audit complet (oversight démontré).</td></tr>
+      <tr><td><b>I-P1-INTÈGRE≠CORRECT</b></td><td>« vérifié » = intègre/authentique, jamais correct ni bit-à-bit ; imposé dans l'UX et l'export (nécessité légale).</td></tr>
+      <tr><td><b>I-P1-AGNOSTIQUE</b></td><td>le produit ne se couple pas à l'essaim ; il se vend que les agents soient petits ou gros.</td></tr>
+      <tr><td><b>I-P1-USABLE</b></td><td>un agent de conformité non-technique revoit/fait-confiance/exporte seul, sinon on simplifie avant de scaler.</td></tr>
+    </tbody>
+  </table>
+  <h3>Réutilisé d'EFE vs neuf</h3>
+  <p><b>Réutilisé :</b> le scellement HMAC + manifest-root + <span class="mono">reprove</span> + clé <span class="mono">HmacKeySource ∘ TenantId</span> (R0/N17 — le cœur de la re-preuve) ; le DAG scellé de P0 ; la souveraineté. <b>Neuf :</b> le 3ᵉ tap d'évidence ; les nœuds humains ; la <b>console de conformité</b> (UX non-technique) ; l'<b>export forensic autonome</b> (le vérifieur statique + le récit) ; le <b>packaging réglementaire</b> (les gabarits EU AI Act / CSDDD) ; l'enforcement « intègre ≠ correct ».</p>
+  <h3>La séquence (~3 mois)</h3>
+  <table>
+    <thead><tr><th>Mois</th><th>Livrable</th></tr></thead>
+    <tbody>
+      <tr><td>M1</td><td>3ᵉ tap d'évidence + nœuds humains ; le DAG enrichi rendu dans une console v0.</td></tr>
+      <tr><td>M2</td><td>console de conformité utilisable (vue décision, statut de re-preuve « cadenas vert », exceptions, RBAC) ; tests d'usabilité avec un vrai agent de conformité.</td></tr>
+      <tr><td>M2–M3</td><td>export forensic autonome (vérifieur statique + récit) ; gabarits réglementaires (EU AI Act / CSDDD).</td></tr>
+      <tr><td>M3</td><td>revue de re-preuve par l'auditeur du client ; mesure du ROI (temps de dossier avant/après) ; <b>conversion</b>.</td></tr>
+    </tbody>
+  </table>
+  <div class="callout key"><p><b>Ce que P1 décide.</b> Si le design-partner <b>paie</b> pour l'auditabilité re-prouvable et souveraine — sur la seule valeur de provenance, <b>sans</b> dépendre des petits modèles —, alors Kovant a un <b>produit défendable et un revenu dé-risqué</b>, et l'histoire au board est faite : « couche de confiance, premier client de référence, fossé EU ». Tout le pari plus grand (l'économie de l'essaim, P2 ; la communication, P3) se construit alors <b>sur un produit qui se vend déjà</b>. P1 est la phase où la provenance cesse d'être une propriété interne pour devenir <b>la raison d'acheter</b>.</p></div>
+  <hr>
+  <p class="small muted"><b>Note d'honnêteté.</b> Architecture de proposition, fondée sur les primitives <b>réelles et re-prouvées</b> d'EFE et le <b>positionnement public</b> de Kovant. Les références réglementaires (EU AI Act, GDPR, CSDDD/LkSG) sont des <b>cibles d'outillage</b>, pas un avis juridique : l'applicabilité dépend de la classification du système et du conseil du client.</p>
+</div>
+
+</body>
+</html>
