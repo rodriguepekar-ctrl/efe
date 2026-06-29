@@ -1,0 +1,37 @@
+# SPDX-License-Identifier: UNLICENSED
+# Kovant P1 / S3 — audit-console : la console opérationnelle de conformité (la 2ᵉ surface).
+# NON trust-critique par conception : deux coquilles — une coquille de TRANSPORT (HTTP fait main) et une
+# INTERFACE (UI rendue serveur en HTML) — au-dessus du routeur PUR de S2 (audit-api). Tout le trust-critique
+# vit dans S2 ; la console n'ajoute AUCUNE surface de confiance : elle REND ce que S2 calcule.
+# Honnêteté cardinale : « montré vérifié ≠ prouvé sans confiance » — le badge rend le verdict de S2 (confiance
+# opérationnelle) ; l'export (S4+S6) établit la preuve trustless. La CLÉ tenant ne quitte jamais le backend ;
+# le bind est egress-gardé (souveraineté). ZÉRO dépendance externe : HTTP/1.1 minimal + USTAR faits main, std.
+[package]
+name = "audit-console"
+version = { workspace = true }
+edition = { workspace = true }
+rust-version = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
+description = "Kovant P1/S3 — audit-console : la console opérationnelle de conformité. Coquille de transport (HTTP fait main, egress-gardé) + UI rendue serveur au-dessus du routeur PUR de S2. REND la confiance (badge cadenas-vert + fraîcheur + fail-loud), ne l'établit pas (l'export S4+S6 le fait). « montré vérifié ≠ prouvé sans confiance ». Zéro dépendance externe ; la clé ne quitte jamais le backend."
+publish = false
+
+[[bin]]
+name = "audit-console"
+path = "src/main.rs"
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+audit-api = { path = "../audit-api" }
+forensic-export = { path = "../forensic-export" }
+reg-evidence = { path = "../reg-evidence" }
+provenance-dag = { path = "../provenance-dag" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+# Tests (tests/ + #[cfg(test)]) : alimenter un tenant via la capture S1 pour exercer la console de bout en bout.
+[dev-dependencies]
+provenance-capture = { path = "../provenance-capture" }

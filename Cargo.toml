@@ -267,6 +267,12 @@ members = [
     # versionné+haché qui voyage, couverture honnête (montre ses trous), aucun champ « conforme »
     # (outillé ≠ conforme). Zéro crypto neuve (re-prouve via provenance-dag). Cf. la roadmap (S6).
     "crates/reg-evidence",
+    # Kovant P1 / S3 — audit-console : la console opérationnelle (la 2ᵉ surface). NON trust-critique par
+    # conception : deux coquilles (transport HTTP + UI rendue serveur) au-dessus du routeur PUR de S2.
+    # Elle REND la confiance (badge, cadenas vert + fraîcheur + fail-loud), elle ne l'ÉTABLIT pas — l'export
+    # (S4+S6) l'établit. Honnêteté : « montré vérifié ≠ prouvé sans confiance ». Zéro dépendance externe
+    # (HTTP/USTAR faits main, std) ; la clé tenant ne quitte jamais le backend. Cf. la roadmap (S3).
+    "crates/audit-console",
 ]
 
 [workspace.package]

@@ -397,6 +397,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "audit-console"
+version = "0.0.1"
+dependencies = [
+ "audit-api",
+ "forensic-export",
+ "provenance-capture",
+ "provenance-dag",
+ "reg-evidence",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "autocfg"
 version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
