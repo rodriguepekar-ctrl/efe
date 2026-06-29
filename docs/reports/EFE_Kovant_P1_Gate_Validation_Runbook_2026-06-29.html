@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>EFE × Kovant — P1 : Runbook de validation de la PORTE (la conversion du design-partner)</title>
+<style>
+  :root{--ink:#0f172a;--muted:#475569;--soft:#64748b;--line:#e2e8f0;--teal:#0d9488;--teal-d:#0f766e;--indigo:#4f46e5;--indigo-d:#4338ca;--ok:#16a34a;--warn:#d97706;--bad:#dc2626;--bg-tint:#f6fbfa;--bg-card:#eef2f1;--code-bg:#0f172a;--code-fg:#e2e8f0;}
+  *{box-sizing:border-box;} html{font-size:11.2px;}
+  body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,Arial,sans-serif;color:var(--ink);margin:0;line-height:1.6;background:#fff;-webkit-font-smoothing:antialiased;}
+  .wrap{max-width:178mm;margin:0 auto;padding:0 2mm;}
+  h1,h2,h3,h4{line-height:1.2;font-weight:700;}
+  h2{font-size:1.45rem;margin:0 0 .55rem;padding-bottom:.32rem;border-bottom:3px solid var(--teal);}
+  h2 .num{color:var(--teal);} h3{font-size:1.13rem;margin:1.1rem 0 .3rem;color:var(--teal-d);}
+  h4{font-size:1rem;margin:.8rem 0 .2rem;color:var(--indigo-d);}
+  p{margin:.55rem 0;text-align:justify;hyphens:auto;} a{color:var(--indigo);text-decoration:none;}
+  code{font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace;font-size:.85em;background:var(--bg-card);padding:.05em .35em;border-radius:4px;color:#0b3b36;}
+  .muted{color:var(--muted);} .small{font-size:.88rem;}
+  section{break-inside:avoid;} .page{break-before:page;} h2{break-after:avoid;}
+  table{border-collapse:collapse;width:100%;margin:.55rem 0;font-size:.8rem;}
+  th,td{border:1px solid var(--line);padding:.32rem .5rem;text-align:left;vertical-align:top;}
+  th{background:var(--bg-card);font-weight:700;} tbody tr:nth-child(even){background:var(--bg-tint);}
+  td.c,th.c{text-align:center;} .good{background:#dcfce7 !important;color:#166534;font-weight:700;} .mid{background:#fef9c3 !important;color:#854d0e;font-weight:700;} .bad{background:#fee2e2 !important;color:#991b1b;font-weight:700;}
+  .tag{display:inline-block;font-size:.71rem;font-weight:700;padding:.08em .5em;border-radius:20px;}
+  .t-ok{background:#dcfce7;color:#166534;} .t-info{background:#e0e7ff;color:#3730a3;} .t-teal{background:#ccfbf1;color:#115e59;} .t-warn{background:#fef3c7;color:#92400e;} .t-bad{background:#fee2e2;color:#991b1b;}
+  pre{background:var(--code-bg);color:var(--code-fg);padding:.55rem .8rem;border-radius:8px;overflow:auto;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.72rem;line-height:1.45;margin:.55rem 0;}
+  pre code{background:none;color:inherit;padding:0;}
+  .callout{border-left:4px solid var(--teal);background:var(--bg-tint);padding:.55rem .85rem;border-radius:0 8px 8px 0;margin:.65rem 0;}
+  .callout p{text-align:left;margin:.28rem 0;}
+  .callout.key{border-color:var(--indigo);background:#eef2ff;} .callout.warn{border-color:var(--warn);background:#fffbeb;} .callout.ok{border-color:var(--ok);background:#f0fdf4;} .callout.bad{border-color:var(--bad);background:#fef2f2;}
+  ol,ul{margin:.4rem 0 .55rem 1.1rem;padding:0;} li{margin:.26rem 0;}
+  .cover{height:262mm;display:flex;flex-direction:column;justify-content:center;position:relative;padding:0 6mm;}
+  .cover .eyebrow{color:var(--teal);font-weight:800;letter-spacing:.2em;font-size:.83rem;text-transform:uppercase;}
+  .cover h1{font-size:2.05rem;margin:.4rem 0 .2rem;line-height:1.08;} .cover .sub{font-size:1.16rem;color:var(--muted);margin-bottom:1.1rem;}
+  .cover .tagline{font-size:1.0rem;color:var(--ink);max-width:163mm;border-left:4px solid var(--teal);padding-left:1rem;font-style:italic;text-align:left;}
+  .cover .meta{position:absolute;bottom:6mm;left:6mm;right:6mm;display:flex;justify-content:space-between;border-top:1px solid var(--line);padding-top:.6rem;font-size:.8rem;color:var(--soft);}
+  .cover .pills{margin:1rem 0;} .cover .pills .tag{font-size:.77rem;margin-right:.3rem;}
+  .mono{font-family:ui-monospace,Menlo,Consolas,monospace;}
+  hr{border:none;border-top:1px solid var(--line);margin:.9rem 0;}
+  .toc{font-size:.9rem;columns:2;column-gap:2rem;} .toc div{margin:.16rem 0;break-inside:avoid;} .toc .n{color:var(--teal);font-weight:700;display:inline-block;width:1.8em;}
+  .step{background:#f6fbfa;border:1px solid var(--line);border-radius:8px;padding:.5rem .8rem;margin:.5rem 0;}
+  .step b.n{display:inline-block;background:var(--teal);color:#fff;border-radius:50%;width:1.4em;height:1.4em;text-align:center;line-height:1.4em;font-size:.8rem;margin-right:.4rem;}
+  @page{size:A4;margin:13mm 12mm;}
+</style>
+</head>
+<body>
+
+<!-- COVER -->
+<div class="wrap"><div class="cover">
+  <div class="eyebrow">P1 · la PORTE · l'épreuve qui n'est pas du code : la conversion</div>
+  <h1>Runbook — Valider la Porte de P1</h1>
+  <div class="sub">Le code des 7 slices est complet. La <b>porte</b> de P1 ne se franchit pas en codant — elle se franchit quand un <b>agent de conformité non-technique</b> fait la boucle <b>seul</b>, et que son <b>auditeur re-prouve</b> le bundle <b>sans nous</b>.</div>
+  <div class="tagline">P1 §9 l'a posé : le critère d'arrêt du programme est l'<b>usabilité</b>, pas une métrique technique. « Un audit que personne ne sait lire n'a aucune valeur. » Ce runbook est le <b>protocole</b> de cette épreuve : un <b>montage de cinq minutes</b> (un seed de démo réaliste + le binaire de la console), la <b>boucle de l'officier</b> en quatre tâches qu'il doit accomplir <b>sans aide</b> (revoir un dossier conforme, <b>faire confiance</b> au cadenas vert, <b>traiter une exception</b> en scellant une revue, <b>exporter</b> un dossier défendable), la <b>re-preuve de l'auditeur</b> (la patte forensic — re-compiler le vérifieur, re-prouver le bundle contre le root publié), une <b>grille d'observation</b> (a-t-il compris le cadenas ? a-t-il hésité ? a-t-il eu besoin d'un ingénieur ? l'honnêteté « montré ≠ prouvé » a-t-elle été reçue ?), et le <b>verdict</b> : <b>passe</b> (il l'a fait seul, l'auditeur a re-prouvé) → conversion ; ou <b>arrête</b> (il a fallu un ingénieur) → on <b>simplifie l'UX avant de scaler</b>. La plomberie de la boucle est déjà <b>prouvée mécaniquement</b> par un test de bout en bout (<span class="mono">gate_loop_smoke</span>) : la démo <b>ne cassera pas</b> devant l'officier ; ce qu'on mesure ici, c'est <b>l'humain</b>, pas la machine.</div>
+  <div class="pills">
+    <span class="tag t-teal">l'usabilité est le critère d'arrêt (P1 §9)</span>
+    <span class="tag t-info">montage 5 min : seed + console</span>
+    <span class="tag t-info">la boucle prouvée mécaniquement (gate_loop_smoke)</span>
+    <span class="tag t-warn">passe → conversion · arrête → simplifier avant de scaler</span>
+  </div>
+  <div class="meta">
+    <span>EFE × Kovant · P1 (le coin de provenance) · runbook de validation de la porte</span>
+    <span>2026-06-29 · protocole</span>
+  </div>
+</div></div>
+
+<!-- TOC -->
+<div class="wrap page">
+  <h2><span class="num">§0</span> Plan</h2>
+  <div class="toc">
+    <div><span class="n">1.</span> Ce que la porte teste (et ce qu'elle ne teste pas)</div>
+    <div><span class="n">2.</span> Le montage (5 minutes)</div>
+    <div><span class="n">3.</span> La boucle de l'officier : 4 tâches, seul</div>
+    <div><span class="n">4.</span> La re-preuve de l'auditeur (la patte forensic)</div>
+    <div><span class="n">5.</span> La grille d'observation</div>
+    <div><span class="n">6.</span> Le verdict : passe / arrête</div>
+  </div>
+  <h3>Le geste, en une phrase</h3>
+  <p>Mettre la console <b>complète</b> devant un vrai agent de conformité, lui demander de <b>revoir-faire-confiance-traiter-exporter seul</b>, faire <b>re-prouver</b> le bundle par son auditeur, et <b>observer l'humain</b> — pour décider si P1 a franchi sa porte (la conversion) ou s'il faut <b>simplifier l'UX avant de scaler</b>.</p>
+  <div class="callout key"><p><b>Pourquoi ce protocole, et pourquoi maintenant.</b> Le risque n°1 d'un produit de confiance n'est pas que le code soit faux (il est testé et revu adversarialement) — c'est que <b>personne ne sache s'en servir</b>. Tout P1 a été conçu pour qu'un <b>non-cryptographe</b> puisse réviser et exporter une preuve <b>sans comprendre la crypto</b> (le cadenas vert, le récit lisible, l'export en un clic). Cette épreuve <b>mesure exactement ça</b>. C'est le seul test qui dit si le coin de provenance est un <b>produit</b> ou seulement une <b>belle propriété</b>.</p></div>
+</div>
+
+<!-- 1 -->
+<div class="wrap page">
+  <h2><span class="num">§1</span> Ce que la porte teste (et ce qu'elle ne teste pas)</h2>
+  <p>La porte est une épreuve <b>d'usabilité</b>, pas de correction. La correction est déjà acquise : les 7 slices sont du code <b>testé</b> et <b>revu adversarialement</b> (la revue a trouvé de vrais bugs à chaque frontière, tous corrigés), et la boucle complète est <b>prouvée mécaniquement</b> (§4). Ce qu'on ignore encore — et que <b>seul un humain révèle</b> — c'est si l'agent de conformité <b>comprend et agit sans aide</b>.</p>
+  <table>
+    <thead><tr><th>La porte TESTE</th><th>La porte ne teste PAS</th></tr></thead>
+    <tbody>
+      <tr><td>l'officier comprend le <b>cadenas vert</b> sans qu'on lui explique la crypto</td><td>la correction du scellement (déjà prouvée : vecteurs NIST/RFC, re-preuve)</td></tr>
+      <tr><td>il sait <b>traiter une exception</b> (sceller une revue) dans son flux</td><td>la solidité de l'export (déjà : re-compilable, ancrable, revu)</td></tr>
+      <tr><td>il <b>exporte</b> un dossier défendable <b>en un clic</b>, sans ingénieur</td><td>la plomberie de la boucle (déjà : <span class="mono">gate_loop_smoke</span> verte)</td></tr>
+      <tr><td>l'honnêteté « <b>montré ≠ prouvé</b> » lui est <b>intelligible</b></td><td>la performance, la montée en charge (hors-sujet pour la porte)</td></tr>
+    </tbody>
+  </table>
+  <div class="callout warn"><p><b>Le bon sujet de test.</b> Un <b>vrai</b> agent de conformité (le métier), <b>non-technique</b>, qui n'a <b>pas</b> vu le code ni l'architecture. S'il faut un ingénieur à côté pour qu'il avance, la porte <b>n'est pas franchie</b> — c'est le signal, pas un échec : il dit « simplifier l'UX d'abord » (§6). Idéalement, deux profils : l'officier (revoit/agit/exporte) et son <b>auditeur</b> (re-prouve le bundle).</p></div>
+</div>
+
+<!-- 2 -->
+<div class="wrap page">
+  <h2><span class="num">§2</span> Le montage (5 minutes)</h2>
+  <p>La console <b>sert</b> ce que la capture a scellé ; elle ne fabrique pas de données. Pour la démo, on <b>seed</b> un journal scellé réaliste (deux dossiers fournisseurs), puis on lance la console dessus.</p>
+  <h3>2.1 — Générer le seed de démo</h3>
+  <pre><code>cargo run -p audit-console --example seed_demo -- /tmp/efe_demo_records.sealed.jsonl</code></pre>
+  <p>Cela produit un <span class="mono">records.sealed.jsonl</span> <b>re-prouvable</b>, scellé avec la <b>clé de démo</b> de la console, contenant :</p>
+  <ul>
+    <li><b>SUP-2024</b> — un dossier <b>conforme</b> complet (extraction → évidence figée <span class="mono">policy://4.2</span> → criblage sanctions <b>PASS</b> → agrégation <b>COMPLIANT</b>). La cible « revoir → faire confiance → exporter ».</li>
+    <li><b>SUP-2099</b> — un dossier <b>en échec</b> (criblage <b>FAIL</b>, évidence ESG figée) <b>sans revue humaine</b>. La cible « traiter une exception ».</li>
+  </ul>
+  <h3>2.2 — Lancer la console</h3>
+  <pre><code>EFE_CONSOLE_RECORDS=/tmp/efe_demo_records.sealed.jsonl cargo run -p audit-console
+# → console de conformité (S3) — http://127.0.0.1:8088
+# → bind LOCAL uniquement (souveraineté) ; la clé tenant ne quitte pas le backend.</code></pre>
+  <p>Ouvrir <span class="mono">http://127.0.0.1:8088</span>. La console exige une session — pour la démo, le jeton est <span class="mono">demo-token</span> :</p>
+  <pre><code># en-tête :   Authorization: Bearer demo-token
+# ou cookie :  session=demo-token</code></pre>
+  <div class="callout"><p><b>Note de souveraineté (à dire à voix haute pendant la démo).</b> Le bind est <b>refusé</b> s'il n'est pas local — <b>rien ne sort</b> de la frontière du tenant. La <b>clé</b> vit dans le backend et n'atteint <b>jamais</b> le navigateur. Une console compromise tromperait l'opérateur, mais ne pourrait <b>ni forger</b> un record, <b>ni</b> faire re-prouver un faux — la confiance dégrade proprement. C'est ce qui rend l'outil sûr à déployer.</p></div>
+</div>
+
+<!-- 3 -->
+<div class="wrap page">
+  <h2><span class="num">§3</span> La boucle de l'officier : 4 tâches, seul</h2>
+  <p>On <b>n'aide pas</b>. On donne ces quatre tâches, dans l'ordre, et on <b>observe</b> (§5). Chaque tâche correspond à une patte de la valeur de P1.</p>
+  <div class="step"><b class="n">1</b><b>Revoir un dossier &amp; faire confiance.</b> « Ouvre le dossier <b>SUP-2024</b>. Est-ce que ce dossier est <b>authentique</b> ? Comment le sais-tu ? » — On attend qu'il pointe le <b>cadenas vert</b> (« Vérifié — record authentique &amp; non-altéré ») <b>sans</b> qu'on lui parle de HMAC. Bonus : qu'il lise le « pourquoi » (le contrôle sanctions, l'évidence <span class="mono">policy://4.2</span> citée, l'horodatage).</div>
+  <div class="step"><b class="n">2</b><b>Traiter une exception.</b> « Va à la <b>file d'exceptions</b>. Un fournisseur est en échec — règle-le. » — On attend qu'il trouve <b>SUP-2099</b>, ouvre le panneau de revue, choisisse une action (<b>OUTREPASSER</b> / <b>ESCALADER</b>), saisisse un <b>motif</b>, et <b>scelle</b>. Au retour, l'<b>oversight scellé</b> apparaît dans le dossier (qui, quoi, quand).</div>
+  <div class="step"><b class="n">3</b><b>Exporter un dossier défendable.</b> « Tu dois remettre le dossier <b>SUP-2024</b> à un auditeur externe. Fais-le. » — On attend un clic sur <b>Exporter</b> (EU AI Act / GDPR / CSDDD / LkSG) → un <b>bundle</b> se télécharge. Bonus : qu'il remarque que la <b>clé ne part pas</b>.</div>
+  <div class="step"><b class="n">4</b><b>Comprendre « montré ≠ prouvé ».</b> « L'écran dit “Vérifié”. Est-ce une <b>preuve</b> que tu peux opposer à un régulateur ? » — On attend qu'il distingue l'<b>affichage</b> (confiance opérationnelle, il est dans le tenant) de l'<b>export re-prouvable</b> (la preuve sans confiance) — ou, a minima, qu'il comprenne que <b>l'export est la preuve</b> (le bandeau le dit sur chaque page).</div>
+  <div class="callout ok"><p><b>Le bon signe.</b> Il <b>n'utilise jamais</b> les mots « hash », « HMAC », « cryptographie » — et pourtant il sait dire « ce dossier est authentique, et voici la preuve que je remets ». La crypto est <b>cachée</b> ; le verdict est <b>montré</b>. C'est exactement la cible de P1 §4/§9.</p></div>
+</div>
+
+<!-- 4 -->
+<div class="wrap page">
+  <h2><span class="num">§4</span> La re-preuve de l'auditeur (la patte forensic)</h2>
+  <p>La seconde moitié de la porte : le destinataire du bundle (l'auditeur du client, ou un test régulateur) le <b>re-prouve seul</b>, <b>sans nous faire confiance</b>. C'est le fossé (S4) en action.</p>
+  <ol>
+    <li><b>Dé-tar</b> le bundle exporté (à l'étape 3). Il contient les <b>records scellés</b>, le <b>manifest-root</b> publié, la <b>source vendorée</b> du vérifieur, le <b>récit</b>, l'évidence réglementaire <span class="mono">reg/</span>, et le <b>README du sceptique</b>.</li>
+    <li><b>Re-compiler</b> le vérifieur (pas un binaire livré — <b>le sien</b>) : <span class="mono">cd verify &amp;&amp; ./build.sh</span>.</li>
+    <li><b>Obtenir <span class="mono">K_tenant</span></b> du responsable de traitement (souveraineté : la clé n'est <b>pas</b> dans le bundle).</li>
+    <li><b>Re-prouver</b> : <span class="mono">./verify/provenance-verify/target/release/provenance-verify records.sealed.jsonl --key-hex &lt;K_tenant&gt; --root &lt;manifest-root&gt;</span> → sortie <b>0</b> ⇔ « authentique &amp; non-altéré ».</li>
+  </ol>
+  <div class="callout ok"><p><b>La plomberie est déjà prouvée — la démo ne casse pas.</b> Le test de bout en bout <span class="mono">audit-console/tests/gate_loop_smoke.rs</span> joue <b>exactement</b> cette boucle (officier revoit → scelle l'exception → exporte ; <b>auditeur</b> dé-tar et <span class="mono">verify_against_root</span> contre le root publié → vert). Donc la patte forensic est <b>mécaniquement garantie</b> : ce qu'on observe devant l'auditeur humain, c'est sa <b>compréhension</b> (« je n'ai eu à faire confiance à personne ; j'ai re-compilé et re-prouvé moi-même »), pas le risque que ça plante.</p></div>
+  <div class="callout warn"><p><b>Honnêteté de portée (à ne pas sur-vendre).</b> La re-preuve atteste l'<b>intégrité</b> (intègre), <b>pas</b> la correction de la décision (<b>intègre ≠ correct</b>), <b>pas</b> l'inforgeabilité par le détenteur de la clé (<b>intègre ≠ inforgeable</b> → l'ancrage), et l'évidence réglementaire est <b>outillée</b>, pas <b>conforme</b> prononcée. Si l'auditeur le <b>comprend</b> et le trouve <b>crédible</b>, c'est un signal de porte <b>fort</b> — c'est précisément l'honnêteté qui rend l'outil acceptable par un conseil juridique.</p></div>
+</div>
+
+<!-- 5 -->
+<div class="wrap page">
+  <h2><span class="num">§5</span> La grille d'observation</h2>
+  <p>Pendant les §3–§4, on <b>observe sans intervenir</b> et on note. Ce sont des signaux d'<b>usabilité</b> — le seul critère de la porte.</p>
+  <table>
+    <thead><tr><th>Tâche</th><th>Signal de PASSE</th><th>Signal d'ARRÊT (simplifier)</th></tr></thead>
+    <tbody>
+      <tr><td>1 · revoir/confiance</td><td>pointe le cadenas vert ; dit « authentique » sans aide</td><td>cherche un digest ; demande « ça veut dire quoi ? » ; ignore le badge</td></tr>
+      <tr><td>2 · exception</td><td>trouve la file, scelle une revue avec motif, seul</td><td>ne trouve pas l'exception ; ne comprend pas « sceller »</td></tr>
+      <tr><td>3 · export</td><td>exporte en un clic ; sait à qui il remettrait le bundle</td><td>hésite ; cherche un bouton ; demande de l'aide pour exporter</td></tr>
+      <tr><td>4 · montré ≠ prouvé</td><td>distingue l'écran (interne) de l'export (opposable)</td><td>croit que « l'écran vert » <b>est</b> la preuve opposable</td></tr>
+      <tr><td>auditeur · re-preuve</td><td>« je n'ai fait confiance à personne ; j'ai re-prouvé moi-même »</td><td>ne voit pas la différence avec « un PDF qu'on m'a envoyé »</td></tr>
+      <tr><td>transversal</td><td><b>aucun</b> mot de crypto employé ; aucun ingénieur sollicité</td><td>un ingénieur a dû intervenir pour débloquer</td></tr>
+    </tbody>
+  </table>
+  <p>Mesurer aussi le <b>ROI ressenti</b> (le levier de la conversion, P1 §9) : demander « <b>combien de temps</b> te prend aujourd'hui d'assembler un dossier de diligence à la main ? » puis comparer au clic d'export. Le gain <b>heures → minutes</b>, re-prouvable, est l'argument de vente.</p>
+</div>
+
+<!-- 6 -->
+<div class="wrap page">
+  <h2><span class="num">§6</span> Le verdict : passe / arrête</h2>
+  <div class="callout ok"><p><b>PASSE (la porte est franchie → conversion / scale).</b> L'agent de conformité a fait la boucle <b>seul, sans ingénieur</b> : revoir, faire confiance au cadenas vert, traiter une exception (scellée), exporter un dossier ; et son <b>auditeur a re-prouvé</b> le bundle de façon autonome. Le design-partner <b>convertit</b> (payant ou référence nommée) sur la <b>seule</b> valeur d'auditabilité re-prouvable et souveraine — indépendamment de toute thèse sur les petits modèles. <b>C'est le signal pour construire la suite</b> (P2, ou un raffinement nommé : <span class="mono">verify-mini</span>, la forêt de Merkle par-cas, l'ancrage RFC 3161) <b>sur un produit qui se vend déjà</b>.</p></div>
+  <div class="callout bad"><p><b>ARRÊT (simplifier avant de scaler).</b> S'il a fallu un ingénieur pour expliquer le cadenas, trouver l'exception, ou déclencher l'export → la surface est <b>trop crue</b>. On ne scale <b>pas</b> ; on <b>simplifie l'UX</b> (le récit lisible, le geste d'export, la formulation de l'honnêteté) <b>avant</b> d'embarquer d'autres workflows ou d'autres cadres. « Un audit que personne ne sait lire n'a aucune valeur » (P1 §9). L'arrêt n'est <b>pas</b> un échec du code — c'est le runbook qui fait son travail : il <b>protège</b> contre un scale prématuré.</p></div>
+  <h3>Ce que la porte décide</h3>
+  <p>P1 est l'endroit où la provenance cesse d'être une <b>propriété interne</b> pour devenir la <b>raison d'acheter</b>. Cette épreuve est le <b>juge</b> de ce passage. Si elle passe, la couche de confiance a un <b>premier client de référence</b> et un <b>revenu dé-risqué</b> ; toute l'histoire au board est faite, et le pari plus grand se construit sur un socle <b>validé par un utilisateur réel</b>, pas seulement par des tests verts.</p>
+  <hr>
+  <p class="small muted"><b>Note d'honnêteté.</b> Ce runbook est un <b>protocole d'épreuve</b>, fondé sur le code <b>réel, testé et revu</b> des 7 slices de P1 (S0–S6, dont la console S3). Le <b>seed</b> et le <b>binaire</b> de la console sont des outils de démo (clé de démo dérivée d'un secret racine de démo — <b>jamais</b> une clé de production). La boucle est <b>mécaniquement prouvée</b> (<span class="mono">gate_loop_smoke</span>) ; ce que la porte mesure, et qu'aucun test ne peut mesurer, c'est l'<b>humain</b> — la compréhension et l'autonomie de l'agent de conformité. C'est, par conception (P1 §9), le <b>seul</b> critère qui décide si le coin de provenance est un produit.</p>
+</div>
+
+</body>
+</html>
