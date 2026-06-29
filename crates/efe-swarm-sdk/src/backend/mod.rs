@@ -221,22 +221,54 @@ pub(crate) fn curl_json(url: &str, body: &Value, max_time_s: u32) -> Option<Valu
 //  Garde-fou souveraineté : endpoint local uniquement (par défaut)
 // ─────────────────────────────────────────────────────────────────────────────
 
-/// Extrait l'hôte d'un endpoint (`scheme://[user@]host[:port][/path]`), gère IPv6 `[::1]`.
+/// Extrait l'hôte d'un endpoint (`scheme://[user:pass@]host[:port][/path][?query][#frag]`), gère IPv6 `[::1]`.
+///
+/// **Durci (anti-différentiel d'analyseur).** Cet extracteur DOIT s'accorder, octet pour octet, avec
+/// l'hôte que curl/reqwest contactent réellement (cf. [`curl_json`]/[`health_probe`]) : sinon la garde
+/// de souveraineté [`is_local_endpoint`] et l'épinglage [`matched_pin`] raisonnent sur un hôte ≠ de celui
+/// effectivement appelé → **bypass SSRF/egress** (exfiltration du prompt hors frontière). Miroir exact de
+/// `provenance-capture::guard::host_of` (même règle, ré-implémentée pour garder le SDK autonome).
 fn host_of(endpoint: &str) -> Option<String> {
-    let after_scheme = endpoint.split("://").last()?;
-    let authority = after_scheme.split('/').next()?;
-    let hostport = authority.rsplit('@').next()?; // ignore un éventuel userinfo
+    // Après le schéma `://` (ou tout l'endpoint si absent). `split_once` — PAS `split("://").last()`,
+    // qui prendrait le dernier `://` (un `://` glissé dans la query/le fragment renverrait le mauvais segment).
+    let after_scheme = endpoint.split_once("://").map(|(_, rest)| rest).unwrap_or(endpoint);
+    // L'autorité s'arrête au PREMIER de `/`, `?` ou `#` (chemin, requête, fragment) — RFC 3986. Ne couper
+    // que sur `/` laissait `http://evil.com#@127.0.0.1` (et `…?x@127.0.0.1`) exhiber « 127.0.0.1 » alors
+    // que curl appelle evil.com : le fragment/la query DOIVENT être tranchés AVANT d'isoler l'hôte.
+    let authority = after_scheme.split(['/', '?', '#']).next().unwrap_or(after_scheme);
+    if authority.is_empty() {
+        return None; // `http://` sans autorité → pas d'hôte (fail-closed : traité comme non-local).
+    }
+    // Retire un éventuel `userinfo@` sur le PREMIER `@` (RFC : `user:pass@host`), JAMAIS le dernier :
+    // `rsplit('@')` faisait passer `http://evil.com#@127.0.0.1` / `http://127.0.0.1@evil.com` pour du loopback.
+    let hostport = authority.split_once('@').map(|(_, h)| h).unwrap_or(authority);
     if let Some(rest) = hostport.strip_prefix('[') {
         // IPv6 littéral : [::1]:port
-        return rest.split(']').next().map(|h| h.to_string());
+        return rest.split(']').next().filter(|h| !h.is_empty()).map(|h| h.to_string());
     }
-    hostport.split(':').next().map(|h| h.to_string())
+    hostport.split(':').next().filter(|h| !h.is_empty()).map(|h| h.to_string())
 }
 
-/// L'endpoint cible-t-il la **machine locale** (boucle locale) ? Base du garde-fou egress.
+/// Un hôte est-il une IPv4 de **loopback** (`127.0.0.0/8`) — 4 octets NUMÉRIQUES dont le premier 127 ?
+/// Durci vs un naïf `starts_with("127.")` : `127.evil.com` (un NOM, qui résout vers l'externe) ne doit PAS
+/// passer la frontière. Seul un littéral IPv4 `127.x.x.x` compte (octal/hex/décimal-entier refusés faute de
+/// 4 octets `u8`). Miroir de `provenance-capture::guard::is_loopback_ipv4`.
+fn is_loopback_ipv4(h: &str) -> bool {
+    let octets: Vec<&str> = h.split('.').collect();
+    octets.len() == 4 && octets[0] == "127" && octets.iter().all(|o| o.parse::<u8>().is_ok())
+}
+
+/// L'endpoint cible-t-il la **machine locale** (boucle locale) ? Base du garde-fou egress (G2 souveraineté).
+///
+/// L'hôte est normalisé (minuscule + retrait d'**un** point final de FQDN) pour que `LOCALHOST`,
+/// `localhost.` et `127.0.0.1.` (formes légitimement locales) passent ; la normalisation n'ouvre AUCUNE
+/// porte vers l'externe (`localhost.evil.com` / `127.0.0.1.evil.com` restent refusés — 4 octets exigés).
 pub(crate) fn is_local_endpoint(endpoint: &str) -> bool {
     match host_of(endpoint) {
-        Some(h) => h == "localhost" || h == "::1" || h.starts_with("127."),
+        Some(h) => {
+            let n = h.strip_suffix('.').unwrap_or(h.as_str()).to_ascii_lowercase();
+            n == "localhost" || n == "::1" || is_loopback_ipv4(&n)
+        }
         None => false,
     }
 }
@@ -545,6 +577,73 @@ mod tests {
         for e in ["http://example.com:11434", "https://api.openai.com/v1", "http://10.0.0.5:11434", "http://192.168.1.9:8080"] {
             assert!(!is_local_endpoint(e), "{e} ne devrait PAS être local");
         }
+    }
+
+    /// **Régression SSRF/egress (G2)** — la garde de souveraineté DOIT s'accorder avec l'hôte que
+    /// curl/reqwest contactent réellement. Ces endpoints exhibaient un faux loopback via un différentiel
+    /// d'analyseur (fragment/query + `userinfo@` pris au dernier `@`) ou un `starts_with("127.")` naïf :
+    /// tous doivent être refusés (sinon un agent exfiltre le prompt hors frontière). Cf. `provenance-capture::guard`.
+    #[test]
+    fn ssrf_egress_bypasses_are_closed() {
+        for e in [
+            "http://evil.com#@127.0.0.1",     // fragment : l'autorité est evil.com, pas 127.0.0.1
+            "http://evil.com?x@127.0.0.1",    // query : idem
+            "http://evil.com/x@127.0.0.1",    // path : idem
+            "http://127.evil.com",            // NOM préfixé 127. (résout externe) ≠ loopback IPv4
+            "http://127.0.0.1@evil.com",      // userinfo = 127.0.0.1, hôte RÉEL = evil.com
+            "http://user:127.0.0.1@evil.com", // userinfo = user:127.0.0.1, hôte = evil.com
+        ] {
+            assert!(!is_local_endpoint(e), "bypass egress doit être refusé : {e}");
+        }
+        // L'hôte extrait est bien evil.com (pas le leurre loopback) : l'extracteur s'accorde avec curl.
+        assert_eq!(host_of("http://evil.com#@127.0.0.1").as_deref(), Some("evil.com"));
+        assert_eq!(host_of("http://evil.com?x@127.0.0.1").as_deref(), Some("evil.com"));
+        assert_eq!(host_of("http://127.0.0.1@evil.com").as_deref(), Some("evil.com"));
+        assert_eq!(host_of("http://").as_deref(), None, "autorité vide → pas d'hôte (fail-closed)");
+    }
+
+    /// La normalisation (casse + point final de FQDN) corrige des FAUX NÉGATIFS (hôtes légitimement
+    /// locaux) sans ouvrir de porte : un nom externe préfixé localhost/127 reste refusé.
+    #[test]
+    fn local_forms_are_normalized_without_opening_egress() {
+        for e in [
+            "http://127.0.0.1:11434",
+            "http://[::1]:8080",
+            "http://LOCALHOST:8000",   // casse
+            "http://localhost.:8000",  // point final de FQDN
+            "http://127.0.0.1.:11434", // IPv4 + point final
+            "http://127.255.0.1:9",    // 127.0.0.0/8, pas seulement 127.0.0.1
+        ] {
+            assert!(is_local_endpoint(e), "hôte local légitime, devrait passer : {e}");
+        }
+        for e in ["http://localhost.evil.com", "http://127.0.0.1.evil.com"] {
+            assert!(!is_local_endpoint(e), "nom externe, ne doit PAS passer : {e}");
+        }
+    }
+
+    /// **Interaction RC-1 (G2-remote)** : un endpoint qui usurpait le loopback via le différentiel
+    /// d'analyseur est désormais classé DISTANT → il retombe sous le gate d'épinglage. Sans `allow_remote`
+    /// il est refusé (egress) ; avec `allow_remote` mais SANS épingle correspondante il est refusé (non
+    /// pinné) ; l'épingle s'apparie sur l'hôte RÉEL (evil.com), jamais sur le leurre. Le fix RENFORCE
+    /// l'épinglage, il ne l'affaiblit pas.
+    #[test]
+    fn ssrf_bypass_endpoint_is_routed_through_remote_pin_gate() {
+        let bypass = "http://evil.com#@127.0.0.1";
+        // egress refusé par défaut (plus de faux « local » qui sautait toute épingle).
+        assert!(matches!(
+            build_local_backend(bypass, "gemma3:12b", false, &[]),
+            Err(SwarmError::RemoteBackendDenied { .. })
+        ));
+        // egress autorisé mais non épinglé → refusé (G2-remote).
+        assert!(matches!(
+            build_local_backend(bypass, "gemma3:12b", true, &[]),
+            Err(SwarmError::RemoteEndpointNotPinned { .. })
+        ));
+        // l'épingle s'apparie sur l'hôte RÉEL (evil.com), pas sur le leurre 127.0.0.1.
+        assert!(matched_pin(bypass, &[EndpointPin::new("evil.com", "sha256/PIN")]).is_some(), "apparié sur evil.com");
+        assert!(matched_pin(bypass, &[EndpointPin::new("127.0.0.1", "sha256/PIN")]).is_none(), "jamais sur le leurre");
+        let pins = [EndpointPin::new("evil.com", "sha256/PIN")];
+        assert!(build_local_backend(bypass, "gemma3:12b", true, &pins).is_ok(), "distant épinglé (sur l'hôte réel) → construit");
     }
 
     #[test]
