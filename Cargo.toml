@@ -262,6 +262,11 @@ members = [
     # la SOURCE du vérifieur (à re-compiler par un tiers), écrit records scellés + root + récit + MANIFEST
     # + README du sceptique (« intègre ≠ inforgeable »). La clé re-prouve mais n'est jamais écrite.
     "crates/forensic-export",
+    # Kovant P1 / S6 — reg-evidence : le moteur d'évidence réglementaire (gabarits EU AI Act / GDPR /
+    # CSDDD-LkSG). Trust-light : LIT le DAG re-prouvé (S0) et en DÉRIVE une VUE re-dérivable — mapping
+    # versionné+haché qui voyage, couverture honnête (montre ses trous), aucun champ « conforme »
+    # (outillé ≠ conforme). Zéro crypto neuve (re-prouve via provenance-dag). Cf. la roadmap (S6).
+    "crates/reg-evidence",
 ]
 
 [workspace.package]

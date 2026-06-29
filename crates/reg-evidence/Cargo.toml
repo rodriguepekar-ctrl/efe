@@ -1,0 +1,29 @@
+# SPDX-License-Identifier: UNLICENSED
+# Kovant P1 / S6 — reg-evidence : le MOTEUR D'ÉVIDENCE réglementaire (gabarits EU AI Act / GDPR / CSDDD-LkSG).
+# Trust-light : il LIT le DAG re-prouvé (S0) et en DÉRIVE des artefacts d'évidence — une VUE re-dérivable,
+# jamais un verdict de conformité (outillé ≠ conforme). AUCUNE crypto neuve : la dérivation re-prouve via
+# provenance-dag (refuse le non-prouvé). Le mapping est une revendication VERSIONNÉE + HACHÉE qui voyage ;
+# la couverture montre ses TROUS (anti-vert-malhonnête). Dépend du seul provenance-dag (+ serde) ;
+# audit-api/-capture sont en dev-deps (l'export S2 alimente la dérivation, et on RE-DÉRIVE comme un tiers).
+[package]
+name = "reg-evidence"
+version = { workspace = true }
+edition = { workspace = true }
+rust-version = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
+description = "Kovant P1/S6 — reg-evidence : dérive du DAG scellé re-prouvé les artefacts d'évidence réglementaire (EU AI Act art. 12/13/14/26, GDPR art. 5/22/30, CSDDD/LkSG). Mapping versionné+haché qui voyage, couverture honnête (montre ses trous), artefact = VUE re-dérivable sans champ « conforme » (outillé ≠ conforme). Trust-light : re-prouve via provenance-dag, zéro crypto neuve."
+publish = false
+
+[dependencies]
+provenance-dag = { path = "../provenance-dag" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+# Tests d'intégration (tests/) : l'export S2 (ExportContent) alimente la dérivation S6, et on RE-DÉRIVE
+# comme le ferait un tiers (trust-light : zéro confiance neuve, re-dérivation octet-à-octet).
+[dev-dependencies]
+provenance-dag = { path = "../provenance-dag" }
+provenance-capture = { path = "../provenance-capture" }
+audit-api = { path = "../audit-api" }

@@ -6872,6 +6872,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "reg-evidence"
+version = "0.0.1"
+dependencies = [
+ "audit-api",
+ "provenance-capture",
+ "provenance-dag",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "regex"
 version = "1.12.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
