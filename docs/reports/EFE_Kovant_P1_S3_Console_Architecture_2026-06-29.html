@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>EFE × Kovant — P1 · S3 : Architecture de la console opérationnelle de conformité (la 2ᵉ surface)</title>
+<style>
+  :root{--ink:#0f172a;--muted:#475569;--soft:#64748b;--line:#e2e8f0;--teal:#0d9488;--teal-d:#0f766e;--indigo:#4f46e5;--indigo-d:#4338ca;--ok:#16a34a;--warn:#d97706;--bad:#dc2626;--bg-tint:#f6fbfa;--bg-card:#eef2f1;--code-bg:#0f172a;--code-fg:#e2e8f0;}
+  *{box-sizing:border-box;} html{font-size:11.2px;}
+  body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,Arial,sans-serif;color:var(--ink);margin:0;line-height:1.6;background:#fff;-webkit-font-smoothing:antialiased;}
+  .wrap{max-width:178mm;margin:0 auto;padding:0 2mm;}
+  h1,h2,h3,h4{line-height:1.2;font-weight:700;}
+  h2{font-size:1.45rem;margin:0 0 .55rem;padding-bottom:.32rem;border-bottom:3px solid var(--teal);}
+  h2 .num{color:var(--teal);} h3{font-size:1.13rem;margin:1.1rem 0 .3rem;color:var(--teal-d);}
+  h4{font-size:1rem;margin:.8rem 0 .2rem;color:var(--indigo-d);}
+  p{margin:.55rem 0;text-align:justify;hyphens:auto;} a{color:var(--indigo);text-decoration:none;}
+  code{font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace;font-size:.85em;background:var(--bg-card);padding:.05em .35em;border-radius:4px;color:#0b3b36;}
+  .muted{color:var(--muted);} .small{font-size:.88rem;}
+  section{break-inside:avoid;} .page{break-before:page;} h2{break-after:avoid;}
+  table{border-collapse:collapse;width:100%;margin:.55rem 0;font-size:.8rem;}
+  th,td{border:1px solid var(--line);padding:.32rem .5rem;text-align:left;vertical-align:top;}
+  th{background:var(--bg-card);font-weight:700;} tbody tr:nth-child(even){background:var(--bg-tint);}
+  td.c,th.c{text-align:center;} .good{background:#dcfce7 !important;color:#166534;font-weight:700;} .mid{background:#fef9c3 !important;color:#854d0e;font-weight:700;} .bad{background:#fee2e2 !important;color:#991b1b;font-weight:700;}
+  .tag{display:inline-block;font-size:.71rem;font-weight:700;padding:.08em .5em;border-radius:20px;}
+  .t-ok{background:#dcfce7;color:#166534;} .t-info{background:#e0e7ff;color:#3730a3;} .t-teal{background:#ccfbf1;color:#115e59;} .t-warn{background:#fef3c7;color:#92400e;} .t-bad{background:#fee2e2;color:#991b1b;}
+  pre{background:var(--code-bg);color:var(--code-fg);padding:.55rem .8rem;border-radius:8px;overflow:auto;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.72rem;line-height:1.45;margin:.55rem 0;}
+  pre code{background:none;color:inherit;padding:0;}
+  .callout{border-left:4px solid var(--teal);background:var(--bg-tint);padding:.55rem .85rem;border-radius:0 8px 8px 0;margin:.65rem 0;}
+  .callout p{text-align:left;margin:.28rem 0;}
+  .callout.key{border-color:var(--indigo);background:#eef2ff;} .callout.warn{border-color:var(--warn);background:#fffbeb;} .callout.ok{border-color:var(--ok);background:#f0fdf4;} .callout.bad{border-color:var(--bad);background:#fef2f2;}
+  .fig{margin:.7rem 0 .9rem;text-align:center;break-inside:avoid;}
+  .fig svg{max-width:100%;height:auto;border:1px solid var(--line);border-radius:10px;background:#fff;}
+  .fig .cap{font-size:.79rem;color:var(--muted);margin-top:.32rem;font-style:italic;text-align:center;}
+  ul,ol{margin:.4rem 0 .55rem 1.1rem;padding:0;} li{margin:.24rem 0;}
+  svg text{font-family:-apple-system,"Segoe UI",Inter,sans-serif;}
+  .cover{height:262mm;display:flex;flex-direction:column;justify-content:center;position:relative;padding:0 6mm;}
+  .cover .eyebrow{color:var(--teal);font-weight:800;letter-spacing:.2em;font-size:.83rem;text-transform:uppercase;}
+  .cover h1{font-size:2.05rem;margin:.4rem 0 .2rem;line-height:1.08;} .cover .sub{font-size:1.16rem;color:var(--muted);margin-bottom:1.1rem;}
+  .cover .tagline{font-size:1.0rem;color:var(--ink);max-width:163mm;border-left:4px solid var(--teal);padding-left:1rem;font-style:italic;text-align:left;}
+  .cover .meta{position:absolute;bottom:6mm;left:6mm;right:6mm;display:flex;justify-content:space-between;border-top:1px solid var(--line);padding-top:.6rem;font-size:.8rem;color:var(--soft);}
+  .cover .pills{margin:1rem 0;} .cover .pills .tag{font-size:.77rem;margin-right:.3rem;}
+  .mono{font-family:ui-monospace,Menlo,Consolas,monospace;}
+  hr{border:none;border-top:1px solid var(--line);margin:.9rem 0;}
+  .toc{font-size:.9rem;columns:2;column-gap:2rem;} .toc div{margin:.16rem 0;break-inside:avoid;} .toc .n{color:var(--teal);font-weight:700;display:inline-block;width:1.8em;}
+  .eq{font-family:ui-monospace,Menlo,Consolas,monospace;background:#ecfdf5;border:1px solid #a7f3d0;border-radius:8px;padding:.45rem .75rem;margin:.5rem 0;font-size:.79rem;color:#065f46;text-align:center;}
+  @page{size:A4;margin:13mm 12mm;}
+</style>
+</head>
+<body>
+
+<!-- COVER -->
+<div class="wrap"><div class="cover">
+  <div class="eyebrow">P1 · S3 · la console opérationnelle · la confiance qu'on REND, pas celle qu'on établit</div>
+  <h1>S3 — La Console Opérationnelle de Conformité</h1>
+  <div class="sub">La surface quotidienne de l'agent de conformité non-cryptographe — une <b>VUE pure</b> sur le cœur scellé de S2 — sous la distinction dure qui la rend honnête : <b>montré vérifié ≠ prouvé sans confiance</b>.</div>
+  <div class="tagline">S0–S2 ont posé le substrat scellé et l'ont rendu <b>servable</b> ; S4 l'a rendu <b>défendable sans confiance</b> ; S6 en <b>auto-produit l'évidence réglementaire</b>. S3 est la <b>dernière marche</b>, et la <b>seconde des deux surfaces</b> de P1 (§2) : non pas l'export forensic <i>trustless</i>, mais la <b>console opérationnelle</b> — celle où un agent de conformité <b>revoit, comprend, agit, et exporte, seul, sans ingénieur</b>. Son principe d'architecture est radical de sobriété : la console <b>n'ajoute aucune surface de confiance</b>. Tout le trust-critique — la projection, l'intégrité-à-la-lecture, l'enveloppe « intègre ≠ correct », le RBAC, la rédaction, le <b>gate d'écriture humaine</b>, le seam d'export — vit déjà dans le cœur Rust de S2, <b>conçu sans framework, testable en air-gap comme une fonction pure</b>. S3 n'est donc que <b>deux coquilles non-trust-critiques</b> : une <b>coquille de transport</b> (qui <i>branche enfin</i> un serveur HTTP sur le routeur pur de S2 — c'est le premier endroit où un framework est permis, <b>parce que la confiance n'en dépend pas</b>) et une <b>interface</b> (un rendu pur, sans crypto, qui ne détient <b>jamais</b> la clé tenant). La cryptographie est <b>cachée</b>, le verdict est <b>montré</b> : un <b>cadenas vert</b> — « Vérifié, record authentique et non-altéré » — avec sa <b>fraîcheur honnête</b> (la date de la dernière re-preuve <b>froide</b>), un bouton « <b>vérifier maintenant</b> » qui déclenche la re-preuve autoritaire, et un <b>rouge fail-loud</b> qui ne <b>masque jamais</b> une altération. La <b>file d'exceptions</b> remonte les cas FAIL/ambigus pour la <b>revue humaine</b> — le <b>seul write</b> de la console, et il est <b>scellé par S2</b> : la console <b>demande</b>, le cœur <b>scelle</b> (le navigateur n'a pas la clé). Recherche et filtre par fournisseur, exigence, période, statut ; RBAC où le <b>bouton caché est cosmétique</b> — c'est S2 qui <b>refuse</b>. Et l'<b>export en un clic</b> : le dossier défendable (S3 × S4 × S6), où la <b>clé voyage séparément</b> — l'heure de dossier manuel devient une minute re-prouvable. L'honnêteté <b>cardinale</b>, sœur des trois autres : « <b>montré vérifié</b> » (le badge, confiance <b>opérationnelle</b> — vous êtes dans le tenant) n'est <b>jamais</b> « <b>prouvé sans confiance</b> » (l'export re-prouvé, confiance <b>forensic</b> — personne à croire) — et c'est <b>pour ça</b> que l'export est à un clic. La <b>porte de tout P1</b> se décide ici : si un agent de conformité non-technique ne peut pas, <b>seul</b>, revoir-faire-confiance-exporter, on <b>simplifie l'UX avant de scaler</b>.</div>
+  <div class="pills">
+    <span class="tag t-teal">une VUE pure sur S2 — zéro surface de confiance neuve</span>
+    <span class="tag t-info">le cadenas vert : re-preuve sans cryptographie + fraîcheur honnête + fail-loud</span>
+    <span class="tag t-warn">montré vérifié ≠ prouvé sans confiance</span>
+    <span class="tag t-info">l'oversight humain = le seul write, scellé par S2</span>
+    <span class="tag t-ok">LA porte de P1 : l'officier fait la boucle SEUL (sinon simplifier)</span>
+  </div>
+  <div class="meta">
+    <span>EFE × Kovant · P1 (le coin de provenance) · S3 — architecture de la console — proposition</span>
+    <span>2026-06-29 · architecture · la 2ᵉ surface</span>
+  </div>
+</div></div>
+
+<!-- TOC -->
+<div class="wrap page">
+  <h2><span class="num">§0</span> Plan</h2>
+  <div class="toc">
+    <div><span class="n">1.</span> Où S3 se situe : la 2ᵉ surface (la console), la dernière marche</div>
+    <div><span class="n">2.</span> Le principe cardinal : la console REND la confiance, elle ne l'ÉTABLIT pas</div>
+    <div><span class="n">3.</span> Montré vérifié ≠ prouvé sans confiance : la distinction d'honnêteté de S3</div>
+    <div><span class="n">4.</span> Le cadenas vert : la re-preuve sans cryptographie (+ fraîcheur, + fail-loud)</div>
+    <div><span class="n">5.</span> La vue décision : le « pourquoi » lisible</div>
+    <div><span class="n">6.</span> La file d'exceptions &amp; l'oversight humain (le seul write, scellé)</div>
+    <div><span class="n">7.</span> Recherche, filtre, pagination (la requête quotidienne)</div>
+    <div><span class="n">8.</span> RBAC : le bouton caché est cosmétique, S2 enforce</div>
+    <div><span class="n">9.</span> L'export en un clic : le dossier défendable (S3 × S4 × S6)</div>
+    <div><span class="n">10.</span> La coquille de transport : où le framework HTTP est ENFIN permis</div>
+    <div><span class="n">11.</span> Souveraineté, ce que S3 ne fait PAS, invariants-tests</div>
+    <div><span class="n">12.</span> Réutilisé-vs-neuf, séquence, la PORTE de P1, ce que S3 décide</div>
+  </div>
+
+  <h3>Le geste, en une phrase</h3>
+  <p>Donner à l'agent de conformité non-cryptographe une <b>vue pure</b> sur le cœur scellé de S2 — un <b>cadenas vert</b> à la place d'un digest, une <b>file d'exceptions</b> dont la revue devient une <b>provenance scellée</b>, et un <b>export défendable en un clic</b> — sous l'honnêteté que ce qui est <b>montré vérifié</b> à l'écran (confiance opérationnelle) n'est <b>pas</b> ce qui est <b>prouvé sans confiance</b> dans l'export (confiance forensic), pour décrocher la <b>porte de P1</b> : l'officier fait la boucle <b>seul</b>.</p>
+
+  <div class="callout key">
+    <p><b>Pourquoi S3 est la marche qui décide P1, et pas un habillage.</b> S0–S4 livrent la <b>capacité</b> ; S6 livre l'<b>artefact</b> ; S3 livre l'<b>usage</b> — et l'usage est le <b>critère d'arrêt</b> de tout le programme (P1 §9). Un audit re-prouvable que <b>personne ne sait lire</b> n'a aucune valeur ; un export défendable que l'officier <b>ne sait pas déclencher seul</b> ne se vend pas. S3 transforme le coin de provenance en un <b>produit qu'on adopte</b>. Et il le fait <b>sans rien risquer de la confiance</b> : parce que tout le trust-critique est <b>déjà</b> dans S2 (testé en air-gap), la console peut être une <b>coquille</b> — légère, remplaçable, hors de la frontière de confiance. Une console <b>compromise</b> peut <b>tromper l'opérateur</b> (risque opérationnel) ; elle ne peut <b>pas forger</b> un record (pas de clé) ni faire re-prouver un DAG altéré (la re-preuve froide de S2 et la re-preuve du tiers l'attrapent). La confiance <b>dégrade proprement</b> — c'est ce qui rend sûr de mettre la console <b>dehors</b>.</p>
+  </div>
+</div>
+
+<!-- 1 -->
+<div class="wrap page">
+  <h2><span class="num">§1</span> Où S3 se situe : la 2ᵉ surface (la console), la dernière marche</h2>
+  <p>L'architecture P1 §2 a posé l'idée structurelle du programme : <b>un substrat scellé, deux surfaces, deux modèles de confiance.</b> La première surface est l'<b>export forensic</b> (S4) — un tiers re-prouve <b>sans faire confiance à personne</b>. La seconde est la <b>console opérationnelle</b> (S3) — l'agent de conformité, <b>à l'intérieur</b> du tenant, revoit et agit au quotidien, et fait confiance à l'affichage <b>parce qu'il est dedans</b>. S3 est cette seconde surface, et c'est la <b>dernière slice</b> de P1 : avec elle, le coin de provenance cesse d'être une propriété technique pour devenir un <b>produit qu'une équipe conformité utilise</b>.</p>
+  <p>La distinction de <b>nature</b> entre les deux surfaces commande toute l'architecture de S3. L'export est <b>trust-critique</b> : un défaut y est une responsabilité (d'où la rigueur extrême de S4). La console, elle, est <b>non-trust-critique</b> : elle n'établit aucune garantie cryptographique — elle <b>rend</b> celles que S2 a déjà calculées. C'est ce qui autorise S3 à être une <b>coquille</b> (§2, §10) plutôt qu'un second cœur de confiance. Le danger de S3 n'est donc pas un calcul faux ; c'est une <b>UX qui ment</b> — un vert affiché sur un store cassé, un badge périmé présenté comme une preuve live, ou un export qui laisse croire qu'on a prouvé alors qu'on a seulement <b>montré</b>. Toute l'architecture est organisée pour <b>rendre ces mensonges impossibles</b> (§3, §4, §8).</p>
+  <table>
+    <thead><tr><th></th><th>Surface forensic (S4)</th><th>Surface opérationnelle (S3 — ici)</th></tr></thead>
+    <tbody>
+      <tr><td><b>Public</b></td><td>régulateur / auditeur EXTERNE</td><td>agent de conformité INTERNE (non-cryptographe)</td></tr>
+      <tr><td><b>Confiance</b></td><td><b>aucune</b> requise (re-preuve)</td><td><b>opérationnelle</b> : il est dans le tenant</td></tr>
+      <tr><td><b>Geste</b></td><td>re-compiler + re-prouver un bundle</td><td>revoir, filtrer, agir, exporter — au quotidien</td></tr>
+      <tr><td><b>Nature</b></td><td>trust-critique (un défaut = responsabilité)</td><td><b>non</b> trust-critique (une VUE ; un défaut = risque opérationnel)</td></tr>
+      <tr><td><b>Ressenti</b></td><td>le sérieux complet, autonome</td><td>un <b>cadenas vert</b>, pas une preuve mathématique</td></tr>
+    </tbody>
+  </table>
+  <div class="callout ok"><p><b>S3 réalise P1 §4 (la console opérationnelle) en s'appuyant sur S2.</b> Le travail de S3 n'est presque <b>que</b> de l'interface et du plumbing : la <b>vue décision</b>, le <b>statut de re-preuve en langage clair</b>, la <b>file d'exceptions</b>, la <b>recherche/filtre</b>, le <b>RBAC</b> — tous décrits dans P1 §4 — se branchent sur des contrats <b>déjà construits et testés</b> dans <span class="mono">audit-api</span> (S2). C'est la 6ᵉ slice sur 7 ; elle clôt la « confiance vendable » de P1.</p></div>
+</div>
+
+<!-- 2 -->
+<div class="wrap page">
+  <h2><span class="num">§2</span> Le principe cardinal : la console REND la confiance, elle ne l'ÉTABLIT pas</h2>
+  <p>Le principe qui fonde S3, et qui le rend <b>sûr</b> : <b>la frontière de confiance s'arrête à S2.</b> Tout ce qui établit une garantie — sceller, re-prouver, projeter sans inventer, isoler par tenant, rédiger, gater l'écriture humaine, produire le contenu d'export — vit dans le cœur Rust de S2, qui a été <b>délibérément conçu sans framework HTTP</b> et <b>testé en air-gap comme une fonction pure</b> (<span class="mono">route(&amp;mut reg, &amp;Request) -&gt; Response</span>). S3 vit <b>au-dessus</b> de cette frontière : il <b>appelle</b> S2 et <b>rend</b> la réponse. Il ne re-calcule <b>rien</b> de trust-critique. C'est l'exact pendant, du côté de l'interface, du « trust-light » de S6 : <b>zéro surface de confiance neuve.</b></p>
+  <div class="fig">
+  <svg viewBox="0 0 720 320" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="La console rend la confiance, l'export l'établit">
+    <defs><marker id="a1" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto"><path d="M0,0 L9,4.5 L0,9 Z" fill="#475569"/></marker></defs>
+    <!-- trust boundary -->
+    <rect x="20" y="150" width="680" height="156" rx="10" fill="#f6fbfa" stroke="#0f766e" stroke-dasharray="4 3"/>
+    <text x="34" y="170" font-size="9.5" font-weight="700" fill="#0f766e">FRONTIÈRE DE CONFIANCE (le tenant) — la clé ne sort jamais</text>
+    <!-- S0/S1 -->
+    <rect x="40" y="248" width="300" height="48" rx="8" fill="#fff" stroke="#0f766e"/>
+    <text x="190" y="268" text-anchor="middle" font-size="10" font-weight="700" fill="#0f766e">S0/S1 · le DAG scellé + la clé tenant</text>
+    <text x="190" y="284" text-anchor="middle" font-size="8.5" fill="#475569">sceau HMAC · manifest-root · souveraineté</text>
+    <!-- S2 core -->
+    <rect x="40" y="186" width="640" height="52" rx="8" fill="#eef2ff" stroke="#4f46e5"/>
+    <text x="360" y="206" text-anchor="middle" font-size="11" font-weight="700" fill="#3730a3">S2 · audit-api — TOUT le trust-critique (Rust, sans framework, air-gap-testable)</text>
+    <text x="360" y="223" text-anchor="middle" font-size="8.5" fill="#475569">projection · intégrité-à-la-lecture · « intègre ≠ correct » · RBAC · rédaction · gate d'écriture · seam d'export</text>
+    <!-- S3 shell + UI (non-trust) -->
+    <rect x="120" y="44" width="220" height="80" rx="9" fill="#ccfbf1" stroke="#0d9488"/>
+    <text x="230" y="66" text-anchor="middle" font-size="11" font-weight="700" fill="#0f766e">S3 · console (REND)</text>
+    <text x="230" y="83" text-anchor="middle" font-size="8.5" fill="#475569">coquille de transport + UI</text>
+    <text x="230" y="96" text-anchor="middle" font-size="8.5" fill="#475569">rendu pur · aucune crypto · aucune clé</text>
+    <text x="230" y="112" text-anchor="middle" font-size="8.5" fill="#0f766e">confiance OPÉRATIONNELLE</text>
+    <line x1="230" y1="124" x2="230" y2="184" stroke="#475569" marker-end="url(#a1)"/>
+    <text x="238" y="158" font-size="8" fill="#475569">appelle route() · rend la réponse</text>
+    <!-- S4 export (establishes) -->
+    <rect x="430" y="44" width="220" height="80" rx="9" fill="#fffbeb" stroke="#d97706"/>
+    <text x="540" y="66" text-anchor="middle" font-size="11" font-weight="700" fill="#92400e">S4 export (ÉTABLIT)</text>
+    <text x="540" y="83" text-anchor="middle" font-size="8.5" fill="#475569">bundle re-prouvable (+ reg/ de S6)</text>
+    <text x="540" y="96" text-anchor="middle" font-size="8.5" fill="#475569">le tiers re-prouve SANS personne</text>
+    <text x="540" y="112" text-anchor="middle" font-size="8.5" fill="#92400e">confiance FORENSIC</text>
+    <line x1="540" y1="124" x2="540" y2="184" stroke="#475569" marker-end="url(#a1)"/>
+    <text x="548" y="158" font-size="8" fill="#475569">seam d'export → assemble</text>
+    <!-- console points to export -->
+    <line x1="340" y1="84" x2="428" y2="84" stroke="#0d9488" marker-end="url(#a1)"/>
+    <text x="384" y="78" text-anchor="middle" font-size="8" fill="#0f766e">« exporter »</text>
+  </svg>
+  <div class="cap">La frontière de confiance s'arrête à <b>S2</b>. La console (S3) <b>rend</b> ce que S2 a calculé — confiance <b>opérationnelle</b> ; l'export (S4) <b>établit</b> une preuve que personne n'a à croire — confiance <b>forensic</b>. La console <b>pointe vers</b> l'export précisément parce qu'elle ne le remplace pas.</div>
+  </div>
+  <p>Cette frontière a une conséquence de sécurité qu'il faut énoncer franchement (et qui justifie de mettre la console <b>dehors</b>) : <b>une console défaillante ou compromise est un risque opérationnel, pas une faille de provenance.</b> Le pire qu'une UI malveillante puisse faire est de <b>tromper l'opérateur</b> — afficher un faux vert, cacher une exception. Elle ne peut <b>pas</b> forger un record (elle n'a pas la clé tenant — celle-ci ne quitte jamais la frontière), ni faire re-prouver un DAG altéré (la re-preuve <b>froide</b> de S2 fait foi, et l'<b>export</b> remis à un tiers le re-prouve <b>indépendamment</b>). La confiance <b>dégrade proprement</b> : on perd du confort, jamais l'intégrité. C'est exactement pourquoi l'architecture peut se permettre une coquille légère et un framework UI riche là où le cœur reste austère.</p>
+  <pre><code>Navigateur (UI — rendu pur, aucune crypto, aucune clé)
+    │  HTTP/JSON, LOCAL (boucle souveraine)
+    ▼
+Coquille de transport (S3 — NON trust-critique ; framework HTTP permis ICI)
+    │  bind egress-gardé (assert_local) · session → AuthContext{tenant, rôle, sujet}
+    │  HTTP Request → audit_api::Request ;  Response → HTTP
+    ▼
+audit-api (S2 — TOUT le trust-critique, Rust, sans async)
+    route(&amp;mut reg, &amp;Request) → Response
+      · projection pure (DecisionView : chaque champ nomme son backed_by_node)
+      · intégrité-à-la-lecture (badge cache-par-root + re-preuve FROIDE autoritaire)
+      · enveloppe « intègre ≠ correct » · RBAC · rédaction · gate d'écriture humaine
+      · seam d'export → S4 (assemble) + S6 (reg_subtree)
+    ▼
+provenance-dag / -capture (S0/S1 — le DAG scellé ; la CLÉ tenant ne sort JAMAIS d'ici)</code></pre>
+</div>
+
+<!-- 3 -->
+<div class="wrap page">
+  <h2><span class="num">§3</span> Montré vérifié ≠ prouvé sans confiance : la distinction d'honnêteté de S3</h2>
+  <p>Chaque slice du coin de provenance porte une distinction dure qui dit <b>ce que la garantie n'est pas</b>. S2 : <b>intègre ≠ correct</b>. S4 : <b>intègre ≠ inforgeable</b>. S6 : <b>outillé ≠ conforme</b>. S3 porte la quatrième, et elle est <b>propre à une interface</b> : ce que l'écran <b>montre</b> n'est pas ce que l'export <b>prouve</b>.</p>
+  <div class="eq">« MONTRÉ vérifié »  ≜  la console REND le verdict d'intégrité de S2 (cadenas vert, fraîcheur T)
+                    — confiance OPÉRATIONNELLE (vous êtes DANS le tenant)
+        ≠  « PROUVÉ sans confiance »  ≜  un tiers RE-PROUVE le bundle exporté (S4)
+                    — confiance FORENSIC (personne à croire ; le navigateur ne calcule RIEN)</div>
+  <p>La nuance n'est pas byzantine — elle protège l'utilisateur et le vendeur. Le badge vert de la console est un <b>rendu fidèle</b> du verdict que le cœur Rust de S2 a calculé par une re-preuve <b>froide</b> ; le <b>navigateur ne calcule aucune preuve</b>, il <b>affiche</b> celle de S2. C'est suffisant pour le <b>quotidien</b> (vous êtes dans le tenant, et le cœur qui affiche est <b>le même code</b> qu'un régulateur re-compile). Mais ce <b>n'est pas</b> une preuve <b>opposable</b> : pour cela, il faut l'<b>export</b> (S4), que le destinataire re-prouve <b>lui-même</b>, sans rien croire — ni la console, ni le binaire, ni Kovant. <b>C'est pour cette raison exacte que l'export est à un clic</b> (§9) : la console ne <b>prétend pas</b> être la preuve forensic ; elle <b>pointe</b> vers elle.</p>
+  <div class="callout warn"><p><b>Trois règles d'UX que la distinction impose (et qui deviennent des invariants, §11).</b> <b>(1) La fraîcheur est montrée, jamais supposée :</b> le badge affiche <span class="mono">as_of</span> — l'horodatage de la dernière re-preuve froide qui l'étaye —, et « <b>vérifier maintenant</b> » déclenche une re-preuve <b>froide autoritaire</b> ; un vert <b>en cache</b> n'est jamais présenté comme une vérité <b>live</b>. <b>(2) Le rouge ne se masque pas :</b> un store altéré est rendu <b>rouge</b>, avec le record cassé localisé — jamais un faux vert (fail-loud, §4). <b>(3) « Montré » renvoie à « prouvé » :</b> toute vue porte le chemin d'export, pour que l'officier sache que la <b>vraie</b> preuve s'obtient en exportant. Une console qui laisserait croire que « l'écran est vert » <b>est</b> « j'ai prouvé » serait un mensonge d'interface — précisément ce que cette distinction interdit.</p></div>
+  <p>Notons que S3 <b>hérite</b> et <b>propage</b> aussi les trois distinctions amont, sans jamais les diluer : le badge dit « <b>intègre</b> » (jamais « correct », §S2) ; l'export porte « intègre ≠ <b>inforgeable</b> » (l'ancrage, §S4) ; les artefacts réglementaires affichés disent « <b>outillé</b> » (jamais « conforme », §S6). La console est le lieu où ces quatre honnêtetés deviennent <b>visibles ensemble</b> pour un non-juriste, non-cryptographe — c'est sa charge propre.</p>
+</div>
+
+<!-- 4 -->
+<div class="wrap page">
+  <h2><span class="num">§4</span> Le cadenas vert : la re-preuve sans cryptographie (+ fraîcheur, + fail-loud)</h2>
+  <p>Le cœur de l'usabilité (et donc de la <b>porte</b> de P1) tient dans un seul élément d'interface : le <b>badge d'intégrité</b>. P1 §4 l'a énoncé — « un clic <i>vérifier</i> exécute la re-preuve sous le capot ; l'utilisateur voit <b>un mot, pas un digest</b> ». S3 le réalise en rendant fidèlement l'<span class="mono">IntegrityEnvelope</span> que <b>chaque</b> réponse de S2 porte déjà.</p>
+  <div class="fig">
+  <svg viewBox="0 0 720 250" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Le badge d'intégrité : vert, rouge, vérifier maintenant">
+    <!-- green -->
+    <rect x="24" y="40" width="210" height="150" rx="10" fill="#f0fdf4" stroke="#16a34a"/>
+    <circle cx="52" cy="68" r="9" fill="#16a34a"/>
+    <text x="70" y="72" font-size="11" font-weight="700" fill="#166534">VÉRIFIÉ</text>
+    <text x="40" y="96" font-size="9" fill="#166534">record authentique &amp; non-altéré</text>
+    <text x="40" y="118" font-size="8.5" fill="#475569">à jour de la re-preuve froide</text>
+    <text x="40" y="131" font-size="8.5" fill="#475569">as_of = 2026-06-29 14:03</text>
+    <text x="40" y="153" font-size="8" fill="#475569">manifest-root ab35…e1 (n=128)</text>
+    <text x="40" y="172" font-size="8" fill="#0f766e">[ vérifier maintenant ]  [ exporter ]</text>
+    <!-- red -->
+    <rect x="256" y="40" width="210" height="150" rx="10" fill="#fef2f2" stroke="#dc2626"/>
+    <circle cx="284" cy="68" r="9" fill="#dc2626"/>
+    <text x="302" y="72" font-size="11" font-weight="700" fill="#991b1b">ALTÉRATION DÉTECTÉE</text>
+    <text x="272" y="96" font-size="9" fill="#991b1b">le record n'est PAS authentique</text>
+    <text x="272" y="118" font-size="8.5" fill="#475569">cassé au record 47</text>
+    <text x="272" y="131" font-size="8.5" fill="#475569">motif : sceau invalide</text>
+    <text x="272" y="156" font-size="8" fill="#991b1b">la vue passe au ROUGE — fail-loud</text>
+    <text x="272" y="172" font-size="8" fill="#475569">jamais un faux vert masqué</text>
+    <!-- verify flow -->
+    <rect x="488" y="40" width="208" height="150" rx="10" fill="#eef2ff" stroke="#4f46e5"/>
+    <text x="592" y="64" text-anchor="middle" font-size="10" font-weight="700" fill="#3730a3">« vérifier maintenant »</text>
+    <text x="500" y="88" font-size="8.5" fill="#475569">→ S2 reprove_now (re-preuve</text>
+    <text x="510" y="100" font-size="8.5" fill="#475569">FROIDE, autoritaire)</text>
+    <text x="500" y="120" font-size="8.5" fill="#475569">→ enveloppe { ok, as_of=now,</text>
+    <text x="510" y="132" font-size="8.5" fill="#475569">broken_at, reason }</text>
+    <text x="500" y="154" font-size="8.5" fill="#3730a3">l'utilisateur voit UN MOT,</text>
+    <text x="500" y="166" font-size="8.5" fill="#3730a3">pas un digest</text>
+  </svg>
+  <div class="cap">Le badge est un <b>rendu fidèle</b> de l'<span class="mono">IntegrityEnvelope</span> de S2 : vert + fraîcheur (<span class="mono">as_of</span>), ou <b>rouge fail-loud</b> avec le record cassé localisé. « Vérifier maintenant » déclenche la re-preuve <b>froide</b>. Aucune cryptographie n'est exposée — un cadenas, pas une équation.</div>
+  </div>
+  <p>Trois propriétés font la crédibilité de ce badge, et chacune vient <b>directement</b> d'un choix déjà fait dans S2 :</p>
+  <ul>
+    <li><b>La fraîcheur est une donnée, pas une hypothèse.</b> S2 distingue un <b>badge rapide</b> (caché par le manifest-root — sain, car le root <b>engage</b> les records) d'une <b>re-preuve froide autoritaire</b>. La console affiche toujours l'<span class="mono">as_of</span> du verdict ; le bouton « vérifier maintenant » force la froide (<span class="mono">reprove_now</span>). Ainsi l'officier ne confond jamais « vert il y a une heure » avec « vert à l'instant ».</li>
+    <li><b>Le rouge est fail-loud, jamais masqué.</b> S2 <b>sert même un store cassé</b>, mais avec une enveloppe <span class="mono">ok:false</span> qui <b>localise</b> le record altéré (<span class="mono">broken_at</span>). La console <b>doit</b> peindre la vue en rouge et nommer le record — un faux vert sur un store altéré serait la pire trahison possible (I-S3-FAIL-LOUD, §11).</li>
+    <li><b>La crypto est cachée, le verdict est montré.</b> Le badge ne montre ni HMAC, ni chaîne, ni hash brut (au plus le manifest-root <b>en petit</b>, comme un numéro de scellé). Le mot — « Vérifié » / « Altération détectée » — porte tout le sens. C'est <b>l'</b>exigence d'usabilité de P1 §9.</li>
+  </ul>
+</div>
+
+<!-- 5 -->
+<div class="wrap page">
+  <h2><span class="num">§5</span> La vue décision : le « pourquoi » lisible</h2>
+  <p>La vue quotidienne par dossier (un fournisseur, un cas) rend le <span class="mono">DecisionView</span> que la projection <b>pure</b> de S2 produit. Sa vertu cardinale est <b>déjà</b> garantie par S2 : la projection <b>n'invente rien</b> — <b>chaque</b> champ nomme le <span class="mono">node_id</span> scellé dont il dérive (<span class="mono">backed_by_node</span>) —, et elle est <b>déterministe</b>. La console n'a donc qu'à <b>rendre</b> une structure qui <b>ne peut pas diverger</b> du record.</p>
+  <p>Ce qu'elle rend, pour qu'un non-technicien comprenne <b>en un coup d'œil</b> :</p>
+  <ul>
+    <li><b>Le statut</b> — l'énumération à 4 valeurs de S2 (<span class="mono">COMPLIANT</span> / <span class="mono">FAIL</span> / <span class="mono">EXCEPTION</span> / <span class="mono">PENDING</span>), rendue comme un bandeau coloré. Le statut décrit l'<b>état du record</b> (un verdict a conclu, un humain est intervenu), <b>jamais</b> la justesse — la console reprend exactement ce cadrage.</li>
+    <li><b>Le verdict</b> — le <span class="mono">verdict_label</span> (l'output du nœud d'agrégation), avec son <span class="mono">verdict_node</span> ; et si le cas porte <b>plusieurs</b> verdicts, le <span class="mono">verdict_conflict</span> est <b>surfacé</b> (jamais résolu en silence) — la console le montre comme une alerte.</li>
+    <li><b>Les contrôles</b> — chaque exigence (le rôle de l'agent, ex. « sanction_check »), sa conclusion, le modèle/version qui a conclu, et — décisif — ses <b>évidences citées</b> : la <span class="mono">retrieved_ref</span> (clause + document), le <span class="mono">content_hash</span> <b>figé au moment T</b>, l'horodatage. C'est la <b>chaîne de raisonnement vérifiable</b> que P1 §3 a rendue possible, ici <b>lisible</b>.</li>
+    <li><b>Le flux &amp; l'oversight</b> — les arêtes de communication (qui a passé quoi à qui) et les actes humains scellés (qui a approuvé/outrepassé, avec quel motif), chacun adossé à son nœud.</li>
+    <li><b>Le badge d'intégrité</b> (§4) — posé <b>au-dessus</b> de la décision, pour que « ce que je lis » soit toujours accompagné de « est-ce authentique ? ».</li>
+  </ul>
+  <div class="callout key"><p><b>La traçabilité par node_id est l'ancre anti-mensonge.</b> Comme l'export forensic (S4) fait <b>citer chaque ligne du récit par son nœud</b>, la vue décision affiche le <span class="mono">backed_by_node</span> de chaque élément : un officier (ou un auditeur regardant par-dessus son épaule) peut <b>recouper</b> n'importe quelle affirmation à l'écran avec le record scellé. La console ne demande <b>jamais</b> qu'on la croie sur parole : tout pointe vers un nœud re-prouvable. C'est la même discipline que le bundle, portée à l'écran.</p></div>
+</div>
+
+<!-- 6 -->
+<div class="wrap page">
+  <h2><span class="num">§6</span> La file d'exceptions &amp; l'oversight humain (le seul write, scellé)</h2>
+  <p>La console est <b>massivement</b> en lecture — mais elle a <b>une</b> écriture, et c'est la plus importante du système socio-technique : l'<b>acte de supervision humaine</b>. P1 §6 l'a posé comme exigence (l'EU AI Act art. 14) : quand un humain revoit, approuve ou outrepasse une décision d'agent, cet acte doit <b>lui-même</b> entrer dans la provenance, scellé — sinon l'audit a un trou (« qui a validé ce FAIL transformé en exception ? »).</p>
+  <p>La console organise cela en deux temps. D'abord la <b>file d'exceptions</b> : une vue filtrée (§7) sur les cas qui <b>demandent un humain</b> — les <span class="mono">FAIL</span>, les <span class="mono">EXCEPTION</span> en cours, les <b>conflits de verdict</b>, les <span class="mono">PENDING</span> qui traînent. L'officier y puise sa charge de travail. Ensuite la <b>revue</b> : sur un cas, il choisit une action — <b>APPROUVER</b>, <b>OUTREPASSER</b>, <b>ESCALADER</b>, <b>COMMENTER</b> — et saisit un <b>motif</b>. Cet acte part vers S2, qui le <b>scelle</b>.</p>
+  <div class="eq">la console DEMANDE  →  S2 record_human_action (RBAC + cible validée)  →  nœud Human SCELLÉ
+       (le navigateur n'a PAS la clé · ne calcule PAS de HMAC · ne peut PAS forger)</div>
+  <p>Le point d'architecture est que <b>la console ne scelle pas</b> : elle <b>demande</b>, et le <b>cœur Rust scelle</b>. C'est le « gate d'écriture » de S2 — le <b>seul</b> chemin par lequel un nœud <span class="mono">Human</span> peut naître. La console ne détient pas la clé, ne calcule aucun HMAC, et ne peut donc pas fabriquer une approbation. S2 valide le rôle (<span class="mono">can_act</span>), valide que la <b>cible existe</b> dans le cas, puis ajoute un nœud scellé re-prouvable — un override non scellé est <b>structurellement impossible</b>. Après l'acte, le badge repasse par une re-preuve <b>froide</b> (le DAG a avancé), et le cas reflète sa nouvelle réalité (souvent <span class="mono">EXCEPTION</span>, désormais <b>tracée</b>).</p>
+  <div class="callout key"><p><b>L'oversight devient une preuve, pas un trou.</b> C'est l'aboutissement opérationnel de P1 §6 : la console transforme « un humain a regardé » en « <b>cet</b> humain a décidé <b>ceci</b> à <b>ce moment</b>, scellé et re-prouvable ». C'est <b>exactement</b> ce qu'un déployeur doit démontrer au régulateur (supervision humaine effective et tracée), et S3 le rend <b>faisable dans le flux de travail quotidien</b> — pas dans un outil séparé. La revue d'exception <b>est</b> de la conformité produite, et le dossier exportable (§9) la contient.</p></div>
+</div>
+
+<!-- 7 -->
+<div class="wrap page">
+  <h2><span class="num">§7</span> Recherche, filtre, pagination (la requête quotidienne)</h2>
+  <p>« Montre-moi toutes les décisions de criblage sanctions du T2 » : la console doit répondre à ce genre de question en secondes. Elle s'appuie sur la liste paginée de S2 (<span class="mono">list_cases</span>) et ses filtres déjà construits — par <b>statut</b>, par <b>période</b>, et par <b>rôle/exigence</b> (les cas contenant un acte d'un rôle donné). La <b>file d'exceptions</b> (§6) n'est qu'un préréglage de ces filtres.</p>
+  <p>Un détail d'architecture mérite d'être rendu <b>visible</b> dans l'UX plutôt que caché : la <b>pagination est liée au root</b>. S2 émet un <b>curseur opaque</b> qui lie la position à la chaîne (<span class="mono">{root}-{pos}</span>) ; si le DAG <b>avance</b> entre deux pages (une nouvelle capture, une revue scellée), le curseur devient <b>périmé</b> et S2 rend <span class="mono">CursorStale</span> — il refuse de paginer <b>en silence</b> contre une chaîne déplacée. La console <b>doit</b> traiter ce cas <b>honnêtement</b> : « les données ont évolué — actualiser », plutôt que d'afficher une page incohérente. C'est l'honnêteté de fraîcheur (§3) portée à la liste.</p>
+  <pre><code>Filtres (→ S2 list_cases : ListQuery)         Pagination liée au root
+  · statut  ∈ {COMPLIANT, FAIL, EXCEPTION, PENDING}   curseur opaque {root}-{pos}
+  · période [from, to]                                 root avancé → CursorStale
+  · rôle/exigence  (ex. "sanction_check")              → UX : « actualiser »
+  · (file d'exceptions = préréglage FAIL/EXCEPTION)     (jamais une page muette)</code></pre>
+  <div class="callout"><p><b>Pourquoi la console n'a pas son propre index.</b> Tout le filtrage, le tri (ordre de chaîne) et la pagination vivent dans S2 (<span class="mono">CaseIndex</span> reconstructible + curseur lié au root). La console ne <b>réplique</b> pas cet état — elle l'<b>interroge</b>. Un index parallèle dans le navigateur pourrait <b>diverger</b> du DAG (le défaut que P1 §2 bannit) ; en restant une <b>vue</b>, S3 hérite gratuitement de la cohérence et de la fraîcheur-honnête de S2.</p></div>
+</div>
+
+<!-- 8 -->
+<div class="wrap page">
+  <h2><span class="num">§8</span> RBAC : le bouton caché est cosmétique, S2 enforce</h2>
+  <p>La console respecte les rôles de S2 — <span class="mono">Viewer</span>, <span class="mono">ComplianceOfficer</span>, <span class="mono">Auditor</span>, <span class="mono">Admin</span> — mais l'architecture impose une honnêteté de sécurité qu'on rate souvent : <b>le RBAC de l'UI est une commodité, pas une frontière.</b> La console <b>cache</b> les boutons qu'un rôle ne peut pas utiliser ; mais la <b>sécurité</b> ne dépend <b>jamais</b> du bouton caché — c'est <b>S2 qui refuse</b>.</p>
+  <table>
+    <thead><tr><th>Rôle</th><th>Voit</th><th>Agit (scelle)</th><th>Exporte</th><th>Ce que la console rend</th></tr></thead>
+    <tbody>
+      <tr><td><b>ComplianceOfficer</b></td><td class="c good">clair</td><td class="c good">oui</td><td class="c good">oui</td><td>tout : revue, action, export</td></tr>
+      <tr><td><b>Auditor</b></td><td class="c good">clair</td><td class="c bad">non</td><td class="c good">oui</td><td>lecture + export ; <b>pas</b> de panneau d'action (il atteste, il ne décide pas)</td></tr>
+      <tr><td><b>Viewer</b></td><td class="c mid">rédigé</td><td class="c bad">non</td><td class="c bad">non</td><td>statut coarse + outputs <b>rédigés</b> (<span class="mono">[rédigé]</span>) ; ni action ni export</td></tr>
+      <tr><td><b>Admin</b></td><td colspan="3" class="c">gouvernance du tenant</td><td>administration (hors flux de revue)</td></tr>
+    </tbody>
+  </table>
+  <p>Deux conséquences précises. <b>Premièrement, la rédaction est rendue, pas refaite.</b> Pour un <span class="mono">Viewer</span>, c'est <b>S2</b> qui masque les outputs free-text susceptibles de porter de la PII (le <span class="mono">verdict_label</span>, les conclusions de contrôle, les justifications, l'identité de l'acteur) et renvoie <span class="mono">[rédigé]</span> ; la console <b>affiche ce qu'elle reçoit</b> — elle ne voit jamais le clair, donc ne peut pas le fuiter. <b>Deuxièmement, le bouton est cosmétique.</b> Si un <span class="mono">Viewer</span> forge une requête d'action (en contournant l'UI), S2 répond <b>403</b> — <span class="mono">can_act</span> est faux. La distinction <span class="mono">Auditor</span> est ici exemplaire : il <b>lit en clair et exporte</b> (il a besoin du dossier pour le re-prouver) mais <b>n'agit pas</b> — <b>S2</b> garantit cette séparation entre <i>attester</i> et <i>décider</i>, que la console ne fait que <b>refléter</b>.</p>
+  <div class="callout warn"><p><b>L'invariant à tester (I-S3-RBAC-COSMÉTIQUE).</b> Une console honnête ne <b>protège jamais</b> par l'absence d'un bouton. Le test décisif : une requête d'action/export émise <b>directement</b> (sans l'UI) par un rôle insuffisant doit être <b>refusée par S2</b> (403), <b>indépendamment</b> de ce que l'UI montre. Si la sécurité reposait sur le masquage côté navigateur, elle serait illusoire — ici elle repose sur le cœur, et le masquage n'est qu'un confort.</p></div>
+</div>
+
+<!-- 9 -->
+<div class="wrap page">
+  <h2><span class="num">§9</span> L'export en un clic : le dossier défendable (S3 × S4 × S6)</h2>
+  <p>C'est le geste qui <b>déclenche la conversion</b> (le ROI de P1 §9) et qui <b>résout</b> la distinction d'honnêteté de S3 : depuis une décision ou une recherche, l'officier clique « <b>exporter le dossier</b> », et la console compose, <b>sous le capot</b>, la chaîne complète qu'on a construite slice après slice.</p>
+  <pre><code>« exporter le dossier »  (un clic, dans le flux de revue)
+   1. S2  export(scope, rôle)      → ExportContent { records_jsonl, manifest_root, report, … }
+                                     (re-preuve FROIDE d'abord ; REFUSE un store cassé)
+   2. S6  derive + reg_subtree     → reg/<cadre>.md + reg/mapping.<v>.json + reg/REDERIVE.md
+                                     (EU AI Act / GDPR / CSDDD-LkSG — outillé ≠ conforme)
+   3. S4  assemble(input, opts{reg_attachments})  → bundle/ AUTONOME
+                                     records.sealed.jsonl + verify/ (source à re-compiler)
+                                     + report.md + reg/ + MANIFEST.sha256 + README du sceptique
+   4. la console STREAME le bundle  → téléchargement.  La CLÉ tenant ne part JAMAIS.</code></pre>
+  <p>Le résultat est l'<b>artefact opposable</b> que l'officier remet à son auditeur ou à un régulateur, et que ce tiers re-prouve <b>sans nous croire</b> (S4), en re-dérivant même l'évidence réglementaire (S6) <b>octet pour octet</b>. C'est ici que « montré » devient « prouvé » : la console ne <b>prouve</b> rien — elle <b>fabrique l'objet</b> qui se prouve ailleurs. Et l'honnêteté voyage <b>avec</b> l'objet : le README porte « intègre ≠ inforgeable », les artefacts reg/ portent « outillé ≠ conforme », et — décisif pour la souveraineté — la <b>clé tenant ne figure dans aucun octet du bundle</b> (elle re-prouve, elle ne s'écrit pas).</p>
+  <div class="callout ok"><p><b>Le levier chiffré, à l'écran.</b> <b>Avant :</b> un agent de conformité assemble un dossier de diligence à la main — des heures, error-prone, non re-prouvable. <b>Après :</b> un clic dans la console produit, en secondes, un <b>bundle autonome</b> que l'auditeur re-prouve seul. Le gain vendable n'est pas « l'IA fait le travail » — c'est « la console <b>produit l'évidence défendable</b> du travail, et n'importe qui la vérifie sans nous ». C'est la phrase qui décroche le design-partner, et S3 est l'endroit où le geste devient <b>trivial</b>.</p></div>
+</div>
+
+<!-- 10 -->
+<div class="wrap page">
+  <h2><span class="num">§10</span> La coquille de transport : où le framework HTTP est ENFIN permis</h2>
+  <p>S2 a été construit avec une austérité délibérée : <b>aucun framework HTTP async</b>, un routeur <b>transport-agnostique</b> exprimé comme une <b>fonction pure</b> (<span class="mono">route(&amp;mut reg, &amp;Request) -&gt; Response</span>), <b>testable en air-gap</b>. Ce choix paie <b>exactement maintenant</b> : la <b>coquille de transport</b> de S3 est le <b>premier</b> endroit où un vrai serveur HTTP apparaît — et c'est <b>permis</b>, parce que la <b>confiance n'en dépend pas</b>. Le cœur reste sans framework ; le framework vit dans la coquille, dehors.</p>
+  <p>La coquille fait <b>trois choses</b>, toutes du plumbing non-trust-critique :</p>
+  <ol>
+    <li><b>Binder un endpoint LOCAL, gardé en egress.</b> La souveraineté (S1/S2) impose que les records restent dans la frontière du client ; la coquille bind un endpoint <b>loopback</b> et applique la garde héritée (<span class="mono">assert_local</span> / <span class="mono">is_local_endpoint</span>) — réexportée par S2 <b>précisément</b> pour que la surface porte visiblement le contrôle d'egress. La console parle au <b>seul</b> backend local ; rien ne sort.</li>
+    <li><b>Mapper la session → <span class="mono">AuthContext</span>.</b> La coquille authentifie l'utilisateur (le mécanisme — SSO, mTLS, jeton — est <b>orthogonal</b> à la confiance de provenance) et en dérive le triplet <span class="mono">{tenant, rôle, sujet}</span> que S2 exige. Le <span class="mono">{tenant}</span> du chemin doit égaler le tenant authentifié (l'isolation structurelle de S2).</li>
+    <li><b>Traduire HTTP ↔ <span class="mono">Request</span>/<span class="mono">Response</span>.</b> Requête HTTP → <span class="mono">audit_api::Request</span> ; <span class="mono">Response</span> → HTTP/JSON. C'est tout. La coquille ne <b>décide</b> rien — elle <b>plombe</b> des octets entre le navigateur et la fonction pure.</li>
+  </ol>
+  <div class="callout key"><p><b>La conséquence : la coquille est remplaçable, et c'est voulu.</b> Parce que <span class="mono">route()</span> est déjà <b>prouvé correct comme fonction pure</b> (tests air-gap de S2), la coquille n'a <b>rien à prouver</b> de trust-critique : elle peut être en Rust (axum/actix), en Go, ou n'importe quoi — la confiance est <b>en dessous</b>. C'est la récompense de l'austérité de S2 : on <b>n'a pas</b> à auditer un framework HTTP pour faire confiance au système. Le test d'invariant (I-S3-VUE-PURE) le matérialise : la même <span class="mono">Request</span> passée <b>directement</b> à <span class="mono">route()</span> (en air-gap) et <b>via</b> la coquille HTTP doit rendre la <b>même</b> <span class="mono">Response</span> — la coquille n'ajoute, ni ne retranche, aucune décision.</p></div>
+</div>
+
+<!-- 11 -->
+<div class="wrap page">
+  <h2><span class="num">§11</span> Souveraineté, ce que S3 ne fait PAS, invariants-tests</h2>
+  <h3>Ce que S3 ne fait PAS (la discipline qui le rend sûr)</h3>
+  <ul>
+    <li><b>Ne détient jamais la clé tenant</b> — elle vit dans la frontière du backend ; le navigateur ne la reçoit <b>jamais</b>. (Forger exige la clé ; la console ne peut donc pas forger.)</li>
+    <li><b>Ne calcule aucune preuve dans le navigateur</b> — le badge <b>rend</b> le verdict de S2 ; la vraie re-preuve est froide (S2) ou trustless (l'export).</li>
+    <li><b>Ne réimplémente</b> ni projection, ni statut, ni RBAC, ni rédaction, ni index — elle appelle S2.</li>
+    <li><b>Ne laisse rien sortir</b> — bind local egress-gardé ; le <b>seul</b> artefact portable est le bundle d'export, et la clé n'y est pas.</li>
+    <li><b>Ne prétend jamais</b> que le vert affiché <b>est</b> une preuve forensic (montré ≠ prouvé) ni que « intègre » <b>est</b> « correct/conforme ».</li>
+    <li><b>Ne protège jamais par un bouton caché</b> — S2 refuse (403) ; le masquage est cosmétique.</li>
+  </ul>
+  <table>
+    <thead><tr><th>Invariant</th><th>Le test (la console reste une VUE honnête)</th></tr></thead>
+    <tbody>
+      <tr><td><b>I-S3-VUE-PURE</b></td><td>la même <span class="mono">Request</span> via la coquille HTTP rend la <b>même</b> <span class="mono">Response</span> que <span class="mono">route()</span> appelé en air-gap — la coquille n'ajoute aucune décision (test de parité)</td></tr>
+      <tr><td><b>I-S3-MONTRÉ≠PROUVÉ</b></td><td>chaque vue affiche la <b>fraîcheur</b> (<span class="mono">as_of</span>) et un chemin d'<b>export</b> ; le navigateur ne contient <b>aucun</b> code de re-preuve (test de présence/absence)</td></tr>
+      <tr><td><b>I-S3-FAIL-LOUD</b></td><td>un store altéré (enveloppe <span class="mono">ok:false</span>) rend la vue <b>rouge</b> avec <span class="mono">broken_at</span> — <b>jamais</b> un vert (test : tamper → rouge)</td></tr>
+      <tr><td><b>I-S3-RBAC-COSMÉTIQUE</b></td><td>une action/export émise <b>hors UI</b> par un rôle insuffisant est refusée <b>par S2</b> (403) — la sécurité ne dépend pas du masquage</td></tr>
+      <tr><td><b>I-S3-ÉCRITURE-SCELLÉE</b></td><td>le <b>seul</b> write est l'action humaine, qui passe par le <b>gate</b> de S2 (RBAC + cible validée) et produit un nœud scellé re-prouvable ; le navigateur ne scelle rien</td></tr>
+      <tr><td><b>I-S3-SOUVERAIN</b></td><td>le bind est <b>loopback</b> (egress-gardé) ; aucune requête sortante ; la clé tenant n'atteint <b>jamais</b> le navigateur (test de forme sur le payload servi)</td></tr>
+      <tr><td><b>I-S3-CURSEUR-HONNÊTE</b></td><td>un <span class="mono">CursorStale</span> (DAG avancé) devient « actualiser », <b>jamais</b> une page incohérente affichée en silence</td></tr>
+    </tbody>
+  </table>
+  <div class="callout bad"><p><b>Le pire défaut possible de S3 — et pourquoi il est borné.</b> Le scénario catastrophe d'une console est un <b>faux vert</b> : afficher « vérifié » sur un record altéré. L'architecture le rend <b>impossible à laisser passer</b> par construction : l'enveloppe de S2 porte <span class="mono">ok</span> et <span class="mono">broken_at</span> sur <b>chaque</b> réponse, et I-S3-FAIL-LOUD est un test. Et même si une UI buggée affichait un faux vert, le tiers qui <b>re-prouve l'export</b> (S4) l'attraperait — la console ne peut pas <b>propager</b> un mensonge au-delà de l'écran. C'est la borne : un défaut d'interface s'arrête à l'interface.</p></div>
+</div>
+
+<!-- 12 -->
+<div class="wrap page">
+  <h2><span class="num">§12</span> Réutilisé-vs-neuf, séquence, la PORTE de P1, ce que S3 décide</h2>
+  <h3>Réutilisé vs neuf</h3>
+  <p><b>Réutilisé (tout le trust-critique, déjà construit &amp; testé) :</b> le <b>routeur</b> transport-agnostique de S2 (<span class="mono">route</span>/<span class="mono">Request</span>/<span class="mono">Response</span>) ; la <b>projection</b> (<span class="mono">DecisionView</span>, <span class="mono">backed_by_node</span>) ; l'<b>intégrité-à-la-lecture</b> (badge cache-par-root + re-preuve froide <span class="mono">reprove_now</span>) ; l'<b>enveloppe</b> « intègre ≠ correct » ; le <b>RBAC</b> (<span class="mono">Role</span>, <span class="mono">can_*</span>, <span class="mono">sees_unredacted</span>) et la <b>rédaction</b> ; l'<b>index</b> + le <b>curseur lié au root</b> ; le <b>gate d'écriture humaine</b> (<span class="mono">record_human_action</span>) ; le <b>seam d'export</b> → S4 (<span class="mono">assemble</span>) + S6 (<span class="mono">reg_subtree</span>) ; la <b>garde de souveraineté</b> (<span class="mono">assert_local</span>). <b>Neuf (tout non-trust-critique) :</b> la <b>coquille de transport</b> (bind local gardé, session → <span class="mono">AuthContext</span>, HTTP ↔ <span class="mono">Request</span>) ; l'<b>interface</b> (rendu pur) — vue décision, cadenas vert + fraîcheur + fail-loud, file d'exceptions + panneau d'action, recherche/filtre, flux d'export ; et l'<b>orchestration</b> du téléchargement de bundle.</p>
+  <h3>La micro-séquence de build de S3</h3>
+  <table>
+    <thead><tr><th>Pas</th><th>Livrable</th><th>Done (testable)</th></tr></thead>
+    <tbody>
+      <tr><td>a</td><td>la <b>coquille</b> : bind local gardé, session → <span class="mono">AuthContext</span>, HTTP ↔ <span class="mono">route()</span></td><td>I-S3-VUE-PURE, I-S3-SOUVERAIN verts (parité air-gap ; bind loopback)</td></tr>
+      <tr><td>b</td><td>la <b>vue décision</b> (lecture) : statut, verdict, contrôles+évidences, flux, oversight, badge</td><td>chaque élément cite son <span class="mono">backed_by_node</span> ; lecture par un non-technicien</td></tr>
+      <tr><td>c</td><td>le <b>cadenas vert</b> : fraîcheur (<span class="mono">as_of</span>) + « vérifier maintenant » (froide) + <b>rouge fail-loud</b></td><td>I-S3-MONTRÉ≠PROUVÉ, I-S3-FAIL-LOUD verts (tamper → rouge)</td></tr>
+      <tr><td>d</td><td>la <b>file d'exceptions</b> + le <b>panneau d'action</b> (→ gate S2, scellé)</td><td>I-S3-ÉCRITURE-SCELLÉE vert ; un override apparaît tracé</td></tr>
+      <tr><td>e</td><td><b>recherche/filtre</b> + pagination (curseur, <span class="mono">CursorStale</span> → actualiser)</td><td>I-S3-CURSEUR-HONNÊTE vert</td></tr>
+      <tr><td>f</td><td>le <b>flux d'export</b> (→ S4 + S6) + <b>RBAC</b> rendu (Viewer rédigé, Auditor sans action)</td><td>I-S3-RBAC-COSMÉTIQUE vert ; un bundle se télécharge et se re-prouve</td></tr>
+      <tr><td>g</td><td><b>test d'usabilité</b> avec un vrai agent de conformité — la boucle complète, seul</td><td><b>LA PORTE de P1</b> (ci-dessous)</td></tr>
+    </tbody>
+  </table>
+  <div class="callout ok"><p><b>PORTE (passe → conversion / scale).</b> Un agent de conformité <b>non-technique</b> fait, <b>seul, sans ingénieur</b> : revoir un dossier, <b>faire confiance</b> au cadenas vert, traiter une <b>exception</b> (scellée), et <b>exporter</b> un dossier — que son auditeur <b>re-prouve</b> de façon autonome. C'est la conversion du design-partner.</p></div>
+  <div class="callout bad"><p><b>ARRÊT (simplifier avant de scaler).</b> Si la re-preuve, l'exception ou l'export ne sont pas <b>compréhensibles et actionnables par un non-cryptographe</b> sans aide → la surface est trop crue : on simplifie l'UX (le cadenas vert, le récit lisible, le geste d'export) <b>avant</b> d'embarquer d'autres workflows. « Un audit que personne ne sait lire n'a aucune valeur » (P1 §9).</p></div>
+  <div class="callout key"><p><b>Ce que S3 décide.</b> S3 transforme un coin de provenance <b>techniquement complet</b> (S0–S6) en un produit <b>adopté</b> : la console est l'endroit où la valeur cesse d'être « re-prouvable en principe » pour devenir « <b>revu, fait-confiance, et exporté en pratique</b>, par la personne dont c'est le métier, sans aide ». C'est <b>la</b> porte de tout P1 (§9), parce que l'usabilité est le critère d'arrêt du programme. Quand un agent de conformité non-cryptographe fait la boucle complète <b>seul</b>, et que son auditeur re-prouve le bundle <b>sans nous</b>, alors la provenance d'EFE est devenue un <b>produit défendable et vendu</b> — et le pari plus grand (l'économie de l'essaim, P2) se construit sur un produit <b>qui se vend déjà</b>. S3 est la dernière marche, et c'est celle qui <b>encaisse</b>.</p></div>
+  <hr>
+  <p class="small muted"><b>Note d'honnêteté.</b> Architecture de proposition pour S3, la <b>6ᵉ slice sur 7</b> de P1, fondée sur les crates <b>réelles et testées</b> de S0 (<span class="mono">provenance-dag</span>), S1 (<span class="mono">provenance-capture</span>), S2 (<span class="mono">audit-api</span> : routeur, projection, enveloppe, RBAC, gate, seam d'export — tous existants), S4 (<span class="mono">forensic-export</span>, avec le seam <span class="mono">reg_attachments</span>) et S6 (<span class="mono">reg-evidence</span>). S3 est <b>non-trust-critique par conception</b> : la <b>coquille de transport</b> et l'<b>interface</b> sont des coquilles au-dessus de la frontière de confiance — le choix du framework HTTP et de la techno d'UI (React/TS, etc.) est <b>orthogonal</b> à la confiance de provenance, et c'est précisément la récompense de l'austérité air-gap de S2. La distinction « <b>montré vérifié ≠ prouvé sans confiance</b> » est une <b>nécessité de cadrage</b> : on livre une console qui <b>rend</b> fidèlement la confiance, et un export qui l'<b>établit</b> sans personne — jamais l'illusion que l'écran est la preuve. Le <b>mécanisme d'authentification</b> de session (SSO/mTLS/jeton) et l'éventuelle <b>réplication multi-utilisateur</b> sont des décisions de déploiement, hors de la frontière de confiance, à fixer avec le design-partner.</p>
+</div>
+
+</body>
+</html>
