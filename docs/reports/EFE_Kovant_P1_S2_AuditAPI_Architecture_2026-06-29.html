@@ -368,11 +368,14 @@
   <pre><code>GET  /tenants/{t}/cases                         → liste paginée (curseur = position de chaîne, §5)
 GET  /tenants/{t}/cases?status=FAIL&from=…&to=… → file d'exceptions / filtre période+statut
 GET  /tenants/{t}/cases/{id}                    → DecisionView (§3) + IntegrityEnvelope (§6)
-POST /tenants/{t}/cases/{id}/reprove            → re-preuve FROIDE à la demande (le « cadenas », §4)
+GET  /tenants/{t}/cases/{id}/report             → le récit rendu (Markdown)          (contenu → S4)
 POST /tenants/{t}/cases/{id}/human-action       → appende un nœud Human SCELLÉ (la seule écriture, §10)
-GET  /tenants/{t}/export/segment?from=…&to=…    → tranche scellée contiguë + récit  (contenu → S4)
-GET  /tenants/{t}/cases/{id}/report             → le récit rendu (HTML/markdown)     (contenu → S4)
+POST /tenants/{t}/reprove                       → re-preuve FROIDE à la demande, du DAG ENTIER (§4 ;
+                                                  l'intégrité est globale à la chaîne — pas par-cas)
+GET  /tenants/{t}/export[?cases=a,b,c]          → payload scellé = DAG COMPLET (re-provable, §9.1) +
+                                                  récit filtré aux ?cases  (contenu → S4)
 // {t} doit ÉGALER le tenant authentifié (§7) ; RBAC sur chaque route (§8) ; air-gap (§7).</code></pre>
+  <p class="small muted">Note de réconciliation : la re-preuve est exposée <b>par tenant</b> (et non par-cas) car la chaîne — donc l'intégrité — est globale (§9.1) ; l'export expose la portée scellée <b>explicitement</b> (le DAG complet ; <span class="mono">?cases</span> ne filtre que le récit) pour écarter le piège « j'ai demandé un cas, je croyais n'exporter que lui ». Le par-cas isolé sans fuite reste la forêt de Merkle (§9.2).</p>
   <h3>11.2 — Le modèle de menaces de S2</h3>
   <table>
     <thead><tr><th>Menace</th><th>La défense (et la couche)</th></tr></thead>

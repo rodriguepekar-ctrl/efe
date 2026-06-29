@@ -1,0 +1,22 @@
+# SPDX-License-Identifier: UNLICENSED
+# Kovant P1 / S2 — audit-api : le service de LECTURE (« servir ») au-dessus du substrat scellé.
+# Le pivot entre S0/S1 (modèle + capture) et les surfaces S3/S4/S6. Tout le trust-critique est ici,
+# en Rust ; la console (S3) n'est qu'une vue. Dépend UNIQUEMENT de provenance-dag + provenance-capture
+# (+ serde pour la projection/JSON) : pas de framework HTTP async — le routeur est transport-agnostique
+# et air-gap-testable, exactement comme S0/S1.
+[package]
+name = "audit-api"
+version = { workspace = true }
+edition = { workspace = true }
+rust-version = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
+description = "Kovant P1/S2 — audit-api : projette le DAG scellé en décisions lisibles + statut d'intégrité, re-prouve à la lecture (cache-par-root + froide autoritaire), enveloppe « intègre ≠ correct » typée, isolation tenant structurelle, gate d'écriture humaine, seam d'export. Le pivot read entre S0/S1 et les surfaces."
+publish = false
+
+[dependencies]
+provenance-dag = { path = "../provenance-dag" }
+provenance-capture = { path = "../provenance-capture" }
+serde = { workspace = true }
+serde_json = { workspace = true }
