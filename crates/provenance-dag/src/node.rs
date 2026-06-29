@@ -60,7 +60,8 @@ pub enum Node {
         artifact_type: String,
         timestamp: u64,
     },
-    /// Une **évidence** : une consultation (outil/retrieval) figée au moment de la décision.
+    /// Une **évidence** : une consultation (outil/retrieval) figée au moment de la décision. C'est un
+    /// nœud **source** (récupéré AVANT d'être consommé — voir [`Node::refs`]).
     Evidence {
         evidence_id: String,
         tool: String,
@@ -69,11 +70,20 @@ pub enum Node {
         /// Empreinte du contenu **tel qu'il était au moment T** (si la source change après, l'audit
         /// montre toujours la version réellement utilisée).
         content_hash: String,
+        /// L'étape qui consomme cette évidence — **annotation scellée** (infalsifiable), pas un
+        /// prérequis causal : l'arête causale validée est `AgentAct.evidence_refs` (acte → évidence).
         consumed_by_node: String,
         timestamp: u64,
     },
     /// Un acte de **supervision humaine** (oversight) — scellé au même titre qu'un acte d'agent.
+    ///
+    /// `node_id` est l'**identité du nœud** (unique dans le DAG) ; `human_id` est l'**acteur** (le
+    /// réviseur). Les deux sont distincts à dessein : un même officier de conformité révise BEAUCOUP
+    /// de cas — confondre les deux ferait collisionner ses revues (`DuplicateId`) et les rendrait
+    /// non-requêtables par cas. `node_id` porte donc la convention `{cas}::{étape}` ; `human_id`
+    /// reste l'identité (auditée) de la personne.
     Human {
+        node_id: String,
         human_id: String,
         action: HumanAction,
         target_node: String,
@@ -131,8 +141,9 @@ impl Node {
                 put_str(&mut o, consumed_by_node);
                 put_u64(&mut o, *timestamp);
             }
-            Node::Human { human_id, action, target_node, justification, timestamp } => {
+            Node::Human { node_id, human_id, action, target_node, justification, timestamp } => {
                 o.push(4);
+                put_str(&mut o, node_id);
                 put_str(&mut o, human_id);
                 o.push(action.tag());
                 put_str(&mut o, target_node);
@@ -149,17 +160,24 @@ impl Node {
             Node::AgentAct { node_id, .. } => node_id,
             Node::Edge { edge_id, .. } => edge_id,
             Node::Evidence { evidence_id, .. } => evidence_id,
-            Node::Human { human_id, .. } => human_id,
+            Node::Human { node_id, .. } => node_id,
         }
     }
 
     /// Les ids que ce nœud **référence** (doivent exister AVANT lui — causalité du DAG append-only).
-    /// Un `AgentAct` est une source (ne référence rien) ; arête/évidence/humain pointent vers des nœuds.
+    ///
+    /// - `AgentAct` référence les **évidences qu'il cite** (`evidence_refs`) : c'est l'arête causale
+    ///   acte→évidence, et elle est **réellement imposée** (append/re-preuve rejettent une citation
+    ///   pendante). Pas de cycle : une évidence est toujours enregistrée AVANT l'acte qui la cite.
+    /// - `Evidence` est la seule **source pure** : *récupérée* avant d'être consommée — la forcer à
+    ///   pointer vers son consommateur créerait un cycle. `consumed_by_node` reste un champ **scellé**
+    ///   (infalsifiable) mais purement **annotatif** : un pointeur-retour, pas un prérequis causal.
+    /// - Arête/humain pointent vers des nœuds qui doivent préexister.
     pub fn refs(&self) -> Vec<&str> {
         match self {
-            Node::AgentAct { .. } => Vec::new(),
+            Node::AgentAct { evidence_refs, .. } => evidence_refs.iter().map(String::as_str).collect(),
+            Node::Evidence { .. } => Vec::new(),
             Node::Edge { from_node, to_node, .. } => vec![from_node.as_str(), to_node.as_str()],
-            Node::Evidence { consumed_by_node, .. } => vec![consumed_by_node.as_str()],
             Node::Human { target_node, .. } => vec![target_node.as_str()],
         }
     }
@@ -205,10 +223,16 @@ mod tests {
     #[test]
     fn refs_and_id() {
         assert_eq!(act("n1").id(), "n1");
-        assert!(act("n1").refs().is_empty(), "un acte est une source");
+        assert_eq!(act("n1").refs(), vec!["ev-1"], "un acte cite (et valide) ses évidences");
         let e = Node::Edge { edge_id: "e1".into(), from_node: "n1".into(), to_node: "n2".into(), artifact_hash: "h".into(), artifact_type: "t".into(), timestamp: 1 };
         assert_eq!(e.refs(), vec!["n1", "n2"]);
-        let h = Node::Human { human_id: "hu1".into(), action: HumanAction::Override, target_node: "n2".into(), justification: "raison".into(), timestamp: 1 };
+        // Une évidence est une SOURCE : elle ne référence rien (récupérée avant d'être consommée ;
+        // `consumed_by_node` est annotatif, pas un prérequis — sinon cycle causal avec evidence_refs).
+        let ev = Node::Evidence { evidence_id: "ev1".into(), tool: "db".into(), query_hash: "h".into(), retrieved_ref: "r".into(), content_hash: "h".into(), consumed_by_node: "futur".into(), timestamp: 1 };
+        assert_eq!(ev.id(), "ev1");
+        assert!(ev.refs().is_empty(), "l'évidence est une source");
+        let h = Node::Human { node_id: "c::rev1".into(), human_id: "hu1".into(), action: HumanAction::Override, target_node: "n2".into(), justification: "raison".into(), timestamp: 1 };
+        assert_eq!(h.id(), "c::rev1", "l'identité du nœud est node_id, pas l'acteur");
         assert_eq!(h.refs(), vec!["n2"]);
     }
 

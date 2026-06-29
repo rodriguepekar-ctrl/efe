@@ -6264,6 +6264,28 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "95067976aca6421a523e491fce939a3e65249bac4b977adee0ee9771568e8aa3"
 
 [[package]]
+name = "provenance-capture"
+version = "0.0.1"
+dependencies = [
+ "provenance-dag",
+]
+
+[[package]]
+name = "provenance-dag"
+version = "0.0.1"
+dependencies = [
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "provenance-verify"
+version = "0.0.1"
+dependencies = [
+ "provenance-dag",
+]
+
+[[package]]
 name = "ptr_meta"
 version = "0.1.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"

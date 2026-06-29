@@ -132,11 +132,23 @@ impl Verdict {
     fn fail(at: usize, reason: impl Into<String>) -> Self {
         Verdict { ok: false, n_records: 0, manifest_root: None, broken_at: Some(at), reason: Some(reason.into()) }
     }
+    /// Échec **non rattaché à un record précis** (root publié non concordant, bundle vide) : `broken_at`
+    /// reste `None` (aucun maillon n'est « cassé ») et `n_records` garde le **compte réel**.
+    fn fail_global(n: usize, reason: impl Into<String>) -> Self {
+        Verdict { ok: false, n_records: n, manifest_root: None, broken_at: None, reason: Some(reason.into()) }
+    }
 }
 
 /// **LA RE-PREUVE** — le cœur trustless. Re-dérive la chaîne depuis le genesis et la clé, vérifie chaque
 /// sceau (à temps constant) ET l'intégrité structurelle (références causales, ids uniques). Ne dépend
 /// que des records bruts et de la clé — rien d'autre à qui faire confiance.
+///
+/// ⚠️ **Portée — troncature de queue.** Une chaîne de hachage n'engage que son **préfixe** : la re-preuve
+/// nue atteste l'intégrité des records **présents**, mais **ne peut pas** détecter qu'on a **supprimé des
+/// records de fin** (le préfixe restant re-prouve comme un DAG authentique plus court). Pour détecter une
+/// troncature — p. ex. la suppression d'un acte de supervision humaine — le tiers DOIT comparer au
+/// **manifest-root publié** via [`verify_against_root`]. (Un bundle vide est d'ailleurs un cas-limite à
+/// part : voir l'appelant CLI, qui le refuse plutôt que de l'attester.)
 pub fn reprove_dag(records: &[Record], key: &TenantKey) -> Verdict {
     let mut chain = sha256(GENESIS);
     let mut ids: std::collections::HashSet<&str> = std::collections::HashSet::new();
@@ -175,9 +187,12 @@ pub fn verify_against_root(records: &[Record], key: &TenantKey, expected_root: &
     }
     match &v.manifest_root {
         Some(root) if root == expected_root => v,
-        other => Verdict::fail(
-            records.len().saturating_sub(1),
-            format!("manifest-root attendu « {expected_root} », obtenu « {} »", other.clone().unwrap_or_default()),
+        other => Verdict::fail_global(
+            records.len(),
+            format!(
+                "intégrité OK mais manifest-root publié NON concordant — attendu « {expected_root} », obtenu « {} » (records absents/ajoutés, ou mauvais bundle)",
+                other.clone().unwrap_or_default()
+            ),
         ),
     }
 }
@@ -192,7 +207,9 @@ fn to_hex(b: &[u8]) -> String {
     s
 }
 fn from_hex(s: &str) -> Option<Vec<u8>> {
-    if s.len() % 2 != 0 {
+    // Longueur paire ET uniquement des chiffres hexa : `u8::from_str_radix` accepte sinon un `+`
+    // de signe (« +a » → 10), ce qui ferait aliaser des chaînes distinctes vers le même octet.
+    if s.len() % 2 != 0 || !s.bytes().all(|b| b.is_ascii_hexdigit()) {
         return None;
     }
     (0..s.len()).step_by(2).map(|i| u8::from_str_radix(s.get(i..i + 2)?, 16).ok()).collect()
@@ -241,8 +258,8 @@ mod tests {
             artifact_hash: "h-art2".into(), artifact_type: "check_verdict".into(), timestamp: 6,
         }).unwrap();
         d.append(&k, Node::Human {
-            human_id: "officer:42".into(), action: HumanAction::Approve, target_node: "aggregate".into(),
-            justification: "revue conforme".into(), timestamp: 7,
+            node_id: "review:1".into(), human_id: "officer:42".into(), action: HumanAction::Approve,
+            target_node: "aggregate".into(), justification: "revue conforme".into(), timestamp: 7,
         }).unwrap();
         d
     }
@@ -358,5 +375,65 @@ mod tests {
         assert!(verify_against_root(d.records(), &key(), &root).ok);
         // Un root différent échoue, même si le DAG est par ailleurs intègre.
         assert!(!verify_against_root(d.records(), &key(), &"ff".repeat(32)).ok);
+    }
+
+    #[test]
+    fn dangling_evidence_citation_is_rejected() {
+        // Régression : un acte qui CITE une évidence jamais enregistrée doit être rejeté (l'arête
+        // acte→évidence est désormais réellement validée, pas seulement scellée).
+        let k = key();
+        let mut d = SealedDag::new();
+        let r = d.append(&k, Node::AgentAct {
+            node_id: "sanction".into(), agent_role: "sanction_check".into(), inputs_hash: "h".into(),
+            model: "m".into(), version: "1".into(), output: "PASS".into(),
+            evidence_refs: vec!["ev-fantome".into()], timestamp: 1,
+        });
+        assert!(matches!(r, Err(DagError::DanglingRef(ref s)) if s == "ev-fantome"), "citation d'évidence pendante refusée à l'append");
+        // Et forgée à la main → la re-preuve la rejette aussi.
+        let forged = vec![Record {
+            node: Node::AgentAct { node_id: "a".into(), agent_role: "r".into(), inputs_hash: "h".into(), model: "m".into(), version: "1".into(), output: "o".into(), evidence_refs: vec!["ev-fantome".into()], timestamp: 1 },
+            seal: "00".repeat(32),
+        }];
+        let v = reprove_dag(&forged, &k);
+        assert!(!v.ok && v.broken_at == Some(0), "re-preuve rejette la citation forgée");
+    }
+
+    #[test]
+    fn root_mismatch_does_not_misattribute_broken_at() {
+        // Quand l'intégrité PASSE mais le root publié diffère : aucun record n'est « cassé » →
+        // broken_at = None et n_records garde le compte réel (jadis : broken_at=len-1, n_records=0).
+        let d = build();
+        let v = verify_against_root(d.records(), &key(), &"ab".repeat(32));
+        assert!(!v.ok);
+        assert_eq!(v.broken_at, None, "aucun maillon cassé : ne pas pointer un record innocent");
+        assert_eq!(v.n_records, d.records().len(), "le compte réel est conservé");
+        assert!(v.reason.as_deref().unwrap_or_default().contains("concordant"));
+    }
+
+    #[test]
+    fn suffix_truncation_reproves_but_published_root_catches_it() {
+        // Propriété d'une chaîne de hachage : un préfixe est un DAG valide. La re-preuve nue NE détecte
+        // PAS la suppression de la revue humaine finale — seul le root publié la rattrape.
+        let d = build();
+        let full_root = d.manifest_root();
+        let mut truncated = d.records().to_vec();
+        truncated.pop(); // supprime la supervision humaine finale
+        let v = reprove_dag(&truncated, &key());
+        assert!(v.ok, "le préfixe tronqué re-prouve comme authentique (limite documentée)");
+        assert_ne!(v.manifest_root, Some(full_root.clone()), "mais son root diffère");
+        // Le tiers qui détient le root publié détecte la troncature.
+        assert!(!verify_against_root(&truncated, &key(), &full_root).ok, "root publié rattrape la troncature");
+    }
+
+    #[test]
+    fn from_hex_rejects_non_canonical() {
+        // Un sceau « +a… » (que from_str_radix accepterait) doit être rejeté.
+        let plus = format!("+a{}", "00".repeat(31)); // 64 chars, contient un '+'
+        let forged = vec![Record {
+            node: Node::AgentAct { node_id: "a".into(), agent_role: "r".into(), inputs_hash: "h".into(), model: "m".into(), version: "1".into(), output: "o".into(), evidence_refs: vec![], timestamp: 1 },
+            seal: plus,
+        }];
+        let v = reprove_dag(&forged, &key());
+        assert!(!v.ok, "sceau hex non-canonique rejeté");
     }
 }

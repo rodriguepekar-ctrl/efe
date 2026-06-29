@@ -246,6 +246,14 @@ members = [
     # SHA-256 + HMAC écrite à la main, zéro dépendance crypto externe → auditable/trustless).
     # Cf. docs/reports/EFE_Kovant_P1_Code_Roadmap_2026-06-29.html (S0).
     "crates/provenance-dag",
+    # Kovant P1 / S1 — provenance-capture : la couche de capture (taps + store). Produit un vrai
+    # DAG scellé sur le runtime ; garde de souveraineté (egress refusé) ; requête par cas/rôle.
+    # Dépend uniquement de provenance-dag. Cf. la même roadmap (S1).
+    "crates/provenance-capture",
+    # Kovant P1 / S4 — provenance-verify : le vérifieur forensic AUTONOME (binaire-fossé).
+    # Dépend UNIQUEMENT de provenance-dag → re-compilable et auditable par un tiers (régulateur),
+    # sortie JSON faite main (zéro dépendance). Cf. la même roadmap (S4).
+    "crates/provenance-verify",
 ]
 
 [workspace.package]
