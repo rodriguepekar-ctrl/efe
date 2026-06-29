@@ -1,0 +1,33 @@
+# SPDX-License-Identifier: UNLICENSED
+# Kovant P1 / S4 — verify-mini : le vérifieur forensic à arbre de dépendances LITTÉRALEMENT VIDE.
+# Identique en contrat à provenance-verify (mêmes args, mêmes codes de sortie, même --json), MAIS sans
+# AUCUNE dépendance : SHA-256 (FIPS 180-4) + HMAC (RFC 2104) std-only embarqués, un parseur JSONL FAIT MAIN
+# (pas de serde), et l'encodage canonique binaire ré-implémenté. `cargo tree` (edges normales) = verify-mini
+# SEUL → un tiers le re-compile en ne faisant confiance qu'aux maths + sa propre compilation, sans astérisque.
+# Sa fidélité à S0 (provenance-dag) est PROUVÉE par un cross-check (manifest-root octet-à-octet) — en
+# dev-dependency UNIQUEMENT (le binaire release reste zéro-dépendance).
+[package]
+name = "verify-mini"
+version = { workspace = true }
+edition = { workspace = true }
+rust-version = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
+description = "Kovant P1/S4 — verify-mini : le vérifieur forensic re-prouvable à arbre de dépendances LITTÉRALEMENT vide (std-only). SHA-256/HMAC faits main + parseur JSONL fait main (pas de serde) + encodage canonique ré-implémenté. Mêmes args/codes/--json que provenance-verify ; fidélité à S0 prouvée par cross-check (root octet-à-octet) en dev-dep. Le « trust-only-the-math » de S4, sans astérisque."
+publish = false
+
+[[bin]]
+name = "verify-mini"
+path = "src/main.rs"
+
+[lib]
+path = "src/lib.rs"
+
+# ── ZÉRO dépendance (le cœur du composant) ──
+[dependencies]
+
+# Le cross-check de FIDÉLITÉ à S0 (manifest-root octet-à-octet) — en dev-dep UNIQUEMENT : il n'entre PAS
+# dans le binaire release (`cargo build --release` reste sans dépendance ; `cargo tree` ne montre que verify-mini).
+[dev-dependencies]
+provenance-dag = { path = "../provenance-dag" }

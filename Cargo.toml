@@ -254,6 +254,11 @@ members = [
     # Dépend UNIQUEMENT de provenance-dag → re-compilable et auditable par un tiers (régulateur),
     # sortie JSON faite main (zéro dépendance). Cf. la même roadmap (S4).
     "crates/provenance-verify",
+    # Kovant P1 / S4 — verify-mini : le vérifieur forensic à arbre de dépendances LITTÉRALEMENT VIDE.
+    # Comme provenance-verify, MAIS sans serde : SHA-256/HMAC std-only embarqués + parseur JSONL fait main
+    # + encodage canonique ré-implémenté. `cargo tree` = verify-mini SEUL. Prouvé FIDÈLE à S0 par un
+    # cross-check (manifest-root octet-à-octet) en dev-dep. Le raffinement « trust-only-the-math » de S4.
+    "crates/verify-mini",
     # Kovant P1 / S2 — audit-api : le service de LECTURE (« servir »), pivot entre S0/S1 et les
     # surfaces S3/S4/S6. Projection pure + intégrité-à-la-lecture + enveloppe « intègre ≠ correct »
     # + isolation tenant + gate d'écriture humaine. Dépend de provenance-dag/-capture + serde.
