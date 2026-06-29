@@ -11,7 +11,7 @@
 use crate::auth::AuthContext;
 use crate::project::DecisionStatus;
 use crate::registry::{RegistryError, TenantRegistry};
-use crate::service::{ApiError, HumanActionInput};
+use crate::service::{ApiError, Cursor, HumanActionInput};
 use provenance_dag::HumanAction;
 use serde::Serialize;
 
@@ -75,7 +75,7 @@ pub fn route(reg: &mut TenantRegistry, req: &Request) -> Response {
     };
 
     match (req.method, rest) {
-        // GET /tenants/{t}/cases  (?status, ?from, ?to, ?after, ?limit)
+        // GET /tenants/{t}/cases  (?status, ?from, ?to, ?role, ?after=<cursor>, ?limit)
         (Method::Get, ["cases"]) => {
             let status = match q(&req.query, "status").map(parse_status) {
                 Some(Ok(s)) => Some(s),
@@ -87,9 +87,17 @@ pub fn route(reg: &mut TenantRegistry, req: &Request) -> Response {
                 (None, None) => None,
                 _ => return Response::err(400, "from et to doivent être fournis ensemble"),
             };
-            let after_pos = qn_usize(&req.query, "after");
+            // Curseur OPAQUE (lié au root) — un token illisible est une erreur d'usage (400), pas un panic.
+            let cursor = match q(&req.query, "after") {
+                Some(tok) => match Cursor::decode(tok) {
+                    Some(c) => Some(c),
+                    None => return Response::err(400, "curseur invalide"),
+                },
+                None => None,
+            };
+            let role = q(&req.query, "role").map(|s| s.to_string());
             let limit = qn_usize(&req.query, "limit").unwrap_or(50).clamp(1, 500);
-            let q = crate::service::ListQuery { status, period, after_pos, limit };
+            let q = crate::service::ListQuery { status, period, role, cursor, limit };
             match svc.list_cases(&q, &req.auth, req.now) {
                 Ok(r) => Response::json(200, &r),
                 Err(e) => err_response(e),
@@ -138,7 +146,7 @@ fn err_response(e: ApiError) -> Response {
         ApiError::NotFound(_) => 404,
         ApiError::Forbidden(_) => 403,
         ApiError::BadRequest(_) => 400,
-        ApiError::Integrity(_) => 409,
+        ApiError::Integrity(_) | ApiError::CursorStale(_) => 409,
     };
     Response::err(status, &e.to_string())
 }
@@ -256,14 +264,50 @@ mod tests {
     }
 
     #[test]
-    fn crafted_after_cursor_does_not_panic() {
-        // ?after=usize::MAX ne doit ni paniquer (debug) ni boucler : page vide propre, statut 200.
+    fn malformed_cursor_is_a_usage_error_not_a_panic() {
+        // ?after=<token illisible> → 400 (erreur d'usage), jamais un panic ni un faux résultat.
         let mut r = reg();
         let mut q = req(Method::Get, "/tenants/acme/cases", AuthContext::new("acme", Role::ComplianceOfficer, "o"));
-        q.query = vec![("after".into(), u64::MAX.to_string())];
+        q.query = vec![("after".into(), u64::MAX.to_string())]; // pas de séparateur → curseur invalide
+        assert_eq!(route(&mut r, &q).status, 400, "curseur illisible → 400");
+    }
+
+    #[test]
+    fn stale_cursor_is_rejected_after_root_advances() {
+        // §5.1 : un curseur émis contre un root antérieur est refusé (409), pas paginé en silence.
+        let mut r = reg();
+        let auth = AuthContext::new("acme", Role::ComplianceOfficer, "o");
+        // page 1 (limit=1) → un next_cursor lié au root courant.
+        let mut p1 = req(Method::Get, "/tenants/acme/cases", auth.clone());
+        p1.query = vec![("limit".into(), "1".into())];
+        let r1 = route(&mut r, &p1);
+        assert_eq!(r1.status, 200);
+        let cursor = serde_json::from_str::<serde_json::Value>(&r1.body).unwrap()["next_cursor"].as_str().map(str::to_string);
+        // fait avancer le DAG (le root change) via une action humaine scellée.
+        let mut act = req(Method::Post, "/tenants/acme/cases/SUP-A/human-action", auth.clone());
+        act.body = Some(r#"{"target_step":"aggregate","action":"APPROVE","justification":"x"}"#.into());
+        assert_eq!(route(&mut r, &act).status, 200);
+        // rejouer le curseur périmé → 409 (recommencer).
+        if let Some(tok) = cursor {
+            let mut p2 = req(Method::Get, "/tenants/acme/cases", auth);
+            p2.query = vec![("after".into(), tok)];
+            assert_eq!(route(&mut r, &p2).status, 409, "curseur périmé → 409");
+        }
+    }
+
+    #[test]
+    fn role_filter_lists_only_matching_cases() {
+        let mut r = reg();
+        let auth = AuthContext::new("acme", Role::ComplianceOfficer, "o");
+        let mut q = req(Method::Get, "/tenants/acme/cases", auth);
+        q.query = vec![("role".into(), "sanction_check".into())];
         let resp = route(&mut r, &q);
         assert_eq!(resp.status, 200);
-        assert!(resp.body.contains("\"cases\":[]"), "page vide propre : {}", resp.body);
+        assert!(resp.body.contains("SUP-A"), "SUP-A a un sanction_check");
+        // un rôle absent → aucune ligne.
+        let mut q2 = req(Method::Get, "/tenants/acme/cases", AuthContext::new("acme", Role::ComplianceOfficer, "o"));
+        q2.query = vec![("role".into(), "role_absent".into())];
+        assert!(route(&mut r, &q2).body.contains("\"cases\":[]"));
     }
 
     #[test]

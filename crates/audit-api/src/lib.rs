@@ -62,6 +62,11 @@ pub use registry::{RegistryError, TenantRegistry};
 pub use report::{render_case, render_export};
 pub use router::{route, Method, Request, Response};
 pub use service::{
-    ApiError, AuditService, CaseResponse, CaseSummary, ExportContent, HumanActionInput, HumanActionResp, ListQuery, ListResponse,
-    SEALED_SCOPE_FULL,
+    ApiError, AuditService, CaseResponse, CaseSummary, Cursor, ExportContent, HumanActionInput, HumanActionResp, ListQuery,
+    ListResponse, SEALED_SCOPE_FULL,
 };
+
+// La **garde de souveraineté** héritée de S1 (§7), re-exportée pour que la surface publique de S2 porte
+// visiblement le contrôle d'egress qu'elle « hérite » — la coquille de transport l'applique à son endpoint
+// de bind (S2 lui-même n'a pas de socket sortant : air-gap par construction).
+pub use provenance_capture::{assert_local, is_local_endpoint, SovereigntyError};

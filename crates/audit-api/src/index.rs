@@ -8,8 +8,8 @@
 //! append-only, la **position de chaîne** est un curseur stable et monotone (pas de page qui glisse).
 
 use crate::project::{project, DecisionStatus, ProjectionConfig};
-use provenance_dag::Record;
-use std::collections::BTreeMap;
+use provenance_dag::{Node, Record};
+use std::collections::{BTreeMap, BTreeSet};
 
 /// Le résumé indexé d'un cas (dérivé — ré-vérifiable en re-projetant le cas).
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -28,6 +28,9 @@ pub struct CaseEntry {
 pub struct CaseIndex {
     /// Trié par `case_id` ; on expose un ordre stable par `first_pos` via [`Self::ordered`].
     by_case: BTreeMap<String, CaseEntry>,
+    /// Index **rôle → cas** (dérivé des `AgentAct.agent_role`) — pour la requête « par exigence/rôle »
+    /// (§5 : « toutes les décisions de criblage sanctions »). Reconstructible comme le reste.
+    roles: BTreeMap<String, BTreeSet<String>>,
 }
 
 impl CaseIndex {
@@ -46,15 +49,31 @@ impl CaseIndex {
             entry.1.push(r);
         }
         let mut by_case = BTreeMap::new();
+        let mut roles: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
         for (case, (first_pos, recs)) in groups {
             let view = project(&recs, &case, config);
             let last_ts = recs.iter().map(|r| node_ts(&r.node)).max().unwrap_or(0);
+            for r in &recs {
+                if let Node::AgentAct { agent_role, .. } = &r.node {
+                    roles.entry(agent_role.clone()).or_default().insert(case.clone());
+                }
+            }
             by_case.insert(
                 case.clone(),
                 CaseEntry { case_id: case, status: view.status, n_records: recs.len(), first_pos, last_ts },
             );
         }
-        CaseIndex { by_case }
+        CaseIndex { by_case, roles }
+    }
+
+    /// Le cas `case_id` contient-il un acte du **rôle** donné ? (pour le filtre `?role=` de la liste.)
+    pub fn has_role(&self, case_id: &str, role: &str) -> bool {
+        self.roles.get(role).is_some_and(|cases| cases.contains(case_id))
+    }
+
+    /// Les cas contenant un acte du **rôle** donné (§5 « par exigence/rôle »), ordonnés par chaîne.
+    pub fn cases_with_role(&self, role: &str) -> Vec<&CaseEntry> {
+        self.ordered().into_iter().filter(|e| self.has_role(&e.case_id, role)).collect()
     }
 
     /// Tous les cas, **ordonnés par position de chaîne** (stable, monotone — l'ordre de pagination).
@@ -81,7 +100,7 @@ impl CaseIndex {
     /// `first_pos` du dernier élément servi (à recombiner avec le manifest-root par l'appelant, §5.1).
     pub fn page(&self, after_pos: Option<usize>, limit: usize) -> (Vec<&CaseEntry>, Option<usize>) {
         let limit = limit.max(1); // garde contre un underflow `limit - 1` si l'appelant passe 0
-        let start = after_pos.map(|p| p + 1).unwrap_or(0);
+        let start = after_pos.map(|p| p.saturating_add(1)).unwrap_or(0); // saturate : pas de panique sur after=usize::MAX
         let mut page: Vec<&CaseEntry> = self.ordered().into_iter().filter(|e| e.first_pos >= start).collect();
         let next = if page.len() > limit { Some(page[limit - 1].first_pos) } else { None };
         page.truncate(limit);

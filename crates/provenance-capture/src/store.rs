@@ -26,6 +26,13 @@ impl CaptureStore {
         CaptureStore { dag: SealedDag::new(), key }
     }
 
+    /// **Recharge** un store depuis des records **déjà scellés** (p. ex. via [`Self::load_records_local`])
+    /// — le chemin de **redémarrage** d'un log persisté. Ne re-scelle ni ne valide : [`Self::reprove`]
+    /// tranchera (fail-loud si le fichier a été altéré au repos).
+    pub fn from_records(key: TenantKey, records: Vec<Record>) -> Self {
+        CaptureStore { dag: SealedDag::from_records(records), key }
+    }
+
     // ── enregistrement via les taps (scelle au fil de l'eau) ──
 
     /// Scelle un **acte** d'agent. Valide d'abord les segments d'id (cas, étape, étapes d'évidence).
@@ -273,6 +280,19 @@ mod tests {
         assert!(v.ok, "stocké local → rechargé → re-prouvé");
         assert_eq!(v.manifest_root, Some(root), "même manifest-root après aller-retour disque");
         let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn reload_a_persisted_store_then_query_and_reprove() {
+        // Redémarrage : capter → persister → recharger via from_records → re-prouver + requêter.
+        let mut s = CaptureStore::new(key());
+        record_case(&mut s, "SUP-2024");
+        let root = s.manifest_root();
+        let recs = SealedDag::records_from_jsonl(&s.to_jsonl()).unwrap();
+        let reloaded = CaptureStore::from_records(key(), recs);
+        assert_eq!(reloaded.manifest_root(), root, "même engagement après reload");
+        assert!(reloaded.reprove().ok, "store rechargé re-prouvé");
+        assert_eq!(reloaded.by_case("SUP-2024").len(), 6, "requêtable après reload");
     }
 
     #[test]

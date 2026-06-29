@@ -63,6 +63,21 @@ impl SealedDag {
         SealedDag { records: Vec::new(), chain: sha256(GENESIS) }
     }
 
+    /// Reconstruit un DAG depuis des records **DÉJÀ scellés** (rechargés du disque via
+    /// [`Self::records_from_jsonl`], pour un **redémarrage**) — **SANS re-sceller ni re-valider**. Les
+    /// records peuvent être altérés ; c'est [`reprove_dag`] qui tranche (fail-loud). La chaîne courante est
+    /// posée au **dernier sceau** (pour que [`Self::manifest_root`] reflète l'engagement rechargé) ; un DAG
+    /// vide ou un sceau final illisible retombe sur la genèse. NE PAS utiliser pour la capture (utiliser
+    /// [`Self::append`], qui scelle et valide).
+    pub fn from_records(records: Vec<Record>) -> Self {
+        let chain = records
+            .last()
+            .and_then(|r| from_hex(&r.seal))
+            .and_then(|b| <[u8; 32]>::try_from(b).ok())
+            .unwrap_or_else(|| sha256(GENESIS));
+        SealedDag { records, chain }
+    }
+
     /// **Scelle et ajoute** un nœud. Vérifie d'abord l'intégrité structurelle (références ⊆ ids
     /// antérieurs ; id unique), puis chaîne le sceau. Déterministe.
     pub fn append(&mut self, key: &TenantKey, node: Node) -> Result<&Record, DagError> {
@@ -423,6 +438,29 @@ mod tests {
         assert_ne!(v.manifest_root, Some(full_root.clone()), "mais son root diffère");
         // Le tiers qui détient le root publié détecte la troncature.
         assert!(!verify_against_root(&truncated, &key(), &full_root).ok, "root publié rattrape la troncature");
+    }
+
+    #[test]
+    fn from_records_reloads_and_reproves() {
+        // Aller-retour persistance : un DAG → JSONL → records → from_records → même root, re-prouve.
+        let d = build();
+        let root = d.manifest_root();
+        let recs = SealedDag::records_from_jsonl(&d.to_jsonl()).unwrap();
+        let reloaded = SealedDag::from_records(recs);
+        assert_eq!(reloaded.manifest_root(), root, "le manifest-root rechargé est posé au dernier sceau");
+        assert!(reprove_dag(reloaded.records(), &key()).ok, "rechargé → re-prouvé");
+        // DAG vide → genèse.
+        assert_eq!(SealedDag::from_records(vec![]).manifest_root(), super::to_hex(&sha256(GENESIS)));
+    }
+
+    #[test]
+    fn from_records_on_tampered_reload_fails_reprove() {
+        let d = build();
+        let tampered = d.to_jsonl().replacen("PASS", "FAIL", 1);
+        let recs = SealedDag::records_from_jsonl(&tampered).unwrap();
+        let reloaded = SealedDag::from_records(recs);
+        // from_records ne valide pas ; la re-preuve (fail-loud) rattrape l'altération.
+        assert!(!reprove_dag(reloaded.records(), &key()).ok, "reload altéré → re-preuve échoue");
     }
 
     #[test]

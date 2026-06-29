@@ -9,7 +9,7 @@
 use crate::auth::{AuthContext, TenantId};
 use crate::project::ProjectionConfig;
 use crate::service::AuditService;
-use provenance_dag::TenantKey;
+use provenance_dag::{Record, TenantKey};
 use std::collections::HashMap;
 
 /// Erreur de résolution de tenant.
@@ -47,6 +47,12 @@ impl TenantRegistry {
     /// Insère un service déjà construit (utile pour brancher la capture S1 avant d'enregistrer).
     pub fn insert(&mut self, tenant: &str, service: AuditService) {
         self.services.insert(tenant.to_string(), service);
+    }
+
+    /// **Réhydrate** un tenant depuis un log **persisté** déjà chargé (redémarrage) : reconstruit le
+    /// service au-dessus des records scellés. L'intégrité reste à re-prouver (fail-loud) à la 1ʳᵉ lecture.
+    pub fn rehydrate(&mut self, tenant: &str, key: TenantKey, records: Vec<Record>, config: ProjectionConfig) {
+        self.services.insert(tenant.to_string(), AuditService::from_records(key, records, config));
     }
 
     /// **La seule porte d'accès** : résout le service du tenant **authentifié**. Il n'existe aucun moyen

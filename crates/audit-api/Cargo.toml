@@ -20,3 +20,9 @@ provenance-dag = { path = "../provenance-dag" }
 provenance-capture = { path = "../provenance-capture" }
 serde = { workspace = true }
 serde_json = { workspace = true }
+
+# Pour les tests d'intégration (tests/) — accès direct aux types S0/S1 (TenantKey, LlmCall).
+[dev-dependencies]
+provenance-dag = { path = "../provenance-dag" }
+provenance-capture = { path = "../provenance-capture" }
+serde_json = { workspace = true }

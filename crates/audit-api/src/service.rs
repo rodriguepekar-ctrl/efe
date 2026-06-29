@@ -14,7 +14,7 @@ use crate::monitor::IntegrityMonitor;
 use crate::project::{project, DecisionStatus, DecisionView, ProjectionConfig};
 use crate::report;
 use provenance_capture::{CaptureError, CaptureStore, HumanReview, LlmCall, MessageEvent, ToolCall};
-use provenance_dag::{HumanAction, Record, TenantKey};
+use provenance_dag::{HumanAction, Node, Record, TenantKey};
 use serde::Serialize;
 
 /// Les erreurs servies par l'API (le routeur les mappe en codes HTTP).
@@ -24,10 +24,13 @@ pub enum ApiError {
     NotFound(String),
     /// Rôle insuffisant → 403.
     Forbidden(String),
-    /// Requête malformée (segment réservé, action inconnue, cible absente) → 400.
+    /// Requête malformée (segment réservé, action inconnue, cible absente, curseur illisible) → 400.
     BadRequest(String),
     /// Le store est altéré : on refuse d'exporter du non-prouvé → 409.
     Integrity(String),
+    /// Le curseur de pagination a été émis contre un **root antérieur** (le DAG a avancé) : le client
+    /// doit **recommencer** la pagination → 409. On ne pagine JAMAIS en silence contre une chaîne déplacée.
+    CursorStale(String),
 }
 impl std::fmt::Display for ApiError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -36,6 +39,7 @@ impl std::fmt::Display for ApiError {
             ApiError::Forbidden(m) => write!(f, "interdit : {m}"),
             ApiError::BadRequest(m) => write!(f, "requête invalide : {m}"),
             ApiError::Integrity(m) => write!(f, "intégrité : {m}"),
+            ApiError::CursorStale(m) => write!(f, "curseur périmé : {m}"),
         }
     }
 }
@@ -59,21 +63,46 @@ pub struct CaseSummary {
     pub last_ts: u64,
 }
 
+/// Un **curseur de pagination opaque** : lie une position de chaîne au **manifest-root** contre lequel
+/// elle a été émise (§5.1). À la page suivante, si le root a avancé, on refuse plutôt que de paginer en
+/// silence contre une chaîne déplacée. Encodage transparent `{root}-{pos}` (le root hex ne contient pas
+/// `-`, donc le séparateur est non-ambigu).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Cursor {
+    pub root: String,
+    pub pos: usize,
+}
+impl Cursor {
+    pub fn encode(&self) -> String {
+        format!("{}-{}", self.root, self.pos)
+    }
+    pub fn decode(s: &str) -> Option<Cursor> {
+        let (root, pos) = s.rsplit_once('-')?;
+        if root.is_empty() {
+            return None;
+        }
+        Some(Cursor { root: root.to_string(), pos: pos.parse().ok()? })
+    }
+}
+
 /// Les filtres d'une liste de cas (groupés pour une signature nette).
 #[derive(Debug, Clone, Default)]
 pub struct ListQuery {
     pub status: Option<DecisionStatus>,
     pub period: Option<(u64, u64)>,
-    /// Curseur de pagination : ne rendre que les cas dont la position de chaîne `> after_pos` (§5.1).
-    pub after_pos: Option<usize>,
+    /// Filtre : seuls les cas contenant un acte du **rôle** donné (ex. « sanction_check »).
+    pub role: Option<String>,
+    /// Curseur opaque de la page précédente (lié au root). `None` = première page.
+    pub cursor: Option<Cursor>,
     pub limit: usize,
 }
 
-/// Une page de cas + curseur + enveloppe.
+/// Une page de cas + curseur opaque (lié au root) + enveloppe.
 #[derive(Debug, Clone, Serialize)]
 pub struct ListResponse {
     pub cases: Vec<CaseSummary>,
-    pub next_cursor: Option<usize>,
+    /// Le curseur **opaque** (`{root}-{pos}`) à repasser pour la page suivante ; `None` = dernière page.
+    pub next_cursor: Option<String>,
     pub provenance: IntegrityEnvelope,
 }
 
@@ -132,6 +161,20 @@ impl AuditService {
         AuditService { store: CaptureStore::new(key), monitor: IntegrityMonitor::new(), config, human_seq: 0 }
     }
 
+    /// **Réhydrate** un service depuis un store déjà chargé (redémarrage / reload d'un log persisté, via
+    /// [`CaptureStore::from_records`]). Le `human_seq` est recalculé au-dessus des actes de revue déjà
+    /// scellés (max existant + 1) pour qu'une nouvelle action humaine ne **collisionne** jamais avec un
+    /// id rechargé. (L'intégrité du store rechargé reste à re-prouver — fail-loud — à la 1ʳᵉ lecture.)
+    pub fn from_store(store: CaptureStore, config: ProjectionConfig) -> Self {
+        let human_seq = next_human_seq(&store);
+        AuditService { store, monitor: IntegrityMonitor::new(), config, human_seq }
+    }
+
+    /// Réhydrate depuis une clé + des records déjà scellés (raccourci pour [`Self::from_store`]).
+    pub fn from_records(key: TenantKey, records: Vec<Record>, config: ProjectionConfig) -> Self {
+        Self::from_store(CaptureStore::from_records(key, records), config)
+    }
+
     /// Accès en LECTURE au store (la projection l'utilise en interne ; un read externe est inoffensif).
     pub fn store(&self) -> &CaptureStore {
         &self.store
@@ -176,11 +219,27 @@ impl AuditService {
         Ok(CaseResponse { decision: view, provenance: IntegrityEnvelope::from_verdict(&verdict, as_of) })
     }
 
-    /// Liste paginée de cas, filtrable par statut et période. Le curseur est la position de chaîne (§5).
+    /// Liste paginée de cas, filtrable par statut, période et **rôle**. Le curseur est **opaque** et
+    /// **lié au root** (§5.1) : si le DAG a avancé depuis son émission, on rend `CursorStale` (recommencer)
+    /// plutôt que de paginer en silence contre une chaîne déplacée.
     pub fn list_cases(&mut self, query: &ListQuery, auth: &AuthContext, now: u64) -> Result<ListResponse, ApiError> {
         if !auth.role.can_view() {
             return Err(ApiError::Forbidden("lecture non autorisée".into()));
         }
+        let current_root = self.store.manifest_root();
+        // Curseur lié au root : un curseur émis contre un root antérieur est refusé (§5.1).
+        let start = match &query.cursor {
+            Some(c) if c.root != current_root => {
+                return Err(ApiError::CursorStale("le DAG a avancé — recommencer la pagination".into()));
+            }
+            // Position hors de la chaîne (curseur forgé/corrompu) → échec FORT, pas une page vide muette
+            // (cohérent avec « on ne pagine JAMAIS en silence contre une chaîne déplacée », §5.1).
+            Some(c) if c.pos >= self.store.records().len() => {
+                return Err(ApiError::CursorStale("position de curseur hors de la chaîne — recommencer".into()));
+            }
+            Some(c) => c.pos.saturating_add(1),
+            None => 0,
+        };
         let limit = query.limit.max(1);
         let idx = CaseIndex::rebuild(self.store.records(), &self.config);
         // Compose les filtres puis pagine sur l'ordre de chaîne.
@@ -191,9 +250,16 @@ impl AuditService {
         if let Some((from, to)) = query.period {
             entries.retain(|e| e.last_ts >= from && e.last_ts <= to);
         }
-        let start = query.after_pos.map(|p| p.saturating_add(1)).unwrap_or(0); // saturate : pas de panique sur ?after=usize::MAX
+        if let Some(role) = &query.role {
+            entries.retain(|e| idx.has_role(&e.case_id, role));
+        }
         entries.retain(|e| e.first_pos >= start);
-        let next_cursor = if entries.len() > limit { Some(entries[limit - 1].first_pos) } else { None };
+        // Curseur opaque de page suivante, lié au root courant.
+        let next_cursor = if entries.len() > limit {
+            Some(Cursor { root: current_root.clone(), pos: entries[limit - 1].first_pos }.encode())
+        } else {
+            None
+        };
         let cases: Vec<CaseSummary> = entries
             .into_iter()
             .take(limit)
@@ -313,6 +379,21 @@ impl AuditService {
     }
 }
 
+/// La prochaine séquence d'acte de revue (`human-{n}`) au-dessus des nœuds `Human` déjà scellés (reload) :
+/// `max(n) + 1`, ou 0 si aucun. Empêche un id de revue rechargé d'entrer en collision avec une nouvelle.
+fn next_human_seq(store: &CaptureStore) -> u64 {
+    store
+        .records()
+        .iter()
+        .filter_map(|r| match &r.node {
+            Node::Human { node_id, .. } => node_id.rsplit_once("::human-").and_then(|(_, n)| n.parse::<u64>().ok()),
+            _ => None,
+        })
+        .max()
+        .map(|m| m.saturating_add(1)) // saturate : un id rechargé forgé (u64::MAX) ne panique ni ne wrappe à 0
+        .unwrap_or(0)
+}
+
 /// **Rédaction** par rôle — opération de VUE (n'altère jamais le sceau). Pour un rôle sans clair (Viewer),
 /// on rédige **tous les outputs free-text** susceptibles de porter des données personnelles : le
 /// `verdict_label` ET les conclusions de contrôle — ce sont la **même classe** (un `AgentAct.output` brut,
@@ -421,5 +502,98 @@ mod tests {
         // La portée scellée est explicite (anti-piège ?cases) : toujours le DAG complet.
         assert!(exp.sealed_scope.starts_with("full-tenant-dag"));
         assert_eq!(exp.report_cases, vec!["SUP-A".to_string()]);
+    }
+
+    /// Construit un service dont le store rechargé est ALTÉRÉ (sceau cassé) — pour tester le fail-loud.
+    fn tampered_service() -> AuditService {
+        let s = svc();
+        let tampered = s.store().to_jsonl().replacen("PASS", "FAIL", 1);
+        let recs = provenance_dag::SealedDag::records_from_jsonl(&tampered).unwrap();
+        AuditService::from_records(TenantKey::from_bytes([7u8; 32]), recs, ProjectionConfig::default())
+    }
+
+    #[test]
+    fn service_fails_loud_on_tampered_reloaded_store() {
+        // I-S2-FAIL-LOUD au niveau SERVICE (désormais testable via le reload) : un store altéré est servi
+        // avec une enveloppe ok:false (VISIBLE, jamais masqué), et l'export le REFUSE.
+        let mut s = tampered_service();
+        let r = s.case_view("SUP-A", &officer(), 1).unwrap();
+        assert!(!r.provenance.ok(), "intégrité cassée signalée dans l'enveloppe");
+        assert!(r.provenance.verdict.broken_at.is_some(), "le record cassé est localisé");
+        assert!(matches!(s.export(None, &officer(), 2), Err(ApiError::Integrity(_))), "export refuse un store cassé");
+    }
+
+    #[test]
+    fn reload_preserves_queryability_and_advances_human_seq() {
+        // Redémarrage : sceller une revue (human-0), persister, recharger, nouvelle revue → human-1
+        // (le human_seq reprend au-dessus des ids rechargés — pas de collision).
+        let mut s = svc();
+        s.record_human_action("SUP-A", &HumanActionInput { target_step: "aggregate".into(), action: HumanAction::Approve, justification: "ok".into() }, &officer(), 5).unwrap();
+        let recs = provenance_dag::SealedDag::records_from_jsonl(&s.store().to_jsonl()).unwrap();
+        let mut reloaded = AuditService::from_records(TenantKey::from_bytes([7u8; 32]), recs, ProjectionConfig::default());
+        assert!(reloaded.case_view("SUP-A", &officer(), 6).unwrap().provenance.ok(), "re-prouvable après reload");
+        let resp = reloaded
+            .record_human_action("SUP-A", &HumanActionInput { target_step: "aggregate".into(), action: HumanAction::Comment, justification: "suite".into() }, &officer(), 7)
+            .unwrap();
+        assert_eq!(resp.sealed_node, "SUP-A::human-1", "le human_seq reprend après reload (pas de collision)");
+        assert!(resp.provenance.ok());
+    }
+
+    #[test]
+    fn cursor_round_trips_and_rejects_stale() {
+        // Pagination liée au root : page 1 émet un curseur ; après un append (root avance), il est périmé.
+        let mut s = svc();
+        // un 2ᵉ cas pour avoir deux pages à limit=1.
+        s.ingest_llm(&LlmCall { case_id: "SUP-B", step: "sanction", agent_role: "sanction_check", inputs: b"i", model: "phi4", version: "1", output: "PASS", evidence_steps: &[], timestamp: 3 }).unwrap();
+        let q1 = ListQuery { limit: 1, ..Default::default() };
+        let p1 = s.list_cases(&q1, &officer(), 1).unwrap();
+        assert_eq!(p1.cases.len(), 1);
+        let cur = Cursor::decode(p1.next_cursor.as_ref().expect("une page suivante")).unwrap();
+        assert_eq!(cur.root, s.store().manifest_root(), "le curseur est lié au root courant");
+        // page 2 avec le curseur valide → l'autre cas.
+        let p2 = s.list_cases(&ListQuery { cursor: Some(cur.clone()), limit: 1, ..Default::default() }, &officer(), 1).unwrap();
+        assert_eq!(p2.cases.len(), 1);
+        assert_ne!(p2.cases[0].case_id, p1.cases[0].case_id, "page 2 ≠ page 1");
+        // le DAG avance → le curseur (root antérieur) est refusé.
+        s.ingest_llm(&LlmCall { case_id: "SUP-C", step: "sanction", agent_role: "sanction_check", inputs: b"i", model: "phi4", version: "1", output: "PASS", evidence_steps: &[], timestamp: 4 }).unwrap();
+        assert!(matches!(s.list_cases(&ListQuery { cursor: Some(cur), limit: 1, ..Default::default() }, &officer(), 1), Err(ApiError::CursorStale(_))));
+    }
+
+    #[test]
+    fn role_filter_selects_cases() {
+        let mut s = svc();
+        s.ingest_llm(&LlmCall { case_id: "SUP-B", step: "extract", agent_role: "supplier_extract", inputs: b"i", model: "phi4", version: "1", output: "{x}", evidence_steps: &[], timestamp: 3 }).unwrap();
+        let only_sanction = s.list_cases(&ListQuery { role: Some("sanction_check".into()), limit: 50, ..Default::default() }, &officer(), 1).unwrap();
+        assert!(only_sanction.cases.iter().any(|c| c.case_id == "SUP-A"));
+        assert!(!only_sanction.cases.iter().any(|c| c.case_id == "SUP-B"), "SUP-B n'a pas de sanction_check");
+    }
+
+    #[test]
+    fn out_of_range_cursor_fails_loud_not_silently_empty() {
+        // Régression (review) : une position de curseur hors-chaîne → CursorStale, pas une page vide muette.
+        let mut s = svc();
+        let root = s.store().manifest_root();
+        let bad = ListQuery { cursor: Some(Cursor { root, pos: 9_999 }), limit: 10, ..Default::default() };
+        assert!(matches!(s.list_cases(&bad, &officer(), 1), Err(ApiError::CursorStale(_))));
+    }
+
+    #[test]
+    fn reload_with_forged_huge_human_id_does_not_panic() {
+        // Régression (review) : un id de revue rechargé forgé (human-{u64::MAX}) ne doit ni paniquer
+        // (debug) ni wrapper le compteur (release) — next_human_seq sature.
+        let forged = Record {
+            node: Node::Human {
+                node_id: "SUP-A::human-18446744073709551615".into(),
+                human_id: "x".into(),
+                action: HumanAction::Approve,
+                target_node: "SUP-A::aggregate".into(),
+                justification: "j".into(),
+                timestamp: 1,
+            },
+            seal: "00".repeat(32),
+        };
+        // from_records → from_store → next_human_seq : aucune panique (le store est cassé, fail-loud à la lecture).
+        let svc = AuditService::from_records(TenantKey::from_bytes([7u8; 32]), vec![forged], ProjectionConfig::default());
+        assert!(!svc.store().reprove().ok, "store forgé → re-preuve échoue (fail-loud)");
     }
 }
