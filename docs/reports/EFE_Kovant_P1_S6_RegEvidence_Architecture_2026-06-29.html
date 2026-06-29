@@ -1,0 +1,408 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>EFE × Kovant — P1 · S6 : Architecture du moteur d'évidence réglementaire (les gabarits EU AI Act / GDPR / CSDDD)</title>
+<style>
+  :root{--ink:#0f172a;--muted:#475569;--soft:#64748b;--line:#e2e8f0;--teal:#0d9488;--teal-d:#0f766e;--indigo:#4f46e5;--indigo-d:#4338ca;--ok:#16a34a;--warn:#d97706;--bad:#dc2626;--bg-tint:#f6fbfa;--bg-card:#eef2f1;--code-bg:#0f172a;--code-fg:#e2e8f0;}
+  *{box-sizing:border-box;} html{font-size:11.2px;}
+  body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,Arial,sans-serif;color:var(--ink);margin:0;line-height:1.6;background:#fff;-webkit-font-smoothing:antialiased;}
+  .wrap{max-width:178mm;margin:0 auto;padding:0 2mm;}
+  h1,h2,h3,h4{line-height:1.2;font-weight:700;}
+  h2{font-size:1.45rem;margin:0 0 .55rem;padding-bottom:.32rem;border-bottom:3px solid var(--teal);}
+  h2 .num{color:var(--teal);} h3{font-size:1.13rem;margin:1.1rem 0 .3rem;color:var(--teal-d);}
+  h4{font-size:1rem;margin:.8rem 0 .2rem;color:var(--indigo-d);}
+  p{margin:.55rem 0;text-align:justify;hyphens:auto;} a{color:var(--indigo);text-decoration:none;}
+  code{font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace;font-size:.85em;background:var(--bg-card);padding:.05em .35em;border-radius:4px;color:#0b3b36;}
+  .muted{color:var(--muted);} .small{font-size:.88rem;}
+  section{break-inside:avoid;} .page{break-before:page;} h2{break-after:avoid;}
+  table{border-collapse:collapse;width:100%;margin:.55rem 0;font-size:.8rem;}
+  th,td{border:1px solid var(--line);padding:.32rem .5rem;text-align:left;vertical-align:top;}
+  th{background:var(--bg-card);font-weight:700;} tbody tr:nth-child(even){background:var(--bg-tint);}
+  td.c,th.c{text-align:center;} .good{background:#dcfce7 !important;color:#166534;font-weight:700;} .mid{background:#fef9c3 !important;color:#854d0e;font-weight:700;} .bad{background:#fee2e2 !important;color:#991b1b;font-weight:700;}
+  .tag{display:inline-block;font-size:.71rem;font-weight:700;padding:.08em .5em;border-radius:20px;}
+  .t-ok{background:#dcfce7;color:#166534;} .t-info{background:#e0e7ff;color:#3730a3;} .t-teal{background:#ccfbf1;color:#115e59;} .t-warn{background:#fef3c7;color:#92400e;} .t-bad{background:#fee2e2;color:#991b1b;}
+  pre{background:var(--code-bg);color:var(--code-fg);padding:.55rem .8rem;border-radius:8px;overflow:auto;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.72rem;line-height:1.45;margin:.55rem 0;}
+  pre code{background:none;color:inherit;padding:0;}
+  .callout{border-left:4px solid var(--teal);background:var(--bg-tint);padding:.55rem .85rem;border-radius:0 8px 8px 0;margin:.65rem 0;}
+  .callout p{text-align:left;margin:.28rem 0;}
+  .callout.key{border-color:var(--indigo);background:#eef2ff;} .callout.warn{border-color:var(--warn);background:#fffbeb;} .callout.ok{border-color:var(--ok);background:#f0fdf4;} .callout.bad{border-color:var(--bad);background:#fef2f2;}
+  .fig{margin:.7rem 0 .9rem;text-align:center;break-inside:avoid;}
+  .fig svg{max-width:100%;height:auto;border:1px solid var(--line);border-radius:10px;background:#fff;}
+  .fig .cap{font-size:.79rem;color:var(--muted);margin-top:.32rem;font-style:italic;text-align:center;}
+  ul,ol{margin:.4rem 0 .55rem 1.1rem;padding:0;} li{margin:.24rem 0;}
+  svg text{font-family:-apple-system,"Segoe UI",Inter,sans-serif;}
+  .cover{height:262mm;display:flex;flex-direction:column;justify-content:center;position:relative;padding:0 6mm;}
+  .cover .eyebrow{color:var(--teal);font-weight:800;letter-spacing:.2em;font-size:.83rem;text-transform:uppercase;}
+  .cover h1{font-size:2.05rem;margin:.4rem 0 .2rem;line-height:1.08;} .cover .sub{font-size:1.16rem;color:var(--muted);margin-bottom:1.1rem;}
+  .cover .tagline{font-size:1.0rem;color:var(--ink);max-width:163mm;border-left:4px solid var(--teal);padding-left:1rem;font-style:italic;text-align:left;}
+  .cover .meta{position:absolute;bottom:6mm;left:6mm;right:6mm;display:flex;justify-content:space-between;border-top:1px solid var(--line);padding-top:.6rem;font-size:.8rem;color:var(--soft);}
+  .cover .pills{margin:1rem 0;} .cover .pills .tag{font-size:.77rem;margin-right:.3rem;}
+  .mono{font-family:ui-monospace,Menlo,Consolas,monospace;}
+  hr{border:none;border-top:1px solid var(--line);margin:.9rem 0;}
+  .toc{font-size:.9rem;columns:2;column-gap:2rem;} .toc div{margin:.16rem 0;break-inside:avoid;} .toc .n{color:var(--teal);font-weight:700;display:inline-block;width:1.8em;}
+  .eq{font-family:ui-monospace,Menlo,Consolas,monospace;background:#ecfdf5;border:1px solid #a7f3d0;border-radius:8px;padding:.45rem .75rem;margin:.5rem 0;font-size:.79rem;color:#065f46;text-align:center;}
+  @page{size:A4;margin:13mm 12mm;}
+</style>
+</head>
+<body>
+
+<!-- COVER -->
+<div class="wrap"><div class="cover">
+  <div class="eyebrow">P1 · S6 · le moteur d'évidence · l'heure de dossier devient une minute, re-prouvable</div>
+  <h1>S6 — Le Moteur d'Évidence Réglementaire</h1>
+  <div class="sub">Du DAG scellé aux artefacts que le réglementaire EU exige — automatiquement, traçablement, re-dérivablement — sous la distinction dure qui le rend honnête : <b>outillé ≠ conforme</b>.</div>
+  <div class="tagline">S0–S2 ont posé le substrat scellé, l'ont rendu lisible et servable ; S4 l'a rendu défendable devant un tiers <b>sans confiance</b>. S6 ferme la boucle de valeur de P1 : il <b>auto-produit l'évidence</b> que des cadres précis — <b>EU AI Act</b> (tenue de registres art. 12, transparence art. 13, contrôle humain art. 14, obligations du déployeur art. 26), <b>GDPR</b> (minimisation art. 5, décision automatisée art. 22, registre des traitements art. 30), <b>devoir de vigilance</b> (CSDDD / LkSG) — réclament. C'est le composant <b>trust-light</b> par construction : il <b>n'invente aucune confiance neuve</b>, il <b>lit le re-prouvé</b>. Son principe d'architecture est triple et radical. <b>(1) L'artefact est une VUE re-dérivable</b>, pas une base de données parallèle : <span class="mono">derive(records_scellés, mapping@version)</span> est une <b>fonction pure et déterministe</b> — un tiers la ré-exécute et obtient <b>les mêmes octets</b>, donc S6 ajoute <b>zéro surface de confiance</b> au fossé de S4. <b>(2) Le mapping est une revendication versionnée et hachée</b>, jamais une vérité : « le nœud humain évidencie l'art. 14 » est une <b>interprétation déclarée de Kovant</b>, datée, et qui <b>voyage</b> avec l'artefact (le réglementaire évolue — actes délégués, normes harmonisées — donc l'artefact enregistre <b>sous quelle version</b> il fut produit). <b>(3) La couverture est honnête sur ses trous</b> : l'artefact <b>énumère</b> ce que le DAG couvre, couvre <b>partiellement</b>, et <b>ne couvre pas</b> (système de gestion des risques art. 9, gouvernance des données art. 10, documentation technique art. 11 — des artefacts <b>organisationnels</b> que le DAG ne produit pas) ; taire un trou serait un <b>« vert malhonnête »</b>, la classe de bug exacte attrapée en S2. Et l'honnêteté <b>légalement nécessaire</b>, sœur de « intègre ≠ correct » (S2/S8) et « intègre ≠ inforgeable » (S4) : <b>fournir l'évidence et la mapper n'est pas prononcer la conformité</b>. L'artefact n'a <b>aucun champ « conforme »</b> — il porte « évidence mappée à l'exigence », parce que la conformité est une <b>conclusion juridique</b> qui dépend de la classification du système, du conseil du client, et des obligations qu'aucun DAG ne remplit. Le ROI est <b>là</b> : le dossier de diligence fournisseur qu'un agent de conformité assemblait en <b>heures</b>, error-prone, le workflow le produit en <b>minutes</b>, re-prouvable, exportable — et <b>défendable</b>. C'est ce qu'on facture.</div>
+  <div class="pills">
+    <span class="tag t-teal">trust-light : l'artefact est une VUE re-dérivable (zéro confiance neuve)</span>
+    <span class="tag t-info">le mapping = revendication VERSIONNÉE &amp; hachée, qui voyage</span>
+    <span class="tag t-info">couverture honnête : la carte montre ses TROUS</span>
+    <span class="tag t-warn">outillé ≠ conforme (aucun champ « conforme »)</span>
+    <span class="tag t-ok">le ROI qui déclenche la conversion : heures → minutes, re-prouvable</span>
+  </div>
+  <div class="meta">
+    <span>EFE × Kovant · P1 (le coin de provenance) · S6 — architecture du moteur d'évidence — proposition</span>
+    <span>2026-06-29 · architecture · sem. 8–10</span>
+  </div>
+</div></div>
+
+<!-- TOC -->
+<div class="wrap page">
+  <h2><span class="num">§0</span> Plan</h2>
+  <div class="toc">
+    <div><span class="n">1.</span> Où S6 se situe : du mapping promis (P1 §7) au moteur d'évidence livré</div>
+    <div><span class="n">2.</span> Le principe cardinal : une VUE re-dérivable, un mapping versionné (trust-light)</div>
+    <div><span class="n">3.</span> Outillé ≠ conforme : la distinction d'honnêteté de S6</div>
+    <div><span class="n">4.</span> Le registre de mapping : la revendication, son data-model, sa version</div>
+    <div><span class="n">5.</span> La couverture honnête : montrer les trous (anti-vert-malhonnête)</div>
+    <div><span class="n">6.</span> Le mapping EU AI Act (art. 12 / 13 / 14 / 26)</div>
+    <div><span class="n">7.</span> Le mapping GDPR (art. 5(1)(c) / 22 / 30)</div>
+    <div><span class="n">8.</span> Le mapping devoir de vigilance (CSDDD / LkSG) : le dossier fournisseur</div>
+    <div><span class="n">9.</span> La re-dérivation dans le bundle forensic (S6 × S4)</div>
+    <div><span class="n">10.</span> <span class="mono">reg-evidence</span> : le neuf à construire, l'artefact, &amp; les invariants-tests</div>
+    <div><span class="n">11.</span> Réutilisé-vs-neuf, séquence, porte/arrêt, ce que S6 décide</div>
+  </div>
+
+  <h3>Le geste, en une phrase</h3>
+  <p>Projeter le DAG scellé de S0–S2 sur les exigences réglementaires EU via un <b>mapping déclaré et versionné</b>, et en <b>dériver</b> — par une fonction <b>pure, re-dérivable par un tiers</b> — l'<b>artefact d'évidence</b> que le régulateur réclame (registre art. 12, dossier de vigilance CSDDD…), chaque ligne <b>citant son nœud scellé</b>, la couverture <b>énonçant ses trous</b>, et l'artefact <b>n'affirmant jamais la conformité</b> (<b>outillé ≠ conforme</b>) — pour transformer l'heure de dossier manuel en une minute défendable, et déclencher la <b>conversion</b>.</p>
+
+  <div class="callout key">
+    <p><b>Pourquoi S6 est la dernière marche de la valeur, pas un gadget.</b> S0–S4 livrent une <b>capacité</b> (un audit re-prouvable et exportable) ; S6 la convertit en l'<b>artefact précis</b> qu'une équipe conformité doit produire <b>de toute façon</b>, et le produit <b>mieux</b> que la main : automatiquement, traçablement, et <b>re-prouvable par le destinataire lui-même</b>. C'est le moment où la provenance cesse d'être « une belle propriété » pour devenir « le livrable que je dois remettre au régulateur, et que je remets en un clic ». Et parce que S6 est <b>trust-light</b> — une vue déterministe sur du déjà-prouvé — il <b>n'ajoute aucun risque cryptographique</b> : tout son risque est dans l'<b>honnêteté du cadrage</b>, qu'on impose par le type (pas de champ « conforme ») et par le test (la couverture doit montrer ses trous).</p>
+  </div>
+</div>
+
+<!-- 1 -->
+<div class="wrap page">
+  <h2><span class="num">§1</span> Où S6 se situe : du mapping promis (P1 §7) au moteur d'évidence livré</h2>
+  <p>P1 §7 a posé la promesse : « le produit ne <i>facilite</i> pas la conformité — il <b>auto-produit l'évidence</b> que des cadres précis exigent ». S6 est la slice qui <b>tient</b> cette promesse en code. Les cinq slices déjà construites forment une pile de confiance : S0 (<span class="mono">provenance-dag</span>) scelle, S1 (<span class="mono">provenance-capture</span>) capte, S2 (<span class="mono">audit-api</span>) projette et sert, S4 (<span class="mono">provenance-verify</span> + <span class="mono">forensic-export</span>) exporte un bundle re-prouvable <b>sans confiance</b>. S6 (<span class="mono">reg-evidence</span>) s'assoit <b>au-dessus</b> de cette pile : il ne touche ni la crypto, ni la capture, ni le scellement — il <b>lit</b> la projection re-prouvée de S2 et en <b>dérive</b> des artefacts d'évidence cadrés sur le réglementaire.</p>
+  <div class="fig">
+  <svg viewBox="0 0 720 250" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Où S6 se situe dans la pile de slices">
+    <defs><marker id="a1" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto"><path d="M0,0 L9,4.5 L0,9 Z" fill="#475569"/></marker></defs>
+    <!-- base stack -->
+    <rect x="20" y="170" width="150" height="56" rx="8" fill="#f6fbfa" stroke="#0f766e"/>
+    <text x="95" y="192" text-anchor="middle" font-size="10.5" font-weight="700" fill="#0f766e">S0 · provenance-dag</text>
+    <text x="95" y="207" text-anchor="middle" font-size="8.5" fill="#475569">le DAG scellé (HMAC, root)</text>
+    <text x="95" y="219" text-anchor="middle" font-size="8.5" fill="#475569">+ S1 capture</text>
+    <rect x="190" y="170" width="150" height="56" rx="8" fill="#eef2ff" stroke="#4f46e5"/>
+    <text x="265" y="192" text-anchor="middle" font-size="10.5" font-weight="700" fill="#3730a3">S2 · audit-api</text>
+    <text x="265" y="207" text-anchor="middle" font-size="8.5" fill="#475569">projection → DecisionView</text>
+    <text x="265" y="219" text-anchor="middle" font-size="8.5" fill="#475569">integrity-on-read · intègre≠correct</text>
+    <rect x="360" y="170" width="150" height="56" rx="8" fill="#fffbeb" stroke="#d97706"/>
+    <text x="435" y="192" text-anchor="middle" font-size="10.5" font-weight="700" fill="#92400e">S4 · forensic-export</text>
+    <text x="435" y="207" text-anchor="middle" font-size="8.5" fill="#475569">bundle trustless · vérifieur</text>
+    <text x="435" y="219" text-anchor="middle" font-size="8.5" fill="#475569">re-compilable · ancrage</text>
+    <!-- S6 lens on top -->
+    <rect x="190" y="40" width="320" height="62" rx="10" fill="#ccfbf1" stroke="#0d9488" stroke-width="1.5"/>
+    <text x="350" y="64" text-anchor="middle" font-size="12" font-weight="700" fill="#0f766e">S6 · reg-evidence — le moteur d'évidence</text>
+    <text x="350" y="80" text-anchor="middle" font-size="9" fill="#475569">une VUE re-dérivable : derive(records scellés, mapping@version) → artefact</text>
+    <text x="350" y="93" text-anchor="middle" font-size="9" fill="#0f766e">EU AI Act · GDPR · CSDDD/LkSG — outillé ≠ conforme</text>
+    <!-- reads projection -->
+    <line x1="265" y1="168" x2="290" y2="104" stroke="#475569" marker-end="url(#a1)"/>
+    <text x="238" y="140" font-size="8" fill="#475569" transform="rotate(-66 238 140)">lit le re-prouvé</text>
+    <!-- ships into bundle -->
+    <line x1="430" y1="104" x2="445" y2="168" stroke="#475569" marker-end="url(#a1)"/>
+    <text x="452" y="140" font-size="8" fill="#475569" transform="rotate(74 452 140)">voyage dans le bundle</text>
+    <!-- note -->
+    <rect x="530" y="58" width="172" height="120" rx="8" fill="#f8fafc" stroke="#e2e8f0"/>
+    <text x="616" y="80" text-anchor="middle" font-size="9.5" font-weight="700" fill="#0f172a">Trust-light</text>
+    <text x="540" y="98" font-size="8" fill="#475569">• n'invente AUCUNE crypto</text>
+    <text x="540" y="112" font-size="8" fill="#475569">• n'ajoute AUCUNE</text>
+    <text x="548" y="123" font-size="8" fill="#475569">surface de confiance</text>
+    <text x="540" y="138" font-size="8" fill="#475569">• déterministe →</text>
+    <text x="548" y="149" font-size="8" fill="#475569">re-dérivable par un tiers</text>
+    <text x="540" y="164" font-size="8" fill="#475569">• risque = l'HONNÊTETÉ</text>
+    <text x="548" y="175" font-size="8" fill="#475569">du cadrage, pas le calcul</text>
+  </svg>
+  <div class="cap">S6 est une <b>lentille</b> posée sur la pile : il lit la projection re-prouvée de S2, dérive un artefact d'évidence, et ce même artefact voyage dans le bundle de S4 où un tiers le <b>re-dérive</b>. Aucune nouvelle confiance n'est introduite — c'est ce que « trust-light » veut dire précisément.</div>
+  </div>
+  <p>La conséquence stratégique est que <b>tout le risque technique de S6 est de l'honnêteté, pas du calcul</b>. Là où S4 concentrait un risque cryptographique (un défaut dans le vérifieur serait une responsabilité), S6 ne re-implémente aucune primitive : sa fonction <span class="mono">derive</span> est une projection déterministe d'un DAG déjà scellé et déjà re-prouvé. Le danger n'est donc <b>pas</b> qu'un calcul soit faux — c'est qu'un artefact <b>sur-promette</b> : qu'il lise comme « nous sommes conformes » alors qu'il ne fournit que de l'évidence, ou qu'il <b>taise</b> une exigence qu'il ne couvre pas. Toute l'architecture de S6 est donc organisée autour d'<b>imposer le cadrage honnête par le type et par le test</b> (§3, §5), exactement comme S2 a imposé « intègre ≠ correct » par l'absence d'un champ « correct » dans son <span class="mono">IntegrityEnvelope</span>.</p>
+  <table>
+    <thead><tr><th></th><th>P1 §7 (la promesse)</th><th>S6 (le livrable)</th></tr></thead>
+    <tbody>
+      <tr><td><b>Nature</b></td><td>« le DAG auto-produit l'évidence »</td><td><span class="mono">reg-evidence</span> : <span class="mono">derive(dag, mapping) → artefact</span>, pur &amp; déterministe</td></tr>
+      <tr><td><b>Cadres</b></td><td>EU AI Act, GDPR, CSDDD/LkSG (une table)</td><td>un <b>registre de mapping versionné</b> par cadre, avec sélecteurs sur le DAG (§4, §6–8)</td></tr>
+      <tr><td><b>Honnêteté</b></td><td>« outille, ne garantit pas la conformité »</td><td><b>outillé ≠ conforme</b> imposé par le type (pas de champ « conforme ») + la couverture montre ses trous (§3, §5)</td></tr>
+      <tr><td><b>Confiance</b></td><td>(implicite) re-prouvable</td><td><b>trust-light</b> : l'artefact est une vue <b>re-dérivable</b> dans le bundle S4 (§9)</td></tr>
+      <tr><td><b>Valeur</b></td><td>« l'IA produit l'évidence du travail »</td><td>heures → minutes : le dossier fournisseur généré, re-prouvable, défendable (§8, §11)</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- 2 -->
+<div class="wrap page">
+  <h2><span class="num">§2</span> Le principe cardinal : une VUE re-dérivable, un mapping versionné</h2>
+  <p>Le piège que S6 doit éviter à tout prix est de devenir une <b>seconde base de données</b> — un entrepôt d'« états de conformité » calculés une fois, stockés, et qui <b>diverge</b> ensuite du record scellé. Ce serait répéter, une couche plus haut, l'erreur que P1 §2 a structurellement exclue (« l'audit n'est pas un journal à côté ; il EST le record »). La réponse architecturale de S6 est la même par construction : <b>l'artefact réglementaire n'est jamais stocké comme une vérité ; il est toujours dérivé, à la demande, du record scellé.</b> Formellement, l'artefact est le résultat d'une fonction <b>pure</b> :</p>
+  <div class="eq">artefact  =  derive( records_scellés , MappingSet@version )      —      derive est PURE &amp; DÉTERMINISTE</div>
+  <p>« Pure et déterministe » est l'exigence centrale, et elle a une conséquence précieuse : <b>n'importe qui</b> détenant les mêmes records scellés et la même version de mapping ré-exécute <span class="mono">derive</span> et obtient l'artefact <b>octet pour octet</b>. C'est exactement la propriété « récit = vue » de S4 (le rapport se régénère depuis les records re-prouvés), <b>promue au rang d'artefact réglementaire</b>. Et c'est ce qui rend S6 <b>trust-light</b> au sens fort : il n'introduit <b>aucune</b> surface de confiance neuve. Le tiers ne doit pas croire l'artefact que Kovant a écrit — il <b>re-dérive le sien</b> à partir du bundle, et le compare. Comme pour le binaire de vérification (« un binaire livré pourrait mentir ; le vôtre ne le peut pas »), un artefact livré pourrait mentir ; l'artefact <b>re-dérivé</b> ne le peut pas.</p>
+  <div class="fig">
+  <svg viewBox="0 0 720 250" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="L'artefact comme vue re-dérivable">
+    <defs><marker id="a2" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto"><path d="M0,0 L9,4.5 L0,9 Z" fill="#475569"/></marker></defs>
+    <!-- inputs -->
+    <rect x="20" y="40" width="160" height="54" rx="8" fill="#f6fbfa" stroke="#0f766e"/>
+    <text x="100" y="62" text-anchor="middle" font-size="10" font-weight="700" fill="#0f766e">records scellés</text>
+    <text x="100" y="78" text-anchor="middle" font-size="8.5" fill="#475569">(re-prouvés · S0/S2)</text>
+    <rect x="20" y="150" width="160" height="62" rx="8" fill="#e0e7ff" stroke="#4f46e5"/>
+    <text x="100" y="170" text-anchor="middle" font-size="10" font-weight="700" fill="#3730a3">MappingSet@version</text>
+    <text x="100" y="185" text-anchor="middle" font-size="8" fill="#475569">revendication DÉCLARÉE</text>
+    <text x="100" y="197" text-anchor="middle" font-size="8" fill="#475569">datée · hachée (set_hash)</text>
+    <text x="100" y="207" text-anchor="middle" font-size="8" fill="#475569">≠ une vérité</text>
+    <!-- derive -->
+    <rect x="270" y="95" width="150" height="62" rx="10" fill="#ccfbf1" stroke="#0d9488" stroke-width="1.5"/>
+    <text x="345" y="120" text-anchor="middle" font-size="11.5" font-weight="700" fill="#0f766e">derive( · )</text>
+    <text x="345" y="137" text-anchor="middle" font-size="8.5" fill="#475569">pure · déterministe</text>
+    <text x="345" y="149" text-anchor="middle" font-size="8.5" fill="#475569">aucun état caché</text>
+    <line x1="180" y1="67" x2="268" y2="112" stroke="#475569" marker-end="url(#a2)"/>
+    <line x1="180" y1="178" x2="268" y2="140" stroke="#475569" marker-end="url(#a2)"/>
+    <!-- artifact -->
+    <rect x="500" y="40" width="200" height="80" rx="8" fill="#fff" stroke="#0d9488"/>
+    <text x="600" y="62" text-anchor="middle" font-size="10.5" font-weight="700" fill="#0f766e">RegulatoryArtifact</text>
+    <text x="600" y="78" text-anchor="middle" font-size="8.5" fill="#475569">une VUE — chaque ligne cite</text>
+    <text x="600" y="90" text-anchor="middle" font-size="8.5" fill="#475569">un node_id ; mapping_version</text>
+    <text x="600" y="104" text-anchor="middle" font-size="8.5" fill="#991b1b">AUCUN champ « conforme »</text>
+    <line x1="420" y1="118" x2="498" y2="86" stroke="#475569" marker-end="url(#a2)"/>
+    <!-- third party re-derive -->
+    <rect x="500" y="150" width="200" height="66" rx="8" fill="#fffbeb" stroke="#d97706"/>
+    <text x="600" y="172" text-anchor="middle" font-size="10" font-weight="700" fill="#92400e">le tiers re-dérive</text>
+    <text x="600" y="188" text-anchor="middle" font-size="8.5" fill="#475569">re-exécute derive(...) sur le</text>
+    <text x="600" y="200" text-anchor="middle" font-size="8.5" fill="#475569">bundle → MÊMES octets</text>
+    <text x="600" y="211" text-anchor="middle" font-size="8" fill="#92400e">zéro confiance neuve</text>
+    <line x1="420" y1="140" x2="498" y2="178" stroke="#475569" marker-end="url(#a2)"/>
+  </svg>
+  <div class="cap">L'artefact est une fonction <b>pure</b> de deux entrées : les records scellés (le fait re-prouvé) et le <span class="mono">MappingSet</span> versionné (la revendication déclarée). Le tiers re-dérive le sien et compare — exactement comme il re-compile le vérifieur de S4. La confiance ne se déplace pas vers S6.</div>
+  </div>
+  <p>La seconde moitié du principe concerne la deuxième entrée. Un record scellé est un <b>fait</b> (re-prouvable). Mais l'énoncé « le nœud humain <span class="mono">APPROVE</span> évidencie l'exigence de contrôle humain de l'art. 14 » <b>n'est pas un fait</b> — c'est une <b>interprétation juridique</b>, et elle appartient à Kovant tant qu'un régulateur ne l'a pas validée. La rigueur impose donc de traiter le mapping comme ce qu'il est : une <b>revendication déclarée, datée, et versionnée</b>, qui <b>voyage avec l'artefact</b> (§4). L'artefact n'enregistre pas seulement « voici l'évidence » mais « voici l'évidence, <b>telle que mappée par la version 2026-06 du registre Kovant</b>, dont le hash est <span class="mono">set_hash</span> ». Cela importe parce que le réglementaire <b>bouge</b> — l'EU AI Act se précise par actes délégués et normes harmonisées, la transposition de la CSDDD varie par État membre — et un artefact produit aujourd'hui doit dire <b>sous quelle lecture</b> il fut produit, pour rester intelligible et contestable demain. Le mapping versionné est, lui aussi, de la provenance.</p>
+  <div class="callout key"><p><b>Le test qui matérialise le principe (I-S6-VUE-REDÉRIVABLE).</b> On re-dérive l'artefact deux fois à partir des mêmes records re-prouvés et de la même version de mapping, et on exige l'<b>égalité octet-à-octet</b> ; puis on le re-dérive <b>depuis le bundle exporté</b> (hors-process, comme un tiers) et on exige encore l'égalité. Si <span class="mono">derive</span> dépend d'un état caché, d'une horloge, ou d'un ordre non déterministe, le test casse — et c'est la garde qui empêche S6 de redevenir une base de données qui diverge.</p></div>
+</div>
+
+<!-- 3 -->
+<div class="wrap page">
+  <h2><span class="num">§3</span> Outillé ≠ conforme : la distinction d'honnêteté de S6</h2>
+  <p>Chaque slice du coin de provenance porte une distinction dure, légalement nécessaire, qui dit <b>ce que la garantie n'est pas</b>. S2 a posé <b>intègre ≠ correct</b> (le record est authentique, pas forcément juste). S4 a posé <b>intègre ≠ inforgeable</b> (authentique-par-le-détenteur-de-clé, pas non-fabriqué — d'où l'ancrage). S6 pose la troisième, et c'est la plus exposée commercialement parce qu'elle touche au mot que tout le marché veut entendre :</p>
+  <div class="eq">OUTILLÉ  ≜  l'évidence que l'exigence réclame est FOURNIE &amp; MAPPÉE (re-prouvablement)
+         ≠  CONFORME  ≜  une conclusion JURIDIQUE (classification + conseil + obligations org.)</div>
+  <p>Produire l'artefact de tenue de registres de l'art. 12 depuis le DAG <b>fournit l'évidence</b> que l'exigence demande — un journal d'événements traçable, et de surcroît <b>infalsifiable</b>, ce qui va <b>au-delà</b> de la lettre. Mais cela ne <b>prononce pas</b> la conformité du système. La conformité dépend de facteurs que le DAG ne connaît pas : la <b>classification</b> du système au sens de l'AI Act (le régime des obligations n'existe que si le système est « à haut risque »), la <b>complétude</b> des autres obligations du déployeur (gestion des risques, documentation, gouvernance des données — §5), le <b>conseil juridique</b> du client, et in fine l'<b>appréciation du régulateur</b>. S6 livre un <b>moteur d'évidence</b> et un <b>argument défendable</b> ; il ne livre <b>jamais</b> un verdict de conformité — et l'architecture le rend <b>impossible</b> à confondre.</p>
+  <h3>L'imposition par le type, pas par la discipline</h3>
+  <p>« Comprendre » la distinction ne suffit pas — P1 §8 l'exigeait déjà « imposée dans l'UX et l'export, pas seulement comprise ». S6 l'impose <b>structurellement</b> : le type <span class="mono">RegulatoryArtifact</span> <b>n'a pas</b> de champ <span class="mono">compliant</span>, <span class="mono">compliance_status</span>, ni <span class="mono">PASS</span> de conformité. Il a <span class="mono">coverage</span> (couvert / partiel / hors-périmètre) et <span class="mono">evidence: [node_id]</span> (les nœuds qui évidencient l'exigence), et il porte un <span class="mono">honesty_envelope</span> qui <b>énonce</b> outillé ≠ conforme. C'est l'exact parallèle du choix de S2 — dont l'<span class="mono">IntegrityEnvelope</span> de type « integrity_only » n'a délibérément <b>pas</b> de champ « correct ». On ne peut pas afficher accidentellement un verdict qui n'existe pas dans le type.</p>
+  <div class="callout warn"><p><b>Pourquoi c'est une protection, pas une timidité.</b> Prétendre « conforme » serait (a) <b>faux</b> au sens juridique (l'évidence d'une exigence n'est pas la satisfaction de toutes), et (b) une <b>responsabilité</b> : si un système audité-« conforme » par notre artefact cause un dommage ou échoue à un contrôle, l'affirmation devient une exposition contractuelle directe pour Kovant. La rigueur honnête déplace exactement le bon risque : nous garantissons que l'<b>évidence est authentique et fidèlement mappée</b> (ce que nous pouvons tenir, re-prouvablement) ; nous ne garantissons <b>pas</b> la conclusion de droit (qui n'est pas la nôtre). C'est ce qui rend l'artefact <b>crédible</b> devant un juriste — un outil qui crie « conforme ! » est précisément celui qu'aucun conseil n'accepte.</p></div>
+  <p>Il faut enfin propager <b>intègre ≠ correct</b> à travers S6, car c'est un risque de blanchiment subtil. Les décisions que l'artefact cite sont <b>intègres</b> (re-prouvées) mais pas nécessairement <b>correctes</b>. Un artefact réglementaire ne doit donc <b>jamais</b> transformer une décision scellée-mais-fausse en « évidence de conformité » : il atteste « voici le record authentique et infalsifiable de ce que le système a fait et de ce que les humains en ont décidé, mappé à l'ask probatoire de l'exigence » — il n'atteste ni que les décisions étaient bonnes, ni que le système est conforme. La chaîne d'honnêteté S2 → S4 → S6 doit rester <b>visiblement cohérente</b> : chacune dit ce que la garantie n'est pas, et S6 ne relâche aucune des deux qui le précèdent.</p>
+</div>
+
+<!-- 4 -->
+<div class="wrap page">
+  <h2><span class="num">§4</span> Le registre de mapping : la revendication, son data-model, sa version</h2>
+  <p>Le cœur neuf de S6 est le <b>registre de mapping</b> : la structure de données qui encode, exigence par exigence, <b>quels nœuds du DAG évidencient quoi</b>, et avec <b>quelle honnêteté</b>. C'est de la <b>donnée déclarée</b>, pas de la logique enfouie : on veut qu'un juriste puisse <b>lire</b> le mapping, le contester, et en proposer une nouvelle version. Chaque entrée est une <span class="mono">RequirementMapping</span> — une revendication atomique, datée, traçable.</p>
+  <pre><code>RequirementMapping  (une revendication DÉCLARÉE — pas une vérité)
+  framework         EU_AI_ACT | GDPR | CSDDD | LkSG
+  citation          "art. 12"  |  "art. 5(1)(c)"  |  "§10 LkSG"
+  requirement_text  le libellé de l'exigence, cité mot pour mot
+  coverage          COVERED | PARTIAL | OUT_OF_DAG_SCOPE      (la couverture HONNÊTE, §5)
+  selector          quels NŒUDS/champs du DAG évidencient l'exigence
+                      ex. (node_type = Human ∧ action ∈ {APPROVE,OVERRIDE})  pour l'art. 14
+                      ex. (node_type = Evidence ∧ content_hash présent)       pour l'art. 12/13
+  furnishes         ce que le DAG fournit, en clair (pour l'artefact lisible)
+  does_not_furnish  le TROU explicite — ce qui reste organisationnel (jamais tu)
+  rationale         pourquoi ce mapping tient — l'argument, daté</code></pre>
+  <p>Les <span class="mono">RequirementMapping</span> se regroupent en un <span class="mono">MappingSet</span> : le registre <b>versionné</b> et <b>haché</b> qui, pris ensemble, constitue « la lecture réglementaire de Kovant à une date donnée ». C'est cet objet qui <b>voyage</b> avec l'artefact, pour que la dérivation soit reproductible et la revendication, datable.</p>
+  <pre><code>MappingSet  (le registre — versionné, haché, voyage avec l'artefact)
+  version       "2026-06"                       (la lecture, datée)
+  published_at  "2026-06-29"                     (quand la revendication a été figée)
+  set_hash      sha256(canonical(mappings))      (l'artefact enregistre LAQUELLE l'a produit)
+  mappings      [ RequirementMapping, ... ]
+  // évolutif par conception : une v2 = un nouveau MappingSet, hash distinct,
+  //   artefacts distinguables (I-S6-MAPPING-VERSIONNÉ). On n'écrase JAMAIS une version.</code></pre>
+  <p>Le <span class="mono">selector</span> mérite une note d'architecture. Il ne doit pas être du <b>code arbitraire</b> (qui rendrait le mapping illisible et la dérivation imprévisible) mais un <b>prédicat déclaratif</b> sur les types de nœuds et leurs champs du DAG de S0 (<span class="mono">AgentAct</span>, <span class="mono">Edge</span>, <span class="mono">Evidence</span>, <span class="mono">Human</span>) — un petit langage fermé : type de nœud, présence/valeur de champ, et relation (<span class="mono">consumed_by</span>, <span class="mono">target_node</span>). Cette fermeture donne trois propriétés : le mapping reste <b>auditable à l'œil</b> ; la dérivation reste <b>déterministe</b> (un prédicat évalué sur des records ordonnés) ; et le sélecteur ne peut pas, par construction, <b>inventer</b> de l'évidence — il ne peut que <b>sélectionner</b> des nœuds qui existent et sont re-prouvés. C'est le pendant, au niveau du mapping, de l'anti-citation-fantôme de S4.</p>
+  <div class="callout key"><p><b>Le mapping est la pièce qui se révise, et c'est voulu.</b> Séparer « le fait scellé » (immuable, dans le DAG) de « sa lecture réglementaire » (révisable, dans le <span class="mono">MappingSet</span>) est ce qui permet au produit de <b>suivre</b> un réglementaire mouvant <b>sans jamais retoucher l'historique</b>. Une nouvelle norme harmonisée, un acte délégué, une jurisprudence : on publie une <span class="mono">version</span> de mapping de plus, on re-dérive les artefacts sous la nouvelle lecture si besoin, et chaque artefact <b>ancien</b> reste intelligible parce qu'il porte la version <b>sous laquelle il fut produit</b>. L'<b>ancrage externe</b> de la version de mapping (publier le <span class="mono">set_hash</span>, l'horodater) — pour rendre « produit sous la lecture v2026-06, qui existait au temps T » <b>non-répudiable</b> — est le raffinement nommé, jumeau de l'ancrage de S4 (§9, §11).</p></div>
+</div>
+
+<!-- 5 -->
+<div class="wrap page">
+  <h2><span class="num">§5</span> La couverture honnête : montrer les trous (anti-vert-malhonnête)</h2>
+  <p>C'est la garde la plus importante de S6, et elle descend en droite ligne d'un bug réel attrapé en S2 : le « <b>vert malhonnête</b> » — un statut qui affichait du succès en taisant ce qu'il ne vérifiait pas. Transposé ici, le danger est un artefact qui <b>énumère soigneusement</b> les exigences que le DAG couvre (art. 12, art. 14…) et <b>passe sous silence</b> celles qu'il ne couvre pas. Un lecteur — surtout un acheteur pressé — lirait ce silence comme « tout est couvert », donc « conforme ». Ce serait une sur-promesse <b>par omission</b>, la forme la plus insidieuse, et exactement ce que « outillé ≠ conforme » (§3) interdit. La réponse est une règle dure : <b>un artefact réglementaire DOIT énumérer ses trous.</b></p>
+  <p>Concrètement, chaque exigence cartographiée porte une classe de couverture, et l'artefact présente les trois classes <b>côte à côte</b>, sans en cacher aucune :</p>
+  <div class="fig">
+  <svg viewBox="0 0 720 210" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="La couverture honnête en trois classes">
+    <!-- covered -->
+    <rect x="20" y="30" width="215" height="150" rx="10" fill="#f0fdf4" stroke="#16a34a"/>
+    <circle cx="48" cy="58" r="9" fill="#16a34a"/>
+    <text x="68" y="62" font-size="11" font-weight="700" fill="#166534">COVERED</text>
+    <text x="36" y="86" font-size="8.5" fill="#475569">le DAG fournit l'évidence —</text>
+    <text x="36" y="99" font-size="8.5" fill="#475569">souvent AU-DELÀ de la lettre</text>
+    <text x="36" y="120" font-size="8.5" fill="#166534">• art. 12 — tenue de registres</text>
+    <text x="44" y="132" font-size="8" fill="#475569">(le DAG EST le log, + infalsifiable)</text>
+    <text x="36" y="150" font-size="8.5" fill="#166534">• CSDDD/LkSG — dossier fournisseur</text>
+    <text x="44" y="162" font-size="8" fill="#475569">(documentation de diligence)</text>
+    <!-- partial -->
+    <rect x="252" y="30" width="215" height="150" rx="10" fill="#fffbeb" stroke="#d97706"/>
+    <circle cx="280" cy="58" r="9" fill="#d97706"/>
+    <text x="300" y="62" font-size="11" font-weight="700" fill="#92400e">PARTIAL</text>
+    <text x="268" y="86" font-size="8.5" fill="#475569">le DAG évidencie le FAIT,</text>
+    <text x="268" y="99" font-size="8.5" fill="#475569">pas l'ADÉQUATION du dispositif</text>
+    <text x="268" y="120" font-size="8.5" fill="#92400e">• art. 14 — contrôle humain</text>
+    <text x="276" y="132" font-size="8" fill="#475569">(prouve qu'il a EU lieu, pas qu'il</text>
+    <text x="276" y="143" font-size="8" fill="#475569">est « effectif » au sens de l'art.)</text>
+    <text x="268" y="162" font-size="8.5" fill="#92400e">• art. 22 GDPR — intervention</text>
+    <!-- out of scope -->
+    <rect x="484" y="30" width="216" height="150" rx="10" fill="#fef2f2" stroke="#dc2626"/>
+    <circle cx="512" cy="58" r="9" fill="#dc2626"/>
+    <text x="532" y="62" font-size="11" font-weight="700" fill="#991b1b">OUT-OF-DAG-SCOPE</text>
+    <text x="500" y="86" font-size="8.5" fill="#475569">artefacts ORGANISATIONNELS —</text>
+    <text x="500" y="99" font-size="8.5" fill="#475569">le DAG ne les produit pas (et le dit)</text>
+    <text x="500" y="120" font-size="8.5" fill="#991b1b">• art. 9 — gestion des risques</text>
+    <text x="500" y="134" font-size="8.5" fill="#991b1b">• art. 10 — gouvernance des données</text>
+    <text x="500" y="148" font-size="8.5" fill="#991b1b">• art. 11 — documentation technique</text>
+    <text x="500" y="162" font-size="8" fill="#475569">(maintenus ailleurs par le déployeur)</text>
+  </svg>
+  <div class="cap">La carte de S6 montre ses <b>trois</b> couleurs, jamais une seule. Taire la colonne rouge serait un « vert malhonnête » — la classe de bug exacte attrapée en S2. La crédibilité d'un moteur d'évidence se mesure à sa volonté de <b>nommer ce qu'il ne couvre pas</b>.</div>
+  </div>
+  <p>L'architecture impose cette honnêteté par un <b>test</b> (I-S6-COUVERTURE-HONNÊTE) : un <span class="mono">MappingSet</span> de cadre dont l'ensemble <span class="mono">OUT_OF_DAG_SCOPE</span> serait <b>vide</b> est <b>rejeté</b> à la construction — parce qu'aucun des cadres réels n'est intégralement couvert par un journal d'événements, et qu'un mapping qui le prétendrait <b>ment</b>. Pour l'EU AI Act en particulier, le mapping <b>doit</b> déclarer comme hors-périmètre-DAG au minimum le système de gestion des risques (art. 9), la gouvernance des données (art. 10), la documentation technique (art. 11 + Annexe IV), le système de gestion de la qualité (art. 17), et la surveillance après commercialisation (art. 72) — autant d'artefacts <b>organisationnels et de cycle de vie</b> qu'un DAG d'exécution ne produit pas. De même, l'évaluation de la conformité, le marquage CE, ou l'analyse d'impact sur les droits fondamentaux (art. 27 pour certains déployeurs) sont hors du périmètre du DAG, et le mapping le <b>dit</b>.</p>
+  <div class="callout bad"><p><b>Le critère d'arrêt de S6 vit ici.</b> Si un artefact généré <b>lit comme « conforme »</b>, ou <b>cache un trou</b> de couverture, ou est compris par un non-juriste comme « nous sommes en règle » — on <b>arrête</b> et on corrige l'honnêteté (l'enveloppe, le ledger de couverture, le libellé) <b>avant</b> de cartographier un cadre de plus. Un artefact qui sur-promet n'est pas un défaut cosmétique : c'est la <b>responsabilité</b> même que les trois distinctions d'honnêteté existent pour écarter. On préfère un moteur d'évidence qui dit honnêtement « voici ce que je couvre, et voici les six choses que je ne couvre pas » à un qui affiche un faux plein.</p></div>
+</div>
+
+<!-- 6 -->
+<div class="wrap page">
+  <h2><span class="num">§6</span> Le mapping EU AI Act (art. 12 / 13 / 14 / 26)</h2>
+  <p>L'EU AI Act (Règlement (UE) 2024/1689) est le cadre où le DAG marque le plus de points, parce que plusieurs de ses exigences sont <b>exactement</b> des exigences de journalisation et de traçabilité — et que le DAG livre cela <b>infalsifiablement</b>, ce qu'aucun journal applicatif ordinaire ne fait. Voici le mapping, avec son honnêteté par article.</p>
+  <table>
+    <thead><tr><th>Article (régime haut risque)</th><th class="c">Couv.</th><th>Ce que le DAG fournit</th><th>L'honnêteté (ce qu'il NE fournit pas)</th></tr></thead>
+    <tbody>
+      <tr><td><b>Art. 12 — Tenue de registres</b> (logs automatiques sur la durée de vie, traçabilité)</td><td class="c good">COVERED</td><td>le DAG scellé <b>EST</b> le registre d'événements automatique — et il est <b>tamper-evident</b> (au-delà de la lettre) : chaque acte, arête, évidence, et nœud humain, horodaté et chaîné</td><td>l'art. 12 vise une <i>capacité</i> de journalisation ; le DAG la dépasse, mais la <b>rétention</b> et la <b>politique de conservation</b> restent des décisions du déployeur</td></tr>
+      <tr><td><b>Art. 13 — Transparence</b> &amp; information des déployeurs (interpréter la sortie)</td><td class="c mid">PARTIAL</td><td>la <b>couche d'évidence</b> (clause citée, document fournisseur, <span class="mono">content_hash</span> au moment T, <span class="mono">consumed_by</span>) reconstruit la chaîne de raisonnement d'une sortie donnée → interprétabilité <i>a posteriori</i></td><td>l'art. 13 inclut aussi la <b>notice d'utilisation</b> et l'information de conception fournie par le fournisseur — documents organisationnels hors DAG</td></tr>
+      <tr><td><b>Art. 14 — Contrôle humain</b> (oversight effectif)</td><td class="c mid">PARTIAL</td><td>les <b>nœuds humains</b> scellés (<span class="mono">APPROVE/OVERRIDE/ESCALATE</span>, <span class="mono">target_node</span>, justification, horodatage) <b>prouvent que l'oversight a eu lieu</b>, par qui, et sur quelle décision</td><td>prouve que le contrôle <b>a eu lieu et fut enregistré</b> — <b>pas</b> que le <i>dispositif</i> d'oversight est « effectif » au sens de l'art. 14 (ça, c'est de la conception + de l'organisation)</td></tr>
+      <tr><td><b>Art. 26 — Obligations du déployeur</b> (oversight, conservation des logs générés)</td><td class="c good">COVERED</td><td>le bundle <b>démontre</b> que le déployeur a tenu les logs auto-générés et assuré l'oversight — re-prouvablement, et exportable au régulateur</td><td>l'art. 26 porte d'autres devoirs (usage conforme à la notice, surveillance, information des personnes) que le DAG <b>n'établit pas</b> seul</td></tr>
+      <tr><td><b>Art. 9 / 10 / 11 / 17 / 72</b> (risques, données, doc. technique, qualité, post-marché)</td><td class="c bad">OUT-OF-DAG</td><td>—</td><td><b>hors périmètre du DAG</b> : artefacts organisationnels et de cycle de vie, maintenus ailleurs par le déployeur. Le mapping les <b>déclare</b> (§5), il ne les cache pas</td></tr>
+    </tbody>
+  </table>
+  <p>Le point saillant est l'art. 12 : là où un concurrent livrerait « nous gardons des logs », le DAG livre « voici le registre d'événements, et il est <b>infalsifiable et re-prouvable par vous-même</b> ». C'est le rare cas où le produit <b>dépasse</b> la lettre de l'exigence, et c'est l'argument de vente le plus net. Mais la discipline tient même là : l'artefact d'art. 12 ne dit pas « art. 12 satisfait » — il dit « voici le registre traçable et infalsifiable que l'art. 12 réclame, chaque entrée citant son nœud scellé ». La nuance entre « voici l'évidence » et « c'est satisfait » est tout ce qui sépare un outil défendable d'une responsabilité.</p>
+</div>
+
+<!-- 7 -->
+<div class="wrap page">
+  <h2><span class="num">§7</span> Le mapping GDPR (art. 5(1)(c) / 22 / 30)</h2>
+  <p>Le GDPR (Règlement (UE) 2016/679) croise le DAG sur trois points, et l'honnêteté y est <b>particulièrement</b> importante parce que le GDPR mêle des exigences <i>techniques</i> (que le DAG touche) et des exigences <i>de base légale</i> (que le DAG n'établit jamais).</p>
+  <table>
+    <thead><tr><th>Article</th><th class="c">Couv.</th><th>Ce que le DAG / la capture fournit</th><th>L'honnêteté (la limite dure)</th></tr></thead>
+    <tbody>
+      <tr><td><b>Art. 5(1)(c) — Minimisation</b></td><td class="c mid">PARTIAL</td><td>la capture (S1) scelle des <b>hachages</b> d'entrée, pas les entrées brutes → <b>minimisation native</b> dans la piste d'audit : on prouve <i>ce qui a été décidé</i> sans retenir la PII brute dans le record</td><td>la minimisation est une propriété du <b>design de capture</b>, pas une garantie : le client contrôle ce qui entre dans les prompts en amont ; un hash n'est ni une base légale ni une anonymisation au sens du droit</td></tr>
+      <tr><td><b>Art. 22 — Décision automatisée</b> (droit à l'intervention humaine)</td><td class="c mid">PARTIAL</td><td>les <b>nœuds humains</b> + la chaîne de décision <b>évidencient</b> que la garde d'intervention humaine existe et a opéré, traçablement</td><td>l'art. 22 porte sur la <b>base légale</b> et l'<b>existence</b> de la garde ; le DAG <b>évidence l'intervention</b>, il n'<b>établit pas</b> le fondement juridique du traitement automatisé</td></tr>
+      <tr><td><b>Art. 30 — Registre des traitements</b></td><td class="c mid">PARTIAL</td><td>le DAG est un <b>registre de traitement granulaire et vérifiable</b> — qui a traité quoi, quand, sur quelle évidence</td><td><b>complément</b>, pas substitut : le registre art. 30 est un document légal/organisationnel (catégories de personnes, destinataires, transferts, durées) que le DAG n'épuise pas</td></tr>
+      <tr><td><b>Bases légales, DPIA, droits des personnes</b></td><td class="c bad">OUT-OF-DAG</td><td>—</td><td><b>hors périmètre du DAG</b> : la licéité (art. 6), l'analyse d'impact (art. 35), l'exercice des droits (accès, effacement) sont juridiques/organisationnels — déclarés comme trous</td></tr>
+    </tbody>
+  </table>
+  <div class="callout warn"><p><b>Le piège GDPR de la rétention, à nommer.</b> Le DAG est <b>append-only</b> et scellé — c'est sa force pour l'auditabilité, mais cela <b>tend</b> avec le droit à l'effacement (art. 17). La réponse architecturale honnête n'est pas dans S6 (qui ne fait que <b>lire</b>) : c'est le <b>crypto-shredding</b> — chiffrer les données de cas sous une clé par-cas dont la destruction rend le contenu illisible <b>sans</b> casser la chaîne de sceaux (le hash reste, le clair disparaît). C'est un <b>raffinement nommé</b> coordonné S0/S1 (la slice § crypto-shredding), <b>pas</b> du ressort de S6 ; mais le mapping GDPR doit le <b>signaler</b> comme la voie d'articulation entre l'append-only et l'art. 17, plutôt que prétendre que l'audit scellé est « compatible effacement » tel quel.</p></div>
+</div>
+
+<!-- 8 -->
+<div class="wrap page">
+  <h2><span class="num">§8</span> Le mapping devoir de vigilance (CSDDD / LkSG) : le dossier fournisseur</h2>
+  <p>C'est le cadre qui porte le <b>ROI</b> de P1 (§9 de l'architecture P1), et le mapping où le DAG <b>brille</b> le plus en valeur concrète. La CSDDD (Directive (UE) 2024/1760) et la LkSG allemande (en vigueur) imposent une diligence raisonnable sur les chaînes d'activités/fournisseurs — identifier, prévenir/atténuer, faire cesser, et surtout <b>documenter</b> les mesures de diligence. La LkSG, en particulier, exige une <b>documentation continue</b> (§10) avec une conservation pluriannuelle. Or, le <b>dossier fournisseur</b> qu'un agent de conformité assemble aujourd'hui à la main — collecter les contrôles (criblage sanctions, critères ESG), réunir les preuves, citer les documents, mettre en forme — <b>est précisément</b> ce que le workflow d'agents, capté dans le DAG, produit nativement.</p>
+  <pre><code>Artefact « dossier de diligence fournisseur » (CSDDD/LkSG) — une VUE re-dérivable, par cas
+  case_scope        SUP-2024  (le fournisseur)
+  mapping_version   "2026-06"  ·  manifest_root  ·  set_hash
+  per_requirement:
+    risque identifié   ← node_id(s) Evidence : criblage, critères ESG, content_hash@T
+    mesure / contrôle  ← node_id(s) AgentAct : sanction_check = PASS, esg_check = ...
+    revue humaine      ← node_id(s) Human    : APPROVE/OVERRIDE, justification, horodatage
+    documentation      ← l'ensemble ci-dessus, RE-PROUVABLE (chaque ligne cite son nœud)
+  coverage_summary   COVERED: documentation de diligence  ·  OUT-OF-DAG: politique groupe, remédiation terrain
+  honesty_envelope   « évidence de diligence DOCUMENTÉE — PAS un certificat de conformité fournisseur »</code></pre>
+  <p>La force du mapping est que la diligence n'est pas <b>racontée</b> (« nous avons vérifié ce fournisseur ») mais <b>évidencée</b> : chaque ligne du dossier cite le nœud scellé dont elle dérive, et le tout se re-prouve. Le <span class="mono">content_hash</span> figé (couche d'évidence de P1 §3) est ici décisif : si la politique ou le document fournisseur change <b>après</b> la décision, le dossier montre toujours la version <b>réellement utilisée</b> au moment de la diligence — ce qui est exactement ce qu'un contrôle de devoir de vigilance cherche à établir.</p>
+  <div class="callout key"><p><b>Le ROI, chiffré par le geste.</b> <b>Avant</b> : un agent de conformité assemble un dossier fournisseur à la main — des <b>heures</b>, error-prone, non re-prouvable. <b>Après</b> : <span class="mono">derive(dag, mapping_csddd, scope=SUP-2024)</span> le produit en <b>secondes</b>, chaque ligne tracée à un nœud scellé, exportable dans un bundle que l'auditeur du client <b>re-prouve seul</b>. Le gain vendable n'est pas « l'IA fait la diligence » (tout le monde le prétend) — c'est « l'IA <b>produit l'évidence documentée et défendable</b> de la diligence », ce que personne ne fait proprement. <b>C'est la phrase qui décroche la conversion.</b> Et l'honnêteté tient jusqu'au bout : l'artefact dit « évidence de diligence documentée », jamais « ce fournisseur est conforme ».</p></div>
+  <p>Une note de granularité, qui anticipe §9 : remettre <b>un seul</b> dossier fournisseur à un régulateur <b>sans révéler les autres cas</b> du tenant est précisément le besoin que la <b>forêt de Merkle par-cas</b> (raffinement nommé de S4 §10) viendra servir. Aujourd'hui, le dossier par-cas se re-prouve contre le <span class="mono">tenant-root</span> (on révèle la chaîne, ou l'on fait confiance à la tranche) ; le Merkle par-cas permettra de prouver un cas <b>en isolation</b>. S6 <b>hérite</b> de ce futur nommé ; il ne le réinvente pas.</p>
+</div>
+
+<!-- 9 -->
+<div class="wrap page">
+  <h2><span class="num">§9</span> La re-dérivation dans le bundle forensic (S6 × S4)</h2>
+  <p>S6 et S4 se composent exactement comme ils le doivent : l'artefact réglementaire <b>voyage dans le bundle</b> de S4, et il y est <b>re-dérivable</b>. Le bundle gagne deux fichiers — l'artefact rendu (<span class="mono">reg/&lt;cadre&gt;.md</span>) et le <span class="mono">MappingSet</span> qui l'a produit (<span class="mono">reg/mapping.&lt;version&gt;.json</span>) — et le README du sceptique gagne une section : « comment <b>re-dériver vous-même</b> cet artefact ». Le tiers ne fait pas davantage confiance à S6 qu'il n'en faisait au binaire livré de S4 : il re-prouve les records, puis <b>re-exécute la dérivation</b> sous le mapping fourni, et compare. Comme la dérivation est pure (§2), il obtient les <b>mêmes octets</b> — ou il a détecté une divergence.</p>
+  <div class="eq">tiers + records.sealed + K_tenant → verify → PASS ;  puis  derive(records, mapping@v) → artefact  ⇔  octet-pour-octet l'artefact livré</div>
+  <p>Cette composition donne à l'artefact réglementaire <b>exactement le même statut trustless</b> que le récit de S4 : ce n'est pas une assertion de Kovant qu'il faut croire, c'est une <b>fonction déterministe de données re-prouvées</b> qu'on peut re-jouer. Deux propriétés en découlent, qu'il faut tester :</p>
+  <ul>
+    <li><b>Traçabilité par node_id (I-S6-TRAÇABLE).</b> Chaque ligne d'évidence de l'artefact cite un <span class="mono">node_id</span> <b>présent</b> dans les records re-prouvés. C'est l'anti-citation-fantôme hérité de S4 : un artefact ne peut pas citer un nœud qui n'existe pas, et le test le vérifie sur la sortie de <span class="mono">derive</span>. Le tiers recoupe chaque ligne directement contre le record scellé — il ne <b>croit</b> jamais le texte de l'artefact, il le <b>recoupe</b>.</li>
+    <li><b>Le mapping voyage, donc la dérivation est reproductible (I-S6-MAPPING-VERSIONNÉ).</b> Sans le <span class="mono">MappingSet</span> dans le bundle, le tiers ne pourrait pas re-dériver (il lui manquerait la lecture). Avec lui, et son <span class="mono">set_hash</span> enregistré dans l'artefact, la re-dérivation est <b>déterministe et datée</b> : « voici l'artefact, voici la lecture v2026-06 qui l'a produit, re-faites-le ».</li>
+  </ul>
+  <div class="callout"><p><b>Zéro confiance neuve — la formulation exacte.</b> Avant S6, le tiers croyait : (a) les maths, (b) sa propre re-compilation du vérifieur, (c) la clé tenant remise par le responsable de traitement. Après S6, il croit <b>exactement les mêmes trois choses</b> — plus rien. L'artefact réglementaire n'élargit pas le cercle de confiance d'un iota, parce qu'il est une <b>vue calculée</b> qu'il <b>re-calcule</b>. C'est la définition opératoire de « trust-light », et c'est ce qui distingue S6 d'un module de reporting ordinaire (lequel demanderait, lui, de croire son éditeur).</p></div>
+  <p>Le raffinement nommé qui se branche ici est, comme annoncé, la <b>forêt de Merkle par-cas</b> : aujourd'hui, l'artefact d'un cas se re-dérive et se re-prouve contre le <span class="mono">tenant-root</span> (le bundle par-cas révèle les records du cas et s'appuie sur le root entier). Le Merkle par-cas — <span class="mono">case-root</span> + preuve d'inclusion vers le <span class="mono">tenant-root</span> ancré — permettra de remettre <b>un</b> dossier fournisseur en n'exposant <b>que</b> les hachages frères, sans rien révéler des autres cas. S6 est <b>compatible par conception</b> (la dérivation par-cas est déjà sa granularité naturelle, §8) ; l'isolation cryptographique est le futur, coordonné S0/S2/S4.</p>
+</div>
+
+<!-- 10 -->
+<div class="wrap page">
+  <h2><span class="num">§10</span> <span class="mono">reg-evidence</span> : le neuf à construire, l'artefact, &amp; les invariants-tests</h2>
+  <p>Le travail <b>neuf</b> de S6 est une crate <b>dep-light</b> (elle dépend de S0 pour les records et de S2 pour la projection re-prouvée ; <span class="mono">serde</span> pour l'I/O ; pas d'async, pas de crypto). Trust-critique <b>très léger</b> — elle ne fait que <b>projeter</b> du re-prouvé — mais sa <b>discipline d'honnêteté</b> fait toute la crédibilité de l'artefact.</p>
+  <pre><code>reg-evidence  (consomme la projection re-prouvée de S2 + les records scellés S0)
+  derive(view: &amp;ProvenanceView, mapping: &amp;MappingSet, scope: CaseScope) -&gt; RegulatoryArtifact
+    1. REFUSE si la vue n'est pas integrity_ok      (jamais d'évidence sur du non-prouvé · I-S6-SUR-PROUVÉ)
+    2. pour chaque RequirementMapping : évalue le selector → collecte les node_id ÉVIDENTS
+    3. classe la couverture (COVERED/PARTIAL/OUT_OF_DAG_SCOPE) ; REJETTE un cadre sans trou (§5)
+    4. rend l'artefact : chaque ligne cite son node_id ; AUCUN champ « conforme » (§3)
+    5. PUR &amp; DÉTERMINISTE : derive(...) re-jouable à l'identique par un tiers (§2, §9)
+  render_md(&amp;RegulatoryArtifact) -&gt; String        // la VUE lisible, citant les nœuds
+  render_html(&amp;RegulatoryArtifact) -&gt; String      // pour la console S2 / l'export S4
+  embed_in_bundle(&amp;RegulatoryArtifact, &amp;MappingSet) // voyage dans le bundle S4 (mapping inclus)
+
+RegulatoryArtifact  (une VUE — PAS un verdict)
+  framework · case_scope · mapping_version · set_hash · manifest_root
+  per_requirement: [ { citation, coverage, evidence:[node_id], furnishes, does_not_furnish, line } ]
+  coverage_summary: { covered, partial, out_of_dag_scope }     // la couverture HONNÊTE, montrée
+  honesty_envelope: « évidence mappée à l'exigence — outillé ≠ conforme »   // PAS de champ compliant</code></pre>
+  <table>
+    <thead><tr><th>Invariant</th><th>Le test qui casse le build</th></tr></thead>
+    <tbody>
+      <tr><td><b>I-S6-VUE-REDÉRIVABLE</b></td><td><span class="mono">derive</span> deux fois (mêmes records re-prouvés + même mapping) → <b>égalité octet-à-octet</b> ; puis re-dérivé <b>depuis le bundle</b>, hors-process → encore égal (aucun état caché/horloge/ordre)</td></tr>
+      <tr><td><b>I-S6-PAS-DE-VERDICT</b></td><td>le type <span class="mono">RegulatoryArtifact</span> n'a <b>aucun</b> champ « conforme/PASS de conformité » (test de forme) ; l'<span class="mono">honesty_envelope</span> porte le libellé « outillé ≠ conforme » (test de présence)</td></tr>
+      <tr><td><b>I-S6-COUVERTURE-HONNÊTE</b></td><td>un <span class="mono">MappingSet</span> de cadre à <span class="mono">OUT_OF_DAG_SCOPE</span> <b>vide</b> est <b>rejeté</b> ; l'artefact AI Act déclare bien art. 9/10/11 hors périmètre (anti-vert-malhonnête)</td></tr>
+      <tr><td><b>I-S6-MAPPING-VERSIONNÉ</b></td><td>l'artefact enregistre <span class="mono">version</span> + <span class="mono">set_hash</span> ; deux versions de mapping produisent des artefacts <b>distinguables</b> (test de non-collision)</td></tr>
+      <tr><td><b>I-S6-TRAÇABLE</b></td><td>chaque ligne d'évidence cite un <span class="mono">node_id</span> <b>présent</b> dans les records re-prouvés (anti-citation-fantôme, hérité de S4)</td></tr>
+      <tr><td><b>I-S6-SUR-PROUVÉ</b></td><td><span class="mono">derive</span> sur une vue <span class="mono">integrity_ok = false</span> <b>échoue</b> — jamais d'évidence réglementaire produite sur du non-re-prouvé</td></tr>
+      <tr><td><b>I-S6-INTÈGRE-PROPAGÉ</b></td><td>l'artefact n'efface pas « intègre ≠ correct » : une décision scellée-mais-possiblement-fausse n'est pas blanchie en « évidence de conformité » (libellé porté + test)</td></tr>
+    </tbody>
+  </table>
+  <div class="callout warn"><p><b>Revue adversariale — orientée honnêteté, pas crypto.</b> Le risque de S6 n'est pas un calcul faux (il n'y a pas de crypto neuve) — c'est une <b>sur-promesse</b>. La revue par-composant (qui a attrapé un vrai bug à chaque frontière — dont le « vert malhonnête » et la fuite PII de S2, la sur-affirmation de l'ancrage <span class="mono">Declared</span> de S4) cible ici trois choses précises : <b>(1)</b> un gabarit lit-il, à l'œil d'un non-juriste, comme « conforme » ? <b>(2)</b> un cadre cache-t-il un trou de couverture ? <b>(3)</b> une ligne cite-t-elle un nœud fantôme, ou une dérivation est-elle non déterministe ? Chacune est un test, et chacune doit casser le build si elle régresse.</p></div>
+</div>
+
+<!-- 11 -->
+<div class="wrap page">
+  <h2><span class="num">§11</span> Réutilisé-vs-neuf, séquence, porte/arrêt, ce que S6 décide</h2>
+  <h3>Réutilisé vs neuf</h3>
+  <p><b>Réutilisé (déjà construit &amp; re-prouvé) :</b> le DAG scellé et ses types de nœuds (<span class="mono">AgentAct/Edge/Evidence/Human</span>) de S0 ; la <b>couche d'évidence</b> à <span class="mono">content_hash</span> figé et les <b>nœuds humains</b> (P1 §3, §6 — déjà dans le modèle de S0/S1) ; la <b>projection re-prouvée</b> et l'<span class="mono">integrity-on-read</span> de S2 (S6 consomme un <span class="mono">ProvenanceView</span> déjà <span class="mono">integrity_ok</span>) ; le <b>seam d'export</b> et le <b>bundle</b> de S4 (où l'artefact voyage et se re-dérive) ; les distinctions d'honnêteté <b>intègre ≠ correct</b> (S2) et <b>intègre ≠ inforgeable</b> (S4) que S6 prolonge. <b>Neuf :</b> le <b>registre de mapping</b> versionné/haché (<span class="mono">RequirementMapping</span> / <span class="mono">MappingSet</span>, §4) ; le <b>moteur de dérivation</b> pur (<span class="mono">derive</span> + le langage de sélecteurs fermé, §2, §10) ; le <b>ledger de couverture honnête</b> (anti-vert-malhonnête, §5) ; l'<b>enveloppe d'honnêteté</b> sans champ « conforme » (§3) ; les <b>gabarits</b> EU AI Act / GDPR / CSDDD-LkSG (§6–8) ; l'intégration <span class="mono">embed_in_bundle</span> (§9).</p>
+  <h3>La micro-séquence de build de S6 (sem. 8–10)</h3>
+  <table>
+    <thead><tr><th>Pas</th><th>Livrable</th><th>Done (testable)</th></tr></thead>
+    <tbody>
+      <tr><td>a</td><td><span class="mono">RequirementMapping</span> / <span class="mono">MappingSet</span> (versionné, haché) + le gabarit EU AI Act (art. 12/13/14/26) avec ses trous déclarés</td><td>I-S6-COUVERTURE-HONNÊTE, I-S6-MAPPING-VERSIONNÉ verts</td></tr>
+      <tr><td>b</td><td><span class="mono">derive</span> (moteur de sélecteurs pur/déterministe) sur la projection re-prouvée de S2</td><td>I-S6-VUE-REDÉRIVABLE, I-S6-SUR-PROUVÉ, I-S6-TRAÇABLE verts</td></tr>
+      <tr><td>c</td><td>l'<span class="mono">honesty_envelope</span> (zéro champ « conforme ») + <span class="mono">render_md/html</span></td><td>I-S6-PAS-DE-VERDICT, I-S6-INTÈGRE-PROPAGÉ verts ; relecture non-juriste</td></tr>
+      <tr><td>d</td><td>les gabarits GDPR (art. 5/22/30) et CSDDD/LkSG (le dossier fournisseur — le ROI)</td><td>un dossier <span class="mono">SUP-2024</span> dérivé, chaque ligne citant son nœud</td></tr>
+      <tr><td>e</td><td><span class="mono">embed_in_bundle</span> : l'artefact + le <span class="mono">MappingSet</span> voyagent dans le bundle S4, re-dérivables</td><td>un tiers re-dérive l'artefact <b>hors-process</b> → octet-à-octet (extension de I-S6-VUE-REDÉRIVABLE)</td></tr>
+      <tr><td>f</td><td><b>revue adversariale</b> orientée honnêteté (sur-promesse ? trou caché ? nœud fantôme ?)</td><td>aucun gabarit ne lit « conforme » ; tous les invariants verts ; revue passée</td></tr>
+    </tbody>
+  </table>
+  <h3>Porte &amp; critère d'arrêt</h3>
+  <div class="callout ok"><p><b>PORTE (la valeur est livrée).</b> Un agent de conformité produit, <b>en un clic</b>, un artefact prêt-régulateur (registre art. 12, ou dossier de diligence CSDDD/LkSG) ; son auditeur ou un test régulateur le <b>re-dérive</b> depuis le bundle, <b>sans nous faire confiance</b> ; et l'artefact ne prétend <b>jamais</b> la conformité — il fournit l'<b>évidence défendable</b>. Le ROI mesuré (heures → minutes) <b>déclenche la conversion</b> (la porte de P1 §9).</p></div>
+  <div class="callout bad"><p><b>ARRÊT (corriger l'honnêteté avant d'élargir).</b> Si un gabarit lit comme « conforme », cache un trou de couverture, ou est compris par un non-juriste comme un certificat → on <b>simplifie et on durcit l'honnêteté</b> (l'enveloppe, le ledger, le libellé) <b>avant</b> d'ajouter un cadre. On n'élargit jamais la surface réglementaire au prix de la rigueur du cadrage : un moteur d'évidence qui sur-promet est précisément la responsabilité que tout le coin de provenance existe pour écarter.</p></div>
+  <div class="callout key"><p><b>Ce que S6 décide.</b> S6 transforme une <b>capacité</b> (un audit re-prouvable et exportable) en le <b>livrable précis</b> que l'équipe conformité doit produire de toute façon — et le produit <b>mieux</b> que la main : automatiquement, traçablement, et <b>re-prouvable par le destinataire lui-même</b>, sous une honnêteté qui le rend <b>défendable</b> plutôt que dangereux. C'est la marche qui fait passer la provenance de « belle propriété interne » à « l'évidence que je remets au régulateur en un clic, et qu'il vérifie seul ». Si le design-partner produit, avec S6, une évidence réglementaire que son conseil <b>accepte comme évidence</b> (et non comme verdict), alors la thèse « moteur d'évidence » de P1 §7 est <b>réalisée en code</b>, le ROI est <b>chiffré</b>, et le coin de provenance est <b>complet</b> : un substrat scellé (S0/S1), servi (S2), exporté sans confiance (S4), et <b>traduit en l'artefact que le droit réclame</b> (S6) — vendable, maintenant, indépendamment de la thèse de l'essaim.</p></div>
+  <hr>
+  <p class="small muted"><b>Note d'honnêteté.</b> Architecture de proposition pour S6, fondée sur les crates <b>réelles et testées</b> de S0 (<span class="mono">provenance-dag</span>), S1 (<span class="mono">provenance-capture</span>), S2 (<span class="mono">audit-api</span>) et le bundle <b>déjà livré</b> de S4 (<span class="mono">forensic-export</span> + <span class="mono">provenance-verify</span>). Les références réglementaires — <b>EU AI Act</b> (Règl. (UE) 2024/1689, art. 12/13/14/26 ; et art. 9/10/11/17/72 déclarés hors périmètre), <b>GDPR</b> (Règl. (UE) 2016/679, art. 5/22/30), <b>CSDDD</b> (Dir. (UE) 2024/1760) et <b>LkSG</b> — sont des <b>cibles d'outillage</b>, pas un avis juridique : la qualification d'un système au « haut risque », l'applicabilité des articles, et la conformité finale dépendent de la <b>classification</b>, du <b>conseil du client</b>, et d'obligations organisationnelles que le DAG ne produit pas (et que le mapping <b>déclare</b>). La distinction « <b>outillé ≠ conforme</b> » est une <b>nécessité de cadrage</b>, imposée par le type (aucun champ « conforme ») et par le test (la couverture montre ses trous) : on livre un moteur d'évidence re-dérivable et un argument défendable, jamais un verdict de conformité. L'<b>ancrage externe de la version de mapping</b>, la <b>forêt de Merkle par-cas</b>, le <b>crypto-shredding</b> (articulation avec l'art. 17 GDPR) et l'<b>export vers les schémas régulateurs</b> sont des <b>raffinements nommés</b>, à activer sur besoin réel, pas des dettes implicites.</p>
+</div>
+
+</body>
+</html>
