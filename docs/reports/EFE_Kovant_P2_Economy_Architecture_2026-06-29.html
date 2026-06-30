@@ -1,0 +1,478 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>EFE × Kovant — Architecture de P2 : l'économie de l'essaim, mesurée, routée, scellée</title>
+<style>
+  :root{--ink:#0f172a;--muted:#475569;--soft:#64748b;--line:#e2e8f0;--teal:#0d9488;--teal-d:#0f766e;--indigo:#4f46e5;--indigo-d:#4338ca;--ok:#16a34a;--warn:#d97706;--bad:#dc2626;--bg-tint:#f6fbfa;--bg-card:#eef2f1;--code-bg:#0f172a;--code-fg:#e2e8f0;}
+  *{box-sizing:border-box;} html{font-size:11.2px;}
+  body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,Arial,sans-serif;color:var(--ink);margin:0;line-height:1.6;background:#fff;-webkit-font-smoothing:antialiased;}
+  .wrap{max-width:178mm;margin:0 auto;padding:0 2mm;}
+  h1,h2,h3,h4{line-height:1.2;font-weight:700;}
+  h2{font-size:1.45rem;margin:0 0 .55rem;padding-bottom:.32rem;border-bottom:3px solid var(--teal);}
+  h2 .num{color:var(--teal);} h3{font-size:1.13rem;margin:1.1rem 0 .3rem;color:var(--teal-d);}
+  h4{font-size:1rem;margin:.8rem 0 .2rem;color:var(--indigo-d);}
+  p{margin:.55rem 0;text-align:justify;hyphens:auto;} a{color:var(--indigo);text-decoration:none;}
+  code{font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace;font-size:.85em;background:var(--bg-card);padding:.05em .35em;border-radius:4px;color:#0b3b36;}
+  .muted{color:var(--muted);} .small{font-size:.88rem;}
+  section{break-inside:avoid;} .page{break-before:page;} h2{break-after:avoid;}
+  table{border-collapse:collapse;width:100%;margin:.55rem 0;font-size:.8rem;}
+  th,td{border:1px solid var(--line);padding:.32rem .5rem;text-align:left;vertical-align:top;}
+  th{background:var(--bg-card);font-weight:700;} tbody tr:nth-child(even){background:var(--bg-tint);}
+  td.c,th.c{text-align:center;} .good{background:#dcfce7 !important;color:#166534;font-weight:700;} .mid{background:#fef9c3 !important;color:#854d0e;font-weight:700;} .bad{background:#fee2e2 !important;color:#991b1b;font-weight:700;}
+  .tag{display:inline-block;font-size:.71rem;font-weight:700;padding:.08em .5em;border-radius:20px;}
+  .t-ok{background:#dcfce7;color:#166534;} .t-info{background:#e0e7ff;color:#3730a3;} .t-teal{background:#ccfbf1;color:#115e59;} .t-warn{background:#fef3c7;color:#92400e;} .t-bad{background:#fee2e2;color:#991b1b;}
+  pre{background:var(--code-bg);color:var(--code-fg);padding:.55rem .8rem;border-radius:8px;overflow:auto;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.72rem;line-height:1.45;margin:.55rem 0;}
+  pre code{background:none;color:inherit;padding:0;}
+  .callout{border-left:4px solid var(--teal);background:var(--bg-tint);padding:.55rem .85rem;border-radius:0 8px 8px 0;margin:.65rem 0;}
+  .callout p{text-align:left;margin:.28rem 0;}
+  .callout.key{border-color:var(--indigo);background:#eef2ff;} .callout.warn{border-color:var(--warn);background:#fffbeb;} .callout.ok{border-color:var(--ok);background:#f0fdf4;} .callout.bad{border-color:var(--bad);background:#fef2f2;}
+  .fig{margin:.7rem 0 .9rem;text-align:center;break-inside:avoid;}
+  .fig svg{max-width:100%;height:auto;border:1px solid var(--line);border-radius:10px;background:#fff;}
+  .fig .cap{font-size:.79rem;color:var(--muted);margin-top:.32rem;font-style:italic;text-align:center;}
+  ul,ol{margin:.4rem 0 .55rem 1.1rem;padding:0;} li{margin:.24rem 0;}
+  svg text{font-family:-apple-system,"Segoe UI",Inter,sans-serif;}
+  .cover{height:262mm;display:flex;flex-direction:column;justify-content:center;position:relative;padding:0 6mm;}
+  .cover .eyebrow{color:var(--teal);font-weight:800;letter-spacing:.2em;font-size:.83rem;text-transform:uppercase;}
+  .cover h1{font-size:2.05rem;margin:.4rem 0 .2rem;line-height:1.08;} .cover .sub{font-size:1.16rem;color:var(--muted);margin-bottom:1.1rem;}
+  .cover .tagline{font-size:1.0rem;color:var(--ink);max-width:163mm;border-left:4px solid var(--teal);padding-left:1rem;font-style:italic;text-align:left;}
+  .cover .meta{position:absolute;bottom:6mm;left:6mm;right:6mm;display:flex;justify-content:space-between;border-top:1px solid var(--line);padding-top:.6rem;font-size:.8rem;color:var(--soft);}
+  .cover .pills{margin:1rem 0;} .cover .pills .tag{font-size:.77rem;margin-right:.3rem;}
+  .mono{font-family:ui-monospace,Menlo,Consolas,monospace;}
+  hr{border:none;border-top:1px solid var(--line);margin:.9rem 0;}
+  .toc{font-size:.9rem;columns:2;column-gap:2rem;} .toc div{margin:.16rem 0;break-inside:avoid;} .toc .n{color:var(--teal);font-weight:700;display:inline-block;width:1.8em;}
+  .eq{font-family:ui-monospace,Menlo,Consolas,monospace;background:#ecfdf5;border:1px solid #a7f3d0;border-radius:8px;padding:.45rem .75rem;margin:.5rem 0;font-size:.79rem;color:#065f46;text-align:center;}
+  @page{size:A4;margin:13mm 12mm;}
+</style>
+</head>
+<body>
+
+<!-- COVER -->
+<div class="wrap"><div class="cover">
+  <div class="eyebrow">Architecture · EFE × Kovant · P2 — le pari économique, mesuré derrière une porte</div>
+  <h1>L'Économie de l'Essaim — Mesurée, Routée, Scellée</h1>
+  <div class="sub">Décomposer un workflow en sous-tâches étroites ; un <b>petit modèle spécialisé</b> par sous-tâche ; <b>mesurer</b> sans tricher où il est non-inférieur au gros et <b>moins cher</b> ; <b>router</b> vers le gros quand il sort de son plancher ; et — le geste qui fait le produit — <b>sceller chaque décision de routage</b> pour que l'économie elle-même soit re-prouvable.</div>
+  <div class="tagline">P2 est la première phase de la <b>piste B</b> de la roadmap : le pari économique, prouvé <b>derrière une porte de falsification</b>, pas affirmé. Trois vérités le commandent, et toutes trois sont déjà <b>écrites dans le code d'EFE</b>, pas espérées. <b>Une :</b> le cœur de mesure <b>existe</b> — <code>efe-bench-inference</code> tranche déjà la non-infériorité appariée (Holm-Bonferroni), porte le diagnostic dispersion/symétrie déployable, et scelle un bundle re-prouvable ; il est prouvé sur Mac, et « le GPU (B2) ne change qu'une ligne ». P2 n'<b>invente</b> donc pas l'instrument — il le <b>branche sur le GPU</b>, <b>spécialise</b> un petit par sous-tâche, ajoute la <b>couche d'escalade</b> au routeur, et <b>scelle le routage</b>. <b>Deux :</b> la thèse naïve est <b>réfutée</b>, re-prouvablement — « le petit bat le gros » est faux, et « agréger des échantillons indépendants récupère l'écart » l'est aussi (l'arc HB.1–HB.4 : les erreurs sont systématiquement asymétriques). Donc P2 ne <b>vote pas</b> et n'<b>agrège pas</b> : il <b>substitue</b> (un spécialiste) et <b>escalade</b> (au gros quand le diagnostic le dit). <b>Trois :</b> l'honnêteté est imposée par le <b>type</b> — le verdict établit une borne supérieure de l'écart &lt; δ, jamais « meilleur » ; un manque de puissance donne <b>Indéterminé</b>, jamais « non-inférieur par défaut » ; et le désaccord entre échantillons est lu comme un <b>thermomètre</b> (escalader), jamais comme un <b>bulletin</b> (agréger). Si <b>aucune</b> sous-tâche ne paie — issue que le programme a déjà <b>vue</b> (les cellules Terrain ne tranchent pas toujours) — la porte ordonne le <b>repli honnête</b> : « gros modèle + provenance », et la piste A reste vendable. P2 transforme « moins cher » en <b>chiffre mesuré et auditable</b>, ou le réfute proprement.</div>
+  <div class="pills">
+    <span class="tag t-teal">décomposer · spécialiser · mesurer (non-infériorité + FWER)</span>
+    <span class="tag t-info">router : escalade label-free quand le petit sort de son plancher</span>
+    <span class="tag t-warn">désaccord = thermomètre, pas bulletin (agrégation réfutée)</span>
+    <span class="tag t-bad">substituable (mesuré, local) ≠ supérieur (revendiqué, global)</span>
+    <span class="tag t-ok">chaque routage scellé → l'économie est re-prouvable (P2 × P1)</span>
+  </div>
+  <div class="meta">
+    <span>EFE — Essaim Fluide Éphémère × Kovant · architecture de P2 (piste B, mois 3–6) · le pari économique mesuré</span>
+    <span>2026-06-29 · architecture / stratégie produit</span>
+  </div>
+</div></div>
+
+<!-- TOC -->
+<div class="wrap page">
+  <h2><span class="num">§0</span> Plan</h2>
+  <div class="toc">
+    <div><span class="n">1.</span> Ce que P2 EST, ce qu'il N'EST PAS — &amp; les deux distinctions</div>
+    <div><span class="n">2.</span> La carte : décomposer → spécialiser → mesurer → router → coûter → trancher → sceller</div>
+    <div><span class="n">3.</span> La décomposition : sous-tâches typées = la structure de provenance</div>
+    <div><span class="n">4.</span> La spécialisation : un petit par sous-tâche étroite (le neuf)</div>
+    <div><span class="n">5.</span> La mesure : non-infériorité appariée + FWER (le cœur, déjà bâti)</div>
+    <div><span class="n">6.</span> Le routeur d'escalade : diagnostic label-free, calibré, scellé</div>
+    <div><span class="n">7.</span> Le coût réel : GPU-secondes, B2 (l'unique aiguillage)</div>
+    <div><span class="n">8.</span> La porte de falsification : qui paie, qui non, le pivot honnête</div>
+    <div><span class="n">9.</span> La composition avec la provenance (P2 × P1) : l'économie auditable</div>
+    <div><span class="n">10.</span> Les invariants I-P2-* (l'honnêteté par le type)</div>
+    <div><span class="n">11.</span> Le registre réutilisé-vs-neuf &amp; la porte P2</div>
+    <div><span class="n">12.</span> Ce que P2 décide — &amp; le pont vers P3/P4</div>
+  </div>
+
+  <h3>Le geste, en une phrase</h3>
+  <p>P2 prend l'instrument de mesure honnête d'EFE — qui sait déjà trancher, sans tricher, « ce petit modèle est-il non-inférieur à ce gros, sur cette sous-tâche, à quel coût, et est-ce re-prouvable ? » — et le <b>productise</b> en trois ajouts minimaux : <b>spécialiser</b> un petit par sous-tâche, lui adjoindre un <b>routeur d'escalade label-free</b> qui le rattrape quand il sort de son plancher, et <b>sceller</b> chaque décision de routage dans la même chaîne de provenance que P1. Le tout est gardé par une <b>porte</b> : si aucune sous-tâche ne paie, on le <b>dit</b> et l'on se replie sur « gros + provenance ».</p>
+
+  <div class="callout key">
+    <p><b>Le principe directeur, hérité d'EFE et de la roadmap.</b> <b>On ne revendique rien qu'on n'ait mesuré</b>, et l'honnêteté n'est pas une promesse mais une <b>contrainte de type</b> : le verdict ne possède aucun champ « meilleur » à remplir, la sous-puissance produit <b>Indéterminé</b>, le coût de déploiement reste <b>suspendu</b> tant que le GPU ne l'a pas mesuré, et le désaccord ne peut pas se transformer en réponse (le type du diagnostic n'est pas le type d'une réponse). C'est la même discipline que les quatre distinctions du moat P1 (intègre≠correct, intègre≠inforgeable, outillé≠conforme, montré≠prouvé) ; P2 en ajoute la cinquième : <b>substituable (mesuré, local) ≠ supérieur (revendiqué, global)</b>.</p>
+  </div>
+</div>
+
+<!-- 1 -->
+<div class="wrap page">
+  <h2><span class="num">§1</span> Ce que P2 EST, ce qu'il N'EST PAS — &amp; les deux distinctions</h2>
+
+  <h3>La thèse-nord de P2</h3>
+  <p>P2 répond à <b>une</b> question, quantitativement et honnêtement : <b>sur quelles sous-tâches étroites un petit modèle spécialisé substitue-t-il le gros à qualité non-inférieure et coût moindre, et le routeur sait-il, sans label, quand il ne le peut pas ?</b> La réponse est une <b>carte</b> — sous-tâche par sous-tâche — qui dit « paie », « exige l'escalade », ou « hors de portée », avec son intervalle de confiance, sa puissance, son coût GPU réel, et un sceau qui la rend re-prouvable. C'est l'argument « <b>moins cher, routé, mesuré</b> » que le board veut, transformé en chiffre opposable.</p>
+
+  <div class="callout bad">
+    <p><b>Ce que P2 N'EST PAS — à dire soi-même, car c'est ce qui le rend crédible.</b> Ce n'est <b>pas</b> « le petit bat le gros » : EFE l'a réfuté, et le code l'interdit (le verdict de substitution n'établit <b>jamais</b> la supériorité, seulement la non-infériorité à une marge δ). Ce n'est <b>pas</b> « beaucoup de petits qui votent valent un gros » : l'arc HB.1–HB.4 a montré, re-prouvablement, qu'<b>aucune agrégation déployable</b> ne récupère l'écart sur l'arithmétique — les erreurs sont systématiquement <b>asymétriques</b> (biais +8,72), pas du bruit symétrique que la médiane annulerait. Ce n'est <b>pas</b> « ça marchera » : c'est un <b>pari mesuré derrière une porte</b>, dont l'issue par défaut attendue est, pour beaucoup de sous-tâches, « <b>non</b> » — et c'est précisément cette posture qui distingue P2 d'un deck d'émergence.</p>
+  </div>
+
+  <h3>Les deux distinctions d'honnêteté de P2 — déjà dans le code</h3>
+  <p>Comme chaque couche du moat impose <b>une</b> distinction par son type, P2 en impose deux, et toutes deux sont déjà écrites comme principes dans <code>efe-bench-inference</code> :</p>
+  <table>
+    <thead><tr><th>Distinction</th><th>L'over-claim qu'elle interdit</th><th>Imposée par</th></tr></thead>
+    <tbody>
+      <tr><td><b>substituable ≠ supérieur</b><br><span class="small muted">(mesuré, local ≠ revendiqué, global)</span></td><td>« le petit est meilleur » ; « les petits remplacent les gros partout »</td><td>le <b>type</b> <code>substitution::Verdict</code> : il borne <b>par le haut</b> l'écart (gros − petit) &lt; δ ; aucun état « meilleur ». Sous-puissance ⇒ <code>Verdict::Indetermine</code>, jamais « non-inférieur » par défaut.</td></tr>
+      <tr><td><b>désaccord = thermomètre, pas bulletin</b><br><span class="small muted">(diagnostic ≠ agrégation)</span></td><td>« le désaccord entre échantillons vote la bonne réponse » (l'agrégation réfutée)</td><td>le <b>type</b> du routeur : il consomme <code>aggregation::dispersion_index</code> / <code>symmetry_test</code> pour produire une <b>décision d'escalade</b>, jamais un mécanisme d'agrégation (<code>Median</code>/<code>SelfConsistency</code>…) pour produire une <b>réponse</b>. La dispersion mesure l'incertitude ; elle ne la résout pas.</td></tr>
+    </tbody>
+  </table>
+
+  <p>Une troisième, opérationnelle, en découle au déploiement : <b>diagnostic ≠ correction</b>. En production il n'y a pas de vérité-terrain ; le routeur escalade sur un <b>proxy label-free</b> (la dispersion). Une décision « gardé au petit » signifie « le diagnostic était dans la zone sûre calibrée », <b>jamais</b> « nous avons vérifié que c'est correct ». Le sceau enregistre la valeur du diagnostic et la calibration qui le justifie — pas une revendication de justesse.</p>
+
+  <div class="callout key">
+    <p><b>La distinction qui sauve l'idée de l'utilisateur, encore.</b> L'idée « beaucoup de petits en parallèle » survit en P2 sous sa <b>forme défendable</b> : non pas l'agrégation (réfutée), mais la <b>substitution par sous-tâche</b> + l'<b>escalade diagnostiquée</b>. Le parallélisme des échantillons d'un même petit n'y sert pas à <b>voter une réponse</b> ; il sert à <b>mesurer la dispersion</b> — le signal qui décide d'escalader. Le « beaucoup » devient un instrument de mesure de confiance, pas une urne. La communication (l'idée profonde, où le parallélisme pourrait <i>vraiment</i> récupérer de l'erreur via diversité/vérification) est le pari <b>suivant</b> — P3, derrière sa propre porte.</p>
+  </div>
+</div>
+
+<!-- 2 -->
+<div class="wrap page">
+  <h2><span class="num">§2</span> La carte : décomposer → spécialiser → mesurer → router → coûter → trancher → sceller</h2>
+
+  <p>P2 est un <b>pipeline en sept étages</b>. L'essentiel de l'appareil <b>existe</b> (en teal ci-dessous, prouvé sur Mac) ; le <b>neuf</b> (en indigo) est concentré et minimal — c'est la « vitesse qu'EFE donne ».</p>
+
+  <div class="fig">
+  <svg viewBox="0 0 720 340" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Le pipeline P2 en sept étages, réutilisé vs neuf">
+    <!-- stage boxes -->
+    <g font-size="9.5">
+    <rect x="18" y="30" width="96" height="54" rx="8" fill="#eef2ff" stroke="#4f46e5"/>
+    <text x="66" y="50" text-anchor="middle" font-weight="700" fill="#3730a3">① Décomposer</text>
+    <text x="66" y="64" text-anchor="middle" font-size="8" fill="#475569">workflow → sous-</text>
+    <text x="66" y="74" text-anchor="middle" font-size="8" fill="#475569">tâches typées</text>
+
+    <rect x="124" y="30" width="96" height="54" rx="8" fill="#eef2ff" stroke="#4f46e5"/>
+    <text x="172" y="50" text-anchor="middle" font-weight="700" fill="#3730a3">② Spécialiser</text>
+    <text x="172" y="64" text-anchor="middle" font-size="8" fill="#475569">un petit / sous-</text>
+    <text x="172" y="74" text-anchor="middle" font-size="8" fill="#475569">tâche (efe-nano)</text>
+
+    <rect x="230" y="30" width="96" height="54" rx="8" fill="#ecfdf5" stroke="#0d9488"/>
+    <text x="278" y="50" text-anchor="middle" font-weight="700" fill="#0f766e">③ Mesurer</text>
+    <text x="278" y="64" text-anchor="middle" font-size="8" fill="#475569">non-inf. + FWER</text>
+    <text x="278" y="74" text-anchor="middle" font-size="8" fill="#475569">(substitution)</text>
+
+    <rect x="336" y="30" width="96" height="54" rx="8" fill="#e0e7ff" stroke="#4f46e5"/>
+    <text x="384" y="47" text-anchor="middle" font-weight="700" fill="#3730a3">④ Router</text>
+    <text x="384" y="60" text-anchor="middle" font-size="8" fill="#475569">escalade label-free</text>
+    <text x="384" y="70" text-anchor="middle" font-size="8" fill="#475569">(diagnostic calibré)</text>
+    <text x="384" y="80" text-anchor="middle" font-size="8" fill="#475569">étend efe-llm-router</text>
+
+    <rect x="442" y="30" width="96" height="54" rx="8" fill="#fffbeb" stroke="#d97706"/>
+    <text x="490" y="47" text-anchor="middle" font-weight="700" fill="#92400e">⑤ Coûter</text>
+    <text x="490" y="60" text-anchor="middle" font-size="8" fill="#475569">GPU-secondes B2</text>
+    <text x="490" y="70" text-anchor="middle" font-size="8" fill="#475569">(SelfHost = 1 ligne)</text>
+    <text x="490" y="80" text-anchor="middle" font-size="8" fill="#475569">vLLM / RTX 5090</text>
+
+    <rect x="548" y="30" width="76" height="54" rx="8" fill="#ecfdf5" stroke="#0d9488"/>
+    <text x="586" y="50" text-anchor="middle" font-weight="700" fill="#0f766e">⑥ Trancher</text>
+    <text x="586" y="64" text-anchor="middle" font-size="8" fill="#475569">porte Terrain</text>
+    <text x="586" y="74" text-anchor="middle" font-size="8" fill="#475569">+ pivot honnête</text>
+
+    <rect x="634" y="30" width="70" height="54" rx="8" fill="#e0e7ff" stroke="#4f46e5"/>
+    <text x="669" y="50" text-anchor="middle" font-weight="700" fill="#3730a3">⑦ Sceller</text>
+    <text x="669" y="64" text-anchor="middle" font-size="8" fill="#475569">routage →</text>
+    <text x="669" y="74" text-anchor="middle" font-size="8" fill="#475569">DAG (P1)</text>
+    </g>
+    <!-- arrows between stages -->
+    <g stroke="#94a3b8" fill="#94a3b8">
+    <line x1="114" y1="57" x2="123" y2="57"/><polygon points="123,54 129,57 123,60"/>
+    <line x1="220" y1="57" x2="229" y2="57"/><polygon points="229,54 235,57 229,60"/>
+    <line x1="326" y1="57" x2="335" y2="57"/><polygon points="335,54 341,57 335,60"/>
+    <line x1="432" y1="57" x2="441" y2="57"/><polygon points="441,54 447,57 441,60"/>
+    <line x1="538" y1="57" x2="547" y2="57"/><polygon points="547,54 553,57 547,60"/>
+    <line x1="624" y1="57" x2="633" y2="57"/><polygon points="633,54 639,57 633,60"/>
+    </g>
+    <!-- legend -->
+    <g font-size="9">
+    <rect x="18" y="108" width="14" height="11" rx="2" fill="#ecfdf5" stroke="#0d9488"/>
+    <text x="38" y="117" fill="#475569">réutilisé d'EFE, prouvé sur Mac (efe-bench-inference : substitution, aggregation-diagnostic, terrain, report/reprove)</text>
+    <rect x="18" y="124" width="14" height="11" rx="2" fill="#eef2ff" stroke="#4f46e5"/>
+    <text x="38" y="133" fill="#475569">neuf P2 : spécialistes par sous-tâche · couche d'escalade · porte économique · sceau de routage (crate efe-economy)</text>
+    <rect x="18" y="140" width="14" height="11" rx="2" fill="#fffbeb" stroke="#d97706"/>
+    <text x="38" y="149" fill="#475569">B2 : l'unique aiguillage — BenchBackend::Scripted → SelfHost (le coût-jetons proxy devient GPU-secondes mesurées)</text>
+    </g>
+    <!-- substrate bar -->
+    <rect x="18" y="172" width="686" height="30" rx="8" fill="#f0fdf4" stroke="#16a34a"/>
+    <text x="361" y="191" text-anchor="middle" font-size="10" font-weight="700" fill="#166534">Substrat de provenance (P1) : S0 provenance-dag · S1 provenance-capture · efe-swarm-provenance — chaque étage scelle, rien ne contourne</text>
+    <!-- two surfaces -->
+    <rect x="120" y="224" width="220" height="36" rx="8" fill="#eef2f1" stroke="#64748b"/>
+    <text x="230" y="240" text-anchor="middle" font-size="9.5" font-weight="700" fill="#334155">Surface board/client : carte de coût</text>
+    <text x="230" y="252" text-anchor="middle" font-size="8" fill="#475569">« moins cher, routé, mesuré » (efe-swarm-dashboard)</text>
+    <rect x="380" y="224" width="220" height="36" rx="8" fill="#eef2f1" stroke="#64748b"/>
+    <text x="490" y="240" text-anchor="middle" font-size="9.5" font-weight="700" fill="#334155">Surface runtime : le routeur-service</text>
+    <text x="490" y="252" text-anchor="middle" font-size="8" fill="#475569">escalade en ligne, scellée (kernel P2 → produit P4)</text>
+    <line x1="361" y1="202" x2="361" y2="223" stroke="#94a3b8" stroke-dasharray="3 3"/>
+    <!-- caption row -->
+    <text x="361" y="284" text-anchor="middle" font-size="8.5" fill="#64748b" font-style="italic">Hors-ligne (③⑤⑥ : calibrer + trancher, label dispo) — puis En-ligne (④⑦ : router label-free + sceller, label absent).</text>
+    <text x="361" y="300" text-anchor="middle" font-size="8.5" fill="#64748b" font-style="italic">La calibration hors-ligne EST ce qui autorise le routage en-ligne ; elle voyage scellée et le routage la cite.</text>
+  </svg>
+  <div class="cap">Sept étages, deux temps (hors-ligne calibrer/trancher avec label ; en-ligne router/sceller sans label), un seul substrat de provenance. Le neuf est concentré dans une crate d'orchestration <code>efe-economy</code> qui compose l'appareil existant ; B2 est l'unique aiguillage GPU.</div>
+  </div>
+
+  <p>Les deux temps sont la clé de l'honnêteté du système. <b>Hors-ligne</b> (③⑤⑥), le label existe : on mesure la non-infériorité, on mesure le coût GPU, on calibre le seuil du diagnostic contre la vérité-terrain, on tranche la porte. <b>En-ligne</b> (④⑦), le label n'existe plus : le routeur applique le seuil <b>calibré</b> de façon label-free et scelle sa décision. Le pont entre les deux temps est la <b>calibration scellée</b> : elle est produite hors-ligne, elle voyage dans la chaîne de provenance, et chaque routage en-ligne la <b>cite</b> — de sorte qu'un auditeur peut re-prouver « ce routage a appliqué <i>cette</i> calibration, dont voici le taux d'erreur mesuré ».</p>
+</div>
+
+<!-- 3 -->
+<div class="wrap page">
+  <h2><span class="num">§3</span> La décomposition : sous-tâches typées = la structure de provenance</h2>
+
+  <p>Le premier étage casse un workflow (p. ex. un contrôle de conformité fournisseur) en <b>sous-tâches étroites</b>, chacune dotée d'un <b>contrat typé</b> : un type d'entrée, un type de sortie, et un <b>scorer</b> qui correspond au type (l'invariant <code>I-BENCH-TRUTH</code> exige déjà que le scorer corresponde au type de tâche). C'est le pilier « décomposer &amp; spécialiser » de la roadmap, et la substitution H-A y tient <b>par sous-tâche étroite</b>, jamais globalement.</p>
+
+  <p><b>L'élégance architecturale décisive :</b> la décomposition n'est pas une structure parallèle à la provenance — <b>c'est la même structure</b>. Chaque sous-tâche exécutée est, dans le DAG scellé de P1, un nœud <code>Node::AgentAct{node_id, agent_role, inputs_hash, model, version, output, evidence_refs, timestamp}</code>. Le <code>agent_role</code> nomme la sous-tâche ; le <code>model</code>/<code>version</code> nomme le spécialiste qui l'a tenue ; les arêtes <code>Edge</code> portent les artefacts typés passés d'une sous-tâche à l'autre. Décomposer le workflow, c'est <b>déjà</b> dessiner le graphe de provenance — la couche économique et la couche d'audit partagent un unique substrat.</p>
+
+  <div class="callout">
+    <p><b>Pourquoi ce partage est un fossé, pas une commodité.</b> Un concurrent qui « route vers un petit modèle » produit une optimisation de coût opaque. P2 produit une optimisation de coût <b>dont chaque décision est un nœud scellé</b> : la sous-tâche, le modèle employé, l'escalade ou non, le diagnostic qui l'a décidée. La provenance ne s'ajoute pas après coup à l'économie — l'économie <b>naît</b> dans le graphe de provenance. C'est ce qui rendra le routage <b>défendable</b> devant un régulateur (§9), là où un routeur nu ne l'est pas.</p>
+  </div>
+
+  <h4>Le contrat de sous-tâche (forme proposée, dans <code>efe-economy::subtask</code>)</h4>
+  <p>Une <code>SubTask</code> porte : un identifiant stable (qui devient le <code>agent_role</code>), le type d'entrée/sortie, le <code>ScorerKind</code> (réutilisé de <code>efe-bench-inference::scorer</code>, v1 fermée), et la référence vers le jeu d'évaluation labellisé gelé de cette sous-tâche (le pilier P0 « geler le harnais avant toute mesure »). Une <code>Decomposition</code> est le DAG de <code>SubTask</code> d'un workflow ; elle se projette sans perte vers une séquence de <code>Node::AgentAct</code> + <code>Edge</code>. Aucune sous-tâche n'est mesurable sans son label ni déployable sans sa référence (le gros de repli) — deux refus de construction qui font respecter, dès la décomposition, <code>I-BENCH-TRUTH</code> et le <b>plancher</b> (§6).</p>
+</div>
+
+<!-- 4 -->
+<div class="wrap page">
+  <h2><span class="num">§4</span> La spécialisation : un petit par sous-tâche étroite <span class="muted">(le neuf)</span></h2>
+
+  <p>C'est la seule brique que le registre de la roadmap classe « <b>à faire</b> » : la <b>spécialisation des petits par sous-tâche</b> (fine-tuning/prompting spécialisé, par workflow). Le runtime des petits, lui, <b>existe</b> — <code>efe-nano</code> (« EFE Nano Agent Swarm runtime : catalog + dispatcher + Mode A/B/C executors + audit + billing »). P2 ne réécrit pas le runtime ; il <b>peuple le catalogue</b> de spécialistes et établit le <b>registre</b> qui lie chaque sous-tâche à son couple {spécialiste, référence}.</p>
+
+  <table>
+    <thead><tr><th>Élément</th><th>Rôle</th><th>D'où il vient</th></tr></thead>
+    <tbody>
+      <tr><td><code>Specialist{model, version, subtask}</code></td><td>le petit modèle spécialisé d'une sous-tâche (prompt-spécialisé ou fine-tuné)</td><td><b>neuf</b> ; servi par le catalogue/dispatcher <code>efe-nano</code> (Mode A/B/C, Mode-C = BYO-LLM)</td></tr>
+      <tr><td><code>Reference{model, version}</code></td><td>le gros modèle, base de non-infériorité <b>et</b> cible d'escalade</td><td>réutilisé ; un palier haut de l'échelle <code>quality_rank</code> de <code>efe-llm-router</code></td></tr>
+      <tr><td><code>SpecialistRegistry</code></td><td>sous-tâche → {spécialiste, référence, calibration scellée}</td><td><b>neuf</b> ; la table que la mesure (§5) remplit et que le routeur (§6) lit</td></tr>
+    </tbody>
+  </table>
+
+  <p>La spécialisation est <b>par workflow</b> et <b>itérative</b> : on ne livre un spécialiste pour une sous-tâche que lorsque la mesure (§5) a établi qu'il y est non-inférieur — ou qu'on l'inscrit explicitement « exige l'escalade » (le routeur le rattrapera toujours). Il n'y a <b>jamais</b> de spécialiste sans sa référence : c'est le <b>plancher</b> de capacité, et l'architecture refuse de déployer une sous-tâche dont la voie d'escalade n'est pas câblée (§6, <code>I-P2-PLANCHER</code>).</p>
+
+  <div class="callout warn">
+    <p><b>Le piège de la spécialisation, à border.</b> Spécialiser peut <b>sur-ajuster</b> au jeu d'évaluation et fabriquer une non-infériorité illusoire. Deux gardes l'empêchent, tous deux déjà dans le harnais : <code>I-BENCH-BLIND</code> (le générateur ne voit jamais le label — il n'atteint que le scorer post-hoc) et l'<b>évaluation sur jeu gelé</b> distinct du jeu d'ajustement. Un spécialiste « non-inférieur » sur un jeu qu'il a vu n'est pas un verdict ; le harnais l'interdit par séparation des jeux.</p>
+  </div>
+</div>
+
+<!-- 5 -->
+<div class="wrap page">
+  <h2><span class="num">§5</span> La mesure : non-infériorité appariée + FWER <span class="muted">(le cœur honnête, déjà bâti)</span></h2>
+
+  <p>C'est le cœur de P2, et il <b>existe</b>, prouvé : <code>efe-bench-inference::substitution</code> — « la couche d'analyse pure sur B1 […] tranche la non-infériorité appariée, la seule méthode qui résiste à un sceptique ». P2 le réutilise <b>quasi verbatim</b> ; le seul ajout est de l'<b>itérer par sous-tâche</b> pour peupler la carte.</p>
+
+  <h4>Les trois erreurs évitées par construction (citées du module)</h4>
+  <ul>
+    <li><b>supériorité ≠ non-infériorité.</b> On n'établit pas « le petit est meilleur » mais « le petit n'est pas pire de plus d'une marge δ » — via une <b>borne de confiance supérieure</b> de l'écart &lt; δ (<code>Verdict</code>). <i>Le type n'a aucun champ « meilleur ».</i></li>
+    <li><b>« non significatif » ≠ « égal ».</b> Sous-puissance ⇒ <code>Verdict::Indetermine</code>, <b>jamais</b> « non-inférieur » par défaut (<code>I-HA-POWER</code> ; <code>achieved_power</code> / <code>required_n</code>).</li>
+    <li><b>non apparié = puissance gaspillée.</b> On compare les <b>mêmes</b> items (la variance vient des discordants), par un <b>bootstrap apparié au niveau item</b>, déterministe (graine fixe) — donc le verdict statistique est lui-même <b>re-prouvable</b> (<code>I-HA-REPROVE</code>).</li>
+  </ul>
+
+  <p>Le livrable est une <code>GapMap{modèle × tâche}</code> avec <b>correction de multiplicité Holm-Bonferroni</b> (<code>I-HA-MULTIPLE</code>) : où le petit substitue déjà, où l'écart résiduel subsiste, où c'est hors de portée. La correction FWER est non-négociable — tester K sous-tâches sans elle <b>fabrique</b> des faux positifs ; le harnais l'applique inter-cellules et garde les cellules échec/plafond <b>au dénominateur</b> (pas de cherry-pick).</p>
+
+  <div class="eq">δ : marge de non-infériorité (gelée, P0) · α : risque de 1ʳᵉ espèce · borne sup. de (acc_gros − acc_petit) &lt; δ ⟹ Substitue · sinon Indéterminé / Hors-portée</div>
+
+  <p>Concrètement, P2 appelle l'appareil existant — <code>pair_by_case</code> → <code>non_inferiority(δ, α)</code> → agrégation en <code>GapMap</code> avec Holm — une fois par sous-tâche, à partir des <code>ConfigReport</code> du spécialiste et de la référence sur le <b>même</b> jeu gelé. Les types consommés sont réels : <code>NonInferiority</code>, <code>Verdict</code> (dont <code>Indetermine</code>), <code>PairedItem</code>, <code>McNemar</code>, <code>wilson_ci</code>, <code>achieved_power</code>, <code>required_n</code>. Aucune statistique nouvelle n'est inventée — c'est la garantie de rigueur, et la vitesse.</p>
+
+  <div class="callout key">
+    <p><b>Pourquoi « déjà bâti » est l'atout central.</b> La partie la plus facile à bâcler d'un pari économique est la <b>statistique</b> : conclure « égal » d'un test non significatif, oublier la multiplicité, comparer des jeux non appariés. EFE a déjà payé ce prix et l'a <b>verrouillé dans des types et des tests</b>. P2 hérite d'un instrument que la revue adversariale a durci — il ne lui reste qu'à le <b>pointer</b> sur les sous-tâches du workflow Kovant, et à le brancher sur le GPU.</p>
+  </div>
+</div>
+
+<!-- 6 -->
+<div class="wrap page">
+  <h2><span class="num">§6</span> Le routeur d'escalade : diagnostic label-free, calibré, scellé</h2>
+
+  <p>La mesure (§5) dit, <b>hors-ligne avec label</b>, où le petit substitue. Mais en <b>production il n'y a pas de label</b> : il faut décider, instance par instance, si la sortie du spécialiste est fiable ou s'il faut <b>escalader</b> vers le gros. C'est le routeur — et c'est le principal ajout de logique de P2.</p>
+
+  <h4>Ce qui existe, ce que P2 ajoute</h4>
+  <p><code>efe-llm-router</code> (M21) fournit déjà : l'abstraction multi-provider, l'échelle de qualité <code>quality_rank</code> (de <code>anthropic:claude-opus</code>=1 … <code>vllm:</code>=8), la gouvernance de coût (<code>CostGovernor</code>, budget par tenant), le cache, le disjoncteur, l'audit. Ce qu'il <b>ne fait pas encore</b>, c'est l'escalade <b>petit→gros pilotée par un diagnostic label-free</b>. P2 ajoute exactement cette couche : exécuter le spécialiste (un palier bas, p. ex. <code>vllm:</code>), lire le <b>diagnostic</b>, et si le diagnostic dépasse le seuil <b>calibré</b>, <b>monter l'échelle</b> <code>quality_rank</code> vers la référence. L'échelle d'escalade <b>existe déjà</b> ; P2 fournit la <b>règle de montée</b>.</p>
+
+  <div class="fig">
+  <svg viewBox="0 0 720 250" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="La décision d'escalade : thermomètre, pas bulletin">
+    <!-- instance -->
+    <rect x="20" y="100" width="90" height="40" rx="8" fill="#eef2f1" stroke="#64748b"/>
+    <text x="65" y="118" text-anchor="middle" font-size="9.5" fill="#334155">instance</text>
+    <text x="65" y="130" text-anchor="middle" font-size="8" fill="#475569">(prod, sans label)</text>
+    <!-- specialist samples -->
+    <rect x="140" y="80" width="120" height="80" rx="8" fill="#e0e7ff" stroke="#4f46e5"/>
+    <text x="200" y="98" text-anchor="middle" font-size="9.5" font-weight="700" fill="#3730a3">spécialiste ×n</text>
+    <text x="200" y="112" text-anchor="middle" font-size="8" fill="#475569">n échantillons</text>
+    <text x="200" y="126" text-anchor="middle" font-size="8" fill="#475569">(petit, bon marché)</text>
+    <text x="200" y="142" text-anchor="middle" font-size="8" fill="#475569">→ dispersion / symétrie</text>
+    <!-- diagnostic gauge -->
+    <rect x="290" y="80" width="130" height="80" rx="8" fill="#fffbeb" stroke="#d97706"/>
+    <text x="355" y="98" text-anchor="middle" font-size="9.5" font-weight="700" fill="#92400e">THERMOMÈTRE</text>
+    <text x="355" y="112" text-anchor="middle" font-size="8" fill="#475569">dispersion_index</text>
+    <text x="355" y="124" text-anchor="middle" font-size="8" fill="#475569">symmetry_test</text>
+    <text x="355" y="140" text-anchor="middle" font-size="8" fill="#475569">vs seuil calibré τ</text>
+    <text x="355" y="152" text-anchor="middle" font-size="7.5" fill="#991b1b" font-style="italic">≠ urne : ne vote aucune réponse</text>
+    <!-- decision -->
+    <path d="M 420 120 L 470 120" stroke="#94a3b8" fill="none"/><polygon points="470,117 476,120 470,123" fill="#94a3b8"/>
+    <!-- stay -->
+    <rect x="480" y="56" width="220" height="40" rx="8" fill="#ecfdf5" stroke="#0d9488"/>
+    <text x="590" y="72" text-anchor="middle" font-size="9" font-weight="700" fill="#0f766e">dispersion ≤ τ → GARDÉ au petit</text>
+    <text x="590" y="86" text-anchor="middle" font-size="8" fill="#475569">« diagnostic dans la zone sûre » (≠ « vérifié correct »)</text>
+    <!-- escalate -->
+    <rect x="480" y="142" width="220" height="40" rx="8" fill="#fef2f2" stroke="#dc2626"/>
+    <text x="590" y="158" text-anchor="middle" font-size="9" font-weight="700" fill="#991b1b">dispersion &gt; τ → ESCALADE au gros</text>
+    <text x="590" y="172" text-anchor="middle" font-size="8" fill="#475569">monte l'échelle quality_rank (efe-llm-router)</text>
+    <line x1="476" y1="120" x2="480" y2="76" stroke="#0d9488" stroke-dasharray="3 2"/>
+    <line x1="476" y1="120" x2="480" y2="162" stroke="#dc2626" stroke-dasharray="3 2"/>
+    <!-- seal -->
+    <rect x="300" y="196" width="320" height="34" rx="8" fill="#e0e7ff" stroke="#4f46e5"/>
+    <text x="460" y="212" text-anchor="middle" font-size="9" font-weight="700" fill="#3730a3">⑦ sceau : Node::AgentAct {sous-tâche, modèle, dispersion, escaladé?, ⟶ calibration}</text>
+    <text x="460" y="224" text-anchor="middle" font-size="8" fill="#475569">la décision cite la calibration scellée — re-prouvable hors-process</text>
+    <line x1="200" y1="160" x2="320" y2="195" stroke="#cbd5e1" stroke-dasharray="2 2"/>
+    <line x1="590" y1="182" x2="560" y2="195" stroke="#cbd5e1" stroke-dasharray="2 2"/>
+    <text x="65" y="175" text-anchor="middle" font-size="7.5" fill="#64748b" font-style="italic">τ vient de</text>
+    <text x="65" y="186" text-anchor="middle" font-size="7.5" fill="#64748b" font-style="italic">la calibration</text>
+    <text x="65" y="197" text-anchor="middle" font-size="7.5" fill="#64748b" font-style="italic">hors-ligne (§5)</text>
+  </svg>
+  <div class="cap">Le routeur lit la dispersion des échantillons du petit comme un <b>thermomètre</b> (incertitude → escalader), jamais comme une <b>urne</b> (agréger une réponse — réfuté). Le seuil τ est calibré hors-ligne contre le label ; la décision le cite et se scelle.</div>
+  </div>
+
+  <h4>La calibration — le pont hors-ligne → en-ligne</h4>
+  <p>Le seuil τ n'est pas choisi à la main : il est <b>calibré</b>. Hors-ligne, sur le jeu labellisé, on dispose à la fois de la dispersion (label-free) <b>et</b> de la justesse réelle (label). On choisit τ pour atteindre une <b>cible de qualité</b> (p. ex. « la qualité routée reste non-inférieure au gros à la marge δ ») et l'on <b>mesure le taux d'erreur</b> que ce τ laisse passer. Le résultat — <code>Calibration{subtask, τ, taux_erreur_mesuré, gap_verdict}</code> — est <b>scellé</b> dans la provenance. C'est lui qui autorise le routage label-free : en production, le routeur applique τ et <b>cite</b> la calibration, de sorte que « pourquoi avoir gardé le petit ici » est re-prouvable.</p>
+
+  <div class="callout bad">
+    <p><b>La garde anti-agrégation, encodée par le type.</b> Le module <code>aggregation</code> contient <b>deux</b> familles : des <i>mécanismes déployables</i> qui produisent une <b>réponse</b> (<code>SelfConsistency</code>, <code>Median</code>, synthèse — <b>réfutés</b> sur l'arithmétique, HB.4) et des <i>diagnostics déployables</i> qui produisent un <b>signal</b> (<code>dispersion_index</code>, <code>symmetry_test</code>). Le routeur de P2 ne consomme <b>que</b> les seconds : son entrée est un signal d'incertitude, sa sortie est une décision d'escalade — <b>jamais</b> une réponse fabriquée par vote. C'est la distinction « thermomètre, pas bulletin » rendue impossible à violer : le type d'une décision d'escalade n'est pas le type d'une réponse.</p>
+  </div>
+
+  <p><b>Le plancher (<code>I-P2-PLANCHER</code>).</b> Sous son plancher de capacité — mesuré en §5 (l'écran de gap : si le petit-seul est déjà ≥ 90 %, il n'y a rien à récupérer ; s'il est trop bas, il faut toujours escalader) — le routeur <b>doit</b> escalader. Une sous-tâche sans voie d'escalade câblée est une <b>erreur de configuration</b>, pas un déploiement : on ne met jamais un petit en production sans son filet gros.</p>
+</div>
+
+<!-- 7 -->
+<div class="wrap page">
+  <h2><span class="num">§7</span> Le coût réel : GPU-secondes, B2 <span class="muted">(l'unique aiguillage)</span></h2>
+
+  <p>Une économie se chiffre en <b>coût de déploiement réel</b>, pas en proxy. Le harnais est explicite et discipliné là-dessus : le coût-jetons est un <b>proxy</b> sur backend scripté (<code>I-BENCH-PROXY</code>), et la <b>domination de déploiement en GPU-secondes reste suspendue à B2</b> (<code>I-HB-COST</code>) — « jamais conclue ici ». P2 lève cette suspension.</p>
+
+  <p>L'aiguillage est, littéralement, <b>une ligne</b> : <code>BenchBackend::Scripted{…}</code> (le seam Mac) devient <code>BenchBackend::SelfHost{endpoint:"…vLLM…", model:"qwen2.5:3b"}</code>. Le harnais pilote alors un vrai endpoint vLLM (sur la RTX 5090) ; dès que vLLM rapporte l'usage réel, le drapeau proxy <b>bascule</b> à « mesuré » et remonte au rapport. Rien d'autre dans la chaîne de mesure ne change — c'est le dividende de l'architecture « tout prouvé sur Mac, GPU = une ligne ».</p>
+
+  <h4>L'équation de l'économie routée</h4>
+  <p>Le routeur ne paie que si le <b>coût attendu de la voie routée</b> est inférieur au coût du gros, <b>à qualité non-inférieure</b> :</p>
+  <div class="eq">coût_routé = coût(petit)·P(garde) + (coût(petit) + coût(gros))·P(escalade) &nbsp;&lt;&nbsp; coût(gros) &nbsp;⟺&nbsp; P(escalade) &lt; [coût(gros) − coût(petit)] / coût(gros)</div>
+  <p>L'escalade a un <b>prix</b> : un cas escaladé paie le petit <b>puis</b> le gros. Le routage n'est donc favorable que si le taux d'escalade reste sous un seuil que cette inégalité fixe, et que la qualité routée reste non-inférieure. Les deux grandeurs — <code>P(escalade)</code> et la qualité routée — sont <b>mesurées</b> à la calibration (§6), pas supposées. Le <code>PriceModel</code> de <code>report</code> porte les coûts ; en B2 ils sont des GPU-secondes réelles, plus des jetons proxy.</p>
+
+  <div class="callout warn">
+    <p><b>Le confondant que B2 doit border.</b> Comparer le coût d'un petit auto-hébergé (GPU-secondes amorties) à celui d'un gros via API (prix par jeton) n'est <b>pas</b> loyal sans expliciter le régime (utilisation GPU, bataille de batch, cache on/off). Le harnais sépare déjà les jetons entrée/sortie et les bornes cache OFF/ON ; B2 doit publier le <b>régime de mesure</b> avec le chiffre, sous peine de fabriquer un avantage. « Moins cher » n'est un chiffre que <b>qualifié</b>.</p>
+  </div>
+</div>
+
+<!-- 8 -->
+<div class="wrap page">
+  <h2><span class="num">§8</span> La porte de falsification : qui paie, qui non, le pivot honnête</h2>
+
+  <p>La porte de P2 est le harnais <b>Terrain</b> — « le harnais de falsification » — déjà construit, avec ses <b>constantes pré-enregistrées gelées avant toute issue</b> (<code>I-TERRAIN-PREREG</code>). Il a été conçu pour répondre, sans tricher, à « l'agrégation récupère-t-elle un vrai écart sur <i>quelque</i> type de tâche ? » avec l'issue par défaut attendue « <b>non</b> ». P2 le réoriente vers « <b>quelle sous-tâche paie</b> ? », avec la même rigueur.</p>
+
+  <h4>Les trois gardes, gelées (citées du module)</h4>
+  <ul>
+    <li><b>L'écran de gap</b> (<code>gap_screen</code>) désarme le confondant <b>plafond</b> : « essaim = gros parce que tout est trivial » n'est PAS une victoire. Une cellule n'ouvre que si le petit-seul (K=1) est &lt; <b>90 %</b> (<code>SMALL_ALONE_MAX</code>) ET en écart ≥ <b>5 pts</b> (<code>GAP_MIN</code>) du gros. <code>ScreenVerdict{Valid, Ceiling, NoGap}</code>.</li>
+    <li><b>La récupération en conditions multiples</b> (<code>run_family</code>) : non-infériorité d'un mécanisme déployable <b>pré-engagé</b> à un K* gelé vs gros@1, + <b>puissance ≥ 70 %</b> (<code>POWER_MIN</code>, sinon Indéterminé) + pas un <b>artefact de fabrication</b> (<code>FAB_MAX</code>) + <b>survie de Holm</b>.</li>
+    <li><b>Le contrôle d'erreur de famille</b> : Holm-Bonferroni inter-cellules, réutilise <code>GapMap</code> <b>verbatim</b>. Les cellules échec/plafond restent au <b>dénominateur</b>.</li>
+  </ul>
+
+  <p>La sortie de la porte est une <b>frontière économique</b> par sous-tâche : <span class="tag t-ok">Paie</span> (non-inférieure ET moins chère, escalade sous le seuil) · <span class="tag t-warn">Exige l'escalade</span> (le routeur la rattrape, gain partiel) · <span class="tag t-bad">Ne paie pas</span> · <span class="tag t-info">Plafond</span> (le petit suffit déjà ; pas un gain d'essaim) · <span class="tag t-info">Indéterminé</span> (puissance insuffisante — collecter plus, ne rien conclure).</p>
+
+  <div class="callout bad">
+    <p><b>La porte est un VRAI falsifieur — le programme l'a déjà vu échouer.</b> Sur les premières cellules Terrain, à n=12, <b>0/3</b> n'ont tranché : le « point doux récupérable » (compétent-mais-bruité + écart réel + erreurs indépendantes) est <b>difficile à atteindre</b> — les maths plafonnent, l'extraction tombe sous le plancher du petit. Ce n'est pas une hypothèse : c'est une issue observée. Donc le pivot ci-dessous n'est pas décoratif — c'est une branche que P2 doit être prêt à prendre.</p>
+  </div>
+
+  <div class="callout ok">
+    <p><b>Le repli honnête (la porte P2 de la roadmap).</b> <b>Si aucune sous-tâche ne paie</b> → l'économie de l'essaim minuscule ne tient pas sur ce workflow → <b>pivot</b> vers « <b>gros modèle + provenance</b> », qui reste vendable via la piste A (P1). On le <b>rapporte tel quel</b>, cellules échec au dénominateur. Le risque est borné par construction : même un P2 entièrement négatif <b>n'entame pas</b> le produit P1 — il le confirme comme le socle, et il livre au board une connaissance rare (« voici, mesuré, où l'essaim minuscule ne paie pas »), qui est elle-même un actif.</p>
+  </div>
+</div>
+
+<!-- 9 -->
+<div class="wrap page">
+  <h2><span class="num">§9</span> La composition avec la provenance (P2 × P1) : l'économie auditable</h2>
+
+  <p>C'est le geste qui transforme une optimisation de coût en <b>produit défendable</b>. Chaque décision de routage et chaque calibration sont <b>scellées</b> dans le même DAG re-prouvable que P1 — l'économie ne contourne jamais le moat, elle le <b>nourrit</b>.</p>
+
+  <table>
+    <thead><tr><th>Objet économique</th><th>Nœud de provenance</th><th>Ce qu'un auditeur re-prouve</th></tr></thead>
+    <tbody>
+      <tr><td>une décision de routage</td><td><code>Node::AgentAct{agent_role=sous-tâche, model=spécialiste|référence, output, …}</code> + un champ diagnostic/escaladé</td><td>« cette décision a employé le petit parce que la dispersion était sous le seuil — et voici le seuil »</td></tr>
+      <tr><td>une calibration</td><td>un nœud scellé portant <code>{τ, taux_erreur_mesuré, gap_verdict, jeu_gelé}</code></td><td>« ce seuil a été calibré ainsi, avec ce taux d'erreur mesuré, sur ce jeu gelé »</td></tr>
+      <tr><td>une escalade</td><td>une <code>Edge</code> petit→gros portant l'artefact et le motif</td><td>« le petit a été rattrapé par le gros, voici l'artefact passé »</td></tr>
+    </tbody>
+  </table>
+
+  <p>L'appareil pour cela <b>existe</b> : <code>efe-swarm-provenance</code> scelle le graphe d'essaim ; <code>provenance-capture</code> (S1) fournit les taps et le store ; <code>provenance-dag</code> (S0) fournit le scellement HMAC et la re-preuve ; et <code>efe-bench-inference</code> porte déjà <code>report::BenchBundle</code> + <code>reexec::ReExecAudit</code> (<code>I-BENCH-REPROVE</code> : « chaque run est scellé + R0-re-prouvable […] atteste la computation, pas la correction du label »). P2 ajoute uniquement le <b>mappage</b> routage→nœud.</p>
+
+  <div class="callout key">
+    <p><b>Le fossé que cette composition crée.</b> Un concurrent peut router vers un petit modèle. Très peu peuvent <b>re-prouver</b>, instance par instance, <b>pourquoi</b> ils ont routé ainsi — et le prouver à un régulateur EU AI Act qui demande « justifiez l'usage d'un modèle plus faible sur cette décision ». P2 répond : « voici le nœud scellé, voici la calibration citée, voici son taux d'erreur mesuré, re-compilez le vérifieur et vérifiez ». L'économie devient une <b>extension du moat</b>, pas une dette d'auditabilité. C'est exactement la convergence que la roadmap place en P4 — P2 en pose la pierre.</p>
+  </div>
+
+  <p><b>La frontière d'honnêteté, encore.</b> Le sceau atteste la <b>computation du routage</b> (quel modèle, quel diagnostic, quelle calibration), <b>pas</b> la <b>correction de la décision métier</b> — exactement comme <code>I-BENCH-REPROVE</code> atteste la computation, pas la correction du label, et comme S2 sépare intègre de correct. Un routage scellé prouve « voici comment et pourquoi nous avons routé », jamais « la réponse est juste ». Cette retenue est ce qui rend le reste opposable.</p>
+</div>
+
+<!-- 10 -->
+<div class="wrap page">
+  <h2><span class="num">§10</span> Les invariants I-P2-* <span class="muted">(l'honnêteté par le type)</span></h2>
+
+  <p>P2 <b>hérite</b> des invariants déjà testés du harnais (<code>I-BENCH-*</code>, <code>I-HA-*</code>, <code>I-HB-*</code>, <code>I-TERRAIN-*</code>) et en ajoute pour les couches neuves. Chacun est imposé par un <b>type</b> et un <b>test</b>, jamais par une convention.</p>
+
+  <table>
+    <thead><tr><th>Invariant</th><th>Énoncé</th><th>Imposé par</th></tr></thead>
+    <tbody>
+      <tr><td><b>I-P2-NON-SUP</b></td><td>le verdict borne l'écart &lt; δ par le haut ; aucun état « meilleur » ne peut s'écrire</td><td>hérité <code>substitution::Verdict</code> (pas de champ supériorité)</td></tr>
+      <tr><td><b>I-P2-INDÉTERMINÉ</b></td><td>sous-puissance ⇒ Indéterminé, jamais « non-inférieur » par défaut</td><td>hérité <code>I-HA-POWER</code> (<code>achieved_power</code>/<code>required_n</code>)</td></tr>
+      <tr><td><b>I-P2-FWER</b></td><td>tester K sous-tâches contrôle l'erreur de famille (Holm) ; cellules échec au dénominateur</td><td>hérité <code>I-HA-MULTIPLE</code> + Terrain (GapMap verbatim)</td></tr>
+      <tr><td><b>I-P2-THERMOMÈTRE</b></td><td>le routeur consomme un <b>diagnostic</b> (dispersion) et émet une <b>décision</b> ; jamais un mécanisme d'agrégation émettant une <b>réponse</b></td><td><b>neuf</b> : le type de l'entrée du routeur ≠ le type d'une réponse ; test : aucune voie ne fabrique de réponse par vote</td></tr>
+      <tr><td><b>I-P2-CALIBRATION-SCELLÉE</b></td><td>le seuil τ est calibré sur jeu gelé, porte son taux d'erreur mesuré, et voyage scellé ; le routage en-ligne le cite</td><td><b>neuf</b> : type <code>Calibration</code> ; test : un routage sans calibration citée est rejeté</td></tr>
+      <tr><td><b>I-P2-PLANCHER</b></td><td>sous le plancher mesuré, escalade obligatoire ; pas de spécialiste sans voie d'escalade</td><td><b>neuf</b> : le registre refuse un déploiement sans référence câblée</td></tr>
+      <tr><td><b>I-P2-COÛT-RÉEL</b></td><td>le verdict d'économie cite des GPU-secondes mesurées (B2), avec le régime ; le proxy est marqué tel quel</td><td>hérité <code>I-BENCH-PROXY</code>/<code>I-HB-COST</code> (drapeau proxy→mesuré)</td></tr>
+      <tr><td><b>I-P2-ROUTAGE-SCELLÉ</b></td><td>toute décision de routage est un nœud scellé re-prouvable (sous-tâche, modèle, diagnostic, escalade)</td><td><b>neuf</b> : mappage routage→<code>Node::AgentAct</code> ; hérite <code>I-BENCH-REPROVE</code></td></tr>
+      <tr><td><b>I-P2-PORTE-HONNÊTE</b></td><td>si aucune sous-tâche ne paie, la porte émet le pivot ; aucune issue négative ne peut être enterrée</td><td><b>neuf</b> : le rapport énumère <b>toutes</b> les sous-tâches (paie/exige/ne paie pas/plafond/indéterminé)</td></tr>
+      <tr><td><b>I-P2-SOUVERAIN</b></td><td>mesure, calibration et routage tournent localement (vLLM/5090 on-prem) ; aucune donnée ne sort ; la clé tenant re-prouve mais ne voyage jamais</td><td>hérité du garde de souveraineté (egress-deny) + S0/S1</td></tr>
+    </tbody>
+  </table>
+
+  <div class="callout">
+    <p><b>Lecture.</b> Sept des dix invariants sont <b>hérités</b> — la rigueur de P2 est largement déjà payée et testée. Les trois <b>neufs</b> (THERMOMÈTRE, CALIBRATION-SCELLÉE, ROUTAGE-SCELLÉ) gardent précisément les trois ajouts de P2 : la règle d'escalade, le pont hors-ligne→en-ligne, et la composition avec la provenance. C'est là que la revue adversariale devra concentrer son feu quand le code viendra.</p>
+  </div>
+</div>
+
+<!-- 11 -->
+<div class="wrap page">
+  <h2><span class="num">§11</span> Le registre réutilisé-vs-neuf &amp; la porte P2</h2>
+
+  <h3>La vitesse qu'EFE donne — au type près</h3>
+  <table>
+    <thead><tr><th>Brique P2</th><th>Statut</th><th>Où / travail restant</th></tr></thead>
+    <tbody>
+      <tr><td>Non-infériorité appariée + FWER (le verdict de substitution)</td><td class="good">construit + testé</td><td><code>efe-bench-inference::substitution</code> — itérer par sous-tâche</td></tr>
+      <tr><td>Diagnostic label-free (dispersion / symétrie)</td><td class="good">construit + testé</td><td><code>aggregation::dispersion_index</code>/<code>symmetry_test</code> — calibrer un seuil</td></tr>
+      <tr><td>Porte de falsification (écran de gap, récupération, Holm)</td><td class="good">construit + testé</td><td><code>terrain</code> (constantes pré-gelées) — réorienter vers « qui paie »</td></tr>
+      <tr><td>Bundle re-prouvable (sceau + re-preuve)</td><td class="good">construit + testé</td><td><code>report::BenchBundle</code> + <code>reexec</code> — mapper le routage</td></tr>
+      <tr><td>Routeur multi-provider + échelle qualité + coût</td><td class="good">construit</td><td><code>efe-llm-router</code> — ajouter la <b>règle d'escalade</b></td></tr>
+      <tr><td>Runtime des petits (catalog/dispatcher, Mode A/B/C)</td><td class="good">construit</td><td><code>efe-nano</code> — peupler de spécialistes</td></tr>
+      <tr><td>Provenance d'essaim (sceau + re-preuve)</td><td class="good">construit + testé</td><td><code>efe-swarm-provenance</code> + S0/S1 — mappage routage→nœud</td></tr>
+      <tr><td>Coût GPU-secondes réel (B2)</td><td class="mid">conçu, suspendu à B2</td><td>l'aiguillage <code>BenchBackend::SelfHost</code> (vLLM/5090) — <b>une ligne + une campagne</b></td></tr>
+      <tr><td>Spécialisation des petits par sous-tâche</td><td class="bad">à faire</td><td>fine-tuning/prompting par sous-tâche + le <code>SpecialistRegistry</code></td></tr>
+      <tr><td>Couche d'escalade · calibration scellée · porte économique · sceau de routage</td><td class="bad">à faire</td><td>la crate d'orchestration neuve <code>efe-economy</code> (compose tout ce qui précède)</td></tr>
+    </tbody>
+  </table>
+
+  <h3>La porte P2 et son repli (rappel de la roadmap, raffiné)</h3>
+  <table>
+    <thead><tr><th>Porte (le test mesuré)</th><th>Si ÉCHEC → repli</th></tr></thead>
+    <tbody>
+      <tr><td>≥ 1 sous-tâche : petit spécialisé <b>non-inférieur</b> (borne sup &lt; δ, puissance ≥ 70 %, survie Holm) <b>ET</b> coût routé &lt; gros (B2 réel), <b>sans</b> dépasser le seuil d'escalade</td><td><b>pivot</b> « gros modèle + provenance » (P1 reste vendable) ; rapport complet de <b>toutes</b> les sous-tâches, cellules échec au dénominateur</td></tr>
+    </tbody>
+  </table>
+  <p class="small muted">Sous-portes (gardes héritées qui peuvent faire échouer une cellule sans la cacher) : <b>plafond</b> (petit-seul ≥ 90 % → pas un gain d'essaim) ; <b>indéterminé</b> (puissance &lt; 70 % → collecter, ne pas conclure) ; <b>artefact</b> (une « récupération » par synthèse qui fabrique des réponses → disqualifiée) ; <b>coût proxy</b> (tant que B2 n'a pas mesuré, la domination de coût reste suspendue, jamais conclue).</p>
+</div>
+
+<!-- 12 -->
+<div class="wrap page">
+  <h2><span class="num">§12</span> Ce que P2 décide — &amp; le pont vers P3/P4</h2>
+
+  <p>P2 répond à la question économique de la piste B sans jamais sur-promettre :</p>
+  <ul>
+    <li><b>L'argument board, mesuré.</b> « Nous savons, <b>mesuré et re-prouvable</b>, sur quelles sous-tâches le petit spécialisé substitue le gros, à quel coût GPU réel, et le routeur sait — sans label — quand escalader. Le routage transforme “moins cher” en <b>chiffre</b>, et chaque décision est <b>auditable</b>. » Et, si c'est le cas : « voici, honnêtement, où ça <b>ne</b> paie <b>pas</b> » — ce qui est, pour ce board, un signal de maturité, pas un aveu.</li>
+    <li><b>Le risque borné.</b> Même un P2 négatif ne coûte pas le produit : il <b>confirme</b> « gros + provenance » (P1) comme socle vendable et livre une carte de coût rare. Il n'y a <b>jamais</b> un moment sans produit.</li>
+    <li><b>Le moat épaissi.</b> En scellant le routage dans le DAG de P1, P2 fait de l'économie une <b>extension</b> du fossé de provenance — pas une optimisation opaque, mais une optimisation <b>re-prouvable</b>, ce qu'aucun routeur nu ne peut offrir à un régulateur EU.</li>
+  </ul>
+
+  <div class="callout key">
+    <p><b>Le pont vers la suite.</b> P2 livre deux actifs que les phases d'après consomment directement. Vers <b>P3 (communication)</b> : le <b>diagnostic</b> (dispersion/symétrie) et le <b>garde anti-poison</b> (juge-oracle de correction) sont l'instrument qui tranchera l'expérience décisive — « la communication entre agents attrape-t-elle des erreurs que l'échantillonnage indépendant rate, sans empoisonner ? » ; P2 prouve d'abord la voie <b>déployable et honnête</b> (substituer + escalader), P3 teste si la <b>communication</b> récupère davantage. Vers <b>P4 (plateforme)</b> : la relation <b>diagnostic → favorabilité</b> que P2 calibre par sous-tâche est exactement la « loi diagnostic→gain » que P4 cherchera à <b>généraliser</b> inter-workflows — le routeur devenant un service géré qui prédit la favorabilité d'un workflow neuf sans tout re-mesurer.</p>
+  </div>
+
+  <hr>
+  <p class="small muted"><b>Note d'honnêteté.</b> Cette architecture est une <b>proposition</b>, fondée sur (a) l'appareil réel et re-prouvé d'EFE — <code>efe-bench-inference</code> (substitution/aggregation/terrain/report/reexec), <code>efe-llm-router</code>, <code>efe-nano</code>, le substrat de provenance S0/S1/<code>efe-swarm-provenance</code> — inspecté dans les sources le 2026-06-29, et (b) la logique de la Roadmap Produit (piste B, porte P2, repli). Les chiffres décisifs — <b>quelles</b> sous-tâches paient, à <b>quel</b> coût GPU, à <b>quel</b> taux d'escalade — restent <b>à mesurer</b> sur le beachhead Kovak réel, par construction : c'est l'objet même de la porte, dont l'issue par défaut, pour beaucoup de sous-tâches, est attendue « non ». La seule chose garantie d'avance est la <b>méthode</b> — et le fait qu'il y a toujours un produit.</p>
+</div>
+
+</body>
+</html>
