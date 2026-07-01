@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Le seuil de bascule du routeur d'escalade — quand l'escalade paie (analyse de coût)</title>
+<style>
+  :root{--ink:#0f172a;--muted:#475569;--soft:#64748b;--line:#e2e8f0;--teal:#0d9488;--teal-d:#0f766e;--indigo:#4f46e5;--indigo-d:#4338ca;--ok:#16a34a;--warn:#d97706;--bad:#dc2626;--bg-tint:#f6fbfa;--bg-card:#eef2f1;--code-bg:#0f172a;--code-fg:#e2e8f0;}
+  *{box-sizing:border-box;} html{font-size:11.4px;}
+  body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,Arial,sans-serif;color:var(--ink);margin:0;line-height:1.6;background:#fff;-webkit-font-smoothing:antialiased;}
+  .wrap{max-width:178mm;margin:0 auto;padding:0 2mm;}
+  h1,h2,h3,h4{line-height:1.2;font-weight:700;}
+  h2{font-size:1.42rem;margin:0 0 .55rem;padding-bottom:.32rem;border-bottom:3px solid var(--teal);}
+  h2 .num{color:var(--teal);} h3{font-size:1.12rem;margin:1.1rem 0 .3rem;color:var(--teal-d);}
+  h4{font-size:1rem;margin:.8rem 0 .2rem;color:var(--indigo-d);}
+  p{margin:.55rem 0;text-align:justify;hyphens:auto;} a{color:var(--indigo);text-decoration:none;}
+  code{font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace;font-size:.85em;background:var(--bg-card);padding:.05em .35em;border-radius:4px;color:#0b3b36;}
+  .muted{color:var(--muted);} .small{font-size:.88rem;}
+  section{break-inside:avoid;} .page{break-before:page;} h2{break-after:avoid;}
+  table{border-collapse:collapse;width:100%;margin:.55rem 0;font-size:.8rem;}
+  th,td{border:1px solid var(--line);padding:.32rem .5rem;text-align:left;vertical-align:top;}
+  th{background:var(--bg-card);font-weight:700;} tbody tr:nth-child(even){background:var(--bg-tint);}
+  td.c,th.c{text-align:center;} .good{background:#dcfce7 !important;color:#166534;font-weight:700;} .mid{background:#fef9c3 !important;color:#854d0e;font-weight:700;} .bad{background:#fee2e2 !important;color:#991b1b;font-weight:700;}
+  .tag{display:inline-block;font-size:.71rem;font-weight:700;padding:.08em .5em;border-radius:20px;}
+  .t-ok{background:#dcfce7;color:#166534;} .t-info{background:#e0e7ff;color:#3730a3;} .t-teal{background:#ccfbf1;color:#115e59;} .t-warn{background:#fef3c7;color:#92400e;} .t-bad{background:#fee2e2;color:#991b1b;}
+  pre{background:var(--code-bg);color:var(--code-fg);padding:.55rem .8rem;border-radius:8px;overflow:auto;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.72rem;line-height:1.45;margin:.55rem 0;}
+  .callout{border-left:4px solid var(--teal);background:var(--bg-tint);padding:.55rem .85rem;border-radius:0 8px 8px 0;margin:.65rem 0;}
+  .callout p{text-align:left;margin:.28rem 0;}
+  .callout.key{border-color:var(--indigo);background:#eef2ff;} .callout.warn{border-color:var(--warn);background:#fffbeb;} .callout.ok{border-color:var(--ok);background:#f0fdf4;} .callout.bad{border-color:var(--bad);background:#fef2f2;}
+  .fig{margin:.7rem 0 .9rem;text-align:center;break-inside:avoid;}
+  .fig svg{max-width:100%;height:auto;border:1px solid var(--line);border-radius:10px;background:#fff;}
+  .fig .cap{font-size:.79rem;color:var(--muted);margin-top:.32rem;font-style:italic;text-align:center;}
+  ul,ol{margin:.4rem 0 .55rem 1.1rem;padding:0;} li{margin:.24rem 0;}
+  svg text{font-family:-apple-system,"Segoe UI",Inter,sans-serif;}
+  .cover{height:262mm;display:flex;flex-direction:column;justify-content:center;position:relative;padding:0 6mm;}
+  .cover .eyebrow{color:var(--teal);font-weight:800;letter-spacing:.16em;font-size:.83rem;text-transform:uppercase;}
+  .cover h1{font-size:2.05rem;margin:.4rem 0 .2rem;line-height:1.08;} .cover .sub{font-size:1.16rem;color:var(--muted);margin-bottom:1.1rem;}
+  .cover .tagline{font-size:1.0rem;color:var(--ink);max-width:163mm;border-left:4px solid var(--teal);padding-left:1rem;font-style:italic;text-align:left;}
+  .cover .meta{position:absolute;bottom:6mm;left:6mm;right:6mm;display:flex;justify-content:space-between;border-top:1px solid var(--line);padding-top:.6rem;font-size:.8rem;color:var(--soft);}
+  .cover .pills{margin:1rem 0;} .cover .pills .tag{font-size:.77rem;margin-right:.3rem;}
+  .mono{font-family:ui-monospace,Menlo,Consolas,monospace;}
+  hr{border:none;border-top:1px solid var(--line);margin:.9rem 0;}
+  .eq{font-family:ui-monospace,Menlo,Consolas,monospace;background:#ecfdf5;border:1px solid #a7f3d0;border-radius:8px;padding:.5rem .75rem;margin:.55rem 0;font-size:.92rem;color:#065f46;text-align:center;}
+  @page{size:A4;margin:13mm 12mm;}
+</style>
+</head>
+<body>
+
+<!-- COVER -->
+<div class="wrap"><div class="cover">
+  <div class="eyebrow">Analyse de coût · P2 · quand le routeur d'escalade paie</div>
+  <h1>Le seuil de bascule<br>du routeur d'escalade</h1>
+  <div class="sub">Une <b>loi chiffrée</b>, dérivée de la mesure des portes ① et ② : à partir de quel écart de coût entre le petit et le gros l'escalade cesse d'être <b>dominée</b> et devient <b>gagnante</b> — et les deux leviers qui la font basculer.</div>
+  <div class="tagline">La mesure de P2 avait rendu un verdict inconfortable : à notre backend (petit <code>phi4-mini</code>, gros <code>gemma3:12b</code>), le routeur d'escalade <b>marche en qualité</b> mais <b>ne paie pas en coût</b> — il est dominé par « utiliser le gros directement ». Ce document répond à la seule question qui restait : <b>est-ce un défaut du routeur, ou de ce backend ?</b> La réponse est une <b>loi de bascule</b> — le routeur gagne dès que le gros coûte plus de <b>C\* = K/(1−f)</b> fois le petit — instanciée sur les valeurs <b>mesurées</b> (f = 33% d'escalade, K = 5 échantillons de diagnostic ⇒ seuil ≈ <b>7,5×</b>). Notre gros n'est qu'à <b>6,8×</b> : juste sous le seuil, d'où la domination. Deux leviers, tous deux chiffrés, franchissent le seuil : un <b>gros plus cher</b> (un dense 70B ou une API frontière, 15–100×) le dépasse largement ; un <b>diagnostic moins cher</b> (K=2 au lieu de 5) fait tomber le seuil à ~3×, que même notre gros franchit. Et un <b>garde-fou</b> contre-intuitif : les modèles <b>MoE</b> découplent la capacité du coût — un gros « 30B » MoE est bon marché, donc on l'utilise <b>directement</b>, jamais comme cible d'escalade. Le routeur n'est ni bon ni mauvais dans l'absolu : il a un <b>domaine de validité</b>, et on le <b>calcule</b>.</div>
+  <div class="pills">
+    <span class="tag t-info">loi : le routeur gagne quand C &gt; K/(1−f)</span>
+    <span class="tag t-warn">mesuré : seuil ≈ 7,5× · notre gros ≈ 6,8× (juste sous)</span>
+    <span class="tag t-ok">2 leviers : gros plus cher · diagnostic moins cher (K=2 → seuil ~3×)</span>
+    <span class="tag t-bad">MESURÉ : MoE 30B Pareto-dominant (96,7% · 0,55s) ⇒ usage direct</span>
+  </div>
+  <div class="meta">
+    <span>EFE × Kovant · P2 (piste B) · analyse de coût du routeur d'escalade · dérivée des portes ①/② mesurées · coût = proxy latence (GPU réel = B2)</span>
+    <span>2026-07-01 · analyse</span>
+  </div>
+</div></div>
+
+<!-- 1 -->
+<div class="wrap page">
+  <h2><span class="num">§1</span> Le point de départ, mesuré</h2>
+
+  <p>Rappel du verdict de la porte ② (sous-tâche de triage, petit <code>phi4-mini</code> spécialisé, gros <code>gemma3:12b</code>, 300 runs re-prouvés). En qualité, l'escalade-par-dispersion <b>atteint la qualité du gros (83,3%)</b> en n'escaladant que <b>33%</b> des cas. En coût (proxy latence), pourtant :</p>
+
+  <table>
+    <thead><tr><th>Option</th><th class="c">Coût/cas</th><th class="c">Qualité</th><th class="c">Verdict</th></tr></thead>
+    <tbody>
+      <tr><td>petit seul (K=5)</td><td class="c">1,85 s</td><td class="c">78,7%</td><td class="c">moins cher, moins bon</td></tr>
+      <tr><td><b>tout-gros</b></td><td class="c">2,50 s</td><td class="c good">83,3%</td><td class="c">la référence</td></tr>
+      <tr><td>routé (escalade 33%)</td><td class="c bad">2,68 s</td><td class="c">83,3%</td><td class="c bad">DOMINÉ</td></tr>
+    </tbody>
+  </table>
+
+  <p>Le point routé est <b>dominé</b> : plus cher que le tout-gros, à qualité égale. Deux raisons, toutes deux chiffrables : <b>(1)</b> le diagnostic exige <b>K=5 appels du petit sur TOUS les cas</b> (≈ 0,7 appel-gros de surcoût fixe) ; <b>(2)</b> le « gros » n'est que <b>~6,8×</b> le petit — un écart trop faible pour que l'escalade rembourse ce surcoût. La question : <b>ces deux nombres définissent-ils un seuil au-delà duquel le routeur gagne ?</b> Oui — et il se calcule.</p>
+</div>
+
+<!-- 2 -->
+<div class="wrap page">
+  <h2><span class="num">§2</span> La loi de bascule</h2>
+
+  <p>Posons <b>s</b> = coût d'un appel du petit, <b>C</b> = coût(gros)/coût(petit), <b>K</b> = nombre d'échantillons du petit pour le diagnostic, <b>f</b> = fraction escaladée pour atteindre la qualité du gros. Le pipeline routé paie, <b>sur chaque cas</b>, les K appels du petit (pour mesurer la dispersion), puis, sur une fraction f, l'appel du gros :</p>
+
+  <div class="eq">coût<sub>routé</sub> = K·s + f·C·s &nbsp;&nbsp;vs&nbsp;&nbsp; coût<sub>tout-gros</sub> = C·s</div>
+
+  <p>Le routeur gagne quand <code>coût_routé &lt; coût_tout-gros</code>, soit <code>K + f·C &lt; C</code>, soit <code>K &lt; C(1−f)</code>. D'où la <b>loi de bascule</b> :</p>
+
+  <div class="eq" style="font-size:1.05rem;">le routeur gagne &nbsp;⟺&nbsp; <b>C &gt; C\* = K / (1 − f)</b></div>
+
+  <p>Instanciée sur les valeurs <b>mesurées</b> — f = 0,33 (l'escalade à 33%), K = 5 :</p>
+
+  <div class="eq">C\* = 5 / (1 − 0,33) = 5 / 0,67 ≈ <b>7,5×</b></div>
+
+  <p>Le routeur ne gagne que si le gros coûte <b>plus de 7,5× le petit</b>. Or, mesuré, <code>gemma3:12b / phi4-mini ≈ 6,8×</code> — <b>juste sous le seuil</b>. D'où la domination observée, expliquée <b>quantitativement</b> et non par accident.</p>
+
+  <div class="callout key">
+    <p><b>Ce que la loi transforme.</b> « Le routeur ne paie pas » devient « le routeur ne paie pas <b>tant que C ≤ 7,5×</b> — et voici l'écart entre 6,8× et 7,5× qui explique <b>exactement</b> pourquoi ». On ne rapporte pas une déception ; on rapporte un <b>seuil</b>, avec la marge précise qui nous en sépare. C'est une carte de décision, pas un slogan.</p>
+  </div>
+</div>
+
+<!-- 3 -->
+<div class="wrap page">
+  <h2><span class="num">§3</span> La carte : deux leviers franchissent le seuil</h2>
+
+  <div class="fig">
+  <svg viewBox="0 0 720 340" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Cout routé vs tout-gros en fonction du ratio C">
+    <!-- axes -->
+    <line x1="70" y1="40" x2="70" y2="300" stroke="#94a3b8"/>
+    <line x1="70" y1="300" x2="700" y2="300" stroke="#94a3b8"/>
+    <text x="30" y="46" font-size="8.5" fill="#64748b">coût</text>
+    <text x="30" y="58" font-size="8.5" fill="#64748b">/cas</text>
+    <!-- x ticks (C) -->
+    <g font-size="8.5" fill="#64748b" text-anchor="middle">
+    <text x="70" y="314">0×</text><text x="225" y="314">7,5×</text><text x="380" y="314">15×</text><text x="535" y="314">22×</text><text x="690" y="314">30×</text>
+    <text x="385" y="330" font-weight="700" fill="#334155">C = coût(gros) / coût(petit)</text>
+    </g>
+    <!-- all-big line: y=C : (70,300)->(690,40) -->
+    <line x1="70" y1="300" x2="690" y2="40" stroke="#0d9488" stroke-width="2.4"/>
+    <text x="612" y="52" font-size="9" font-weight="700" fill="#0f766e">tout-gros (= C)</text>
+    <!-- routed K=5: y=5+0.33C : C=0 ->256.7 ; C=30 ->170.8 -->
+    <line x1="70" y1="256.7" x2="690" y2="170.8" stroke="#4f46e5" stroke-width="2.4"/>
+    <text x="600" y="165" font-size="9" font-weight="700" fill="#3730a3">routé K=5</text>
+    <!-- routed K=2: y=2+0.33C : C=0 ->282.7 ; C=30 ->196.8 -->
+    <line x1="70" y1="282.7" x2="690" y2="196.8" stroke="#4f46e5" stroke-width="1.6" stroke-dasharray="5 3"/>
+    <text x="600" y="203" font-size="8.5" fill="#4338ca">routé K=2</text>
+    <!-- crossover K=5 at C=7.46 -->
+    <circle cx="224" cy="235" r="4" fill="#d97706"/>
+    <line x1="224" y1="235" x2="224" y2="300" stroke="#d97706" stroke-dasharray="2 2"/>
+    <text x="224" y="228" font-size="8" fill="#92400e" text-anchor="middle">seuil K=5 ≈ 7,5×</text>
+    <!-- crossover K=2 at C=2.99 -->
+    <circle cx="132" cy="274" r="3.5" fill="#d97706"/>
+    <text x="120" y="268" font-size="7.5" fill="#92400e" text-anchor="middle">seuil K=2 ≈ 3×</text>
+    <!-- region labels -->
+    <text x="150" y="90" font-size="8.5" fill="#991b1b" font-style="italic">à gauche du seuil :</text>
+    <text x="150" y="101" font-size="8.5" fill="#991b1b" font-style="italic">routeur DOMINÉ</text>
+    <text x="470" y="250" font-size="8.5" fill="#166534" font-style="italic">à droite : routeur GAGNE</text>
+    <text x="470" y="261" font-size="8.5" fill="#166534" font-style="italic">(routé &lt; tout-gros)</text>
+    <!-- reference markers -->
+    <g font-size="7.5" fill="#475569">
+    <line x1="211" y1="300" x2="211" y2="296" stroke="#475569"/><text x="211" y="292" text-anchor="middle">gemma-12B ~6,8×</text>
+    <line x1="380" y1="300" x2="380" y2="296" stroke="#475569"/><text x="380" y="292" text-anchor="middle">70B dense ~15–25×</text>
+    <text x="690" y="292" text-anchor="end" fill="#166534">API frontière ~30–100× →</text>
+    </g>
+  </svg>
+  <div class="cap">Coût par cas selon le ratio C. La droite <b>teal</b> = tout-gros (pente 1). Les droites <b>indigo</b> = routé (K=5 pleine, K=2 pointillé), d'ordonnée à l'origine K et de pente f≈0,33. Le routeur gagne à <b>droite du croisement</b> (seuil orange). Baisser K de 5 à 2 déplace le seuil de 7,5× à 3×.</div>
+  </div>
+
+  <table>
+    <thead><tr><th>Cible d'escalade</th><th class="c">C (ratio coût)</th><th class="c">Routeur à K=5<br>(seuil 7,5×)</th><th class="c">Routeur à K=2<br>(seuil 3×)</th></tr></thead>
+    <tbody>
+      <tr><td><code>gemma-12B</code> (dense) — <b>mesuré</b></td><td class="c">~6,8×</td><td class="c bad">dominé (juste sous)</td><td class="c good">GAGNE</td></tr>
+      <tr><td><code>70B</code> dense</td><td class="c">~15–25×</td><td class="c good">GAGNE</td><td class="c good">GAGNE</td></tr>
+      <tr><td>API frontière (Claude / GPT)</td><td class="c">~30–100× ($/tok)</td><td class="c good">GAGNE largement</td><td class="c good">GAGNE</td></tr>
+    </tbody>
+  </table>
+
+  <p><b>Les deux leviers, chiffrés.</b> <b>(1) Un gros plus cher</b> monte C au-dessus de 7,5× (un dense 70B, une API frontière). <b>(2) Un diagnostic moins cher</b> — K=2 au lieu de 5 — abaisse le seuil à <code>C\* = 2/(1−0,33) ≈ 3×</code>, que même notre <code>gemma-12B</code> (6,8×) franchit. Autrement dit : <b>notre backend actuel bascule de perdant à gagnant rien qu'en passant K de 5 à 2</b> (sous réserve que le signal de dispersion survive à K=2 — mesurable, c'est l'option voisine).</p>
+</div>
+
+<!-- 4 -->
+<div class="wrap page">
+  <h2><span class="num">§4</span> Le contre-exemple MESURÉ : le MoE 30B, ou pourquoi la taille ment</h2>
+
+  <p>On a voulu tester un gros « plus gros » — <code>qwen3-coder:30b</code> — et le résultat, <b>mesuré</b> (300 runs re-prouvés), retourne l'intuition. C'est un <b>MoE</b> (Mixture-of-Experts) : <b>30,5 B de paramètres totaux, mais ~3 B actifs</b> par token. Grande capacité, <b>calcul bon marché</b>. Mesuré comme cible d'escalade contre le petit <code>phi4-mini</code> :</p>
+
+  <table>
+    <thead><tr><th>Option</th><th class="c">C mesuré</th><th class="c">Coût/cas</th><th class="c">Qualité</th><th class="c">Verdict</th></tr></thead>
+    <tbody>
+      <tr><td>petit seul (K=5)</td><td class="c">—</td><td class="c">2,16 s</td><td class="c">79,3%</td><td class="c">cher (K×) et moins bon</td></tr>
+      <tr><td><b>MoE 30B seul</b></td><td class="c good">1,3×</td><td class="c good">0,55 s</td><td class="c good">96,7%</td><td class="c good">GAGNE sur les 2 axes</td></tr>
+      <tr><td>routé (escalade 66%)</td><td class="c bad">—</td><td class="c bad">2,52 s</td><td class="c">96,7%</td><td class="c bad">DOMINÉ</td></tr>
+    </tbody>
+  </table>
+
+  <div class="callout bad">
+    <p><b>Le MoE 30B est Pareto-dominant.</b> À <b>0,55 s/appel</b>, il est moins cher que le dense 12B (2,5 s) <b>et</b> moins cher que faire tourner le petit K=5 (2,16 s) — tout en étant <b>bien meilleur</b> (96,7% vs 83,3% vs 79,3%). Le ratio mesuré <b>C = 1,3×</b> est très en-dessous du seuil applicable ici (14,7×, cf. §5). Conséquence : contre ce gros, <b>tout l'appareil — petit, spécialisation, routeur — est inutile. La bonne décision est « le MoE seul, directement ».</b></p>
+  </div>
+
+  <div class="callout key">
+    <p><b>La règle de décision, corrigée par la mesure.</b> Le paramètre qui décide n'est pas le <b>nombre de paramètres</b> du gros — c'est son <b>coût de calcul par appel</b>, que les MoE <b>découplent</b> de la taille. On ne route que vers un gros <b>cher en calcul</b> (dense-large, frontière). Un gros <b>bon marché</b> (MoE) s'utilise <b>directement</b> — et s'il est aussi <b>meilleur</b>, il rend caduque l'idée même de router.</p>
+  </div>
+
+  <div class="callout warn">
+    <p><b>Et la thèse de l'essaim, alors ?</b> Un MoE, c'est ~3 B actifs — il <b>valide</b> donc l'intuition « le calcul petit-actif est bon marché », mais l'implémente <b>mieux</b> : un <b>routage d'experts appris dans un seul modèle</b>, plutôt qu'un essaim de SLM séparés + un routeur construit à la main. La question honnête devient : <b>qu'apporte un essaim de SLM séparés qu'un MoE unique n'apporte pas ?</b> — la souveraineté et la provenance <b>par-agent</b>, l'hétérogénéité multi-fournisseur, la spécialisation extrême ; mais <b>pas</b> le coût brut sur une tâche que le MoE couvre. Surfacer cela, re-prouvablement, est précisément le travail d'un appareil de mesure honnête.</p>
+  </div>
+</div>
+
+<!-- 5 -->
+<div class="wrap page">
+  <h2><span class="num">§5</span> Ce que ça décide</h2>
+
+  <ul>
+    <li><b>Le routeur d'escalade a un domaine de validité, et il se calcule</b> : il gagne quand <code>C &gt; K/(1−f)</code>. Ce n'est ni « ça marche » ni « ça ne marche pas » — c'est une <b>frontière chiffrée</b>.</li>
+    <li><b>À notre backend, on est juste sous la frontière</b> (6,8× vs 7,5×) — et deux leviers mesurables la franchissent : un gros plus cher, ou un diagnostic moins cher (K=2 → seuil ~3×).</li>
+    <li><b>La forme du gros compte plus que sa taille</b> : un MoE bon marché s'utilise directement ; seul un gros <b>cher</b> justifie le surcoût du diagnostic.</li>
+  </ul>
+
+  <div class="callout key">
+    <p><b>Pourquoi c'est le produit.</b> Un concurrent affirmerait « petit + routeur = moins cher », ou l'inverse après un échec. La bonne réponse n'est ni l'un ni l'autre : c'est une <b>loi</b> qui dit, pour <b>n'importe quel</b> couple (petit, gros) et <b>n'importe quel</b> réglage de diagnostic, <b>de quel côté de la frontière on se trouve</b> — et de combien. C'est exactement l'instrument qu'un ingénieur d'infra et un directeur financier veulent : non pas « c'est moins cher », mais « voici la condition, chiffrée et re-mesurable, sous laquelle ça l'est ».</p>
+  </div>
+
+  <hr>
+  <p class="small muted"><b>Note d'honnêteté.</b> La <b>loi de bascule</b> (<code>C &gt; K/(1−f)</code>) est exacte ; ses constantes sont <b>mesurées</b> sur Mac/Ollama (<code>phi4-mini</code> K=5) en <b>proxy latence</b> — le GPU-seconde réel (B2) donnerait les vrais C. <b>Deux</b> cibles ont été mesurées, et elles montrent que <b>f dépend du gros</b> : contre <code>gemma-12B</code> (83,3%), f = 33% → seuil 7,5× (C mesuré ≈ 6,8×, juste sous) ; contre le <b>MoE 30B</b> (96,7%), la barre monte, donc <b>f monte à 66% → seuil 14,7×</b> — <b>l'inverse</b> de ce qu'on avait d'abord supposé (un meilleur gros n'abaisse pas f, il l'augmente ; la mesure a corrigé l'hypothèse). Le MoE 30B mesuré (C = 1,3×) est donc massivement dominé, et sa qualité supérieure en fait un candidat à l'<b>usage direct</b> (§4). Les mappages de C pour le 70B dense et l'API frontière restent des <b>ordres de grandeur</b> à confirmer par mesure. Le driver <code>examples/p2_diagnostic.rs</code> est instrumenté — il mesure C, calcule le seuil, imprime le verdict — la loi est <b>exécutable et re-mesurable</b> sur n'importe quel couple.</p>
+</div>
+
+</body>
+</html>
