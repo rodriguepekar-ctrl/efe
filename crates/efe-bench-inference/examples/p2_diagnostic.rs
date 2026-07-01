@@ -14,6 +14,7 @@
 //!     --endpoint http://127.0.0.1:11434 --big gemma3:12b --small phi4-mini-local --n 150 --k 5
 
 use std::sync::{Arc, Mutex};
+use std::time::Instant;
 
 use efe_bench_inference::Dataset;
 use efe_swarm_sdk::{AgentCall, AgentRole, Budget, ClientMode, KSpec, OnExceed, Swarm, SwarmObserver, TopologySpec};
@@ -165,9 +166,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("  petit {small} (K={k}, specialise)  ·  gros {big} (K=1, specialise, cible d'escalade)  ·  n={n}\n");
 
     println!("[1/2] petit ({small}, K={k}) ...");
+    let t_small = Instant::now();
     let (small_items, small_v) = run_model(&endpoint, &small, &ds, k, gen_tokens).await?;
+    let small_secs = t_small.elapsed().as_secs_f64();
     println!("[2/2] gros ({big}, K=1) ...");
+    let t_big = Instant::now();
     let (big_items, big_v) = run_model(&endpoint, &big, &ds, 1, gen_tokens).await?;
+    let big_secs = t_big.elapsed().as_secs_f64();
+    // Cout par APPEL (proxy latence) : petit = temps / (n*k) ; gros = temps / n.
+    let small_call = small_secs / (n as f64 * k as f64).max(1.0);
+    let big_call = big_secs / n as f64;
+    let cost_ratio = if small_call > 0.0 { big_call / small_call } else { 0.0 };
 
     // Aligne par id, calcule dispersion + justesse.
     let mut rows: Vec<Row> = Vec::with_capacity(n);
@@ -226,6 +235,29 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         Some(e) => println!("\n  -> escalade-par-dispersion atteint la qualite du gros ({:.1}%) en escaladant {:.0}% des cas.", big_acc * 100.0, e as f64 / n as f64 * 100.0),
         None => println!("\n  -> escalade-par-dispersion n'atteint pas la qualite du gros meme a 100% (diagnostic faible)."),
     }
+
+    // -- CARTE DE COUT (proxy latence ; GPU reel = B2) : le routeur paie-t-il ? --
+    let reach_frac = reach.map(|e| e as f64 / n as f64).unwrap_or(1.0);
+    let cost_small_alone = k as f64 * small_call; // K echantillons, pas d'escalade
+    let cost_all_big = big_call; // tout-gros
+    let cost_routed = k as f64 * small_call + reach_frac * big_call; // petit K sur tous + escalade
+    let breakeven = if reach_frac < 1.0 { k as f64 / (1.0 - reach_frac) } else { f64::INFINITY };
+    println!("\n-- CARTE DE COUT (proxy latence ; GPU reel = B2) --");
+    println!("  cout/appel : petit {:.2}s · gros {:.2}s · ratio C = {:.1}x", small_call, big_call, cost_ratio);
+    println!("  {:<24} {:>9} {:>8}", "option", "cout/cas", "qualite");
+    println!("  {:<24} {:>8.2}s {:>7.1}%", "petit seul (K)", cost_small_alone, small_acc * 100.0);
+    println!("  {:<24} {:>8.2}s {:>7.1}%", "tout-gros", cost_all_big, big_acc * 100.0);
+    println!("  {:<24} {:>8.2}s {:>7.1}%", format!("route (escalade {:.0}%)", reach_frac * 100.0), cost_routed, big_acc * 100.0);
+    println!(
+        "  -> le routeur {} le tout-gros ({:.2}s vs {:.2}s) a qualite egale",
+        if cost_routed < cost_all_big { "BAT" } else { "est DOMINE par" },
+        cost_routed,
+        cost_all_big
+    );
+    println!(
+        "  seuil de bascule : le routeur gagne quand C > K/(1-f) = {:.1}x  (mesure : C={:.1}x, K={}, f={:.0}%)",
+        breakeven, cost_ratio, k, reach_frac * 100.0
+    );
 
     println!("\nre-preuve : petit {}/{} · gros {}/{} runs re-prouves · la mesure est scellee et re-prouvable", small_v, small_items.len(), big_v, big_items.len());
     println!("NB : dispersion = self-agreement label-free (thermometre) ; jamais agregee en reponse (bulletin). Cout GPU reel = B2.");
