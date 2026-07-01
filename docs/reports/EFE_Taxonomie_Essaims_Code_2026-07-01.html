@@ -151,7 +151,52 @@
 
 <!-- 3 -->
 <div class="wrap page">
-  <h2><span class="num">§3</span> Les 3 axes de variantes (les réglages, pas des moteurs)</h2>
+  <h2><span class="num">§3</span> La comparaison tête-à-tête</h2>
+
+  <p>Le §2 décrit chaque moteur seul ; ici on les met <b>face à face</b>. La différence fondamentale, d'abord — <b>à qui servent les agents</b> : dans <b>A</b>, les petits <b>servent</b> les gros (ils pré-mâchent ; coordination <b>indirecte</b> par phéromones) ; dans <b>B</b> et <b>C</b>, les agents <b>SONT</b> les ouvriers qui produisent la réponse (coordination <b>directe</b> : artefacts typés / DAG) ; <b>D</b> est un autre plan — des <b>essaims entiers</b> qui convergent dans un espace latent.</p>
+
+  <table>
+    <thead><tr><th>Dimension</th><th>A · Stigmergique</th><th>B · Topologique</th><th>C · Runtime</th><th>D · Méta</th></tr></thead>
+    <tbody>
+      <tr><td><b>Coordination</b></td><td>phéromones (stigmergie)</td><td>artefacts typés / topologie</td><td>DAG déclaratif + dispatch</td><td>espace latent (Hilbert)</td></tr>
+      <tr><td><b>« Agent » = quoi</b></td><td>6 nano-robots SLM</td><td>rôles (gén./vérif./juge)</td><td>catalogue : code / SLM / LLM</td><td>un essaim entier</td></tr>
+      <tr><td><b>Petit ↔ gros</b></td><td>petit <b>sert</b> le gros</td><td>pairs + escalade</td><td>hétérogène (A/B/C mêlés)</td><td>abstrait</td></tr>
+      <tr><td><b>Provenance / audit</b></td><td>audit chain</td><td class="good">auto-câblée, re-vérifiable</td><td class="good">audit par dispatch (P1)</td><td class="bad">stub (différé)</td></tr>
+      <tr><td><b>Budget / coût</b></td><td>BudgetTracker (−33%)</td><td class="good">plafond jamais dépassé</td><td>budget + metering</td><td>n/a</td></tr>
+      <tr><td><b>Mesuré ?</b></td><td class="bad">non</td><td class="good">OUI (bench P2)</td><td class="mid">mesurable</td><td class="bad">non applicable</td></tr>
+      <tr><td><b>Souverain (local)</b></td><td>oui</td><td class="good">oui (egress-deny)</td><td>oui (VM Firecracker)</td><td>abstrait</td></tr>
+      <tr><td><b>Lourdeur</b></td><td class="bad">lourd (bridge 3-LLM + SSE)</td><td class="good">léger (SDK)</td><td>moyen (catalog + VM)</td><td>math</td></tr>
+      <tr><td><b>Maturité</b></td><td class="mid">figé (Frozen v1.0)</td><td class="good">mesuré / prouvé</td><td class="good">productisé</td><td class="bad">expérimental (mocks)</td></tr>
+      <tr><td><b>Idéal pour</b></td><td>coordonner de gros LLM frontière</td><td>tâche à mesurer + prouver</td><td>pipeline d'agents typés en prod</td><td>faire converger des essaims</td></tr>
+    </tbody>
+  </table>
+
+  <h4>Les trois arbitrages qui comptent</h4>
+  <ul>
+    <li><b>Prouvabilité → B gagne</b> (mesuré + provenance auto-câblée) ; C est provenancé (P1) ; A a une chaîne d'audit mais n'est <b>pas mesuré</b> ; D est un <i>stub</i>.</li>
+    <li><b>Poids → B le plus léger</b>, A le plus lourd (il traîne un bridge 3-LLM + streaming SSE + phéromones).</li>
+    <li><b>Philosophie</b> : A « le petit sert le gros » (frontière) ; B/C « les agents font le travail » (souverain) ; D « une géométrie de consensus » (théorique).</li>
+  </ul>
+
+  <div class="callout key">
+    <p><b>B et C ne sont pas des concurrents — ils s'emboîtent.</b> <b>C est le runtime</b> (le catalogue d'agents typés qu'on déploie) ; <b>B est le SDK d'orchestration mesuré</b> posé dessus (<code>swarm.run</code> sur une topologie, budget + provenance). Ils partagent le même blackboard (N21). <b>B + C = une seule pile cohérente</b>, actuelle, mesurée et provenancée. A (stigmergique, frontière-centré, figé) et D (méta, expérimental) sont des <b>philosophies à part</b>.</p>
+  </div>
+
+  <h4>Quel moteur pour quel besoin</h4>
+  <table>
+    <thead><tr><th>Besoin</th><th class="c">Moteur</th></tr></thead>
+    <tbody>
+      <tr><td>Coordonner Claude / GPT / Gemini en débat / vote / relais</td><td class="c mid">A <span class="small muted">(figé — à raviver au besoin)</span></td></tr>
+      <tr><td>Mesurer + prouver qu'un petit substitue un gros sur une tâche</td><td class="c good">B ✅</td></tr>
+      <tr><td>Déployer un pipeline d'agents hétérogènes, audité, souverain</td><td class="c good">C ✅</td></tr>
+      <tr><td>Faire converger plusieurs essaims indépendants</td><td class="c bad">D <span class="small muted">(recherche)</span></td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- 4 -->
+<div class="wrap page">
+  <h2><span class="num">§4</span> Les 3 axes de variantes (les réglages, pas des moteurs)</h2>
 
   <h4>Axe 1 — les 7 TOPOLOGIES (dans le moteur B, <code>TopologySpec</code>)</h4>
   <table>
@@ -197,7 +242,7 @@
 
 <!-- 4 -->
 <div class="wrap page">
-  <h2><span class="num">§4</span> Maturités &amp; dispersion : ce que la multiplicité révèle</h2>
+  <h2><span class="num">§5</span> Maturités &amp; dispersion : ce que la multiplicité révèle</h2>
 
   <table>
     <thead><tr><th>Moteur</th><th>Rôle historique</th><th class="c">Maturité</th><th>Preuve dans le code</th></tr></thead>
@@ -220,7 +265,7 @@
 
 <!-- 5 -->
 <div class="wrap page">
-  <h2><span class="num">§5</span> La recommandation de consolidation</h2>
+  <h2><span class="num">§6</span> La recommandation de consolidation</h2>
 
   <div class="callout ok">
     <p><b>Garder deux, archiver deux.</b> La question n'est pas « quel est le meilleur essaim » — c'est <b>« lequel garde-t-on, mesuré et provenancé »</b>. La réponse suit la maturité :</p>
