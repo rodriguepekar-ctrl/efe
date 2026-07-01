@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>L'essaim, au juste — ce qui est codé, ce qui est prouvé, ce qui est pari</title>
+<style>
+  :root{--ink:#0f172a;--muted:#475569;--soft:#64748b;--line:#e2e8f0;--teal:#0d9488;--teal-d:#0f766e;--indigo:#4f46e5;--indigo-d:#4338ca;--ok:#16a34a;--warn:#d97706;--bad:#dc2626;--bg-tint:#f6fbfa;--bg-card:#eef2f1;--code-bg:#0f172a;--code-fg:#e2e8f0;}
+  *{box-sizing:border-box;} html{font-size:11.4px;}
+  body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,Arial,sans-serif;color:var(--ink);margin:0;line-height:1.6;background:#fff;-webkit-font-smoothing:antialiased;}
+  .wrap{max-width:178mm;margin:0 auto;padding:0 2mm;}
+  h1,h2,h3,h4{line-height:1.2;font-weight:700;}
+  h2{font-size:1.45rem;margin:0 0 .55rem;padding-bottom:.32rem;border-bottom:3px solid var(--teal);}
+  h2 .num{color:var(--teal);} h3{font-size:1.13rem;margin:1.1rem 0 .3rem;color:var(--teal-d);}
+  h4{font-size:1rem;margin:.8rem 0 .2rem;color:var(--indigo-d);}
+  p{margin:.55rem 0;text-align:justify;hyphens:auto;} a{color:var(--indigo);text-decoration:none;}
+  code{font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace;font-size:.85em;background:var(--bg-card);padding:.05em .35em;border-radius:4px;color:#0b3b36;}
+  .muted{color:var(--muted);} .small{font-size:.88rem;}
+  section{break-inside:avoid;} .page{break-before:page;} h2{break-after:avoid;}
+  table{border-collapse:collapse;width:100%;margin:.55rem 0;font-size:.8rem;}
+  th,td{border:1px solid var(--line);padding:.32rem .5rem;text-align:left;vertical-align:top;}
+  th{background:var(--bg-card);font-weight:700;} tbody tr:nth-child(even){background:var(--bg-tint);}
+  td.c,th.c{text-align:center;} .good{background:#dcfce7 !important;color:#166534;font-weight:700;} .mid{background:#fef9c3 !important;color:#854d0e;font-weight:700;} .bad{background:#fee2e2 !important;color:#991b1b;font-weight:700;}
+  .tag{display:inline-block;font-size:.71rem;font-weight:700;padding:.08em .5em;border-radius:20px;}
+  .t-ok{background:#dcfce7;color:#166534;} .t-info{background:#e0e7ff;color:#3730a3;} .t-teal{background:#ccfbf1;color:#115e59;} .t-warn{background:#fef3c7;color:#92400e;} .t-bad{background:#fee2e2;color:#991b1b;}
+  pre{background:var(--code-bg);color:var(--code-fg);padding:.55rem .8rem;border-radius:8px;overflow:auto;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.72rem;line-height:1.45;margin:.55rem 0;}
+  pre code{background:none;color:inherit;padding:0;}
+  .callout{border-left:4px solid var(--teal);background:var(--bg-tint);padding:.55rem .85rem;border-radius:0 8px 8px 0;margin:.65rem 0;}
+  .callout p{text-align:left;margin:.28rem 0;}
+  .callout.key{border-color:var(--indigo);background:#eef2ff;} .callout.warn{border-color:var(--warn);background:#fffbeb;} .callout.ok{border-color:var(--ok);background:#f0fdf4;} .callout.bad{border-color:var(--bad);background:#fef2f2;}
+  .fig{margin:.7rem 0 .9rem;text-align:center;break-inside:avoid;}
+  .fig svg{max-width:100%;height:auto;border:1px solid var(--line);border-radius:10px;background:#fff;}
+  .fig .cap{font-size:.79rem;color:var(--muted);margin-top:.32rem;font-style:italic;text-align:center;}
+  ul,ol{margin:.4rem 0 .55rem 1.1rem;padding:0;} li{margin:.24rem 0;}
+  svg text{font-family:-apple-system,"Segoe UI",Inter,sans-serif;}
+  .cover{height:262mm;display:flex;flex-direction:column;justify-content:center;position:relative;padding:0 6mm;}
+  .cover .eyebrow{color:var(--teal);font-weight:800;letter-spacing:.18em;font-size:.83rem;text-transform:uppercase;}
+  .cover h1{font-size:2.1rem;margin:.4rem 0 .2rem;line-height:1.08;} .cover .sub{font-size:1.16rem;color:var(--muted);margin-bottom:1.1rem;}
+  .cover .tagline{font-size:1.0rem;color:var(--ink);max-width:163mm;border-left:4px solid var(--teal);padding-left:1rem;font-style:italic;text-align:left;}
+  .cover .meta{position:absolute;bottom:6mm;left:6mm;right:6mm;display:flex;justify-content:space-between;border-top:1px solid var(--line);padding-top:.6rem;font-size:.8rem;color:var(--soft);}
+  .cover .pills{margin:1rem 0;} .cover .pills .tag{font-size:.77rem;margin-right:.3rem;}
+  .mono{font-family:ui-monospace,Menlo,Consolas,monospace;}
+  hr{border:none;border-top:1px solid var(--line);margin:.9rem 0;}
+  .eq{font-family:ui-monospace,Menlo,Consolas,monospace;background:#ecfdf5;border:1px solid #a7f3d0;border-radius:8px;padding:.45rem .75rem;margin:.5rem 0;font-size:.79rem;color:#065f46;text-align:center;}
+  @page{size:A4;margin:13mm 12mm;}
+</style>
+</head>
+<body>
+
+<!-- COVER -->
+<div class="wrap"><div class="cover">
+  <div class="eyebrow">Note de cadrage · au niveau agents · ce qui est codé ≠ prouvé ≠ pari</div>
+  <h1>L'essaim, au juste</h1>
+  <div class="sub">« Ce que l'on a codé, est-ce de petits agents qui se passent de l'information à des agents LLM entre eux ? » — la réponse exacte, vérifiée dans le code, pour ne rien sur-revendiquer à l'oral.</div>
+  <div class="tagline"><b>Oui — sur le substrat.</b> Ce qui est construit EST un essaim de <b>petits LLM</b> qui se passent des <b>artefacts typés en parallèle</b>, via un <b>blackboard partagé</b> et des <b>topologies</b> (pipeline, consensus, gossip, débat), le tout <b>scellé et re-prouvable</b>. Sur ce point, le modèle mental et le code coïncident. Mais <b>trois précisions</b> séparent ce qui est <b>codé</b> de ce qui est <b>prouvé</b> et de ce qui reste un <b>pari</b> — et les confondre casserait la seule chose qui rend le pitch crédible, l'honnêteté. <b>Un :</b> « à très peu de paramètres » veut dire <b>petits modèles de langage</b>, pas micro-réseaux sur-mesure. <b>Deux :</b> le passage d'information a <b>deux formes au statut de preuve opposé</b> — l'<b>agrégation</b> (voter, médiane) est codée <i>et mesurée et réfutée</i> ; la <b>communication</b> (artefacts vérifiés dans la boucle) est codée mais reste un <b>pari ouvert</b>, non prouvé. <b>Trois :</b> la valeur <b>prouvée et vendable</b> n'est pas « les agents qui se parlent » — c'est la <b>couche autour</b> d'eux : provenance, mesure, routeur, souveraineté. Cette note fixe la carte, pour que tu dises exactement ce qui est vrai : « on a codé l'essaim <b>et</b> l'appareil qui mesure honnêtement s'il aide ».</div>
+  <div class="pills">
+    <span class="tag t-teal">codé : essaim de petits LLM + blackboard + topologies, scellé</span>
+    <span class="tag t-bad">agrégation (vote) = réfutée</span>
+    <span class="tag t-info">communication (vérifiée) = pari ouvert, mesuré</span>
+    <span class="tag t-ok">prouvé &amp; vendable = la couche autour (provenance/mesure/routeur)</span>
+  </div>
+  <div class="meta">
+    <span>EFE (Essaim Fluide Éphémère) · note de cadrage interne — alignement modèle mental ↔ code · au niveau agents</span>
+    <span>2026-06-30 · vérifié dans les sources</span>
+  </div>
+</div></div>
+
+<!-- 1 -->
+<div class="wrap page">
+  <h2><span class="num">§1</span> La question, et la réponse en une ligne</h2>
+
+  <p><b>La question.</b> « Ce que l'on a codé, est-ce de petits agents qui permettent de passer des informations à des agents LLM entre eux, en parallèle ? » — autrement dit, le code correspond-il à la thèse de départ (l'essaim de petits modèles communicants) ?</p>
+
+  <div class="callout key">
+    <p><b>La réponse en une ligne.</b> <b>Oui, le substrat est exactement cela</b> — un essaim de petits LLM qui se passent des artefacts typés en parallèle, scellé et re-prouvable, est codé, tourne et est testé. <b>Mais la valeur prouvée n'est pas ce passage d'information en soi</b> : sous sa forme « agrégation » il est <b>réfuté</b>, sous sa forme « communication vérifiée » il est un <b>pari ouvert</b> ; ce qui est <b>prouvé et vendable</b>, c'est l'appareil de <b>confiance et de mesure</b> qui entoure l'essaim.</p>
+  </div>
+
+  <p>Le reste de cette note détaille les trois précisions qui font la différence entre « on pense la même chose » (vrai sur le substrat) et « on revendique la même chose » (à manier avec rigueur). Chacune est <b>vérifiée dans le code</b>, pas supposée.</p>
+</div>
+
+<!-- 2 -->
+<div class="wrap page">
+  <h2><span class="num">§2</span> Ce qui est CODÉ : l'essaim de petits LLM qui se passent l'info</h2>
+
+  <p>Sur le substrat, le code <b>est</b> la thèse. Vérifié dans les sources :</p>
+  <ul>
+    <li><b>Les agents = des rôles tenus par de petits LLM.</b> <code>ClientMode</code> distingue <b>Mode A</b> (keyless / scripté / déterministe — pour le seam de test) et <b>Mode C</b> (LLM réel via Ollama / vLLM — un SLM type <code>phi4-mini</code>, <code>llama3.2-1b</code>). Un agent est un rôle + un contrat d'entrée/sortie typé, adossé à un appel de petit modèle.</li>
+    <li><b>Ils se passent l'information — deux mécanismes réels.</b> Un <b>blackboard</b> partagé (<code>efe-blackboard</code> : un store indexé par JSON-pointer, <b>versionné par champ</b>, chaque écriture attribuée à un <code>AgentId</code>, primitive d'écriture conditionnelle <code>write_if</code>) ; et des <b>topologies</b> (<code>efe-swarm-topology</code> : Generate-Verify, Pipeline, Hiérarchique, Consensus, <b>gossip</b>, <b>débat</b>) qui définissent <i>comment</i> l'info circule.</li>
+    <li><b>En parallèle.</b> Les topologies de flotte lancent <b>K agents</b> à la fois (<code>TopologySpec::consensus(..., 5)</code>), avec un dimensionnement par vagues.</li>
+    <li><b>Scellé et re-prouvable.</b> <code>swarm.run(task, topology, budget)</code> renvoie un <code>provenance_root</code> qu'un tiers re-vérifie (<code>verify_swarm</code>), budget <b>plafonné jamais dépassé</b>. Chaque appel de modèle et chaque message est capté pour la provenance (N17).</li>
+  </ul>
+
+  <div class="fig">
+  <svg viewBox="0 0 720 250" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="L'essaim codé : petits LLM, blackboard, topologies, sceau">
+    <!-- agents -->
+    <g>
+    <circle cx="90" cy="70" r="22" fill="#e0e7ff" stroke="#4f46e5"/><text x="90" y="74" text-anchor="middle" font-size="9" fill="#3730a3">SLM</text>
+    <circle cx="90" cy="130" r="22" fill="#e0e7ff" stroke="#4f46e5"/><text x="90" y="134" text-anchor="middle" font-size="9" fill="#3730a3">SLM</text>
+    <circle cx="90" cy="190" r="22" fill="#e0e7ff" stroke="#4f46e5"/><text x="90" y="194" text-anchor="middle" font-size="9" fill="#3730a3">SLM</text>
+    </g>
+    <text x="90" y="34" text-anchor="middle" font-size="9" font-weight="700" fill="#3730a3">K petits LLM (parallèle)</text>
+    <!-- blackboard -->
+    <rect x="210" y="55" width="180" height="150" rx="10" fill="#f6fbfa" stroke="#0d9488"/>
+    <text x="300" y="76" text-anchor="middle" font-size="10" font-weight="700" fill="#0f766e">Blackboard partagé</text>
+    <text x="300" y="92" text-anchor="middle" font-size="8" fill="#475569">store versionné / champ</text>
+    <text x="300" y="104" text-anchor="middle" font-size="8" fill="#475569">écriture attribuée (AgentId)</text>
+    <rect x="228" y="116" width="144" height="20" rx="4" fill="#ccfbf1" stroke="#0d9488"/><text x="300" y="130" text-anchor="middle" font-size="8" fill="#115e59">artefact typé · v3</text>
+    <rect x="228" y="142" width="144" height="20" rx="4" fill="#ccfbf1" stroke="#0d9488"/><text x="300" y="156" text-anchor="middle" font-size="8" fill="#115e59">artefact typé · v7</text>
+    <rect x="228" y="168" width="144" height="20" rx="4" fill="#ccfbf1" stroke="#0d9488"/><text x="300" y="182" text-anchor="middle" font-size="8" fill="#115e59">artefact typé · v9</text>
+    <!-- arrows agents<->bb -->
+    <g stroke="#94a3b8" fill="none">
+    <line x1="112" y1="70" x2="209" y2="100" marker-end="url(#a)"/>
+    <line x1="112" y1="130" x2="209" y2="130"/>
+    <line x1="112" y1="190" x2="209" y2="160"/>
+    </g>
+    <!-- topologies -->
+    <rect x="410" y="70" width="120" height="120" rx="10" fill="#eef2ff" stroke="#4f46e5"/>
+    <text x="470" y="90" text-anchor="middle" font-size="9.5" font-weight="700" fill="#3730a3">Topologies</text>
+    <text x="470" y="106" text-anchor="middle" font-size="8" fill="#475569">pipeline</text>
+    <text x="470" y="119" text-anchor="middle" font-size="8" fill="#475569">consensus</text>
+    <text x="470" y="132" text-anchor="middle" font-size="8" fill="#475569">gossip</text>
+    <text x="470" y="145" text-anchor="middle" font-size="8" fill="#475569">débat</text>
+    <text x="470" y="158" text-anchor="middle" font-size="8" fill="#475569">hiérarchique</text>
+    <line x1="390" y1="130" x2="409" y2="130" stroke="#94a3b8"/>
+    <!-- seal -->
+    <rect x="555" y="85" width="140" height="90" rx="10" fill="#f0fdf4" stroke="#16a34a"/>
+    <text x="625" y="118" text-anchor="middle" font-size="9.5" font-weight="700" fill="#166534">Sceau provenance</text>
+    <text x="625" y="134" text-anchor="middle" font-size="8" fill="#475569">provenance_root</text>
+    <text x="625" y="146" text-anchor="middle" font-size="8" fill="#475569">re-prouvable (tiers)</text>
+    <text x="625" y="160" text-anchor="middle" font-size="8" fill="#475569">budget plafonné</text>
+    <line x1="530" y1="130" x2="554" y2="130" stroke="#94a3b8"/>
+    <text x="360" y="232" text-anchor="middle" font-size="8.5" fill="#64748b" font-style="italic">Codé, tourne, testé (bout-en-bout LLM prouvé sur Ollama). C'est le substrat — l'idée de départ, réelle.</text>
+  </svg>
+  <div class="cap">L'essaim tel qu'il est codé : K petits LLM en parallèle, un blackboard partagé versionné où ils déposent des artefacts typés, des topologies qui orchestrent le flux, et un sceau de provenance re-prouvable. <b>Sur ce substrat, le modèle mental et le code coïncident.</b></div>
+  </div>
+
+  <p class="small muted">Précision de statut : le bout-en-bout avec de vrais petits LLM (Mode C) est <b>prouvé</b> dans un exemple sur Ollama local ; les quatre topologies tournent réellement. Le câblage de Mode C dans le SDK unifié est la tranche d'ingénierie suivante — l'idée, elle, est démontrée.</p>
+</div>
+
+<!-- 3 -->
+<div class="wrap page">
+  <h2><span class="num">§3</span> Précision 1 : « très peu de paramètres » = petits <b>LLM</b></h2>
+
+  <p>Dans le code, un agent n'est <b>pas</b> un réseau neuronal sur-mesure à quelques milliers de paramètres. C'est un <b>petit modèle de langage</b> (SLM) qui tient un rôle — résolu par nom depuis une flotte, et exécuté en Mode C contre un endpoint vLLM/Ollama.</p>
+
+  <div class="callout">
+    <p><b>Pourquoi la formulation compte.</b> « Petits LLM spécialisés » est <b>exactement</b> la thèse SLM-swarm de Kovant — donc cela s'aligne parfaitement. Mais dire « agents à très peu de paramètres » laisse imaginer des micro-réseaux bespoke, ce qui <b>n'est pas</b> ce qui est codé. Pour rester juste à l'oral : <b>« de petits modèles de langage, spécialisés par sous-tâche »</b>.</p>
+  </div>
+</div>
+
+<!-- 4 -->
+<div class="wrap page">
+  <h2><span class="num">§4</span> Précision 2 : le passage d'info a deux formes, au statut de preuve <b>opposé</b></h2>
+
+  <p>C'est la précision la plus importante, et elle est <b>visible dans le code lui-même</b>. La sortie d'une topologie (<code>TopologyOutput</code>) porte un champ <code>decided_pattern</code> (<code>vote</code> / <code>borda</code> / <code>condorcet</code>) et un drapeau <code>escalated</code> : le code <b>implémente</b> le passage-comme-agrégation <b>et</b> l'appareil qui le <b>mesure</b>. Or les deux formes ne valent pas pareil :</p>
+
+  <table>
+    <thead><tr><th>Forme du « passage d'info »</th><th>Dans le code</th><th>Statut de preuve</th></tr></thead>
+    <tbody>
+      <tr><td><b>Agrégation / consensus</b><br><span class="small muted">voter, médiane, borda, condorcet</span></td><td class="good">codé (<code>decided_pattern</code>)</td><td class="bad">MESURÉ &amp; RÉFUTÉ — les erreurs des petits sont systématiquement biaisées, le vote les <b>amplifie</b> (arc HB.1–HB.4)</td></tr>
+      <tr><td><b>Communication vérifiée</b><br><span class="small muted">artefacts typés + vérification dans la boucle (blackboard, débat)</span></td><td class="good">codé (infra)</td><td class="mid">PARI OUVERT — peut récupérer l'erreur SI elle injecte diversité / vérification ground-truth ; <b>non encore prouvé</b> (phase mesurée à venir)</td></tr>
+    </tbody>
+  </table>
+
+  <div class="eq">passage d'info CODÉ ✔ &nbsp;≠&nbsp; passage d'info qui PRODUIT de la valeur &nbsp;:&nbsp; agrégation = réfutée · communication = pari ouvert</div>
+
+  <div class="callout bad">
+    <p><b>La correction de modèle mental à intégrer.</b> Le passage d'information <b>existe</b> dans le code — ce n'est pas en question. Ce qui est en question, c'est s'il <b>améliore</b> le résultat. La réponse mesurée est : <b>non</b> pour l'agrégation (réfutée, re-prouvablement), <b>peut-être</b> pour la communication vérifiée (pari, derrière une porte de falsification, avec un garde anti-poison — un juge-oracle de correction). Tenir cette distinction est ce qui te distingue d'un vendeur d'émergence.</p>
+  </div>
+</div>
+
+<!-- 5 -->
+<div class="wrap page">
+  <h2><span class="num">§5</span> Précision 3 : la valeur prouvée = la couche <b>autour</b>, pas le passage d'info</h2>
+
+  <p>Si l'essaim-qui-communique est le <b>substrat</b>, ce qui est <b>prouvé, prêt et vendable</b> est la <b>couche qui l'entoure</b> — celle qui rend n'importe quel essaim d'agents digne de confiance et mesurable :</p>
+  <ul>
+    <li><b>Provenance</b> — re-prouver ce que chaque agent <b>et</b> chaque message a fait (chaînes scellées, vérifieur zéro-dépendance qu'un tiers re-compile).</li>
+    <li><b>Mesure</b> — trancher, sans tricher, où un petit substitue un gros, et à quel coût (non-infériorité, contrôle d'erreur de famille, harnais de falsification).</li>
+    <li><b>Routeur</b> — garder le petit quand un diagnostic le permet, escalader vers le gros sinon ; et <b>sceller</b> chaque décision de routage.</li>
+    <li><b>Souveraineté</b> — egress refusé, clé qui ne sort jamais, déploiement local.</li>
+  </ul>
+
+  <div class="callout key">
+    <p><b>Le renversement à garder en tête.</b> Tu ne vends pas « nos agents qui se parlent = intelligence ». Tu vends « <b>on rend n'importe quel essaim d'agents auditable, mesuré et souverain</b> » — et l'essaim communicant est le terrain sur lequel cette couche démontre sa valeur. C'est cette couche, pas le passage d'info, qui constitue le moat prêt aujourd'hui.</p>
+  </div>
+</div>
+
+<!-- 6 -->
+<div class="wrap page">
+  <h2><span class="num">§6</span> Le piège à l'oral — et la formulation juste</h2>
+
+  <div class="callout bad">
+    <p><b>❌ À NE PAS dire.</b> « On a fait de petits agents qui se passent l'info entre LLM, <b>c'est ça la valeur</b>. » → tu revendiques le truc <b>réfuté</b> (agrégation) ou <b>non prouvé</b> (communication), et tu <b>casses ta propre marque d'honnêteté</b> — la seule chose qui te distingue dans un marché saturé de promesses.</p>
+  </div>
+
+  <div class="callout ok">
+    <p><b>✅ À dire.</b> « On a codé l'<b>essaim de petits agents qui se passent des artefacts typés en parallèle</b> — <b>ET</b> l'appareil qui mesure honnêtement si ce passage aide. Le premier, c'est l'idée ; le second, c'est ce qui en fait un produit. Et la mesure tranche : le <b>vote n'aide pas</b> (réfuté), la <b>communication-avec-vérification peut-être</b> (pari ouvert, mesuré derrière une porte), et pendant ce temps la <b>provenance et le routeur se vendent quoi qu'il arrive</b>. »</p>
+  </div>
+
+  <h3>La carte, en trois colonnes</h3>
+  <table>
+    <thead><tr><th>Élément</th><th>Codé ?</th><th>Prouvé valable ?</th><th>Statut pour le pitch</th></tr></thead>
+    <tbody>
+      <tr><td>Essaim de petits LLM, parallèle, blackboard + topologies, scellé</td><td class="c good">oui</td><td class="c mid">substrat</td><td>« l'idée, réelle et auditable »</td></tr>
+      <tr><td>Passage d'info par <b>agrégation</b> (vote/médiane)</td><td class="c good">oui</td><td class="c bad">RÉFUTÉ</td><td>à énoncer comme réfuté (crédibilité)</td></tr>
+      <tr><td>Passage d'info par <b>communication vérifiée</b></td><td class="c good">oui (infra)</td><td class="c mid">PARI</td><td>« pari ouvert, mesuré derrière une porte »</td></tr>
+      <tr><td><b>Provenance · mesure · routeur · souveraineté</b></td><td class="c good">oui</td><td class="c good">PROUVÉ</td><td>le moat — ce que tu vends</td></tr>
+    </tbody>
+  </table>
+
+  <hr>
+  <p class="small muted"><b>Note d'honnêteté.</b> Cette carte est vérifiée dans les sources EFE le 2026-06-30 — <code>efe-swarm-sdk</code> (Mode A/C, <code>TopologySpec</code>, <code>swarm.run</code>/<code>verify_swarm</code>), <code>efe-blackboard</code> (store versionné, écriture attribuée), <code>efe-swarm-topology</code> (<code>TopologyOutput</code>, <code>decided_pattern</code>, <code>AgentContribution</code>), et l'appareil de mesure <code>efe-bench-inference</code> (réfutation de l'agrégation). « Codé » signifie présent et testé ; « prouvé valable » signifie mesuré comme apportant un gain ; « pari » signifie une hypothèse à falsifier, jamais une revendication. C'est précisément cette discipline — ne jamais confondre les trois colonnes — qui rend le reste crédible.</p>
+</div>
+
+</body>
+</html>
