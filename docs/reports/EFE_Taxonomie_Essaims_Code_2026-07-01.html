@@ -282,7 +282,89 @@
   </div>
 
   <hr>
+</div>
+
+<!-- 7 -->
+<div class="wrap page">
+  <h2><span class="num">§7</span> Phases × moteurs × agents : les trois plans, articulés</h2>
+
+  <p>Une confusion naturelle mérite d'être fermée ici : <b>les phases P0→P5 de la roadmap font-elles partie des moteurs, ou des agents ? Non</b> — ce sont trois <b>plans différents</b>, et leur articulation est la clé de lecture de tout le programme.</p>
+
+  <table>
+    <thead><tr><th>Plan</th><th>Nature</th><th>Membres</th></tr></thead>
+    <tbody>
+      <tr><td><b>Phases P0→P5</b></td><td>du <b>TEMPS</b> — la roadmap : quoi prouver/vendre, dans quel ordre</td><td>P0 amorçage · P1 provenance · P2 économie · P3 communication · P4 plateforme · P5 fossé</td></tr>
+      <tr><td><b>Moteurs A/B/C/D</b></td><td>du <b>CODE</b> — des architectures d'essaim</td><td>A stigmergique · B topologique · C runtime · D méta</td></tr>
+      <tr><td><b>Agents</b></td><td>les <b>OUVRIERS</b> — ce qui tourne <i>dans</i> un moteur</td><td>nano-robots ; générateurs/vérifieurs/juges ; entrées de catalogue Mode A/B/C</td></tr>
+    </tbody>
+  </table>
+
+  <p><b>Hiérarchie :</b> une phase <b>mobilise</b> des moteurs ; un moteur <b>contient</b> des agents. P1 n'« est » pas un agent — P1 est <i>le trimestre où l'on construit la couche qui enveloppe les moteurs</i>.</p>
+
+  <h4>La carte de mobilisation : quelle phase mobilise quel moteur</h4>
+  <table>
+    <thead><tr><th>Phase</th><th>Moteur(s) mobilisé(s)</th><th>Comment</th></tr></thead>
+    <tbody>
+      <tr><td><b>P0</b> amorçage</td><td class="c">B</td><td>le seam <code>SwarmObserver</code>, le harnais d'éval ; + l'adaptateur vers le runtime client</td></tr>
+      <tr><td><b>P1</b> provenance</td><td class="c good">AU-DESSUS de tous</td><td><b>moteur-agnostique par design</b> (<code>I-P1-AGNOSTIQUE</code>) : les slices S0…S6 n'implémentent aucun essaim, elles <b>enveloppent</b> ce que les moteurs font (appel LLM / message / humain → nœud scellé). Sa force : P1 se vend même si tous les essaims échouent.</td></tr>
+      <tr><td><b>P2</b> économie</td><td class="c good">B (+ C)</td><td>le bench pilote <code>swarm.run</code> (<code>GenerateVerify</code>, <code>Consensus</code> — les portes ①/② mesurées) ; C désigné comme lieu des spécialistes ; <code>efe-llm-router</code> étendu</td></tr>
+      <tr><td><b>P3</b> communication</td><td class="c mid">B</td><td>les topologies itératives <code>Gossip</code>/<code>Debate</code> sont <b>déjà</b> dans <code>TopologySpec</code> — l'infra du pari existe, le verdict non</td></tr>
+      <tr><td><b>P4</b> plateforme</td><td class="c good">B + C</td><td>templates de décomposition, routeur en service géré, surfaces produit</td></tr>
+      <tr><td><b>P5</b> fossé</td><td class="c">—</td><td>pas un moteur : la <b>composition</b> (provenance + connaissance mesurée + conformité)</td></tr>
+      <tr><td class="bad"><b>aucune phase</b></td><td class="c bad">A · D</td><td>les moteurs stigmergique et méta ne sont mobilisés par <b>aucune</b> phase de la roadmap — la confirmation la plus nette que ce sont des lignées R&amp;D hors du chemin produit (cohérent avec la reco §6 : archiver)</td></tr>
+    </tbody>
+  </table>
+
+  <div class="callout warn">
+    <p><b>La collision de noms à désamorcer (avant toute conversation externe).</b> Il existe <b>deux « P1 »</b> dans le repo : <b>P1-phase</b> (provenance, la roadmap produit) et <b>« Phase 1 » du moteur A</b> (<code>efe-nano-app-coordinator</code>, les 6 nano-robots). Même symbole, sens différents. Idem « Phase 2 » (<code>efe-coordinator</code> ≠ <code>efe-swarm-topology</code>). C'est un piège de vocabulaire, pas une profondeur cachée — une ligne de glossaire suffit à le fermer : <i>« P<i>n</i> = phase de la roadmap produit ; “Phase <i>n</i>” dans une crate = jalon interne historique de cette lignée de code. »</i></p>
+  </div>
+
+  <div class="callout key">
+    <p><b>La phrase qui résume tout.</b> Les phases sont le <b>calendrier</b>, les moteurs sont les <b>machines</b>, les agents sont les <b>ouvriers</b>. P1 a construit la <b>caméra</b> qui filme n'importe quelle machine (sans se coupler à aucune) ; P2 a construit la <b>balance</b> qui pèse ce que produit la machine B ; P3 testera si les ouvriers de B gagnent à se parler ; P4 industrialise B+C ; et A et D sont des machines restées à l'atelier, qu'aucune phase n'a retenues.</p>
+  </div>
+
+  <hr>
   <p class="small muted"><b>Note d'honnêteté.</b> Taxonomie établie par lecture des sources le 2026-07-01 (<code>efe-swarm-sdk/spec.rs</code> pour les topologies, <code>efe-nano/lib.rs</code> pour les modes, <code>efe-multi-llm/lib.rs</code> pour les patterns, <code>efe-coordinator/lib.rs</code> et <code>efe-meta-swarm/lib.rs</code> pour les moteurs A et D). Les <b>maturités</b> sont inférées des descriptions et des marqueurs de code (mocks, « frozen », provenance) — à confirmer par une revue d'usage. Les frontières exactes entre lignées sont <b>partiellement floues</b> (développement itératif) ; la distinction <b>moteur ≠ variante</b>, elle, est nette.</p>
+</div>
+
+<!-- 7 -->
+<div class="wrap page">
+  <h2><span class="num">§7</span> L'articulation : phases × moteurs × agents</h2>
+
+  <p>Une question naturelle referme ce document : <b>les phases P0→P5 de la roadmap « font-elles partie » des agents ou des moteurs ?</b> Non — et la confusion vient d'une <b>collision de vocabulaire</b> qu'il faut désamorcer. Il y a <b>trois plans</b> distincts :</p>
+
+  <table>
+    <thead><tr><th>Plan</th><th>Nature</th><th>Membres</th></tr></thead>
+    <tbody>
+      <tr><td><b>Phases P0→P5</b></td><td>du <b>TEMPS</b> — la roadmap : quoi prouver/vendre, dans quel ordre</td><td>P0 amorçage · P1 provenance · P2 économie · P3 communication · P4 plateforme · P5 fossé</td></tr>
+      <tr><td><b>Moteurs A/B/C/D</b></td><td>du <b>CODE</b> — des architectures d'essaim (ce document)</td><td>A stigmergique · B topologique · C runtime · D méta</td></tr>
+      <tr><td><b>Agents</b></td><td>les <b>OUVRIERS</b> — ce qui tourne <i>dans</i> un moteur</td><td>nano-robots, générateurs/vérifieurs/juges, entrées de catalogue Mode A/B/C…</td></tr>
+    </tbody>
+  </table>
+
+  <p><b>Hiérarchie :</b> une phase <b>mobilise</b> des moteurs ; un moteur <b>contient</b> des agents. P1 n'« est » pas un agent — P1 est <i>le trimestre où l'on construit la couche qui enveloppe les moteurs</i>.</p>
+
+  <div class="callout warn">
+    <p><b>La collision de noms à désamorcer.</b> Il existe <b>deux « P1 »</b> dans le repo : <b>P1-phase</b> (la provenance, dans la roadmap produit) et <b>« Phase 1 » du moteur A</b> (<code>efe-nano-app-coordinator</code>, les 6 nano-robots). Même symbole, sens différents. Idem « Phase 2 » (<code>efe-coordinator</code> ≠ <code>efe-swarm-topology</code>). C'est un piège de vocabulaire, pas une profondeur cachée — une ligne de glossaire suffit à l'éliminer d'une conversation avec un partenaire.</p>
+  </div>
+
+  <h4>La carte : quelle phase mobilise quel moteur</h4>
+  <table>
+    <thead><tr><th>Phase</th><th>Moteurs mobilisés</th><th>Comment</th></tr></thead>
+    <tbody>
+      <tr><td><b>P0</b> amorçage</td><td class="c">B (+ adaptateur)</td><td>le seam <code>SwarmObserver</code>, le harnais gelé, l'adaptateur vers le runtime du client</td></tr>
+      <tr><td><b>P1</b> provenance</td><td class="c good">AU-DESSUS de tous</td><td><b>moteur-agnostique par design</b> (I-P1-AGNOSTIQUE) : les 7 slices n'implémentent aucun essaim — elles <b>enveloppent</b> ce que les moteurs font (appel LLM, message, humain → nœud scellé). Se vend même si tous les essaims échouent.</td></tr>
+      <tr><td><b>P2</b> économie</td><td class="c good">B (mesure) + C (spécialistes)</td><td>le bench pilote <code>swarm.run</code> (GenerateVerify/Consensus — les portes ①/② mesurées) ; le catalogue C est le lieu désigné des spécialistes ; étend <code>efe-llm-router</code></td></tr>
+      <tr><td><b>P3</b> communication</td><td class="c">B (topologies itératives)</td><td><code>Gossip</code>/<code>Debate</code> sont déjà dans <code>TopologySpec</code> — l'infra du pari existe, le verdict non</td></tr>
+      <tr><td><b>P4</b> plateforme</td><td class="c">B + C généralisés</td><td>templates de décomposition, routeur en service géré, surfaces produit</td></tr>
+      <tr><td><b>P5</b> fossé</td><td class="c">— (composition)</td><td>pas un moteur : provenance + connaissance mesurée + conformité, composées</td></tr>
+      <tr><td class="bad"><b>aucune</b></td><td class="c bad">A · D</td><td><b>aucune phase ne les mobilise</b> — la confirmation la plus nette que ce sont des lignées R&amp;D hors du chemin produit, cohérente avec la reco §6 (archiver)</td></tr>
+    </tbody>
+  </table>
+
+  <div class="callout key">
+    <p><b>La phrase qui résume tout.</b> Les phases sont le <b>calendrier</b>, les moteurs sont les <b>machines</b>, les agents sont les <b>ouvriers</b>. P1 a construit la <b>caméra</b> qui filme n'importe quelle machine (sans se coupler à aucune) ; P2 a construit la <b>balance</b> qui pèse ce que produit la machine B ; P3 testera si les ouvriers de B gagnent à se parler ; P4 industrialise B+C ; et A et D sont des machines restées à l'atelier — qu'aucune phase n'a retenues.</p>
+  </div>
 </div>
 
 </body>
