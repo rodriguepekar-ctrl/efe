@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>P2 : reste à faire — l'état réel après la campagne de mesure, et le chemin critique</title>
+<style>
+  :root{--ink:#0f172a;--muted:#475569;--soft:#64748b;--line:#e2e8f0;--teal:#0d9488;--teal-d:#0f766e;--indigo:#4f46e5;--indigo-d:#4338ca;--ok:#16a34a;--warn:#d97706;--bad:#dc2626;--bg-tint:#f6fbfa;--bg-card:#eef2f1;--code-bg:#0f172a;--code-fg:#e2e8f0;}
+  *{box-sizing:border-box;} html{font-size:11.2px;}
+  body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,Arial,sans-serif;color:var(--ink);margin:0;line-height:1.6;background:#fff;-webkit-font-smoothing:antialiased;}
+  .wrap{max-width:178mm;margin:0 auto;padding:0 2mm;}
+  h1,h2,h3,h4{line-height:1.2;font-weight:700;}
+  h2{font-size:1.42rem;margin:0 0 .55rem;padding-bottom:.32rem;border-bottom:3px solid var(--teal);}
+  h2 .num{color:var(--teal);} h3{font-size:1.1rem;margin:1.0rem 0 .3rem;color:var(--teal-d);}
+  h4{font-size:1rem;margin:.8rem 0 .2rem;color:var(--indigo-d);}
+  p{margin:.5rem 0;text-align:justify;hyphens:auto;} a{color:var(--indigo);text-decoration:none;}
+  code{font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace;font-size:.84em;background:var(--bg-card);padding:.05em .35em;border-radius:4px;color:#0b3b36;}
+  .muted{color:var(--muted);} .small{font-size:.88rem;}
+  section{break-inside:avoid;} .page{break-before:page;} h2{break-after:avoid;}
+  table{border-collapse:collapse;width:100%;margin:.5rem 0;font-size:.78rem;}
+  th,td{border:1px solid var(--line);padding:.3rem .45rem;text-align:left;vertical-align:top;}
+  th{background:var(--bg-card);font-weight:700;} tbody tr:nth-child(even){background:var(--bg-tint);}
+  td.c,th.c{text-align:center;} .good{background:#dcfce7 !important;color:#166534;font-weight:700;} .mid{background:#fef9c3 !important;color:#854d0e;font-weight:700;} .bad{background:#fee2e2 !important;color:#991b1b;font-weight:700;}
+  .tag{display:inline-block;font-size:.7rem;font-weight:700;padding:.08em .5em;border-radius:20px;}
+  .t-ok{background:#dcfce7;color:#166534;} .t-info{background:#e0e7ff;color:#3730a3;} .t-teal{background:#ccfbf1;color:#115e59;} .t-warn{background:#fef3c7;color:#92400e;} .t-bad{background:#fee2e2;color:#991b1b;}
+  .callout{border-left:4px solid var(--teal);background:var(--bg-tint);padding:.55rem .85rem;border-radius:0 8px 8px 0;margin:.6rem 0;}
+  .callout p{text-align:left;margin:.28rem 0;}
+  .callout.key{border-color:var(--indigo);background:#eef2ff;} .callout.warn{border-color:var(--warn);background:#fffbeb;} .callout.ok{border-color:var(--ok);background:#f0fdf4;} .callout.bad{border-color:var(--bad);background:#fef2f2;}
+  .fig{margin:.7rem 0 .9rem;text-align:center;break-inside:avoid;}
+  .fig svg{max-width:100%;height:auto;border:1px solid var(--line);border-radius:10px;background:#fff;}
+  .fig .cap{font-size:.78rem;color:var(--muted);margin-top:.32rem;font-style:italic;text-align:center;}
+  ul,ol{margin:.35rem 0 .5rem 1.1rem;padding:0;} li{margin:.22rem 0;}
+  svg text{font-family:-apple-system,"Segoe UI",Inter,sans-serif;}
+  .cover{height:262mm;display:flex;flex-direction:column;justify-content:center;position:relative;padding:0 6mm;}
+  .cover .eyebrow{color:var(--teal);font-weight:800;letter-spacing:.16em;font-size:.83rem;text-transform:uppercase;}
+  .cover h1{font-size:2.0rem;margin:.4rem 0 .2rem;line-height:1.08;} .cover .sub{font-size:1.15rem;color:var(--muted);margin-bottom:1.1rem;}
+  .cover .tagline{font-size:1.0rem;color:var(--ink);max-width:163mm;border-left:4px solid var(--teal);padding-left:1rem;font-style:italic;text-align:left;}
+  .cover .meta{position:absolute;bottom:6mm;left:6mm;right:6mm;display:flex;justify-content:space-between;border-top:1px solid var(--line);padding-top:.6rem;font-size:.8rem;color:var(--soft);}
+  .cover .pills{margin:1rem 0;} .cover .pills .tag{font-size:.77rem;margin-right:.3rem;}
+  .mono{font-family:ui-monospace,Menlo,Consolas,monospace;}
+  hr{border:none;border-top:1px solid var(--line);margin:.9rem 0;}
+  .eq{font-family:ui-monospace,Menlo,Consolas,monospace;background:#ecfdf5;border:1px solid #a7f3d0;border-radius:8px;padding:.45rem .75rem;margin:.5rem 0;font-size:.8rem;color:#065f46;text-align:center;}
+  @page{size:A4;margin:13mm 12mm;}
+</style>
+</head>
+<body>
+
+<!-- COVER -->
+<div class="wrap"><div class="cover">
+  <div class="eyebrow">Bilan d'étape · P2 — l'économie mesurée · l'état réel, pas le plan</div>
+  <h1>P2 : reste à faire</h1>
+  <div class="sub">Après la campagne de mesure (portes ① et ② traversées sur de vrais modèles, 1 200+ runs re-prouvés) : ce qui est <b>fait</b>, ce qui <b>manque</b>, les <b>quatre trous que la mesure a révélés</b>, et le <b>chemin critique</b> ordonné du moins cher au plus cher.</div>
+  <div class="tagline">Ce bilan a un avantage rare : il ne compare pas un plan à un plan, mais un plan à du <b>travail fait</b>. La campagne de mesure a déjà traversé la moitié de P2 — le harnais tourne bout-en-bout sur de vrais modèles, la <b>spécialisation est démontrée</b> (+35 points), la <b>loi de bascule du routeur</b> est posée et instrumentée, et deux références de coût sont mesurées. Le verdict d'étape est net : <b>la partie mesure/falsification de P2 est bien entamée et a déjà rendu ses leçons ; la partie produit n'a pas une ligne</b> — la crate <code>efe-economy</code>, la calibration scellée, l'escalade en service, le sceau de routage et les surfaces restent entiers. Mieux : la mesure a révélé <b>quatre manques que le plan initial ne voyait pas</b> — le corpus n'est pas re-dérivable (le générateur vit hors du repo), les <b>métriques par-classe</b> manquent (or en conformité, un faux APPROVE d'un fournisseur sanctionné ne vaut pas un faux REVIEW — c'est LA métrique), le δ=15 atteignable n'est pas un δ métier, et la calibration doit être <b>par-paire</b> (f dépend du gros : 33% contre un 12B, 66% contre le MoE). Et une leçon stratégique impose d'<b>amender la porte P2 elle-même</b> : la référence doit inclure le meilleur gros bon marché (MoE), sinon la porte peut passer contre une référence faible et se faire démolir en due diligence. Le chemin critique qui suit ordonne tout cela du moins cher au plus cher — deux corrections à 15 minutes d'abord, le GPU ensuite, la crate enfin.</div>
+  <div class="pills">
+    <span class="tag t-ok">fait : portes ①② traversées · spécialisation +35 pts · loi de bascule</span>
+    <span class="tag t-bad">pas une ligne : efe-economy · calibration · escalade · sceau · surfaces</span>
+    <span class="tag t-warn">4 trous révélés : re-dérivabilité · par-classe · δ métier · calibration par-paire</span>
+    <span class="tag t-info">amender la porte : la référence inclut le MoE</span>
+  </div>
+  <div class="meta">
+    <span>EFE × Kovant · P2 (piste B) · bilan d'étape &amp; reste à faire · fondé sur les mesures des 2026-06-30 / 07-01</span>
+    <span>2026-07-02 · bilan d'étape</span>
+  </div>
+</div></div>
+
+<!-- 1 -->
+<div class="wrap page">
+  <h2><span class="num">§1</span> Le tableau de bord : où P2 en est vraiment</h2>
+
+  <p>Contre les trois portes de falsification et les sept slices de la roadmap code, l'état <b>réel</b> — mesuré, pas déclaré :</p>
+
+  <table>
+    <thead><tr><th>Élément</th><th>État réel</th><th>Ce qui reste</th></tr></thead>
+    <tbody>
+      <tr><td><b>Porte ① — l'écart</b><br><span class="small muted">(substitution)</span></td><td class="mid">traversée à moitié : harnais prouvé bout-en-bout (900+ runs re-prouvés), spécialisation <b>démontrée</b> (+35 pts : 40% → 75,3%), 1 sous-tâche adaptée construite (triage procurement, labels objectifs)</td><td>le <b>verdict ferme</b> (indéterminé à n=150 ; n_req ≈ 379 à δ=15) · d'autres sous-tâches · le <b>vrai</b> workflow (dépend de P0)</td></tr>
+      <tr><td><b>Porte ② — le diagnostic</b></td><td class="mid">explorée : le signal existe mais est faible (séparation +0,10), courbe d'escalade mesurée (la dispersion atteint la qualité du gros à 33% d'escalade ; oracle très au-dessus), « thermomètre pas bulletin » tenu</td><td>la <b>calibration scellée</b> (P2.2 — le type <code>Calibration</code> n'existe pas) · un <b>diagnostic moins cher</b> (K=2, logprobs)</td></tr>
+      <tr><td><b>Porte ③ — le coût</b><br><span class="small muted">(la porte P2)</span></td><td class="bad">suspendue (par construction) : la loi <code>C &gt; K/(1−f)</code> est posée et <b>instrumentée</b> ; deux références mesurées en proxy-latence (gemma-12B : C≈6,8×, dominé de peu ; MoE 30B : C=1,3×, Pareto-dominant → usage direct)</td><td><b>B2</b> = GPU-secondes réelles (5090/vLLM) · un vrai gros <b>cher</b> mesuré · le régime publié (batch, cache)</td></tr>
+      <tr><td>P2.0 spike</td><td class="good">fait — et au-delà (2 drivers + la sous-tâche adaptée + l'instrumentation coût)</td><td>—</td></tr>
+      <tr><td>P2.1 crate <code>efe-economy</code></td><td class="bad">pas commencée</td><td>tout : <code>SubTask</code> / <code>Decomposition</code> / <code>SpecialistRegistry</code> / projection→nœud</td></tr>
+      <tr><td>P2.2 calibration scellée</td><td class="bad">pas commencée (l'exploration ≠ l'artefact)</td><td><code>calibrate.rs</code> : recherche de τ* + type scellé + citation — <b>par-paire</b> (§3.4)</td></tr>
+      <tr><td>P2.3 escalade sur <code>efe-llm-router</code></td><td class="bad">pas commencée</td><td><code>route()</code> label-free · montée <code>quality_rank</code> · plancher · rejet sans calibration</td></tr>
+      <tr><td>P2.4 porte économique</td><td class="mid">la carte de coût vit dans un <i>exemple</i>, pas une crate</td><td><code>EconomyFrontier</code>/<code>EconomyReport</code> (toutes sous-tâches au dénominateur) + brancher <code>terrain</code> <b>verbatim</b> (gap_screen / run_family / Holm)</td></tr>
+      <tr><td>P2.5 sceau de routage + e2e</td><td class="bad">pas commencée (les <i>bench</i> sont scellés ; les <i>décisions de routage</i> non)</td><td>mappage <code>RoutingDecision</code>→<code>Node::AgentAct</code> + le test e2e qui casse le build</td></tr>
+      <tr><td>P2.6 surfaces</td><td class="bad">pas commencée</td><td>carte de coût (dashboard) + kernel routeur-service</td></tr>
+      <tr><td>Spécialisation</td><td class="mid"><b>prompting</b> fait (politique + few-shot, +35 pts)</td><td>le <b>fine-tuning</b> par sous-tâche — le levier plausible pour fermer les 4-8 pts restants</td></tr>
+    </tbody>
+  </table>
+
+  <div class="callout key">
+    <p><b>En une phrase.</b> La partie <b>mesure / falsification</b> de P2 est bien entamée et a déjà rendu ses leçons (dont deux qui corrigent le plan) ; la partie <b>produit</b> — la crate, la calibration, l'escalade en service, le sceau de routage, les surfaces — <b>n'a pas une ligne</b>.</p>
+  </div>
+</div>
+
+<!-- 2 -->
+<div class="wrap page">
+  <h2><span class="num">§2</span> Ce que la campagne a déjà acquis (les actifs)</h2>
+
+  <ul>
+    <li><b>Le harnais tourne sur de vrais modèles, bout-en-bout, re-prouvé.</b> 1 200+ runs scellés et re-vérifiés (100%) sur <code>phi4-mini</code> / <code>llama-1b</code> / <code>gemma3:12b</code> / <code>qwen3-30B-MoE</code>, sur Mac, sans GPU.</li>
+    <li><b>La spécialisation est un levier démontré</b> : +35 points sur le petit (40% → 75,3%) rien qu'avec la politique + few-shot ; l'écart au gros s'effondre de +28 à +8 pts. La thèse « un petit <i>spécialisé</i> par sous-tâche » est quantifiée.</li>
+    <li><b>La loi de bascule du routeur est posée, instrumentée, exécutable</b> : <span class="mono">le routeur gagne ⟺ C &gt; K/(1−f)</span> — le driver mesure C, calcule le seuil, imprime le verdict, sur n'importe quel couple de modèles.</li>
+    <li><b>Deux références de coût mesurées</b> (proxy-latence) : gemma-12B dense (C≈6,8×, routeur dominé de peu — seuil 7,5×) ; <b>MoE 30B</b> (C=1,3×, 96,7% de qualité — <b>Pareto-dominant</b>, tout l'appareil inutile contre lui → usage direct).</li>
+    <li><b>Deux hypothèses corrigées par la mesure</b> — la discipline appliquée à soi-même : (a) « un meilleur gros baisserait f » → <b>faux</b>, il l'augmente (33% → 66%) ; (b) « swarm de SLM = moins cher » → <b>fragile</b>, un MoE le bat sur le coût brut ; la valeur d'un essaim est la <b>confiance par-agent</b>, pas le coût.</li>
+    <li><b>Le kernel P2.0 est commité et poussé</b> : corpus (150 cas, labels objectifs) + 2 drivers (<code>p2_triage.rs</code>, <code>p2_diagnostic.rs</code> instrumenté).</li>
+  </ul>
+
+  <div class="callout ok">
+    <p><b>Pourquoi ces acquis comptent double.</b> Ils ne sont pas seulement de l'avancement — ils sont la <b>démonstration du produit lui-même</b> : l'appareil a dit la vérité, y compris contre sa propre thèse, re-prouvablement. C'est exactement ce qu'on vend.</p>
+  </div>
+</div>
+
+<!-- 3 -->
+<div class="wrap page">
+  <h2><span class="num">§3</span> Les quatre trous que la mesure a révélés <span class="muted">(absents du plan initial)</span></h2>
+
+  <h3>3.1 — Le corpus n'est pas re-dérivable (dette d'honnêteté · correction : 15 min)</h3>
+  <p>Vérifié dans le repo : le générateur du corpus (<code>gen_triage.py</code>) n'est <b>pas versionné</b> — il survit dans un répertoire temporaire (récupérable aujourd'hui, périssable). Or les corpus de référence affichent « re-dérivable : <code>corpus::math(300, seed)</code> ». Le claim « labels objectifs par construction » est <b>affaibli</b> tant que la règle qui les produit ne voyage pas avec le repo. <b>À faire en premier</b> : récupérer le script et le versionner (ou le porter dans <code>corpus.rs</code>).</p>
+
+  <h3>3.2 — Les métriques par-classe manquent (le chantier le plus porteur)</h3>
+  <p>Tout a été mesuré en <b>exactitude globale</b>. Mais sur un triage d'achat, un <b>faux APPROVE d'un fournisseur sanctionné</b> ne vaut pas un faux REVIEW : la métrique métier est le <b>rappel BLOCK / taux de faux-APPROVE</b>, asymétrique. Ni la porte ① ni la ② ne l'ont mesurée. Conséquence double : (a) le verdict de substitution peut changer une fois pondéré par le risque ; (b) le routeur peut être <b>re-calibré pour escalader prioritairement les BLOCK incertains</b> — c'est peut-être là que « petit + escalade » bat même le MoE, en <b>sûreté par coût</b>. Mesurable <b>sur les données déjà acquises</b>, sans GPU.</p>
+
+  <h3>3.3 — δ=15 n'est pas un δ métier (à trancher AVANT la campagne d'échelle)</h3>
+  <p>Le verdict ferme atteignable (n≈379) l'est à une marge de <b>15 points</b> — trop lâche pour de la conformité. Le δ défendable (≤5 pts) exige beaucoup plus de données <b>ou</b> impose d'accepter le recadrage : la substitution pure ne se prouve pas à marge serrée ; le produit est « <b>petit + escalade ciblée</b> » (cf. 3.2). Ce choix de cadrage doit être tranché <b>avant</b> de dépenser la campagne HA.4 — sinon on achète un verdict qui ne convainc personne.</p>
+
+  <h3>3.4 — La calibration est par-paire, pas par-sous-tâche</h3>
+  <p>Mesuré : <b>f dépend du gros</b> — f=33% contre gemma-12B, <b>f=66%</b> contre le MoE 30B (un meilleur gros monte la barre → il faut escalader plus). Le type <code>Calibration</code> de P2.2 doit donc être indexé par <b>(petit, gros, sous-tâche)</b>, pas par sous-tâche seule. Détail de conception qui évite un routeur mal calibré en production.</p>
+</div>
+
+<!-- 4 -->
+<div class="wrap page">
+  <h2><span class="num">§4</span> Les deux dépendances externes <span class="muted">(hors code)</span></h2>
+
+  <h3>4.1 — B2 : le montage GPU n'est pas terminé</h3>
+  <p>La porte ③ est <b>suspendue par construction</b> tant que le coût n'est pas en GPU-secondes réelles. L'état du montage Mac↔RTX 5090 : documenté (tunnel SSH loopback — requis par le garde de souveraineté), mais <b>inachevé</b> côté Windows (l'installation d'OpenSSH Server bloquait sur l'élévation admin ; Ollama/vLLM Windows non confirmés). Reste : finir l'installation (admin), tunnel, puis <b>rejouer les deux drivers</b> sur vLLM — l'aiguillage est une ligne, l'instrumentation est déjà en place.</p>
+
+  <h3>4.2 — Le beachhead Kovant (la dépendance P0)</h3>
+  <p>Tout ce qui a été mesuré l'est sur un corpus <b>synthétique-réaliste</b>. La porte P2 <i>au sens de la roadmap</i> se tranche sur un <b>workflow réel du design-partner</b>, avec un jeu d'éval gelé et des critères pré-enregistrés. Sans la conversation Kovant (P0), P2 peut être <b>prêt à trancher</b> — harnais, méthode, seuils — mais pas <b>tranché</b>. C'est une borne dure du calendrier, pas un oubli technique ; elle court <b>en parallèle</b> du code.</p>
+
+  <div class="callout key">
+    <p><b>L'amendement de la porte P2 (la leçon MoE, à intégrer).</b> La porte d'origine — « ≥1 sous-tâche : petit non-inférieur ET moins cher <i>que le gros</i> » — a un angle mort que notre propre mesure a exposé : elle peut passer contre un gros dense faible et se faire <b>démolir en due diligence par un MoE bon marché</b> (mesuré : 96,7% à 0,55 s/cas). <b>La référence de la porte doit inclure le meilleur gros bon marché disponible (MoE)</b>, et le livrable de P2 devient la <b>carte de décision d'architecture</b> — « sur VOTRE tâche : petit+routeur vs dense vs MoE — qui gagne, mesuré, re-prouvable » — plutôt que « l'essaim est moins cher ». Plus honnête, <b>et</b> plus vendable.</p>
+  </div>
+</div>
+
+<!-- 5 -->
+<div class="wrap page">
+  <h2><span class="num">§5</span> Le chemin critique <span class="muted">(du moins cher au plus cher)</span></h2>
+
+  <div class="fig">
+  <svg viewBox="0 0 720 210" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Le chemin critique du reste à faire">
+    <g font-size="8.6">
+    <rect x="12" y="26" width="94" height="52" rx="8" fill="#ecfdf5" stroke="#0d9488"/>
+    <text x="59" y="44" text-anchor="middle" font-weight="700" fill="#0f766e">1 · générateur</text>
+    <text x="59" y="57" text-anchor="middle" fill="#475569">versionner le corpus</text>
+    <text x="59" y="69" text-anchor="middle" fill="#64748b">15 min · Mac</text>
+    <rect x="116" y="26" width="100" height="52" rx="8" fill="#ecfdf5" stroke="#0d9488"/>
+    <text x="166" y="44" text-anchor="middle" font-weight="700" fill="#0f766e">2 · par-classe</text>
+    <text x="166" y="57" text-anchor="middle" fill="#475569">rappel BLOCK / faux-APPROVE</text>
+    <text x="166" y="69" text-anchor="middle" fill="#64748b">données déjà là · Mac</text>
+    <rect x="226" y="26" width="94" height="52" rx="8" fill="#ecfdf5" stroke="#0d9488"/>
+    <text x="273" y="44" text-anchor="middle" font-weight="700" fill="#0f766e">3 · K=2</text>
+    <text x="273" y="57" text-anchor="middle" fill="#475569">diagnostic moins cher</text>
+    <text x="273" y="69" text-anchor="middle" fill="#64748b">seuil ~3× · Mac</text>
+    <rect x="330" y="26" width="100" height="52" rx="8" fill="#fef9c3" stroke="#d97706"/>
+    <text x="380" y="44" text-anchor="middle" font-weight="700" fill="#854d0e">4 · n→400</text>
+    <text x="380" y="57" text-anchor="middle" fill="#475569">verdict ① (δ tranché avant)</text>
+    <text x="380" y="69" text-anchor="middle" fill="#64748b">~1 h de runs · Mac</text>
+    <rect x="440" y="26" width="94" height="52" rx="8" fill="#fef9c3" stroke="#d97706"/>
+    <text x="487" y="44" text-anchor="middle" font-weight="700" fill="#854d0e">5 · B2</text>
+    <text x="487" y="57" text-anchor="middle" fill="#475569">5090/vLLM → porte ③</text>
+    <text x="487" y="69" text-anchor="middle" fill="#64748b">setup Windows + rejouer</text>
+    <rect x="544" y="26" width="160" height="52" rx="8" fill="#eef2ff" stroke="#4f46e5"/>
+    <text x="624" y="41" text-anchor="middle" font-weight="700" fill="#3730a3">6 · efe-economy</text>
+    <text x="624" y="54" text-anchor="middle" fill="#475569">P2.1→P2.6 + revue adversariale</text>
+    <text x="624" y="67" text-anchor="middle" fill="#64748b">le vrai code produit</text>
+    </g>
+    <g stroke="#94a3b8" fill="#94a3b8">
+    <line x1="106" y1="52" x2="115" y2="52"/><polygon points="115,49 121,52 115,55"/>
+    <line x1="216" y1="52" x2="225" y2="52"/><polygon points="225,49 231,52 225,55"/>
+    <line x1="320" y1="52" x2="329" y2="52"/><polygon points="329,49 335,52 329,55"/>
+    <line x1="430" y1="52" x2="439" y2="52"/><polygon points="439,49 445,52 439,55"/>
+    <line x1="534" y1="52" x2="543" y2="52"/><polygon points="543,49 549,52 543,55"/>
+    </g>
+    <rect x="116" y="110" width="418" height="34" rx="8" fill="#fffbeb" stroke="#d97706" stroke-dasharray="4 3"/>
+    <text x="325" y="125" text-anchor="middle" font-size="9" font-weight="700" fill="#92400e">En parallèle (business) : P0 — la conversation Kovant → le workflow réel + l'éval gelée</text>
+    <text x="325" y="138" text-anchor="middle" font-size="8" fill="#475569">sans lui, la porte P2 est « prête à trancher » mais pas « tranchée » au sens de la roadmap</text>
+    <text x="360" y="172" text-anchor="middle" font-size="8.5" fill="#64748b" font-style="italic">1–4 : Mac, sans GPU (les corrections + les leviers). 5 : le seul pas matériel. 6 : le code produit — après que 1–5 ont fixé les paramètres (δ, K, métriques, C réels).</text>
+    <text x="360" y="188" text-anchor="middle" font-size="8.5" fill="#64748b" font-style="italic">Ordre = coût croissant de la découverte : chaque étape peut encore réorienter la suivante à prix faible.</text>
+  </svg>
+  <div class="cap">Six pas ordonnés du moins cher au plus cher, la dépendance business en parallèle. On ne construit la crate (6) qu'une fois les paramètres fixés par la mesure (1–5) — le même principe de falsification-d'abord qui a guidé toute la campagne.</div>
+  </div>
+
+  <table>
+    <thead><tr><th class="c">#</th><th>Action</th><th>Ce que ça débloque</th><th class="c">Coût</th></tr></thead>
+    <tbody>
+      <tr><td class="c">1</td><td><b>Versionner le générateur</b> du corpus (scratchpad → repo, ou port dans <code>corpus.rs</code>)</td><td>ferme la dette de re-dérivabilité (§3.1)</td><td class="c good">15 min</td></tr>
+      <tr><td class="c">2</td><td><b>Métriques par-classe</b> (rappel BLOCK, faux-APPROVE) sur les données déjà mesurées + re-calibrage de l'escalade dessus</td><td>le verdict métier ; peut-être l'avantage « sûreté par coût » vs MoE (§3.2)</td><td class="c good">Mac, sans GPU</td></tr>
+      <tr><td class="c">3</td><td><b>K=2 / logprobs</b> — le diagnostic moins cher</td><td>si le signal survit : le seuil tombe à ~3× &lt; C=6,8× → <b>notre backend actuel bascule</b></td><td class="c good">Mac, sans GPU</td></tr>
+      <tr><td class="c">4</td><td><b>Corpus → ~400 + multi-graines</b> → verdict ferme porte ① <i>(après avoir tranché le δ métier, §3.3)</i></td><td>clôt la porte ① proprement</td><td class="c mid">~1 h de runs</td></tr>
+      <tr><td class="c">5</td><td><b>B2</b> : finir le montage 5090 (admin Windows → SSH → Ollama/vLLM) et rejouer les 2 drivers</td><td>la porte ③ cesse d'être suspendue ; les C réels</td><td class="c mid">setup + 1 soirée</td></tr>
+      <tr><td class="c">6</td><td><b>La crate <code>efe-economy</code></b> : P2.1 types → P2.2 calibration scellée <i>par-paire</i> → P2.3 escalade → P2.5 sceau+e2e → P2.4 porte (sur <code>terrain</code> verbatim) → P2.6 surfaces — avec <b>revue adversariale</b> sur les 3 invariants neufs (THERMOMÈTRE, CALIBRATION-SCELLÉE, ROUTAGE-SCELLÉ)</td><td>P2 devient un <b>produit</b>, pas une campagne</td><td class="c bad">le vrai chantier</td></tr>
+      <tr><td class="c">∥</td><td><b>P0 business</b> : la conversation Kovant → le workflow réel + l'éval gelée + les critères pré-enregistrés</td><td>la porte P2 <i>au sens de la roadmap</i> devient tranchable</td><td class="c mid">calendrier externe</td></tr>
+    </tbody>
+  </table>
+
+  <div class="callout key">
+    <p><b>Pourquoi cet ordre.</b> C'est le même principe qui a guidé toute la campagne : <b>l'ordre de build = l'ordre de falsification</b>. Les pas 1–4 coûtent presque rien et peuvent encore <b>réorienter</b> le chantier (le δ métier, le K du diagnostic, la métrique par-classe changent la conception de la calibration) ; le pas 5 fixe les C réels ; le pas 6 — le seul cher — se construit alors sur des paramètres <b>mesurés</b>, pas supposés. On ne code pas la crate avant que la mesure ait fini de parler.</p>
+  </div>
+
+  <hr>
+  <p class="small muted"><b>Note d'honnêteté.</b> Bilan fondé sur l'état réel du repo et les mesures des 2026-06-30/07-01 (corpus 150 cas vérifiés ; générateur confirmé absent du repo, récupérable en scratchpad ; 1 200+ runs re-prouvés ; C mesurés en <b>proxy-latence</b> — les GPU-secondes réelles restent l'objet du pas 5). Les tailles d'effort sont des ordres de grandeur, pas des engagements. La porte P2 <i>au sens de la roadmap</i> exige le workflow réel du design-partner : tout ce qui précède la <b>prépare</b> ; seule la mesure sur le beachhead la <b>tranche</b>.</p>
+</div>
+
+</body>
+</html>
