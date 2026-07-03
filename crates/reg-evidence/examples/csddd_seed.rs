@@ -290,6 +290,10 @@ fn write_bundle(
     write(dir, "records.sealed.jsonl", jsonl)?;
     write(dir, "records.TAMPERED.jsonl", &tampered)?;
 
+    // Le vérifieur zéro-dépendance VOYAGE avec le bundle : le destinataire le re-compile HORS-LIGNE depuis
+    // ce qu'il a reçu, sans rien croire d'autre que les maths + sa propre compilation (le geste D1).
+    write_embedded_verifier(dir)?;
+
     // Les trois dossiers : la VUE canonique (.md, comparée octet-à-octet) + un rendu HTML de démo.
     for (art, slug) in artifacts {
         write(dir, &format!("reg/{slug}.md"), &render_md(art))?;
@@ -313,6 +317,48 @@ fn write(dir: &Path, rel: &str, content: &str) -> std::io::Result<()> {
         std::fs::create_dir_all(parent)?;
     }
     std::fs::write(&path, content)
+}
+
+/// Embarque le vérifieur **zéro-dépendance** dans `verify/verify-mini/`, avec un `Cargo.toml` **autonome**
+/// (valeurs concrètes, sans héritage de workspace) — pour que le destinataire le **re-compile hors-ligne**
+/// depuis le bundle. Les sources sont **baked à la compilation** (`include_str!`) : la copie embarquée est
+/// donc **octet-à-octet identique** au `verify-mini` du dépôt Kovant (aucune dérive possible).
+fn write_embedded_verifier(dir: &Path) -> std::io::Result<()> {
+    // Les 7 fichiers du vérifieur (arbre de dépendances littéralement vide : SHA-256/HMAC + parseur JSONL
+    // + encodage canonique, tout std-only) — chemin résolu depuis la crate reg-evidence à la compilation.
+    const SRC: &[(&str, &str)] = &[
+        ("hmac.rs", include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/../verify-mini/src/hmac.rs"))),
+        ("json.rs", include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/../verify-mini/src/json.rs"))),
+        ("lib.rs", include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/../verify-mini/src/lib.rs"))),
+        ("main.rs", include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/../verify-mini/src/main.rs"))),
+        ("record.rs", include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/../verify-mini/src/record.rs"))),
+        ("sha256.rs", include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/../verify-mini/src/sha256.rs"))),
+        ("verify.rs", include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/../verify-mini/src/verify.rs"))),
+    ];
+    // Un manifeste AUTONOME (pas de `{ workspace = true }`) : buildable seul, hors de tout workspace.
+    const CARGO_TOML: &str = "# Verifieur forensic zero-dependance — copie AUTONOME embarquee dans le bundle\n\
+# (sans heritage de workspace), pour la re-compilation hors-ligne par le destinataire.\n\
+# Octet-a-octet identique au verify-mini du depot Kovant. `cargo tree` = verify-mini SEUL.\n\
+[package]\n\
+name = \"verify-mini\"\n\
+version = \"0.0.0\"\n\
+edition = \"2021\"\n\
+publish = false\n\
+\n\
+[[bin]]\n\
+name = \"verify-mini\"\n\
+path = \"src/main.rs\"\n\
+\n\
+[lib]\n\
+path = \"src/lib.rs\"\n\
+\n\
+[dependencies]\n";
+
+    for (name, content) in SRC {
+        write(dir, &format!("verify/verify-mini/src/{name}"), content)?;
+    }
+    write(dir, "verify/verify-mini/Cargo.toml", CARGO_TOML)?;
+    Ok(())
 }
 
 /// Le dossier de sortie : `argv[1]` s'il est fourni, sinon `~/Downloads/csddd-demo-bundle`.
@@ -371,17 +417,21 @@ sans rien préparer d'autre. La **clé tenant n'est pas ici** (souveraineté) �
 - `records.sealed.jsonl` — les records **scellés & re-prouvables** (le journal du tenant : 2 cas).\n\
 - `records.TAMPERED.jsonl` — une copie où **un seul champ scellé** a été retourné (le verdict sanctions du\n\
   fournisseur **bloqué** SUP-2099, maquillé de `FAIL` en `PASS`).\n\
+- `verify/verify-mini/` — le **vérifieur à zéro dépendance**, source complète + `Cargo.toml` autonome :\n\
+  re-compilez-le **hors-ligne** et re-prouvez **sans nous**.\n\
 - `reg/csddd.{{md,html}}`, `reg/lksg.{{md,html}}`, `reg/eu_ai_act.{{md,html}}` — les **dossiers dérivés**\n\
   (VUE `.md` canonique + rendu `.html` de lecture), sur le cas **SUP-2024**.\n\
 - `reg/mapping.*.json` — les **lectures versionnées** qui voyagent (pour re-dériver).\n\
 - `reg/REDERIVE.md` — comment **re-dériver vous-même**, octet pour octet (trust-light).\n\
 \n\
-## D1 — la re-preuve sans confiance (→ exit 0)\n\
+## D1 — la re-preuve sans confiance, HORS-LIGNE (→ exit 0)\n\
+Coupez le Wi-Fi. **Re-compilez** le vérifieur depuis ce que vous avez reçu, puis re-prouvez :\n\
 ```\n\
-cargo run -q -p verify-mini -- \"{d}/records.sealed.jsonl\" --key-hex {hex} --root {root}\n\
+cargo build --release --offline --manifest-path \"{d}/verify/verify-mini/Cargo.toml\" --target-dir /tmp/vm\n\
+/tmp/vm/release/verify-mini \"{d}/records.sealed.jsonl\" --key-hex {hex} --root {root}\n\
 ```\n\
-Un tiers **re-compile** `verify-mini` (zéro dépendance) et re-prouve **sans rien croire**. Le `--root`\n\
-ancre la vérification au manifest-root publié.\n\
+Arbre de dépendances **vide** → compile en secondes, **sans réseau**. Le `--root` ancre au manifest-root\n\
+publié. _(Alternative rapide depuis le dépôt : `cargo run -q -p verify-mini -- <records> --key-hex … --root …`.)_\n\
 \n\
 ## D2 — l'altération détectée (→ exit 1)\n\
 ```\n\
@@ -413,10 +463,12 @@ fn print_demo_guide(dir: &Path, root: &str) {
     println!("  clé tenant (hex) : {hex}");
     println!("  manifest-root    : {root}");
     println!("───────────────────────────────────────────────────────────────────────────");
-    println!("  D1  re-preuve (exit 0) :");
-    println!("      cargo run -q -p verify-mini -- \"{d}/records.sealed.jsonl\" --key-hex {hex} --root {root}");
+    println!("  D1  re-preuve HORS-LIGNE (exit 0) — re-compiler le vérifieur depuis le bundle :");
+    println!("      cargo build --release --offline --manifest-path \"{d}/verify/verify-mini/Cargo.toml\" --target-dir /tmp/vm");
+    println!("      /tmp/vm/release/verify-mini \"{d}/records.sealed.jsonl\" --key-hex {hex} --root {root}");
+    println!("      (alternative rapide : cargo run -q -p verify-mini -- \"{d}/records.sealed.jsonl\" --key-hex {hex} --root {root})");
     println!("  D2  altération (exit 1) :");
-    println!("      cargo run -q -p verify-mini -- \"{d}/records.TAMPERED.jsonl\" --key-hex {hex}");
+    println!("      /tmp/vm/release/verify-mini \"{d}/records.TAMPERED.jsonl\" --key-hex {hex}");
     println!("  D3  dossier CSDDD :");
     println!("      open \"{d}/reg/csddd.html\"");
     println!("═══════════════════════════════════════════════════════════════════════════\n");
