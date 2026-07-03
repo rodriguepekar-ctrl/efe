@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Plan de présentation Kovant — les 4 moteurs au service de la vraie histoire</title>
+<style>
+  :root{--ink:#0f172a;--muted:#475569;--soft:#64748b;--line:#e2e8f0;--teal:#0d9488;--teal-d:#0f766e;--indigo:#4f46e5;--indigo-d:#4338ca;--ok:#16a34a;--warn:#d97706;--bad:#dc2626;--bg-tint:#f6fbfa;--bg-card:#eef2f1;--code-bg:#0f172a;--code-fg:#e2e8f0;}
+  *{box-sizing:border-box;} html{font-size:11.2px;}
+  body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,Arial,sans-serif;color:var(--ink);margin:0;line-height:1.55;background:#fff;-webkit-font-smoothing:antialiased;}
+  .wrap{max-width:178mm;margin:0 auto;padding:0 2mm;}
+  h1,h2,h3,h4{line-height:1.2;font-weight:700;}
+  h2{font-size:1.4rem;margin:0 0 .5rem;padding-bottom:.3rem;border-bottom:3px solid var(--teal);}
+  h2 .num{color:var(--teal);} h3{font-size:1.08rem;margin:.95rem 0 .28rem;color:var(--teal-d);}
+  h4{font-size:.98rem;margin:.7rem 0 .18rem;color:var(--indigo-d);}
+  p{margin:.45rem 0;text-align:justify;hyphens:auto;} a{color:var(--indigo);text-decoration:none;}
+  code{font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace;font-size:.84em;background:var(--bg-card);padding:.05em .35em;border-radius:4px;color:#0b3b36;}
+  .muted{color:var(--muted);} .small{font-size:.88rem;}
+  section{break-inside:avoid;} .page{break-before:page;} h2{break-after:avoid;}
+  table{border-collapse:collapse;width:100%;margin:.5rem 0;font-size:.77rem;}
+  th,td{border:1px solid var(--line);padding:.3rem .45rem;text-align:left;vertical-align:top;}
+  th{background:var(--bg-card);font-weight:700;} tbody tr:nth-child(even){background:var(--bg-tint);}
+  td.c,th.c{text-align:center;}
+  .s{font-weight:800;color:var(--teal-d);white-space:nowrap;}
+  .callout{border-left:4px solid var(--teal);background:var(--bg-tint);padding:.5rem .8rem;border-radius:0 8px 8px 0;margin:.55rem 0;}
+  .callout p{text-align:left;margin:.25rem 0;}
+  .callout.key{border-color:var(--indigo);background:#eef2ff;} .callout.warn{border-color:var(--warn);background:#fffbeb;} .callout.ok{border-color:var(--ok);background:#f0fdf4;} .callout.bad{border-color:var(--bad);background:#fef2f2;}
+  .fig{margin:.6rem 0 .8rem;text-align:center;break-inside:avoid;}
+  .fig svg{max-width:100%;height:auto;border:1px solid var(--line);border-radius:10px;background:#fff;}
+  .fig .cap{font-size:.78rem;color:var(--muted);margin-top:.3rem;font-style:italic;text-align:center;}
+  ul,ol{margin:.3rem 0 .45rem 1.1rem;padding:0;} li{margin:.18rem 0;}
+  svg text{font-family:-apple-system,"Segoe UI",Inter,sans-serif;}
+  .cover{height:262mm;display:flex;flex-direction:column;justify-content:center;position:relative;padding:0 6mm;}
+  .cover .eyebrow{color:var(--teal);font-weight:800;letter-spacing:.16em;font-size:.83rem;text-transform:uppercase;}
+  .cover h1{font-size:2.0rem;margin:.4rem 0 .2rem;line-height:1.08;} .cover .sub{font-size:1.15rem;color:var(--muted);margin-bottom:1.1rem;}
+  .cover .tagline{font-size:1.0rem;color:var(--ink);max-width:163mm;border-left:4px solid var(--teal);padding-left:1rem;font-style:italic;text-align:left;}
+  .cover .meta{position:absolute;bottom:6mm;left:6mm;right:6mm;display:flex;justify-content:space-between;border-top:1px solid var(--line);padding-top:.6rem;font-size:.8rem;color:var(--soft);}
+  .cover .pills{margin:1rem 0;} .cover .pills .tag{display:inline-block;font-size:.77rem;font-weight:700;padding:.08em .5em;border-radius:20px;margin-right:.3rem;}
+  .t-ok{background:#dcfce7;color:#166534;} .t-info{background:#e0e7ff;color:#3730a3;} .t-teal{background:#ccfbf1;color:#115e59;} .t-warn{background:#fef3c7;color:#92400e;} .t-bad{background:#fee2e2;color:#991b1b;}
+  hr{border:none;border-top:1px solid var(--line);margin:.9rem 0;}
+  @page{size:A4;margin:12mm 12mm;}
+</style>
+</head>
+<body>
+
+<!-- COVER -->
+<div class="wrap"><div class="cover">
+  <div class="eyebrow">Brief de présentation · Kovant · les 4 moteurs, au service de la vraie histoire</div>
+  <h1>Plan de présentation<br>— les 4 moteurs</h1>
+  <div class="sub">Concept → ce qu'on a fait → ce qu'il reste → notre but avec eux. Un arc en quatre actes, ~14 slides, conçu pour que « 4 moteurs » soit une <b>force</b> (la preuve qu'on a cartographié et mesuré le terrain), pas une faiblesse.</div>
+  <div class="tagline">Ce brief pose la présentation avant de faire les slides. Le point décisif est <b>le cadrage</b> (§1) : présenter « voici nos 4 moteurs d'essaim » se retourne contre nous — ça ressemble à de la dispersion, ça vend un runtime à une boîte qui en a déjà un, et ça met en avant la partie la plus faible. La bonne façon : les 4 moteurs comme <b>preuve de profondeur + carte de décision</b>, au service du vrai message — <i>« nous mesurons honnêtement quelle architecture gagne sur VOTRE tâche, et nous rendons la gagnante auditable »</i>. Quatre principes gouvernent chaque slide : vendre <b>la carte + la couche</b>, pas l'essaim ; faire du <b>MoE</b> le pic de crédibilité (on réfute notre propre thèse) ; assumer l'<b>état honnête</b> comme une force devant un board ; et clore par un <b>ask mesurable</b> (un workflow, une mesure, un bundle re-prouvable), pas une vente. L'arc émotionnel : ouvrir sur la tension (le marché se trie sur la confiance), bâtir la crédibilité par la mesure, culminer sur le MoE (« eux, ils sont honnêtes »), et résoudre sur un ask à faible engagement et forte preuve.</div>
+  <div class="pills">
+    <span class="tag t-teal">4 moteurs = profondeur + carte de décision, pas 4 produits</span>
+    <span class="tag t-bad">le MoE = le pic de crédibilité (on réfute notre propre thèse)</span>
+    <span class="tag t-ok">l'état honnête = une force devant un board</span>
+    <span class="tag t-info">l'ask = une mesure, pas une vente</span>
+  </div>
+  <div class="meta">
+    <span>EFE × Kovant · brief de présentation (à valider avant les slides) · ~25 min + 20 min discussion</span>
+    <span>2026-07-02 · plan de présentation</span>
+  </div>
+</div></div>
+
+<!-- 1 -->
+<div class="wrap page">
+  <h2><span class="num">§1</span> Le cadrage stratégique <span class="muted">(à lire avant de construire le deck)</span></h2>
+
+  <p>Tu as dit « présentation <b>des 4 moteurs</b> ». Le risque, si on le prend au pied de la lettre : présenter « voici nos 4 moteurs d'essaim » <b>se retourne contre nous</b> de trois façons — (1) ça <b>ressemble à de la dispersion</b> (4 choses à moitié faites) ; (2) tu <b>vends un runtime à une boîte qui a déjà un runtime</b> ; (3) ça met en avant la partie la <b>plus faible</b> de l'histoire (les moteurs) au lieu du moat (provenance / mesure).</p>
+
+  <div class="callout key">
+    <p><b>Le recadrage.</b> Présente les 4 moteurs non pas comme <b>4 produits</b>, mais comme <b>la preuve que tu as cartographié ET mesuré tout l'espace de conception des essaims</b> — pendant que la plupart en construisent un seul et prient. Les 4 moteurs deviennent une <b>démonstration de profondeur + une carte de décision</b>, au service du vrai message : <i>« je vous apporte la couche qui mesure honnêtement quelle architecture gagne sur VOTRE tâche, et qui la rend auditable ».</i></p>
+  </div>
+
+  <h4>Les 4 principes qui gouvernent chaque slide</h4>
+  <table>
+    <thead><tr><th>Principe</th><th>Ce que ça impose au deck</th></tr></thead>
+    <tbody>
+      <tr><td><b>1 · Vendre la carte + la couche, pas l'essaim</b></td><td>le héros n'est jamais un moteur — c'est la mesure honnête et la provenance ; les moteurs sont le décor qui prouve la profondeur</td></tr>
+      <tr><td><b>2 · Le MoE = ton moment de crédibilité</b></td><td>sortir toi-même « j'ai réfuté ma propre thèse » te distingue de tout pitch d'émergence — c'est le pic, pas une faiblesse</td></tr>
+      <tr><td><b>3 · L'état honnête est une force</b></td><td>« mesure à moitié faite, crate produit pas commencée, voici les 4 trous » désarme un board deeptech — zéro vaporware</td></tr>
+      <tr><td><b>4 · L'ask est une mesure, pas une vente</b></td><td>« donnez-moi UN workflow, je mesure qui gagne + je scelle » — faible engagement, forte preuve</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- 2 -->
+<div class="wrap page">
+  <h2><span class="num">§2</span> L'arc de la présentation (4 actes, ~14 slides)</h2>
+
+  <div class="fig">
+  <svg viewBox="0 0 720 250" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="L'arc émotionnel de la présentation">
+    <line x1="40" y1="210" x2="700" y2="210" stroke="#94a3b8"/>
+    <!-- emotional arc curve : rises to peak at MoE (S9), resolves at ask -->
+    <path d="M 60 190 C 140 185, 200 150, 270 140 C 340 130, 380 70, 430 55 C 470 45, 500 90, 560 110 C 610 128, 650 120, 690 118" fill="none" stroke="#4f46e5" stroke-width="2.4"/>
+    <!-- act bands -->
+    <text x="95" y="228" text-anchor="middle" font-size="9" fill="#64748b">ACTE 0</text>
+    <text x="230" y="228" text-anchor="middle" font-size="9" fill="#64748b">ACTE 1 — concept</text>
+    <text x="440" y="228" text-anchor="middle" font-size="9" fill="#64748b">ACTE 2 — ce qu'on a fait</text>
+    <text x="595" y="228" text-anchor="middle" font-size="9" fill="#64748b">ACTE 3 — reste</text>
+    <text x="675" y="228" text-anchor="middle" font-size="9" fill="#64748b">ACTE 4</text>
+    <line x1="150" y1="205" x2="150" y2="215" stroke="#cbd5e1"/><line x1="320" y1="205" x2="320" y2="215" stroke="#cbd5e1"/>
+    <line x1="555" y1="205" x2="555" y2="215" stroke="#cbd5e1"/><line x1="640" y1="205" x2="640" y2="215" stroke="#cbd5e1"/>
+    <!-- beats -->
+    <circle cx="95" cy="188" r="3.5" fill="#0f766e"/><text x="95" y="178" text-anchor="middle" font-size="7.5" fill="#0f766e">tension</text>
+    <circle cx="230" cy="142" r="3.5" fill="#0f766e"/><text x="230" y="132" text-anchor="middle" font-size="7.5" fill="#0f766e">profondeur</text>
+    <circle cx="430" cy="55" r="5" fill="#dc2626"/><text x="430" y="45" text-anchor="middle" font-size="8" font-weight="700" fill="#991b1b">S9 · le MoE (le pic)</text>
+    <text x="430" y="33" text-anchor="middle" font-size="7" fill="#991b1b">« eux, ils sont honnêtes »</text>
+    <circle cx="595" cy="112" r="3.5" fill="#d97706"/><text x="595" y="102" text-anchor="middle" font-size="7.5" fill="#92400e">désarmement</text>
+    <circle cx="675" cy="118" r="4" fill="#16a34a"/><text x="672" y="108" text-anchor="middle" font-size="7.5" fill="#166534">l'ask</text>
+    <text x="360" y="18" text-anchor="middle" font-size="9.5" font-weight="700" fill="#334155">Intensité / adhésion au fil des slides</text>
+  </svg>
+  <div class="cap">L'arc : ouvrir sur la <b>tension</b> (le marché se trie sur la confiance), bâtir la crédibilité, <b>culminer sur le MoE</b> (le moment « ils sont honnêtes »), puis <b>désarmer</b> (l'état réel) et <b>résoudre</b> sur un ask mesurable. Le MoE est délibérément placé au pic — pas enterré.</div>
+  </div>
+
+  <table>
+    <thead><tr><th>Acte</th><th>Rôle</th><th class="c">Slides</th></tr></thead>
+    <tbody>
+      <tr><td><b>0 · Ouverture</b></td><td>poser la tension : le marché se trie sur la confiance ; ce qui manque à Kovant</td><td class="c">S1–S2</td></tr>
+      <tr><td><b>1 · Le concept</b></td><td>les 4 moteurs = la carte du terrain (profondeur) + l'honnêteté sur les maturités</td><td class="c">S3–S5</td></tr>
+      <tr><td><b>2 · Ce qu'on a fait</b></td><td>la campagne mesurée ; le MoE (pic) ; le moat prêt ; <b>+ 3 démos live</b></td><td class="c">S6–S10 + D1–D3</td></tr>
+      <tr><td><b>3 · Ce qu'il reste</b></td><td>l'état honnête + le chemin critique (désarmement)</td><td class="c">S11–S12</td></tr>
+      <tr><td><b>4 · Notre but</b></td><td>l'offre de partenariat + l'ask mesurable</td><td class="c">S13–S14</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- 3 -->
+<div class="wrap page">
+  <h2><span class="num">§3</span> Le plan slide-par-slide</h2>
+
+  <h3>Acte 0 — Ouverture</h3>
+  <table>
+    <thead><tr><th class="c">#</th><th>Message (la slide)</th><th>À montrer</th><th>À dire</th></tr></thead>
+    <tbody>
+      <tr><td class="s">S1</td><td>Le marché agentique se trie sur la <b>confiance</b>, pas la capacité</td><td>titre + positionnement 1-ligne</td><td>saturé de promesses d'émergence ; l'industriel EU (AI Act/GDPR) n'achète que la <b>preuve</b> ; je viens avec la couche confiance/mesure/économie</td></tr>
+      <tr><td class="s">S2</td><td>Vous avez le runtime + la traction ; il vous <b>manque</b> la couche</td><td>2 colonnes <i>vous avez / il manque</i></td><td>votre pari SLM-swarm doit être rendu <b>vrai, borné, vendable</b> — c'est exactement cette couche</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Acte 1 — Le concept : les 4 moteurs <span class="muted">(profondeur, pas dispersion)</span></h3>
+  <table>
+    <thead><tr><th class="c">#</th><th>Message</th><th>À montrer</th><th>À dire</th></tr></thead>
+    <tbody>
+      <tr><td class="s">S3</td><td>« L'essaim n'est pas UNE chose » — on a <b>cartographié et mesuré</b> l'espace de conception</td><td>la carte des 4 moteurs en <b>noms fonctionnels</b> (coordonner de gros modèles · mesurer &amp; prouver · déployer en prod · recherche)</td><td>la plupart construisent un essaim et prient ; nous connaissons le terrain → <b>transforme « 4 » de faiblesse en force</b></td></tr>
+      <tr><td class="s">S4</td><td>Les 4 moteurs, en clair — ce qu'ils <b>PERMETTENT</b></td><td>4 encadrés, une phrase « ce que ça permet » chacun</td><td>jargon (stigmergique/Hilbert) en <b>backup</b> ; sur scène, le fonctionnel uniquement</td></tr>
+      <tr><td class="s">S5</td><td>La carte de maturité : <b>2 mesurés/productisés, 2 R&amp;D — et on vous le dit</b></td><td>la carte couleur (B+C verts ; A+D à archiver)</td><td><i>cette</i> honnêteté EST le produit — on vous dit lequel est réel, pas lequel sonne bien</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Acte 2 — Ce qu'on a fait : la campagne mesurée <span class="muted">(la crédibilité)</span></h3>
+  <table>
+    <thead><tr><th class="c">#</th><th>Message</th><th>À montrer</th><th>À dire</th></tr></thead>
+    <tbody>
+      <tr><td class="s">S6</td><td>« On ne revendique rien qu'on n'ait mesuré »</td><td>1 200+ runs scellés &amp; re-vérifiés à 100%, sur de vrais modèles</td><td>la discipline, en une slide — mesuré, réel, re-prouvable</td></tr>
+      <tr><td class="s">S7</td><td>La <b>spécialisation paie</b> (+35 pts)</td><td>40% → 75,3% ; écart au gros 28 → 8 pts</td><td>votre thèse SLM a un <b>cœur réel</b> et mesuré — un petit <i>spécialisé</i> est un vrai levier</td></tr>
+      <tr><td class="s">S8</td><td>Le routeur a une <b>LOI</b> (pas un slogan)</td><td><code>gagne ⟺ C &gt; K/(1−f)</code> + le graphe de bascule</td><td>on ne dit pas « moins cher » — on donne la <b>condition exacte</b> ; la rigueur qu'un DAF et un board adorent</td></tr>
+      <tr><td class="s">S9 🎯</td><td><b>La bombe honnête : le MoE</b> — on a mesuré et réfuté notre <b>propre</b> thèse</td><td>la table Pareto (MoE 96,7% @ 0,55 s, domine petit+routeur ET dense)</td><td><b>dans l'ordre :</b> (a) ça <b>valide</b> votre intuition (le calcul petit-actif est bon marché — un MoE EST ça, mieux fait) ; (b) donc la valeur n'est pas « small = cheap » (fragile) mais la <b>mesure + la provenance</b> ; (c) d'où le besoin de nous : savoir, sur chaque tâche, laquelle gagne. <b>← le pic du deck</b></td></tr>
+      <tr><td class="s">S10</td><td>Le <b>moat déjà prêt</b> : la provenance</td><td>le bundle trustless (déjà du code, re-compilable par un régulateur)</td><td>la couche qui <b>enveloppe n'importe quel moteur</b>, re-prouvable sans vous faire confiance ; indépendante de l'essaim — se vend même si tous les moteurs échouent</td></tr>
+      <tr><td class="s">🎬 D1</td><td colspan="3"><b>Démo — re-preuve trustless (live)</b> : re-compiler le vérifieur zéro-dépendance <b>hors-ligne</b> + re-prouver l'authentique → exit 0. « Vous n'avez pas à me croire. » <i>Mise en scène → §5.</i></td></tr>
+      <tr><td class="s">🎬 D2</td><td colspan="3"><b>Démo — altération (live)</b>, chaînée à D1 : retourner un octet → exit 1, falsification <b>localisée</b>. L'infalsifiabilité, vue. <i>→ §5.</i></td></tr>
+      <tr><td class="s">🎬 D3</td><td colspan="3"><b>Démo — dossier CSDDD</b> : le moteur d'évidence auto-produit un dossier <b>fournisseur</b> re-prouvable (leur vertical exact), qui montre ses trous. <i>→ §5.</i></td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- 4 -->
+<div class="wrap page">
+  <h2><span class="num">§4</span> Le plan slide-par-slide (suite)</h2>
+
+  <h3>Acte 3 — Ce qu'il reste à faire <span class="muted">(le désarmement)</span></h3>
+  <table>
+    <thead><tr><th class="c">#</th><th>Message</th><th>À montrer</th><th>À dire</th></tr></thead>
+    <tbody>
+      <tr><td class="s">S11</td><td>L'<b>état honnête</b> : mesure à moitié, crate produit pas commencée, 4 trous</td><td>le tableau de bord (fait / à moitié / pas une ligne) + les 4 trous</td><td>zéro travail caché — dont le plus porteur : les <b>métriques par-classe</b> (un faux-APPROVE d'un sanctionné ≠ un faux-REVIEW ; c'est LA métrique conformité)</td></tr>
+      <tr><td class="s">S12</td><td>Le <b>chemin critique</b>, du moins cher au plus cher</td><td>les 6 pas (15 min → Mac → GPU → la crate) + P0 en parallèle</td><td>falsification-d'abord : on ne code pas la crate avant que la mesure ait fini de parler</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Acte 4 — Notre but avec eux <span class="muted">(l'ask)</span></h3>
+  <table>
+    <thead><tr><th class="c">#</th><th>Message</th><th>À montrer</th><th>À dire</th></tr></thead>
+    <tbody>
+      <tr><td class="s">S13</td><td>L'<b>offre</b> : devenir votre couche de confiance/mesure/économie, prouvée sur <b>UN</b> de vos workflows</td><td>la séquence P0 → P1 → P2 comme offre de partenariat</td><td>un raccourci de plusieurs trimestres + un fossé que vous n'avez pas</td></tr>
+      <tr><td class="s">S14</td><td>L'<b>ask concret</b> + clôture</td><td>le prochain pas + la phrase-clôture</td><td>« Donnez-moi <b>un</b> workflow réel. Je mesure, re-prouvablement, quelle architecture y gagne — la carte de décision — et je l'enveloppe de provenance et de souveraineté. » Faible engagement, forte preuve.</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Slides de backup <span class="muted">(à ne sortir que si on te pousse)</span></h3>
+  <ul>
+    <li>Taxonomie technique : moteur ≠ topologie ≠ agent</li>
+    <li>Les 7 topologies · 3 modes d'exécution · 5 patterns multi-LLM</li>
+    <li>Les maths du break-even (dérivation <code>C &gt; K/(1−f)</code>)</li>
+    <li>Les slices P2.1 → P2.6 + les 3 invariants neufs (THERMOMÈTRE, CALIBRATION-SCELLÉE, ROUTAGE-SCELLÉ)</li>
+    <li>Les 4 distinctions d'honnêteté (intègre≠correct, etc.) + l'articulation phases × moteurs × agents</li>
+    <li><b>Le glossaire des deux « P1 »</b> — à dégainer si un ingénieur Kovant creuse la double numérotation</li>
+  </ul>
+</div>
+
+<!-- 5 -->
+<div class="wrap page">
+  <h2><span class="num">§5</span> Les 3 démos live : mise en scène</h2>
+
+  <p>Elles se placent dans l'<b>Acte 2</b>, juste après le moat (S10) : elles rendent la provenance <b>tangible</b> et la branchent sur la vertical de Kovant. Règle d'or : <b>chaque démo &lt; 2 min, répétée, avec un filet</b> — une démo live qui plante en réunion coûte plus qu'elle ne rapporte.</p>
+
+  <div class="callout key">
+    <p><b>Les trois démos sortent désormais d'UNE commande</b> (validées de bout en bout, 2026-07-03). <code>cargo run -p reg-evidence --example csddd_seed</code> assemble un <b>bundle autoportant</b> dans <code>~/Downloads/csddd-demo-bundle</code> — records scellés + <b>vérifieur zéro-dépendance embarqué</b> + les 3 dossiers (CSDDD / LkSG / EU AI Act) — et <b>imprime la clé, le root et les commandes déjà remplies</b>. La préparation manuelle tombe à <b>zéro</b> : le point ⚠️ « ~30 min de prep » de D3 est <b>levé</b>.</p>
+  </div>
+
+  <h3>🎬 D1 · La re-preuve trustless, hors-ligne <span class="muted">(le geste du régulateur · prête · validée)</span></h3>
+  <table>
+    <tbody>
+      <tr><td class="s" style="width:20%">Message</td><td>« Vous n'avez pas à me croire — re-compilez mon vérifieur et vérifiez vous-mêmes. »</td></tr>
+      <tr><td class="s">Mise en scène</td><td><b>1.</b> <code>ls ~/Downloads/csddd-demo-bundle</code> → <code>records.sealed.jsonl</code> · <code>verify/verify-mini/</code> · <code>reg/</code> · <code>README.md</code> — « voilà ce qu'un régulateur reçoit, autonome ». &nbsp;<b>2.</b> <b>couper le Wi-Fi</b> (le montrer), puis re-compiler le vérifieur <b>embarqué</b> : <code>cargo build --release --offline --manifest-path …/verify/verify-mini/Cargo.toml --target-dir /tmp/vm</code> — « arbre de dépendances vide → <b>0,6 s</b>, sans réseau ». &nbsp;<b>3.</b> re-prouver : <code>/tmp/vm/release/verify-mini …/records.sealed.jsonl --key-hex &lt;clé&gt; --root &lt;root&gt;</code></td></tr>
+      <tr><td class="s">Résultat visible</td><td><b>exit 0</b> · « ✓ VÉRIFIÉ — record authentique et non-altéré (<b>13 records, root concordant</b>) »</td></tr>
+      <tr><td class="s">Le filet</td><td>alternative depuis le dépôt : <code>cargo run -q -p verify-mini -- &lt;records&gt; --key-hex … --root …</code> ; + une <b>capture pré-enregistrée</b> du terminal</td></tr>
+      <tr><td class="s">Prep</td><td><b>zéro</b> — le seed a déjà écrit le bundle (<b>vérifieur embarqué compris</b>) et imprimé la <b>clé</b> + le <b>root</b></td></tr>
+    </tbody>
+  </table>
+
+  <h3>🎬 D2 · L'altération <span class="muted">(l'infalsifiabilité, vue · prête · validée · chaînée à D1)</span></h3>
+  <table>
+    <tbody>
+      <tr><td class="s" style="width:20%">Message</td><td>« Quelqu'un maquille le fournisseur <b>bloqué</b> en conforme (<code>FAIL</code>→<code>PASS</code>) — regardez. »</td></tr>
+      <tr><td class="s">Mise en scène</td><td>même terminal, même vérifieur re-compilé. <b>1.</b> montrer l'altération d'<b>un octet</b> — le seed a déjà écrit <code>records.TAMPERED.jsonl</code> (le <code>FAIL</code> de SUP-2099 retourné en <code>PASS</code>) ; ou le faire live : <code>sed 's/FAIL/PASS/' records.sealed.jsonl &gt; /tmp/tampered.jsonl</code>. &nbsp;<b>2.</b> <code>/tmp/vm/release/verify-mini …/records.TAMPERED.jsonl --key-hex &lt;clé&gt; --json</code></td></tr>
+      <tr><td class="s">Résultat visible</td><td><b>exit 1</b> · <code>{"ok":false,…,"broken_at":11,…}</code> — « rejeté, ET la falsification est <b>localisée au record 11</b> (le criblage sanctions maquillé) »</td></tr>
+      <tr><td class="s">Le filet</td><td>capture pré-enregistrée ; le cross-check <code>verify-mini ↔ S0</code> (test du dépôt) rejette déjà l'altéré <b>au bon record</b> — reproductible</td></tr>
+    </tbody>
+  </table>
+
+  <h3>🎬 D3 · Le dossier CSDDD <span class="muted">(leur vertical, réglé · prête · validée)</span></h3>
+  <table>
+    <tbody>
+      <tr><td class="s" style="width:20%">Message</td><td>« Ce dossier de vigilance fournisseur — des heures à la main — le workflow le produit, re-prouvable, avec ses limites affichées. »</td></tr>
+      <tr><td class="s">Mise en scène</td><td>même bundle. <b>1.</b> <code>open …/reg/csddd.html</code> — le <b>dossier fournisseur SUP-2024</b> : criblage sanctions + évaluation ESG + double oversight humain, chaque ligne citant un <code>node_id</code> scellé <b>à recouper</b>. &nbsp;<b>2.</b> le point qui tue — <b>une seule capture, trois lectures</b> : <code>open …/reg/lksg.html</code> puis <code>…/reg/eu_ai_act.html</code> (l'art. 12 « home run » : le DAG <i>est</i> le registre). &nbsp;<b>3.</b> ouvrir <code>reg/REDERIVE.md</code> : « vous le <b>re-calculez</b> — vous ne me croyez pas ».</td></tr>
+      <tr><td class="s">Résultat visible</td><td>un <b>dossier fournisseur re-prouvable</b>, généré automatiquement, qui <b>montre ses trous</b> (HORS-PÉRIMÈTRE-DAG, déclarés) et n'a <b>aucun champ « conforme »</b> (outillé ≠ conforme)</td></tr>
+      <tr><td class="s">Le filet</td><td>les <code>.html</code> sont <b>déjà dans le bundle</b> (rien à générer live) ; capture d'écran en dernier recours</td></tr>
+      <tr><td class="s">Prep</td><td><b>zéro</b> — <span class="muted">le seed <code>reg-evidence --example csddd_seed</code> a produit les 3 dossiers ; le point « ~30 min » est <b>levé</b></span></td></tr>
+    </tbody>
+  </table>
+
+  <div class="callout warn">
+    <p><b>La discipline de démo (non négociable).</b> Terminal <b>grande police</b>, propre, une seule fenêtre. <b>Répète</b> chaque démo 3 fois. <b>Wi-Fi coupé</b> pour D1 (ça <i>prouve</i> le hors-ligne — c'est un argument, pas une gêne). <b>Toujours</b> un filet (capture/enregistrement) prêt à côté. Si une démo hésite &gt; 10 s, bascule sur le filet sans t'excuser — « voici l'enregistrement » — et continue.</p>
+  </div>
+
+  <div class="callout key">
+    <p><b>Le geste de clôture qui gagne la salle.</b> Termine en leur <b>tendant le bundle</b> (clé USB / lien) : « Re-compilez le vérifieur vous-mêmes — <b>il est dans le bundle</b> — ce soir, hors-ligne, sans nous. C'est la seule chose qu'aucun deck d'émergence ne pourra jamais vous offrir. »</p>
+  </div>
+</div>
+
+<!-- 6 -->
+<div class="wrap page">
+  <h2><span class="num">§6</span> Les pièges à éviter &amp; la phrase à leur laisser</h2>
+
+  <table>
+    <thead><tr><th>Piège</th><th>La parade</th></tr></thead>
+    <tbody>
+      <tr><td><b>1 · Noyer la scène de jargon</b> (stigmergique, Hilbert)</td><td>fonctionnel sur scène, technique en backup</td></tr>
+      <tr><td><b>2 · Le MoE sonne comme « votre pari est mort »</b></td><td>toujours le retourner : « votre intuition est <b>validée</b>, et voilà pourquoi vous avez besoin de la mesure »</td></tr>
+      <tr><td><b>3 · Présenter A et D comme des produits</b></td><td>ce sont de la R&amp;D archivée ; les montrer prouve ta <b>rigueur</b> (« on sait quoi jeter »), pas ton offre</td></tr>
+      <tr><td><b>4 · Vendre un essaim / un runtime</b></td><td>ils en ont un. Tu vends la <b>carte + la couche</b> au-dessus</td></tr>
+      <tr><td><b>5 · Un ask flou</b> (« travaillons ensemble »)</td><td>un ask <b>mesurable</b> : un workflow, une mesure, un bundle re-prouvable</td></tr>
+    </tbody>
+  </table>
+
+  <div class="callout key">
+    <p><b>La phrase à leur laisser (la diapo de clôture).</b> « Vous n'avez pas besoin d'un essaim de plus. Vous avez besoin de <b>savoir, sur votre tâche, quelle architecture gagne — petit+routeur, dense, ou MoE — mesuré et re-prouvable — et de rendre la gagnante auditable pour un régulateur européen.</b> Ça, personne ne l'a, et c'est par construction difficile à copier. »</p>
+  </div>
+
+  <div class="callout ok">
+    <p><b>Le fil rouge, en une ligne pour toi (l'orateur).</b> À chaque slide, demande-toi : <i>est-ce que ça vend l'essaim, ou est-ce que ça vend la mesure honnête + la provenance ?</i> Si c'est le premier, recadre. Les 4 moteurs ne sont là que pour <b>prouver que tu connais le terrain mieux que quiconque</b> — et que tu es assez honnête pour dire lequel jeter.</p>
+  </div>
+
+  <hr>
+  <p class="small muted"><b>Note.</b> Ce brief est le <b>plan à valider</b> avant de produire les slides. Les données citées (spécialisation +35 pts, break-even <code>C&gt;K/(1−f)</code>, MoE Pareto-dominant 96,7% @ 0,55 s, 1 200+ runs re-prouvés) sont <b>mesurées</b> et re-prouvables (campagne des 2026-06-30/07-01, proxy-latence ; GPU-secondes réelles = pas 5 du chemin critique). Toutes les slides ont un support déjà rédigé dans les PDF de la session (taxonomie, bascule, reste-à-faire, vision) — le deck est un <b>montage</b>, pas une création de zéro.</p>
+</div>
+
+</body>
+</html>
