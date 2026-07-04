@@ -22,7 +22,7 @@ path = "src/bin/verify_meta.rs"
 
 [dependencies]
 efe-audit-core = { path = "../efe-audit-core" }
-blake3     = "1"
+sha2       = "0.10"
 serde      = { workspace = true, features = ["derive"] }
 # `float_roundtrip` est REQUIS pour la CORRECTION de la re-preuve : sans lui, le parseur
 # de flottants de serde_json est rapide-mais-lossy (jusqu'à 1 ULP), donc un f64 relu ne

@@ -1,0 +1,31 @@
+# SPDX-License-Identifier: UNLICENSED
+# verify-meta-mini — le re-prouveur de consensus de méta-essaim à arbre de dépendances
+# LITTÉRALEMENT VIDE (le « verify-mini » de l'étage méta). SHA-256 (FIPS 180-4) + HMAC
+# (RFC 2104) écrits à la main + parseur JSONL fait main (pas de serde) + encodage canonique
+# ré-implémenté. `cargo tree --edges normal` = verify-meta-mini SEUL. La construction du
+# sceau — HMAC-SHA256(clé, parent‖SHA256(contenu)), genèse b"genesis" — est prouvée FIDÈLE à
+# efe-audit-core par des vecteurs golden gelés + un cross-check round-trip contre
+# efe-meta-verify (en dev-dep UNIQUEMENT : le binaire release reste zéro-dépendance).
+[package]
+name = "verify-meta-mini"
+version = "0.0.1"
+edition = "2021"
+license = "UNLICENSED"
+description = "Zero-dependency re-prover for meta-swarm consensus provenance: hand-written SHA-256/HMAC + hand-written JSONL parser (no serde) + re-implemented canonical encoding. `cargo tree --edges normal` = this crate alone. Same seal construction as efe-audit-core, proven by frozen golden vectors + a byte-for-byte cross-check against efe-meta-verify."
+publish = false
+
+[[bin]]
+name = "verify_meta_mini"
+path = "src/bin/verify_meta_mini.rs"
+
+[lib]
+path = "src/lib.rs"
+
+# ── ZÉRO dépendance normale (le cœur du composant) ──
+[dependencies]
+
+# Cross-check de FIDÉLITÉ à efe-meta-verify (round-trip byte-à-byte) — dev-dep UNIQUEMENT :
+# n'entre PAS dans le binaire release (`cargo tree --edges normal` ne montre que verify-meta-mini).
+[dev-dependencies]
+efe-meta-verify = { path = "../efe-meta-verify" }
+serde_json      = { workspace = true }

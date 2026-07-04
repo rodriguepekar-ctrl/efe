@@ -11,7 +11,9 @@
 //! Le sceau réutilise [`efe_audit_core::chain_hmac`] (+ HKDF par tenant), la **même**
 //! construction que `efe-nano` et `efe-swarm-provenance` (vecteurs golden gelés,
 //! byte-identiques) ⇒ la chaîne méta est **mutuellement vérifiable** avec les deux
-//! autres étages. Le hash de contenu est BLAKE3-256 (convention N17 / essaim). **Aucune
+//! autres étages. Le hash de contenu est **SHA-256** — la même primitive que le moat P1
+//! (`provenance-dag` / `verify-mini`), donc **entièrement ré-implémentable à la main**
+//! (c'est ce que fait le vérifieur zéro-dépendance `verify-meta-mini`, P1.2). **Aucune
 //! dépendance au moteur de méta-essaim** : la re-preuve n'exige que la crypto partagée,
 //! un hash, et un parseur.
 //!
@@ -20,6 +22,7 @@
 
 use efe_audit_core::chain_hmac;
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 
 /// Un pas de consensus **scellé** : le contenu PUBLIC + son sceau. La clé n'y est jamais.
 /// C'est une ligne du `meta_steps.jsonl` (auto-portant : `meta_id` répété par ligne).
@@ -65,9 +68,9 @@ pub struct Verdict {
     pub reason: Option<String>,
 }
 
-/// Hash de contenu canonique d'un pas : `BLAKE3(id ‖ 0x1f ‖ step ‖ résidu ‖ dim ‖ z̃)`.
-/// Encodage **déterministe** (little-endian, ordre de champ gelé), aligné sur le
-/// content-addressing BLAKE3-256 des records N17 / `efe-swarm-provenance`.
+/// Hash de contenu canonique d'un pas : `SHA-256(id ‖ 0x1f ‖ step ‖ résidu ‖ dim ‖ z̃)`.
+/// Encodage **déterministe** (little-endian, ordre de champ gelé). SHA-256 = même
+/// primitive que le moat P1 ⇒ ré-implémentable à la main (vérifieur zéro-dép P1.2).
 #[must_use]
 pub fn canonical_hash(meta_id: &str, step: u64, residual: f64, consensus: &[f64]) -> [u8; 32] {
     let mut b = Vec::with_capacity(meta_id.len() + 25 + consensus.len() * 8);
@@ -79,7 +82,9 @@ pub fn canonical_hash(meta_id: &str, step: u64, residual: f64, consensus: &[f64]
     for &v in consensus {
         b.extend_from_slice(&v.to_le_bytes());
     }
-    *blake3::hash(&b).as_bytes()
+    let mut out = [0u8; 32];
+    out.copy_from_slice(&Sha256::digest(&b));
+    out
 }
 
 /// **Scelle** une suite de pas EN PLACE (remplit `.seal`) et rend le `root` (hex du

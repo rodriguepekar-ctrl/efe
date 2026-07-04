@@ -131,6 +131,10 @@ members = [
     # l'étage méta) : 2 fichiers + 1 clé → exit 0/1, faute localisée. Sceau efe-audit-core
     # byte-identique ⇒ la chaîne méta est mutuellement vérifiable avec nano & essaim.
     "crates/efe-meta-verify",
+    # P1.2 — re-prouveur du consensus de méta-essaim à arbre de dépendances LITTÉRALEMENT VIDE
+    # (le « verify-mini » de l'étage méta) : SHA-256/HMAC + parseur JSONL faits main, aucune dép
+    # normale. `cargo tree --edges normal` = ce crate seul. Fidélité prouvée par golden + cross-check.
+    "crates/verify-meta-mini",
     # Sprint A1 Phase 2 — PR #5 — gRPC transport.
     # `efe-meta-swarm-proto` = Protocol Buffers + tonic-generated
     # client/server stubs for the meta-swarm gRPC surface.  Wire-
