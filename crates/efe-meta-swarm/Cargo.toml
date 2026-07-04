@@ -46,6 +46,12 @@ file-loading       = ["dep:ndarray", "dep:ndarray-npy"]
 # gate "efe-server binary byte-identical" invariant remains satisfied
 # (no transitive linker change).  Phase 2 will flip this on by default.
 core-integration   = ["dep:efe-core", "dep:tokio"]
+# Câble la provenance re-prouvable DANS le moteur (chaque pas de consensus scellé au fil de
+# l'itération, via un StepObserver). Off par défaut : le seam (trait StepObserver + run(obs)) est
+# TOUJOURS compilé et crypto-free ; seul le sink HMAC + l'API iterate_with_provenance sont gatés, pour
+# garder le graphe de build par défaut minimal (l'invariant "binaire efe-server byte-identique" est de
+# toute façon tenu, efe-meta-swarm n'étant pas lié à efe-server).
+provenance         = ["dep:efe-meta-verify", "dep:efe-audit-core", "dep:efe-nano-sdk"]
 
 # -----------------------------------------------------------------------------
 # Dependencies — workspace-shared where possible.
@@ -68,22 +74,21 @@ ndarray-npy   = { version = "0.8",  optional = true }
 # `efe-meta-swarm` stays small (= zero transitive impact on efe-server).
 efe-core      = { path = "../efe-core", optional = true }
 tokio         = { workspace = true,     optional = true }
+# Optional, gated by the `provenance` feature : le câblage de la provenance dans le moteur
+# (src/provenance.rs). efe-meta-verify fournit le sceau incrémental (MetaChainState) + les types ;
+# efe-audit-core la crypto partagée (chain_hmac + HKDF) ; efe-nano-sdk le TenantId. Pull-in UNIQUEMENT
+# quand la feature est active ⇒ graphe de build par défaut inchangé.
+efe-meta-verify = { path = "../efe-meta-verify", optional = true }
+efe-audit-core  = { path = "../efe-audit-core",  optional = true }
+efe-nano-sdk    = { path = "../efe-nano-sdk",     optional = true }
 
 [dev-dependencies]
 proptest    = "1.5"
 criterion   = { version = "0.5", features = ["html_reports"] }
 insta       = "1.39"
 tempfile    = "3.10"
-# PR #3 Cat 14 pin tests : JSON snapshots of serialisable types.
+# JSON snapshots (PR #3 Cat 14) + le bundle de démo provenance (variante altérée) + tests de fidélité.
 serde_json  = { workspace = true }
-# PROTOTYPE (meta_provenance example) — ÉMET un bundle de provenance du consensus
-# (meta_steps.jsonl + meta_manifest.json) re-prouvable par le binaire autonome `verify_meta`
-# (crate efe-meta-verify). Sceau via la crypto PARTAGÉE (efe-audit-core, byte-identique à
-# nano & essaim). Dev-only : zéro impact sur le graphe de build par défaut ni sur l'invariant
-# « binaire efe-server byte-identique » (efe-meta-swarm n'est pas lié à efe-server).
-efe-audit-core  = { path = "../efe-audit-core" }
-efe-nano-sdk    = { path = "../efe-nano-sdk" }
-efe-meta-verify = { path = "../efe-meta-verify" }
 
 # -----------------------------------------------------------------------------
 # Benches + examples (declared explicitly so cargo can resolve them).
@@ -112,6 +117,7 @@ path = "examples/safety_violation_attempt.rs"
 [[example]]
 name = "meta_provenance"
 path = "examples/meta_provenance.rs"
+required-features = ["provenance"]
 
 # -----------------------------------------------------------------------------
 # Lints — local to the crate.  Aligned with the conventions used by

@@ -11,6 +11,6 @@ pub mod coupled;
 pub mod convergence;
 pub mod trace;
 
-pub use coupled::CoupledIteration;
+pub use coupled::{CoupledIteration, ObservedStep, StepObserver};
 pub use convergence::{ConvergenceCriterion, StopReason};
 pub use trace::{IterationTrace, IterationStep};

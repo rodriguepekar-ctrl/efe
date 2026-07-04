@@ -3,7 +3,7 @@
 use std::time::Duration;
 
 use crate::{MetaSwarmError, Result, Tensor};
-use crate::iteration::{CoupledIteration, ConvergenceCriterion, StopReason, IterationTrace};
+use crate::iteration::{CoupledIteration, ConvergenceCriterion, StepObserver, StopReason, IterationTrace};
 use crate::operators::{Lift, Pull, MetaOperator};
 use crate::participants::SwarmParticipant;
 use crate::safety::SafetySet;
@@ -76,6 +76,18 @@ impl MetaSwarm {
 
     /// Run the coupled iteration to convergence (or `max_iters`).
     pub fn iterate(&self) -> Result<MetaSwarmResult> {
+        self.run_engine(None)
+    }
+
+    /// Comme [`MetaSwarm::iterate`], mais en poussant **chaque pas** de consensus à un
+    /// [`StepObserver`] (scellement de provenance, dashboard live, export streaming…). L'observateur
+    /// ne voit que le pas **déjà calculé** : activer l'observation ne change **rien** au numérique.
+    pub fn iterate_observed(&self, observer: &mut dyn StepObserver) -> Result<MetaSwarmResult> {
+        self.run_engine(Some(observer))
+    }
+
+    /// Cœur partagé : construit le moteur, l'exécute (avec un observateur optionnel), mappe la sortie.
+    fn run_engine(&self, observer: Option<&mut dyn StepObserver>) -> Result<MetaSwarmResult> {
         self.tracer.iteration_started(&self.id, self.criterion.max_iters);
 
         let engine = CoupledIteration {
@@ -89,7 +101,7 @@ impl MetaSwarm {
             criterion:    self.criterion.clone(),
             trace:        self.trace_enabled,
         };
-        let out = engine.run()?;
+        let out = engine.run(observer)?;
 
         self.tracer.iteration_ended(
             &self.id,

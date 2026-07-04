@@ -17,6 +17,10 @@ pub struct Step {
     pub residual: f64,
     /// Méta-consensus après projection (z̃), en f64.
     pub consensus: Vec<f64>,
+    /// **v2** : `‖z − z̃‖` scellé (l'enveloppe de sûreté auditée). `None` dans les bundles v1.
+    pub safety_delta: Option<f64>,
+    /// **v3** : hash de contenu (hex) de la contribution de chaque participant. `None` en v1/v2.
+    pub vote_hashes: Option<Vec<String>>,
     /// Sceau embarqué (décodé).
     pub seal: [u8; 32],
 }
@@ -30,6 +34,8 @@ impl Step {
             step: o.get_u64("step")?,
             residual: o.get_f64("residual")?,
             consensus: o.get_f64_arr("consensus")?,
+            safety_delta: o.get_f64_opt("safety_delta")?,
+            vote_hashes: o.get_str_arr_opt("vote_hashes")?,
             seal: from_hex32(o.get_str("seal")?).ok_or_else(|| "sceau : 64 hex attendus".to_string())?,
         })
     }
@@ -38,8 +44,8 @@ impl Step {
 /// Hash de contenu canonique — **byte-identique** à `efe_meta_verify::canonical_hash` :
 /// `SHA-256( id ‖ 0x1f ‖ step_LE ‖ résidu_LE ‖ dim_LE ‖ z̃_LE )`.
 #[must_use]
-pub fn canonical(meta_id: &str, step: u64, residual: f64, consensus: &[f64]) -> [u8; 32] {
-    let mut b = Vec::with_capacity(meta_id.len() + 25 + consensus.len() * 8);
+pub fn canonical(meta_id: &str, step: u64, residual: f64, consensus: &[f64], safety_delta: Option<f64>, vote_hashes: Option<&[String]>) -> [u8; 32] {
+    let mut b = Vec::with_capacity(meta_id.len() + 41 + consensus.len() * 8);
     b.extend_from_slice(meta_id.as_bytes());
     b.push(0x1f);
     b.extend_from_slice(&step.to_le_bytes());
@@ -47,6 +53,19 @@ pub fn canonical(meta_id: &str, step: u64, residual: f64, consensus: &[f64]) -> 
     b.extend_from_slice(&(consensus.len() as u64).to_le_bytes());
     for &v in consensus {
         b.extend_from_slice(&v.to_le_bytes());
+    }
+    // v2 : le safety_delta scellé est ajouté APRÈS le vecteur, uniquement s'il est présent (None ⇒ v1).
+    if let Some(d) = safety_delta {
+        b.extend_from_slice(&d.to_le_bytes());
+    }
+    // v3 : les hashes de contribution des participants, en ordre — count + 32 o bruts par hash décodé.
+    if let Some(hashes) = vote_hashes {
+        if !hashes.is_empty() {
+            b.extend_from_slice(&(hashes.len() as u64).to_le_bytes());
+            for h in hashes {
+                b.extend_from_slice(&from_hex32(h).unwrap_or([0u8; 32]));
+            }
+        }
     }
     sha256(&b)
 }
@@ -89,7 +108,7 @@ pub fn verify(steps: &[Step], key: &[u8], expected_root: &[u8; 32]) -> Outcome {
     }
     let mut parent: Option<[u8; 32]> = None;
     for (i, s) in steps.iter().enumerate() {
-        let ph = canonical(&s.meta_id, s.step, s.residual, &s.consensus);
+        let ph = canonical(&s.meta_id, s.step, s.residual, &s.consensus, s.safety_delta, s.vote_hashes.as_deref());
         let recomputed = seal_step(parent.as_ref(), &ph, key);
         if !ct_eq(&recomputed, &s.seal) {
             return Outcome::Broken { at: i, reason: format!("pas {i} : sceau invalide — contenu altéré, réordonné, ou mauvaise clé tenant") };

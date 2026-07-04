@@ -18,6 +18,8 @@ pub enum JsonValue {
     Num(String),
     /// Tableau de nombres — tokens bruts.
     NumArr(Vec<String>),
+    /// Tableau de chaînes (v3 : les `vote_hashes`).
+    StrArr(Vec<String>),
 }
 
 /// Un objet JSON plat (recherche par **nom**, indépendante de l'ordre ; l'encodage canonique, lui, est figé).
@@ -55,6 +57,22 @@ impl Obj {
                 .map(|t| t.parse::<f64>().map_err(|e| format!("champ « {key} » : flottant invalide ({e})")))
                 .collect(),
             other => Err(format!("champ « {key} » : tableau de flottants attendu, trouvé {other:?}")),
+        }
+    }
+    /// La valeur flottante d'un champ **optionnel** : `None` si absent (bundle v1), `Some(f64)` si présent.
+    pub fn get_f64_opt(&self, key: &str) -> Result<Option<f64>, String> {
+        match self.fields.iter().find(|(k, _)| k == key) {
+            None => Ok(None),
+            Some((_, JsonValue::Num(t))) => t.parse::<f64>().map(Some).map_err(|e| format!("champ « {key} » : flottant invalide ({e})")),
+            Some((_, other)) => Err(format!("champ « {key} » : flottant attendu, trouvé {other:?}")),
+        }
+    }
+    /// La valeur tableau-de-chaînes d'un champ **optionnel** : `None` si absent (v1/v2), `Some(vec)` sinon.
+    pub fn get_str_arr_opt(&self, key: &str) -> Result<Option<Vec<String>>, String> {
+        match self.fields.iter().find(|(k, _)| k == key) {
+            None => Ok(None),
+            Some((_, JsonValue::StrArr(a))) => Ok(Some(a.clone())),
+            Some((_, other)) => Err(format!("champ « {key} » : tableau de chaînes attendu, trouvé {other:?}")),
         }
     }
     fn lookup(&self, key: &str) -> Result<&JsonValue, String> {
@@ -130,10 +148,45 @@ impl P {
         self.ws();
         match self.peek() {
             Some('"') => Ok(JsonValue::Str(self.string()?)),
-            Some('[') => Ok(JsonValue::NumArr(self.num_array()?)),
+            Some('[') => self.array(),
             Some(c) if c == '-' || c.is_ascii_digit() => Ok(JsonValue::Num(self.number()?)),
-            other => Err(format!("valeur inattendue {other:?} (offset {}) — chaîne, nombre, ou tableau de nombres attendus", self.i)),
+            other => Err(format!("valeur inattendue {other:?} (offset {}) — chaîne, nombre, ou tableau attendus", self.i)),
         }
+    }
+
+    /// Un tableau : distingue **chaînes** (v3 `vote_hashes`) vs **nombres** (`consensus`) en regardant
+    /// le premier caractère non-blanc après `[` — sans consommer.
+    fn array(&mut self) -> Result<JsonValue, String> {
+        let mut j = self.i + 1; // après '['
+        while matches!(self.c.get(j), Some(' ' | '\t' | '\n' | '\r')) {
+            j += 1;
+        }
+        if self.c.get(j) == Some(&'"') {
+            Ok(JsonValue::StrArr(self.str_array()?))
+        } else {
+            Ok(JsonValue::NumArr(self.num_array()?))
+        }
+    }
+
+    fn str_array(&mut self) -> Result<Vec<String>, String> {
+        self.expect('[')?;
+        let mut out = Vec::new();
+        self.ws();
+        if self.peek() == Some(']') {
+            self.bump();
+            return Ok(out);
+        }
+        loop {
+            self.ws();
+            out.push(self.string()?);
+            self.ws();
+            match self.bump() {
+                Some(',') => continue,
+                Some(']') => break,
+                other => return Err(format!("attendu « , » ou « ] », trouvé {other:?} (offset {})", self.i)),
+            }
+        }
+        Ok(out)
     }
 
     /// Une chaîne JSON, échappements décodés exactement.

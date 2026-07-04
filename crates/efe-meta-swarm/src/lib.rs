@@ -103,9 +103,15 @@ pub mod prelude;
 // -----------------------------------------------------------------------------
 
 pub use error::{MetaSwarmError, Result};
+pub use iteration::{ObservedStep, StepObserver};
 pub use meta_swarm::{MetaSwarm, MetaSwarmResult};
 pub use builder::MetaSwarmBuilder;
 pub use spaces::Tensor;
+
+/// Câblage de la provenance dans le moteur (feature `provenance`, off par défaut) : scelle chaque pas
+/// de consensus dans une chaîne HMAC re-prouvable via [`StepObserver`], sans toucher au numérique.
+#[cfg(feature = "provenance")]
+pub mod provenance;
 
 /// Identifier of a participant within a meta-swarm. Always unique within one
 /// `MetaSwarm` instance.

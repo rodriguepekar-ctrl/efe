@@ -26,6 +26,41 @@ pub struct StepResult {
     pub meta_consensus: Tensor,
     /// New participant states.
     pub participant_states: Vec<Tensor>,
+    /// `‖z − z̃‖` : de combien l'**enveloppe de sûreté** a ramené l'agrégat brut `z` dans l'ensemble
+    /// admissible pour produire `z̃` (`0.0` = enveloppe inactive). Scellé par la provenance v2.
+    pub safety_delta: f64,
+    /// Les **votes liftés** des participants (leurs contributions au consensus, en méta-espace), retenus
+    /// pour l'observateur. L'engine ne les **hache pas** (il reste crypto-free) ; c'est la provenance v3
+    /// (feature-gated) qui en scelle un hash de contenu par participant.
+    pub votes: Vec<Tensor>,
+}
+
+/// Le **contexte** d'un pas observé, passé à [`StepObserver::on_step`]. `#[non_exhaustive]` : de futurs
+/// paliers (hashes des contributions participants, etc.) pourront **ajouter des champs sans casser** les
+/// implémentations d'observateur, qui ne font que *lire* ce contexte.
+#[non_exhaustive]
+pub struct ObservedStep<'a> {
+    /// Indice du pas (0-based).
+    pub step: usize,
+    /// Résidu joint à ce pas.
+    pub residual: f64,
+    /// Méta-consensus après projection de sûreté (le vecteur z̃).
+    pub meta_consensus: &'a Tensor,
+    /// `‖z − z̃‖` — de combien l'enveloppe de sûreté a agi à ce pas (`0.0` = inactive).
+    pub safety_delta: f64,
+    /// v3 : les **votes liftés** des participants (leurs contributions), pour sceller un hash de contenu
+    /// par participant. L'observateur les hache lui-même s'il le souhaite ; l'engine ne les hache pas.
+    pub votes: &'a [Tensor],
+}
+
+/// Observateur **par-pas** du moteur — crypto-free, zéro dépendance. Le moteur ne connaît que ce
+/// trait ; la provenance (scellement HMAC), un dashboard live, un export streaming… en sont des
+/// implémentations externes. Invariant de **non-interférence** : l'observateur ne reçoit que le
+/// résultat DÉJÀ calculé et ne le modifie jamais — activer un observateur ne change **rien** au
+/// numérique (mêmes `meta_consensus`, `iterations`, `residual`).
+pub trait StepObserver {
+    /// Appelé après chaque pas, avec le [`ObservedStep`] (déjà calculé — non-interférence).
+    fn on_step(&mut self, observed: &ObservedStep);
 }
 
 /// The coupled iteration engine.  Holds borrowed references to all the
@@ -85,15 +120,23 @@ impl<'a> CoupledIteration<'a> {
         }
         let residual = sq.sqrt();
 
+        // ‖z − z̃‖ : de combien l'enveloppe de sûreté a ramené l'agrégat brut dans l'admissible.
+        let safety_delta = z.distance_squared(&z_tilde)?.sqrt();
+
         Ok(StepResult {
             residual,
             meta_consensus: z_tilde,
             participant_states: new_states,
+            safety_delta,
+            votes,
         })
     }
 
     /// Run the iteration to convergence (or `max_iters`).
-    pub fn run(&self) -> Result<RunOutput> {
+    ///
+    /// `observer` is an optional per-step [`StepObserver`] (provenance sealing, dashboard, …). It sees
+    /// only the already-computed step and cannot perturb the numerics (non-interference invariant).
+    pub fn run(&self, mut observer: Option<&mut dyn StepObserver>) -> Result<RunOutput> {
         let start = Instant::now();
         let mut trace = if self.trace { Some(IterationTrace::new()) } else { None };
 
@@ -117,6 +160,10 @@ impl<'a> CoupledIteration<'a> {
             let r = self.step_once()?;
             if let Some(t) = trace.as_mut() {
                 t.record_step(step, r.residual, &r.meta_consensus, &r.participant_states);
+            }
+            // Le seam de provenance : l'observateur voit le pas DÉJÀ calculé (non-interférence).
+            if let Some(o) = observer.as_deref_mut() {
+                o.on_step(&ObservedStep { step, residual: r.residual, meta_consensus: &r.meta_consensus, safety_delta: r.safety_delta, votes: &r.votes });
             }
             let residual = r.residual;
             last = Some(r);

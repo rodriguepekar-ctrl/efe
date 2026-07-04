@@ -1,32 +1,22 @@
-//! # `meta_provenance` — ÉMET un bundle de provenance du consensus de méta-essaim,
-//! re-prouvable **hors-ligne, sans nous** par le binaire autonome `verify_meta`.
+//! # `meta_provenance` — la provenance du consensus **scellée PAR LE MOTEUR** (v1 câblée).
 //!
-//! Ce prototype ferme le seul trou du couplage « nano + essaim + méta-essaim » à la
-//! couche de confiance : le méta-essaim avait une enveloppe de sûreté et un transport
-//! mTLS, mais **aucune re-preuve de son consensus**. Ici, chaque pas de convergence
-//! (indice, résidu, méta-consensus *après projection de sûreté*) est scellé dans une
-//! chaîne HMAC via la crypte **partagée** [`efe_audit_core`] (`chain_hmac` + HKDF),
-//! **byte-identique** à `efe-nano` et `efe-swarm-provenance` (vecteur golden gelé,
-//! vérifié ci-dessous par `assert`). On écrit ensuite un **bundle** de deux fichiers
-//! + une variante altérée, que le binaire séparé `verify_meta` re-prouve avec la seule
-//! clé tenant (jamais écrite dans le bundle).
-//!
-//! Additif STRICT : dev-only ; `efe-meta-swarm` reste hors du binaire de prod (les deps
-//! sont en `[dev-dependencies]` → zéro impact sur le graphe par défaut).
+//! Contrairement au prototype (qui scellait la *trace* après coup), ici chaque pas de consensus est
+//! scellé **au fil de l'itération**, dans le moteur, via un `StepObserver` : `iterate_with_provenance`
+//! rend le résultat **et** un [`MetaProvenance`] (root + pas scellés, **sans clé**) — la provenance est
+//! une sortie de première classe. Noter qu'on n'active **pas** la trace : la provenance en est
+//! indépendante. Le bundle produit est **identique** à P1.1/P1.2 → re-prouvable par `verify_meta` ET
+//! `verify_meta_mini` (zéro-dép), hors-ligne, sans nous.
 //!
 //! ```text
-//! cargo run --release -p efe-meta-swarm --example meta_provenance            # → ~/Downloads/meta-provenance-bundle
-//! cargo run -p efe-meta-verify --bin verify_meta -- <dir>/meta_steps.jsonl <dir>/meta_manifest.json --key-hex <hex>
+//! cargo run --release -p efe-meta-swarm --example meta_provenance --features provenance
 //! ```
 
-use efe_audit_core::HmacKeySource;
 use efe_meta_swarm::prelude::*;
-use efe_meta_verify::{seal_in_place, to_hex, MetaManifest, SealedMetaStep};
-use efe_nano_sdk::TenantId;
+use efe_meta_swarm::provenance::{HmacKeySource, TenantId};
 use std::path::{Path, PathBuf};
 
 fn main() -> Result<()> {
-    // ── 1. Le MÊME méta-essaim Kovant (3 essaims), tracing activé → trace par-pas ──
+    // ── 1. Le méta-essaim Kovant (3 essaims). Pas de .trace() : la provenance est indépendante. ──
     let meta = MetaSwarm::builder()
         .id("kovant-procurement-v1")
         .meta_space_dim(256)
@@ -40,72 +30,49 @@ fn main() -> Result<()> {
         .pull_for("contract-risk", LinearPull::identity(256, 512)?.boxed())
         .pull_for("spend-categorization", LinearPull::identity(256, 384)?.boxed())
         .meta_operator(UniformMetaOp::new(256).boxed())
-        .meta_safety(BoxSafety::symmetric(256, 10.0).boxed())
+        // Enveloppe SERRÉE (±0.4) : le garde-fou agit réellement → `safety_delta` non nul, pour
+        // montrer que l'activation de l'enveloppe de sûreté devient re-prouvable (v2).
+        .meta_safety(BoxSafety::symmetric(256, 0.4).boxed())
         .alpha_default(0.5)
         .coupling_gamma(0.2)
         .tolerance(1e-4)
         .max_iters(1000)
-        .trace(true)
         .build()?;
 
-    let result = meta.iterate()?;
-    let trace = result.trace.expect("trace activée (.trace(true)) → présente");
-    let src = trace.steps();
-    println!("méta-essaim « {} » : {} pas de consensus, résidu final {:.3e}, arrêt {:?}", meta.id(), src.len(), result.final_residual, result.stop_reason);
+    // ── 2. Itérer EN SCELLANT chaque pas (câblage moteur natif). La clé est dérivée, tenue le temps
+    //       du run, puis droppée : elle n'entre jamais dans `prov`. ──
+    let (result, prov) = meta.iterate_with_provenance(&HmacKeySource::test_key(), TenantId::system())?;
+    println!("=== Méta-essaim « {} » — provenance scellée PAR LE MOTEUR (v1) ===", meta.id());
+    println!("→ {} pas · résidu final {:.3e} · arrêt {:?}", result.iterations, result.final_residual, result.stop_reason);
+    println!("→ meta_provenance_root : {}", prov.root);
+    let max_delta = prov.steps.iter().filter_map(|s| s.safety_delta).fold(0.0_f64, f64::max);
+    let n_active = prov.steps.iter().filter(|s| s.safety_delta.unwrap_or(0.0) > 0.0).count();
+    println!("→ enveloppe de sûreté (v2, scellée) : max ‖z−z̃‖ = {max_delta:.4} · active à {n_active}/{} pas", prov.steps.len());
+    let n_contrib = prov.steps.first().and_then(|s| s.vote_hashes.as_ref()).map_or(0, Vec::len);
+    println!("→ contributions scellées (v3) : {n_contrib} hash/pas (1 par essaim, « qui a contribué quoi ») · schéma v{}", prov.manifest().schema_version);
 
-    // ── 2. Construire les pas scellables (contenu PUBLIC — la clé n'y entre jamais) ──
-    let mut steps: Vec<SealedMetaStep> = src
-        .iter()
-        .map(|s| SealedMetaStep {
-            meta_id: meta.id().to_string(),
-            step: s.step as u64,
-            residual: s.residual,
-            consensus: s.meta_consensus.as_slice().iter().map(|&v| f64::from(v)).collect(),
-            seal: String::new(),
-        })
-        .collect();
-
-    // ── 3. Clé tenant (crypto PARTAGÉE, HKDF byte-identique nano) + sceller la chaîne ──
+    // ── 3. La clé tenant (pour la re-preuve — re-dérivée à part, jamais dans le bundle). ──
     let key = HmacKeySource::test_key().derive(TenantId::system()).expect("clé tenant dérivée");
-    let key_hex = to_hex(&key);
-    assert_eq!(key_hex, "4f849020850db9409ad503b209412186e588114247a023ad70b128b0acfb560d", "clé golden byte-identique efe-nano");
-    let root = seal_in_place(&mut steps, &key);
+    let key_hex: String = key.iter().map(|b| format!("{b:02x}")).collect();
 
-    // ── 4. Écrire le bundle : steps.jsonl + manifest.json + une variante altérée (D2) ──
+    // ── 4. Écrire le bundle (meta_steps.jsonl + meta_manifest.json) + une variante altérée (D2). ──
     let dir = out_dir();
-    write_jsonl(&dir, "meta_steps.jsonl", &steps)?;
-    let manifest = MetaManifest { meta_id: meta.id().to_string(), n_steps: steps.len(), root: root.clone() };
-    write(&dir, "meta_manifest.json", &(serde_json::to_string_pretty(&manifest).expect("manifeste sérialisable") + "\n"))?;
+    prov.write_bundle(&dir).expect("écriture du bundle");
+    let k = prov.steps.len() / 2;
+    let mut tampered = prov.steps.clone();
+    tampered[k].consensus[0] += 1.0; // un octet du contenu du pas médian
+    let mut jsonl = String::new();
+    for s in &tampered {
+        jsonl.push_str(&serde_json::to_string(s).expect("SealedMetaStep sérialisable"));
+        jsonl.push('\n');
+    }
+    std::fs::write(dir.join("meta_steps.TAMPERED.jsonl"), jsonl).expect("écriture altérée");
 
-    // Altération : on modifie une valeur du CONTENU d'un pas médian ; son sceau embarqué
-    // devient périmé → verify_meta recompute un hash différent et casse À ce pas.
-    let k = steps.len() / 2;
-    let mut tampered = steps.clone();
-    tampered[k].consensus[0] += 1.0;
-    write_jsonl(&dir, "meta_steps.TAMPERED.jsonl", &tampered)?;
-
-    // ── 5. Le mode d'emploi (clé + root + les 2 commandes verify_meta) ──
-    print_guide(&dir, &key_hex, &root, steps.len(), k);
+    // ── 5. Le mode d'emploi : les DEUX vérifieurs (pratique + zéro-dép). ──
+    print_guide(&dir, &key_hex, &prov.root, prov.steps.len(), k);
     Ok(())
 }
 
-/// Écrit une suite de pas en JSONL (une `SealedMetaStep` par ligne).
-fn write_jsonl(dir: &Path, name: &str, steps: &[SealedMetaStep]) -> std::io::Result<()> {
-    let mut body = String::new();
-    for s in steps {
-        body.push_str(&serde_json::to_string(s).expect("pas sérialisable"));
-        body.push('\n');
-    }
-    write(dir, name, &body)
-}
-
-/// Écrit `dir/name` en créant les dossiers parents au besoin.
-fn write(dir: &Path, name: &str, content: &str) -> std::io::Result<()> {
-    std::fs::create_dir_all(dir)?;
-    std::fs::write(dir.join(name), content)
-}
-
-/// Dossier de sortie : `argv[1]` s'il est fourni, sinon `~/Downloads/meta-provenance-bundle`.
 fn out_dir() -> PathBuf {
     if let Some(arg) = std::env::args().nth(1) {
         return PathBuf::from(arg);
@@ -117,16 +84,15 @@ fn out_dir() -> PathBuf {
 fn print_guide(dir: &Path, key_hex: &str, root: &str, n: usize, k: usize) {
     let d = dir.display();
     println!("\n═══════════════════════════════════════════════════════════════════════════");
-    println!("  BUNDLE PROVENANCE MÉTA-ESSAIM écrit dans :\n    {d}");
+    println!("  BUNDLE (scellé par le moteur) écrit dans :\n    {d}");
     println!("───────────────────────────────────────────────────────────────────────────");
-    println!("  clé tenant (hex, golden)  : {key_hex}");
-    println!("  meta_provenance_root      : {root}");
-    println!("  pas de consensus scellés  : {n}");
+    println!("  clé tenant (hex)      : {key_hex}");
+    println!("  meta_provenance_root  : {root}");
+    println!("  pas de consensus      : {n}");
     println!("───────────────────────────────────────────────────────────────────────────");
-    println!("  Re-preuve AUTONOME (sans nous, hors-ligne) — 2 fichiers + 1 clé :");
-    println!("  ✓ intègre (exit 0) :");
-    println!("      cargo run -q -p efe-meta-verify --bin verify_meta -- \"{d}/meta_steps.jsonl\" \"{d}/meta_manifest.json\" --key-hex {key_hex}");
-    println!("  ✗ altéré (exit 1, cassé au pas {k}) :");
-    println!("      cargo run -q -p efe-meta-verify --bin verify_meta -- \"{d}/meta_steps.TAMPERED.jsonl\" \"{d}/meta_manifest.json\" --key-hex {key_hex}");
+    println!("  Re-preuve hors-ligne, sans nous — DEUX vérifieurs (bundle identique) :");
+    println!("  ✓ pratique (P1.1)        : cargo run -q -p efe-meta-verify --bin verify_meta -- \"{d}/meta_steps.jsonl\" \"{d}/meta_manifest.json\" --key-hex {key_hex}");
+    println!("  ✓ zéro-dép (P1.2)        : cargo run -q -p verify-meta-mini --bin verify_meta_mini -- \"{d}/meta_steps.jsonl\" \"{d}/meta_manifest.json\" --key-hex {key_hex}");
+    println!("  ✗ altéré (exit 1, pas {k}) : cargo run -q -p verify-meta-mini --bin verify_meta_mini -- \"{d}/meta_steps.TAMPERED.jsonl\" \"{d}/meta_manifest.json\" --key-hex {key_hex}");
     println!("═══════════════════════════════════════════════════════════════════════════\n");
 }
