@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>EFE — l'IA agentique : l'essaim re-prouvable (nano · essaim · méta-essaim) — dossier technique dense</title>
+<style>
+  :root{--ink:#0f172a;--muted:#475569;--soft:#64748b;--line:#e2e8f0;--teal:#0d9488;--teal-d:#0f766e;--indigo:#4f46e5;--indigo-d:#4338ca;--ok:#16a34a;--warn:#d97706;--bad:#dc2626;--bg-tint:#f6fbfa;--bg-card:#eef2f1;}
+  *{box-sizing:border-box;} html{font-size:11.1px;}
+  body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,Arial,sans-serif;color:var(--ink);margin:0;line-height:1.55;background:#fff;-webkit-font-smoothing:antialiased;}
+  .wrap{max-width:178mm;margin:0 auto;padding:0 2mm;}
+  h1,h2,h3,h4{line-height:1.2;font-weight:700;}
+  h2{font-size:1.4rem;margin:0 0 .5rem;padding-bottom:.3rem;border-bottom:3px solid var(--teal);}
+  h2 .num{color:var(--teal);} h3{font-size:1.06rem;margin:.9rem 0 .25rem;color:var(--teal-d);}
+  h4{font-size:.96rem;margin:.65rem 0 .15rem;color:var(--indigo-d);}
+  p{margin:.42rem 0;text-align:justify;hyphens:auto;} a{color:var(--indigo);text-decoration:none;}
+  code{font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace;font-size:.83em;background:var(--bg-card);padding:.05em .35em;border-radius:4px;color:#0b3b36;}
+  .muted{color:var(--muted);} .small{font-size:.87rem;}
+  section{break-inside:avoid;} .page{break-before:page;} h2{break-after:avoid;}
+  table{border-collapse:collapse;width:100%;margin:.5rem 0;font-size:.76rem;}
+  th,td{border:1px solid var(--line);padding:.3rem .45rem;text-align:left;vertical-align:top;}
+  th{background:var(--bg-card);font-weight:700;} tbody tr:nth-child(even){background:var(--bg-tint);}
+  td.c,th.c{text-align:center;} td.n{text-align:right;white-space:nowrap;}
+  .s{font-weight:800;color:var(--teal-d);white-space:nowrap;}
+  .callout{border-left:4px solid var(--teal);background:var(--bg-tint);padding:.5rem .8rem;border-radius:0 8px 8px 0;margin:.55rem 0;}
+  .callout p{text-align:left;margin:.25rem 0;}
+  .callout.key{border-color:var(--indigo);background:#eef2ff;} .callout.warn{border-color:var(--warn);background:#fffbeb;} .callout.ok{border-color:var(--ok);background:#f0fdf4;}
+  .fig{margin:.7rem 0 .9rem;text-align:center;break-inside:avoid;}
+  .fig svg{max-width:100%;height:auto;border:1px solid var(--line);border-radius:10px;background:#fff;}
+  .fig .cap{font-size:.78rem;color:var(--muted);margin-top:.3rem;font-style:italic;}
+  ul,ol{margin:.3rem 0 .45rem 1.1rem;padding:0;} li{margin:.16rem 0;}
+  svg text{font-family:-apple-system,"Segoe UI",Inter,sans-serif;}
+  .cover{height:262mm;display:flex;flex-direction:column;justify-content:center;position:relative;padding:0 6mm;}
+  .cover .eyebrow{color:var(--teal);font-weight:800;letter-spacing:.16em;font-size:.83rem;text-transform:uppercase;}
+  .cover h1{font-size:2.0rem;margin:.4rem 0 .2rem;line-height:1.08;} .cover .sub{font-size:1.15rem;color:var(--muted);margin-bottom:1.1rem;}
+  .cover .tagline{font-size:1.0rem;color:var(--ink);max-width:163mm;border-left:4px solid var(--teal);padding-left:1rem;font-style:italic;text-align:left;}
+  .cover .meta{position:absolute;bottom:6mm;left:6mm;right:6mm;display:flex;justify-content:space-between;border-top:1px solid var(--line);padding-top:.6rem;font-size:.8rem;color:var(--soft);}
+  .cover .pills{margin:1rem 0;} .cover .pills .tag{display:inline-block;font-size:.77rem;font-weight:700;padding:.08em .5em;border-radius:20px;margin-right:.3rem;margin-bottom:.3rem;}
+  .t-ok{background:#dcfce7;color:#166534;} .t-info{background:#e0e7ff;color:#3730a3;} .t-teal{background:#ccfbf1;color:#115e59;} .t-warn{background:#fef3c7;color:#92400e;} .t-bad{background:#fee2e2;color:#991b1b;}
+  .star{color:var(--warn);font-weight:800;}
+  hr{border:none;border-top:1px solid var(--line);margin:.9rem 0;}
+  @page{size:A4;margin:12mm 12mm;}
+</style>
+</head>
+<body>
+
+<!-- COVER -->
+<div class="wrap"><div class="cover">
+  <div class="eyebrow">Dossier technique · EFE · l'IA agentique</div>
+  <h1>L'IA agentique d'EFE<br>— l'essaim re-prouvable</h1>
+  <div class="sub">Trois étages d'orchestration d'agents — <b>nano-robots → essaim → méta-essaim</b>, plus la coordination multi-LLM <i>Scout&nbsp;&amp;&nbsp;Synthesize</i> — <b>couplés au substrat de confiance</b> (le socle) de sorte que <b>chaque pas d'agent soit re-prouvable</b>.</div>
+  <div class="tagline">La plupart des frameworks d'agents orchestrent ; le nôtre orchestre <b>et se prouve</b>. À chaque étage — un nano-agent, une arête d'essaim, un pas de consensus d'essaim-d'essaims — l'acte est <b>scellé cryptographiquement, par construction</b>, et <b>re-vérifiable hors-ligne par un tiers</b>, sans nous. Ce dossier décrit toute cette partie d'EFE : le runtime nano « B2A », l'essaim topologique, le méta-essaim à enveloppe de sûreté, l'app multi-LLM, et — en secondaire mais porteur — la couche de confiance re-prouvable qui les traverse tous. C'est ce couplage qui transforme « encore un framework d'agents » en « le seul dont chaque décision est opposable devant un régulateur ».</div>
+  <div class="pills">
+    <span class="tag t-teal">3 étages : nano · essaim · méta-essaim</span>
+    <span class="tag t-info">~31 crates · ~5 200 tests · ~258K lignes de Rust</span>
+    <span class="tag t-ok">chaque pas re-prouvable hors-ligne, sans nous</span>
+    <span class="tag t-warn">Mode A/B/C · 5 topologies · enveloppe de sûreté</span>
+  </div>
+  <div class="meta">
+    <span>EFE — l'IA agentique · dossier technique dense · nano-robots · swarm · méta-essaim · substrat de confiance (secondaire)</span>
+    <span>2026-07-04</span>
+  </div>
+</div></div>
+
+<!-- 1 -->
+<div class="wrap page">
+  <h2><span class="num">§1</span> La thèse &amp; l'architecture d'ensemble</h2>
+  <p>L'IA agentique d'EFE est bâtie sur une conviction unique : <b>l'orchestration d'agents est un actif banalisé ; la re-preuve de ce qu'ils ont fait ne l'est pas.</b> Le prix des jetons s'effondre, et n'importe qui peut assembler un graphe d'agents ; ce que personne ne peut offrir facilement, c'est un artefact qu'un régulateur, un auditeur ou un client <b>re-vérifie lui-même, hors-ligne, sans coopération du fournisseur.</b> EFE construit donc l'orchestration <i>et</i> sa preuve, sur trois étages emboîtés.</p>
+  <p>Les trois étages forment une <b>hiérarchie de profondeur</b>. En bas, les <b>nano-robots</b> : des micro-agents petits, spécialisés, déterministes, qu'un agent client (Claude, GPT) appelle pour décharger ses sous-tâches (parser, extraire, classer, valider). Au milieu, l'<b>essaim</b> : ces agents composés en topologies nommées (générer-vérifier, pipeline, consensus…), avec une provenance <b>par-agent</b>. En haut, le <b>méta-essaim</b> : plusieurs essaims indépendants qui convergent sur un consensus latent partagé <b>sans se révéler leur état interne</b>, sous une <b>enveloppe de sûreté prouvée</b>. À côté, l'app <b>Scout&nbsp;&amp;&nbsp;Synthesize</b> coordonne de vrais gros LLM (Claude/GPT/Gemini) via cinq protocoles de collaboration.</p>
+  <p><b>Le socle transverse</b> — la couche de confiance (positionnée ici en <i>secondaire</i>, mais c'est elle qui rend le reste défendable) — n'est pas un produit à part : c'est la propriété qui traverse les trois étages. La même crypto (HMAC-SHA256 chaîné + HKDF par tenant, écrite à la main) scelle le nano-audit, la provenance d'essaim et le consensus méta ; les chaînes des trois étages sont <b>mutuellement vérifiables</b> ; et des vérifieurs <b>à arbre de dépendances vide</b> permettent la re-preuve « ne croire que les maths ».</p>
+
+  <div class="fig">
+    <svg viewBox="0 0 720 468" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Architecture à trois étages de l'IA agentique EFE">
+      <defs>
+        <marker id="arr" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="#64748b"/></marker>
+      </defs>
+      <!-- title -->
+      <text x="360" y="24" text-anchor="middle" font-size="14" font-weight="800" fill="#0f172a">L'essaim agentique re-prouvable — trois étages sur le socle de confiance</text>
+
+      <!-- tier 3 meta -->
+      <rect x="60" y="44" width="470" height="70" rx="10" fill="#eef2ff" stroke="#4f46e5" stroke-width="1.5"/>
+      <text x="76" y="66" font-size="13" font-weight="800" fill="#3730a3">③ Méta-essaim</text>
+      <text x="76" y="84" font-size="10.5" fill="#334155">Essaim-d'essaims · consensus latent partagé sans révéler l'état</text>
+      <text x="76" y="100" font-size="10.5" fill="#334155">Enveloppe de sûreté PROUVÉE (projection dans l'admissible)</text>
+
+      <!-- tier 2 swarm -->
+      <rect x="60" y="130" width="470" height="70" rx="10" fill="#e9fbf6" stroke="#0d9488" stroke-width="1.5"/>
+      <text x="76" y="152" font-size="13" font-weight="800" fill="#0f766e">② Essaim</text>
+      <text x="76" y="170" font-size="10.5" fill="#334155">5 topologies (générer-vérifier · pipeline · consensus · hiér. · auto)</text>
+      <text x="76" y="186" font-size="10.5" fill="#334155">Provenance PAR-AGENT · blackboard stigmergique · gateway /verify</text>
+
+      <!-- tier 1 nano -->
+      <rect x="60" y="216" width="470" height="70" rx="10" fill="#f0fdf4" stroke="#16a34a" stroke-width="1.5"/>
+      <text x="76" y="238" font-size="13" font-weight="800" fill="#166534">① Nano-robots (EFE Agentic)</text>
+      <text x="76" y="256" font-size="10.5" fill="#334155">Runtime « B2A » · Mode A (Rust pur) / B (µVM local) / C (LLM+schéma)</text>
+      <text x="76" y="272" font-size="10.5" fill="#334155">Chaîne d'audit HMAC + époques Merkle · catalogue signé · replay</text>
+
+      <!-- S&S side -->
+      <rect x="548" y="44" width="112" height="242" rx="10" fill="#fffbeb" stroke="#d97706" stroke-width="1.5"/>
+      <text x="604" y="66" text-anchor="middle" font-size="11.5" font-weight="800" fill="#92400e">Scout &amp;</text>
+      <text x="604" y="82" text-anchor="middle" font-size="11.5" font-weight="800" fill="#92400e">Synthesize</text>
+      <text x="604" y="106" text-anchor="middle" font-size="9.5" fill="#334155">coordination</text>
+      <text x="604" y="119" text-anchor="middle" font-size="9.5" fill="#334155">multi-LLM réelle</text>
+      <text x="604" y="140" text-anchor="middle" font-size="9.5" fill="#334155">5 workflows</text>
+      <text x="604" y="153" text-anchor="middle" font-size="9.5" fill="#334155">Vote·Relay·Debate</text>
+      <text x="604" y="166" text-anchor="middle" font-size="9.5" fill="#334155">Specialist·Cascade</text>
+      <text x="604" y="188" text-anchor="middle" font-size="9.5" fill="#334155">grammaire GBNF</text>
+      <text x="604" y="201" text-anchor="middle" font-size="9.5" fill="#334155">(JSON garanti)</text>
+
+      <!-- delegation arrows -->
+      <line x1="300" y1="216" x2="300" y2="202" stroke="#64748b" stroke-width="1.4" marker-end="url(#arr)"/>
+      <line x1="300" y1="130" x2="300" y2="116" stroke="#64748b" stroke-width="1.4" marker-end="url(#arr)"/>
+      <text x="318" y="210" font-size="9" fill="#64748b" font-style="italic">compose ↑</text>
+      <text x="318" y="124" font-size="9" fill="#64748b" font-style="italic">fédère ↑</text>
+
+      <!-- bedrock -->
+      <rect x="60" y="304" width="600" height="60" rx="10" fill="#0f172a"/>
+      <text x="360" y="328" text-anchor="middle" font-size="12.5" font-weight="800" fill="#5eead4">SOCLE — Substrat de confiance (secondaire, mais porteur)</text>
+      <text x="360" y="346" text-anchor="middle" font-size="10" fill="#e2e8f0">Même crypto écrite-main (HMAC-SHA256 + HKDF) · chaînes des 3 étages MUTUELLEMENT vérifiables</text>
+      <text x="360" y="360" text-anchor="middle" font-size="10" fill="#e2e8f0">chaque pas scellé, re-prouvable HORS-LIGNE par un tiers, sans nous</text>
+
+      <!-- verifiers -->
+      <text x="360" y="392" text-anchor="middle" font-size="10.5" font-weight="700" fill="#0f172a">Vérifieurs à dépendances vides (« ne croire que les maths ») :</text>
+      <rect x="120" y="402" width="150" height="26" rx="6" fill="#fff" stroke="#4338ca"/><text x="195" y="419" text-anchor="middle" font-size="10" fill="#3730a3">verify-mini (moat P1)</text>
+      <rect x="285" y="402" width="150" height="26" rx="6" fill="#fff" stroke="#4338ca"/><text x="360" y="419" text-anchor="middle" font-size="10" fill="#3730a3">verify_meta (méta)</text>
+      <rect x="450" y="402" width="150" height="26" rx="6" fill="#fff" stroke="#4338ca"/><text x="525" y="419" text-anchor="middle" font-size="10" fill="#3730a3">verify_meta_mini (0-dép)</text>
+
+      <text x="360" y="452" text-anchor="middle" font-size="9.5" font-style="italic" fill="#64748b">un agent client délègue vers le bas ; la provenance remonte et se scelle ; le tiers re-prouve à chaque étage.</text>
+    </svg>
+    <div class="cap">Les trois étages d'orchestration, l'app multi-LLM, et le socle de confiance qui les traverse — chaque acte re-prouvable hors-ligne.</div>
+  </div>
+
+  <div class="callout key"><p><b>L'échelle, en un chiffre.</b> Cette partie « agentic » d'EFE, c'est <b>~31 crates, ~5 200 tests, ~258 000 lignes de Rust</b> — sur les <b>65 crates</b> du dépôt (les ~26 autres : cœur plateforme, planes RAG/vecteur/KG, infra commerciale — <b>hors périmètre agentique, cf. §9</b>). Un système réel et opéré, pas une démo. Le reste du dossier détaille chaque étage, puis les 8 crates du socle de confiance (§8), puis l'état honnête (ce qui est prod vs stub).</p></div>
+</div>
+
+<!-- 2 -->
+<div class="wrap page">
+  <h2><span class="num">§2</span> Étage 1 · Les nano-robots — le runtime « EFE Agentic »</h2>
+  <p>Le cœur de l'IA agentique d'EFE est un <b>runtime de nano-agents</b> (nom de code M50). Sa thèse commerciale est le « <b>B2A</b> » (<i>Business-to-Agent</i>) : au lieu qu'un agent LLM client fasse cent appels séquentiels pour parser, extraire et classer — lent, cher, sujet aux hallucinations, opaque — il <b>délègue</b> ces sous-tâches à un <b>essaim de nano-agents</b> petits, spécialisés et <b>déterministes</b>, exécutés en parallèle et <b>audités par construction</b>, avec un record forensic par appel. Un nano-agent est une <b>entrée de catalogue signée, versionnée, schéma-contrainte et gold-testée</b> ; un <code>Runtime</code> l'exécute dans l'un de trois modes.</p>
+
+  <h3>Les trois modes d'exécution</h3>
+  <p>Le mode est déclaré dans le catalogue (<code>ExecutionMode</code>) et imposé par le runtime :</p>
+  <table><thead><tr><th style="width:9%">Mode</th><th style="width:22%">Isolation</th><th>Ce qu'il exécute · usage · latence</th></tr></thead><tbody>
+    <tr><td class="s">A — Rust pur</td><td>thread pool tokio, pas de VM</td><td>Fonction Rust déterministe : parse JSON, validation de schéma, regex, formatage. <b>~1-10 ms</b>, cible ~1000-5000 appels/s/nœud.</td></tr>
+    <tr><td class="s">B — Modèle local</td><td>micro-VM Firecracker (<code>efe-agent-runner</code>)</td><td>Modèle ML pré-chargé : NER, sentiment, classification, embeddings. <b>~50-200 ms</b>.</td></tr>
+    <tr><td class="s">C — LLM-augmenté</td><td>µVM Firecracker + LLM externe via <code>efe-llm-router</code> (M21)</td><td>Extraction d'entités, résumé schématisé, raisonnement structuré, avec <b>schéma JSON strict en sortie</b>, <b>redaction PII</b> (<code>efe-pii</code>, M29) en amont, et <b>contrôle de coût</b> (pré-check + post-charge). <b>~500-2000 ms</b>. C'est le chemin auquel chaque record de provenance N17 est attaché.</td></tr>
+  </tbody></table>
+
+  <p>Au-dessus, le runtime <code>efe-nano</code> (le crate phare : <b>~51 000 lignes, ~1 175 tests</b>) est complet des Phases 1 à 3 : catalogue, <b>dispatcher DAG</b> (planificateur + exécution parallèle), les trois exécuteurs, une <b>chaîne d'audit HMAC + notarisation par époques Merkle</b> (avec <code>verify_chain</code>/<code>verify_subchain</code>), la <b>suppression GDPR par tombstone</b>, budget/metering, idempotence et <b>replay</b>, un <b>ordonnanceur d'équité</b>, et une vingtaine d'agents de départ. Un <b>pare-feu de licence</b> sépare le <b>SDK public MIT</b> (<code>efe-nano-sdk</code>, ~331 tests) — le vocabulaire de types que le client adopte, sans dépendance transitive au backend — du <b>runtime commercial</b>.</p>
+
+  <table><thead><tr><th style="width:26%">Crate</th><th class="c" style="width:9%">tests</th><th>Rôle</th></tr></thead><tbody>
+    <tr><td class="s">efe-nano</td><td class="c">1175</td><td>Le runtime phare (Mode A/B/C, dispatcher, chaîne d'audit HMAC+Merkle, replay, 20+ agents).</td></tr>
+    <tr><td class="s">efe-nano-sdk</td><td class="c">331</td><td>Le SDK public <b>MIT</b> : types/traits (NanoAgent, Catalog, Runtime, + provenance/publisher/gold).</td></tr>
+    <tr><td class="s">efe-agentic-bridge</td><td class="c">170</td><td>Le pont vers la <b>vraie API Anthropic</b> (tool_use, SSE streaming, retry, coût, provenance par appel) — la démo live.</td></tr>
+    <tr><td class="s">efe-nano-preanalysis</td><td class="c">80</td><td>6 agents de référence (NER, sentiment, langue, <b>PII-redactor</b>, résumé, validation de schéma).</td></tr>
+    <tr><td class="s">efe-nano-swarm-adapter</td><td class="c">87</td><td>Le point d'étranglement N23 : force sig + gold + idempotence + seed déterministe + audit sur chaque dispatch.</td></tr>
+    <tr><td class="s">efe-nano-inference-daemon</td><td class="c">18</td><td>Daemon d'inférence <b>guest</b> (Firecracker) : vérifie le SHA-256 du modèle au boot. <span class="muted">(mince — ONNX différé)</span></td></tr>
+    <tr><td class="s">efe-agent-runner</td><td class="c">88</td><td>M25 — le bac à sable d'exécution <b>hôte</b> : microVM Firecracker in-cluster pour agents LLM (l'isolation de Mode B/C). Le pendant hôte du daemon guest. <span class="muted">(EXPÉRIMENTAL — cf. §9)</span></td></tr>
+  </tbody></table>
+  <p class="small muted">La paire <code>efe-agent-runner</code> (hôte, place la microVM) + <code>efe-nano-inference-daemon</code> (invité, sert le modèle) est le chemin qui rendra Mode B/C non-<i>stub</i> ; aujourd'hui Mode B tourne sur un <code>StubVmPool</code> et le LLM live passe par <code>efe-agentic-bridge</code> (vraie API Claude). Le routage multi-fournisseur, les gabarits de prompt versionnés et la rédaction PII sont des services partagés de la plateforme (<code>efe-llm-router</code> · <code>efe-prompts</code> · <code>efe-pii</code>), comptés hors du cœur agentique (§9).</p>
+</div>
+
+<!-- 3 -->
+<div class="wrap page">
+  <h2><span class="num">§3</span> Les primitives de confiance des agents (série « N »)</h2>
+  <p>Autour du runtime, une série de crates livre exactement le vocabulaire qu'un régulateur ou un partenaire gouvernance réclame — <b>qui</b> a le droit de livrer une capacité d'IA dans le système, <b>ce que</b> chaque appel LLM a fait, et la <b>garantie</b> que rien n'entre en production sans passer un gold-test. Ce sont les crown jewels pour un acheteur de confiance.</p>
+
+  <table><thead><tr><th style="width:22%">Primitive</th><th class="c" style="width:8%">tests</th><th>Ce qu'elle prouve</th></tr></thead><tbody>
+    <tr><td class="s">★ N17 · llm-provenance</td><td class="c">112</td><td><b>Record forensic par appel LLM (Mode C)</b> : identité + hash du modèle, quatre hachages BLAKE3 du prompt (système/utilisateur/final/entrées), template versionné, params d'échantillonnage, usage jetons, comptabilité de coût, IDs provider/région, <code>output_hash</code>, drapeaux de sûreté, appels d'outils, <b>stratégie PII</b> appliquée, lignée replay/cache, snapshot publisher+tier KYC. « Montre-moi tout appel ayant utilisé le prompt X. »</td></tr>
+    <tr><td class="s">★ N18 · publisher-identity</td><td class="c">170</td><td><b>Identité cryptographique</b> du publieur : <b>Ed25519</b> constant-time, échelle <b>KYC 4 tiers</b> (email→KYC+bond), cascade de <b>révocation</b>, hook <b>sanctions</b>, ledger de publication <b>HMAC-chaîné</b>. Non-répudiation de qui a publié quoi, révocable, historique append-only.</td></tr>
+    <tr><td class="s">★ N19 · gold-test-gate</td><td class="c">251</td><td><b>Gate de promotion</b> : rien n'atteint le tier prod sans passer une suite gold <b>immuable, approuvée-opérateur, HMAC-chaînée</b> ; 3 stratégies d'assertion (égalité stricte / tolérance numérique / <b>similarité sémantique</b> par embeddings) ; chaque <b>bypass est signé cryptographiquement</b> ; drift sweep 24 h.</td></tr>
+    <tr><td class="s">★ N24 · compliance-wiring</td><td class="c">103</td><td><b>Le flip</b> : câble les vrais N18/N19 dans l'adaptateur de dispatch et bascule le DAG par défaut de <code>experimental_fast</code> (gates OFF) à <code>tier1_strict</code> (fail-closed). La différence entre « on a du code conformité » et « la conformité est <b>sur le chemin de requête</b> ».</td></tr>
+    <tr><td class="s">· N16 · multi-region</td><td class="c">129</td><td><b>Replay déterministe</b> d'une chaîne d'audit dans une autre région, sous <b>politique de résidence</b> + JWT opérateur + shipment de chaîne. Répond aux exigences DORA / résidence EU. <span class="muted">(transport gRPC/RS256 différé)</span></td></tr>
+  </tbody></table>
+
+  <div class="callout key"><p><b>Pourquoi c'est décisif.</b> N17 (provenance par appel), N18 (identité publieur) et N19 (gold-gate) sont <b>code-complets, lourdement testés</b> (533 tests à eux trois), et répondent mot pour mot à ce que l'EU AI Act et DORA exigent. N24 les <b>allume par défaut</b>. C'est le langage exact du régulateur, en code qui tourne.</p></div>
+</div>
+
+<!-- 4 -->
+<div class="wrap page">
+  <h2><span class="num">§4</span> Étage 2 · L'essaim — l'orchestration topologique</h2>
+  <p>L'étage médian compose les agents en <b>topologies nommées</b> et — c'est le différenciateur — donne une <b>provenance par-agent</b>. Le point remarquable : même les agents <b>Mode A purement Rust</b>, qui n'émettent aucun record LLM et forment le gros de la flotte, sont hachés canoniquement et chaînés dans une chaîne HMAC par-essaim <b>re-prouvable hors-ligne</b>. On prouve donc « qui a dit quoi, quand, à partir de quoi » <b>même pour les agents qui ne disent rien</b>.</p>
+
+  <h3>Le SDK en une fonction, cinq topologies</h3>
+  <p>Toute la complexité (substrat, topologies, consensus, provenance) se replie en un appel : <code>swarm.run(task, topology, budget)</code>. Le <code>TopologySpec</code> offre cinq familles : <b>T1 Generate-Verify</b> (générer K candidats, vérifier), <b>T2 Pipeline</b> (étapes typées), <b>T3 Hiérarchique</b>, <b>T-Consensus</b> (vote/débat/gossip), et <b>Auto</b> (choix guidé). L'appel est <b>keyless / self-host</b> (aucune clé API), sous une <b>garde de souveraineté</b> qui refuse tout endpoint non-loopback, et il retourne un <code>provenance_root</code> — « voici un hash que votre régulateur re-vérifie ».</p>
+
+  <h3>Le moat exposé, et observable</h3>
+  <p>La <b>gateway HTTP</b> (Axum) expose <code>POST /v1/swarm/run</code> et surtout <code>GET /v1/swarm/verify/:id</code> : un endpoint qui <b>re-prouve indépendamment</b> un run stocké (recompose la chaîne contenu+DAG, la chaîne forensic N17, et le pont Mode A↔Mode C) et <b>détecte + localise</b> toute altération post-hoc, la clé de signature ne quittant jamais le serveur. Le <b>dashboard live</b> (SSE) laisse littéralement <b>regarder</b> les nano-agents se passer l'information en parallèle, en tapant les seams existants via un unique observateur — sans réécrire un seul agent.</p>
+
+  <table><thead><tr><th style="width:26%">Crate</th><th class="c" style="width:9%">tests</th><th>Rôle</th></tr></thead><tbody>
+    <tr><td class="s">★ efe-swarm-provenance</td><td class="c">151</td><td>Provenance <b>par-agent</b> (le moat d'essaim) : <code>verify_offline</code> re-prouve depuis 2 fichiers + 1 clé ; pont N17 Mode C ; crypto byte-identique à nano.</td></tr>
+    <tr><td class="s">★ efe-swarm-sdk</td><td class="c">41</td><td>Le SDK 1-fonction <code>swarm.run</code> · 5 topologies · keyless/self-host · garde d'egress.</td></tr>
+    <tr><td class="s">★ efe-swarm-gateway</td><td class="c">47</td><td>Gateway HTTP : <code>/run</code> + <code>/verify/:id</code> (re-preuve sur le fil) · Postgres write-once · OIDC · redaction PII.</td></tr>
+    <tr><td class="s">· efe-blackboard</td><td class="c">103</td><td>Le substrat stigmergique (blackboard = vérité durable, bus = index) — ce qui rend possible la couverture 100 % et le replay déterministe. 11 exemples runnable.</td></tr>
+    <tr><td class="s">· efe-swarm-topology</td><td class="c">54</td><td>Les compositions nommées (générer-vérifier, pipeline, consensus) génériques sur des traits.</td></tr>
+    <tr><td class="s">· efe-swarm-orchestrator</td><td class="c">95</td><td>Runtime DAG (Kahn, parallèle) · timeouts · <b>compliance opt-in par-agent</b> (sig/gold) avec verdict auditable.</td></tr>
+    <tr><td class="s">· efe-swarm-memory</td><td class="c">39</td><td>Mémoire inter-runs <b>re-prouvable</b> (<code>memory_root</code>) : la mémoire est une entrée hachée qui prime, ne gouverne pas.</td></tr>
+    <tr><td class="s">· efe-swarm-dashboard</td><td class="c">13</td><td>Cœur dashboard live SSE (observateur sur les seams, replay des retardataires).</td></tr>
+    <tr><td class="s">· efe-audit-core</td><td class="c">14</td><td>La crypto partagée (HMAC-SHA256 chaîné + HKDF par tenant), <b>byte-identique</b> à nano ⇒ chaînes mutuellement vérifiables.</td></tr>
+  </tbody></table>
+</div>
+
+<!-- 5 -->
+<div class="wrap page">
+  <h2><span class="num">§5</span> La science mesurée — l'honnêteté comme crédibilité</h2>
+  <p>L'étage essaim porte aussi un <b>instrument de mesure</b>, <code>efe-bench-inference</code> (~118 tests, 7 exemples exécutables), gouverné par sept invariants nommés (justesse oracle-scorée × coût jetons, cheap-parallèle vs gros modèle, à dataset/scorer/budget identiques, avec un bundle <b>re-prouvable</b>). Sa particularité : il est assez honnête pour <b>livrer le harnais qui a falsifié sa propre thèse</b>. Trois résultats, mesurés sur de vrais modèles (Ollama, ~1 200 runs re-joués), structurent notre franchise :</p>
+  <ul>
+    <li><b>La spécialisation paie gros</b> — +35 points (40 % → 75,3 %) : donner à un petit modèle des instructions spécialisées est un levier majeur.</li>
+    <li><b>Le MoE Pareto-domine</b> — un petit modèle Mixture-of-Experts bat le routeur-d'essaim en coût, ce qui <b>réfute notre propre thèse</b> « petit essaim = moins cher ». C'est le pic de crédibilité : nous publions ce qui nous contredit.</li>
+    <li><b>La loi de bascule</b> — le routeur gagne ⟺ <code>C &gt; K/(1−f)</code> (C = ratio de coût gros/petit, K = échantillons de diagnostic, f = fraction d'escalade). Une loi, pas une opinion.</li>
+  </ul>
+  <div class="callout ok"><p><b>Le message honnête.</b> La valeur d'EFE n'est <b>pas</b> « le petit bat le gros » (réfuté) — c'est la <b>couche de mesure et de preuve</b> qui dit <i>quelle architecture gagne sur VOTRE tâche</i> et rend la gagnante <b>auditable</b>. Devant un board, réfuter sa propre thèse est un actif de confiance.</p></div>
+</div>
+
+<!-- 6 -->
+<div class="wrap page">
+  <h2><span class="num">§6</span> Étage 3 · Le méta-essaim — consensus gouverné &amp; provenance native</h2>
+  <p>L'étage supérieur coordonne <b>plusieurs essaims</b>. <code>efe-meta-swarm</code> (~213 tests) implémente une primitive rare : N essaims indépendants convergent sur un <b>consensus latent partagé</b> via des opérateurs <i>lift</i>/<i>pull</i> et une projection non-expansive, <b>sans que chacun connaisse l'état interne de l'autre</b>. Surtout, il porte une <b>enveloppe de sûreté prouvée</b> : à chaque pas, l'itéré est <b>projeté dans un ensemble admissible</b> (boîte / polyèdre), de sorte qu'un essaim « emballé » ou adversarialement initialisé est <b>mathématiquement ramené dans les bornes</b>. La démo phare, <code>three_swarms_kovant</code>, fait converger trois essaims de procurement Kovant (scoring fournisseur, risque contractuel, catégorisation de dépense) dans un méta-espace 256-dim ; <code>safety_violation_attempt</code> montre le garde-fou agir.</p>
+
+  <h3>La provenance <i>native</i> du consensus (v1 → v3)</h3>
+  <p>Le méta-essaim était le seul étage sans provenance. Il l'a désormais, et <b>scellée dans le moteur</b> (pas reconstruite après coup) : à chaque pas de convergence, un observateur <b>crypto-free</b> reçoit le pas déjà calculé et le scelle dans une chaîne HMAC re-prouvable, via la crypto partagée (<code>chain_hmac</code> + HKDF, byte-identique à nano/essaim). Trois paliers de schéma, chacun sur-ensemble du précédent, <b>tous re-prouvables hors-ligne</b> — et rétro-compatibles (les bundles v1/v2 restent stables) :</p>
+  <table><thead><tr><th style="width:9%">Palier</th><th>Ce qui est scellé, en plus</th><th style="width:34%">La valeur gouvernance</th></tr></thead><tbody>
+    <tr><td class="s">v1</td><td>Chaque pas de consensus (indice, résidu, méta-consensus après projection).</td><td>« Le consensus a bien pris cette valeur au pas k. »</td></tr>
+    <tr><td class="s">v2</td><td>+ <code>safety_delta = ‖z − z̃‖</code> — de combien l'enveloppe a ramené le consensus dans l'admissible.</td><td>« Au pas k, le <b>garde-fou a agi</b>, de δ. » — l'activation du garde-fou, auditable.</td></tr>
+    <tr><td class="s">v3</td><td>+ un hash de contribution <b>par participant</b> · <b>mode replay</b> (re-exécuter reproduit le root).</td><td>« <b>Quel essaim a contribué quoi</b> » + reproductibilité déterministe.</td></tr>
+  </tbody></table>
+  <p>Comme le moat P1, l'étage méta a <b>deux vérifieurs</b> : <code>verify_meta</code> (pratique) et <code>verify_meta_mini</code> — un re-prouveur à <b>arbre de dépendances littéralement vide</b> (<code>cargo tree</code> = une ligne), SHA-256/HMAC et parseur JSONL <b>écrits à la main</b>, que Kovant re-compile hors-ligne pour re-prouver « en ne croyant qu'aux maths ». La <b>non-interférence</b> est garantie et testée : activer la provenance ne change <b>rien</b> au numérique.</p>
+  <table><thead><tr><th style="width:26%">Crate</th><th class="c" style="width:9%">tests</th><th>Rôle</th></tr></thead><tbody>
+    <tr><td class="s">★ efe-meta-swarm</td><td class="c">213</td><td>Le moteur : consensus latent, enveloppe de sûreté prouvée, provenance native (v1-v3) via <code>StepObserver</code>.</td></tr>
+    <tr><td class="s">· efe-meta-swarm-server</td><td class="c">405</td><td>Plan de contrôle gRPC : <b>mTLS SAN-pinné</b>, hot-rotation cert-manager, OTel, contract-drift guard.</td></tr>
+    <tr><td class="s">· efe-meta-swarm-proto</td><td class="c">17</td><td>Les stubs gRPC (Protocol Buffers + tonic) de la surface méta-essaim — le contrat de transport du plan de contrôle.</td></tr>
+    <tr><td class="s">★ efe-meta-verify / verify-meta-mini</td><td class="c">10 / 13</td><td>Les deux vérifieurs du consensus méta : pratique + <b>zéro-dépendance</b> (fidélité prouvée par golden + cross-check).</td></tr>
+  </tbody></table>
+</div>
+
+<!-- 7 -->
+<div class="wrap page">
+  <h2><span class="num">§7</span> Scout &amp; Synthesize — la coordination multi-LLM réelle</h2>
+  <p>À côté des trois étages, une application concrète coordonne de <b>vrais gros LLM</b> (Claude / GPT / Gemini) via les nano-robots. Elle a un différenciateur rare : la sortie des petits modèles est <b>contrainte par grammaire GBNF</b>, ce qui donne une conformité JSON-Schema <b>mathématique</b> — pas « espérée par prompt » — avec un enregistrement d'audit par appel. Au-dessus, un orchestrateur à <b>chaîne d'audit HMAC/BLAKE3</b> (format figé v1.0.0) et des <b>invariants de gouvernance vérifiés par des tests nommés</b> (anti-monoculture : aucun vendeur ne domine ; isolation physique par tenant ; revert de budget atomique).</p>
+  <table><thead><tr><th style="width:26%">Crate / composant</th><th class="c" style="width:9%">tests</th><th>Rôle</th></tr></thead><tbody>
+    <tr><td class="s">★ efe-coordinator</td><td class="c">728</td><td>Le cerveau : DAG + blackboard stigmergique + bridge multi-LLM réel + SSE. 3 missions : <b>A</b> (pré-mâcher pour 1 gros LLM), <b>B</b> (fan-out vers N LLMs + vote pondéré), <b>Speculative</b> (drafter local + gros LLM). Chaîne HMAC/BLAKE3, hard-caps par tenant.</td></tr>
+    <tr><td class="s">★ efe-multi-llm</td><td class="c">200</td><td>5 workflows de collaboration : <b>Vote</b> (Borda/Condorcet), <b>Relay</b> (Claude planifie → GPT code → Gemini synthétise), <b>Debate</b> (2 débattent + 1 jury), <b>Specialist</b> (décompose → route → agrège), <b>Cascade</b> (drafter local → GPT → Claude ; −41 % de latence vs Claude seul).</td></tr>
+    <tr><td class="s">★ efe-nano-app-coordinator</td><td class="c">191</td><td>Fondation Phase 1 : 6 nano-robots SLM à sortie <b>grammar-enforced (GBNF)</b> → conformité mathématique + 1 audit/invocation.</td></tr>
+    <tr><td class="s">· efe-preview-server</td><td class="c">67</td><td>Le <b>Preview Lab</b> : bridge HTTP/SSE devant <code>efe-coordinator</code> — les missions <b>live</b> + les économies mesurées, streamées dans le navigateur. La surface de démo de Scout&amp;Synthesize.</td></tr>
+  </tbody></table>
+</div>
+
+<!-- 8 -->
+<div class="wrap page">
+  <h2><span class="num">§8</span> Le substrat de confiance — secondaire, mais porteur</h2>
+  <p>Positionné en <b>secondaire</b> dans ce partenariat, le substrat de confiance est pourtant ce qui rend tout le reste défendable. Sans lui, les trois étages sont réplicables (d'autres font de l'orchestration) ; avec lui, EFE offre <b>la seule orchestration à trois étages dont chaque pas est re-prouvable hors-ligne par un tiers, sans coopération du fournisseur</b>. Ce n'est pas un produit à part : c'est une propriété qui <b>traverse</b> les étages.</p>
+  <p>Techniquement, le socle est le <b>moat « P1 »</b> : un DAG scellé re-prouvable dont toute la crypto (SHA-256 FIPS 180-4, HMAC RFC 2104, encodage canonique binaire) est <b>écrite à la main, prouvée par vecteurs NIST/RFC, sans aucune dépendance crypto externe</b>. Le vérifieur <code>verify-mini</code> a un <b>arbre de dépendances littéralement vide</b> (<code>cargo tree</code> = une ligne) ; <code>forensic-export</code> assemble un <b>bundle trustless</b> qui vendore la source du vérifieur (à re-compiler par le tiers) ; <code>reg-evidence</code> en <b>dérive les dossiers réglementaires</b> (EU AI Act art. 12/13/14/26, GDPR, <b>CSDDD/LkSG</b>) comme des <b>vues re-dérivables</b> — le ROI heures→minutes.</p>
+  <p><b>Le couplage</b> aux trois étages est concret : la crate <code>efe-audit-core</code> réplique la construction crypto d'<code>efe-nano</code> <b>byte pour byte</b> (vecteurs golden gelés), de sorte que la chaîne d'audit nano, la chaîne de provenance d'essaim et la chaîne de consensus méta sont <b>toutes la même construction HMAC</b> — donc <b>mutuellement vérifiables</b> sous la même clé tenant. Et l'<b>honnêteté est structurelle</b> : la couche atteste l'<i>intégrité</i> (ce qui s'est passé, re-prouvable) et <b>jamais la correction</b> d'une décision (« outillé ≠ conforme » ; <code>reg-evidence</code> n'a délibérément aucun champ « conforme »). Devant un partenaire gouvernance, cette limite assumée est de la crédibilité.</p>
+  <h3>La carte du socle — le moat « P1 » en 8 crates (224 tests)</h3>
+  <table><thead><tr><th style="width:20%">Crate</th><th class="c" style="width:8%">tests</th><th>Étage · rôle</th></tr></thead><tbody>
+    <tr><td class="s">provenance-dag</td><td class="c">29</td><td><b>S0</b> — le DAG scellé re-prouvable : nœuds typés (acte/arête/évidence/humain), chaîne HMAC écrite-main, zéro dépendance crypto externe.</td></tr>
+    <tr><td class="s">provenance-capture</td><td class="c">15</td><td><b>S1</b> — la capture : garde de souveraineté (egress refusé) + les 4 taps (appel→acte, message→arête, outil→évidence, humain→supervision).</td></tr>
+    <tr><td class="s">provenance-verify</td><td class="c">9</td><td><b>S4</b> — le vérifieur forensic autonome (JSONL scellé + clé → verdict + code de sortie), trustless.</td></tr>
+    <tr><td class="s">verify-mini</td><td class="c">29</td><td><b>S4</b> — le même, à arbre de dépendances <b>littéralement vide</b> (std-only), fidélité prouvée par cross-check octet-à-octet.</td></tr>
+    <tr><td class="s">audit-api</td><td class="c">41</td><td><b>S2</b> — projette le DAG en décisions lisibles + statut d'intégrité, re-prouve à la lecture ; « intègre ≠ correct » typé.</td></tr>
+    <tr><td class="s">audit-console</td><td class="c">35</td><td><b>S3</b> — la console de conformité rendue serveur (badge cadenas-vert + fraîcheur + fail-loud) ; la clé ne quitte jamais le backend.</td></tr>
+    <tr><td class="s">forensic-export</td><td class="c">29</td><td><b>S4a</b> — l'assembleur du bundle trustless (vendore la source du vérifieur + README du sceptique) ; la clé n'y entre jamais.</td></tr>
+    <tr><td class="s">reg-evidence</td><td class="c">37</td><td><b>S6</b> — dérive les dossiers réglementaires (EU AI Act 12/13/14/26, GDPR, CSDDD/LkSG) comme des vues re-dérivables, sans champ « conforme ».</td></tr>
+  </tbody></table>
+  <p class="small muted">La crypto partagée <code>efe-audit-core</code> (§4) est byte-identique à ces chaînes — c'est le pont qui rend nano · essaim · méta · socle <b>mutuellement re-prouvables</b> sous une même clé tenant.</p>
+
+  <div class="callout key"><p><b>Souveraineté (invariant, pas monnaie d'échange).</b> La clé tenant <b>re-prouve mais ne s'écrit jamais</b> dans un bundle ; keyless / air-gap / self-host sont assumés comme le mode phare (ADR dédié, 65 runs réels 0 échec, model-agnostic). Ce que Kovant absorbe est donc <b>vérifiable</b> — l'actif n'est pas une boîte noire.</p></div>
+</div>
+
+<!-- 9 -->
+<div class="wrap page">
+  <h2><span class="num">§9</span> Maturité &amp; état honnête</h2>
+  <p>Fidèle à l'éthique du projet, ce dossier <b>assume ses limites</b>. La partie agentic est majoritairement <b>code-complète et lourdement testée</b>, mais certains chemins d'exécution exotiques sont des points d'intégration à finir. À connaître avant toute due diligence :</p>
+  <table><thead><tr><th style="width:24%">Composant</th><th class="c" style="width:15%">Maturité</th><th>Le détail cru</th></tr></thead><tbody>
+    <tr><td class="s">Substrat de confiance (P1)</td><td class="c">🟢 le + solide</td><td>verify-mini / forensic-export / reg-evidence complets et démontrés. Le plus mûr <b>et</b> le plus défendable.</td></tr>
+    <tr><td class="s">Essaim (étage 2)</td><td class="c">🟢 prêt</td><td>SDK + gateway <code>/verify</code> + dashboard + provenance réels ; flotte par défaut Mode A keyless ; Mode C réel prouvé contre Ollama.</td></tr>
+    <tr><td class="s">Provenance méta (v1-v3)</td><td class="c">🟢 native</td><td>Scellée dans le moteur, non-interférente (testé), re-prouvée par les deux vérifieurs (dont zéro-dép). Livré cette semaine.</td></tr>
+    <tr><td class="s">Nano (étage 1)</td><td class="c">🟡 partiel</td><td>Structure complète (~1 175 tests, chaîne d'audit réelle). <b>Mais</b> Mode B sur <code>StubVmPool</code> (Firecracker réel différé) ; le LLM live passe par <code>efe-agentic-bridge</code> (vraie API Claude).</td></tr>
+    <tr><td class="s">Méta-essaim (étage 3)</td><td class="c">🟠 démo forte, câblage partiel</td><td><code>three_swarms_kovant</code> + enveloppe = réels. <b>Mais</b> scaffold hors du binaire de prod ; l'<i>Authorizer</i> mTLS applicatif renvoie encore Deny.</td></tr>
+    <tr><td class="s">N18 KYC / sanctions</td><td class="c">🟠 stubs</td><td>Trait + stub (points d'intégration), pas un vendeur live. Ed25519 / ledger / révocation, eux, sont réels.</td></tr>
+    <tr><td class="s">efe-agent-runner (M25)</td><td class="c">🟠 expérimental</td><td>Le bac à sable microVM Firecracker <b>hôte</b> pour agents LLM (88 tests). Explicitement EXPÉRIMENTAL — c'est le chemin qui rendra Mode B/C non-<i>stub</i>.</td></tr>
+    <tr><td class="s">N16 transport cross-région</td><td class="c">🟠 différé</td><td>In-process / HS256 aujourd'hui (gRPC + RS256 différés).</td></tr>
+  </tbody></table>
+  <div class="callout"><p><b>Périmètre — rien d'oublié, tout est un choix.</b> Sur les <b>65 crates</b> du dépôt, ce dossier couvre les <b>~31 crates agentiques</b> (§2–§7) + les <b>8 crates du socle</b> P1 (§8). Les <b>~26 restantes ne sont pas agentiques</b> : le cœur plateforme (<code>efe-core</code>, <code>efe-server</code>, <code>efe-gateway</code>, <code>efe-telemetry</code>, <code>efe-ffi</code>, <code>efe-kernels</code>), les planes connaissance/récupération (<code>efe-graphrag</code>, <code>efe-kg</code>, <code>efe-vector</code>, <code>efe-retrieval</code>, <code>efe-multimodal</code>), et l'infra commerciale M21→M33 (<code>efe-llm-router</code>, <code>efe-prompts</code>, <code>efe-pii</code>, <code>efe-cache</code>, <code>efe-billing</code>, <code>efe-metering</code>, <code>efe-events</code>, <code>efe-region</code>, <code>efe-active-learning</code>, <code>efe-curation</code>, <code>efe-backup</code>, <code>efe-admin</code>, <code>efe-bench</code>, <code>efe-cluster-provisioner</code>). Elles servent la plateforme entière (RAG compris), pas seulement l'agentique — d'où l'exclusion assumée. <code>efe-llm-router</code> · <code>efe-prompts</code> · <code>efe-pii</code> sont néanmoins <b>cités</b> là où l'agentique les sollicite (§2, §7).</p></div>
+</div>
+
+<!-- 10 -->
+<div class="wrap page">
+  <h2><span class="num">§10</span> Démos exécutables &amp; le cadre du partenariat</h2>
+  <h3>Ce qui tourne, en direct</h3>
+  <table><thead><tr><th style="width:26%">Démo</th><th>Commande / geste</th></tr></thead><tbody>
+    <tr><td class="s">Méta-essaim Kovant</td><td><code>cargo run --example three_swarms_kovant -p efe-meta-swarm</code> — 3 essaims convergent, enveloppe de sûreté active.</td></tr>
+    <tr><td class="s">Provenance méta re-prouvée</td><td><code>meta_provenance</code> (émet le bundle scellé PAR le moteur) → <code>verify_meta_mini</code> (zéro-dép) re-prouve hors-ligne.</td></tr>
+    <tr><td class="s">Le moat sur le fil</td><td><code>efe-swarm-gateway</code> : <code>POST /run</code> → <code>GET /verify/:id</code> (re-preuve + altération localisée).</td></tr>
+    <tr><td class="s">Claude réel provenancé</td><td><code>efe-claude-smoke</code> — vraie API Anthropic, provenance par appel (N17).</td></tr>
+    <tr><td class="s">Coordination multi-LLM</td><td><code>efe-coordinator</code> missions A/B/Speculative en SSE.</td></tr>
+    <tr><td class="s">Missions live (Preview Lab)</td><td><code>efe-preview-server</code> — missions Scout&amp;Synthesize + économies, streamées en SSE dans le navigateur.</td></tr>
+    <tr><td class="s">Vérifieurs opérateur</td><td><code>efe-publisher-verify</code> · <code>efe-gold-verify</code> · <code>verify-mini</code> — re-vérifier une chaîne en une commande.</td></tr>
+  </tbody></table>
+
+  <h3>Le cadre proposé à Kovant</h3>
+  <p>Le partenariat porte sur les <b>nano-robots, l'essaim et le méta-essaim</b> — le <b>produit</b> à absorber — <b>couplés au substrat de confiance</b> (le socle, en secondaire mais porteur). La ligne à tenir : ce n'est pas « encore un framework d'agents » (banalisé), c'est <b>« la seule orchestration à trois étages dont chaque pas est re-prouvable, hors-ligne, sans vous »</b>. Le couplage à la confiance est précisément ce qui rend l'actif <b>défendable</b> et son <b>absorption sûre</b> — Kovant re-vérifie ce qu'elle absorbe, plutôt que d'acheter une boîte noire.</p>
+  <div class="callout ok"><p><b>La preuve, pas la promesse.</b> La meilleure ouverture reste un <b>pilote mesuré</b> sur une tâche Kovant réelle, livré en <b>bundle re-prouvable</b> : Kovant recompile un vérifieur zéro-dépendance, coupe le réseau, et re-prouve chaque étage elle-même. C'est la seule chose qu'aucun deck d'émergence ne pourra jamais offrir.</p></div>
+</div>
+
+</body>
+</html>
