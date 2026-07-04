@@ -127,6 +127,10 @@ members = [
     #   * docs/EFE_A1_PHASE1_ARCHITECTURE.md
     #   * docs/EFE_A1_ROADMAP_USER_ACTIVATABLE.md
     "crates/efe-meta-swarm",
+    # P1.1 — re-prouveur AUTONOME du consensus de méta-essaim (le « verify-mini » de
+    # l'étage méta) : 2 fichiers + 1 clé → exit 0/1, faute localisée. Sceau efe-audit-core
+    # byte-identique ⇒ la chaîne méta est mutuellement vérifiable avec nano & essaim.
+    "crates/efe-meta-verify",
     # Sprint A1 Phase 2 — PR #5 — gRPC transport.
     # `efe-meta-swarm-proto` = Protocol Buffers + tonic-generated
     # client/server stubs for the meta-swarm gRPC surface.  Wire-

@@ -76,6 +76,14 @@ insta       = "1.39"
 tempfile    = "3.10"
 # PR #3 Cat 14 pin tests : JSON snapshots of serialisable types.
 serde_json  = { workspace = true }
+# PROTOTYPE (meta_provenance example) — ÉMET un bundle de provenance du consensus
+# (meta_steps.jsonl + meta_manifest.json) re-prouvable par le binaire autonome `verify_meta`
+# (crate efe-meta-verify). Sceau via la crypto PARTAGÉE (efe-audit-core, byte-identique à
+# nano & essaim). Dev-only : zéro impact sur le graphe de build par défaut ni sur l'invariant
+# « binaire efe-server byte-identique » (efe-meta-swarm n'est pas lié à efe-server).
+efe-audit-core  = { path = "../efe-audit-core" }
+efe-nano-sdk    = { path = "../efe-nano-sdk" }
+efe-meta-verify = { path = "../efe-meta-verify" }
 
 # -----------------------------------------------------------------------------
 # Benches + examples (declared explicitly so cargo can resolve them).
@@ -100,6 +108,10 @@ path = "examples/multimodal_three_swarms.rs"
 [[example]]
 name = "safety_violation_attempt"
 path = "examples/safety_violation_attempt.rs"
+
+[[example]]
+name = "meta_provenance"
+path = "examples/meta_provenance.rs"
 
 # -----------------------------------------------------------------------------
 # Lints — local to the crate.  Aligned with the conventions used by

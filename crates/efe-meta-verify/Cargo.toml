@@ -1,0 +1,31 @@
+# SPDX-License-Identifier: UNLICENSED
+# efe-meta-verify — le re-prouveur AUTONOME du consensus de méta-essaim (le « verify-mini »
+# de l'étage méta). 2 fichiers (meta_steps.jsonl + meta_manifest.json) + 1 clé tenant
+# (--key-hex, JAMAIS dans les fichiers) → exit 0/1, faute LOCALISÉE. Le sceau réutilise
+# efe-audit-core (chain_hmac + HKDF), byte-identique à efe-nano / efe-swarm-provenance ⇒ la
+# chaîne méta est mutuellement vérifiable avec les deux autres étages. Ne dépend PAS du
+# moteur de méta-essaim : la re-preuve n'exige que la crypto partagée + un hash + un parseur.
+[package]
+name = "efe-meta-verify"
+version = "0.0.1"
+edition = "2021"
+license = "UNLICENSED"
+description = "Standalone re-prover for meta-swarm consensus provenance (2 files + 1 tenant key -> exit 0/1, localized fault). Shared audit crypto (efe-audit-core, byte-identical to efe-nano) => mutually verifiable with nano & swarm chains. No dependency on the meta-swarm engine."
+publish = false
+
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+name = "verify_meta"
+path = "src/bin/verify_meta.rs"
+
+[dependencies]
+efe-audit-core = { path = "../efe-audit-core" }
+blake3     = "1"
+serde      = { workspace = true, features = ["derive"] }
+# `float_roundtrip` est REQUIS pour la CORRECTION de la re-preuve : sans lui, le parseur
+# de flottants de serde_json est rapide-mais-lossy (jusqu'à 1 ULP), donc un f64 relu ne
+# re-hache pas comme le sceau (l'écriture ryu, elle, est toujours exacte). Avec lui,
+# from_str(to_string(x)) == x ⇒ le méta-consensus se re-hache à l'identique.
+serde_json = { workspace = true, features = ["float_roundtrip"] }
