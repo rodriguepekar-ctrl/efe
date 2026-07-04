@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Kovant Partnership — le menu complet des actifs présentables (inventaire vérifié)</title>
+<style>
+  :root{--ink:#0f172a;--muted:#475569;--soft:#64748b;--line:#e2e8f0;--teal:#0d9488;--teal-d:#0f766e;--indigo:#4f46e5;--indigo-d:#4338ca;--ok:#16a34a;--warn:#d97706;--bad:#dc2626;--bg-tint:#f6fbfa;--bg-card:#eef2f1;--code-bg:#0f172a;--code-fg:#e2e8f0;}
+  *{box-sizing:border-box;} html{font-size:11.2px;}
+  body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,Arial,sans-serif;color:var(--ink);margin:0;line-height:1.55;background:#fff;-webkit-font-smoothing:antialiased;}
+  .wrap{max-width:178mm;margin:0 auto;padding:0 2mm;}
+  h1,h2,h3,h4{line-height:1.2;font-weight:700;}
+  h2{font-size:1.4rem;margin:0 0 .5rem;padding-bottom:.3rem;border-bottom:3px solid var(--teal);}
+  h2 .num{color:var(--teal);} h3{font-size:1.08rem;margin:.95rem 0 .28rem;color:var(--teal-d);}
+  h4{font-size:.98rem;margin:.7rem 0 .18rem;color:var(--indigo-d);}
+  p{margin:.45rem 0;text-align:justify;hyphens:auto;} a{color:var(--indigo);text-decoration:none;}
+  code{font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace;font-size:.84em;background:var(--bg-card);padding:.05em .35em;border-radius:4px;color:#0b3b36;}
+  .muted{color:var(--muted);} .small{font-size:.88rem;}
+  section{break-inside:avoid;} .page{break-before:page;} h2{break-after:avoid;}
+  table{border-collapse:collapse;width:100%;margin:.5rem 0;font-size:.77rem;}
+  th,td{border:1px solid var(--line);padding:.3rem .45rem;text-align:left;vertical-align:top;}
+  th{background:var(--bg-card);font-weight:700;} tbody tr:nth-child(even){background:var(--bg-tint);}
+  td.c,th.c{text-align:center;}
+  .s{font-weight:800;color:var(--teal-d);white-space:nowrap;}
+  .callout{border-left:4px solid var(--teal);background:var(--bg-tint);padding:.5rem .8rem;border-radius:0 8px 8px 0;margin:.55rem 0;}
+  .callout p{text-align:left;margin:.25rem 0;}
+  .callout.key{border-color:var(--indigo);background:#eef2ff;} .callout.warn{border-color:var(--warn);background:#fffbeb;} .callout.ok{border-color:var(--ok);background:#f0fdf4;} .callout.bad{border-color:var(--bad);background:#fef2f2;}
+  .fig{margin:.6rem 0 .8rem;text-align:center;break-inside:avoid;}
+  ul,ol{margin:.3rem 0 .45rem 1.1rem;padding:0;} li{margin:.18rem 0;}
+  .cover{height:262mm;display:flex;flex-direction:column;justify-content:center;position:relative;padding:0 6mm;}
+  .cover .eyebrow{color:var(--teal);font-weight:800;letter-spacing:.16em;font-size:.83rem;text-transform:uppercase;}
+  .cover h1{font-size:2.0rem;margin:.4rem 0 .2rem;line-height:1.08;} .cover .sub{font-size:1.15rem;color:var(--muted);margin-bottom:1.1rem;}
+  .cover .tagline{font-size:1.0rem;color:var(--ink);max-width:163mm;border-left:4px solid var(--teal);padding-left:1rem;font-style:italic;text-align:left;}
+  .cover .meta{position:absolute;bottom:6mm;left:6mm;right:6mm;display:flex;justify-content:space-between;border-top:1px solid var(--line);padding-top:.6rem;font-size:.8rem;color:var(--soft);}
+  .cover .pills{margin:1rem 0;} .cover .pills .tag{display:inline-block;font-size:.77rem;font-weight:700;padding:.08em .5em;border-radius:20px;margin-right:.3rem;margin-bottom:.3rem;}
+  .t-ok{background:#dcfce7;color:#166534;} .t-info{background:#e0e7ff;color:#3730a3;} .t-teal{background:#ccfbf1;color:#115e59;} .t-warn{background:#fef3c7;color:#92400e;} .t-bad{background:#fee2e2;color:#991b1b;}
+  .star{color:var(--warn);font-weight:800;}
+  hr{border:none;border-top:1px solid var(--line);margin:.9rem 0;}
+  @page{size:A4;margin:12mm 12mm;}
+</style>
+</head>
+<body>
+
+<!-- COVER -->
+<div class="wrap"><div class="cover">
+  <div class="eyebrow">Inventaire vérifié · EFE × Kovant · le menu complet des actifs</div>
+  <h1>Kovant Partnership<br>— le menu complet des actifs</h1>
+  <div class="sub">Tout ce qu'EFE peut mettre sur la table d'un partenariat, vérifié <b>sans trou</b> : les <b>67 membres</b> du workspace couverts un par un, les <b>6 arguments transverses</b> qui portent la thèse, les 6 couches produit, les démos exécutables, et les matériaux déjà prêts.</div>
+  <div class="tagline">Ce document n'est pas une liste de crates — un inventaire qui s'arrête là est dangereusement incomplet pour un partenaire dont le métier est la confiance. La partie porteuse est ailleurs : la <b>défensabilité</b> (un vérifieur à zéro dépendance que le client re-compile lui-même), le <b>mapping réglementaire</b> exact, la <b>souveraineté</b> assumée comme pilier phare, le <b>modèle commercial</b> déjà câblé, et la <b>maturité opérationnelle</b> gardée à chaque PR. Le moat est ce sur quoi on s'associe ; la plateforme (~450K lignes, ~9 500 tests) est la preuve qu'on livre ; la mesure honnête — jusqu'à réfuter notre propre thèse — est la crédibilité. Ce menu range tout cela pour que la conversation avec Kovant parte de la valeur, pas de la technique.</div>
+  <div class="pills">
+    <span class="tag t-teal">67/67 membres couverts (diff Cargo.toml, 0 non-couvert)</span>
+    <span class="tag t-info">le moat = la valeur, re-prouvable sans nous</span>
+    <span class="tag t-ok">souveraineté / keyless = pilier phare (ADR)</span>
+    <span class="tag t-bad">intégrité ≠ correction — l'honnêteté comme atout</span>
+    <span class="tag t-warn">un vrai SaaS : SLOs, DR, Stripe, mTLS</span>
+  </div>
+  <div class="meta">
+    <span>EFE × Kovant · inventaire d'actifs vérifié · ~9 500 tests · ~450K LOC · 6 couches · 71 exemples / 25 CLIs / 45 endpoints</span>
+    <span>2026-07-03 · menu complet</span>
+  </div>
+</div></div>
+
+<!-- 1 -->
+<div class="wrap page">
+  <h2><span class="num">§1</span> Méthode &amp; garantie de complétude</h2>
+  <p>Ce menu a été construit pour répondre à une exigence précise : <b>être sûr qu'il ne manque rien</b>. Il n'est donc pas le fruit d'une mémoire, mais d'un balayage systématique du dépôt. Un workflow de vingt-et-un agents a couvert <b>chacun des 67 membres</b> du workspace, groupés en dix clusters ; un critique de complétude a ensuite <i>diffé</i> la liste couverte contre le fichier <code>Cargo.toml</code> réel et confirmé <b>zéro membre non-couvert et zéro membre couvert absent du dépôt</b> (le chiffre « 68 » évoqué plus tôt était une erreur de comptage : <code>tools/loadgen</code>, <code>bench/harness</code>, <code>smoke/runner</code> et <code>slos/rollup</code> dédupent proprement à 67). En parallèle, deux balayages transverses ont catalogué toutes les surfaces exécutables — <b>71 exemples</b> lançables, <b>25 binaires CLI</b>, <b>45 endpoints HTTP</b>, <b>33 tests smoke/e2e</b> — et l'ensemble des documents déjà rédigés.</p>
+  <p>Le même critique, joué en mode adversarial, a fait le travail le plus utile : il a démontré qu'un inventaire honnête ne peut pas <i>s'arrêter</i> à une liste de crates. Il a fait remonter, preuves à l'appui et fichiers cités, les <b>angles transverses</b> qu'une simple énumération rate — la défensabilité, le mapping réglementaire, la souveraineté, le modèle commercial, la maturité opérationnelle. Ce sont eux, et non tel ou tel crate, qui portent un dossier de partenariat. Le document les place donc <b>en premier</b> (§2), avant les six couches produit (§3) qui en sont la preuve de profondeur.</p>
+  <div class="callout key"><p><b>L'échelle est elle-même un argument.</b> EFE n'est pas un prototype : c'est un monorepo Rust de <b>67 crates, ~450 000 lignes, ~9 500 tests</b>, structuré en six couches (moat de provenance · essaim · runtime nano · app multi-LLM · cœur plateforme · infra commerciale), plus un méta-essaim et des harnais d'exploitation. Le message n'est pas « regardez comme c'est gros », mais « la couche de confiance que nous vous proposons repose sur une plateforme réelle, opérée et mesurée ».</p></div>
+</div>
+
+<!-- 2 -->
+<div class="wrap page">
+  <h2><span class="num">§2</span> Les 6 arguments transverses — la thèse du partenariat</h2>
+  <p>Ce qui suit n'est pas la partie « technique » du dossier : c'est <b>la partie décisive</b>. Chacun de ces six arguments répond à une question qu'un board de partenaire pose réellement, et chacun est adossé à du code et à des décisions d'architecture datées, pas à une intention. Pris ensemble, ils forment la colonne vertébrale d'une présentation à Kovant.</p>
+
+  <h3>A1 · La défensabilité — le moat qui ne s'érode pas</h3>
+  <p>La question qu'un board pose toujours est : « qu'est-ce qui vous protège quand le prix des tokens s'effondre et que n'importe qui peut assembler un essaim d'agents ? ». Notre réponse tient en une ligne, littéralement : <code>cargo tree -p verify-mini --edges normal</code> n'imprime qu'une ligne — le vérifieur forensic n'a <b>aucune dépendance externe</b>. Son SHA-256 (FIPS 180-4) et son HMAC (RFC 2104) sont <b>écrits à la main</b>, prouvés octet par octet contre les vecteurs NIST et RFC 4231, et le sceau est calculé sur un <b>encodage canonique binaire</b> (pas du JSON, qui autoriserait des ambiguïtés de concaténation — un test dédié vérifie que <code>("ab","c") ≠ ("a","bc")</code>). La conséquence stratégique est inscrite noir sur blanc dans trois décisions d'architecture acceptées (ADR-SWARM-006/008/011) : la valeur n'est <i>ni</i> le compute (il s'érode avec le prix des tokens), <i>ni</i> la coopération du fournisseur (impossible à obtenir d'un concurrent), mais un <b>vérifieur indépendant, minuscule, que le client re-compile et re-exécute lui-même</b>. C'est précisément ce qu'aucun fournisseur hébergé ne peut offrir — et c'est le terrain d'un partenaire dont le métier est la confiance.</p>
+
+  <h3>A2 · « Un tiers vérifie SANS vous » — prouvé en direct, hors-ligne</h3>
+  <p>Le deuxième argument transforme la promesse en artefact exécutable. La question tueuse d'un acheteur gouvernance est : « un régulateur peut-il confirmer votre évidence <i>sans</i> vous faire confiance, et hors-ligne ? ». La réponse n'est pas une affirmation, c'est un geste que le balayage a <b>exécuté de bout en bout</b> : émettre un bundle scellé, copier <i>uniquement</i> le vérifieur embarqué hors du dépôt vers un répertoire vierge, le recompiler <code>--offline</code> en <b>1,64 s</b> (<code>cargo tree</code> ne montre alors rien d'autre que lui-même), puis lancer ce binaire fraîchement compilé sur les enregistrements. Résultat : authentique → <code>exit 0</code> ; un seul octet retourné → <code>exit 1</code>, faute <b>localisée</b> (<code>broken_at:2</code>) ; mauvaise clé tenant → <code>exit 1</code> ; et la <b>clé n'apparaît dans aucun fichier</b> du bundle (grep = absent — souveraineté structurelle). C'est la démonstration D1/D2 que l'on projette en réunion, et elle est structurellement impossible à répliquer pour un service hébergé.</p>
+
+  <h3>A3 · Le mapping réglementaire — machine-lisible, pas gesticulé</h3>
+  <p>Le troisième argument répond au reproche classique fait aux pitchs de conformité : gesticuler autour du mot « compliance » sans jamais nommer un instrument précis. Nous nommons, et surtout nous <b>montrons</b>. Le fichier <code>docs/compliance/controls_index.yaml</code> (v0.8.0) est une source de vérité qui mappe <b>seize scripts d'évidence</b> à des identifiants de contrôle concrets sur <b>six cadres</b> — GDPR, ISO 27001 Annexe A, SOC 2, EU AI Act, HIPAA, CCPA. Exemples cités verbatim : <code>comp_hmac_chain_evidence</code> couvre neuf contrôles dont l'<b>AI Act Art. 12</b> (tenue de registres) et SOC2-CC7.1/CC7.2 ; <code>comp_ai_act_human_oversight_evidence</code> couvre l'<b>AI Act Art. 14/16.a/29</b> et le <b>GDPR Art. 22</b> (décision automatisée) ; <code>comp_breach_72h_evidence</code> → GDPR Art. 33/34 ; <code>comp_erasure_30d_evidence</code> → GDPR Art. 17. Là où <code>reg-evidence</code> (S6) produit les <i>dossiers</i> eux-mêmes — EU AI Act, GDPR, CSDDD/LkSG, re-dérivables octet pour octet depuis le bundle — cet index est la <b>table de correspondance</b> que l'acheteur réclame en due diligence. On la lui tend.</p>
+
+  <h3>A4 · Souveraineté / keyless / air-gap — le pilier phare assumé</h3>
+  <p>Pour un partenariat tourné vers l'Europe, la souveraineté est un moteur d'achat, et elle est assumée dans le code, pas seulement en slide. La décision <b>ADR-SWARM-011</b> énonce littéralement que le <i>self-host keyless est « le mode phare »</i> ; sa décision-sœur <b>ADR-SWARM-008</b> porte un verdict <b>GO</b> fondé sur <b>65 exécutions réelles, zéro échec</b>, sur trois modèles Ollama locaux (gemma3:12b, qwen3-coder:30b, qwen3-vl:30b), chacun à 100 % de vérification, 100 % de traçabilité, budget sous plafond et 100 % d'altérations détectées — le moat y étant explicitement <b>model-agnostic</b> (« changer de modèle local ne change rien aux garanties »). Les signaux code confirment que ce n'est pas cosmétique : <code>keyless</code> dans ~140 fichiers, <code>self-host</code> ~104, <code>air-gap</code> ~47, <code>BYOK</code> ~36, <code>offline</code> ~168. La triade qu'un hébergeur ne peut égaler : <b>souverain</b> (127.0.0.1, air-gappable, les données ne sortent pas), <b>local/keyless</b> (aucun header d'autorisation, aucune dépendance réseau), <b>vérifiable</b> (re-preuve hors-ligne sans coopération du fournisseur).</p>
+
+  <h3>A5 · Le modèle commercial — construit et testé, pas slideware</h3>
+  <p>Le cinquième argument désamorce le doute « produit ou prototype ? ». Le modèle économique est câblé. Le plan de facturation Stripe (une vingtaine de fichiers) ne stocke <b>jamais de PAN</b> (on ne garde que les quatre derniers chiffres + la marque), dérive ses clés d'idempotence de <code>(tenant, période, action)</code> pour qu'un rejeu réseau ne double jamais une facture, et vérifie ses webhooks par HMAC. Autour, le <b>metering temps-réel par tenant</b> (le terme <code>meter</code> dans ~140 fichiers) est conçu pour être invisible sur le chemin chaud ; les <b>quotas</b> (~62), l'<b>overage</b> (~43), les <b>budgets/hard-caps</b> (~312) et les rate-limits (~40) forment une gouvernance de coût déjà en place. Message au partenaire : la mécanique de revenu existe, elle est instrumentée, elle est prête à porter un modèle « B2A » (Business-to-Agent) à l'usage.</p>
+
+  <h3>A6 · La maturité opérationnelle — l'acheteur souscrit le risque</h3>
+  <p>Le sixième argument est celui qu'on sous-estime toujours et qui décide pourtant de la signature. Cinq <b>SLOs publiés</b> (<code>SLO.md</code>) sont gardés par un <b>gate CI bloquant</b> : toute régression supérieure à 10 % bloque la PR via <code>.github/workflows/bench.yml</code> et <code>scripts/check_regression.py</code>. Le gate de merge <code>smoke/runner</code> exécute <b>neuf vérifications à chaque PR</b> contre un cluster kind éphémère, dont la rotation de certificats mTLS et le rechargement à chaud SIGHUP. Les exercices de reprise sont <b>trimestriels</b> et produisent une évidence auditeur-prête : <code>efe-dr-drill</code> émet un <i>DrillReport</i> SOC 2 et vérifie que la chaîne d'audit HMAC survit à un basculement de région ; <code>efe-backup</code> conditionne toute restauration à un manifeste signé <b>Ed25519</b> et à cinq vérifieurs indépendants. Enfin, l'évidence trimestrielle (<code>bench/harness</code>, <code>slos/rollup</code>) est <b>signée cosign</b> et publiée. C'est la différence entre « on a du code » et « on opère, et on le prouve à chaque PR ».</p>
+
+  <div class="callout key"><p><b>Deux méta-atouts à ne pas oublier.</b> D'abord, la <b>frontière d'honnêteté</b> : toute la couche atteste l'<i>intégrité</i> (ce qui s'est passé, re-prouvable) et <b>jamais la correction</b> d'une décision (<code>outillé ≠ conforme</code> ; <code>reg-evidence</code> n'a délibérément aucun champ « compliant »). Devant un partenaire gouvernance, cette limite assumée <i>est</i> de la crédibilité. Ensuite, <b>le corpus existant</b> — ne pas réinventer : trois ADRs qui <i>sont</i> le récit du moat (SWARM-006 « la provenance par-agent est le moat » — Lot P4 : 24,34 µs/agent, 815 o/record, 100 % tracé, altération détectée ; SWARM-008 ; SWARM-011), trois versions de deck Kovant (v1/v2/v3) et toute la série documentaire Kovant sont déjà dans le dépôt.</p></div>
+</div>
+
+<!-- 3 -->
+<div class="wrap page">
+  <h2><span class="num">§3</span> Les 6 couches produit — la preuve de profondeur (67 crates)</h2>
+  <p>Les arguments transverses ci-dessus ne tiennent que parce qu'ils reposent sur des couches réelles et testées. Cette section les inventorie <b>intégralement</b> — les 67 membres, aucun omis. La lecture n'a pas besoin d'être exhaustive en réunion : les crates marqués <span class="star">★</span> sont ceux à haute pertinence pour un partenaire confiance ; les autres constituent la profondeur qui rend le dossier crédible.</p>
+
+  <h3>① Le moat de provenance « Kovant P1 » <span class="muted">— 8 crates, 224 tests, tous <span class="star">★</span></span></h3>
+  <p>C'est le cœur du partenariat : une sous-couche cryptographique de provenance pour l'IA agentique, auditable de bout en bout, sans aucune crypto externe, et honnête par le type (« intègre ≠ correct / ≠ inforgeable / ≠ conforme »). Les deux actifs les plus forts sont la <b>chaîne de bundle trustless</b> (S4 <code>verify-mini</code> + S4a <code>forensic-export</code> : un régulateur re-prouve l'intégrité en ne faisant confiance qu'aux maths et à son propre compilateur) et <b>reg-evidence</b> (S6 : les dossiers EU AI Act / GDPR / CSDDD-LkSG re-dérivables — le ROI heures→minutes).</p>
+  <table><thead><tr><th style="width:20%">Crate</th><th>Rôle</th><th style="width:34%">Démontrable / différenciateur</th></tr></thead><tbody>
+    <tr><td class="s">★ provenance-dag <span class="muted">S0</span></td><td>Le DAG scellé, re-prouvable, socle de confiance. Crypto écrite à la main, encodage canonique binaire.</td><td>Doctest (seal → reprove → verify_against_root) ; 29 tests dont vecteurs NIST/RFC.</td></tr>
+    <tr><td class="s">★ provenance-capture <span class="muted">S1</span></td><td>La capture (4 taps) + store souverain ; entrées hachées (minimisation GDPR) ; garde d'egress (loopback only).</td><td><code>examples/emit_demo_case.rs</code> ; garde SSRF-safe testée.</td></tr>
+    <tr><td class="s">★ audit-api <span class="muted">S2</span></td><td>Le routeur pur (HTTP-as-pure-function, air-gap testable) : projection, re-preuve à la lecture, RBAC, gate d'écriture humaine, enveloppe « intègre ≠ correct » (aucun champ « correct »).</td><td><code>tests/airgap.rs</code> ; 41 tests (le plus du cluster).</td></tr>
+    <tr><td class="s">★ audit-console <span class="muted">S3</span></td><td>La console opérationnelle (HTTP/1.1 + HTML faits main, zéro dép). Badge/cadenas vert, fraîcheur, <i>fail-loud</i> au rouge ; export en un clic.</td><td>Binaire <code>audit-console</code> ; <code>seed_demo.rs</code> ; e2e filaire.</td></tr>
+    <tr><td class="s">★ provenance-verify <span class="muted">S4</span></td><td>Le vérifieur forensic autonome (CLI) : exit 0/1/2, sortie JSON faite main.</td><td>CLI <code>provenance-verify &lt;jsonl&gt; --key-hex … --root …</code>.</td></tr>
+    <tr><td class="s">★ verify-mini <span class="muted">S4</span></td><td>Le vérifieur à <b>arbre de dépendances littéralement vide</b> (SHA-256/HMAC/JSONL std-only). Fidélité à S0 prouvée octet-à-octet (cross-check en dev-dep).</td><td><code>cargo tree</code> = 1 ligne ; recompile offline 1,6 s. <b>Le cœur du moat IP.</b></td></tr>
+    <tr><td class="s">★ forensic-export <span class="muted">S4a</span></td><td>L'assembleur du bundle trustless : re-prouve, <b>vendore la source du vérifieur</b> (à recompiler par le tiers), écrit records + root + récit + README du sceptique. La clé n'est jamais écrite.</td><td><code>examples/emit_bundle.rs</code> ; <code>trustless_end_to_end.rs</code>.</td></tr>
+    <tr><td class="s">★ reg-evidence <span class="muted">S6</span></td><td>Le moteur d'évidence : dérive du DAG re-prouvé les dossiers <b>EU AI Act (art. 12/9-14/26/72), GDPR (5-35), CSDDD/LkSG</b> comme vues re-dérivables. <i>outillé ≠ conforme</i>.</td><td><code>examples/csddd_seed.rs</code> ; re-dérivation hors-process depuis un vrai bundle.</td></tr>
+  </tbody></table>
+
+  <h3>② Substrat + produit d'essaim + mesure <span class="muted">— 10 crates</span></h3>
+  <p>La couche qui rend la provenance <b>par-agent</b> possible et la <b>productise</b>. Le point différenciant est que même les agents « Mode A » purement Rust — qui n'émettent aucun record LLM et forment le gros de la flotte — sont hachés canoniquement et chaînés dans une chaîne HMAC par-essaim re-prouvable hors-ligne. Le tout est exposé en HTTP (l'endpoint <code>/verify/:id</code>) et observable en direct (dashboard SSE). S'y ajoute le harnais de mesure qui a eu l'honnêteté de <b>falsifier sa propre thèse</b>.</p>
+  <table><thead><tr><th style="width:22%">Crate</th><th>Rôle</th><th style="width:30%">Démontrable</th></tr></thead><tbody>
+    <tr><td class="s">★ efe-swarm-provenance</td><td>Provenance par-agent (le « moat ») : <code>verify_swarm</code> re-prouve chaîne + contenu + DAG + couverture depuis 2 fichiers + 1 clé ; pont Mode A↔Mode C.</td><td><code>examples/verify_offline.rs</code> (re-preuve tiers) ; 151 tests.</td></tr>
+    <tr><td class="s">★ efe-swarm-sdk</td><td>Le SDK 1-fonction <code>swarm.run(task, topology, budget)</code> : <b>5 topologies</b> (Generate-Verify, Pipeline, Hiérarchique, Consensus, Auto), keyless/self-host, garde d'egress.</td><td><code>--example quickstart</code>, <code>selfhost_ollama/flagship</code> (~15 exemples).</td></tr>
+    <tr><td class="s">★ efe-swarm-gateway</td><td>Gateway HTTP (Axum) : <code>POST /v1/swarm/run</code> + <code>GET /v1/swarm/verify/:id</code> (re-preuve indépendante), Postgres write-once, OIDC, redaction PII.</td><td><code>curl_e2e.sh</code> (run → verify → records → metrics).</td></tr>
+    <tr><td class="s">· efe-swarm-dashboard</td><td>Cœur dashboard live (SSE) : tape les seams existants via un observateur, 4 panneaux, replay des retardataires. « Regarder l'essaim en direct. »</td><td>Doctest + <code>replay_and_live.rs</code>.</td></tr>
+    <tr><td class="s">· efe-bench-inference</td><td>Le harnais de mesure (7 invariants) : justesse oracle-scorée × coût jetons, cheap-parallèle vs gros modèle, bundle re-prouvable. <b>A falsifié sa propre thèse.</b></td><td><code>--example run_bench</code> (Ollama réel) ; 7 exemples P2.</td></tr>
+    <tr><td class="s">· efe-blackboard</td><td>Le substrat d'état (Blackboard = vérité durable, EventBus = index best-effort). Rend possible la couverture 100 % et le replay déterministe.</td><td>11 exemples (swarm_load/reliable/streaming/verifier…).</td></tr>
+    <tr><td class="s">· efe-swarm-topology</td><td>Compositions nommées (Generate-Verify, Pipeline streaming, Consensus) génériques sur des traits.</td><td>54 tests.</td></tr>
+    <tr><td class="s">· efe-swarm-memory</td><td>Mémoire inter-runs <b>re-prouvable</b> : chaîne <code>vN = HMAC(vN-1, FoldRecord)</code> → <code>memory_root</code> ; la mémoire est une entrée hachée/épinglée qui ne gouverne pas.</td><td>~39 tests (socle MEM-1 ; recall/gouvernance = MEM-2/3, à venir).</td></tr>
+    <tr><td class="s">· efe-swarm-orchestrator</td><td>Runtime DAG (Kahn, parallèle tokio), timeouts, <b>compliance opt-in par-agent</b> (sig-verify/gold-gate) avec verdict auditable.</td><td><code>audit_n21_swarm_orchestration.rs</code>.</td></tr>
+    <tr><td class="s">· efe-audit-core</td><td>La crypto partagée (HMAC-SHA256 chaîné + HKDF par tenant), <b>byte-identique</b> à efe-nano → chaînes swarm et trace mutuellement vérifiables.</td><td>Golden-vector regression ; ~14 tests.</td></tr>
+  </tbody></table>
+</div>
+
+<!-- 4 -->
+<div class="wrap page">
+  <h3>③ Runtime nano « EFE Agentic » + compliance N-series <span class="muted">— 11 crates</span></h3>
+  <p>Le runtime phare « B2A » : un agent client (Claude/GPT) délègue ses sous-tâches à un essaim de nano-agents déterministes (<b>Mode A</b> Rust pur ~1-10 ms · <b>Mode B</b> modèle local en microVM Firecracker · <b>Mode C</b> LLM + schéma JSON strict + redaction PII + contrôle de coût). Autour, la <b>série N</b> livre exactement le vocabulaire d'un régulateur : provenance par appel, identité cryptographique du publieur, gate de qualité gold, et le câblage qui allume tout par défaut. Le seul membre <b>démontrable en live sur la vraie API Claude</b> est ici (<code>efe-agentic-bridge</code>).</p>
+  <table><thead><tr><th style="width:22%">Crate</th><th>Rôle</th><th style="width:30%">Démontrable</th></tr></thead><tbody>
+    <tr><td class="s">★ efe-nano</td><td>Le runtime privé (42K loc) : catalogue, dispatcher DAG, Mode A/B/C, trace d'audit <b>HMAC + époques Merkle</b>, tombstone GDPR, budget/metering, replay. 21 agents de départ.</td><td>~1 175 tests ; 11 suites d'intégration (audit chain, Merkle, GDPR…).</td></tr>
+    <tr><td class="s">★ efe-agentic-bridge</td><td>Le pont N21/N26/N27 vers la <b>vraie API Anthropic Messages</b> (tool_use, SSE, retry Retry-After + backoff, comptage de coût, provenance par appel).</td><td>CLI live <code>efe-claude-smoke --question …</code>. <b>La démo API réelle.</b></td></tr>
+    <tr><td class="s">★ efe-llm-provenance <span class="muted">N17</span></td><td>Record forensic par appel Mode C : hachage BLAKE3 des prompts, registre de modèle hash-vérifié, requêtes tenant, 12 surfaces Prometheus.</td><td>~112 tests ; 5 endpoints de requête.</td></tr>
+    <tr><td class="s">★ efe-publisher-identity <span class="muted">N18</span></td><td>Racine d'identité : <b>Ed25519</b> constant-time, échelle KYC 4 tiers, cascade de révocation, hook sanctions, <b>ledger de publication HMAC-chaîné</b>.</td><td>CLI <code>efe-publisher-verify</code> (re-vérifie la chaîne hors-ligne).</td></tr>
+    <tr><td class="s">★ efe-gold-test-gate <span class="muted">N19</span></td><td>Gate de promotion : gold set immuable operator-approuvé, ledger de runs <b>et bypass</b> HMAC-chaîné, 3 stratégies d'assertion (strict/tolérance/similarité).</td><td>CLI <code>efe-gold-verify</code> ; ~251 tests (le plus gros crate compliance).</td></tr>
+    <tr><td class="s">★ efe-compliance-wiring <span class="muted">N24</span></td><td>Le <b>flip</b> : câble les vrais N18/N19 dans l'adaptateur et bascule le DAG par défaut de gates-OFF à <code>tier1_strict</code> fail-closed. Défense contre réécriture silencieuse du gold set.</td><td>~103 tests ; presets tier1_strict / experimental_relaxed.</td></tr>
+    <tr><td class="s">★ efe-nano-swarm-adapter <span class="muted">N23</span></td><td>Le point d'étranglement qui force sig + gold + idempotence + seed déterministe + audit sur <b>chaque</b> dispatch.</td><td>~87 tests (audit_n23, chaos_n23).</td></tr>
+    <tr><td class="s">★ efe-nano-preanalysis</td><td>6 agents de pré-analyse dont un <b>PII-redactor</b> et un validateur de schéma — briques de conformité pour tout DAG.</td><td>~80 tests ; 6 agents nommés.</td></tr>
+    <tr><td class="s">· efe-llm-provenance / efe-multi-region <span class="muted">N16</span></td><td>Replay multi-région sous <b>politique de résidence</b> + JWT opérateur + shipment de chaîne.</td><td>~129 tests (transport gRPC/RS256 différé).</td></tr>
+    <tr><td class="s">· efe-nano-sdk</td><td>Le SDK public <b>MIT</b> (types/traits) — pare-feu de licence vs runtime commercial ; zéro dép backend transitive côté client.</td><td>~331 tests inline ; vocabulaire compliance/provenance/publisher/gold.</td></tr>
+    <tr><td class="s">· efe-nano-inference-daemon <span class="muted">N11</span></td><td>Daemon d'inférence guest (Firecracker) : vérifie le <b>SHA-256 du modèle</b> au boot avant chargement (attestation supply-chain).</td><td>~18 tests (inférence = stub ; ONNX réel différé).</td></tr>
+  </tbody></table>
+
+  <h3>④ Scout &amp; Synthesize — l'app multi-LLM <span class="muted">— 3 crates, 488 tests</span></h3>
+  <p>Une application concrète de coordination multi-LLM, avec un différenciateur rare : la sortie des petits modèles est <b>contrainte par grammaire GBNF</b>, ce qui donne une conformité JSON-Schema <i>mathématique</i> (pas « espérée par prompt »), avec un enregistrement d'audit par appel. Au-dessus, un orchestrateur à chaîne d'audit HMAC/BLAKE3 (format figé v1.0.0) et des invariants de gouvernance vérifiés par des tests nommés.</p>
+  <table><thead><tr><th style="width:24%">Crate</th><th>Rôle</th><th style="width:28%">Démontrable</th></tr></thead><tbody>
+    <tr><td class="s">★ efe-nano-app-coordinator</td><td>Phase 1 : 6 nano-robots SLM à sortie <b>grammar-enforced (GBNF)</b> → conformité mathématique ; 1 audit/invocation.</td><td>62 tests ; <code>audit_chain_integrity.rs</code>.</td></tr>
+    <tr><td class="s">★ efe-coordinator</td><td>Phase 2 : orchestrateur DAG + blackboard stigmergique + bridge multi-LLM réel (Claude/GPT/Gemini) + SSE. Chaîne HMAC/BLAKE3, hard-caps par tenant.</td><td>3 démos SSE (<code>mission_a/b/speculative</code>) ; 317 tests.</td></tr>
+    <tr><td class="s">★ efe-multi-llm</td><td>Phase 3 : <b>5 workflows</b> (Vote/Relay/Debate/Specialist/Cascade) + Borda/Condorcet ; invariants anti-monoculture, isolation tenant, revert de budget atomique — testés.</td><td>109 tests ; <code>invariants_phase3.rs</code>.</td></tr>
+  </tbody></table>
+</div>
+
+<!-- 5 -->
+<div class="wrap page">
+  <h3>⑤ Le cœur plateforme <span class="muted">— 6 crates</span></h3>
+  <p>La preuve que ce n'est pas une couche de démo posée sur du vide : un serveur de production et son runtime. <b>efe-server</b> est de fait un <i>plan de contrôle conformité</i> en code (audit HMAC-chaîné vérifiable en CLI, effacement/portabilité GDPR, BYOK, notification de sous-traitants, OIDC/JWT/mTLS), et <b>efe-preview-server</b> est la meilleure démo visuelle turnkey du dépôt.</p>
+  <table><thead><tr><th style="width:22%">Crate</th><th>Rôle</th><th style="width:30%">Démontrable</th></tr></thead><tbody>
+    <tr><td class="s">★ efe-server</td><td>Le binaire serveur (48K loc, 902 tests) : namespace <code>/v1</code> quasi-conformité (data_rights GDPR 17/20, subprocessors, audit-export), OIDC/JWT/JWKS, mTLS, <b>audit HMAC hash-chaîné</b>.</td><td>CLI <code>efe-verify-audit</code> (détecte toute suppression/mutation, exit 0/1).</td></tr>
+    <tr><td class="s">★ efe-preview-server</td><td>Bridge SSE devant efe-coordinator : stream d'une mission d'essaim en direct (start→savings), lab A/B, endpoint de résilience. <b>La meilleure démo visuelle.</b></td><td>Binaire <code>efe-preview-server</code> (localhost, clés côté serveur).</td></tr>
+    <tr><td class="s">· efe-core</td><td>Le runtime (39K loc) : lifecycle d'essaim (genesis/fusion/consensus/dissolution) + sous-système « alignment/constitution » (cône de contraintes gouvernable, versionné, breach).</td><td>Benches + ~38 tests d'intégration.</td></tr>
+    <tr><td class="s">· efe-telemetry</td><td>Observabilité (14K loc, 328 tests) : logs JSON avec <b>redaction de champs (PII-safe)</b>, spans, /metrics Prometheus, sink d'audit d'événements de gouvernance.</td><td>e2e + OTel ; init(TelemetryConfig).</td></tr>
+    <tr><td class="s">· efe-kernels</td><td>Substrat GPU (CUDA derrière feature) : ~22 kernels, équivalence CPU/GPU testée, et un <b>fingerprint GPU = attestation d'exécution matérielle</b>.</td><td>Suite cross-backend ; CUDA hors build par défaut.</td></tr>
+    <tr><td class="s">· efe-ffi</td><td>Bindings Python PyO3/maturin (classify zero-copy, verdicts immuables, chargement de bundle, numpy) — une stack ML Python consomme EFE en process.</td><td>45 tests.</td></tr>
+  </tbody></table>
+
+  <h3>⑥ L'infra commerciale <span class="muted">— 18 crates (M21→M33, D17)</span></h3>
+  <p>La ceinture d'entreprise. Plusieurs de ces crates portent une vraie <b>surface de gouvernance</b> et pas seulement de la plomberie : un bac à sable Firecracker avec approbation humaine in-band, une gestion de changement de taxonomie signée, une cascade d'effacement GDPR câblée dans l'apprentissage, une facturation PCI-consciente, une reprise après sinistre qui émet de l'évidence SOC 2.</p>
+  <table><thead><tr><th style="width:20%">Crate</th><th>Rôle</th><th style="width:26%">Démontrable</th></tr></thead><tbody>
+    <tr><td class="s">★ efe-agent-runner <span class="muted">M25</span></td><td>Bac à sable <b>Firecracker réel</b> par-tenant : whitelist d'outils, <b>approbation humaine in-band</b> sur chaque écriture (blocage AWAITING_APPROVAL), DPIA, audit qui enregistre <code>sandbox_escape_attempt_detected</code>. <i>Expérimental.</i></td><td>Contrôleur K8s + gRPC ; 88 tests.</td></tr>
+    <tr><td class="s">★ efe-curation <span class="muted">M23</span></td><td>Gestion de changement de taxonomie : détection de dérive (KL), DAG de version <b>signé</b>, chaîne d'audit HMAC vérifiable de bout en bout, canary + auto-rollback.</td><td>gRPC ; 62 tests (densité la + haute).</td></tr>
+    <tr><td class="s">★ efe-active-learning <span class="muted">M24</span></td><td>Boucle fermée (observe→select→label→retune→promote) avec <b>cascade d'effacement GDPR Art. 17 câblée dans l'apprentissage</b> (le droit à l'effacement propage jusqu'aux bundles ré-entraînés).</td><td>gRPC ; 53 tests.</td></tr>
+    <tr><td class="s">★ efe-gateway <span class="muted">N22</span></td><td>La façade publique : <b>21 routes</b> (agentic, swarms, compliance, gold, llm-provenance), JWT + isolation tenant, RFC 7807, W3C Trace, OpenAPI/Swagger, probes K8s.</td><td>Binaire <code>efe-gateway</code> ; <code>/v1/llm-provenance</code>, <code>/compliance/status</code> — <b>curl-able live</b>.</td></tr>
+    <tr><td class="s">★ efe-region <span class="muted">M30</span></td><td>Awareness région + failover opérateur + <b>drill DR trimestriel qui émet de l'évidence SOC 2</b> et vérifie la survie de la chaîne HMAC au basculement.</td><td>Binaire <code>efe-dr-drill</code> ; 18 tests.</td></tr>
+    <tr><td class="s">★ efe-billing <span class="muted">M31</span></td><td>Facturation Stripe : <b>no-PAN</b>, idempotence <code>(tenant,période,action)</code>, webhooks HMAC, réconciliation de dérive.</td><td>42 tests ; verify_stripe_signature.</td></tr>
+    <tr><td class="s">★ efe-pii <span class="muted">M29</span></td><td>Détection + redaction PII (Presidio) : échelle Off/Detect/Redact/<b>Strict</b> (reject) + hardening Unicode (homoglyphes, zero-width).</td><td>33 tests.</td></tr>
+    <tr><td class="s">★ efe-saga <span class="muted">D93</span></td><td>Orchestrateur de saga (compensation en ordre inverse, idempotence) ; cas nommé <b>cascade GDPR-delete ≤ 30 j</b>.</td><td>API Saga.run() ; 9 tests.</td></tr>
+    <tr><td class="s">★ efe-admin</td><td>CLI d'onboarding self-service (POC 30 min) : Tenant/Compliance/Keys/DPIA/audit-export/curation — toute la surface gouvernance drivable au terminal.</td><td>Binaire <code>efe-admin</code> ; 58 tests (SSO/login = stubs v1).</td></tr>
+    <tr><td class="s">· efe-llm-router <span class="muted">M21</span></td><td>Gateway multi-provider (8 providers) + gouvernance de coût par tenant + circuit breaker + cache ; <b>audit HMAC-chaîné par appel</b>.</td><td>Binaire microservice ; 23 tests (Bedrock = stub).</td></tr>
+    <tr><td class="s">· efe-prompts <span class="muted">M21</span></td><td>Registre de prompts versionnés, eval-attestés, A/B ; substitution <b>anti-Jinja2</b> (choix de sécurité documenté).</td><td>30 tests dont proptest.</td></tr>
+    <tr><td class="s">· efe-cache <span class="muted">M27</span></td><td>Plan de cache Redis : cache d'embeddings, <b>cache LLM signé HMAC</b> (renvoie Poisoned plutôt qu'une valeur altérée), quotas Lua-atomiques.</td><td>17 tests.</td></tr>
+    <tr><td class="s">· efe-events <span class="muted">M28</span></td><td>Enveloppe d'événement typée + NATS JetStream ; hiérarchie de sujets par tenant portant les <b>signaux de gouvernance</b> (approbations, DPIA, dérive).</td><td>13 tests + bench.</td></tr>
+    <tr><td class="s">· efe-metering <span class="muted">M31</span></td><td>Metering temps-réel par tenant, invisible sur le hot path (Redis + cron de rollup).</td><td>46 tests.</td></tr>
+    <tr><td class="s">· efe-multimodal <span class="muted">M30</span></td><td>Inférence multimodale (vision SigLIP + audio Whisper) + input-guard (magic-byte, taille, <b>hash SHA-256 audit-safe</b>, DPIA).</td><td>45 tests (fusion clip_joint = stub).</td></tr>
+    <tr><td class="s">· efe-vector <span class="muted">M32</span></td><td>Index vectoriel maison : flat + <b>HNSW</b> + quantization binaire (~32× mémoire, recall &gt;0,85), isolation tenant par construction.</td><td>73 tests ; 3 benches.</td></tr>
+    <tr><td class="s">· efe-retrieval / efe-kg / efe-graphrag</td><td>Retrieval hybride (BM25 + RRF), graphe de connaissances pur-Rust, orchestrateur GraphRAG multi-hop. Proof-of-depth (pertinence gouvernance moindre).</td><td>38 / 72 / 26 tests (in-memory).</td></tr>
+  </tbody></table>
+
+  <h3>+ Méta-essaim &amp; harnais d'exploitation <span class="muted">— 3 + 7 crates</span></h3>
+  <table><thead><tr><th style="width:22%">Crate</th><th>Rôle</th><th style="width:28%">Démontrable</th></tr></thead><tbody>
+    <tr><td class="s">★ efe-meta-swarm</td><td>Consensus latent hiérarchique : N essaims convergent <b>sans partager d'état</b> ; <b>enveloppe de sécurité prouvée</b> (projection dans l'ensemble admissible à chaque pas).</td><td><code>--example three_swarms_kovant</code> (procurement Kovant) ; <code>safety_violation_attempt</code>.</td></tr>
+    <tr><td class="s">· efe-meta-swarm-server / -proto</td><td>Plan de contrôle gRPC : <b>mTLS SAN-pinné</b>, hot-rotation cert-manager, OTel, contract-drift guard au build.</td><td>Binaires controller/participant ; ~406 marqueurs de test.</td></tr>
+    <tr><td class="s">★ bench/harness</td><td>Orchestrateur bench + chaos reproductible → verdict → baseline versionnée → <b>évidence trimestrielle signée cosign</b> (badges SVG, API JSON, mdBook).</td><td>Binaire <code>efe-bench-harness</code> ; ~306 tests (le + profond).</td></tr>
+    <tr><td class="s">★ smoke/runner</td><td>Gate de merge <b>9 checks à chaque PR</b> (boot, L1/L2, rotation mTLS, reload SIGHUP, metrics, OTel…) contre kind éphémère.</td><td>Binaire <code>efe-smoke</code> (run + gate).</td></tr>
+    <tr><td class="s">★ slos/rollup</td><td>4 SLOs + rollup multi-tier + burn-rate (Google-SRE) + <b>évidence PDF tamper-evident (SHA256 + cosign)</b>.</td><td>Binaire <code>efe-slo-rollup</code>.</td></tr>
+    <tr><td class="s">★ efe-backup <span class="muted">D17</span></td><td>DR : restore ordonné gardé par <b>manifeste Ed25519 + 5 vérifieurs</b> (dont intégrité chaîne HMAC, signatures, OIDC), drills RTO-mesurés.</td><td>Binaire <code>efe_backup</code> (7 sous-commandes).</td></tr>
+    <tr><td class="s">· efe-bench / tools/loadgen / efe-cluster-provisioner</td><td>Bench gRPC (10 SLOs, refuse la prod), loadgen L2 <b>déterministe bit-à-bit</b> (profil compliance-quarterly), provisioner kind/k3s partagé.</td><td>Binaires <code>efe_bench</code>, <code>efe-meta-swarm-loadgen</code>.</td></tr>
+  </tbody></table>
+</div>
+
+<!-- 6 -->
+<div class="wrap page">
+  <h2><span class="num">§4</span> Les démos live — le catalogue exécutable</h2>
+  <p>La provenance devient tangible quand on la <i>montre</i>. Le dépôt offre 71 exemples, 25 CLIs et 45 endpoints ; voici les huit gestes à haute valeur pour Kovant, du plus décisif (« vérifiez sans nous ») au plus visuel (« regardez l'essaim tourner »). Règle : chaque démo &lt; 2 min, répétée, avec un filet (capture pré-enregistrée).</p>
+  <table><thead><tr><th class="c" style="width:8%">#</th><th style="width:26%">Démo</th><th style="width:34%">Commande</th><th>Le message</th></tr></thead><tbody>
+    <tr><td class="c s">D1-3</td><td>Bundle CSDDD (re-preuve · altération · dossier)</td><td><code>csddd_seed</code> → <code>verify-mini</code> ; <code>open reg/csddd.html</code></td><td>« Re-prouvez vous-mêmes, hors-ligne. » + « une capture, trois lectures (CSDDD/LkSG/AI Act) ».</td></tr>
+    <tr><td class="c s">D4</td><td>Essaim procurement Kovant</td><td><code>cargo run --example three_swarms_kovant -p efe-meta-swarm</code></td><td>Consensus multi-agents gouverné + enveloppe de sécurité prouvée.</td></tr>
+    <tr><td class="c s">D5</td><td>Le moat en HTTP</td><td><code>efe-swarm-gateway</code> + <code>curl_e2e.sh</code></td><td>La re-preuve <i>sur le fil</i> : <code>run</code> → <code>verify/:id</code> détecte et localise l'altération.</td></tr>
+    <tr><td class="c s">D6</td><td>Mission d'essaim en direct</td><td><code>efe-preview-server</code> (SSE)</td><td>Regarder un essaim gouverné tourner + le <i>savings report</i>.</td></tr>
+    <tr><td class="c s">D7</td><td>Claude réel, provenancé</td><td><code>efe-claude-smoke --question …</code></td><td>Vraie API Anthropic + provenance par appel (N26).</td></tr>
+    <tr><td class="c s">D8</td><td>Vérifieurs opérateur</td><td><code>efe-verify-audit</code> · <code>efe-publisher-verify</code> · <code>efe-gold-verify</code></td><td>Un tiers re-vérifie la chaîne cryptographique <b>en une commande</b>.</td></tr>
+  </tbody></table>
+
+  <h2 style="margin-top:1.1rem;"><span class="num">§5</span> Les matériaux déjà prêts</h2>
+  <p>Un dossier de partenariat ne part pas de zéro : le dépôt contient déjà un corpus cohérent qu'il faut <b>réutiliser plutôt que réinventer</b>.</p>
+  <ul>
+    <li><b>3 ADRs = le récit du moat</b> (à réutiliser verbatim) : SWARM-006 « la provenance par-agent est le moat » ; SWARM-008 « self-host multi-modèle : GO » ; SWARM-011 « self-host keyless est le mode phare ».</li>
+    <li><b>3 decks Kovant</b> (v1/v2/<b>v3</b>, <code>docs/marketing/</code>) + le <b>deck « 4 moteurs »</b> (14 slides, produit cette semaine).</li>
+    <li><b>La série Kovant</b> (~20 docs) : P0/P1/P2 architectures, S2/S3/S4/S6, roadmaps, propositions, <b>Vision &amp; Ambition 1-page</b>, le plan de présentation.</li>
+    <li><b>La série technique « Partie 3→18 »</b> (substrat, agents/topologies, provenance moat, souveraineté/PII, résultats réels, bench scale, qualité code, ce-qui-manque, runbooks) + <b>27 docs d'architecture M50</b>.</li>
+    <li><b>Les preuves de conformité &amp; d'ops</b> : <code>docs/compliance/controls_index.yaml</code> (le mapping) et <code>SLO.md</code> (les SLOs gardés en CI).</li>
+  </ul>
+
+  <h2 style="margin-top:1.1rem;"><span class="num">§6</span> Recommandation &amp; caveats honnêtes</h2>
+  <p><b>La ligne à présenter</b> — ne pas dérouler les six couches (ça noie). Ouvrir sur <b>A1 + A2</b> (le moat + « vérifiez sans nous », démos D1/D2) ; enchaîner sur <b>A3</b> (le mapping réglementaire, dossier D3) ; asseoir la souveraineté avec <b>A4</b> (les 65 runs, 0 échec) ; culminer sur <b>② le MoE qui réfute la thèse</b> (le pic d'honnêteté) ; clore sur <b>A5 + A6</b> (« et c'est un vrai SaaS : Stripe, SLOs gardés en CI, DR trimestriel, ~9 500 tests »). L'<i>ask</i> est une mesure et un bundle re-prouvable, pas une vente.</p>
+  <div class="callout warn"><p><b>À sous-promettre (documenté in-code — des choix, pas des défauts).</b> Mode B Firecracker tourne sur <code>StubVmPool</code> (swap réel différé) ; KYC/sanctions de N18 sont des stubs opérateur (l'Ed25519 et le ledger sont réels) ; <code>efe-agent-runner</code> est explicitement <i>expérimental</i> (clause de sunset, chiffrement d'état = stub KMS) ; le transport cross-région de N16 est in-process (gRPC/RS256 différés) ; <code>efe-core</code> marque ELS/HBM/CUDA en stub ; la fusion <code>clip_joint</code> multimodale est un stub ; beaucoup de fonctionnalités sont derrière des <i>features</i> cargo (le build par défaut est léger). Dire ces limites <b>avant</b> qu'on ne les demande est cohérent avec toute la thèse : intégrité et honnêteté d'abord.</p></div>
+  <div class="callout ok"><p><b>Le geste de clôture.</b> Tendre le bundle (clé USB / lien) : « Re-compilez le vérifieur vous-mêmes — il est dans le bundle — ce soir, hors-ligne, sans nous. C'est la seule chose qu'aucun deck d'émergence ne pourra jamais vous offrir. » Puis l'<i>ask</i> : un périmètre mesuré, un bundle re-prouvable, une mesure conjointe sur une tâche Kovant réelle.</p></div>
+</div>
+
+</body>
+</html>
