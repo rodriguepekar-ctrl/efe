@@ -36,7 +36,7 @@ pii = ["dep:efe-pii", "dep:regex"]
 # `efe-coordinator` (fan-out + 5 missions dans `efe-multi-llm`). OFF par défaut → build
 # **byte-identique** (deps non compilées). ON = compile les 3 providers frontière du
 # coordinator. L'activation **runtime** reste gouvernée par `EFE_LLM_FRONTIER_ENABLED`.
-frontier-llm = ["dep:efe-coordinator", "dep:efe-multi-llm", "efe-coordinator/anthropic", "efe-coordinator/openai", "efe-coordinator/gemini"]
+frontier-llm = ["dep:efe-coordinator", "dep:efe-multi-llm", "dep:provenance-capture", "efe-coordinator/anthropic", "efe-coordinator/openai", "efe-coordinator/gemini"]
 
 [dependencies]
 efe-swarm-sdk        = { path = "../efe-swarm-sdk", version = "0.0.1" }
@@ -68,6 +68,7 @@ regex   = { version = "1", optional = true }                            # détec
 # frontière) ; AUCUN tonic/prost (ni l'un ni l'autre n'en dépend) → pas de conflit de versions.
 efe-coordinator = { path = "../efe-coordinator", version = "0.0.1", optional = true }  # Coordinator + providers Claude/GPT/Gemini
 efe-multi-llm   = { path = "../efe-multi-llm",   version = "0.0.1", optional = true }  # 5 missions (servies en M3)
+provenance-capture = { path = "../provenance-capture", version = "0.0.1", optional = true }  # egress guard is_local_endpoint (réutilisé — pas de 3e copie)
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["macros", "rt-multi-thread", "time"] }

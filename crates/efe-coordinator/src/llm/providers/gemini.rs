@@ -207,6 +207,11 @@ impl LlmProvider for GeminiProvider {
         format!("gemini_{}", self.model)
     }
 
+    fn endpoint(&self) -> Option<String> {
+        // Endpoint canonique de l'API Gemini (l'hôte suffit à classer la localité : distant).
+        Some("https://generativelanguage.googleapis.com/v1beta/models".to_string())
+    }
+
     async fn call(&self, req: LlmCall) -> CoordResult<LlmResponse> {
         if self.breaker.is_open() {
             return Err(CoordError::LlmProvider {

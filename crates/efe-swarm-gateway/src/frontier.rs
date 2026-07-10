@@ -8,10 +8,10 @@
 //! et la **capture de provenance** (M1) décorera chaque provider **ici même** — un
 //! `LlmProvenanceRecord` scellé par appel — sans changer la signature publique ci-dessous.
 //!
-//! **M0 (fondations)** : on enregistre les providers frontière **réels** (best-effort — un
-//! provider dont la clé manque est simplement absent). Aucune route n'est encore montée
-//! (M3) et aucun appel n'est encore décoré (M1) : ce module ne fait qu'**assembler** le
-//! coordinator, gouverné au runtime par `EFE_LLM_FRONTIER_ENABLED` côté binaire.
+//! **M0+M1** : on enregistre les providers frontière **réels** (best-effort — un provider
+//! dont la clé manque est simplement absent), **chacun enveloppé** du décorateur de provenance
+//! [`crate::mission::ProvenanceProvider`] (M1). Aucune route n'est encore montée (M3) : ce module
+//! assemble le coordinator décoré, gouverné au runtime par `EFE_LLM_FRONTIER_ENABLED` côté binaire.
 //!
 //! **Souveraineté** : aucune clé n'est loggée ni copiée hors du provider. Les constructeurs
 //! `from_env` du coordinator lisent la clé au moment de bâtir le client HTTP ; cet état
@@ -31,9 +31,9 @@ use efe_coordinator::{ClaudeProvider, Coordinator, GeminiProvider, GptProvider, 
 /// d'exposer un coordinator vide. Ne panique jamais — une clé absente ⇒ provider omis
 /// (les `from_env` renvoient une `Err` silencieuse, pas un panic).
 ///
-/// **M1** insérera ici la décoration de provenance : chaque `Arc<dyn LlmProvider>`
-/// enregistré sera enveloppé d'un `ProvenanceProvider` qui scelle l'appel (endpoint
-/// **observé**, `R4RemoteChannel`, hachés blake3, échecs compris) dans le puits de mission.
+/// **M1 (fait)** : chaque provider est enveloppé d'un [`crate::mission::ProvenanceProvider`]
+/// qui scelle l'appel (endpoint **observé** → `R4RemoteChannel` distant, hachés blake3,
+/// échecs compris) dans le puits de mission actif — capture `no-op` hors d'un scope de mission.
 #[must_use]
 pub fn coordinator_from_env() -> Option<Arc<Coordinator>> {
     let registry = ProviderRegistry::new();
@@ -41,15 +41,15 @@ pub fn coordinator_from_env() -> Option<Arc<Coordinator>> {
 
     // Best-effort : un provider dont la clé manque est omis (from_env → Err), jamais fatal.
     if let Ok(p) = ClaudeProvider::from_env() {
-        registry.register(Arc::new(p));
+        registry.register(crate::mission::ProvenanceProvider::wrap(Arc::new(p)));
         registered += 1;
     }
     if let Ok(p) = GptProvider::from_env() {
-        registry.register(Arc::new(p));
+        registry.register(crate::mission::ProvenanceProvider::wrap(Arc::new(p)));
         registered += 1;
     }
     if let Ok(p) = GeminiProvider::from_env() {
-        registry.register(Arc::new(p));
+        registry.register(crate::mission::ProvenanceProvider::wrap(Arc::new(p)));
         registered += 1;
     }
 

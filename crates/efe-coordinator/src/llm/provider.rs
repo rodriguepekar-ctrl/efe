@@ -203,6 +203,15 @@ pub trait LlmProvider: Send + Sync + 'static {
     /// Identifiant kebab-case.
     fn id(&self) -> ProviderId;
 
+    /// **Couche 2 (RC-1)** : l'endpoint réseau **observé** de ce provider (URL de base),
+    /// s'il communique sur un canal réseau. `None` (défaut) = pas de canal observable
+    /// (mock, provider en mémoire). Permet à un décorateur de provenance de **classer** la
+    /// localité de l'appel (loopback → R2, distant → R4) sur une URL réelle plutôt
+    /// qu'inférée, et de sceller l'attestation de canal dans le record N17.
+    fn endpoint(&self) -> Option<String> {
+        None
+    }
+
     /// Appel non-streaming : retourne la réponse complète.
     async fn call(&self, req: LlmCall) -> CoordResult<LlmResponse>;
 

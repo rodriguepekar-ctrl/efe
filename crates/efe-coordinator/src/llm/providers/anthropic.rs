@@ -211,6 +211,10 @@ impl LlmProvider for ClaudeProvider {
         format!("claude_{}", self.model)
     }
 
+    fn endpoint(&self) -> Option<String> {
+        Some(ANTHROPIC_URL.to_string())
+    }
+
     async fn call(&self, req: LlmCall) -> CoordResult<LlmResponse> {
         if self.breaker.is_open() {
             return Err(CoordError::LlmProvider {
