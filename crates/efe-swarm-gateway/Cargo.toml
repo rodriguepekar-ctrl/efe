@@ -32,6 +32,11 @@ oidc = ["dep:jsonwebtoken"]
 # PII opt-in par tenant (G9) : caviarde sorties + previews. Détection LOCALE (regex, sans
 # réseau → souverain) + le redactor `efe-pii`. OFF par défaut (Off = no-op).
 pii = ["dep:efe-pii", "dep:regex"]
+# Couche 2 (frontière) : sert la coordination multi-LLM (Claude/Gemini/GPT) via
+# `efe-coordinator` (fan-out + 5 missions dans `efe-multi-llm`). OFF par défaut → build
+# **byte-identique** (deps non compilées). ON = compile les 3 providers frontière du
+# coordinator. L'activation **runtime** reste gouvernée par `EFE_LLM_FRONTIER_ENABLED`.
+frontier-llm = ["dep:efe-coordinator", "dep:efe-multi-llm", "efe-coordinator/anthropic", "efe-coordinator/openai", "efe-coordinator/gemini"]
 
 [dependencies]
 efe-swarm-sdk        = { path = "../efe-swarm-sdk", version = "0.0.1" }
@@ -57,6 +62,12 @@ sqlx = { version = "0.7", default-features = false, features = ["runtime-tokio",
 jsonwebtoken = { workspace = true, optional = true }
 efe-pii = { path = "../efe-pii", version = "0.0.1", optional = true }   # redactor (pur, local) + PolicyKind
 regex   = { version = "1", optional = true }                            # détecteur PII LOCAL (souverain)
+
+# Couche 2 (feature `frontier-llm`) : moteur de coordination multi-LLM + 5 missions.
+# Optionnels → absents du build par défaut. Le coordinator tire reqwest 0.12 (client
+# frontière) ; AUCUN tonic/prost (ni l'un ni l'autre n'en dépend) → pas de conflit de versions.
+efe-coordinator = { path = "../efe-coordinator", version = "0.0.1", optional = true }  # Coordinator + providers Claude/GPT/Gemini
+efe-multi-llm   = { path = "../efe-multi-llm",   version = "0.0.1", optional = true }  # 5 missions (servies en M3)
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["macros", "rt-multi-thread", "time"] }

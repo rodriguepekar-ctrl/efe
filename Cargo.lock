@@ -2948,6 +2948,8 @@ dependencies = [
  "async-trait",
  "axum",
  "efe-blackboard",
+ "efe-coordinator",
+ "efe-multi-llm",
  "efe-nano-sdk",
  "efe-pii",
  "efe-swarm-dashboard",

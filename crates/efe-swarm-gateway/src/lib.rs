@@ -55,6 +55,8 @@ mod router_map;
 mod routes;
 mod state;
 mod store;
+#[cfg(feature = "frontier-llm")]
+mod frontier; // Couche 2 : construit le Coordinator frontière (Claude/Gemini/GPT) depuis l'env
 #[cfg(test)]
 mod test_support; // ADR-016 : synthetic_mode_c_run partagé (lib tests + store_pg tests)
 #[cfg(feature = "postgres")]
@@ -74,6 +76,8 @@ pub use error::GatewayError;
 pub use router_map::RouterMap;
 pub use state::{AdmissionPermit, AdmitReject, SwarmGatewayState};
 pub use store::{InMemoryRunStore, RunStore, StoredRun};
+#[cfg(feature = "frontier-llm")]
+pub use frontier::coordinator_from_env;
 #[cfg(feature = "oidc")]
 pub use oidc::OidcVerifier;
 #[cfg(feature = "pii")]

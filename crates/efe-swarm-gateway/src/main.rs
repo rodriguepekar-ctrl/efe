@@ -51,6 +51,24 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
+    // ── Couche 2 (feature `frontier-llm`) : coordination multi-LLM (Claude/Gemini/GPT) ──
+    // Runtime-gated par EFE_LLM_FRONTIER_ENABLED (défaut off) ; les clés provider sont lues
+    // server-side par les `from_env` du coordinator. Off, ou aucune clé ⇒ frontière NON
+    // servie (aucune route `/v1/llm/*` ne pourra l'utiliser — 501). Aucune clé loggée.
+    #[cfg(feature = "frontier-llm")]
+    if std::env::var("EFE_LLM_FRONTIER_ENABLED").map(|v| v == "true").unwrap_or(false) {
+        match efe_swarm_gateway::coordinator_from_env() {
+            Some(coord) => {
+                state = state.with_coordinator(coord);
+                println!("→ coordination frontière (Couche 2) activée — providers câblés depuis l'env.");
+            }
+            None => eprintln!(
+                "AVERTISSEMENT: EFE_LLM_FRONTIER_ENABLED=true mais aucune clé provider \
+                 (ANTHROPIC_API_KEY / OPENAI_API_KEY / GOOGLE_AI_KEY) — frontière NON servie."
+            ),
+        }
+    }
+
     // ── Prod (feature `postgres`) : persistance durable write-once des records ───
     #[cfg(feature = "postgres")]
     if let Ok(url) = std::env::var("DATABASE_URL") {

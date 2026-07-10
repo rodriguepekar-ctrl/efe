@@ -166,6 +166,13 @@ pub struct SwarmGatewayState {
     /// famille (`"anthropic"`) en identifiant de modèle concret (`"anthropic/claude-…"`)
     /// attendu par le routeur. **Aucun secret** (noms de modèles = politique de routage).
     pub router_map: RouterMap,
+    /// **Couche 2 (feature `frontier-llm`)** : moteur de coordination multi-LLM
+    /// (Claude/Gemini/GPT) — fan-out + vote + provenance par appel. `None` ⇒ frontière
+    /// non câblée (les futures routes `/v1/llm/*` répondront 501). Câblé server-side depuis
+    /// l'env (`EFE_LLM_FRONTIER_ENABLED` + clés provider) ; les clés vivent **dans les
+    /// providers du coordinator**, jamais copiées dans cet état ni scellées dans un bundle.
+    #[cfg(feature = "frontier-llm")]
+    pub coordinator: Option<Arc<efe_coordinator::Coordinator>>,
     /// **Prod (feature `oidc`)** : vérificateur de JWT OIDC (clé PUBLIQUE server-side).
     /// `None` ⇒ repli sur l'extracteur d'en-têtes dev. Jamais une clé privée.
     #[cfg(feature = "oidc")]
@@ -222,6 +229,8 @@ impl SwarmGatewayState {
             dash_metrics: DashboardMetrics::new(),
             router_endpoint: None,
             router_map: RouterMap::default(),
+            #[cfg(feature = "frontier-llm")]
+            coordinator: None,
             #[cfg(feature = "oidc")]
             oidc: None,
             #[cfg(feature = "pii")]
@@ -394,6 +403,16 @@ impl SwarmGatewayState {
     /// (ex. `EFE_SWARM_ROUTER_MODELS="anthropic=…,openai=…"`). **Aucun secret.**
     pub fn with_router_models(mut self, map: RouterMap) -> Self {
         self.router_map = map;
+        self
+    }
+
+    /// **Couche 2 (feature `frontier-llm`)** : câble le moteur de coordination multi-LLM
+    /// (Claude/Gemini/GPT). À construire depuis l'env **côté binaire** (clés provider
+    /// server-side, via `frontier::coordinator_from_env`) puis injecter ici ; `None`
+    /// (défaut) ⇒ frontière non servie (les routes `/v1/llm/*` de M3 répondront 501).
+    #[cfg(feature = "frontier-llm")]
+    pub fn with_coordinator(mut self, coordinator: Arc<efe_coordinator::Coordinator>) -> Self {
+        self.coordinator = Some(coordinator);
         self
     }
 
