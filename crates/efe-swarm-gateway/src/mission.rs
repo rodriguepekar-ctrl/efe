@@ -273,6 +273,7 @@ impl LlmProvider for ProvenanceProvider {
 mod tests {
     use super::*;
     use efe_coordinator::error::CoordError;
+    use efe_coordinator::{MultiLlmBridge, ProviderRegistry};
 
     /// Provider factice : réponse fixe OU erreur, endpoint configurable (pour exercer R2/R4/None).
     struct FakeProvider {
@@ -374,5 +375,71 @@ mod tests {
         }));
         let out = p.call(LlmCall::simple("x", 4)).await;
         assert!(out.is_ok(), "l'appel marche toujours hors scope");
+    }
+
+    #[tokio::test]
+    async fn local_endpoint_yields_r2_not_r4() {
+        // DoD **model-agnostic** : un endpoint LOCAL (loopback) ⇒ barreau **R2**, JAMAIS R4 —
+        // le même décorateur sert un SLM local souverain sans mentir sur la localité.
+        let p = ProvenanceProvider::wrap(Arc::new(FakeProvider {
+            id: "local_slm".into(),
+            endpoint: Some("http://127.0.0.1:11434/api/generate".into()),
+            fail: false,
+        }));
+        let s = scope();
+        let sink = s.sink.clone();
+        scoped(s, async {
+            let _ = p.call(LlmCall::simple("x", 8)).await;
+        })
+        .await;
+        let recs = sink.drain();
+        assert!(matches!(recs[0].compute_attestation, ComputeAttestation::R2LocalWitnessed));
+        assert!(!recs[0].compute_attestation.is_remote(), "loopback ⇒ pas d'egress (R2, pas R4)");
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn capture_survives_bridge_fanout_including_failures() {
+        // LE test qui compte : la capture doit survivre au **vrai** chemin
+        // (`scoped` → `MultiLlmBridge::call_many_ok` → `provider.call`), pas seulement à un
+        // appel direct au décorateur. `call_many` pousse des `async move` dans un
+        // `FuturesUnordered` polled sur CETTE tâche (aucun `tokio::spawn`) → le task-local
+        // `MISSION` se propage au fan-out ; et `call_many_ok` filtre les `Err` APRÈS coup → le
+        // décorateur a déjà scellé l'échec. On prouve les deux d'un coup — ce test échouerait si
+        // le bridge spawnait (capture perdue) ou si l'échec n'était pas capturé.
+        let registry = ProviderRegistry::new();
+        registry.register(ProvenanceProvider::wrap(Arc::new(FakeProvider {
+            id: "claude_x".into(),
+            endpoint: Some("https://api.anthropic.com/v1/messages".into()),
+            fail: false,
+        })));
+        registry.register(ProvenanceProvider::wrap(Arc::new(FakeProvider {
+            id: "gpt_y".into(),
+            endpoint: Some("https://api.openai.com/v1/chat/completions".into()),
+            fail: true, // ce provider MEURT
+        })));
+        let bridge = MultiLlmBridge::new(registry);
+        let ids = vec!["claude_x".to_string(), "gpt_y".to_string()];
+
+        let s = scope();
+        let sink = s.sink.clone();
+        let oks = scoped(s, async move {
+            bridge.call_many_ok(&ids, LlmCall::simple("q", 16)).await
+        })
+        .await;
+
+        // La mission ne voit qu'UN succès (gpt_y droppé par call_many_ok)…
+        assert_eq!(oks.len(), 1, "call_many_ok drop l'échec côté mission");
+        // …mais le REÇU voit les DEUX appels (capture sous le filtre + task-local propagé au fan-out).
+        let recs = sink.drain();
+        assert_eq!(recs.len(), 2, "les 2 appels (succès + échec) sont scellés — capture survit au fan-out");
+        assert_eq!(
+            recs.iter().filter(|r| matches!(r.completeness, Completeness::Errored { .. })).count(),
+            1,
+            "l'appel mort figure au reçu (Errored) — pas de drop silencieux"
+        );
+        assert!(
+            recs.iter().all(|r| r.compute_attestation.is_remote()),
+            "les 2 endpoints distants ⇒ R4"
+        );
     }
 }
