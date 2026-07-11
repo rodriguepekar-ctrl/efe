@@ -59,6 +59,8 @@ mod store;
 mod frontier; // Couche 2 : construit le Coordinator frontière (Claude/Gemini/GPT) depuis l'env
 #[cfg(feature = "frontier-llm")]
 mod mission; // Couche 2 (M1) : capture de provenance par appel LLM (décorateur + scope task-local)
+#[cfg(feature = "frontier-llm")]
+mod mission_graph; // Couche 2 (M2) : le reçu honnête — graphe depuis topologie déclarée + scellement + store
 #[cfg(test)]
 mod test_support; // ADR-016 : synthetic_mode_c_run partagé (lib tests + store_pg tests)
 #[cfg(feature = "postgres")]
@@ -82,6 +84,12 @@ pub use store::{InMemoryRunStore, RunStore, StoredRun};
 pub use frontier::coordinator_from_env;
 #[cfg(feature = "frontier-llm")]
 pub use mission::{scoped, MissionProvenanceSink, MissionScope}; // Couche 2 (M1) : surface de capture consommée par les handlers M3
+#[cfg(feature = "frontier-llm")]
+pub use mission_graph::{
+    build_and_seal_mission, seal_and_store_mission, specialist_declared_arity, topology_cascade,
+    topology_debate, topology_relay, topology_specialist, topology_vote, BuildError, DeclaredCall,
+    MissionSeal, MissionTopology,
+}; // Couche 2 (M2) : le reçu honnête — surface consommée par les handlers M3
 #[cfg(feature = "oidc")]
 pub use oidc::OidcVerifier;
 #[cfg(feature = "pii")]

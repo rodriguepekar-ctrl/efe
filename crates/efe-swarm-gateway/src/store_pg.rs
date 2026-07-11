@@ -136,6 +136,30 @@ impl RunStore for PgRunStore {
         Ok(())
     }
 
+    async fn put_stored(&self, id: Uuid, stored: StoredRun) -> Result<(), GatewayError> {
+        // **Couche 2 (M2)** : même INSERT write-once que `put`, mais depuis un `StoredRun`
+        // déjà construit par `mission_graph` (pas de `from_outcome`).
+        sqlx::query(
+            "INSERT INTO swarm_runs \
+             (id, tenant, records, root, output, topology, created_at, llm_records, n17_leaves, n17_root) \
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) ON CONFLICT (id) DO NOTHING",
+        )
+        .bind(id)
+        .bind(&stored.tenant)
+        .bind(Json(&stored.records))
+        .bind(&stored.root)
+        .bind(Json(&stored.output))
+        .bind(&stored.topology)
+        .bind(stored.created_at_unix() as i64)
+        .bind(Json(&stored.llm_records))
+        .bind(Json(&stored.n17_leaves))
+        .bind(&stored.n17_root)
+        .execute(&self.pool)
+        .await
+        .map_err(|e| GatewayError::Internal(format!("store.put_stored : {e}")))?;
+        Ok(())
+    }
+
     async fn get(&self, id: Uuid, tenant: &str) -> Result<Option<StoredRun>, GatewayError> {
         // Isolation tenant : un run d'un autre tenant est INVISIBLE (clause AND tenant).
         let row = sqlx::query(
