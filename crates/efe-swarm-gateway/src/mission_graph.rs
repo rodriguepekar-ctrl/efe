@@ -330,6 +330,7 @@ mod tests {
     use crate::SwarmGatewayState;
     use efe_coordinator::{CoordResult, LlmCall, LlmProvider, LlmResponse, MultiLlmBridge, ProviderRegistry};
     use efe_swarm_provenance::verify_run_offline;
+    use std::collections::HashSet;
     use std::sync::Arc;
 
     const TENANT: &str = "system";
@@ -482,5 +483,136 @@ mod tests {
         let v = verify_run_offline(&stored.records, &stored.llm_records, &stored.n17_leaf_bytes(), stored.n17_root_bytes(), &key);
         assert!(!v.fully_proven, "validator dû (REGEN_ALL) mais absent → verified=false");
         assert_eq!(v.bridge.broken, 1);
+    }
+
+    /// Exécute une SÉQUENCE d'appels (répétitions permises) sous un scope de mission, via
+    /// `call_one` — pour les topologies à provider répété (debate) ou à N sous-tâches (specialist).
+    async fn run_sequence(state: &SwarmGatewayState, calls: &[&str]) -> (Arc<MissionProvenanceSink>, Uuid) {
+        let mission_id = Uuid::from_u128(0x5EED_C0DE);
+        let tenant_id = state.tenant_id(TENANT).unwrap();
+        let sink = MissionProvenanceSink::new();
+        let scope = MissionScope { tenant_id, mission_id, sink: sink.clone() };
+        let distinct: Vec<&str> = calls.iter().copied().collect::<HashSet<_>>().into_iter().collect();
+        let bridge = bridge_with(&distinct);
+        let seq: Vec<String> = calls.iter().map(|s| s.to_string()).collect();
+        scoped(scope, async move {
+            for id in &seq {
+                let _ = bridge.call_one(id, LlmCall::simple("q", 16)).await;
+            }
+        })
+        .await;
+        (sink, mission_id)
+    }
+
+    #[tokio::test]
+    async fn tampered_mission_record_breaks_reproof() {
+        // DoD #4 : muter un record du graphe de mission casse la re-preuve (content_intact), localisé.
+        let state = SwarmGatewayState::in_memory();
+        let providers = ["claude_a", "gpt_b", "gemini_c"];
+        let (sink, mission_id) = run_fanout(&state, &providers).await;
+        let topo = topology_vote(&providers.iter().map(|s| s.to_string()).collect::<Vec<_>>());
+        let run_id = seal_and_store_mission(&state, TENANT, mission_id, &topo, &sink, json!({})).await.unwrap();
+        let stored = state.store.get(run_id, TENANT).await.unwrap().unwrap();
+        let key = state.derive_key(TENANT).unwrap();
+
+        // sain avant.
+        let ok = verify_run_offline(&stored.records, &stored.llm_records, &stored.n17_leaf_bytes(), stored.n17_root_bytes(), &key);
+        assert!(ok.fully_proven, "sain avant falsification");
+
+        // un attaquant réécrit la sortie d'un record du graphe (sans la clé).
+        let mut tampered = stored.records.clone();
+        tampered[0].output_hash = efe_nano_sdk::Blake3Hash::from_bytes([0xFF; 32]);
+        let v = verify_run_offline(&tampered, &stored.llm_records, &stored.n17_leaf_bytes(), stored.n17_root_bytes(), &key);
+        assert!(!v.fully_proven, "record muté → re-preuve cassée");
+        assert!(!v.swarm.content_intact, "le contenu ne se recalcule plus");
+        assert!(v.swarm.first_break.is_some(), "la faute est localisée");
+    }
+
+    #[tokio::test]
+    async fn relay_roundtrip_is_fully_proven() {
+        // DoD #5 (relay) : 3 appels séquentiels, providers distincts.
+        let state = SwarmGatewayState::in_memory();
+        let (sink, mission_id) = run_sequence(&state, &["planner", "implementer", "synthesizer"]).await;
+        let topo = topology_relay("planner", "implementer", "synthesizer");
+        let run_id = seal_and_store_mission(&state, TENANT, mission_id, &topo, &sink, json!({"final": "ok"})).await.unwrap();
+        let stored = state.store.get(run_id, TENANT).await.unwrap().unwrap();
+        let key = state.derive_key(TENANT).unwrap();
+        let v = verify_run_offline(&stored.records, &stored.llm_records, &stored.n17_leaf_bytes(), stored.n17_root_bytes(), &key);
+        assert!(v.fully_proven, "relay 3/3 se re-prouve");
+        assert_eq!(v.bridge.consistent, 3);
+    }
+
+    #[tokio::test]
+    async fn debate_roundtrip_with_repeated_providers() {
+        // DoD #5 (debate) : rounds=2 → 2*2+1=5 appels ; pro/contra RÉPÉTÉS → l'appariement injectif
+        // doit lier chaque occurrence à un record DISTINCT (le cas ambigu de la critique).
+        let state = SwarmGatewayState::in_memory();
+        let (sink, mission_id) = run_sequence(&state, &["pro", "contra", "pro", "contra", "jury"]).await;
+        let topo = topology_debate("pro", "contra", "jury", 2);
+        assert_eq!(topo.calls.len(), 5, "arité debate = 2*rounds+1");
+        let run_id = seal_and_store_mission(&state, TENANT, mission_id, &topo, &sink, json!({"verdict": "x"})).await.unwrap();
+        let stored = state.store.get(run_id, TENANT).await.unwrap().unwrap();
+        let key = state.derive_key(TENANT).unwrap();
+        let v = verify_run_offline(&stored.records, &stored.llm_records, &stored.n17_leaf_bytes(), stored.n17_root_bytes(), &key);
+        assert!(v.fully_proven, "debate 5/5 (providers répétés) se re-prouve — injectivité OK");
+        assert_eq!(v.bridge.consistent, 5);
+    }
+
+    #[tokio::test]
+    async fn specialist_arity_is_pure_and_roundtrips() {
+        // DoD #6 : l'arité specialist est DÉTERMINISTE (Decomposer PUR) — un egress romprait l'invariant.
+        let text = "Analyse le contrat. Puis calcule le risque. Enfin rédige un résumé.";
+        let n1 = specialist_declared_arity(text);
+        let n2 = specialist_declared_arity(text);
+        assert_eq!(n1, n2, "Decomposer pur : N re-dérivé déterministe (jamais depuis l'output producteur)");
+        assert!(n1 >= 1, "un texte non vide donne ≥1 sous-tâche");
+
+        // round-trip : N appels réels → topology_specialist(N) (appariement par consommation) → verify true.
+        let state = SwarmGatewayState::in_memory();
+        let calls: Vec<&str> = (0..n1).map(|_| "slm").collect();
+        let (sink, mission_id) = run_sequence(&state, &calls).await;
+        let topo = topology_specialist(n1);
+        let run_id = seal_and_store_mission(&state, TENANT, mission_id, &topo, &sink, json!({})).await.unwrap();
+        let stored = state.store.get(run_id, TENANT).await.unwrap().unwrap();
+        let key = state.derive_key(TENANT).unwrap();
+        let v = verify_run_offline(&stored.records, &stored.llm_records, &stored.n17_leaf_bytes(), stored.n17_root_bytes(), &key);
+        assert!(v.fully_proven, "specialist N/N (N re-dérivé pur) se re-prouve");
+        assert_eq!(v.bridge.consistent, n1);
+    }
+
+    #[tokio::test]
+    async fn cascade_mislabeled_present_validator_is_caught_by_injectivity() {
+        // DoD #7 (partie POSITIVE) : si le validator A ÉTÉ appelé (record présent) mais que le
+        // producteur déclare ACCEPT (2 slots) pour le cacher, l'Invariant #2 l'ATTRAPE (record
+        // surnuméraire → erreur). Le false-ACCEPT n'est indétectable QUE si le validator n'a jamais
+        // été appelé (cf. test suivant).
+        let state = SwarmGatewayState::in_memory();
+        let (sink, mission_id) = run_sequence(&state, &["drafter_x", "verifier_y", "validator_z"]).await; // validator APPELÉ
+        let key = state.derive_key(TENANT).unwrap();
+        let tid = state.tenant_id(TENANT).unwrap();
+        let topo = topology_cascade("drafter_x", "verifier_y", "validator_z", "ACCEPT"); // mensonge : 2 slots déclarés
+        let err = build_and_seal_mission(tid, mission_id, &key, &topo, sink.drain(), &json!({})).unwrap_err();
+        assert_eq!(
+            err,
+            BuildError::UndeclaredCall { provider: "validator_z".into() },
+            "un validator appelé mais non-déclaré est REJETÉ — le false-ACCEPT est attrapé par l'injectivité"
+        );
+    }
+
+    #[tokio::test]
+    async fn cascade_undue_but_uncalled_validator_is_the_documented_residual() {
+        // DoD #7 (partie NÉGATIVE, honnêteté) : le RÉSIDU (§9bis). Si le validator n'a JAMAIS été
+        // appelé (0 record) et que le producteur déclare ACCEPT, le reçu se re-prouve `true` — la
+        // décision jaccard N'EST PAS re-dérivable offline (textes one-way). Tier B (digest
+        // d'ensemble de mots, différé) recomputerait le jaccard et attraperait un ACCEPT frauduleux.
+        // Ce test DOCUMENTE la limite (verified=true attendu).
+        let state = SwarmGatewayState::in_memory();
+        let (sink, mission_id) = run_sequence(&state, &["drafter_x", "verifier_y"]).await; // validator PAS appelé
+        let topo = topology_cascade("drafter_x", "verifier_y", "validator_z", "ACCEPT");
+        let run_id = seal_and_store_mission(&state, TENANT, mission_id, &topo, &sink, json!({})).await.unwrap();
+        let stored = state.store.get(run_id, TENANT).await.unwrap().unwrap();
+        let key = state.derive_key(TENANT).unwrap();
+        let v = verify_run_offline(&stored.records, &stored.llm_records, &stored.n17_leaf_bytes(), stored.n17_root_bytes(), &key);
+        assert!(v.fully_proven, "RÉSIDU DOCUMENTÉ : ACCEPT sans validator appelé se re-prouve (non détectable sans Tier B)");
     }
 }
