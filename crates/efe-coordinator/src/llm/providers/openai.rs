@@ -234,6 +234,10 @@ impl LlmProvider for GptProvider {
         format!("gpt_{}", self.model)
     }
 
+    fn endpoint(&self) -> Option<String> {
+        Some(OPENAI_URL.to_string())
+    }
+
     async fn call(&self, req: LlmCall) -> CoordResult<LlmResponse> {
         if self.breaker.is_open() {
             return Err(CoordError::LlmProvider {

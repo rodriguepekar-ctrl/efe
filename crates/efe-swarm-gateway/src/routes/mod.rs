@@ -10,6 +10,8 @@ pub mod records;
 pub mod replay;
 pub mod run;
 pub mod verify;
+#[cfg(feature = "frontier-llm")]
+pub mod llm; // Couche 2 (M3) : /v1/llm/* — les 5 missions frontière servies + le checker d'arité
 
 use axum::routing::{get, post};
 use axum::Router;

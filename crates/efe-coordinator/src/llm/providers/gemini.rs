@@ -181,23 +181,16 @@ impl GeminiProvider {
         self
     }
 
+    // **M4 (§2.3)** : la clé N'EST PLUS en query-string (`?key=`) — elle transite en en-tête
+    // `x-goog-api-key` (ajouté au builder de requête). Ferme la classe « URL keyée dans un
+    // `Display` d'erreur / dans les logs ». Les URLs ne portent donc plus de secret.
     #[allow(dead_code)]
     fn url_non_stream(&self) -> String {
-        format!(
-            "{}/{}:generateContent?key={}",
-            GEMINI_BASE,
-            self.model,
-            self.api_key.expose()
-        )
+        format!("{}/{}:generateContent", GEMINI_BASE, self.model)
     }
 
     fn url_stream(&self) -> String {
-        format!(
-            "{}/{}:streamGenerateContent?alt=sse&key={}",
-            GEMINI_BASE,
-            self.model,
-            self.api_key.expose()
-        )
+        format!("{}/{}:streamGenerateContent?alt=sse", GEMINI_BASE, self.model)
     }
 }
 
@@ -205,6 +198,11 @@ impl GeminiProvider {
 impl LlmProvider for GeminiProvider {
     fn id(&self) -> ProviderId {
         format!("gemini_{}", self.model)
+    }
+
+    fn endpoint(&self) -> Option<String> {
+        // Endpoint canonique de l'API Gemini (l'hôte suffit à classer la localité : distant).
+        Some("https://generativelanguage.googleapis.com/v1beta/models".to_string())
     }
 
     async fn call(&self, req: LlmCall) -> CoordResult<LlmResponse> {
@@ -246,18 +244,15 @@ impl LlmProvider for GeminiProvider {
             if let Some(s) = &system {
                 body["systemInstruction"] = json!({"parts": [{"text": s}]});
             }
-            let url = format!(
-                "{}/{}:generateContent?key={}",
-                GEMINI_BASE,
-                model,
-                api_key.expose()
-            );
+            let url = format!("{}/{}:generateContent", GEMINI_BASE, model);
             let http = http.clone();
             let provider_id = format!("gemini_{model}");
+            let api_header = api_key.expose().to_string(); // §2.3 : clé en header, jamais en URL
             async move {
                 let send = http
                     .post(&url)
                     .header("content-type", "application/json")
+                    .header("x-goog-api-key", api_header)
                     .json(&body)
                     .send()
                     .await
@@ -387,6 +382,7 @@ impl LlmProvider for GeminiProvider {
             .http
             .post(&url)
             .header("content-type", "application/json")
+            .header("x-goog-api-key", self.api_key.expose()) // §2.3 : clé en header, jamais en URL
             .json(&body)
             .send()
             .await
@@ -440,15 +436,11 @@ impl LlmProvider for GeminiProvider {
     }
 
     async fn health(&self) -> CoordResult<bool> {
-        // Endpoint /models existe et est cheap (pas d'inférence).
-        let url = format!(
-            "{}?key={}",
-            GEMINI_BASE,
-            self.api_key.expose()
-        );
+        // Endpoint /models existe et est cheap (pas d'inférence). Clé en header (§2.3).
         let resp = self
             .http
-            .get(&url)
+            .get(GEMINI_BASE)
+            .header("x-goog-api-key", self.api_key.expose())
             .timeout(Duration::from_secs(10))
             .send()
             .await;
@@ -534,7 +526,7 @@ mod tests {
         let url = p.url_stream();
         assert!(url.contains("streamGenerateContent"));
         assert!(url.contains("alt=sse"));
-        assert!(url.contains("key="));
+        assert!(!url.contains("key="), "§2.3 : la clé passe en header x-goog-api-key, jamais en URL");
     }
 
     #[test]
@@ -544,7 +536,7 @@ mod tests {
         let url = p.url_non_stream();
         assert!(url.contains("generateContent"));
         assert!(!url.contains("streamGenerateContent"));
-        assert!(url.contains("key="));
+        assert!(!url.contains("key="), "§2.3 : la clé passe en header x-goog-api-key, jamais en URL");
     }
 
     #[test]

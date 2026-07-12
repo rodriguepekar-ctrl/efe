@@ -166,10 +166,24 @@ pub struct SwarmGatewayState {
     /// famille (`"anthropic"`) en identifiant de modèle concret (`"anthropic/claude-…"`)
     /// attendu par le routeur. **Aucun secret** (noms de modèles = politique de routage).
     pub router_map: RouterMap,
+    /// **Couche 2 (feature `frontier-llm`)** : moteur de coordination multi-LLM
+    /// (Claude/Gemini/GPT) — fan-out + vote + provenance par appel. `None` ⇒ frontière
+    /// non câblée (les futures routes `/v1/llm/*` répondront 501). Câblé server-side depuis
+    /// l'env (`EFE_LLM_FRONTIER_ENABLED` + clés provider) ; les clés vivent **dans les
+    /// providers du coordinator**, jamais copiées dans cet état ni scellées dans un bundle.
+    #[cfg(feature = "frontier-llm")]
+    pub coordinator: Option<Arc<efe_coordinator::Coordinator>>,
     /// **Prod (feature `oidc`)** : vérificateur de JWT OIDC (clé PUBLIQUE server-side).
     /// `None` ⇒ repli sur l'extracteur d'en-têtes dev. Jamais une clé privée.
     #[cfg(feature = "oidc")]
     pub oidc: Option<Arc<crate::oidc::OidcVerifier>>,
+    /// **Couche 2 (M3, feature `oidc`)** : vérificateur OIDC **DÉDIÉ au chemin frontière** —
+    /// audience épinglée `efe-llm` (cf. [`crate::oidc::OidcVerifier::llm_from_env`]). Séparé de
+    /// `oidc` pour qu'un jeton d'essaim souverain NE déverrouille PAS l'egress tiers coûteux
+    /// non-souverain (§4). Consommé par l'extracteur [`crate::auth::LlmCaller`] des routes
+    /// `/v1/llm/*` ; `None` ⇒ 401 fail-closed sur ce chemin (jamais de repli keyless).
+    #[cfg(feature = "oidc")]
+    pub oidc_llm: Option<Arc<crate::oidc::OidcVerifier>>,
     /// **G9 (feature `pii`)** : politique PII par tenant (défaut `Off`). Caviarde sorties +
     /// previews. Détection LOCALE (souverain).
     #[cfg(feature = "pii")]
@@ -222,8 +236,12 @@ impl SwarmGatewayState {
             dash_metrics: DashboardMetrics::new(),
             router_endpoint: None,
             router_map: RouterMap::default(),
+            #[cfg(feature = "frontier-llm")]
+            coordinator: None,
             #[cfg(feature = "oidc")]
             oidc: None,
+            #[cfg(feature = "oidc")]
+            oidc_llm: None,
             #[cfg(feature = "pii")]
             pii: crate::pii::PiiConfig::default(),
             admission: Arc::new(Semaphore::new(permits)),
@@ -353,6 +371,16 @@ impl SwarmGatewayState {
         self
     }
 
+    /// **Couche 2 (M3, feature `oidc`)** : branche le vérificateur OIDC **frontière** (audience
+    /// `efe-llm`). L'extracteur [`crate::auth::LlmCaller`] des routes `/v1/llm/*` valide alors un
+    /// JWT `aud=efe-llm` (401 sinon, sans repli keyless). À construire côté binaire via
+    /// [`crate::oidc::OidcVerifier::llm_from_env`]. Orthogonal à [`Self::with_oidc`] (essaim).
+    #[cfg(feature = "oidc")]
+    pub fn with_oidc_llm(mut self, verifier: Arc<crate::oidc::OidcVerifier>) -> Self {
+        self.oidc_llm = Some(verifier);
+        self
+    }
+
     /// Remplace le store des runs (ex. `PgRunStore` en prod via la feature `postgres`).
     pub fn with_store(mut self, store: Arc<dyn RunStore>) -> Self {
         self.store = store;
@@ -394,6 +422,16 @@ impl SwarmGatewayState {
     /// (ex. `EFE_SWARM_ROUTER_MODELS="anthropic=…,openai=…"`). **Aucun secret.**
     pub fn with_router_models(mut self, map: RouterMap) -> Self {
         self.router_map = map;
+        self
+    }
+
+    /// **Couche 2 (feature `frontier-llm`)** : câble le moteur de coordination multi-LLM
+    /// (Claude/Gemini/GPT). À construire depuis l'env **côté binaire** (clés provider
+    /// server-side, via `frontier::coordinator_from_env`) puis injecter ici ; `None`
+    /// (défaut) ⇒ frontière non servie (les routes `/v1/llm/*` de M3 répondront 501).
+    #[cfg(feature = "frontier-llm")]
+    pub fn with_coordinator(mut self, coordinator: Arc<efe_coordinator::Coordinator>) -> Self {
+        self.coordinator = Some(coordinator);
         self
     }
 

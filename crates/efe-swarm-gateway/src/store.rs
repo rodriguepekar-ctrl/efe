@@ -36,6 +36,11 @@ pub struct StoredRun {
     pub n17_root: Option<String>,
     pub output: Value,
     pub topology: String,
+    /// **Couche 2 (M3)** : le résumé **scellé** de la requête de mission (`kind`, `k`, `rounds`,
+    /// `user_text_hash`, `verifier_decision`…) — la source dont le checker out-of-band
+    /// `/v1/llm/audit/:id` **re-dérive** l'arité déclarée (jamais l'output producteur). `{}`
+    /// pour un run essaim/keyless (pas de mission). **Aucun secret** (hachés + paramètres).
+    pub request: Value,
     pub created_at: SystemTime,
 }
 
@@ -53,6 +58,37 @@ impl StoredRun {
             n17_root: outcome.n17_sealed.root_hex(),
             output: outcome.run.output.clone(),
             topology: outcome.run.topology.clone(),
+            request: Value::Null, // run essaim : pas de requête de mission LLM
+            created_at: SystemTime::now(),
+        }
+    }
+
+    /// **Couche 2 (M2)** : construit un [`StoredRun`] depuis une **mission multi-LLM**. Le
+    /// graphe d'`AgentCallRecord` et les chaînes (`provenance_root`, N17) sont **déjà scellés**
+    /// par `mission_graph::build_and_seal_mission` (la mission EST l'exécuteur — pas de
+    /// `RunOutcome`/`SwarmRun`/`SealedProvenance`). Constructeur direct, jumeau de `from_outcome`.
+    #[allow(clippy::too_many_arguments)]
+    pub fn from_mission(
+        tenant: &str,
+        records: Vec<AgentCallRecord>,
+        provenance_root: Option<String>,
+        llm_records: Vec<LlmProvenanceRecord>,
+        n17_leaves: Vec<String>,
+        n17_root: Option<String>,
+        output: Value,
+        topology: String,
+        request: Value,
+    ) -> Self {
+        Self {
+            tenant: tenant.to_string(),
+            records,
+            root: provenance_root,
+            llm_records,
+            n17_leaves,
+            n17_root,
+            output,
+            topology,
+            request,
             created_at: SystemTime::now(),
         }
     }
@@ -108,6 +144,9 @@ fn unhex32(s: &str) -> Option<[u8; 32]> {
 #[async_trait]
 pub trait RunStore: Send + Sync {
     async fn put(&self, id: Uuid, tenant: &str, outcome: &RunOutcome) -> Result<(), GatewayError>;
+    /// **Couche 2 (M2)** : persiste un [`StoredRun`] **déjà construit** (mission multi-LLM) —
+    /// court-circuite `from_outcome` (pas de `RunOutcome`). Write-once, comme `put`.
+    async fn put_stored(&self, id: Uuid, stored: StoredRun) -> Result<(), GatewayError>;
     async fn get(&self, id: Uuid, tenant: &str) -> Result<Option<StoredRun>, GatewayError>;
 }
 
@@ -164,6 +203,14 @@ impl InMemoryRunStore {
 impl RunStore for InMemoryRunStore {
     async fn put(&self, id: Uuid, tenant: &str, outcome: &RunOutcome) -> Result<(), GatewayError> {
         let stored = StoredRun::from_outcome(tenant, outcome);
+        self.runs
+            .lock()
+            .map_err(|_| GatewayError::Internal("store: lock empoisonné".into()))?
+            .insert(id, stored);
+        Ok(())
+    }
+
+    async fn put_stored(&self, id: Uuid, stored: StoredRun) -> Result<(), GatewayError> {
         self.runs
             .lock()
             .map_err(|_| GatewayError::Internal("store: lock empoisonné".into()))?

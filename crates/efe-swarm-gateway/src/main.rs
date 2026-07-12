@@ -31,6 +31,30 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // ── Source de clé de provenance — le cœur du durcissement prod ──────────────
     let master_present = std::env::var(MASTER_ENV).map(|v| !v.trim().is_empty()).unwrap_or(false);
     let (keys, key_label) = key_source_for(master_present);
+
+    // ── M4 : préflight go/no-go de la frontière — la TRIADE (non-forgeable + authentifiée + durable) ──
+    // La frontière est un egress PAYANT vers un TIERS : chaque invariant manquant REFUSE de démarrer,
+    // jamais ne dégrade en silence. Calculé depuis l'INTENTION env, AVANT tout câblage d'état (with_keys,
+    // with_coordinator) : aucun état forgeable/non-authentifié/volatil n'est même assemblé.
+    #[cfg(feature = "frontier-llm")]
+    if frontier_flag_enabled() {
+        // #2 non-forgeable : le MÊME contrat que le scellement (dry-run derive, PAS master_present —
+        // qui n'attrape pas un master < 32 o : il booterait "vert" puis 500 à chaque seal).
+        let key_ok = HmacKeySource::EnvHkdf.derive(efe_nano_sdk::TenantId::system()).is_ok();
+        // #7 authentifié : la clé publique OIDC frontière (aud=efe-llm) est-elle configurée ?
+        #[cfg(feature = "oidc")]
+        let auth_ok = efe_swarm_gateway::OidcVerifier::llm_from_env().map(|o| o.is_some()).unwrap_or(false);
+        #[cfg(not(feature = "oidc"))]
+        let auth_ok = false; // feature oidc absente ⟹ egress tiers sans authentification cryptographique ⟹ refus.
+        // #3 durable : intention (postgres compilé + DATABASE_URL) ; connect/migrate re-valident plus bas.
+        let store_durable = cfg!(feature = "postgres") && std::env::var("DATABASE_URL").is_ok();
+        if let Err(why) = frontier_boot_guard(true, key_ok, auth_ok, store_durable) {
+            eprintln!("FATAL (M4 gate production) : {why}");
+            std::process::exit(78); // EX_CONFIG (sysexits.h) — config invalide, non-retryable
+        }
+        println!("→ préflight frontière OK (provenance non-forgeable + auth OIDC efe-llm + store durable).");
+    }
+
     if !master_present {
         eprintln!(
             "AVERTISSEMENT: {MASTER_ENV} absent ou vide → repli sur la clé de TEST PUBLIQUE. \
@@ -48,6 +72,24 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         if let Ok(models) = std::env::var("EFE_SWARM_ROUTER_MODELS") {
             state = state.with_router_models(efe_swarm_gateway::RouterMap::from_env_str(&models));
             println!("→ mapping provider→modèle surchargé (EFE_SWARM_ROUTER_MODELS).");
+        }
+    }
+
+    // ── Couche 2 (feature `frontier-llm`) : coordination multi-LLM (Claude/Gemini/GPT) ──
+    // Runtime-gated par EFE_LLM_FRONTIER_ENABLED (défaut off) ; les clés provider sont lues
+    // server-side par les `from_env` du coordinator. Off, ou aucune clé ⇒ frontière NON
+    // servie (aucune route `/v1/llm/*` ne pourra l'utiliser — 501). Aucune clé loggée.
+    #[cfg(feature = "frontier-llm")]
+    if frontier_flag_enabled() {
+        match efe_swarm_gateway::coordinator_from_env() {
+            Some(coord) => {
+                state = state.with_coordinator(coord);
+                println!("→ coordination frontière (Couche 2) activée — providers câblés depuis l'env.");
+            }
+            None => eprintln!(
+                "AVERTISSEMENT: EFE_LLM_FRONTIER_ENABLED=true mais aucune clé provider \
+                 (ANTHROPIC_API_KEY / OPENAI_API_KEY / GOOGLE_AI_KEY) — frontière NON servie."
+            ),
         }
     }
 
@@ -70,6 +112,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     if let Some(verifier) = efe_swarm_gateway::OidcVerifier::from_env()? {
         state = state.with_oidc(std::sync::Arc::new(verifier));
         println!("→ auth OIDC activée (JWT ES256, clé publique server-side).");
+    }
+
+    // ── Couche 2 (M3, feature `oidc`) : auth DÉDIÉE du chemin frontière (aud=efe-llm) ───
+    // Séparée de l'auth essaim : un jeton souverain ne déverrouille pas l'egress tiers coûteux.
+    #[cfg(feature = "oidc")]
+    if let Some(verifier) = efe_swarm_gateway::OidcVerifier::llm_from_env()? {
+        state = state.with_oidc_llm(std::sync::Arc::new(verifier));
+        println!("→ auth OIDC frontière activée (JWT aud=efe-llm, clé publique server-side).");
     }
 
     // ── G9 (feature `pii`) : politique PII par défaut depuis l'env (détection locale) ──
@@ -99,6 +149,46 @@ fn key_source_for(master_present: bool) -> (HmacKeySource, &'static str) {
     } else {
         (HmacKeySource::test_key(), "test_key() (DEV — provenance NON sécurisée)")
     }
+}
+
+/// **M4 (§1.4)** : le flag d'activation de la frontière — **source UNIQUE** de vérité,
+/// réutilisée par le préflight ET le câblage du coordinator (interdit tout drift). Égalité
+/// stricte `"true"` (fail-closed) ; une valeur non-vide ≠ `"true"` émet un avertissement ops
+/// (activation silencieusement ignorée, footgun `1`/`TRUE`/`yes`).
+fn frontier_flag_enabled() -> bool {
+    match std::env::var("EFE_LLM_FRONTIER_ENABLED") {
+        Ok(v) if v == "true" => true,
+        Ok(v) if !v.trim().is_empty() => {
+            eprintln!("AVERTISSEMENT: EFE_LLM_FRONTIER_ENABLED='{v}' ≠ 'true' ⟹ frontière NON activée (attendu exactement 'true').");
+            false
+        }
+        _ => false,
+    }
+}
+
+/// **M4 (§1)** : le préflight go/no-go de la frontière — la **triade** de production. **Pur**
+/// (testable sans muter l'env, sur le patron de `key_source_for`). Refuse de démarrer si la
+/// frontière est activée sans l'un des trois invariants : non-forgeabilité (clé HMAC dérivable),
+/// authentification (OIDC `aud=efe-llm`), durabilité (store Postgres). L'ordre des messages suit
+/// la gravité : une clé forgeable rend TOUT le reste sans valeur.
+#[cfg(feature = "frontier-llm")]
+fn frontier_boot_guard(frontier_on: bool, key_ok: bool, auth_ok: bool, store_durable: bool) -> Result<(), &'static str> {
+    if !frontier_on {
+        return Ok(()); // frontière OFF ⟹ dev/essaim souverain intact (InMemory + test_key légitimes)
+    }
+    if !key_ok {
+        return Err("EFE_LLM_FRONTIER_ENABLED exige EFE_NANO_AUDIT_HMAC_MASTER valide (≥ 32 o) — \
+                    sinon la provenance est scellée sous test_key() PUBLIQUE ⟹ reçus R4 FORGEABLES.");
+    }
+    if !auth_ok {
+        return Err("EFE_LLM_FRONTIER_ENABLED exige l'auth OIDC frontière (feature `oidc` + clé publique, \
+                    aud=efe-llm) — sinon egress tiers PAYANT sans authentification (tenant/rôles en clair).");
+    }
+    if !store_durable {
+        return Err("EFE_LLM_FRONTIER_ENABLED exige un store DURABLE (feature `postgres` + DATABASE_URL) — \
+                    sinon les reçus R4 (la preuve) sont perdus à chaque rollout.");
+    }
+    Ok(())
 }
 
 /// Attend **SIGTERM** (rollout k8s) ou **Ctrl-C** (local) → arrêt gracieux.
@@ -141,5 +231,16 @@ mod tests {
         let (src, label) = key_source_for(false);
         assert!(matches!(src, HmacKeySource::StaticMaster(_)), "master absent → repli test_key");
         assert!(label.contains("DEV"));
+    }
+
+    /// **M4 (§1.5)** : la table de vérité du préflight — la triade non-forgeable/authentifié/durable.
+    #[cfg(feature = "frontier-llm")]
+    #[test]
+    fn frontier_boot_guard_enforces_the_triad() {
+        assert!(frontier_boot_guard(false, false, false, false).is_ok(), "frontière OFF ⟹ dev toujours OK");
+        assert!(frontier_boot_guard(true, false, true, true).is_err(), "#2 clé forgeable ⟹ refus");
+        assert!(frontier_boot_guard(true, true, false, true).is_err(), "#7 auth absente ⟹ refus");
+        assert!(frontier_boot_guard(true, true, true, false).is_err(), "#3 store volatil ⟹ refus");
+        assert!(frontier_boot_guard(true, true, true, true).is_ok(), "triade complète ⟹ GO");
     }
 }

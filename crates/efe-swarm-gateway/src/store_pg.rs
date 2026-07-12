@@ -29,13 +29,16 @@ const DDL: &str = "CREATE TABLE IF NOT EXISTS swarm_runs (\
     created_at BIGINT NOT NULL,\
     llm_records JSONB NOT NULL DEFAULT '[]'::jsonb,\
     n17_leaves JSONB NOT NULL DEFAULT '[]'::jsonb,\
-    n17_root TEXT)";
+    n17_root TEXT,\
+    request JSONB NOT NULL DEFAULT '{}'::jsonb)";
 const DDL_INDEX: &str = "CREATE INDEX IF NOT EXISTS swarm_runs_tenant_idx ON swarm_runs (tenant)";
 // ADR-016 : migration en place d'une table pré-existante (idempotent — IF NOT EXISTS).
 const DDL_ALTER: &[&str] = &[
     "ALTER TABLE swarm_runs ADD COLUMN IF NOT EXISTS llm_records JSONB NOT NULL DEFAULT '[]'::jsonb",
     "ALTER TABLE swarm_runs ADD COLUMN IF NOT EXISTS n17_leaves JSONB NOT NULL DEFAULT '[]'::jsonb",
     "ALTER TABLE swarm_runs ADD COLUMN IF NOT EXISTS n17_root TEXT",
+    // Couche 2 (M3) : le résumé de requête, pour le checker out-of-band d'arité.
+    "ALTER TABLE swarm_runs ADD COLUMN IF NOT EXISTS request JSONB NOT NULL DEFAULT '{}'::jsonb",
 ];
 
 /// Store Postgres des runs (prod). Les records sont immuables (write-once).
@@ -91,8 +94,8 @@ impl PgRunStore {
     pub async fn insert_stored(&self, id: Uuid, stored: &StoredRun) -> Result<(), GatewayError> {
         sqlx::query(
             "INSERT INTO swarm_runs \
-             (id, tenant, records, root, output, topology, created_at, llm_records, n17_leaves, n17_root) \
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) ON CONFLICT (id) DO NOTHING",
+             (id, tenant, records, root, output, topology, created_at, llm_records, n17_leaves, n17_root, request) \
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) ON CONFLICT (id) DO NOTHING",
         )
         .bind(id)
         .bind(&stored.tenant)
@@ -104,6 +107,7 @@ impl PgRunStore {
         .bind(Json(&stored.llm_records))
         .bind(Json(&stored.n17_leaves))
         .bind(&stored.n17_root)
+        .bind(Json(&stored.request))
         .execute(&self.pool)
         .await
         .map_err(|e| GatewayError::Internal(format!("insert_stored : {e}")))?;
@@ -117,8 +121,8 @@ impl RunStore for PgRunStore {
         let stored = StoredRun::from_outcome(tenant, outcome);
         sqlx::query(
             "INSERT INTO swarm_runs \
-             (id, tenant, records, root, output, topology, created_at, llm_records, n17_leaves, n17_root) \
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) ON CONFLICT (id) DO NOTHING",
+             (id, tenant, records, root, output, topology, created_at, llm_records, n17_leaves, n17_root, request) \
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) ON CONFLICT (id) DO NOTHING",
         )
         .bind(id)
         .bind(&stored.tenant)
@@ -130,16 +134,42 @@ impl RunStore for PgRunStore {
         .bind(Json(&stored.llm_records)) // ADR-016 : la forensique N17, durable
         .bind(Json(&stored.n17_leaves))
         .bind(&stored.n17_root)
+        .bind(Json(&stored.request))
         .execute(&self.pool)
         .await
         .map_err(|e| GatewayError::Internal(format!("store.put : {e}")))?;
         Ok(())
     }
 
+    async fn put_stored(&self, id: Uuid, stored: StoredRun) -> Result<(), GatewayError> {
+        // **Couche 2 (M2)** : même INSERT write-once que `put`, mais depuis un `StoredRun`
+        // déjà construit par `mission_graph` (pas de `from_outcome`).
+        sqlx::query(
+            "INSERT INTO swarm_runs \
+             (id, tenant, records, root, output, topology, created_at, llm_records, n17_leaves, n17_root, request) \
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) ON CONFLICT (id) DO NOTHING",
+        )
+        .bind(id)
+        .bind(&stored.tenant)
+        .bind(Json(&stored.records))
+        .bind(&stored.root)
+        .bind(Json(&stored.output))
+        .bind(&stored.topology)
+        .bind(stored.created_at_unix() as i64)
+        .bind(Json(&stored.llm_records))
+        .bind(Json(&stored.n17_leaves))
+        .bind(&stored.n17_root)
+        .bind(Json(&stored.request))
+        .execute(&self.pool)
+        .await
+        .map_err(|e| GatewayError::Internal(format!("store.put_stored : {e}")))?;
+        Ok(())
+    }
+
     async fn get(&self, id: Uuid, tenant: &str) -> Result<Option<StoredRun>, GatewayError> {
         // Isolation tenant : un run d'un autre tenant est INVISIBLE (clause AND tenant).
         let row = sqlx::query(
-            "SELECT records, root, output, topology, created_at, llm_records, n17_leaves, n17_root \
+            "SELECT records, root, output, topology, created_at, llm_records, n17_leaves, n17_root, request \
              FROM swarm_runs WHERE id = $1 AND tenant = $2",
         )
         .bind(id)
@@ -161,6 +191,7 @@ impl RunStore for PgRunStore {
         let llm_records: Json<Vec<LlmProvenanceRecord>> = row.try_get("llm_records").map_err(map)?;
         let n17_leaves: Json<Vec<String>> = row.try_get("n17_leaves").map_err(map)?;
         let n17_root: Option<String> = row.try_get("n17_root").map_err(map)?;
+        let request: Json<Value> = row.try_get("request").map_err(map)?;
 
         Ok(Some(StoredRun {
             tenant: tenant.to_string(),
@@ -171,6 +202,7 @@ impl RunStore for PgRunStore {
             n17_root,
             output: output.0,
             topology,
+            request: request.0,
             created_at: UNIX_EPOCH + Duration::from_secs(created_at_unix.max(0) as u64),
         }))
     }
