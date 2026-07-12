@@ -73,6 +73,11 @@ jobs:
         run: cargo build -p efe-ffi --lib
       - name: Test (workspace minus efe-ffi)
         run: cargo nextest run --workspace --exclude efe-ffi
+      # Couche 2 (frontière /v1/llm/*) : le build workspace ci-dessus est en features PAR DÉFAUT
+      # (frontier-llm OFF) — sans ce job, la surface servie + la triade de boot M4 pourriraient
+      # sans détection. On compile/teste exactement le stack de prod (cf. Dockerfile).
+      - name: Test (efe-swarm-gateway — stack prod frontier-llm)
+        run: cargo nextest run -p efe-swarm-gateway --features "postgres oidc pii frontier-llm"
       - name: Test (efe-ffi rlib)
         env:
           PYO3_PYTHON: python3.12

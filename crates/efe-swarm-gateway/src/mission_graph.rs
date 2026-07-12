@@ -324,6 +324,15 @@ pub async fn seal_and_store_mission_with_request(
     let tenant_id = state.tenant_id(tenant)?;
     let key = state.derive_key(tenant)?;
     let drained = sink.drain();
+    // **M4 §2.4** : compteurs d'egress frontière, AVANT le move de `drained` dans le builder.
+    // Un record par appel : `is_remote()` = barreau R4 (egress distant) ; `cost_cents` ×1000 = µ¢.
+    {
+        let calls = drained.len() as u64;
+        let remote = drained.iter().filter(|r| r.compute_attestation.is_remote()).count() as u64;
+        let microcents: u64 =
+            drained.iter().map(|r| (r.cost_accounting.cost_cents * 1000.0).round().max(0.0) as u64).sum();
+        state.frontier_metrics.observe_mission(tenant, calls, remote, microcents);
+    }
     let seal = build_and_seal_mission(tenant_id, mission_id, &key, topology, drained, &output)
         .map_err(|e| crate::GatewayError::Internal(format!("M2 graphe de mission : {e}")))?;
     let stored = crate::StoredRun::from_mission(

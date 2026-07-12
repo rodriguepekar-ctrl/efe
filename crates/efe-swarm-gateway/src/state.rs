@@ -173,6 +173,11 @@ pub struct SwarmGatewayState {
     /// providers du coordinator**, jamais copiées dans cet état ni scellées dans un bundle.
     #[cfg(feature = "frontier-llm")]
     pub coordinator: Option<Arc<efe_coordinator::Coordinator>>,
+    /// **Couche 2 (M4 §2.4)** : compteurs d'egress frontière (appels, appels R4, coût µ¢, coût
+    /// par tenant) exposés sur `/metrics`. Alimentés au scellement de mission — le chemin
+    /// PAYANT devient observable (alerting coût/egress). Toujours présent sous la feature.
+    #[cfg(feature = "frontier-llm")]
+    pub frontier_metrics: Arc<crate::frontier_metrics::FrontierMetrics>,
     /// **Prod (feature `oidc`)** : vérificateur de JWT OIDC (clé PUBLIQUE server-side).
     /// `None` ⇒ repli sur l'extracteur d'en-têtes dev. Jamais une clé privée.
     #[cfg(feature = "oidc")]
@@ -238,6 +243,8 @@ impl SwarmGatewayState {
             router_map: RouterMap::default(),
             #[cfg(feature = "frontier-llm")]
             coordinator: None,
+            #[cfg(feature = "frontier-llm")]
+            frontier_metrics: crate::frontier_metrics::FrontierMetrics::new(),
             #[cfg(feature = "oidc")]
             oidc: None,
             #[cfg(feature = "oidc")]

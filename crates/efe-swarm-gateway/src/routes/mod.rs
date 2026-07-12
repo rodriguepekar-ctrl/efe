@@ -4,6 +4,7 @@
 
 pub mod dashboard;
 pub mod events;
+pub mod health; // Sondes k8s (M4 §G4) : /healthz (liveness) + /readyz (readiness réelle)
 pub mod memory;
 pub mod metrics;
 pub mod records;

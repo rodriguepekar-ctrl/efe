@@ -61,6 +61,8 @@ mod frontier; // Couche 2 : construit le Coordinator frontière (Claude/Gemini/G
 mod mission; // Couche 2 (M1) : capture de provenance par appel LLM (décorateur + scope task-local)
 #[cfg(feature = "frontier-llm")]
 mod mission_graph; // Couche 2 (M2) : le reçu honnête — graphe depuis topologie déclarée + scellement + store
+#[cfg(feature = "frontier-llm")]
+pub mod frontier_metrics; // Couche 2 (M4 §2.4) : compteurs de coût/egress frontière pour /metrics
 #[cfg(test)]
 mod test_support; // ADR-016 : synthetic_mode_c_run partagé (lib tests + store_pg tests)
 #[cfg(feature = "postgres")]
@@ -108,6 +110,10 @@ pub fn router(state: SwarmGatewayState) -> Router {
     let app = Router::new()
         .nest("/v1/swarm", routes::routes())
         .route("/metrics", get(routes::metrics::metrics))
+        // Sondes k8s (M4 §G4) : liveness triviale + readiness reflétant le câblage réel
+        // (frontière annoncée mais coordinator absent ⟹ 503, retiré du load-balancer).
+        .route("/healthz", get(routes::health::healthz))
+        .route("/readyz", get(routes::health::readyz))
         .route("/dashboard", get(routes::dashboard::dashboard));
     // Couche 2 (M3) : la surface frontière servie — montée SOUS le feature `frontier-llm`
     // uniquement (build par défaut byte-identique). `#[cfg]` sur un `let` shadow : le type reste

@@ -15,7 +15,10 @@ FROM rust:1-bookworm AS builder
 WORKDIR /build
 COPY . .
 # Features prod activées ; ajustez selon le déploiement (ex. self-host pur : aucune feature requise).
-RUN cargo build --release -p efe-swarm-gateway --bin efe-swarm-gateway --features "postgres oidc pii"
+# `frontier-llm` inclus : sans lui, /v1/llm/* n'est pas monté (404) et EFE_LLM_FRONTIER_ENABLED
+# est un no-op — l'image ne contiendrait pas la Couche 2. La frontière reste OFF par défaut au
+# runtime (EFE_LLM_FRONTIER_ENABLED absent), gouvernée par la triade de boot M4.
+RUN cargo build --release -p efe-swarm-gateway --bin efe-swarm-gateway --features "postgres oidc pii frontier-llm"
 
 # ── Étage runtime (mince) ───────────────────────────────────────────────────────────────────────
 FROM debian:bookworm-slim
@@ -35,9 +38,9 @@ USER efe
 ENV EFE_SWARM_GATEWAY_ADDR=0.0.0.0:8080
 EXPOSE 8080
 
-# Sonde : /metrics répond dès que la passerelle écoute (cf. liveness/readiness du chart Helm).
+# Sonde : /healthz (liveness triviale). La readiness réelle (frontière câblée) = /readyz côté k8s.
 HEALTHCHECK --interval=15s --timeout=3s --start-period=5s --retries=3 \
-  CMD curl -fsS http://127.0.0.1:8080/metrics || exit 1
+  CMD curl -fsS http://127.0.0.1:8080/healthz || exit 1
 
 # AUCUNE clé dans l'image. Le master HKDF (signature) et les secrets OIDC/DB viennent de
 # l'environnement / des Secrets Kubernetes au runtime, jamais de l'image.

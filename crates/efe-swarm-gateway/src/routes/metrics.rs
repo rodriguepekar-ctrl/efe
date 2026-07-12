@@ -51,15 +51,28 @@ fn render_admission(s: &SwarmGatewayState) -> String {
     )
 }
 
+/// **Couche 2 (M4 §2.4)** : compteurs d'egress frontière (coût/appels/R4). Gaté `frontier-llm` ;
+/// hors feature ⟹ chaîne vide ⟹ sortie `/metrics` **byte-identique** au build par défaut.
+#[cfg(feature = "frontier-llm")]
+fn render_frontier(s: &SwarmGatewayState) -> String {
+    s.frontier_metrics.render_prometheus()
+}
+#[cfg(not(feature = "frontier-llm"))]
+fn render_frontier(_s: &SwarmGatewayState) -> String {
+    String::new()
+}
+
 pub async fn metrics(State(s): State<SwarmGatewayState>) -> impl IntoResponse {
     let body = format!(
-        "{}{}{}{}",
+        "{}{}{}{}{}",
         s.prov_metrics.render_prometheus(),
         s.substrate_metrics.render_prometheus(),
         // Inc.3 : surfaces du dashboard (events émis/perdus + jauges live).
         s.dash_metrics.render_prometheus(s.dashboards.len(), s.dashboards.total_subscribers()),
         // ADR-014 : admission process.
         render_admission(&s),
+        // Couche 2 (M4 §2.4) : egress frontière (vide hors feature).
+        render_frontier(&s),
     );
     ([(CONTENT_TYPE, "text/plain; version=0.0.4")], body)
 }

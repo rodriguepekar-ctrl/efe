@@ -32,6 +32,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let master_present = std::env::var(MASTER_ENV).map(|v| !v.trim().is_empty()).unwrap_or(false);
     let (keys, key_label) = key_source_for(master_present);
 
+    // GAP-SHORT-MASTER : un master FOURNI mais invalide (< 32 o, non-blanc) booterait "vert" en
+    // EnvHkdf puis échouerait 500 à CHAQUE scellement de provenance. On refuse tout de suite (tous
+    // chemins, pas seulement la frontière) via le MÊME contrat que le scellement (dry-run derive).
+    if master_present && HmacKeySource::EnvHkdf.derive(efe_nano_sdk::TenantId::system()).is_err() {
+        eprintln!(
+            "FATAL : {MASTER_ENV} fourni mais invalide (≥ 32 octets requis) — refus de démarrer \
+             (provenance non-scellable, chaque run échouerait 500)."
+        );
+        std::process::exit(78);
+    }
+
     // ── M4 : préflight go/no-go de la frontière — la TRIADE (non-forgeable + authentifiée + durable) ──
     // La frontière est un egress PAYANT vers un TIERS : chaque invariant manquant REFUSE de démarrer,
     // jamais ne dégrade en silence. Calculé depuis l'INTENTION env, AVANT tout câblage d'état (with_keys,
@@ -125,9 +136,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // ── G9 (feature `pii`) : politique PII par défaut depuis l'env (détection locale) ──
     #[cfg(feature = "pii")]
     if let Ok(p) = std::env::var("EFE_PII_DEFAULT_POLICY") {
-        if let Ok(policy) = p.parse::<efe_swarm_gateway::PolicyKind>() {
-            state = state.with_pii(efe_swarm_gateway::PiiConfig::new(policy));
-            println!("→ PII opt-in : politique par défaut = {}", policy.as_str());
+        match p.parse::<efe_swarm_gateway::PolicyKind>() {
+            Ok(policy) => {
+                state = state.with_pii(efe_swarm_gateway::PiiConfig::new(policy));
+                println!("→ PII opt-in : politique par défaut = {}", policy.as_str());
+            }
+            // GAP-PII : une valeur invalide (typo 'reduct') ne doit PAS être ignorée en silence —
+            // sinon redact_for_egress devient no-op et le prompt sort EN CLAIR vers le tiers.
+            Err(_) => eprintln!(
+                "AVERTISSEMENT: EFE_PII_DEFAULT_POLICY='{p}' invalide (attendu off|detect|redact|strict) — \
+                 PII par défaut OFF : les prompts frontière sortiront EN CLAIR vers les providers."
+            ),
         }
     }
 

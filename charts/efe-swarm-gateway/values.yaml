@@ -27,8 +27,11 @@ hkdf:
   # La passerelle dérive une clé HKDF PAR TENANT pour SIGNER la chaîne de provenance.
   # Elle n'authentifie aucun provider. Source : un Secret (généré ici si absent, ou fourni).
   enabled: true
-  # Nom de la variable d'env que le binaire prod (HmacKeySource::EnvHkdf) lit.
-  envName: EFE_HKDF_MASTER_KEY
+  # Nom de la variable d'env que le binaire prod (HmacKeySource::EnvHkdf) lit. DOIT égaler la
+  # constante Rust MASTER_ENV (efe-audit-core/src/keys.rs:22). Un nom divergent ⟹ master jamais
+  # vu ⟹ repli test_key() PUBLIQUE ⟹ provenance FORGEABLE (le moat vaincu), et frontière en
+  # CrashLoop (boot guard M4). NE PAS renommer sans changer aussi MASTER_ENV.
+  envName: EFE_NANO_AUDIT_HMAC_MASTER
   existingSecret: ""      # si défini, on lit la clé de ce Secret existant (recommandé prod/Vault)
   existingSecretKey: master
   # Si existingSecret vide : on génère une clé aléatoire au 1er install (conservée aux upgrades).
