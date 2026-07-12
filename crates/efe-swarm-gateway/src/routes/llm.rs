@@ -169,19 +169,43 @@ fn hash_text(t: &str) -> String {
     blake3_bytes(t.as_bytes()).to_hex()
 }
 
+/// **M4 (§2.1)** : borne le budget de la requête au **plafond tenant** AVANT l'egress payant.
+/// Le cap vit en **microcents** (`TenantPolicies`), la requête en **cents** — conversion exacte
+/// ×1000 (1 µ¢ = 1/1000 ¢, cf. `savings_report.rs`). Cap absent (`None`) ⟹ no-op. Ferme la
+/// DoS-coût : sans ce clamp, `req.max_budget_cents` (u32, client-contrôlé) va jusqu'à ~42 M$.
+fn clamp_budget(coord: &Coordinator, tenant_uuid: &Uuid, budget_cents: &mut u32) {
+    if let Some(pol) = coord.policies.get(tenant_uuid) {
+        let capped_microcents = pol.cap_microcents(u64::from(*budget_cents) * 1000);
+        *budget_cents = u32::try_from(capped_microcents / 1000).unwrap_or(u32::MAX);
+    }
+}
+
+/// **M4 (§2.2)** : caviarde le texte utilisateur AVANT egress vers le tiers, selon la policy PII
+/// du tenant (`Redact`/`Strict` caviardent ; `Off`/`Detect` = no-op). Détection **locale**
+/// (regex, sans réseau). Le frontière n'est PAS souverain : sans policy, le prompt sort en clair
+/// (documenté). Appelé AVANT tout usage de `user_text` (hash scellé + arité) ⟹ le reçu commit ce
+/// qui a réellement été envoyé.
+#[cfg(feature = "pii")]
+fn redact_for_egress(s: &SwarmGatewayState, tenant: &str, text: &mut String) {
+    *text = crate::pii::redact_text(text, s.pii.policy_for(tenant));
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
-//  Les 5 handlers servis (sync). Patron : role → 501-si-None → gate → admit → scope → run → seal.
+//  Les 5 handlers servis (sync). Patron : role → 501-si-None → gate → clamp/redact → admit → scope → run → seal.
 // ─────────────────────────────────────────────────────────────────────────────
 
 pub async fn vote(
     State(s): State<SwarmGatewayState>,
     caller: LlmCaller,
-    GatewayJson(req): GatewayJson<Vote3LlmRequest>,
+    GatewayJson(mut req): GatewayJson<Vote3LlmRequest>,
 ) -> Result<Response, GatewayError> {
     caller.require_any_role(&["operator", "admin"])?;
     let coord = s.coordinator.as_ref().ok_or_else(|| GatewayError::NotImplemented("coordination frontière non câblée (frontier-llm)".into()))?;
     let tid = s.tenant_id(&caller.tenant)?;
     egress_gate(coord, &tid.0, &req.llms)?;
+    clamp_budget(coord, &tid.0, &mut req.max_budget_cents); // §2.1 cap coût tenant
+    #[cfg(feature = "pii")]
+    redact_for_egress(&s, &caller.tenant, &mut req.user_text); // §2.2 PII avant egress
     let _permit = match s.admit(&caller.tenant) {
         Ok(p) => p,
         Err(reject) => return Ok(too_many_response(&s, reject)),
@@ -201,13 +225,16 @@ pub async fn vote(
 pub async fn relay(
     State(s): State<SwarmGatewayState>,
     caller: LlmCaller,
-    GatewayJson(req): GatewayJson<RelayRequest>,
+    GatewayJson(mut req): GatewayJson<RelayRequest>,
 ) -> Result<Response, GatewayError> {
     caller.require_any_role(&["operator", "admin"])?;
     let coord = s.coordinator.as_ref().ok_or_else(|| GatewayError::NotImplemented("coordination frontière non câblée (frontier-llm)".into()))?;
     let tid = s.tenant_id(&caller.tenant)?;
     let (planner, implementer, synthesizer) = (req.planner_llm.clone(), req.implementer_llm.clone(), req.synthesizer_llm.clone());
     egress_gate(coord, &tid.0, &[planner.clone(), implementer.clone(), synthesizer.clone()])?;
+    clamp_budget(coord, &tid.0, &mut req.max_budget_cents); // §2.1 cap coût tenant
+    #[cfg(feature = "pii")]
+    redact_for_egress(&s, &caller.tenant, &mut req.user_text); // §2.2 PII avant egress
     let _permit = match s.admit(&caller.tenant) {
         Ok(p) => p,
         Err(reject) => return Ok(too_many_response(&s, reject)),
@@ -226,7 +253,7 @@ pub async fn relay(
 pub async fn debate(
     State(s): State<SwarmGatewayState>,
     caller: LlmCaller,
-    GatewayJson(req): GatewayJson<DebateRequest>,
+    GatewayJson(mut req): GatewayJson<DebateRequest>,
 ) -> Result<Response, GatewayError> {
     caller.require_any_role(&["operator", "admin"])?;
     // Pré-validation au handler → 400 propre (sinon `run_debate` rend Config → 500).
@@ -237,6 +264,9 @@ pub async fn debate(
     let tid = s.tenant_id(&caller.tenant)?;
     let (pro, contra, jury, rounds) = (req.pro_llm.clone(), req.contra_llm.clone(), req.jury_llm.clone(), req.rounds);
     egress_gate(coord, &tid.0, &[pro.clone(), contra.clone(), jury.clone()])?;
+    clamp_budget(coord, &tid.0, &mut req.max_budget_cents); // §2.1 cap coût tenant
+    #[cfg(feature = "pii")]
+    redact_for_egress(&s, &caller.tenant, &mut req.user_text); // §2.2 PII avant egress
     let _permit = match s.admit(&caller.tenant) {
         Ok(p) => p,
         Err(reject) => return Ok(too_many_response(&s, reject)),
@@ -255,12 +285,15 @@ pub async fn debate(
 pub async fn specialist(
     State(s): State<SwarmGatewayState>,
     caller: LlmCaller,
-    GatewayJson(req): GatewayJson<SpecialistRequest>,
+    GatewayJson(mut req): GatewayJson<SpecialistRequest>,
 ) -> Result<Response, GatewayError> {
     caller.require_any_role(&["operator", "admin"])?;
     let coord = s.coordinator.as_ref().ok_or_else(|| GatewayError::NotImplemented("coordination frontière non câblée (frontier-llm)".into()))?;
     let tid = s.tenant_id(&caller.tenant)?;
     egress_gate(coord, &tid.0, &req.available_llms)?;
+    clamp_budget(coord, &tid.0, &mut req.max_budget_cents); // §2.1 cap coût tenant
+    #[cfg(feature = "pii")]
+    redact_for_egress(&s, &caller.tenant, &mut req.user_text); // §2.2 PII avant egress (N re-dérivé sur le texte caviardé)
     // Arité N re-dérivée par le Decomposer PUR (le même que run_specialist) DEPUIS le user_text.
     let n = specialist_declared_arity(&req.user_text);
     // Anti-500 : < 2 LLM permis + N ≥ 3 ⟹ run_specialist planterait en MonocultureViolation.
@@ -285,13 +318,16 @@ pub async fn specialist(
 pub async fn cascade(
     State(s): State<SwarmGatewayState>,
     caller: LlmCaller,
-    GatewayJson(req): GatewayJson<CascadeRequest>,
+    GatewayJson(mut req): GatewayJson<CascadeRequest>,
 ) -> Result<Response, GatewayError> {
     caller.require_any_role(&["operator", "admin"])?;
     let coord = s.coordinator.as_ref().ok_or_else(|| GatewayError::NotImplemented("coordination frontière non câblée (frontier-llm)".into()))?;
     let tid = s.tenant_id(&caller.tenant)?;
     let (drafter, verifier, validator) = (req.drafter_llm.clone(), req.verifier_llm.clone(), req.validator_llm.clone());
     egress_gate(coord, &tid.0, &[drafter.clone(), verifier.clone(), validator.clone()])?;
+    clamp_budget(coord, &tid.0, &mut req.max_budget_cents); // §2.1 cap coût tenant
+    #[cfg(feature = "pii")]
+    redact_for_egress(&s, &caller.tenant, &mut req.user_text); // §2.2 PII avant egress
     let _permit = match s.admit(&caller.tenant) {
         Ok(p) => p,
         Err(reject) => return Ok(too_many_response(&s, reject)),
@@ -623,6 +659,22 @@ mod tests {
     fn map_mission_err_maps_monoculture_to_400() {
         let e = MultiLlmError::MonocultureViolation { dominant_llm: "claude".into(), ratio: 0.8, limit: 0.6, total: 10 };
         assert!(matches!(map_mission_err(e), GatewayError::BadRequest(_)), "monoculture ⟹ 400, pas 500");
+    }
+
+    /// **M4 (§2.2, DoD #6)** — la redaction PII s'applique AVANT egress selon la policy tenant
+    /// (`Redact` caviarde ; `Off` par défaut ⟹ prompt en clair, honnête). Prouve le câblage
+    /// `redact_for_egress` (la primitive `redact_text` est testée dans `pii.rs`).
+    #[cfg(feature = "pii")]
+    #[test]
+    fn redact_for_egress_applies_tenant_policy() {
+        use crate::pii::{PiiConfig, PolicyKind};
+        let state = SwarmGatewayState::in_memory().with_pii(PiiConfig::new(PolicyKind::Off).with_tenant("system", PolicyKind::Redact));
+        let mut redacted = "contacte john@example.com stp".to_string();
+        redact_for_egress(&state, "system", &mut redacted);
+        assert!(!redacted.contains("john@example.com"), "policy Redact ⟹ PII caviardée avant egress");
+        let mut clear = "contacte john@example.com stp".to_string();
+        redact_for_egress(&state, "22222222-2222-2222-2222-222222222222", &mut clear);
+        assert!(clear.contains("john@example.com"), "policy Off (défaut) ⟹ prompt en clair (non souverain)");
     }
 
     /// debate `rounds` hors 1..=5 ⟹ 400 (pré-validé au handler, AVANT `run_debate` — donc

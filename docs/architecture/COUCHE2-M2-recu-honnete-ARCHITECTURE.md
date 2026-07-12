@@ -105,7 +105,7 @@ seal_n17(&llm_records, &state.derive_key(tenant)) -> SealedN17                  
 ## 7. Re-preuve
 
 - **`GET /v1/swarm/verify/:id` (ou `/v1/llm/verify` en M3) — INCHANGÉ** → `verify_run_offline(records, llm_records, leaves, root, key)` → `fully_proven`. Un appel déclaré **omis** ⟹ `Missing` ⟹ `false`. Un **tamper** ⟹ `RecordContentMutated` ⟹ `false`, `first_break` localisé (N17 **et** essaim).
-- **Checker OUT-OF-BAND (optionnel — le SEUL chemin d'audit tierce de l'arité)** : une **nouvelle** route (jamais `verify.rs`) qui relit `stored.request` (scellé dans le nœud racine), **re-calcule** l'arité (K/rounds/`Decomposer::decompose` pur) et **compte** les nœuds Mode-C ⟹ signale une sous-déclaration. C'est ce qui transforme la garantie *write-side* en *auditable par un tiers* — à faire en M3+ si le pitch l'exige.
+- **Checker OUT-OF-BAND (optionnel — le contrôle détenteur-de-clé de l'arité)** : une **nouvelle** route (jamais `verify.rs`) qui relit `stored.request` (scellé dans le nœud racine), **re-calcule** l'arité (K/rounds/`Decomposer::decompose` pur) et **compte** les nœuds Mode-C ⟹ signale une sous-déclaration. C'est ce qui rend la garantie *write-side* *auditable hors-bande par le détenteur de la clé* (jamais trustless-tiers) — à faire en M3+ si le pitch l'exige.
 
 ---
 

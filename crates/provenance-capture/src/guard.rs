@@ -19,6 +19,13 @@ fn host_of(endpoint: &str) -> Option<&str> {
     if authority.is_empty() {
         return None;
     }
+    // §3.2 (F3) : fail-close les autorités contenant `\`, un espace ou un caractère de contrôle.
+    // Un client WHATWG (`url`/`reqwest`) normalise `\` → `/` ⟹ l'hôte RÉEL diffère de notre analyse
+    // RFC-3986 (`http://evil.com\@127.0.0.1` : host reqwest = evil.com, host RFC = 127.0.0.1). Refuser
+    // (None) aligne le garde sur le pire cas plutôt que de MENTIR sur la localité (bypass SSRF latent).
+    if authority.bytes().any(|b| b == b'\\' || b == b' ' || b.is_ascii_control()) {
+        return None;
+    }
     // Retire un éventuel `userinfo@` sur le PREMIER `@` (RFC : `user:pass@host`), pas le dernier.
     // `rsplit('@')` (dernier `@`) était dangereux combiné à l'absence de coupe `#`/`?`.
     let hostport = authority.split_once('@').map(|(_, h)| h).unwrap_or(authority);
@@ -134,6 +141,21 @@ mod tests {
         ] {
             assert_eq!(host_of(e), Some("evil.com"), "l'hôte réel est evil.com : {e}");
             assert!(!is_local_endpoint(e), "doit être refusé (bypass SSRF) : {e}");
+            assert!(matches!(assert_local(e), Err(SovereigntyError { .. })));
+        }
+    }
+
+    #[test]
+    fn ssrf_backslash_space_control_fail_closed() {
+        // §3.2 (F3) : une autorité contenant `\`, espace ou contrôle diverge d'un client WHATWG
+        // (reqwest normalise `\` → `/`) ⟹ host_of=None ⟹ refusé, jamais faussement « local ».
+        for e in [
+            "http://evil.com\\@127.0.0.1/v1", // reqwest appellerait evil.com
+            "http://127.0.0.1 @evil.com",
+            "http://127.0.0.1\t/x",
+        ] {
+            assert_eq!(host_of(e), None, "autorité dangereuse ⟹ None : {e}");
+            assert!(!is_local_endpoint(e), "fail-closed : {e}");
             assert!(matches!(assert_local(e), Err(SovereigntyError { .. })));
         }
     }

@@ -223,10 +223,11 @@ pub(crate) fn curl_json(url: &str, body: &Value, max_time_s: u32) -> Option<Valu
 
 /// Extrait l'hôte d'un endpoint (`scheme://[user:pass@]host[:port][/path][?query][#frag]`), gère IPv6 `[::1]`.
 ///
-/// **Durci (anti-différentiel d'analyseur).** Cet extracteur DOIT s'accorder, octet pour octet, avec
-/// l'hôte que curl/reqwest contactent réellement (cf. [`curl_json`]/[`health_probe`]) : sinon la garde
-/// de souveraineté [`is_local_endpoint`] et l'épinglage [`matched_pin`] raisonnent sur un hôte ≠ de celui
-/// effectivement appelé → **bypass SSRF/egress** (exfiltration du prompt hors frontière). Miroir exact de
+/// **Durci (anti-différentiel d'analyseur).** Vise l'accord avec l'hôte que curl/reqwest contactent
+/// réellement (cf. [`curl_json`]/[`health_probe`]) ; à défaut, les autorités qui divergeraient d'un
+/// client WHATWG (`\`, espace, contrôle) sont **fail-closed** (retour `None`, §3.2 F3), jamais
+/// faussement acceptées — sinon la garde [`is_local_endpoint`] et l'épinglage [`matched_pin`]
+/// raisonneraient sur un hôte ≠ de celui appelé → **bypass SSRF/egress**. Miroir exact de
 /// `provenance-capture::guard::host_of` (même règle, ré-implémentée pour garder le SDK autonome).
 fn host_of(endpoint: &str) -> Option<String> {
     // Après le schéma `://` (ou tout l'endpoint si absent). `split_once` — PAS `split("://").last()`,
@@ -238,6 +239,13 @@ fn host_of(endpoint: &str) -> Option<String> {
     let authority = after_scheme.split(['/', '?', '#']).next().unwrap_or(after_scheme);
     if authority.is_empty() {
         return None; // `http://` sans autorité → pas d'hôte (fail-closed : traité comme non-local).
+    }
+    // §3.2 (F3) : fail-close les autorités contenant `\`, espace ou contrôle — un client WHATWG
+    // (`url`/`reqwest`) normalise `\` → `/`, divergeant de notre analyse RFC-3986 (bypass SSRF
+    // latent). Refuser plutôt que MENTIR sur la localité. Miroir EXACT de
+    // `provenance-capture::guard::host_of` (discipline #4 : les deux copies durcies ENSEMBLE).
+    if authority.bytes().any(|b| b == b'\\' || b == b' ' || b.is_ascii_control()) {
+        return None;
     }
     // Retire un éventuel `userinfo@` sur le PREMIER `@` (RFC : `user:pass@host`), JAMAIS le dernier :
     // `rsplit('@')` faisait passer `http://evil.com#@127.0.0.1` / `http://127.0.0.1@evil.com` pour du loopback.
@@ -592,6 +600,8 @@ mod tests {
             "http://127.evil.com",            // NOM préfixé 127. (résout externe) ≠ loopback IPv4
             "http://127.0.0.1@evil.com",      // userinfo = 127.0.0.1, hôte RÉEL = evil.com
             "http://user:127.0.0.1@evil.com", // userinfo = user:127.0.0.1, hôte = evil.com
+            "http://evil.com\\@127.0.0.1/v1", // §3.2 (F3) backslash : reqwest normalise \→/ → evil.com
+            "http://127.0.0.1 @evil.com",     // §3.2 (F3) espace dans l'autorité
         ] {
             assert!(!is_local_endpoint(e), "bypass egress doit être refusé : {e}");
         }
@@ -600,6 +610,8 @@ mod tests {
         assert_eq!(host_of("http://evil.com?x@127.0.0.1").as_deref(), Some("evil.com"));
         assert_eq!(host_of("http://127.0.0.1@evil.com").as_deref(), Some("evil.com"));
         assert_eq!(host_of("http://").as_deref(), None, "autorité vide → pas d'hôte (fail-closed)");
+        // §3.2 (F3) : les autorités WHATWG-divergentes ⟹ None (fail-closed), jamais faussement local.
+        assert_eq!(host_of("http://evil.com\\@127.0.0.1/v1").as_deref(), None, "backslash ⟹ None");
     }
 
     /// La normalisation (casse + point final de FQDN) corrige des FAUX NÉGATIFS (hôtes légitimement

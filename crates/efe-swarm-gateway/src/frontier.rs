@@ -22,7 +22,8 @@
 use std::sync::Arc;
 
 use efe_coordinator::{
-    ClaudeProvider, Coordinator, GeminiProvider, GptProvider, PolicyRegistry, ProviderRegistry, TenantPolicies,
+    ClaudeProvider, Coordinator, GeminiProvider, GptProvider, LlmProvider, PolicyRegistry, ProviderRegistry,
+    TenantPolicies,
 };
 use uuid::Uuid;
 
@@ -40,25 +41,32 @@ use uuid::Uuid;
 #[must_use]
 pub fn coordinator_from_env() -> Option<Arc<Coordinator>> {
     let registry = ProviderRegistry::new();
-    let mut registered = 0usize;
+    let mut ids: Vec<String> = Vec::new();
 
     // Best-effort : un provider dont la clé manque est omis (from_env → Err), jamais fatal.
+    // L'id est capturé AVANT le wrap (qui consomme le provider) — cf. log ci-dessous (§3.3).
     if let Ok(p) = ClaudeProvider::from_env() {
+        ids.push(p.id());
         registry.register(crate::mission::ProvenanceProvider::wrap(Arc::new(p)));
-        registered += 1;
     }
     if let Ok(p) = GptProvider::from_env() {
+        ids.push(p.id());
         registry.register(crate::mission::ProvenanceProvider::wrap(Arc::new(p)));
-        registered += 1;
     }
     if let Ok(p) = GeminiProvider::from_env() {
+        ids.push(p.id());
         registry.register(crate::mission::ProvenanceProvider::wrap(Arc::new(p)));
-        registered += 1;
     }
 
-    if registered == 0 {
+    if ids.is_empty() {
         return None;
     }
+
+    // **M4 (§3.3)** : les ids enregistrés portent le MODÈLE (`claude_<model>`, `gpt_<model>`,
+    // `gemini_<model>`) — l'allowlist `EFE_LLM_TENANT_ALLOWLIST` doit les citer EXACTEMENT
+    // (l'étage 2 ⊆ registre du gate rejette sinon en 400). On les logge au boot pour rendre
+    // les allowlists authorables sans deviner le suffixe-modèle. Aucune clé n'est loggée (ids seuls).
+    eprintln!("→ providers frontière enregistrés (ids pour EFE_LLM_TENANT_ALLOWLIST) : {ids:?}");
 
     // **M3 (§2)** : charge l'allowlist d'egress par tenant, indispensable au gate fail-closed
     // (`egress_gate`). SANS elle, `coord.policies.get(tenant)` = None ⟹ **403 pour TOUT tenant**
@@ -78,20 +86,36 @@ fn policy_registry_from_env() -> PolicyRegistry {
     std::env::var("EFE_LLM_TENANT_ALLOWLIST").map(|raw| policy_registry_from_str(&raw)).unwrap_or_default()
 }
 
-/// Parseur **pur** de l'allowlist. Format : `"<tenant_uuid>=claude,gpt;<uuid2>=gemini"`.
+/// Parseur **pur** de l'allowlist. Format :
+/// `"<tenant_uuid>=<id1>,<id2>[@cap=<cents>];<uuid2>=<id3>"`.
 ///
-/// **Contrats de correction (§2)** : (1) les identifiants LLM DOIVENT égaler ceux enregistrés
-/// dans le `ProviderRegistry` (`claude`/`gpt`/`gemini`) — l'étage 2 ⊆ registre du gate rejette
-/// sinon en 400 ; (2) le tenant système = UUID `00…001` ; (3) une entrée malformée (pas de `=`,
-/// UUID invalide) est **ignorée** (jamais fatale), pas transformée en policy fantôme.
+/// **Contrats (§2 / §2.1 / §3.3)** :
+/// - les identifiants LLM DOIVENT égaler ceux **enregistrés** — `claude_<model>` / `gpt_<model>` /
+///   `gemini_<model>` (logués au boot par `coordinator_from_env`) — l'étage 2 ⊆ registre du gate
+///   rejette sinon en **400** (correction du piège `ADV-5` : jadis documenté `claude`/`gpt`/`gemini`
+///   nus, qui ne matchent JAMAIS le registre suffixé-modèle) ;
+/// - **`@cap=<cents>`** (optionnel) pose le **plafond de coût par requête** du tenant, en **cents**
+///   (stocké en microcents ×1000). Absent ⟹ pas de plafond tenant (seul le budget de requête
+///   s'applique — cf. `clamp_budget`) ;
+/// - tenant système = UUID `00…001` ; une entrée malformée (pas de `=`, UUID invalide) est
+///   **ignorée** (jamais fatale), pas transformée en policy fantôme.
 fn policy_registry_from_str(raw: &str) -> PolicyRegistry {
     let mut reg = PolicyRegistry::new();
     for entry in raw.split(';').map(str::trim).filter(|e| !e.is_empty()) {
-        let Some((tid_s, llms)) = entry.split_once('=') else { continue };
+        let Some((tid_s, rest)) = entry.split_once('=') else { continue };
         let Ok(tid) = Uuid::parse_str(tid_s.trim()) else { continue };
+        // Sépare la liste des LLM d'un éventuel plafond `@cap=<cents>` (cents → microcents ×1000).
+        let (llms_s, cap_microcents) = match rest.split_once("@cap=") {
+            Some((llms, cap_s)) => (llms, cap_s.trim().parse::<u64>().ok().map(|cents| cents * 1000)),
+            None => (rest, None),
+        };
         let allowed: Vec<String> =
-            llms.split(',').map(str::trim).filter(|s| !s.is_empty()).map(String::from).collect();
-        reg.insert(TenantPolicies { allowed_llms: Some(allowed), ..TenantPolicies::open(tid) });
+            llms_s.split(',').map(str::trim).filter(|s| !s.is_empty()).map(String::from).collect();
+        reg.insert(TenantPolicies {
+            allowed_llms: Some(allowed),
+            max_cost_microcents_per_query: cap_microcents,
+            ..TenantPolicies::open(tid)
+        });
     }
     reg
 }
@@ -106,18 +130,23 @@ mod tests {
     ///
     /// Note : test **non déterministe si l'env porte déjà une clé** ; il n'affirme donc que
     /// l'invariant faible « pas de panic, résultat cohérent avec le nombre de clés vues ».
-    /// Le parseur d'allowlist (§2) : entrées valides ⟹ policy par tenant keyée sur l'UUID nu ;
-    /// entrées malformées ignorées ; chaîne vide ⟹ registre vide (fail-closed). Pur → race-free.
+    /// Le parseur d'allowlist (§2/§2.1) : ids **suffixés-modèle** + plafond `@cap` optionnel ;
+    /// entrées malformées ignorées ; chaîne vide ⟹ fail-closed. Pur → race-free.
     #[test]
-    fn policy_registry_from_str_parses_and_skips_garbage() {
+    fn policy_registry_from_str_parses_allowlist_and_cap() {
         let sys = efe_nano_sdk::TenantId::system().0;
-        let reg = policy_registry_from_str(&format!("{sys}=claude, gpt ; garbage-sans-egal ; pas-un-uuid=x ; "));
+        let reg = policy_registry_from_str(&format!(
+            "{sys}=claude_sonnet, gpt_4o @cap=50000 ; garbage-sans-egal ; pas-un-uuid=x ; "
+        ));
         let pol = reg.get(&sys).expect("policy système présente");
         assert_eq!(
             pol.allowed_llms.as_deref(),
-            Some(&["claude".to_string(), "gpt".to_string()][..]),
-            "les 2 LLM autorisés sont parsés (espaces trimés)"
+            Some(&["claude_sonnet".to_string(), "gpt_4o".to_string()][..]),
+            "les 2 ids suffixés-modèle sont parsés (espaces trimés)"
         );
+        assert_eq!(pol.max_cost_microcents_per_query, Some(50_000 * 1000), "@cap=50000 cents = 50M microcents");
+        let no_cap = policy_registry_from_str(&format!("{sys}=claude_sonnet"));
+        assert_eq!(no_cap.get(&sys).unwrap().max_cost_microcents_per_query, None, "sans @cap ⟹ pas de plafond tenant");
         assert!(reg.get(&Uuid::nil()).is_none(), "les entrées malformées ne créent aucune policy fantôme");
         assert!(policy_registry_from_str("").get(&sys).is_none(), "chaîne vide ⟹ fail-closed total");
     }

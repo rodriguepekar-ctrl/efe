@@ -177,7 +177,7 @@ async fn mission_response(s: &SwarmGatewayState, run_id: Uuid, tenant: &str, out
 
 ---
 
-## 8. `StoredRun.request` + le checker out-of-band (le seul audit tierce de l'arité)
+## 8. `StoredRun.request` + le checker out-of-band (le contrôle détenteur-de-clé de l'arité)
 
 **`StoredRun.request: Value`** (non-Option, `DEFAULT '{}'`, miroir exact de `output`) :
 - `store.rs` : champ + `from_mission`/`from_outcome` gagnent un param `request: Value` (`from_outcome` passe `json!({})`).
@@ -190,7 +190,7 @@ async fn mission_response(s: &SwarmGatewayState, run_id: Uuid, tenant: &str, out
 3. **Compter les nœuds Mode-C** scellés : `stored.records.iter().filter(|r| matches!(r.agent_kind, AgentKind::ModeC)).count()` (patron [sdk.rs:491](crates/efe-swarm-sdk/src/sdk.rs)).
 4. **Signaler** : `declared_arity > mode_c_count` ⟹ **sous-déclaration**. DTO `LlmAuditView { kind, declared_arity, mode_c_records, under_declared }`.
 
-C'est ce qui transforme la garantie *write-side* en **auditable par un tiers** (détenteur de clé) — le complément de l'Invariant #2 (sur-déclaration, rejetée au build).
+C'est ce qui rend la garantie *write-side* **auditable hors-bande par le détenteur de la clé** (jamais trustless-tiers : le checker re-dérive l'arité SOUS la clé tenant) — le complément de l'Invariant #2 (sur-déclaration, rejetée au build).
 
 ---
 

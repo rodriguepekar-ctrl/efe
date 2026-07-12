@@ -122,7 +122,7 @@ flag   capture GRAPHE handlers  gate
 **Checklist go/no-go**
 - [ ] `main.rs` lit le flag + clés (`ANTHROPIC_API_KEY`/`OPENAI_API_KEY`/`GOOGLE_AI_KEY`).
 - [ ] **Fail-fast au boot** si `EFE_LLM_FRONTIER_ENABLED` sans `EFE_NANO_AUDIT_HMAC_MASTER` (sinon `test_key()` publique ⟹ **provenance forgeable**).
-- [ ] `PgRunStore` (feature `postgres`) en prod ⟹ reçus **durables** (l'`InMemory` les perd au restart, avec re-scellement sous une autre clé).
+- [ ] `PgRunStore` (feature `postgres`) en prod ⟹ reçus **durables** (l'`InMemory` perd tous les reçus au restart — HashMap en mémoire process ; un reçu perdu ne peut plus être re-prouvé : **perte de données, pas altération**. `EnvHkdf` est déterministe ⟹ **même clé** au restart ; le risque « autre clé » n'existe qu'à la **rotation** du master, concern orthogonal).
 - [ ] **Guard re-synchronisé** : `provenance-capture/guard.rs` et `efe-swarm-sdk/backend/mod.rs:266` durcis **ensemble** (drift SSRF déjà survenu).
 - [ ] **Doc du modèle de confiance** publiée : reçu R4 = *tamper-evident + re-vérifiable par le détenteur de la clé*, **PAS trustless-tiers**. Ne pas sur-vendre.
 - [ ] **Non-régression essaim** : `/v1/swarm/*` inchangé, exécuté **isolé** (flakiness workspace connue).

@@ -1084,6 +1084,34 @@ mod tests {
         assert_eq!(resp.status(), StatusCode::NOT_FOUND, "défaut : /v1/llm/* non monté ⟹ 404");
     }
 
+    /// **M4 (§5, #6)** — non-régression essaim quand `frontier-llm` est COMPILÉE : monter
+    /// `/v1/llm/*` ne perturbe pas le routeur essaim. Complète `no_llm_routes_when_frontier_off`
+    /// (côté « flag off »). 100 % côté harnais — aucune touche à `verify.rs`.
+    #[cfg(feature = "frontier-llm")]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn swarm_run_unchanged_when_frontier_compiled() {
+        let (app, _s) = app();
+        let resp = app
+            .clone()
+            .oneshot(post_run(json!({
+                "task": { "text": "x", "expected": "x" },
+                "topology": { "kind": "consensus", "generator": "echo_generator", "judges": ["consistency"], "k": 3 },
+                "budget": { "max_cents": 100 }
+            })))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK, "l'essaim reste servi sous frontier-llm");
+        let run = body_json(resp).await;
+        assert_eq!(run["run"]["provenance"]["verified"], json!(true));
+        let run_id = run["run_id"].as_str().unwrap().to_string();
+        let resp = app
+            .oneshot(Request::builder().uri(format!("/v1/swarm/verify/{run_id}")).body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        assert_eq!(body_json(resp).await["verified"], json!(true), "re-preuve essaim intacte");
+    }
+
     // ── Inc.3 — dashboard live ────────────────────────────────────────────────
 
     async fn collect_text(resp: axum::response::Response) -> String {
