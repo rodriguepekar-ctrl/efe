@@ -238,3 +238,28 @@ C'est ce qui transforme la garantie *write-side* en **auditable par un tiers** (
 | — (discipline) | double-mint `mission_id` ⟹ `SwarmMismatch` | §5 **un seul `mission_id` threadé** |
 
 *Préparation M3 : la surface servie est mécanique — mais la souveraineté du chemin frontière EXIGE fail-closed + rédaction d'erreur + aud dédié. Sans ces trois, servir les missions serait servir une fuite.*
+
+---
+
+## 13. Statut d'implémentation (M3 livré — 2026-07-11, post-audit de couverture)
+
+Après une **passe d'audit de couverture** (6 lentilles : câblage-policy, auth-aud, injection-state, DTOs, tests-DoD, critique-complétude), voici l'état réel item par item.
+
+**Fait & vérifié** (build par défaut byte-identique ; `--features frontier-llm` ; `--features frontier-llm,oidc` ; `--features frontier-llm,postgres`) :
+
+| Item | Où | Preuve |
+|---|---|---|
+| 5 handlers + `/v1/llm/audit/:id` + `routes_llm()` | `routes/llm.rs` | monté sous `#[cfg]` dans `router()` + `llm_router()` |
+| §2 gate **fail-closed + ⊆ registre** | `egress_gate` | 3 tests unit + 403/400 HTTP e2e |
+| §2 **chargement du `PolicyRegistry`** (`EFE_LLM_TENANT_ALLOWLIST`) | `frontier.rs` `policy_registry_from_env`/`_from_str` | test parseur (pur, race-free) |
+| §3 **rédaction du canal d'erreur** | `map_mission_err` | `map_mission_err_redacts_provider_secret` (2 secrets, 0 fuite) |
+| §4 **`LlmCaller` + `OidcVerifier::llm_from_env` (aud=efe-llm) + `state.oidc_llm`** | `auth.rs`/`oidc.rs`/`state.rs`/`main.rs` | RBAC strict (unit) + `vote_401_when_wrong_audience_then_200_when_efe_llm` (oidc) |
+| §5 **un seul `mission_id`** threadé | 5 handlers | `vote_e2e…` ⟹ `bridge_consistent=true` |
+| §7 **`held_strength` dans `LlmMissionResponse`** | `routes/llm.rs` | `held.any_remote=true` (R4) sur un vote servi |
+| §8 **`StoredRun.request` + checker** | `store.rs`/`store_pg.rs`/`mission_graph.rs`/`audit` | positif + négatif + tenant-scope 404 |
+| **DoD #1..#8** | `routes/llm.rs` + `lib.rs` (#8) + `efe-multi-llm/tests/no_spawn_guard.rs` (#7) | e2e servi, 403/400, redaction, 429+aud, erreurs-missions, checker, garde no-`spawn`, byte-identique |
+
+**Dette assumée (tracée, non-bloquante)** :
+- **§9 DTOs miroir `Llm*Request` + `#[serde(deny_unknown_fields)]`** — **DÉFÉRÉ**. Ce n'est aucun des 8 items DoD ; l'audit le classe « acceptable MVP, valeur-sécurité nulle » (isolation/egress/auth sont indépendants des champs de requête). Une implémentation propre exigerait soit un couplage gateway → `efe_nano_app_coordinator::types::router::TaskClass` (non réexporté par `efe-multi-llm`/`efe-coordinator`), soit de toucher `efe-multi-llm` (non-négociable). Les 5 requêtes d'`efe-multi-llm` sont réutilisées directement comme DTOs HTTP. **Risque résiduel borné** : un champ optionnel mal orthographié (ex. `max_budget` au lieu de `max_budget_cents`) retombe au défaut (500 c = 5 $) au lieu d'un 400 — jamais une faille, jamais un dépassement non-borné. À reprendre si/quand un contrat HTTP stable devient requis (le miroir vivra dans `dto.rs` avec `From`).
+- **§3 (défense en profondeur, hors M3)** : `gemini.rs` devrait passer la clé en header `x-goog-api-key` plutôt qu'en query-string (le reçu scellé + le corps HTTP sont déjà propres via `map_mission_err`, mais les logs bruts restent une surface).
+- **Reste** : **M4** (le prod gate) au plan roadmap.

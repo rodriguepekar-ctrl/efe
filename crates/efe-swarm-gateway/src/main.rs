@@ -90,6 +90,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("→ auth OIDC activée (JWT ES256, clé publique server-side).");
     }
 
+    // ── Couche 2 (M3, feature `oidc`) : auth DÉDIÉE du chemin frontière (aud=efe-llm) ───
+    // Séparée de l'auth essaim : un jeton souverain ne déverrouille pas l'egress tiers coûteux.
+    #[cfg(feature = "oidc")]
+    if let Some(verifier) = efe_swarm_gateway::OidcVerifier::llm_from_env()? {
+        state = state.with_oidc_llm(std::sync::Arc::new(verifier));
+        println!("→ auth OIDC frontière activée (JWT aud=efe-llm, clé publique server-side).");
+    }
+
     // ── G9 (feature `pii`) : politique PII par défaut depuis l'env (détection locale) ──
     #[cfg(feature = "pii")]
     if let Ok(p) = std::env::var("EFE_PII_DEFAULT_POLICY") {

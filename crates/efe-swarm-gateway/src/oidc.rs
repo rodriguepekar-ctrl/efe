@@ -69,6 +69,20 @@ impl OidcVerifier {
         Ok(Some(Self::from_pem(&pem, issuer.as_deref(), audience.as_deref())?))
     }
 
+    /// **Couche 2 (M3)** : vérificateur **dédié au chemin frontière** — audience **épinglée à
+    /// `efe-llm`** (NON conditionnelle : ignore `EFE_OIDC_AUDIENCE`). Un jeton d'essaim
+    /// souverain (`aud` absent ou autre) est ainsi **rejeté 401** avant tout egress tiers
+    /// coûteux (§4). `EFE_OIDC_LLM_AUDIENCE` surcharge l'audience (défaut `efe-llm`) ; même
+    /// clé publique + issuer que [`Self::from_env`]. `None` si `EFE_OIDC_PUBLIC_KEY_PEM` absent.
+    pub fn llm_from_env() -> Result<Option<Self>, GatewayError> {
+        let Ok(pem) = std::env::var("EFE_OIDC_PUBLIC_KEY_PEM") else {
+            return Ok(None);
+        };
+        let issuer = std::env::var("EFE_OIDC_ISSUER_URL").ok();
+        let audience = std::env::var("EFE_OIDC_LLM_AUDIENCE").unwrap_or_else(|_| "efe-llm".to_string());
+        Ok(Some(Self::from_pem(&pem, issuer.as_deref(), Some(&audience))?))
+    }
+
     /// Vérifie le jeton → `Caller`. Signature/exp/iss/aud invalides → 401.
     pub fn verify(&self, token: &str) -> Result<Caller, GatewayError> {
         let data = decode::<Claims>(token, &self.key, &self.validation)

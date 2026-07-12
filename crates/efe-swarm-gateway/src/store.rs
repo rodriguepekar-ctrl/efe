@@ -36,6 +36,11 @@ pub struct StoredRun {
     pub n17_root: Option<String>,
     pub output: Value,
     pub topology: String,
+    /// **Couche 2 (M3)** : le résumé **scellé** de la requête de mission (`kind`, `k`, `rounds`,
+    /// `user_text_hash`, `verifier_decision`…) — la source dont le checker out-of-band
+    /// `/v1/llm/audit/:id` **re-dérive** l'arité déclarée (jamais l'output producteur). `{}`
+    /// pour un run essaim/keyless (pas de mission). **Aucun secret** (hachés + paramètres).
+    pub request: Value,
     pub created_at: SystemTime,
 }
 
@@ -53,6 +58,7 @@ impl StoredRun {
             n17_root: outcome.n17_sealed.root_hex(),
             output: outcome.run.output.clone(),
             topology: outcome.run.topology.clone(),
+            request: Value::Null, // run essaim : pas de requête de mission LLM
             created_at: SystemTime::now(),
         }
     }
@@ -71,6 +77,7 @@ impl StoredRun {
         n17_root: Option<String>,
         output: Value,
         topology: String,
+        request: Value,
     ) -> Self {
         Self {
             tenant: tenant.to_string(),
@@ -81,6 +88,7 @@ impl StoredRun {
             n17_root,
             output,
             topology,
+            request,
             created_at: SystemTime::now(),
         }
     }

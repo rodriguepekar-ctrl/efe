@@ -105,17 +105,30 @@ pub const CRATE_VERSION: &str = env!("CARGO_PKG_VERSION");
 /// **App standalone complète** : `/v1/swarm/*` + `/metrics` + `/dashboard` (UI live).
 /// Pour un déploiement souverain : `axum::serve(listener, router(state))`.
 pub fn router(state: SwarmGatewayState) -> Router {
-    Router::new()
+    let app = Router::new()
         .nest("/v1/swarm", routes::routes())
         .route("/metrics", get(routes::metrics::metrics))
-        .route("/dashboard", get(routes::dashboard::dashboard))
-        .with_state(state)
+        .route("/dashboard", get(routes::dashboard::dashboard));
+    // Couche 2 (M3) : la surface frontière servie — montée SOUS le feature `frontier-llm`
+    // uniquement (build par défaut byte-identique). `#[cfg]` sur un `let` shadow : le type reste
+    // `Router<SwarmGatewayState>` jusqu'au `with_state` final.
+    #[cfg(feature = "frontier-llm")]
+    let app = app.nest("/v1/llm", routes::llm::routes_llm());
+    app.with_state(state)
 }
 
 /// Les **routes d'essaim** (relatif, sans préfixe) — à monter via `.nest("/v1/swarm", …)`
 /// dans une app hôte (`efe-server`).
 pub fn swarm_router(state: SwarmGatewayState) -> Router {
     routes::routes().with_state(state)
+}
+
+/// Couche 2 (M3) : les **routes frontière** (relatif : `vote`, `relay`, …) — à monter via
+/// `.nest("/v1/llm", llm_router(state))` dans une app hôte. Séparé de [`swarm_router`] pour
+/// que l'hôte les préfixe indépendamment (`/v1/llm/*`, PAS `/v1/swarm/v1/llm/*`).
+#[cfg(feature = "frontier-llm")]
+pub fn llm_router(state: SwarmGatewayState) -> Router {
+    routes::llm::routes_llm().with_state(state)
 }
 
 /// La **seule** route `/metrics` — à `.merge` dans une app hôte.
@@ -1047,6 +1060,28 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+    }
+
+    /// **Couche 2 (M3, DoD #8)** — défaut **byte-identique** : sans la feature `frontier-llm`,
+    /// AUCUNE route `/v1/llm/*` n'est montée (le `.nest` est sous `#[cfg]`). Un POST y répond
+    /// 404 — la propriété structurelle (gating cfg) devient un gardien exécutable. Ce test ne
+    /// compile QUE dans le build par défaut (retiré dès que la frontière est servie).
+    #[cfg(not(feature = "frontier-llm"))]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn no_llm_routes_when_frontier_off() {
+        let (app, _s) = app();
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/v1/llm/vote")
+                    .header("content-type", "application/json")
+                    .body(Body::from(r#"{"user_text":"x","task_class":"FACTUAL_QA","llms":["a","b","c"]}"#))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::NOT_FOUND, "défaut : /v1/llm/* non monté ⟹ 404");
     }
 
     // ── Inc.3 — dashboard live ────────────────────────────────────────────────

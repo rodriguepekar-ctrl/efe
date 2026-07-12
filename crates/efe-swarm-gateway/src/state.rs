@@ -177,6 +177,13 @@ pub struct SwarmGatewayState {
     /// `None` ⇒ repli sur l'extracteur d'en-têtes dev. Jamais une clé privée.
     #[cfg(feature = "oidc")]
     pub oidc: Option<Arc<crate::oidc::OidcVerifier>>,
+    /// **Couche 2 (M3, feature `oidc`)** : vérificateur OIDC **DÉDIÉ au chemin frontière** —
+    /// audience épinglée `efe-llm` (cf. [`crate::oidc::OidcVerifier::llm_from_env`]). Séparé de
+    /// `oidc` pour qu'un jeton d'essaim souverain NE déverrouille PAS l'egress tiers coûteux
+    /// non-souverain (§4). Consommé par l'extracteur [`crate::auth::LlmCaller`] des routes
+    /// `/v1/llm/*` ; `None` ⇒ 401 fail-closed sur ce chemin (jamais de repli keyless).
+    #[cfg(feature = "oidc")]
+    pub oidc_llm: Option<Arc<crate::oidc::OidcVerifier>>,
     /// **G9 (feature `pii`)** : politique PII par tenant (défaut `Off`). Caviarde sorties +
     /// previews. Détection LOCALE (souverain).
     #[cfg(feature = "pii")]
@@ -233,6 +240,8 @@ impl SwarmGatewayState {
             coordinator: None,
             #[cfg(feature = "oidc")]
             oidc: None,
+            #[cfg(feature = "oidc")]
+            oidc_llm: None,
             #[cfg(feature = "pii")]
             pii: crate::pii::PiiConfig::default(),
             admission: Arc::new(Semaphore::new(permits)),
@@ -359,6 +368,16 @@ impl SwarmGatewayState {
     #[cfg(feature = "oidc")]
     pub fn with_oidc(mut self, verifier: Arc<crate::oidc::OidcVerifier>) -> Self {
         self.oidc = Some(verifier);
+        self
+    }
+
+    /// **Couche 2 (M3, feature `oidc`)** : branche le vérificateur OIDC **frontière** (audience
+    /// `efe-llm`). L'extracteur [`crate::auth::LlmCaller`] des routes `/v1/llm/*` valide alors un
+    /// JWT `aud=efe-llm` (401 sinon, sans repli keyless). À construire côté binaire via
+    /// [`crate::oidc::OidcVerifier::llm_from_env`]. Orthogonal à [`Self::with_oidc`] (essaim).
+    #[cfg(feature = "oidc")]
+    pub fn with_oidc_llm(mut self, verifier: Arc<crate::oidc::OidcVerifier>) -> Self {
+        self.oidc_llm = Some(verifier);
         self
     }
 

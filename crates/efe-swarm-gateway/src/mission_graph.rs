@@ -303,6 +303,24 @@ pub async fn seal_and_store_mission(
     sink: &crate::mission::MissionProvenanceSink,
     output: Value,
 ) -> Result<Uuid, crate::GatewayError> {
+    // Résumé de requête minimal (callers non-handler) — le `kind` suffit au store.
+    let request = json!({ "kind": topology.kind });
+    seal_and_store_mission_with_request(state, tenant, mission_id, topology, sink, output, request).await
+}
+
+/// **Couche 2 (M3)** : variante qui **scelle le résumé de requête** (`request`) — la source
+/// dont le checker out-of-band `/v1/llm/audit/:id` re-dérive l'arité déclarée. Les handlers M3
+/// l'appellent avec `{kind, k, rounds, user_text_hash, verifier_decision}`.
+#[cfg(feature = "frontier-llm")]
+pub async fn seal_and_store_mission_with_request(
+    state: &crate::SwarmGatewayState,
+    tenant: &str,
+    mission_id: Uuid,
+    topology: &MissionTopology,
+    sink: &crate::mission::MissionProvenanceSink,
+    output: Value,
+    request: Value,
+) -> Result<Uuid, crate::GatewayError> {
     let tenant_id = state.tenant_id(tenant)?;
     let key = state.derive_key(tenant)?;
     let drained = sink.drain();
@@ -317,6 +335,7 @@ pub async fn seal_and_store_mission(
         seal.n17_root,
         output,
         topology.kind.clone(),
+        request,
     );
     let run_id = Uuid::new_v4();
     state.store.put_stored(run_id, stored).await?;

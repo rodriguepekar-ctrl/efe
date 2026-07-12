@@ -94,6 +94,7 @@ pub(crate) fn synthetic_mode_c_run(model: &str) -> (Vec<efe_swarm_provenance::Ag
         n17_root: sealed.root_hex(),
         output: json!({ "value": "ok" }),
         topology: "T-consensus".into(),
+        request: json!({}),
         created_at: std::time::SystemTime::now(),
     };
     (records, stored)
