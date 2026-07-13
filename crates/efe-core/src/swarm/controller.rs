@@ -270,9 +270,11 @@ impl SwarmController {
     /// will introduce a dedicated single-step kernel — bypassing
     /// genesis / dissolution / alignment when not strictly needed —
     /// gated behind a separate optimisation feature.  Until then,
-    /// convergence guarantees of the meta-swarm hold under the
-    /// empirical non-expansiveness of `Φ` on the operational domain
-    /// (verified by `efe-prove` at certification time).
+    /// convergence guarantees of the meta-swarm hold **only as long as**
+    /// `Φ` is non-expansive (`L_Φ ≤ 1`) on the operational domain — a
+    /// property that is **not proven here** and must be **checked
+    /// empirically** (the M1.c Lipschitz canary measures `L_Φ`; M1.b
+    /// makes `Φ` deterministic so that measurement is well-defined).
     ///
     /// # Parameters
     ///
@@ -364,13 +366,35 @@ impl SwarmController {
     /// single implementation of the Φ computation here guarantees the bound
     /// measured is the one actually applied in the coupled step.
     ///
-    /// # Determinism (M1.d, out of M1.a scope)
+    /// # Determinism (M1.b)
     ///
-    /// `execute()` currently draws a fresh `SwarmId`/`RequestId` per call,
-    /// seeding the genesis noise (`init_sigma`) — so `Φ(x)` is **not** yet
-    /// reproducible bit-for-bit.  M1.a exposes the operator; M1.d makes it
-    /// deterministic (seed derived from `participant.seed ⊕ step_index`,
-    /// `init_sigma = 0`).
+    /// The one stochastic stage on this path is the genesis noise
+    /// `h[i] = prior + init_sigma·N(0,1; seed)` with `seed = compute_seed(spec.id)`
+    /// — derived from the [`crate::types::SwarmSpec`]'s `id`, **not** the fresh
+    /// `SwarmId` that [`Self::execute`] draws for telemetry (that one never reaches
+    /// genesis; see `GenesisEngine::spawn`).  Since `phi_once` clones a *fixed*
+    /// `base_spec`, that seed is constant, so `Φ(x)` is already bit-reproducible for
+    /// a given spec at **any** `init_sigma`.  What the fixed noise realization ε
+    /// still does: it perturbs the nonlinear pipeline, so `Φ` depends on `spec.id`
+    /// and — critically — ε does **not** cancel in `Φ(x) − Φ(y)`, leaving a
+    /// seed-dependent floor that would corrupt the M1.c empirical-Lipschitz ratio.
+    /// The meta-swarm **latent** controller
+    /// (`efe_server::mode1::build_mvp_controller`) is built with `init_sigma = 0`,
+    /// which short-circuits the RNG entirely: `Φ` becomes the **noise-free operator**
+    /// — bit-invariant to `spec.id`, and a clean function of `x` for the canary
+    /// (verified end-to-end in
+    /// `efe-meta-swarm/tests/integration_local_participant.rs`).  Determinism of the
+    /// operator is thus a property of the controller's *construction* (`init_sigma`),
+    /// not of `phi_once` itself; the fresh `SwarmId`/`RequestId` never leak into the
+    /// output (they feed only telemetry).
+    ///
+    /// **Single-flight per controller.**  The fused centroid crosses to the
+    /// dissolver via a per-controller channel, so `Φ` is pure only under
+    /// **sequential** calls on a given controller (the meta-swarm's
+    /// one-controller-per-participant design satisfies this — `step_with_pull`
+    /// awaits `phi_once` to completion).  Do **not** invoke `phi_once`
+    /// concurrently on a *shared* `SwarmController`; give each concurrent
+    /// evaluator its own controller (the M1.c Lipschitz-canary contract).
     ///
     /// # Errors
     ///
