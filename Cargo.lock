@@ -2335,6 +2335,7 @@ dependencies = [
  "efe-core",
  "efe-meta-verify",
  "efe-nano-sdk",
+ "efe-server",
  "insta",
  "ndarray 0.15.6",
  "ndarray-npy",

@@ -46,6 +46,11 @@ file-loading       = ["dep:ndarray", "dep:ndarray-npy"]
 # gate "efe-server binary byte-identical" invariant remains satisfied
 # (no transitive linker change).  Phase 2 will flip this on by default.
 core-integration   = ["dep:efe-core", "dep:tokio"]
+# Couche 3 M1.a (Voie A) — the end-to-end participant seam test only. Pulls efe-server
+# (its `mode1::build_mvp_controller`) to construct a REAL `SwarmController`. Kept OFF the
+# `core-integration` production path so the served `LocalParticipant` never links the heavy
+# `efe-server` crate ; enable ONLY to run `tests/integration_local_participant.rs`.
+integration-test   = ["core-integration", "dep:efe-server"]
 # Câble la provenance re-prouvable DANS le moteur (chaque pas de consensus scellé au fil de
 # l'itération, via un StepObserver). Off par défaut : le seam (trait StepObserver + run(obs)) est
 # TOUJOURS compilé et crypto-free ; seul le sink HMAC + l'API iterate_with_provenance sont gatés, pour
@@ -74,6 +79,11 @@ ndarray-npy   = { version = "0.8",  optional = true }
 # `efe-meta-swarm` stays small (= zero transitive impact on efe-server).
 efe-core      = { path = "../efe-core", optional = true }
 tokio         = { workspace = true,     optional = true }
+# Optional, gated by the `integration-test` feature (Couche 3 M1.a, Voie A) : the real
+# `SwarmController` construction (Mode-1 fusion on stub templates) lives in efe-server::mode1.
+# Pulled ONLY for the M1.a e2e test — never for the default build nor the production
+# `core-integration` path (the served bridge must stay decoupled from the heavy efe-server crate).
+efe-server    = { path = "../efe-server", optional = true }
 # Optional, gated by the `provenance` feature : le câblage de la provenance dans le moteur
 # (src/provenance.rs). efe-meta-verify fournit le sceau incrémental (MetaChainState) + les types ;
 # efe-audit-core la crypto partagée (chain_hmac + HKDF) ; efe-nano-sdk le TenantId. Pull-in UNIQUEMENT

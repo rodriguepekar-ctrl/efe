@@ -346,26 +346,71 @@ impl SwarmController {
                 "step_with_pull: pull contains NaN or Inf".into(),
             ));
         }
-        // Build a single-round request seeded with the current state.
+        // Φ(current) = one fusion round seeded with `current`, isolated
+        // from the coupling term (Couche 3 M1.a — see `phi_once`).
+        let phi_x = self.phi_once(current, base_spec, tenant_id).await?;
+        // Mix : (1 - α - γ) · current + α · Φ(current) + γ · pull.
+        crate::swarm::coupled::mix_coupled(current, &phi_x, pull, alpha, gamma)
+    }
+
+    /// **Couche 3 (M1.a)** — the participant's internal operator `Φ_m(x)`,
+    /// **isolated** from the Krasnosel'skii-Mann mix.  Runs one fusion round
+    /// seeded with `x` (`spec.problem_embedding = x`, `max_rounds = 1`,
+    /// `DecodeMode::PassThrough`) and returns its raw latent output.
+    ///
+    /// This is the accessor the meta-swarm needs to **measure `Φ`'s
+    /// empirical Lipschitz bound** (the H1 guard-rail of M1.c) *without* the
+    /// `α`/`γ` coupling that [`Self::step_with_pull`] adds on top.  Keeping a
+    /// single implementation of the Φ computation here guarantees the bound
+    /// measured is the one actually applied in the coupled step.
+    ///
+    /// # Determinism (M1.d, out of M1.a scope)
+    ///
+    /// `execute()` currently draws a fresh `SwarmId`/`RequestId` per call,
+    /// seeding the genesis noise (`init_sigma`) — so `Φ(x)` is **not** yet
+    /// reproducible bit-for-bit.  M1.a exposes the operator; M1.d makes it
+    /// deterministic (seed derived from `participant.seed ⊕ step_index`,
+    /// `init_sigma = 0`).
+    ///
+    /// # Errors
+    ///
+    /// [`EfeError::InvalidConfig`] if `dim(x) != base_spec.dim_latent`, if
+    /// `x` holds NaN/Inf, or if the controller decodes a non-raw output.
+    pub async fn phi_once(
+        &self,
+        x: &[f32],
+        base_spec: &crate::types::SwarmSpec,
+        tenant_id: &str,
+    ) -> Result<Vec<f32>> {
+        let dim = base_spec.dim_latent.get() as usize;
+        if x.len() != dim {
+            return Err(EfeError::InvalidConfig(format!(
+                "phi_once: x length {} != spec dim_latent {dim}",
+                x.len()
+            )));
+        }
+        if !x.iter().all(|v| v.is_finite()) {
+            return Err(EfeError::InvalidConfig(
+                "phi_once: x contains NaN or Inf".into(),
+            ));
+        }
+        // Build a single-round request seeded with `x`.
         let mut spec = base_spec.clone();
-        spec.problem_embedding = current.to_vec();
-        spec.max_rounds = std::num::NonZeroU32::new(1)
-            .expect("1 is non-zero");
+        spec.problem_embedding = x.to_vec();
+        spec.max_rounds = std::num::NonZeroU32::new(1).expect("1 is non-zero");
         let req = crate::swarm::request::Request::synthetic(
             spec,
             tenant_id.to_string(),
             crate::types::RequestId::new(),
         );
-        // Execute one round to get Φ(current).
+        // Execute one round to get Φ(x).
         let resp = self.execute(req).await?;
-        let phi_x = resp
-            .output
-            .as_raw()
-            .ok_or_else(|| EfeError::InvalidConfig(
-                "step_with_pull: expected raw output (controller decoded non-pass-through)".into()
-            ))?;
-        // Mix : (1 - α - γ) · current + α · Φ(current) + γ · pull.
-        crate::swarm::coupled::mix_coupled(current, phi_x, pull, alpha, gamma)
+        let phi_x = resp.output.as_raw().ok_or_else(|| {
+            EfeError::InvalidConfig(
+                "phi_once: expected raw output (controller decoded non-pass-through)".into(),
+            )
+        })?;
+        Ok(phi_x.to_vec())
     }
 
     /// Internal main flow (separated from [`execute`] so telemetry is
