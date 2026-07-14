@@ -111,7 +111,7 @@ within v1.  Adding a new field requires :
 | `BoxSafety` | 1 | 2-99 | 2 |
 | `Polyhedron` | 1, 2, 3 | 4-99 | 4 |
 | `LearnedHull` | 1, 2 | 3-99 | 3 |
-| `ParticipantDescriptor` | 1-7 | 8-99 | 8 |
+| `ParticipantDescriptor` | 1-8 (8 = `config_hash`, Couche 3 M1.d) | 9-99 | 9 |
 | `IterationConfig` | 1-6 | 7-9, 10-99 | 7 |
 | `IterateRequest` | 1-5 | 6-99 | 6 |
 | `IterateResponse` | 1-7 | 8-99 | 8 |

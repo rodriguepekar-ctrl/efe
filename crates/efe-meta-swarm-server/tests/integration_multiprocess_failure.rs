@@ -111,23 +111,26 @@ async fn controller_with_manifest_mismatch_fails_at_iterate() {
         ParticipantManifest {
             id: "alpha".into(),
             dim: 8,
-            kappa: 0.6,
-            seed: 1,
+            kappa: Some(0.6),
+            seed: Some(1),
             blas_backend: "none".into(),
+            controller: None,
         },
         ParticipantManifest {
             id: "beta".into(),
             dim: 8,
-            kappa: 0.7,
-            seed: 2,
+            kappa: Some(0.7),
+            seed: Some(2),
             blas_backend: "none".into(),
+            controller: None,
         },
         ParticipantManifest {
             id: "ghost".into(),
             dim: 8,
-            kappa: 0.5,
-            seed: 3,
+            kappa: Some(0.5),
+            seed: Some(3),
             blas_backend: "none".into(),
+            controller: None,
         },
     ];
     // Manifest declares alpha + beta + ghost ; only alpha and beta

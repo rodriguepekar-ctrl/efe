@@ -192,6 +192,37 @@ pub async fn run_iterate(
         }
     }
 
+    // Couche 3 M1.d — **fail-closed non-convergence** (architecture §4).
+    // With `iteration.require_convergence` set in the manifest, a run that
+    // did not converge is an ERROR, never an OK response whose non-converged
+    // "consensus" a client might silently trust.  Design notes :
+    //   * gRPC code = ABORTED — deliberately NOT FAILED_PRECONDITION (which
+    //     `classify_grpc_status` buckets as safety_violation) and NOT
+    //     INTERNAL (which conflates non-convergence with bugs).
+    //   * The guard sits AFTER the metrics block so the
+    //     `convergence="max_iters"` histograms keep counting.
+    //   * This is a RESPONSE-layer gate.  Do NOT implement it via
+    //     `MetaSwarmBuilder::strict(true)` : strict also flips the engine's
+    //     H1 pre-check, and `RemoteParticipant::verify_non_expansive` still
+    //     returns `Stub` (no certificate on the wire yet) — strict would
+    //     brick every served Iterate.  Wire-level certificates are the
+    //     Couche 3 M4 milestone.
+    //   * `StepOnce` (max_iters = 1, definitionally non-converged) is exempt.
+    if manifest.iteration.require_convergence && result.stop_reason != StopReason::Converged {
+        warn!(
+            iterations = result.iterations,
+            final_residual = result.final_residual,
+            stop_reason = ?result.stop_reason,
+            "Iterate did NOT converge and require_convergence is set — failing closed",
+        );
+        return Err(Status::aborted(format!(
+            "convergence failed after {} iterations (final_residual = {:e}, \
+             tolerance = {:e}) — iteration.require_convergence is set : a \
+             non-converged iterate is never returned as a consensus",
+            result.iterations, result.final_residual, validated.tolerance,
+        )));
+    }
+
     let response = build_response(&result, start.elapsed());
 
     info!(
@@ -410,11 +441,19 @@ fn validate_expected_against_manifest(
         // Reject NaN explicitly : a NaN client-side kappa would slip
         // through `(NaN).abs() > 1e-6 == false` and reach Phase-1's
         // `MetaSwarmBuilder` as a hidden invariant violation.
-        let diff = (e.kappa - m.kappa).abs();
+        //
+        // Couche 3 M1.d : manifest kappa is an Option (absent on efe-core
+        // rows).  An efe-core row advertises the sentinel kappa = 0.0 on the
+        // wire (see `ParticipantState::descriptor`), so the expectation
+        // check compares against `unwrap_or(0.0)` — the engine identity
+        // itself is checked via the manifest `controller` block presence,
+        // not via the deprecated mock constant.
+        let manifest_kappa = m.kappa.unwrap_or(0.0);
+        let diff = (e.kappa - manifest_kappa).abs();
         if diff.is_nan() || diff > 1.0e-6 {
             return Err(ServerError::Config(format!(
-                "expected_participants[{i}].kappa = {} but manifest has {} (or NaN sent)",
-                e.kappa, m.kappa,
+                "expected_participants[{i}].kappa = {} but manifest has {manifest_kappa} (or NaN sent)",
+                e.kappa,
             )));
         }
     }
@@ -783,9 +822,10 @@ mod tests {
             participants: vec![ParticipantManifest {
                 id: "p-1".into(),
                 dim: 8,
-                kappa: 0.6,
-                seed: 1,
+                kappa: Some(0.6),
+                seed: Some(1),
                 blas_backend: "none".into(),
+                controller: None,
             }],
             iteration: IterationManifest::default(),
         }
@@ -890,6 +930,7 @@ mod tests {
             build_sha: String::new(),
             blas_backend: "none".into(),
             features: vec![],
+            config_hash: None,
         }];
         let err = validate_request(&r, &m).unwrap_err();
         assert!(matches!(err, ServerError::Config(ref msg) if msg.contains("kappa")));

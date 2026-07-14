@@ -124,9 +124,10 @@ impl ParticipantState {
         let row = ParticipantManifest {
             id: config.id.clone(),
             dim: 8,
-            kappa: 0.6,
-            seed: 11,
+            kappa: Some(0.6),
+            seed: Some(11),
             blas_backend: "none".into(),
+            controller: None,
         };
         let local = LocalParticipant::from_manifest_row(&row).expect("test LocalParticipant build");
         let iteration = IterationParams {
@@ -148,9 +149,10 @@ impl ParticipantState {
         let row = ParticipantManifest {
             id: config.id.clone(),
             dim: 8,
-            kappa: 0.6,
-            seed: 11,
+            kappa: Some(0.6),
+            seed: Some(11),
             blas_backend: "none".into(),
+            controller: None,
         };
         let local = LocalParticipant::from_manifest_row(&row).expect("test LocalParticipant build");
         Self::new(config, local, iteration)
@@ -158,7 +160,20 @@ impl ParticipantState {
 
     /// Pre-built descriptor.  PR #9 fills in real values from the
     /// manifest row (was placeholders dim/kappa/seed = 0 in PR #6).
+    ///
+    /// **Couche 3 M1.d — honest wire.**  For an efe-core participant,
+    /// `kappa`/`seed` are mock-only concepts : the wire carries the sentinels
+    /// `0.0`/`0` (frozen field numbers — deprecated, never removed) and the
+    /// engine is identified by `config_hash` (SHA-256 of the manifest
+    /// `controller` block) plus the `engine:efe-core-mode1` feature token.
+    /// The `determinism` claim is kept for BOTH engines : the mock is
+    /// deterministic by construction, and the efe-core latent controller runs
+    /// the M1.b zero-noise Φ (bit-reproducible, seed-invariant).
     pub fn descriptor(&self) -> ParticipantDescriptor {
+        let mut features = vec!["determinism".into(), "step_index".into()];
+        if self.local.is_efe_core() {
+            features.push(crate::participant::local::ENGINE_FEATURE_EFE_CORE.into());
+        }
         ParticipantDescriptor {
             id: self.local.id().to_string(),
             dim: u32::try_from(self.local.dim()).unwrap_or(u32::MAX),
@@ -166,7 +181,8 @@ impl ParticipantState {
             seed: self.local.seed(),
             build_sha: crate::GIT_SHA.into(),
             blas_backend: "none".into(),
-            features: vec!["determinism".into(), "step_index".into()],
+            features,
+            config_hash: self.local.config_hash().map(str::to_string),
         }
     }
 }

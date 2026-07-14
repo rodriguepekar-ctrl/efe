@@ -295,8 +295,9 @@ where
         return report;
     }
 
-    // Helper to fold a candidate ratio into the running maximum.
-    let mut record = |num: f64, den: f64, l_hat: &mut f64, worst_sep: &mut f64, scored: &mut usize| {
+    // Helper to fold a candidate ratio into the running maximum.  (Mutates
+    // only through its arguments, so it is a plain `Fn` closure.)
+    let record = |num: f64, den: f64, l_hat: &mut f64, worst_sep: &mut f64, scored: &mut usize| {
         if den > 0.0 && num.is_finite() {
             *scored += 1;
             let r = num / den;

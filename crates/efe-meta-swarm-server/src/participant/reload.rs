@@ -132,26 +132,50 @@ async fn apply_reload(
     };
 
     // 2. Reject own-row drift.  κ is f32 ; use the same tolerance as
-    //    `validate_reload_compatibility` for parity.
+    //    `validate_reload_compatibility` for parity.  Couche 3 M1.d : the
+    //    manifest kappa/seed are Options (absent on efe-core rows) — the
+    //    running participant stores sentinels 0.0/0 for those, so compare
+    //    against `unwrap_or(sentinel)` ;  presence drift (mock ↔ efe-core)
+    //    is caught by the `controller` block comparison below.
     let old_dim = state.local.dim();
     let old_kappa = state.local.kappa();
     let old_seed = state.local.seed();
     let new_dim = new_row.dim as usize;
-    let kappa_drift = (old_kappa - new_row.kappa).abs();
+    let new_kappa = new_row.kappa.unwrap_or(0.0);
+    let new_seed = new_row.seed.unwrap_or(0);
+    let kappa_drift = (old_kappa - new_kappa).abs();
     let kappa_drift_nan = kappa_drift.is_nan();
     if old_dim != new_dim
         || kappa_drift_nan
         || kappa_drift > crate::manifest::RELOAD_KAPPA_TOLERANCE
-        || old_seed != new_row.seed
+        || old_seed != new_seed
     {
         state
             .metrics
             .record_reload_failure(ReloadFailureReason::Drift);
         let msg = format!(
             "reload : own row {own_id:?} drifted (dim {old_dim} → {new_dim}, \
-             kappa {old_kappa} → {} (Δ {kappa_drift}), seed {old_seed} → {}) — \
+             kappa {old_kappa} → {new_kappa} (Δ {kappa_drift}), seed {old_seed} → {new_seed}) — \
              κ / dim / seed are immutable across reload in Phase 2 (AD3 / AD9)",
-            new_row.kappa, new_row.seed,
+        );
+        error!(error = %msg, "participant reload rejected");
+        return Err(ServerError::Manifest(msg));
+    }
+
+    // 2bis. Couche 3 M1.d — the efe-core `controller` block is baked in at
+    //       boot (build_mvp_controller + H1 boot canary ran against IT) ;
+    //       ANY drift — including presence drift (mock ↔ efe-core) — is
+    //       rejected fail-closed, exactly like dim/kappa/seed.  Restart to
+    //       change the engine.
+    if state.local.controller_manifest() != new_row.controller.as_ref() {
+        state
+            .metrics
+            .record_reload_failure(ReloadFailureReason::Drift);
+        let msg = format!(
+            "reload : own row {own_id:?} controller drift — the efe-core \
+             engine block is immutable across reload (the running engine and \
+             its H1 certificate were built from the boot-time block) ; \
+             restart the participant to change it",
         );
         error!(error = %msg, "participant reload rejected");
         return Err(ServerError::Manifest(msg));
@@ -263,16 +287,18 @@ mod tests {
                 ParticipantManifest {
                     id: own_id.into(),
                     dim: 8,
-                    kappa: 0.6,
-                    seed: 11,
+                    kappa: Some(0.6),
+                    seed: Some(11),
                     blas_backend: "none".into(),
+                    controller: None,
                 },
                 ParticipantManifest {
                     id: "peer-a".into(),
                     dim: 8,
-                    kappa: 0.7,
-                    seed: 22,
+                    kappa: Some(0.7),
+                    seed: Some(22),
                     blas_backend: "none".into(),
+                    controller: None,
                 },
             ],
             iteration: IterationManifest {
@@ -282,6 +308,7 @@ mod tests {
                 coupling_gamma: 0.2,
                 deterministic: true,
                 max_wall_ms: 15_000,
+                require_convergence: false,
             },
         }
     }
@@ -306,7 +333,7 @@ mod tests {
     async fn apply_reload_rejects_own_kappa_drift() {
         let state = test_state("self");
         let mut new = matching_manifest("self");
-        new.participants[0].kappa = 0.75; // drift from 0.6
+        new.participants[0].kappa = Some(0.75); // drift from 0.6
         let err = apply_reload_with_manifest(&state, new).await.unwrap_err();
         assert!(
             matches!(err, ServerError::Manifest(ref m) if m.contains("drifted") && m.contains("kappa")),
@@ -335,7 +362,7 @@ mod tests {
     async fn apply_reload_rejects_own_seed_drift() {
         let state = test_state("self");
         let mut new = matching_manifest("self");
-        new.participants[0].seed = 999; // drift from 11
+        new.participants[0].seed = Some(999); // drift from 11
         let err = apply_reload_with_manifest(&state, new).await.unwrap_err();
         assert!(
             matches!(err, ServerError::Manifest(ref m) if m.contains("drifted") && m.contains("seed")),
@@ -418,7 +445,7 @@ mod tests {
     async fn apply_reload_rejects_nan_own_kappa() {
         let state = test_state("self");
         let mut new = matching_manifest("self");
-        new.participants[0].kappa = f32::NAN;
+        new.participants[0].kappa = Some(f32::NAN);
         // `validate_manifest` would catch this first, but the inner
         // `apply_reload` is also independently safe : if a future
         // refactor short-circuits the validator, the NaN guard inside

@@ -474,13 +474,18 @@ pub fn build_inline_manifest(
         .map(|p| ParticipantManifest {
             id: p.id.clone(),
             dim: p.dim,
-            kappa: p.kappa,
-            seed: p.seed,
+            // The ReloadConfig RPC carries WIRE descriptors (mock-shaped) ;
+            // it cannot express an efe-core `controller` block (M1.d) — and
+            // engine changes across reload are rejected by
+            // `validate_reload_compatibility` anyway.
+            kappa: Some(p.kappa),
+            seed: Some(p.seed),
             blas_backend: if p.blas_backend.is_empty() {
                 "none".into()
             } else {
                 p.blas_backend.clone()
             },
+            controller: None,
         })
         .collect::<Vec<_>>();
 
@@ -525,23 +530,26 @@ mod tests {
                 ParticipantManifest {
                     id: "supplier-scoring".into(),
                     dim: 8,
-                    kappa: 0.6,
-                    seed: 11,
+                    kappa: Some(0.6),
+                    seed: Some(11),
                     blas_backend: "none".into(),
+                    controller: None,
                 },
                 ParticipantManifest {
                     id: "contract-risk".into(),
                     dim: 8,
-                    kappa: 0.7,
-                    seed: 22,
+                    kappa: Some(0.7),
+                    seed: Some(22),
                     blas_backend: "none".into(),
+                    controller: None,
                 },
                 ParticipantManifest {
                     id: "spend-categorization".into(),
                     dim: 8,
-                    kappa: 0.5,
-                    seed: 33,
+                    kappa: Some(0.5),
+                    seed: Some(33),
                     blas_backend: "none".into(),
+                    controller: None,
                 },
             ],
             iteration: IterationManifest::default(),
@@ -636,12 +644,12 @@ mod tests {
         let m0 = three_p_manifest();
         let state = test_state_with_manifest(m0.clone(), "/dev/null".into());
         let mut new = m0.clone();
-        new.participants[1].kappa = 0.85;
+        new.participants[1].kappa = Some(0.85);
         let err = apply_reload_with_manifest(&state, new).await.unwrap_err();
         assert!(matches!(err, ServerError::Manifest(ref msg) if msg.contains("kappa drift")));
         // Manifest unchanged.
         let post = state.manifest.read().await;
-        assert!((post.participants[1].kappa - 0.7).abs() < 1e-6);
+        assert!((post.participants[1].kappa.unwrap_or(f32::NAN) - 0.7).abs() < 1e-6);
     }
 
     #[tokio::test]
@@ -662,9 +670,10 @@ mod tests {
         new.participants.push(ParticipantManifest {
             id: "fraud-detection".into(),
             dim: 8,
-            kappa: 0.55,
-            seed: 44,
+            kappa: Some(0.55),
+            seed: Some(44),
             blas_backend: "none".into(),
+            controller: None,
         });
         let outcome = apply_reload_with_manifest(&state, new).await.expect("ok");
         assert_eq!(outcome.participants, 4);
@@ -697,12 +706,12 @@ mod tests {
         let m0 = three_p_manifest();
         let state = test_state_with_manifest(m0.clone(), "/dev/null".into());
         let mut bad = m0.clone();
-        bad.participants[0].kappa = 1.5; // outside (0, 1)
+        bad.participants[0].kappa = Some(1.5); // outside (0, 1)
         let err = apply_reload_with_manifest(&state, bad).await.unwrap_err();
         assert!(matches!(err, ServerError::Manifest(_)));
         assert_eq!(state.health.snapshot().reload_gen, 0);
         let post = state.manifest.read().await;
-        assert!((post.participants[0].kappa - 0.6).abs() < 1e-6);
+        assert!((post.participants[0].kappa.unwrap_or(f32::NAN) - 0.6).abs() < 1e-6);
     }
 
     #[tokio::test]
@@ -825,6 +834,7 @@ mod tests {
                     build_sha: String::new(),
                     blas_backend: String::new(),
                     features: vec![],
+                    config_hash: None,
                 })
                 .collect(),
             drain_inflight: false,
@@ -878,6 +888,7 @@ mod tests {
                 build_sha: String::new(),
                 blas_backend: String::new(),
                 features: vec![],
+                config_hash: None,
             }],
             drain_inflight: false,
         };
@@ -899,6 +910,7 @@ mod tests {
                 build_sha: String::new(),
                 blas_backend: String::new(),
                 features: vec![],
+                config_hash: None,
             }],
             drain_inflight: false,
         };

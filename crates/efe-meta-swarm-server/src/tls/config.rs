@@ -142,7 +142,7 @@ pub fn build_rustls_server_config(cfg: &TlsServerConfig) -> Result<rustls::Serve
 
     let provider = Arc::new(rustls::crypto::ring::default_provider());
 
-    let base = rustls::ServerConfig::builder_with_provider(provider)
+    let base = rustls::ServerConfig::builder_with_provider(provider.clone())
         .with_protocol_versions(cfg.min_protocol.rustls_versions())
         .map_err(|e| TlsError::RustlsConfig(e.to_string()))?;
 
@@ -157,7 +157,13 @@ pub fn build_rustls_server_config(cfg: &TlsServerConfig) -> Result<rustls::Serve
                 .add(ca)
                 .map_err(|e| TlsError::RustlsConfig(e.to_string()))?;
         }
-        let inner = WebPkiClientVerifier::builder(Arc::new(roots))
+        // `builder_with_provider`, NOT `builder` : the bare form resolves the
+        // process-default CryptoProvider from crate features, which PANICS as
+        // soon as the dependency graph unifies a second provider into rustls
+        // (e.g. `aws-lc-rs` arriving through the Couche 3 M1.d optional
+        // `efe-server` dependency).  Pinning ring here keeps every build —
+        // default or `core-integration` — on one deterministic provider.
+        let inner = WebPkiClientVerifier::builder_with_provider(Arc::new(roots), provider)
             .build()
             .map_err(|e| TlsError::RustlsConfig(e.to_string()))?;
         Arc::new(StrictSanVerifier::new(inner, cfg.allowed_peer_sans.clone()))

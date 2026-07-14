@@ -129,9 +129,10 @@ impl ControllerState {
             participants: vec![ParticipantManifest {
                 id: "stub".into(),
                 dim: 1,
-                kappa: 0.5,
-                seed: 0,
+                kappa: Some(0.5),
+                seed: Some(0),
                 blas_backend: "none".into(),
+                controller: None,
             }],
             iteration: IterationManifest::default(),
         };
@@ -154,11 +155,16 @@ impl ControllerState {
                 .map(|p| ParticipantDescriptor {
                     id: p.id.clone(),
                     dim: p.dim,
-                    kappa: p.kappa,
-                    seed: p.seed,
+                    // M1.d : Option in the manifest → wire sentinels (0.0/0
+                    // identify "not a mock" together with the row's
+                    // `controller` block ; the authoritative config_hash
+                    // comes from the participant's own Capabilities).
+                    kappa: p.kappa.unwrap_or(0.0),
+                    seed: p.seed.unwrap_or(0),
                     build_sha: String::new(),
                     blas_backend: p.blas_backend.clone(),
                     features: Vec::new(),
+                    config_hash: None,
                 })
                 .collect(),
             Err(_) => Vec::<ParticipantDescriptor>::new(),

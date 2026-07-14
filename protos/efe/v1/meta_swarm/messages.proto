@@ -121,13 +121,25 @@ message LearnedHull {
 message ParticipantDescriptor {
   string id           = 1;   // unique within a MetaSwarm
   uint32 dim          = 2;
-  float  kappa        = 3;   // contraction constant ; MUST be in (0, 1)
-  uint64 seed         = 4;
+  // DEPRECATED SEMANTICS (Couche 3 M1.d) : kappa/seed are MOCK-engine concepts
+  // (Φ(x)=κ·x, pseudo-random initial state).  A real efe-core participant
+  // (features contains "engine:efe-core-mode1") sends the sentinels kappa=0.0 /
+  // seed=0 and identifies its configuration via `config_hash` instead.  Field
+  // numbers 3/4 are FROZEN (never re-used) ; mock participants still fill them.
+  float  kappa        = 3;   // mock contraction constant ; MUST be in (0, 1) for engine=mock
+  uint64 seed         = 4;   // mock initial-state seed
   string build_sha    = 5;   // git short SHA of the participant binary
   string blas_backend = 6;   // "none" | "openblas" | "mkl" | "metal" | ...
-  repeated string features = 7;  // e.g. ["determinism", "metrics", "trace"]
+  repeated string features = 7;  // e.g. ["determinism", "step_index", "engine:efe-core-mode1"]
 
-  reserved 8 to 99;
+  // Couche 3 M1.d — hex-encoded SHA-256 of the participant's manifest
+  // `controller` block (canonical JSON).  Present ⟺ the participant serves a
+  // REAL efe-core engine ;  absent for mock participants.  Consumers MUST treat
+  // absence as "unverified/mock" (fail-closed) : prost drops unknown fields on
+  // re-encode, so an old-binary hop strips this field — never default-allow.
+  optional string config_hash = 8;
+
+  reserved 9 to 99;
 }
 
 // =============================================================================
