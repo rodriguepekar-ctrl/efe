@@ -238,6 +238,17 @@ pub async fn run_iterate(
 
 /// Run a `StepOnce` RPC end-to-end.  Implementation : invoke
 /// `Iterate` with `max_iters = 1`.
+///
+/// **`iteration.require_convergence` deliberately does NOT gate `StepOnce`.**
+/// That manifest flag fails an *Iterate* closed when the multi-round loop stops
+/// without reaching `Converged` (see [`run_iterate`]).  `StepOnce` is a
+/// single-Φ primitive : with `max_iters = 1` a run essentially never reports
+/// `Converged`, so applying the whole-Iterate gate here would abort EVERY
+/// `StepOnce` the moment an operator set `require_convergence` — bricking the
+/// primitive.  A `StepOnce` caller owns its own stopping logic (it reads
+/// `residual` off the response) ; the fail-closed convergence contract is an
+/// `Iterate`-level guarantee only.  (The response type carries no `stop_reason`
+/// precisely because a single step has no convergence verdict to report.)
 #[instrument(skip(state, _req, cancel))]
 pub async fn run_step_once(
     state: ControllerState,

@@ -16,20 +16,23 @@
 //! into a [`crate::genesis::GenesisEngine`] (via
 //! `builder().router(..).cardinality(..)`), they make the spawned population
 //! — count, template mix, and therefore the active mask — **independent of
-//! `x`** : the only remaining `x`-dependence in a fusion round is the
-//! continuous `beta_mix` stage, so `Φ` becomes **continuous by
-//! construction** (no routing cells, no boundaries to jump).
+//! `x`**.  What this removes is precisely the *integer* `x`-dependence : no
+//! routing cells, no boundaries to jump, so the remaining `x`-dependence of a
+//! fusion round is **continuous**, and `Φ` is **continuous by construction**.
 //!
 //! ## Honesty (never over-sell)
 //!
-//! Continuity-by-construction removes the *discontinuity* threat to H1 ;
-//! it does **not** by itself certify a contraction modulus.  The
-//! architecture doc's closed-form claim (`L_Φ ≤ β₁ ≈ 0.17` intra-cell) is
-//! **not** minted as a certificate anywhere : the M1.c empirical canary
-//! measured `L̂ ≈ 0.69` on the real operator, and until that gap is
+//! Continuity-by-construction removes the *discontinuity* threat to H1 ;  it
+//! does **not** by itself certify a contraction modulus, and it does **not**
+//! reduce the residual `x`-sensitivity to `beta_mix` alone.  The M1.c
+//! empirical canary, run on THIS fixed operator, measured `L̂ ≈ 0.37` — well
+//! above the architecture doc's closed-form intra-cell claim
+//! (`L_Φ ≤ β₁ ≈ 0.17`), which is direct evidence that a continuous
+//! `x`-sensitivity *beyond* `beta_mix` persists.  That closed-form bound is
+//! therefore **not** minted as a certificate anywhere : until the gap is
 //! reconciled the only honest H1 evidence remains the **measured** bound
-//! (property-tested, NOT certified).  Fixed topology + canary is the
-//! honest pairing the doc itself prescribes (§3, « le mélange »).
+//! (property-tested, NOT certified).  Fixed topology + canary is the honest
+//! pairing the doc itself prescribes (§3, « le mélange »).
 
 use crate::errors::{EfeError, Result};
 use crate::genesis::cardinality::{Cardinality, CardinalityEstimator};

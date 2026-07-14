@@ -17,7 +17,7 @@
 
 mod common;
 
-use efe_meta_swarm_proto::meta_swarm::StopReason as ProtoStopReason;
+use efe_meta_swarm_proto::meta_swarm::{StepOnceRequest, StopReason as ProtoStopReason};
 use efe_meta_swarm_server::controller::ControllerService;
 use efe_meta_swarm_server::manifest::IterationManifest;
 use efe_meta_swarm_server::proto::MetaSwarmService;
@@ -107,4 +107,28 @@ async fn strict_profile_passes_a_converging_iterate() {
         .expect("a converging Iterate passes the strict profile")
         .into_inner();
     assert_eq!(resp.stop_reason, ProtoStopReason::Converged as i32, "{resp:?}");
+}
+
+/// **`StepOnce` is EXEMPT from `require_convergence`** (by design — see
+/// `controller::iterate::run_step_once`).  A single Φ step has no convergence
+/// verdict ; gating it on the whole-Iterate flag would abort EVERY `StepOnce`
+/// under the strict profile and brick the primitive.  Same strict profile that
+/// ABORTS a non-converged `Iterate` above ⇒ `StepOnce` still returns OK.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn step_once_is_exempt_from_require_convergence() {
+    let statics = spawn_three().await;
+    let state = common::build_controller_state_with_iteration(&statics, 10, DIM, iteration(true));
+    let svc = ControllerService::new(state);
+
+    let resp = svc
+        .step_once(Request::new(StepOnceRequest::default()))
+        .await
+        .expect("StepOnce is exempt from require_convergence — it must NOT abort")
+        .into_inner();
+    // The single-step primitive reports a finite residual and carries NO
+    // stop_reason field (there is no convergence verdict for one step).
+    assert!(
+        resp.residual.is_finite(),
+        "StepOnce returns a finite residual : {resp:?}",
+    );
 }

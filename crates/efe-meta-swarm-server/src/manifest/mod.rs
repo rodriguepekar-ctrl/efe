@@ -347,63 +347,121 @@ pub fn validate_reload_compatibility(
 
     // Per-participant drift check for ids present in BOTH manifests.
     // Removed (in current, not in new) and added (in new, not in current)
-    // rows are allowed by AD5.
+    // rows are allowed by AD5 — but see [`validate_engine_lineage`] for the
+    // lifetime guard that stops a *removed-then-re-added* id from swapping its
+    // engine identity across two reloads (this consecutive-manifest diff alone
+    // cannot catch that, since the removed row isn't in `new`).
     for old_p in &current.participants {
         let Some(new_p) = new.participants.iter().find(|p| p.id == old_p.id) else {
             // Participant removed at reload → AD5 allows.
             continue;
         };
-        if old_p.dim != new_p.dim {
+        if let Some(reason) = participant_engine_drift(old_p, new_p) {
             return Err(ServerError::Manifest(format!(
-                "reload : participant {:?} dim drift {} → {} (not supported in Phase 2)",
-                old_p.id, old_p.dim, new_p.dim,
-            )));
-        }
-        // NaN-safe κ drift detection, None-aware since Couche 3 M1.d
-        // (kappa is absent on efe-core rows).  Presence drift (Some ↔ None)
-        // is an engine change — rejected.  If either value is NaN, treat as
-        // drift (every comparison with NaN is false ; `.abs()` propagates) —
-        // a NaN κ would have been caught by `validate_manifest`, but defence
-        // in depth here keeps the reload path independently safe.
-        match (old_p.kappa, new_p.kappa) {
-            (None, None) => {}
-            (Some(old_k), Some(new_k)) => {
-                let drift = (old_k - new_k).abs();
-                if drift.is_nan() || drift > RELOAD_KAPPA_TOLERANCE {
-                    return Err(ServerError::Manifest(format!(
-                        "reload : participant {:?} kappa drift {old_k} → {new_k} \
-                         (tolerance {RELOAD_KAPPA_TOLERANCE}, not supported in Phase 2)",
-                        old_p.id,
-                    )));
-                }
-            }
-            (old_k, new_k) => {
-                return Err(ServerError::Manifest(format!(
-                    "reload : participant {:?} kappa drift {old_k:?} → {new_k:?} \
-                     (engine change across reload is not supported)",
-                    old_p.id,
-                )));
-            }
-        }
-        if old_p.seed != new_p.seed {
-            return Err(ServerError::Manifest(format!(
-                "reload : participant {:?} seed drift {:?} → {:?} (not supported in Phase 2)",
-                old_p.id, old_p.seed, new_p.seed,
-            )));
-        }
-        // Couche 3 M1.d — the efe-core engine block is baked in at boot
-        // (exactly like the mock's dim/kappa/seed) ; ANY drift — including
-        // presence drift (mock ↔ efe-core) — is rejected fail-closed.  The
-        // comparison is verbatim structural equality (`PartialEq`).
-        if old_p.controller != new_p.controller {
-            return Err(ServerError::Manifest(format!(
-                "reload : participant {:?} controller drift (the efe-core \
-                 engine block is immutable across reload ; restart to change it)",
+                "reload : participant {:?} {reason} — the engine is immutable \
+                 across reload (restart to change it)",
                 old_p.id,
             )));
         }
     }
 
+    Ok(())
+}
+
+/// Engine-identity drift between two manifest rows that share an `id`.
+///
+/// Returns `Some(reason)` iff an **engine-shaping** field drifts — `dim`,
+/// `kappa` (presence drift `Some ↔ None`, or a `Some`/`Some` delta beyond
+/// [`RELOAD_KAPPA_TOLERANCE`], NaN-safe), `seed`, or the efe-core `controller`
+/// block (verbatim `PartialEq`).  Returns `None` when the two rows describe the
+/// **same** engine.  `blas_backend` is deliberately NOT part of identity (it
+/// never changes Φ).
+///
+/// Shared verbatim by [`validate_reload_compatibility`] (drift between
+/// *consecutive* manifests) and [`validate_engine_lineage`] (drift across a
+/// *remove-then-re-add* over the process lifetime) so both enforce IDENTICAL
+/// immutability semantics.  The reason strings preserve the `dim drift` /
+/// `kappa drift` / `seed drift` / `controller drift` / `engine change`
+/// substrings the reload tests pin.
+pub(crate) fn participant_engine_drift(
+    old_p: &ParticipantManifest,
+    new_p: &ParticipantManifest,
+) -> Option<String> {
+    if old_p.dim != new_p.dim {
+        return Some(format!("dim drift {} → {}", old_p.dim, new_p.dim));
+    }
+    // NaN-safe κ drift, None-aware since Couche 3 M1.d (kappa is absent on
+    // efe-core rows).  Presence drift (Some ↔ None) is an engine change.  A
+    // NaN κ would have been caught by `validate_manifest`, but treating it as
+    // drift here keeps the reload path independently safe (defence in depth).
+    match (old_p.kappa, new_p.kappa) {
+        (None, None) => {}
+        (Some(old_k), Some(new_k)) => {
+            let drift = (old_k - new_k).abs();
+            if drift.is_nan() || drift > RELOAD_KAPPA_TOLERANCE {
+                return Some(format!(
+                    "kappa drift {old_k} → {new_k} (tolerance {RELOAD_KAPPA_TOLERANCE})"
+                ));
+            }
+        }
+        (old_k, new_k) => {
+            return Some(format!(
+                "kappa drift {old_k:?} → {new_k:?} (engine change across reload)"
+            ));
+        }
+    }
+    if old_p.seed != new_p.seed {
+        return Some(format!("seed drift {:?} → {:?}", old_p.seed, new_p.seed));
+    }
+    // Couche 3 M1.d — the efe-core engine block is baked in at boot (exactly
+    // like the mock's dim/kappa/seed) ; ANY drift — including presence drift
+    // (mock ↔ efe-core) — is an engine change.
+    if old_p.controller != new_p.controller {
+        return Some(
+            "controller drift (the efe-core engine block is immutable across reload)".to_string(),
+        );
+    }
+    None
+}
+
+/// **Couche 3 M1.d — lifetime engine-identity lineage guard.**
+///
+/// [`validate_reload_compatibility`] only diffs ids present in BOTH the
+/// current and the new manifest, so it cannot see an id that was *removed* by
+/// one reload and *re-added* — with a different engine — by a later reload.
+/// AD5 allows add/remove, so without a lifetime memory the immutability
+/// invariant ("an engine's identity is fixed for the process lifetime ;
+/// restart to change it") could be defeated on the CONTROLLER's book by that
+/// two-reload dance.  (The participant process is independently safe — its own
+/// reload guard compares against RUNNING state, not the previous manifest —
+/// but the controller must keep an honest book too.)
+///
+/// `recorded` maps every id the controller has EVER served → the row it was
+/// first seen with.  For each row in `new`, if `recorded` already knows that id
+/// with a different engine identity, the reload is rejected.  A first-seen id,
+/// or a re-add with the SAME identity, passes.
+///
+/// # Errors
+///
+/// [`ServerError::Manifest`] naming the id and the drifting field.
+pub(crate) fn validate_engine_lineage(
+    recorded: &std::collections::HashMap<String, ParticipantManifest>,
+    new: &Manifest,
+) -> Result<(), ServerError> {
+    for new_p in &new.participants {
+        let Some(seen) = recorded.get(&new_p.id) else {
+            continue; // first sighting — nothing to compare against yet.
+        };
+        if let Some(reason) = participant_engine_drift(seen, new_p) {
+            return Err(ServerError::Manifest(format!(
+                "reload : participant {:?} engine lineage {reason} — this id was \
+                 previously served with a different engine ; a remove-then-re-add \
+                 cannot change an engine's identity within a process lifetime \
+                 (restart to change it)",
+                new_p.id,
+            )));
+        }
+    }
     Ok(())
 }
 
@@ -815,6 +873,56 @@ mod reload_compat_tests {
             matches!(err, ServerError::Manifest(ref msg) if msg.contains("seed drift")),
             "{err:?}",
         );
+    }
+
+    #[test]
+    fn engine_lineage_rejects_readd_with_drifted_engine() {
+        // Couche 3 M1.d — the lifetime lineage guard : a *removed-then-re-added*
+        // id cannot swap its engine identity, even though the per-manifest diff
+        // (`validate_reload_compatibility`) never sees it (the id is absent from
+        // the intermediate manifest).
+        use std::collections::HashMap;
+        let m = three_participant_manifest();
+        let recorded: HashMap<String, ParticipantManifest> = m
+            .participants
+            .iter()
+            .map(|p| (p.id.clone(), p.clone()))
+            .collect();
+
+        // Same identities → allowed.
+        validate_engine_lineage(&recorded, &m).expect("identical lineage passes");
+
+        // Re-add id[0] with a drifted kappa → rejected as an engine change.
+        let mut drifted = m.clone();
+        drifted.participants[0].kappa = Some(0.95); // was 0.6
+        let err = validate_engine_lineage(&recorded, &drifted).unwrap_err();
+        assert!(
+            matches!(err, ServerError::Manifest(ref msg)
+                if msg.contains("lineage") && msg.contains("kappa drift")),
+            "{err:?}",
+        );
+
+        // Presence drift (mock → efe-core) across the lineage is also rejected.
+        let mut engine_swap = m.clone();
+        engine_swap.participants[1].kappa = None; // mock → engine shape
+        let err = validate_engine_lineage(&recorded, &engine_swap).unwrap_err();
+        assert!(
+            matches!(err, ServerError::Manifest(ref msg)
+                if msg.contains("lineage") && msg.contains("engine change")),
+            "{err:?}",
+        );
+
+        // A brand-new id (never served) is unconstrained by the lineage.
+        let mut added = m.clone();
+        added.participants.push(ParticipantManifest {
+            id: "fresh".into(),
+            dim: 8,
+            kappa: Some(0.5),
+            seed: Some(7),
+            blas_backend: "none".into(),
+            controller: None,
+        });
+        validate_engine_lineage(&recorded, &added).expect("first-seen id is unconstrained");
     }
 
     #[test]

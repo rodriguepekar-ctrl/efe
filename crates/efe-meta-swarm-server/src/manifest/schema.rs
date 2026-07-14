@@ -77,8 +77,12 @@ fn default_blas() -> String {
 }
 
 /// Couche 3 M1.d — versioned declaration of a REAL efe-core participant
-/// engine.  Feeds `efe_server::mode1::build_mvp_controller(Mode1Config::
-/// for_dim(dim))` + a `SwarmSpec` + the participant's safety box.
+/// engine.  Feeds the server-side latent assembly in `participant::core_engine`
+/// + a `SwarmSpec` + the participant's safety box.  The `topology` field picks
+/// the recipe : `fixed` (default) → `build_fixed_topology_controller`
+/// (x-independent `population` plan) ;  `dynamic` → `build_mvp_controller`
+/// (heuristic meta-analyzer/router/cardinality, `population` shapes only the
+/// spec).
 ///
 /// `PartialEq` is derived because the block is compared verbatim for
 /// **reload drift** (a SIGHUP that edits it is rejected fail-closed — the
@@ -155,8 +159,9 @@ pub struct SafetyBoxManifest {
 /// construction) — it does **not** certify a contraction modulus : the only
 /// honest H1 evidence remains the measured canary bound (property-tested,
 /// NOT certified).  The architecture doc's closed-form `≤ β₁ ≈ 0.17` claim
-/// is deliberately NOT minted as a certificate (the M1.c canary measured
-/// `L̂ ≈ 0.69` — measure, don't assume).
+/// is deliberately NOT minted as a certificate : the M1.c canary measured
+/// `L̂ ≈ 0.37` on the fixed operator (and `≈ 0.69` on the dynamic one) —
+/// both above `β₁`, so measure, don't assume.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum TopologyManifest {

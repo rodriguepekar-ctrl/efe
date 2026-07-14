@@ -180,22 +180,34 @@ son rework du dissolver) ; token de fil `topology:fixed|dynamic` sur le descript
 
 **La mesure** (même boîte `[0.05, 0.30]^16`, même sonde, canari M1.c) :
 
-| Topologie | `L̂` mesuré | Verdict |
-|---|---|---|
-| dynamique (routage heuristique) | **0.691** | H1 tient (property-testé) |
-| **fixe (Palier-2)** | **0.366** | H1 tient (property-testé) |
-| *prédiction §1.1 (forme fermée)* | *≤ β₁ ≈ 0.17* | **réfutée comme certificat** |
+| Topologie | `L̂` mesuré | Population effective | Verdict |
+|---|---|---|---|
+| dynamique (routage heuristique) | **0.691** | ≥128 agents, mix de templates | H1 tient (property-testé) |
+| **fixe (Palier-2)** | **0.366** | 4 agents `na-sem` (plan du manifeste) | H1 tient (property-testé) |
+| *prédiction §1.1 (forme fermée)* | *≤ β₁ ≈ 0.17* | — | **réfutée comme certificat** |
 
-Deux enseignements, à graver tels quels dans le pitch :
+Deux enseignements — le premier **prudent** (l'expérience n'est PAS contrôlée), le
+second **solide** (mesure d'un opérateur unique) :
 
-1. **Le §1.2 avait raison qualitativement** : fixer la topologie divise la sensibilité
-   mesurée par ~1.9 — le routage x-dépendant était bien une source majeure du ratio.
-2. **Le §1.1 est trop optimiste comme certificat** : même sans aucun routage, le vrai
-   opérateur mesure `0.366 ≫ β₁ ≈ 0.17` — il existe une sensibilité à `x` au-delà de
-   `beta_mix` que la composition en forme fermée ne capture pas. **En conséquence,
-   AUCUN certificat « analytique ≤ β₁ » n'est émis nulle part** : la topologie fixe
-   apporte la **continuité par construction** (elle élimine LE mécanisme de rupture de
-   H1 — les sauts entiers du routage), pas un module de contraction en forme fermée.
+1. **La comparaison fixe-vs-dynamique est CONFONDUE — ne pas en tirer de claim causal.**
+   `0.366 < 0.691` va dans le sens attendu (retirer la discontinuité du routage *devrait*
+   aider), mais ce n'est **pas** une expérience à variable unique : l'opérateur fixe
+   honore le plan du manifeste (4 agents `na-sem` purs) tandis que l'opérateur dynamique,
+   qui **ignore `spec.population`** (`GenesisEngine::spawn` dérive la cardinalité du dag,
+   jamais du plan), fait éclore ≥128 agents de templates mixtes via
+   `HeuristicEstimator` (`min_agents = 128`). La taille de population (~32×) ET le mix de
+   templates changent EN MÊME TEMPS que la fixité du routage ; et les deux `L̂` sont des
+   **bornes inférieures** issues d'une sonde qui cherche les discontinuités. Le ratio
+   ~1.9 ne mesure donc PAS « la part du routage » — il faudrait une re-mesure à
+   population/mix appariés (dynamique bridé à 4 `na-sem`) pour attribuer quoi que ce soit
+   au routage. **Claim retiré : « fixer la topologie divise la sensibilité ».**
+2. **Le §1.1 est réfuté comme certificat — ça, c'est solide** (mesure de l'opérateur
+   fixe SEUL, sans comparaison) : même sans aucun routage, le vrai opérateur mesure
+   `0.366 ≫ β₁ ≈ 0.17`. Il existe une sensibilité à `x` au-delà de `beta_mix` que la
+   composition en forme fermée ne capture pas. **En conséquence, AUCUN certificat
+   « analytique ≤ β₁ » n'est émis nulle part** : la topologie fixe apporte la
+   **continuité par construction** (elle élimine LE mécanisme de rupture de H1 — les
+   sauts entiers du routage), pas un module de contraction en forme fermée.
 
 **Requalification honnête du Palier-2** (amende le §3) : « topologie fixe = Φ continu
 par construction + borne **mesurée** (property-testée, non certifiée) ». Le seuil

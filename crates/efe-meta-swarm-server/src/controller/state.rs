@@ -1,6 +1,7 @@
 //! Shared controller state.
 
-use std::sync::Arc;
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
 use efe_meta_swarm_proto::meta_swarm::{InfoResponse, ParticipantDescriptor};
@@ -8,7 +9,7 @@ use tokio::sync::RwLock;
 
 use crate::config::controller::ControllerConfig;
 use crate::controller::inflight::InflightSemaphore;
-use crate::manifest::Manifest;
+use crate::manifest::{Manifest, ParticipantManifest};
 use crate::observability::health::HealthState;
 use crate::observability::metrics::MetricsRegistry;
 use crate::tls::TlsReloader;
@@ -65,6 +66,17 @@ pub struct ControllerState {
     /// participant via mTLS.  See `controller/iterate.rs::
     /// connect_participants` for the consumer.
     pub tls_reloader: Option<Arc<TlsReloader>>,
+    /// Couche 3 M1.d — **lifetime engine-identity lineage**.  Maps every
+    /// participant id the controller has EVER served → the row it was first
+    /// seen with.  Consulted on reload by
+    /// [`crate::manifest::validate_engine_lineage`] so a *removed-then-re-added*
+    /// id cannot swap its engine identity across two reloads — the immutability
+    /// invariant the per-manifest drift check alone cannot uphold (it only sees
+    /// ids present in both manifests).  Populated at boot, monotonically
+    /// extended after each successful reload (first identity per id wins ; a
+    /// process restart resets it, which is the sanctioned way to change an
+    /// engine).
+    pub engine_lineage: Arc<Mutex<HashMap<String, ParticipantManifest>>>,
 }
 
 impl std::fmt::Debug for ControllerState {
@@ -90,6 +102,12 @@ impl ControllerState {
         // `step_total{participant_id="supplier-scoring"}` render with
         // `0` rather than "no data" before any traffic.
         metrics.pretouch_for_manifest(&manifest);
+        // Seed the engine lineage with every boot-time participant identity.
+        let engine_lineage: HashMap<String, ParticipantManifest> = manifest
+            .participants
+            .iter()
+            .map(|p| (p.id.clone(), p.clone()))
+            .collect();
         Self {
             config: Arc::new(config),
             health: HealthState::serving(),
@@ -98,6 +116,7 @@ impl ControllerState {
             manifest: Arc::new(RwLock::new(manifest)),
             inflight: InflightSemaphore::new(max_inflight),
             tls_reloader: None,
+            engine_lineage: Arc::new(Mutex::new(engine_lineage)),
         }
     }
 

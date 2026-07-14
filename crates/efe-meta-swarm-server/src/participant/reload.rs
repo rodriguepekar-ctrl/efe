@@ -372,6 +372,48 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn apply_reload_rejects_own_controller_block_drift() {
+        // Couche 3 M1.d — step 2bis : the efe-core `controller` block is baked
+        // in at boot (the engine + its H1 canary were built from IT), and is
+        // immutable across reload exactly like dim/kappa/seed.  This targets the
+        // guard directly via the INNER `apply_reload` : the outer
+        // `apply_reload_with_manifest` would reject a mock row that also
+        // declares a `controller` block at `validate_manifest` (mock XOR
+        // engine), so we exercise the defense-in-depth comparison beneath it.
+        // The running participant is a mock (`controller_manifest() == None`) ;
+        // a reload row that keeps the SAME dim/kappa/seed (steps 2 pass) but
+        // ADDS a controller block must be rejected as controller drift.
+        use crate::manifest::{
+            AlignmentConeManifest, ControllerManifest, PopulationManifest, SafetyBoxManifest,
+            TopologyManifest,
+        };
+        let state = test_state("self");
+        let mut new = matching_manifest("self");
+        new.participants[0].controller = Some(ControllerManifest {
+            schema: 1,
+            population: vec![PopulationManifest { template: "na-sem".into(), count: 4 }],
+            max_rounds: 3,
+            alignment_cone: AlignmentConeManifest {
+                anchors: vec![vec![0.1; 8]],
+                max_projection_distance: 0.5,
+            },
+            safety_box: SafetyBoxManifest { lo: 0.05, hi: 0.30 },
+            topology: TopologyManifest::Fixed,
+            tenant_id: "t".into(),
+            h1_canary: Default::default(),
+        });
+        // Inner `apply_reload` — bypasses the outer `validate_manifest` to
+        // isolate step 2bis (see the comment above).
+        let err = apply_reload(&state, new).await.unwrap_err();
+        assert!(
+            matches!(err, ServerError::Manifest(ref m) if m.contains("controller drift")),
+            "{err:?}",
+        );
+        // Transactional : the rejected reload left the gen at 0.
+        assert_eq!(state.health.snapshot().reload_gen, 0);
+    }
+
+    #[tokio::test]
     async fn apply_reload_rejects_own_id_missing_in_new_manifest() {
         let state = test_state("self");
         let mut new = matching_manifest("self");

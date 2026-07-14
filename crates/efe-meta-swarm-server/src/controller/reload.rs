@@ -189,11 +189,24 @@ async fn apply_reload(
         let diff = diff_manifests(&current, &new_manifest);
         (compat, diff)
     }; // read guard dropped here.
+    // Couche 3 M1.d — chain the lifetime engine-identity lineage check after
+    // the per-manifest compat check (only when the latter passed) so BOTH
+    // funnel through the single rejection path below (metrics + drift span).
+    // This catches a removed-then-re-added id that swaps its engine across two
+    // reloads — invisible to the consecutive-manifest diff above.  `std::Mutex`
+    // guard, no `.await` held across it.
+    let compat_check = compat_check.and_then(|()| {
+        let lineage = state
+            .engine_lineage
+            .lock()
+            .expect("engine_lineage mutex poisoned");
+        crate::manifest::validate_engine_lineage(&lineage, &new_manifest)
+    });
     if let Err(e) = compat_check {
         state
             .metrics
             .record_reload_failure(ReloadFailureReason::Drift);
-        error!(error = %e, "reload rejected at validate_reload_compatibility");
+        error!(error = %e, "reload rejected at compatibility / lineage check");
         // PR #18 — emit a manifest.reload span on the drift-failure
         // path.  G9 gap-fill.  Audit-pass : `trigger` is now threaded
         // from the outer wrapper so SIGHUP-triggered drift failures
@@ -227,6 +240,20 @@ async fn apply_reload(
 
     // 3. Acquire write lock + atomic swap.
     let participants_count = new_manifest.participants.len();
+    // Extend the engine lineage with any first-seen ids BEFORE `new_manifest`
+    // is moved into the write guard.  Insert-if-absent : the FIRST identity per
+    // id is retained for the process lifetime, so a later legitimate
+    // remove/re-add of the SAME engine still passes, while a drifted re-add is
+    // rejected by the lineage check above.
+    {
+        let mut lineage = state
+            .engine_lineage
+            .lock()
+            .expect("engine_lineage mutex poisoned");
+        for p in &new_manifest.participants {
+            lineage.entry(p.id.clone()).or_insert_with(|| p.clone());
+        }
+    }
     {
         let mut write_guard = state.manifest.write().await;
         *write_guard = new_manifest;
@@ -696,6 +723,52 @@ mod tests {
             .applied_changes
             .iter()
             .any(|s| s == "participants: removed spend-categorization"));
+    }
+
+    #[tokio::test]
+    async fn apply_reload_lineage_rejects_remove_then_readd_engine_swap() {
+        // Couche 3 M1.d — the reload immutability invariant must survive a
+        // remove-then-re-add across TWO reloads.  The per-manifest diff cannot
+        // see it (the id is absent from the intermediate manifest) ; the
+        // lifetime engine-lineage guard must reject it.
+        let m0 = three_p_manifest();
+        let state = test_state_with_manifest(m0.clone(), "/dev/null".into());
+        let victim = m0.participants[2].id.clone(); // "spend-categorization", κ 0.5
+
+        // Reload 1 : remove the victim (AD5 allows).
+        let mut m1 = m0.clone();
+        m1.participants.remove(2);
+        apply_reload_with_manifest(&state, m1)
+            .await
+            .expect("removal is allowed (AD5)");
+        assert_eq!(state.health.snapshot().reload_gen, 1);
+
+        // Reload 2 : re-add the SAME id with a DIFFERENT engine (κ 0.5 → 0.95).
+        // Pre-fix this slipped through unchecked (the id was "added", not
+        // "changed") ; the lineage guard must now reject it.
+        let mut m2 = m0.clone();
+        m2.participants[2].kappa = Some(0.95);
+        let err = apply_reload_with_manifest(&state, m2).await.unwrap_err();
+        assert!(
+            matches!(err, ServerError::Manifest(ref msg)
+                if msg.contains("lineage") && msg.contains("kappa drift")),
+            "the drifted re-add must be rejected by the engine lineage guard, got : {err:?}",
+        );
+        // Transactional : the rejected reload left the gen at 1.
+        assert_eq!(state.health.snapshot().reload_gen, 1);
+
+        // Sanity : re-adding the victim with its ORIGINAL engine is allowed.
+        let outcome = apply_reload_with_manifest(&state, m0.clone())
+            .await
+            .expect("re-add with the SAME engine identity is allowed");
+        assert_eq!(outcome.participants, 3);
+        assert!(state
+            .manifest
+            .read()
+            .await
+            .participants
+            .iter()
+            .any(|p| p.id == victim));
     }
 
     #[tokio::test]

@@ -179,6 +179,16 @@ async fn real_swarm_controller_serves_steps_over_grpc() {
     // Contraction : the last successive delta must be well below the first
     // (empirical composite κ ≈ 0.65 per step ⇒ ×0.65⁴ ≈ 0.18 over 4 gaps).
     let (first, last) = (deltas[0], *deltas.last().unwrap());
+    eprintln!("SERVED-ROUND successive deltas = {deltas:?}");
+    // Anti-vacuous guard : a frozen / no-op engine emits all-zero deltas, which
+    // would satisfy `last ≤ first·0.5` VACUOUSLY.  Require the trajectory to
+    // actually MOVE on the first gap (≫ the f32 noise floor) so the ratio below
+    // is a real contraction, not `0 ≤ 0`.
+    assert!(
+        first > 1e-4,
+        "the served iteration must actually move (else contraction is vacuous) : \
+         deltas = {deltas:?}",
+    );
     assert!(
         last <= first * 0.5 + 1e-9,
         "the served coupled iteration must contract : deltas = {deltas:?}",
@@ -202,8 +212,10 @@ async fn real_swarm_controller_serves_steps_over_grpc() {
 }
 
 /// **The H1 boot gate over the REAL canary** : `mode: boot` runs the M1.c
-/// adversarial Lipschitz canary on the box and PASSES here (L̂ ≈ 0.69 < 0.95)
-/// — property-tested, not certified ;  `mode: off` skips it instantly.
+/// adversarial Lipschitz canary on the box and PASSES here (the default row is
+/// FIXED topology, L̂ ≈ 0.37, well under the 0.95 bar) — property-tested, not
+/// certified ;  `mode: off` skips it instantly ;  and an impossible margin
+/// drives the fail-closed REFUSE branch.
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn h1_boot_gate_runs_the_real_canary() {
     // mode: off — skip, immediate.
@@ -212,13 +224,32 @@ async fn h1_boot_gate_runs_the_real_canary() {
     p_off.h1_boot_gate().await.expect("mode=off skips the canary");
 
     // mode: boot — the real canary runs (~18 Φ evals) and must pass on this
-    // within-cone box (M1.c measured L̂ = 0.691 with a larger probe).
+    // within-cone box (the default row is FIXED topology ; a larger probe
+    // measured L̂ ≈ 0.37 on the fixed operator, 0.69 on the dynamic one).
     let p_boot = LocalParticipant::from_manifest_row(&engine_row("core-boot", "boot"))
         .expect("build (canary boot)");
     p_boot
         .h1_boot_gate()
         .await
         .expect("the real Φ is non-expansive on this box — the canary must pass");
+
+    // mode: boot with an IMPOSSIBLE margin — acceptance is `L̂ < 1 − margin`,
+    // so margin = 0.9 puts the bar at 0.1 ;  the real L̂ ≈ 0.37 exceeds it and
+    // the gate must FAIL CLOSED.  This exercises the REFUSE branch — without it
+    // only the pass and skip branches are ever covered, and a gate that
+    // silently returned `Ok` on failure would go unnoticed.
+    let mut refuse_row = engine_row("core-refuse", "boot");
+    refuse_row.controller.as_mut().unwrap().h1_canary.margin = 0.9;
+    let p_refuse = LocalParticipant::from_manifest_row(&refuse_row)
+        .expect("build (impossible margin)");
+    let err = p_refuse
+        .h1_boot_gate()
+        .await
+        .expect_err("L̂ ≈ 0.37 ≥ 1 − 0.9 ⇒ the boot gate must refuse to serve");
+    assert!(
+        format!("{err}").contains("H1"),
+        "the refusal must name the H1 hypothesis it failed, got : {err}",
+    );
 }
 
 /// **M1 Palier-2 — the explicit DYNAMIC opt-out still serves.**  Coverage of
@@ -295,9 +326,23 @@ async fn palier2_measurement_fixed_vs_dynamic_lipschitz() {
          the HONEST claim is the measured bound (property-tested, NOT certified)"
     );
     assert!(!inc_f, "the fixed-topology canary must be conclusive on this box");
+    assert!(!inc_d, "the dynamic-topology canary must also be conclusive on this box");
     assert!(
         fixed.accepts(false),
         "H1 must hold (L̂ < 1 − margin) for the fixed-topology operator, got L̂ = {l_fixed}",
+    );
+    // Regression teeth — NOT a causal claim.  `fixed` and `dynamic` must build
+    // MEASURABLY DIFFERENT operators : if `topology:fixed` silently fell back to
+    // the dynamic assembly (a switch that is a no-op), both L̂ would coincide.
+    // We assert only that they DIFFER (|Δ| observed ≈ 0.33) ; we do NOT claim
+    // that fixing the topology *causes* the gap — that comparison is confounded
+    // (fixed = 4 na-sem agents, dynamic = ≥128 mixed ; GenesisEngine ignores the
+    // population plan), see the architecture doc addendum, Enseignement #1.
+    assert!(
+        (*l_fixed - *l_dyn).abs() > 0.1,
+        "the two topology classes must yield measurably different operators \
+         (else the topology switch is a silent no-op) : \
+         L̂_fixed = {l_fixed}, L̂_dynamic = {l_dyn}",
     );
 }
 
