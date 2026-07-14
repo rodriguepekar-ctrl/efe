@@ -173,6 +173,15 @@ impl ParticipantState {
         let mut features = vec!["determinism".into(), "step_index".into()];
         if self.local.is_efe_core() {
             features.push(crate::participant::local::ENGINE_FEATURE_EFE_CORE.into());
+            // M1 Palier-2 — advertise the topology class honestly : `fixed`
+            // means Φ is continuous by construction (population independent
+            // of x) ;  `dynamic` means H1 rests solely on the canary.
+            if let Some(c) = self.local.controller_manifest() {
+                features.push(match c.topology {
+                    crate::manifest::TopologyManifest::Fixed => "topology:fixed".into(),
+                    crate::manifest::TopologyManifest::Dynamic => "topology:dynamic".into(),
+                });
+            }
         }
         ParticipantDescriptor {
             id: self.local.id().to_string(),

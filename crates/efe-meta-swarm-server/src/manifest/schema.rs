@@ -107,6 +107,17 @@ pub struct ControllerManifest {
     /// sampling domain of the H1 Lipschitz canary.  Per-coordinate uniform
     /// bounds `[lo, hi]` (e.g. `[0.05, 0.30]`, inside the alignment cone).
     pub safety_box: SafetyBoxManifest,
+    /// **M1 Palier-2 — genesis topology class.**  Default `fixed` (the safe
+    /// profile) : the swarm population — agent count, template mix, active
+    /// mask — is the CONSTANT declared in `population`, independent of the
+    /// input `x`, so the operator `Φ` is **continuous by construction** (the
+    /// dynamic genesis routing's integer jumps — the one mechanism that can
+    /// break H1 — are eliminated).  `dynamic` opts back into the heuristic
+    /// meta-analyzer/router/cardinality pipeline : `population` then only
+    /// shapes the `SwarmSpec`, the actual topology varies with `x`, and H1
+    /// rests SOLELY on the empirical canary (logged loudly at boot).
+    #[serde(default)]
+    pub topology: TopologyManifest,
     /// Tenant attribution forwarded to efe-core telemetry.
     pub tenant_id: String,
     /// H1 boot canary policy.  Defaults to `mode: boot` (fail-closed honest).
@@ -136,6 +147,25 @@ pub struct AlignmentConeManifest {
 pub struct SafetyBoxManifest {
     pub lo: f32,
     pub hi: f32,
+}
+
+/// M1 Palier-2 — genesis topology class of an efe-core row.
+///
+/// `Fixed` removes the *discontinuity* threat to H1 (continuity by
+/// construction) — it does **not** certify a contraction modulus : the only
+/// honest H1 evidence remains the measured canary bound (property-tested,
+/// NOT certified).  The architecture doc's closed-form `≤ β₁ ≈ 0.17` claim
+/// is deliberately NOT minted as a certificate (the M1.c canary measured
+/// `L̂ ≈ 0.69` — measure, don't assume).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum TopologyManifest {
+    /// Population plan honoured EXACTLY, independent of `x` (default).
+    #[default]
+    Fixed,
+    /// Heuristic (x-dependent) genesis routing — H1 unproven by
+    /// construction ;  explicitly opted into, logged at boot.
+    Dynamic,
 }
 
 /// H1 (non-expansiveness) boot-canary policy for an efe-core row.

@@ -12,6 +12,7 @@ mod schema;
 pub use schema::{
     AlignmentConeManifest, ControllerManifest, H1CanaryManifest, IterationManifest, Manifest,
     MetaSpaceManifest, ParticipantManifest, PopulationManifest, SafetyBoxManifest, SafetyManifest,
+    TopologyManifest,
 };
 
 use std::collections::HashSet;

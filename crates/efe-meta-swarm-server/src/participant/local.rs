@@ -403,6 +403,34 @@ impl LocalParticipant {
     }
 }
 
+impl LocalParticipant {
+    /// **Test/ops introspection (doc-hidden)** — run the M1.c Lipschitz
+    /// canary on the efe-core engine and return the raw certificate
+    /// (`None` for a mock engine).  Same spawn_blocking discipline as
+    /// [`Self::h1_boot_gate`] ;  used by the Palier-2 measurement test to
+    /// compare `L̂` across topology classes.
+    #[cfg(feature = "core-integration")]
+    #[doc(hidden)]
+    pub async fn h1_certificate(
+        &self,
+    ) -> Result<Option<efe_meta_swarm::participants::NonExpansiveCertificate>, MetaSwarmError>
+    {
+        if !matches!(&self.inner.engine, Engine::EfeCore(_)) {
+            return Ok(None);
+        }
+        let this = self.clone();
+        let cert = tokio::task::spawn_blocking(move || {
+            let Engine::EfeCore(bridge) = &this.inner.engine else {
+                unreachable!("checked EfeCore above ; enum is immutable");
+            };
+            bridge.verify_non_expansive()
+        })
+        .await
+        .map_err(|e| MetaSwarmError::Internal(format!("H1 canary panicked : {e}")))??;
+        Ok(Some(cert))
+    }
+}
+
 /// Small extension so the H1 failure logs its evidence before bubbling.
 /// Only used by the feature-gated `h1_boot_gate` body.
 #[cfg(feature = "core-integration")]
@@ -427,16 +455,34 @@ impl TapTrace for MetaSwarmError {
 /// build carries zero efe-core/efe-server code.
 #[cfg(feature = "core-integration")]
 mod core_engine {
+    use std::sync::Arc;
+
+    use efe_core::consensus::ConsensusConfig;
+    use efe_core::fusion::MvpCpuFusion;
+    use efe_core::genesis::{
+        DefaultSpawner, FixedCardinality, FixedTemplateRouter, GenesisEngine, SpawnerConfig,
+    };
+    use efe_core::genesis::registry::{StubTemplateRegistry, TemplateRegistry};
+    use efe_core::memory::{DeviceBackend, HostBackend, MemoryPool, PoolConfig};
+    use efe_core::streams::{StreamPool, StreamPoolConfig};
+    use efe_core::swarm::controller::{ControllerConfig, SwarmController};
+    use efe_core::swarm::strategies::{
+        AlignmentProjector, ConsensusDetector, Dissolver, FusionStrategy, GenesisStrategy,
+        NullTelemetryCollector, TelemetryCollector,
+    };
     use efe_core::types::{
         AlignmentCone, LatentDim, PopulationMix, ResourceBudget, SwarmSpec, TemplateCode,
     };
     use efe_meta_swarm::participants::LipschitzProbe;
     use efe_meta_swarm::safety::{BoxSafety, SafetySet};
     use efe_meta_swarm::MetaSwarmError;
-    use efe_server::mode1::{build_mvp_controller, Mode1Config};
+    use efe_server::mode1::{
+        build_mvp_controller, AlignmentAdapter, ConsensusAdapter, FusionAdapter, LastCentroid,
+        LastSpecTrace, Mode1Config, PassThroughDissolver,
+    };
     use sha2::{Digest, Sha256};
 
-    use crate::manifest::{ControllerManifest, ParticipantManifest};
+    use crate::manifest::{ControllerManifest, ParticipantManifest, TopologyManifest};
 
     /// A generous wall-clock budget for the participant spec : a real
     /// `phi_once` costs ~0.5-3 s (arena zeroing dominates) — far above
@@ -464,7 +510,7 @@ mod core_engine {
             })?;
             mix.push((code, p.count));
         }
-        let population = PopulationMix::new(mix)
+        let population = PopulationMix::new(mix.clone())
             .map_err(|e| into_internal(&row.id, "population", &e))?;
 
         // 2. Spec pieces.
@@ -488,9 +534,27 @@ mod core_engine {
             .build()
             .map_err(|e| into_internal(&row.id, "SwarmSpec", &e))?;
 
-        // 3. The REAL controller (M1.b : deterministic, noise-free Φ).
-        let controller = build_mvp_controller(Mode1Config::for_dim(row.dim))
-            .map_err(|e| into_internal(&row.id, "build_mvp_controller", &e))?;
+        // 3. The REAL controller (M1.b : deterministic, noise-free Φ),
+        //    per the manifest topology class (M1 Palier-2).
+        let controller = match block.topology {
+            // Palier-2 (default) : x-independent topology ⟹ Φ continuous by
+            // construction — the genesis-routing discontinuity (the one H1
+            // killer) is eliminated.
+            TopologyManifest::Fixed => build_fixed_topology_controller(row, &mix)?,
+            // Explicit opt-out : heuristic (x-dependent) genesis routing.
+            // H1 then rests SOLELY on the empirical canary — logged loudly.
+            TopologyManifest::Dynamic => {
+                tracing::warn!(
+                    participant = %row.id,
+                    "topology = DYNAMIC : the genesis routing varies with x, so Φ \
+                     may be discontinuous at routing-cell boundaries — H1 is \
+                     unproven by construction and rests solely on the empirical \
+                     canary (property-tested, NOT certified)"
+                );
+                build_mvp_controller(Mode1Config::for_dim(row.dim))
+                    .map_err(|e| into_internal(&row.id, "build_mvp_controller", &e))?
+            }
+        };
 
         // 4. Participant safety box = state projection + H1 canary domain.
         let safety: Box<dyn SafetySet> = Box::new(
@@ -534,6 +598,110 @@ mod core_engine {
         })?;
         let hash = hex_sha256(canonical.as_bytes());
         Ok((bridge, hash))
+    }
+
+    /// **M1 Palier-2 — the fixed-topology latent controller.**
+    ///
+    /// Mirrors `efe_server::mode1::build_mvp_parts`'s LATENT recipe (the
+    /// converge-now single-round profile of M1.a/M1.b) with ONE deliberate
+    /// difference : genesis routing/cardinality are the CONSTANTS
+    /// [`FixedTemplateRouter`]/[`FixedCardinality`] built from the manifest
+    /// population plan — so the spawned population (count, mix, mask) is
+    /// independent of the input `x` and `Φ` is continuous by construction.
+    ///
+    /// DELIBERATE DUPLICATION : this assembly is a mirror of mode1's latent
+    /// branch, kept HERE (server crate) instead of extending `mode1.rs`,
+    /// which a concurrent session currently holds (its uncommitted dissolver
+    /// rework touches exactly that construction).  Consolidate into a
+    /// `build_mvp_controller_fixed(cfg, plan)` in mode1 once that lands.
+    /// Until then this path intentionally uses only HEAD-committed APIs.
+    fn build_fixed_topology_controller(
+        row: &ParticipantManifest,
+        plan: &[(TemplateCode, u32)],
+    ) -> Result<std::sync::Arc<SwarmController>, MetaSwarmError> {
+        let cfg = Mode1Config::for_dim(row.dim);
+        let ii = |what: &str, e: &dyn std::fmt::Display| into_internal(&row.id, what, e);
+
+        // 1. Device + pools (HostBackend, CPU-only — identical to mode1).
+        let device: Arc<dyn DeviceBackend> = Arc::new(HostBackend::new());
+        let mut pool_cfg = PoolConfig::default();
+        pool_cfg.prealloc_arenas = cfg.prealloc_arenas;
+        pool_cfg.max_arenas = cfg.max_arenas;
+        let pool = Arc::new(MemoryPool::new(pool_cfg, device.clone()).map_err(|e| ii("MemoryPool", &e))?);
+        let mut stream_cfg = StreamPoolConfig::default();
+        stream_cfg.size = cfg.n_streams;
+        let streams = Arc::new(StreamPool::new(stream_cfg).map_err(|e| ii("StreamPool", &e))?);
+        let registry: Arc<dyn TemplateRegistry> =
+            Arc::new(StubTemplateRegistry::mvp_defaults(row.dim));
+
+        // 2. FIXED genesis : constant router + cardinality from the manifest
+        //    plan, zero-noise spawner (M1.b determinism).
+        let router = Arc::new(FixedTemplateRouter::from_population(plan).map_err(|e| ii("fixed router", &e))?);
+        let cardinality = Arc::new(FixedCardinality::from_population(plan).map_err(|e| ii("fixed cardinality", &e))?);
+        let mut spawner_cfg = SpawnerConfig::default();
+        spawner_cfg.init_sigma = 0.0; // deterministic genesis — no noise draw
+        let spawner = Arc::new(DefaultSpawner::new(
+            pool.clone(),
+            registry.clone(),
+            streams.clone(),
+            spawner_cfg,
+        ));
+        let genesis: Arc<dyn GenesisStrategy> = Arc::new(
+            GenesisEngine::builder()
+                .router(router)
+                .cardinality(cardinality)
+                .spawner(spawner)
+                .build_mvp(pool, registry, streams)
+                .map_err(|e| ii("GenesisEngine", &e))?,
+        );
+
+        // 3. Fusion + centroid channel (single-flight discipline as mode1).
+        let fusion_core = Arc::new(
+            MvpCpuFusion::builder()
+                .with_backend(device)
+                .with_replay_enabled(false)
+                .build()
+                .map_err(|e| ii("MvpCpuFusion", &e))?,
+        );
+        let last_centroid = LastCentroid::new();
+        let last_spec_trace = LastSpecTrace::new();
+        let fusion: Arc<dyn FusionStrategy> = Arc::new(FusionAdapter::new(
+            fusion_core,
+            cfg.fusion.clone(),
+            last_centroid.clone(),
+            last_spec_trace,
+        ));
+        let dissolver: Arc<dyn Dissolver> = Arc::new(PassThroughDissolver::new(last_centroid));
+        let alignment: Arc<dyn AlignmentProjector> =
+            Arc::new(AlignmentAdapter::strict_default().map_err(|e| ii("AlignmentAdapter", &e))?);
+        let telemetry: Arc<dyn TelemetryCollector> = Arc::new(NullTelemetryCollector);
+
+        // 4. Converge-now consensus (single-round Φ profile — M1.a) : same
+        //    signal weights as Mode-1, threshold 0 + hysteresis 1, and
+        //    ControllerConfig::default() (min_rounds = 0).
+        let converge_now: ConsensusConfig = cfg
+            .consensus
+            .clone()
+            .with_confidence_threshold(0.0)
+            .with_hysteresis(1);
+        let consensus_factory = move || -> Box<dyn ConsensusDetector> {
+            Box::new(
+                ConsensusAdapter::new(converge_now.clone())
+                    .expect("converge-now consensus config is valid"),
+            )
+        };
+
+        SwarmController::builder()
+            .genesis(genesis)
+            .fusion(fusion)
+            .dissolver(dissolver)
+            .alignment(alignment)
+            .telemetry(telemetry)
+            .consensus_factory(consensus_factory)
+            .config(ControllerConfig::default())
+            .build()
+            .map(std::sync::Arc::new)
+            .map_err(|e| ii("SwarmController", &e))
     }
 
     /// Manifest → canary probe (bounded, boot-sized).

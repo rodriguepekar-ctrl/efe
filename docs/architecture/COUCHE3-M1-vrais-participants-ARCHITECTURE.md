@@ -164,3 +164,41 @@ Le seam d'exécution est **à moitié prêt** : le handler `Step` tourne déjà 
 | `verify_non_expansive` / garde H1 | `Stub` ⟹ garde morte (`certificate.rs:35`, `coupled.rs:144`) | §3/§4 (Empirical + strict) |
 
 *Préparation M1 : « vrais participants » n'est pas un flip de flag — c'est un travail « L » qui, mal fait, **régresse la sûreté** sous le mock. Le seul chemin honnête : câbler le pont efe-core, **contraindre la topologie** pour retrouver une contraction **analytique** (`≤ β₁`), ajouter un **canary empirique adversarial** et un **gate fail-closed** sur la non-convergence, rétablir (ou retirer) le déterminisme — et dire « vrais essaims latents efe-core », **jamais** « vrais SLM ». Le dowry gagne en honnêteté ce qu'il perd en esbroufe : un méta-essaim qui coordonne de vrais essaims, converge de façon **vérifiable**, et **refuse** de mentir quand il ne converge pas.*
+
+---
+
+## Addendum · 2026-07-14 — Palier-2 livré, et ce que la mesure a tranché
+
+**Livré** (complète le jalon M1.b du §8) : `FixedTemplateRouter` + `FixedCardinality`
+(`efe-core/src/genesis/fixed.rs` — routage/cardinalité **constants**, le dag issu de `x`
+est ignoré par construction, x-indépendance prouvée par tests) ; champ manifeste
+`controller.topology: fixed | dynamic` (**défaut `fixed`**, l'opt-out `dynamic` est
+loggé bruyamment au boot) ; assemblage à topologie fixe côté serveur
+(`efe-meta-swarm-server::participant::core_engine`, miroir délibéré de la recette
+latente de `mode1` — à consolider dans `mode1` quand la session concurrente aura posé
+son rework du dissolver) ; token de fil `topology:fixed|dynamic` sur le descripteur.
+
+**La mesure** (même boîte `[0.05, 0.30]^16`, même sonde, canari M1.c) :
+
+| Topologie | `L̂` mesuré | Verdict |
+|---|---|---|
+| dynamique (routage heuristique) | **0.691** | H1 tient (property-testé) |
+| **fixe (Palier-2)** | **0.366** | H1 tient (property-testé) |
+| *prédiction §1.1 (forme fermée)* | *≤ β₁ ≈ 0.17* | **réfutée comme certificat** |
+
+Deux enseignements, à graver tels quels dans le pitch :
+
+1. **Le §1.2 avait raison qualitativement** : fixer la topologie divise la sensibilité
+   mesurée par ~1.9 — le routage x-dépendant était bien une source majeure du ratio.
+2. **Le §1.1 est trop optimiste comme certificat** : même sans aucun routage, le vrai
+   opérateur mesure `0.366 ≫ β₁ ≈ 0.17` — il existe une sensibilité à `x` au-delà de
+   `beta_mix` que la composition en forme fermée ne capture pas. **En conséquence,
+   AUCUN certificat « analytique ≤ β₁ » n'est émis nulle part** : la topologie fixe
+   apporte la **continuité par construction** (elle élimine LE mécanisme de rupture de
+   H1 — les sauts entiers du routage), pas un module de contraction en forme fermée.
+
+**Requalification honnête du Palier-2** (amende le §3) : « topologie fixe = Φ continu
+par construction + borne **mesurée** (property-testée, non certifiée) ». Le seuil
+honnête reste le mélange « fixe + canary » — inchangé ; seule la promesse « prouvé
+analytiquement ≤ β₁ » est retirée tant que l'écart 0.366 vs 0.17 n'est pas réconcilié
+(piste : mesurer les étages un à un via `phi_once` sur des variantes d'assemblage).

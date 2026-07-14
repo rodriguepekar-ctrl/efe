@@ -39,7 +39,7 @@ use efe_meta_swarm_proto::meta_swarm::{CapabilitiesRequest, StepRequest, TensorF
 use efe_meta_swarm_proto::participant::MetaParticipantServiceClient;
 use efe_meta_swarm_server::manifest::{
     AlignmentConeManifest, ControllerManifest, H1CanaryManifest, ParticipantManifest,
-    PopulationManifest, SafetyBoxManifest,
+    PopulationManifest, SafetyBoxManifest, TopologyManifest,
 };
 use efe_meta_swarm_server::participant::{IterationParams, LocalParticipant};
 use tonic::transport::Endpoint;
@@ -50,6 +50,10 @@ const BOX_LO: f32 = 0.05;
 const BOX_HI: f32 = 0.30;
 
 fn engine_block(h1_mode: &str) -> ControllerManifest {
+    engine_block_with_topology(h1_mode, TopologyManifest::Fixed)
+}
+
+fn engine_block_with_topology(h1_mode: &str, topology: TopologyManifest) -> ControllerManifest {
     ControllerManifest {
         schema: 1,
         population: vec![PopulationManifest { template: "na-sem".into(), count: 4 }],
@@ -59,6 +63,7 @@ fn engine_block(h1_mode: &str) -> ControllerManifest {
             max_projection_distance: 0.5,
         },
         safety_box: SafetyBoxManifest { lo: BOX_LO, hi: BOX_HI },
+        topology,
         tenant_id: "tenant-m1d".into(),
         h1_canary: H1CanaryManifest {
             mode: h1_mode.into(),
@@ -214,6 +219,86 @@ async fn h1_boot_gate_runs_the_real_canary() {
         .h1_boot_gate()
         .await
         .expect("the real Φ is non-expansive on this box — the canary must pass");
+}
+
+/// **M1 Palier-2 — the explicit DYNAMIC opt-out still serves.**  Coverage of
+/// the legacy (x-dependent genesis) profile : the participant boots, serves a
+/// Step, and its wire descriptor HONESTLY carries `topology:dynamic`.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn dynamic_topology_opt_out_serves_and_is_advertised() {
+    let mut row = engine_row("core-dyn", "off");
+    row.controller = Some(engine_block_with_topology("off", TopologyManifest::Dynamic));
+    let (addr, _h) = common::spawn_participant_service(
+        row,
+        IterationParams { alpha_default: 0.5, coupling_gamma: 0.2 },
+    )
+    .await;
+    let mut client = connect(addr).await;
+
+    let caps = client
+        .capabilities(Request::new(CapabilitiesRequest {}))
+        .await
+        .expect("capabilities")
+        .into_inner();
+    let d = caps.descriptor.expect("descriptor");
+    assert!(
+        d.features.iter().any(|f| f == "topology:dynamic"),
+        "the dynamic opt-out must be visible on the wire, got {:?}",
+        d.features,
+    );
+
+    let resp = client
+        .step(Request::new(StepRequest {
+            pulled_from_meta: Some(TensorF32 { dim: DIM as u32, data: vec![0.1; DIM] }),
+            step_index: 0,
+        }))
+        .await
+        .expect("a dynamic-topology Step still serves")
+        .into_inner();
+    assert!(resp.new_state.expect("state").data.iter().all(|v| v.is_finite()));
+}
+
+/// **The Palier-2 measurement — the experiment that arbitrates the doc's
+/// β₁ claim.**  M1.c measured L̂ ≈ 0.69 on the DYNAMIC operator ;  the
+/// architecture's closed-form analysis (§1.1) predicts ≤ β₁ ≈ 0.17
+/// *intra-cell*.  Under FIXED topology there are no routing cells at all :
+/// if the 0.69 came from boundary jumps, L̂_fixed should collapse toward β₁ ;
+/// if it persists, the closed-form analysis is too optimistic and must never
+/// be minted as a certificate.  Either way the HONEST claim stays the
+/// measured one.  The test asserts only H1 (< 1 − margin) for the fixed
+/// operator and PRINTS both bounds for the record.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn palier2_measurement_fixed_vs_dynamic_lipschitz() {
+    use efe_meta_swarm_server::participant::LocalParticipant;
+    let cert_of = |topology: TopologyManifest| async move {
+        let mut row = engine_row("core-measure", "boot");
+        row.controller = Some(engine_block_with_topology("boot", topology));
+        let p = LocalParticipant::from_manifest_row(&row).expect("build");
+        p.h1_certificate()
+            .await
+            .expect("canary ran")
+            .expect("efe-core row yields a certificate")
+    };
+
+    let fixed = cert_of(TopologyManifest::Fixed).await;
+    let dynamic = cert_of(TopologyManifest::Dynamic).await;
+
+    use efe_meta_swarm::participants::NonExpansiveCertificate as C;
+    let (C::Empirical { l_hat: l_fixed, inconclusive: inc_f, .. },
+         C::Empirical { l_hat: l_dyn, inconclusive: inc_d, .. }) = (&fixed, &dynamic)
+    else {
+        panic!("expected Empirical certificates, got {fixed:?} / {dynamic:?}");
+    };
+    eprintln!(
+        "PALIER-2 MEASUREMENT  L̂_fixed={l_fixed:.5} (inconclusive={inc_f})  \
+         L̂_dynamic={l_dyn:.5} (inconclusive={inc_d})  — doc §1.1 predicted ≤ β₁ ≈ 0.17 ; \
+         the HONEST claim is the measured bound (property-tested, NOT certified)"
+    );
+    assert!(!inc_f, "the fixed-topology canary must be conclusive on this box");
+    assert!(
+        fixed.accepts(false),
+        "H1 must hold (L̂ < 1 − margin) for the fixed-topology operator, got L̂ = {l_fixed}",
+    );
 }
 
 /// `config_hash` is a stable function of the block (same block ⇒ same hash ;

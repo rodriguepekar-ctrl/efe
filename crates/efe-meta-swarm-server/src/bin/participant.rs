@@ -135,6 +135,12 @@ async fn async_main(config: ParticipantConfig) -> Result<(), ServerError> {
         kappa = local.kappa(),
         seed = local.seed(),
         engine = if local.is_efe_core() { "efe-core-mode1" } else { "mock" },
+        topology = local
+            .controller_manifest()
+            .map_or("-", |c| match c.topology {
+                efe_meta_swarm_server::manifest::TopologyManifest::Fixed => "fixed",
+                efe_meta_swarm_server::manifest::TopologyManifest::Dynamic => "dynamic",
+            }),
         config_hash = local.config_hash().unwrap_or("-"),
         "participant loaded from manifest row",
     );

@@ -13,7 +13,7 @@
 use efe_meta_swarm_server::manifest::{
     validate_manifest, validate_reload_compatibility, AlignmentConeManifest, ControllerManifest,
     H1CanaryManifest, IterationManifest, Manifest, MetaSpaceManifest, ParticipantManifest,
-    PopulationManifest, SafetyBoxManifest, SafetyManifest,
+    PopulationManifest, SafetyBoxManifest, SafetyManifest, TopologyManifest,
 };
 
 const DIM: u32 = 16;
@@ -28,6 +28,7 @@ fn engine_block() -> ControllerManifest {
             max_projection_distance: 0.5,
         },
         safety_box: SafetyBoxManifest { lo: 0.05, hi: 0.30 },
+        topology: TopologyManifest::Fixed,
         tenant_id: "tenant-m1d".into(),
         h1_canary: H1CanaryManifest::default(),
     }
