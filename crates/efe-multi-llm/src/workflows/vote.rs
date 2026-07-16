@@ -12,7 +12,7 @@ use crate::budget::BudgetTracker;
 use crate::canonical::{CanonicalClaim, CanonicalSchemaId};
 use crate::error::{MultiLlmError, MultiLlmResult};
 use crate::events_ext::{Phase3EventExt, Phase3Publisher};
-use crate::reformulator_ext::{CanonicalReformulator, SourceDialect};
+use crate::reformulator_ext::{reformulator_for, SourceDialect};
 use crate::request::{VoteMode, Vote3LlmRequest, Vote3LlmResponse};
 use crate::vote_ext::{borda_tally, condorcet_tally};
 use crate::vote_ext::borda::BordaBallot;
@@ -38,7 +38,8 @@ pub async fn run_vote_3llm(
     let swarm_id = Uuid::now_v7();
     let publisher = Phase3Publisher;
     let budget = BudgetTracker::new(req.max_budget_cents);
-    let reformulator = CanonicalReformulator::new();
+    // Fil B.0 : reformulateur pluggable (déterministe par défaut).
+    let reformulator = reformulator_for(coord);
 
     let bus = Arc::clone(&coord.bus);
 
@@ -77,19 +78,23 @@ pub async fn run_vote_3llm(
     let mut claims: Vec<(String, CanonicalClaim, f32)> = Vec::new();
     for r in &responses {
         let dialect = SourceDialect::from_provider_id(&r.provider);
-        let value = match reformulator.route(
-            &r.text,
-            dialect,
-            CanonicalSchemaId::ClaimV1,
-            &r.provider,
-        ) {
-            Ok(v) => v,
+        let reff = match reformulator
+            .to_canonical(&r.text, dialect, CanonicalSchemaId::ClaimV1, &r.provider)
+            .await
+        {
+            Ok(reff) => reff,
             Err(_) => continue, // skip ce LLM si parsing échoue
         };
         publisher
-            .publish_reformulation(&bus, swarm_id, &r.provider, "canonical/claim_v1")
+            .publish_reformulation(
+                &bus,
+                swarm_id,
+                &r.provider,
+                "canonical/claim_v1",
+                reff.engine,
+            )
             .await;
-        if let Ok(claim) = serde_json::from_value::<CanonicalClaim>(value) {
+        if let Ok(claim) = serde_json::from_value::<CanonicalClaim>(reff.value) {
             claims.push((r.provider.clone(), claim, r.self_quality));
         }
     }

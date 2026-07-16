@@ -26,6 +26,8 @@ use uuid::Uuid;
 
 use efe_coordinator::{EventBus, StreamEvent};
 
+use crate::reformulator_ext::ReformulatorEngine;
+
 /// Trait d'extension pour publier les évènements Phase 3.
 #[async_trait::async_trait]
 pub trait Phase3EventExt: Send + Sync {
@@ -81,6 +83,7 @@ pub trait Phase3EventExt: Send + Sync {
         swarm_id: Uuid,
         from_llm: &str,
         target_schema: &str,
+        engine: ReformulatorEngine,
     );
 
     /// Publie un charge sur le budget.
@@ -255,13 +258,21 @@ impl Phase3EventExt for Phase3Publisher {
         swarm_id: Uuid,
         from_llm: &str,
         target_schema: &str,
+        engine: ReformulatorEngine,
     ) {
+        // Fil B.0 : le reçu porte le moteur effectif (`RULE` / `SLM` /
+        // `SLM_DEGRADED_TO_RULE`). On ne peut revendiquer « médié par le petit
+        // modèle » que si `engine == SLM`.
         Self::emit(
             bus,
             swarm_id,
             "reformulator",
             "DONE",
-            serde_json::json!({"from_llm": from_llm, "target_schema": target_schema}),
+            serde_json::json!({
+                "from_llm": from_llm,
+                "target_schema": target_schema,
+                "engine": engine.tag(),
+            }),
         )
         .await;
     }

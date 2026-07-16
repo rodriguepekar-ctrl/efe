@@ -14,7 +14,7 @@ use crate::budget::BudgetTracker;
 use crate::canonical::CanonicalSchemaId;
 use crate::error::{MultiLlmError, MultiLlmResult};
 use crate::events_ext::{Phase3EventExt, Phase3Publisher};
-use crate::reformulator_ext::{CanonicalReformulator, SourceDialect};
+use crate::reformulator_ext::{reformulator_for, SourceDialect};
 use crate::request::{RelayRequest, RelayResponse};
 
 /// Exécute le Relay : Claude plan → GPT code → Gemini synthesis.
@@ -26,7 +26,9 @@ pub async fn run_relay(
     let swarm_id = Uuid::now_v7();
     let publisher = Phase3Publisher;
     let budget = BudgetTracker::new(req.max_budget_cents);
-    let reformulator = CanonicalReformulator::new();
+    // Fil B.0 : reformulateur pluggable (SLM si câblé, sinon déterministe —
+    // inchangé sur tous les chemins servis actuels).
+    let reformulator = reformulator_for(coord);
     let bus = Arc::clone(&coord.bus);
 
     // ── Phase α : PLANIFICATION ───────────────────────────────────────
@@ -61,21 +63,28 @@ pub async fn run_relay(
             budget.max_cost_cents(),
         )
         .await;
-    let plan_canonical = reformulator
-        .route(
+    let plan_ref = reformulator
+        .to_canonical(
             &plan_resp.text,
             SourceDialect::from_provider_id(&req.planner_llm),
             CanonicalSchemaId::PlanV1,
             &req.planner_llm,
         )
+        .await
         .map_err(|e| MultiLlmError::RelayPhaseFailed {
             phase: "α (planning reformulation)".into(),
             reason: e.to_string(),
         })?;
     publisher
-        .publish_reformulation(&bus, swarm_id, &req.planner_llm, "canonical/plan_v1")
+        .publish_reformulation(
+            &bus,
+            swarm_id,
+            &req.planner_llm,
+            "canonical/plan_v1",
+            plan_ref.engine,
+        )
         .await;
-    let plan_json = plan_canonical.to_string();
+    let plan_json = plan_ref.value.to_string();
 
     // ── Phase β : IMPLEMENTATION ──────────────────────────────────────
     let code_prompt = format!(
@@ -108,21 +117,28 @@ pub async fn run_relay(
             budget.max_cost_cents(),
         )
         .await;
-    let code_canonical = reformulator
-        .route(
+    let code_ref = reformulator
+        .to_canonical(
             &code_resp.text,
             SourceDialect::from_provider_id(&req.implementer_llm),
             CanonicalSchemaId::CodeV1,
             &req.implementer_llm,
         )
+        .await
         .map_err(|e| MultiLlmError::RelayPhaseFailed {
             phase: "β (code reformulation)".into(),
             reason: e.to_string(),
         })?;
     publisher
-        .publish_reformulation(&bus, swarm_id, &req.implementer_llm, "canonical/code_v1")
+        .publish_reformulation(
+            &bus,
+            swarm_id,
+            &req.implementer_llm,
+            "canonical/code_v1",
+            code_ref.engine,
+        )
         .await;
-    let code_json = code_canonical.to_string();
+    let code_json = code_ref.value.to_string();
 
     // ── Phase γ : SYNTHESIS ──────────────────────────────────────────
     let synth_prompt = format!(
@@ -156,21 +172,28 @@ pub async fn run_relay(
             budget.max_cost_cents(),
         )
         .await;
-    let synth_canonical = reformulator
-        .route(
+    let synth_ref = reformulator
+        .to_canonical(
             &synth_resp.text,
             SourceDialect::from_provider_id(&req.synthesizer_llm),
             CanonicalSchemaId::SynthesisV1,
             &req.synthesizer_llm,
         )
+        .await
         .map_err(|e| MultiLlmError::RelayPhaseFailed {
             phase: "γ (synthesis reformulation)".into(),
             reason: e.to_string(),
         })?;
     publisher
-        .publish_reformulation(&bus, swarm_id, &req.synthesizer_llm, "canonical/synthesis_v1")
+        .publish_reformulation(
+            &bus,
+            swarm_id,
+            &req.synthesizer_llm,
+            "canonical/synthesis_v1",
+            synth_ref.engine,
+        )
         .await;
-    let synth_json = synth_canonical.to_string();
+    let synth_json = synth_ref.value.to_string();
 
     // Petite touche pour faire taire le linter "unused" sur DagNode.
     let _ = DagNode::root(format!("phase3-relay-{swarm_id}"), || async {

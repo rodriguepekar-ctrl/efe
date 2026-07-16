@@ -11,7 +11,7 @@ use crate::budget::BudgetTracker;
 use crate::canonical::{ArgumentStance, CanonicalArgument};
 use crate::error::{MultiLlmError, MultiLlmResult};
 use crate::events_ext::{Phase3EventExt, Phase3Publisher};
-use crate::reformulator_ext::{CanonicalReformulator, SourceDialect};
+use crate::reformulator_ext::{reformulator_for, SourceDialect};
 use crate::request::{DebateArgumentSummary, DebateRequest, DebateResponse};
 use crate::DEBATE_MAX_ROUNDS;
 
@@ -38,7 +38,8 @@ pub async fn run_debate(
     let swarm_id = Uuid::now_v7();
     let publisher = Phase3Publisher;
     let budget = BudgetTracker::new(req.max_budget_cents);
-    let reformulator = CanonicalReformulator::new();
+    // Fil B.0 : reformulateur pluggable (déterministe par défaut).
+    let reformulator = reformulator_for(coord);
     let bus = Arc::clone(&coord.bus);
 
     let mut arguments_per_round: Vec<Vec<DebateArgumentSummary>> = Vec::new();
@@ -146,20 +147,44 @@ pub async fn run_debate(
         } else {
             ArgumentStance::Rebuttal
         };
-        let pro_canon: CanonicalArgument = reformulator
-            .to_argument(
+        let pro_ref = reformulator
+            .to_argument_value(
                 &pro_resp.text,
                 pro_stance,
                 SourceDialect::from_provider_id(&req.pro_llm),
             )
-            ?;
-        let contra_canon: CanonicalArgument = reformulator
-            .to_argument(
+            .await?;
+        let pro_canon: CanonicalArgument =
+            serde_json::from_value(pro_ref.value).map_err(|e| {
+                MultiLlmError::ReformulationFailed {
+                    from_dialect: SourceDialect::from_provider_id(&req.pro_llm).tag().to_string(),
+                    to_schema: "canonical/argument_v1".to_string(),
+                    reason: e.to_string(),
+                }
+            })?;
+        let contra_ref = reformulator
+            .to_argument_value(
                 &contra_resp.text,
                 contra_stance,
                 SourceDialect::from_provider_id(&req.contra_llm),
             )
-            ?;
+            .await?;
+        let contra_canon: CanonicalArgument =
+            serde_json::from_value(contra_ref.value).map_err(|e| {
+                MultiLlmError::ReformulationFailed {
+                    from_dialect: SourceDialect::from_provider_id(&req.contra_llm).tag().to_string(),
+                    to_schema: "canonical/argument_v1".to_string(),
+                    reason: e.to_string(),
+                }
+            })?;
+
+        // Fil B.0 : provenance du moteur de reformulation (par argument).
+        publisher
+            .publish_reformulation(&bus, swarm_id, &req.pro_llm, "canonical/argument_v1", pro_ref.engine)
+            .await;
+        publisher
+            .publish_reformulation(&bus, swarm_id, &req.contra_llm, "canonical/argument_v1", contra_ref.engine)
+            .await;
 
         publisher
             .publish_debate_argument(&bus, swarm_id, round_idx, &req.pro_llm, "PRO")
