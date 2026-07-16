@@ -375,10 +375,40 @@ Le reçu re-vérifiable des missions (Couche-2) doit désormais porter, **par ho
   d'audit `from_client_with_audit` (B.3). Testé hors-ligne jusqu'à l'écho et au clamp via un **faux
   llama-server** (revue #7) ; la qualité de contenu reste **live-only** (`#[ignore]`, llama-server +
   poids requis). Revue adverse : 10 findings bruts → 9 confirmés (dont 3 doublons) → **7 corrigés**.
-- **B.2 — Wiring servi opt-in.** `coordinator_from_env` construit le SLM depuis l'env, derrière feature +
-  URL. Défaut = déterministe, inchangé.
-- **B.3 — Provenance estampillée.** `engine` par hop dans le reçu ; revendication « SLM-médié » gardée.
-- **B.4 — Circuit + timeouts.** Résilience du hop reformulation.
+- **B.2 — Wiring servi opt-in + circuit CONSOMMÉ. ✅ IMPLÉMENTÉ & VÉRIFIÉ (2026-07-14, commit-pending).**
+  `coordinator_from_env` (gateway, feature `frontier-llm`) construit le SLM depuis
+  `EFE_SLM_REFORMULATOR_URL` via la fonction **pure** `slm_clients_from(url)` (pattern maison
+  `policy_registry_from_str`, testable race-free) : URL absente/vide ⟹ bundle par défaut (chemin servi
+  strictement inchangé) ; URL fournie ⟹ `from_assets_multillm` (lecture d'assets, **aucun réseau au
+  boot**) + circuit `"reformulator"` (3 échecs / reset 10 s — mêmes valeurs que les 3 SLM Phase 1) sous la
+  clé partagée `SLM_REFORMULATOR_CIRCUIT_KEY` (exportée par efe-multi-llm — zéro dérive de chaîne) ;
+  échec de construction ⟹ warn + déterministe, **boot jamais cassé**. **DÉCISION assumée : le circuit
+  breaker est TIRÉ de B.4 dans B.2** — un circuit enregistré mais non consommé serait une protection de
+  façade ; il est donc réellement consommé par hop dans `SlmReformulator` (`Clone` à `Arc` partagé ⟹ état
+  global au coordinator) : ouvert ⟹ dégradation SANS appel réseau ; succès validé ⟹ refermé ; défaillance
+  ROBOT (invoke/hors-schéma/écho) ⟹ incrément. **Correctif de sémantique attrapé en route** : le backend
+  distingue `BackendError::{ClientSide, Robot}` — une entrée inutilisable (vide) dégrade SANS impacter le
+  circuit (le circuit mesure la santé du robot, pas des entrées ; épinglé par test). Re-exports
+  ergonomiques ajoutés à efe-coordinator (`ReformulatorClient`/`ReformulatorProfile`/`SlmCircuitBreaker`,
+  précédent `TenantId`). **Revue adverse B.2 : 9 findings bruts → 5 confirmés → 5 corrigés.** Les deux
+  medium ont durci le breaker partagé (`slm_circuit.rs`) : (1) HalfOpen laissait passer un **troupeau
+  concurrent** vers un llama-server malade (le doc promettait « 1 sonde », `is_open()` laissait passer
+  tout le monde) ⟹ nouvelle **porte à acquisition `try_call()`** (état interne 4-valeurs, slot de sonde
+  unique, reprise anti-blocage après `reset_timeout`) consommée par `circuit_allows()` ; `is_open()`
+  reste un **peek multi-sonde** documenté honnêtement (contrat « juste read » de `slm_guard` mission A/B
+  préservé — instances de circuit distinctes, blast radius nul). (2) `record_failure` publiait
+  `state=Open` AVANT le timestamp ⟹ un observateur concurrent pouvait rebasculer l'ouverture fraîche en
+  HalfOpen (fenêtre perdue) ⟹ timestamp écrit sous mutex AVANT la publication. Les trois autres :
+  chemin sonde-échoue + bras circuit de `to_argument_value` épinglés par tests ; le seam
+  `reformulator_for`-attache-le-circuit prouvé de bout en bout (coordinator réel, clé partagée) ;
+  en-tête corrigé (deadlines/budget = B.4 seul). Nuance honnête documentée : une sonde consommée par une
+  erreur `ClientSide` ne rend pas de verdict — le slot est retenu jusqu'à la borne de reprise, jamais plus.
+- **B.3 — Provenance chaînée + estampillée.** `engine` par hop est déjà dans les évènements (B.0) ;
+  reste : chaîner l'audit SLM au reçu re-vérifiable (le seam `from_client_with_audit` existe) ;
+  revendication « SLM-médié » gardée.
+- **B.4 — Deadlines/budget de mission (repérimétré).** Le circuit (initialement ici) est livré en B.2 ;
+  reste : décompter la latence du hop SLM (≤ 30 s) de `req.max_total_latency`/budget, et passer une
+  deadline dans `reformulate()`.
 
 Ordre imposé : B.0 (sûr) → B.1 (substance modèle) → B.2 (servi) → B.3/B.4 (honnêteté + résilience).
 

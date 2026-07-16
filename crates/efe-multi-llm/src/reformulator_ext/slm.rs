@@ -22,7 +22,10 @@
 //! provenance re-vérifiable est le jalon B.3 (le seam existe :
 //! [`SlmReformulator::from_client_with_audit`]). La latence d'un hop SLM est
 //! bornée par le timeout du client (30 s en profil multi-llm) mais n'est PAS
-//! encore décomptée des deadlines/budgets de mission — B.2/B.4. La qualité de
+//! encore décomptée des deadlines/budgets de mission — B.4 (le circuit B.2
+//! borne la perte non budgétée : 3 échecs ⟹ ouvert, puis 1 seule sonde par
+//! fenêtre de reset paie le timeout, les autres hops dégradent sans appel).
+//! La qualité de
 //! contenu du SLM n'est vérifiée en bout en bout que par les tests live
 //! `#[ignore]` (llama-server + poids requis) ; hors ligne, la MÉCANIQUE est
 //! testée (construction d'input, clamp, écho de schéma — via un faux
@@ -34,9 +37,14 @@ use async_trait::async_trait;
 use efe_nano_app_coordinator::types::{LlmDialect, ReformulatorInput, SchemaId};
 use efe_nano_app_coordinator::{
     AuditWriter, CallContext, InMemoryAuditWriter, NanoRobotClient, ReformulatorClient,
-    ReformulatorProfile, TenantId,
+    ReformulatorProfile, SlmCircuitBreaker, TenantId,
 };
 use uuid::Uuid;
+
+/// **Fil B.2** — clé du circuit breaker du reformulateur SLM dans
+/// `CoordinatorClients.slm_circuits`. Symbole partagé avec le wiring servi
+/// (efe-swarm-gateway) pour interdire toute dérive de chaîne.
+pub const SLM_REFORMULATOR_CIRCUIT_KEY: &str = "reformulator";
 
 use crate::canonical::{
     ArgumentStance, CanonicalArgument, CanonicalClaim, CanonicalCode, CanonicalPlan,
@@ -46,6 +54,28 @@ use crate::error::{MultiLlmError, MultiLlmResult};
 
 use super::engine::{Reformulated, ReformulatorEngine};
 use super::{CanonicalReformulator, Reformulator, SourceDialect};
+
+/// Erreur d'un backend de reformulation — la distinction est **porteuse** :
+/// seul un échec du ROBOT (réseau, modèle, écho de schéma) doit compter pour
+/// le circuit breaker ; un rejet côté client (entrée inutilisable) ne dit
+/// RIEN de la santé du robot et ne doit jamais contribuer à ouvrir le circuit
+/// (sinon trois entrées vides bloqueraient des hops sains pendant le reset).
+#[derive(Debug)]
+pub(crate) enum BackendError {
+    /// Entrée inutilisable côté client — dégradation SANS impact circuit.
+    ClientSide(String),
+    /// Défaillance du robot (invoke/écho) — compte pour le circuit.
+    Robot(String),
+}
+
+impl std::fmt::Display for BackendError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::ClientSide(m) => write!(f, "client-side: {m}"),
+            Self::Robot(m) => write!(f, "robot: {m}"),
+        }
+    }
+}
 
 /// Backend d'un reformulateur-modèle : la SEULE partie qui parle réellement au
 /// petit modèle. Abstrait pour (a) garder l'adapter testable via un mock, et
@@ -58,14 +88,15 @@ pub(crate) trait ReformulatorBackend: Send + Sync {
 
     /// Traduit `raw` (dialecte `from`) vers la forme canonique `target`.
     /// `stance` n'est renseigné que pour `ArgumentV1`. Renvoie la valeur
-    /// canonique brute (à valider par l'appelant), ou une erreur textuelle.
+    /// canonique brute (à valider par l'appelant), ou une [`BackendError`]
+    /// typée (client-side vs robot — décide de l'impact circuit).
     async fn reformulate(
         &self,
         raw: &str,
         from: SourceDialect,
         target: CanonicalSchemaId,
         stance: Option<ArgumentStance>,
-    ) -> Result<serde_json::Value, String>;
+    ) -> Result<serde_json::Value, BackendError>;
 }
 
 /// Plafond de caractères passés au SLM — sous la borne de validation de
@@ -148,16 +179,16 @@ impl ReformulatorBackend for NanoRobotBackend {
         from: SourceDialect,
         target: CanonicalSchemaId,
         stance: Option<ArgumentStance>,
-    ) -> Result<serde_json::Value, String> {
+    ) -> Result<serde_json::Value, BackendError> {
         if !self.supports(target) {
-            return Err(format!(
+            return Err(BackendError::ClientSide(format!(
                 "SLM reformulateur : profil {:?} sans support de {target:?} — dégradation déterministe",
                 self.client.profile(),
-            ));
+            )));
         }
         let trimmed = raw.trim();
         if trimmed.is_empty() {
-            return Err("SLM reformulateur : raw_text vide".into());
+            return Err(BackendError::ClientSide("SLM reformulateur : raw_text vide".into()));
         }
         // Clamp sous la borne de validation (16 000 chars), à la frontière char.
         let raw_text: String = trimmed.chars().take(SLM_RAW_TEXT_MAX_CHARS).collect();
@@ -176,15 +207,15 @@ impl ReformulatorBackend for NanoRobotBackend {
             .client
             .invoke(input, &ctx)
             .await
-            .map_err(|e| format!("SLM reformulateur : invoke a échoué : {e}"))?;
+            .map_err(|e| BackendError::Robot(format!("SLM reformulateur : invoke a échoué : {e}")))?;
 
         // Écho de schéma : la grammaire lie schema_id à la forme, mais on
         // re-vérifie (défense en profondeur, et garde contre un mauvais asset).
         if output.schema_id != expected {
-            return Err(format!(
+            return Err(BackendError::Robot(format!(
                 "SLM reformulateur : écho de schéma inattendu ({:?} ≠ {expected:?})",
                 output.schema_id,
-            ));
+            )));
         }
         Ok(output.canonical)
     }
@@ -209,15 +240,58 @@ fn validate_canonical(target: CanonicalSchemaId, v: &serde_json::Value) -> bool 
 
 /// Adapter Fil B : essaie le petit modèle, **dégrade** vers le déterministe
 /// (`fallback`) en estampillant, sans jamais échouer là où la règle réussirait.
+///
+/// **B.2** — un [`SlmCircuitBreaker`] optionnel protège le hop, via la porte
+/// à acquisition `try_call` : circuit ouvert ⟹ dégradation SANS appel
+/// réseau ; en HalfOpen, **une seule sonde à la fois** paie l'appel réseau
+/// (les hops concurrents dégradent sans appel — pas de troupeau vers un
+/// llama-server malade) ; un succès validé referme le circuit ; toute
+/// défaillance du modèle (invoke, sortie hors-schéma, écho) l'incrémente.
+/// Le breaker est `Clone`-partagé (`Arc` interne) : l'état est GLOBAL au
+/// coordinator — des échecs répétés à travers les missions ouvrent le
+/// circuit pour toutes, exactement l'intention.
 pub struct SlmReformulator {
     backend: Arc<dyn ReformulatorBackend>,
     fallback: CanonicalReformulator,
+    circuit: Option<SlmCircuitBreaker>,
 }
 
 impl SlmReformulator {
     /// Construit avec un backend (réel ou mock). Le repli est le déterministe.
     pub(crate) fn new(backend: Arc<dyn ReformulatorBackend>) -> Self {
-        Self { backend, fallback: CanonicalReformulator::new() }
+        Self { backend, fallback: CanonicalReformulator::new(), circuit: None }
+    }
+
+    /// **Fil B.2** — attache un circuit breaker (clone partagé : l'état vit
+    /// dans le `CoordinatorClients` d'origine, commun à toutes les missions).
+    #[must_use]
+    pub fn with_circuit(mut self, circuit: SlmCircuitBreaker) -> Self {
+        self.circuit = Some(circuit);
+        self
+    }
+
+    /// Le circuit autorise-t-il un appel ? (`None` = pas de circuit = oui.)
+    ///
+    /// Porte à acquisition ([`SlmCircuitBreaker::try_call`]) : en HalfOpen,
+    /// un seul hop obtient le slot de sonde ; les autres reçoivent `false`
+    /// et dégradent sans appel réseau. Nuance honnête : le bras `ClientSide`
+    /// ne rend aucun verdict au circuit — une sonde consommée par une entrée
+    /// inutilisable retient le slot jusqu'à la borne de reprise
+    /// (`reset_timeout`), jamais plus.
+    fn circuit_allows(&self) -> bool {
+        self.circuit.as_ref().map_or(true, SlmCircuitBreaker::try_call)
+    }
+
+    fn circuit_success(&self) {
+        if let Some(c) = &self.circuit {
+            c.record_success();
+        }
+    }
+
+    fn circuit_failure(&self) {
+        if let Some(c) = &self.circuit {
+            c.record_failure();
+        }
     }
 
     /// **Fil B.1** — construit l'adapter directement depuis un
@@ -252,19 +326,43 @@ impl Reformulator for SlmReformulator {
         llm_source: &str,
     ) -> MultiLlmResult<Reformulated> {
         if self.backend.supports(target) {
-            match self.backend.reformulate(raw, from, target, None).await {
-                Ok(v) if validate_canonical(target, &v) => {
-                    return Ok(Reformulated::new(v, ReformulatorEngine::Slm));
-                }
-                // Sortie SLM hors-schéma → on ne la sert JAMAIS telle quelle.
-                Ok(_) => tracing::warn!(
+            if !self.circuit_allows() {
+                // Circuit ouvert : dégradation SANS appel réseau (B.2).
+                tracing::warn!(
                     ?target, llm_source,
-                    "SLM degrade : sortie hors-schéma (validation typée) — repli déterministe"
-                ),
-                Err(reason) => tracing::warn!(
-                    ?target, llm_source, %reason,
-                    "SLM degrade : invoke — repli déterministe"
-                ),
+                    "SLM degrade : circuit ouvert — repli déterministe sans appel"
+                );
+            } else {
+                match self.backend.reformulate(raw, from, target, None).await {
+                    Ok(v) if validate_canonical(target, &v) => {
+                        self.circuit_success();
+                        return Ok(Reformulated::new(v, ReformulatorEngine::Slm));
+                    }
+                    // Sortie SLM hors-schéma → on ne la sert JAMAIS telle
+                    // quelle — et c'est une défaillance du ROBOT (circuit).
+                    Ok(_) => {
+                        self.circuit_failure();
+                        tracing::warn!(
+                            ?target, llm_source,
+                            "SLM degrade : sortie hors-schéma (validation typée) — repli déterministe"
+                        );
+                    }
+                    Err(BackendError::Robot(reason)) => {
+                        self.circuit_failure();
+                        tracing::warn!(
+                            ?target, llm_source, %reason,
+                            "SLM degrade : invoke — repli déterministe"
+                        );
+                    }
+                    // Entrée inutilisable : dégradation SANS impact circuit
+                    // (le circuit mesure la santé du robot, pas des entrées).
+                    Err(BackendError::ClientSide(reason)) => {
+                        tracing::warn!(
+                            ?target, llm_source, %reason,
+                            "SLM degrade : entrée côté client — repli déterministe (circuit non impacté)"
+                        );
+                    }
+                }
             }
         }
         // Repli déterministe, connu-bon, estampillé.
@@ -280,18 +378,38 @@ impl Reformulator for SlmReformulator {
     ) -> MultiLlmResult<Reformulated> {
         let target = CanonicalSchemaId::ArgumentV1;
         if self.backend.supports(target) {
-            match self.backend.reformulate(raw, from, target, Some(stance)).await {
-                Ok(v) if validate_canonical(target, &v) => {
-                    return Ok(Reformulated::new(v, ReformulatorEngine::Slm));
-                }
-                Ok(_) => tracing::warn!(
+            if !self.circuit_allows() {
+                tracing::warn!(
                     ?target, dialect = from.tag(),
-                    "SLM degrade : sortie hors-schéma (validation typée) — repli déterministe"
-                ),
-                Err(reason) => tracing::warn!(
-                    ?target, dialect = from.tag(), %reason,
-                    "SLM degrade : invoke — repli déterministe"
-                ),
+                    "SLM degrade : circuit ouvert — repli déterministe sans appel"
+                );
+            } else {
+                match self.backend.reformulate(raw, from, target, Some(stance)).await {
+                    Ok(v) if validate_canonical(target, &v) => {
+                        self.circuit_success();
+                        return Ok(Reformulated::new(v, ReformulatorEngine::Slm));
+                    }
+                    Ok(_) => {
+                        self.circuit_failure();
+                        tracing::warn!(
+                            ?target, dialect = from.tag(),
+                            "SLM degrade : sortie hors-schéma (validation typée) — repli déterministe"
+                        );
+                    }
+                    Err(BackendError::Robot(reason)) => {
+                        self.circuit_failure();
+                        tracing::warn!(
+                            ?target, dialect = from.tag(), %reason,
+                            "SLM degrade : invoke — repli déterministe"
+                        );
+                    }
+                    Err(BackendError::ClientSide(reason)) => {
+                        tracing::warn!(
+                            ?target, dialect = from.tag(), %reason,
+                            "SLM degrade : entrée côté client — repli déterministe (circuit non impacté)"
+                        );
+                    }
+                }
             }
         }
         let arg = self.fallback.to_argument(raw, stance, from)?;
@@ -313,7 +431,15 @@ impl Reformulator for SlmReformulator {
 #[must_use]
 pub fn reformulator_for(coord: &efe_coordinator::Coordinator) -> Box<dyn Reformulator> {
     match coord.clients.reformulator.as_ref() {
-        Some(client) => Box::new(SlmReformulator::from_client(client.clone())),
+        Some(client) => {
+            let mut slm = SlmReformulator::from_client(client.clone());
+            // B.2 : si le wiring a enregistré un circuit pour le reformulateur,
+            // on l'attache (clone partagé — l'état reste global au coordinator).
+            if let Some(circuit) = coord.clients.slm_circuit(SLM_REFORMULATOR_CIRCUIT_KEY) {
+                slm = slm.with_circuit(circuit.clone());
+            }
+            Box::new(slm)
+        }
         None => Box::new(CanonicalReformulator::new()),
     }
 }
@@ -340,8 +466,8 @@ mod tests {
             _from: SourceDialect,
             _target: CanonicalSchemaId,
             _stance: Option<ArgumentStance>,
-        ) -> Result<serde_json::Value, String> {
-            self.output.clone().ok_or_else(|| "mock backend error".to_string())
+        ) -> Result<serde_json::Value, BackendError> {
+            self.output.clone().ok_or_else(|| BackendError::Robot("mock backend error".into()))
         }
     }
 
@@ -571,7 +697,10 @@ mod tests {
             .reformulate("   ", SourceDialect::Unknown, CanonicalSchemaId::ClaimV1, None)
             .await
             .unwrap_err();
-        assert!(err.contains("vide"), "{err}");
+        match err {
+            BackendError::ClientSide(m) => assert!(m.contains("vide"), "{m}"),
+            other => panic!("attendu ClientSide, obtenu {other}"),
+        }
     }
 
     // ─── Faux llama-server : écho de schéma + clamp, HORS LIGNE ──────
@@ -629,7 +758,10 @@ mod tests {
             .reformulate("The Fed held rates.", SourceDialect::Unknown, CanonicalSchemaId::ClaimV1, None)
             .await
             .unwrap_err();
-        assert!(err.contains("écho"), "{err}");
+        match err {
+            BackendError::Robot(m) => assert!(m.contains("écho"), "{m}"),
+            other => panic!("attendu Robot (compte pour le circuit), obtenu {other}"),
+        }
         // Et au niveau adapter : dégradation estampillée, sortie déterministe valide.
         let r = SlmReformulator::from_client(client);
         let out = r
@@ -637,6 +769,294 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(out.engine, ReformulatorEngine::SlmDegradedToRule);
+    }
+
+    // ─── Fil B.2 : le circuit breaker, consommé pour de vrai ─────────
+
+    /// Backend qui COMPTE ses appels et échoue (ou réussit) à la demande —
+    /// pour prouver que le circuit ouvert court-circuite l'appel réseau.
+    struct CountingBackend {
+        calls: std::sync::atomic::AtomicUsize,
+        output: Option<serde_json::Value>, // None ⟹ Err
+    }
+
+    #[async_trait]
+    impl ReformulatorBackend for CountingBackend {
+        fn supports(&self, _t: CanonicalSchemaId) -> bool {
+            true
+        }
+        async fn reformulate(
+            &self,
+            _raw: &str,
+            _from: SourceDialect,
+            _target: CanonicalSchemaId,
+            _stance: Option<ArgumentStance>,
+        ) -> Result<serde_json::Value, BackendError> {
+            self.calls.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            self.output.clone().ok_or_else(|| BackendError::Robot("boom".into()))
+        }
+    }
+
+    /// Seuil 2 : deux échecs ouvrent le circuit ; le 3ᵉ hop dégrade SANS
+    /// appeler le backend (le compteur reste à 2). Tous estampillés dégradés.
+    #[tokio::test]
+    async fn circuit_opens_after_threshold_and_skips_backend() {
+        use efe_nano_app_coordinator::SlmCircuitBreaker;
+        let backend = Arc::new(CountingBackend {
+            calls: std::sync::atomic::AtomicUsize::new(0),
+            output: None,
+        });
+        let circuit = SlmCircuitBreaker::new(2, std::time::Duration::from_secs(60));
+        let r = SlmReformulator::new(backend.clone()).with_circuit(circuit.clone());
+        for _ in 0..3 {
+            let out = r
+                .to_canonical("The Fed held rates.", SourceDialect::Unknown, CanonicalSchemaId::ClaimV1, "x")
+                .await
+                .unwrap();
+            assert_eq!(out.engine, ReformulatorEngine::SlmDegradedToRule);
+        }
+        assert_eq!(
+            backend.calls.load(std::sync::atomic::Ordering::SeqCst),
+            2,
+            "le 3ᵉ hop doit être court-circuité (circuit ouvert)"
+        );
+        assert!(circuit.is_open());
+    }
+
+    /// Une sortie HORS-SCHÉMA compte comme échec de circuit (seuil 1 ⟹ le
+    /// hop suivant est court-circuité).
+    #[tokio::test]
+    async fn invalid_output_counts_as_circuit_failure() {
+        use efe_nano_app_coordinator::SlmCircuitBreaker;
+        let backend = Arc::new(CountingBackend {
+            calls: std::sync::atomic::AtomicUsize::new(0),
+            output: Some(serde_json::json!({"garbage": true})),
+        });
+        let circuit = SlmCircuitBreaker::new(1, std::time::Duration::from_secs(60));
+        let r = SlmReformulator::new(backend.clone()).with_circuit(circuit);
+        for _ in 0..2 {
+            let out = r
+                .to_canonical("x y z", SourceDialect::Unknown, CanonicalSchemaId::ClaimV1, "x")
+                .await
+                .unwrap();
+            assert_eq!(out.engine, ReformulatorEngine::SlmDegradedToRule);
+        }
+        assert_eq!(backend.calls.load(std::sync::atomic::Ordering::SeqCst), 1);
+    }
+
+    /// Après `reset_timeout`, le circuit passe HalfOpen : UN appel de sonde
+    /// repart vers le backend ; s'il réussit, le circuit se referme (Closed).
+    #[tokio::test]
+    async fn circuit_half_opens_then_closes_on_success() {
+        use efe_nano_app_coordinator::{SlmCircuitBreaker, SlmCircuitState};
+        // Échec d'abord (seuil 1, reset immédiat), puis on bascule le backend
+        // en succès via un second adapter partageant le MÊME circuit.
+        let failing = Arc::new(CountingBackend {
+            calls: std::sync::atomic::AtomicUsize::new(0),
+            output: None,
+        });
+        let circuit = SlmCircuitBreaker::new(1, std::time::Duration::ZERO);
+        let r_fail = SlmReformulator::new(failing).with_circuit(circuit.clone());
+        let _ = r_fail
+            .to_canonical("a b", SourceDialect::Unknown, CanonicalSchemaId::ClaimV1, "x")
+            .await
+            .unwrap();
+        // reset ZERO ⟹ state() bascule aussitôt en HalfOpen (sonde autorisée).
+        assert_eq!(circuit.state(), SlmCircuitState::HalfOpen);
+
+        let succeeding = Arc::new(CountingBackend {
+            calls: std::sync::atomic::AtomicUsize::new(0),
+            output: Some(valid_claim_json()),
+        });
+        let r_ok = SlmReformulator::new(succeeding.clone()).with_circuit(circuit.clone());
+        let out = r_ok
+            .to_canonical("a b", SourceDialect::Unknown, CanonicalSchemaId::ClaimV1, "x")
+            .await
+            .unwrap();
+        assert_eq!(out.engine, ReformulatorEngine::Slm, "la sonde HalfOpen passe");
+        assert_eq!(succeeding.calls.load(std::sync::atomic::Ordering::SeqCst), 1);
+        assert_eq!(circuit.state(), SlmCircuitState::Closed, "succès ⟹ refermé");
+    }
+
+    /// **Le correctif B.2** : une entrée inutilisable (ClientSide) n'impacte
+    /// PAS le circuit — trois entrées vides (qui échouent partout, y compris
+    /// au repli : on ne fabrique pas de claim depuis du vide) ne doivent pas
+    /// bloquer des hops sains ; seule une défaillance ROBOT ouvre le circuit.
+    #[tokio::test]
+    async fn client_side_errors_do_not_open_the_circuit() {
+        use efe_nano_app_coordinator::{SlmCircuitBreaker, SlmCircuitState};
+        let client = Arc::new(
+            ReformulatorClient::from_assets_multillm("http://127.0.0.1:1").expect("assets"),
+        );
+        let circuit = SlmCircuitBreaker::new(1, std::time::Duration::from_secs(60));
+        let r = SlmReformulator::from_client(client).with_circuit(circuit.clone());
+        // 3 entrées vides : ClientSide au backend, et le repli déterministe
+        // refuse AUSSI le vide (« empty claim ») — l'erreur remonte à
+        // l'appelant (on ne fabrique pas de claim depuis du vide), mais le
+        // point épinglé est ailleurs : le circuit reste FERMÉ, car il mesure
+        // la santé du ROBOT, pas la qualité des entrées.
+        for _ in 0..3 {
+            let err = r
+                .to_canonical("   ", SourceDialect::Unknown, CanonicalSchemaId::ClaimV1, "x")
+                .await
+                .expect_err("vide partout : l'erreur doit remonter, pas être maquillée");
+            assert!(err.to_string().contains("empty claim"), "{err}");
+        }
+        assert_eq!(circuit.state(), SlmCircuitState::Closed, "ClientSide ⇏ circuit");
+        // Une vraie défaillance robot (endpoint mort) : le circuit s'ouvre.
+        let out = r
+            .to_canonical("real text", SourceDialect::Unknown, CanonicalSchemaId::ClaimV1, "x")
+            .await
+            .unwrap();
+        assert_eq!(out.engine, ReformulatorEngine::SlmDegradedToRule);
+        assert!(circuit.is_open(), "échec ROBOT ⟹ circuit ouvert (seuil 1)");
+    }
+
+    /// Sans circuit attaché (`from_client` nu, tests live), rien ne change :
+    /// les hops passent, aucun court-circuit.
+    #[tokio::test]
+    async fn no_circuit_means_no_gating() {
+        let backend = Arc::new(CountingBackend {
+            calls: std::sync::atomic::AtomicUsize::new(0),
+            output: None,
+        });
+        let r = SlmReformulator::new(backend.clone());
+        for _ in 0..4 {
+            let out = r
+                .to_canonical("a b", SourceDialect::Unknown, CanonicalSchemaId::ClaimV1, "x")
+                .await
+                .unwrap();
+            assert_eq!(out.engine, ReformulatorEngine::SlmDegradedToRule);
+        }
+        assert_eq!(backend.calls.load(std::sync::atomic::Ordering::SeqCst), 4);
+    }
+
+    /// **Revue B.2** — la sonde qui ÉCHOUE ré-ouvre le circuit avec une
+    /// fenêtre FRAÎCHE (sans le refresh du timestamp, l'ancienne fenêtre
+    /// expirée ferait rebasculer aussitôt en HalfOpen), et exactement UNE
+    /// sonde paie l'appel réseau par fenêtre.
+    #[tokio::test]
+    async fn probe_failure_reopens_with_fresh_window_single_probe() {
+        use efe_nano_app_coordinator::{SlmCircuitBreaker, SlmCircuitState};
+        let backend = Arc::new(CountingBackend {
+            calls: std::sync::atomic::AtomicUsize::new(0),
+            output: None,
+        });
+        let circuit = SlmCircuitBreaker::new(1, std::time::Duration::from_millis(40));
+        let r = SlmReformulator::new(backend.clone()).with_circuit(circuit.clone());
+        let hop = || r.to_canonical("a b", SourceDialect::Unknown, CanonicalSchemaId::ClaimV1, "x");
+        // Hop 1 : échec robot ⟹ Open (fenêtre fraîche).
+        assert_eq!(hop().await.unwrap().engine, ReformulatorEngine::SlmDegradedToRule);
+        assert_eq!(backend.calls.load(std::sync::atomic::Ordering::SeqCst), 1);
+        assert!(circuit.is_open());
+        // Hop 2 immédiat : Open non expiré ⟹ dégradé SANS appel réseau.
+        assert_eq!(hop().await.unwrap().engine, ReformulatorEngine::SlmDegradedToRule);
+        assert_eq!(backend.calls.load(std::sync::atomic::Ordering::SeqCst), 1);
+        // Fenêtre écoulée : LA sonde repart (1 appel), échoue ⟹ RE-Open.
+        tokio::time::sleep(std::time::Duration::from_millis(60)).await;
+        assert_eq!(hop().await.unwrap().engine, ReformulatorEngine::SlmDegradedToRule);
+        assert_eq!(
+            backend.calls.load(std::sync::atomic::Ordering::SeqCst),
+            2,
+            "exactement UNE sonde par fenêtre"
+        );
+        // Fenêtre FRAÎCHE : l'ancien timestamp (60 ms > 40 ms) rebasculerait
+        // aussitôt en HalfOpen — le refresh doit donner Open.
+        assert_eq!(
+            circuit.state(),
+            SlmCircuitState::Open,
+            "réouverture avec fenêtre fraîche, pas l'ancienne expirée"
+        );
+        // Hop suivant immédiat : court-circuité (le compteur ne bouge pas).
+        assert_eq!(hop().await.unwrap().engine, ReformulatorEngine::SlmDegradedToRule);
+        assert_eq!(backend.calls.load(std::sync::atomic::Ordering::SeqCst), 2);
+    }
+
+    /// **Revue B.2** — les bras circuit de `to_argument_value` (jusqu'ici
+    /// seuls ceux de `to_canonical` étaient épinglés) : succès SLM referme,
+    /// échec robot ouvre, circuit ouvert court-circuite l'appel réseau.
+    #[tokio::test]
+    async fn to_argument_value_circuit_arms() {
+        use efe_nano_app_coordinator::{SlmCircuitBreaker, SlmCircuitState};
+        let raw = "<thesis>Rates should stay</thesis>\n- reason one\n- reason two";
+        let circuit = SlmCircuitBreaker::new(1, std::time::Duration::from_secs(60));
+        // Succès SLM : estampillé Slm, circuit refermé/fermé.
+        let ok_backend = Arc::new(CountingBackend {
+            calls: std::sync::atomic::AtomicUsize::new(0),
+            output: Some(valid_argument_json()),
+        });
+        let r_ok = SlmReformulator::new(ok_backend.clone()).with_circuit(circuit.clone());
+        let out = r_ok
+            .to_argument_value(raw, ArgumentStance::Pro, SourceDialect::ClaudeXml)
+            .await
+            .unwrap();
+        assert_eq!(out.engine, ReformulatorEngine::Slm);
+        assert_eq!(circuit.state(), SlmCircuitState::Closed);
+        // Échec robot (seuil 1) : dégradé estampillé + circuit OUVERT.
+        let failing = Arc::new(CountingBackend {
+            calls: std::sync::atomic::AtomicUsize::new(0),
+            output: None,
+        });
+        let r_fail = SlmReformulator::new(failing.clone()).with_circuit(circuit.clone());
+        let out = r_fail
+            .to_argument_value(raw, ArgumentStance::Pro, SourceDialect::ClaudeXml)
+            .await
+            .unwrap();
+        assert_eq!(out.engine, ReformulatorEngine::SlmDegradedToRule);
+        assert!(circuit.is_open(), "échec robot via to_argument_value ⟹ ouvert");
+        // Circuit ouvert : le hop suivant dégrade SANS appel réseau.
+        let out = r_fail
+            .to_argument_value(raw, ArgumentStance::Contra, SourceDialect::ClaudeXml)
+            .await
+            .unwrap();
+        assert_eq!(out.engine, ReformulatorEngine::SlmDegradedToRule);
+        assert_eq!(
+            failing.calls.load(std::sync::atomic::Ordering::SeqCst),
+            1,
+            "circuit ouvert ⟹ pas de 2ᵉ appel réseau"
+        );
+    }
+
+    /// **Revue B.2** — le seam servi de bout en bout : `reformulator_for`
+    /// doit ATTACHER le circuit enregistré sous [`SLM_REFORMULATOR_CIRCUIT_KEY`]
+    /// dans `coord.clients` (jusqu'ici, seuls des adapters construits à la
+    /// main via `.with_circuit()` étaient testés — le lookup + attach du
+    /// sélecteur restait non prouvé).
+    #[tokio::test]
+    async fn reformulator_for_attaches_the_registered_circuit() {
+        use efe_nano_app_coordinator::SlmCircuitBreaker;
+        let client = Arc::new(
+            ReformulatorClient::from_assets_multillm("http://127.0.0.1:1").expect("assets"),
+        );
+        let circuit = SlmCircuitBreaker::new(1, std::time::Duration::from_secs(60));
+        let mut clients = efe_coordinator::CoordinatorClients::default();
+        clients.reformulator = Some(client);
+        clients
+            .slm_circuits
+            .insert(SLM_REFORMULATOR_CIRCUIT_KEY.to_string(), circuit.clone());
+        let coord = efe_coordinator::Coordinator::builder()
+            .registry(efe_coordinator::ProviderRegistry::new())
+            .clients(clients)
+            .build()
+            .expect("coordinator");
+        let r = reformulator_for(&coord);
+        // Endpoint mort ⟹ échec ROBOT sur le hop : si le sélecteur a bien
+        // attaché le clone partagé, c'est le circuit du COORDINATOR qui
+        // s'ouvre (seuil 1) — pas un état local perdu.
+        let out = r
+            .to_canonical(
+                "The Fed held rates.",
+                SourceDialect::Unknown,
+                CanonicalSchemaId::ClaimV1,
+                "claude",
+            )
+            .await
+            .unwrap();
+        assert_eq!(out.engine, ReformulatorEngine::SlmDegradedToRule);
+        assert!(
+            circuit.is_open(),
+            "reformulator_for doit attacher le circuit enregistré (clé partagée)"
+        );
     }
 
     /// **Clamp** : un raw_text de 20 000 chars dépasse la borne de validation

@@ -149,7 +149,6 @@ impl NanoRobotClient for ReformulatorClient {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::clients::NanoRobotClient as _;
 
     #[test]
     fn provenance_profile_reports_v1() {
