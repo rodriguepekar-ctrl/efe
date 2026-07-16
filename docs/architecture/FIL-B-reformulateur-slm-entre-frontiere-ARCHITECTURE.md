@@ -361,9 +361,20 @@ Le reçu re-vérifiable des missions (Couche-2) doit désormais porter, **par ho
   méthodes du trait sont `to_canonical` / `to_argument_value` (distinctes des inhérentes `route` /
   `to_argument`) pour éviter l'ambiguïté de résolution ; non-régression valeur-égale testée sur
   `ClaimV1`/`CodeV1` (déterministes) car `CanonicalPlan` porte un `Uuid` frais par appel.
-- **B.1 — Assets SLM multi-llm.** Grammaire + prompt + schémas + `SchemaId` étendu +
-  `from_assets_multillm`. `supports()` s'ouvre schéma par schéma. Testé **live** (`#[ignore]`, exige un
-  llama-server + poids Qwen3-0.6B).
+- **B.1 — Assets SLM multi-llm. ✅ IMPLÉMENTÉ & VÉRIFIÉ (2026-07-14, commit-pending).** Grammaire-union
+  `reformulator_multillm_v1.gbnf` (l'enveloppe LIE chaque `schema_id` à sa forme `CanonicalX` exacte —
+  mismatch impossible par construction ; non-vacuité `json-string-1` sur claim/thesis/summary/action,
+  alignée sur le contrat minLength 1 des schémas canoniques maison) + prompt + schéma JSON avec 5
+  exemples = contrat inter-crates testé (`unit_slm_assets.rs` les désérialise dans les vrais
+  `CanonicalX`). `SchemaId` +4 variants (additif ; le validateur provenance refuse explicitement le
+  profil multi-llm — `CanonicalError::MultiLlmProfile`). `ReformulatorProfile {ProvenanceV1, MultiLlmV1}`
+  + `from_assets_multillm` (n_predict 1536, **timeout 30 s** aligné sur le budget — revue B.1 #2) ;
+  `schema_version()` délégué à l'inner (revue #4/6/9). Backend réveillé : `supports()` = profil
+  multi-llm ; `reformulate()` = input+clamp(15 500 chars = sémantique `chars` de validator 0.18)+
+  `CallContext`+invoke+écho-de-schéma. Dégradations **observables** (`tracing::warn` par raison) + seam
+  d'audit `from_client_with_audit` (B.3). Testé hors-ligne jusqu'à l'écho et au clamp via un **faux
+  llama-server** (revue #7) ; la qualité de contenu reste **live-only** (`#[ignore]`, llama-server +
+  poids requis). Revue adverse : 10 findings bruts → 9 confirmés (dont 3 doublons) → **7 corrigés**.
 - **B.2 — Wiring servi opt-in.** `coordinator_from_env` construit le SLM depuis l'env, derrière feature +
   URL. Défaut = déterministe, inchangé.
 - **B.3 — Provenance estampillée.** `engine` par hop dans le reçu ; revendication « SLM-médié » gardée.

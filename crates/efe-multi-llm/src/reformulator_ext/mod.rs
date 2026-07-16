@@ -14,7 +14,7 @@ mod slm;
 
 pub use canonical::CanonicalReformulator;
 pub use engine::{Reformulated, ReformulatorEngine};
-pub use slm::reformulator_for;
+pub use slm::{reformulator_for, SlmReformulator};
 
 use crate::canonical::{ArgumentStance, CanonicalSchemaId};
 use crate::error::MultiLlmResult;

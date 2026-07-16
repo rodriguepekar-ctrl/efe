@@ -82,7 +82,7 @@ pub use canonical::{
 };
 pub use clients::{
     AnalyzerClient, CompressorClient, FilterClient, NanoRobotClient, ReformulatorClient,
-    RouterClient, VerifierClient,
+    ReformulatorProfile, RouterClient, VerifierClient,
     // R3.S2 (fix L2) : re-export crate-root pour cohérence avec les autres
     // clients (AnalyzerClient etc. sont accessibles directement à
     // `efe_nano_app_coordinator::SlmCircuitBreaker` au lieu du chemin

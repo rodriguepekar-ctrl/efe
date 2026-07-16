@@ -84,6 +84,7 @@ pub use error::{MultiLlmError, MultiLlmResult};
 pub use events_ext::Phase3EventExt;
 pub use reformulator_ext::{
     reformulator_for, CanonicalReformulator, Reformulated, Reformulator, ReformulatorEngine,
+    SlmReformulator,
 };
 pub use request::{
     CascadeRequest, CascadeResponse, DebateRequest, DebateResponse, RelayRequest,

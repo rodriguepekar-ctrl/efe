@@ -1,0 +1,65 @@
+# ReformulatorOutput v1.1.0 — profil MULTI-LLM (Fil B.1) — GBNF llama.cpp b9297+
+# Schéma source : assets/schemas/reformulator_multillm_v1.json
+#
+# Différence clef vs reformulator_v1.gbnf : ici "canonical" n'est PAS un JSON
+# libre — l'enveloppe LIE chaque schema_id à la forme canonique exacte
+# d'efe-multi-llm::canonical (serde exact), en 5 alternatives. Un mismatch
+# schema_id/forme est donc impossible PAR CONSTRUCTION. La validation typée
+# finale (serde_json::from_value::<CanonicalX>) reste faite côté Rust
+# (défense en profondeur).
+#
+# Formes émises (champs requis serde + champs à forte valeur ; les champs
+# serde-default omis ici sont remplis par défaut à la désérialisation) :
+#   plan_v1      : {plan_id, title, steps[{id, action, deps[]}], rationale}
+#   code_v1      : {language, source}
+#   claim_v1     : {claim, evidence[{source, excerpt}], confidence, domain}
+#   argument_v1  : {thesis, reasoning[], sources[], stance}
+#   synthesis_v1 : {summary, citations[{llm_source, snippet}], uncertainty}
+
+root ::= plan-env | code-env | claim-env | argument-env | synthesis-env
+
+plan-env      ::= "{" ws "\"canonical\":" ws plan ws "," ws "\"schema_id\":" ws "\"plan_v1\"" ws "," ws "\"extraction_warnings\":" ws warnings-arr ws "}"
+code-env      ::= "{" ws "\"canonical\":" ws code ws "," ws "\"schema_id\":" ws "\"code_v1\"" ws "," ws "\"extraction_warnings\":" ws warnings-arr ws "}"
+claim-env     ::= "{" ws "\"canonical\":" ws claim ws "," ws "\"schema_id\":" ws "\"claim_v1\"" ws "," ws "\"extraction_warnings\":" ws warnings-arr ws "}"
+argument-env  ::= "{" ws "\"canonical\":" ws argument ws "," ws "\"schema_id\":" ws "\"argument_v1\"" ws "," ws "\"extraction_warnings\":" ws warnings-arr ws "}"
+synthesis-env ::= "{" ws "\"canonical\":" ws synthesis ws "," ws "\"schema_id\":" ws "\"synthesis_v1\"" ws "," ws "\"extraction_warnings\":" ws warnings-arr ws "}"
+
+# ── plan_v1 (efe-multi-llm CanonicalPlan) ─────────────────────────────────
+plan ::= "{" ws "\"plan_id\":" ws uuid ws "," ws "\"title\":" ws json-string ws "," ws "\"steps\":" ws steps-arr ws "," ws "\"rationale\":" ws json-string ws "}"
+steps-arr ::= "[" ws step (ws "," ws step){0,11} ws "]"
+step ::= "{" ws "\"id\":" ws int ws "," ws "\"action\":" ws json-string-1 ws "," ws "\"deps\":" ws int-arr ws "}"
+int-arr ::= "[" ws "]" | "[" ws int (ws "," ws int){0,11} ws "]"
+
+# ── code_v1 (efe-multi-llm CanonicalCode ; tests/deps serde-default) ──────
+code ::= "{" ws "\"language\":" ws language ws "," ws "\"source\":" ws json-string ws "}"
+language ::= "\"rust\"" | "\"python\"" | "\"typescript\"" | "\"go\"" | "\"java\"" | "\"cpp\"" | "\"sql\"" | "\"bash\""
+
+# ── claim_v1 (efe-multi-llm CanonicalClaim — PAS le claim_text de v1) ─────
+claim ::= "{" ws "\"claim\":" ws json-string-1 ws "," ws "\"evidence\":" ws evidence-arr ws "," ws "\"confidence\":" ws zero-one ws "," ws "\"domain\":" ws json-string ws "}"
+evidence-arr ::= "[" ws "]" | "[" ws evidence (ws "," ws evidence){0,5} ws "]"
+evidence ::= "{" ws "\"source\":" ws json-string ws "," ws "\"excerpt\":" ws json-string ws "}"
+
+# ── argument_v1 (efe-multi-llm CanonicalArgument ; stance SCREAMING) ──────
+argument ::= "{" ws "\"thesis\":" ws json-string-1 ws "," ws "\"reasoning\":" ws string-arr-1 ws "," ws "\"sources\":" ws string-arr ws "," ws "\"stance\":" ws stance ws "}"
+stance ::= "\"PRO\"" | "\"CONTRA\"" | "\"NEUTRAL\"" | "\"REBUTTAL\""
+string-arr-1 ::= "[" ws json-string-1 (ws "," ws json-string-1){0,7} ws "]"
+string-arr ::= "[" ws "]" | "[" ws json-string (ws "," ws json-string){0,5} ws "]"
+
+# ── synthesis_v1 (efe-multi-llm CanonicalSynthesis ; sections default) ────
+synthesis ::= "{" ws "\"summary\":" ws json-string-1 ws "," ws "\"citations\":" ws citations-arr ws "," ws "\"uncertainty\":" ws json-string ws "}"
+citations-arr ::= "[" ws "]" | "[" ws citation (ws "," ws citation){0,5} ws "]"
+citation ::= "{" ws "\"llm_source\":" ws json-string ws "," ws "\"snippet\":" ws json-string ws "}"
+
+# ── briques communes ──────────────────────────────────────────────────────
+warnings-arr ::= "[" ws "]" | "[" ws short-string (ws "," ws short-string){0,9} ws "]"
+uuid ::= "\"" hex{8} "-" hex{4} "-" hex{4} "-" hex{4} "-" hex{12} "\""
+hex ::= [0-9a-fA-F]
+int ::= "0" | [1-9] [0-9]{0,3}
+zero-one ::= "0" ("." [0-9]{1,3})? | "1" ("." "0"{1,3})?
+json-string ::= "\"" char* "\""
+# Non vide — pour les champs dont le contrat déclare minLength 1
+# (claim, thesis, summary, action, éléments de reasoning).
+json-string-1 ::= "\"" char+ "\""
+short-string ::= "\"" char{0,200} "\""
+char ::= [^"\\\x00-\x1F] | "\\" ([\"\\/bfnrt] | "u" [0-9a-fA-F]{4})
+ws ::= [ \t\n]*

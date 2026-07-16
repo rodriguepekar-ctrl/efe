@@ -136,6 +136,24 @@ impl LlamaServerClient {
         })
     }
 
+    /// **Fil B.1 (additif)** — fixe le timeout end-to-end de `complete` ET
+    /// reconstruit le client HTTP avec une marge (+5 s) pour que la borne
+    /// reqwest ne coupe pas avant la borne tokio. Nécessaire dès que
+    /// `max_tokens` dépasse ce qu'un petit modèle génère en ~5 s (le défaut
+    /// historique) : la borne doit suivre le budget de génération.
+    pub fn with_timeouts(mut self, total: Duration) -> RobotResult<Self> {
+        self.http = HttpClient::builder()
+            .timeout(total + Duration::from_secs(5))
+            .pool_max_idle_per_host(8)
+            .build()
+            .map_err(|e| RobotError::Config {
+                robot: self.id,
+                reason: format!("cannot rebuild HTTP client: {e}"),
+            })?;
+        self.timeout = total;
+        Ok(self)
+    }
+
     /// Cœur du contrat : envoie un prompt à `llama-server` et parse la
     /// réponse en type fort `O` (qui doit correspondre à la grammar GBNF).
     ///

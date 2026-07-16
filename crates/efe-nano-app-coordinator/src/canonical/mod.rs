@@ -174,6 +174,16 @@ pub enum CanonicalError {
         /// Détail de la violation.
         detail: String,
     },
+
+    /// **Fil B.1** — le schéma appartient au profil MULTI-LLM : sa forme
+    /// canonique est le type `CanonicalX` d'`efe-multi-llm`, validé côté
+    /// appelant (`efe-multi-llm::reformulator_ext::slm`) — ce validateur de
+    /// provenance ne le connaît pas (dépendance inverse impossible).
+    #[error("schema {schema_id:?} belongs to the multi-llm profile; validate caller-side (efe-multi-llm)")]
+    MultiLlmProfile {
+        /// Le schema_id multi-llm reçu.
+        schema_id: SchemaId,
+    },
 }
 
 /// Valide le champ `canonical` d'une `ReformulatorOutput` selon son
@@ -257,6 +267,12 @@ pub fn validate_canonical(out: &ReformulatorOutput) -> Result<CanonicalValue, Ca
                 }
             })?;
             CanonicalValue::SourceRef(s)
+        }
+        // Fil B.1 — profil MULTI-LLM : les formes (CanonicalX d'efe-multi-llm)
+        // sont validées côté appelant ; ce validateur de provenance refuse
+        // explicitement plutôt que de valider à tort avec les mauvais types.
+        SchemaId::PlanV1 | SchemaId::CodeV1 | SchemaId::ArgumentV1 | SchemaId::SynthesisV1 => {
+            return Err(CanonicalError::MultiLlmProfile { schema_id: out.schema_id });
         }
     };
     Ok(parsed)

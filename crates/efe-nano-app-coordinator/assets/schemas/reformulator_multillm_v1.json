@@ -1,0 +1,168 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://efe-projet.com/schemas/reformulator_multillm_v1.json",
+  "title": "ReformulatorOutput (multi-llm profile, Fil B.1)",
+  "description": "Strict output of the L1 Reformulator (Qwen3-0.6B Q5) under the MULTI-LLM asset profile. The grammar binds schema_id to the exact efe-multi-llm canonical shape; final typed validation is done caller-side (serde_json::from_value::<CanonicalX>). The examples below are the cross-crate contract: each `canonical` MUST deserialize into the matching efe-multi-llm type (enforced by efe-multi-llm/tests/unit_slm_assets.rs).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["canonical", "schema_id", "extraction_warnings"],
+  "properties": {
+    "canonical": {
+      "description": "Exact efe-multi-llm canonical shape, bound to schema_id by the grammar.",
+      "oneOf": [
+        {
+          "title": "plan_v1 (CanonicalPlan)",
+          "type": "object",
+          "required": ["plan_id", "title", "steps", "rationale"],
+          "properties": {
+            "plan_id": {"type": "string", "format": "uuid"},
+            "title": {"type": "string"},
+            "steps": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 12,
+              "items": {
+                "type": "object",
+                "required": ["id", "action", "deps"],
+                "properties": {
+                  "id": {"type": "integer", "minimum": 0},
+                  "action": {"type": "string"},
+                  "deps": {"type": "array", "items": {"type": "integer", "minimum": 0}}
+                }
+              }
+            },
+            "rationale": {"type": "string"}
+          }
+        },
+        {
+          "title": "code_v1 (CanonicalCode)",
+          "type": "object",
+          "required": ["language", "source"],
+          "properties": {
+            "language": {"enum": ["rust", "python", "typescript", "go", "java", "cpp", "sql", "bash"]},
+            "source": {"type": "string"}
+          }
+        },
+        {
+          "title": "claim_v1 (CanonicalClaim — multi-llm shape, NOT the provenance-v1 claim_text shape)",
+          "type": "object",
+          "required": ["claim", "evidence", "confidence", "domain"],
+          "properties": {
+            "claim": {"type": "string", "minLength": 1},
+            "evidence": {
+              "type": "array",
+              "maxItems": 6,
+              "items": {
+                "type": "object",
+                "required": ["source", "excerpt"],
+                "properties": {
+                  "source": {"type": "string"},
+                  "excerpt": {"type": "string"}
+                }
+              }
+            },
+            "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+            "domain": {"type": "string"}
+          }
+        },
+        {
+          "title": "argument_v1 (CanonicalArgument)",
+          "type": "object",
+          "required": ["thesis", "reasoning", "sources", "stance"],
+          "properties": {
+            "thesis": {"type": "string", "minLength": 1},
+            "reasoning": {"type": "array", "minItems": 1, "maxItems": 8, "items": {"type": "string"}},
+            "sources": {"type": "array", "maxItems": 6, "items": {"type": "string"}},
+            "stance": {"enum": ["PRO", "CONTRA", "NEUTRAL", "REBUTTAL"]}
+          }
+        },
+        {
+          "title": "synthesis_v1 (CanonicalSynthesis)",
+          "type": "object",
+          "required": ["summary", "citations", "uncertainty"],
+          "properties": {
+            "summary": {"type": "string", "minLength": 1},
+            "citations": {
+              "type": "array",
+              "maxItems": 6,
+              "items": {
+                "type": "object",
+                "required": ["llm_source", "snippet"],
+                "properties": {
+                  "llm_source": {"type": "string"},
+                  "snippet": {"type": "string"}
+                }
+              }
+            },
+            "uncertainty": {"type": "string"}
+          }
+        }
+      ]
+    },
+    "schema_id": {
+      "enum": ["plan_v1", "code_v1", "claim_v1", "argument_v1", "synthesis_v1"]
+    },
+    "extraction_warnings": {
+      "type": "array",
+      "maxItems": 10,
+      "items": {"type": "string", "maxLength": 200}
+    }
+  },
+  "examples": [
+    {
+      "canonical": {
+        "plan_id": "01920b5e-1111-7000-8000-000000000001",
+        "title": "Invoice processing",
+        "steps": [
+          {"id": 1, "action": "Parse the invoice PDF", "deps": []},
+          {"id": 2, "action": "Extract line items", "deps": [1]}
+        ],
+        "rationale": "Sequential extraction pipeline."
+      },
+      "schema_id": "plan_v1",
+      "extraction_warnings": []
+    },
+    {
+      "canonical": {
+        "language": "rust",
+        "source": "fn main() { println!(\"hello\"); }"
+      },
+      "schema_id": "code_v1",
+      "extraction_warnings": []
+    },
+    {
+      "canonical": {
+        "claim": "The Fed held rates steady.",
+        "evidence": [
+          {"source": "FOMC statement, June", "excerpt": "The Fed held rates steady."}
+        ],
+        "confidence": 0.8,
+        "domain": "finance"
+      },
+      "schema_id": "claim_v1",
+      "extraction_warnings": []
+    },
+    {
+      "canonical": {
+        "thesis": "Rates should stay unchanged this quarter.",
+        "reasoning": ["Inflation remains sticky.", "Growth is within target."],
+        "sources": ["FOMC minutes"],
+        "stance": "PRO"
+      },
+      "schema_id": "argument_v1",
+      "extraction_warnings": []
+    },
+    {
+      "canonical": {
+        "summary": "Both models agree the plan is feasible; they diverge on timeline.",
+        "citations": [
+          {"llm_source": "claude", "snippet": "feasible within two sprints"},
+          {"llm_source": "gemini", "snippet": "needs three sprints"}
+        ],
+        "uncertainty": "Timeline estimate differs between sources."
+      },
+      "schema_id": "synthesis_v1",
+      "extraction_warnings": ["timeline divergence noted"]
+    }
+  ]
+}
