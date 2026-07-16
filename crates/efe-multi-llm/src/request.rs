@@ -8,6 +8,8 @@ use serde::{Deserialize, Serialize};
 
 use efe_nano_app_coordinator::types::router::TaskClass;
 
+use crate::reformulator_ext::ReformulationHop;
+
 /// Mode de vote pour Mission Vote 3-LLM.
 #[allow(missing_docs)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -78,6 +80,11 @@ pub struct Vote3LlmResponse {
     /// LLMs cancellés pour early termination (I9).
     #[serde(default)]
     pub cancelled_llms: Vec<String>,
+    /// **Fil B.3** — un hop estampillé par claim entrée au vote (moteur
+    /// effectif + faits d'audit SLM). Scellé dans le reçu re-vérifiable par
+    /// la gateway. Additif (`default` : rétro-compat des sorties stockées).
+    #[serde(default)]
+    pub reformulation_hops: Vec<ReformulationHop>,
 }
 
 // ─── Mission Relay (séquentiel typé) ──────────────────────────────
@@ -120,6 +127,10 @@ pub struct RelayResponse {
     pub latency_ms: u64,
     /// Hash audit.
     pub audit_chain_hash: String,
+    /// **Fil B.3** — les 3 hops estampillés (`plan`/`code`/`synthesis`) :
+    /// moteur effectif + faits d'audit SLM par hop. Scellés dans le reçu.
+    #[serde(default)]
+    pub reformulation_hops: Vec<ReformulationHop>,
 }
 
 // ─── Mission Debate (3 rounds + jury) ─────────────────────────────
@@ -165,6 +176,10 @@ pub struct DebateResponse {
     pub latency_ms: u64,
     /// Hash audit.
     pub audit_chain_hash: String,
+    /// **Fil B.3** — 2 hops estampillés par round (`argument:rN:PRO|CONTRA`).
+    /// Le verdict du jury n'est PAS reformulé (honnête : pas de hop jury).
+    #[serde(default)]
+    pub reformulation_hops: Vec<ReformulationHop>,
 }
 
 /// Résumé public d'un argument (pour la réponse Debate).

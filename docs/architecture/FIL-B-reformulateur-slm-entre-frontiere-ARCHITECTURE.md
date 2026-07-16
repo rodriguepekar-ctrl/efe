@@ -403,9 +403,48 @@ Le reçu re-vérifiable des missions (Couche-2) doit désormais porter, **par ho
   `reformulator_for`-attache-le-circuit prouvé de bout en bout (coordinator réel, clé partagée) ;
   en-tête corrigé (deadlines/budget = B.4 seul). Nuance honnête documentée : une sonde consommée par une
   erreur `ClientSide` ne rend pas de verdict — le slot est retenu jusqu'à la borne de reprise, jamais plus.
-- **B.3 — Provenance chaînée + estampillée.** `engine` par hop est déjà dans les évènements (B.0) ;
-  reste : chaîner l'audit SLM au reçu re-vérifiable (le seam `from_client_with_audit` existe) ;
-  revendication « SLM-médié » gardée.
+- **B.3 — Provenance chaînée + estampillée. ✅ IMPLÉMENTÉ & VÉRIFIÉ (2026-07-17, commit-pending).**
+  Constat de vérité-terrain (6 lecteurs) : le stamp `engine` de B.0 n'allait NULLE PART de servi (bus
+  in-process sans abonné, payload tronqué à 120 chars) et l'`audit_chain_hash` des réponses est le
+  swarm_id formaté — pas un hash de chaîne. B.3 rend la promesse §6 réelle, en trois étages :
+  (1) **capture par-hop** — `TeeAuditWriter`/`HopCapture` (slm.rs) : chaque invocation SLM tee son
+  `AuditEntry` (celle que `LlamaServerClient` écrit) dans un slot par-hop ; l'adapter l'attache à
+  `Reformulated.slm_audit` sur le succès (`Slm`) COMME sur la dégradation-avec-tentative
+  (`SlmDegradedToRule` après invoke parti — y compris écho refusé : statut `SUCCESS` côté robot,
+  `engine` dégradé côté mission, les deux dits) ; aucun audit si aucun appel (circuit ouvert,
+  schéma non supporté, entrée vide) — on ne committe pas une tentative qui n'a pas eu lieu. Le
+  writer partagé du backend reste alimenté à l'identique (seam `from_client_with_audit` durable,
+  croisable par `entry_id`). (2) **les missions portent les hops** — vote/relay/debate accumulent
+  des `ReformulationHop {hop, from_llm, target_schema, engine, slm_audit?}` typés dans un champ
+  additif `reformulation_hops` (serde default) de leurs réponses ; étiquettes stables (`plan`,
+  `claim:<llm>`, `argument:rN:PRO|CONTRA`) ; le verdict jury n'est pas reformulé (pas de hop —
+  honnête) ; vote n'enregistre que les claims ENTRÉES au vote. (3) **le sceau gateway** —
+  `build_and_seal_mission` gagne `reformulation_hops: &[Value]` (le builder non-gated ne dépend
+  pas d'efe-multi-llm) : un nœud **Mode-A `reform_i`** par hop, `output_hash = blake3(JSON du
+  hop)` — chaque hop committé INDIVIDUELLEMENT dans la chaîne HMAC, en plus du commitment global
+  du blob par `reduce` (fan-in dispatch→hops→reduce ; `check_dag` : parents existants, vérifié).
+  Falsifier un hop scellé (maquiller `SLM_DEGRADED_TO_RULE` en `SLM`) casse la re-preuve,
+  localisée — épinglé par test. Surface servie : `LlmMissionResponse.reformulation`
+  `{hops, slm, rule, degraded, slm_mediated}` avec **`slm_mediated` vrai SSI tous les hops sont
+  `SLM`** (le garde-fou §6, par construction) ; `GET /v1/llm/audit/:id` gagne
+  `reform_hops_recorded` (nœuds scellés) vs `reform_hops_expected` re-dérivable de la requête
+  scellée (relay=3, debate=2·rounds, specialist/cascade=0, vote=None — suit les répondants) +
+  `reform_under_declared`. DoD §12 tenu : test `reformulator_slm_stamped_when_url_set` (vote via
+  `reformulator_for` contre un faux llama-server : 3 hops `SLM` + faits d'audit). Modèle de
+  confiance inchangé et dit : hops depuis l'output PRODUCTEUR (builder de confiance +
+  tamper-evidence clé-détenteur), l'axe déclaratif vit dans le checker out-of-band — via un
+  **marqueur `reform_expected` scellé dans le résumé de requête** par le handler (marqueur
+  absent = vote OU run antérieur à B.3 ⟹ `None`, aucune accusation rétroactive sur un run
+  honnête). **Revue adverse B.3 : 11 findings bruts → 4 confirmés (2 doublons) → 3 corrigés.**
+  (1) `llama_server.rs` avait UN chemin terminal sans entrée d'audit (200 + corps indécodable) —
+  une invocation réelle devenait invisible du reçu ; reproduit en runtime par le vérificateur ;
+  corrigé (record_failure) + épinglé par test faux-serveur-corps-poubelle. (2) Le checker aurait
+  accusé à tort tous les runs relay/debate scellés AVANT B.3 (`reform_under_declared=true` sur
+  un run honnête) ⟹ le marqueur scellé ci-dessus + test des deux axes. (3) **Résidu documenté** :
+  une DOUBLE défaillance (SLM ET repli — en pratique une réponse LLM vide) perd la tentative SLM
+  du reçu (l'erreur remonte sans hop ; dans vote, le LLM est sauté) — la tentative reste
+  observable (`tracing::warn` avec entry_id) et RETENUE par le writer partagé du backend
+  (croisable via `from_client_with_audit`) ; l'appel LLM Mode-C, lui, reste scellé.
 - **B.4 — Deadlines/budget de mission (repérimétré).** Le circuit (initialement ici) est livré en B.2 ;
   reste : décompter la latence du hop SLM (≤ 30 s) de `req.max_total_latency`/budget, et passer une
   deadline dans `reformulate()`.

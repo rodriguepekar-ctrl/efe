@@ -240,12 +240,23 @@ impl LlamaServerClient {
             return Err(err);
         }
 
-        // Parse la réponse llama-server.
-        let raw: LlamaCompletionResponse =
-            resp.json().await.map_err(|e| RobotError::Transport {
-                robot: self.id,
-                source: Box::new(e),
-            })?;
+        // Parse la réponse llama-server. Sur échec (200 mais corps tronqué/
+        // malformé — serveur crashé en pleine écriture, proxy), on enregistre
+        // une entry "Failed" AVANT de remonter : c'était le SEUL chemin
+        // terminal sans entrée d'audit — une invocation réelle doit toujours
+        // en produire exactement une (contrat NanoRobotClient, et depuis
+        // Fil B.3 un invariant du reçu scellé).
+        let raw: LlamaCompletionResponse = match resp.json().await {
+            Ok(r) => r,
+            Err(e) => {
+                let err = RobotError::Transport {
+                    robot: self.id,
+                    source: Box::new(e),
+                };
+                self.record_failure(ctx, &input_hash, started, &err).await;
+                return Err(err);
+            }
+        };
 
         debug!(
             robot = self.id,

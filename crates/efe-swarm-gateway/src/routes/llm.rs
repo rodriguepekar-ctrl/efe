@@ -130,6 +130,43 @@ struct HeldStrengthView {
     any_remote: bool,
 }
 
+/// **Fil B.3** — vue agrégée des hops de reformulation d'un run (dérivée de la
+/// sortie SCELLÉE, jamais recalculée ailleurs). `slm_mediated` n'est vrai que
+/// si TOUS les hops sont `SLM` — la revendication « relais médié par le petit
+/// modèle » (§6 Fil B), gardée par construction : une seule dégradation la fait
+/// tomber, visiblement.
+#[derive(Serialize)]
+struct ReformulationView {
+    hops: usize,
+    slm: usize,
+    rule: usize,
+    degraded: usize,
+    slm_mediated: bool,
+}
+
+/// Dérive la vue depuis la sortie de mission (champ `reformulation_hops` des
+/// missions vote/relay/debate). `None` si la mission n'en porte pas
+/// (specialist/cascade, ou run antérieur à B.3).
+fn reformulation_view(output: &Value) -> Option<ReformulationView> {
+    let hops = output.get("reformulation_hops")?.as_array()?;
+    let (mut slm, mut rule, mut degraded) = (0usize, 0usize, 0usize);
+    for h in hops {
+        match h.get("engine").and_then(Value::as_str) {
+            Some("SLM") => slm += 1,
+            Some("RULE") => rule += 1,
+            Some("SLM_DEGRADED_TO_RULE") => degraded += 1,
+            _ => {}
+        }
+    }
+    Some(ReformulationView {
+        hops: hops.len(),
+        slm,
+        rule,
+        degraded,
+        slm_mediated: !hops.is_empty() && slm == hops.len(),
+    })
+}
+
 /// Réponse 200 d'une mission servie — `held_strength` vit ICI (PAS dans `N17VerifyView`, qui
 /// est partagé avec `verify.rs`/`replay.rs` et ne peut pas gagner de champ).
 #[derive(Serialize)]
@@ -139,6 +176,10 @@ struct LlmMissionResponse {
     provenance_root: Option<String>,
     n17_root: Option<String>,
     held: HeldStrengthView,
+    /// **Fil B.3** — hops de reformulation estampillés (absent si la mission
+    /// n'en produit pas). Le détail par hop vit dans `output.reformulation_hops`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    reformulation: Option<ReformulationView>,
 }
 
 /// Recharge le run scellé et le re-prouve (offline) pour surfacer roots + `held_strength`.
@@ -150,6 +191,7 @@ async fn mission_response(s: &SwarmGatewayState, run_id: Uuid, tenant: &str, out
         .ok_or_else(|| GatewayError::Internal("run scellé introuvable après persistance".into()))?;
     let key = s.derive_key(tenant)?;
     let v = verify_run_offline(&stored.records, &stored.llm_records, &stored.n17_leaf_bytes(), stored.n17_root_bytes(), &key);
+    let reformulation = reformulation_view(&output);
     let body = LlmMissionResponse {
         run_id,
         output,
@@ -160,6 +202,7 @@ async fn mission_response(s: &SwarmGatewayState, run_id: Uuid, tenant: &str, out
             weakest_label: v.held_strength.weakest_label,
             any_remote: v.held_strength.any_remote,
         },
+        reformulation,
     };
     Ok((StatusCode::OK, Json(body)).into_response())
 }
@@ -216,9 +259,11 @@ pub async fn vote(
     let llms = req.llms.clone();
     let request = json!({ "kind": "llm/vote", "k": llms.len(), "user_text_hash": hash_text(&req.user_text) });
     let resp = scoped(scope, run_vote_3llm(coord, req)).await.map_err(map_mission_err)?;
+    // B.3 : les hops estampillés, extraits de la réponse TYPÉE → scellés en nœuds Mode-A.
+    let hops: Vec<Value> = resp.reformulation_hops.iter().filter_map(|h| serde_json::to_value(h).ok()).collect();
     let output = serde_json::to_value(&resp).unwrap_or(Value::Null);
     let topo = topology_vote(&llms);
-    let run_id = seal_and_store_mission_with_request(&s, &caller.tenant, mission_id, &topo, &sink, output.clone(), request).await?;
+    let run_id = seal_and_store_mission_with_request(&s, &caller.tenant, mission_id, &topo, &sink, output.clone(), request, hops).await?;
     mission_response(&s, run_id, &caller.tenant, output).await
 }
 
@@ -242,11 +287,13 @@ pub async fn relay(
     let mission_id = Uuid::new_v4();
     let sink = MissionProvenanceSink::new();
     let scope = MissionScope { tenant_id: tid, mission_id, sink: sink.clone() };
-    let request = json!({ "kind": "llm/relay", "user_text_hash": hash_text(&req.user_text) });
+    let request = json!({ "kind": "llm/relay", "user_text_hash": hash_text(&req.user_text), "reform_expected": 3 });
     let resp = scoped(scope, run_relay(coord, req)).await.map_err(map_mission_err)?;
+    // B.3 : les hops estampillés (plan/code/synthesis) → scellés en nœuds Mode-A.
+    let hops: Vec<Value> = resp.reformulation_hops.iter().filter_map(|h| serde_json::to_value(h).ok()).collect();
     let output = serde_json::to_value(&resp).unwrap_or(Value::Null);
     let topo = topology_relay(&planner, &implementer, &synthesizer);
-    let run_id = seal_and_store_mission_with_request(&s, &caller.tenant, mission_id, &topo, &sink, output.clone(), request).await?;
+    let run_id = seal_and_store_mission_with_request(&s, &caller.tenant, mission_id, &topo, &sink, output.clone(), request, hops).await?;
     mission_response(&s, run_id, &caller.tenant, output).await
 }
 
@@ -274,11 +321,13 @@ pub async fn debate(
     let mission_id = Uuid::new_v4();
     let sink = MissionProvenanceSink::new();
     let scope = MissionScope { tenant_id: tid, mission_id, sink: sink.clone() };
-    let request = json!({ "kind": "llm/debate", "rounds": rounds, "user_text_hash": hash_text(&req.user_text) });
+    let request = json!({ "kind": "llm/debate", "rounds": rounds, "user_text_hash": hash_text(&req.user_text), "reform_expected": 2 * usize::from(rounds) });
     let resp = scoped(scope, run_debate(coord, req)).await.map_err(map_mission_err)?;
+    // B.3 : les hops estampillés (2 par round, jury non reformulé) → scellés en nœuds Mode-A.
+    let hops: Vec<Value> = resp.reformulation_hops.iter().filter_map(|h| serde_json::to_value(h).ok()).collect();
     let output = serde_json::to_value(&resp).unwrap_or(Value::Null);
     let topo = topology_debate(&pro, &contra, &jury, rounds); // arité DEPUIS req.rounds
-    let run_id = seal_and_store_mission_with_request(&s, &caller.tenant, mission_id, &topo, &sink, output.clone(), request).await?;
+    let run_id = seal_and_store_mission_with_request(&s, &caller.tenant, mission_id, &topo, &sink, output.clone(), request, hops).await?;
     mission_response(&s, run_id, &caller.tenant, output).await
 }
 
@@ -307,11 +356,12 @@ pub async fn specialist(
     let mission_id = Uuid::new_v4();
     let sink = MissionProvenanceSink::new();
     let scope = MissionScope { tenant_id: tid, mission_id, sink: sink.clone() };
-    let request = json!({ "kind": "llm/specialist", "n": n, "user_text_hash": hash_text(&req.user_text) });
+    let request = json!({ "kind": "llm/specialist", "n": n, "user_text_hash": hash_text(&req.user_text), "reform_expected": 0 });
     let resp = scoped(scope, run_specialist(coord, req)).await.map_err(map_mission_err)?;
     let output = serde_json::to_value(&resp).unwrap_or(Value::Null);
     let topo = topology_specialist(n);
-    let run_id = seal_and_store_mission_with_request(&s, &caller.tenant, mission_id, &topo, &sink, output.clone(), request).await?;
+    // Specialist ne reformule pas (agrégation par règle) — zéro hop, honnête.
+    let run_id = seal_and_store_mission_with_request(&s, &caller.tenant, mission_id, &topo, &sink, output.clone(), request, Vec::new()).await?;
     mission_response(&s, run_id, &caller.tenant, output).await
 }
 
@@ -341,9 +391,10 @@ pub async fn cascade(
     // mais non re-dérivable du reçu sans Tier B). Un validator appelé mais mal-déclaré → UndeclaredCall.
     let decision = resp.verifier_decision.clone();
     let output = serde_json::to_value(&resp).unwrap_or(Value::Null);
-    let request = json!({ "kind": "llm/cascade", "verifier_decision": decision, "user_text_hash": user_text_hash });
+    let request = json!({ "kind": "llm/cascade", "verifier_decision": decision, "user_text_hash": user_text_hash, "reform_expected": 0 });
     let topo = topology_cascade(&drafter, &verifier, &validator, &decision);
-    let run_id = seal_and_store_mission_with_request(&s, &caller.tenant, mission_id, &topo, &sink, output.clone(), request).await?;
+    // Cascade ne reformule pas (draft→verify→validate en texte) — zéro hop, honnête.
+    let run_id = seal_and_store_mission_with_request(&s, &caller.tenant, mission_id, &topo, &sink, output.clone(), request, Vec::new()).await?;
     mission_response(&s, run_id, &caller.tenant, output).await
 }
 
@@ -360,6 +411,17 @@ struct LlmAuditView {
     /// `true` si le graphe scellé a MOINS de nœuds Mode-C que la requête scellée n'en implique
     /// (un handler/builder qui aurait sous-déclaré la topologie relativement à la requête).
     under_declared: bool,
+    /// **Fil B.3** — nœuds de hop de reformulation (`reform_*`) scellés dans le graphe.
+    reform_hops_recorded: usize,
+    /// Arité de reformulation ATTENDUE — lue depuis le marqueur `reform_expected` que le
+    /// handler scelle dans le résumé de requête (relay = 3, debate = 2·rounds — jury non
+    /// reformulé —, specialist/cascade = 0). `None` si le marqueur est absent : vote (le nombre
+    /// de hops suit les LLM effectivement répondants ≤ k, non re-dérivable de la requête seule)
+    /// et les runs scellés AVANT B.3 (aucune accusation rétroactive sur un run honnête).
+    reform_hops_expected: Option<usize>,
+    /// `true` si des hops attendus manquent au graphe scellé (producteur/builder qui aurait
+    /// omis des hops — l'axe déclaratif du modèle de confiance B.3).
+    reform_under_declared: bool,
 }
 
 pub async fn audit(
@@ -371,11 +433,12 @@ pub async fn audit(
     let stored = s.store.get(id, &caller.tenant).await?.ok_or(GatewayError::NotFound)?;
     let req = &stored.request;
     let kind = req.get("kind").and_then(|v| v.as_str()).unwrap_or("").to_string();
+    let rounds = req.get("rounds").and_then(Value::as_u64).unwrap_or(0) as usize;
     // Arité DÉCLARÉE re-dérivée depuis la REQUÊTE scellée (jamais l'output producteur).
     let declared_arity = match kind.as_str() {
         "llm/vote" => req.get("k").and_then(Value::as_u64).unwrap_or(0) as usize,
         "llm/relay" => 3,
-        "llm/debate" => 2 * req.get("rounds").and_then(Value::as_u64).unwrap_or(0) as usize + 1,
+        "llm/debate" => 2 * rounds + 1,
         // N (specialist) et la décision (cascade) sont COMMITTÉS (tamper-evident) mais non
         // re-dérivables sans le clair (privacy) / sans Tier B — on lit la valeur scellée.
         "llm/specialist" => req.get("n").and_then(Value::as_u64).unwrap_or(0) as usize,
@@ -383,7 +446,24 @@ pub async fn audit(
         _ => 0,
     };
     let mode_c_records = stored.records.iter().filter(|r| matches!(r.agent_kind, AgentKind::ModeC)).count();
-    Ok(Json(LlmAuditView { kind, declared_arity, mode_c_records, under_declared: declared_arity > mode_c_records }).into_response())
+    // B.3 : les hops de reformulation scellés vs le marqueur déclaratif `reform_expected`
+    // (scellé par le handler DANS le résumé de requête — jamais l'output producteur).
+    // Marqueur absent (vote, ou run antérieur à B.3) ⟹ None ⟹ pas d'accusation : un run
+    // honnête scellé avant B.3 n'a AUCUN nœud reform_* et ne doit pas passer pour frauduleux.
+    let reform_hops_recorded =
+        stored.records.iter().filter(|r| r.agent_id.as_str().starts_with("reform_")).count();
+    let reform_hops_expected = req.get("reform_expected").and_then(Value::as_u64).map(|n| n as usize);
+    let reform_under_declared = reform_hops_expected.is_some_and(|e| e > reform_hops_recorded);
+    Ok(Json(LlmAuditView {
+        kind,
+        declared_arity,
+        mode_c_records,
+        under_declared: declared_arity > mode_c_records,
+        reform_hops_recorded,
+        reform_hops_expected,
+        reform_under_declared,
+    })
+    .into_response())
 }
 
 #[cfg(test)]
@@ -546,7 +626,7 @@ mod tests {
         // Le graphe déclare 2 appels, MAIS la requête scellée prétend k=3 (sous-déclaration).
         let topo = topology_vote(&["claude_a".to_string(), "gpt_b".to_string()]);
         let request = json!({ "kind": "llm/vote", "k": 3 });
-        let run_id = seal_and_store_mission_with_request(&state, tenant, mission_id, &topo, &sink, json!({}), request).await.unwrap();
+        let run_id = seal_and_store_mission_with_request(&state, tenant, mission_id, &topo, &sink, json!({}), request, Vec::new()).await.unwrap();
 
         let app = crate::router(state);
         let resp = app
@@ -587,10 +667,19 @@ mod tests {
         let mission = body_json(resp).await;
         assert!(mission["run_id"].is_string(), "un run scellé est renvoyé");
         assert_eq!(mission["held"]["any_remote"], json!(true), "endpoint distant ⟹ barreau R4 (non-souverain)");
+        // B.3 : la vue reformulation — 3 hops, tous RULE (aucun SLM câblé dans
+        // ce coordinator de test) ⟹ slm_mediated=false, ET C'EST LE POINT :
+        // on ne peut pas revendiquer « SLM-médié » sans SLM.
+        assert_eq!(mission["reformulation"]["hops"], json!(3), "un hop par claim votant");
+        assert_eq!(mission["reformulation"]["rule"], json!(3));
+        assert_eq!(mission["reformulation"]["slm"], json!(0));
+        assert_eq!(mission["reformulation"]["slm_mediated"], json!(false), "pas de SLM ⟹ pas de revendication");
+        assert_eq!(mission["output"]["reformulation_hops"].as_array().map(Vec::len), Some(3), "le détail par hop est dans la sortie scellée");
         let run_id = mission["run_id"].as_str().unwrap().to_string();
 
         // Re-preuve INDÉPENDANTE via la route essaim INCHANGÉE (store partagé, §7).
         let resp = app
+            .clone()
             .oneshot(
                 Request::builder()
                     .uri(format!("/v1/swarm/verify/{run_id}"))
@@ -604,6 +693,24 @@ mod tests {
         let v = body_json(resp).await;
         assert_eq!(v["verified"], json!(true), "mission re-prouvée depuis les records persistés");
         assert_eq!(v["n17"]["bridge_consistent"], json!(true), "pont N17 cohérent ⟹ un seul mission_id threadé (§5)");
+
+        // B.3 : le checker out-of-band compte les nœuds de hop scellés.
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .uri(format!("/v1/llm/audit/{run_id}"))
+                    .header("x-efe-tenant", "system")
+                    .header("x-efe-roles", "auditor")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let a = body_json(resp).await;
+        assert_eq!(a["reform_hops_recorded"], json!(3), "3 nœuds reform_* scellés dans le graphe");
+        assert_eq!(a["reform_hops_expected"], json!(null), "vote : arité non re-dérivable de la requête");
+        assert_eq!(a["reform_under_declared"], json!(false));
     }
 
     // ── DoD #2 — souveraineté fail-closed (au niveau HTTP) ───────────────────────
@@ -724,7 +831,7 @@ mod tests {
         scoped(scope, async move { let _ = bridge.call_many_ok(&ids, LlmCall::simple("q", 8)).await; }).await;
         // Requête HONNÊTE : k=2 == 2 nœuds Mode-C.
         let topo = topology_vote(&["claude_a".to_string(), "gpt_b".to_string()]);
-        let run_id = seal_and_store_mission_with_request(&state, "system", mission_id, &topo, &sink, json!({}), json!({ "kind": "llm/vote", "k": 2 }))
+        let run_id = seal_and_store_mission_with_request(&state, "system", mission_id, &topo, &sink, json!({}), json!({ "kind": "llm/vote", "k": 2 }), Vec::new())
             .await
             .unwrap();
 
@@ -763,7 +870,7 @@ mod tests {
         let ids = vec!["claude_a".to_string()];
         scoped(scope, async move { let _ = bridge.call_many_ok(&ids, LlmCall::simple("q", 8)).await; }).await;
         let topo = topology_vote(&["claude_a".to_string()]);
-        let run_id = seal_and_store_mission_with_request(&state, "system", mission_id, &topo, &sink, json!({}), json!({ "kind": "llm/vote", "k": 1 }))
+        let run_id = seal_and_store_mission_with_request(&state, "system", mission_id, &topo, &sink, json!({}), json!({ "kind": "llm/vote", "k": 1 }), Vec::new())
             .await
             .unwrap();
 
@@ -781,6 +888,66 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(resp.status(), StatusCode::NOT_FOUND, "run d'un autre tenant ⟹ 404 (isolation)");
+    }
+
+    // ── Fil B.3 — l'axe déclaratif des hops : marqueur scellé, pas d'accusation rétroactive ──
+    /// Un run LEGACY (scellé avant B.3 : requête sans `reform_expected`, zéro nœud `reform_*`)
+    /// ne doit PAS passer pour frauduleux (`expected=None`) ; à l'inverse, un run dont la
+    /// requête scellée PORTE le marqueur mais dont le graphe n'a pas les hops est détecté.
+    #[cfg(not(feature = "oidc"))]
+    #[tokio::test]
+    async fn audit_reform_marker_absent_no_accusation_present_detects() {
+        let state = wired_state(&["claude_a"], Some(&["claude_a"]));
+        let seal_with_request = |request: Value| {
+            let state = state.clone();
+            async move {
+                let mission_id = Uuid::new_v4();
+                let tenant_id = state.tenant_id("system").unwrap();
+                let sink = MissionProvenanceSink::new();
+                let scope = MissionScope { tenant_id, mission_id, sink: sink.clone() };
+                let coord = state.coordinator.as_ref().unwrap();
+                let bridge = &coord.bridge;
+                scoped(scope, async move {
+                    let _ = bridge.call_many_ok(&["claude_a".to_string()], efe_coordinator::LlmCall::simple("q", 8)).await;
+                })
+                .await;
+                let topo = topology_vote(&["claude_a".to_string()]);
+                seal_and_store_mission_with_request(&state, "system", mission_id, &topo, &sink, json!({}), request, Vec::new())
+                    .await
+                    .unwrap()
+            }
+        };
+        // Run "legacy" : requête relay SANS marqueur (comme scellée avant B.3).
+        let legacy = seal_with_request(json!({ "kind": "llm/relay" })).await;
+        // Run B.3 : marqueur présent (3 hops attendus) mais AUCUN nœud reform_* scellé.
+        let dishonest = seal_with_request(json!({ "kind": "llm/relay", "reform_expected": 3 })).await;
+
+        let app = crate::router(state.clone());
+        let audit_of = |run_id: Uuid| {
+            let app = app.clone();
+            async move {
+                let resp = app
+                    .oneshot(
+                        Request::builder()
+                            .uri(format!("/v1/llm/audit/{run_id}"))
+                            .header("x-efe-tenant", "system")
+                            .header("x-efe-roles", "auditor")
+                            .body(Body::empty())
+                            .unwrap(),
+                    )
+                    .await
+                    .unwrap();
+                assert_eq!(resp.status(), StatusCode::OK);
+                body_json(resp).await
+            }
+        };
+        let a = audit_of(legacy).await;
+        assert_eq!(a["reform_hops_expected"], json!(null), "marqueur absent ⟹ pas d'attente");
+        assert_eq!(a["reform_under_declared"], json!(false), "un run legacy honnête n'est PAS accusé");
+        let a = audit_of(dishonest).await;
+        assert_eq!(a["reform_hops_expected"], json!(3), "marqueur scellé ⟹ attente re-dérivée");
+        assert_eq!(a["reform_hops_recorded"], json!(0));
+        assert_eq!(a["reform_under_declared"], json!(true), "hops attendus absents du graphe ⟹ détecté");
     }
 
     // ── DoD #4 — admission (429 + Retry-After) sur le chemin frontière ───────────

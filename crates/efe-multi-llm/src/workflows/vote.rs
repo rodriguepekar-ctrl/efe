@@ -76,6 +76,9 @@ pub async fn run_vote_3llm(
 
     // ── Étape 3 : reformulation → canonical claim ────────────────────
     let mut claims: Vec<(String, CanonicalClaim, f32)> = Vec::new();
+    // Fil B.3 : un hop estampillé par claim ENTRÉE au vote (le reçu reflète
+    // ce qui a réellement voté, pas les tentatives avortées).
+    let mut reformulation_hops = Vec::with_capacity(responses.len());
     for r in &responses {
         let dialect = SourceDialect::from_provider_id(&r.provider);
         let reff = match reformulator
@@ -94,8 +97,10 @@ pub async fn run_vote_3llm(
                 reff.engine,
             )
             .await;
+        let hop = reff.to_hop(&format!("claim:{}", r.provider), &r.provider, "canonical/claim_v1");
         if let Ok(claim) = serde_json::from_value::<CanonicalClaim>(reff.value) {
             claims.push((r.provider.clone(), claim, r.self_quality));
+            reformulation_hops.push(hop);
         }
     }
 
@@ -195,6 +200,7 @@ pub async fn run_vote_3llm(
         latency_ms: started.elapsed().as_millis() as u64,
         audit_chain_hash: format!("{:016x}", swarm_id.as_u128()),
         cancelled_llms: vec![],
+        reformulation_hops,
     })
 }
 

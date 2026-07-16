@@ -110,12 +110,21 @@ fn take_matching(pool: &mut [Option<LlmProvenanceRecord>], provider: Option<&str
 /// Cohérence du pont : chaque nœud Mode-C porte `swarm_id = SwarmId::from_uuid(mission_id)` et
 /// `tenant_id = scope.tenant_id` — identiques à ce que M1 pose sur les `LlmProvenanceRecord`
 /// (`swarm_request_id = mission_id`) ; sinon `SwarmMismatch`/`TenantMismatch` sur un run honnête.
+///
+/// **Fil B.3** — `reformulation_hops` : un nœud Mode-A `reform_i` par hop de reformulation
+/// (JSON du hop committé dans `output_hash` : moteur effectif + faits d'audit SLM). Chaque hop
+/// est ainsi committé **individuellement** dans la chaîne HMAC, en plus du commitment global du
+/// blob de sortie par le nœud `reduce`. Les hops viennent de l'output PRODUCTEUR (pas de la
+/// requête) — même modèle de confiance que le blob : builder de confiance + tamper-evidence
+/// clé-détenteur ; l'axe déclaratif (arité attendue relay=3, debate=2·rounds) vit dans le
+/// checker out-of-band `/v1/llm/audit/:id`.
 pub fn build_and_seal_mission(
     tenant_id: TenantId,
     mission_id: Uuid,
     key: &[u8],
     topology: &MissionTopology,
     drained: Vec<LlmProvenanceRecord>,
+    reformulation_hops: &[Value],
     output: &Value,
 ) -> Result<MissionSeal, BuildError> {
     if topology.calls.is_empty() {
@@ -127,7 +136,8 @@ pub fn build_and_seal_mission(
     let n17_records = drained.clone();
     let mut pool: Vec<Option<LlmProvenanceRecord>> = drained.into_iter().map(Some).collect();
 
-    let mut drafts: Vec<AgentCallDraft> = Vec::with_capacity(topology.calls.len() + 2);
+    let mut drafts: Vec<AgentCallDraft> =
+        Vec::with_capacity(topology.calls.len() + reformulation_hops.len() + 2);
 
     // (1) Nœud racine Mode-A « dispatch » : committe la déclaration (kind, arité, providers, extra).
     let dispatch_id = Uuid::new_v4();
@@ -175,7 +185,30 @@ pub fn build_and_seal_mission(
         return Err(BuildError::UndeclaredCall { provider: leftover.model_identity.provider });
     }
 
-    // (3) Nœud réducteur Mode-A : committe la sortie finale, dépend de tous les Mode-C (fan-in).
+    // (2bis — Fil B.3) Un nœud Mode-A par hop de reformulation : committe le hop entier
+    // (engine + slm_audit) individuellement dans la chaîne. Enfant du dispatch, parent du reduce.
+    let mut hop_ids: Vec<Uuid> = Vec::with_capacity(reformulation_hops.len());
+    for (i, hop) in reformulation_hops.iter().enumerate() {
+        let hid = Uuid::new_v4();
+        hop_ids.push(hid);
+        let label = hop.get("hop").and_then(Value::as_str).unwrap_or("reform");
+        drafts.push(
+            AgentCallDraft::new(
+                swarm_id,
+                tenant_id,
+                agent_id(&format!("reform_{i}")),
+                AgentRole::Stage,
+                AgentKind::ModeA,
+                blake3_bytes(label.as_bytes()),
+                blake3_bytes(&serde_json::to_vec(hop).unwrap_or_default()),
+            )
+            .with_record_id(hid)
+            .caused_by(dispatch_id),
+        );
+    }
+
+    // (3) Nœud réducteur Mode-A : committe la sortie finale, dépend de tous les Mode-C (fan-in)
+    // et, en B.3, des hops de reformulation (la sortie en dérive).
     let reducer_id = Uuid::new_v4();
     let mut reducer = AgentCallDraft::new(
         swarm_id,
@@ -189,6 +222,9 @@ pub fn build_and_seal_mission(
     .with_record_id(reducer_id);
     for cid in &mode_c_ids {
         reducer = reducer.caused_by(*cid);
+    }
+    for hid in &hop_ids {
+        reducer = reducer.caused_by(*hid);
     }
     drafts.push(reducer);
 
@@ -305,13 +341,17 @@ pub async fn seal_and_store_mission(
 ) -> Result<Uuid, crate::GatewayError> {
     // Résumé de requête minimal (callers non-handler) — le `kind` suffit au store.
     let request = json!({ "kind": topology.kind });
-    seal_and_store_mission_with_request(state, tenant, mission_id, topology, sink, output, request).await
+    seal_and_store_mission_with_request(state, tenant, mission_id, topology, sink, output, request, Vec::new()).await
 }
 
 /// **Couche 2 (M3)** : variante qui **scelle le résumé de requête** (`request`) — la source
 /// dont le checker out-of-band `/v1/llm/audit/:id` re-dérive l'arité déclarée. Les handlers M3
 /// l'appellent avec `{kind, k, rounds, user_text_hash, verifier_decision}`.
+///
+/// **Fil B.3** — `reformulation_hops` : les hops estampillés extraits de la réponse TYPÉE de la
+/// mission (chaque `Value` = un `ReformulationHop` sérialisé), scellés en nœuds Mode-A.
 #[cfg(feature = "frontier-llm")]
+#[allow(clippy::too_many_arguments)] // pipeline de scellement explicite (champs nommés voulus)
 pub async fn seal_and_store_mission_with_request(
     state: &crate::SwarmGatewayState,
     tenant: &str,
@@ -320,6 +360,7 @@ pub async fn seal_and_store_mission_with_request(
     sink: &crate::mission::MissionProvenanceSink,
     output: Value,
     request: Value,
+    reformulation_hops: Vec<Value>,
 ) -> Result<Uuid, crate::GatewayError> {
     let tenant_id = state.tenant_id(tenant)?;
     let key = state.derive_key(tenant)?;
@@ -333,8 +374,9 @@ pub async fn seal_and_store_mission_with_request(
             drained.iter().map(|r| (r.cost_accounting.cost_cents * 1000.0).round().max(0.0) as u64).sum();
         state.frontier_metrics.observe_mission(tenant, calls, remote, microcents);
     }
-    let seal = build_and_seal_mission(tenant_id, mission_id, &key, topology, drained, &output)
-        .map_err(|e| crate::GatewayError::Internal(format!("M2 graphe de mission : {e}")))?;
+    let seal =
+        build_and_seal_mission(tenant_id, mission_id, &key, topology, drained, &reformulation_hops, &output)
+            .map_err(|e| crate::GatewayError::Internal(format!("M2 graphe de mission : {e}")))?;
     let stored = crate::StoredRun::from_mission(
         tenant,
         seal.records,
@@ -472,14 +514,14 @@ mod tests {
         let key = state.derive_key(TENANT).unwrap();
         let tid = state.tenant_id(TENANT).unwrap();
         let topo = topology_vote(&vec!["claude_a".into()]); // 1 seul déclaré → gpt_b surnuméraire
-        let err = build_and_seal_mission(tid, mission_id, &key, &topo, sink.drain(), &json!({})).unwrap_err();
+        let err = build_and_seal_mission(tid, mission_id, &key, &topo, sink.drain(), &[], &json!({})).unwrap_err();
         assert_eq!(err, BuildError::UndeclaredCall { provider: "gpt_b".into() });
     }
 
     #[test]
     fn empty_topology_is_refused() {
         let topo = MissionTopology { kind: "llm/x".into(), calls: vec![], declaration: json!({}) };
-        let err = build_and_seal_mission(TenantId::system(), Uuid::from_u128(1), &[0u8; 32], &topo, vec![], &json!({})).unwrap_err();
+        let err = build_and_seal_mission(TenantId::system(), Uuid::from_u128(1), &[0u8; 32], &topo, vec![], &[], &json!({})).unwrap_err();
         assert_eq!(err, BuildError::EmptyTopology);
     }
 
@@ -530,6 +572,65 @@ mod tests {
         })
         .await;
         (sink, mission_id)
+    }
+
+    /// **Fil B.3** — les hops de reformulation sont scellés en nœuds Mode-A :
+    /// le run se re-prouve, les nœuds `reform_*` committent chaque hop
+    /// individuellement, et muter un hop scellé casse la re-preuve (localisée).
+    #[tokio::test]
+    async fn reformulation_hops_are_sealed_and_tamper_evident() {
+        let state = SwarmGatewayState::in_memory();
+        let providers = ["claude_a", "gpt_b", "gemini_c"];
+        let (sink, mission_id) = run_fanout(&state, &providers).await;
+        let topo = topology_vote(&providers.iter().map(|s| s.to_string()).collect::<Vec<_>>());
+        let hops = vec![
+            json!({"hop": "claim:claude_a", "from_llm": "claude_a", "target_schema": "canonical/claim_v1", "engine": "SLM",
+                   "slm_audit": {"entry_id": "018f0000-0000-7000-8000-000000000001", "robot_id": "reformulator",
+                                  "schema_version": "1.1.0", "status": "SUCCESS", "input_hash": "aa", "output_hash": "bb",
+                                  "tokens_prompt": 10, "tokens_completion": 20, "latency_ms": 5}}),
+            json!({"hop": "claim:gpt_b", "from_llm": "gpt_b", "target_schema": "canonical/claim_v1", "engine": "SLM_DEGRADED_TO_RULE"}),
+            json!({"hop": "claim:gemini_c", "from_llm": "gemini_c", "target_schema": "canonical/claim_v1", "engine": "RULE"}),
+        ];
+        let key = state.derive_key(TENANT).unwrap();
+        let tid = state.tenant_id(TENANT).unwrap();
+        let seal = build_and_seal_mission(tid, mission_id, &key, &topo, sink.drain(), &hops, &json!({"winner": "claude_a"}))
+            .expect("sceau avec hops");
+        // 1 dispatch + 3 Mode-C + 3 reform + 1 reduce.
+        assert_eq!(seal.records.len(), 8);
+        let reform_nodes: Vec<_> =
+            seal.records.iter().filter(|r| r.agent_id.as_str().starts_with("reform_")).collect();
+        assert_eq!(reform_nodes.len(), 3, "un nœud Mode-A par hop");
+        assert!(reform_nodes.iter().all(|r| matches!(r.agent_kind, AgentKind::ModeA)));
+        // Chaque hop est committé INDIVIDUELLEMENT : output_hash = blake3(hop JSON).
+        // NB : `append_all_canonical` réordonne les records — on cible par agent_id.
+        let hash_of = |hop: &Value| efe_swarm_provenance::blake3_bytes(&serde_json::to_vec(hop).unwrap());
+        let reform_0 = reform_nodes.iter().find(|r| r.agent_id.as_str() == "reform_0").expect("reform_0");
+        assert_eq!(reform_0.output_hash, hash_of(&hops[0]), "le hop 0 (avec slm_audit) est committé");
+
+        // Sain : la re-preuve passe avec les nœuds de hop dans la chaîne (chemin StoredRun réel).
+        let stored = crate::StoredRun::from_mission(
+            TENANT,
+            seal.records,
+            seal.provenance_root,
+            seal.llm_records,
+            seal.n17_leaves,
+            seal.n17_root,
+            json!({"winner": "claude_a"}),
+            topo.kind.clone(),
+            json!({"kind": topo.kind}),
+        );
+        let v = verify_run_offline(&stored.records, &stored.llm_records, &stored.n17_leaf_bytes(), stored.n17_root_bytes(), &key);
+        assert!(v.fully_proven, "le run avec nœuds reform_* se re-prouve");
+
+        // Falsification : réécrire l'engine d'un hop scellé (SLM_DEGRADED_TO_RULE → SLM,
+        // la fraude exacte que B.3 rend impossible) casse la re-preuve, localisée.
+        let mut tampered = stored.records.clone();
+        let idx = tampered.iter().position(|r| r.agent_id.as_str() == "reform_1").unwrap();
+        let forged = json!({"hop": "claim:gpt_b", "from_llm": "gpt_b", "target_schema": "canonical/claim_v1", "engine": "SLM"});
+        tampered[idx].output_hash = hash_of(&forged);
+        let v = verify_run_offline(&tampered, &stored.llm_records, &stored.n17_leaf_bytes(), stored.n17_root_bytes(), &key);
+        assert!(!v.fully_proven, "un hop maquillé en SLM casse la re-preuve");
+        assert!(v.swarm.first_break.is_some(), "la faute est localisée");
     }
 
     #[tokio::test]
@@ -619,7 +720,7 @@ mod tests {
         let key = state.derive_key(TENANT).unwrap();
         let tid = state.tenant_id(TENANT).unwrap();
         let topo = topology_cascade("drafter_x", "verifier_y", "validator_z", "ACCEPT"); // mensonge : 2 slots déclarés
-        let err = build_and_seal_mission(tid, mission_id, &key, &topo, sink.drain(), &json!({})).unwrap_err();
+        let err = build_and_seal_mission(tid, mission_id, &key, &topo, sink.drain(), &[], &json!({})).unwrap_err();
         assert_eq!(
             err,
             BuildError::UndeclaredCall { provider: "validator_z".into() },

@@ -17,10 +17,13 @@
 //! [`reformulator_for`] renvoie le déterministe — la RÉPONSE des missions est
 //! strictement identique ; seuls les évènements portent `engine` (= `RULE`).
 //!
-//! Honnêteté (B.1) : l'audit des invocations SLM part par défaut dans un
-//! [`InMemoryAuditWriter`] local (non chaîné) — le raccord au reçu de
-//! provenance re-vérifiable est le jalon B.3 (le seam existe :
-//! [`SlmReformulator::from_client_with_audit`]). La latence d'un hop SLM est
+//! **B.3** : chaque hop capture l'`AuditEntry` de son invocation SLM (tee
+//! par-hop) et la porte dans [`Reformulated::slm_audit`] → les missions la
+//! mettent dans `reformulation_hops` (réponse) → la gateway la SCELLE dans le
+//! reçu re-vérifiable (nœud Mode-A par hop). Le writer partagé du backend
+//! reste alimenté à l'identique ([`InMemoryAuditWriter`] local par défaut ;
+//! un writer durable s'injecte via [`SlmReformulator::from_client_with_audit`]
+//! — les `entry_id` du reçu croisent alors ses entrées). La latence d'un hop SLM est
 //! bornée par le timeout du client (30 s en profil multi-llm) mais n'est PAS
 //! encore décomptée des deadlines/budgets de mission — B.4 (le circuit B.2
 //! borne la perte non budgétée : 3 échecs ⟹ ouvert, puis 1 seule sonde par
@@ -36,8 +39,8 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use efe_nano_app_coordinator::types::{LlmDialect, ReformulatorInput, SchemaId};
 use efe_nano_app_coordinator::{
-    AuditWriter, CallContext, InMemoryAuditWriter, NanoRobotClient, ReformulatorClient,
-    ReformulatorProfile, SlmCircuitBreaker, TenantId,
+    AuditEntry, AuditWriter, CallContext, InMemoryAuditWriter, NanoRobotClient,
+    ReformulatorClient, ReformulatorProfile, RobotResult, SlmCircuitBreaker, TenantId,
 };
 use uuid::Uuid;
 
@@ -52,8 +55,42 @@ use crate::canonical::{
 };
 use crate::error::{MultiLlmError, MultiLlmResult};
 
-use super::engine::{Reformulated, ReformulatorEngine};
+use super::engine::{Reformulated, ReformulatorEngine, SlmHopAudit};
 use super::{CanonicalReformulator, Reformulator, SourceDialect};
+
+/// **Fil B.3** — capture par-hop de l'`AuditEntry` d'une invocation SLM.
+/// Un slot par hop (créé frais dans `to_canonical`/`to_argument_value`) :
+/// pas d'état partagé entre hops, donc pas de course entre missions.
+pub(crate) type HopCapture = Arc<std::sync::Mutex<Option<AuditEntry>>>;
+
+fn fresh_capture() -> HopCapture {
+    Arc::new(std::sync::Mutex::new(None))
+}
+
+fn take_capture(c: &HopCapture) -> Option<SlmHopAudit> {
+    c.lock().expect("hop capture mutex poisoned").take().map(|e| SlmHopAudit::from(&e))
+}
+
+/// Writer en T : capture la DERNIÈRE `AuditEntry` du hop (le contrat
+/// `NanoRobotClient` en garantit exactement une par invoke) tout en déléguant
+/// au writer partagé du backend — le seam durable
+/// (`from_client_with_audit`) reste alimenté à l'identique.
+struct TeeAuditWriter {
+    shared: Arc<dyn AuditWriter>,
+    capture: HopCapture,
+}
+
+#[async_trait]
+impl AuditWriter for TeeAuditWriter {
+    async fn record(&self, entry: AuditEntry) -> RobotResult<()> {
+        *self.capture.lock().expect("hop capture mutex poisoned") = Some(entry.clone());
+        self.shared.record(entry).await
+    }
+
+    async fn entries(&self) -> Vec<AuditEntry> {
+        self.shared.entries().await
+    }
+}
 
 /// Erreur d'un backend de reformulation — la distinction est **porteuse** :
 /// seul un échec du ROBOT (réseau, modèle, écho de schéma) doit compter pour
@@ -90,12 +127,18 @@ pub(crate) trait ReformulatorBackend: Send + Sync {
     /// `stance` n'est renseigné que pour `ArgumentV1`. Renvoie la valeur
     /// canonique brute (à valider par l'appelant), ou une [`BackendError`]
     /// typée (client-side vs robot — décide de l'impact circuit).
+    ///
+    /// **B.3** : `capture` reçoit l'`AuditEntry` de l'invocation quand une
+    /// invocation part réellement — y compris pour un invoke qui ÉCHOUE
+    /// (l'entrée `failure` est capturée : le reçu peut committer la
+    /// tentative). Les backends sans invocation réelle (mocks) l'ignorent.
     async fn reformulate(
         &self,
         raw: &str,
         from: SourceDialect,
         target: CanonicalSchemaId,
         stance: Option<ArgumentStance>,
+        capture: &HopCapture,
     ) -> Result<serde_json::Value, BackendError>;
 }
 
@@ -179,6 +222,7 @@ impl ReformulatorBackend for NanoRobotBackend {
         from: SourceDialect,
         target: CanonicalSchemaId,
         stance: Option<ArgumentStance>,
+        capture: &HopCapture,
     ) -> Result<serde_json::Value, BackendError> {
         if !self.supports(target) {
             return Err(BackendError::ClientSide(format!(
@@ -200,8 +244,13 @@ impl ReformulatorBackend for NanoRobotBackend {
             target_schema_id: expected,
             stance_hint: stance.map(|s| Self::stance_tag(s).to_string()),
         };
-        // Contexte frais par appel (swarm_id UUIDv7 propre à ce hop).
-        let ctx = CallContext::new(self.tenant_id, self.audit.clone());
+        // Contexte frais par appel (swarm_id UUIDv7 propre à ce hop). B.3 :
+        // le writer en T capture l'AuditEntry du hop (succès OU échec) tout
+        // en alimentant le writer partagé — le reçu committe la tentative.
+        let ctx = CallContext::new(
+            self.tenant_id,
+            Arc::new(TeeAuditWriter { shared: self.audit.clone(), capture: capture.clone() }),
+        );
 
         let output = self
             .client
@@ -325,6 +374,9 @@ impl Reformulator for SlmReformulator {
         target: CanonicalSchemaId,
         llm_source: &str,
     ) -> MultiLlmResult<Reformulated> {
+        // B.3 : capture par-hop de l'AuditEntry — attachée à la sortie sur
+        // TOUS les chemins (succès SLM comme dégradation-avec-tentative).
+        let capture = fresh_capture();
         if self.backend.supports(target) {
             if !self.circuit_allows() {
                 // Circuit ouvert : dégradation SANS appel réseau (B.2).
@@ -333,10 +385,11 @@ impl Reformulator for SlmReformulator {
                     "SLM degrade : circuit ouvert — repli déterministe sans appel"
                 );
             } else {
-                match self.backend.reformulate(raw, from, target, None).await {
+                match self.backend.reformulate(raw, from, target, None, &capture).await {
                     Ok(v) if validate_canonical(target, &v) => {
                         self.circuit_success();
-                        return Ok(Reformulated::new(v, ReformulatorEngine::Slm));
+                        return Ok(Reformulated::new(v, ReformulatorEngine::Slm)
+                            .with_slm_audit(take_capture(&capture)));
                     }
                     // Sortie SLM hors-schéma → on ne la sert JAMAIS telle
                     // quelle — et c'est une défaillance du ROBOT (circuit).
@@ -365,9 +418,27 @@ impl Reformulator for SlmReformulator {
                 }
             }
         }
-        // Repli déterministe, connu-bon, estampillé.
-        let value = self.fallback.route(raw, from, target, llm_source)?;
-        Ok(Reformulated::new(value, ReformulatorEngine::SlmDegradedToRule))
+        // Repli déterministe, connu-bon, estampillé — avec, le cas échéant,
+        // l'audit de la TENTATIVE SLM (le reçu committe ce qui a été essayé).
+        let value = match self.fallback.route(raw, from, target, llm_source) {
+            Ok(v) => v,
+            Err(e) => {
+                // RÉSIDU documenté (revue B.3) : double défaillance — SLM ET
+                // repli. L'erreur remonte sans hop, la tentative capturée ne
+                // rejoint pas le reçu. Elle reste observable ici, et RETENUE
+                // par le writer partagé du backend (croisable par entry_id
+                // via `from_client_with_audit`).
+                if let Some(a) = take_capture(&capture) {
+                    tracing::warn!(
+                        entry_id = %a.entry_id, status = %a.status, ?target, llm_source,
+                        "double défaillance (SLM + repli) : tentative SLM hors reçu — retenue par le writer partagé"
+                    );
+                }
+                return Err(e);
+            }
+        };
+        Ok(Reformulated::new(value, ReformulatorEngine::SlmDegradedToRule)
+            .with_slm_audit(take_capture(&capture)))
     }
 
     async fn to_argument_value(
@@ -377,6 +448,7 @@ impl Reformulator for SlmReformulator {
         from: SourceDialect,
     ) -> MultiLlmResult<Reformulated> {
         let target = CanonicalSchemaId::ArgumentV1;
+        let capture = fresh_capture();
         if self.backend.supports(target) {
             if !self.circuit_allows() {
                 tracing::warn!(
@@ -384,10 +456,11 @@ impl Reformulator for SlmReformulator {
                     "SLM degrade : circuit ouvert — repli déterministe sans appel"
                 );
             } else {
-                match self.backend.reformulate(raw, from, target, Some(stance)).await {
+                match self.backend.reformulate(raw, from, target, Some(stance), &capture).await {
                     Ok(v) if validate_canonical(target, &v) => {
                         self.circuit_success();
-                        return Ok(Reformulated::new(v, ReformulatorEngine::Slm));
+                        return Ok(Reformulated::new(v, ReformulatorEngine::Slm)
+                            .with_slm_audit(take_capture(&capture)));
                     }
                     Ok(_) => {
                         self.circuit_failure();
@@ -412,13 +485,26 @@ impl Reformulator for SlmReformulator {
                 }
             }
         }
-        let arg = self.fallback.to_argument(raw, stance, from)?;
+        let arg = match self.fallback.to_argument(raw, stance, from) {
+            Ok(a) => a,
+            Err(e) => {
+                // Même résidu documenté que `to_canonical` (double défaillance).
+                if let Some(a) = take_capture(&capture) {
+                    tracing::warn!(
+                        entry_id = %a.entry_id, status = %a.status, dialect = from.tag(),
+                        "double défaillance (SLM + repli) : tentative SLM hors reçu — retenue par le writer partagé"
+                    );
+                }
+                return Err(e);
+            }
+        };
         let value = serde_json::to_value(arg).map_err(|e| MultiLlmError::ReformulationFailed {
             from_dialect: from.tag().to_string(),
             to_schema: "canonical/argument_v1".to_string(),
             reason: e.to_string(),
         })?;
-        Ok(Reformulated::new(value, ReformulatorEngine::SlmDegradedToRule))
+        Ok(Reformulated::new(value, ReformulatorEngine::SlmDegradedToRule)
+            .with_slm_audit(take_capture(&capture)))
     }
 }
 
@@ -466,6 +552,7 @@ mod tests {
             _from: SourceDialect,
             _target: CanonicalSchemaId,
             _stance: Option<ArgumentStance>,
+            _capture: &HopCapture,
         ) -> Result<serde_json::Value, BackendError> {
             self.output.clone().ok_or_else(|| BackendError::Robot("mock backend error".into()))
         }
@@ -693,14 +780,17 @@ mod tests {
             ReformulatorClient::from_assets_multillm("http://127.0.0.1:1").expect("assets"),
         );
         let backend = NanoRobotBackend::new(client);
+        let capture = fresh_capture();
         let err = backend
-            .reformulate("   ", SourceDialect::Unknown, CanonicalSchemaId::ClaimV1, None)
+            .reformulate("   ", SourceDialect::Unknown, CanonicalSchemaId::ClaimV1, None, &capture)
             .await
             .unwrap_err();
         match err {
             BackendError::ClientSide(m) => assert!(m.contains("vide"), "{m}"),
             other => panic!("attendu ClientSide, obtenu {other}"),
         }
+        // B.3 : rejet AVANT invocation ⟹ aucune AuditEntry capturée.
+        assert!(take_capture(&capture).is_none(), "pas d'invocation, pas d'audit");
     }
 
     // ─── Faux llama-server : écho de schéma + clamp, HORS LIGNE ──────
@@ -754,21 +844,31 @@ mod tests {
         let url = spawn_fake_llama(code_env).await;
         let client = Arc::new(ReformulatorClient::from_assets_multillm(url).expect("assets"));
         let backend = NanoRobotBackend::new(client.clone());
+        let capture = fresh_capture();
         let err = backend
-            .reformulate("The Fed held rates.", SourceDialect::Unknown, CanonicalSchemaId::ClaimV1, None)
+            .reformulate("The Fed held rates.", SourceDialect::Unknown, CanonicalSchemaId::ClaimV1, None, &capture)
             .await
             .unwrap_err();
         match err {
             BackendError::Robot(m) => assert!(m.contains("écho"), "{m}"),
             other => panic!("attendu Robot (compte pour le circuit), obtenu {other}"),
         }
-        // Et au niveau adapter : dégradation estampillée, sortie déterministe valide.
+        // B.3 : une invocation RÉELLE est partie (le faux serveur a répondu) —
+        // l'AuditEntry est capturée même si l'écho a été refusé ensuite.
+        let attempt = take_capture(&capture).expect("la tentative est capturée");
+        assert_eq!(attempt.robot_id, "reformulator");
+        assert_eq!(attempt.status, "SUCCESS", "le CLIENT a vu un 200 ; c'est l'écho qui a été refusé");
+        // Et au niveau adapter : dégradation estampillée, sortie déterministe
+        // valide, ET la tentative SLM portée dans le hop (B.3).
         let r = SlmReformulator::from_client(client);
         let out = r
             .to_canonical("The Fed held rates.", SourceDialect::Unknown, CanonicalSchemaId::ClaimV1, "x")
             .await
             .unwrap();
         assert_eq!(out.engine, ReformulatorEngine::SlmDegradedToRule);
+        let audit = out.slm_audit.expect("dégradé-avec-tentative ⟹ audit porté");
+        assert_eq!(audit.robot_id, "reformulator");
+        assert!(!audit.input_hash.is_empty(), "le reçu committe ce que le SLM a vu");
     }
 
     // ─── Fil B.2 : le circuit breaker, consommé pour de vrai ─────────
@@ -791,6 +891,7 @@ mod tests {
             _from: SourceDialect,
             _target: CanonicalSchemaId,
             _stance: Option<ArgumentStance>,
+            _capture: &HopCapture,
         ) -> Result<serde_json::Value, BackendError> {
             self.calls.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
             self.output.clone().ok_or_else(|| BackendError::Robot("boom".into()))
@@ -1084,5 +1185,178 @@ mod tests {
             .unwrap();
         assert_eq!(out.engine, ReformulatorEngine::Slm, "le clamp doit permettre le hop SLM");
         assert!(validate_canonical(CanonicalSchemaId::ClaimV1, &out.value));
+        // B.3 : un hop SLM réussi porte ses faits d'audit — le reçu committe
+        // input_hash/output_hash/tokens de l'invocation réelle.
+        let audit = out.slm_audit.expect("hop SLM ⟹ audit capturé");
+        assert_eq!(audit.robot_id, "reformulator");
+        assert_eq!(audit.schema_version, "1.1.0", "profil multi-llm");
+        assert_eq!(audit.status, "SUCCESS");
+        assert!(!audit.input_hash.is_empty() && !audit.output_hash.is_empty());
+        assert_eq!((audit.tokens_prompt, audit.tokens_completion), (10, 20), "tokens du faux serveur");
+    }
+
+    // ─── Fil B.3 : l'audit SLM porté par hop, chaîné au reçu ─────────
+
+    /// **Revue B.3** — un 200 au corps INDÉCODABLE (serveur crashé en pleine
+    /// écriture, proxy qui tronque) était le SEUL chemin terminal sans entrée
+    /// d'audit : une invocation réelle devenait invisible du reçu. Épinglé :
+    /// la tentative est désormais capturée (statut FAILED).
+    #[tokio::test]
+    async fn garbled_200_body_attempt_is_captured_in_hop_audit() {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            loop {
+                let Ok((mut sock, _)) = listener.accept().await else { break };
+                tokio::spawn(async move {
+                    let mut buf = vec![0u8; 64 * 1024];
+                    let _ = sock.read(&mut buf).await;
+                    let body = "pas du json du tout";
+                    let resp = format!(
+                        "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n\
+                         Content-Length: {}\r\nConnection: close\r\n\r\n{}",
+                        body.len(),
+                        body
+                    );
+                    let _ = sock.write_all(resp.as_bytes()).await;
+                    let _ = sock.shutdown().await;
+                });
+            }
+        });
+        let client = Arc::new(
+            ReformulatorClient::from_assets_multillm(format!("http://{addr}")).expect("assets"),
+        );
+        let r = SlmReformulator::from_client(client);
+        let out = r
+            .to_canonical("The Fed held rates.", SourceDialect::Unknown, CanonicalSchemaId::ClaimV1, "x")
+            .await
+            .unwrap();
+        assert_eq!(out.engine, ReformulatorEngine::SlmDegradedToRule);
+        let audit = out.slm_audit.expect("corps indécodable : la tentative RÉELLE est capturée");
+        assert_eq!(audit.status, "FAILED");
+        assert!(!audit.input_hash.is_empty(), "ce qui a été envoyé au SLM est committé");
+    }
+
+    /// Un invoke qui ÉCHOUE réellement (endpoint mort) capture l'AuditEntry
+    /// `FAILED` — le reçu committe la tentative, pas seulement les succès.
+    #[tokio::test]
+    async fn failed_invoke_attempt_is_captured_in_hop_audit() {
+        let client = Arc::new(
+            ReformulatorClient::from_assets_multillm("http://127.0.0.1:1").expect("assets"),
+        );
+        let r = SlmReformulator::from_client(client);
+        let out = r
+            .to_canonical("The Fed held rates.", SourceDialect::Unknown, CanonicalSchemaId::ClaimV1, "x")
+            .await
+            .unwrap();
+        assert_eq!(out.engine, ReformulatorEngine::SlmDegradedToRule);
+        let audit = out.slm_audit.expect("l'invoke est parti (et a échoué) ⟹ tentative capturée");
+        assert_eq!(audit.status, "FAILED");
+        assert!(!audit.input_hash.is_empty(), "l'entrée tentée est committée");
+        assert!(audit.output_hash.is_empty(), "pas de sortie sur un échec transport");
+    }
+
+    /// Circuit OUVERT ⟹ aucun appel réseau ⟹ AUCUN audit sur le hop dégradé
+    /// (on ne committe pas une tentative qui n'a pas eu lieu).
+    #[tokio::test]
+    async fn open_circuit_hop_carries_no_slm_audit() {
+        use efe_nano_app_coordinator::SlmCircuitBreaker;
+        let backend = Arc::new(CountingBackend {
+            calls: std::sync::atomic::AtomicUsize::new(0),
+            output: None,
+        });
+        let circuit = SlmCircuitBreaker::new(1, std::time::Duration::from_secs(60));
+        let r = SlmReformulator::new(backend).with_circuit(circuit);
+        // Hop 1 : échec robot (mock, sans AuditEntry) → ouvre le circuit.
+        let _ = r
+            .to_canonical("a b", SourceDialect::Unknown, CanonicalSchemaId::ClaimV1, "x")
+            .await
+            .unwrap();
+        // Hop 2 : circuit ouvert → dégradé sans appel → pas d'audit.
+        let out = r
+            .to_canonical("a b", SourceDialect::Unknown, CanonicalSchemaId::ClaimV1, "x")
+            .await
+            .unwrap();
+        assert_eq!(out.engine, ReformulatorEngine::SlmDegradedToRule);
+        assert!(out.slm_audit.is_none(), "pas d'appel ⟹ pas d'audit committé");
+    }
+
+    /// Le tee alimente AUSSI le writer partagé (seam `from_client_with_audit`) :
+    /// les `entry_id` portés par les hops croisent les entrées du writer durable.
+    #[tokio::test]
+    async fn shared_audit_writer_still_receives_entries() {
+        let claim_env = serde_json::json!({
+            "canonical": {
+                "claim": "The Fed held rates steady.",
+                "evidence": [],
+                "confidence": 0.8,
+                "domain": "finance"
+            },
+            "schema_id": "claim_v1",
+            "extraction_warnings": []
+        });
+        let url = spawn_fake_llama(claim_env).await;
+        let client = Arc::new(ReformulatorClient::from_assets_multillm(url).expect("assets"));
+        let shared = Arc::new(InMemoryAuditWriter::default());
+        let r = SlmReformulator::from_client_with_audit(client, shared.clone());
+        let out = r
+            .to_canonical("Rates held.", SourceDialect::Unknown, CanonicalSchemaId::ClaimV1, "x")
+            .await
+            .unwrap();
+        assert_eq!(out.engine, ReformulatorEngine::Slm);
+        let hop_audit = out.slm_audit.expect("audit du hop");
+        let entries = shared.entries().await;
+        assert_eq!(entries.len(), 1, "le writer partagé reçoit l'entrée à l'identique");
+        assert_eq!(entries[0].entry_id, hop_audit.entry_id, "croisable par entry_id");
+        assert_eq!(entries[0].input_hash, hop_audit.input_hash);
+    }
+
+    /// **DoD Fil B (§12)** — `reformulator_slm_stamped_when_url_set` : une
+    /// mission SERVIE via `reformulator_for` (le sélecteur du chemin servi)
+    /// contre un llama-server (faux) : chaque hop de la réponse est estampillé
+    /// `SLM` et porte ses faits d'audit. C'est la revendication « relais médié
+    /// par le petit modèle », re-vérifiable depuis le reçu.
+    #[tokio::test]
+    async fn reformulator_slm_stamped_when_url_set() {
+        use efe_coordinator::{Coordinator, MockLlmProvider, ProviderRegistry};
+        let claim_env = serde_json::json!({
+            "canonical": {
+                "claim": "The Fed held rates steady.",
+                "evidence": [],
+                "confidence": 0.8,
+                "domain": "finance"
+            },
+            "schema_id": "claim_v1",
+            "extraction_warnings": []
+        });
+        let url = spawn_fake_llama(claim_env).await;
+        let reg = ProviderRegistry::new();
+        for id in ["claude_x", "gpt_x", "gemini_x"] {
+            reg.register(Arc::new(MockLlmProvider::new(id).with_response("The Fed held rates.")));
+        }
+        let mut clients = efe_coordinator::CoordinatorClients::default();
+        clients.reformulator =
+            Some(Arc::new(ReformulatorClient::from_assets_multillm(url).expect("assets")));
+        let coord = Coordinator::builder().registry(reg).clients(clients).build().expect("coord");
+
+        let req = crate::request::Vote3LlmRequest {
+            user_text: "Did the Fed hold rates?".into(),
+            task_class: efe_nano_app_coordinator::types::router::TaskClass::FactualQa,
+            llms: vec!["claude_x".into(), "gpt_x".into(), "gemini_x".into()],
+            mode: crate::request::VoteMode::Plurality,
+            quorum: None,
+            max_budget_cents: 100,
+            max_total_latency: std::time::Duration::from_secs(60),
+        };
+        let resp = crate::workflows::run_vote_3llm(&coord, req).await.expect("vote");
+        assert_eq!(resp.reformulation_hops.len(), 3, "un hop par LLM répondant");
+        for hop in &resp.reformulation_hops {
+            assert_eq!(hop.engine, ReformulatorEngine::Slm, "hop {} : URL câblée ⟹ SLM", hop.hop);
+            assert_eq!(hop.target_schema, "canonical/claim_v1");
+            let audit = hop.slm_audit.as_ref().expect("hop SLM ⟹ faits d'audit");
+            assert_eq!(audit.status, "SUCCESS");
+            assert!(!audit.input_hash.is_empty());
+        }
     }
 }

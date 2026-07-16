@@ -45,6 +45,9 @@ pub async fn run_debate(
     let mut arguments_per_round: Vec<Vec<DebateArgumentSummary>> = Vec::new();
     let mut last_pro_argument = String::new();
     let mut last_contra_argument = String::new();
+    // Fil B.3 : 2 hops estampillés par round (le verdict jury n'est pas
+    // reformulé — pas de hop jury, honnête).
+    let mut reformulation_hops = Vec::with_capacity(2 * req.rounds as usize);
 
     for round_idx in 1..=req.rounds {
         publisher
@@ -154,6 +157,12 @@ pub async fn run_debate(
                 SourceDialect::from_provider_id(&req.pro_llm),
             )
             .await?;
+        // Fil B.3 : le hop AVANT le from_value (qui consomme `.value`).
+        let pro_hop = pro_ref.to_hop(
+            &format!("argument:r{round_idx}:PRO"),
+            &req.pro_llm,
+            "canonical/argument_v1",
+        );
         let pro_canon: CanonicalArgument =
             serde_json::from_value(pro_ref.value).map_err(|e| {
                 MultiLlmError::ReformulationFailed {
@@ -169,6 +178,11 @@ pub async fn run_debate(
                 SourceDialect::from_provider_id(&req.contra_llm),
             )
             .await?;
+        let contra_hop = contra_ref.to_hop(
+            &format!("argument:r{round_idx}:CONTRA"),
+            &req.contra_llm,
+            "canonical/argument_v1",
+        );
         let contra_canon: CanonicalArgument =
             serde_json::from_value(contra_ref.value).map_err(|e| {
                 MultiLlmError::ReformulationFailed {
@@ -180,11 +194,13 @@ pub async fn run_debate(
 
         // Fil B.0 : provenance du moteur de reformulation (par argument).
         publisher
-            .publish_reformulation(&bus, swarm_id, &req.pro_llm, "canonical/argument_v1", pro_ref.engine)
+            .publish_reformulation(&bus, swarm_id, &req.pro_llm, "canonical/argument_v1", pro_hop.engine)
             .await;
         publisher
-            .publish_reformulation(&bus, swarm_id, &req.contra_llm, "canonical/argument_v1", contra_ref.engine)
+            .publish_reformulation(&bus, swarm_id, &req.contra_llm, "canonical/argument_v1", contra_hop.engine)
             .await;
+        reformulation_hops.push(pro_hop);
+        reformulation_hops.push(contra_hop);
 
         publisher
             .publish_debate_argument(&bus, swarm_id, round_idx, &req.pro_llm, "PRO")
@@ -257,6 +273,7 @@ pub async fn run_debate(
         total_cost_cents: budget.spent_cents(),
         latency_ms: started.elapsed().as_millis() as u64,
         audit_chain_hash: format!("{:016x}", swarm_id.as_u128()),
+        reformulation_hops,
     })
 }
 

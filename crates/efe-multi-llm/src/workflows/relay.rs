@@ -84,6 +84,8 @@ pub async fn run_relay(
             plan_ref.engine,
         )
         .await;
+    // Fil B.3 : le hop estampillé part dans la réponse → scellé dans le reçu.
+    let plan_hop = plan_ref.to_hop("plan", &req.planner_llm, "canonical/plan_v1");
     let plan_json = plan_ref.value.to_string();
 
     // ── Phase β : IMPLEMENTATION ──────────────────────────────────────
@@ -138,6 +140,7 @@ pub async fn run_relay(
             code_ref.engine,
         )
         .await;
+    let code_hop = code_ref.to_hop("code", &req.implementer_llm, "canonical/code_v1");
     let code_json = code_ref.value.to_string();
 
     // ── Phase γ : SYNTHESIS ──────────────────────────────────────────
@@ -193,6 +196,7 @@ pub async fn run_relay(
             synth_ref.engine,
         )
         .await;
+    let synth_hop = synth_ref.to_hop("synthesis", &req.synthesizer_llm, "canonical/synthesis_v1");
     let synth_json = synth_ref.value.to_string();
 
     // Petite touche pour faire taire le linter "unused" sur DagNode.
@@ -213,5 +217,6 @@ pub async fn run_relay(
         total_cost_cents: budget.spent_cents(),
         latency_ms: started.elapsed().as_millis() as u64,
         audit_chain_hash: format!("{:016x}", swarm_id.as_u128()),
+        reformulation_hops: vec![plan_hop, code_hop, synth_hop],
     })
 }

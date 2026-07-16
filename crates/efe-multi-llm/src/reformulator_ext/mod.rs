@@ -13,7 +13,7 @@ mod engine;
 mod slm;
 
 pub use canonical::CanonicalReformulator;
-pub use engine::{Reformulated, ReformulatorEngine};
+pub use engine::{Reformulated, ReformulationHop, ReformulatorEngine, SlmHopAudit};
 pub use slm::{reformulator_for, SlmReformulator, SLM_REFORMULATOR_CIRCUIT_KEY};
 
 use crate::canonical::{ArgumentStance, CanonicalSchemaId};
