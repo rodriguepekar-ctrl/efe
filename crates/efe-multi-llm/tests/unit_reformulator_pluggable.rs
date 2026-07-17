@@ -79,7 +79,8 @@ async fn trait_argument_matches_inherent_and_stamps_rule() {
     assert_eq!(round.stance, inherent.stance);
 }
 
-/// Sanity : les 5 schémas passent par le trait sans erreur ni panique, tous
+/// Sanity : 4 des 5 schémas passent par `to_canonical` sans erreur ni panique
+/// (ArgumentV1 est couvert par le test `to_argument_value` dédié ci-dessus), tous
 /// estampillés `Rule` (le déterministe est complet).
 #[tokio::test]
 async fn all_five_schemas_route_via_trait_as_rule() {

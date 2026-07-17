@@ -351,7 +351,7 @@ Le reçu re-vérifiable des missions (Couche-2) doit désormais porter, **par ho
 
 ## 8 · Jalons (chacun fail-closed, testable, byte-identique quand SLM off)
 
-- **B.0 — Seam Rust (SLM path dormant). ✅ IMPLÉMENTÉ & VÉRIFIÉ (2026-07-14, commit-pending).** Trait +
+- **B.0 — Seam Rust (SLM path dormant). ✅ IMPLÉMENTÉ & VÉRIFIÉ (2026-07-14, commit 04759dd).** Trait +
   2 impls (dont `SlmReformulator` qui, faute d'assets, `supports()==false` pour tout ⟹ dégrade toujours
   vers la règle) + threading dans les missions + provenance `engine`. **Invariant :** sans
   `clients.reformulator`, sortie strictement inchangée (le déterministe, juste boxé/awaité). **10 fichiers
@@ -361,7 +361,7 @@ Le reçu re-vérifiable des missions (Couche-2) doit désormais porter, **par ho
   méthodes du trait sont `to_canonical` / `to_argument_value` (distinctes des inhérentes `route` /
   `to_argument`) pour éviter l'ambiguïté de résolution ; non-régression valeur-égale testée sur
   `ClaimV1`/`CodeV1` (déterministes) car `CanonicalPlan` porte un `Uuid` frais par appel.
-- **B.1 — Assets SLM multi-llm. ✅ IMPLÉMENTÉ & VÉRIFIÉ (2026-07-14, commit-pending).** Grammaire-union
+- **B.1 — Assets SLM multi-llm. ✅ IMPLÉMENTÉ & VÉRIFIÉ (2026-07-14, commit 113edfa).** Grammaire-union
   `reformulator_multillm_v1.gbnf` (l'enveloppe LIE chaque `schema_id` à sa forme `CanonicalX` exacte —
   mismatch impossible par construction ; non-vacuité `json-string-1` sur claim/thesis/summary/action,
   alignée sur le contrat minLength 1 des schémas canoniques maison) + prompt + schéma JSON avec 5
@@ -375,7 +375,7 @@ Le reçu re-vérifiable des missions (Couche-2) doit désormais porter, **par ho
   d'audit `from_client_with_audit` (B.3). Testé hors-ligne jusqu'à l'écho et au clamp via un **faux
   llama-server** (revue #7) ; la qualité de contenu reste **live-only** (`#[ignore]`, llama-server +
   poids requis). Revue adverse : 10 findings bruts → 9 confirmés (dont 3 doublons) → **7 corrigés**.
-- **B.2 — Wiring servi opt-in + circuit CONSOMMÉ. ✅ IMPLÉMENTÉ & VÉRIFIÉ (2026-07-14, commit-pending).**
+- **B.2 — Wiring servi opt-in + circuit CONSOMMÉ. ✅ IMPLÉMENTÉ & VÉRIFIÉ (2026-07-16, commit bdd4f7e).**
   `coordinator_from_env` (gateway, feature `frontier-llm`) construit le SLM depuis
   `EFE_SLM_REFORMULATOR_URL` via la fonction **pure** `slm_clients_from(url)` (pattern maison
   `policy_registry_from_str`, testable race-free) : URL absente/vide ⟹ bundle par défaut (chemin servi
@@ -403,7 +403,7 @@ Le reçu re-vérifiable des missions (Couche-2) doit désormais porter, **par ho
   `reformulator_for`-attache-le-circuit prouvé de bout en bout (coordinator réel, clé partagée) ;
   en-tête corrigé (deadlines/budget = B.4 seul). Nuance honnête documentée : une sonde consommée par une
   erreur `ClientSide` ne rend pas de verdict — le slot est retenu jusqu'à la borne de reprise, jamais plus.
-- **B.3 — Provenance chaînée + estampillée. ✅ IMPLÉMENTÉ & VÉRIFIÉ (2026-07-17, commit-pending).**
+- **B.3 — Provenance chaînée + estampillée. ✅ IMPLÉMENTÉ & VÉRIFIÉ (2026-07-17, commit 33a2b2c).**
   Constat de vérité-terrain (6 lecteurs) : le stamp `engine` de B.0 n'allait NULLE PART de servi (bus
   in-process sans abonné, payload tronqué à 120 chars) et l'`audit_chain_hash` des réponses est le
   swarm_id formaté — pas un hash de chaîne. B.3 rend la promesse §6 réelle, en trois étages :
@@ -445,7 +445,7 @@ Le reçu re-vérifiable des missions (Couche-2) doit désormais porter, **par ho
   du reçu (l'erreur remonte sans hop ; dans vote, le LLM est sauté) — la tentative reste
   observable (`tracing::warn` avec entry_id) et RETENUE par le writer partagé du backend
   (croisable via `from_client_with_audit`) ; l'appel LLM Mode-C, lui, reste scellé.
-- **B.4 — Deadlines de mission sur le hop SLM. ✅ IMPLÉMENTÉ & VÉRIFIÉ (2026-07-17, commit-pending).**
+- **B.4 — Deadlines de mission sur le hop SLM. ✅ IMPLÉMENTÉ & VÉRIFIÉ (2026-07-17, commit 6961f56).**
   Le trait public `Reformulator` gagne `deadline: Option<Duration>` = temps de mission **restant**,
   calculé par la mission à CHAQUE hop (`max_total_latency − started.elapsed()` — relay ×3, vote ×1
   par claim, debate ×2 par round) ; le moteur règle l'ignore (≈ instantané). Dans l'adapter SLM,
