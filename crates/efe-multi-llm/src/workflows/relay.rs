@@ -69,6 +69,8 @@ pub async fn run_relay(
             SourceDialect::from_provider_id(&req.planner_llm),
             CanonicalSchemaId::PlanV1,
             &req.planner_llm,
+            // B.4 : le hop SLM est borné au temps de mission RESTANT.
+            Some(req.max_total_latency.saturating_sub(started.elapsed())),
         )
         .await
         .map_err(|e| MultiLlmError::RelayPhaseFailed {
@@ -125,6 +127,8 @@ pub async fn run_relay(
             SourceDialect::from_provider_id(&req.implementer_llm),
             CanonicalSchemaId::CodeV1,
             &req.implementer_llm,
+            // B.4 : le hop SLM est borné au temps de mission RESTANT.
+            Some(req.max_total_latency.saturating_sub(started.elapsed())),
         )
         .await
         .map_err(|e| MultiLlmError::RelayPhaseFailed {
@@ -181,6 +185,8 @@ pub async fn run_relay(
             SourceDialect::from_provider_id(&req.synthesizer_llm),
             CanonicalSchemaId::SynthesisV1,
             &req.synthesizer_llm,
+            // B.4 : le hop SLM est borné au temps de mission RESTANT.
+            Some(req.max_total_latency.saturating_sub(started.elapsed())),
         )
         .await
         .map_err(|e| MultiLlmError::RelayPhaseFailed {

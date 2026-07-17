@@ -107,13 +107,30 @@ pub fn coordinator_from_env() -> Option<Arc<Coordinator>> {
 /// s'ouvre après 3 échecs : dégradation sans appel réseau pendant 10 s,
 /// puis UNE seule sonde par fenêtre paie le timeout client (30 s max) —
 /// les hops concurrents dégradent sans appel (porte `try_call`, pas de
-/// troupeau vers un serveur malade). Cette latence de sonde n'est pas
-/// encore décomptée des deadlines de mission — B.4.
+/// troupeau vers un serveur malade). Depuis B.4, chaque hop est de plus
+/// borné au temps de mission RESTANT (deadline threadée par les missions) :
+/// même la sonde ne peut pas manger la deadline des gros modèles, et une
+/// coupure-deadline n'ouvre pas DIRECTEMENT le circuit (raison
+/// `deadline_exhausted` estampillée dans le hop scellé du reçu ; résidu
+/// indirect documenté dans slm.rs : une génération abandonnée qui moud côté
+/// serveur peut faire payer aux hops suivants de vrais timeouts 30 s).
 fn slm_clients_from(url: Option<&str>) -> CoordinatorClients {
     let mut clients = CoordinatorClients::default();
     let Some(url) = url.map(str::trim).filter(|u| !u.is_empty()) else {
         return clients;
     };
+    // Honnêteté (revue B.4) : l'URL n'est PAS contrainte au local — un
+    // llama-server distant est possible et son egress n'est ni gardé par
+    // l'allowlist tenant ni décompté (le hop est budgété 0 ¢). On prévient
+    // au boot plutôt que de prétendre une souveraineté qu'on ne vérifie pas.
+    // (Le check est un miroir minimal des `is_local_endpoint` maison —
+    // provenance-capture/guard.rs & efe-swarm-sdk — sans en dépendre.)
+    if !slm_url_looks_local(url) {
+        eprintln!(
+            "⚠ EFE_SLM_REFORMULATOR_URL ({url}) ne pointe pas sur un hôte local — \
+             l'egress de ce SLM n'est ni gardé ni décompté ; souveraineté NON garantie"
+        );
+    }
     match ReformulatorClient::from_assets_multillm(url) {
         Ok(c) => {
             clients.reformulator = Some(Arc::new(c));
@@ -135,6 +152,18 @@ fn slm_clients_from(url: Option<&str>) -> CoordinatorClients {
         }
     }
     clients
+}
+
+/// L'hôte de `url` est-il manifestement local ? (localhost / 127.x / ::1)
+/// Check de BOOT-WARN uniquement — pas une garde de sécurité.
+fn slm_url_looks_local(url: &str) -> bool {
+    let rest = url.split("://").nth(1).unwrap_or(url);
+    let host = rest.split(['/', '?']).next().unwrap_or(rest);
+    let host = host.strip_prefix('[').map_or_else(
+        || host.rsplit_once(':').map_or(host, |(h, _)| h),
+        |h| h.split(']').next().unwrap_or(h),
+    );
+    host == "localhost" || host == "::1" || host.starts_with("127.")
 }
 
 /// Charge l'**allowlist d'egress par tenant** depuis `EFE_LLM_TENANT_ALLOWLIST` (côté binaire).
@@ -224,6 +253,18 @@ mod tests {
     /// Sans opt-in : bundle par défaut, strictement pré-B.2. Avec URL : client
     /// multi-llm + circuit `"reformulator"` présents (aucun réseau au boot —
     /// `from_assets_multillm` ne fait que lire les assets). URL vide = absent.
+    #[test]
+    fn slm_url_locality_boot_warn_heuristic() {
+        // Locaux manifestes.
+        for u in ["http://127.0.0.1:8080", "http://localhost:8080/x", "http://[::1]:9000", "127.0.0.1:1"] {
+            assert!(slm_url_looks_local(u), "{u} devrait être vu local");
+        }
+        // Distants (⟹ warn de boot : egress ni gardé ni décompté).
+        for u in ["http://10.0.0.5:8080", "https://slm.example.com", "http://192.168.1.10:8080"] {
+            assert!(!slm_url_looks_local(u), "{u} ne doit PAS être vu local");
+        }
+    }
+
     #[test]
     fn slm_clients_from_wires_client_and_circuit_only_on_opt_in() {
         use efe_coordinator::ReformulatorProfile;

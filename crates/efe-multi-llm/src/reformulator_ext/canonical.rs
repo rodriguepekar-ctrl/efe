@@ -371,6 +371,9 @@ impl Reformulator for CanonicalReformulator {
         from: SourceDialect,
         target: crate::canonical::CanonicalSchemaId,
         llm_source: &str,
+        // B.4 : le parsing règle est ≈ instantané (pur Rust, zéro réseau) —
+        // la deadline de mission n'a rien à borner ici.
+        _deadline: Option<std::time::Duration>,
     ) -> MultiLlmResult<Reformulated> {
         let value = self.route(raw, from, target, llm_source)?;
         Ok(Reformulated::new(value, ReformulatorEngine::Rule))
@@ -381,6 +384,7 @@ impl Reformulator for CanonicalReformulator {
         raw: &str,
         stance: ArgumentStance,
         from: SourceDialect,
+        _deadline: Option<std::time::Duration>,
     ) -> MultiLlmResult<Reformulated> {
         let arg = self.to_argument(raw, stance, from)?;
         let value = serde_json::to_value(arg).map_err(|e| MultiLlmError::ReformulationFailed {

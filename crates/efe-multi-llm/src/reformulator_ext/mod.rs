@@ -70,21 +70,31 @@ impl SourceDialect {
 pub trait Reformulator: Send + Sync {
     /// Traduit `raw` (dialecte `from`, produit par `llm_source`) vers la forme
     /// canonique `target`. Renvoie la valeur **et** le moteur qui l'a produite.
+    ///
+    /// **Fil B.4** — `deadline` : temps de mission RESTANT pour ce hop
+    /// (`max_total_latency − elapsed`, calculé par la mission). `None` = pas
+    /// de contrainte (usage librairie/tests). Un moteur-modèle doit borner son
+    /// invocation à ce reste et **dégrader estampillé** (`deadline_exhausted`)
+    /// s'il ne peut pas tenir — un hop SLM lent ne mange JAMAIS la deadline
+    /// des gros modèles. Le moteur règle (≈ instantané) l'ignore.
     async fn to_canonical(
         &self,
         raw: &str,
         from: SourceDialect,
         target: CanonicalSchemaId,
         llm_source: &str,
+        deadline: Option<std::time::Duration>,
     ) -> MultiLlmResult<Reformulated>;
 
     /// Cas particulier de `debate` : reformule un argument en portant sa
     /// `stance` (que la forme canonique générique `to_canonical` ne transporte
     /// pas). Renvoie la valeur `CanonicalArgument` sérialisée + le moteur.
+    /// `deadline` : même contrat que [`Self::to_canonical`] (Fil B.4).
     async fn to_argument_value(
         &self,
         raw: &str,
         stance: ArgumentStance,
         from: SourceDialect,
+        deadline: Option<std::time::Duration>,
     ) -> MultiLlmResult<Reformulated>;
 }

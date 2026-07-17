@@ -82,7 +82,14 @@ pub async fn run_vote_3llm(
     for r in &responses {
         let dialect = SourceDialect::from_provider_id(&r.provider);
         let reff = match reformulator
-            .to_canonical(&r.text, dialect, CanonicalSchemaId::ClaimV1, &r.provider)
+            .to_canonical(
+                &r.text,
+                dialect,
+                CanonicalSchemaId::ClaimV1,
+                &r.provider,
+                // B.4 : le hop SLM est borné au temps de mission RESTANT.
+                Some(req.max_total_latency.saturating_sub(started.elapsed())),
+            )
             .await
         {
             Ok(reff) => reff,

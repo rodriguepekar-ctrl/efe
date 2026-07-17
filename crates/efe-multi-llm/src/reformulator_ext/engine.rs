@@ -125,6 +125,17 @@ pub struct ReformulationHop {
     /// lieu pendant ce hop (y compris une tentative échouée puis dégradée).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub slm_audit: Option<SlmHopAudit>,
+    /// **Fil B.4** — POURQUOI ce hop a dégradé (tag stable :
+    /// `deadline_exhausted` / `circuit_open` / `unsupported_schema` /
+    /// `robot_error` / `invalid_output` / `client_side`). Absent pour un hop
+    /// `SLM` réussi et pour le moteur règle pur. Rend chaque dégradation
+    /// distinguable dans le reçu scellé — une deadline de mission épuisée ne
+    /// ressemble plus à un circuit ouvert. (Nuance : pendant qu'une sonde
+    /// HalfOpen est en vol, la porte refuse les autres hops avec le tag
+    /// `circuit_open` — c'est la porte qui a refusé, même si l'état public
+    /// est HalfOpen.)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub degrade_reason: Option<String>,
 }
 
 /// Résultat d'une reformulation : la valeur canonique **plus** le moteur qui
@@ -140,21 +151,30 @@ pub struct Reformulated {
     pub engine: ReformulatorEngine,
     /// **Fil B.3** — faits d'audit de l'invocation SLM du hop. `None` pour le
     /// moteur règle et quand aucun appel SLM n'est parti (circuit ouvert,
-    /// schéma non supporté, entrée rejetée côté client).
+    /// schéma non supporté, entrée rejetée côté client, deadline épuisée).
     pub slm_audit: Option<SlmHopAudit>,
+    /// **Fil B.4** — raison de la dégradation (tag stable), `None` sinon.
+    pub degrade_reason: Option<&'static str>,
 }
 
 impl Reformulated {
     /// Constructeur pratique (sans audit SLM — le cas règle).
     #[must_use]
     pub fn new(value: serde_json::Value, engine: ReformulatorEngine) -> Self {
-        Self { value, engine, slm_audit: None }
+        Self { value, engine, slm_audit: None, degrade_reason: None }
     }
 
     /// **Fil B.3** — attache les faits d'audit SLM capturés pendant le hop.
     #[must_use]
     pub fn with_slm_audit(mut self, audit: Option<SlmHopAudit>) -> Self {
         self.slm_audit = audit;
+        self
+    }
+
+    /// **Fil B.4** — attache la raison de dégradation (tag stable).
+    #[must_use]
+    pub fn with_degrade_reason(mut self, reason: &'static str) -> Self {
+        self.degrade_reason = Some(reason);
         self
     }
 
@@ -168,6 +188,7 @@ impl Reformulated {
             target_schema: target_schema.to_string(),
             engine: self.engine,
             slm_audit: self.slm_audit.clone(),
+            degrade_reason: self.degrade_reason.map(str::to_string),
         }
     }
 }
@@ -229,10 +250,24 @@ mod tests {
         assert_eq!(v["from_llm"], "claude_x");
         assert_eq!(v["target_schema"], "canonical/plan_v1");
         assert!(v.get("slm_audit").is_none(), "None ⟹ champ absent du fil");
+        assert!(v.get("degrade_reason").is_none(), "None ⟹ champ absent du fil (B.4)");
         // Round-trip.
         let back: ReformulationHop = serde_json::from_value(v).unwrap();
         assert_eq!(back.engine, ReformulatorEngine::Rule);
         assert!(back.slm_audit.is_none());
+        assert!(back.degrade_reason.is_none());
+    }
+
+    /// **Fil B.4** — la raison de dégradation voyage sur le fil (tag stable).
+    #[test]
+    fn degrade_reason_rides_the_wire() {
+        let hop = Reformulated::new(serde_json::json!({}), ReformulatorEngine::SlmDegradedToRule)
+            .with_degrade_reason("deadline_exhausted")
+            .to_hop("plan", "claude_x", "canonical/plan_v1");
+        let v = serde_json::to_value(&hop).unwrap();
+        assert_eq!(v["degrade_reason"], "deadline_exhausted");
+        let back: ReformulationHop = serde_json::from_value(v).unwrap();
+        assert_eq!(back.degrade_reason.as_deref(), Some("deadline_exhausted"));
     }
 
     #[test]

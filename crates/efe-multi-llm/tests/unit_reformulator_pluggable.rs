@@ -24,7 +24,7 @@ async fn trait_claim_matches_inherent_and_stamps_rule() {
         .route(raw, dialect, CanonicalSchemaId::ClaimV1, "gemini_x")
         .expect("inherent route ok");
     let via_trait = r
-        .to_canonical(raw, dialect, CanonicalSchemaId::ClaimV1, "gemini_x")
+        .to_canonical(raw, dialect, CanonicalSchemaId::ClaimV1, "gemini_x", None)
         .await
         .expect("trait to_canonical ok");
 
@@ -46,7 +46,7 @@ async fn trait_code_matches_inherent() {
         .route(raw, dialect, CanonicalSchemaId::CodeV1, "gpt_x")
         .expect("inherent");
     let via_trait = r
-        .to_canonical(raw, dialect, CanonicalSchemaId::CodeV1, "gpt_x")
+        .to_canonical(raw, dialect, CanonicalSchemaId::CodeV1, "gpt_x", None)
         .await
         .expect("trait");
 
@@ -68,7 +68,7 @@ async fn trait_argument_matches_inherent_and_stamps_rule() {
         .to_argument(raw, ArgumentStance::Pro, dialect)
         .expect("inherent to_argument");
     let via_trait = r
-        .to_argument_value(raw, ArgumentStance::Pro, dialect)
+        .to_argument_value(raw, ArgumentStance::Pro, dialect, None)
         .await
         .expect("trait to_argument_value");
 
@@ -92,7 +92,7 @@ async fn all_five_schemas_route_via_trait_as_rule() {
     ];
     for (schema, raw) in cases {
         let out = r
-            .to_canonical(raw, SourceDialect::Unknown, schema, "x")
+            .to_canonical(raw, SourceDialect::Unknown, schema, "x", None)
             .await
             .unwrap_or_else(|e| panic!("schema {schema:?} failed: {e}"));
         assert_eq!(out.engine, ReformulatorEngine::Rule, "{schema:?}");

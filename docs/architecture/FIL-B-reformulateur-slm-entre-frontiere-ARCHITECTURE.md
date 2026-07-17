@@ -445,9 +445,43 @@ Le reçu re-vérifiable des missions (Couche-2) doit désormais porter, **par ho
   du reçu (l'erreur remonte sans hop ; dans vote, le LLM est sauté) — la tentative reste
   observable (`tracing::warn` avec entry_id) et RETENUE par le writer partagé du backend
   (croisable via `from_client_with_audit`) ; l'appel LLM Mode-C, lui, reste scellé.
-- **B.4 — Deadlines/budget de mission (repérimétré).** Le circuit (initialement ici) est livré en B.2 ;
-  reste : décompter la latence du hop SLM (≤ 30 s) de `req.max_total_latency`/budget, et passer une
-  deadline dans `reformulate()`.
+- **B.4 — Deadlines de mission sur le hop SLM. ✅ IMPLÉMENTÉ & VÉRIFIÉ (2026-07-17, commit-pending).**
+  Le trait public `Reformulator` gagne `deadline: Option<Duration>` = temps de mission **restant**,
+  calculé par la mission à CHAQUE hop (`max_total_latency − started.elapsed()` — relay ×3, vote ×1
+  par claim, debate ×2 par round) ; le moteur règle l'ignore (≈ instantané). Dans l'adapter SLM,
+  **ordre des gardes** : supports → **deadline** → circuit — un hop sans temps ne part pas ET ne
+  consomme pas le slot de sonde HalfOpen. Plancher `SLM_HOP_MIN_REMAINING = 1 s` (heuristique
+  documentée : sous ça, même un robot sain ne répond pas — tenter ne ferait que brûler le budget de
+  l'appel frontière suivant). En vol : `tokio::timeout(reste)` coupe l'invoke ; la future du client
+  étant DROP (son écriture d'audit avec), le backend **SYNTHÉTISE** l'`AuditEntry` de la tentative
+  (status `TIMEOUT`, même `input_hash` blake3 que le client aurait committé) SSI la capture est
+  encore vide — **l'invariant B.3 « tentative réelle ⟹ capturée » tient sous B.4**. Une
+  coupure-deadline (`BackendError::DeadlineExhausted`) n'impacte JAMAIS le circuit : l'impatience
+  de mission n'est pas une défaillance robot — le circuit mesure le robot contre SON SLA (30 s,
+  timeout client interne, qui lui compte toujours). **Chaque dégradation porte désormais sa raison**
+  (`degrade_reason`, tags stables : `deadline_exhausted`/`circuit_open`/`unsupported_schema`/
+  `robot_error`/`invalid_output`/`client_side`) dans le hop scellé du reçu — une deadline épuisée ne
+  ressemble plus à un circuit ouvert. Budget : le SLM est local ⟹ 0 ¢, seule la latence est
+  décomptée (dit tel quel). DoD §12 tenu : `mission_succeeds_with_degraded_hops_when_deadline_exhausted`
+  (vote e2e : deadline épuisée ⟹ 3 hops dégradés estampillés, la mission RÉUSSIT) + test
+  coupe-en-vol (faux serveur pendu, coupé à ~1,2 s au lieu de 30 s, entrée TIMEOUT synthétisée,
+  circuit fermé au seuil 1). **Revue adverse B.4 : 13 findings bruts → 7 confirmés (3 angles d'un
+  même défaut + 2 doublons de doc) → 4 corrigés.** (1) Le VRAI : le tee écrivait la capture AVANT
+  d'attendre le writer partagé — une coupure-deadline atterrissant dans `shared.record` scellait
+  dans le reçu un `entry_id` jamais persisté côté durable ⟹ **faux signal de falsification** sur
+  exactement la propriété « croisable par entry_id » ; corrigé en INVERSANT l'ordre du tee
+  (partagé d'abord, capture après ⟹ le reçu ne référence que du persisté ; coupe avant
+  persistance ⟹ capture vide ⟹ synthèse hors-timeout à travers le tee complet ; résidu étroit
+  dit : coupe entre commit durable et retour de future ⟹ doublon bénin possible, jamais
+  d'orphelin) + un échec du writer sur la synthèse est BRUYANT et laisse le hop sans audit
+  (jamais d'audit orphelin scellé). (2) `client_side` manquait à la liste documentée des tags.
+  (3) « n'impacte JAMAIS le circuit » adouci en « jamais DIRECTEMENT » + deux résidus dits :
+  sonde HalfOpen coupée ⟹ slot retenu sans verdict jusqu'à la borne de reprise ; génération
+  abandonnée qui moud côté llama-server ⟹ les hops SUIVANTS peuvent payer de vrais timeouts
+  30 s qui, eux, comptent. (4) Sur-vente attrapée dans MA propre doc : l'URL SLM n'est PAS
+  contrainte au local — ajout d'un warn de boot (`slm_url_looks_local`, heuristique testée,
+  pas une garde) : un SLM distant a un egress ni gardé ni décompté, souveraineté non garantie,
+  dit tel quel.
 
 Ordre imposé : B.0 (sûr) → B.1 (substance modèle) → B.2 (servi) → B.3/B.4 (honnêteté + résilience).
 

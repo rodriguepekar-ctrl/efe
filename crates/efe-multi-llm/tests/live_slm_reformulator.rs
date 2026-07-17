@@ -38,7 +38,7 @@ async fn live_plan_from_claude_xml_is_slm_stamped() {
     let raw = "<plan><step>Parse the invoice PDF</step><step>Extract line items</step>\
                <step>Reconcile totals</step></plan>";
     let out = slm()
-        .to_canonical(raw, SourceDialect::ClaudeXml, CanonicalSchemaId::PlanV1, "claude_live")
+        .to_canonical(raw, SourceDialect::ClaudeXml, CanonicalSchemaId::PlanV1, "claude_live", None)
         .await
         .expect("hop plan");
     assert_eq!(out.engine, ReformulatorEngine::Slm, "doit être le SLM, pas la dégradation");
@@ -52,7 +52,7 @@ async fn live_plan_from_claude_xml_is_slm_stamped() {
 async fn live_code_from_gemini_markdown_is_slm_stamped() {
     let raw = "Here is the implementation:\n```rust\nfn add(a: u32, b: u32) -> u32 { a + b }\n```";
     let out = slm()
-        .to_canonical(raw, SourceDialect::GeminiMarkdown, CanonicalSchemaId::CodeV1, "gemini_live")
+        .to_canonical(raw, SourceDialect::GeminiMarkdown, CanonicalSchemaId::CodeV1, "gemini_live", None)
         .await
         .expect("hop code");
     assert_eq!(out.engine, ReformulatorEngine::Slm);
@@ -66,7 +66,7 @@ async fn live_code_from_gemini_markdown_is_slm_stamped() {
 async fn live_claim_from_gemini_markdown_is_slm_stamped() {
     let raw = "The Fed held rates steady.[^1]\n\n[^1]: FOMC statement, June.";
     let out = slm()
-        .to_canonical(raw, SourceDialect::GeminiMarkdown, CanonicalSchemaId::ClaimV1, "gemini_live")
+        .to_canonical(raw, SourceDialect::GeminiMarkdown, CanonicalSchemaId::ClaimV1, "gemini_live", None)
         .await
         .expect("hop claim");
     assert_eq!(out.engine, ReformulatorEngine::Slm);
@@ -81,7 +81,7 @@ async fn live_claim_from_gemini_markdown_is_slm_stamped() {
 async fn live_argument_carries_stance_hint() {
     let raw = "<thesis>Rates should stay unchanged</thesis>\n- inflation is sticky\n- growth on target";
     let out = slm()
-        .to_argument_value(raw, ArgumentStance::Pro, SourceDialect::ClaudeXml)
+        .to_argument_value(raw, ArgumentStance::Pro, SourceDialect::ClaudeXml, None)
         .await
         .expect("hop argument");
     assert_eq!(out.engine, ReformulatorEngine::Slm);
@@ -96,7 +96,7 @@ async fn live_synthesis_from_gpt_json_is_slm_stamped() {
     let raw = r#"{"summary": "Both agree the plan works; timelines differ.",
                   "notes": "claude says 2 sprints, gemini says 3"}"#;
     let out = slm()
-        .to_canonical(raw, SourceDialect::Gpt4Json, CanonicalSchemaId::SynthesisV1, "gpt_live")
+        .to_canonical(raw, SourceDialect::Gpt4Json, CanonicalSchemaId::SynthesisV1, "gpt_live", None)
         .await
         .expect("hop synthesis");
     assert_eq!(out.engine, ReformulatorEngine::Slm);

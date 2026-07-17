@@ -155,6 +155,8 @@ pub async fn run_debate(
                 &pro_resp.text,
                 pro_stance,
                 SourceDialect::from_provider_id(&req.pro_llm),
+                // B.4 : le hop SLM est borné au temps de mission RESTANT.
+                Some(req.max_total_latency.saturating_sub(started.elapsed())),
             )
             .await?;
         // Fil B.3 : le hop AVANT le from_value (qui consomme `.value`).
@@ -176,6 +178,8 @@ pub async fn run_debate(
                 &contra_resp.text,
                 contra_stance,
                 SourceDialect::from_provider_id(&req.contra_llm),
+                // B.4 : le hop SLM est borné au temps de mission RESTANT.
+                Some(req.max_total_latency.saturating_sub(started.elapsed())),
             )
             .await?;
         let contra_hop = contra_ref.to_hop(
