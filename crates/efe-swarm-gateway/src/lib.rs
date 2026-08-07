@@ -516,6 +516,104 @@ mod tests {
         assert!(v["first_break"].is_string(), "la faute est localisée");
     }
 
+    // ── P.0 — la COMPLÉTUDE du reçu ────────────────────────────────────────────────────────
+    // Ces quatre tests couvrent le défaut fermé par P.0 : `verify` recalculait la racine sans
+    // jamais la confronter à la racine scellée, si bien qu'une troncature — invisible à
+    // l'intégrité, puisqu'un préfixe de chaîne HMAC valide l'est aussi — rendait `verified:true`
+    // à un attaquant ne détenant **aucune clé**.
+
+    /// Helper P.0 : exécute un run d'essaim réel (plusieurs records) et rend `(app, store, id)`.
+    async fn seeded_run() -> (Router, std::sync::Arc<InMemoryRunStore>, Uuid) {
+        let (app, store) = app_with_store();
+        let resp = app
+            .clone()
+            .oneshot(post_run(json!({
+                "task": { "text": "hello", "expected": "hello" },
+                "topology": { "kind": "consensus", "generator": "echo_generator",
+                              "judges": ["consistency", "length_band", "j_non_empty"], "k": 5 },
+                "budget": { "max_cents": 1000 }
+            })))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let run = body_json(resp).await;
+        let id: Uuid = run["run_id"].as_str().unwrap().parse().unwrap();
+        (app, store, id)
+    }
+
+    async fn get_verify(app: &Router, id: Uuid) -> Value {
+        let resp = app
+            .clone()
+            .oneshot(Request::builder().uri(format!("/v1/swarm/verify/{id}")).body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        body_json(resp).await
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn verify_reports_root_match_on_healthy_run() {
+        // Nominal : la racine reconstruite reproduit la racine scellée.
+        let (app, _store, id) = seeded_run().await;
+        let v = get_verify(&app, id).await;
+        assert_eq!(v["root_matches"], json!(true), "run intact ⟹ la racine scellée est reproduite");
+        assert_eq!(v["verified"], json!(true), "P.0 ne dégrade pas un run sain");
+        assert_eq!(v["chain_intact"], json!(true));
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn verify_detects_tail_truncation() {
+        // **LE test de P.0.** On retire le dernier enregistrement en base, sans aucune clé.
+        let (app, store, id) = seeded_run().await;
+        let before = get_verify(&app, id).await;
+        assert_eq!(before["verified"], json!(true), "prérequis : le run est vérifié avant l'attaque");
+        let n_before = before["records"].as_u64().unwrap();
+        assert!(n_before >= 2, "le run doit porter assez de records pour être tronqué (obtenu {n_before})");
+
+        assert!(store.truncate_tail(id, 1), "un enregistrement a été retiré");
+
+        let after = get_verify(&app, id).await;
+        // (1) Le point crucial : l'intégrité SEULE ne voit RIEN — le préfixe est valide.
+        assert_eq!(after["chain_intact"], json!(true), "un préfixe de chaîne HMAC valide reste valide");
+        assert_eq!(after["content_intact"], json!(true), "aucun contenu n'a été muté");
+        assert_eq!(after["dag_consistent"], json!(true), "le DAG restant est cohérent");
+        assert!(after["first_break"].is_null(), "aucune faute localisée : rien n'est *cassé*");
+        assert_eq!(after["records"].as_u64().unwrap(), n_before - 1, "il manque bien un record");
+        // (2) …et pourtant le run n'est PAS celui qui a été scellé.
+        assert_eq!(after["root_matches"], json!(false), "la racine scellée n'est plus reproduite");
+        assert_eq!(after["verified"], json!(false), "P.0 : un run tronqué n'est PAS vérifié");
+        assert_ne!(after["root"], before["root"], "la racine a changé");
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn verify_detects_total_record_deletion() {
+        // Cas-limite : tout supprimer. `verify_swarm` déclare un run vide *trivialement* intègre
+        // et ne reconstruit AUCUNE racine — un contrôle naïf (comparer seulement deux `Some`)
+        // laisserait donc passer la suppression totale.
+        let (app, store, id) = seeded_run().await;
+        assert!(store.drop_all_records(id), "tous les records ont été supprimés");
+
+        let v = get_verify(&app, id).await;
+        assert_eq!(v["records"], json!(0));
+        assert_eq!(v["chain_intact"], json!(true), "un run vide est trivialement intègre");
+        assert!(v["root"].is_null(), "aucune racine reconstruite");
+        assert_eq!(v["root_matches"], json!(false), "une racine scellée non reproduite ⟹ faux");
+        assert_eq!(v["verified"], json!(false), "P.0 : la suppression totale n'est PAS vérifiée");
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn verify_without_sealed_root_does_not_accuse() {
+        // Non-accusation rétroactive : un run scellé AVANT la persistance de la racine ne peut
+        // ni être confirmé ni être accusé. Le verdict doit rester celui d'avant P.0.
+        let (app, store, id) = seeded_run().await;
+        assert!(store.clear_root(id), "la racine scellée a été effacée (run « legacy »)");
+
+        let v = get_verify(&app, id).await;
+        assert!(v["root_matches"].is_null(), "sans racine scellée ⟹ None, jamais false");
+        assert_eq!(v["verified"], json!(true), "P.0 n'accuse PAS un run honnête antérieur");
+        assert!(v["root"].is_string(), "la racine reste reconstruite et exposée");
+    }
+
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     async fn verify_unknown_run_is_404() {
         let (app, _s) = app();

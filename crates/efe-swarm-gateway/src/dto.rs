@@ -505,10 +505,28 @@ pub struct RunResponse {
 pub struct VerifyResponse {
     pub run_id: Uuid,
     /// Re-preuve COMPLÈTE : chaîne d'essaim OK **ET** (zéro Mode C, ou chaîne N17 intacte
-    /// ET pont entièrement cohérent). Un run keyless/Mode A reste `verified` trivialement.
+    /// ET pont entièrement cohérent) **ET** [`Self::root_matches`] ≠ `Some(false)` (P.0 :
+    /// le run est aussi **complet**, pas seulement intègre). Un run keyless/Mode A reste
+    /// `verified` trivialement.
     pub verified: bool,
     /// `provenance_root` reconstruit depuis les records + la clé tenant.
     pub root: Option<String>,
+    /// **P.0 — la comparaison de COMPLÉTUDE** : la racine reconstruite est-elle égale à la
+    /// racine **scellée au moment du run** (`StoredRun.root`) ?
+    ///
+    /// Sans ce contrôle, l'intégrité seule ne prouve rien contre la **troncature** : un préfixe
+    /// d'une chaîne HMAC valide est lui-même une chaîne HMAC valide. Retirer les derniers
+    /// enregistrements laisse donc `chain_intact`/`content_intact`/`dag_consistent` à `true` —
+    /// mais change la racine.
+    ///
+    /// - `Some(true)`  : le run est **complet** — rien n'a été retiré, ajouté ni substitué.
+    /// - `Some(false)` : **troncature ou substitution détectée** ; `verified` est forcé à
+    ///   `false`. Couvre aussi la **suppression totale** des records (racine scellée présente,
+    ///   racine reconstruite absente).
+    /// - `None`        : **aucune racine scellée n'est persistée** pour ce run (run antérieur à
+    ///   la persistance de la racine, run vide ou keyless). On ne peut ni confirmer ni accuser :
+    ///   le verdict est laissé **inchangé**. *Aucune accusation rétroactive.*
+    pub root_matches: Option<bool>,
     pub chain_intact: bool,
     pub content_intact: bool,
     pub dag_consistent: bool,

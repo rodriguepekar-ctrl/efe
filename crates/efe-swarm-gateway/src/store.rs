@@ -197,6 +197,71 @@ impl InMemoryRunStore {
         }
         false
     }
+
+    /// **Test-only (P.0)** : **tronque la queue** d'un run — retire les `drop` derniers
+    /// enregistrements en conservant la racine scellée.
+    ///
+    /// C'est l'attaque que l'intégrité seule **ne voit pas** : un préfixe d'une chaîne HMAC
+    /// valide est lui-même une chaîne HMAC valide, donc `chain_intact` reste `true`. Seule la
+    /// comparaison à la racine scellée la révèle. Ne touche **que** la copie en mémoire.
+    ///
+    /// Rend `false` si le run est inconnu, si `drop` vaut 0, ou s'il ne reste rien à retirer
+    /// (on refuse de fabriquer un cas d'attaque vide qui rendrait le test vacant).
+    #[cfg(any(test, feature = "tamper-testkit"))]
+    pub fn truncate_tail(&self, id: Uuid, drop: usize) -> bool {
+        if drop == 0 {
+            return false;
+        }
+        let mut g = match self.runs.lock() {
+            Ok(g) => g,
+            Err(_) => return false,
+        };
+        match g.get_mut(&id) {
+            Some(run) if run.records.len() > drop => {
+                let keep = run.records.len() - drop;
+                run.records.truncate(keep);
+                true
+            }
+            _ => false,
+        }
+    }
+
+    /// **Test-only (P.0)** : **supprime tous** les enregistrements d'un run, en conservant la
+    /// racine scellée. Cas-limite vicieux : `verify_swarm` déclare un run vide *trivialement*
+    /// intègre (chaîne, contenu et DAG à `true`) et ne reconstruit **aucune** racine — un
+    /// contrôle naïf le laisserait donc passer pour vérifié.
+    #[cfg(any(test, feature = "tamper-testkit"))]
+    pub fn drop_all_records(&self, id: Uuid) -> bool {
+        let mut g = match self.runs.lock() {
+            Ok(g) => g,
+            Err(_) => return false,
+        };
+        match g.get_mut(&id) {
+            Some(run) if !run.records.is_empty() => {
+                run.records.clear();
+                true
+            }
+            _ => false,
+        }
+    }
+
+    /// **Test-only (P.0)** : efface la **racine scellée** d'un run, simulant un enregistrement
+    /// antérieur à sa persistance. Sert à prouver la **non-accusation rétroactive** : un tel run
+    /// doit rendre `root_matches: None` et **conserver** son verdict.
+    #[cfg(any(test, feature = "tamper-testkit"))]
+    pub fn clear_root(&self, id: Uuid) -> bool {
+        let mut g = match self.runs.lock() {
+            Ok(g) => g,
+            Err(_) => return false,
+        };
+        match g.get_mut(&id) {
+            Some(run) => {
+                run.root = None;
+                true
+            }
+            None => false,
+        }
+    }
 }
 
 #[async_trait]
