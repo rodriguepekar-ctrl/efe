@@ -133,6 +133,85 @@ participants:
     assert_eq!(c.h1_canary.mode, "boot", "canary defaults to boot (fail-closed honest)");
 }
 
+// =====================================================================
+// Couche 3 M1 — `require_convergence` : le défaut DÉPEND DU MOTEUR
+// =====================================================================
+//
+// L'audit de conformité de la Couche 3 a trouvé le mécanisme fail-closed
+// présent (gRPC ABORTED) mais **inerte là où il compte** : le défaut plat
+// `false` laissait ouvert le trou que le §4 de l'architecture appelait un
+// « blocker de soundness ». Un participant mock est `Φ(x) = κ·x` avec `κ < 1` :
+// il converge par construction, la garde y est sans objet. C'est le VRAI
+// opérateur efe-core — celui dont la contraction n'est que property-testée
+// (canari M1.c, `L̂` borne INFÉRIEURE qui falsifie H1 sans jamais la certifier)
+// — qui peut rendre un point-fixe parasite étiqueté « consensus ». La garde
+// était donc désarmée exactement sur le seul chemin qui en avait besoin.
+//
+// Les trois cas de la règle sont épinglés ici, en YAML : c'est le contrat vu
+// par un opérateur, et cela vérifie du même coup que serde distingue bien
+// « champ absent » de « champ à false ».
+
+/// Fabrique un manifeste à partir des YAML ci-dessus, en y injectant
+/// éventuellement un bloc `iteration`.
+fn manifest_yaml(with_engine: bool, iteration_block: &str) -> Manifest {
+    let participant = if with_engine {
+        "  - id: core-participant\n    dim: 16\n    controller:\n      schema: 1\n      \
+         population:\n        - template: na-sem\n          count: 4\n      max_rounds: 3\n      \
+         alignment_cone:\n        anchors:\n          - [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, \
+         0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]\n        max_projection_distance: 0.5\n      \
+         safety_box:\n        lo: 0.05\n        hi: 0.30\n      tenant_id: tenant-m1d\n"
+    } else {
+        "  - id: supplier-scoring\n    dim: 8\n    kappa: 0.6\n    seed: 11\n"
+    };
+    let yaml = format!(
+        "version: v0.2.0\nmeta:\n  dim: 16\n  safety:\n    kind: box\n    radius: 10.0\n\
+         participants:\n{participant}{iteration_block}"
+    );
+    let m: Manifest = serde_yaml::from_str(&yaml).expect("YAML parses");
+    validate_manifest(&m).expect("YAML validates");
+    m
+}
+
+/// **Le cas qui motive le correctif** : un manifeste servant un vrai moteur
+/// efe-core et ne stipulant RIEN est fail-closed — une itération qui n'atteint
+/// pas `Converged` devient un ABORTED, jamais un « consensus » consommable.
+#[test]
+fn unstated_policy_is_strict_when_an_efe_core_engine_is_served() {
+    let m = manifest_yaml(true, "");
+    assert!(m.has_efe_core_participant(), "la ligne porte un bloc controller");
+    assert_eq!(m.iteration.require_convergence, None, "rien n'est stipulé sur le fil");
+    assert!(
+        m.require_convergence(),
+        "moteur réel + politique non stipulée ⇒ fail-closed (c'était le trou)"
+    );
+}
+
+/// La rétro-compat v0.2.0 est intacte : sans bloc `controller`, la ronde ne
+/// coordonne que des mocks contractifs par construction, et le comportement
+/// historique permissif est conservé au bit près.
+#[test]
+fn unstated_policy_stays_lenient_for_a_mock_only_manifest() {
+    let m = manifest_yaml(false, "");
+    assert!(!m.has_efe_core_participant());
+    assert!(
+        !m.require_convergence(),
+        "aucun moteur réel ⇒ défaut historique inchangé (aucune rupture v0.2.0)"
+    );
+}
+
+/// L'opt-out reste possible et STIPULÉ gagne — on n'impose pas le choix, on
+/// exige qu'il soit fait. `load_and_validate` le journalise bruyamment quand un
+/// vrai moteur est servi ; ici on épingle seulement que la stipulation prime.
+#[test]
+fn stated_policy_always_wins_over_the_engine_derived_default() {
+    let strict_off = manifest_yaml(true, "iteration:\n  require_convergence: false\n");
+    assert_eq!(strict_off.iteration.require_convergence, Some(false), "false ≠ absent");
+    assert!(!strict_off.require_convergence(), "opt-out explicite honoré");
+
+    let strict_on = manifest_yaml(false, "iteration:\n  require_convergence: true\n");
+    assert!(strict_on.require_convergence(), "opt-in explicite honoré sur un mock");
+}
+
 /// The fail-closed-against-old-binaries property : an efe-core row OMITS
 /// kappa/seed, and a mock row REQUIRES them — so the two shapes can never be
 /// silently confused (validate enforces the presence rules both ways).

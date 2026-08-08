@@ -42,6 +42,21 @@ pub fn load(path: impl AsRef<Path>) -> Result<Manifest, ServerError> {
 pub fn load_and_validate(path: impl AsRef<Path>) -> Result<Manifest, ServerError> {
     let m = load(path)?;
     validate_manifest(&m)?;
+    // Couche 3 M1 — la non-convergence est fail-closed PAR DÉFAUT dès qu'un vrai
+    // moteur efe-core est servi (cf. `Manifest::require_convergence`). La désactiver
+    // explicitement reste légitime — mais jamais en silence : c'est précisément
+    // l'opérateur dont la contraction n'est que property-testée (canari M1.c, `L̂`
+    // est une borne INFÉRIEURE) qui peut rendre un point-fixe parasite étiqueté
+    // « consensus ». Même règle qu'ailleurs dans ce dépôt : on n'impose pas le
+    // choix, on exige qu'il soit FAIT et visible.
+    if m.has_efe_core_participant() && m.iteration.require_convergence == Some(false) {
+        tracing::warn!(
+            "iteration.require_convergence = false alors que le manifeste sert un \
+             participant efe-core : un Iterate qui n'atteint PAS `Converged` rendra \
+             un OK portant un « consensus » non convergé, que l'appelant peut croire \
+             sur parole. Retirer le champ rétablit le défaut fail-closed (ABORTED)."
+        );
+    }
     Ok(m)
 }
 

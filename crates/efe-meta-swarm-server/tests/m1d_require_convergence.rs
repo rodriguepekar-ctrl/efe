@@ -39,7 +39,7 @@ async fn spawn_three() -> Vec<(String, usize, f32, u64, std::net::SocketAddr)> {
     ]
 }
 
-fn iteration(require_convergence: bool) -> IterationManifest {
+fn iteration(require_convergence: Option<bool>) -> IterationManifest {
     IterationManifest {
         max_iters: 100,
         tolerance: 1.0e-4,
@@ -56,7 +56,7 @@ fn iteration(require_convergence: bool) -> IterationManifest {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn strict_profile_aborts_on_non_convergence() {
     let statics = spawn_three().await;
-    let state = common::build_controller_state_with_iteration(&statics, 10, DIM, iteration(true));
+    let state = common::build_controller_state_with_iteration(&statics, 10, DIM, iteration(Some(true)));
     let svc = ControllerService::new(state);
 
     // 2 iterations at tolerance 1e-12 cannot converge (κ ≥ 0.5 ⇒ ~50+ iters).
@@ -72,12 +72,19 @@ async fn strict_profile_aborts_on_non_convergence() {
     );
 }
 
-/// require_convergence = FALSE (the default) keeps the historical lenient
+/// require_convergence STATED as `false` keeps the historical lenient
 /// behaviour : OK + `stop_reason = MAX_ITERS` — backward compat pinned.
+///
+/// This test was named `lenient_default_…` while `false` *was* the flat
+/// default.  It no longer is : unstated now resolves against the engine
+/// (`Manifest::require_convergence`), so what is pinned here is the explicit
+/// OPT-OUT — the operator stated a choice and it is honoured, loudly logged
+/// when a real engine is present.  The resolution rule itself is pinned by
+/// the unit tests in `manifest::schema`.
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn lenient_default_returns_ok_with_max_iters() {
+async fn stated_lenient_returns_ok_with_max_iters() {
     let statics = spawn_three().await;
-    let state = common::build_controller_state_with_iteration(&statics, 10, DIM, iteration(false));
+    let state = common::build_controller_state_with_iteration(&statics, 10, DIM, iteration(Some(false)));
     let svc = ControllerService::new(state);
 
     let resp = svc
@@ -98,7 +105,7 @@ async fn lenient_default_returns_ok_with_max_iters() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn strict_profile_passes_a_converging_iterate() {
     let statics = spawn_three().await;
-    let state = common::build_controller_state_with_iteration(&statics, 10, DIM, iteration(true));
+    let state = common::build_controller_state_with_iteration(&statics, 10, DIM, iteration(Some(true)));
     let svc = ControllerService::new(state);
 
     let resp = svc
@@ -117,7 +124,7 @@ async fn strict_profile_passes_a_converging_iterate() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn step_once_is_exempt_from_require_convergence() {
     let statics = spawn_three().await;
-    let state = common::build_controller_state_with_iteration(&statics, 10, DIM, iteration(true));
+    let state = common::build_controller_state_with_iteration(&statics, 10, DIM, iteration(Some(true)));
     let svc = ControllerService::new(state);
 
     let resp = svc

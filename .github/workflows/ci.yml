@@ -83,6 +83,44 @@ jobs:
           PYO3_PYTHON: python3.12
         run: cargo nextest run -p efe-ffi --lib
 
+  # Couche 3 M1 — LE job qui défend le DoD. `rust-tests` ci-dessus exécute bien
+  # `efe-meta-swarm-server` (via `nextest run --workspace`), mais aux features PAR
+  # DÉFAUT : or les 5 tests qui prouvent le DoD#1 — une ronde SERVIE (Step-sur-gRPC)
+  # tournée par un VRAI `SwarmController` efe-core, contenue dans la boîte de sûreté,
+  # plus le gate H1 de boot et la mesure Palier-2 — vivent dans un fichier
+  # `#![cfg(feature = "core-integration")]`, donc ZÉRO test exécuté. Sans ce job, le
+  # seul e2e du méta-essaim peut pourrir sur une dérive d'efe-core, du contrôleur
+  # latent ou de `core_engine::build` sans qu'aucun voyant ne s'allume.
+  # Job SÉPARÉ plutôt qu'une étape de `rust-tests` : la feature tire efe-core ET
+  # efe-server dans le graphe, un build qui ferait sauter le timeout de 15 min.
+  meta-swarm-core-integration:
+    name: Couche 3 — méta-essaim (vrais participants efe-core)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30     # build à froid efe-core + efe-server ≈ 6 min en local (debug)
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.88
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: meta-swarm-core-integration
+      - uses: taiki-e/install-action@nextest
+      # `protoc` n'est PAS requis : efe-meta-swarm-proto embarque protoc-bin-vendored.
+      # On compile TOUTES les cibles sous la feature — c'est ce qui attrape une
+      # rupture de `#[cfg]` n'importe où dans le crate, pas seulement dans la suite
+      # de preuve.
+      - name: Build (toutes cibles, core-integration)
+        run: cargo build -p efe-meta-swarm-server --features core-integration --all-targets
+      # …mais on n'EXÉCUTE que la suite de preuve. Portée volontairement étroite,
+      # et il faut le dire plutôt que de laisser croire à une couverture plus large :
+      #   * le reste du crate tourne DÉJÀ dans `rust-tests` (nextest --workspace),
+      #     aux features par défaut — le relancer ici n'ajoute aucune couverture ;
+      #   * les `integration_multiprocess_*` lancent de vrais binaires et sont
+      #     connus pour flaker sous charge parallèle (ils passent isolés) ; les
+      #     embarquer dans une porte bloquante apprendrait à relancer jusqu'au vert,
+      #     ce qui est exactement la pathologie que ce dépôt traque.
+      - name: Test (la suite de preuve du DoD #1)
+        run: cargo nextest run -p efe-meta-swarm-server --features core-integration --test m1d_core_serving_e2e
+
   python-tests:
     name: Python unit tests
     runs-on: ubuntu-latest
@@ -136,12 +174,13 @@ jobs:
     name: All checks passed
     runs-on: ubuntu-latest
     if: always()
-    needs: [fast-checks, rust-tests, python-tests, cuda-build, security]
+    needs: [fast-checks, rust-tests, meta-swarm-core-integration, python-tests, cuda-build, security]
     steps:
       - name: Verify all jobs succeeded
         run: |
           if [[ "${{ needs.fast-checks.result }}" != "success" || \
                 "${{ needs.rust-tests.result }}" != "success" || \
+                "${{ needs.meta-swarm-core-integration.result }}" != "success" || \
                 "${{ needs.python-tests.result }}" != "success" || \
                 "${{ needs.cuda-build.result }}" != "success" || \
                 "${{ needs.security.result }}" != "success" ]]; then

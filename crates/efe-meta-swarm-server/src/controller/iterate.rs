@@ -208,17 +208,29 @@ pub async fn run_iterate(
     //     brick every served Iterate.  Wire-level certificates are the
     //     Couche 3 M4 milestone.
     //   * `StepOnce` (max_iters = 1, definitionally non-converged) is exempt.
-    if manifest.iteration.require_convergence && result.stop_reason != StopReason::Converged {
+    //   * The policy is RESOLVED, not read raw : unstated defaults to `true`
+    //     as soon as a participant carries an efe-core `controller` block (a
+    //     mock is `κ·x`, `κ < 1` — it converges by construction, so a flat
+    //     `false` default left the guard off exactly where it was needed).
+    if manifest.require_convergence() && result.stop_reason != StopReason::Converged {
         warn!(
             iterations = result.iterations,
             final_residual = result.final_residual,
             stop_reason = ?result.stop_reason,
             "Iterate did NOT converge and require_convergence is set — failing closed",
         );
+        // Dire D'OÙ vient la politique : sans cela, un opérateur dont le YAML ne
+        // contient pas le champ chercherait en vain un réglage qu'il n'a pas écrit.
+        let origin = if manifest.iteration.require_convergence.is_some() {
+            "iteration.require_convergence is set"
+        } else {
+            "iteration.require_convergence is unstated and defaults to STRICT \
+             because this manifest serves an efe-core participant"
+        };
         return Err(Status::aborted(format!(
             "convergence failed after {} iterations (final_residual = {:e}, \
-             tolerance = {:e}) — iteration.require_convergence is set : a \
-             non-converged iterate is never returned as a consensus",
+             tolerance = {:e}) — {origin} : a non-converged iterate is never \
+             returned as a consensus",
             result.iterations, result.final_residual, validated.tolerance,
         )));
     }

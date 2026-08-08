@@ -83,6 +83,8 @@ Un certificat **empirique** `NonExpansiveCertificate::Empirical{n_samples, seed,
 
 **Correctif (fail-closed, blocker)** : en profil « contraction requise », `stop_reason != Converged` ⟹ **RPC en échec** (`FAILED_PRECONDITION`), **jamais** étiqueté « consensus » ; exposer le `final_residual` ; et rendre la garde H1 (`coupled.rs:144`) **capable d'échouer** (`Stub.is_valid()=false` en strict).
 
+> **AMENDÉ par l'addendum du 2026-08-08** (deux points, lire avant de citer ce §) : ce n'est plus un « profil » à activer — c'est le **défaut** dès qu'un participant efe-core est servi (`Manifest::require_convergence`) ; et le code d'erreur est **`ABORTED`**, pas `FAILED_PRECONDITION` (que `classify_grpc_status` range en `safety_violation`, ce qui confondrait une non-convergence avec une sortie de boîte).
+
 ---
 
 ## 5. Le trou de déterminisme (high)
@@ -214,3 +216,73 @@ par construction + borne **mesurée** (property-testée, non certifiée) ». Le 
 honnête reste le mélange « fixe + canary » — inchangé ; seule la promesse « prouvé
 analytiquement ≤ β₁ » est retirée tant que l'écart 0.366 vs 0.17 n'est pas réconcilié
 (piste : mesurer les étages un à un via `phi_once` sur des variantes d'assemblage).
+
+---
+
+## Addendum · 2026-08-08 — audit de conformité : les deux écarts qui changeaient le comportement servi
+
+L'audit du jalon M1 (6 critères du §8 + §3/§4/§5/§7 confrontés **au code**, suite de preuve
+exécutée) a rendu 4 critères tenus et 2 écarts *de comportement*. Ils sont fermés ici ; les
+écarts purement documentaires relevés au passage (§2 périmé, §7 prescrivant une phrase que
+l'addendum du 14/07 a retirée, §8 sans marqueur de livraison et au lettrage divergent des
+commits) restent ouverts et sont listés à la fin.
+
+**Écart A — la preuve du DoD n'était défendue par aucune CI.** `ci.yml` exécute bien
+`cargo nextest run --workspace`, donc `efe-meta-swarm-server` **est** testé — mais aux features
+PAR DÉFAUT. Or les 5 tests qui prouvent le **DoD #1** (`m1d_core_serving_e2e.rs` : ronde servie
+Step-sur-gRPC par un vrai `SwarmController`, gate H1 de boot, mesure Palier-2, `config_hash`)
+vivent dans un fichier `#![cfg(feature = "core-integration")]` : **zéro test exécuté**. La preuve
+existait et passait — je l'ai lancée à la main, 16/16 verte — mais rien ne la protégeait : une
+dérive d'efe-core, du contrôleur latent ou de `core_engine::build` l'aurait cassée en silence.
+*Correctif* : un job `meta-swarm-core-integration` dédié dans `ci.yml`, câblé dans `all-green`
+(un job qui peut échouer sans bloquer serait lui-même un vert malhonnête). Job séparé plutôt
+qu'une étape de `rust-tests` : la feature tire efe-core ET efe-server, un build qui ferait
+sauter le timeout de 15 min. Il **compile toutes les cibles** sous la feature — c'est ce qui
+attrape une rupture de `#[cfg]` n'importe où — mais n'en **exécute que la suite de preuve**, et
+cette portée étroite est délibérée : le reste du crate tourne déjà dans `rust-tests`, et les
+`integration_multiprocess_*` lancent de vrais binaires qui flakent sous charge parallèle (3
+échecs observés en suite complète, les 3 verts isolés en 1,8 s). Les mettre dans une porte
+bloquante apprendrait à relancer jusqu'au vert — exactement la pathologie visée.
+
+**Écart B — le fail-closed de non-convergence était inerte là où il compte.** Le mécanisme
+existait (§4 livré : gRPC `ABORTED`), mais `iteration.require_convergence` valait `false` par
+défaut, sans aucun couplage à la présence d'un moteur réel — et un test épinglait ce défaut
+permissif comme comportement correct. Le raisonnement qui manquait : un participant mock est
+`Φ(x) = κ·x` avec `κ < 1`, il **converge par construction**, la garde y est sans objet ; c'est
+le vrai opérateur efe-core, dont la contraction n'est que *property-testée* (canari M1.c, `L̂`
+est une borne **inférieure** qui falsifie H1 sans jamais la certifier), qui peut rendre un
+point-fixe parasite étiqueté « consensus ». La garde était donc désarmée exactement sur le seul
+chemin qui en avait besoin — le trou que ce §4 appelle un *blocker de soundness* restait ouvert
+pendant que la case était cochée.
+*Correctif* : le champ devient `Option<bool>` (« absent » ≠ « à false ») et
+`Manifest::require_convergence()` résout — **stipulé gagne**, non stipulé vaut `true` dès qu'une
+ligne porte un bloc `controller`. On n'impose pas le choix, on exige qu'il soit **fait** :
+l'opt-out explicite reste honoré et `load_and_validate` le journalise bruyamment quand un vrai
+moteur est servi. Les manifestes mock v0.2.0 ne portent aucun bloc `controller` : leur
+comportement est inchangé au bit près.
+
+**Amendement au §4** : « en profil *contraction requise* » devient « **par défaut** dès qu'un
+participant efe-core est servi ». Et le code est `ABORTED`, non `FAILED_PRECONDITION` comme
+l'annonçait le §4 — écart délibéré et commenté au site : `classify_grpc_status` range
+`FAILED_PRECONDITION` en `safety_violation`, ce qui aurait confondu une non-convergence avec une
+sortie de boîte.
+
+**Ce que l'audit a trouvé tenu**, et qu'il faut continuer à dire : DoD #1 (prouvé ET exécuté),
+#4 (déterminisme prouvé par rerun + contrôle négatif ; fil honnête — `kappa`/`seed` sentinellés
+et dépréciés, `config_hash`, `topology` annoncés), #6 (fail-closed dans les deux sens : un
+binaire sans la feature refuse de servir un mock à la place d'un bloc `controller`, et le reload
+rejette toute dérive du bloc — y compris la dérive de *présence* mock↔efe-core, qui aurait
+permis de booter en mock puis de basculer à chaud sur un moteur jamais passé au canari).
+
+**Écarts laissés ouverts** (documentaires, aucun effet servi) : (a) le §2 « état des lieux » est
+un tableau au **présent** dont six affirmations sont désormais fausses (le test d'intégration
+« n'existe pas » — il porte 11 tests ; `core-integration` « 0 hit dans le serveur » — 14 dans le
+seul `participant/local.rs` ; `verify_non_expansive` « Stub » — `Empirical` réel ; etc.) ; (b) le
+§7 prescrit de remplacer « convergence prouvée » par « contraction analytique ≤ β₁ », que
+l'addendum du 14/07 a **retirée** — suivre le §7 produirait la sur-vente qu'il prétend éliminer,
+alors que le code, lui, est honnête (aucune variante analytique dans l'enum de certificat) ;
+(c) le §8 ne marque **aucun** jalon livré et son lettrage a divergé des commits (doc M1.b =
+topologie fixe / commit M1.b = Φ déterministe ; doc M1.d = déterminisme / commit M1.d = vrais
+participants servis) ; (d) le DoD #5 est littéralement inapplicable — `grep = 0` ne peut pas
+être satisfait puisque les tables de bannissement contiennent les phrases ; sur le fond il est
+tenu, aucune occurrence n'est une affirmation dans le périmètre.

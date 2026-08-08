@@ -308,7 +308,7 @@ mod tests {
                 coupling_gamma: 0.2,
                 deterministic: true,
                 max_wall_ms: 15_000,
-                require_convergence: false,
+                require_convergence: None, // non stipulé — résolu selon le moteur servi
             },
         }
     }

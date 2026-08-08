@@ -228,12 +228,27 @@ pub struct IterationManifest {
     /// Couche 3 M1.d — **fail-closed non-convergence** (architecture §4).
     /// When `true`, an `Iterate` that stops on `MaxItersHit` returns a gRPC
     /// `ABORTED` error instead of an OK response carrying a non-converged
-    /// "consensus" the caller might silently trust.  Default `false` keeps
-    /// the historical lenient behaviour for v0.2.0 manifests ;  deployments
-    /// serving REAL participants (the "contraction required" profile) SHOULD
-    /// set it to `true`.  `StepOnce` (max_iters = 1, definitionally
-    /// non-converged) is exempt.
-    pub require_convergence: bool,
+    /// "consensus" the caller might silently trust.  `StepOnce`
+    /// (`max_iters = 1`, definitionally non-converged) is exempt.
+    ///
+    /// **`None` = not stated, and the default then DEPENDS ON THE ENGINE**
+    /// — resolve it with [`Manifest::require_convergence`], never by reading
+    /// this field directly.  A flat `false` default was a fail-open on the
+    /// only path that can actually diverge : a mock participant is `Φ(x) = κ·x`
+    /// with `κ < 1`, so it converges by construction and the guard is moot ;
+    /// the real efe-core operator is the one whose contraction is merely
+    /// *property-tested* (M1.c canary, `L̂` is a lower bound — it falsifies H1,
+    /// it never certifies it).  The soundness hole architecture §4 called a
+    /// blocker therefore stayed wide open exactly where it mattered, while the
+    /// audit ticked the box because the mechanism existed.
+    ///
+    /// So: stated wins (an explicit `false` is a legitimate, LOUDLY logged
+    /// opt-out — we require the choice to be MADE, not to go a given way) ;
+    /// unstated resolves to `true` as soon as any participant row carries a
+    /// `controller` block.  v0.2.0 mock manifests carry none, so they keep the
+    /// historical lenient behaviour untouched.
+    #[serde(default)]
+    pub require_convergence: Option<bool>,
 }
 
 impl Default for IterationManifest {
@@ -245,7 +260,33 @@ impl Default for IterationManifest {
             coupling_gamma: 0.2,
             deterministic: true,
             max_wall_ms: 15_000,
-            require_convergence: false,
+            require_convergence: None,
         }
+    }
+}
+
+impl Manifest {
+    /// Does this round coordinate at least one **real efe-core participant** ?
+    ///
+    /// The `controller` block is what `LocalParticipant::from_manifest_row`
+    /// turns into an `Engine::EfeCore` bridge ; a row without one is a mock.
+    #[must_use]
+    pub fn has_efe_core_participant(&self) -> bool {
+        self.participants.iter().any(|p| p.controller.is_some())
+    }
+
+    /// **The effective fail-closed policy for non-convergence** — resolves
+    /// [`IterationManifest::require_convergence`] against the engine actually
+    /// being served.  Read this, never the raw field.
+    ///
+    /// `Some(v)` ⟹ `v` (the operator stated a choice, and it is honoured —
+    /// including an explicit `false`, which [`super::load_and_validate`] logs
+    /// loudly when a real engine is present).  `None` ⟹ `true` iff at least
+    /// one participant carries a `controller` block.
+    #[must_use]
+    pub fn require_convergence(&self) -> bool {
+        self.iteration
+            .require_convergence
+            .unwrap_or_else(|| self.has_efe_core_participant())
     }
 }
