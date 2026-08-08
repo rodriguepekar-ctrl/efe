@@ -2964,7 +2964,9 @@ dependencies = [
  "futures",
  "http-body-util",
  "jsonwebtoken",
+ "provenance-bridge",
  "provenance-capture",
+ "provenance-dag",
  "regex",
  "serde",
  "serde_json",
@@ -6323,6 +6325,7 @@ dependencies = [
  "efe-swarm-provenance",
  "provenance-dag",
  "uuid",
+ "verify-mini",
 ]
 
 [[package]]

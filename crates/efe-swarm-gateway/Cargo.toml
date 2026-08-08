@@ -41,6 +41,10 @@ frontier-llm = ["dep:efe-coordinator", "dep:efe-multi-llm", "dep:provenance-capt
 [dependencies]
 efe-swarm-sdk        = { path = "../efe-swarm-sdk", version = "0.0.1" }
 efe-swarm-provenance = { path = "../efe-swarm-provenance", version = "0.0.1" }  # verify_swarm + AgentCallRecord + métriques
+# Fil P (P.2) : la dérivation + le scellement du bundle de provenance (pile B). La gateway ne
+# dépend PAS de provenance-dag directement, sauf pour le type de clé rendu par derive_bundle_key.
+provenance-bridge    = { path = "../provenance-bridge", version = "0.0.1" }     # bundle_from_run + stack_b_key
+provenance-dag       = { path = "../provenance-dag", version = "0.0.1" }        # TenantKey (type de retour)
 efe-swarm-memory     = { path = "../efe-swarm-memory", version = "0.0.1" }      # ADR-019 (MEM-3) : store + endpoints mémoire
 efe-swarm-topology   = { path = "../efe-swarm-topology", version = "0.0.1" }    # AgentFleet (flotte partagée)
 efe-swarm-dashboard  = { path = "../efe-swarm-dashboard", version = "0.0.1" }   # DashboardBus + observer (Inc.3)

@@ -86,6 +86,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
+    // ── Fil P (P.2) : l'export du bundle de provenance (pile B) ──
+    // OFF par défaut : sans opt-in, la route n'est PAS montée (l'URI n'existe pas), donc la
+    // surface servie est byte-identique à l'avant-P.2. Le bundle n'expose aucune clé — seulement
+    // des empreintes ; la clé tenant de la pile B voyage hors bande vers l'auditeur.
+    if efe_swarm_gateway::bundle_export_from_env() {
+        state = state.with_bundle_export(true);
+        println!(
+            "→ export du bundle de provenance ACTIVÉ (GET /v1/swarm/bundle/:id, rôle auditor) — \
+             re-prouvable par verify-mini ; racine NON encore ancrée hors bundle (P.4)."
+        );
+    }
+
     // ── Couche 2 (feature `frontier-llm`) : coordination multi-LLM (Claude/Gemini/GPT) ──
     // Runtime-gated par EFE_LLM_FRONTIER_ENABLED (défaut off) ; les clés provider sont lues
     // server-side par les `from_env` du coordinator. Off, ou aucune clé ⇒ frontière NON

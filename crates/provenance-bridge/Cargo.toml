@@ -25,7 +25,13 @@ name = "provenance_bridge"
 path = "src/lib.rs"
 
 [dependencies]
-provenance-dag        = { path = "../provenance-dag", version = "0.0.1" }        # Node (pile B)
+provenance-dag        = { path = "../provenance-dag", version = "0.0.1" }        # Node, SealedDag, TenantKey (pile B)
 efe-swarm-provenance  = { path = "../efe-swarm-provenance", version = "0.0.1" }  # AgentCallRecord, deterministic_order, verify_swarm (pile A)
 efe-nano-sdk          = { path = "../efe-nano-sdk", version = "0.0.1" }          # LlmProvenanceRecord, Blake3Hash, ProvenanceId
 uuid                  = { workspace = true }
+
+# La re-preuve du bundle par le vérifieur à arbre de dépendances VIDE — le critère d'acceptation de
+# P.2. En DEV-dépendance uniquement : `cargo tree -p provenance-bridge -e normal` reste propre, et
+# l'arbre de verify-mini reste littéralement vide. Même patron que le contre-contrôle S0 de S4.
+[dev-dependencies]
+verify-mini = { path = "../verify-mini" }

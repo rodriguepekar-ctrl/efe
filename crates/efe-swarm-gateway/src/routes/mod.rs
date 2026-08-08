@@ -2,6 +2,7 @@
 //! Les handlers HTTP, regroupés par route. `routes()` assemble le `Router` des routes
 //! d'essaim (relatif, sans préfixe — montable via `.nest("/v1/swarm", …)`).
 
+pub mod bundle; // Fil P (P.2) : /v1/swarm/bundle/:id — l'export re-prouvable par verify-mini
 pub mod dashboard;
 pub mod events;
 pub mod health; // Sondes k8s (M4 §G4) : /healthz (liveness) + /readyz (readiness réelle)

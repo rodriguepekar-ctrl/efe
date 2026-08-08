@@ -80,7 +80,7 @@ pub use dto::{
 };
 pub use error::GatewayError;
 pub use router_map::RouterMap;
-pub use state::{AdmissionPermit, AdmitReject, SwarmGatewayState};
+pub use state::{bundle_export_from_env, AdmissionPermit, AdmitReject, SwarmGatewayState};
 pub use store::{InMemoryRunStore, RunStore, StoredRun};
 #[cfg(feature = "frontier-llm")]
 pub use frontier::coordinator_from_env;
@@ -120,6 +120,14 @@ pub fn router(state: SwarmGatewayState) -> Router {
     // `Router<SwarmGatewayState>` jusqu'au `with_state` final.
     #[cfg(feature = "frontier-llm")]
     let app = app.nest("/v1/llm", routes::llm::routes_llm());
+    // Fil P (P.2) : l'export du bundle de provenance — monté **seulement** sur opt-in explicite.
+    // Sans lui, l'URI n'existe pas (404), donc le comportement servi est byte-identique à
+    // l'avant-P.2 : pas de 501 qui trahirait l'existence d'une surface désactivée.
+    let app = if state.bundle_export_enabled() {
+        app.route("/v1/swarm/bundle/:id", get(routes::bundle::bundle))
+    } else {
+        app
+    };
     app.with_state(state)
 }
 
@@ -612,6 +620,145 @@ mod tests {
         assert!(v["root_matches"].is_null(), "sans racine scellée ⟹ None, jamais false");
         assert_eq!(v["verified"], json!(true), "P.0 n'accuse PAS un run honnête antérieur");
         assert!(v["root"].is_string(), "la racine reste reconstruite et exposée");
+    }
+
+    // ── Fil P (P.2) — l'export du bundle de provenance ─────────────────────────────────────
+
+    /// État de test avec l'export ACTIVÉ + le store concret conservé. On passe par
+    /// `with_bundle_export` et jamais par l'environnement : manipuler une variable d'env dans un
+    /// test serait une course avec les autres tests du même processus.
+    fn app_with_bundle() -> (Router, Arc<InMemoryRunStore>) {
+        let store = Arc::new(InMemoryRunStore::new());
+        let state = SwarmGatewayState::new(
+            Arc::new(AgentFleet::standard()),
+            HmacKeySource::test_key(),
+            store.clone(),
+            ProvenanceMetrics::new(),
+            Arc::new(SubstrateMetrics::default()),
+        )
+        .with_bundle_export(true);
+        (router(state), store)
+    }
+
+    async fn seed_run(app: &Router) -> Uuid {
+        let resp = app
+            .clone()
+            .oneshot(post_run(json!({
+                "task": { "text": "hello", "expected": "hello" },
+                "topology": { "kind": "consensus", "generator": "echo_generator",
+                              "judges": ["consistency", "length_band", "j_non_empty"], "k": 5 },
+                "budget": { "max_cents": 1000 }
+            })))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        body_json(resp).await["run_id"].as_str().unwrap().parse().unwrap()
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn bundle_route_is_not_mounted_without_the_opt_in() {
+        // L'invariant byte-identique : sans opt-in, l'URI n'EXISTE pas. Pas un 501 — un 404, comme
+        // n'importe quelle route inconnue avant P.2. Une surface désactivée ne doit même pas
+        // trahir son existence.
+        let (app, _store) = app_with_store();
+        let id = seed_run(&app).await;
+        let resp = app
+            .oneshot(Request::builder().uri(format!("/v1/swarm/bundle/{id}")).body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::NOT_FOUND, "route non montée ⟹ l'URI n'existe pas");
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn bundle_export_serves_a_reprovable_bundle() {
+        let (app, _store) = app_with_bundle();
+        let id = seed_run(&app).await;
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .uri(format!("/v1/swarm/bundle/{id}"))
+                    .header("x-efe-roles", HeaderValue::from_static("auditor"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let b = body_json(resp).await;
+
+        let jsonl = b["bundle_jsonl"].as_str().unwrap();
+        let root = b["manifest_root"].as_str().unwrap();
+        let n = b["node_count"].as_u64().unwrap();
+        assert!(n >= 1, "le bundle porte des nœuds");
+        assert_eq!(jsonl.lines().count() as u64, n, "une ligne JSON par nœud");
+        assert_eq!(b["anchored"], json!(false), "P.4 non fait : la racine n'est PAS ancrée, et on le dit");
+        assert!(b["mapping_version"].as_str().unwrap().starts_with("fil-p/"));
+
+        // Aucune clé ne sort par cette route — ni la clé A, ni la clé B.
+        assert!(!jsonl.contains("key"), "le bundle ne transporte aucune clé");
+
+        // …et le bundle se re-prouve réellement, avec la clé de la PILE B dérivée à part.
+        let bkey = provenance_bridge::stack_b_key(&HmacKeySource::test_key().derive(
+            efe_nano_sdk::TenantId::system(),
+        ).unwrap(), "00000000-0000-0000-0000-000000000001");
+        let records = provenance_dag::SealedDag::records_from_jsonl(jsonl).unwrap();
+        let v = provenance_dag::verify_against_root(&records, &bkey, root);
+        assert!(v.ok, "le bundle servi se re-prouve contre sa racine : {:?}", v.reason);
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn bundle_export_refuses_a_viewer() {
+        // Un export de provenance entière n'est pas une lecture ordinaire.
+        let (app, _store) = app_with_bundle();
+        let id = seed_run(&app).await;
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .uri(format!("/v1/swarm/bundle/{id}"))
+                    .header("x-efe-roles", HeaderValue::from_static("viewer"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::FORBIDDEN, "viewer n'exporte pas la provenance");
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn bundle_export_refuses_to_whitewash_a_truncated_run() {
+        // LE refus du jalon : donner un bundle re-prouvable à un run tronqué offrirait un témoin
+        // crédible à un reçu menteur. Aucun bundle, même partiel.
+        let (app, store) = app_with_bundle();
+        let id = seed_run(&app).await;
+        assert!(store.truncate_tail(id, 1), "un enregistrement retiré en base");
+
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .uri(format!("/v1/swarm/bundle/{id}"))
+                    .header("x-efe-roles", HeaderValue::from_static("auditor"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::INTERNAL_SERVER_ERROR, "aucun bundle sur un run tronqué");
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn bundle_export_unknown_run_is_404() {
+        let (app, _store) = app_with_bundle();
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .uri(format!("/v1/swarm/bundle/{}", Uuid::new_v4()))
+                    .header("x-efe-roles", HeaderValue::from_static("auditor"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::NOT_FOUND);
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]

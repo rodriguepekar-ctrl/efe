@@ -67,9 +67,11 @@
 pub mod derive;
 pub mod error;
 pub mod mapping;
+pub mod seal;
 pub mod view;
 
 pub use derive::nodes_from_run;
 pub use error::DeriveError;
 pub use mapping::{HASH_ABSENT, HASH_PREFIX, MAPPING_VERSION};
+pub use seal::{bundle_from_run, seal_bundle, stack_b_key, Bundle, BundleError};
 pub use view::RunView;

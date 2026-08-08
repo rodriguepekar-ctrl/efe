@@ -538,6 +538,35 @@ pub struct VerifyResponse {
     pub n17: N17VerifyView,
 }
 
+/// **Fil P (P.2)** : le **bundle de provenance** exporté — la vue du reçu que la pile B sait
+/// re-prouver.
+///
+/// Ce que la réponse contient : les nœuds scellés (JSONL), leur engagement (`manifest_root`) et
+/// leur compte. Ce qu'elle ne contient **jamais** : la clé tenant (elle voyage hors bande vers
+/// l'auditeur) ni les sorties elles-mêmes (le bundle ne porte que des **empreintes**, préfixées
+/// `blake3:` pour qu'aucune ne puisse passer pour une valeur).
+///
+/// Le `manifest_root` rendu ici est **celui du bundle**, calculé à la volée. Tant que P.4 ne l'aura
+/// pas publié **hors** du bundle, il ne prouve la cohérence que contre lui-même : une troncature
+/// reste indétectable pour qui ne détient pas de racine de référence indépendante. C'est dit dans
+/// [`Self::anchored`], et il ne faut pas revendiquer davantage.
+#[derive(Debug, Clone, Serialize)]
+pub struct BundleResponse {
+    pub run_id: Uuid,
+    /// Les records du DAG, une ligne JSON par nœud — le format que lit `verify-mini`.
+    pub bundle_jsonl: String,
+    /// L'engagement sur la totalité du bundle (hex).
+    pub manifest_root: String,
+    /// Le nombre de nœuds — second garde contre la troncature, indépendant de la racine.
+    pub node_count: u32,
+    /// La version de la **règle de traduction** qui a produit ces nœuds. Permet à un auditeur de
+    /// distinguer « le run a changé » de « la règle de lecture a changé ».
+    pub mapping_version: String,
+    /// La racine est-elle **ancrée hors bundle** ? Toujours `false` avant P.4 — et le dire ici
+    /// évite qu'un consommateur prête au bundle une opposabilité qu'il n'a pas encore.
+    pub anchored: bool,
+}
+
 /// **ADR-016** : le verdict du pont N17 + de la chaîne forensique, dans la re-preuve.
 #[derive(Debug, Clone, Serialize)]
 pub struct N17VerifyView {
