@@ -83,7 +83,7 @@ pub use router_map::RouterMap;
 pub use state::{bundle_export_from_env, AdmissionPermit, AdmitReject, SwarmGatewayState};
 // Fil P (P.3) : le signataire d'attestation, re-exporté pour que le binaire le construise
 // depuis l'env sans dépendre directement du pont.
-pub use provenance_bridge::BundleSigner;
+pub use provenance_bridge::{AnchorSink, BundleSigner, FileAnchorSink};
 pub use store::{InMemoryRunStore, RunStore, StoredRun};
 #[cfg(feature = "frontier-llm")]
 pub use frontier::coordinator_from_env;
@@ -862,6 +862,66 @@ mod tests {
                 .is_ok(),
             "l'attestation lie CE bundle, CE run, CE tenant"
         );
+    }
+
+    // ── Fil P (P.4) — l'ancre publiée hors du bundle ───────────────────────────────────────
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn without_an_anchor_sink_the_bundle_says_it_is_not_anchored() {
+        // Sans support d'ancrage, le bundle ne prouve sa cohérence que CONTRE LUI-MÊME. Le dire.
+        let (app, _s) = app_with_bundle();
+        let id = seed_run(&app).await;
+        let b = get_bundle(&app, id).await;
+        assert_eq!(b["anchored"], json!(false), "aucune ancre ⟹ le bundle l'annonce");
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn serving_a_bundle_publishes_its_anchor_outside_the_bundle() {
+        // LE geste de P.4 : la racine attendue est écrite AILLEURS, et c'est cet « ailleurs » qui
+        // rend une troncature détectable par quelqu'un ne détenant AUCUNE clé.
+        let mut path = std::env::temp_dir();
+        path.push(format!("efe-p4-gw-{}.log", Uuid::new_v4()));
+        let sink = Arc::new(provenance_bridge::FileAnchorSink::new(&path));
+
+        let store = Arc::new(InMemoryRunStore::new());
+        let state = SwarmGatewayState::new(
+            Arc::new(AgentFleet::standard()),
+            HmacKeySource::test_key(),
+            store.clone(),
+            ProvenanceMetrics::new(),
+            Arc::new(SubstrateMetrics::default()),
+        )
+        .with_bundle_export(true)
+        .with_anchor_sink(sink);
+        let app = router(state);
+
+        let id = seed_run(&app).await;
+        let b = get_bundle(&app, id).await;
+        assert_eq!(b["anchored"], json!(true), "l'ancre a RÉELLEMENT été publiée");
+
+        // Le journal existe, hors du bundle, et dit la même chose que lui.
+        let journal = std::fs::read_to_string(&path).expect("le journal d'ancres existe");
+        let idx = provenance_dag::AnchorIndex::parse(&journal).expect("journal relisible");
+        let a = idx.get(&id.to_string()).expect("ce run est ancré");
+        assert_eq!(a.manifest_root, b["manifest_root"].as_str().unwrap());
+        assert_eq!(u64::from(a.node_count), b["node_count"].as_u64().unwrap());
+
+        // …et un bundle tronqué échoue CONTRE cette ancre, alors qu'il reste intègre seul.
+        let bkey = provenance_bridge::stack_b_key(
+            &HmacKeySource::test_key().derive(efe_nano_sdk::TenantId::system()).unwrap(),
+            "00000000-0000-0000-0000-000000000001",
+        );
+        let full = provenance_dag::SealedDag::records_from_jsonl(
+            b["bundle_jsonl"].as_str().unwrap(),
+        )
+        .unwrap();
+        let short = &full[..full.len() - 1];
+        assert!(provenance_dag::reprove_dag(short, &bkey).ok, "tronqué mais intègre — le piège");
+        assert!(
+            !provenance_dag::verify_against_anchor(short, &bkey, a).ok,
+            "l'ancre publiée l'attrape"
+        );
+        let _ = std::fs::remove_file(&path);
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]

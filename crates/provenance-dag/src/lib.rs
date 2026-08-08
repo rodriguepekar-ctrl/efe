@@ -53,12 +53,16 @@
 //! assert!(verify_against_root(dag.records(), &key, &root).ok);
 //! ```
 
+pub mod anchor;
 pub mod dag;
 pub mod hmac;
 pub mod key;
 pub mod node;
 pub mod sha256;
 
+pub use anchor::{
+    verify_against_anchor, AnchorError, AnchorIndex, AnchorRecord, ANCHOR_SCHEMA_V1,
+};
 pub use dag::{reprove_dag, verify_against_root, DagError, Record, SealedDag, Verdict, GENESIS};
 pub use hmac::{ct_eq, hmac_sha256};
 pub use key::TenantKey;

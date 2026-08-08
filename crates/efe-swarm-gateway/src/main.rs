@@ -94,7 +94,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         state = state.with_bundle_export(true);
         println!(
             "→ export du bundle de provenance ACTIVÉ (GET /v1/swarm/bundle/:id, rôle auditor) — \
-             re-prouvable par verify-mini ; racine NON encore ancrée hors bundle (P.4)."
+             re-prouvable par verify-mini."
         );
 
         // ── Fil P (P.3) : la clé d'attestation de racine ──
@@ -131,6 +131,26 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             _ => println!(
                 "→ attestation de racine INACTIVE (aucune graine) — les bundles sortiront SANS \
                  champ d'attestation."
+            ),
+        }
+
+        // ── Fil P (P.4) : la publication de l'ancre ──
+        // Sans elle, un bundle tronqué re-prouve parfaitement : il ne prouve sa cohérence que
+        // CONTRE LUI-MÊME. L'ancre est la racine attendue, écrite AILLEURS — et c'est ce
+        // « ailleurs » qui fait tout le travail, pas la cryptographie.
+        match std::env::var("EFE_SWARM_ANCHOR_LOG") {
+            Ok(path) if !path.is_empty() => {
+                let sink = std::sync::Arc::new(efe_swarm_gateway::FileAnchorSink::new(&path));
+                println!(
+                    "→ ancrage ACTIF — {} ; REMETTEZ ce journal à l'auditeur par un canal DISTINCT \
+                     du bundle, sans quoi l'ancre ne prouve rien.",
+                    efe_swarm_gateway::AnchorSink::describe(sink.as_ref())
+                );
+                state = state.with_anchor_sink(sink);
+            }
+            _ => println!(
+                "→ ancrage INACTIF (aucun EFE_SWARM_ANCHOR_LOG) — les bundles sortiront avec \
+                 anchored=false : une TRONCATURE resterait indétectable sans clé."
             ),
         }
     }

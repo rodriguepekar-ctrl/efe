@@ -26,6 +26,16 @@
 //! vérification circulaire (n'importe qui peut engendrer une paire et signer). Seule l'empreinte
 //! (`key_id`) est rendue, pour que l'auditeur sache *laquelle* de ses clés épinglées appliquer.
 //!
+//! # L'ancre (P.4)
+//!
+//! Si un support de publication est configuré, la route écrit l'**ancre** du bundle — la racine
+//! attendue et son compte de nœuds — **hors** du bundle, dans un journal append-only. C'est le seul
+//! geste qui rende une troncature détectable par quelqu'un ne détenant **aucune clé**, à condition
+//! que l'auditeur reçoive ce journal par un **canal distinct** de celui du bundle.
+//!
+//! La publication échoue **fort** : si elle rate, la route rend une erreur au lieu de servir un
+//! bundle annonçant `anchored: true` — un auditeur chercherait alors une ancre inexistante.
+//!
 //! # Les gardes
 //!
 //! Drapeau absent ⟹ la route n'est **pas montée** (404, exactement comme avant P.2 : le
@@ -43,7 +53,7 @@
 
 use axum::extract::{Path, State};
 use axum::Json;
-use provenance_bridge::{bundle_from_run, RunView, MAPPING_VERSION};
+use provenance_bridge::{anchor_of, bundle_from_run, RunView, MAPPING_VERSION};
 use uuid::Uuid;
 
 use crate::auth::Caller;
@@ -89,15 +99,36 @@ pub async fn bundle(
         AttestationView::from(signer.attest(id, &caller.tenant, &b, signed_at))
     });
 
+    // ── P.4 : publier l'ancre HORS du bundle ───────────────────────────────────────────────
+    // C'est le seul geste qui rend une troncature détectable par quelqu'un ne détenant AUCUNE clé.
+    // Il échoue FORT : servir un bundle en annonçant `anchored: true` alors que la publication a
+    // échoué serait un « vert malhonnête » — l'auditeur chercherait une ancre qui n'existe pas.
+    // Mieux vaut refuser la réponse que mentir sur sa garantie.
+    let anchored = match s.anchor_sink.as_ref() {
+        None => false,
+        Some(sink) => {
+            let derived_at = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| u64::try_from(d.as_millis()).unwrap_or(u64::MAX))
+                .unwrap_or(0);
+            let anchor = anchor_of(id, &caller.tenant, &b, derived_at)
+                .map_err(|e| GatewayError::Internal(format!("ancre inconstructible — {e}")))?;
+            sink.publish(&anchor)
+                .map_err(|e| GatewayError::Internal(format!("ancre NON publiée — {e}")))?;
+            true
+        }
+    };
+
     Ok(Json(BundleResponse {
         run_id: id,
         bundle_jsonl: b.jsonl,
         manifest_root: b.manifest_root,
         node_count: b.node_count,
         mapping_version: MAPPING_VERSION.to_string(),
-        // P.4 n'est pas fait : la racine n'est publiée nulle part, donc le bundle ne prouve sa
-        // cohérence que contre lui-même. Le dire ici plutôt que de laisser un lecteur le supposer.
-        anchored: false,
+        // `true` SEULEMENT si la publication a réellement réussi (sinon on a déjà rendu une erreur).
+        // Sans support d'ancrage, `false` : le bundle ne prouve alors sa cohérence que contre
+        // lui-même, et le dire vaut mieux que laisser un lecteur le supposer.
+        anchored,
         attestation,
     }))
 }

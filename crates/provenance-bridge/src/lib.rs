@@ -35,13 +35,16 @@
 //! - **P.2** — [`seal`] : le scellement du bundle et la clé de la pile B ([`stack_b_key`], dont
 //!   les octets ne sont **jamais** ceux de la pile A).
 //! - **P.3** — [`attest`] : l'attestation ed25519 de la racine, vérifiable **sans aucun secret**.
+//! - **P.4** — [`anchor`] : la publication de l'ancre **hors** du bundle. Le *format* et la
+//!   *vérification* vivent dans la pile B (`provenance_dag::anchor`), parce qu'ils sont critiques
+//!   pour la confiance et doivent rester lisibles par un vérifieur sans dépendances ; ici ne vit
+//!   que l'**écriture**.
 //!
-//! Reste devant : **P.4**, l'ancre publiée **hors** du bundle. Tant qu'elle manque, un producteur
-//! malveillant peut tronquer un run *puis* signer honnêtement la racine du bundle tronqué — la
-//! signature serait valide et le mensonge intact. P.3 authentifie l'**émetteur** ; P.4 fixe
-//! l'**attendu**. Ne jamais confondre les deux.
+//! P.3 authentifie l'**émetteur** ; P.4 fixe l'**attendu**. Ne jamais confondre les deux, ni les
+//! vendre ensemble : sans ancre, un producteur peut tronquer un run *puis* signer honnêtement la
+//! racine du bundle tronqué — signature valide, mensonge intact.
 //!
-//! Cette crate n'écrit rien nulle part : elle ne fait que dériver, sceller et signer.
+//! Hors la publication de l'ancre (P.4), cette crate n'écrit rien : elle dérive, scelle et signe.
 //!
 //! ## Le tableau des niveaux (rappel — §6 du doc d'architecture)
 //!
@@ -75,6 +78,7 @@
 pub mod derive;
 pub mod error;
 pub mod mapping;
+pub mod anchor;
 pub mod attest;
 pub mod seal;
 pub mod view;
@@ -82,6 +86,7 @@ pub mod view;
 pub use derive::nodes_from_run;
 pub use error::DeriveError;
 pub use mapping::{HASH_ABSENT, HASH_PREFIX, MAPPING_VERSION};
+pub use anchor::{anchor_of, AnchorSink, FileAnchorSink, PublishError};
 pub use attest::{
     attest_tuple, key_id_of, verify_attestation, verify_attestation_binds, AttestError,
     BundleSigner, RootAttestation, ATTEST_SCHEMA_V1,

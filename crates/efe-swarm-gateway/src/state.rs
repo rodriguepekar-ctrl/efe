@@ -186,6 +186,17 @@ pub struct SwarmGatewayState {
     /// `Debug`. Elle ne quitte **jamais** le processus — seule l'**empreinte** (`key_id`) est
     /// servie, et la clé **publique** se publie hors bande.
     pub bundle_signer: Option<Arc<provenance_bridge::BundleSigner>>,
+    /// **Fil P (P.4)** : le support de publication de l'**ancre** — la racine attendue, écrite
+    /// **hors** du bundle.
+    ///
+    /// `None` ⟹ aucune ancre n'est publiée, et la réponse porte `anchored: false`. C'est la
+    /// vérité : sans référence externe, un bundle tronqué re-prouve parfaitement, et le bundle ne
+    /// prouve sa cohérence que contre lui-même.
+    ///
+    /// Le support est délibérément **abstrait** (`AnchorSink`) : l'architecture (§11.2) laisse la
+    /// question ouverte entre journal interne, horodatage RFC-3161 et journal de transparence.
+    /// Seul le contrat est imposé — hors bundle, append-only, canal distinct.
+    pub anchor_sink: Option<Arc<dyn provenance_bridge::AnchorSink>>,
     /// **Couche 2 (feature `frontier-llm`)** : moteur de coordination multi-LLM
     /// (Claude/Gemini/GPT) — fan-out + vote + provenance par appel. `None` ⇒ frontière
     /// non câblée (les futures routes `/v1/llm/*` répondront 501). Câblé server-side depuis
@@ -266,6 +277,8 @@ impl SwarmGatewayState {
             // Fil P (P.3) : aucune clé d'attestation par défaut — les bundles sortent SANS
             // champ d'attestation, ce qui est la vérité plutôt qu'un champ vide.
             bundle_signer: None,
+            // Fil P (P.4) : aucune publication d'ancre par défaut.
+            anchor_sink: None,
             #[cfg(feature = "frontier-llm")]
             coordinator: None,
             #[cfg(feature = "frontier-llm")]
@@ -626,6 +639,18 @@ impl SwarmGatewayState {
     #[must_use]
     pub fn with_bundle_signer(mut self, signer: provenance_bridge::BundleSigner) -> Self {
         self.bundle_signer = Some(Arc::new(signer));
+        self
+    }
+
+    /// **Fil P (P.4)** : installe le support de publication de l'ancre.
+    ///
+    /// Avec lui, chaque bundle servi publie sa racine attendue **ailleurs**, et la réponse porte
+    /// `anchored: true`. C'est le seul niveau où une troncature devient détectable par quelqu'un
+    /// qui ne détient **aucune clé** — à condition qu'il reçoive le journal par un canal distinct
+    /// de celui du bundle.
+    #[must_use]
+    pub fn with_anchor_sink(mut self, sink: Arc<dyn provenance_bridge::AnchorSink>) -> Self {
+        self.anchor_sink = Some(sink);
         self
     }
 }
