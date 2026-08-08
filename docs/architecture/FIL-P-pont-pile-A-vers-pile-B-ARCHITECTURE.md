@@ -1,7 +1,10 @@
 # FIL-P — LE PONT : brancher le reçu servi (pile A) sur le vérifieur auditable (pile B)
 
-**Statut :** architecture / préparation (aucun code n'est modifié par ce document).
-**Date :** 2026-08-05 · **Base :** monorepo `efe` @ HEAD `02eccdb`.
+**Statut :** **P.0 → P.4 IMPLÉMENTÉS ET VÉRIFIÉS** (commits `8bceaf3`, `06c5235`, `e3c00e5`,
+`c51c538`, `e8817b8`). P.5 reste optionnel. Ce document a été **amendé au réel** après
+implémentation : les deux corrections d'architecture prises en cours de route sont signalées à
+leur place (§4 pour `RunView`, §8/P.4 pour le placement de l'ancre) plutôt que réécrites en silence.
+**Date :** 2026-08-05, amendé 2026-08-06 · **Base :** monorepo `efe` @ HEAD `02eccdb`.
 **Auteur :** R. Pekar — avec Claude Code (Opus 5).
 **Filiation :** issu du classement par potentiel (panel à 5 lentilles, 2026-08-05), dont les cinq juges
 ont convergé indépendamment sur ce geste comme le plus fort rendement du dépôt.
@@ -343,7 +346,8 @@ pub enum DeriveError {
     RootMismatch { sealed: String, recomputed: Option<String> },  // `None` = chaîne rompue ou run vidé
 }
 
-// ── P.2 à P.4 (non codés) ────────────────────────────────────────────────────────────────
+// ── P.2 à P.4 — CODÉS (signatures réelles ; anchor_of vit dans le pont, AnchorRecord dans
+//    la pile B : voir la correction au §8/P.4) ───────────────────────────────────────────
 pub fn seal_bundle(nodes: Vec<Node>, key: &TenantKey)
     -> Result<(SealedDag, String /* manifest_root */), DagError>;
 pub fn anchor_of(run_id: Uuid, tenant: &str, root: &str, n: u32, at: u64) -> AnchorRecord;
@@ -433,29 +437,42 @@ parfaitement valide. L'intégrité n'est pas la vérité.
   `root_matches`, l'intégrer au verdict. **DoD :** un run dont on supprime le dernier enregistrement en
   base renvoie désormais `verified: false` avec `root_matches: false` ; un run antérieur au champ
   renvoie `None` et **n'est pas accusé** ; les tests existants de `verify` restent verts. **Taille XS-S.**
+  ✅ **FAIT** (`8bceaf3`) — 4 tests, dont `verify_detects_tail_truncation` qui épingle que
+  `chain_intact` reste `true` : l'attaque est invisible à l'intégrité seule.
   *Tant que ce jalon n'est pas fait, tout le reste scellerait un mensonge — et le Pont donnerait à ce
   mensonge un vérifieur auditable, ce qui serait pire que de ne rien faire.*
 
 - **P.1 — La dérivation pure.** `nodes_from_run` + le mapping figé + `DeriveError`. Aucune surface
   servie, aucun effet de bord. **DoD :** un golden du mapping (run fixé ⟹ nœuds attendus, à l'octet) ;
-  déterminisme prouvé par double dérivation ; les six variantes d'erreur épinglées ; **la re-preuve du
-  bundle dérivé passe** (`reprove_dag`). **Taille S-M.**
+  déterminisme prouvé par double dérivation (y compris à entrée mélangée) ; les variantes d'erreur
+  épinglées — **quatre par une entrée fautive construite, la cinquième (`DuplicateNodeId`) par la
+  propriété qui la rend inatteignable** (cf. §9) ; **la re-preuve du bundle dérivé passe**
+  (`reprove_dag`). **Taille S-M.** ✅ **FAIT** (`06c5235`, golden ajouté ensuite) — 43 tests.
 
 - **P.2 — Le bundle servi.** Scellement, export JSONL, route opt-in, dérivation de la clé B.
   **DoD :** sans drapeau, **byte-identique** — aucune route montée, aucune réponse modifiée ; avec
   drapeau, un bundle exporté est re-prouvé **par le binaire `verify-mini`** ; falsifier un nœud du
-  bundle casse la re-preuve, localisée. **Taille M.**
+  bundle casse la re-preuve, localisée. **Taille M.** ✅ **FAIT** (`e3c00e5`) — la route n'est pas
+  montée sans opt-in (404, pas 501 : une surface désactivée ne trahit pas son existence).
 
 - **P.3 — L'attestation de racine.** ed25519 sur le patron de `cosign_tuple`, domaine versionné distinct.
   **DoD :** une attestation vérifie avec la seule clé publique ; une racine modifiée, un `run_id`
   substitué ou un `node_count` gonflé la font échouer ; l'absence de clé produit un bundle **sans**
   champ d'attestation, jamais un champ vide. **Taille S** *(+ M pour la garde et la rotation des clés,
-  qui est un chantier d'exploitation et non de cryptographie)*.
+  qui est un chantier d'exploitation et non de cryptographie)*. ✅ **FAIT** (`c51c538`) — la clé
+  publique **ne sort jamais** par la route (seule son empreinte) : la servir à côté du bundle
+  rendrait la vérification circulaire.
 
 - **P.4 — L'ancre publiée.** `AnchorRecord`, journal append-only hors bundle, option CLI.
   **DoD :** `verify_against_root` est appelé avec une ancre **reçue par un canal distinct** ; un bundle
   tronqué de son dernier nœud échoue **sur le root ET sur le compte** ; sans ancre, le vérifieur dit
-  « racine publiée absente » et **jamais** « vérifié ». **Taille M.**
+  « racine publiée absente » et **jamais** « vérifié ». **Taille M.** ✅ **FAIT** (`e8817b8`).
+  **Correction d'architecture assumée** : le change-set plaçait `anchor.rs` dans le pont, mais
+  `provenance-verify` ne dépend que de `provenance-dag` — y loger l'ancre aurait inversé
+  l'invariant « pont → piles ». Le **format et la vérification** vivent donc dans la pile B
+  (`provenance-dag/anchor.rs`), **seule l'écriture** dans le pont. Trouvaille au passage : le CLI
+  **sur-revendiquait** — sans référence, il imprimait « ✓ VÉRIFIÉ » alors qu'un bundle tronqué
+  produit ce verdict ; corrigé en trois verdicts distincts.
 
 - **P.5 — La supervision humaine attachée** *(optionnel, ouvre l'article 14).* La console attache ses
   revues au DAG dérivé via `Node::Human`, persistées. **DoD :** une revue survit au redémarrage ; elle
@@ -474,11 +491,22 @@ parfaitement valide. L'intégrité n'est pas la vérité.
 - **Déterminisme** : dériver deux fois le même run ⟹ même `manifest_root`. Et dériver le même run avec
   les records **mélangés en entrée** ⟹ même racine (c'est ce que garantit `deterministic_order`, déjà
   testé côté A par `deterministic_order_is_input_order_independent`).
-- **Fail-closed** : les six variantes de `DeriveError` sont chacune épinglées par un test qui construit
-  l'entrée fautive.
+- **Fail-closed** : les **cinq** variantes de `DeriveError`. Quatre sont épinglées par un test qui
+  construit l'entrée fautive (`RootMismatch`, `MissingRoot`, `TimestampBeforeEpoch`, `PendingRef`).
+  La cinquième, `DuplicateNodeId`, est **inatteignable par construction** et il faut le dire plutôt
+  que d'écrire un test contorsionné : l'identité d'un acte est `{run}::{seq:06}-{agent}`, or la
+  chaîne de la pile A refuse un `seq` non strictement croissant (`BreakReason::NonMonotonicSeq`) —
+  deux records de même `seq` cassent la racine, et la dérivation refuse avant d'y arriver. Elle
+  reste en défense en profondeur ; le test
+  `node_ids_are_injective_which_is_why_duplicates_are_unreachable` épingle la **propriété** qui la
+  rend inatteignable, et sert d'alarme si elle disparaît.
 - **Re-preuve croisée** (P.2, le test-roi) : sceller une mission dans la pile A, dériver, exporter, puis
-  **re-prouver le bundle avec le binaire `verify-mini`** — c'est-à-dire par un exécutable dont
-  l'arborescence de dépendances est vide. Ce test est la démonstration entière du Pont.
+  **re-prouver le bundle par `verify-mini`** — le vérifieur dont l'arborescence de dépendances est
+  vide. Ce test est la démonstration entière du Pont. *Précision d'honnêteté : le test appelle
+  `verify_mini::run`, c'est-à-dire la MÊME fonction que le binaire enveloppe, via une
+  **dev-dépendance** (l'arbre normal reste propre des deux côtés). Il exerce donc la logique de
+  vérification, pas l'analyse d'arguments ni la lecture de fichiers du binaire — celles-ci sont
+  couvertes par les tests propres de `verify-mini`.*
 - **Falsification** : muter un nœud du bundle ⟹ re-preuve cassée et **localisée** ; muter la racine
   attestée ⟹ signature invalide ; retirer le dernier nœud ⟹ échec **sur le root et sur le compte**.
 - **Non-accusation rétroactive** (P.0) : un run scellé avant l'introduction du champ renvoie `None`,

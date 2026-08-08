@@ -195,6 +195,7 @@ pub fn nodes_from_run(view: &RunView<'_>, key: &[u8]) -> Result<Vec<Node>, Deriv
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::mapping::{act_node_id, evidence_node_id};
     use efe_nano_sdk::{AgentId, Blake3Hash, ProvenanceId, SwarmId, TenantId};
     use efe_swarm_provenance::{AgentCallDraft, AgentCallRecord, AgentKind, AgentRole, SwarmChain};
     use provenance_dag::{reprove_dag, SealedDag, TenantKey};
@@ -407,6 +408,208 @@ mod tests {
             matches!(err, DeriveError::PendingRef { .. } | DeriveError::RootMismatch { .. }),
             "attendu un refus typé, obtenu {err:?}"
         );
+    }
+
+    // ── LE GOLDEN DU MAPPING ──────────────────────────────────────────────────────────────
+
+    /// Une empreinte attendue, telle que le mapping doit l'écrire : préfixée, 64 chiffres.
+    fn h(byte: u8) -> String {
+        format!("blake3:{}", format!("{byte:02x}").repeat(32))
+    }
+
+    /// La forensique d'un appel frontière, **entièrement figée**.
+    fn frozen_llm(prov: ProvenanceId) -> efe_nano_sdk::LlmProvenanceRecord {
+        use efe_nano_sdk::{
+            Completeness, CostAccounting, FinishReason, LlmProvenanceRecord, ModelIdentity,
+            NanoAgentId, NanoAgentVersion, PiiStrategy, RetryOutcome, SamplingParams, TokenUsage,
+        };
+        LlmProvenanceRecord {
+            provenance_id: prov,
+            trace_id: Uuid::from_u128(0xBEEF),
+            swarm_request_id: Uuid::from_u128(0x5EED),
+            op_id: "swarm.writer".into(),
+            tenant_id: TenantId::system(),
+            agent_id: NanoAgentId::new("writer").unwrap(),
+            agent_version: NanoAgentVersion::new("1.0.0").unwrap(),
+            model_identity: ModelIdentity::hosted("ollama", "gemma3:12b", "local"),
+            model_hash_verified: false,
+            prompt_template_id: "t".into(),
+            prompt_template_version: "1.0.0".into(),
+            prompt_inputs_hash: Blake3Hash::ZERO,
+            system_prompt_hash: Blake3Hash::ZERO,
+            // Distinct de l'input du record : le golden doit pouvoir dire LEQUEL a été pris.
+            user_prompt_hash: Blake3Hash::from_bytes([7u8; 32]),
+            final_prompt_hash: Blake3Hash::from_bytes([7u8; 32]),
+            sampling: SamplingParams {
+                temperature: 0.2,
+                top_p: None,
+                max_tokens: 16,
+                seed: Some(7),
+                stop_sequences: vec![],
+            },
+            token_usage: TokenUsage {
+                client_estimated_input: 5,
+                client_estimated_output: 2,
+                provider_reported_input: None,
+                provider_reported_output: None,
+                is_estimated: true,
+            },
+            cost_accounting: CostAccounting {
+                cost_cents: 0.0,
+                prices_table_version: 0,
+                provider_quoted_cost_cents: None,
+                overflow_capped: false,
+            },
+            provider_request_id: None,
+            provider_response_time_ms: 5,
+            provider_finish_reason: FinishReason::Stop,
+            provider_region: None,
+            publisher_id: None,
+            publisher_kyc_tier: None,
+            gold_case_id: None,
+            provider_metadata: std::collections::HashMap::new(),
+            output_hash: Some(Blake3Hash::from_bytes([8u8; 32])),
+            completeness: Completeness::Complete,
+            safety_flags: vec![],
+            tool_calls: vec![],
+            pii_strategy_applied: PiiStrategy::None,
+            redaction_token_set: vec![],
+            replay_of: None,
+            cache_hit: None,
+            recorded_at: UNIX_EPOCH,
+            streaming_mode: false,
+            retry_count: 0,
+            retry_outcome: RetryOutcome::NoRetry,
+            time_to_first_token_ms: None,
+            compute_attestation: efe_nano_sdk::ComputeAttestation::default(),
+        }
+    }
+
+    #[test]
+    fn golden_mapping_is_frozen_to_the_byte() {
+        // **Le test que le §9 désigne comme le plus important du Pont** : un run entièrement figé
+        // produit EXACTEMENT cette liste de nœuds. Il n'a l'air de rien et il porte tout : le
+        // mapping est ce qui décide de l'identité et du contenu des nœuds SCELLÉS. Une dérive
+        // silencieuse y changerait toutes les racines des bundles futurs, sans qu'aucun autre test
+        // ne s'en aperçoive — ils vérifient tous des propriétés (déterminisme, causalité,
+        // re-preuve) que le mapping conserverait en dérivant.
+        //
+        // Toute modification de ce littéral doit être un choix DÉLIBÉRÉ, accompagné d'une montée
+        // de MAPPING_VERSION.
+        let tenant = TenantId::system();
+        let swarm = SwarmId::from_uuid(Uuid::from_u128(0x5EED));
+        let prov = ProvenanceId::from_uuid(Uuid::from_u128(0xC0FFEE));
+        let run = Uuid::from_u128(0x42);
+        let r0 = Uuid::from_u128(0x10);
+        let r1 = Uuid::from_u128(0x11);
+
+        let mut chain = SwarmChain::new(tenant, swarm, key());
+        let d0 = AgentCallDraft::new(
+            swarm,
+            tenant,
+            AgentId::new("planner").unwrap(),
+            AgentRole::Generator,
+            AgentKind::ModeA,
+            Blake3Hash::from_bytes([1u8; 32]),
+            Blake3Hash::from_bytes([2u8; 32]),
+        )
+        .with_record_id(r0)
+        .with_wall_at(UNIX_EPOCH + Duration::from_millis(1_000))
+        .wrote("plan", 1);
+        let d1 = AgentCallDraft::new(
+            swarm,
+            tenant,
+            AgentId::new("writer").unwrap(),
+            AgentRole::Solver,
+            AgentKind::ModeC,
+            Blake3Hash::from_bytes([3u8; 32]),
+            Blake3Hash::from_bytes([4u8; 32]),
+        )
+        .with_record_id(r1)
+        .with_wall_at(UNIX_EPOCH + Duration::from_millis(2_000))
+        .caused_by(r0)
+        .with_llm_provenance(prov);
+        let records = chain.append_all_canonical(vec![d0, d1]);
+        let root = chain.root_hex().unwrap();
+        let llm = vec![frozen_llm(prov)];
+
+        let nodes =
+            nodes_from_run(&RunView::new(run, "acme", &records, &llm, Some(&root)), &key()).unwrap();
+
+        let act0 = "00000000-0000-0000-0000-000000000042::000000-planner";
+        let act1 = "00000000-0000-0000-0000-000000000042::000001-writer";
+        let ev1 = "00000000-0000-0000-0000-000000000042::000001-writer#llm";
+
+        let expected = vec![
+            // (1) L'acte Mode A : aucun modèle inventé, l'empreinte de sortie préfixée.
+            Node::AgentAct {
+                node_id: act0.into(),
+                agent_role: "generator".into(),
+                inputs_hash: h(1),
+                model: "mode_a".into(),
+                version: MAPPING_VERSION.into(),
+                output: h(2),
+                evidence_refs: vec![],
+                timestamp: 1_000,
+            },
+            // (2) L'évidence PRÉCÈDE l'acte qui la cite — la causalité de la pile B l'exige.
+            Node::Evidence {
+                evidence_id: ev1.into(),
+                tool: "ollama".into(),
+                query_hash: h(7), // le prompt FINAL, pas l'input du record
+                retrieved_ref: format!("llm-provenance://{}", prov.as_uuid()),
+                content_hash: h(8),
+                consumed_by_node: act1.into(),
+                timestamp: 2_000,
+            },
+            // (3) L'acte Mode C : le modèle porte fournisseur ET identifiant.
+            Node::AgentAct {
+                node_id: act1.into(),
+                agent_role: "solver".into(),
+                inputs_hash: h(3),
+                model: "mode_c:ollama/gemma3:12b".into(),
+                version: MAPPING_VERSION.into(),
+                output: h(4),
+                evidence_refs: vec![ev1.into()],
+                timestamp: 2_000,
+            },
+            // (4) Les arêtes EN QUEUE : l'artefact transporté est la sortie du PARENT.
+            Node::Edge {
+                edge_id: format!("{act0}->{act1}"),
+                from_node: act0.into(),
+                to_node: act1.into(),
+                artifact_hash: h(2),
+                artifact_type: "generator".into(),
+                timestamp: 2_000,
+            },
+        ];
+
+        assert_eq!(nodes, expected, "le mapping a DÉRIVÉ — est-ce délibéré ? sinon, régression");
+    }
+
+    #[test]
+    fn node_ids_are_injective_which_is_why_duplicates_are_unreachable() {
+        // `DeriveError::DuplicateNodeId` ne peut PAS être atteint par un run qui passe le contrôle
+        // de racine, et il faut le dire plutôt que d'écrire un test contorsionné : l'identité d'un
+        // acte est `{run}::{seq:06}-{agent}`, or la chaîne de la pile A REFUSE un `seq` non
+        // strictement croissant (`BreakReason::NonMonotonicSeq`) — deux records de même `seq`
+        // cassent la chaîne, donc la racine, donc la dérivation refuse AVANT d'y arriver.
+        //
+        // La variante reste dans le code comme défense en profondeur : si le schéma d'identité
+        // changeait un jour, elle transformerait une collision silencieuse en refus. Ce test
+        // épingle la PROPRIÉTÉ qui la rend inatteignable, et sert d'alarme si elle disparaît.
+        let (run, recs, _root) = chained_run(6);
+        let ordered = deterministic_order(&recs);
+        let ids: Vec<String> = ordered.iter().map(|r| act_node_id(run, r)).collect();
+        let uniq: std::collections::HashSet<&String> = ids.iter().collect();
+        assert_eq!(ids.len(), uniq.len(), "les identifiants d'actes sont injectifs");
+
+        // Et les trois familles d'identifiants ne peuvent pas se croiser.
+        for id in &ids {
+            assert!(!uniq.contains(&evidence_node_id(id)), "aucune évidence ne collisionne un acte");
+        }
+        // Le `seq` étant strictement croissant, deux actes du même agent restent distincts.
+        assert_ne!(act_node_id(run, &ordered[0]), act_node_id(run, &ordered[1]));
     }
 
     // ── Le chemin Mode C ──────────────────────────────────────────────────────────────────
