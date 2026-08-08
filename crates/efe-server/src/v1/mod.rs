@@ -12,6 +12,10 @@ pub mod billing;
 /// M29 — BYOK key rotation API.
 pub mod byok;
 /// M29 — GDPR Art. 17 erasure + Art. 20 portability.
+/// Couche 3 M2 — `/v1/consensus` : une ronde de consensus méta-essaim **avec son reçu
+/// re-prouvable** (`meta_provenance_root` + les deux artefacts que `verify_meta_mini` consomme).
+pub mod consensus;
+
 pub mod data_rights;
 /// M28 — Customer-facing event log : paginated read of recent events.
 pub mod events;

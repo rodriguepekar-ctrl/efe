@@ -84,7 +84,20 @@ pub async fn run_iterate(
     let inner_loop_started = std::time::Instant::now();
     let cancel_for_blocking = cancel.clone();
     let meta_for_blocking = Arc::clone(&meta_swarm);
-    let join = tokio::task::spawn_blocking(move || meta_for_blocking.iterate());
+    // Couche 3 M2 — le SEUL endroit où le chemin servi diffère selon la provenance.
+    //
+    // Les deux branches appellent le MÊME moteur : `iterate_with_provenance` n'est
+    // qu'`iterate_observed` avec un observateur qui scelle le pas DÉJÀ calculé. La
+    // non-interférence est donc structurelle, pas une promesse — et elle est épinglée au niveau
+    // SERVI par `provenance_does_not_change_the_numerics`, parce qu'un test de la bibliothèque
+    // ne dit rien du câblage d'ici.
+    let prov_for_blocking = state.provenance.clone();
+    let join = tokio::task::spawn_blocking(move || match prov_for_blocking {
+        Some(p) => meta_for_blocking
+            .iterate_with_provenance(p.key_source(), p.tenant())
+            .map(|(r, prov)| (r, Some(prov))),
+        None => meta_for_blocking.iterate().map(|r| (r, None)),
+    });
 
     let inner_result = tokio::select! {
         biased;
@@ -108,7 +121,7 @@ pub async fn run_iterate(
         },
     };
 
-    let result = inner_result.map_err(|e| meta_swarm_error_to_status(&e))?;
+    let (result, provenance) = inner_result.map_err(|e| meta_swarm_error_to_status(&e))?;
 
     // PR #17 audit-pass — wire inner-loop observability.  Maps the
     // Phase-1 `StopReason` to the closed `Convergence` taxonomy and
@@ -235,7 +248,12 @@ pub async fn run_iterate(
         )));
     }
 
-    let response = build_response(&result, start.elapsed());
+    let response = build_response(
+        &result,
+        start.elapsed(),
+        provenance.as_ref(),
+        req_inner.include_provenance_bundle,
+    );
 
     info!(
         iterations = result.iterations,
@@ -735,8 +753,19 @@ fn build_meta_swarm(
         .map_err(|e| ServerError::Manifest(format!("MetaSwarm build failed: {e}")))
 }
 
-fn build_response(result: &MetaSwarmResult, elapsed: Duration) -> IterateResponse {
-    use efe_meta_swarm_proto::meta_swarm::StopReason as ProtoStop;
+/// Couche 3 M2 — projette le reçu sur le fil.
+///
+/// `provenance = None` (contrôleur sans provenance) ⟹ root **vide** et bundle absent. C'est le
+/// signal honnête « pas de reçu » : jamais un placeholder, jamais un root de complaisance qu'un
+/// consommateur pourrait prendre pour une preuve. Le bundle n'accompagne le root que si le client
+/// l'a **demandé** — il coûte O(itérations × dim) et personne ne devrait le payer sans l'avoir voulu.
+fn build_response(
+    result: &MetaSwarmResult,
+    elapsed: Duration,
+    provenance: Option<&efe_meta_swarm::provenance::MetaProvenance>,
+    include_bundle: bool,
+) -> IterateResponse {
+    use efe_meta_swarm_proto::meta_swarm::{MetaProvenanceBundle, StopReason as ProtoStop};
 
     // Phase-1 StopReason → proto StopReason mapping.
     let stop_reason = match result.stop_reason {
@@ -744,6 +773,15 @@ fn build_response(result: &MetaSwarmResult, elapsed: Duration) -> IterateRespons
         StopReason::MaxItersHit => ProtoStop::MaxIters,
         StopReason::Error => ProtoStop::ParticipantDown, // closest semantic
     } as i32;
+
+    let meta_provenance_root = provenance.map(|p| p.root.clone()).unwrap_or_default();
+    let meta_provenance_bundle = provenance.filter(|_| include_bundle).map(|p| MetaProvenanceBundle {
+        // Les DEUX artefacts viennent des mêmes producteurs d'octets que `write_bundle` : ce qui
+        // part sur le fil est byte-identique à ce qu'un opérateur aurait écrit sur disque, donc
+        // re-prouvable par la même commande sans adaptation.
+        steps_jsonl: p.steps_jsonl(),
+        manifest_json: p.manifest_json(),
+    });
 
     IterateResponse {
         iterations: u32::try_from(result.iterations).unwrap_or(u32::MAX),
@@ -757,6 +795,8 @@ fn build_response(result: &MetaSwarmResult, elapsed: Duration) -> IterateRespons
         stop_reason,
         wall_us: u64::try_from(elapsed.as_micros()).unwrap_or(u64::MAX),
         trace_id: String::new(),
+        meta_provenance_root,
+        meta_provenance_bundle,
     }
 }
 
@@ -872,6 +912,8 @@ mod tests {
             }),
             initial_states: vec![],
             traceparent: String::new(),
+            // M2 : la plupart des tests d'unité n'ont pas besoin du reçu complet.
+            include_provenance_bundle: false,
         }
     }
 

@@ -304,12 +304,23 @@ impl MetaProvenance {
         s
     }
 
+    /// Le contenu de `meta_manifest.json` — **la définition unique** de sa forme octet.
+    ///
+    /// Extrait de [`Self::write_bundle`] (Couche 3 M2) parce que le bundle ne voyage plus seulement
+    /// par le disque : le contrôleur méta-essaim le rend aussi sur le fil gRPC. Deux sérialisations
+    /// séparées auraient dérivé — un espacement, un `\n` final — et la dérive n'aurait été
+    /// découverte que chez l'auditeur, dont le vérifieur aurait refusé un bundle pourtant intègre.
+    /// Un seul producteur d'octets, donc, pour les deux chemins.
+    #[must_use]
+    pub fn manifest_json(&self) -> String {
+        serde_json::to_string_pretty(&self.manifest()).expect("manifeste sérialisable") + "\n"
+    }
+
     /// Écrit le bundle (`meta_steps.jsonl` + `meta_manifest.json`) sous `dir`. **La clé n'y est jamais.**
     pub fn write_bundle(&self, dir: &Path) -> std::io::Result<()> {
         std::fs::create_dir_all(dir)?;
         std::fs::write(dir.join("meta_steps.jsonl"), self.steps_jsonl())?;
-        let manifest = serde_json::to_string_pretty(&self.manifest()).expect("manifeste sérialisable") + "\n";
-        std::fs::write(dir.join("meta_manifest.json"), manifest)?;
+        std::fs::write(dir.join("meta_manifest.json"), self.manifest_json())?;
         Ok(())
     }
 }

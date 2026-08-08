@@ -77,6 +77,16 @@ pub struct ControllerState {
     /// process restart resets it, which is the sanctioned way to change an
     /// engine).
     pub engine_lineage: Arc<Mutex<HashMap<String, ParticipantManifest>>>,
+    /// Couche 3 M2 — **sous quelle clé et pour quel tenant sceller les reçus de consensus.**
+    ///
+    /// `None` ⟹ le contrôleur sert SANS provenance : `meta_provenance_root` part **vide** sur le
+    /// fil, et c'est le signal honnête (« pas de reçu »), jamais un placeholder. `Some` ⟹ chaque
+    /// `Iterate` scelle ses pas dans une chaîne HMAC re-prouvable hors-ligne.
+    ///
+    /// Résolu **une fois au boot** par [`super::provenance::ProvenanceConfig::from_env`], qui
+    /// refuse de démarrer plutôt que d'émettre un reçu forgeable sans le dire. Derrière un `Arc` :
+    /// l'état est cloné par requête, la source de clé ne l'est pas.
+    pub provenance: Option<Arc<super::provenance::ProvenanceConfig>>,
 }
 
 impl std::fmt::Debug for ControllerState {
@@ -117,7 +127,20 @@ impl ControllerState {
             inflight: InflightSemaphore::new(max_inflight),
             tls_reloader: None,
             engine_lineage: Arc::new(Mutex::new(engine_lineage)),
+            // M2 : éteinte par défaut. `bin/controller.rs` l'allume au boot si — et seulement si —
+            // l'opérateur l'a demandée ET qu'une clé sûre (ou un dev explicitement reconnu) existe.
+            provenance: None,
         }
+    }
+
+    /// Couche 3 M2 — attache la configuration de scellement après construction.
+    ///
+    /// Même patron que [`Self::set_tls_reloader`] : le boot résout, l'état porte. Séparé du
+    /// constructeur pour que la résolution (qui peut ÉCHOUER, cf.
+    /// [`super::provenance::ProvenanceConfig::from_env`]) reste au boot, où un échec est un refus
+    /// de démarrer visible, et non un état à-moitié-construit.
+    pub fn set_provenance(&mut self, cfg: Arc<super::provenance::ProvenanceConfig>) {
+        self.provenance = Some(cfg);
     }
 
     /// PR #16 — attach a TLS reloader after construction.

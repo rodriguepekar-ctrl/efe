@@ -23,7 +23,7 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use efe_meta_swarm_proto::controller::MetaSwarmServiceClient;
-use efe_meta_swarm_proto::meta_swarm::HealthRequest;
+use efe_meta_swarm_proto::meta_swarm::{HealthRequest, IterateRequest, IterateResponse};
 use tokio::sync::Mutex;
 use tonic::transport::{Channel, Endpoint};
 use tonic::Request;
@@ -56,6 +56,16 @@ pub enum MetaSwarmClientError {
     /// The Health RPC itself failed (network drop, timeout, etc.).
     #[error("Health probe RPC failed : {0}")]
     HealthRpcFailed(#[source] tonic::Status),
+
+    /// Couche 3 M2 — l'`Iterate` servi a échoué côté contrôleur.
+    ///
+    /// Distincte de [`Self::HealthRpcFailed`] à dessein : un `Iterate` peut échouer pour des
+    /// raisons **métier** que l'appelant doit pouvoir distinguer d'une panne de transport —
+    /// `ABORTED` (non-convergence fail-closed, Couche 3 M1/M2), `FAILED_PRECONDITION` (sortie de
+    /// boîte de sûreté), `DEADLINE_EXCEEDED` (budget mural). Écraser tout cela en « erreur de
+    /// santé » ferait perdre à la façade HTTP la seule information qui compte pour son client.
+    #[error("Iterate RPC failed : {0}")]
+    IterateRpcFailed(#[source] tonic::Status),
 }
 
 /// Cheap-to-clone gRPC client wrapper.  Holds an `Arc`'d tonic
@@ -202,6 +212,27 @@ impl MetaSwarmClient {
     /// The endpoint URL the client is bound to.  Used by metrics
     /// labels + tracing spans.
     #[must_use]
+    /// Couche 3 M2 — exécute une ronde de consensus sur le contrôleur méta-essaim.
+    ///
+    /// Le passage est **transparent** : la requête part telle quelle et la réponse revient telle
+    /// quelle, `meta_provenance_root` et `meta_provenance_bundle` compris. C'est délibéré — cette
+    /// façade ne doit ni fabriquer ni retoucher un reçu. Si elle re-sérialisait le bundle, ce que
+    /// l'auditeur re-prouve ne serait plus ce que le contrôleur a scellé, et le seul moyen de s'en
+    /// apercevoir serait un échec de re-preuve chez le tiers.
+    ///
+    /// # Errors
+    /// [`MetaSwarmClientError::IterateRpcFailed`] — le contrôleur a refusé ou échoué ; le
+    /// [`tonic::Status`] d'origine est conservé, code compris.
+    #[instrument(skip_all, fields(endpoint = %self.inner.endpoint))]
+    pub async fn iterate(&self, req: IterateRequest) -> Result<IterateResponse, MetaSwarmClientError> {
+        let mut client = self.inner.client.lock().await;
+        client
+            .iterate(Request::new(req))
+            .await
+            .map(tonic::Response::into_inner)
+            .map_err(MetaSwarmClientError::IterateRpcFailed)
+    }
+
     pub fn endpoint(&self) -> &str {
         &self.inner.endpoint
     }

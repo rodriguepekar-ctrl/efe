@@ -23,7 +23,7 @@ use efe_meta_swarm_server::{
     tls::{reload::TlsPaths, CertWatcher, TlsMetrics, TlsReloader},
 };
 
-use ::tracing::{error, info};
+use ::tracing::{error, info, warn};
 use tokio::sync::watch;
 use tonic::transport::{Certificate as TonicCertificate, Identity, Server, ServerTlsConfig};
 
@@ -112,6 +112,40 @@ async fn async_main(
     );
 
     let mut state = ControllerState::new(config.clone(), manifest);
+
+    // ── Couche 3 M2 — la clé et le tenant du reçu de consensus (fail-closed) ────────────────
+    //
+    // Résolu ICI, avant que le serveur gRPC ne se lie : une provenance demandée sans clé sûre est
+    // un REFUS DE DÉMARRER, pas un repli silencieux sur une clé de dev publiquement connue. Même
+    // patron que `frontier_boot_guard` (Couche 2 M4) et `h1_boot_gate` (Couche 3 M1.d) — un
+    // opérateur qui lit « préflight OK » doit pouvoir en déduire ce que le système garantit.
+    match efe_meta_swarm_server::controller::provenance::ProvenanceConfig::from_env() {
+        Ok(Some(cfg)) => {
+            if cfg.is_forgeable() {
+                // Le dire, et le RE-dire : un reçu sous clé de dev ressemble à une preuve.
+                warn!(
+                    key_source = cfg.label(),
+                    "provenance de consensus ACTIVE sous la clé de DÉVELOPPEMENT — le \
+                     meta_provenance_root servi est FORGEABLE par quiconque connaît cette clé \
+                     (elle est publique). Ne PAS présenter ces reçus comme une preuve.",
+                );
+            } else {
+                info!(key_source = cfg.label(), "provenance de consensus active — chaque Iterate scelle ses pas");
+            }
+            state.set_provenance(std::sync::Arc::new(cfg));
+        }
+        Ok(None) => {
+            info!(
+                "provenance de consensus INACTIVE (aucun {} déclaré) — le fil portera un \
+                 meta_provenance_root VIDE : aucun reçu n'est produit, et c'est le signal honnête.",
+                efe_meta_swarm_server::controller::provenance::TENANT_ENV,
+            );
+        }
+        Err(why) => {
+            error!(error = %why, "provenance de consensus mal configurée — refus de démarrer");
+            return Err(efe_meta_swarm_server::error::ServerError::Config(why));
+        }
+    }
 
     // PR #18 — initialise the OpenTelemetry SDK inside the tokio
     // runtime context.  The BatchSpanProcessor uses tokio for async

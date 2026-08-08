@@ -2,6 +2,8 @@
 
 pub mod inflight;
 pub mod iterate;
+/// Couche 3 M2 — sous quelle clé et pour quel tenant le contrôleur scelle ses reçus.
+pub mod provenance;
 pub mod reload;
 mod service;
 mod state;
