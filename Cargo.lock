@@ -6316,6 +6316,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "95067976aca6421a523e491fce939a3e65249bac4b977adee0ee9771568e8aa3"
 
 [[package]]
+name = "provenance-bridge"
+version = "0.0.1"
+dependencies = [
+ "efe-nano-sdk",
+ "efe-swarm-provenance",
+ "provenance-dag",
+ "uuid",
+]
+
+[[package]]
 name = "provenance-capture"
 version = "0.0.1"
 dependencies = [

@@ -258,6 +258,11 @@ members = [
     # DAG scellé sur le runtime ; garde de souveraineté (egress refusé) ; requête par cas/rôle.
     # Dépend uniquement de provenance-dag. Cf. la même roadmap (S1).
     "crates/provenance-capture",
+    # Fil P / P.1 — provenance-bridge : la DÉRIVATION PURE du reçu servi (pile A) vers le DAG
+    # scellé auditable (pile B) — le producteur qui manquait à la pile B. Sens des dépendances
+    # imposé : pont → piles, jamais l'inverse (verify-mini garde son arbre VIDE).
+    # Cf. docs/architecture/FIL-P-pont-pile-A-vers-pile-B-ARCHITECTURE.md.
+    "crates/provenance-bridge",
     # Kovant P1 / S4 — provenance-verify : le vérifieur forensic AUTONOME (binaire-fossé).
     # Dépend UNIQUEMENT de provenance-dag → re-compilable et auditable par un tiers (régulateur),
     # sortie JSON faite main (zéro dépendance). Cf. la même roadmap (S4).

@@ -311,37 +311,51 @@ bundle tronqué, ce qui est exactement l'attaque qu'on cherche à rendre visible
 
 ## 4 · Contrats d'interface (signatures exactes proposées)
 
+> **Correction apportée à l'implémentation de P.1 (2026-08-05).** Ce paragraphe annonçait
+> `nodes_from_run(stored: &StoredRun)`. C'était une **erreur** : `StoredRun` vit dans
+> `efe-swarm-gateway` (`store.rs:24`), pas dans `efe-swarm-provenance`. Le prendre en entrée aurait
+> fait dépendre une crate de dérivation *pure* de tout le serveur HTTP (axum, tower, sqlx…), et
+> inversé le sens des dépendances que le fil s'impose. Le pont définit donc sa propre vue minimale,
+> `RunView`, que l'appelant construit. Les signatures ci-dessous sont **celles du code livré**.
+
 ```rust
-// crates/provenance-bridge/src/lib.rs (crate NEUVE — voir §11.1)
+// crates/provenance-bridge/src/  (crate NEUVE — voir §11.1)
+
+/// La vue minimale d'un run scellé : des EMPRUNTS, aucune possession — la pureté par les types.
+pub struct RunView<'a> {
+    pub run_id: Uuid,
+    pub tenant: &'a str,
+    pub records: &'a [AgentCallRecord],
+    pub llm_records: &'a [LlmProvenanceRecord],
+    pub sealed_root: Option<&'a str>,   // sa présence ARME le contrôle de complétude
+}
 
 /// Dérivation pure : un run scellé de la pile A -> les nœuds de la pile B.
-pub fn nodes_from_run(stored: &StoredRun) -> Result<Vec<Node>, DeriveError>;
+/// La clé est celle de la pile A : le pont re-prouve LUI-MÊME la complétude plutôt que de croire
+/// son appelant sur parole.
+pub fn nodes_from_run(view: &RunView<'_>, key: &[u8]) -> Result<Vec<Node>, DeriveError>;
 
-/// Scellement du DAG dérivé avec la clé de la pile B (JAMAIS celle de la pile A).
+pub enum DeriveError {
+    PendingRef { node: String, missing: Uuid },          // référence causale pendante
+    DuplicateNodeId(String),                             // violerait DagError::DuplicateId
+    TimestampBeforeEpoch { record: Uuid },
+    MissingRoot,                                         // complétude indécidable : on refuse
+    RootMismatch { sealed: String, recomputed: Option<String> },  // `None` = chaîne rompue ou run vidé
+}
+
+// ── P.2 à P.4 (non codés) ────────────────────────────────────────────────────────────────
 pub fn seal_bundle(nodes: Vec<Node>, key: &TenantKey)
     -> Result<(SealedDag, String /* manifest_root */), DagError>;
-
-/// L'ancre à publier HORS du bundle.
 pub fn anchor_of(run_id: Uuid, tenant: &str, root: &str, n: u32, at: u64) -> AnchorRecord;
-
-/// L'attestation asymétrique de la racine.
 pub fn attest_root(anchor: &AnchorRecord, sk: &SigningKey, key_id: &str) -> RootAttestation;
 pub fn verify_attestation(att: &RootAttestation, pk: &VerifyingKey) -> Result<(), AttestError>;
-
-#[derive(Debug)]
-pub enum DeriveError {
-    PendingRef { node: String, missing: String },  // référence causale pendante
-    DuplicateNodeId(String),                       // violerait DagError::DuplicateId
-    TimestampBeforeEpoch { record: Uuid },
-    MissingRoot,                                   // StoredRun.root absent : on refuse de dériver
-    RootMismatch { stored: String, recomputed: String },  // P.0 : le run ne se re-prouve pas
-}
 ```
 
-> **Note de dépendance.** La crate `provenance-bridge` dépend de `efe-swarm-provenance` (pile A, pour
-> `StoredRun`/`deterministic_order`) et de `provenance-dag` (pile B). **Aucune des deux piles ne dépend
-> du pont** : le sens des flèches garantit qu'aucune ne peut être cassée par lui, et que
-> `verify-mini` conserve son arborescence de dépendances vide.
+> **Note de dépendance (vérifiée au build).** `provenance-bridge` dépend de `efe-swarm-provenance`
+> (pile A), `provenance-dag` (pile B), `efe-nano-sdk` et `uuid`. **Aucune des deux piles ne dépend du
+> pont** : `cargo tree -p provenance-dag` ne le mentionne pas, et surtout
+> `cargo tree -p verify-mini` reste **littéralement vide** — l'invariant qui rend la pile B
+> auditable est préservé.
 
 ---
 

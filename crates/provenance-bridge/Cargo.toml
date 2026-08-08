@@ -1,0 +1,31 @@
+# SPDX-License-Identifier: UNLICENSED
+# Fil P / P.1 — provenance-bridge : la DÉRIVATION PURE du reçu servi (pile A) vers le DAG
+# scellé auditable (pile B). Cf. docs/architecture/FIL-P-pont-pile-A-vers-pile-B-ARCHITECTURE.md.
+#
+# Sens des dépendances (invariant du fil) : **pont → piles**, jamais l'inverse. Ni
+# efe-swarm-provenance ni provenance-dag ne dépendent d'ici, de sorte qu'aucune des deux ne peut
+# être cassée par le pont — et que `verify-mini` conserve son arbre de dépendances VIDE.
+#
+# Le pont ne dépend PAS d'efe-swarm-gateway : `StoredRun` y vit, mais le prendre en entrée
+# tirerait axum/tower/sqlx dans une crate de dérivation pure. On définit à la place une vue
+# minimale ([`RunView`]) que l'appelant construit — correction assumée du §4 du doc d'archi.
+[package]
+name = "provenance-bridge"
+version = { workspace = true }
+edition = { workspace = true }
+rust-version = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
+description = "Fil P/P.1 — dérivation PURE et déterministe d'un run scellé (pile A : AgentCallRecord + chaîne HMAC tenant) vers les nœuds typés du DAG re-prouvable (pile B). Aucune surface servie, aucun effet de bord : le bundle est une VUE du reçu, jamais une seconde source de vérité."
+publish = false
+
+[lib]
+name = "provenance_bridge"
+path = "src/lib.rs"
+
+[dependencies]
+provenance-dag        = { path = "../provenance-dag", version = "0.0.1" }        # Node (pile B)
+efe-swarm-provenance  = { path = "../efe-swarm-provenance", version = "0.0.1" }  # AgentCallRecord, deterministic_order, verify_swarm (pile A)
+efe-nano-sdk          = { path = "../efe-nano-sdk", version = "0.0.1" }          # LlmProvenanceRecord, Blake3Hash, ProvenanceId
+uuid                  = { workspace = true }
