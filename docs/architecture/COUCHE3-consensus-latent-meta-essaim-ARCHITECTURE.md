@@ -11,7 +11,7 @@ La Couche 3 est un **triptyque honnête** que l'audit doc-vs-code a mis à nu :
 
 1. **Le moteur, la provenance et le transport sont RÉELS.** Le point-fixe couplé Krasnoselskii-Mann, la projection de sûreté fermement non-expansive (prouvée par proptest), la chaîne HMAC re-prouvable par deux vérifieurs qui se croisent, et une vraie ronde de consensus servie sur gRPC/mTLS — tout cela existe, compile, et passe. **C'est le dowry.**
 2. **Les docs SUR-VENDENT sur deux axes.** (#1) « MetaConsensus par weighted vote + outlier detection » alors que le seul opérateur câblé est **`UniformMetaOp`** (moyenne uniforme, zéro détection d'outlier). (#2) « convergence prouvée (cf. `certification.rs`) » alors que `certification.rs` est un **stub `always-valid`** et que la garde d'hypothèse H1 du moteur est **dishonest-green** (ne peut jamais échouer).
-3. **Rien n'est branché à un chemin servi honnête.** Les participants servis sont des **`MockParticipant`** synthétiques (pas efe-core) ; `efe-server` n'a **aucune route `/consensus`** et n'appelle **jamais** `iterate()` ; la provenance re-prouvable **n'est pas sur le chemin servi** ; streaming et fédération inter-org sont absents (`unimplemented!` / 0 code).
+3. **Rien n'est branché à un chemin servi honnête.** ~~Les participants servis sont des `MockParticipant` synthétiques (pas efe-core)~~ — **cette moitié est FERMÉE par M1** (2026-07-14, `c53a7f6` : le participant servi enveloppe un vrai `SwarmController` efe-core sous `core-integration`, fail-closed). Le **reste tient toujours**, re-vérifié le 2026-08-08 : `efe-server` n'a **aucune route `/consensus`** et n'appelle **jamais** `iterate()` (0 occurrence) ; la provenance re-prouvable **n'est pas sur le chemin servi** (`iterate_with_provenance` / `meta_provenance_root` : 0 occurrence côté serveur) ; streaming et fédération inter-org sont absents. **C'est M2**, et il n'est pas fait.
 
 **Donc la Couche 3 n'est pas « livrer le moteur » — le moteur existe.** C'est :
 - **(a) corriger l'honnêteté D'ABORD** (le plus urgent pour Kovant : des docs qui mentent sont une bombe de crédibilité devant un investisseur technique) ;
@@ -46,10 +46,11 @@ La Couche 3 est un **triptyque honnête** que l'audit doc-vs-code a mis à nu :
 ### 2.2 Sur-vente #2 — « convergence prouvée (cf. certification.rs) »
 
 **Réalité** (le plus grave, sévérité **blocker** honnêteté) :
-- `certification.rs:47` : `BundleCertificate::Stub => true` **inconditionnel** ; `participants/certificate.rs:33` : `NonExpansiveCertificate::Stub => true`. Toutes les impls (`local.rs:229`, `mock.rs:157`, `remote_participant.rs:400`) renvoient **`Stub`**.
-- La **garde H1** du moteur (`coupled.rs:144` : `if !cert.is_valid() { return Err(HypothesisCheckFailed{H1}) }`) est donc **dishonest-green** : le chemin d'erreur est **inatteignable**. Elle *ressemble* à une vérification par participant ; elle ne vérifie **rien**.
+- `certification.rs:49` : `BundleCertificate::Stub => true` **inconditionnel** — ⚠ **TOUJOURS VRAI** (re-vérifié 2026-08-08). Le certificat de *bundle* n'a pas bougé ; c'est le certificat **par participant** qui a été traité par M1.c. Ne pas confondre les deux.
+- ~~`participants/certificate.rs:33` : `NonExpansiveCertificate::Stub => true` ; toutes les impls renvoient `Stub`~~ — ✅ **CORRIGÉ par M1.c** (`a8f1798`), mais **partiellement, et il faut dire jusqu'où** : `certificate.rs:66` rend désormais `Stub => !strict` (donc **rejeté** en strict), et le participant **local réel** rend un `Empirical` calculé par un canari adversarial (`participants/local.rs:245`). Rendent **encore `Stub`** : le **mock** (`mock.rs:157` — il n'a rien à certifier) et surtout le **`RemoteParticipant`** (`efe-meta-swarm-server/src/client/remote_participant.rs:400`), faute de certificat **sur le fil** — c'est le jalon **M4**, et c'est la raison pour laquelle le mode strict n'est PAS activé sur l'`Iterate` servi (il briquerait chaque ronde distante).
+- ~~La **garde H1** du moteur est **dishonest-green** : le chemin d'erreur est **inatteignable**~~ — ✅ **FAUX DEPUIS M1.c**. `coupled.rs:152` appelle `cert.accepts(self.strict)` et rend `HypothesisCheckFailed{H1}` : la garde **peut** échouer, sur un `L̂ ≥ 1 − marge` comme sur un `Stub` en strict. Côté serveur elle est même posée **plus tôt** — un gate de **boot** qui refuse de démarrer le participant (`h1_boot_gate`), donc avant qu'un seul RPC ne soit servi.
 - La variante signée `LocalSignature` **ignore totalement** le champ `signature` Ed25519 (`certification.rs:50`, jamais vérifié) et **fait confiance à un Lipschitz auto-déclaré**. Pire, son seuil est `< 1.0` **strict** — il **rejetterait** `UniformMetaOp` et `BoxSafety` (L=1.0 exact), c'est-à-dire **exactement les opérateurs qui SONT non-expansifs**.
-- La crate **`efe-prove`** citée comme source du Lipschitz+signature (`certification.rs:7`) **n'existe pas** dans le workspace. Toute la « Phase-3 » référence un composant fantôme.
+- La crate **`efe-prove`** citée comme source du Lipschitz+signature (`certification.rs:7`) **n'existe pas** dans le workspace — ⚠ **TOUJOURS VRAI** (re-vérifié 2026-08-08, 0 crate de ce nom). Toute la « Phase-3 » référence un composant fantôme.
 - **Ce qui EST prouvé** : la fermeté de `BoxSafety` (proptest) + la borne fermée L=1 d'`UniformMetaOp`. C'est **testé en CI**, ce n'est **pas** un certificat runtime.
 
 ### 2.3 Résidus d'honnêteté (annexes mais réels)
@@ -79,7 +80,7 @@ Comme la Couche 2 (moteur réel non servi → surface servie re-prouvable), le c
 1. **`run_iterate` doit passer par `iterate_with_provenance`** (aujourd'hui il appelle `iterate()` **sans observateur** — `iterate.rs:87`) ; activer la feature `provenance` dans `efe-meta-swarm-server` (aujourd'hui non activée → le code de scellement **n'est même pas compilé**).
 2. **Renvoyer `meta_provenance_root`** dans `IterateResponse` (slot 8) + exposer le **bundle** (`meta_steps.jsonl` + `meta_manifest.json`) via un `GetConsensusReceipt`. La **clé tenant vient du responsable** (`HmacKeySource::derive`), **jamais du fil**.
 3. **Une route `/consensus`** côté efe-server (ou une mission gateway) : `efe-server` n'expose aujourd'hui que `health_probe` (`services/meta_swarm/mod.rs`), gaté `EFE_META_SWARM_ENABLED=false`, **aucun site d'appel** de `meta_swarm_client()`, **aucune route**. L'analogue exact de `/v1/llm`.
-4. **De VRAIS participants** (§ le plus lourd) : le binaire participant enveloppe `MockParticipant::with_contraction` (`participant/local.rs:91`, contraction synthétique `κ·x`). Le pont réel `LocalParticipant↔efe-core` (feature **`core-integration`**, `default=[]`) n'est référencé **nulle part** dans le serveur. **Tant que ce pont n'est pas câblé, « SLM-swarms » est faux au niveau transport** — la ronde coordonne des mocks.
+4. **De VRAIS participants** (§ le plus lourd) — ✅ **LIVRÉ par M1** (`c53a7f6`, `b9a8fce`, `665ead0`). *Constat d'origine, conservé pour la traçabilité* : « le binaire participant enveloppe `MockParticipant::with_contraction` ; le pont réel `LocalParticipant↔efe-core` n'est référencé **nulle part** dans le serveur ». **Aujourd'hui** (re-vérifié 2026-08-08) : `Engine::EfeCore` servi sous `core-integration`, topologie **fixe par défaut** (Φ continu par construction), canari H1 adversarial en **gate de boot** fail-closed, et refus de servir un mock à la place d'un bloc `controller` déclaré. **Le garde-fou reste entier** : ce sont de vrais **essaims latents efe-core**, jamais de « vrais SLM » — aucun poids de LM ni tokenizer sur le chemin du pas.
 
 **Modèle de confiance à graver** (identique R4 Couche 2) : le reçu est **tamper-evident pour le détenteur de la clé tenant**, **PAS trustless** ; il atteste **l'intégrité du transcript, PAS la correction du consensus**.
 
@@ -169,8 +170,8 @@ docs   particip. reçu   robuste  réel   sécurité  (recherche)
 
 | Jalon | But | Effort | Sortie clé (binaire) |
 |---|---|---|---|
-| **M0 — Honnêteté** | corriger les 2 sur-ventes ; retirer `AttentionSoftmax` du schéma public (ou le faire échouer explicitement) ; bannir « convergence prouvée » ; ajouter le **gate Lipschitz** `build()` (fail-closed) | **S** | `grep` des phrases bannies = 0 ; un opérateur expansif ⟹ `Err` |
-| **M1 — Vrais participants** | câbler `core-integration` dans le binaire participant (`LocalParticipant`↔efe-core au lieu de `MockParticipant`) | **L** | une ronde coordonne de **vrais** essaims EFE/SLM |
+| **M0 — Honnêteté** | corriger les 2 sur-ventes ; retirer `AttentionSoftmax` du schéma public (ou le faire échouer explicitement) ; bannir « convergence prouvée » ; ajouter le **gate Lipschitz** `build()` (fail-closed) | **S** | ~~`grep` des phrases bannies = 0~~ — **insatisfaisable** : les tables BANNIR/REMPLACER contiennent nécessairement les phrases qu'elles interdisent. Critère exécutable : **toute occurrence est une MENTION** (table, ligne « sur-vente », négation), **jamais une affirmation** ; un opérateur expansif ⟹ `Err` |
+| **M1 — Vrais participants** ✅ **LIVRÉ** (`8fcb3dc` → `665ead0`) | câbler `core-integration` dans le binaire participant (`LocalParticipant`↔efe-core au lieu de `MockParticipant`) | **L** | une ronde coordonne de vrais essaims **latents efe-core** — ~~« EFE/SLM »~~, jamais SLM. Détail & DoD re-vérifié : `COUCHE3-M1-vrais-participants-ARCHITECTURE.md` |
 | **M2 — Servi + reçu** | `run_iterate` via `iterate_with_provenance` ; `meta_provenance_root` dans `IterateResponse` (slot 8) ; route `/consensus` efe-server | **M** | `POST /consensus` → reçu re-vérifiable par `verify-meta-mini` |
 | **M3 — Agrégateur robuste** | `FixedWeightMetaOp` + `CoordinateMedianMetaOp`, proptests miroir, câblés par config | **L** | vrai « weighted vote » + robustesse aux outliers, **non-expansifs** |
 | **M4 — Certificat réel** | `NonExpansivenessCertificate` scellé + re-vérifié ; Ed25519-sur-root ; garde H1 qui peut échouer | **L** | borne de Lipschitz **auditable** (plus de `Stub`) |
@@ -187,7 +188,7 @@ docs   particip. reçu   robuste  réel   sécurité  (recherche)
 - **Pas de « convergence prouvée »** : la non-expansivité est **property-testée** ; le certificat runtime est un `Stub` (jusqu'à M4).
 - **Pas de trustless / inter-org** : tamper-evident **détenteur-de-clé**, mono-domaine coopératif. La fédération est un **axe de recherche**.
 - **Pas de streaming** : `IterateStream`/`StepStream` = `unimplemented!` (PR#21).
-- **Pas de « vrais SLM » au transport** tant que M1 n'est pas fait (participants = `MockParticipant`).
+- **Pas de « vrais SLM »** — jamais, et M1 n'y change rien : depuis `c53a7f6` le transport coordonne de vrais **essaims latents efe-core** (fusion Mode1 numérique), ce qui n'est pas la même chose. Templates stub, aucun poids de modèle ni tokenizer sur le chemin du pas.
 - Le reçu **atteste l'intégrité, pas la correction** ; il scelle des **sorties**, pas de quoi ré-exécuter.
 
 ---
@@ -197,9 +198,9 @@ docs   particip. reçu   robuste  réel   sécurité  (recherche)
 | Revendication doc | Réalité (preuve) | Correctif |
 |---|---|---|
 | « weighted vote + outlier detection » | seul `UniformMetaOp` câblé ; attention = stub expansif ; config parse-only (`iterate.rs:651`, `config.rs:89`) | §2.1 + §4 (agrégateur honnête + gate Lipschitz) |
-| « convergence prouvée (cf. certification.rs) » | `Stub => true` ; garde H1 dishonest-green ; `efe-prove` fantôme ; signature jamais vérifiée (`certification.rs:47-54`) | §2.2 + §5 (certificat réel) |
+| « convergence prouvée (cf. certification.rs) » | **partiellement corrigé (M1.c)** — ✅ la garde H1 n'est **plus** dishonest-green (`cert.accepts(strict)`, `Empirical` adversarial, gate de boot) ; ⚠ **restent vrais** : `BundleCertificate::Stub => true` inconditionnel, `efe-prove` fantôme, signature jamais vérifiée, et `RemoteParticipant` toujours `Stub` (= pas de certificat **sur le fil**, jalon M4) | §2.2 + §5 (certificat réel) |
 | « projection de sûreté prouvée » | **seul `BoxSafety`** l'est ; Polyhedron/Learned non (`polyhedron.rs:89`, `learned.rs`) | §2.3 (ne certifier que Box) |
-| « consensus distribué SLM » | participants = `MockParticipant` synthétiques (`participant/local.rs:91`) | §3 + M1 (core-integration) |
+| « consensus distribué SLM » | ✅ M1 livré : participants = vrais essaims **latents efe-core** (`Engine::EfeCore`) — donc « distribué » et « réel » sont acquis, **« SLM » ne l'est pas** (fusion numérique Mode1, templates stub) | dire « consensus distribué sur essaims latents efe-core » |
 | « re-preuve / replay du consensus » | provenance non servie (`iterate()` sans observateur) ; scelle sorties + hashes positionnels, pas l'opérateur ni les entrées | §3 + M2 + `C3-F6`/`C3-F3` |
 | « transport mTLS fail-closed » | logique fail-closed mais **défaut fail-open** ; loopback bypass ; authz stub (`config/controller.rs:90`, `remote_participant.rs:183`, `auth/mtls.rs:12`) | §6 (`ADV-3`/`ADV-4`/`ADV-9`) |
 | « fédéré / inter-région » | 0 code ; modèle mono-CA (`grep = 0`) | §7 (recherche différée) |

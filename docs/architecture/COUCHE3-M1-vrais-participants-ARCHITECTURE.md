@@ -7,6 +7,23 @@
 
 ## 0. Verdict & principe
 
+> ### ⚠ CE VERDICT DÉCRIT L'ÉTAT **AVANT** M1 — quatre de ses cinq axes sont désormais FERMÉS.
+> C'est la première section que lit un visiteur, et elle est restée au **présent** pendant tout le
+> jalon : lue telle quelle après livraison, elle dit l'inverse du code. Chaque axe porte donc son
+> état, **re-vérifié au code le 2026-08-08**. Le texte d'origine est intact : c'est le compte rendu
+> de reconnaissance, et il vaut mieux voir ce qui a été prédit que le réécrire après coup.
+>
+> | Axe | État |
+> |---|---|
+> | 1 — le vrai danger est la discontinuité du routage | ⚠ **moitié/moitié** : l'intuition est CONFIRMÉE (elle a motivé le Palier-2), le **chiffre 0.17 est RÉFUTÉ** (mesure : `L̂ = 0.366`) |
+> | 2 — non-convergence silencieuse | ✅ **fermé** — `ABORTED`, et fail-closed **par défaut** dès qu'un moteur efe-core est servi (audit du 08/08) |
+> | 3 — Φ non déterministe | ✅ **fermé** — M1.b (`init_sigma = 0`), rerun bit-à-bit prouvé + contrôle négatif |
+> | 4 — ce ne sont pas des « SLM » | 🔒 **INCHANGÉ, et à ne jamais lâcher** — aucun poids de LM ni tokenizer sur le chemin du pas |
+> | 5 — garde-fou H1 mort | ✅ **fermé** — M1.c : `Stub` rejeté en strict, `Empirical` adversarial, gate de **boot** fail-closed |
+>
+> L'**avertissement central** en bas de section, lui, reste entièrement valable : il dit *pourquoi*
+> ces quatre axes devaient être fermés avant de servir quoi que ce soit.
+
 Le jalon M1 « remplacer le `MockParticipant` synthétique par de vrais essaims efe-core » **paraît** un simple flip de feature (`core-integration`). **La reconnaissance a démonté cette illusion sur cinq axes**, dont un qui **renverse l'hypothèse de départ** :
 
 1. **Le vrai danger n'est PAS l'attention.** Au round 1, la fusion efe-core opère sur un latent **seedé par les priors de template** (indépendant de `x`) ; `x` n'entre dans Φ **que** par `beta_mix` à poids **β₁ ≈ 0.17**. **Intra-cellule, Φ est donc analytiquement une ~0.17-CONTRACTION**, pas un opérateur expansif. Le vrai ennemi de H1 est la **discontinuité du routage génésique** (la classe de `x` → nombre entier d'agents → topologie **en escalier** → Φ **discontinu** aux frontières, Lipschitz localement non borné).
@@ -31,7 +48,7 @@ $$ L \le \underbrace{1}_{P_{C_m}} \cdot \big[(1-\alpha-\gamma) + \alpha\,L_\Phi\
 
 **Toute la convergence de type Krasnoselskii-Mann dépend de H1 : `L_Φ ≤ 1`.** Le mock l'assure trivialement (`Φ(x)=κ·x`, `L_Φ=κ<1`). La question de M1 : **le Φ d'un vrai essaim efe-core l'assure-t-il ?**
 
-### 1.1 Le renversement : Φ = Fuse₁, et `x` n'y entre qu'à ≈0.17
+### 1.1 Le renversement : Φ = Fuse₁, et `x` n'y entre ~~qu'à ≈0.17~~ que faiblement *(chiffre réfuté — voir l'encadré en fin de section)*
 
 `SwarmController::step_with_pull` (`controller.rs:349-368`) calcule `Φ(x)` en **UN round** : clone du `base_spec`, `spec.problem_embedding = current`, `max_rounds = 1`, `execute()`, `phi_x = resp.output.as_raw()`, puis `mix_coupled`. Dans ce round (`mvp_cpu.rs:148-237`), l'ordre des kernels est **scores → softmax → aggregate → beta_mix → project → clip**, et :
 
@@ -39,7 +56,19 @@ $$ L \le \underbrace{1}_{P_{C_m}} \cdot \big[(1-\alpha-\gamma) + \alpha\,L_\Phi\
 - `x` entre **uniquement** par `beta_mix` (`mvp_cpu.rs:208-213`) avec `β₁ = problem_anchor_init·e^{-decay} ≈ 0.2·e^{-0.15} ≈ 0.172` (`schedule.rs:20`, `config.rs:69`) ;
 - `beta_mix` (Lipschitz β), `project` vers l'enveloppe des anchors (`(1-α)I+αΠ`, non-expansif), `clip` coordonnée (projection boîte, non-expansif), extraction du centroïde (moyenne, non-expansif) sont **tous non-expansifs**.
 
-**Conséquence** : **intra-cellule, `L_Φ ≤ β₁ ≈ 0.17`** — Φ est analytiquement une **contraction**. La prémisse « attention expansive ⟹ Φ expansif » est **FAUSSE** pour ce câblage 1-round. *(Ne pas gaspiller l'effort à « dompter l'attention ».)*
+**Conséquence** : ~~**intra-cellule, `L_Φ ≤ β₁ ≈ 0.17`** — Φ est analytiquement une **contraction**~~. La prémisse « attention expansive ⟹ Φ expansif » est **FAUSSE** pour ce câblage 1-round. *(Ne pas gaspiller l'effort à « dompter l'attention ».)*
+
+> **⚠ LA BORNE `≤ β₁ ≈ 0.17` EST RÉFUTÉE PAR LA MESURE** (addendum du 14/07). Sur l'opérateur à
+> topologie **fixe** — donc sans aucune discontinuité de routage, exactement le régime « intra-cellule »
+> que ce paragraphe décrit — le canari adversarial mesure **`L̂ = 0.366`**, soit plus du double.
+> Et `L̂` étant une borne **inférieure**, la vraie constante est ≥ 0.366. Il existe donc une
+> sensibilité à `x` que cette composition en forme fermée **ne capture pas** ; la dérivation
+> ci-dessus omet quelque chose qui n'a pas encore été identifié (piste ouverte : mesurer les étages
+> un à un via `phi_once` sur des variantes d'assemblage).
+> **Ce qui survit** : Φ reste **largement contractant** (`0.366 ≪ 1`, H1 tient), le diagnostic
+> « le danger est le routage, pas l'attention » reste juste, et la conclusion pratique — ne pas
+> dompter l'attention — est inchangée. **Ce qui tombe** : le droit de dire « analytiquement »,
+> et le chiffre 0.17. Ne citer ni l'un ni l'autre comme une garantie.
 
 ### 1.2 Le vrai ennemi : la discontinuité du routage
 
@@ -49,16 +78,22 @@ $$ L \le \underbrace{1}_{P_{C_m}} \cdot \big[(1-\alpha-\gamma) + \alpha\,L_\Phi\
 
 ## 2. L'état des lieux (RÉEL / STUB / NON CÂBLÉ)
 
-| Élément | Statut | Preuve |
+> **Ce tableau décrivait l'état À LA RÉDACTION (avant M1).** Il a été laissé au présent pendant
+> tout le jalon, si bien qu'après livraison six de ses huit lignes affirmaient le contraire du
+> code — un lecteur en aurait conclu que rien n'est câblé. La colonne de droite le corrige et
+> chaque entrée a été **re-vérifiée dans le code le 2026-08-08**. Les deux lignes qui restent
+> vraies (« vrais SLM », et le mock toujours `Stub`) sont les plus importantes à ne pas perdre.
+
+| Élément | Constat À LA RÉDACTION (pré-M1) | **Aujourd'hui** (re-vérifié 2026-08-08) |
 |---|---|---|
-| Pont réel `LocalParticipant` (efe-meta-swarm) | **codé, jamais exécuté** | `participants/local.rs` (delegate `runtime.block_on(controller.step_with_pull)` + `safety.project`) ; **aucun test e2e** (le `tests/integration_local_participant.rs` référencé `local.rs:264` **n'existe pas**) |
-| `verify_non_expansive()` | **Stub** (les deux participants) | `local.rs:229`, `mock.rs:157` → `Stub` ; `certificate.rs:35` `Stub=>true` ⟹ garde H1 morte |
-| Participant **servi** | **MockParticipant** (κ·x) | `efe-meta-swarm-server/participant/local.rs:91` `from_manifest_row` → `MockParticipant::with_contraction` ; **`core-integration` = 0 hit** dans le serveur |
-| `Φ` semantics | **couplage faible ≈0.17, priors-dominé** | `x` n'entre qu'à β₁ (§1.1) ⟹ « les participants raisonnent ensemble sur le problème » est **largement fictif** |
-| Manifeste participant | **mock-shaped** | `schema.rs:43-50` `{id,dim,kappa,seed}` — **aucun** champ de `SwarmSpec` (population/templates, convergence, alignment_cone, budget, max_rounds) |
-| Builder `manifeste→SwarmController` | **absent** | n'existe QUE dans `efe-server::mode1:1149` (`build_mvp_backend`), qui rend un `Arc<dyn ExecuteBackend>`, **pas** un `SwarmController` |
-| Déterminisme de Φ | **cassé** | `controller.rs:200` `SwarmId::new()=UUIDv4` par pas → seed genesis variable |
-| « vrais SLM » | **stub** | `mode1.rs:1172` `StubTemplateRegistry` + `MvpCpuFusion` numérique ; sidecar poids = `pause:3.9` désactivé (`values.yaml:299`) |
+| Pont réel `LocalParticipant` (efe-meta-swarm) | **codé, jamais exécuté** ; aucun test e2e — le `tests/integration_local_participant.rs` référencé par `local.rs:264` **n'existait pas** | **exécuté** : le fichier existe et porte **11 tests** (contenance, pureté de Φ, déterminisme bit-à-bit + contrôle négatif bruité) |
+| `verify_non_expansive()` | **Stub** aux deux participants ⟹ **garde H1 morte** (`Stub => true`) | **corrigé, mais pas uniformément — et c'est voulu** : le participant réel rend un `Empirical` calculé par le canari M1.c (`local.rs:245`) ; le **mock rend toujours `Stub`** (`mock.rs:157`, il n'a rien à certifier). Ce qui a changé, c'est que `Stub` est désormais **rejeté en strict** (`certificate.rs:66` `Stub => !strict`) : la garde peut échouer |
+| Participant **servi** | **MockParticipant** (κ·x) ; `core-integration` = **0 hit** dans le serveur | **efe-core servi** sous `core-integration` (`Engine::EfeCore`, 14 hits dans le seul `participant/local.rs`), et **fail-closed** : un binaire sans la feature face à un bloc `controller` **refuse** au lieu de servir un mock |
+| `Φ` semantics | **couplage faible ≈0.17, priors-dominé** — `x` n'entre qu'à β₁ (§1.1) | le **qualitatif tient** (priors-dominé, « les participants raisonnent ensemble » reste largement fictif) ; **le chiffre non** : l'addendum du 14/07 mesure `L̂ = 0.366` sur l'opérateur fixe, `≫ β₁ ≈ 0.17` ⟹ la forme fermée est **réfutée comme certificat** |
+| Manifeste participant | **mock-shaped** `{id,dim,kappa,seed}` — aucun champ de `SwarmSpec` | bloc versionné `controller { population, max_rounds, alignment_cone, safety_box, topology, tenant_id, h1_canary }` ; `kappa`/`seed` **dépréciés** et interdits sur une ligne moteur (règles de présence fail-closed **dans les deux sens**) |
+| Builder `manifeste→SwarmController` | **absent** hors `efe-server::mode1` (qui rend un `ExecuteBackend`, pas un `SwarmController`) | présent et **réutilisable** : `core_engine::build` → `build_fixed_topology_controller` (Palier-2, défaut) ou `build_mvp_controller` (opt-out `dynamic`) |
+| Déterminisme de Φ | **cassé** — `SwarmId::new() = UUIDv4` par pas ⟹ seed genesis variable | **rétabli et prouvé** (M1.b, `init_sigma = 0`) : rerun bit-à-bit, invariance au seed, et un **contrôle négatif** bruité qui échouerait si le test était vide |
+| « vrais SLM » | **stub** — `StubTemplateRegistry` + `MvpCpuFusion` numérique ; sidecar poids désactivé | **INCHANGÉ, et c'est le garde-fou à ne jamais lâcher** : aucun poids de LM ni tokenizer sur le chemin du pas. On coordonne de vrais **essaims latents efe-core**, jamais de « vrais SLM » |
 
 ---
 
@@ -70,16 +105,29 @@ La question « comment rendre H1 vraie pour un vrai participant » a **deux rép
 Un certificat **empirique** `NonExpansiveCertificate::Empirical{n_samples, seed, radius, l_hat}`, `is_valid() = l_hat < 1 − margin`, alimenté par un échantillonnage sur `LocalParticipant` via un nouvel accesseur **`controller.phi_once(x)`** (extraction de `controller.rs:349-366`).
 > **Honnêteté impérative** : un `L̂` par échantillonnage de paires est une **BORNE INFÉRIEURE** (falsification-only) — il **détecte** l'expansivité grossière (`L̂ ≥ 1 ⟹ échec`), il ne la **certifie jamais**. Pire, ici il est **biaisé-optimiste** : des paires uniformes tombent presque sûrement dans la **même cellule** de routage (§1.2) où `L≈0.17`, et **n'enjambent quasi jamais une frontière** (mesure nulle) ⟹ `L̂` lira `≪1` alors que Φ est discontinu. **Donc l'échantillonnage DOIT être adversarial** : perturber `x` autour des exemplaires de `meta_analyzer`, montée de gradient/différences finies sur le ratio. Étiquette : « **non-expansivité property-testée, NON certifiée** ». À livrer comme **canary runtime + gate fail-closed**, jamais comme garantie.
 
-### Palier-2 — non-expansivité PROUVÉE (la seule à revendiquer « prouvé »)
-**Contraindre la topologie** : construire le `SwarmController` du participant avec un **`StaticRouter` + cardinalité fixe + masque figé**, indépendants de `x`. Alors la seule dépendance en `x` restante est `beta_mix` (continu) ⟹ **Φ devient continu et analytiquement non-expansif de module `≤ β₁ < 1`** par composition (§1.1) ⟹ un **certificat de contraction RÉEL** (forme fermée, pas empirique) ⟹ **H1 prouvée par construction**.
+### Palier-2 — ~~non-expansivité PROUVÉE~~ → **continuité par construction + borne MESURÉE**
 
-> **Décision M1** : viser le **Palier-2** (topologie fixe) pour obtenir une garantie **analytique** — c'est peu coûteux (désactiver le routage dynamique) et ça transforme la garde H1 morte en preuve. **Livrer le canary empirique EN PLUS** (Palier-1) pour attraper toute dérive. Le « Palier-1 seul » est insuffisant (falsification biaisée) ; le mélange (fixe + canary) est le seuil honnête.
+> ## ⚠ CE PALIER A ÉTÉ RÉFUTÉ PAR LA MESURE — lire ceci avant de citer quoi que ce soit ci-dessous.
+> Le raisonnement du paragraphe suivant a été **livré puis testé** (addendum du 14/07, `b9a8fce`),
+> et **la moitié « analytique » ne tient pas** : l'opérateur fixe mesure `L̂ = 0.366`, soit
+> `≫ β₁ ≈ 0.17`. Il existe une sensibilité à `x` que la composition en forme fermée ne capture
+> pas. **Aucun certificat « analytique ≤ β₁ » n'est émis nulle part** — l'enum de certificat ne
+> porte que `Stub` / `Empirical` / `LocalSignature`, et le code est donc honnête ; c'était le
+> *document* qui promettait plus. Ce qui reste, et qui est réel : la topologie fixe élimine **le**
+> mécanisme connu de rupture de H1 (les sauts entiers du routage) ⟹ **Φ continu PAR
+> CONSTRUCTION**, assorti d'une borne **mesurée, property-testée, NON certifiée**.
+> Le texte d'origine est conservé ci-dessous **tel qu'il a été écrit**, pour que l'on voie ce qui
+> a été prédit et ce que la mesure a tranché — pas pour être cité comme une garantie.
+
+*(Raisonnement d'origine, RÉFUTÉ comme certificat :)* **Contraindre la topologie** : construire le `SwarmController` du participant avec un **`StaticRouter` + cardinalité fixe + masque figé**, indépendants de `x`. Alors la seule dépendance en `x` restante est `beta_mix` (continu) ⟹ **Φ devient continu et analytiquement non-expansif de module `≤ β₁ < 1`** par composition (§1.1) ⟹ un **certificat de contraction RÉEL** (forme fermée, pas empirique) ⟹ **H1 prouvée par construction**.
+
+> **Décision M1** : viser le **Palier-2** (topologie fixe) ~~pour obtenir une garantie **analytique**~~ — pour obtenir la **continuité par construction** ; c'est peu coûteux (désactiver le routage dynamique) et ça transforme la garde H1 morte en garde qui peut échouer. **Livrer le canary empirique EN PLUS** (Palier-1) pour attraper toute dérive. Le « Palier-1 seul » est insuffisant (falsification biaisée) ; le mélange (fixe + canary) est le seuil honnête — **et c'est désormais le seuil réel, pas un repli** : la mesure ayant retiré la garantie analytique, le canari n'est plus un supplément, il est la seule borne dont on dispose.
 
 ---
 
 ## 4. Le trou de non-convergence silencieuse (blocker de soundness)
 
-`run()` rend **`Ok(MaxItersHit)`** (`coupled.rs:180-189`), mappé en **métrique** `Convergence::MaxIters` sans `Err` gRPC (`iterate.rs:123-126`, `service.rs:331`). Le code porte même le commentaire assumé « *Phase-2's algorithm is contractive ; this counter is expected to stay at 0 in production* » (`iterate.rs:146`) — **hypothèse non vérifiée**. Combiné au `Stub` (garde H1 morte), un déploiement « vrais participants » peut tourner en prod **sans jamais converger et sans aucune erreur**, et rendre un **point-fixe parasite** (Brouwer : la map couplée envoie une boîte convexe compacte dans elle-même ⟹ ≥1 point-fixe, pas forcément unique ni juste) **manipulable** par un essaim adverse (la moyenne uniforme `UniformMetaOp` n'a **aucune** résistance aux outliers).
+`run()` rend **`Ok(MaxItersHit)`** (`coupled.rs:180-189`), mappé en **métrique** `Convergence::MaxIters` sans `Err` gRPC (`iterate.rs:123-126`, `service.rs:331`). Le code porte même le commentaire assumé « *Phase-2's algorithm is contractive ; this counter is expected to stay at 0 in production* » (`iterate.rs:146`) — **hypothèse non vérifiée**. Combiné au `Stub` (garde H1 alors morte — ✅ **corrigée depuis** par M1.c), un déploiement « vrais participants » ~~peut tourner~~ *pouvait tourner* en prod **sans jamais converger et sans aucune erreur**, et rendre un **point-fixe parasite** (Brouwer : la map couplée envoie une boîte convexe compacte dans elle-même ⟹ ≥1 point-fixe, pas forcément unique ni juste) **manipulable** par un essaim adverse (la moyenne uniforme `UniformMetaOp` n'a **aucune** résistance aux outliers).
 
 **Correctif (fail-closed, blocker)** : en profil « contraction requise », `stop_reason != Converged` ⟹ **RPC en échec** (`FAILED_PRECONDITION`), **jamais** étiqueté « consensus » ; exposer le `final_residual` ; et rendre la garde H1 (`coupled.rs:144`) **capable d'échouer** (`Stub.is_valid()=false` en strict).
 
@@ -113,10 +161,10 @@ Le seam d'exécution est **à moitié prêt** : le handler `Step` tourne déjà 
 | BANNIR | REMPLACER par |
 |---|---|
 | « le méta-essaim coordonne de **vrais SLM** / modèles de langage » | « coordonne de **vrais essaims latents efe-core** (fusion Mode1) » — la partie EFE est honnête |
-| « les participants **raisonnent ensemble** sur le problème » | « couplage latent **faible (≈0.17)**, priors-dominé au round 1 » |
-| « **convergence prouvée/garantie** » | « contraction **analytique** (module ≤ β₁) **sous topologie fixe** (Palier-2), sinon **property-testée non certifiée** (canary) » |
+| « les participants **raisonnent ensemble** sur le problème » | « couplage latent **faible**, priors-dominé au round 1 » — ~~« ≈0.17 »~~ : ne plus citer ce chiffre comme la sensibilité réelle, la **mesure** donne `L̂ = 0.366` (addendum du 14/07) |
+| « **convergence prouvée/garantie** » | ⚠ **le remplacement d'origine était lui-même une sur-vente** — ~~« contraction *analytique* (module ≤ β₁) sous topologie fixe »~~ a été **retiré** par l'addendum du 14/07 : l'opérateur fixe mesure `L̂ = 0.366 ≫ β₁ ≈ 0.17`, et **aucun certificat analytique n'est émis nulle part** (l'enum ne porte que `Stub` / `Empirical` / `LocalSignature`). Dire : « **topologie fixe ⟹ Φ continu PAR CONSTRUCTION** — les sauts entiers du routage, seul mécanisme connu de rupture de H1, sont éliminés — **+ borne MESURÉE, property-testée, NON certifiée** : le canari est adversarial et `L̂` est une borne **inférieure**, elle *falsifie* H1, elle ne la prouve jamais » |
 | « consensus **byzantin-robuste / tolérant aux fautes** » | « agrégation **vérifiable**, **aucune** résistance aux outliers (moyenne uniforme) » |
-| « participant **déterministe** » (sur le fil) | soit rendu vrai (§5), soit retiré → « stochastique » |
+| « participant **déterministe** » (sur le fil) | soit rendu vrai (§5), soit retiré → « stochastique ». **RÉSOLU par le vrai** (M1.b, `init_sigma = 0`) : la revendication `determinism` reste sur le fil parce qu'elle est prouvée — rerun bit-à-bit, invariance au seed, contrôle négatif bruité |
 
 > **« Vrais SLM »** est une **piste séparée NON livrée** : il faudrait des **poids de modèle + tokenizer sur le chemin du pas**, ce qui n'existe pas (`problem_embedding` écrasé, templates stub, sidecar désactivé).
 
@@ -126,21 +174,34 @@ Le seam d'exécution est **à moitié prêt** : le handler `Step` tourne déjà 
 
 **Sous-jalons** (l'ordre importe : le garde-fou AVANT la démo) :
 
-| Sous-jalon | Livrable | Effort |
-|---|---|---|
-| **M1.a — seam d'exécution** | `phi_once(x)` + `build_latent_controller` (hors efe-server) + wiring `LocalParticipant` sous `core-integration` + **test d'intégration** (vrai `SwarmController`, N pas Step-sur-gRPC, **contenance** dans la boîte) | **L** |
-| **M1.b — topologie fixe (Palier-2)** | `StaticRouter` + cardinalité fixe + masque figé ⟹ Φ continu, **certificat de contraction analytique** (`≤ β₁`) | **M** |
-| **M1.c — garde-fou H1** | `verify_non_expansive` réel (`Empirical`, échantillonnage **adversarial** via `phi_once`) + `Stub.is_valid()=false` en strict + **gate fail-closed** (`MaxItersHit` ⟹ échec ; `L̂ ≥ 1−marge` ⟹ échec ; jamais « consensus » si non convergé) | **M** |
-| **M1.d — déterminisme** | seed déterministe `(seed ⊕ step_index)` + `init_sigma=0` (ou retrait du claim) ; `config_hash` sur le proto à la place de `kappa/seed` | **M** |
-| **M1.e — honnêteté** | schéma manifeste `controller`, dépréciation `kappa/seed`, bannissement des phrases (§7), redéfinition du drift de reload sur `config_hash` | **S** |
+> **⚠ Le lettrage de ce tableau NE CORRESPOND PAS à celui des commits.** Les sous-jalons ont été
+> livrés dans un ordre différent de celui planifié, et les lettres ont suivi le travail réel, pas
+> ce tableau. Lire §8 puis `git log` donne donc une carte fausse. La correspondance :
+>
+> | Ici (plan) | Commit | Ce que le commit a réellement livré |
+> |---|---|---|
+> | M1.a | `8fcb3dc` **M1.a** | seam d'exécution (`phi_once` + `build_mvp_controller`) — *concorde* |
+> | M1.b | `b9a8fce` **« Palier-2 »** | topologie fixe — livrée **en dernier**, sans lettre |
+> | M1.c | `a8f1798` **M1.c** | canari Lipschitz empirique — *concorde* |
+> | M1.d | `720d07c` **M1.b** | déterminisme (Φ sans bruit) — **lettre décalée** |
+> | M1.e | `c53a7f6` **M1.d** + `665ead0` | vrais participants servis + manifeste/fil honnêtes + dette de revue adverse |
 
-**DoD (acceptation)** :
-1. **Un vrai `SwarmController` tourne une ronde servie** (Step-sur-gRPC) qui **converge** (`residual ≤ tol`, `stop_reason = Converged`), **contenue** dans la boîte de sûreté.
-2. **H1 est un contrôle qui PEUT échouer** : un participant à topologie **dynamique** (donc potentiellement discontinu) OU un `L̂ ≥ 1−marge` ⟹ **RPC en échec**, jamais un consensus.
-3. **Non-convergence ⟹ échec explicite** (`MaxItersHit` n'est plus un « succès »).
-4. **Déterminisme** : soit reproductibilité bit-à-bit prouvée par un test de rerun, soit le claim est **retiré** du fil.
-5. **Aucune phrase bannie** (§7) dans les docs ; `grep 'vrais SLM|convergence prouvée|byzantin'` = 0.
-6. Le participant **servi** enveloppe le pont efe-core (pas `MockParticipant`) sous `core-integration` ; le mock reste disponible pour les tests.
+| Sous-jalon | Livrable | Effort | État |
+|---|---|---|---|
+| **M1.a — seam d'exécution** | `phi_once(x)` + `build_latent_controller` (hors efe-server) + wiring `LocalParticipant` sous `core-integration` + **test d'intégration** (vrai `SwarmController`, N pas Step-sur-gRPC, **contenance** dans la boîte) | **L** | ✅ `8fcb3dc` |
+| **M1.b — topologie fixe (Palier-2)** | `StaticRouter` + cardinalité fixe + masque figé ⟹ Φ continu, ~~**certificat de contraction analytique** (`≤ β₁`)~~ | **M** | ✅ `b9a8fce` — **mais le certificat analytique est RÉFUTÉ** (`L̂ = 0.366 ≫ 0.17`) : livré comme continuité par construction + borne mesurée (addendum 14/07) |
+| **M1.c — garde-fou H1** | `verify_non_expansive` réel (`Empirical`, échantillonnage **adversarial** via `phi_once`) + `Stub.is_valid()=false` en strict + **gate fail-closed** (`MaxItersHit` ⟹ échec ; `L̂ ≥ 1−marge` ⟹ échec ; jamais « consensus » si non convergé) | **M** | ✅ `a8f1798` — le gate `L̂` est posé au **boot** (le participant ne sert jamais), plus fort qu'un échec RPC |
+| **M1.d — déterminisme** | seed déterministe `(seed ⊕ step_index)` + `init_sigma=0` (ou retrait du claim) ; `config_hash` sur le proto à la place de `kappa/seed` | **M** | ✅ `720d07c` (commité sous la lettre **M1.b**) |
+| **M1.e — honnêteté** | schéma manifeste `controller`, dépréciation `kappa/seed`, bannissement des phrases (§7), redéfinition du drift de reload sur `config_hash` | **S** | ✅ `c53a7f6` + `665ead0` (commités sous **M1.d**) |
+
+**DoD (acceptation)** — état re-vérifié **au code** le 2026-08-08 :
+
+1. ✅ **Un vrai `SwarmController` tourne une ronde servie** (Step-sur-gRPC) qui **converge** (`residual ≤ tol`, `stop_reason = Converged`), **contenue** dans la boîte de sûreté. *(`real_swarm_controller_serves_steps_over_grpc` ; gardé en CI depuis l'audit du 08/08 — il ne l'était pas avant.)*
+2. ⚠ **H1 est un contrôle qui PEUT échouer** — **tenu sur une branche, tranché à l'inverse sur l'autre.** `L̂ ≥ 1−marge` ⟹ refus **au boot** : tenu, et en plus fort que « RPC en échec ». Topologie **dynamique** ⟹ le code **loggue bruyamment et SERT** (un test l'épingle, le descripteur annonce `topology:dynamic`). La décision est défendable — le canari est adversarial, ce que le §3 exigeait — mais **ce critère n'a jamais été amendé** : c'est le doc qui n'a pas suivi la décision, pas le code qui a dérivé.
+3. ✅ **Non-convergence ⟹ échec explicite** (`ABORTED`, et non `FAILED_PRECONDITION` — cf. amendement du §4). *Le mécanisme existait depuis M1.d mais restait **inerte par défaut** ; c'est l'audit du 08/08 qui l'a rendu fail-closed dès qu'un moteur efe-core est servi.*
+4. ✅ **Déterminisme** : reproductibilité bit-à-bit prouvée par test de rerun, **avec contrôle négatif** (un Φ bruité doit échouer) — le claim reste sur le fil parce qu'il est prouvé.
+5. ✅ **Aucune phrase bannie (§7) employée comme AFFIRMATION** dans les docs. ~~`grep '…' = 0`~~ : ce critère était **littéralement insatisfaisable** — les tables de bannissement du §7 et du doc frère contiennent nécessairement les phrases qu'elles interdisent, donc le grep ne peut pas rendre 0. Le contrôle exécutable est : *toute occurrence doit être une **mention** (table BANNIR/REMPLACER, ligne « sur-vente », négation explicite), jamais une revendication.* Vérifié le 08/08 sur `docs/` + les crates du méta-essaim : aucune affirmation. Une occurrence **hors périmètre** à traiter séparément — `EFE_A1_PHASE3_R2_MISSIONS_REELLES_LIVE_ARCHITECTURE.md:283`, « premier test qui exerce les vrais SLM » (autre couche).
+6. ✅ Le participant **servi** enveloppe le pont efe-core (pas `MockParticipant`) sous `core-integration` ; le mock reste disponible pour les tests. **Fail-closed dans les deux sens** : un binaire sans la feature face à un bloc `controller` refuse au lieu de servir un mock, et le reload rejette la dérive de **présence** mock↔efe-core.
 
 ---
 
@@ -158,7 +219,7 @@ Le seam d'exécution est **à moitié prêt** : le handler `Step` tourne déjà 
 
 | Revendication (doc/code) | Réalité (preuve) | Correctif M1 |
 |---|---|---|
-| « participant itère son opérateur Φ **sur `x_t`** » | `x_t` n'entre qu'à `β₁≈0.17` ; le latent vient des priors (`mvp_cpu.rs`, `spawner.rs`) | §1.1 + §7 (couplage faible documenté) |
+| « participant itère son opérateur Φ **sur `x_t`** » | `x_t` n'entre que **faiblement** ; le latent vient des priors (`mvp_cpu.rs`, `spawner.rs`). ~~`β₁≈0.17`~~ — **chiffre réfuté**, la mesure donne `L̂ = 0.366` (addendum 14/07) | §1.1 + §7 (couplage faible documenté, **sans citer de borne analytique**) |
 | « garanties A5 §4 **transportées** » (docstring `local.rs:27`) | vrai **seulement si** Φ non-expansif ; jamais vérifié (Stub) | §3 (Palier-2 analytique) + §4 (garde réelle) |
 | « algorithme **contractif**, compteur MaxIters = 0 » (`iterate.rs:146`) | hypothèse **assumée** ; expansif ⟹ non-convergence silencieuse | §4 (fail-closed) |
 | descripteur `determinism` + `kappa/seed` sur le fil | Φ non déterministe (`UUIDv4`) ; `κ` sans sens pour un vrai controller | §5 (seed déterministe + `config_hash`) |
@@ -274,15 +335,32 @@ binaire sans la feature refuse de servir un mock à la place d'un bloc `controll
 rejette toute dérive du bloc — y compris la dérive de *présence* mock↔efe-core, qui aurait
 permis de booter en mock puis de basculer à chaud sur un moteur jamais passé au canari).
 
-**Écarts laissés ouverts** (documentaires, aucun effet servi) : (a) le §2 « état des lieux » est
-un tableau au **présent** dont six affirmations sont désormais fausses (le test d'intégration
-« n'existe pas » — il porte 11 tests ; `core-integration` « 0 hit dans le serveur » — 14 dans le
-seul `participant/local.rs` ; `verify_non_expansive` « Stub » — `Empirical` réel ; etc.) ; (b) le
-§7 prescrit de remplacer « convergence prouvée » par « contraction analytique ≤ β₁ », que
-l'addendum du 14/07 a **retirée** — suivre le §7 produirait la sur-vente qu'il prétend éliminer,
-alors que le code, lui, est honnête (aucune variante analytique dans l'enum de certificat) ;
-(c) le §8 ne marque **aucun** jalon livré et son lettrage a divergé des commits (doc M1.b =
-topologie fixe / commit M1.b = Φ déterministe ; doc M1.d = déterminisme / commit M1.d = vrais
-participants servis) ; (d) le DoD #5 est littéralement inapplicable — `grep = 0` ne peut pas
-être satisfait puisque les tables de bannissement contiennent les phrases ; sur le fond il est
-tenu, aucune occurrence n'est une affirmation dans le périmètre.
+**Les quatre écarts documentaires — FERMÉS le même jour, dans une seconde passe.** Ils n'avaient
+aucun effet servi, mais les laisser aurait été incohérent avec ce que ce document reproche au
+code : un doc qui décrit un état révolu est la même faute qu'un test qui affiche vert sans rien
+vérifier — sauf qu'ici la victime est le lecteur, et le lecteur visé est Kovant.
+
+- **(a) §2 « état des lieux »** était un tableau au **présent** dont six lignes sur huit
+  affirmaient le contraire du code. Réécrit en deux colonnes — constat à la rédaction / état
+  **re-vérifié au code le 08/08** — plutôt que d'effacer l'historique. Deux lignes restent
+  vraies et sont désormais signalées comme telles : « vrais SLM » (toujours stub, le garde-fou à
+  ne jamais lâcher) et le **mock qui rend toujours `Stub`** — ce qui a changé n'est pas le mock
+  mais le fait que `Stub` soit **rejeté en strict**, donc que la garde puisse échouer.
+- **(b) §7** prescrivait de remplacer « convergence prouvée » par « contraction analytique
+  ≤ β₁ » — une phrase que l'addendum du 14/07 avait **retirée** : suivre le §7 aurait produit la
+  sur-vente qu'il prétend éliminer. Corrigé, ainsi que le « ≈0.17 » de la ligne voisine (la
+  mesure donne 0.366) et la ligne « déterminisme », marquée résolue par le vrai.
+- **(c) §8** ne portait **aucun** marqueur de livraison et son lettrage avait divergé des
+  commits. Chaque sous-jalon porte son commit, chaque critère de DoD son état re-vérifié, et une
+  table de correspondance explicite dit quel commit a livré quel sous-jalon — le décalage est
+  signalé, pas réécrit.
+- **(d) DoD #5** était **littéralement insatisfaisable** : les tables de bannissement contiennent
+  nécessairement les phrases interdites, donc `grep = 0` ne peut pas rendre 0. Le critère est
+  reformulé en un contrôle exécutable — *mention* (table, ligne « sur-vente », négation) versus
+  *affirmation* — et vérifié tel quel.
+
+**Écart de fond laissé ouvert** — et c'est le seul : le **DoD #2** demande qu'une topologie
+**dynamique** fasse échouer le RPC ; le code loggue bruyamment et **sert**, avec un test qui
+l'épingle. La décision est défendable (le canari M1.c est adversarial, ce que le §3 exigeait),
+mais elle n'a jamais été portée dans le critère. Trancher explicitement — amender le DoD, ou
+refuser `dynamic` — reste à faire ; ce n'est pas un oubli de code, c'est un arbitrage.
