@@ -59,11 +59,32 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let auth_ok = false; // feature oidc absente ⟹ egress tiers sans authentification cryptographique ⟹ refus.
         // #3 durable : intention (postgres compilé + DATABASE_URL) ; connect/migrate re-valident plus bas.
         let store_durable = cfg!(feature = "postgres") && std::env::var("DATABASE_URL").is_ok();
-        if let Err(why) = frontier_boot_guard(true, key_ok, auth_ok, store_durable) {
+        // §2.2 : la CAPACITÉ de caviarder — la feature, ou une reconnaissance explicite du risque.
+        let accepted_cleartext =
+            std::env::var("EFE_LLM_ACCEPT_CLEARTEXT_EGRESS").map(|v| v == "true").unwrap_or(false);
+        let pii_ok = cfg!(feature = "pii") || accepted_cleartext;
+        if let Err(why) = frontier_boot_guard(true, key_ok, auth_ok, store_durable, pii_ok) {
             eprintln!("FATAL (M4 gate production) : {why}");
             std::process::exit(78); // EX_CONFIG (sysexits.h) — config invalide, non-retryable
         }
-        println!("→ préflight frontière OK (provenance non-forgeable + auth OIDC efe-llm + store durable).");
+        // Le message de préflight ne dit QUE ce qui est vrai : si la capacité PII est absente et
+        // que l'opérateur l'a reconnu, on le répète ici plutôt que d'imprimer un « OK » lisse.
+        if cfg!(feature = "pii") {
+            println!(
+                "→ préflight frontière OK (provenance non-forgeable + auth OIDC efe-llm + store \
+                 durable + capacité PII compilée)."
+            );
+        } else {
+            println!(
+                "→ préflight frontière OK (provenance non-forgeable + auth OIDC efe-llm + store \
+                 durable) — ATTENTION : capacité PII ABSENTE, reconnue par \
+                 EFE_LLM_ACCEPT_CLEARTEXT_EGRESS : les prompts sortent EN CLAIR vers un tiers."
+            );
+        }
+        println!(
+            "→ plafond serveur de budget par requête : {} c (EFE_LLM_MAX_BUDGET_CENTS).",
+            efe_swarm_gateway::server_budget_ceiling_cents()
+        );
     }
 
     if !master_present {
@@ -260,7 +281,13 @@ fn frontier_flag_enabled() -> bool {
 /// authentification (OIDC `aud=efe-llm`), durabilité (store Postgres). L'ordre des messages suit
 /// la gravité : une clé forgeable rend TOUT le reste sans valeur.
 #[cfg(feature = "frontier-llm")]
-fn frontier_boot_guard(frontier_on: bool, key_ok: bool, auth_ok: bool, store_durable: bool) -> Result<(), &'static str> {
+fn frontier_boot_guard(
+    frontier_on: bool,
+    key_ok: bool,
+    auth_ok: bool,
+    store_durable: bool,
+    pii_ok: bool,
+) -> Result<(), &'static str> {
     if !frontier_on {
         return Ok(()); // frontière OFF ⟹ dev/essaim souverain intact (InMemory + test_key légitimes)
     }
@@ -275,6 +302,24 @@ fn frontier_boot_guard(frontier_on: bool, key_ok: bool, auth_ok: bool, store_dur
     if !store_durable {
         return Err("EFE_LLM_FRONTIER_ENABLED exige un store DURABLE (feature `postgres` + DATABASE_URL) — \
                     sinon les reçus R4 (la preuve) sont perdus à chaque rollout.");
+    }
+    // **M4 (§2.2) — le quatrième invariant : la CAPACITÉ de caviarder.**
+    //
+    // Nuance qui décide de la forme du garde : un défaut PII `Off` **par policy** est légitime et
+    // documenté. Ce qui ne l'était pas, c'est le **silence** — sans la feature `pii`, le site
+    // d'appel disparaissait à la compilation, et l'opérateur lisait « préflight frontière OK »
+    // pendant que chaque prompt sortait en clair vers un tiers. Il n'avait même pas le MOYEN de
+    // l'activer.
+    //
+    // On ne force donc pas la caviardage (ce serait changer la politique produit) ; on exige que
+    // l'absence de capacité soit **choisie**, jamais subie. Deux remèdes, tous deux explicites :
+    // compiler avec `pii`, ou reconnaître le risque par `EFE_LLM_ACCEPT_CLEARTEXT_EGRESS=true`.
+    if !pii_ok {
+        return Err("EFE_LLM_FRONTIER_ENABLED exige la CAPACITÉ de caviarder (feature `pii`) — sinon \
+                    le prompt utilisateur sort EN CLAIR vers un tiers, sans que rien ne le signale. \
+                    Deux remèdes : compiler avec `--features pii` (le défaut de policy reste `Off`, \
+                    donc rien ne change sans policy), ou reconnaître le risque explicitement avec \
+                    EFE_LLM_ACCEPT_CLEARTEXT_EGRESS=true.");
     }
     Ok(())
 }
@@ -325,10 +370,27 @@ mod tests {
     #[cfg(feature = "frontier-llm")]
     #[test]
     fn frontier_boot_guard_enforces_the_triad() {
-        assert!(frontier_boot_guard(false, false, false, false).is_ok(), "frontière OFF ⟹ dev toujours OK");
-        assert!(frontier_boot_guard(true, false, true, true).is_err(), "#2 clé forgeable ⟹ refus");
-        assert!(frontier_boot_guard(true, true, false, true).is_err(), "#7 auth absente ⟹ refus");
-        assert!(frontier_boot_guard(true, true, true, false).is_err(), "#3 store volatil ⟹ refus");
-        assert!(frontier_boot_guard(true, true, true, true).is_ok(), "triade complète ⟹ GO");
+        assert!(frontier_boot_guard(false, false, false, false, false).is_ok(), "frontière OFF ⟹ dev toujours OK");
+        assert!(frontier_boot_guard(true, false, true, true, true).is_err(), "#2 clé forgeable ⟹ refus");
+        assert!(frontier_boot_guard(true, true, false, true, true).is_err(), "#7 auth absente ⟹ refus");
+        assert!(frontier_boot_guard(true, true, true, false, true).is_err(), "#3 store volatil ⟹ refus");
+        assert!(frontier_boot_guard(true, true, true, true, true).is_ok(), "les quatre invariants ⟹ GO");
+    }
+
+    #[test]
+    fn frontier_boot_guard_refuses_a_silent_cleartext_egress() {
+        // **M4 §2.2** — le correctif du fail-open PII. Sans la CAPACITÉ de caviarder (feature `pii`
+        // absente ET risque non reconnu), la frontière refuse de démarrer : jusqu'ici elle
+        // imprimait « préflight frontière OK » pendant que chaque prompt sortait en clair, et
+        // l'opérateur n'avait même pas le moyen d'activer la caviardage.
+        let err = frontier_boot_guard(true, true, true, true, false)
+            .expect_err("capacité PII absente et non reconnue ⟹ refus de démarrer");
+        assert!(err.contains("EN CLAIR"), "le message dit ce qui se passerait : {err}");
+        assert!(err.contains("EFE_LLM_ACCEPT_CLEARTEXT_EGRESS"), "…et comment le reconnaître");
+        assert!(err.contains("pii"), "…et comment le corriger vraiment");
+
+        // Le défaut PII `Off` PAR POLICY reste légitime : on n'exige pas la caviardage, seulement
+        // que son absence soit CHOISIE. Les deux remèdes débloquent.
+        assert!(frontier_boot_guard(true, true, true, true, true).is_ok());
     }
 }

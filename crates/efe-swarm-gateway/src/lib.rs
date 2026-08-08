@@ -80,6 +80,9 @@ pub use dto::{
 };
 pub use error::GatewayError;
 pub use router_map::RouterMap;
+// M4 §2.1 : le plafond serveur de budget, re-exporté pour que le binaire l'annonce au boot.
+#[cfg(feature = "frontier-llm")]
+pub use routes::llm::server_budget_ceiling_cents;
 pub use state::{bundle_export_from_env, AdmissionPermit, AdmitReject, SwarmGatewayState};
 // Fil P (P.3) : le signataire d'attestation, re-exporté pour que le binaire le construise
 // depuis l'env sans dépendre directement du pont.

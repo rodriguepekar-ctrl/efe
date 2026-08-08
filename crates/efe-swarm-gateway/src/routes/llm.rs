@@ -216,11 +216,46 @@ fn hash_text(t: &str) -> String {
 /// Le cap vit en **microcents** (`TenantPolicies`), la requête en **cents** — conversion exacte
 /// ×1000 (1 µ¢ = 1/1000 ¢, cf. `savings_report.rs`). Cap absent (`None`) ⟹ no-op. Ferme la
 /// DoS-coût : sans ce clamp, `req.max_budget_cents` (u32, client-contrôlé) va jusqu'à ~42 M$.
+/// **M4 (§2.1)** — le **plafond SERVEUR** par requête, en cents. Env `EFE_LLM_MAX_BUDGET_CENTS`,
+/// défaut **10 000 c (100 $)**.
+///
+/// Il existe parce que le cap *tenant* ne suffit pas : un tenant allowlisté est construit avec
+/// `TenantPolicies::open(tid)`, donc `max_cost_microcents_per_query = None`, et `cap_microcents`
+/// rend alors le budget **inchangé**. Sans plafond serveur, `req.max_budget_cents` — un `u32`
+/// **contrôlé par le client** — pouvait atteindre `u32::MAX`, soit ≈ **42,9 M$ par requête**, sur
+/// le seul chemin qui dépense de l'argent réel.
+///
+/// Un client ne dimensionne pas la dépense d'autrui : même patron que `max_width_cap` (ADR-014),
+/// où le serveur borne un champ que le DTO laisse ouvert.
+pub fn server_budget_ceiling_cents() -> u32 {
+    std::env::var("EFE_LLM_MAX_BUDGET_CENTS")
+        .ok()
+        .and_then(|s| s.parse::<u32>().ok())
+        .unwrap_or(10_000)
+        .max(1) // un plafond à 0 rendrait toute mission impossible ; on refuse de se tirer dessus
+}
+
+/// **M4 (§2.1)** — borne le budget d'une requête : cap du tenant **puis** plafond serveur.
+///
+/// L'ordre et l'inconditionnalité comptent, et c'est tout le correctif :
+///
+/// 1. **le cap du tenant**, s'il en a un — la politique la plus spécifique gagne d'abord ;
+/// 2. **le plafond serveur, TOUJOURS** — y compris quand le tenant n'a aucune politique, ou une
+///    politique sans cap. C'est la branche qui manquait : `if let Some(pol) = …` laissait passer
+///    intact le budget d'un tenant sans policy.
+///
+/// La conversion sature désormais vers le budget **d'origine** et non vers `u32::MAX` : un dépassement
+/// de conversion ne doit pas *augmenter* une dépense. Le plafond serveur la borne ensuite de toute façon.
 fn clamp_budget(coord: &Coordinator, tenant_uuid: &Uuid, budget_cents: &mut u32) {
+    // (1) Le cap du tenant, quand il existe.
     if let Some(pol) = coord.policies.get(tenant_uuid) {
         let capped_microcents = pol.cap_microcents(u64::from(*budget_cents) * 1000);
-        *budget_cents = u32::try_from(capped_microcents / 1000).unwrap_or(u32::MAX);
+        // `unwrap_or(*budget_cents)` et NON `u32::MAX` : un échec de conversion ne peut pas
+        // transformer un plafonnement en autorisation.
+        *budget_cents = u32::try_from(capped_microcents / 1000).unwrap_or(*budget_cents);
     }
+    // (2) Le plafond serveur — inconditionnel. C'est lui qui ferme le DoS-coût.
+    *budget_cents = (*budget_cents).min(server_budget_ceiling_cents());
 }
 
 /// **M4 (§2.2)** : caviarde le texte utilisateur AVANT egress vers le tiers, selon la policy PII
@@ -231,6 +266,23 @@ fn clamp_budget(coord: &Coordinator, tenant_uuid: &Uuid, budget_cents: &mut u32)
 #[cfg(feature = "pii")]
 fn redact_for_egress(s: &SwarmGatewayState, tenant: &str, text: &mut String) {
     *text = crate::pii::redact_text(text, s.pii.policy_for(tenant));
+}
+
+/// **La contrepartie de compilation** — sans la feature `pii`, la caviardage **n'existe pas**.
+///
+/// Elle est écrite explicitement plutôt que laissée à un site d'appel `#[cfg]`, et c'est tout le
+/// correctif : jusqu'ici la ligne d'appel **disparaissait** du binaire sans erreur, sans
+/// avertissement et sans trace d'exécution. Un opérateur pouvait construire sans `pii`, lire
+/// « préflight frontière OK », et expédier chaque prompt **en clair** à un tiers.
+///
+/// Rendre l'absence visible ici ne suffit pas à elle seule — c'est pourquoi la porte de boot
+/// (`main.rs`, `frontier_boot_guard`) exige désormais soit la feature, soit une **reconnaissance
+/// explicite** de l'opérateur (`EFE_LLM_ACCEPT_CLEARTEXT_EGRESS=true`). Le défaut `Off` par
+/// *policy* reste légitime ; c'est le **silence** qui ne l'était pas.
+#[cfg(not(feature = "pii"))]
+fn redact_for_egress(_s: &SwarmGatewayState, _tenant: &str, _text: &mut String) {
+    // No-op assumé : la capacité n'est pas compilée. Aucune caviardage n'est possible, et le boot
+    // l'a déjà dit — bruyamment, ou en refusant de démarrer.
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -247,7 +299,6 @@ pub async fn vote(
     let tid = s.tenant_id(&caller.tenant)?;
     egress_gate(coord, &tid.0, &req.llms)?;
     clamp_budget(coord, &tid.0, &mut req.max_budget_cents); // §2.1 cap coût tenant
-    #[cfg(feature = "pii")]
     redact_for_egress(&s, &caller.tenant, &mut req.user_text); // §2.2 PII avant egress
     let _permit = match s.admit(&caller.tenant) {
         Ok(p) => p,
@@ -278,7 +329,6 @@ pub async fn relay(
     let (planner, implementer, synthesizer) = (req.planner_llm.clone(), req.implementer_llm.clone(), req.synthesizer_llm.clone());
     egress_gate(coord, &tid.0, &[planner.clone(), implementer.clone(), synthesizer.clone()])?;
     clamp_budget(coord, &tid.0, &mut req.max_budget_cents); // §2.1 cap coût tenant
-    #[cfg(feature = "pii")]
     redact_for_egress(&s, &caller.tenant, &mut req.user_text); // §2.2 PII avant egress
     let _permit = match s.admit(&caller.tenant) {
         Ok(p) => p,
@@ -312,7 +362,6 @@ pub async fn debate(
     let (pro, contra, jury, rounds) = (req.pro_llm.clone(), req.contra_llm.clone(), req.jury_llm.clone(), req.rounds);
     egress_gate(coord, &tid.0, &[pro.clone(), contra.clone(), jury.clone()])?;
     clamp_budget(coord, &tid.0, &mut req.max_budget_cents); // §2.1 cap coût tenant
-    #[cfg(feature = "pii")]
     redact_for_egress(&s, &caller.tenant, &mut req.user_text); // §2.2 PII avant egress
     let _permit = match s.admit(&caller.tenant) {
         Ok(p) => p,
@@ -341,7 +390,6 @@ pub async fn specialist(
     let tid = s.tenant_id(&caller.tenant)?;
     egress_gate(coord, &tid.0, &req.available_llms)?;
     clamp_budget(coord, &tid.0, &mut req.max_budget_cents); // §2.1 cap coût tenant
-    #[cfg(feature = "pii")]
     redact_for_egress(&s, &caller.tenant, &mut req.user_text); // §2.2 PII avant egress (N re-dérivé sur le texte caviardé)
     // Arité N re-dérivée par le Decomposer PUR (le même que run_specialist) DEPUIS le user_text.
     let n = specialist_declared_arity(&req.user_text);
@@ -376,7 +424,6 @@ pub async fn cascade(
     let (drafter, verifier, validator) = (req.drafter_llm.clone(), req.verifier_llm.clone(), req.validator_llm.clone());
     egress_gate(coord, &tid.0, &[drafter.clone(), verifier.clone(), validator.clone()])?;
     clamp_budget(coord, &tid.0, &mut req.max_budget_cents); // §2.1 cap coût tenant
-    #[cfg(feature = "pii")]
     redact_for_egress(&s, &caller.tenant, &mut req.user_text); // §2.2 PII avant egress
     let _permit = match s.admit(&caller.tenant) {
         Ok(p) => p,
@@ -711,6 +758,43 @@ mod tests {
         assert_eq!(a["reform_hops_recorded"], json!(3), "3 nœuds reform_* scellés dans le graphe");
         assert_eq!(a["reform_hops_expected"], json!(null), "vote : arité non re-dérivable de la requête");
         assert_eq!(a["reform_under_declared"], json!(false));
+    }
+
+    // ── M4 §2.1 — le plafond de budget (le DoS-coût fermé) ───────────────────────
+    // `clamp_budget` était appelée aux 5 handlers et n'avait AUCUN test. Elle ne bornait rien
+    // pour un tenant sans policy — or un tenant allowlisté est construit avec
+    // `TenantPolicies::open(tid)`, donc sans cap. Un client pouvait demander `u32::MAX` cents,
+    // soit ≈ 42,9 M$ sur la seule route qui dépense de l'argent réel.
+
+    #[test]
+    fn the_server_ceiling_bounds_a_tenant_that_has_no_policy_at_all() {
+        // LE critère M4 §2.1 : « test d'un tenant sans cap ⟹ défaut serveur borné, pas u32::MAX ».
+        let coord = test_coordinator(&["claude"], None); // `None` = AUCUNE policy : le cas du trou
+        let unknown = Uuid::from_u128(0xDEAD_BEEF);
+
+        let mut budget = u32::MAX; // ≈ 42,9 M$ — ce qu'un client pouvait réclamer
+        clamp_budget(&coord, &unknown, &mut budget);
+
+        assert_ne!(budget, u32::MAX, "un tenant sans policy n'est plus non borné");
+        assert_eq!(budget, server_budget_ceiling_cents(), "il tombe au plafond SERVEUR");
+        assert!(budget <= 10_000, "défaut ≤ 100 $ par requête");
+    }
+
+    #[test]
+    fn a_small_budget_passes_through_untouched() {
+        // Le plafond ne doit pas casser l'usage légitime : il borne, il ne normalise pas.
+        let coord = test_coordinator(&["claude"], None); // `None` = AUCUNE policy : le cas du trou
+        let mut budget = 500; // le défaut documenté
+        clamp_budget(&coord, &Uuid::from_u128(1), &mut budget);
+        assert_eq!(budget, 500, "un budget raisonnable traverse intact");
+    }
+
+    #[test]
+    fn the_ceiling_is_operator_configurable_and_never_zero() {
+        // Un plafond à 0 rendrait toute mission impossible — on refuse de se tirer dessus.
+        // (On lit l'env sans la muter : le test épingle le contrat, pas une valeur d'exécution.)
+        let ceiling = server_budget_ceiling_cents();
+        assert!(ceiling >= 1, "jamais 0");
     }
 
     // ── DoD #2 — souveraineté fail-closed (au niveau HTTP) ───────────────────────
