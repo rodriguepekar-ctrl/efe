@@ -760,6 +760,116 @@ mod tests {
         assert_eq!(a["reform_under_declared"], json!(false));
     }
 
+    // ── M3 DoD — l'e2e des CINQ missions servies ─────────────────────────────────
+    // Le critère dit : « POST /v1/llm/{les 5} → GET verify ⟹ verified=true, roots présents ».
+    // Seul `vote` l'avait. Le scellement des cinq était bien testé au niveau GRAPHE
+    // (mission_graph.rs : relay/debate/specialist/cascade `_roundtrip_is_fully_proven`), mais le
+    // chemin SERVI — celui qu'un client emprunte — ne l'était que pour un cinquième d'entre eux.
+
+    /// Le patron commun : POST la mission, puis re-prouver par la route essaim INCHANGÉE.
+    /// Rend la valeur JSON de la mission, pour que chaque test y ajoute ses assertions propres.
+    #[cfg(not(feature = "oidc"))]
+    async fn post_mission_then_verify(app: &axum::Router, uri: &str, body: &Value) -> Value {
+        let resp = app.clone().oneshot(post_req(uri, "operator", body)).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK, "{uri} servie ⟹ 200");
+        let mission = body_json(resp).await;
+        assert!(mission["run_id"].is_string(), "{uri} : un run scellé est renvoyé");
+        assert_eq!(mission["held"]["any_remote"], json!(true), "{uri} : endpoint distant ⟹ R4");
+
+        let run_id = mission["run_id"].as_str().unwrap().to_string();
+        let resp = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri(format!("/v1/swarm/verify/{run_id}"))
+                    .header("x-efe-tenant", "system")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let v = body_json(resp).await;
+        assert_eq!(v["verified"], json!(true), "{uri} : re-prouvée depuis les records persistés");
+        assert!(v["root"].is_string(), "{uri} : provenance_root présente");
+        assert_eq!(v["root_matches"], json!(true), "{uri} : P.0 — la racine SCELLÉE est reproduite");
+        assert_eq!(v["n17"]["bridge_consistent"], json!(true), "{uri} : pont N17 cohérent");
+        mission
+    }
+
+    #[cfg(not(feature = "oidc"))]
+    #[tokio::test]
+    async fn relay_e2e_seals_verifies_and_reports_r4() {
+        let llms = ["claude_a", "gpt_b", "gemini_c"];
+        let app = crate::router(wired_state(&llms, Some(&llms)));
+        let body = json!({
+            "user_text": "écris une fonction de tri",
+            "planner_llm": "claude_a",
+            "implementer_llm": "gpt_b",
+            "synthesizer_llm": "gemini_c"
+        });
+        let m = post_mission_then_verify(&app, "/v1/llm/relay", &body).await;
+        // Le relais produit TROIS hops de traduction (plan → code → synthèse) — et aucun n'est
+        // SLM ici : sans petit modèle câblé, la revendication ne doit pas être faite.
+        assert_eq!(m["reformulation"]["hops"], json!(3), "relay : plan + code + synthèse");
+        assert_eq!(m["reformulation"]["slm_mediated"], json!(false), "aucun SLM ⟹ aucune revendication");
+    }
+
+    #[cfg(not(feature = "oidc"))]
+    #[tokio::test]
+    async fn debate_e2e_seals_verifies_and_reports_r4() {
+        let llms = ["claude_a", "gpt_b", "gemini_c"];
+        let app = crate::router(wired_state(&llms, Some(&llms)));
+        let body = json!({
+            "user_text": "faut-il taxer le carbone ?",
+            "pro_llm": "claude_a",
+            "contra_llm": "gpt_b",
+            "jury_llm": "gemini_c",
+            "rounds": 1
+        });
+        let m = post_mission_then_verify(&app, "/v1/llm/debate", &body).await;
+        // 2 hops par round (PRO + CONTRA). Le verdict du jury n'est PAS reformulé — donc pas de
+        // hop : c'est honnête, et ça se voit dans le compte.
+        assert_eq!(m["reformulation"]["hops"], json!(2), "debate : 2 hops par round, jury non reformulé");
+    }
+
+    #[cfg(not(feature = "oidc"))]
+    #[tokio::test]
+    async fn specialist_e2e_seals_verifies_and_reports_r4() {
+        let llms = ["claude_a", "gpt_b", "gemini_c"];
+        let app = crate::router(wired_state(&llms, Some(&llms)));
+        let body = json!({
+            "user_text": "analyse ce contrat puis résume-le",
+            "available_llms": llms,
+            "capability_scores": {
+                "claude_a": { "analysis": 0.9 },
+                "gpt_b":    { "analysis": 0.5 },
+                "gemini_c": { "analysis": 0.4 }
+            }
+        });
+        let m = post_mission_then_verify(&app, "/v1/llm/specialist", &body).await;
+        // specialist ne reformule pas. Le champ est ABSENT, et non « hops: 0 » — même discipline
+        // que partout ailleurs : ne pas produire de hop n'est pas produire zéro hop, c'est ne rien
+        // avoir à revendiquer. Un champ vide se lirait comme une mesure ; son absence, non.
+        assert!(m.get("reformulation").is_none(), "specialist : aucun hop ⟹ champ ABSENT");
+    }
+
+    #[cfg(not(feature = "oidc"))]
+    #[tokio::test]
+    async fn cascade_e2e_seals_verifies_and_reports_r4() {
+        let llms = ["claude_a", "gpt_b", "gemini_c"];
+        let app = crate::router(wired_state(&llms, Some(&llms)));
+        let body = json!({
+            "user_text": "quelle est la capitale de la France ?",
+            "task_class": "FACTUAL_QA",
+            "drafter_llm": "claude_a",
+            "verifier_llm": "gpt_b",
+            "validator_llm": "gemini_c"
+        });
+        let m = post_mission_then_verify(&app, "/v1/llm/cascade", &body).await;
+        assert!(m.get("reformulation").is_none(), "cascade : aucun hop ⟹ champ ABSENT");
+    }
+
     // ── M4 §2.1 — le plafond de budget (le DoS-coût fermé) ───────────────────────
     // `clamp_budget` était appelée aux 5 handlers et n'avait AUCUN test. Elle ne bornait rien
     // pour un tenant sans policy — or un tenant allowlisté est construit avec

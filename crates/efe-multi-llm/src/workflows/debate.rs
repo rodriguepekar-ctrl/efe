@@ -276,7 +276,7 @@ pub async fn run_debate(
         jury_llm: req.jury_llm,
         total_cost_cents: budget.spent_cents(),
         latency_ms: started.elapsed().as_millis() as u64,
-        audit_chain_hash: format!("{:016x}", swarm_id.as_u128()),
+        swarm_id_hex: swarm_id.simple().to_string(),
         reformulation_hops,
     })
 }

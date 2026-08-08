@@ -136,7 +136,7 @@ flag   capture GRAPHE handlers  gate
 | SSE mission-level (`?stream=true`) | `DashboardBus` non alimenté par les missions | UX temps-réel |
 | Chemin `R3RemoteCosigned` (ed25519) pour le frontière | Aucun provider frontière ne cosigne | reçu **trustless-tiers** sur R4 |
 | Unification / activation `efe-llm-router` | Non re-vérifiable offline + non adressable par modèle | gouvernance cost/rate centralisée |
-| Retrait du placeholder `audit_chain_hash` de `efe-multi-llm` | Nettoyage, non bloquant | dette technique |
+| ~~Retrait du placeholder `audit_chain_hash` de `efe-multi-llm`~~ — **FAIT** (renommé `swarm_id_hex`) | Requalifié : ce n'était pas du nettoyage. Le champ est sérialisé par la passerelle, donc **scellé dans le reçu et lu par un auditeur** ; un nom promettant une chaîne d'audit là où il n'y a qu'un identifiant recopié est un « vert malhonnête », pas de la cosmétique. Renommé plutôt que retiré : la corrélation réponse↔swarm est utile, c'est le NOM qui mentait. | — |
 
 ---
 

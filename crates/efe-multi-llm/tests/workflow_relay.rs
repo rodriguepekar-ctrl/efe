@@ -73,14 +73,14 @@ async fn relay_synthesizer_down_fails_phase_gamma() {
 }
 
 #[tokio::test]
-async fn relay_audit_chain_hash_present() {
+async fn relay_swarm_id_hex_present() {
     let reg = ProviderRegistry::new();
     reg.register(Arc::new(MockLlmProvider::new("claude").with_response("1. Plan")));
     reg.register(Arc::new(MockLlmProvider::new("gpt").with_response("```rust\nfn x(){}\n```")));
     reg.register(Arc::new(MockLlmProvider::new("gemini").with_response("## Result\nDone.")));
     let coord = Coordinator::builder().registry(reg).build().unwrap();
     let resp = run_relay(&coord, req()).await.unwrap();
-    assert!(resp.audit_chain_hash.len() >= 16);
+    assert!(resp.swarm_id_hex.len() >= 16);
 }
 
 #[tokio::test]

@@ -406,7 +406,8 @@ Le reçu re-vérifiable des missions (Couche-2) doit désormais porter, **par ho
 - **B.3 — Provenance chaînée + estampillée. ✅ IMPLÉMENTÉ & VÉRIFIÉ (2026-07-17, commit 33a2b2c).**
   Constat de vérité-terrain (6 lecteurs) : le stamp `engine` de B.0 n'allait NULLE PART de servi (bus
   in-process sans abonné, payload tronqué à 120 chars) et l'`audit_chain_hash` des réponses est le
-  swarm_id formaté — pas un hash de chaîne. B.3 rend la promesse §6 réelle, en trois étages :
+  swarm_id formaté — pas un hash de chaîne. *(Ce constat est resté vrai et le champ a fini par être
+  renommé `swarm_id_hex` en Couche 2 : le mensonge n'était pas dans la valeur, il était dans le nom.)* B.3 rend la promesse §6 réelle, en trois étages :
   (1) **capture par-hop** — `TeeAuditWriter`/`HopCapture` (slm.rs) : chaque invocation SLM tee son
   `AuditEntry` (celle que `LlamaServerClient` écrit) dans un slot par-hop ; l'adapter l'attache à
   `Reformulated.slm_audit` sur le succès (`Slm`) COMME sur la dégradation-avec-tentative

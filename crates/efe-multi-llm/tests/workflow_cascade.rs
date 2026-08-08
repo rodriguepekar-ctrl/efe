@@ -63,7 +63,7 @@ async fn cascade_regen_all_escalates_to_validator() {
 async fn cascade_response_includes_audit_hash() {
     let coord = coord_3("a", "a", "v");
     let resp = run_cascade(&coord, req()).await.unwrap();
-    assert!(resp.audit_chain_hash.len() >= 16);
+    assert!(resp.swarm_id_hex.len() >= 16);
 }
 
 #[tokio::test]

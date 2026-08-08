@@ -205,7 +205,7 @@ pub async fn run_vote_3llm(
         per_llm_scores: scores,
         total_cost_cents: total_cost,
         latency_ms: started.elapsed().as_millis() as u64,
-        audit_chain_hash: format!("{:016x}", swarm_id.as_u128()),
+        swarm_id_hex: swarm_id.simple().to_string(),
         cancelled_llms: vec![],
         reformulation_hops,
     })

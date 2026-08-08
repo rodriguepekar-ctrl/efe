@@ -377,6 +377,10 @@ mod tests {
         assert!(frontier_boot_guard(true, true, true, true, true).is_ok(), "les quatre invariants ⟹ GO");
     }
 
+    /// La fonction gardée est `#[cfg(feature = "frontier-llm")]` : sans ce gate, la cible **binaire**
+    /// du profil par défaut ne compilait plus (`cannot find function frontier_boot_guard`). Le test
+    /// jumeau ci-dessus le portait, celui-ci ne l'avait pas.
+    #[cfg(feature = "frontier-llm")]
     #[test]
     fn frontier_boot_guard_refuses_a_silent_cleartext_egress() {
         // **M4 §2.2** — le correctif du fail-open PII. Sans la CAPACITÉ de caviarder (feature `pii`

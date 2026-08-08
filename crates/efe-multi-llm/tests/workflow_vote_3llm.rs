@@ -118,7 +118,7 @@ async fn vote_3llm_response_contains_all_scores() {
     };
     let resp = run_vote_3llm(&coord, req).await.unwrap();
     assert_eq!(resp.per_llm_scores.len(), 3);
-    assert!(resp.audit_chain_hash.len() >= 16);
+    assert!(resp.swarm_id_hex.len() >= 16);
 }
 
 #[tokio::test]

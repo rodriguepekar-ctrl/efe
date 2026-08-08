@@ -75,8 +75,23 @@ pub struct Vote3LlmResponse {
     pub total_cost_cents: u32,
     /// Latence ms.
     pub latency_ms: u64,
-    /// Hash chaîne d'audit.
-    pub audit_chain_hash: String,
+    /// Identifiant du swarm en hexadécimal canonique (`Uuid::simple`, 32 chiffres) — **ce n'est PAS
+    /// un haché**, et rien n'est chaîné ici. Le champ a longtemps porté le nom `audit_chain_hash` en affirmant « Hash
+    /// chaîne d'audit » : il est SÉRIALISÉ tel quel par la passerelle, donc SCELLÉ dans le reçu,
+    /// donc lisible par un auditeur — un nom qui promet une chaîne d'audit là où il n'y a qu'un
+    /// identifiant recopié est exactement la classe de bug « vert malhonnête » que ce dépôt
+    /// traque. La VRAIE chaîne vit ailleurs : la racine HMAC par tenant de `efe-swarm-provenance`,
+    /// exposée par `GET /v1/swarm/verify/{run_id}`. Ce champ ne sert qu'à corréler une réponse à
+    /// son swarm. (Le `audit_chain_hash` de `efe-coordinator`, lui, est un vrai BLAKE3 sur les
+    /// entrées d'audit : le nom y est mérité, il n'a pas été touché.)
+    ///
+    /// **Et il ne corrélait même pas.** Le rendu était `format!("{:016x}", swarm_id.as_u128())` :
+    /// `016` borne la largeur MINIMALE, pas celle d'un u128. Un UUID v7 porte un horodatage 48 bits
+    /// dont le premier quartet reste nul tout ce siècle, donc la valeur servie faisait **31**
+    /// caractères là où la forme canonique en fait 32 — elle n'était égale à l'identifiant du swarm
+    /// pour AUCUN run. Un auditeur joignant le reçu sur cet identifiant ne trouvait jamais rien, en
+    /// silence. On sérialise désormais `swarm_id.simple()`, où la largeur ne peut plus être fausse.
+    pub swarm_id_hex: String,
     /// LLMs cancellés pour early termination (I9).
     #[serde(default)]
     pub cancelled_llms: Vec<String>,
@@ -125,8 +140,8 @@ pub struct RelayResponse {
     pub total_cost_cents: u32,
     /// Latence.
     pub latency_ms: u64,
-    /// Hash audit.
-    pub audit_chain_hash: String,
+    /// Identifiant du swarm en hexadécimal — **pas un haché** (cf. `VoteResponse::swarm_id_hex`).
+    pub swarm_id_hex: String,
     /// **Fil B.3** — les 3 hops estampillés (`plan`/`code`/`synthesis`) :
     /// moteur effectif + faits d'audit SLM par hop. Scellés dans le reçu.
     #[serde(default)]
@@ -174,8 +189,8 @@ pub struct DebateResponse {
     pub total_cost_cents: u32,
     /// Latence.
     pub latency_ms: u64,
-    /// Hash audit.
-    pub audit_chain_hash: String,
+    /// Identifiant du swarm en hexadécimal — **pas un haché** (cf. `VoteResponse::swarm_id_hex`).
+    pub swarm_id_hex: String,
     /// **Fil B.3** — 2 hops estampillés par round (`argument:rN:PRO|CONTRA`).
     /// Le verdict du jury n'est PAS reformulé (honnête : pas de hop jury).
     #[serde(default)]
@@ -223,8 +238,8 @@ pub struct SpecialistResponse {
     pub total_cost_cents: u32,
     /// Latence.
     pub latency_ms: u64,
-    /// Hash audit.
-    pub audit_chain_hash: String,
+    /// Identifiant du swarm en hexadécimal — **pas un haché** (cf. `VoteResponse::swarm_id_hex`).
+    pub swarm_id_hex: String,
 }
 
 /// Assignation d'une sub-task à un LLM.
@@ -289,8 +304,8 @@ pub struct CascadeResponse {
     pub latency_ms: u64,
     /// Latence gagnée vs baseline (ms).
     pub latency_saved_ms: i64,
-    /// Hash audit.
-    pub audit_chain_hash: String,
+    /// Identifiant du swarm en hexadécimal — **pas un haché** (cf. `VoteResponse::swarm_id_hex`).
+    pub swarm_id_hex: String,
 }
 
 #[cfg(test)]

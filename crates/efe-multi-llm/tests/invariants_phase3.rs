@@ -127,15 +127,21 @@ fn i13_budget_never_exceeds_cap_under_contention() {
     assert!(t.spent_cents() <= 100);
 }
 
-// ── I10 : audit chain — couvert dans workflow_*.rs (champ audit_chain_hash) ──
+// ── I10 : corrélation de réponse — PAS une chaîne d'audit (cf. README, I10) ──
+//
+// L'invariant s'énonçait « Audit chain complète : `audit_chain_hash` toujours retourné », et le
+// test se contentait d'un `len() >= 16` — un champ constant valant "0000000000000000" l'aurait
+// satisfait. Or rien n'est chaîné ici : la valeur est l'identifiant du swarm recopié en hex. On
+// épingle donc ce qu'elle EST — un identifiant complet, qui round-trip et qui VARIE d'un run à
+// l'autre — plutôt que de laisser une assertion vide sous un nom qui promet de l'audit.
 #[tokio::test]
-async fn i10_workflows_produce_audit_hash() {
+async fn i10_workflows_return_a_full_correlatable_swarm_id_not_a_hash() {
     let reg = ProviderRegistry::new();
     reg.register(Arc::new(MockLlmProvider::new("claude").with_response("X")));
     reg.register(Arc::new(MockLlmProvider::new("gpt").with_response("X")));
     reg.register(Arc::new(MockLlmProvider::new("gemini").with_response("X")));
     let coord = Coordinator::builder().registry(reg).build().unwrap();
-    let req = efe_multi_llm::Vote3LlmRequest {
+    let req = || efe_multi_llm::Vote3LlmRequest {
         user_text: "Q?".into(),
         task_class: efe_nano_app_coordinator::types::router::TaskClass::FactualQa,
         llms: vec!["claude".into(), "gpt".into(), "gemini".into()],
@@ -144,6 +150,20 @@ async fn i10_workflows_produce_audit_hash() {
         max_budget_cents: 100,
         max_total_latency: Duration::from_secs(5),
     };
-    let resp = efe_multi_llm::run_vote_3llm(&coord, req).await.unwrap();
-    assert!(resp.audit_chain_hash.len() >= 16);
+    let a = efe_multi_llm::run_vote_3llm(&coord, req()).await.unwrap();
+    let b = efe_multi_llm::run_vote_3llm(&coord, req()).await.unwrap();
+
+    // L'identifiant est COMPLET : un UUID fait 128 bits, donc 32 chiffres hex. L'ancien seuil de
+    // 16 aurait accepté un identifiant tronqué de moitié — soit une collision rendue plausible.
+    assert_eq!(a.swarm_id_hex.len(), 32, "identifiant tronqué : {}", a.swarm_id_hex);
+    assert!(
+        a.swarm_id_hex.chars().all(|c| c.is_ascii_hexdigit() && !c.is_ascii_uppercase()),
+        "hex minuscule attendu : {}",
+        a.swarm_id_hex
+    );
+    // Il RETOURNE vers un vrai UUID — c'est un identifiant, pas un condensé opaque.
+    let round_trip = u128::from_str_radix(&a.swarm_id_hex, 16).expect("hex → u128");
+    assert_eq!(format!("{round_trip:032x}"), a.swarm_id_hex, "round-trip non injectif");
+    // Et il VARIE : un champ constant passerait toutes les assertions ci-dessus.
+    assert_ne!(a.swarm_id_hex, b.swarm_id_hex, "deux runs partagent le même identifiant");
 }

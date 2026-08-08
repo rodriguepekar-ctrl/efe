@@ -161,7 +161,7 @@ pub async fn run_cascade(
         total_cost_cents: budget.spent_cents(),
         latency_ms: total_ms,
         latency_saved_ms,
-        audit_chain_hash: format!("{:016x}", swarm_id.as_u128()),
+        swarm_id_hex: swarm_id.simple().to_string(),
     })
 }
 
