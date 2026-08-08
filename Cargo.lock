@@ -2951,6 +2951,7 @@ dependencies = [
  "async-stream",
  "async-trait",
  "axum",
+ "ed25519-dalek",
  "efe-blackboard",
  "efe-coordinator",
  "efe-multi-llm",
@@ -6321,6 +6322,7 @@ checksum = "95067976aca6421a523e491fce939a3e65249bac4b977adee0ee9771568e8aa3"
 name = "provenance-bridge"
 version = "0.0.1"
 dependencies = [
+ "ed25519-dalek",
  "efe-nano-sdk",
  "efe-swarm-provenance",
  "provenance-dag",

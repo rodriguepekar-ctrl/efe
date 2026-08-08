@@ -29,6 +29,9 @@ provenance-dag        = { path = "../provenance-dag", version = "0.0.1" }       
 efe-swarm-provenance  = { path = "../efe-swarm-provenance", version = "0.0.1" }  # AgentCallRecord, deterministic_order, verify_swarm (pile A)
 efe-nano-sdk          = { path = "../efe-nano-sdk", version = "0.0.1" }          # LlmProvenanceRecord, Blake3Hash, ProvenanceId
 uuid                  = { workspace = true }
+# P.3 — l'attestation ed25519 de la racine. MÊME bibliothèque que la co-signature R3 de
+# efe-swarm-provenance et que N18 publisher-identity : aucune crypto maison, aucune 3e pile.
+ed25519-dalek         = "2.1"
 
 # La re-preuve du bundle par le vérifieur à arbre de dépendances VIDE — le critère d'acceptation de
 # P.2. En DEV-dépendance uniquement : `cargo tree -p provenance-bridge -e normal` reste propre, et

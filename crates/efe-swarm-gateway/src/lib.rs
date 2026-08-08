@@ -81,6 +81,9 @@ pub use dto::{
 pub use error::GatewayError;
 pub use router_map::RouterMap;
 pub use state::{bundle_export_from_env, AdmissionPermit, AdmitReject, SwarmGatewayState};
+// Fil P (P.3) : le signataire d'attestation, re-exporté pour que le binaire le construise
+// depuis l'env sans dépendre directement du pont.
+pub use provenance_bridge::BundleSigner;
 pub use store::{InMemoryRunStore, RunStore, StoredRun};
 #[cfg(feature = "frontier-llm")]
 pub use frontier::coordinator_from_env;
@@ -743,6 +746,122 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(resp.status(), StatusCode::INTERNAL_SERVER_ERROR, "aucun bundle sur un run tronqué");
+    }
+
+    // ── Fil P (P.3) — l'attestation de racine servie ───────────────────────────────────────
+
+    /// La graine de test. Sa clé publique correspondante est celle qu'un auditeur épinglerait
+    /// hors bande.
+    const TEST_SEED: [u8; 32] = [42u8; 32];
+
+    fn app_with_attested_bundle() -> (Router, Arc<InMemoryRunStore>) {
+        let store = Arc::new(InMemoryRunStore::new());
+        let state = SwarmGatewayState::new(
+            Arc::new(AgentFleet::standard()),
+            HmacKeySource::test_key(),
+            store.clone(),
+            ProvenanceMetrics::new(),
+            Arc::new(SubstrateMetrics::default()),
+        )
+        .with_bundle_export(true)
+        .with_bundle_signer(BundleSigner::from_seed(TEST_SEED));
+        (router(state), store)
+    }
+
+    async fn get_bundle(app: &Router, id: Uuid) -> Value {
+        let resp = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri(format!("/v1/swarm/bundle/{id}"))
+                    .header("x-efe-roles", HeaderValue::from_static("auditor"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        body_json(resp).await
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn without_a_signing_key_the_attestation_field_is_absent_not_empty() {
+        // Un champ vide se confondrait avec une signature. Absent veut dire absent.
+        let (app, _s) = app_with_bundle();
+        let id = seed_run(&app).await;
+        let b = get_bundle(&app, id).await;
+        assert!(b.get("attestation").is_none(), "champ ABSENT, jamais vide ni nul");
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn a_served_attestation_verifies_with_the_public_key_alone() {
+        // LE point de P.3 : l'auditeur ne détient AUCUN secret — seulement la clé publique qu'il a
+        // épinglée hors bande.
+        let (app, _s) = app_with_attested_bundle();
+        let id = seed_run(&app).await;
+        let b = get_bundle(&app, id).await;
+
+        let att = b.get("attestation").expect("clé déployée ⟹ attestation servie");
+        assert_eq!(att["run_id"].as_str().unwrap(), id.to_string());
+        assert_eq!(att["manifest_root"], b["manifest_root"], "atteste LA racine servie");
+        assert_eq!(att["node_count"], b["node_count"]);
+        assert_eq!(att["sig"].as_str().unwrap().len(), 128, "ed25519 = 64 octets");
+
+        // La route ne sert JAMAIS la clé publique : la servir rendrait la vérification circulaire.
+        let signer = BundleSigner::from_seed(TEST_SEED);
+        let body = serde_json::to_string(&b).unwrap();
+        assert!(!body.contains(&signer.public_key_hex()), "la clé publique ne sort PAS par ici");
+        assert_eq!(att["key_id"].as_str().unwrap(), signer.key_id(), "seule l'empreinte la nomme");
+
+        // …et la vérification tient, avec la seule publique épinglée.
+        let attestation = provenance_bridge::RootAttestation {
+            schema: att["schema"].as_u64().unwrap() as u16,
+            run_id: id,
+            tenant_id: att["tenant_id"].as_str().unwrap().to_string(),
+            manifest_root: att["manifest_root"].as_str().unwrap().to_string(),
+            node_count: att["node_count"].as_u64().unwrap() as u32,
+            key_id: att["key_id"].as_str().unwrap().to_string(),
+            signed_at: att["signed_at"].as_u64().unwrap(),
+            sig: att["sig"].as_str().unwrap().to_string(),
+        };
+        let vk = ed25519_dalek::SigningKey::from_bytes(&TEST_SEED).verifying_key();
+        assert!(
+            provenance_bridge::verify_attestation(&attestation, &vk).is_ok(),
+            "vérifiée sans aucun secret"
+        );
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn a_served_attestation_binds_the_served_bundle() {
+        // Une signature authentique portant sur AUTRE CHOSE ne vaut rien : on vérifie qu'elle lie
+        // bien le bundle rendu dans la même réponse.
+        let (app, _s) = app_with_attested_bundle();
+        let id = seed_run(&app).await;
+        let b = get_bundle(&app, id).await;
+        let att = &b["attestation"];
+
+        let bundle = provenance_bridge::Bundle {
+            jsonl: b["bundle_jsonl"].as_str().unwrap().to_string(),
+            manifest_root: b["manifest_root"].as_str().unwrap().to_string(),
+            node_count: b["node_count"].as_u64().unwrap() as u32,
+        };
+        let attestation = provenance_bridge::RootAttestation {
+            schema: att["schema"].as_u64().unwrap() as u16,
+            run_id: id,
+            tenant_id: att["tenant_id"].as_str().unwrap().to_string(),
+            manifest_root: att["manifest_root"].as_str().unwrap().to_string(),
+            node_count: att["node_count"].as_u64().unwrap() as u32,
+            key_id: att["key_id"].as_str().unwrap().to_string(),
+            signed_at: att["signed_at"].as_u64().unwrap(),
+            sig: att["sig"].as_str().unwrap().to_string(),
+        };
+        let vk = ed25519_dalek::SigningKey::from_bytes(&TEST_SEED).verifying_key();
+        let tenant = attestation.tenant_id.clone();
+        assert!(
+            provenance_bridge::verify_attestation_binds(&attestation, &vk, id, &tenant, &bundle)
+                .is_ok(),
+            "l'attestation lie CE bundle, CE run, CE tenant"
+        );
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]

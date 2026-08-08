@@ -78,4 +78,5 @@ provenance-capture = { path = "../provenance-capture", version = "0.0.1", option
 tokio = { workspace = true, features = ["macros", "rt-multi-thread", "time"] }
 tower = { workspace = true }                    # ServiceExt::oneshot (tests axum)
 http-body-util = "0.1"                          # collecte du corps de réponse dans les tests
+ed25519-dalek = "2.1"                           # Fil P (P.3) : vérifier une attestation servie avec la SEULE clé publique
 axum = { version = "0.7", default-features = false, features = ["json", "tokio", "http1", "query"] }

@@ -177,6 +177,15 @@ pub struct SwarmGatewayState {
     /// L'export ne révèle **aucune clé** : le bundle ne contient que des empreintes, et la clé
     /// tenant de la pile B voyage hors bande vers l'auditeur.
     pub bundle_export: bool,
+    /// **Fil P (P.3)** : la clé privée d'**attestation de racine**, si l'opérateur en a déployé une.
+    ///
+    /// `None` ⟹ les bundles sont servis **sans champ d'attestation** — jamais avec un champ vide
+    /// ou nul, qu'un consommateur pourrait prendre pour une signature. Absent veut dire absent.
+    ///
+    /// La clé ne fuit pas : `BundleSigner` rédige son `Debug`, et `SwarmGatewayState` ne dérive pas
+    /// `Debug`. Elle ne quitte **jamais** le processus — seule l'**empreinte** (`key_id`) est
+    /// servie, et la clé **publique** se publie hors bande.
+    pub bundle_signer: Option<Arc<provenance_bridge::BundleSigner>>,
     /// **Couche 2 (feature `frontier-llm`)** : moteur de coordination multi-LLM
     /// (Claude/Gemini/GPT) — fan-out + vote + provenance par appel. `None` ⇒ frontière
     /// non câblée (les futures routes `/v1/llm/*` répondront 501). Câblé server-side depuis
@@ -254,6 +263,9 @@ impl SwarmGatewayState {
             router_map: RouterMap::default(),
             // Fil P (P.2) : OFF par défaut — la route d'export n'est pas montée.
             bundle_export: false,
+            // Fil P (P.3) : aucune clé d'attestation par défaut — les bundles sortent SANS
+            // champ d'attestation, ce qui est la vérité plutôt qu'un champ vide.
+            bundle_signer: None,
             #[cfg(feature = "frontier-llm")]
             coordinator: None,
             #[cfg(feature = "frontier-llm")]
@@ -604,6 +616,17 @@ impl SwarmGatewayState {
     #[must_use]
     pub fn bundle_export_enabled(&self) -> bool {
         self.bundle_export
+    }
+
+    /// **Fil P (P.3)** : installe la clé privée d'attestation de racine.
+    ///
+    /// Sans elle, les bundles sont servis **non attestés** — et le disent. Avec elle, un tiers qui
+    /// a épinglé la clé **publique** hors bande peut conclure que la racine servie a bien été
+    /// émise ici, sans détenir le moindre secret.
+    #[must_use]
+    pub fn with_bundle_signer(mut self, signer: provenance_bridge::BundleSigner) -> Self {
+        self.bundle_signer = Some(Arc::new(signer));
+        self
     }
 }
 

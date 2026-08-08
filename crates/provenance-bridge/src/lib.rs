@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: UNLICENSED
-//! # `provenance-bridge` — Fil P / P.1 : la dérivation pure pile A → pile B
+//! # `provenance-bridge` — Fil P : joindre le reçu servi au vérifieur auditable
 //!
 //! Le dépôt possède **deux moitiés de moat qui ne se touchent pas**. La **pile A**
 //! (`efe-swarm-provenance` + la gateway) scelle les missions réellement servies, avec un contenu
@@ -29,11 +29,19 @@
 //!    amputé serait indistinguable d'un bundle tronqué par un attaquant — le fabriquer soi-même
 //!    reviendrait à créer l'ambiguïté que le fil cherche à supprimer.
 //!
-//! ## Ce que P.1 ne fait PAS encore
+//! ## Ce que cette crate contient, jalon par jalon
 //!
-//! P.1 s'arrête à la **dérivation**. Le scellement du bundle, la route d'export, la signature
-//! ed25519 de la racine et l'ancrage publié hors du bundle sont P.2 à P.4. En particulier :
-//! **aucune surface servie n'est touchée**, et cette crate n'écrit rien nulle part.
+//! - **P.1** — [`nodes_from_run`] : la dérivation pure et déterministe.
+//! - **P.2** — [`seal`] : le scellement du bundle et la clé de la pile B ([`stack_b_key`], dont
+//!   les octets ne sont **jamais** ceux de la pile A).
+//! - **P.3** — [`attest`] : l'attestation ed25519 de la racine, vérifiable **sans aucun secret**.
+//!
+//! Reste devant : **P.4**, l'ancre publiée **hors** du bundle. Tant qu'elle manque, un producteur
+//! malveillant peut tronquer un run *puis* signer honnêtement la racine du bundle tronqué — la
+//! signature serait valide et le mensonge intact. P.3 authentifie l'**émetteur** ; P.4 fixe
+//! l'**attendu**. Ne jamais confondre les deux.
+//!
+//! Cette crate n'écrit rien nulle part : elle ne fait que dériver, sceller et signer.
 //!
 //! ## Le tableau des niveaux (rappel — §6 du doc d'architecture)
 //!
@@ -67,11 +75,16 @@
 pub mod derive;
 pub mod error;
 pub mod mapping;
+pub mod attest;
 pub mod seal;
 pub mod view;
 
 pub use derive::nodes_from_run;
 pub use error::DeriveError;
 pub use mapping::{HASH_ABSENT, HASH_PREFIX, MAPPING_VERSION};
+pub use attest::{
+    attest_tuple, key_id_of, verify_attestation, verify_attestation_binds, AttestError,
+    BundleSigner, RootAttestation, ATTEST_SCHEMA_V1,
+};
 pub use seal::{bundle_from_run, seal_bundle, stack_b_key, Bundle, BundleError};
 pub use view::RunView;

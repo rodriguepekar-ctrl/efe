@@ -15,6 +15,17 @@
 //! - **La clé.** Elle voyage hors bande. Sans elle le bundle ne se re-prouve pas — c'est voulu.
 //! - **Les sorties.** Le bundle ne porte que des empreintes, préfixées `blake3:`.
 //!
+//! # L'attestation (P.3)
+//!
+//! Si — et seulement si — une clé privée d'attestation est déployée, la réponse porte une
+//! signature **ed25519** de la racine. Un tiers qui a **épinglé la clé publique hors bande** peut
+//! alors conclure que cette racine a bien été émise ici, **sans détenir aucun secret**. Sans clé
+//! déployée, le champ est **absent** — jamais vide, ce qui se confondrait avec une signature.
+//!
+//! La route ne sert **jamais la clé publique** : la servir à côté du bundle rendrait la
+//! vérification circulaire (n'importe qui peut engendrer une paire et signer). Seule l'empreinte
+//! (`key_id`) est rendue, pour que l'auditeur sache *laquelle* de ses clés épinglées appliquer.
+//!
 //! # Les gardes
 //!
 //! Drapeau absent ⟹ la route n'est **pas montée** (404, exactement comme avant P.2 : le
@@ -36,7 +47,7 @@ use provenance_bridge::{bundle_from_run, RunView, MAPPING_VERSION};
 use uuid::Uuid;
 
 use crate::auth::Caller;
-use crate::dto::BundleResponse;
+use crate::dto::{AttestationView, BundleResponse};
 use crate::error::GatewayError;
 use crate::state::SwarmGatewayState;
 
@@ -67,6 +78,17 @@ pub async fn bundle(
         GatewayError::Internal(format!("bundle de provenance non produit — {e}"))
     })?;
 
+    // ── P.3 : l'attestation de racine ──────────────────────────────────────────────────────
+    // Aucune clé déployée ⟹ le champ est ABSENT, jamais vide : un champ vide se confondrait avec
+    // une signature. L'horloge est prise ICI et non dans le pont, qui reste pur.
+    let attestation = s.bundle_signer.as_ref().map(|signer| {
+        let signed_at = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| u64::try_from(d.as_millis()).unwrap_or(u64::MAX))
+            .unwrap_or(0);
+        AttestationView::from(signer.attest(id, &caller.tenant, &b, signed_at))
+    });
+
     Ok(Json(BundleResponse {
         run_id: id,
         bundle_jsonl: b.jsonl,
@@ -76,5 +98,6 @@ pub async fn bundle(
         // P.4 n'est pas fait : la racine n'est publiée nulle part, donc le bundle ne prouve sa
         // cohérence que contre lui-même. Le dire ici plutôt que de laisser un lecteur le supposer.
         anchored: false,
+        attestation,
     }))
 }

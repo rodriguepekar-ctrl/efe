@@ -565,6 +565,59 @@ pub struct BundleResponse {
     /// La racine est-elle **ancrée hors bundle** ? Toujours `false` avant P.4 — et le dire ici
     /// évite qu'un consommateur prête au bundle une opposabilité qu'il n'a pas encore.
     pub anchored: bool,
+    /// **Fil P (P.3)** : l'attestation ed25519 de la racine, si une clé est déployée.
+    ///
+    /// `None` ⟹ aucune clé n'est installée : le bundle est servi **non attesté**, et le champ est
+    /// **absent** plutôt que vide — un champ vide se confondrait avec une signature.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub attestation: Option<AttestationView>,
+}
+
+/// **Fil P (P.3)** : l'attestation servie — le seul artefact du fil qu'un tiers vérifie **sans
+/// détenir aucun secret**.
+///
+/// ⚠️ Elle ne vaut que si la **clé publique a été épinglée hors bande**. C'est pourquoi cette vue
+/// porte un `key_id` (une *empreinte* de la clé publique, qui nomme la clé) et **jamais la clé
+/// publique elle-même** : la servir ici rendrait la vérification circulaire, donc vide — n'importe
+/// qui peut engendrer une paire et signer n'importe quelle racine.
+///
+/// Et ce qu'elle ne prouve **pas**, tant que P.4 manque : que la racine attestée soit celle
+/// qu'il fallait attendre. Un producteur malveillant peut tronquer un run *puis* signer
+/// honnêtement la racine du bundle tronqué. P.3 authentifie l'**émetteur** ; P.4 fixera
+/// l'**attendu**.
+#[derive(Debug, Clone, Serialize)]
+pub struct AttestationView {
+    /// Version du format d'attestation.
+    pub schema: u16,
+    /// Le run attesté (empêche de déplacer l'attestation vers un autre run).
+    pub run_id: Uuid,
+    /// Le tenant attesté (empêche le transport inter-tenant).
+    pub tenant_id: String,
+    /// La racine attestée — ce qui est réellement signé.
+    pub manifest_root: String,
+    /// Le compte de nœuds, signé lui aussi (second garde contre la troncature).
+    pub node_count: u32,
+    /// **L'empreinte** de la clé publique — pour savoir *laquelle* de vos clés épinglées appliquer.
+    pub key_id: String,
+    /// Millisecondes depuis l'époque, signées (empêche de rejouer une vieille attestation).
+    pub signed_at: u64,
+    /// La signature ed25519 (128 caractères hexadécimaux).
+    pub sig: String,
+}
+
+impl From<provenance_bridge::RootAttestation> for AttestationView {
+    fn from(a: provenance_bridge::RootAttestation) -> Self {
+        Self {
+            schema: a.schema,
+            run_id: a.run_id,
+            tenant_id: a.tenant_id,
+            manifest_root: a.manifest_root,
+            node_count: a.node_count,
+            key_id: a.key_id,
+            signed_at: a.signed_at,
+            sig: a.sig,
+        }
+    }
 }
 
 /// **ADR-016** : le verdict du pont N17 + de la chaîne forensique, dans la re-preuve.

@@ -96,6 +96,43 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             "→ export du bundle de provenance ACTIVÉ (GET /v1/swarm/bundle/:id, rôle auditor) — \
              re-prouvable par verify-mini ; racine NON encore ancrée hors bundle (P.4)."
         );
+
+        // ── Fil P (P.3) : la clé d'attestation de racine ──
+        // Fail-fast DÉLIBÉRÉ : une graine posée mais illisible signifie qu'un opérateur CROIT
+        // signer ses bundles. Servir en silence des bundles non attestés serait un « vert
+        // malhonnête » — précisément la classe de défaut que ce fil corrige. On refuse de
+        // démarrer plutôt que de laisser croire. Même discipline que la porte de boot M4.
+        match std::env::var("EFE_SWARM_BUNDLE_SIGNING_SEED") {
+            Ok(seed_hex) if !seed_hex.is_empty() => {
+                match efe_swarm_gateway::BundleSigner::from_seed_hex(&seed_hex) {
+                    Ok(signer) => {
+                        // On imprime l'EMPREINTE et la clé PUBLIQUE — jamais la graine. La publique
+                        // est destinée à être épinglée hors bande par l'auditeur ; sans cet
+                        // épinglage, la signature ne prouve rien.
+                        println!(
+                            "→ attestation de racine ACTIVE — key_id={} ; clé PUBLIQUE à publier \
+                             hors bande : {}",
+                            signer.key_id(),
+                            signer.public_key_hex()
+                        );
+                        state = state.with_bundle_signer(signer);
+                    }
+                    Err(e) => {
+                        eprintln!(
+                            "ERREUR FATALE: EFE_SWARM_BUNDLE_SIGNING_SEED illisible ({e}). \
+                             Attendu 64 caractères hexadécimaux (graine ed25519 de 32 octets). \
+                             Refus de démarrer : servir des bundles NON attestés alors qu'une clé \
+                             est configurée ferait croire à une signature inexistante."
+                        );
+                        std::process::exit(1);
+                    }
+                }
+            }
+            _ => println!(
+                "→ attestation de racine INACTIVE (aucune graine) — les bundles sortiront SANS \
+                 champ d'attestation."
+            ),
+        }
     }
 
     // ── Couche 2 (feature `frontier-llm`) : coordination multi-LLM (Claude/Gemini/GPT) ──
