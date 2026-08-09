@@ -290,3 +290,27 @@ impl Manifest {
             .unwrap_or_else(|| self.has_efe_core_participant())
     }
 }
+
+impl ControllerManifest {
+    /// **La** définition du `config_hash` déclaré : SHA-256 (hex) du JSON canonique du bloc.
+    ///
+    /// Extraite de `core_engine::build` (Couche 3 v4) parce qu'elle a désormais DEUX
+    /// consommateurs : le participant, qui l'annonce sur le fil (M1.d), et le contrôleur, qui la
+    /// scelle dans la liaison du reçu. Deux calculs séparés auraient dérivé — et la liaison
+    /// aurait attesté un hash que le participant n'annonce pas, incohérence qu'aucun des deux
+    /// côtés n'aurait pu détecter seul. Un seul producteur d'octets, donc.
+    ///
+    /// # Panics
+    /// Jamais en pratique : `ControllerManifest` est composé de types serde-sérialisables.
+    #[must_use]
+    pub fn config_hash(&self) -> String {
+        use sha2::{Digest, Sha256};
+        let canonical = serde_json::to_string(self).expect("bloc controller sérialisable");
+        let digest = Sha256::digest(canonical.as_bytes());
+        let mut out = String::with_capacity(64);
+        for b in digest {
+            out.push_str(&format!("{b:02x}"));
+        }
+        out
+    }
+}

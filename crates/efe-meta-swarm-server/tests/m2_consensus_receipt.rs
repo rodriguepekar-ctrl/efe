@@ -23,6 +23,8 @@
 //! | `provenance_does_not_change_the_numerics` | que sceller altère le consensus servi |
 //! | `without_provenance_the_root_is_empty_never_a_placeholder` | le « vert malhonnête » : un root décoratif |
 //! | `the_bundle_is_opt_in_but_the_root_is_not` | payer le bundle sans l'avoir demandé, ou perdre le root |
+//! | `the_served_receipt_names_its_participants_and_its_rule` | **v4** : un reçu qui ne sait pas nommer l'agent derrière une position |
+//! | `a_third_party_rejects_a_receipt_whose_identities_were_rewritten` | **v4** : des noms falsifiés sous un root valide (contrôle négatif) |
 
 mod common;
 
@@ -100,6 +102,13 @@ fn third_party_reproves(steps_jsonl: &str, manifest_json: &str, key: &[u8]) -> R
     if n_steps != steps.len() {
         return Err(format!("manifeste incohérent : n_steps={n_steps} ≠ {} lignes", steps.len()));
     }
+    // **v4** — recouper la LIAISON avant la chaîne. Sans ce contrôle, un manifeste dont on aurait
+    // réécrit les identités passerait la re-preuve (qui ne regarde que le condensé scellé) et
+    // l'auditeur lirait des noms falsifiés sous un root valide.
+    let binding = verify_meta_mini::verify::Binding::from_manifest(&m)
+        .map_err(|e| format!("liaison illisible : {e}"))?;
+    verify_meta_mini::verify::check_binding(&steps, binding.as_ref())
+        .map_err(|e| format!("REFUSÉ (liaison) : {e}"))?;
     match verify(&steps, key, &expected_root) {
         Outcome::Ok { root } => {
             assert!(!meta_id.is_empty(), "un bundle sans meta_id n'identifie rien");
@@ -319,4 +328,114 @@ async fn the_bundle_is_opt_in_but_the_root_is_not() {
 
     assert_eq!(resp.meta_provenance_root.len(), 64, "le root voyage TOUJOURS quand la provenance est active");
     assert!(resp.meta_provenance_bundle.is_none(), "…mais le bundle n'est PAS envoyé sans demande");
+}
+
+// =====================================================================
+// Couche 3 v4 — le reçu NOMME ses acteurs et sa règle
+// =====================================================================
+
+/// **Le test du jalon v4.** Le reçu servi ne dit plus « la position 1 a contribué *h* » : il dit
+/// **quel agent**, sous **quelle configuration déclarée**, et sous **quelle règle**. C'est la
+/// différence entre une trace mathématique et un enregistrement qu'un auditeur procurement peut
+/// exploiter.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn the_served_receipt_names_its_participants_and_its_rule() {
+    let (svc, _statics) = serve_with_provenance().await;
+    let resp = svc
+        .iterate(Request::new(common::iterate_request_with_receipt(DIM as u32, 100, 1.0e-3)))
+        .await
+        .expect("iterate")
+        .into_inner();
+    let (steps_jsonl, manifest_json) = bundle_of(&resp);
+
+    let m = verify_meta_mini::json::parse_object(manifest_json.trim()).expect("manifeste lisible");
+    assert_eq!(m.get_u64("schema_version").expect("schema"), 4, "une liaison ⟹ schéma 4");
+
+    let b = verify_meta_mini::verify::Binding::from_manifest(&m)
+        .expect("liaison lisible")
+        .expect("le manifeste servi PORTE la liaison");
+
+    // Les trois participants sont NOMMÉS, dans l'ordre où ils votent.
+    assert_eq!(
+        b.participant_ids,
+        vec!["supplier-scoring".to_string(), "contract-risk".into(), "spend-categorization".into()],
+        "le reçu nomme ses acteurs, en ordre",
+    );
+    // La règle d'agrégation est scellée — elle ne peut plus changer en silence d'une ronde à l'autre.
+    assert_eq!(b.operator, "uniform");
+    // Les participants sont des mocks ici : aucune configuration à attester, et cela se LIT
+    // (colonne vide) au lieu d'être deviné.
+    assert!(b.declared_config_hashes.iter().all(String::is_empty));
+    assert_eq!(b.declared_config_hashes.len(), b.participant_ids.len(), "colonnes alignées");
+
+    // Et le tiers re-prouve l'ensemble — chaîne ET liaison.
+    third_party_reproves(steps_jsonl, manifest_json, &tenant_key()).expect("re-preuve complète");
+}
+
+/// **Le contrôle négatif du jalon.** Réécrire une identité — ou permuter deux agents — dans le
+/// manifeste CASSE la re-preuve chez le tiers. Sans cela, nommer les acteurs serait décoratif :
+/// un auditeur lirait des noms falsifiés sous un root parfaitement valide.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_third_party_rejects_a_receipt_whose_identities_were_rewritten() {
+    let (svc, _statics) = serve_with_provenance().await;
+    let resp = svc
+        .iterate(Request::new(common::iterate_request_with_receipt(DIM as u32, 100, 1.0e-3)))
+        .await
+        .expect("iterate")
+        .into_inner();
+    let (steps_jsonl, manifest_json) = bundle_of(&resp);
+    let key = tenant_key();
+
+    // Préalable : intact ⟹ passe. Si ce préalable tombait, le reste serait vide de sens.
+    third_party_reproves(steps_jsonl, manifest_json, &key).expect("intact ⟹ intègre");
+
+    // (a) RENOMMER un agent.
+    let renamed = manifest_json.replacen("supplier-scoring", "supplier-scoring-EVIL", 1);
+    assert_ne!(renamed, *manifest_json, "l'altération DOIT mordre — sinon ce test ne teste rien");
+    let err = third_party_reproves(steps_jsonl, &renamed, &key).expect_err("renommage refusé");
+    assert!(err.contains("liaison"), "le refus nomme la liaison : {err}");
+
+    // (b) Changer la RÈGLE d'agrégation — le cas qu'aucune trace positionnelle ne pourrait voir.
+    let rule = manifest_json.replacen("\"uniform\"", "\"attention\"", 1);
+    assert_ne!(rule, *manifest_json, "l'altération DOIT mordre");
+    third_party_reproves(steps_jsonl, &rule, &key).expect_err("changement de règle refusé");
+
+    // (c) RETIRER la liaison en gardant les pas — l'effacement doit être aussi visible que la
+    //     falsification, sinon il suffirait de supprimer les noms pour redevenir « intègre ».
+    let stripped: String = manifest_json
+        .lines()
+        .filter(|l| !l.contains("binding_"))
+        .collect::<Vec<_>>()
+        .join("\n");
+    third_party_reproves(steps_jsonl, &stripped, &key).expect_err("effacer la liaison est refusé");
+}
+
+/// **Le test que mon propre commentaire promettait, et qui manquait.** Le nom scellé dans la
+/// liaison doit être celui de l'opérateur RÉELLEMENT appliqué — sinon le reçu attesterait une
+/// règle d'agrégation qui n'est pas celle qui a combiné les votes, ce qui est précisément le
+/// mensonge que ce champ existe pour empêcher.
+///
+/// La dérive est désormais structurellement impossible (`wired_meta_operator` donne à l'opérateur
+/// le nom scellé), mais on l'épingle quand même : c'est cette propriété-là qui compte, pas la
+/// façon dont elle est obtenue aujourd'hui.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn the_sealed_rule_is_the_one_actually_applied() {
+    let (svc, _statics) = serve_with_provenance().await;
+    let resp = svc
+        .iterate(Request::new(common::iterate_request_with_receipt(DIM as u32, 100, 1.0e-3)))
+        .await
+        .expect("iterate")
+        .into_inner();
+    let (_, manifest_json) = bundle_of(&resp);
+
+    let m = verify_meta_mini::json::parse_object(manifest_json.trim()).expect("manifeste lisible");
+    let b = verify_meta_mini::verify::Binding::from_manifest(&m).expect("lisible").expect("présente");
+
+    // L'opérateur effectivement câblé par le contrôleur porte CE nom.
+    let wired = efe_meta_swarm::prelude::UniformMetaOp::with_name("uniform", DIM);
+    let applied = efe_meta_swarm::prelude::MetaOperator::name(&wired).to_string();
+    assert_eq!(
+        b.operator, applied,
+        "le nom SCELLÉ doit être celui de l'opérateur APPLIQUÉ, pas une étiquette parallèle",
+    );
 }

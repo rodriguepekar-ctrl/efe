@@ -111,6 +111,24 @@ fn real_main(args: &[String]) -> i32 {
         return 2;
     }
 
+    // **v4** — recouper la LIAISON (qui / quelle config / quelle règle) AVANT la chaîne.
+    //
+    // Sans ce contrôle, un manifeste dont on aurait réécrit les identités passerait la re-preuve
+    // — qui ne regarde que le condensé scellé — et l'auditeur lirait des noms falsifiés sous un
+    // root parfaitement valide. C'est le contrôle qui donne sa valeur au champ.
+    match verify_meta_mini::verify::Binding::from_manifest(&m) {
+        Ok(binding) => {
+            if let Err(e) = verify_meta_mini::verify::check_binding(&steps, binding.as_ref()) {
+                eprintln!("erreur : {e}");
+                return 1;
+            }
+        }
+        Err(e) => {
+            eprintln!("erreur : {e}");
+            return 2;
+        }
+    }
+
     let outcome = verify(&steps, &key, &expected_root);
     let ok = matches!(outcome, Outcome::Ok { .. });
     if json {

@@ -38,6 +38,7 @@ fn roundtrip_against_efe_meta_verify() {
             consensus: vec![f64::from(-0.190_753_86_f32), f64::from(0.328_241_91_f32), f64::from(0.554_084_1_f32), i as f64],
             safety_delta: None,
             vote_hashes: None,
+            binding_hash: None,
             seal: String::new(),
         })
         .collect();

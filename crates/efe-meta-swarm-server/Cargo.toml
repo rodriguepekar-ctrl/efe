@@ -36,7 +36,7 @@ efe-meta-swarm = { path = "../efe-meta-swarm", features = ["provenance"] }
 # to ;  sha2 hashes that block into the wire `config_hash`.
 efe-server = { path = "../efe-server", optional = true }
 efe-core   = { path = "../efe-core",   optional = true }
-sha2       = { version = "0.10", optional = true }
+sha2       = { version = "0.10" }   # Couche 3 M2/v4 — config_hash déclaré, hors feature
 
 # gRPC.
 #
@@ -184,7 +184,7 @@ tls = ["tonic/tls"]
 # `cargo tree -p efe-meta-swarm-server -e normal`), and an efe-core manifest
 # row on a default-built binary fails CONSTRUCTION (never a silent mock).
 # `sha2` computes the wire `config_hash` of the manifest controller block.
-core-integration = ["efe-meta-swarm/core-integration", "dep:efe-server", "dep:efe-core", "dep:sha2"]
+core-integration = ["efe-meta-swarm/core-integration", "dep:efe-server", "dep:efe-core"]
 
 # ─────────────────────────────────────────────────────────────────────
 # Dev dependencies.

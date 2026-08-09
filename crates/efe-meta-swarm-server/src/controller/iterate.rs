@@ -92,9 +92,13 @@ pub async fn run_iterate(
     // SERVI par `provenance_does_not_change_the_numerics`, parce qu'un test de la bibliothèque
     // ne dit rien du câblage d'ici.
     let prov_for_blocking = state.provenance.clone();
+    // Couche 3 v4 — la LIAISON : qui contribue, sous quelle configuration déclarée, sous quelle
+    // règle. Construite ICI parce que c'est le seul point qui connaît les trois à la fois : le
+    // manifeste (identités + blocs `controller`), l'opérateur câblé, et les α/γ validés.
+    let binding = build_run_binding(&manifest, &validated);
     let join = tokio::task::spawn_blocking(move || match prov_for_blocking {
         Some(p) => meta_for_blocking
-            .iterate_with_provenance(p.key_source(), p.tenant())
+            .iterate_with_provenance(p.key_source(), p.tenant(), binding)
             .map(|(r, prov)| (r, Some(prov))),
         None => meta_for_blocking.iterate().map(|r| (r, None)),
     });
@@ -728,7 +732,7 @@ fn build_meta_swarm(
             .pull_for(pid, Box::new(pull));
     }
 
-    builder = builder.meta_operator(Box::new(UniformMetaOp::new(meta_dim)));
+    builder = builder.meta_operator(Box::new(wired_meta_operator(meta_dim)));
 
     match &manifest.meta.safety {
         SafetyManifest::Box { radius } => {
@@ -751,6 +755,78 @@ fn build_meta_swarm(
     builder
         .build()
         .map_err(|e| ServerError::Manifest(format!("MetaSwarm build failed: {e}")))
+}
+
+/// **Couche 3 v4 — la liaison du run : qui a contribué, sous quelle config, sous quelle règle.**
+///
+/// Jusqu'en v3, le reçu scellait des `vote_hashes` **purement positionnels** : il prouvait « la
+/// position 1 a contribué l'entrée *h* au pas *k* » sans jamais pouvoir nommer l'agent derrière
+/// cette position, sa version, ni la règle qui a combiné les votes. Un auditeur procurement
+/// demande exactement ces trois choses ; c'est la différence entre une trace mathématique et un
+/// enregistrement auditable.
+///
+/// **L'ordre est porteur de sens** : il doit être celui dans lequel les participants ont été
+/// connectés et votent, donc celui de `manifest.participants` — le même que `build_meta_swarm`
+/// consomme. Un ordre différent rattacherait les votes aux mauvaises identités, ce qui serait pire
+/// que pas d'identités du tout.
+///
+/// **Ce qui est scellé est DÉCLARÉ, pas RAPPORTÉ.** Le `config_hash` vient du bloc `controller` du
+/// manifeste, c'est-à-dire de la configuration *demandée* — pas de celle que le participant a *dit*
+/// servir. Recouper les deux exige un certificat sur le fil, qui est le jalon **M4** ; jusque-là,
+/// prétendre attester la version réellement exécutée serait une sur-vente. Un participant mock n'a
+/// pas de configuration à attester : sa colonne reste vide, ce qui se lit comme tel.
+///
+/// Rend `None` si le manifeste ne déclare aucun participant — un reçu qui lierait une liste vide
+/// n'attesterait rien et vaut mieux absent que décoratif.
+fn build_run_binding(
+    manifest: &Manifest,
+    validated: &ValidatedIterateRequest,
+) -> Option<efe_meta_swarm::provenance::RunBinding> {
+    if manifest.participants.is_empty() {
+        return None;
+    }
+    let ids: Vec<String> = manifest.participants.iter().map(|p| p.id.clone()).collect();
+    let hashes: Vec<String> = manifest
+        .participants
+        .iter()
+        .map(|p| p.controller.as_ref().map_or_else(String::new, crate::manifest::ControllerManifest::config_hash))
+        .collect();
+
+    // `OPERATOR_ID` doit suivre l'opérateur RÉELLEMENT câblé dans `build_meta_swarm`. Les deux
+    // sont volontairement à quelques lignes l'un de l'autre : sceller le nom d'une règle qui n'est
+    // pas celle appliquée serait exactement le mensonge que ce champ existe pour empêcher.
+    efe_meta_swarm::provenance::RunBinding::try_new(
+        ids,
+        hashes,
+        OPERATOR_ID,
+        validated.alpha_default,
+        validated.coupling_gamma,
+    )
+    .map_err(|e| {
+        // Une liaison mal formée n'interrompt PAS la ronde : le consensus reste servi, sans reçu
+        // nominatif. Le contraire — refuser de servir parce qu'un champ d'audit est mal formé —
+        // ferait dépendre la disponibilité d'un détail de traçabilité.
+        warn!(error = %e, "liaison de provenance mal formée — ronde servie SANS reçu nominatif");
+    })
+    .ok()
+}
+
+/// Identité de la règle d'agrégation scellée dans la liaison.
+///
+/// Ce n'est PAS une étiquette libre : c'est le **nom porté par l'opérateur réellement câblé**,
+/// parce que [`wired_meta_operator`] le lui donne. La dérive « on scelle *uniform* mais on
+/// applique autre chose » devient donc structurellement impossible — il n'y a qu'un site de
+/// construction, et il lit cette constante.
+const OPERATOR_ID: &str = "uniform";
+
+/// **Le seul endroit où l'opérateur d'agrégation est construit.**
+///
+/// Extrait de [`build_meta_swarm`] pour que le nom scellé dans la liaison et le nom de
+/// l'opérateur appliqué soient **la même valeur**, et non deux constantes qu'on jurerait garder
+/// synchronisées. `UniformMetaOp::new` aurait nommé l'opérateur `UniformMetaOp(dim=N)` — un nom
+/// qui bouge avec la dimension et qui n'aurait rien voulu dire dans un reçu.
+fn wired_meta_operator(meta_dim: usize) -> UniformMetaOp {
+    UniformMetaOp::with_name(OPERATOR_ID, meta_dim)
 }
 
 /// Couche 3 M2 — projette le reçu sur le fil.

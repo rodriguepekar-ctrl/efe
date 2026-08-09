@@ -52,9 +52,197 @@ pub struct SealedMetaStep {
     /// (re-exécuter → re-hacher → concordance). Absent (`None`) en v1/v2.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub vote_hashes: Option<Vec<String>>,
+    /// **v4** : hash (SHA-256, hex) de la [`RunBinding`] — **qui** a contribué, **sous quelle
+    /// configuration**, et **sous quelle règle** d'agrégation.
+    ///
+    /// C'est le champ qui transforme le reçu d'une *trace mathématique* en un *enregistrement
+    /// auditable*. Jusqu'en v3, `vote_hashes` était **purement positionnel** : le reçu prouvait
+    /// « la position 1 a contribué l'entrée *h* au pas *k* », sans jamais pouvoir nommer l'agent
+    /// derrière cette position, sa version, ni la règle qui a combiné les votes. Un auditeur
+    /// procurement demande exactement ces trois choses.
+    ///
+    /// La liaison elle-même n'est PAS répétée ici (elle est constante sur tout le run) : elle
+    /// voyage **une fois** dans [`MetaManifest::binding`], et seul son hash est scellé à chaque
+    /// pas. La conséquence est la propriété recherchée — **altérer l'identité dans le manifeste
+    /// casse la re-preuve** : le hash recalculé ne correspond plus à celui scellé.
+    ///
+    /// Absent (`None`) en v1/v2/v3 : l'encodage canonique antérieur est alors **inchangé**, donc
+    /// les roots déjà émis restent stables.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub binding_hash: Option<String>,
     /// Sceau HMAC chaîné de ce pas (hex). Rempli par [`seal_in_place`].
     #[serde(default)]
     pub seal: String,
+}
+
+/// **v4** — ce qui lie une ronde de consensus à ses acteurs et à sa règle.
+///
+/// Ferme d'un coup les trois résidus que l'architecture Couche 3 §2.3 signalait : la provenance
+/// « ne scelle NI l'identité de l'opérateur (Uniform vs Attention), NI `alphas/gamma`, NI
+/// l'identité des participants (seulement des hashes positionnels) ».
+///
+/// ## Pourquoi des tableaux PARALLÈLES et non un `Vec<Participant>`
+///
+/// Parce que le vérifieur qui compte n'est pas celui-ci. `verify-meta-mini` a un parseur JSON
+/// **fait main** qui ne lit que des objets **plats** — chaînes, nombres, tableaux de nombres,
+/// tableaux de chaînes — et c'est sa vertu : un sceptique le relit en entier en une après-midi,
+/// et son `cargo tree` est vide. Une liaison imbriquée l'aurait forcé à apprendre les
+/// objets-dans-les-tableaux, c'est-à-dire à grossir exactement là où sa valeur est d'être petit.
+/// On paie donc une API un peu moins jolie ici pour ne pas dégrader l'artefact qui porte la
+/// promesse « re-prouvable sans nous faire confiance ». Le manifeste y gagne d'ailleurs en
+/// lisibilité humaine : deux colonnes alignées se relisent à l'œil.
+///
+/// L'invariant `participant_ids.len() == declared_config_hashes.len()` est vérifié par
+/// [`Self::try_new`] et re-vérifié par [`check_binding`].
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct RunBinding {
+    /// Les identifiants des participants **en ordre** — l'ordre EST le lien avec `vote_hashes`.
+    /// Le réordonner change le hash de la liaison, donc casse la re-preuve : permuter des
+    /// identités est précisément la falsification qu'un auditeur doit pouvoir détecter.
+    pub participant_ids: Vec<String>,
+    /// Les `config_hash` **DÉCLARÉS** au manifeste, alignés sur `participant_ids`. Chaîne **vide**
+    /// ⟺ participant mock, qui n'a aucune configuration à attester.
+    ///
+    /// **Déclaré, pas rapporté** — distinction à ne pas maquiller. Ce qui est scellé est la
+    /// configuration que le manifeste *demandait*, pas celle que le participant a *dit* servir.
+    /// Recouper les deux exige un certificat sur le fil : c'est le jalon **M4**. Tant qu'il
+    /// n'existe pas, prétendre attester la version réellement exécutée serait une sur-vente.
+    pub declared_config_hashes: Vec<String>,
+    /// Identité de la règle d'agrégation (p. ex. `"uniform"`). Sceller ce nom rend re-prouvable
+    /// « ces votes ont été combinés par CETTE règle » — sans quoi un opérateur pourrait changer
+    /// d'agrégateur entre deux rondes sans que le reçu en garde trace.
+    pub operator: String,
+    /// Poids de l'opérateur dans le pas couplé.
+    pub alpha: f64,
+    /// Poids du terme de couplage (`pull`).
+    pub gamma: f64,
+}
+
+impl RunBinding {
+    /// Construit en vérifiant l'alignement des deux colonnes.
+    ///
+    /// # Errors
+    /// Longueurs différentes, ou un `config_hash` non vide qui n'est pas 64 hex — deux fautes qui
+    /// produiraient un reçu dont la liaison ne veut rien dire, et qu'il vaut mieux refuser au
+    /// producteur que livrer à l'auditeur.
+    pub fn try_new(
+        participant_ids: Vec<String>,
+        declared_config_hashes: Vec<String>,
+        operator: impl Into<String>,
+        alpha: f64,
+        gamma: f64,
+    ) -> Result<Self, String> {
+        if participant_ids.len() != declared_config_hashes.len() {
+            return Err(format!(
+                "liaison mal formée : {} identifiants pour {} config_hash — les deux colonnes \
+                 doivent être alignées, sinon la position n'identifie plus rien",
+                participant_ids.len(),
+                declared_config_hashes.len()
+            ));
+        }
+        if let Some(bad) = declared_config_hashes.iter().find(|h| !h.is_empty() && from_hex32(h).is_none()) {
+            return Err(format!("liaison mal formée : config_hash {bad:?} n'est pas 64 caractères hex"));
+        }
+        Ok(Self { participant_ids, declared_config_hashes, operator: operator.into(), alpha, gamma })
+    }
+
+    /// Vue appariée `(id, config_hash)` — `None` pour un mock.
+    pub fn participants(&self) -> impl Iterator<Item = (&str, Option<&str>)> {
+        self.participant_ids
+            .iter()
+            .zip(self.declared_config_hashes.iter())
+            .map(|(id, h)| (id.as_str(), if h.is_empty() { None } else { Some(h.as_str()) }))
+    }
+
+    /// L'encodage canonique **binaire** de la liaison — la seule forme dont le hash est scellé.
+    ///
+    /// Binaire et **préfixé en longueur**, jamais du JSON : deux sérialisations JSON du même objet
+    /// peuvent différer (ordre des clés, espaces, échappements) et produiraient deux hashes pour
+    /// une même liaison. Le préfixage rend l'encodage **injectif** — sans lui, les identités
+    /// `["ab", "c"]` et `["a", "bc"]` se concaténeraient à l'identique, et déplacer une frontière
+    /// d'identité serait une falsification indétectable.
+    #[must_use]
+    pub fn canonical(&self) -> Vec<u8> {
+        // Le préfixe compte ce qui est RÉELLEMENT écrit, pas ce que la colonne des identifiants
+        // annonce : `participants()` est un `zip`, donc des colonnes désalignées (possible via
+        // une désérialisation qui contourne `try_new`) produiraient sinon un préfixe qui ment sur
+        // le nombre d'entrées qui suivent — un encodage incohérent, donc ambigu.
+        let n = self.participant_ids.len().min(self.declared_config_hashes.len());
+        let mut b = Vec::with_capacity(64 + n * 64);
+        b.extend_from_slice(&(n as u64).to_le_bytes());
+        for (id, cfg) in self.participants() {
+            b.extend_from_slice(&(id.len() as u64).to_le_bytes());
+            b.extend_from_slice(id.as_bytes());
+            match cfg {
+                // Le marqueur de présence est scellé LUI AUSSI : sans lui, « absent » et
+                // « présent avec un hash nul » se confondraient.
+                Some(h) => {
+                    b.push(1);
+                    b.extend_from_slice(&from_hex32(h).unwrap_or([0u8; 32]));
+                }
+                None => b.push(0),
+            }
+        }
+        b.extend_from_slice(&(self.operator.len() as u64).to_le_bytes());
+        b.extend_from_slice(self.operator.as_bytes());
+        b.extend_from_slice(&self.alpha.to_le_bytes());
+        b.extend_from_slice(&self.gamma.to_le_bytes());
+        b
+    }
+
+    /// Le hash scellé dans chaque pas (SHA-256 de [`Self::canonical`], en hex).
+    #[must_use]
+    pub fn hash_hex(&self) -> String {
+        let mut out = [0u8; 32];
+        out.copy_from_slice(&Sha256::digest(&self.canonical()));
+        to_hex(&out)
+    }
+}
+
+/// **v4** — recoupe la liaison portée par le manifeste avec celle **scellée** dans les pas.
+///
+/// C'est le contrôle qui donne sa valeur au champ : sans lui, un manifeste dont on aurait
+/// réécrit les identités passerait la re-preuve de la chaîne (qui ne regarde que le hash scellé)
+/// et l'auditeur lirait des noms falsifiés sous un root parfaitement valide.
+///
+/// # Errors
+/// - un pas scelle une liaison alors que le manifeste n'en porte aucune (ou l'inverse) ;
+/// - le hash recalculé depuis le manifeste diffère de celui scellé (identité falsifiée) ;
+/// - deux pas d'un même run scellent des liaisons différentes (la liaison est un invariant de run).
+pub fn check_binding(steps: &[SealedMetaStep], binding: Option<&RunBinding>) -> Result<(), String> {
+    // Une liaison DÉSÉRIALISÉE contourne `try_new` : on re-vérifie l'alignement ici, sinon des
+    // colonnes de longueurs différentes livreraient à l'auditeur une liaison dont une partie des
+    // identités n'est tout simplement pas couverte par le sceau.
+    if let Some(b) = binding {
+        if b.participant_ids.len() != b.declared_config_hashes.len() {
+            return Err(format!(
+                "liaison du manifeste mal formée : {} identifiants pour {} config_hash — \
+                 les colonnes doivent être alignées",
+                b.participant_ids.len(),
+                b.declared_config_hashes.len()
+            ));
+        }
+    }
+    let expected = binding.map(RunBinding::hash_hex);
+    for (i, s) in steps.iter().enumerate() {
+        match (&s.binding_hash, &expected) {
+            (None, None) => {}
+            (Some(sealed), Some(exp)) if sealed == exp => {}
+            (Some(sealed), Some(exp)) => {
+                return Err(format!(
+                    "pas {i} : la liaison du manifeste ne correspond PAS à celle scellée \
+                     (scellé {sealed}, manifeste {exp}) — identité ou règle falsifiée"
+                ))
+            }
+            (Some(_), None) => {
+                return Err(format!("pas {i} : une liaison est SCELLÉE mais le manifeste n'en porte aucune"))
+            }
+            (None, Some(_)) => {
+                return Err(format!("pas {i} : le manifeste porte une liaison que ce pas ne scelle PAS"))
+            }
+        }
+    }
+    Ok(())
 }
 
 /// Le **manifeste** — la revendication que le tiers recoupe.
@@ -70,6 +258,53 @@ pub struct MetaManifest {
     pub n_steps: usize,
     /// `meta_provenance_root` attendu (hex du dernier sceau).
     pub root: String,
+    // ── v4 — la LIAISON, à PLAT et sans magie serde ────────────────────────────────────────
+    //
+    // Portée **une fois** ici plutôt que répétée à chaque pas (elle est constante sur le run) ;
+    // seul son hash est scellé. Elle n'est pas « en confiance » pour autant : `check_binding`
+    // recalcule ce hash et le confronte au scellé, si bien qu'une identité réécrite ici casse la
+    // re-preuve au lieu de passer inaperçue.
+    //
+    // Cinq champs plats plutôt qu'un objet imbriqué (ou un `#[serde(flatten)]`) : le vérifieur
+    // zéro-dépendance lit ce fichier avec un parseur JSON fait main qui ne connaît que les objets
+    // PLATS. Un objet imbriqué l'aurait obligé à grandir exactement là où sa valeur est d'être
+    // petit et relisible d'un bout à l'autre ; `flatten` aurait marché ici mais aurait fait
+    // dépendre la forme du fichier d'un comportement serde subtil, invisible depuis le manifeste.
+    // La verbosité est le prix d'un fichier qu'un tiers peut re-parser à la main.
+    /// v4 — identifiants des participants, **en ordre**.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub binding_participant_ids: Option<Vec<String>>,
+    /// v4 — `config_hash` déclarés, alignés ; chaîne vide ⟺ mock.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub binding_declared_config_hashes: Option<Vec<String>>,
+    /// v4 — identité de la règle d'agrégation.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub binding_operator: Option<String>,
+    /// v4 — poids de l'opérateur.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub binding_alpha: Option<f64>,
+    /// v4 — poids du couplage.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub binding_gamma: Option<f64>,
+}
+
+impl MetaManifest {
+    /// Réassemble la [`RunBinding`] depuis les champs plats. `None` pour un manifeste v1-v3.
+    ///
+    /// Exige les cinq champs : une liaison **partielle** est refusée (`None` + le manque sera
+    /// signalé par [`check_binding`], qui verra un pas scellant une liaison sans manifeste). Un
+    /// assemblage tolérant aurait produit une liaison amputée dont le hash ne correspondrait à
+    /// rien — un échec au mauvais endroit, chez l'auditeur plutôt qu'ici.
+    #[must_use]
+    pub fn binding(&self) -> Option<RunBinding> {
+        Some(RunBinding {
+            participant_ids: self.binding_participant_ids.clone()?,
+            declared_config_hashes: self.binding_declared_config_hashes.clone()?,
+            operator: self.binding_operator.clone()?,
+            alpha: self.binding_alpha?,
+            gamma: self.binding_gamma?,
+        })
+    }
 }
 
 /// Défaut serde du schéma (bundles v1 sans le champ).
@@ -94,7 +329,15 @@ pub struct Verdict {
 /// Encodage **déterministe** (little-endian, ordre de champ gelé). SHA-256 = même
 /// primitive que le moat P1 ⇒ ré-implémentable à la main (vérifieur zéro-dép P1.2).
 #[must_use]
-pub fn canonical_hash(meta_id: &str, step: u64, residual: f64, consensus: &[f64], safety_delta: Option<f64>, vote_hashes: Option<&[String]>) -> [u8; 32] {
+pub fn canonical_hash(
+    meta_id: &str,
+    step: u64,
+    residual: f64,
+    consensus: &[f64],
+    safety_delta: Option<f64>,
+    vote_hashes: Option<&[String]>,
+    binding_hash: Option<&str>,
+) -> [u8; 32] {
     let mut b = Vec::with_capacity(meta_id.len() + 41 + consensus.len() * 8);
     b.extend_from_slice(meta_id.as_bytes());
     b.push(0x1f); // unit separator : id ‖ corps
@@ -118,6 +361,13 @@ pub fn canonical_hash(meta_id: &str, step: u64, residual: f64, consensus: &[f64]
                 b.extend_from_slice(&from_hex32(h).unwrap_or([0u8; 32]));
             }
         }
+    }
+    // v4 : le hash de la LIAISON (qui / quelle config / quelle règle), ajouté après les
+    // vote_hashes. Absent ⇒ octets v3 (⊂ v2 ⊂ v1) inchangés, donc roots antérieurs stables.
+    // 32 octets, quel que soit le nombre de participants — la liaison elle-même voyage dans le
+    // manifeste, seul son condensé est scellé.
+    if let Some(h) = binding_hash {
+        b.extend_from_slice(&from_hex32(h).unwrap_or([0u8; 32]));
     }
     let mut out = [0u8; 32];
     out.copy_from_slice(&Sha256::digest(&b));
@@ -144,7 +394,7 @@ pub fn seal_in_place(steps: &mut [SealedMetaStep], key: &[u8]) -> String {
     let mut parent: Option<[u8; 32]> = None;
     let mut last = [0u8; 32];
     for s in steps.iter_mut() {
-        let ph = canonical_hash(&s.meta_id, s.step, s.residual, &s.consensus, s.safety_delta, s.vote_hashes.as_deref());
+        let ph = canonical_hash(&s.meta_id, s.step, s.residual, &s.consensus, s.safety_delta, s.vote_hashes.as_deref(), s.binding_hash.as_deref());
         let seal = chain_hmac(parent.as_ref(), &ph, key);
         s.seal = to_hex(&seal);
         parent = Some(seal);
@@ -163,7 +413,7 @@ pub fn verify(steps: &[SealedMetaStep], key: &[u8], expected_root: &str) -> Verd
     }
     let mut parent: Option<[u8; 32]> = None;
     for (i, s) in steps.iter().enumerate() {
-        let ph = canonical_hash(&s.meta_id, s.step, s.residual, &s.consensus, s.safety_delta, s.vote_hashes.as_deref());
+        let ph = canonical_hash(&s.meta_id, s.step, s.residual, &s.consensus, s.safety_delta, s.vote_hashes.as_deref(), s.binding_hash.as_deref());
         let recomputed = chain_hmac(parent.as_ref(), &ph, key);
         let claimed = match from_hex32(&s.seal) {
             Some(c) => c,
@@ -227,21 +477,35 @@ pub struct MetaChainState {
     key: Vec<u8>,
     parent: Option<[u8; 32]>,
     steps: Vec<SealedMetaStep>,
+    /// **v4** — invariant de run : fixé au constructeur, jamais modifiable par un `push`.
+    binding: Option<RunBinding>,
 }
 
 impl MetaChainState {
     /// Nouvelle chaîne vide pour `meta_id`, scellée sous `key` (32 o, dérivée par tenant).
     pub fn new(meta_id: impl Into<String>, key: Vec<u8>) -> Self {
-        Self { meta_id: meta_id.into(), key, parent: None, steps: Vec::new() }
+        Self { meta_id: meta_id.into(), key, parent: None, steps: Vec::new(), binding: None }
+    }
+
+    /// **v4** — même chose, en liant le run à ses acteurs et à sa règle.
+    ///
+    /// La liaison est fixée **une fois pour le run** et non par pas, parce que c'en est un
+    /// invariant : les mêmes participants, la même règle, du premier au dernier pas. La poser au
+    /// constructeur rend structurellement impossible qu'elle varie en cours de route — un `push`
+    /// ne peut pas la contredire, il n'y a pas d'endroit où l'écrire.
+    #[must_use]
+    pub fn new_bound(meta_id: impl Into<String>, key: Vec<u8>, binding: RunBinding) -> Self {
+        Self { meta_id: meta_id.into(), key, parent: None, steps: Vec::new(), binding: Some(binding) }
     }
 
     /// Scelle **un** pas et l'ajoute à la chaîne : `seal = chain_hmac(parent, SHA256(canonique), clé)`.
     /// `safety_delta = Some(‖z − z̃‖)` scelle l'enveloppe de sûreté (v2) ; `vote_hashes = Some(...)` scelle
     /// les contributions des participants (v3). `None`/`None` = v1.
     pub fn push(&mut self, step: u64, residual: f64, consensus: Vec<f64>, safety_delta: Option<f64>, vote_hashes: Option<Vec<String>>) {
-        let ph = canonical_hash(&self.meta_id, step, residual, &consensus, safety_delta, vote_hashes.as_deref());
+        let binding_hash = self.binding.as_ref().map(RunBinding::hash_hex);
+        let ph = canonical_hash(&self.meta_id, step, residual, &consensus, safety_delta, vote_hashes.as_deref(), binding_hash.as_deref());
         let seal = chain_hmac(self.parent.as_ref(), &ph, &self.key);
-        self.steps.push(SealedMetaStep { meta_id: self.meta_id.clone(), step, residual, consensus, safety_delta, vote_hashes, seal: to_hex(&seal) });
+        self.steps.push(SealedMetaStep { meta_id: self.meta_id.clone(), step, residual, consensus, safety_delta, vote_hashes, binding_hash, seal: to_hex(&seal) });
         self.parent = Some(seal);
     }
 
@@ -261,7 +525,7 @@ impl MetaChainState {
     #[must_use]
     pub fn finish(self) -> MetaProvenance {
         let root = self.parent.map_or_else(String::new, |p| to_hex(&p));
-        MetaProvenance { meta_id: self.meta_id, root, steps: self.steps }
+        MetaProvenance { meta_id: self.meta_id, root, steps: self.steps, binding: self.binding }
     }
 }
 
@@ -275,6 +539,9 @@ pub struct MetaProvenance {
     pub root: String,
     /// Les pas de consensus scellés.
     pub steps: Vec<SealedMetaStep>,
+    /// **v4** — la liaison du run (qui / quelle config / quelle règle). `None` pour un bundle
+    /// v1-v3, dont l'encodage reste alors strictement inchangé.
+    pub binding: Option<RunBinding>,
 }
 
 impl MetaProvenance {
@@ -283,14 +550,27 @@ impl MetaProvenance {
     /// de sûreté) est présent, sinon **1**.
     #[must_use]
     pub fn manifest(&self) -> MetaManifest {
-        let schema_version = if self.steps.iter().any(|s| s.vote_hashes.is_some()) {
+        let schema_version = if self.binding.is_some() {
+            4
+        } else if self.steps.iter().any(|s| s.vote_hashes.is_some()) {
             3
         } else if self.steps.iter().any(|s| s.safety_delta.is_some()) {
             2
         } else {
             1
         };
-        MetaManifest { meta_id: self.meta_id.clone(), schema_version, n_steps: self.steps.len(), root: self.root.clone() }
+        let b = self.binding.as_ref();
+        MetaManifest {
+            meta_id: self.meta_id.clone(),
+            schema_version,
+            n_steps: self.steps.len(),
+            root: self.root.clone(),
+            binding_participant_ids: b.map(|x| x.participant_ids.clone()),
+            binding_declared_config_hashes: b.map(|x| x.declared_config_hashes.clone()),
+            binding_operator: b.map(|x| x.operator.clone()),
+            binding_alpha: b.map(|x| x.alpha),
+            binding_gamma: b.map(|x| x.gamma),
+        }
     }
 
     /// Le contenu de `meta_steps.jsonl` (une [`SealedMetaStep`] par ligne).
@@ -337,7 +617,7 @@ mod chain_tests {
         // Version BATCH (seal_in_place) = la référence.
         let mut batch: Vec<SealedMetaStep> = content
             .iter()
-            .map(|(s, r, c)| SealedMetaStep { meta_id: "m".into(), step: *s, residual: *r, consensus: c.clone(), safety_delta: None, vote_hashes: None, seal: String::new() })
+            .map(|(s, r, c)| SealedMetaStep { meta_id: "m".into(), step: *s, residual: *r, consensus: c.clone(), safety_delta: None, vote_hashes: None, binding_hash: None, seal: String::new() })
             .collect();
         let batch_root = seal_in_place(&mut batch, &key);
 
@@ -375,8 +655,8 @@ mod chain_tests {
         assert!(!verify(&stripped, &key, &prov.root).ok, "retirer un safety_delta scellé casse le sceau");
 
         // v1 (None) ≠ v2 (Some) sur le même contenu (le delta compte) ; et None reste byte-stable.
-        assert_ne!(canonical_hash("m", 1, 0.5, &[0.3, 0.4], None, None), canonical_hash("m", 1, 0.5, &[0.3, 0.4], Some(0.47), None));
-        assert_eq!(canonical_hash("m", 1, 0.5, &[0.3, 0.4], None, None), canonical_hash("m", 1, 0.5, &[0.3, 0.4], None, None));
+        assert_ne!(canonical_hash("m", 1, 0.5, &[0.3, 0.4], None, None, None), canonical_hash("m", 1, 0.5, &[0.3, 0.4], Some(0.47), None, None));
+        assert_eq!(canonical_hash("m", 1, 0.5, &[0.3, 0.4], None, None, None), canonical_hash("m", 1, 0.5, &[0.3, 0.4], None, None, None));
     }
 
     #[test]
@@ -414,6 +694,7 @@ mod tests {
                 consensus: vec![i as f64, 0.5, -1.0],
                 safety_delta: None,
                 vote_hashes: None,
+                binding_hash: None,
                 seal: String::new(),
             })
             .collect()
@@ -487,6 +768,7 @@ mod tests {
                 consensus: vec![f64::from(-0.190_753_86_f32), f64::from(0.328_241_91_f32), f64::from(0.554_084_1_f32)],
                 safety_delta: None,
                 vote_hashes: None,
+                binding_hash: None,
                 seal: String::new(),
             })
             .collect();
@@ -497,5 +779,143 @@ mod tests {
             .collect();
         let v = verify(&reparsed, &key, &root);
         assert!(v.ok, "round-trip JSONL doit re-vérifier — broken_at={:?}, root_att={root}, root_calc={}", v.broken_at, v.root);
+    }
+}
+
+#[cfg(test)]
+mod binding_tests {
+    use super::*;
+
+    fn binding() -> RunBinding {
+        RunBinding::try_new(
+            vec!["supplier-scoring".into(), "contract-risk".into()],
+            vec!["a".repeat(64), String::new()],
+            "uniform",
+            0.5,
+            0.2,
+        )
+        .expect("liaison bien formée")
+    }
+
+    fn sealed(binding: Option<RunBinding>) -> MetaProvenance {
+        let key = vec![7u8; 32];
+        let mut chain = match binding {
+            Some(b) => MetaChainState::new_bound("run-1", key, b),
+            None => MetaChainState::new("run-1", key),
+        };
+        for i in 0..3u64 {
+            chain.push(i, 1.0 / (i as f64 + 1.0), vec![0.1, 0.2], Some(0.0), Some(vec!["b".repeat(64)]));
+        }
+        chain.finish()
+    }
+
+    /// **Le test qui donne son sens au champ.** Le reçu NOMME ses acteurs et sa règle — c'est ce
+    /// qui sépare une trace mathématique d'un enregistrement auditable.
+    #[test]
+    fn the_receipt_names_who_contributed_and_under_which_rule() {
+        let p = sealed(Some(binding()));
+        let m = p.manifest();
+        assert_eq!(m.schema_version, 4, "une liaison ⟹ schéma 4");
+        let b = m.binding().expect("le manifeste porte la liaison");
+        assert_eq!(b.participant_ids, ["supplier-scoring", "contract-risk"]);
+        assert_eq!(b.operator, "uniform");
+        // Le mock n'a pas de configuration à attester : sa colonne est vide, et cela se LIT.
+        let pairs: Vec<_> = b.participants().collect();
+        assert_eq!(pairs[0].1, Some("a".repeat(64).as_str()));
+        assert_eq!(pairs[1].1, None);
+        check_binding(&p.steps, Some(&b)).expect("la liaison scellée correspond au manifeste");
+    }
+
+    /// **LA propriété.** Réécrire une identité dans le manifeste CASSE la re-preuve. Sans cela, le
+    /// champ ne serait qu'une décoration : un auditeur lirait des noms falsifiés sous un root
+    /// parfaitement valide.
+    #[test]
+    fn tampering_an_identity_in_the_manifest_breaks_the_reproof() {
+        let p = sealed(Some(binding()));
+
+        // (a) renommer un participant
+        let mut forged = binding();
+        forged.participant_ids[0] = "supplier-scoring-EVIL".into();
+        let err = check_binding(&p.steps, Some(&forged)).expect_err("un renommage doit être refusé");
+        assert!(err.contains("falsifiée"), "{err}");
+
+        // (b) PERMUTER deux identités — le cas vicieux : les mêmes noms, le même nombre, mais les
+        //     votes se rattachent désormais aux mauvais agents.
+        let mut swapped = binding();
+        swapped.participant_ids.swap(0, 1);
+        swapped.declared_config_hashes.swap(0, 1);
+        check_binding(&p.steps, Some(&swapped)).expect_err("une permutation doit être refusée");
+
+        // (c) changer la RÈGLE d'agrégation
+        let mut other_rule = binding();
+        other_rule.operator = "attention".into();
+        check_binding(&p.steps, Some(&other_rule)).expect_err("changer la règle doit être refusé");
+
+        // (d) changer α
+        let mut other_alpha = binding();
+        other_alpha.alpha = 0.6;
+        check_binding(&p.steps, Some(&other_alpha)).expect_err("changer α doit être refusé");
+
+        // (e) RETIRER la liaison du manifeste tout en gardant les pas scellés
+        check_binding(&p.steps, None).expect_err("retirer la liaison doit être refusé");
+    }
+
+    /// L'encodage est **injectif** : déplacer une frontière d'identité change le hash. Sans le
+    /// préfixage en longueur, `["ab","c"]` et `["a","bc"]` se concaténeraient à l'identique.
+    #[test]
+    fn the_canonical_encoding_is_injective_over_identity_boundaries() {
+        let a = RunBinding::try_new(vec!["ab".into(), "c".into()], vec![String::new(); 2], "u", 0.5, 0.2).unwrap();
+        let b = RunBinding::try_new(vec!["a".into(), "bc".into()], vec![String::new(); 2], "u", 0.5, 0.2).unwrap();
+        assert_ne!(a.hash_hex(), b.hash_hex(), "les frontières d'identité doivent être scellées");
+    }
+
+    /// « Absent » et « présent avec un hash nul » ne doivent pas se confondre — d'où le marqueur
+    /// de présence scellé.
+    #[test]
+    fn an_absent_config_differs_from_a_zero_config() {
+        let absent = RunBinding::try_new(vec!["p".into()], vec![String::new()], "u", 0.5, 0.2).unwrap();
+        let zero = RunBinding::try_new(vec!["p".into()], vec!["0".repeat(64)], "u", 0.5, 0.2).unwrap();
+        assert_ne!(absent.hash_hex(), zero.hash_hex());
+    }
+
+    /// **Rétro-compatibilité** : sans liaison, l'encodage canonique est strictement celui de v3,
+    /// donc les roots déjà émis restent valides. C'est ce qui rend v4 additif et non cassant.
+    #[test]
+    fn v3_roots_are_unchanged_by_the_v4_addition() {
+        let v3 = sealed(None);
+        assert_eq!(v3.manifest().schema_version, 3, "sans liaison ⟹ schéma 3");
+        assert!(v3.steps.iter().all(|s| s.binding_hash.is_none()));
+        assert!(verify(&v3.steps, &[7u8; 32], &v3.root).ok, "un bundle v3 se re-prouve à l'identique");
+        // Et un pas v3 hache EXACTEMENT comme avant l'ajout : `None` ⇒ aucun octet supplémentaire.
+        let s = &v3.steps[0];
+        assert_eq!(
+            canonical_hash(&s.meta_id, s.step, s.residual, &s.consensus, s.safety_delta, s.vote_hashes.as_deref(), None),
+            canonical_hash(&s.meta_id, s.step, s.residual, &s.consensus, s.safety_delta, s.vote_hashes.as_deref(), None),
+        );
+    }
+
+    /// Une liaison mal formée est refusée **au producteur**, pas livrée à l'auditeur.
+    #[test]
+    fn a_malformed_binding_is_refused_at_construction() {
+        let misaligned = RunBinding::try_new(vec!["a".into(), "b".into()], vec![String::new()], "u", 0.5, 0.2);
+        assert!(misaligned.unwrap_err().contains("alignées"));
+        let bad_hex = RunBinding::try_new(vec!["a".into()], vec!["pas-du-hex".into()], "u", 0.5, 0.2);
+        assert!(bad_hex.unwrap_err().contains("hex"));
+    }
+
+    /// Des colonnes désalignées arrivées par DÉSÉRIALISATION (donc sans passer par `try_new`)
+    /// sont refusées par le contrôle, et non silencieusement tronquées par le `zip`.
+    #[test]
+    fn misaligned_columns_from_deserialisation_are_refused_not_truncated() {
+        let p = sealed(Some(binding()));
+        let broken = RunBinding {
+            participant_ids: vec!["a".into(), "b".into(), "c".into()],
+            declared_config_hashes: vec![String::new()],
+            operator: "uniform".into(),
+            alpha: 0.5,
+            gamma: 0.2,
+        };
+        let err = check_binding(&p.steps, Some(&broken)).expect_err("désalignement refusé");
+        assert!(err.contains("alignées"), "{err}");
     }
 }
