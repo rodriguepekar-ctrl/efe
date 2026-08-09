@@ -269,3 +269,126 @@ pub fn from_hex32(s: &str) -> Option<[u8; 32]> {
     out.copy_from_slice(&v);
     Some(out)
 }
+
+// =====================================================================
+// Couche 3 · 3a — l'ANCRE : ce qu'on peut constater SANS la clé
+// =====================================================================
+
+/// Une ancre publiée : la revendication `(racine, nombre de pas)` d'une ronde, écrite dans un
+/// journal **append-only** au moment où elle a été scellée.
+///
+/// ## Pourquoi elle existe, alors que la chaîne est déjà re-prouvable
+///
+/// Parce que la re-preuve n'attrape pas la **troncature**. Le préfixe d'une chaîne HMAC valide est
+/// lui-même une chaîne HMAC parfaitement valide : couper les cinq derniers pas d'une ronde produit
+/// un bundle qui se re-prouve impeccablement, sous une racine différente que rien ne signale. Le
+/// manifeste porte bien `n_steps`, mais il voyage AVEC le bundle — celui qui tronque le corrige.
+///
+/// Il faut donc une revendication publiée **avant**, et **ailleurs**. C'est l'ancre.
+///
+/// ## Et surtout : la recouper ne demande AUCUN SECRET
+///
+/// Comparer deux chaînes et deux entiers. Un tiers qui n'a pas la clé du tenant — donc qui ne peut
+/// pas re-prouver la chaîne — peut malgré tout constater qu'on lui présente une ronde tronquée, ou
+/// une racine autre que celle publiée. C'est exactement la marche que l'ancre fait gagner, et la
+/// raison pour laquelle ce vérifieur l'accepte **sans `--key-hex`**.
+///
+/// Ce qu'elle ne donne pas : le détenteur du journal est le même que celui de la clé. Il peut
+/// publier ce qu'il veut, quand il veut. Ce que l'ancre supprime, c'est la réécriture
+/// **rétroactive** — publier tôt, et ne plus pouvoir revenir dessus.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Anchor {
+    /// Clé du journal — préfixée `meta:` pour une ronde de consensus.
+    pub run_id: String,
+    /// Le tenant propriétaire.
+    pub tenant_id: String,
+    /// La racine attendue (hex).
+    pub manifest_root: String,
+    /// Le nombre de pas engagés — **le garde contre la troncature**.
+    pub node_count: u32,
+}
+
+/// Le préfixe qui isole les ancres de consensus dans un journal partagé avec la Couche 2.
+pub const META_ANCHOR_PREFIX: &str = "meta:";
+
+/// Lit un journal d'ancres et rend celle de `meta_id`, s'il y en a une.
+///
+/// Le format est celui de `provenance-dag` : six champs séparés par des tabulations,
+/// `schema \t run_id \t tenant_id \t manifest_root \t node_count \t derived_at`. Il est
+/// ré-implémenté ici plutôt qu'importé — c'est le prix du « zéro dépendance », et la fidélité en
+/// est **prouvée** par un cross-check contre le producteur (cf. `tests/cross_check.rs`), pas
+/// affirmée.
+///
+/// # Errors
+/// Ligne au mauvais nombre de champs, ou compteur illisible. Une ligne d'un autre `run_id` n'est
+/// pas une erreur : on la saute.
+pub fn find_anchor(journal: &str, meta_id: &str) -> Result<Option<Anchor>, String> {
+    let want = format!("{META_ANCHOR_PREFIX}{meta_id}");
+    let mut found: Option<Anchor> = None;
+    for (n, line) in journal.lines().enumerate() {
+        let line = line.trim_end_matches('\r');
+        if line.trim().is_empty() {
+            continue;
+        }
+        let f: Vec<&str> = line.split('\t').collect();
+        if f.len() != 6 {
+            return Err(format!("journal, ligne {} : 6 champs attendus, {} trouvés", n + 1, f.len()));
+        }
+        if f[1] != want {
+            continue;
+        }
+        let node_count = f[4]
+            .parse::<u32>()
+            .map_err(|e| format!("journal, ligne {} : node_count illisible ({e})", n + 1))?;
+        let a = Anchor {
+            run_id: f[1].to_string(),
+            tenant_id: f[2].to_string(),
+            manifest_root: f[3].to_string(),
+            node_count,
+        };
+        // Deux ancres CONTRADICTOIRES pour la même ronde sont une information, pas un détail à
+        // arbitrer : dans un journal append-only, cela veut dire que quelqu'un a publié deux
+        // vérités. On refuse plutôt que de choisir.
+        match &found {
+            Some(prev) if *prev != a => {
+                return Err(format!(
+                    "ANCRES CONTRADICTOIRES pour {want} : « {} » ({} pas) puis « {} » ({} pas)",
+                    prev.manifest_root, prev.node_count, a.manifest_root, a.node_count,
+                ))
+            }
+            _ => found = Some(a),
+        }
+    }
+    Ok(found)
+}
+
+/// Recoupe un manifeste avec son ancre — **sans clé**.
+///
+/// # Errors
+/// Racine discordante (réécriture) ou nombre de pas discordant (**troncature**).
+pub fn check_against_anchor(
+    manifest_root: &str,
+    n_steps: usize,
+    anchor: &Anchor,
+) -> Result<(), String> {
+    // Le NOMBRE DE PAS d'abord, et l'ordre n'est pas indifférent : une troncature change les DEUX
+    // valeurs, mais « le journal engage 30 pas, le bundle en présente 29 » est un diagnostic, là où
+    // « les racines diffèrent » ne dit à l'auditeur que ce qu'il voyait déjà. On lui rend
+    // l'information la plus spécifique en premier.
+    if u64::from(anchor.node_count) != n_steps as u64 {
+        let verb = if (n_steps as u64) < u64::from(anchor.node_count) { "TRONCATURE" } else { "AJOUT" };
+        return Err(format!(
+            "{verb} : le journal engage {} pas, le bundle en présente {n_steps} — la chaîne \
+             présentée est pourtant parfaitement intègre, c'est l'ancre qui le révèle",
+            anchor.node_count,
+        ));
+    }
+    if anchor.manifest_root != manifest_root {
+        return Err(format!(
+            "RACINE DISCORDANTE : même nombre de pas, mais le journal a publié « {} » et le bundle \
+             présente « {manifest_root} » — un contenu a été RÉÉCRIT",
+            anchor.manifest_root,
+        ));
+    }
+    Ok(())
+}

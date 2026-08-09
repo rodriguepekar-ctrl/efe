@@ -29,6 +29,10 @@ efe-meta-swarm-proto = { path = "../efe-meta-swarm-proto" }
 # (`MetaSwarm::iterate_with_provenance`). Sans elle le contrôleur ne sait pas sceller ;
 # avec elle il PEUT, et ne le fait que si un tenant est configuré (cf. controller::provenance).
 efe-meta-swarm = { path = "../efe-meta-swarm", features = ["provenance"] }
+# Couche 3 · 3a — le vocabulaire d'ancrage (AnchorRecord + son format de ligne). On dépend de
+# provenance-dag et NON de provenance-bridge : celui-ci tire blake3/ed25519/chrono et les deux
+# piles de provenance, ce qui serait un mauvais marché pour six champs de texte.
+provenance-dag = { path = "../provenance-dag", version = "0.0.1" }
 
 # Couche 3 M1.d — OPTIONAL, gated by the `core-integration` feature (see
 # [features]).  efe-server provides `mode1::build_mvp_controller` (Voie A) ;

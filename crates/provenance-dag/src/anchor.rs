@@ -67,6 +67,55 @@ pub struct AnchorRecord {
     pub derived_at: u64,
 }
 
+/// Le préfixe qui **isole** les ancres de consensus méta-essaim dans un journal partagé.
+///
+/// `AnchorIndex` indexe par `run_id` SEUL. Sans préfixe, une ronde de méta-essaim et un run de
+/// passerelle qui porteraient le même identifiant se contrediraient dans l'index — au mieux une
+/// `Conflict` fantôme, au pire une ancre de la mauvaise nature rendue pour une recherche. Les
+/// collisions sont improbables en pratique (UUID d'un côté, `iter-<hex>` de l'autre) ; « improbable »
+/// n'est pas une garantie, et un index de provenance n'est pas l'endroit où s'en contenter.
+///
+/// Le préfixe rend donc la séparation **structurelle**, et il permet ce qu'on voulait : **UN SEUL
+/// journal** couvrant la Couche 2 (runs de la passerelle) et la Couche 3 (rondes de consensus).
+/// Un auditeur n'a qu'un fichier à consulter, et sait à quoi il a affaire en lisant la clé.
+pub const META_ANCHOR_PREFIX: &str = "meta:";
+
+/// Fabrique l'ancre d'une **ronde de consensus méta-essaim**.
+///
+/// Prend des valeurs nues plutôt qu'un type de la Couche 3 : ce crate n'a aucune raison de dépendre
+/// du moteur de méta-essaim pour construire six champs de texte.
+///
+/// **Placé ici et non dans `provenance-bridge`** — où vivait d'abord son jumeau `anchor_of` — parce
+/// que le pont tire tout un arbre (blake3, ed25519, chrono, les deux piles de provenance). Ancrer
+/// une ronde de consensus n'a pas à coûter cela : le contrôleur méta-essaim ne dépend que de ce
+/// crate-ci, quatorze crates dont l'essentiel est serde. Le vocabulaire d'ancrage reste avec le
+/// TYPE qu'il fabrique, ce qui est de toute façon sa place.
+///
+/// Ce que l'ancre engage : la **racine** de la chaîne de consensus et le **nombre de pas**. Le
+/// second n'est pas décoratif — c'est lui qui attrape la TRONCATURE, dont le préfixe restant est
+/// une chaîne parfaitement intègre. Et le tout est vérifiable **SANS LA CLÉ** : comparer deux
+/// chaînes et deux entiers ne demande aucun secret, là où re-prouver la chaîne l'exige. C'est
+/// précisément la marche que l'ancre fait gagner.
+///
+/// # Errors
+/// Les champs ne doivent contenir ni tabulation ni saut de ligne (le format cesserait d'être
+/// injectif) — [`AnchorRecord::new`] le refuse.
+pub fn meta_anchor_of(
+    meta_id: &str,
+    tenant: &str,
+    root: &str,
+    n_steps: usize,
+    derived_at: u64,
+) -> Result<AnchorRecord, AnchorError> {
+    AnchorRecord::new(
+        format!("{META_ANCHOR_PREFIX}{meta_id}"),
+        tenant,
+        root.to_string(),
+        u32::try_from(n_steps).unwrap_or(u32::MAX),
+        derived_at,
+    )
+}
+
 /// Ce qui peut mal se passer avec une ancre ou un journal.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AnchorError {

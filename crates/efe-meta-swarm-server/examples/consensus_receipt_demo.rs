@@ -137,8 +137,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         "test_key() (DÉMO — reçu forgeable)",
         true,
     )));
+    // Couche 3 · 3a — le journal d'ancres. Chaque ronde scellée y publie sa racine ET son nombre
+    // de pas, AVANT que le reçu ne sorte. C'est ce qui rend une TRONCATURE détectable sans clé.
+    let anchor_path = PathBuf::from(OUT_DIR).join("anchors.log");
+    std::fs::create_dir_all(anchor_path.parent().unwrap())?;
+    let _ = std::fs::remove_file(&anchor_path); // démo : on repart d'un journal propre
+    state.set_anchor_log(std::sync::Arc::new(
+        efe_meta_swarm_server::controller::anchor::FileAnchorLog::new(&anchor_path),
+    ));
     let svc = ControllerService::new(state);
-    println!("│  contrôleur prêt — provenance ACTIVE (clé de démo, reçu forgeable)");
+    println!("│  contrôleur prêt — provenance ACTIVE (clé de démo, reçu forgeable), ancrage ACTIF");
     println!("│");
 
     // ── 3. La ronde, par le chemin SERVI ────────────────────────────────────────────────────
@@ -181,10 +189,37 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     assert_ne!(forged, bundle.manifest_json, "la falsification doit mordre");
     std::fs::write(dir.join("meta_manifest.FORGED.json"), &forged)?;
 
+    // La variante TRONQUÉE — le cas vicieux, et la raison d'être de l'ancre. On coupe le dernier
+    // pas et on « corrige » le manifeste : racine = le sceau du pas précédent, n_steps = n-1. Le
+    // bundle obtenu se re-prouve PARFAITEMENT avec la clé, parce que le préfixe d'une chaîne HMAC
+    // valide est lui-même une chaîne HMAC valide. Rien, dans le bundle, ne trahit la coupure.
+    // Seule la revendication publiée AVANT, ailleurs, la révèle.
+    let lines: Vec<&str> = bundle.steps_jsonl.lines().filter(|l| !l.trim().is_empty()).collect();
+    if lines.len() >= 2 {
+        let kept = &lines[..lines.len() - 1];
+        let last_seal = serde_json::from_str::<serde_json::Value>(kept[kept.len() - 1])
+            .ok()
+            .and_then(|v| v.get("seal").and_then(|s| s.as_str()).map(str::to_string))
+            .ok_or("sceau du dernier pas conservé introuvable")?;
+        std::fs::write(dir.join("meta_steps.TRUNCATED.jsonl"), kept.join("\n") + "\n")?;
+
+        let mut m: serde_json::Value = serde_json::from_str(&bundle.manifest_json)?;
+        m["root"] = serde_json::Value::String(last_seal);
+        m["n_steps"] = serde_json::Value::from(kept.len());
+        std::fs::write(
+            dir.join("meta_manifest.TRUNCATED.json"),
+            serde_json::to_string_pretty(&m)? + "\n",
+        )?;
+    }
+
     println!("├─ ARTEFACTS écrits dans {OUT_DIR}/");
     println!("│    meta_steps.jsonl            ({} pas scellés)", bundle.steps_jsonl.lines().count());
     println!("│    meta_manifest.json          (la revendication)");
     println!("│    meta_manifest.FORGED.json   (une IDENTITÉ réécrite — doit être REFUSÉ)");
+    println!("│    meta_steps.TRUNCATED.jsonl  + meta_manifest.TRUNCATED.json");
+    println!("│        un pas COUPÉ, manifeste « corrigé » — se re-prouve PARFAITEMENT avec la clé,");
+    println!("│        et n'est démasqué QUE par l'ancre.");
+    println!("│    anchors.log                 (la racine publiée AVANT que le reçu ne sorte)");
     println!("│");
     println!(
         "└─ à re-prouver avec un binaire dont l'arbre de dépendances est VIDE   [{} ms au total]",

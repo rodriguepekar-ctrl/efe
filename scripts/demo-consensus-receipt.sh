@@ -12,7 +12,10 @@
 #    3. un binaire à l'arbre de dépendances VIDE le re-prouve ;
 #    4. le même binaire REFUSE une variante dont une identité a été
 #       réécrite — parce qu'un contrôle qui ne peut pas échouer ne
-#       prouve rien.
+#       prouve rien ;
+#    5. et une TRONCATURE, que la re-preuve NE VOIT PAS (le préfixe
+#       d'une chaîne HMAC valide est lui-même valide), est démasquée
+#       par la racine publiée — SANS AUCUNE CLÉ.
 #
 #  Usage :
 #    bash scripts/demo-consensus-receipt.sh          # participants MOCK
@@ -44,16 +47,16 @@ MODE="${1:-}"
 # avorte. Deux lignes de plus valent mieux qu'une démo qui meurt sur l'interpréteur
 # par défaut de la machine où on la montre.
 if [ "$MODE" = "--real" ]; then
-  echo "═══ 1/3 · la ronde servie sur de VRAIS participants efe-core, et son reçu ═══"
+  echo "═══ 1/4 · la ronde servie sur de VRAIS participants efe-core, et son reçu ═══"
   cargo run -q --release -p efe-meta-swarm-server --example consensus_receipt_demo \
     --features core-integration -- --engine
 else
-  echo "═══ 1/3 · la ronde servie (participants mock), et son reçu ═══"
+  echo "═══ 1/4 · la ronde servie (participants mock), et son reçu ═══"
   cargo run -q --release -p efe-meta-swarm-server --example consensus_receipt_demo
 fi
 
 echo
-echo "═══ 2/3 · le tiers re-prouve (binaire zéro-dépendance) ═══"
+echo "═══ 2/4 · le tiers re-prouve (binaire zéro-dépendance) ═══"
 cargo build -q --release -p verify-meta-mini
 VERIFY="./target/release/verify_meta_mini"
 
@@ -74,7 +77,7 @@ if ! "$VERIFY" "$BUNDLE/meta_steps.jsonl" "$BUNDLE/meta_manifest.json" --key-hex
 fi
 
 echo
-echo "═══ 3/3 · et il REFUSE une identité réécrite ═══"
+echo "═══ 3/4 · et il REFUSE une identité réécrite ═══"
 # Le cas que le schéma v4 rend détectable : la chaîne des pas est
 # parfaitement intacte, seul un NOM a changé dans le manifeste. Sans le
 # recoupement de liaison, ce bundle passerait — et l'auditeur lirait
@@ -85,10 +88,39 @@ if "$VERIFY" "$BUNDLE/meta_steps.jsonl" "$BUNDLE/meta_manifest.FORGED.json" --ke
 fi
 
 echo
+echo "═══ 4/4 · l'ANCRE : ce que la clé seule NE VOIT PAS ═══"
+# Le cas vicieux. On coupe un pas et on « corrige » le manifeste. Le préfixe d'une
+# chaîne HMAC valide étant lui-même une chaîne valide, ce bundle se re-prouve
+# PARFAITEMENT — rien, à l'intérieur, ne trahit la coupure.
+echo "  a) le bundle TRONQUÉ, re-prouvé AVEC la clé :"
+if ! "$VERIFY" "$BUNDLE/meta_steps.TRUNCATED.jsonl" "$BUNDLE/meta_manifest.TRUNCATED.json" \
+     --key-hex "$KEY" | sed 's/^/     /'; then
+  echo "ÉCHEC : le bundle tronqué aurait dû PASSER la re-preuve (c'est le fond du problème)." >&2
+  exit 1
+fi
+echo "     ↑ vert. La chaîne EST intègre — la re-preuve ne peut pas voir une troncature."
+echo
+echo "  b) le MÊME bundle, confronté à l'ancre publiée — et SANS AUCUNE CLÉ :"
+if "$VERIFY" "$BUNDLE/meta_steps.TRUNCATED.jsonl" "$BUNDLE/meta_manifest.TRUNCATED.json" \
+     --anchor "$BUNDLE/anchors.log" 2>&1 | sed 's/^/     /'; then
+  echo "ÉCHEC : une troncature a été ACCEPTÉE malgré l'ancre." >&2
+  exit 1
+fi
+echo
+echo "  c) et le bundle INTACT, toujours sans clé :"
+if ! "$VERIFY" "$BUNDLE/meta_steps.jsonl" "$BUNDLE/meta_manifest.json" \
+     --anchor "$BUNDLE/anchors.log" | sed 's/^/     /'; then
+  echo "ÉCHEC : le bundle intact ne concorde pas avec son ancre." >&2
+  exit 1
+fi
+
+echo
 echo "═══ DÉMO OK ═══"
 echo "  · le reçu d'une ronde servie se re-prouve hors-ligne, sans nous ;"
 echo "  · il nomme ses agents et sa règle ;"
-echo "  · réécrire l'un des deux le fait REFUSER."
+echo "  · réécrire l'un des deux le fait REFUSER ;"
+echo "  · et une TRONCATURE — invisible à la re-preuve, puisque la chaîne restante"
+echo "    est intègre — est démasquée par la racine publiée, SANS AUCUNE CLÉ."
 echo
 echo "Ce qu'il atteste : l'INTÉGRITÉ de la suite de pas — jamais la CORRECTION"
 echo "de la décision de consensus. Et il est tamper-evident pour un DÉTENTEUR"

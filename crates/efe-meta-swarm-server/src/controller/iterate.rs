@@ -252,6 +252,42 @@ pub async fn run_iterate(
         )));
     }
 
+    // ── Couche 3 · 3a — publier l'ancre AVANT de rendre le reçu ─────────────────────────────
+    //
+    // L'ordre est le fond du dispositif : un auditeur qui reçoit un bundle doit pouvoir en trouver
+    // l'ancre. Publier après l'avoir servi laisserait une fenêtre où le reçu circule sans
+    // revendication publiée — exactement l'intervalle qu'une troncature exploiterait.
+    //
+    // Un échec de publication FAIT ÉCHOUER l'appel. C'est délibéré : servir un reçu en taisant que
+    // son ancre n'a pas été écrite enverrait l'auditeur chercher une ligne qui n'existe pas, et il
+    // en conclurait — à tort — que le reçu est falsifié. Mieux vaut refuser la ronde que produire
+    // cette accusation.
+    if let (Some(log), Some(prov), Some(pcfg)) =
+        (state.anchor_log.as_ref(), provenance.as_ref(), state.provenance.as_ref())
+    {
+        let derived_at = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| u64::try_from(d.as_millis()).unwrap_or(u64::MAX))
+            .unwrap_or(0);
+        let anchor = provenance_dag::meta_anchor_of(
+            &prov.meta_id,
+            &pcfg.tenant().as_uuid().to_string(),
+            &prov.root,
+            prov.steps.len(),
+            derived_at,
+        )
+        .map_err(|e| Status::internal(format!("ancre inconstructible — {e}")))?;
+        log.publish(&anchor).map_err(|e| {
+            error!(error = %e, path = %log.path().display(), "ancre NON publiée");
+            Status::internal(format!(
+                "ancre NON publiée dans {} — {e} ; la ronde est refusée plutôt que servie sans \
+                 revendication publiée",
+                log.path().display(),
+            ))
+        })?;
+        debug!(root = %prov.root, n_steps = prov.steps.len(), "ancre publiée");
+    }
+
     let response = build_response(
         &result,
         start.elapsed(),

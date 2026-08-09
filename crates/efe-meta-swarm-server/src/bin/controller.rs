@@ -147,6 +147,24 @@ async fn async_main(
         }
     }
 
+    // ── Couche 3 · 3a — le journal d'ancres, partagé avec le Fil P ──────────────────────────
+    //
+    // Sans ancre publiée, une TRONCATURE reste indétectable pour qui n'a pas la clé : le préfixe
+    // d'une chaîne HMAC valide est lui-même une chaîne valide, et le `n_steps` du manifeste voyage
+    // avec le bundle — celui qui tronque le corrige. On le DIT au boot plutôt que de le laisser
+    // deviner ; c'est le même message que la passerelle du Fil P émet dans le même cas.
+    match efe_meta_swarm_server::controller::anchor::log_from_env() {
+        Some(log) => {
+            info!(path = %log.path().display(), "ancrage ACTIF — chaque ronde scellée publie sa racine");
+            state.set_anchor_log(std::sync::Arc::new(log));
+        }
+        None => info!(
+            "ancrage INACTIF (aucun {}) — les reçus sortiront SANS racine publiée : une \
+             troncature resterait indétectable sans la clé du tenant.",
+            efe_meta_swarm_server::controller::anchor::ANCHOR_LOG_ENV,
+        ),
+    }
+
     // PR #18 — initialise the OpenTelemetry SDK inside the tokio
     // runtime context.  The BatchSpanProcessor uses tokio for async
     // export ; calling init_otel from `fn main()` (outside the runtime)

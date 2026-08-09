@@ -61,8 +61,7 @@ pub mod node;
 pub mod sha256;
 
 pub use anchor::{
-    verify_against_anchor, AnchorError, AnchorIndex, AnchorRecord, ANCHOR_SCHEMA_V1,
-};
+    verify_against_anchor, AnchorError, AnchorIndex, AnchorRecord, ANCHOR_SCHEMA_V1, meta_anchor_of, META_ANCHOR_PREFIX};
 pub use dag::{reprove_dag, verify_against_root, DagError, Record, SealedDag, Verdict, GENESIS};
 pub use hmac::{ct_eq, hmac_sha256};
 pub use key::TenantKey;

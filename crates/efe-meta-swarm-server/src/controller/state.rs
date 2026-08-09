@@ -87,6 +87,11 @@ pub struct ControllerState {
     /// refuse de démarrer plutôt que d'émettre un reçu forgeable sans le dire. Derrière un `Arc` :
     /// l'état est cloné par requête, la source de clé ne l'est pas.
     pub provenance: Option<Arc<super::provenance::ProvenanceConfig>>,
+    /// Couche 3 · 3a — le journal d'ancres, **partagé avec le Fil P**.
+    ///
+    /// `None` ⟹ ancrage inactif : les reçus sortent sans ancre publiée, donc une TRONCATURE
+    /// resterait indétectable sans la clé. C'est dit au boot plutôt que deviné.
+    pub anchor_log: Option<Arc<super::anchor::FileAnchorLog>>,
 }
 
 impl std::fmt::Debug for ControllerState {
@@ -130,6 +135,8 @@ impl ControllerState {
             // M2 : éteinte par défaut. `bin/controller.rs` l'allume au boot si — et seulement si —
             // l'opérateur l'a demandée ET qu'une clé sûre (ou un dev explicitement reconnu) existe.
             provenance: None,
+            // Éteint par défaut : `bin/controller.rs` l'allume si l'opérateur a désigné un journal.
+            anchor_log: None,
         }
     }
 
@@ -141,6 +148,11 @@ impl ControllerState {
     /// de démarrer visible, et non un état à-moitié-construit.
     pub fn set_provenance(&mut self, cfg: Arc<super::provenance::ProvenanceConfig>) {
         self.provenance = Some(cfg);
+    }
+
+    /// Couche 3 · 3a — attache le journal d'ancres après construction.
+    pub fn set_anchor_log(&mut self, log: Arc<super::anchor::FileAnchorLog>) {
+        self.anchor_log = Some(log);
     }
 
     /// PR #16 — attach a TLS reloader after construction.
