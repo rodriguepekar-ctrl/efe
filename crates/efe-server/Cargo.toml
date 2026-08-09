@@ -322,6 +322,13 @@ path = "src/bin/efe_verify_audit.rs"
 name = "efe-onboard"
 path = "src/bin/efe_onboard.rs"
 
+# Couche 3 — la passerelle qui SERT `/v1/consensus`. Binaire dédié plutôt qu'une
+# route greffée sur `efe-server` (la passerelle REST agent, autre préoccupation,
+# autre état) : le routeur existait, testé, et n'était monté nulle part.
+[[bin]]
+name = "efe-consensus-gateway"
+path = "src/bin/efe_consensus_gateway.rs"
+
 # Sprint **D16** — `efe-bundle` CLI : embedder bundle management
 # (keygen, pack, sign, verify, inspect). Architecture
 # `docs/bench/d16_embedder_bundling_architecture.md` § 6.
