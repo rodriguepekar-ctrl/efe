@@ -15,7 +15,15 @@
 #       prouve rien.
 #
 #  Usage :
-#    bash scripts/demo-consensus-receipt.sh
+#    bash scripts/demo-consensus-receipt.sh          # participants MOCK
+#    bash scripts/demo-consensus-receipt.sh --real   # participants efe-core RÉELS
+#
+#  Le mode --real fait tourner de VRAIS participants efe-core : le reçu
+#  affiche alors trois `config_hash` réels — « cet agent, dans cette
+#  version précise, a contribué ceci » — et chaque participant passe le
+#  canari H1 de boot (fail-closed). Il exige la feature
+#  `core-integration`, qui tire efe-core + efe-server : comptez quelques
+#  minutes au premier build, quelques secondes ensuite.
 #
 #  Sortie 0 si la démo se déroule comme annoncé (re-preuve OK **et**
 #  falsification refusée) ; ≥ 1 sinon.
@@ -30,8 +38,19 @@ BUNDLE="demo-bundles/meta-consensus-served"
 # d'un master côté serveur, que personne d'autre ne détient.
 KEY="4f849020850db9409ad503b209412186e588114247a023ad70b128b0acfb560d"
 
-echo "═══ 1/3 · la ronde servie, et son reçu ═══"
-cargo run -q --release -p efe-meta-swarm-server --example consensus_receipt_demo
+MODE="${1:-}"
+# Branche explicite plutôt que des tableaux d'arguments : sous `set -u`, bash 3.2
+# (celui livré par macOS) traite un TABLEAU VIDE comme une variable NON DÉFINIE et
+# avorte. Deux lignes de plus valent mieux qu'une démo qui meurt sur l'interpréteur
+# par défaut de la machine où on la montre.
+if [ "$MODE" = "--real" ]; then
+  echo "═══ 1/3 · la ronde servie sur de VRAIS participants efe-core, et son reçu ═══"
+  cargo run -q --release -p efe-meta-swarm-server --example consensus_receipt_demo \
+    --features core-integration -- --engine
+else
+  echo "═══ 1/3 · la ronde servie (participants mock), et son reçu ═══"
+  cargo run -q --release -p efe-meta-swarm-server --example consensus_receipt_demo
+fi
 
 echo
 echo "═══ 2/3 · le tiers re-prouve (binaire zéro-dépendance) ═══"
