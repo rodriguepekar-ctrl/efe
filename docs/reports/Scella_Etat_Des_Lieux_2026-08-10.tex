@@ -1,0 +1,385 @@
+\documentclass[10pt]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage[french]{babel}
+\usepackage{newpxtext,newpxmath}
+\usepackage[a4paper,top=1.5cm,bottom=1.35cm,left=1.65cm,right=1.65cm]{geometry}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{titlesec}
+\usepackage[most]{tcolorbox}
+\usepackage{enumitem}
+\usepackage{array}
+\usepackage{booktabs}
+\usepackage{fancyhdr}
+
+\definecolor{navy}{HTML}{1F3A5F}
+\definecolor{grey}{HTML}{54606E}
+\definecolor{green}{HTML}{2C6E49}
+\definecolor{amber}{HTML}{9C6A16}
+\definecolor{red}{HTML}{A6322E}
+\definecolor{plum}{HTML}{7A4EA8}
+\definecolor{boxgray}{HTML}{F3F5F8}
+\definecolor{boxred}{HTML}{FCF2F1}
+\definecolor{boxgreen}{HTML}{F1F7F3}
+\definecolor{boxedge}{HTML}{D9E0EA}
+
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{2.6pt}
+\linespread{1.0}
+
+\pagestyle{fancy}\fancyhf{}
+\lhead{\small\color{grey}Scella}
+\rhead{\small\color{grey}État des lieux -- 10 août 2026}
+\cfoot{\small\color{grey}\thepage}
+\renewcommand{\headrulewidth}{0.3pt}
+
+\titleformat{\section}{\color{navy}\large\bfseries}{}{0pt}{}
+\titlespacing{\section}{0pt}{9pt}{3pt}
+\titleformat{\subsection}{\color{navy}\bfseries}{}{0pt}{}
+\titlespacing{\subsection}{0pt}{7pt}{1.5pt}
+
+\newtcolorbox{these}{colback=boxgray,colframe=boxedge,boxrule=0.5pt,arc=2.5pt,
+  left=8pt,right=8pt,top=4.5pt,bottom=4.5pt}
+\newtcolorbox{alerte}{colback=boxred,colframe=red!55,boxrule=0.8pt,arc=2.5pt,
+  left=8pt,right=8pt,top=4.5pt,bottom=4.5pt}
+\newtcolorbox{acquis}{colback=boxgreen,colframe=green!45,boxrule=0.8pt,arc=2.5pt,
+  left=8pt,right=8pt,top=4.5pt,bottom=4.5pt}
+
+\newcommand{\ok}{{\color{green}\textbf{FAIT}}}
+\newcommand{\partiel}{{\color{amber}\textbf{PARTIEL}}}
+\newcommand{\design}{{\color{grey}\textbf{CONÇU}}}
+\newcommand{\nope}{{\color{red}\textbf{NON FAIT}}}
+\newcommand{\sz}[1]{{\small\color{grey}\textsf{#1}}}
+\newcommand{\code}[1]{\texttt{\small #1}}
+
+\begin{document}
+
+\begin{center}
+{\Huge\bfseries\color{navy} Scella}\\[4pt]
+{\large\color{grey}\itshape Où en est-on : état des lieux mesuré au code}\\[4pt]
+{\small\color{grey} 10 août 2026 \; · \; branche \code{couche2-m0-frontier}, HEAD \code{0077fcb} \; · \; 66 crates}
+\end{center}
+\vspace{2pt}
+
+\begin{these}
+\textbf{Le résultat central.} Le méta-essaim est passé, en une journée, de \emph{coordonner} à
+\textbf{attester} : une ronde servie rend désormais un reçu qu'un tiers re-prouve hors ligne, qui
+\textbf{nomme} ses agents et sa règle, et dont une \textbf{troncature} se voit \textbf{sans la clé}.
+C'est le premier assemblage complet et montrable du dépôt. Mais la mesure fait apparaître un fait que
+personne n'avait écrit : \emph{toutes} ces capacités sont \textbf{opt-in}, et \textbf{aucun profil de
+déploiement ne les allume ensemble}. Un build par défaut de Scella ne sert donc \textbf{aucun reçu} --
+et la seule configuration cohérente qui existe aujourd'hui est un script de démonstration.
+\end{these}
+
+\section{1 · Méthode : ce que « mesuré » veut dire ici}
+
+Aucune affirmation de ce document ne vient d'un document de conception ni d'un souvenir de session.
+Chaque chiffre, chaque « fait » et chaque « non fait » a été relu dans le code de ce matin, à
+l'emplacement indiqué. C'est la discipline habituelle du projet, et elle a de nouveau payé : trois
+énoncés que je tenais pour acquis se sont révélés inexacts au contrôle, et ils sont corrigés
+\emph{à leur place} plutôt qu'en silence.
+
+Le premier concerne l'ancrage tiers. J'avais avancé que RFC 3161 « n'apparaît qu'en commentaire ».
+C'est faux : le crate \code{forensic-export} porte déjà un \code{AnchorMethod::Rfc3161}, une structure
+\code{AnchorProof} et un \code{verify\_anchor} qui exécute le contrôle décisif -- la liaison de racine
+(\code{bound\_root == manifest\_root}). Ce qui est délégué, et le module le dit lui-même, c'est le
+\emph{parsing cryptographique du jeton}. La conséquence est favorable et sera reprise au §5 : le jalon
+3b n'est pas un travail à inventer, c'est un raccordement.
+
+Le deuxième concerne l'état de la branche. « Jamais fusionnée » était inexact : \code{main} pointe sur
+\code{d2613fa}, un merge de \code{couche2-m0-frontier} daté du \textbf{12 juillet}. La branche a donc
+bien été intégrée une fois ; ce sont les \textbf{31 commits accumulés depuis} qui ne l'ont pas été.
+
+Le troisième concerne le périmètre : ce document couvre la Couche 2, la Couche 3 et les deux piles de
+reçu. Il ne couvre \emph{pas} le Fil B ni la couche nano, qui n'ont pas été relus dans cet arc. Le §6
+le dit explicitement plutôt que de laisser le silence passer pour une validation.
+
+\section{2 · L'arc de la journée : de « coordonner » à « attester »}
+
+Huit commits ont été poussés aujourd'hui, mais ils ne forment qu'un seul mouvement, et c'est ainsi
+qu'il faut les lire. Avant ce matin, le méta-essaim faisait converger plusieurs participants et
+n'en laissait \textbf{aucune trace opposable} : la plomberie était auditable, la ronde ne produisait
+rien. La question qu'un évaluateur pose en premier -- « montrez-moi ce que la machine a
+\emph{produit}, pas comment elle est faite » -- restait sans réponse.
+
+Elle en a une maintenant, et cette réponse satisfait trois propriétés qu'il faut distinguer, parce
+qu'elles se démontrent séparément et qu'aucune n'implique les autres.
+
+\renewcommand{\arraystretch}{1.2}
+\begin{center}\small
+\begin{tabular}{@{}l >{\raggedright\arraybackslash}p{7.4cm} >{\raggedright\arraybackslash}p{6.1cm}@{}}
+\toprule
+\textbf{Jalon} & \textbf{Propriété obtenue} & \textbf{Ce qui la démontre} \\
+\midrule
+\textbf{M2} & Un tiers re-prouve le reçu \emph{hors ligne}, sans faire confiance au serveur &
+  \code{cargo tree -e normal} montre le vérifieur \textbf{seul} : zéro dépendance \\
+\textbf{v4} & Le reçu \textbf{nomme} ses acteurs, leurs versions déclarées et sa règle d'agrégation &
+  Renommer un agent, permuter deux colonnes ou changer $\alpha$ : la re-preuve \textbf{casse} \\
+\textbf{3a} & Une \textbf{troncature} est détectable \textbf{sans aucune clé} &
+  Le bundle tronqué passe la re-preuve avec la clé, et l'ancre le \textbf{refuse} sans \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{2.1 · Pourquoi l'ancre était indispensable, et non décorative}
+
+Le point mérite d'être posé lentement, parce qu'il est contre-intuitif et qu'il est au cœur de ce que
+le projet appelle un \emph{vert malhonnête} -- un système qui affiche OK en faisant autre chose.
+
+Une chaîne HMAC prouve que ce qui est là n'a pas bougé. Elle ne prouve pas que \emph{tout} est encore
+là. La raison est structurelle : \textbf{le préfixe d'une chaîne HMAC valide est lui-même une chaîne
+HMAC valide}. Retirer les derniers pas d'une ronde et « corriger » le manifeste produit donc un bundle
+qui se re-prouve \textbf{parfaitement} -- rien, à l'intérieur, ne trahit la coupure. Un opérateur
+mécontent d'une ronde peut ainsi en publier la moitié qui l'arrange, et le vérifieur dira vert.
+
+Seule une \textbf{racine publiée à l'avance}, accompagnée du nombre de pas, expose la coupure. Et le
+contrôle qui l'expose ne demande \textbf{aucune clé} : c'est une comparaison de deux chaînes de
+caractères contre un journal append-only. Le jalon 3a a donc ajouté une propriété que la cryptographie
+seule ne pouvait pas donner, et la démo l'exhibe par un « vert gênant » -- elle montre d'abord le
+bundle tronqué \emph{passer} la re-preuve, avant de le faire tomber sur l'ancre. Un contrôle qui ne
+peut pas échouer ne prouve rien ; le montrer échouer est ce qui rend la démonstration crédible.
+
+\subsection{2.2 · Ce que la démonstration montre, et ce qu'elle ne montre pas}
+
+L'ensemble tient en une commande, en deux modes. Sans drapeau, trois participants \emph{mock} : le
+mécanisme est démontré, mais la colonne de configuration du reçu est vide -- un mock n'a aucune
+version à attester, et c'est la première chose qu'un lecteur attentif remarque. Avec \code{--real},
+trois participants \textbf{efe-core} réels, chacun déclaré par un bloc de contrôleur dont le SHA-256
+est scellé, chacun passant au démarrage le canari H1 de non-expansivité en \emph{fail-closed}. Le reçu
+affiche alors trois \code{config\_hash} distincts et réels, ce qui autorise enfin la phrase qu'un
+acheteur conformité veut entendre : \emph{cet agent, dans cette version précise, a contribué ceci}.
+
+Deux limites doivent accompagner toute présentation. Les participants vivent dans le processus de la
+démo : le transport gRPC est réel, l'isolation système d'exploitation ne l'est pas -- choix de
+fiabilité assumé, l'orchestration multi-processus du dépôt étant instable sous charge, et une démo qui
+échoue une fois sur cinq ne démontre rien. Et surtout, le reçu atteste l'\textbf{intégrité} de la
+suite de pas, \textbf{jamais la correction} de la décision de consensus. Il est \emph{tamper-evident
+pour un détenteur de clé}, pas \emph{trustless pour un tiers} : un détenteur peut fabriquer une chaîne
+cohérente. C'est le cadrage constant du projet, et il est répété jusque dans le corps de la réponse
+HTTP, à l'endroit précis où un lecteur pressé conclurait « vérifié = correct ».
+
+\section{3 · Le fait structurel : tout est opt-in, aucun profil ne l'allume}
+
+C'est le résultat le plus important de cet état des lieux, et il n'était visible qu'en regardant les
+\emph{défauts} plutôt que les capacités. Chaque crate servi part désactivé.
+
+\renewcommand{\arraystretch}{1.1}
+\begin{center}\small
+\begin{tabular}{@{}l l >{\raggedright\arraybackslash}p{9.3cm}@{}}
+\toprule
+\textbf{Crate servi} & \textbf{\code{default}} & \textbf{Ce que le défaut laisse dehors} \\
+\midrule
+\code{efe-swarm-gateway}     & \code{[]}      & la frontière LLM, le garde d'egress, le journal d'ancres \\
+\code{efe-meta-swarm-server} & \code{["tls"]} & le moteur efe-core réel (\code{core-integration}) \\
+\code{efe-server}            & \code{[]}      & la façade \code{/v1/consensus} et son client méta-essaim \\
+\code{efe-meta-swarm}        & \code{[]}      & les chemins optionnels du moteur \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+À quoi s'ajoutent sept interrupteurs d'environnement, répartis sur trois crates, qu'il faut connaître
+et poser \emph{ensemble} pour obtenir le comportement que décrivent les documents de présentation.
+
+\begin{center}\small
+\begin{tabular}{@{}l >{\raggedright\arraybackslash}p{9.9cm}@{}}
+\toprule
+\textbf{Interrupteur} & \textbf{Ce qu'il commande} \\
+\midrule
+\code{EFE\_META\_SWARM\_ENABLED}            & l'existence même du sous-système méta-essaim \\
+\code{EFE\_META\_PROVENANCE\_TENANT}        & le scellement du reçu ; absent $\Rightarrow$ \textbf{aucun reçu} \\
+\code{EFE\_NANO\_AUDIT\_HMAC\_MASTER}       & le master dont la clé tenant est dérivée \\
+\code{EFE\_META\_PROVENANCE\_ALLOW\_DEV\_KEY} & l'autorisation explicite d'une clé de développement \\
+\code{EFE\_SWARM\_ANCHOR\_LOG}              & le journal d'ancres -- sans lui, pas de détection de troncature \\
+\code{EFE\_LLM\_FRONTIER\_ENABLED}          & les appels aux modèles frontière (Couche 2) \\
+\code{EFE\_LLM\_ACCEPT\_CLEARTEXT\_EGRESS}  & la reconnaissance explicite d'une sortie en clair \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{alerte}
+\textbf{Le constat.} La recherche a été faite et elle est revenue vide : \textbf{aucun} des fichiers de
+déploiement du dépôt (\code{.env.slm}, \code{.env.template}, \code{.envrc}, \code{poc.env},
+\code{docker/Dockerfile.prod}) ne pose un seul des quatre interrupteurs du reçu, et \textbf{aucun
+document hors code} ne mentionne \code{EFE\_META\_PROVENANCE\_TENANT}. Conséquence exacte : un build par
+défaut de Scella ne sert \textbf{aucun reçu} -- pas un reçu faible, aucun. La racine part vide, ce qui
+est le signal honnête câblé à dessein, mais le fait demeure : « Scella fait X » n'est vrai que sous une
+configuration qui n'existe nulle part comme artefact nommé, sauf dans \code{scripts/demo-consensus-receipt.sh}.
+\end{alerte}
+
+Il faut être juste sur l'origine de cette situation : elle ne vient pas d'un oubli mais d'une
+discipline. Le \emph{fail-closed} est une vertu, et l'alternative -- servir un reçu sous clé de
+développement sans que personne l'ait demandé -- serait exactement la malhonnêteté que tout le
+dispositif existe pour empêcher. Le manque n'est donc pas dans le code, il est dans ce qui l'accompagne :
+il manque \textbf{un profil nommé}, disant pour chaque interrupteur ce qu'il achète et ce que son
+absence coûte. C'est une page, et c'est aujourd'hui l'écart le plus rentable du dépôt.
+
+\section{4 · Le delta contre le rapport du 5 août}
+
+Le dépôt dispose d'un point de comparaison daté et écrit : l'analyse composant par composant du
+5 août, dont le verdict d'ouverture était \emph{« presque tout est construit ; presque rien n'est
+servi »}. Cinq jours plus tard, quatre de ses lignes ont changé -- et sa propre alerte centrale est
+fermée.
+
+\renewcommand{\arraystretch}{1.15}
+\begin{center}\small
+\begin{tabular}{@{}>{\raggedright\arraybackslash}p{3.5cm} l >{\raggedright\arraybackslash}p{8.6cm}@{}}
+\toprule
+\textbf{Ligne du 5 août} & \textbf{Aujourd'hui} & \textbf{Ce qui a bougé, et où le vérifier} \\
+\midrule
+Le méta-essaim \newline \sz{NON SERVI · XL} & \partiel &
+  M0, M1 et M2 faits ; moteur réel vérifié (canari H1, e2e DoD\#1). Restent M3 et M4 \\
+Le reçu, pile A \newline \sz{non résistant à la troncature} & \ok &
+  \code{routes/verify.rs:74--78} : \code{root\_matches} existe et entre dans le verdict \\
+Le reçu, pile B \newline \sz{aucun producteur} & \ok &
+  \code{GET /v1/swarm/bundle/:id} monté dans \code{efe-swarm-gateway/src/lib.rs:133} \\
+Couche 2 servie \newline \sz{PII fail-open, budget no-op} & \ok &
+  commits \code{a85f178} puis \code{af1e105} -- dont un identifiant qui ne corrélait rien \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+La ligne « pile A » mérite un mot, parce que c'était l'alerte encadrée en rouge du 5 août : la route
+qui portait le verdict public recalculait la racine et \textbf{ne la comparait jamais} à la racine
+scellée, alors que la comparaison correcte existait un fichier plus loin. Un tiers disposant de
+l'écriture en base et d'\emph{aucune clé} obtenait \code{verified: true} sur un run tronqué. La
+comparaison est là aujourd'hui. Subsiste un \textbf{résidu assumé et documenté} : un run dont la
+racine n'a pas été persistée rend \code{root\_matches: None} et conserve son verdict -- choix de
+non-accusation rétroactive, défendable, mais qui doit être dit plutôt que découvert.
+
+\section{5 · Les maillons faibles d'aujourd'hui}
+
+Ils ont bougé. Le reçu est solide ; ses limites sont nommées, et toutes ont été vérifiées comme
+\emph{non faites} plutôt que supposées telles.
+
+\subsection{5.1 · M4 -- le \code{config\_hash} est \emph{déclaré}, pas \emph{rapporté}}
+
+C'est la limite la plus subtile et la plus importante à énoncer correctement. Le reçu v4 scelle la
+configuration que le \textbf{manifeste demandait}, pas celle que le participant a \textbf{dit servir}.
+Un participant qui répondrait en servant autre chose que sa ligne déclarée ne serait pas démasqué par
+le reçu. La pièce manquante est le certificat porté sur le fil : \code{client/remote\_participant.rs:404}
+retourne encore \code{Ok(NonExpansiveCertificate::Stub)}, un marqueur de phase 1 qui, comme son
+module le dit, n'effectue \textbf{aucun contrôle}. Tant qu'il est là, le mode strict ne peut pas être
+activé sur l'\code{Iterate} servi. \sz{Taille M.}
+
+\subsection{5.2 · 3b -- l'ancre est détenue par l'opérateur}
+
+Le journal posé aujourd'hui supprime la réécriture \emph{rétroactive} : on ne peut plus republier une
+version tronquée d'une ronde déjà ancrée. Il ne supprime pas la confiance dans l'opérateur, qui reste
+maître de son journal. La garantie tierce -- horodatage RFC 3161, témoin externe, log de transparence --
+est le jalon suivant.
+
+C'est ici que la correction annoncée au §1 change l'estimation. Le crate \code{forensic-export} porte
+déjà l'\code{AnchorProof} structurée, l'énumération des méthodes (\code{rfc3161},
+\code{transparency-log}, \code{regulator-deposit}, \code{declared}) et le \code{verify\_anchor} qui
+exécute le contrôle décisif : la preuve commet-elle bien \textbf{ce} DAG. Ce qui manque du côté
+Couche 3 n'est donc pas une invention mais un \textbf{raccordement} : émettre une \code{AnchorProof}
+plutôt qu'une ligne de journal, et brancher la vérification du jeton chez l'émetteur. \sz{Taille M,
+revue à la baisse.}
+
+\subsection{5.3 · M3 -- aucune résistance aux valeurs aberrantes}
+
+Le contrôle est net : zéro opérateur de médiane, de moyenne élaguée ou de type Krum dans le moteur.
+L'agrégation servie est uniforme, donc un participant défaillant ou hostile déplace le consensus à
+proportion de son poids. Ce jalon dépendait de v4 et ne pouvait pas être fait avant : une médiane
+élaguée sur des votes \emph{positionnels} n'est pas auditable -- pour justifier d'avoir écarté une
+contribution, il faut pouvoir la \textbf{nommer}. Le déblocage est acquis depuis ce matin. \sz{Taille L.}
+
+\subsection{5.4 · Un arbitrage laissé ouvert}
+
+Le DoD\#2 demande qu'une topologie dynamique fasse \textbf{échouer} la requête ; le code journalise un
+avertissement et sert. Ce n'est pas un bug -- c'est une décision non tranchée, et elle doit l'être
+explicitement, dans un sens ou dans l'autre, plutôt que rester un écart entre un document et un
+comportement. \sz{Taille XS.}
+
+\section{6 · Portée : ce que cet état des lieux ne couvre pas}
+
+Cette analyse a relu la Couche 2 (conformité), la Couche 3 (conformité \emph{et} actualité des
+documents) et les deux piles de reçu. Le Fil P l'avait été précédemment. N'ont \textbf{pas} été
+audités dans cet arc : le \textbf{Fil B} (le relais SLM entre modèles frontière) et la \textbf{couche
+nano}. Leur silence ici n'est pas un satisfecit.
+
+Une sonde a par ailleurs été passée sur les documents de la Couche 2, avec la signature qui avait
+révélé huit péremptions côté Couche 3 (« n'existe pas », « 0 hit », « non câblé »). Trois occurrences,
+\textbf{toutes disculpées} après lecture : un récit de piège corrigé, une table de corrections, un
+extrait de code. Ce n'est pas un balayage complet -- c'est une sonde, et elle est revenue propre.
+
+\section{7 · Position, et les deux choses qui manquent}
+
+La branche \code{couche2-m0-frontier} porte \textbf{31 commits} non intégrés depuis le merge du
+12 juillet. L'arbre de travail est propre, aux fichiers d'une session concurrente près (quatre sources
+et deux PDF, intacts). Le dépôt compte 66 crates ; la chaîne du reçu -- moteur servi, bibliothèque de
+vérification, binaire tiers -- est couverte par plusieurs centaines de tests dont le détail est mesuré
+séparément.
+
+\begin{acquis}
+\textbf{Pour l'objectif réel, la capacité n'est plus le goulot.} L'artefact de conversion existe, il
+tourne en une commande, et il survit à la première question dure -- \emph{quel agent, dans quelle
+version, combiné selon quelle règle} -- à laquelle un reçu positionnel ne pouvait pas répondre. C'était
+précisément l'objet des deux derniers jalons.
+\end{acquis}
+
+Ce qui manque tient en deux choses, et aucune des deux n'est technique.
+
+\textbf{Le profil.} Sept interrupteurs et deux features qui font que Scella fait ce que ses documents
+de présentation décrivent, écrits une fois, avec le coût de chaque absence. Sans lui, la seule
+configuration cohérente qui existe est un script de démonstration -- et c'est une phrase qu'on ne veut
+pas avoir à prononcer devant un évaluateur.
+
+\textbf{La branche.} Trente-et-un commits qui ne sont visibles que si l'on sait quelle branche
+regarder. Quiconque clone \code{main} aujourd'hui ne voit ni M2, ni v4, ni l'ancrage, ni la démo, ni le
+job d'intégration continue qui défend le DoD\#1.
+
+Le reste -- M4, 3b, M3 -- est du travail de qualité qui renforcera des propriétés que personne ne verra
+dans une réunion de trente minutes.
+
+\section{Annexe · Comment re-vérifier ce rapport}
+
+Un état des lieux qui demande qu'on le croie sur parole a le même défaut que le \emph{vert malhonnête}
+qu'il dénonce. Chaque affirmation du document est donc reproductible en une commande ou à une ligne de
+code précise, depuis la racine du dépôt. Les affirmations \textbf{négatives} -- « M3 n'existe pas » --
+sont les plus importantes à pouvoir contrôler, parce que ce sont celles qu'un lecteur ne peut pas
+vérifier en lisant : une recherche qui revient vide est une preuve, à condition d'être rejouable.
+
+\renewcommand{\arraystretch}{1.22}
+\begin{center}\small
+\begin{tabular}{@{}>{\raggedright\arraybackslash}p{5.05cm} >{\raggedright\arraybackslash}p{11.1cm}@{}}
+\toprule
+\textbf{Affirmation} & \textbf{Ce qui la rejoue} \\
+\midrule
+66 crates & \code{ls crates | wc -l} \\
+31 commits non intégrés & \code{git rev-list -{}-count main..HEAD} \\
+\code{main} fusionnée le 12 juillet & \code{git log -1 -{}-format=\%ci main} \\
+Les défauts sont vides &
+  \code{grep -A1 '\textasciicircum\textbackslash\lbrack features\textbackslash\rbrack' \newline
+  crates/efe-\{server,swarm-gateway,meta-swarm\{,-server\}\}/Cargo.toml} \\
+Aucun fichier de déploiement ne pose les interrupteurs du reçu &
+  \code{grep -nE 'META\_PROVENANCE|SWARM\_ANCHOR' .env.slm .env.template .envrc poc.env docker/Dockerfile.prod} \\
+Aucun document hors code ne les mentionne &
+  \code{grep -rl EFE\_META\_PROVENANCE . -{}-include='*.md' -{}-include='*.yml'} \\
+M4 non fait & \code{client/remote\_participant.rs:404} $\rightarrow$ \code{Ok(NonExpansiveCertificate::Stub)} \\
+M3 non fait & \code{grep -rniE 'trimmed\_mean|krum|coordinate\_wise\_median' crates/efe-meta-swarm/src} \\
+3b : la structure existe déjà & \code{forensic-export/src/anchor.rs:162} $\rightarrow$ \code{pub fn verify\_anchor} \\
+Pile A : la racine est comparée & \code{efe-swarm-gateway/src/routes/verify.rs:74--78} \\
+Pile B : le producteur existe & \code{efe-swarm-gateway/src/lib.rs:133} \\
+Le vérifieur est sans dépendance & \code{cargo tree -p verify-meta-mini -e normal -{}-prefix none} \\
+L'ensemble se démontre en une commande & \code{bash scripts/demo-consensus-receipt.sh -{}-real} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Deux avertissements sur cette annexe, pour qu'elle ne soit pas lue plus largement qu'elle ne vaut. Les
+lignes qui portent sur des \emph{absences} valent à la date du document et pour le périmètre indiqué au
+§6 : elles ne disent rien du Fil B ni de la couche nano. Et la dernière ligne exige la feature
+\code{core-integration}, donc quelques minutes de compilation au premier passage -- ce qui est
+précisément le genre de détail qu'il vaut mieux découvrir avant une démonstration qu'au milieu.
+
+\vspace{4pt}
+\begin{these}
+\small\textbf{Rappel de cadrage, à conserver dans toute présentation.} Le reçu atteste l'\textbf{intégrité}
+d'une suite de pas, jamais la \textbf{correction} d'une décision. Il est \emph{tamper-evident pour un
+détenteur de clé}, pas \emph{trustless pour un tiers}. Et les participants du mode réel exécutent une
+fusion latente Mode-1 numérique : ce ne sont pas des « vrais SLM ».
+\end{these}
+
+\end{document}
