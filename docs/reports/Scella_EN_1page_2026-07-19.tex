@@ -1,0 +1,117 @@
+\documentclass[10pt]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage[english]{babel}
+\usepackage{newpxtext,newpxmath}
+% 1.35 -> 1.18 cm : le recu ancre + le meta-essaim nominatif ajoutent ~7 lignes.
+% Un << une-page >> qui deborde n'est plus un une-page ; on reprend la marge plutot
+% que d'amputer le fond.
+\usepackage[a4paper,margin=1.15cm]{geometry}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{enumitem}
+
+\definecolor{efenavy}{HTML}{1F3A5F}
+\definecolor{efegray}{HTML}{54606E}
+\definecolor{efesolve}{HTML}{2C6E49}
+
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{2pt}
+\linespread{1.0}
+\pagestyle{empty}
+
+\newcommand{\hd}[1]{\vspace{3.5pt}{\color{efenavy}\large\bfseries #1}\par\vspace{1.5pt}}
+\newlist{tight}{itemize}{1}
+\setlist[tight]{leftmargin=1.25em,itemsep=2pt,topsep=1.5pt,parsep=0pt,label=\textendash}
+
+\begin{document}
+
+\begin{center}
+{\Huge\bfseries\color{efenavy} Scella}\\[3pt]
+{\large\color{efegray}\itshape small-model coordination that writes one re-verifiable receipt}
+\end{center}
+\vspace{2pt}
+
+\textbf{The problem.} Getting several AIs (Claude, GPT, an in-house model) to cooperate on one
+decision in a regulated setting, and proving afterwards, to a third party and without handing over
+your data or taking the operator's word for it, \emph{exactly} what each one did. Scella does it by
+coordinating \emph{small} models around the big ones and sealing every step into a single,
+offline-re-verifiable receipt.
+
+\hd{The latent lineage: deterministic, sealed fusion}
+\begin{tight}
+\item \textbf{Nano-robots:} the elementary unit, a row of a tensor in \texttt{efe-core}, updated by a
+deterministic coupling step (fixed population, neutral priors, one fusion round). It is the
+addressable unit that makes every computation \emph{traceable and identically replayable}, the basis
+of the audit. {\color{efesolve}\textbf{Solves (3):}} the replayable unit that lets a decision be audited to the bit.
+\item \textbf{Swarm $\Phi$:} fuses the units into a \textbf{consensus centroid} in one deterministic
+round (\texttt{init\_sigma}=0, seed from the spec), bit-for-bit reproducible and replayable. An
+adversarial Lipschitz estimator gives a \emph{measured} stability bound ($\hat{L}\approx0.69$
+dynamic, $0.37$ fixed) as a fail-closed guard, the kind a safety certification can require. {\color{efesolve}\textbf{Solves (3):}} a re-playable result with a measured stability bound.
+\item \textbf{Meta-swarm:} coordinates several swarms over gRPC with \textbf{strict mTLS} (TLS 1.3,
+SAN check); the engine manifest travels in the protocol and the execution graph re-derives from the
+declared topology, so the layer is auditable independently of what the participants compute. Runs the
+AI \emph{where the data lives}: multi-region, sovereignty (banking, healthcare, public sector). {\color{efesolve}\textbf{Solves (1) \& (2):}} coordinated, sealed AI while the data stays with its owner.
+\textbf{A served round now writes its own receipt} (\texttt{POST /v1/consensus}) that \textbf{names
+its actors}: each swarm by id, its \emph{declared} \texttt{config\_hash}, and the aggregation rule
+--- \emph{which agent, in which version, combined how}. Rewriting one breaks the re-proof.
+\end{tight}
+
+\hd{The interstice lineage: small models between the big ones}
+\begin{tight}
+\item \textbf{The Relay:} inserts a small model (Qwen3-0.6B, GBNF-constrained) between two frontier
+calls. It rewrites one model's dialect (\texttt{ClaudeXml}) into a canonical form, then into the
+other's (\texttt{Gpt4Json}), and seals each rewrite. Sealed, re-verifiable per-hop provenance;
+\texttt{slm\_mediated} is true only if \emph{all} hops are SLM; mission deadlines bound each hop. The
+most finished brick, served opt-in, complete. {\color{efesolve}\textbf{Solves (1):}} several providers cooperate without glue, each hop an auditable trace.
+\item \textbf{The Framing:} generalizes the Relay with a \textbf{compressor} (Llama-3.2-1B) before and
+a \textbf{verifier} (Phi-4-mini, closed verdict) after a frontier call, in the same receipt. The
+simple tasks go to the SLM, the reasoning to the big model; the same framing works around Claude, GPT
+or Gemini, and can route the reasoning to several of them for the same question. {\color{efesolve}\textbf{Solves (4):}} cuts cost and catches hallucinations (compress and verify).
+\item \textbf{SLM mediator swarm:} the edge between two LLMs becomes a declared, typed chain of sealed
+hops (translate $\rightarrow$ compress $\rightarrow$ verify $\rightarrow$ retranslate), each carried
+by a small model chosen by role. About two thirds is inherited from the Relay; the new part is a
+per-role registry, the typed chain, and the runtime that seals $N$ nodes. {\color{efesolve}\textbf{Solves (1) \& (3):}} a multi-step decision that arrives already carrying its proof.
+\item \textbf{Flexible MLP} \emph{(future):} a tiny quantized network (int8, a few kilobytes) that
+\emph{self-adapts on-device} under a \textbf{proven adaptation invariant}. Placed upstream, it scores
+anomalies and routes: confident cases take the light path, anomalous ones go to full verification (or
+to a human). It reduces cost; it does not establish trust. \emph{Separate piece, not yet integrated.} {\color{efesolve}\textbf{Solves (4):}} pays full verification only on the anomalous fraction.
+\end{tight}
+
+\hd{The receipt: what binds it all}
+All of Scella writes \textbf{one re-verifiable receipt}: each step is the same sealed, chained HMAC
+node (per-tenant key), re-derivable by any key-holder, and tampering with one link makes the next fail
+to verify. The root is \textbf{published to an append-only anchor log before the receipt is served}, closing what
+re-proof cannot see: a \textbf{truncated} round re-proves \emph{perfectly} (a valid chain's prefix is
+a valid chain); only the published claim exposes it, \textbf{without any key}. \textbf{Exact
+guarantee:} tamper-evident for whoever holds the key; still \emph{not trustless} --- the log holder is
+the key holder, so the anchor removes \emph{retroactive} rewriting, not trust. Third-party anchoring
+(RFC 3161) not yet wired; Flexible MLP not yet integrated. An
+asset of \textbf{verifiable discipline}, not a distributed vault. {\color{efesolve}\textbf{Solves (0):}} a third party re-derives the proof offline, without your systems.
+
+\hd{Results: measured, positive}
+\begin{tight}
+\item \textbf{Engineering.} Nearly \textbf{1,200 green tests} across the runtime, the audit chain and
+the provenance; the Relay \textbf{served \& complete} (about 220 tests, $\sim$19 adversarial fixes).
+\item \textbf{Small vs big.} A small model (3.8\,B) \emph{alone} \textbf{matches a big one} (12\,B) at
+\textbf{87.5\%}, at lower cost; reasoning takes it to \textbf{94\%}, the correct answer present among
+the candidates \textbf{100\% of the time}.
+\item \textbf{Live economics.} Routing on real Claude + Gemini keys \textbf{cuts cost $\sim$−27\%}
+(up to $\sim$90\% on the cheap-routable) with \textbf{quality held}, and latency up to
+\textbf{$\sim$3× lower} on fast cases.
+\item \textbf{Framing.} On a real end-to-end run, pre-processing \textbf{cut the big model's input by
+$\sim$85\%} (132$\rightarrow$20 tokens), answer \textbf{verified SUPPORTED}.
+\item \textbf{Method.} A \textbf{re-provable measurement instrument}: deterministic, reproducible
+results with frozen constants; it reports what it measures, positives and gaps alike.
+\end{tight}
+
+% Le contenu ajoute (recu ancre, meta-essaim nominatif) pousse la note de bas sur une
+% seconde page. `\enlargethispage` est l'outil prevu pour cela : on etire CETTE page
+% plutot que d'ecraser la marge de tout le document ou d'amputer le fond.
+\enlargethispage{3\baselineskip}
+\vspace{3pt}
+{\color{efegray}\hrule height 0.4pt}
+\vspace{2pt}
+{\scriptsize\color{efegray}(0)--(4) refer to the problems above: (0)~prove to a third party, offline, without your data or trusting the operator; (1)~orchestrate several providers with an auditable trace; (2)~keep the data at its owner's; (3)~replayable, re-verifiable decisions; (4)~cut cost and hallucination.}
+
+\end{document}

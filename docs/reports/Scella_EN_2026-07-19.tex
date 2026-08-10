@@ -1,0 +1,313 @@
+\documentclass[11pt]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage[english]{babel}
+\usepackage{newpxtext,newpxmath}
+\usepackage[a4paper,top=1.6cm,bottom=1.55cm,left=2.1cm,right=2.1cm]{geometry}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{titlesec}
+\usepackage[most]{tcolorbox}
+\usepackage{fancyhdr}
+\usepackage{enumitem}
+\usepackage{booktabs}
+\usepackage{listings}
+\lstdefinestyle{jsonic}{basicstyle=\ttfamily\footnotesize,backgroundcolor=\color{boxgray},%
+  breaklines=true,columns=fullflexible,keepspaces=true,xleftmargin=6pt,%
+  framexleftmargin=6pt,aboveskip=4pt,belowskip=4pt}
+\lstset{style=jsonic}
+
+\definecolor{efenavy}{HTML}{1F3A5F}
+\definecolor{efeteal}{HTML}{0E7A6E}
+\definecolor{efeamber}{HTML}{B25A1E}
+\definecolor{efeplum}{HTML}{7A4EA8}
+\definecolor{efegray}{HTML}{54606E}
+\definecolor{efesolve}{HTML}{2C6E49}
+\definecolor{boxgray}{HTML}{F3F5F8}
+\definecolor{boxamber}{HTML}{FBF3EA}
+\definecolor{boxedge}{HTML}{D9E0EA}
+
+\titleformat{\section}{\color{efenavy}\large\bfseries}{}{0pt}{}
+\titlespacing{\section}{0pt}{7pt}{3pt}
+\titleformat{\subsection}[runin]{\color{efenavy}\bfseries}{}{0pt}{}[:\;]
+\titlespacing{\subsection}{0pt}{5pt}{0.5em}
+
+\setlength{\parskip}{0.6pt}
+\setlength{\parindent}{0pt}
+\setlength{\emergencystretch}{3em}
+
+\pagestyle{fancy}\fancyhf{}
+\renewcommand{\headrulewidth}{0.3pt}
+\lhead{\small\color{efegray}Scella}
+\rhead{}
+\cfoot{\small\color{efegray}\thepage}
+
+\newcommand{\mesure}[1]{{\color{efeteal}\textbf{Measured.} }#1\par}
+\newcommand{\concept}[1]{{\color{efenavy}\textbf{Concept:} }#1\par}
+\newcommand{\exemple}[1]{{\color{efeamber}\textbf{Example:} }#1\par}
+\newcommand{\utilite}[1]{{\color{efeplum}\textbf{Real-world use:} }#1\par}
+\newcommand{\solves}[2]{{\color{efesolve}\textbf{Solves #1:} }#2\par}
+
+\newtcolorbox{these}{colback=boxgray,colframe=boxedge,boxrule=0.5pt,arc=2.5pt,
+  left=8pt,right=8pt,top=6pt,bottom=6pt}
+\newtcolorbox{cadre}{colback=boxamber,colframe=efeamber!55,boxrule=0.6pt,arc=2.5pt,
+  left=8pt,right=8pt,top=6pt,bottom=6pt}
+
+\begin{document}
+
+\begin{center}
+{\Huge\bfseries\color{efenavy} Scella}
+\end{center}
+\vspace{6pt}
+
+\begin{these}
+\textbf{The problem.} Getting several AIs (Claude, GPT, an in-house model) to cooperate on a single
+decision in a regulated setting, and proving afterwards, to a third party and without handing over your data or taking the operator's word for it, \emph{exactly} what each one did.
+
+\textbf{What Scella concretely solves:}
+\begin{itemize}[leftmargin=1.3em,itemsep=1.5pt,topsep=2pt,parsep=0pt,label=\textendash]
+\item orchestrate \textbf{several AI providers} with no third-party glue, with an auditable trace;
+\item keep the \textbf{data at its owner's} (multi-region) while coordinating the AI;
+\item make every decision \textbf{replayable and re-verifiable offline}, without access to the systems;
+\item \textbf{cut cost and hallucination} on long documents: compress before the big model, verify
+after against the sources.
+\end{itemize}
+\vspace{2pt}
+\textbf{The interstice takes three forms:} \textbf{The Framing}: compress the prompt before the call,
+verify the answer after (simple tasks to the SLM, reasoning to the big model); \textbf{the SLM
+mediator swarm}: the edge between two LLMs becomes a declared chain of small sealed agents
+(translate → compress → verify); and, \textbf{alongside a coding agent}, small agents process a big
+model's stream on the side (check against the repo, validate a schema) without blocking its loop.
+Six bricks, two lineages, detailed below.
+\end{these}
+
+\section{I \;\textbar\; The latent lineage: nano-robots, swarm, meta-swarm}
+
+\subsection{Nano-robots}
+The nano-agent is the \textbf{elementary unit} of the latent lineage: a \emph{row of a tensor}, a
+vector in the space of \texttt{efe-core}, updated by a coupling step. Its dynamics are
+\textbf{deterministic} and its invariants are explicit in the code: fixed population, neutral
+$\sin(i)$ priors, a single fusion round. It is the unit the swarm aggregates and the meta-swarm
+distributes.
+\concept{A nano-agent = one row of the state tensor, updated by a fixed coupling step. Not a
+process: a vector of numbers.}
+\utilite{The addressable unit that makes every computation \emph{traceable and identically
+replayable}: the basis for the audit and the reproducibility required in a regulated environment.}
+\exemple{On a query, 16 samples are drawn from the model: each is a row of the state tensor, agent
+no.\,3 = the 3rd sample. The coupling step brings them closer. \emph{Other case:} 16 samples already
+in agreement $\rightarrow$ a step changes nothing; scattered $\rightarrow$ it tightens them.}
+\solves{(3)}{the addressable, identically-replayable unit that lets a whole decision be re-played and audited to the bit.}
+
+\subsection{The swarm ($\Phi$)}
+The swarm \textbf{fuses the nano-agents into a latent fixed point} $\Phi$: one round, deterministic
+(\texttt{init\_sigma}=0, seed derived from the spec), that condenses the population into a
+\textbf{consensus centroid}: the latent position the population converges to in one round,
+bit-for-bit reproducible and therefore \textbf{replayable}: you re-run a fusion and get the same
+result, which feeds the audit. Determinism is hardened until $\Phi$ is \emph{pure by construction}:
+two concurrent fusions never conflict, one same spec always yields the same result.
+\mesure{The fixed point is characterized by an \textbf{adversarial Lipschitz estimator} (by
+bisection, with no internal access to the model) that gives its empirical constant ($\hat{L}\approx0.69$ in dynamic topology, $0.37$ in fixed topology) and serves as a \textbf{fail-closed guard}. One $\Phi$ pass costs $\sim$2.6 s (zeroing a 1 GiB arena).}
+\concept{Fusing = iterating the coupling to a fixed point; the output is the centroid the rows
+converge to.}
+\utilite{A deterministic result paired with a \emph{measured stability bound} (Lipschitz): the kind
+of bound a safety certification may require (automotive, medical, aerospace).}
+\exemple{The 16 samples of an answer converge in one round to their consensus position (the
+centroid), bit-for-bit reproducible. \emph{Other case:} 12 close samples and 4 outliers
+$\rightarrow$ the centroid is pulled toward the outliers (uniform mean, no outlier detection).}
+\solves{(3)}{a deterministic, bit-for-bit replayable result with a measured stability bound, so the fusion can be re-verified rather than trusted.}
+
+\subsection{The meta-swarm}
+The meta-swarm \textbf{coordinates several swarms} over gRPC. It is the \emph{coordination layer} of
+the latent lineage, real and tested: pure Tensor$\rightarrow$Tensor participants, an \textbf{engine
+manifest carried in the protocol} (\texttt{kappa} and seed explicit, so a binary of another version
+refuses an engine row it does not know), a \textbf{strict startup check}, and \textbf{strict mTLS}
+(TLS 1.3, SAN verification). The purity of the participants and the end-to-end seal make it the
+\textbf{deployment base (C.3)}: the infrastructure that \emph{will execute} the interstice-lineage
+hops, under the same integrity guarantees as the rest of the system. The execution graph is
+\textbf{re-derived from the declared topology}, which makes this layer \emph{auditable} independently
+of what the participants compute.
+\concept{Several swarms on separate machines; a coordinator exchanges their centroids over gRPC +
+mTLS and seals each send.}
+\utilite{Run the AI \emph{where the data lives} (multi-region, multi-tenant) with sealed, auditable
+coordination: data residency, sovereignty (banking, healthcare, public sector).}
+\exemple{Several machines each process their batch in parallel; the coordinator exchanges their
+results over mTLS and seals each send; an audit re-traces who produced what, without replaying the
+computations. \emph{Other case:} a machine runs an incompatible version $\rightarrow$ its unknown
+engine row gets it refused.}
+\solves{(1) \& (2)}{coordinates the models across machines and regions with sealed, auditable exchanges while the data never leaves its owner.}
+
+{\color{efenavy}\textbf{The round now writes its own receipt.}} Until recently the coordination layer
+was auditable in its \emph{plumbing} --- who exchanged with whom, under which engine --- but the
+round itself produced no artefact. A served round now seals every consensus step as it iterates and
+returns the two files an offline verifier eats (\texttt{meta\_steps.jsonl},
+\texttt{meta\_manifest.json}), exposed as \texttt{POST /v1/consensus}. Asking for the full receipt is
+opt-in; the root always travels.
+\concept{One coordination round in, one re-provable receipt out --- produced by the served path, not
+by a demonstration path beside it.}
+\utilite{The compliance question is rarely \emph{what came out}; it is \emph{who contributed what,
+running which version, combined under which rule}. The receipt answers all three: each participating
+swarm is named, carries its \emph{declared} \texttt{config\_hash}, and the aggregation rule travels
+with its coefficients. Sealing the identities is what turns a mathematical trace into an audit
+record --- before it, the receipt could only say \emph{position 1 contributed hash h}.}
+\exemple{A procurement round over three swarms (supplier scoring, contract risk, spend
+categorisation) returns its consensus and a receipt naming the three, each with the SHA-256 of its
+declared engine block. \emph{Other case:} someone rewrites one name, swaps two agents, or changes
+the rule in the manifest $\rightarrow$ the re-proof fails and says which.}
+\section{II \;\textbar\; The interstice lineage: The Inter-model Relay, The Framing}
+
+\subsection{The Inter-model Relay}
+The inter-model relay inserts \textbf{a small model} (Qwen3-0.6B, decoding constrained by a GBNF
+grammar) between two frontier calls: it translates one's dialect (\texttt{ClaudeXml}) into a
+canonical form, then into the other's dialect (\texttt{Gpt4Json}). It is the most \textbf{finished}
+brick: coded and pushed end-to-end, served opt-in, protected by a single-probe circuit breaker, with
+\textbf{sealed, re-verifiable per-hop provenance} (each hop is an HMAC node; \texttt{slm\_mediated}
+is true only if \emph{all} hops are SLM) and \textbf{mission deadlines that bound the hop} (stamped
+degradation, six stable reasons). Built in five milestones (byte-identical seam when the SLM is
+absent, grammar, opt-in service, chained provenance, deadlines), with a gap-free completeness audit
+and four adversarial reviews (twenty-six fixes).
+The Relay is justified by its \textbf{function}: dialect translation, sealed provenance, sovereignty: every inter-model exchange becomes an \emph{attributable and re-verifiable} hop, relayed from one
+model to the other. It is the brick from which the whole interstice lineage inherits this integration
+point. The small model's vocabulary is fixed by a \textbf{GBNF union grammar} that ties each schema
+to its form, and six stable degradation reasons make every fallback legible in the receipt.
+\concept{Between two big models, a small model rewrites one's output into the exact form the other
+expects, and seals that rewrite.}
+\utilite{Make several AI providers (Claude, GPT, in-house model) cooperate \emph{without third-party
+glue}, with an auditable trace: multi-provider orchestration in a regulated enterprise (finance,
+insurance, defense).}
+\exemple{Claude extracts a clause from a supplier contract and renders it in XML; the next step
+expects JSON to check it against a policy. The small model translates via a canonical form; the
+receipt keeps the hashes. \emph{Other case:} Gemini renders the same clause in Markdown
+$\rightarrow$ canonical $\rightarrow$ the XML form Claude expects.}
+\solves{(1)}{lets Claude, GPT and an in-house model cooperate without third-party glue, each exchange sealed as an attributable, re-verifiable hop.}
+
+\subsection{The Framing}
+The Framing generalizes the Relay: instead of only \emph{translating between} two models, it
+\emph{frames} a frontier call (a \textbf{compressor} before, a \textbf{verifier} after) inside the same re-verifiable receipt. \textbf{The principle:} the \emph{simple} tasks (compress, check against sources) go to the small model, \textbf{the reasoning to the big model.} The small agents are
+bounded, grammar-constrained, and \textbf{LLM-agnostic} about what they frame: the same framing works
+around \textbf{Claude, GPT or Gemini}. It is additive: a hop type \{Prep, Translate, Check\} where an
+inherited hop with no label stays a Translate, seals intact. The compressor (Llama-3.2-1B,
+temperature 0, \emph{map-reduce beyond $\sim$512 tokens}) reduces the prompt; the verifier
+(Phi-4-mini, closed verdict) annotates an assertion: an \textbf{addition to the receipt}, in strict
+parity with the unverified path. \texttt{debate} is \emph{excluded} from prep (topic semantic drift);
+thresholds are \emph{reused}, not copied, from \texttt{efe-coordinator}. \texttt{slm\_mediated} stays
+frozen to translation hops only.
+\textbf{Status: architecture written ($\sim$535 lines, milestones a$\rightarrow$d), ready to code.}
+The compressor and verifier attach \textbf{by role} (\texttt{prep\_for} / \texttt{check\_for}), like
+the Relay's translator, and write into the same receipt: the Framing is a natural extension of the
+hop.
+\concept{Around a frontier call: a small model before (compresses the prompt), another after
+(verifies the answer): both in the same receipt.}
+\utilite{Long-document analysis (legal, insurance, procurement): reduce what is sent to the model and
+check its answer against the sources: avoid a costly hallucination on a contract.}
+\exemple{Question on a 40-page contract: the compressor reduces the contract to the relevant
+passages before the call; the verifier checks the answer (``clause 7: notification within 72 h'')
+against the cited passages $\rightarrow$ SUPPORTED, as an annotation. \emph{Other case:} the answer
+contradicts the clause $\rightarrow$ CONTRADICTED, flagged, the call goes through anyway.}
+\solves{(4)}{compresses what is sent to the big model and checks its answer against the sources, cutting cost and catching hallucinations on long documents.}
+
+\section{III \;\textbar\; The SLM mediator swarm}
+
+It is a \textbf{different kind of swarm} from Section~I's: the latent swarm (nano $\rightarrow$
+$\Phi$ $\rightarrow$ meta) is Tensor$\rightarrow$Tensor and \emph{selects} a consensus; the mediator swarm (this one) is made of small language models that \emph{carry} information between the big
+ones.
+
+\textbf{The thesis.} An edge between two LLM agents is an interstice you can instrument. The Relay
+put a single translator there; the mediator swarm puts a \textbf{declared chain of specialized small agents} (translate, compress, verify), each staying a \emph{sealed hop}, time-bounded, attributable.
+It does not produce ``more intelligence'': it produces a re-verifiable receipt of everything that
+passed through.
+
+\concept{Widen the Relay: instead of one small model per edge, a declared chain (translate
+$\rightarrow$ compress $\rightarrow$ verify $\rightarrow$ translate), each step a sealed hop.}
+\utilite{Regulated decision pipelines (procurement, compliance, KYC, claims): each step sealed, the
+decision arrives with a re-verifiable receipt: the audit is built in, not bolted on after.}
+\exemple{Purchase request: Claude drafts the supplier's risk assessment $\rightarrow$ translate
+$\rightarrow$ check the supplier against a sanctions list $\rightarrow$ compress $\rightarrow$ GPT
+recommends a decision; the receipt traces the 4 hops. \emph{Other case:} the sanctions verifier goes
+down $\rightarrow$ its hop degrades, stamped, the chain continues and the receipt says so.}
+\solves{(1) \& (3)}{turns a multi-step, multi-provider decision into a declared chain of sealed hops, so the decision arrives already carrying its re-verifiable proof.}
+
+\textbf{Alongside an LLM (coding agent).} Another topology: the swarm runs \emph{beside} a single
+model, not between two. While an agent writes code, small agents process its stream in parallel
+(check a claim against the repo, validate that an edit respects a schema) without blocking its loop,
+each a sealed hop in the receipt. \emph{Not designed in detail, not coded.}
+
+\subsection{What it is, precisely}
+An edge $A\rightarrow B$ is no longer a single hop but an \emph{ordered list} (translate $\rightarrow$
+compress $\rightarrow$ verify $\rightarrow$ retranslate), each step carried by a small model chosen
+\emph{by role} from a registry. The composition is \textbf{declared}, frozen per mission type.
+
+\subsection{A hop's steps, and the receipt}
+Each small agent passes the guards, calls its model under a GBNF grammar, validates the typed form
+(\emph{rejects} if wrong), stamps itself (engine + reason), and seals into HMAC. The mission produces
+\textbf{a single re-verifiable receipt}; \texttt{slm\_mediated} is true only if \emph{all}
+translation hops are SLM, and falsifying a sealed label breaks the re-proof.
+
+\subsection{The Flexible MLP (upstream anomaly filter, future)}
+The \textbf{Flexible MLP} is a small quantized network (int8, a few kilobytes) that \emph{self-adapts
+on-device} under a \textbf{proven adaptation invariant}: it changes without ever violating its
+guarantee. Placed \emph{upstream} of the chain, it computes an \textbf{anomaly score} that
+\emph{routes}: confident cases take the light path, anomalous ones go to full verification (or to a
+human). You only pay the heavy control on the anomalous fraction. \textbf{Its limit:} it reduces
+cost, it does not establish trust. \textbf{Separate piece, not yet integrated into Scella.}
+\solves{(4)}{routes confident cases to the light path and pays full verification only on the anomalous fraction, cutting the cost of verification (without claiming to establish trust).}
+
+\vspace{3pt}
+{\color{boxedge}\hrule height 0.6pt}
+\vspace{3pt}
+{\color{efenavy}\textbf{The receipt: what binds all of Scella.}} The six bricks write only \textbf{one
+re-verifiable receipt}: each step is the same \textbf{sealed, chained HMAC node}, re-derivable by any
+key-holder; the \textbf{Flexible MLP}, once integrated, will seal its triage decision as one more
+node. The root is now \textbf{published to an append-only anchor log before the receipt is served}
+--- one log shared across the layers, so an auditor has a single place to look. That closes the one
+thing re-proof cannot see: \textbf{truncation}. The prefix of a valid HMAC chain is itself a valid
+chain, so a shortened round re-proves \emph{perfectly} --- the manifest carries the step count, but
+it travels \emph{with} the bundle, and whoever truncates corrects it. Only a claim published
+\emph{beforehand and elsewhere} exposes the cut, and checking it takes no secret: comparing two
+strings and two integers. Hence \textbf{truncation is detectable without the key}, and the offline
+verifier accepts an anchor \emph{without} one --- saying explicitly, in that mode, that the chain has
+\emph{not} been re-proved. \textbf{Exact guarantee:} \emph{tamper-evident for whoever holds the key};
+still \emph{not trustless} --- the log holder is the key holder, so the anchor removes
+\emph{retroactive} rewriting, not trust in the operator. Third-party anchoring (RFC 3161, external
+witness) is the named next step, not done. Flexible MLP not yet integrated. An asset of
+\textbf{verifiable discipline}, not a distributed vault.
+\solves{(0)}{the one re-verifiable receipt a third party re-derives offline, without your systems and without trusting the operator: exactly what each one did.}
+
+\vspace{5pt}
+\section{Results -- what it yields, by part}
+What the real measurements established, positively, brick by brick:
+\begin{itemize}[leftmargin=1.3em,itemsep=2.5pt,topsep=3pt,label=\textendash]
+\item \textbf{Nano-robots \& the receipt} -- a \textbf{tested and reviewed} foundation: nearly
+\textbf{1,200 green tests} on the runtime, the audit chain and the provenance; each step sealed and
+re-verifiable.
+\item \textbf{Swarm $\Phi$ (latent fusion)} -- a small model (3.8\,B) \emph{alone} \textbf{matches a
+big one} (12\,B) on a real task (\textbf{87.5\%}), at lower cost; reasoning takes it from 40\% to
+\textbf{94\%} on arithmetic (the correct answer \textbf{present among the candidates 100\% of the
+time}); \textbf{deterministic, bit-for-bit replayable} execution, under a measured stability guard.
+\item \textbf{Meta-swarm (coordination)} -- validated \emph{live} on real providers (Claude +
+Gemini): \textbf{cost cut} ($\sim$−27\% aggregate, up to $\sim$90\% on the cheap-routable),
+\textbf{quality held}, latency up to $\sim$3× lower on fast cases.
+\item \textbf{The consensus receipt} -- a served round returns a receipt \textbf{naming its three
+swarms}, each with the SHA-256 of its declared engine block, and the aggregation rule. A verifier
+whose dependency tree is \emph{literally empty} re-proves it offline; rewriting one identity makes
+the re-proof fail. And a \textbf{truncated} round --- which re-proves \emph{perfectly}, since a valid
+chain's prefix is a valid chain --- is caught by the published root \textbf{with no key at all}.
+Checkable in one command: \texttt{bash scripts/demo-consensus-receipt.sh -{}-real}.
+\item \textbf{The Relay (Thread B)} -- \textbf{served and complete} (B.0→B.4), hardened by adversarial
+review ($\sim$19 fixes), $\sim$220 tests; each inter-model hop \textbf{sealed and re-verifiable}.
+\item \textbf{The Framing} -- on a real end-to-end run, pre-processing \textbf{cut the big model's
+input by $\sim$85\%} (132→20 tokens), answer \textbf{verified SUPPORTED}.
+\item \textbf{SLM mediator swarm} -- built on the Relay's \emph{proven} hop (\textbf{two thirds
+already there}, tested); the declared chain is its natural extension.
+\item \textbf{The method} -- a \textbf{re-provable measurement instrument}, disciplined: reproducible
+results, frozen constants.
+\end{itemize}
+
+% Le resultat ajoute (le recu de consensus) pousse une demi-ligne de note sur une
+% 5e page. On etire CETTE page plutot que de retoucher la mise en page du document.
+\enlargethispage{3\baselineskip}
+\vspace{4pt}
+{\color{efegray}\hrule height 0.4pt}
+\vspace{2.5pt}
+{\footnotesize\color{efegray}(0)--(4) refer to the problems above: (0)~prove to a third party, offline, without your data or trusting the operator; (1)~orchestrate several providers with an auditable trace; (2)~keep the data at its owner's; (3)~replayable, re-verifiable decisions; (4)~cut cost and hallucination.}
+
+\end{document}
