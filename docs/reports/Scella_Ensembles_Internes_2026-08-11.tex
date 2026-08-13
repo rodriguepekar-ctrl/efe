@@ -1,0 +1,351 @@
+\documentclass[10pt]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage[french]{babel}
+\usepackage{newpxtext,newpxmath}
+\usepackage[a4paper,top=1.5cm,bottom=1.35cm,left=1.6cm,right=1.6cm]{geometry}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{titlesec}
+\usepackage[most]{tcolorbox}
+\usepackage{enumitem}
+\usepackage{array}
+\usepackage{booktabs}
+\usepackage{fancyhdr}
+
+\definecolor{navy}{HTML}{1F3A5F}
+\definecolor{grey}{HTML}{54606E}
+\definecolor{green}{HTML}{2C6E49}
+\definecolor{amber}{HTML}{9C6A16}
+\definecolor{red}{HTML}{A6322E}
+\definecolor{plum}{HTML}{7A4EA8}
+\definecolor{boxgray}{HTML}{F3F5F8}
+\definecolor{boxred}{HTML}{FCF2F1}
+\definecolor{boxgreen}{HTML}{F1F7F3}
+\definecolor{boxplum}{HTML}{F7F3FB}
+\definecolor{boxcode}{HTML}{F7F8FA}
+\definecolor{boxedge}{HTML}{D9E0EA}
+
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{2.6pt}
+\linespread{1.0}
+
+\pagestyle{fancy}\fancyhf{}
+\lhead{\small\color{grey}Scella}
+\rhead{\small\color{grey}Les ensembles -- internes à chacun des deux corps -- 11 août 2026}
+\cfoot{\small\color{grey}\thepage}
+\renewcommand{\headrulewidth}{0.3pt}
+
+\titleformat{\section}{\color{navy}\large\bfseries}{}{0pt}{}
+\titlespacing{\section}{0pt}{11pt}{3pt}
+\titleformat{\subsection}{\color{navy}\bfseries}{}{0pt}{}
+\titlespacing{\subsection}{0pt}{7pt}{1.5pt}
+
+\newtcolorbox{these}{colback=boxgray,colframe=boxedge,boxrule=0.5pt,arc=2.5pt,
+  left=8pt,right=8pt,top=4.5pt,bottom=4.5pt}
+\newtcolorbox{alerte}{colback=boxred,colframe=red!55,boxrule=0.8pt,arc=2.5pt,
+  left=8pt,right=8pt,top=4.5pt,bottom=4.5pt}
+\newtcolorbox{acquis}{colback=boxgreen,colframe=green!45,boxrule=0.8pt,arc=2.5pt,
+  left=8pt,right=8pt,top=4.5pt,bottom=4.5pt}
+\newtcolorbox{piste}{colback=boxplum,colframe=plum!45,boxrule=0.8pt,arc=2.5pt,
+  left=8pt,right=8pt,top=4.5pt,bottom=4.5pt}
+\newtcolorbox{extrait}{colback=boxcode,colframe=boxedge,boxrule=0.5pt,arc=1.5pt,
+  left=7pt,right=7pt,top=3.5pt,bottom=3.5pt}
+
+\newcommand{\best}[1]{{\color{green}\textbf{#1}}}
+\newcommand{\pire}[1]{{\color{red}\textbf{#1}}}
+\newcommand{\sz}[1]{{\small\color{grey}\textsf{#1}}}
+\newcommand{\code}[1]{\texttt{\small #1}}
+\newcommand{\x}{$\times$}
+\newcommand{\loc}[1]{{\footnotesize\color{grey}\texttt{#1}}}
+
+\begin{document}
+
+\begin{center}
+{\Huge\bfseries\color{navy} Scella}\\[4pt]
+{\large\color{grey}\itshape Les ensembles, internes à chacun des deux corps}\\[4pt]
+{\small\color{grey} 11 août 2026 \; · \; suite de la série des couples \; · \; quatre lentilles intrinsèques, plus un garde de fermeture}
+\end{center}
+\vspace{2pt}
+
+\begin{these}
+\textbf{Le résultat central, et il contredit la question.} Vous demandez les meilleurs ensembles
+\emph{internes} à Scella et à EFE. Ils existent et ils sont solides -- mais ils arrivent
+\textbf{troisième et quatrième}. Les deux premiers sont des \textbf{greffes} : du scellement posé sur un
+producteur. Chaque corps, seul, plafonne : Scella sans producteur est un principe, EFE sans scellement
+est un calcul que personne ne peut contester. Et la mesure fait apparaître l'asymétrie qui explique
+tout le reste : \textbf{Scella est le seul tissu qui traverse EFE ; EFE n'a aucun tissu propre.}
+\end{these}
+
+\section{1 · Pourquoi le niveau « ensemble » dit autre chose que le niveau « couple »}
+
+Quatre études de couples précèdent celle-ci. Monter d'un cran n'a d'intérêt que si le cran produit une
+observation qu'une paire ne peut pas porter, et c'est le cas pour une raison structurelle : un
+\textbf{couple} donne une \emph{propriété}, un \textbf{ensemble} donne une \textbf{capacité qu'un tiers
+exerce de bout en bout}. « Artefact scellé \x{} re-prouveur zéro-dépendance » énonce un motif ;
+« produire, sceller, nommer, publier l'ancre, re-prouver, refuser la falsification » est une chose qui
+tourne. Le second se démontre, le premier s'explique.
+
+D'où une modification assumée du cadre. Les quatre lentilles intrinsèques du 5 août restent la
+notation -- \textbf{maturité} rapportée à l'effort restant, \textbf{rareté} pure, \textbf{adversaire} en
+revue diligente, \textbf{démontrabilité} devant un ingénieur sceptique. J'y ajoute non pas une
+cinquième note mais un \textbf{garde binaire} : l'ensemble \emph{ferme}-t-il sa boucle, ou lui
+manque-t-il une pièce absente ? Un ensemble ouvert ne se note pas utilement, il se décrit. Faire de la
+fermeture une note l'aurait diluée dans une moyenne ; en faire un garde la laisse visible.
+
+\begin{alerte}
+\textbf{Faits et jugements, séparés -- comme dans toute la série.} La partition des corps, les
+dépendances, les emplacements et les zéros sont des \textbf{faits}, lus dans le code du 11 août ;
+l'annexe donne la commande qui rejoue chacun. Les \textbf{notes} sont un \textbf{jugement} structuré
+pour être discutable. Un désaccord sur « rareté = 4 » est légitime et ne se tranche par aucune
+commande ; un désaccord sur « \code{HopKind} : 0 occurrence » s'ouvre en une seconde.
+\end{alerte}
+
+\section{2 · La partition des deux corps, mesurée et non supposée}
+
+La distinction que vous posez entre Scella et EFE existe dans le code. Elle se lit dans les noms de
+crates, et surtout dans le graphe de dépendances.
+
+\renewcommand{\arraystretch}{1.15}
+\begin{center}\small
+\begin{tabular}{@{}>{\raggedright\arraybackslash}p{2.9cm} c >{\raggedright\arraybackslash}p{11.8cm}@{}}
+\toprule
+\textbf{Corps} & \sz{Crates} & \textbf{Ce qu'il fait, et qui le compose} \\
+\midrule
+\textbf{Scella} \sz{le scellement} & 15 &
+  \code{provenance-dag}, \code{provenance-capture}, \code{provenance-bridge}, \code{provenance-verify},
+  \code{audit-api}, \code{audit-console}, \code{forensic-export}, \code{reg-evidence},
+  \code{verify-mini}, \code{verify-meta-mini}, \code{efe-meta-verify}, \code{efe-audit-core},
+  \code{efe-publisher-identity}, \code{efe-swarm-provenance}, \code{efe-llm-provenance} \\
+\addlinespace[2pt]
+\textbf{EFE} \sz{le calcul} & 19 &
+  \code{efe-core}, \code{efe-kernels}, \code{efe-meta-swarm\{,-server,-proto\}},
+  \code{efe-nano} + 5 crates nano, \code{efe-swarm-\{gateway,sdk,memory,topology,orchestrator,dashboard\}},
+  \code{efe-gold-test-gate}, \code{efe-swarm-provenance} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\code{efe-swarm-provenance} figure dans les \emph{deux} lignes, et \code{efe-llm-provenance} appartient
+au scellement tout en ne servant que des chemins de calcul. Ce ne sont pas des erreurs de classement :
+ce sont les \textbf{charnières}, et elles se chaînent --
+\code{efe-llm-provenance} $\rightarrow$ \code{efe-swarm-provenance} $\rightarrow$
+\code{provenance-bridge} $\rightarrow$ \code{provenance-dag}.
+
+\begin{acquis}
+\textbf{La mesure qui recadre tout.} \code{provenance-dag} compte \textbf{onze dépendants}, dont
+\textbf{les deux binaires de calcul} -- \code{efe-swarm-gateway} et \code{efe-meta-swarm-server}. Et ils
+ne se contentent pas de déclarer la dépendance : ils écrivent tous deux dans le \textbf{même type
+d'ancre}, \code{provenance\_dag::AnchorIndex}, avec le même vocabulaire de racine.
+
+Autrement dit : \textbf{Scella traverse EFE de part en part. EFE, lui, n'a aucun tissu qui lui soit
+propre} -- aucun type, aucun chemin de données que ses deux binaires partageraient sans passer par le
+scellement.
+\end{acquis}
+
+\section{3 · Le classement des dix ensembles}
+
+Rangs de 1 à 10 par lentille ; \emph{Éc.} est l'amplitude entre le meilleur et le pire rang, c'est-à-dire
+le signal de variance. La colonne \emph{Corps} applique le garde de fermeture : \emph{pur} = l'ensemble
+se suffit à lui-même dans son corps ; \emph{greffe} = il enjambe les deux ; \emph{joignant} = il
+relierait EFE à lui-même.
+
+\renewcommand{\arraystretch}{1.16}
+\begin{center}\small
+\begin{tabular}{@{}r >{\raggedright\arraybackslash}p{6.75cm} l cccc c c@{}}
+\toprule
+& \textbf{L'ensemble} & \sz{Corps} & \sz{Mat} & \sz{Rar} & \sz{Adv} & \sz{Dém} & \textbf{Moy} & \sz{Éc.} \\
+\midrule
+\textbf{1} & \textbf{La boucle du reçu méta} \sz{Couche 3 servie + M2 + liaison v4 + ancre 3a + deux vérifieurs + démo} & \sz{greffe} & 2 & 4 & \best{1} & \best{1} & \textbf{2,00} & 3 \\
+\textbf{2} & \textbf{La boucle pile B} \sz{S0$\rightarrow$S6 + producteur \code{bundle/:id} + ancre + \code{verify-mini}} & \sz{greffe} & \best{1} & 3 & 2 & 3 & \textbf{2,25} & 2 \\
+\textbf{3} & \textbf{Le triangle de re-preuve croisée} \sz{un artefact, deux implémentations, \code{cross\_check}} & \sz{\textbf{Scella pur}} & 3 & 2 & 3 & 2 & \textbf{2,50} & \best{1} \\
+\textbf{4} & \textbf{La contraction servie} \sz{$\Phi$ déterministe + canari Lipschitz + porte H1 + topologie fixe} & \sz{\textbf{EFE pur}} & 5 & \best{1} & 4 & 5 & \textbf{3,75} & \pire{4} \\
+5 & Le Fil B servi \sz{reformulateur SLM + circuit 1-sonde + provenance par-hop + deadlines} & \sz{EFE pur} & 4 & 5 & 5 & 4 & \textbf{4,50} & \best{1} \\
+6 & Le participant réel de bout en bout \sz{\code{efe-core} $\rightarrow$ gRPC $\rightarrow$ manifeste $\rightarrow$ DoD\#1} & \sz{EFE pur} & 7 & 8 & 6 & 6 & \textbf{6,75} & 2 \\
+7 & La souveraineté d'egress \sz{boot guard + allowlist + PII + cap + reçu R4} & \sz{greffe} & 6 & 9 & 7 & 7 & \textbf{7,25} & 3 \\
+8 & \textbf{La couverture universelle de re-preuve} \sz{les six chaînes orphelines --- latent} & \sz{Scella pur} & 8 & 7 & 8 & 8 & \textbf{7,75} & \best{1} \\
+9 & \textbf{Fil C, la Colonne} \sz{nano + essaim + méta-essaim + Fil B, un seul reçu --- latent} & \sz{joignant} & 9 & 6 & 9 & 9 & \textbf{8,25} & 3 \\
+10 & \textbf{Le runtime nano} \sz{six crates, aucun appelant --- \pire{cassé}} & \sz{EFE pur} & \pire{10} & \pire{10} & \pire{10} & \pire{10} & \textbf{10,00} & \best{0} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\section{4 · Le résultat central : les meilleurs ensembles ne sont internes à personne}
+
+C'est la réponse directe, et elle contredit la formulation de la question.
+
+Les deux premiers -- la boucle du reçu méta et la boucle pile B -- sont des \textbf{greffes}. Retirez
+EFE : Scella n'a plus rien à sceller, et une pile de provenance sans producteur est une bibliothèque.
+Retirez Scella : EFE produit un vecteur de consensus que personne ne peut opposer à quiconque, et un
+calcul non opposable n'est pas un actif.
+
+Les meilleurs ensembles \textbf{purement internes} arrivent donc \textbf{troisième et quatrième}, et il
+vaut la peine de dire lesquels précisément, parce que ce sont eux la réponse à « internes de chacun ».
+
+\subsection{4.1 · Scella pur -- le triangle de re-preuve croisée \sz{(3\textsuperscript{e}, 2,50)}}
+
+Un artefact scellé, \textbf{deux ré-implémentations indépendantes} du vérifieur -- l'une à zéro
+dépendance, l'autre à soixante-dix -- qui doivent tomber d'accord, et le contrôle croisé qui épingle
+leur accord. C'est le seul ensemble du dépôt qui ne dépend d'\textbf{aucune origine} : il vaut pour
+n'importe quel artefact scellé, quel que soit ce qui l'a produit. C'est ce qui en fait le Scella le plus
+pur du portefeuille.
+
+Sa valeur profonde n'est pas cryptographique, elle est \emph{méthodologique} : deux implémentations
+écrites séparément qui doivent s'accorder transforment un format en \textbf{spécification}. Une
+divergence entre elles est un bug de spec révélé avant l'auditeur. Son écart de 1 dit ce qu'il est --
+bon partout, exceptionnel nulle part, et c'est le profil d'une fondation.
+
+\subsection{4.2 · EFE pur -- la contraction servie \sz{(4\textsuperscript{e}, 3,75)}}
+
+$\Phi$ rendu déterministe, sa constante de Lipschitz \textbf{mesurée} en boîte noire par un estimateur
+adverse à bisection, une porte de démarrage qui \textbf{refuse de servir} si la non-expansivité est
+falsifiée, et une topologie fixe qui borne le tout. Il ne demande rien à Scella : c'est le seul
+ensemble EFE de premier plan qui se ferme sans emprunter au scellement.
+
+\section{5 · L'ensemble le plus haute-variance, et pourquoi il mérite un traitement à part}
+
+La contraction servie porte un écart de \textbf{4} : première en rareté, cinquième en maturité comme en
+démontrabilité. C'est, au niveau des ensembles, l'analogue du diagnostic porté sur la co-signature R3
+dans la série des couples -- mais dans une version bien plus favorable, puisque celle-ci \emph{tourne}.
+
+Ce que je ne sais pas retrouver ailleurs tient en une phrase : un moteur numérique qui \textbf{mesure}
+sa propre garantie de contraction au lieu de la déclarer, et qui a \textbf{réfuté son propre
+certificat} -- $\hat{L} = 0{,}69$ mesuré contre $0{,}17$ annoncé analytiquement, la borne mesurée
+retenue et la borne théorique abandonnée. Puis un \emph{fail-open} trouvé en revue -- un \code{.ok()}
+avalait les explosions de $\Phi$ en les traitant comme des hors-domaine -- et fermé par un état à trois
+branches. Ce n'est pas une preuve, c'est un falsificateur ; la distinction est faite dans le code
+lui-même.
+
+Ce qui le plombe est aussi net. Il faut expliquer ce qu'est une constante de Lipschitz avant que
+quiconque comprenne pourquoi la chose est remarquable. Et surtout : \textbf{son test de bout en bout ne
+tourne pas dans le jeu de features par défaut} -- \code{m1d\_core\_serving\_e2e} rapporte zéro test
+exécuté sans \code{core-integration}. La chose la plus rare du dépôt est celle qui se montre le plus
+mal, et son silence par défaut est parfaitement cohérent avec le constat général : tout est opt-in.
+
+\begin{piste}
+\textbf{Son vecteur de démonstration n'est pas la théorie.} C'est la phrase \emph{« il a réfuté sa
+propre note »}. Un ingénieur sceptique n'a pas besoin de comprendre Lipschitz pour comprendre qu'un
+système qui contredit sa propre documentation et retient le résultat défavorable a été construit par
+quelqu'un qui préfère la mesure au confort.
+\end{piste}
+
+\section{6 · Les ensembles joignants -- zéro ligne, mais pas terrain vierge}
+
+C'est ici que le Sandwich trouve sa place, et la réponse est sans ambiguïté.
+
+\renewcommand{\arraystretch}{1.15}
+\begin{center}\small
+\begin{tabular}{@{}>{\raggedright\arraybackslash}p{5.4cm} >{\raggedright\arraybackslash}p{4.2cm} >{\raggedright\arraybackslash}p{5.9cm}@{}}
+\toprule
+\textbf{Ensemble joignant} & \textbf{Ce qu'il ferait} & \textbf{État vérifié} \\
+\midrule
+\textbf{Sandwich C.1} & compresseur et vérifieur en hops scellés autour des appels frontière & \code{HopKind} : \pire{0 occurrence} \\
+\textbf{Essaim médiateur} & chaîne déclarée de $N$ petits agents entre deux LLM & \code{SwarmMediator}, \code{EdgePlan} : \pire{0} \\
+\textbf{Fil C, la Colonne} & nano + essaim + méta-essaim + Fil B sous un seul reçu & \pire{0 ligne} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Les trois ensembles qui joindraient EFE \emph{à lui-même} n'existent pas. Le Fil B vit dans
+\code{efe-swarm-gateway}, le méta-essaim dans \code{efe-meta-swarm-server} : deux binaires distincts,
+aucun chemin de données partagé. La paire qu'on croit voir sur un schéma d'architecture n'est pas dans
+le code.
+
+\begin{acquis}
+\textbf{Mais ils ne partiraient pas de zéro} -- et c'est ce que l'analyse par ensembles fait apparaître
+là où celle par couples ne le pouvait pas. Les deux binaires partagent \emph{déjà} le substrat :
+\code{provenance-dag}, \code{AnchorIndex}, le même vocabulaire de racine et d'ancre. Ce qui manque n'est
+pas la fondation, c'est le \textbf{flux}. Le Fil C compte zéro ligne, mais son terrain est nivelé :
+l'estimation « XL » héritée du 5 août mérite d'être revue à la baisse, exactement comme 3b l'a été
+en découvrant que \code{forensic-export} portait déjà l'\code{AnchorProof}.
+\end{acquis}
+
+\section{7 · L'ensemble mort, et le gisement}
+
+\textbf{Le runtime nano} ferme la marche avec un écart de \textbf{0} : dernier sur les quatre lentilles,
+parfaitement cohérent, cohéremment mort. Six crates -- \code{efe-nano}, \code{-sdk},
+\code{-app-coordinator}, \code{-preanalysis}, \code{-swarm-adapter}, \code{-inference-daemon} -- et le
+daemon n'a \textbf{aucun appelant dans le dépôt}. C'est le seul ensemble dont je dirais qu'il coûte plus
+qu'il ne rapporte tant qu'il n'est ni câblé ni retiré : du code jamais exécuté est une dette qu'un
+examinateur trouve seul, et qu'il interprète comme un défaut de discipline plutôt que comme un
+chantier.
+
+\textbf{Le gisement} est au 8\textsuperscript{e} rang et vaut mieux que sa place. Neuf crates scellent
+une véritable chaîne HMAC ; \textbf{deux seulement} ont un re-prouveur qu'un tiers peut lire
+intégralement avant de lui accorder sa confiance. La propriété fondatrice de tout l'édifice couvre
+\textbf{deux chaînes sur neuf}. Or le motif à répliquer est déjà écrit, et il est même classé
+3\textsuperscript{e} : le triangle de re-preuve croisée existe deux fois, il pourrait exister neuf fois.
+Aucune invention n'est requise -- seulement de la répétition disciplinée.
+
+\begin{alerte}
+\textbf{Une correction sur un ensemble que je classais comme acquis.} L'essaim $\Phi$ « pur en
+concurrence » ne l'est \textbf{pas dans \code{HEAD}} : \code{dissolution\_centroid} y compte zéro
+occurrence. Ces lignes vivent dans l'arbre de travail d'une session concurrente. Tout ensemble qui
+s'appuie sur cette propriété est aujourd'hui \textbf{latent}, et non \emph{servi} -- la même correction
+que celle portée par l'étude du croisement complet, re-vérifiée ici plutôt que recopiée.
+\end{alerte}
+
+\section{8 · Le jugement}
+
+Vous demandiez les meilleurs ensembles internes à chacun des deux corps. Ils existent, ils sont
+solides, et ils arrivent troisième et quatrième -- derrière deux greffes. Scella réalise sa valeur en se
+posant sur un producteur ; EFE réalise la sienne en se faisant sceller. Aucun des deux ne vaut seul ce
+qu'il vaut greffé, et la greffe, elle, tourne : \textbf{515 tests, zéro échec, zéro ignoré} sur la
+chaîne du reçu, mesurés le 11 août sur 35 binaires de test.
+
+Ce qui manque n'est donc pas un ensemble interne de plus. C'est qu'\textbf{EFE ne s'assemble jamais
+avec lui-même}. Les trois ensembles qui le feraient -- Sandwich, essaim médiateur, Colonne -- sont à
+zéro ligne, sur un terrain que le scellement a déjà préparé pour eux.
+
+\begin{these}
+\small\textbf{Rappel de cadrage, inchangé dans toute la série.} Le reçu atteste l'\textbf{intégrité}
+d'une suite de pas, jamais la \textbf{correction} d'une décision. Il est \emph{tamper-evident pour un
+détenteur de clé}, pas \emph{trustless pour un tiers}. Les participants du mode réel exécutent une
+fusion latente Mode-1 numérique : ce ne sont pas des « vrais SLM ». Et ce document note des ensembles
+sans présupposer aucune finalité extérieure -- il n'y en a plus de déclarée, et il n'en invente pas.
+\end{these}
+
+\section{Annexe · Vérifier chaque affirmation soi-même}
+
+Les \emph{notes} de ce document ne se vérifient pas ; les \emph{faits} qui les portent, si. Comme dans
+le reste de la série, les affirmations \textbf{négatives} sont les plus importantes à pouvoir contrôler :
+une recherche qui revient vide n'est une preuve que si elle est rejouable.
+
+\renewcommand{\arraystretch}{1.22}
+\begin{center}\small
+\begin{tabular}{@{}>{\raggedright\arraybackslash}p{5.3cm} >{\raggedright\arraybackslash}p{10.8cm}@{}}
+\toprule
+\textbf{Affirmation} & \textbf{Ce qui la rejoue} \\
+\midrule
+La partition des deux corps &
+  \code{ls crates | grep -iE 'provenance|verify|audit|forensic|reg-evidence'} \newline
+  \code{ls crates | grep -iE '\textasciicircum efe-(core|nano|swarm|meta-swarm|kernels|gold)'} \\
+\code{provenance-dag} a onze dépendants &
+  \code{grep -rl provenance-dag crates/*/Cargo.toml} \\
+Les deux binaires écrivent la même ancre &
+  \code{grep -rn 'provenance\_dag::AnchorIndex' crates/efe-swarm-gateway/src crates/efe-meta-swarm-server/src} \\
+Les ensembles joignants sont à zéro &
+  \code{grep -rc 'HopKind\textbackslash|SwarmMediator\textbackslash|EdgePlan' crates -{}-include='*.rs'} \\
+Le daemon nano n'a aucun appelant &
+  \code{grep -rl efe-nano-inference-daemon crates/*/Cargo.toml} \\
+$\Phi$ pur n'est pas dans \code{HEAD} &
+  \code{git show HEAD:crates/efe-core/src/els/mod.rs | grep -c dissolution\_centroid} \\
+Le canari et la porte H1 existent &
+  \code{crates/efe-meta-swarm/src/participants/lipschitz.rs} \newline
+  \code{crates/efe-meta-swarm-server/src/participant/local.rs:342} \\
+La topologie fixe existe &
+  \code{crates/efe-core/src/genesis/fixed.rs:47} \\
+Le Fil B est servi &
+  \code{grep -rl EFE\_SLM\_REFORMULATOR\_URL crates -{}-include='*.rs'} \\
+515 tests, zéro échec &
+  \code{cargo test -p efe-meta-verify -p verify-meta-mini -p efe-meta-swarm-server} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Deux avertissements, pour que l'annexe ne soit pas lue plus largement qu'elle ne vaut. Les lignes qui
+portent sur des \emph{absences} valent à la date du document. Et la dernière dépasse dix minutes de
+compilation au premier passage -- ce qui est précisément le genre de détail qu'il vaut mieux découvrir
+avant une démonstration qu'au milieu.
+
+\end{document}
