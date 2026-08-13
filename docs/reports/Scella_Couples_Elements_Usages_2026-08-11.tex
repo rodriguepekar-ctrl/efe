@@ -1,0 +1,327 @@
+\documentclass[10pt]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage[french]{babel}
+\usepackage{newpxtext,newpxmath}
+\usepackage[a4paper,top=1.5cm,bottom=1.35cm,left=1.55cm,right=1.55cm]{geometry}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{titlesec}
+\usepackage[most]{tcolorbox}
+\usepackage{enumitem}
+\usepackage{array}
+\usepackage{booktabs}
+\usepackage{fancyhdr}
+
+\definecolor{navy}{HTML}{1F3A5F}
+\definecolor{grey}{HTML}{54606E}
+\definecolor{green}{HTML}{2C6E49}
+\definecolor{amber}{HTML}{9C6A16}
+\definecolor{red}{HTML}{A6322E}
+\definecolor{plum}{HTML}{7A4EA8}
+\definecolor{boxgray}{HTML}{F3F5F8}
+\definecolor{boxred}{HTML}{FCF2F1}
+\definecolor{boxgreen}{HTML}{F1F7F3}
+\definecolor{boxplum}{HTML}{F7F3FB}
+\definecolor{boxedge}{HTML}{D9E0EA}
+
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{2.6pt}
+\linespread{1.0}
+
+\pagestyle{fancy}\fancyhf{}
+\lhead{\small\color{grey}Scella}
+\rhead{\small\color{grey}Couples : éléments, classement, usages -- 11 août 2026}
+\cfoot{\small\color{grey}\thepage}
+\renewcommand{\headrulewidth}{0.3pt}
+
+\titleformat{\section}{\color{navy}\large\bfseries}{}{0pt}{}
+\titlespacing{\section}{0pt}{9pt}{3pt}
+\titleformat{\subsection}{\color{navy}\bfseries}{}{0pt}{}
+\titlespacing{\subsection}{0pt}{7pt}{1.5pt}
+
+\newtcolorbox{these}{colback=boxgray,colframe=boxedge,boxrule=0.5pt,arc=2.5pt,
+  left=8pt,right=8pt,top=4.5pt,bottom=4.5pt}
+\newtcolorbox{alerte}{colback=boxred,colframe=red!55,boxrule=0.8pt,arc=2.5pt,
+  left=8pt,right=8pt,top=4.5pt,bottom=4.5pt}
+\newtcolorbox{acquis}{colback=boxgreen,colframe=green!45,boxrule=0.8pt,arc=2.5pt,
+  left=8pt,right=8pt,top=4.5pt,bottom=4.5pt}
+\newtcolorbox{piste}{colback=boxplum,colframe=plum!45,boxrule=0.8pt,arc=2.5pt,
+  left=8pt,right=8pt,top=4.5pt,bottom=4.5pt}
+
+\newcommand{\best}[1]{{\color{green}\textbf{#1}}}
+\newcommand{\pire}[1]{{\color{red}\textbf{#1}}}
+\newcommand{\sz}[1]{{\small\color{grey}\textsf{#1}}}
+\newcommand{\tz}[1]{{\footnotesize\color{grey}\textsf{#1}}}
+\newcommand{\code}[1]{\texttt{\small #1}}
+\newcommand{\x}{$\times$}
+
+\begin{document}
+
+\begin{center}
+{\Huge\bfseries\color{navy} Scella}\\[4pt]
+{\large\color{grey}\itshape Les couples : de quoi ils sont faits, ce qu'ils valent, contre qui ils tiennent}\\[4pt]
+{\small\color{grey} 11 août 2026 \; · \; anatomie, classement intrinsèque et modèle de menace}
+\end{center}
+\vspace{2pt}
+
+\begin{these}
+\textbf{Ce que ce document ajoute aux deux précédents.} Le premier disait \emph{quels} couples existent,
+le second \emph{dans quel ordre} ils valent. Celui-ci les ouvre : chaque couple est décomposé en ses
+deux éléments \textbf{plus son liant} -- la pièce qui fait la multiplication, et celle qu'on oublie
+toujours en décrivant une architecture. Puis chacun est confronté à la seule question qui donne un
+périmètre plutôt qu'une promesse : \textbf{contre qui tient-il, et contre qui ne tient-il pas ?} Le
+résultat d'ensemble est que ce portefeuille sert à \textbf{rendre un processus contrôlable}, et pas
+encore à le rendre contrôlable \emph{par un adversaire complet}. Deux fils séparent les deux états,
+et ils sont nommés.
+\end{these}
+
+\section{1 · Pourquoi le liant, et pas seulement les deux moitiés}
+
+Un couple n'est pas une paire de composants voisins : c'est deux éléments \textbf{plus le mécanisme
+qui les fait produire ensemble une propriété qu'aucun n'a seul}. Ce troisième terme -- le
+\emph{liant} -- est presque toujours absent des descriptions d'architecture, parce qu'un diagramme
+montre des boîtes et des flèches, pas des ordres d'exécution ni des contraintes d'appariement.
+
+C'est pourtant lui qui porte toute la valeur, et le tableau du §2 le montre bloc par bloc. Le
+caviardage PII et le scellement du reçu existent tous deux dans quantité de systèmes ; ce qui est rare
+est que le premier s'exécute \emph{avant} le second. Une topologie déclarée et des enregistrements
+d'appels sont ordinaires ; ce qui mord est que leur appariement soit \emph{injectif}. Une chaîne HMAC
+et une signature Ed25519 sont deux primitives banales ; ce qui compte est qu'elles soient
+\emph{orthogonales}, au point qu'une forgerie exige les deux clés.
+
+Retenir cette lecture change la manière d'auditer : quand une propriété composée disparaît, ce n'est
+presque jamais parce qu'un des deux éléments a été retiré -- ils sont visibles, quelqu'un le
+remarquerait. C'est parce que le liant a été affaibli en silence : un appel déplacé, une contrainte
+relâchée, une vérification rendue optionnelle.
+
+\section{2 · Les éléments, couple par couple}
+
+\renewcommand{\arraystretch}{1.25}
+\begin{center}\footnotesize
+\begin{tabular}{@{}>{\raggedright\arraybackslash}p{2.75cm} >{\raggedright\arraybackslash}p{4.05cm} >{\raggedright\arraybackslash}p{4.05cm} >{\raggedright\arraybackslash}p{5.15cm}@{}}
+\toprule
+\textbf{Le couple} & \textbf{Élément A} & \textbf{Élément B} & \textbf{Le liant -- ce qui fait la propriété} \\
+\midrule
+\textbf{1 · Artefact \x{} re-prouveur} &
+  L'artefact scellé : \code{meta\_steps.jsonl} + \code{manifest.json} &
+  Le re-prouveur : SHA-256, HMAC et parseur JSON \textbf{écrits à la main} &
+  \textbf{L'absence de chaîne d'approvisionnement.} \code{cargo tree -e normal} montre le binaire
+  \textbf{seul} : rien à qui faire confiance entre l'auditeur et l'octet \\
+\textbf{2 · Topologie \x{} reçu} &
+  La topologie \textbf{déclarée} -- la liste des appels annoncés &
+  Un enregistrement scellé \textbf{par appel réellement effectué} &
+  \textbf{L'appariement injectif.} Un n\oe ud déclaré $\leftrightarrow$ un record, jamais deux vers le
+  même. Sans lui, 3 déclarés + 1 record $\Rightarrow$ « Consistent » \\
+\textbf{3 · Reçu v4 \x{} ancre} &
+  \code{participant\_ids} \textbf{ordonnés}, \code{declared\_config\_hashes} alignés, opérateur,
+  $\alpha$, $\gamma$ &
+  Le journal append-only : racine \textbf{et} nombre de pas &
+  \textbf{L'antériorité de la publication.} Le préfixe d'une chaîne HMAC valide est valide ; seule une
+  racine publiée \emph{avant} expose la coupure -- sans clé \\
+\textbf{4 · Canari \x{} participants} &
+  L'estimateur de Lipschitz empirique, boîte noire, bisection pour les discontinuités &
+  Le participant efe-core réel et sa porte de démarrage &
+  \textbf{Le fail-closed.} La mesure ne produit pas un rapport : elle produit un \emph{refus de
+  servir} \\
+\textbf{5= · PII \x{} scellement} &
+  Le caviardage selon la policy tenant -- détection \textbf{locale}, sans réseau &
+  Le hash du prompt scellé dans la chaîne &
+  \textbf{L'ordre.} Caviarder \emph{avant} tout usage du texte $\Rightarrow$ le sceau couvre ce qui est
+  réellement sorti \\
+\textbf{5= · Reçu \x{} coût} &
+  Le plafonnement : cap tenant \textbf{puis} plafond serveur, inconditionnel &
+  Le coût par appel, scellé dans chaque enregistrement &
+  \textbf{La borne en amont du sceau.} Le reçu enregistre une dépense que quelque chose avait
+  \emph{déjà} bornée \\
+\textbf{7 · R3 \x{} HMAC} &
+  La chaîne HMAC tenant, qui scelle le record \textbf{co-signature incluse} &
+  La signature Ed25519 du n\oe ud sur \code{prompt\_hash} $\Vert$ \code{output\_hash} &
+  \textbf{L'orthogonalité des deux clés} : forger exige \textbf{les deux}. Plus la non-élévation :
+  signature invérifiable $\Rightarrow$ redescente automatique \\
+\textbf{8 · Revendication \x{} chute} &
+  Les hops de reformulation, chacun portant son moteur (SLM / règle / dégradé) &
+  Le prédicat « tous les hops sont SLM », calculé \textbf{depuis la sortie scellée} &
+  \textbf{Le calcul depuis la source scellée.} La vue ne peut pas diverger de l'attesté ; une seule
+  dégradation fait tomber la revendication \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\section{3 · Le classement (rappel)}
+
+Établi le 11 août sur les quatre lentilles intrinsèques -- maturité, rareté, adversaire,
+démontrabilité -- après le retrait de la lentille d'objectif extérieur.
+
+\renewcommand{\arraystretch}{1.1}
+\begin{center}\small
+\begin{tabular}{@{}r >{\raggedright\arraybackslash}p{6.3cm} c c >{\raggedright\arraybackslash}p{6.0cm}@{}}
+\toprule
+& \textbf{Le couple} & \textbf{Moy} & \sz{Éc.} & \textbf{État} \\
+\midrule
+\textbf{1} & Artefact scellé \x{} re-prouveur zéro-dépendance & \textbf{2,00} & 2 & servi, sans caveat relevé \\
+\textbf{2} & Topologie déclarée \x{} reçu apparié injectivement & \textbf{2,50} & 2 & servi \\
+\textbf{3} & Reçu v4 \x{} ancre & \textbf{3,00} & 4 & servi ; ancre détenue par l'opérateur \\
+\textbf{4} & Canari H1 \x{} participants réels & \textbf{4,00} & 4 & servi ; échappatoire déclarée \\
+5\,= & Caviardage PII \x{} scellement & 5,75 & 3 & servi ; sans policy, sortie en clair \\
+5\,= & Reçu \x{} coût réel par appel & 5,75 & 3 & servi \\
+7 & Co-signature R3 \x{} chaîne HMAC & 6,25 & \pire{7} & \textbf{vérifieur servi, producteur absent} \\
+8 & Revendication \x{} sa propre chute & 6,75 & 1 & servi ; voisin d'une fissure \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\sz{Éc. = amplitude entre le meilleur et le pire rang obtenus par un même couple. Un écart élevé
+signale l'instabilité, pas la médiocrité : le rang 7 est premier en rareté et dernier partout ailleurs.}
+
+\section{4 · À quoi ça sert -- et surtout, contre qui ça tient}
+
+C'est la formulation qui rend un usage discutable. « À quoi ça sert » sans modèle de menace produit une
+promesse ; la même question avec un adversaire nommé produit un \textbf{périmètre}. La colonne de
+droite est donc la plus importante des trois, et c'est celle qu'il faut lire en premier.
+
+\renewcommand{\arraystretch}{1.25}
+\begin{center}\footnotesize
+\begin{tabular}{@{}r >{\raggedright\arraybackslash}p{4.55cm} >{\raggedright\arraybackslash}p{5.35cm} >{\raggedright\arraybackslash}p{5.35cm}@{}}
+\toprule
+& \textbf{Le problème résolu} & \textbf{Tient contre} & \textbf{Ne tient PAS contre} \\
+\midrule
+\textbf{1} & Faire contrôler une affirmation par quelqu'un qui ne vous accorde rien -- ni à vous, ni à
+  vos dépendances &
+  un opérateur qui ment sur son propre outillage ; un auditeur \textbf{sans réseau} ; une vérification
+  dans dix ans &
+  un détenteur de clé qui fabrique la chaîne \textbf{entière} dès l'origine \\
+\textbf{2} & Prouver qu'une consultation multi-sources a eu lieu \textbf{comme annoncée} &
+  un opérateur qui prétend un panel et ne fait qu'un appel ; le même fournisseur compté trois fois &
+  un manifeste qui déclare \emph{honnêtement} un panel étroit -- il prouve la conformité à la
+  déclaration, pas son ambition \\
+\textbf{3} & Empêcher qu'on ne publie que la moitié qui arrange &
+  la troncature rétroactive, \textbf{détectable sans aucune clé} &
+  un opérateur qui n'ancre pas, ou qui réécrit son journal avant publication -- l'ancre est chez lui
+  \sz{(c'est 3b)} \\
+\textbf{4} & Refuser de servir quand l'hypothèse de sûreté du système est falsifiée &
+  une régression silencieuse de l'opérateur ; une borne théorique optimiste -- elle \textbf{a été
+  réfutée}, $\hat{L}=0{,}69$ contre $\beta_1 \approx 0{,}17$ annoncé &
+  un manifeste qui désactive le canari : l'échappatoire est déclarée et bruyante, mais elle existe \\
+\textbf{5=} & Répondre « qu'avez-vous envoyé à ce tiers ? » par une \textbf{preuve} et non par une
+  affirmation &
+  une fuite par oubli ; la disparition \emph{silencieuse} du caviardage quand la capacité n'est pas
+  compilée &
+  un tenant \textbf{sans policy} : le prompt sort en clair, et c'est documenté \\
+\textbf{5=} & Une trace de dépense opposable, bornée en amont &
+  le déni de service par le coût ; un client qui dimensionne la dépense d'autrui ; un dépassement de
+  conversion &
+  un opérateur qui trafique sa propre table de prix \\
+\textbf{7} & Savoir \textbf{qui} a produit une sortie, prouvable sans détenir le secret du producteur &
+  \emph{le concevrait contre} un n\oe ud de calcul distant qui nie avoir produit X &
+  \pire{rien, aujourd'hui} -- aucun producteur, registre vide, aucun enregistrement n'est R3 \\
+\textbf{8} & Empêcher une revendication de survivre à sa propre dégradation &
+  un relais qui retombe silencieusement sur des règles au lieu du petit modèle &
+  la souveraineté du relais : l'URL du petit modèle n'est pas contrainte au local \sz{(faux couple F1)} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\section{5 · Les trois familles -- ce que l'ensemble fait réellement}
+
+Les huit couples ne forment pas une liste plate. Ils remplissent trois fonctions distinctes, et cette
+partition en dit plus long que le classement lui-même.
+
+\textbf{Famille A -- prouver ce qui s'est passé à quelqu'un qui ne vous croit pas.} \sz{(couples 1, 2, 3)}
+C'est le c\oe ur, et c'est aussi le haut du classement -- ce n'est pas une coïncidence, c'est le
+résultat. Trois des quatre premiers font la même chose sous trois angles : rendre une affirmation
+contrôlable \emph{malgré} l'intérêt de celui qui l'émet. Aucun ne demande qu'on croie l'opérateur ; ils
+demandent seulement qu'il ait laissé une trace avant de savoir qu'on la lui réclamerait.
+
+\textbf{Famille B -- empêcher le système de mentir sur lui-même.} \sz{(couples 4, 8, et la règle de non-élévation du 7)}
+Fonction différente, et plus rare. Il ne s'agit plus de convaincre un tiers mais d'installer des
+mécanismes qui \textbf{échouent bruyamment} quand une hypothèse interne cesse d'être vraie : le canari
+qui refuse de démarrer, la revendication qui tombe à la première dégradation, le barreau qui redescend
+sans qu'on le lui demande. C'est la famille la plus caractéristique du dépôt, et la moins visible de
+l'extérieur -- elle ne produit rien tant que tout va bien.
+
+\textbf{Famille C -- borner et tracer ce qui sort et ce que ça coûte.} \sz{(les deux couples 5=)}
+La plus ordinaire, et le classement le dit sans détour : ce sont les deux derniers du groupe servi.
+Nécessaires, solides, non distinctifs. Les compter comme des atouts serait la première erreur de
+présentation.
+
+\section{6 · Ce que ce portefeuille sert, et la limite qui le borne}
+
+La forme de problème que ces couples adressent est précise, et elle mérite d'être énoncée telle
+quelle : \textbf{un processus automatisé, exécuté par une partie qui a un intérêt dans son résultat, et
+dont un tiers doit pouvoir contrôler le déroulement après coup}. Toute situation de cette forme est un
+usage possible -- audit d'un système de décision, expertise après litige, archivage réglementaire,
+calcul délégué à un fournisseur, reproductibilité d'un protocole. Ce n'est pas une liste de marchés :
+c'est la description d'une \emph{forme}, et elle est volontairement laissée à ce niveau.
+
+\begin{alerte}
+\textbf{La limite qui borne l'ensemble, et qu'il vaut mieux dire avant qu'après.} Le reçu est
+\emph{tamper-evident pour un détenteur de clé}, pas \emph{trustless pour un tiers}. Il ne rend pas le
+mensonge impossible : il en augmente le coût et en laisse la trace. Deux exceptions -- et ce sont
+précisément les deux mieux classées : le \textbf{re-prouveur zéro-dépendance}, qui ne demande de
+confiance à personne, et l'\textbf{ancre}, qui expose la troncature sans clé.
+\end{alerte}
+
+Autrement dit, et c'est la phrase à retenir : ce portefeuille sert aujourd'hui à \textbf{rendre un
+processus contrôlable}, et pas encore à le rendre contrôlable \textbf{par un adversaire complet}. La
+distance entre les deux états ne tient pas à une découverte à faire, mais à \textbf{deux fils
+identifiés} -- un producteur de co-signature sur le chemin servi, et un ancrage tiers. Les deux ont
+leurs matériaux déjà écrits et testés dans le dépôt.
+
+\section{7 · L'élément porteur -- ce que la décomposition révèle}
+
+Décomposer huit couples en seize éléments fait apparaître une chose qu'aucune des deux analyses
+précédentes ne pouvait montrer : \textbf{ces éléments ne sont pas seize}. Plusieurs sont le même,
+réutilisé -- et l'un d'eux porte presque tout.
+
+\renewcommand{\arraystretch}{1.15}
+\begin{center}\small
+\begin{tabular}{@{}>{\raggedright\arraybackslash}p{5.1cm} c >{\raggedright\arraybackslash}p{9.6cm}@{}}
+\toprule
+\textbf{L'élément} & \textbf{Couples} & \textbf{Ce que sa perte emporterait} \\
+\midrule
+\textbf{La chaîne HMAC scellée} & \pire{7 / 8} &
+  1, 2, 3, les deux 5=, 7 et 8 \textbf{simultanément}. C'est le point porteur unique du portefeuille \\
+La policy tenant & 2 & les deux couples 5= -- caviardage \emph{et} plafond de coût en dépendent \\
+La sortie scellée comme source unique & 2 & le couple 8, et l'appariement du couple 2 \\
+La signature Ed25519 & 1 \sz{(+1 latent)} & le couple 7, et le chantier de signature de racine \\
+\midrule
+\textbf{L'estimateur de Lipschitz} & \best{1} &
+  le couple 4 \textbf{seul} -- c'est le seul qui ne touche pas au reçu \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Le constat se vérifie en une ligne : \code{participant/local.rs}, qui porte le canari, ne contient
+\textbf{aucune} occurrence de HMAC. Le couple 4 est le seul du portefeuille qui survivrait
+intégralement à une faille dans le scellement -- parce qu'il ne prouve rien à personne : il refuse de
+démarrer.
+
+\begin{alerte}
+\textbf{La conséquence, et elle réordonne les priorités.} Sept couples sur huit reposent sur le
+\emph{même} élément. Une faille dans le scellement HMAC ne dégraderait pas le portefeuille, elle
+l'\textbf{effondrerait d'un coup} -- y compris les couples les mieux classés, y compris ceux dont la
+propriété semble indépendante. Cette concentration n'est pas un défaut de conception : c'est le prix
+d'une architecture cohérente, où tout se ramène à un sceau unique. Mais elle doit être \emph{sue}, car
+elle change ce qu'il faut protéger en priorité.
+\end{alerte}
+
+Et elle donne au rang 1 une justification qu'il n'avait pas encore. Si un seul élément porte sept
+couples, alors la seule chose qui compte vraiment est de pouvoir \textbf{contrôler cet élément sans
+dépendre de celui qui l'a produit}. C'est exactement ce que fait le re-prouveur zéro-dépendance -- et
+c'est pourquoi il finit premier d'un classement où il n'était même pas engagé. Ce n'est pas un
+amplificateur : c'est le \textbf{seul contrôle indépendant du point porteur unique}.
+
+Ce qui rend d'autant plus gênant le fait, établi dans le document compagnon, qu'\textbf{aucun test ni
+job d'intégration continue} ne garde la contrainte de dépendances nulles.
+
+\begin{these}
+\small\textbf{Portée et statut.} Les éléments, les liants et les emplacements sont des faits établis
+contre le code du 11 août ; les colonnes « tient / ne tient pas » en découlent directement. Les
+\textbf{notes} du classement, elles, sont un jugement structuré et discutable, pas une mesure --
+distinction développée dans le document compagnon. Aucune cible d'usage n'est déclarée et ce document
+n'en propose aucune : il décrit une forme de problème, pas un destinataire. La couche nano et
+\code{efe-gold-test-gate} n'ont été examinés dans aucun des trois documents.
+\end{these}
+
+\end{document}

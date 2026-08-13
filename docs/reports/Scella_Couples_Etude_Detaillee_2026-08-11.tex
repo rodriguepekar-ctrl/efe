@@ -1,0 +1,582 @@
+\documentclass[10pt]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage[french]{babel}
+\usepackage{newpxtext,newpxmath}
+\usepackage[a4paper,top=1.5cm,bottom=1.35cm,left=1.6cm,right=1.6cm]{geometry}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{titlesec}
+\usepackage[most]{tcolorbox}
+\usepackage{enumitem}
+\usepackage{array}
+\usepackage{booktabs}
+\usepackage{fancyhdr}
+
+\definecolor{navy}{HTML}{1F3A5F}
+\definecolor{grey}{HTML}{54606E}
+\definecolor{green}{HTML}{2C6E49}
+\definecolor{amber}{HTML}{9C6A16}
+\definecolor{red}{HTML}{A6322E}
+\definecolor{plum}{HTML}{7A4EA8}
+\definecolor{boxgray}{HTML}{F3F5F8}
+\definecolor{boxred}{HTML}{FCF2F1}
+\definecolor{boxgreen}{HTML}{F1F7F3}
+\definecolor{boxplum}{HTML}{F7F3FB}
+\definecolor{boxcode}{HTML}{F7F8FA}
+\definecolor{boxedge}{HTML}{D9E0EA}
+
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{2.6pt}
+\linespread{1.0}
+
+\pagestyle{fancy}\fancyhf{}
+\lhead{\small\color{grey}Scella}
+\rhead{\small\color{grey}Les couples -- étude détaillée -- 11 août 2026}
+\cfoot{\small\color{grey}\thepage}
+\renewcommand{\headrulewidth}{0.3pt}
+
+\titleformat{\section}{\color{navy}\large\bfseries}{}{0pt}{}
+\titlespacing{\section}{0pt}{11pt}{3pt}
+\titleformat{\subsection}{\color{navy}\bfseries}{}{0pt}{}
+\titlespacing{\subsection}{0pt}{7pt}{1.5pt}
+
+\newtcolorbox{these}{colback=boxgray,colframe=boxedge,boxrule=0.5pt,arc=2.5pt,
+  left=8pt,right=8pt,top=4.5pt,bottom=4.5pt}
+\newtcolorbox{alerte}{colback=boxred,colframe=red!55,boxrule=0.8pt,arc=2.5pt,
+  left=8pt,right=8pt,top=4.5pt,bottom=4.5pt}
+\newtcolorbox{acquis}{colback=boxgreen,colframe=green!45,boxrule=0.8pt,arc=2.5pt,
+  left=8pt,right=8pt,top=4.5pt,bottom=4.5pt}
+\newtcolorbox{piste}{colback=boxplum,colframe=plum!45,boxrule=0.8pt,arc=2.5pt,
+  left=8pt,right=8pt,top=4.5pt,bottom=4.5pt}
+\newtcolorbox{extrait}{colback=boxcode,colframe=boxedge,boxrule=0.5pt,arc=1.5pt,
+  left=7pt,right=7pt,top=3.5pt,bottom=3.5pt}
+
+\newcommand{\best}[1]{{\color{green}\textbf{#1}}}
+\newcommand{\pire}[1]{{\color{red}\textbf{#1}}}
+\newcommand{\sz}[1]{{\small\color{grey}\textsf{#1}}}
+\newcommand{\code}[1]{\texttt{\small #1}}
+\newcommand{\x}{$\times$}
+\newcommand{\loc}[1]{{\footnotesize\color{grey}\texttt{#1}}}
+
+% En-tête normalisé de chaque couple
+\newcommand{\couple}[4]{%
+  \subsection{#1 · #2 \hfill {\normalsize\color{grey}moyenne \textbf{#3} · écart #4}}}
+
+\begin{document}
+
+\begin{center}
+{\Huge\bfseries\color{navy} Scella}\\[4pt]
+{\large\color{grey}\itshape Les huit couples : anatomie, mécanisme, falsifieur, notation}\\[4pt]
+{\small\color{grey} 11 août 2026 \; · \; étude détaillée \; · \; branche \code{couche2-m0-frontier}, HEAD \code{580782f}}
+\end{center}
+\vspace{2pt}
+
+\begin{these}
+\textbf{Ce que ce document ajoute aux trois précédents.} Les premiers disaient \emph{quels} couples
+existent, \emph{dans quel ordre} ils valent, et \emph{contre qui} ils tiennent. Celui-ci descend d'un
+cran : pour chacun, le \textbf{mécanisme exact} -- souvent une ligne -- le \textbf{test qui échoue}
+quand la propriété casse, et la \textbf{justification de chacune des quatre notes} plutôt que la note
+seule. Deux précisions gagnées en descendant : l'injectivité du couple n\textsuperscript{o}2 tient
+entièrement dans un \code{Option::take()}, et la taxonomie de dégradation du couple
+n\textsuperscript{o}7 compte \textbf{dix motifs nommés} -- une rigueur qui rend d'autant plus
+frappante l'absence de tout producteur.
+\end{these}
+
+\section{1 · Méthode de notation}
+
+Un couple est deux éléments \textbf{plus un liant} : le mécanisme qui les fait produire ensemble une
+propriété qu'aucun n'a seul. Chaque couple est noté sur les quatre lentilles intrinsèques établies le
+5 août -- sans lentille d'objectif extérieur, celle-ci ayant disparu avec la piste qu'elle servait.
+
+\textbf{Maturité} : ce qu'il reste à faire pour que la propriété soit réellement obtenue, caveats
+compris. \textbf{Rareté} : la paire existe-t-elle ailleurs, ou la discipline qu'elle exige est-elle
+inhabituelle. \textbf{Adversaire} : la propriété survit-elle à un examinateur hostile qui cherche la
+faille plutôt que la confirmation. \textbf{Démontrabilité} : peut-on la montrer à un ingénieur
+sceptique, et surtout peut-on lui montrer son \emph{falsifieur} échouer.
+
+Les rangs vont de 1 (meilleur) à 8, par lentille. La moyenne des quatre donne le classement ;
+l'\textbf{écart} entre le meilleur et le pire rang mesure l'instabilité, et il se lit séparément.
+
+\begin{alerte}
+\textbf{Faits et jugements, séparés.} Les mécanismes, emplacements, noms de tests et taxonomies
+ci-dessous sont des \textbf{faits}, lus dans le code du 11 août et cités avec leur ligne. Les
+\textbf{notes} sont un \textbf{jugement} structuré pour être discutable. Un désaccord sur « rareté = 3 »
+est légitime ; un désaccord sur « \code{take\_matching} consomme le record » se tranche en ouvrant le
+fichier.
+\end{alerte}
+
+\renewcommand{\arraystretch}{1.12}
+\begin{center}\small
+\begin{tabular}{@{}r >{\raggedright\arraybackslash}p{6.6cm} cccc c c@{}}
+\toprule
+& \textbf{Le couple} & \sz{Mat} & \sz{Rar} & \sz{Adv} & \sz{Dém} & \textbf{Moy} & \sz{Éc.} \\
+\midrule
+\textbf{1} & Artefact scellé \x{} re-prouveur zéro-dépendance & \best{1} & 3 & \best{1} & 3 & \textbf{2,00} & 2 \\
+\textbf{2} & Topologie déclarée \x{} appariement injectif & 2 & 4 & 2 & 2 & \textbf{2,50} & 2 \\
+\textbf{3} & Liaison v4 \x{} ancre publiée & 3 & 5 & 3 & \best{1} & \textbf{3,00} & 4 \\
+\textbf{4} & Canari de Lipschitz \x{} porte de démarrage & 6 & 2 & 4 & 4 & \textbf{4,00} & 4 \\
+5\,= & Caviardage PII \x{} scellement & 4 & 7 & 6 & 6 & 5,75 & 3 \\
+5\,= & Plafonnement \x{} coût scellé & 5 & \pire{8} & 5 & 5 & 5,75 & 3 \\
+7 & Co-signature R3 \x{} chaîne HMAC & \pire{8} & \best{1} & \pire{8} & \pire{8} & 6,25 & \pire{7} \\
+8 & Revendication \x{} sa propre chute & 7 & 6 & 7 & 7 & 6,75 & \best{1} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\section{2 · Les huit couples, en détail}
+
+\couple{Rang 1}{Artefact scellé \x{} re-prouveur zéro-dépendance}{2,00}{2}
+
+\textbf{Anatomie.} \emph{A} : l'artefact scellé -- \code{meta\_steps.jsonl} et
+\code{meta\_manifest.json}, les octets exacts produits par le chemin servi. \emph{B} : un re-prouveur
+dont l'arbre de dépendances normales est \textbf{vide}. \emph{Le liant} : l'absence de chaîne
+d'approvisionnement entre l'auditeur et l'octet.
+
+\textbf{Le mécanisme.} Atteindre zéro dépendance interdit \code{serde}, \code{sha2}, \code{hmac} --
+tout. Les deux crates ré-implémentent donc à la main SHA-256, HMAC et un parseur JSON :
+\code{verify-mini} en \textbf{1\,159 lignes} sur sept modules
+\sz{(\code{sha256}, \code{hmac}, \code{json}, \code{record}, \code{verify}, \code{lib}, \code{main})},
+\code{verify-meta-mini} en \textbf{992 lignes} sur six. Ce n'est pas un accident de graphe de
+dépendances : c'est une contrainte tenue \textbf{deux fois}, sur deux piles indépendantes.
+
+Ré-implémenter de la cryptographie est une mauvaise idée par défaut, et le dépôt le sait : la
+\emph{fidélité} des deux implémentations est prouvée séparément, par des \textbf{vecteurs golden gelés}
+et un \textbf{cross-check octet-à-octet} contre la référence -- \code{golden\_chain\_hmac\_matches\_}
+\code{audit\_core}, \code{roundtrip\_against\_efe\_meta\_verify}, plus un aller-retour par version de
+schéma \sz{(v2 \code{safety\_delta}, v3 \code{vote\_hashes})}. La ré-implémentation est donc encadrée
+par une preuve d'équivalence, pas laissée à la confiance.
+
+\textbf{Le falsifieur.} \code{cargo tree -p verify-meta-mini -e normal -{}-prefix none} doit rendre
+\emph{une seule ligne}. C'est le contrôle le plus court du dépôt et le plus difficile à contester.
+
+\textbf{La notation.} \best{Maturité 1} : le seul couple du portefeuille dont l'analyse n'a relevé
+\emph{aucun} caveat. \sz{Rareté 3} : la discipline est rare, mais le \emph{principe} d'un vérifieur
+minimal ne l'est pas. \best{Adversaire 1} : la revendication se vérifie en une commande, et aucune
+rhétorique n'y résiste. \sz{Démontrabilité 3} : excellente, mais moins spectaculaire que le vert
+gênant du rang 3 -- une ligne de sortie convainc un ingénieur, elle ne le surprend pas.
+
+\begin{alerte}
+\textbf{La faille de ce couple n'est pas dans son code, elle est dans sa garde.} L'invariant
+« \code{cargo tree} ne montre que ce crate » est \emph{documenté} en commentaire dans quatre
+\code{Cargo.toml}, mais n'est gardé par \textbf{aucun test et aucun job d'intégration continue}. Le
+seul contrôle exécutable vit dans \code{scripts/demo-consensus-receipt.sh}, que rien ne déclenche
+automatiquement. Un \code{cargo add} passerait la revue sans qu'aucun voyant ne s'allume, et le couple
+le mieux classé du portefeuille tomberait en silence. \sz{Correctif : porter le contrôle en test.
+Taille XS.}
+\end{alerte}
+
+\couple{Rang 2}{Topologie déclarée \x{} appariement injectif}{2,50}{2}
+
+\textbf{Anatomie.} \emph{A} : la topologie \textbf{déclarée} -- la liste des appels annoncés avant
+exécution. \emph{B} : un \code{LlmProvenanceRecord} scellé par appel \textbf{réellement} effectué.
+\emph{Le liant} : un appariement \textbf{injectif} entre les deux.
+
+\textbf{Le mécanisme, et il tient en une ligne.} L'appariement puise dans un vivier de records qui
+sont des \code{Option}, et \emph{consomme} celui qu'il retient \loc{(mission\_graph.rs:98)} :
+
+\begin{extrait}\small
+\code{fn take\_matching(pool: \&mut [Option<LlmProvenanceRecord>], provider: Option<\&str>)}\\
+\hspace*{2em}\code{...}\\
+\hspace*{2em}\code{pool[idx].take()} \hfill \sz{$\leftarrow$ toute l'injectivité est ici}
+\end{extrait}
+
+\code{Option::take()} laisse un \code{None} derrière lui : un record ne peut donc être apparié
+\textbf{qu'une seule fois}. Sans cette ligne, trois n\oe uds déclarés sur le même fournisseur
+pointeraient tous le \emph{même} enregistrement et le reçu conclurait « cohérent » -- un faux positif
+parfait, et indétectable, puisque toutes les empreintes seraient valides.
+
+Ce n'est pas un cas théorique. La topologie \code{llm/debate} déclare $2 \cdot \text{rounds} + 1$
+appels avec les mêmes fournisseurs \textbf{répétés} à chaque ronde \loc{(mission\_graph.rs:273)} ;
+c'est exactement là que l'appariement naïf se casserait, et le dépôt l'a épinglé. Cinq topologies sont
+servies, chacune avec son arité déclarée : \code{vote} \sz{($k$ = nombre de modèles)}, \code{relay}
+\sz{(3 : planificateur, implémenteur, synthétiseur)}, \code{debate} \sz{($2r+1$)}, \code{specialist}
+\sz{(nombre de sous-tâches)}, \code{cascade}.
+
+\textbf{Les falsifieurs, et il y en a deux.}
+
+\begin{extrait}\small
+\code{omitted\_call\_makes\_verify\_false} \loc{(:475)} --- déclare trois fournisseurs, n'en exécute
+que deux ; exige \code{fully\_proven == false} et \code{bridge.broken == 1}.\\[2pt]
+\code{injective\_matching\_prevents\_partial\_receipt\_forgery} \loc{(:492)} --- déclare trois appels
+au \emph{même} fournisseur, n'en produit qu'un ; exige un n\oe ud apparié et deux manquants.
+\end{extrait}
+
+Le second est celui qui compte : il couvre le cas qu'une implémentation raisonnable raterait.
+
+\textbf{Le verdict est décomposé}, et c'est une qualité rare. Le premier test assère aussi
+\code{v.swarm.ok()} -- la chaîne d'essaim reste \emph{intègre} pendant que \code{fully\_proven} est
+faux. Le reçu ne dit donc pas seulement \emph{que} quelque chose ne va pas, il dit \emph{où} : ici le
+pont vers les appels externes, pas le sceau. Un auditeur qui reçoit un verdict binaire doit enquêter ;
+celui-ci reçoit un diagnostic.
+
+\textbf{La notation.} \sz{Maturité 2} : servi, sans caveat propre -- mais bordé par le faux couple F2
+\sz{(le \code{config\_hash} déclaré et non rapporté)}. \sz{Rareté 4} : déclarer une topologie est
+banal, l'apparier injectivement l'est beaucoup moins. \sz{Adversaire 2} : l'attaque évidente est
+précisément celle qui est couverte. \sz{Démontrabilité 2} : deux tests nommés, lisibles, et dont
+l'échec est parlant.
+
+\textbf{La limite, à énoncer.} Ce couple prouve la \emph{conformité à la déclaration}, pas
+l'\emph{ambition} de la déclaration. Un manifeste qui annonce honnêtement un panel d'un seul modèle
+produit un reçu parfaitement valide.
+
+\couple{Rang 3}{Liaison v4 \x{} ancre publiée}{3,00}{4}
+
+\textbf{Anatomie.} \emph{A} : la \code{RunBinding} v4 -- identifiants de participants \textbf{ordonnés},
+\code{config\_hash} déclarés alignés, opérateur, $\alpha$, $\gamma$, scellés ensemble. \emph{B} : un
+journal d'ancres append-only portant la racine \textbf{et le nombre de pas}. \emph{Le liant} :
+l'\textbf{antériorité} de la publication sur la réponse.
+
+\textbf{Le mécanisme, côté v4.} L'encodage canonique est binaire et préfixé en longueur
+\loc{(efe-meta-verify/src/lib.rs:165)}, avec deux protections que seule une lecture attentive révèle.
+D'abord, le préfixe de comptage n'est \emph{pas} la longueur de la première colonne :
+
+\begin{extrait}\small
+\code{let n = self.participant\_ids.len().min(self.declared\_config\_hashes.len());}
+\end{extrait}
+
+Une désérialisation contournant le constructeur pourrait produire des colonnes désalignées ; le
+préfixe mentirait alors sur le nombre d'entrées qui suivent, et l'encodage deviendrait ambigu. Le
+\code{min} ferme les deux bouts. Ensuite le \textbf{marqueur de présence} du \code{config\_hash}
+est scellé lui aussi \sz{(un octet 1 ou 0)} : sans lui, « absent » et « présent avec un hash nul » se
+confondraient.
+
+\textbf{Le mécanisme, côté ancre.} La ronde publie sa racine \emph{avant} que la réponse ne soit
+construite \loc{(controller/iterate.rs:280 $\rightarrow$ :291)}, et un échec de publication fait
+échouer l'appel. La clé du journal est préfixée \code{"meta:"} \loc{(anchor.rs:81)}, de sorte qu'un
+\textbf{seul} journal couvre la Couche 2 et la Couche 3, et qu'un auditeur sache à quoi il a affaire
+en lisant la clé.
+
+\textbf{Pourquoi l'ancre est nécessaire, et non décorative.} Le préfixe d'une chaîne HMAC valide est
+lui-même une chaîne HMAC valide. Retirer les derniers pas et « corriger » le manifeste produit donc un
+bundle qui se re-prouve \textbf{parfaitement} : rien, à l'intérieur, ne trahit la coupure. Seule une
+racine publiée à l'avance l'expose -- et le contrôle ne demande \textbf{aucune clé}.
+
+Le contrôle compare le \textbf{nombre de pas d'abord}, et l'ordre est délibéré
+\loc{(verify-meta-mini/src/verify.rs:369)} : une troncature change les deux valeurs, mais « le journal
+engage 30 pas, le bundle en présente 29 » est un diagnostic, là où « les racines diffèrent » ne dit à
+l'auditeur que ce qu'il voyait déjà. Le message distingue même \code{TRONCATURE} d'\code{AJOUT}.
+
+\textbf{Le falsifieur -- et c'est le meilleur du dépôt, parce qu'il est \emph{gênant}.} La
+démonstration montre d'abord le bundle tronqué \textbf{passer} la re-preuve avec la clé -- un vert
+franc, mérité, et trompeur -- avant de le faire tomber sur l'ancre sans aucune clé. Montrer sa propre
+garantie échouer là où elle ne s'applique pas est ce qui rend crédible l'endroit où elle s'applique.
+
+\textbf{La notation.} \sz{Maturité 3} : servi et complet, mais l'ancre reste détenue par l'opérateur.
+\sz{Rareté 5} : l'ancrage est un principe connu \sz{(journaux de transparence)} ; c'est le
+\emph{couplage} avec une liaison nominative qui est moins courant. \sz{Adversaire 3} : très solide
+contre la troncature rétroactive, attaquable sur la détention du journal. \best{Démontrabilité 1} : le
+meilleur du portefeuille, pour la raison ci-dessus.
+
+\textbf{La limite.} L'ancre est chez l'opérateur. Elle supprime la réécriture \emph{rétroactive}, pas
+la confiance. La garantie tierce est le jalon 3b, et \code{verify\_anchor} existe déjà côté
+\code{forensic-export}.
+
+\couple{Rang 4}{Canari de Lipschitz \x{} porte de démarrage}{4,00}{4}
+
+\textbf{Anatomie.} \emph{A} : un estimateur de constante de Lipschitz \textbf{empirique}, en boîte
+noire \loc{(participants/lipschitz.rs)}. \emph{B} : le participant efe-core réel et sa porte de
+démarrage \loc{(participant/local.rs:342)}. \emph{Le liant} : le \textbf{fail-closed} -- la mesure ne
+produit pas un rapport, elle produit un refus de servir.
+
+\textbf{Le mécanisme.} L'estimateur \sz{(\code{estimate\_lipschitz})} échantillonne des paires de
+points et cherche adversarialement le pire rapport, par bissection, afin de traquer les
+discontinuités. Il rend un certificat :
+
+\begin{extrait}\small
+\code{NonExpansiveCertificate::Empirical \{ l\_hat, margin, n\_pairs\_scored, inconclusive \}}\\[2pt]
+\sz{accepté seulement si} \code{l\_hat < 1 − margin} \sz{\textbf{et} concluant.}
+\end{extrait}
+
+\textbf{Ce que la documentation dit d'elle-même, et qu'il faut citer.} \emph{« $\hat{L}$ est une borne
+\textbf{inférieure} sur $L_\Phi$ »} ; le certificat est \emph{property-tested}, \textbf{pas} certifié ;
+et un passage est \emph{« a falsification failure, never a proof »}. Le dispositif ne prouve donc
+jamais la non-expansivité -- il échoue à la réfuter. C'est une distinction que peu de systèmes
+prennent la peine d'écrire, et elle est ici dans le type lui-même via \code{inconclusive}.
+
+\textbf{L'actif réel n'est pas le garde-fou, c'est ce que la mesure a produit.} Elle a
+\textbf{réfuté le certificat analytique} du document de conception : $\hat{L} = 0{,}69$ en topologie
+dynamique et $0{,}366$ en topologie fixe, contre un $\beta_1 \approx 0{,}17$ annoncé. La borne honnête
+est la borne mesurée. Un dépôt qui publie la réfutation de sa propre note théorique dit quelque chose
+sur sa méthode qu'aucune démonstration ne dirait.
+
+\textbf{Un piège déjà tombé, et corrigé.} Une première version avalait les explosions de $\Phi$ comme
+« hors domaine » via un \code{.ok()} -- un \emph{fail-open} parfait, où l'échec le plus grave
+ressemblait au cas le plus bénin. Il a fallu un \code{PhiOutcome} à trois états pour distinguer
+« hors domaine » de « a explosé ».
+
+\textbf{La notation.} \sz{Maturité 6} : servi, mais avec une échappatoire déclarée. \sz{Rareté 2} :
+mesurer empiriquement sa propre constante de contraction et refuser de démarrer dessus est très
+inhabituel. \sz{Adversaire 4} : honnête sur son statut, mais l'échappatoire est une prise.
+\sz{Démontrabilité 4} : le chiffre mesuré qui contredit le document est parlant, la démonstration est
+longue \sz{(le sondage coûte de trente secondes à quelques minutes au démarrage)}.
+
+\textbf{La limite.} \code{h1\_canary.mode = "off"} dans le manifeste fait servir le participant avec
+un avertissement bruyant. L'échappatoire est déclarée, tracée, et elle existe.
+
+\couple{Rang 5\,=}{Caviardage PII \x{} scellement}{5,75}{3}
+
+\textbf{Anatomie.} \emph{A} : le caviardage selon la policy tenant, à quatre modes -- \code{Off},
+\code{Detect}, \code{Redact}, \code{Strict} -- par tenant, avec \code{Off} pour défaut
+\loc{(pii.rs:7)}. \emph{B} : le hash du prompt scellé dans la chaîne. \emph{Le liant} :
+l'\textbf{ordre}.
+
+\textbf{Le mécanisme.} \code{Off} et \code{Detect} ne caviardent pas ; \code{Redact} et \code{Strict}
+caviardent, par détection \textbf{locale} -- expressions régulières, sans réseau. Le point décisif est
+l'ordre d'appel : \code{redact\_for\_egress} s'exécute \textbf{avant tout usage} de \code{user\_text},
+donc avant le hash scellé et avant le calcul d'arité. Le reçu commet ainsi ce qui est \emph{réellement}
+sorti. Caviarder après scellement ne vaudrait rien : on scellerait le texte en clair et l'on jurerait
+ensuite l'avoir protégé. Le patron servi est explicite dans le code :
+\code{role $\rightarrow$ gate $\rightarrow$ clamp/redact $\rightarrow$ admit $\rightarrow$ scope
+$\rightarrow$ run $\rightarrow$ seal}.
+
+\textbf{La faille fermée, et elle était invisible.} Sans la feature \code{pii}, la ligne de caviardage
+\emph{disparaissait du binaire} -- sans erreur, sans avertissement, sans trace d'exécution. Un
+opérateur pouvait compiler, lire « préflight frontière OK », et expédier chaque prompt en clair. Le
+correctif ne s'est pas contenté d'un \code{\#[cfg]} au site d'appel : la porte de démarrage exige
+désormais \textbf{soit la capacité compilée, soit une reconnaissance explicite} de l'opérateur. Le
+défaut \code{Off} par \emph{policy} reste légitime ; c'est le \textbf{silence} qui ne l'était pas.
+
+\textbf{La notation.} \sz{Maturité 4} : servi, avec une fissure documentée. \pire{Rareté 7} :
+caviarder avant un appel tiers est une pratique répandue ; seule la discipline d'ordre est
+distinctive. \sz{Adversaire 6} : l'examinateur hostile trouve prise immédiatement. \sz{Démontrabilité
+6} : montrer que l'\emph{ordre} compte exige de lire le code, ce qui est le contraire d'une
+démonstration.
+
+\textbf{La limite.} Sans policy tenant, le prompt sort en clair. C'est documenté dans le module même,
+et c'est ce qui coûte à ce couple les trois rangs qu'il a perdus au reclassement.
+
+\couple{Rang 5\,=}{Plafonnement \x{} coût scellé}{5,75}{3}
+
+\textbf{Anatomie.} \emph{A} : \code{clamp\_budget} -- cap du tenant \textbf{puis} plafond serveur
+\loc{(routes/llm.rs:249)}. \emph{B} : le coût par appel, scellé dans chaque enregistrement. \emph{Le
+liant} : la borne posée \textbf{en amont} du sceau.
+
+\textbf{Le mécanisme, et ses trois défaillances superposées corrigées.} La version antérieure ne
+bornait rien en l'absence de politique tenant : \code{if let Some(pol) = ...} laissait passer intact
+le budget d'un tenant sans policy. Aujourd'hui le plafond serveur s'applique \textbf{inconditionnellement},
+après le cap tenant. Sa valeur vient de \code{EFE\_LLM\_MAX\_BUDGET\_CENTS}, par défaut
+\textbf{10\,000}, avec un \code{.max(1)} explicite -- \emph{un plafond à zéro rendrait toute mission
+impossible ; on refuse de se tirer dessus}. Et la conversion sature vers le budget \textbf{d'origine},
+jamais vers \code{u32::MAX} : un dépassement arithmétique ne peut pas transformer un plafonnement en
+autorisation.
+
+\textbf{La notation.} \sz{Maturité 5} : servi et complet. \pire{Rareté 8} : le dernier du portefeuille
+-- la comptabilité de coût dans une piste d'audit est un acquis de l'industrie. \sz{Adversaire 5} :
+solide sur ce qu'il couvre. \sz{Démontrabilité 5} : convaincant, sans surprise.
+
+\textbf{La limite.} Le couple ne protège pas contre un opérateur qui trafique sa propre table de prix
+-- il scelle une dépense déclarée, pas une dépense auditée auprès du fournisseur. Le champ
+\code{provider\_quoted\_cost\_cents} existe précisément pour ce recoupement.
+
+\couple{Rang 7}{Co-signature R3 \x{} chaîne HMAC}{6,25}{7 \sz{(le plus instable)}}
+
+\textbf{Anatomie.} \emph{A} : la chaîne HMAC tenant, qui scelle le record \textbf{co-signature
+incluse} dans le \code{leaf\_hash}. \emph{B} : la signature Ed25519 du n\oe ud sur
+\code{prompt\_hash} $\Vert$ \code{output\_hash}, clé privée ne quittant jamais le n\oe ud. \emph{Le
+liant} : l'\textbf{orthogonalité} des deux systèmes.
+
+\textbf{Le mécanisme, et l'argument qui le justifie est écrit dans le module.} Une co-signature HMAC
+exigerait que le vérifieur \emph{détienne le secret du n\oe ud}, donc qu'il puisse le \textbf{forger} :
+pas de non-répudiation. L'asymétrie est l'essence de R3. L'orchestrateur ne détient que du
+\textbf{public} -- un tiers muni du registre, des records et de la clé tenant peut donc \textbf{tout
+vérifier hors ligne, sans aucun secret}. D'où la propriété composée : \textbf{forger un R3 exige les
+DEUX clés}.
+
+\textbf{La règle de fer -- « aucune élévation sans preuve » (I-RC9).} Le barreau \textbf{scellé} est la
+\emph{revendication} du producteur ; le barreau \textbf{vérifié} est ce que la preuve cryptographique
+\emph{soutient}. Le vérifieur n'accepte jamais R3 sur parole : une co-signature invérifiable
+\textbf{redescend} le record à R4 -- la transaction se re-prouve toujours -- et le verdict le
+\textbf{signale}. C'est câblé, pas déclaratif : \code{n17\_chain.rs:346} calcule
+\code{(held\_strength, cosign\_anomalies)}, la ligne 365 les place dans le verdict, la ligne 393
+déclenche la dégradation, et \code{routes/llm.rs:201-202} sert \code{weakest\_rank} et
+\code{weakest\_label} jusqu'au client.
+
+\textbf{La taxonomie de dégradation compte dix motifs nommés}, et leur lecture donne la mesure du
+soin : \code{NodeNotPinned}, \code{NodeRevoked}, \code{UnsupportedScheme}, \code{TupleMismatch},
+\code{MalformedKey}, \code{MalformedSignature}, \code{SignatureInvalid}, \code{MissingOutput}
+\sz{(refuser de lier une co-signature à un contenu absent)}, \code{NonceReused} \sz{(rejeu intra-run)}
+et \code{ChainNotIntact} \sz{(pas de témoin sur un run non re-prouvé)}. Le registre distingue en outre
+\code{Active} de \code{Revoked \{ reason \}}.
+
+\begin{alerte}
+\textbf{Et la propriété ne se déclenche jamais.} Aucun chemin servi ne \emph{produit} de co-signature :
+les seules constructions de \code{NodeCoSignature} hors définitions de types sont des \code{\#[test]}
+\loc{(efe-swarm-sdk/src/n17.rs:322)}, et le registre de n\oe uds n'est peuplé que dans des tests
+\loc{(NodeRegistry::empty().with\_node(...), attest.rs:219)}. En production le registre est vide, aucun
+enregistrement n'est R3, et le barreau le plus faible est \textbf{R4 par construction}. Dix motifs de
+dégradation extrêmement soignés gardent une porte que personne ne franchit.
+\end{alerte}
+
+\textbf{La notation, et elle est brutale.} \pire{Maturité 8} : il manque un producteur.
+\best{Rareté 1} : la conception -- double clé, non-élévation automatique, taxonomie à dix motifs -- est
+la plus sophistiquée du portefeuille. \pire{Adversaire 8} : un examinateur le tue en une phrase, « donc
+ça ne se déclenche jamais ». \pire{Démontrabilité 8} : il n'y a littéralement rien à montrer.
+
+\begin{piste}
+\textbf{L'écart de \pire{7} est le plus grand du tableau, et c'est l'information utile.} Un couple
+premier sur une lentille et dernier sur trois n'est pas « moyen » : il est \textbf{instable}. La
+formule juste est \emph{pire réalisé, meilleur latent}. Un producteur sur le chemin servi et un
+registre peuplé le feraient passer de septième à disputer la première place -- c'est le seul chantier
+identifié qui déplace un couple de six rangs. Et il a un précédent : le trou « aucun producteur » de la
+pile B avait exactement cette forme, et il a été fermé.
+\end{piste}
+
+\couple{Rang 8}{Revendication \x{} sa propre chute}{6,75}{1 \sz{(le plus stable)}}
+
+\textbf{Anatomie.} \emph{A} : les hops de reformulation, chacun portant son moteur effectif
+\sz{(\code{SLM}, \code{RULE}, ou dégradé)}. \emph{B} : le prédicat « tous les hops sont SLM »
+\loc{(routes/llm.rs:166)}. \emph{Le liant} : le calcul \textbf{depuis la sortie scellée}.
+
+\textbf{Le mécanisme.} \code{slm\_mediated} vaut \code{!hops.is\_empty() \&\& slm == hops.len()} : la
+revendication « relais médié par le petit modèle » n'est vraie que si \textbf{tous} les hops le sont,
+et une seule dégradation la fait tomber, visiblement. La vue agrégée
+\sz{(\code{hops}, \code{slm}, \code{rule}, \code{degraded}, \code{slm\_mediated})} est dérivée de la
+sortie \textbf{scellée}, jamais recalculée ailleurs -- elle ne peut donc pas diverger de l'attesté.
+
+\textbf{Une précision gagnée en descendant dans le code}, et qui renforce le couple : chaque hop est
+\emph{en outre} scellé \textbf{individuellement} dans la chaîne HMAC, comme un n\oe ud Mode-A
+\code{reform\_i} dont le JSON -- moteur effectif et faits d'audit -- est committé dans son
+\code{output\_hash}, en plus du commitment global du blob de sortie par le n\oe ud \code{reduce}. Les
+hops viennent de la sortie \textbf{productrice}, pas de la requête.
+
+\textbf{La notation.} \sz{Maturité 7} : servi, mais voisin immédiat d'une fissure. \sz{Rareté 6} : le
+patron « la revendication embarque son falsifieur » est élégant et peu répandu, mais sa portée est
+étroite. \sz{Adversaire 7} : l'examinateur passe au faux couple F1 dans la phrase suivante.
+\sz{Démontrabilité 7} : un booléen dans une réponse JSON.
+
+\textbf{L'écart de 1 en fait le couple le plus \emph{stable} du portefeuille} -- il est régulièrement
+avant-dernier partout. C'est l'inverse exact du rang 7, et les deux méritent d'être lus ensemble : la
+stabilité n'est pas une qualité en soi, elle dit seulement qu'aucun travail ne le déplacera beaucoup.
+
+\textbf{La limite, et c'est un faux couple voisin.} \code{slm\_mediated} atteste la \emph{médiation},
+pas la \emph{souveraineté}. L'URL du petit modèle n'est pas contrainte au local, son egress n'est ni
+gardé par l'allowlist tenant ni décompté \sz{(le hop est budgété 0 ¢)}, et le système avertit au
+démarrage plutôt que de prétendre une souveraineté qu'il ne vérifie pas. Pire, la règle de
+souveraineté existe en \textbf{trois} implémentations qui ont déjà divergé une fois en contournement
+SSRF.
+
+\section{3 · L'élément porteur -- ce que la décomposition révèle}
+
+Décomposer huit couples en seize éléments fait apparaître qu'\textbf{ils ne sont pas seize}. Plusieurs
+sont le même, réutilisé -- et l'un porte presque tout.
+
+\renewcommand{\arraystretch}{1.15}
+\begin{center}\small
+\begin{tabular}{@{}>{\raggedright\arraybackslash}p{4.9cm} c >{\raggedright\arraybackslash}p{9.7cm}@{}}
+\toprule
+\textbf{L'élément} & \textbf{Couples} & \textbf{Ce que sa perte emporterait} \\
+\midrule
+\textbf{La chaîne HMAC scellée} & \pire{7 / 8} &
+  1, 2, 3, les deux 5=, 7 et 8 \textbf{simultanément} : le point porteur unique \\
+La policy tenant & 2 & les deux couples 5= -- caviardage \emph{et} plafond de coût \\
+La sortie scellée, source unique & 2 & le couple 8, et l'appariement du couple 2 \\
+La signature Ed25519 & 1 \sz{(+1 latent)} & le couple 7, et le chantier de signature de racine \\
+\midrule
+\textbf{L'estimateur de Lipschitz} & \best{1} & le couple 4 \textbf{seul} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Le constat se vérifie en une commande : \code{participant/local.rs}, qui porte le canari, ne contient
+\textbf{aucune} occurrence de HMAC. Le couple 4 est le seul qui survivrait intégralement à une faille
+dans le scellement -- parce qu'il ne prouve rien à personne : il refuse de démarrer.
+
+\begin{alerte}
+\textbf{La conséquence réordonne les priorités.} Sept couples sur huit reposent sur le \emph{même}
+élément. Une faille dans le scellement ne dégraderait pas le portefeuille, elle l'\textbf{effondrerait
+d'un coup} -- y compris les mieux classés, y compris ceux dont la propriété semble indépendante. Ce
+n'est pas un défaut de conception : c'est le prix d'une architecture cohérente où tout se ramène à un
+sceau unique. Mais cela doit être \emph{su}.
+\end{alerte}
+
+Et cela donne au rang 1 la justification qui lui manquait. Si un seul élément porte sept couples, la
+seule chose qui compte vraiment est de pouvoir \textbf{contrôler cet élément sans dépendre de celui qui
+l'a produit}. Le re-prouveur zéro-dépendance n'est donc pas un « amplificateur » : c'est le
+\textbf{seul contrôle indépendant du point porteur unique}. Ce qui rend d'autant plus gênant qu'aucun
+test ne garde sa contrainte.
+
+\section{4 · Sensibilité -- ce qui déplacerait chaque rang}
+
+\renewcommand{\arraystretch}{1.2}
+\begin{center}\small
+\begin{tabular}{@{}r >{\raggedright\arraybackslash}p{4.3cm} >{\raggedright\arraybackslash}p{7.4cm} >{\raggedright\arraybackslash}p{3.4cm}@{}}
+\toprule
+& \textbf{Le couple} & \textbf{L'événement unique qui le déplacerait} & \textbf{Effet} \\
+\midrule
+1 & Re-prouveur zéro-dép & \emph{aucun} qui le monte -- il est au plafond ; une dépendance ajoutée le
+  ferait chuter de partout & \sz{ne peut que} $\downarrow$ \\
+2 & Topologie \x{} injectif & \textbf{M4} : un \code{config\_hash} \emph{rapporté}, fermant F2 &
+  $\uparrow$ \sz{vers la 1\textsuperscript{re}} \\
+3 & Liaison v4 \x{} ancre & \textbf{3b} : une ancre tierce -- \code{verify\_anchor} existe déjà &
+  $\uparrow$ \sz{sur l'adversaire} \\
+4 & Canari \x{} porte & retirer l'échappatoire, ou la rendre refusable par configuration &
+  $\uparrow$ \sz{modeste} \\
+5\,= & PII \x{} scellement & une policy tenant par \textbf{défaut fail-closed} & $\uparrow$ \sz{2 rangs} \\
+5\,= & Plafonnement \x{} coût & rien de bon marché : sa faiblesse est la \emph{rareté} & \sz{stable} \\
+\textbf{7} & \textbf{Co-signature R3} & \textbf{un producteur} servi + un registre peuplé &
+  \best{$\uparrow$ six rangs} \\
+8 & Revendication \x{} chute & fermer F1 : contraindre l'URL du SLM et décompter son egress &
+  $\uparrow$ \sz{modeste} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Un seul chantier déplace un couple de six rangs ; tous les autres valent un ou deux. Classés par
+\emph{effet sur la valeur} plutôt que par difficulté ressentie, les travaux du portefeuille sont donc
+écrasés par un seul item -- ce qui est exactement ce que mesurait l'écart de \pire{7}.
+
+\section{5 · Les quatre documents de cette série, et lequel ouvrir}
+
+Quatre analyses ont été produites en deux jours sur le même objet. Elles ne se remplacent pas -- elles
+descendent -- et il vaut mieux dire laquelle répond à quoi que laisser un lecteur les ouvrir dans le
+désordre.
+
+\renewcommand{\arraystretch}{1.25}
+\begin{center}\small
+\begin{tabular}{@{}>{\raggedright\arraybackslash}p{5.0cm} >{\raggedright\arraybackslash}p{5.4cm} >{\raggedright\arraybackslash}p{5.6cm}@{}}
+\toprule
+\textbf{Le document} & \textbf{Il répond à} & \textbf{Ce qu'il faut en retenir} \\
+\midrule
+\code{Etat\_Des\_Lieux} \sz{(10 août)} &
+  Où en est le dépôt ? &
+  Tout est opt-in et \textbf{aucun profil ne l'allume} : un build par défaut ne sert aucun reçu \\
+\code{Meilleurs\_Couples} \sz{(10 août)} &
+  Quels couples existent ? &
+  Les faits et les \textbf{faux couples}. Sa hiérarchie est périmée \sz{(lentille Kovant)}, ses faits
+  ne le sont pas \\
+\code{Couples\_Classement\_} \code{Intrinseque} \sz{(11 août)} &
+  Dans quel ordre valent-ils, sans finalité ? &
+  Le classement en vigueur, et pourquoi retirer l'axe extérieur a tout déplacé \\
+\textbf{Ce document} \sz{(11 août)} &
+  Comment marchent-ils exactement ? &
+  Le mécanisme, le test qui échoue, et la \textbf{justification de chaque note} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Deux remarques pour finir, qui portent sur la série plutôt que sur un document.
+
+La première : \textbf{deux de ces quatre documents ont dû corriger le précédent}, et dans les deux cas
+la correction est venue d'une commande écrite pour \emph{confirmer} une absence. C'est un taux d'erreur
+élevé, et il n'est pas un accident de rédaction : les affirmations négatives -- « cela n'existe pas »,
+« rien ne le produit » -- sont les seules qu'un lecteur ne peut pas vérifier en lisant, et donc les
+seules qu'un auteur doit exécuter avant d'écrire. Les annexes de re-vérification existent pour cette
+raison.
+
+La seconde : \textbf{aucune cible d'usage n'est déclarée}, et aucun de ces documents n'en propose. Le
+classement est sans finalité, ce qui est un état tenable -- c'était déjà la posture du 5 août. Si une
+cible apparaît, la quatrième lentille se rejoue, et le §4 ci-dessus dit déjà de combien chaque rang
+bougerait.
+
+\begin{these}
+\small\textbf{Portée et statut.} Mécanismes, emplacements, noms de tests et taxonomies sont des faits
+lus dans le code du 11 août ; les \textbf{notes} sont un jugement structuré, pas une mesure. La chaîne
+du reçu mesure \textbf{515 tests, 0 échec} \sz{(35 binaires)}, par exécution réelle. La couche nano et
+\code{efe-gold-test-gate} n'ont été examinés dans aucun des quatre documents de cette série. Et le
+rappel qui ne dépend d'aucune cible : le reçu atteste l'\textbf{intégrité} d'une suite de pas, jamais
+la \textbf{correction} d'une décision, et il est \emph{tamper-evident pour un détenteur de clé}, pas
+\emph{trustless pour un tiers}.
+\end{these}
+
+\end{document}
