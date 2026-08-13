@@ -1,0 +1,369 @@
+\documentclass[10pt]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage[french]{babel}
+\usepackage{newpxtext,newpxmath}
+\usepackage[a4paper,top=1.5cm,bottom=1.35cm,left=1.6cm,right=1.6cm]{geometry}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{titlesec}
+\usepackage[most]{tcolorbox}
+\usepackage{enumitem}
+\usepackage{array}
+\usepackage{booktabs}
+\usepackage{fancyhdr}
+
+\definecolor{navy}{HTML}{1F3A5F}
+\definecolor{grey}{HTML}{54606E}
+\definecolor{green}{HTML}{2C6E49}
+\definecolor{amber}{HTML}{9C6A16}
+\definecolor{red}{HTML}{A6322E}
+\definecolor{plum}{HTML}{7A4EA8}
+\definecolor{boxgray}{HTML}{F3F5F8}
+\definecolor{boxred}{HTML}{FCF2F1}
+\definecolor{boxgreen}{HTML}{F1F7F3}
+\definecolor{boxplum}{HTML}{F7F3FB}
+\definecolor{boxcode}{HTML}{F7F8FA}
+\definecolor{boxedge}{HTML}{D9E0EA}
+
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{2.6pt}
+\linespread{1.0}
+
+\pagestyle{fancy}\fancyhf{}
+\lhead{\small\color{grey}Scella}
+\rhead{\small\color{grey}Quel groupe faire produit unique -- 11 août 2026}
+\cfoot{\small\color{grey}\thepage}
+\renewcommand{\headrulewidth}{0.3pt}
+
+\titleformat{\section}{\color{navy}\large\bfseries}{}{0pt}{}
+\titlespacing{\section}{0pt}{11pt}{3pt}
+\titleformat{\subsection}{\color{navy}\bfseries}{}{0pt}{}
+\titlespacing{\subsection}{0pt}{7pt}{1.5pt}
+
+\newtcolorbox{these}{colback=boxgray,colframe=boxedge,boxrule=0.5pt,arc=2.5pt,
+  left=8pt,right=8pt,top=4.5pt,bottom=4.5pt}
+\newtcolorbox{alerte}{colback=boxred,colframe=red!55,boxrule=0.8pt,arc=2.5pt,
+  left=8pt,right=8pt,top=4.5pt,bottom=4.5pt}
+\newtcolorbox{acquis}{colback=boxgreen,colframe=green!45,boxrule=0.8pt,arc=2.5pt,
+  left=8pt,right=8pt,top=4.5pt,bottom=4.5pt}
+\newtcolorbox{piste}{colback=boxplum,colframe=plum!45,boxrule=0.8pt,arc=2.5pt,
+  left=8pt,right=8pt,top=4.5pt,bottom=4.5pt}
+\newtcolorbox{extrait}{colback=boxcode,colframe=boxedge,boxrule=0.5pt,arc=1.5pt,
+  left=7pt,right=7pt,top=3.5pt,bottom=3.5pt}
+
+% \textcolor plutôt que {\color …} : en tête de cellule p{}, \color insère un whatsit
+% qui ouvre une ligne vide et décale verticalement toute la colonne.
+\newcommand{\best}[1]{\textcolor{green}{\textbf{#1}}}
+\newcommand{\pire}[1]{\textcolor{red}{\textbf{#1}}}
+\newcommand{\sz}[1]{\textcolor{grey}{\small\textsf{#1}}}
+\newcommand{\code}[1]{\texttt{\small #1}}
+\newcommand{\x}{$\times$}
+\newcommand{\loc}[1]{{\footnotesize\color{grey}\texttt{#1}}}
+
+\begin{document}
+
+\begin{center}
+{\Huge\bfseries\color{navy} Scella}\\[4pt]
+{\large\color{grey}\itshape Quel groupe faire produit unique}\\[4pt]
+{\small\color{grey} 11 août 2026 \; · \; suite de la série couples $\rightarrow$ ensembles \; · \; frontières mesurées, non dessinées}
+\end{center}
+\vspace{2pt}
+
+\begin{these}
+\textbf{Le résultat central.} La question change de nature : « ensembles » demandait ce qui fonctionne
+ensemble, « un seul produit » demande \textbf{ce qu'il faut jeter}. Mesuré plutôt que dessiné, le
+candidat retenu -- \textbf{l'essaim attestable} -- pèse \textbf{7 crates} en mode défaut et
+\textbf{26} dans le mode qui le rend démontrable. Cet écart de dix-neuf crates tient à \textbf{une
+seule ligne} de \code{Cargo.toml} qui défait, une couche plus haut, un découplage établi et
+\emph{documenté} une couche plus bas. Corrigé, le produit tombe à \textbf{neuf crates sur soixante-six}
+-- et l'écart de couverture désigné comme le plus gros gisement du dépôt (\textbf{2 chaînes scellées
+re-prouvables sur 9}) se referme de lui-même, parce qu'il était en grande partie l'artefact d'une
+absence de frontière.
+\end{these}
+
+\section{1 · Ce que « un seul produit » change, et la contrainte que je m'impose}
+
+Les quatre études de couples, puis celle des ensembles, notaient des assemblages selon ce qu'ils
+\emph{apportent}. Un produit se juge à l'inverse : il se définit \textbf{autant par son exclusion que
+par son contenu}. Un groupe qui ne jette rien n'est pas un produit, c'est un dépôt.
+
+J'ai donc changé de méthode plutôt que de refaire un classement. Les frontières ne sont pas dessinées à
+la main d'après les documents d'architecture : elles sont \textbf{mesurées}. La nomenclature réelle
+d'un produit, c'est la fermeture transitive de son binaire racine, et \code{cargo tree} la donne
+exactement. C'est la seule façon de savoir ce qu'on livre vraiment plutôt que ce qu'on croit livrer.
+
+\begin{alerte}
+\textbf{La contrainte que je m'impose, et qu'il faut dire.} Aucune cible extérieure n'est déclarée
+depuis l'abandon de la piste Kovant, et ce document \textbf{n'en invente pas}. Il ne juge donc pas
+« quel produit se vend » -- cette question n'a pas de réponse sans destinataire. Il juge les
+\textbf{propriétés intrinsèques de produit} : unicité de la promesse, unicité de la surface, fermeture
+de la frontière, et coût de la découpe. Ce sont des propriétés vérifiables sans acheteur.
+\end{alerte}
+
+Quatre critères, et le premier est un test que je m'applique sans indulgence : la promesse tient-elle en
+\textbf{une phrase, sans « et aussi »} ? Un candidat qui a besoin d'une conjonction pour se décrire est
+un catalogue déguisé.
+
+\section{2 · Les nomenclatures mesurées}
+
+Ce sont des faits, sortis de \code{cargo tree -e normal}, intersectés avec les membres du workspace.
+L'annexe donne la commande.
+
+\renewcommand{\arraystretch}{1.16}
+\begin{center}\small
+\begin{tabular}{@{}>{\raggedright\arraybackslash}p{6.2cm} c >{\raggedright\arraybackslash}p{8.2cm}@{}}
+\toprule
+\textbf{Racine} & \textbf{Crates} & \textbf{Ce que le chiffre dit} \\
+\midrule
+\code{efe-core} \sz{seul} & \best{1} & Le moteur ne tire \textbf{rien} du workspace \\
+\code{verify-meta-mini}, \code{verify-mini} & \best{1} & Zéro dépendance, confirmé des deux côtés \\
+\code{efe-meta-swarm-server} \sz{défaut} & \best{7} & Un produit remarquablement serré \\
+\code{efe-swarm-gateway} & 11 & Complet et \emph{déjà} découplé \\
+\code{efe-server} \sz{seul} & 20 & Le monolithe applicatif \\
+\code{efe-meta-swarm-server} \sz{\code{--features core-integration}} & \pire{26} & \textbf{Le mode qui rend le produit démontrable quadruple son empreinte} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+La dernière ligne est celle qui décide de tout le document. Le mode \code{--real} de la démonstration --
+participants \code{efe-core} réels, trois \code{config\_hash} réels, canari H1 au démarrage -- est
+exactement ce qui rend le produit crédible devant un examinateur. C'est aussi ce qui lui fait tirer
+dix-neuf crates supplémentaires.
+
+\section{3 · Les quatre candidats, et les deux qui s'éliminent seuls}
+
+\renewcommand{\arraystretch}{1.2}
+\begin{center}\small
+\begin{tabular}{@{}>{\raggedright\arraybackslash}p{3.5cm} c c >{\raggedright\arraybackslash}p{8.1cm}@{}}
+\toprule
+\textbf{Candidat} & \sz{Crates} & \sz{Jette} & \textbf{Le test « une phrase »} \\
+\midrule
+\textbf{P1} · Le reçu seul & 4--6 & 60 & \emph{« Un tiers re-prouve, sans vous croire. »} \best{\checkmark} \\
+\textbf{P2} · L'essaim attestable & 7 $\rightarrow$ \pire{26} & 40 & \emph{« Des agents convergent, et le reçu nomme qui a contribué quoi, sous quelle version. »} \best{\checkmark} \\
+\textbf{P3} · Le relais souverain & \best{11} & 55 & \emph{« De petits modèles locaux relaient entre gros modèles, un reçu par saut. »} \best{\checkmark} \\
+\textbf{P4} · La Colonne & 66 & \pire{0} & \emph{« Un organisme à quatre étages sous un seul reçu. »} \pire{$\times$} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\textbf{P4 s'élimine seul, et pour deux raisons qui se renforcent.} Sa phrase décrit une
+\emph{architecture}, pas une promesse -- un lecteur en ressort en sachant comment c'est bâti et pas ce
+que ça lui fait. Et il ne jette rien : les trois assemblages qui le constitueraient
+-- Sandwich, essaim médiateur, Fil C -- comptent zéro ligne. On ne fait pas un produit d'un plan.
+
+\textbf{P1 s'élimine aussi, mais pour une raison plus subtile et plus instructive.} Sa phrase est la
+meilleure des quatre, et sa nomenclature la plus serrée. Mais sans producteur, il n'a rien à sceller :
+sa démonstration exigerait d'emprunter précisément P2. C'est une \textbf{bibliothèque} excellente, pas
+un produit -- et on ne bâtit pas un produit sur une moitié qui a besoin de l'autre pour se montrer.
+C'est la version « produit » du résultat de l'étude des ensembles : \emph{les meilleurs assemblages
+sont des greffes}.
+
+Restent \textbf{P2} et \textbf{P3}.
+
+\section{4 · Le défaut qui tranche, et c'est la signature du dépôt appliquée au packaging}
+
+Voici pourquoi P2 coûte vingt-six crates. Dans \code{efe-meta-swarm/Cargo.toml}, la séparation a été
+faite \textbf{correctement}, et l'intention écrite noir sur blanc :
+
+\begin{extrait}
+\code{core-integration \ = ["dep:efe-core", "dep:tokio"]} \\
+\code{integration-test \ = ["core-integration", "dep:efe-server"]} \\[3pt]
+\sz{« the served bridge must stay decoupled from the heavy efe-server crate »}
+\end{extrait}
+
+Un cran au-dessus, \code{efe-meta-swarm-server/Cargo.toml:191} :
+
+\begin{extrait}
+\code{core-integration = ["efe-meta-swarm/core-integration", \pire{"dep:efe-server"}, "dep:efe-core"]}
+\end{extrait}
+
+\begin{alerte}
+\textbf{Il réintroduit \code{dep:efe-server} dans la feature de \emph{production}} -- exactement ce que
+la couche du dessous avait délibérément évité, et documenté comme devant l'être. La discipline est
+établie, écrite, puis défaite une couche plus haut.
+
+C'est le \emph{vert malhonnête} appliqué au packaging : le produit se croit découplé, le graphe de
+dépendances dit le contraire. Et la conséquence est chiffrable -- \code{efe-server} amène
+\code{billing}, \code{cache}, \code{graphrag}, \code{kg}, \code{multimodal}, \code{pii},
+\code{prompts}, \code{region}, \code{retrieval}, \code{vector}, \code{telemetry}, \code{metering},
+\code{events}, \code{curation}, \code{agent-runner}, \code{llm-router}. \textbf{Dix-neuf crates d'une
+pile applicative sans aucun rapport avec la promesse du produit.}
+\end{alerte}
+
+\subsection{4.1 · Ce que la correction coûte, mesuré}
+
+L'import de production est réel, pas un résidu de test : il se trouve dans
+\code{participant/local.rs:479}, à l'intérieur du module \code{core\_engine} déclaré ligne 457, et le
+seul \code{\#[cfg(test)]} du fichier n'apparaît qu'à la ligne 749. La dépendance est donc à prendre au
+sérieux -- il ne suffit pas de la déplacer en dev-dépendance.
+
+Mais l'extraction est \textbf{mécanique}, et c'est là le point : \code{efe-server/src/mode1.rs} fait
+\textbf{1 979 lignes} et ne contient qu'\textbf{un seul} \code{use crate::} -- deux traits.
+\emph{Le couplage au monolithe tient à une ligne d'import.} Sortir la recette Mode-1 vers
+\code{efe-core}, où elle appartient conceptuellement, est une opération de déplacement, pas une refonte.
+
+\begin{acquis}
+Après correction, \textbf{P2 passe de 26 à environ 9 crates} : les 7 du mode défaut, plus
+\code{efe-core} (qui ne tire rien), plus le vérifieur zéro-dépendance.
+\end{acquis}
+
+\begin{alerte}
+\textbf{Avertissement pratique.} \code{crates/efe-server/src/mode1.rs} fait partie des fichiers
+modifiés par la session concurrente et non commités. Ce refactor entrerait \textbf{en collision}. Il
+faut attendre que cet arbre se stabilise, ou se coordonner avant d'y toucher.
+\end{alerte}
+
+\section{5 · Le bénéfice caché : tracer la frontière referme le gisement}
+
+L'étude des ensembles désignait comme plus gros gisement du dépôt l'écart \textbf{2 chaînes scellées
+re-prouvables sur 9}. J'ai vérifié ce que cet écart devient une fois la frontière produit tracée, et le
+résultat corrige la recommandation précédente.
+
+Dans la nomenclature de P2, \code{efe-audit-core} et \code{efe-nano-sdk} ne sont tirés que pour
+\textbf{un type chacun} -- \code{HmacKeySource} et \code{TenantId}, deux simples ré-exports dans
+\code{efe-meta-swarm/src/provenance.rs}. Ils n'apportent \textbf{aucune chaîne scellée} dans le produit.
+
+\begin{acquis}
+\textbf{Le produit contient donc exactement une chaîne scellée -- le reçu méta -- et elle a deux
+re-prouveurs, dont un à zéro dépendance.} L'écart « 2 sur 9 » devient \textbf{1 sur 1, doublement
+re-prouvé}.
+\end{acquis}
+
+Ce n'est pas un tour de passe-passe comptable : les sept chaînes orphelines vivent dans des crates que
+le produit \emph{ne livre pas}. \textbf{Le gisement identifié comme le plus important du dépôt était en
+grande partie l'artefact d'une absence de frontière produit} -- et le tracer coûte nettement moins cher
+que de le combler. C'est une révision à la baisse d'une recommandation que je portais il y a quelques
+heures, et elle est faite ici plutôt qu'en silence.
+
+\sz{Bonus d'hygiène au passage : deux crates entiers liés pour deux alias de type. Les définir
+localement ferait passer le produit de neuf à sept.}
+
+\section{6 · P2 ou P3 -- la décision, et sur quoi elle se joue}
+
+Les deux tiennent. Le choix ne se tranche pas au classement mais sur \textbf{le défaut qu'on préfère
+posséder}.
+
+\renewcommand{\arraystretch}{1.2}
+\begin{center}\small
+\begin{tabular}{@{}>{\raggedright\arraybackslash}p{2.6cm} >{\raggedright\arraybackslash}p{6.4cm} >{\raggedright\arraybackslash}p{6.4cm}@{}}
+\toprule
+& \textbf{P2 · L'essaim attestable} & \textbf{P3 · Le relais souverain} \\
+\midrule
+Packaging & défectueux $\rightarrow$ \best{9 après une correction mécanique} & \best{déjà correct} : 11 crates, aucun monolithe \\
+Promesse & exige d'expliquer un consensus latent & \best{immédiatement lisible} \\
+Reçu & \best{v4 nominatif + ancre + 2 vérifieurs + contrôle croisé} & par saut + bundle + ancre, \emph{non} nominatif \\
+Démonstration & \best{la meilleure du dépôt} : une commande, 4 actes, 3 échecs voulus & exige un point de terminaison SLM externe \\
+Ce qui lui manque & une \emph{extraction} de module & un \emph{changement de format scellé} \\
+Tests & \best{515, 0 échec, 0 ignoré} sur sa chaîne & --- \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{alerte}
+\textbf{Une correction, faite en cours de rédaction.} J'allais trancher en invoquant contre P3 le
+\textbf{garde d'egress dupliqué} -- \code{is\_local\_endpoint} vit bien dans deux fichiers,
+\code{provenance-capture/src/guard.rs} et \code{efe-swarm-sdk/src/backend/mod.rs}, et les deux copies
+ont déjà divergé une fois en produisant un contournement SSRF. La vérification a réfuté l'argument :
+\textbf{\code{provenance-capture} n'est pas dans la fermeture de P3}. La duplication \emph{enjambe} la
+frontière au lieu d'être dedans -- P3 n'en embarquerait qu'une seule copie. Tracer la frontière
+résout ce défaut-là aussi, exactement comme elle referme le gisement du §5. L'argument tombe, et le
+verdict doit reposer sur autre chose.
+\end{alerte}
+
+\begin{piste}
+\textbf{Je recommande P2}, et la raison qui subsiste après cette réfutation est plus solide que celle
+que j'allais donner : c'est la \textbf{nature du travail restant}.
+
+Ce qui manque à P2 est un \textbf{déplacement de module} -- mécanique, une ligne \code{use crate::} sur
+1 979, aucun format touché, aucun vérifieur à mettre à jour, fait une bonne fois. Ce qui manque à P3
+est un \textbf{reçu nominatif} : porter la liaison v4 sur le bundle de la pile B change le
+\textbf{format scellé}, donc oblige à modifier \emph{aussi} le re-prouveur -- et un format scellé se
+change une fois, ou jamais.
+
+Et c'est bien la propriété qui est en jeu : ce que P2 possède de rare -- un reçu qui \textbf{nomme} ses
+acteurs, leurs versions et sa règle, et dont la troncature se voit \textbf{sans la clé} -- est
+précisément ce dont P3 est dépourvu. Le produit doit être bâti autour de ce qu'il a de plus rare.
+\end{piste}
+
+\section{7 · Ce que la recommandation exige d'abandonner}
+
+C'est la partie difficile, et elle doit être dite sans adoucissement. Retenir P2 revient à sortir du
+produit \textbf{cinquante-sept crates sur soixante-six} :
+
+\begin{itemize}[leftmargin=1.1em,itemsep=1pt,topsep=2pt]
+\item \textbf{les six crates nano} -- dont le daemon n'a déjà aucun appelant dans le dépôt ;
+\item \textbf{toute la pile passerelle et le Fil B} (11 crates) -- c'est-à-dire le travail le plus
+      immédiatement lisible du dépôt, et quatre revues adverses ;
+\item \textbf{\code{efe-server} et ses dix-neuf crates applicatifs} ;
+\item la pile B complète, le registre gold, la curation, l'apprentissage actif.
+\end{itemize}
+
+Ces crates ne meurent pas : ils redeviennent ce qu'ils sont -- un dépôt de recherche \emph{autour} d'un
+produit. Mais ils \textbf{cessent d'être livrés}, et c'est exactement ce que « n'en faire qu'un »
+exige. Un produit qui ne renonce à rien n'a pas de frontière, et sans frontière il n'a ni promesse
+tenable ni surface installable.
+
+\section{8 · Les trois actions, dans l'ordre}
+
+\begin{enumerate}[leftmargin=1.6em,itemsep=2pt,topsep=2pt]
+\item \textbf{Extraire la recette Mode-1 hors de \code{efe-server}} vers \code{efe-core}, et retirer
+      \code{dep:efe-server} de la feature \code{core-integration}. \sz{Mécanique -- une ligne
+      \code{use crate::} sur 1 979. À coordonner avec la session concurrente.}
+\item \textbf{Écrire le profil} qui allume les sept interrupteurs, avec le coût de chaque absence.
+      \sz{Sans lui, la seule configuration cohérente qui existe est un script de démonstration.}
+\item \textbf{Livrer les neuf crates} comme un binaire unique plus un vérifieur zéro-dépendance.
+\end{enumerate}
+
+\begin{these}
+\small\textbf{Rappel de cadrage, inchangé dans toute la série.} Le reçu atteste l'\textbf{intégrité}
+d'une suite de pas, jamais la \textbf{correction} d'une décision. Il est \emph{tamper-evident pour un
+détenteur de clé}, pas \emph{trustless pour un tiers}. Les participants du mode réel exécutent une
+fusion latente Mode-1 numérique : ce ne sont pas des « vrais SLM ». Et ce document choisit un produit
+sans présupposer aucun destinataire -- il n'y en a plus de déclaré, et il n'en invente pas.
+\end{these}
+
+\section{Annexe · Vérifier chaque affirmation soi-même}
+
+Les \emph{recommandations} de ce document ne se vérifient pas ; les \textbf{mesures} qui les portent,
+si -- et ce sont elles qui font tout le travail.
+
+\renewcommand{\arraystretch}{1.22}
+\begin{center}\small
+\begin{tabular}{@{}>{\raggedright\arraybackslash}p{5.1cm} >{\raggedright\arraybackslash}p{11.0cm}@{}}
+\toprule
+\textbf{Affirmation} & \textbf{Ce qui la rejoue} \\
+\midrule
+La nomenclature d'un candidat &
+  \code{ls crates | sort > /tmp/ws.txt} \newline
+  \code{cargo tree -p <racine> -e normal -{}-prefix none | awk '\{print \$1\}' \textbackslash} \newline
+  \code{\ \ | sort -u | comm -12 - /tmp/ws.txt | wc -l} \\
+7 en défaut, 26 en mode réel &
+  la même commande avec et sans \code{-{}-features core-integration} \\
+\code{efe-core} ne tire rien &
+  \code{cargo tree -p efe-core -e normal -{}-prefix none} \\
+La feature réintroduit le monolithe &
+  \code{crates/efe-meta-swarm-server/Cargo.toml:191} \newline
+  à comparer à \code{crates/efe-meta-swarm/Cargo.toml:48-53} \\
+L'import est en production &
+  \code{crates/efe-meta-swarm-server/src/participant/local.rs:479} \newline
+  \sz{module \code{core\_engine} l.\,457 ; unique \code{\#[cfg(test)]} l.\,749} \\
+Le couplage tient à une ligne &
+  \code{grep -c 'use crate::' crates/efe-server/src/mode1.rs} \\
+Les deux crates ne servent qu'un type &
+  \code{grep -n 'efe\_audit\_core::\textbackslash|efe\_nano\_sdk::' crates/efe-meta-swarm/src/provenance.rs} \\
+Le garde dupliqué enjambe la frontière &
+  \code{grep -rln 'fn is\_local\_endpoint' crates -{}-include='*.rs'} \newline
+  \sz{deux fichiers ; comparer à la nomenclature de P3 --- \code{provenance-capture} n'y est pas} \\
+515 tests, zéro échec &
+  \code{cargo test -p efe-meta-verify -p verify-meta-mini -p efe-meta-swarm-server} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Un avertissement pour finir. Les nomenclatures dépendent des features actives et de l'état du
+\code{Cargo.lock} : elles valent à la date du document. Et la dernière ligne dépasse dix minutes de
+compilation au premier passage -- le genre de détail qu'il vaut mieux découvrir avant une démonstration
+qu'au milieu.
+
+\end{document}
