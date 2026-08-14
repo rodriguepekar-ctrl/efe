@@ -21,7 +21,7 @@ publish     = false
 #   * Phase 2 (Q3 2026)     :  + EFE_META_SWARM_ENABLED + gRPC service
 #   * Phase 3 (Q3 2026)     :  + AdminService.SetTenantFeature(meta_swarm)
 #   * Phase 4 (Q4 2026)     :  + SDK clients v0.4.0 (Apache-2.0)
-#   * Phase 5 (Dec 2026)    :  + GA, tarification, étude de cas Kovant
+#   * Phase 5 (Dec 2026)    :  + GA, tarification, étude de cas client
 #
 # Architecture reference :  docs/EFE_A1_HIERARCHICAL_SWARMS_ARCHITECTURE.md
 # Phase 1 reference      :  docs/EFE_A1_PHASE1_ARCHITECTURE.md

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: UNLICENSED
-//! # `audit-api` — Kovant P1 / S2 : le service de LECTURE (« servir »)
+//! # `audit-api` — Provenance P1 / S2 : le service de LECTURE (« servir »)
 //!
 //! Le **pivot** entre le substrat scellé (S0 [`provenance_dag`] + S1 [`provenance_capture`]) et les
 //! surfaces (console S3 ∥ export+verify S4 ∥ gabarits S6). Tout le **trust-critique** vit ici, en Rust ;

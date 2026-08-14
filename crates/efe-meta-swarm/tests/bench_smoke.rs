@@ -2,7 +2,7 @@
 //!
 //! Verifies *without* running the full criterion harness that :
 //!
-//!   1. The Kovant scenario builds and converges (≤ 60 iters, residual
+//!   1. The procurement scenario builds and converges (≤ 60 iters, residual
 //!      ≤ 1e-3).
 //!   2. Determinism : 3 reruns produce bit-identical (iters, residual).
 //!   3. The baseline YAML at `bench_baselines/v0.10.0/meta_swarm_slos.yaml`
@@ -12,7 +12,7 @@
 //! We deliberately do **not** invoke `cargo bench` in a sub-process —
 //! that would cost ~60 s on dev box and would re-discover the disk
 //! pressure issue we hit on the freeze host.  The smoke test instead
-//! reconstructs the exact same `KovantScenario` (small duplication of
+//! reconstructs the exact same `ProcurementScenario` (small duplication of
 //! constants ; pinned by Test 1 of this file).
 //!
 //! Cf. `crates/efe-meta-swarm/benches/three_swarms_kovant_latency.rs`
@@ -23,7 +23,7 @@ use std::path::PathBuf;
 
 use efe_meta_swarm::prelude::*;
 
-/// Minimal local mirror of `KovantScenario` from the bench file.
+/// Minimal local mirror of `ProcurementScenario` from the bench file.
 /// Held tiny on purpose — Test 1 is the pin between the two.
 fn build_kovant_meta() -> MetaSwarm {
     MetaSwarm::builder()
@@ -57,7 +57,7 @@ fn build_kovant_meta() -> MetaSwarm {
         .build().unwrap()
 }
 
-/// Test 1 — Kovant scenario converges within the architectural budget.
+/// Test 1 — procurement scenario converges within the architectural budget.
 ///
 /// Pins :  iterations ≤ 60         (SLO-A1-META-CONVERGENCE-ITERS).
 ///         final_residual ≤ 1e-3   (SLO-A1-META-RESIDUAL-FINAL).
@@ -69,7 +69,7 @@ fn kovant_converges_within_budget() {
 
     assert_eq!(
         result.stop_reason, StopReason::Converged,
-        "Kovant scenario must converge (stop_reason was {:?})", result.stop_reason,
+        "procurement scenario must converge (stop_reason was {:?})", result.stop_reason,
     );
     assert!(
         result.iterations <= 60,
@@ -108,7 +108,7 @@ fn kovant_determinism_3_reruns() {
 /// The bench scenario uses `BoxSafety::symmetric(256, 10.0)` as meta-
 /// safety ; we verify the final meta-consensus lies inside it.  This
 /// is the cheapest sanity check that PR #3's `safety_every_step_meta`
-/// invariants still hold on the Kovant geometry.
+/// invariants still hold on the procurement geometry.
 #[test]
 fn kovant_meta_consensus_inside_safety() {
     let meta = build_kovant_meta();
@@ -116,7 +116,7 @@ fn kovant_meta_consensus_inside_safety() {
     let safety = BoxSafety::symmetric(256, 10.0);
     assert!(
         safety.contains(&result.meta_consensus, 1e-3),
-        "final meta-consensus outside Box(±10) on Kovant scenario",
+        "final meta-consensus outside Box(±10) on procurement scenario",
     );
 }
 

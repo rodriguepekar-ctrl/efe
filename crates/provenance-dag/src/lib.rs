@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: UNLICENSED
-//! # `provenance-dag` — Kovant P1 / S0 : le DAG scellé re-prouvable (le **cœur de confiance**)
+//! # `provenance-dag` — Provenance P1 / S0 : le DAG scellé re-prouvable (le **cœur de confiance**)
 //!
 //! Le contrat que tout P1 consomme : un graphe d'actes d'agents et de messages, **scellé** et
 //! **re-prouvable indépendamment**, qui fait de « beaucoup de petits agents auditables » une réalité

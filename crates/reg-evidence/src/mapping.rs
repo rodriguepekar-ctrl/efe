@@ -2,7 +2,7 @@
 //! **Le registre de mapping** — une **revendication versionnée et hachée**, jamais une vérité.
 //!
 //! L'énoncé « le nœud humain `APPROVE` évidencie l'art. 14 » n'est **pas un fait** : c'est une
-//! **interprétation juridique déclarée** de Kovant, et elle appartient à Kovant tant qu'un régulateur ne
+//! **interprétation juridique déclarée** de l'éditeur, et elle lui appartient tant qu'un régulateur ne
 //! l'a pas validée. S6 la traite donc comme ce qu'elle est : une revendication **datée**, **versionnée**,
 //! et **hachée** ([`MappingSet::set_hash`]) qui **voyage avec l'artefact** — pour que la dérivation soit
 //! reproductible et la lecture, datable (le réglementaire évolue : actes délégués, normes harmonisées).

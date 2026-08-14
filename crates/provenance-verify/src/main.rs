@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: UNLICENSED
-//! # `provenance-verify` — le vérifieur forensic AUTONOME (Kovant P1 / S4, le composant-fossé)
+//! # `provenance-verify` — le vérifieur forensic AUTONOME (Provenance P1 / S4, le composant-fossé)
 //!
 //! Prend un **JSONL de records scellés** + la **clé tenant** (que le client détient), re-dérive et
 //! **vérifie l'intégrité** (la re-preuve de S0), et rend un verdict + un code de sortie. Conçu pour le

@@ -16,7 +16,7 @@ use efe_meta_swarm::provenance::{HmacKeySource, TenantId};
 use std::path::{Path, PathBuf};
 
 fn main() -> Result<()> {
-    // ── 1. Le méta-essaim Kovant (3 essaims). Pas de .trace() : la provenance est indépendante. ──
+    // ── 1. Le méta-essaim procurement (3 essaims). Pas de .trace() : la provenance est indépendante. ──
     let meta = MetaSwarm::builder()
         .id("kovant-procurement-v1")
         .meta_space_dim(256)

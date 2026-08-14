@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: UNLICENSED
-# Kovant P1 / S4 — provenance-verify : le vérifieur forensic AUTONOME (le composant-fossé).
+# Provenance P1 / S4 — provenance-verify : le vérifieur forensic AUTONOME (le composant-fossé).
 # Dépend UNIQUEMENT de provenance-dag (lui-même zéro dépendance crypto) → un tiers (régulateur,
 # auditeur) le re-compile et l'audite sans faire confiance à personne. La sortie JSON est faite main
 # (pas de serde) pour que le binaire ne dépende de RIEN d'autre que du cœur auditable.
@@ -11,7 +11,7 @@ rust-version = { workspace = true }
 authors = { workspace = true }
 license = { workspace = true }
 repository = { workspace = true }
-description = "Kovant P1/S4 — vérifieur forensic autonome : prend un JSONL de records scellés + la clé tenant, re-dérive et vérifie l'intégrité (re-preuve), rend un verdict humain ou JSON + un code de sortie. Trustless : dépend uniquement de provenance-dag (zéro crypto externe, re-compilable par un tiers)."
+description = "Provenance P1/S4 — vérifieur forensic autonome : prend un JSONL de records scellés + la clé tenant, re-dérive et vérifie l'intégrité (re-preuve), rend un verdict humain ou JSON + un code de sortie. Trustless : dépend uniquement de provenance-dag (zéro crypto externe, re-compilable par un tiers)."
 publish = false
 
 [[bin]]

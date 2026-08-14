@@ -1,4 +1,4 @@
-//! The headline demo : a 3-swarm Kovant Procurement Operations Blueprint
+//! The headline demo : a 3-swarm Procurement Operations Blueprint
 //! collaborates via a meta-swarm.
 //!
 //! Three specialised swarms — supplier scoring (384), contract risk (512),
@@ -38,7 +38,7 @@ fn main() -> Result<()> {
         .trace(true)
         .build()?;
 
-    println!("=== Kovant Procurement Meta-Swarm Demo ===");
+    println!("=== Procurement Meta-Swarm Demo ===");
     println!("3 swarms : supplier-scoring (384), contract-risk (512), spend-categorization (384)");
     println!("Meta-space : 256-dim, uniform aggregation, box safety.\n");
 

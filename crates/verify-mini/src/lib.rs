@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: UNLICENSED
-//! # `verify-mini` — Kovant P1 / S4 : le vérifieur forensic à arbre de dépendances **LITTÉRALEMENT VIDE**
+//! # `verify-mini` — Provenance P1 / S4 : le vérifieur forensic à arbre de dépendances **LITTÉRALEMENT VIDE**
 //!
 //! Le raffinement « **trust-only-the-math, sans astérisque** » du fossé (S4). `provenance-verify` ne
 //! dépend que de `provenance-dag`, mais celui-ci tire `serde`/`serde_json` pour le JSONL — une dépendance

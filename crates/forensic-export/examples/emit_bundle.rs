@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: UNLICENSED
 //! Émet un **bundle forensic** réel sur disque — pour le test end-to-end « trustless » : un tiers
-//! re-compile la source vendorée du vérifieur et re-prouve le bundle, hors-ligne, sans rien d'EFE/Kovant.
+//! re-compile la source vendorée du vérifieur et re-prouve le bundle, hors-ligne, sans rien de l'Ã©diteur.
 //!
 //! Usage : `cargo run -p forensic-export --example emit_bundle -- <dossier_sortie>`
 //! Imprime le chemin du bundle, la clé hex (à donner au vérifieur — elle n'est PAS dans le bundle) et le root.

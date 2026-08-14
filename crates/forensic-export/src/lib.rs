@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: UNLICENSED
-//! # `forensic-export` — Kovant P1 / S4a : l'assembleur du bundle trustless (le fossé)
+//! # `forensic-export` — Provenance P1 / S4a : l'assembleur du bundle trustless (le fossé)
 //!
 //! Transforme le **seam d'export** de S2 ([`BundleInput`]) en un **bundle forensic autonome** qu'un tiers
 //! re-prouve **hors-ligne, sans nous faire confiance**, en **re-compilant** lui-même le vérifieur fourni.

@@ -257,7 +257,7 @@ fn spawn_controller_process(
 }
 
 impl ProcessHarness {
-    /// Default Kovant topology : 3 participants on `dim = 8` with
+    /// Default procurement topology : 3 participants on `dim = 8` with
     /// (κ, seed) = (0.6, 11), (0.7, 22), (0.5, 33).  Used by every
     /// happy-path test.
     pub async fn spawn_kovant() -> Self {
@@ -321,7 +321,7 @@ impl ProcessHarness {
         }
     }
 
-    /// Kovant manifest declares 3 participants ; one is **not** spawned.
+    /// procurement manifest declares 3 participants ; one is **not** spawned.
     /// The controller's `EFE_META_SWARM_PARTICIPANTS` env var still
     /// includes the absent id, but pointing at a closed port —
     /// `RemoteParticipant::connect` will fail with `ECONNREFUSED`.
