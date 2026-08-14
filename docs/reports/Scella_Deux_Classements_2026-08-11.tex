@@ -1,0 +1,325 @@
+\documentclass[10pt]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage[french]{babel}
+\usepackage{newpxtext,newpxmath}
+\usepackage[a4paper,top=1.5cm,bottom=1.35cm,left=1.6cm,right=1.6cm]{geometry}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{titlesec}
+\usepackage[most]{tcolorbox}
+\usepackage{enumitem}
+\usepackage{array}
+\usepackage{booktabs}
+\usepackage{fancyhdr}
+
+\definecolor{navy}{HTML}{1F3A5F}
+\definecolor{grey}{HTML}{54606E}
+\definecolor{green}{HTML}{2C6E49}
+\definecolor{amber}{HTML}{9C6A16}
+\definecolor{red}{HTML}{A6322E}
+\definecolor{plum}{HTML}{7A4EA8}
+\definecolor{boxgray}{HTML}{F3F5F8}
+\definecolor{boxred}{HTML}{FCF2F1}
+\definecolor{boxgreen}{HTML}{F1F7F3}
+\definecolor{boxplum}{HTML}{F7F3FB}
+\definecolor{boxcode}{HTML}{F7F8FA}
+\definecolor{boxedge}{HTML}{D9E0EA}
+
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{2.6pt}
+\linespread{1.0}
+
+\pagestyle{fancy}\fancyhf{}
+\lhead{\small\color{grey}Scella}
+\rhead{\small\color{grey}Le meilleur produit, et le plus rapide -- 11 août 2026}
+\cfoot{\small\color{grey}\thepage}
+\renewcommand{\headrulewidth}{0.3pt}
+
+\titleformat{\section}{\color{navy}\large\bfseries}{}{0pt}{}
+\titlespacing{\section}{0pt}{11pt}{3pt}
+\titleformat{\subsection}{\color{navy}\bfseries}{}{0pt}{}
+\titlespacing{\subsection}{0pt}{7pt}{1.5pt}
+
+\newtcolorbox{these}{colback=boxgray,colframe=boxedge,boxrule=0.5pt,arc=2.5pt,
+  left=8pt,right=8pt,top=4.5pt,bottom=4.5pt}
+\newtcolorbox{alerte}{colback=boxred,colframe=red!55,boxrule=0.8pt,arc=2.5pt,
+  left=8pt,right=8pt,top=4.5pt,bottom=4.5pt}
+\newtcolorbox{acquis}{colback=boxgreen,colframe=green!45,boxrule=0.8pt,arc=2.5pt,
+  left=8pt,right=8pt,top=4.5pt,bottom=4.5pt}
+\newtcolorbox{piste}{colback=boxplum,colframe=plum!45,boxrule=0.8pt,arc=2.5pt,
+  left=8pt,right=8pt,top=4.5pt,bottom=4.5pt}
+\newtcolorbox{extrait}{colback=boxcode,colframe=boxedge,boxrule=0.5pt,arc=1.5pt,
+  left=7pt,right=7pt,top=3.5pt,bottom=3.5pt}
+\newtcolorbox{podium}{colback=boxgreen,colframe=green!60,boxrule=1.1pt,arc=2.5pt,
+  left=9pt,right=9pt,top=5.5pt,bottom=5.5pt}
+
+% \textcolor plutôt que {\color …} : en tête de cellule p{}, \color insère un whatsit
+% qui ouvre une ligne vide et décale verticalement toute la colonne.
+\newcommand{\best}[1]{\textcolor{green}{\textbf{#1}}}
+\newcommand{\pire}[1]{\textcolor{red}{\textbf{#1}}}
+\newcommand{\sz}[1]{\textcolor{grey}{\small\textsf{#1}}}
+\newcommand{\code}[1]{\texttt{\small #1}}
+\newcommand{\x}{$\times$}
+\newcommand{\pc}{\,\%}
+\newcommand{\oui}{\best{oui}}
+\newcommand{\non}{\pire{non}}
+
+\begin{document}
+
+\begin{center}
+{\Huge\bfseries\color{navy} Scella}\\[4pt]
+{\large\color{grey}\itshape Le meilleur produit, et le plus rapide à faire --- deux classements}\\[4pt]
+{\small\color{grey} 11 août 2026 \; · \; arbitrage des quatre verdicts de la série \; · \; sur les cinq documents fournis}
+\end{center}
+\vspace{2pt}
+
+\begin{these}
+\textbf{Le résultat central.} Les deux classements donnent le \textbf{même vainqueur} --- \textbf{la
+preuve réglementaire} --- mais pour des raisons \textbf{entièrement disjointes}, ce qui est la seule
+manière dont une convergence puisse être solide plutôt que circulaire. Sur le meilleur produit, les
+trois candidats arrivent d'abord à \textbf{égalité parfaite} (chacun gagne exactement un de mes trois
+axes) ; c'est un quatrième critère --- \emph{l'utilisateur peut-il l'adopter sans changer son
+architecture ?} --- qui tranche. Sur la rapidité, la mesure décisive est que j'ai
+\textbf{exécuté sa démonstration} : elle tourne aujourd'hui, sans une ligne de code à écrire, et le
+bundle qu'elle produit \textbf{embarque la source de son propre vérifieur}. À l'inverse, l'essaim
+attestable --- vainqueur de deux de mes rapports précédents --- est \textbf{troisième des deux
+classements}.
+\end{these}
+
+\section{1 · Périmètre et méthode}
+
+\textbf{Une note de périmètre d'abord.} \code{Scella\_EN 2.pdf} et \code{Scella\_EN-1.pdf} sont
+\textbf{byte-identiques} --- même empreinte MD5. C'est un seul document téléchargé deux fois ; les six
+fichiers fournis en contiennent cinq distincts.
+
+\textbf{Et une note de méthode.} Vous ne demandez pas un cinquième axe : vous demandez d'\textbf{arbitrer}
+entre les quatre verdicts que la série a produits, chacun ayant couronné un candidat différent. Le
+travail de ce rapport est donc un départage, pas une nouvelle mesure --- à une exception près, décisive
+pour le second classement, où j'ai exécuté ce que je m'apprêtais à noter.
+
+Les groupes à \textbf{zéro ligne} --- le Cadrage, l'essaim médiateur, la Colonne --- sont exclus des deux
+classements par construction. On ne classe pas comme produit ce qui n'existe pas, et « le plus rapide à
+faire » n'a aucun sens pour ce qui reste à écrire entièrement.
+
+\renewcommand{\arraystretch}{1.2}
+\begin{center}\small
+\begin{tabular}{@{}c >{\raggedright\arraybackslash}p{4.1cm} >{\raggedright\arraybackslash}p{3.5cm} >{\raggedright\arraybackslash}p{7.0cm}@{}}
+\toprule
+& \textbf{Candidat} & \textbf{Empreinte} & \textbf{Ce qu'il promet} \\
+\midrule
+\textbf{C1} & \textbf{La preuve réglementaire} & 8 crates · 12 862 l. · 240 tests & l'artefact que la loi exige, produit automatiquement, re-prouvable par son destinataire \\
+\textbf{C2} & \textbf{L'essaim attestable} \sz{ou « réfutable »} & 9 après correctif \sz{(26 aujourd'hui)} & un consensus multi-agents dont le reçu nomme qui a contribué quoi, sous quelle version \\
+\textbf{C3} & \textbf{Le relais souverain} & 11 crates, déjà découplé & faire coopérer Claude, GPT et un modèle interne sans colle tierce, chaque saut scellé \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\section{2 · Classement nº 1 --- le meilleur produit}
+
+\subsection{2.1 · Le fait gênant qu'il faut dire avant le verdict}
+
+J'ai croisé les trois axes que la série a mesurés. Le résultat est une \textbf{égalité parfaite à
+trois}.
+
+\renewcommand{\arraystretch}{1.2}
+\begin{center}\small
+\begin{tabular}{@{}>{\raggedright\arraybackslash}p{6.2cm} ccc c@{}}
+\toprule
+& \textbf{Cohérence produit} & \textbf{Révolutionnaire} & \textbf{Rachetable} & \textbf{Total} \\
+\midrule
+\textbf{C1} · La preuve réglementaire & 3 & 2 & \best{1} & \textbf{6} \\
+\textbf{C2} · L'essaim réfutable & 2 & \best{1} & 3 & \textbf{6} \\
+\textbf{C3} · Le relais souverain & \best{1} & 3 & 2 & \textbf{6} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\textbf{Chacun gagne exactement un axe, et aucun ne domine.} Ce n'est pas une dérobade : c'est la
+démonstration que les trois axes mesuraient bien des choses \emph{orthogonales} --- sinon un candidat
+aurait émergé partout. Une moyenne pondérée aurait produit un vainqueur, mais un vainqueur fabriqué par
+le choix des poids plutôt que par les faits. Mieux vaut nommer l'égalité et chercher un départage
+honnête.
+
+\subsection{2.2 · Le départage : le test de l'utilisateur pressé}
+
+Le critère de départage doit découler de la définition d'un produit, pas d'une préférence. Le seul qui
+le fasse : \textbf{la chose survit-elle au contact d'un utilisateur qui a un budget et aucune
+patience ?} Trois questions, et elles se répondent par oui ou non.
+
+\renewcommand{\arraystretch}{1.25}
+\begin{center}\small
+\begin{tabular}{@{}>{\raggedright\arraybackslash}p{3.0cm} >{\raggedright\arraybackslash}p{3.3cm} >{\raggedright\arraybackslash}p{4.6cm} >{\raggedright\arraybackslash}p{5.0cm}@{}}
+\toprule
+& \textbf{A-t-il \emph{déjà} le problème ?} & \textbf{Peut-il adopter sans changer son architecture ?} & \textbf{La valeur est-elle lisible sans explication ?} \\
+\midrule
+\textbf{C1} & \oui{} --- légalement & \oui{} --- quatre taps, en observation & \oui{} --- « votre registre AI Act art.\,12, produit tout seul » \\
+\textbf{C3} & \oui{} --- coût et périmètre & \non{} --- votre trafic passe par la passerelle & \oui{} --- « $-$27\pc{} sur votre facture LLM » \\
+\textbf{C2} & \textcolor{amber}{\textbf{émergent}} & \non{} --- il faut adopter le moteur & \non{} --- il faut expliquer le consensus latent \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\textbf{C1 : trois sur trois. C3 : deux sur trois. C2 : zéro sur trois.}
+
+\begin{alerte}
+\textbf{La colonne du milieu porte l'écart décisif, et il est plus grave qu'il n'y paraît.}
+\textbf{C1 observe depuis le côté ; C3 se place dans le chemin critique.} Un tap qui tombe ne fait rien
+tomber. Une passerelle qui tombe coupe l'accès aux modèles. Ce n'est pas une différence de confort
+d'intégration, c'est une différence de \textbf{risque d'adoption} --- et c'est le premier calcul que
+fait quiconque envisage de mettre une brique nouvelle en production.
+\end{alerte}
+
+\begin{podium}
+\textbf{Classement nº 1 --- le meilleur produit} \\[3pt]
+\textbf{1. C1 · La preuve réglementaire} \quad --- \quad
+\textbf{2. C3 · Le relais souverain} \quad --- \quad
+\textbf{3. C2 · L'essaim attestable}
+\end{podium}
+
+\textbf{C2 reste le plus révolutionnaire, et je ne le retire pas} : cinq levées d'impossibilité sur
+six, et le seul système du dépôt qui se réfute lui-même au démarrage. Mais \emph{le plus rare} et
+\emph{le meilleur produit} sont deux questions distinctes. Si l'objectif était la singularité
+technique, C2 gagne ; la question posée était celle d'un produit.
+
+\section{3 · Classement nº 2 --- le plus faisable, le plus rapidement}
+
+Les critères changent entièrement : \textbf{combien de code reste à écrire, et qu'est-ce qui bloque ?}
+
+\subsection{3.1 · La mesure décisive : j'ai exécuté la démonstration de C1}
+
+Je ne voulais pas classer sur une espérance. \code{cargo run -p reg-evidence -{}-example csddd\_seed}
+\textbf{tourne aujourd'hui} et écrit un bundle complet, puis annonce trois démonstrations. Je les ai
+lancées.
+
+\begin{extrait}
+\code{-- D1 : re-preuve du bundle intact --} \\
+\code{VÉRIFIÉ --- record authentique et non-altéré (13 records, root concordant).} \\
+\code{(intégrité attestée --- PAS la correction de la décision) \hfill exit=0} \\[4pt]
+\code{-- D2 : le bundle ALTÉRÉ doit être REFUSÉ --} \\
+\code{ÉCHEC --- vérification refusée. cassé au record : 11} \\
+\code{motif : sceau invalide \hfill exit=1}
+\end{extrait}
+
+\begin{acquis}
+\textbf{Et le point qui m'a surpris : le bundle embarque la source de son propre vérifieur.} Le
+destinataire peut faire \code{cargo build -{}-offline} depuis le dossier reçu et re-prouver avec un
+binaire \emph{qu'il a compilé lui-même}. S'y ajoute une troisième démonstration : le dossier CSDDD
+rendu en HTML. C'est, en une commande, exactement la promesse du produit --- et elle n'attend rien.
+\end{acquis}
+
+\subsection{3.2 · Ce qu'il reste, candidat par candidat}
+
+\renewcommand{\arraystretch}{1.25}
+\begin{center}\small
+\begin{tabular}{@{}c >{\raggedright\arraybackslash}p{4.4cm} >{\raggedright\arraybackslash}p{4.6cm} >{\raggedright\arraybackslash}p{5.2cm}@{}}
+\toprule
+& \textbf{Code à écrire} & \textbf{Blocage} & \textbf{Démonstration} \\
+\midrule
+\textbf{C1} & \best{aucun} & \best{aucun} & \best{tourne} --- 3 actes vérifiés, bundle auto-vérifiant \\
+\textbf{C3} & \best{aucun} & \best{aucun} & 17 exemples, mais une démo vivante exige des clés fournisseur \\
+\textbf{C2} & extraction de la recette Mode-1 hors d'\code{efe-server} & \pire{\code{mode1.rs} est modifié par la session concurrente, non commité} & la meilleure du dépôt --- mais le paquet reste à 26 crates \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{podium}
+\textbf{Classement nº 2 --- le plus rapide à faire} \\[3pt]
+\textbf{1. C1} \quad --- \quad \textbf{2. C3} \quad --- \quad \textbf{3. C2}
+\end{podium}
+
+\textbf{C1 ne demande aucune ligne de code.} Il lui manque un script d'enrobage de ses trois exemples,
+le retrait de \mbox{« Kovant »} de onze fichiers, et le profil. Trois travaux mécaniques, aucun blocage,
+aucune dépendance extérieure.
+
+\textbf{C2 est troisième malgré la meilleure démonstration du dépôt}, et la raison n'est pas technique :
+son unique correctif touche un fichier qu'une \textbf{autre session détient}, non commité. C'est un
+blocage qui ne dépend ni de vous ni de moi, et aucune quantité de travail ne le lève.
+
+\section{4 · La convergence --- s'en méfier avant de s'en réjouir}
+
+C1 est premier des deux classements. Une convergence est suspecte : elle signale souvent qu'on a mesuré
+deux fois la même chose sous deux noms. J'ai donc vérifié, et \textbf{les deux rangs reposent sur des
+faits disjoints}.
+
+\begin{itemize}[leftmargin=1.2em,itemsep=2pt,topsep=2pt]
+\item Il est \textbf{le meilleur produit} parce qu'il s'adopte sans changer d'architecture et répond à
+      une obligation légale. \emph{Ni le code ni les tests n'entrent dans cet argument.}
+\item Il est \textbf{le plus rapide} parce qu'il n'exige aucune ligne de code et qu'aucun fichier bloqué
+      ne se trouve sur son chemin. \emph{Ni la loi ni l'architecture n'entrent dans celui-là.}
+\end{itemize}
+
+La cause commune est en amont des deux : \textbf{C1 possède son propre producteur et ne dépend d'aucune
+thèse}. Cette unique propriété nourrit la valeur \emph{et} la vitesse, ce qui rend la convergence
+solide plutôt que circulaire.
+
+Et l'asymétrie mérite d'être nommée sans adoucissement : \textbf{C2 a la meilleure démonstration et le
+pire blocage ; C1 a une démonstration qui marche et aucun blocage.}
+
+\section{5 · La décision, et ce qui la renverserait}
+
+\begin{acquis}
+\textbf{Faites C1 --- la preuve réglementaire.} Il gagne les deux classements, pour des raisons
+indépendantes, et le chemin tient en trois travaux sans code : un script d'enrobage des trois exemples,
+le retrait de « Kovant » des onze fichiers de la pile, et le profil.
+\end{acquis}
+
+Ensuite \textbf{C3 comme second module} --- jamais fusionné. Sa force est précisément de ne rien imposer,
+et l'assembler à C1 détruirait la propriété qui fait toute la valeur de C1 : on peut l'adopter sans rien
+changer.
+
+\begin{piste}
+\textbf{Ce qui renverserait ce verdict, et je le dis pour que vous puissiez le contredire.} Si la
+finalité n'est pas un produit mais une \textbf{démonstration de force technique}, \textbf{C2 reprend la
+première place} : il détient cinq des six levées d'impossibilité et la seule démonstration en une
+commande. Mon classement suppose que vous voulez quelque chose qui \emph{serve}, pas quelque chose qui
+\emph{impressionne}. Si c'est l'inverse, l'ordre s'inverse aussi.
+\end{piste}
+
+\begin{these}
+\small\textbf{Rappel de cadrage, inchangé dans toute la série.} Le reçu atteste l'\textbf{intégrité}
+d'une suite de pas, jamais la \textbf{correction} d'une décision --- la sortie de D1 le dit d'ailleurs
+elle-même. Il est \emph{tamper-evident pour un détenteur de clé}, pas \emph{trustless pour un tiers}.
+Les participants du mode réel exécutent une fusion latente Mode-1 numérique : ce ne sont pas des
+« vrais SLM ». Et ce document ne nomme aucun acquéreur : il classe des propriétés, pas des
+destinataires.
+\end{these}
+
+\section{Annexe · Vérifier chaque affirmation soi-même}
+
+Les \emph{rangs} sont un jugement ; les \textbf{exécutions} et les \textbf{empreintes} se rejouent.
+
+\renewcommand{\arraystretch}{1.22}
+\begin{center}\small
+\begin{tabular}{@{}>{\raggedright\arraybackslash}p{5.2cm} >{\raggedright\arraybackslash}p{10.9cm}@{}}
+\toprule
+\textbf{Affirmation} & \textbf{Ce qui la rejoue} \\
+\midrule
+Les deux \code{Scella\_EN} sont identiques &
+  \code{md5 -q 'Scella\_EN 2.pdf' 'Scella\_EN-1.pdf'} \sz{$\rightarrow$ même empreinte} \\
+La démonstration de C1 tourne &
+  \code{cargo run -q -{}-release -p reg-evidence -{}-example csddd\_seed} \\
+D1 --- la re-preuve passe &
+  \code{cargo run -q -{}-release -p verify-mini -- <bundle>/records.sealed.jsonl \textbackslash} \newline
+  \code{\ \ -{}-key-hex <clé> -{}-root <root>} \sz{$\rightarrow$ exit 0} \\
+D2 --- l'altération est refusée &
+  la même commande sur \code{records.TAMPERED.jsonl} \sz{$\rightarrow$ exit 1, cassé au record 11} \\
+Le bundle embarque son vérifieur &
+  \code{ls <bundle>/verify/verify-mini/Cargo.toml} \\
+Les exemples par candidat &
+  \code{ls crates/<crate>/examples/} \sz{C1 = 4 · C2 = 6 · C3 = 17} \\
+Le blocage de C2 &
+  \code{git status -{}-short -- crates/efe-server/src/mode1.rs} \sz{$\rightarrow$ M, non commité} \\
+Les empreintes 8 / 9 / 11 crates &
+  \code{Scella\_Produit\_Unique} et \code{Scella\_Groupes\_Rachetables}, annexes \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Un avertissement pour finir. Le premier classement repose sur trois axes dont les notes sont un
+jugement structuré, et son départage sur un test à trois questions que je propose plutôt que je ne
+mesure --- il est discutable, et c'est voulu. Le second classement, lui, ne repose que sur des faits :
+du code exécuté, des fichiers comptés, un blocage constaté. \textbf{Si vous ne deviez retenir qu'un des
+deux, retenez le second} : c'est celui qui ne demande pas qu'on me croie.
+
+\end{document}

@@ -1,0 +1,294 @@
+\documentclass[10pt]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage[french]{babel}
+\usepackage{newpxtext,newpxmath}
+\usepackage[a4paper,top=1.5cm,bottom=1.35cm,left=1.6cm,right=1.6cm]{geometry}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{titlesec}
+\usepackage[most]{tcolorbox}
+\usepackage{enumitem}
+\usepackage{array}
+\usepackage{booktabs}
+\usepackage{fancyhdr}
+
+\definecolor{navy}{HTML}{1F3A5F}
+\definecolor{grey}{HTML}{54606E}
+\definecolor{green}{HTML}{2C6E49}
+\definecolor{amber}{HTML}{9C6A16}
+\definecolor{red}{HTML}{A6322E}
+\definecolor{plum}{HTML}{7A4EA8}
+\definecolor{boxgray}{HTML}{F3F5F8}
+\definecolor{boxred}{HTML}{FCF2F1}
+\definecolor{boxgreen}{HTML}{F1F7F3}
+\definecolor{boxplum}{HTML}{F7F3FB}
+\definecolor{boxcode}{HTML}{F7F8FA}
+\definecolor{boxedge}{HTML}{D9E0EA}
+
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{2.6pt}
+\linespread{1.0}
+
+\pagestyle{fancy}\fancyhf{}
+\lhead{\small\color{grey}Scella}
+\rhead{\small\color{grey}Le prix de rachat -- par niveau et par produit -- 11 août 2026}
+\cfoot{\small\color{grey}\thepage}
+\renewcommand{\headrulewidth}{0.3pt}
+
+\titleformat{\section}{\color{navy}\large\bfseries}{}{0pt}{}
+\titlespacing{\section}{0pt}{11pt}{3pt}
+\titleformat{\subsection}{\color{navy}\bfseries}{}{0pt}{}
+\titlespacing{\subsection}{0pt}{7pt}{1.5pt}
+
+\newtcolorbox{these}{colback=boxgray,colframe=boxedge,boxrule=0.5pt,arc=2.5pt,
+  left=8pt,right=8pt,top=4.5pt,bottom=4.5pt}
+\newtcolorbox{alerte}{colback=boxred,colframe=red!55,boxrule=0.8pt,arc=2.5pt,
+  left=8pt,right=8pt,top=4.5pt,bottom=4.5pt}
+\newtcolorbox{acquis}{colback=boxgreen,colframe=green!45,boxrule=0.8pt,arc=2.5pt,
+  left=8pt,right=8pt,top=4.5pt,bottom=4.5pt}
+\newtcolorbox{piste}{colback=boxplum,colframe=plum!45,boxrule=0.8pt,arc=2.5pt,
+  left=8pt,right=8pt,top=4.5pt,bottom=4.5pt}
+\newtcolorbox{extrait}{colback=boxcode,colframe=boxedge,boxrule=0.5pt,arc=1.5pt,
+  left=7pt,right=7pt,top=3.5pt,bottom=3.5pt}
+
+% \textcolor plutôt que {\color …} : en tête de cellule p{}, \color insère un whatsit
+% qui ouvre une ligne vide et décale verticalement toute la colonne.
+\newcommand{\best}[1]{\textcolor{green}{\textbf{#1}}}
+\newcommand{\pire}[1]{\textcolor{red}{\textbf{#1}}}
+\newcommand{\sz}[1]{\textcolor{grey}{\small\textsf{#1}}}
+\newcommand{\code}[1]{\texttt{\small #1}}
+\newcommand{\x}{$\times$}
+
+\begin{document}
+
+\begin{center}
+{\Huge\bfseries\color{navy} Scella}\\[4pt]
+{\large\color{grey}\itshape Le prix de rachat --- par niveau et par produit}\\[4pt]
+{\small\color{grey} 11 août 2026 \; · \; régimes de valorisation, pas de montants \; · \; tous les faits mesurés au dépôt}
+\end{center}
+\vspace{2pt}
+
+\begin{alerte}
+\textbf{Ce document ne contient aucun chiffre en euros, et c'est délibéré.} Il n'y a ni client, ni
+revenu, ni acquéreur déclaré ; or le prix d'un actif est fixé par l'\emph{alternative} de l'acheteur,
+que je n'ai aucun moyen de connaître d'ici. Un montant inventé serait une fabrication présentée comme
+une analyse --- et il pourrait être cité dans une négociation réelle. C'est exactement le
+\emph{vert malhonnête} que ce projet combat.
+
+Ce qui suit est plus utile qu'un nombre : \textbf{le régime de prix que chaque produit peut atteindre},
+ce qui l'y bloque, et \textbf{la seule chose qui change de niveau plutôt que de montant}. Vous
+connaissez votre marché et vos taux ; ce document est la structure où les brancher.
+\end{alerte}
+
+\section{1 · L'échelle des niveaux --- ce qui est réellement payé}
+
+Un rachat n'a pas « un prix » : il a un \textbf{régime}, et le régime détermine la base de calcul.
+Changer de régime change l'ordre de grandeur ; s'agiter à l'intérieur d'un régime ne déplace que la
+marge. C'est la distinction la plus utile de tout ce document, parce qu'elle réoriente l'effort : la
+question n'est pas « comment valoir plus ? » mais « comment changer de base de calcul ? ».
+
+\renewcommand{\arraystretch}{1.22}
+\begin{center}\small
+\begin{tabular}{@{}c >{\raggedright\arraybackslash}p{3.5cm} >{\raggedright\arraybackslash}p{6.6cm} >{\raggedright\arraybackslash}p{4.7cm}@{}}
+\toprule
+& \textbf{Niveau} & \textbf{Ce qu'on achète réellement} & \textbf{Base du calcul} \\
+\midrule
+\textbf{N0} & Aucun prix & rien --- le code n'a de valeur d'option que pour son auteur & --- \\
+\textbf{N1} & \textbf{Acqui-hire} & \textbf{la personne}. Le code est la preuve de compétence, pas la marchandise & par ingénieur qui transfère \\
+\textbf{N2} & \textbf{Achat d'actif / IP} & un composant qui épargne du temps de construction & \textbf{coût de reconstruction évité} $+$ time-to-market \\
+\textbf{N3} & \textbf{Acquisition produit} & des clients et un revenu récurrent & multiple de revenu \\
+\textbf{N4} & Stratégique / défensif & une position --- un standard, un verrou, un concurrent bloqué & le risque propre de l'acquéreur \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\section{2 · La matrice --- niveau \x{} produit}
+
+\renewcommand{\arraystretch}{1.24}
+\begin{center}\small
+\begin{tabular}{@{}>{\raggedright\arraybackslash}p{2.9cm} >{\raggedright\arraybackslash}p{4.3cm} >{\raggedright\arraybackslash}p{4.3cm} >{\raggedright\arraybackslash}p{4.3cm}@{}}
+\toprule
+\textbf{Niveau} & \textbf{C1 · Preuve réglementaire} & \textbf{C2 · Essaim réfutable} & \textbf{C3 · Relais souverain} \\
+\midrule
+\textbf{N1} acqui-hire & atteignable & \textbf{régime gravitationnel} & atteignable \\
+\textbf{N2} actif / IP & \best{haut du niveau} & plafonné --- \emph{aucun acheteur} & \textbf{bas du niveau} --- catégorie encombrée \\
+\textbf{N3} produit & \pire{fermé --- 0 client} & \pire{fermé} & \pire{fermé} \\
+\textbf{N4} stratégique & possible \emph{si} le format est repris par un tiers & non & non \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{acquis}
+\textbf{Le classement qui en découle :} \; \textbf{1. C1 --- haut de N2} \; · \;
+\textbf{2. C3 --- bas de N2} \; · \; \textbf{3. C2 --- N1}, avec un argument N2 qui ne trouve personne.
+\end{acquis}
+
+\section{3 · Le paradoxe de C2, et c'est le résultat central}
+
+C2 est \textbf{le plus difficile à reconstruire de tout le dépôt}. Le canari de Lipschitz qui mesure sa
+propre non-expansivité et réfute son certificat analytique n'a pas d'équivalent que je sache nommer.
+C'est un argument N2 puissant, et il est réel.
+
+Et c'est \textbf{le moins cher à vendre}.
+
+La raison est structurelle plutôt que conjoncturelle : \emph{le coût de reconstruction ne fixe un prix
+que pour quelqu'un qui veut déjà la chose}. Il plafonne, il ne crée pas. Or C2 exige que l'acheteur
+accepte une thèse --- l'essaim latent, le méta-consensus. L'ensemble des acheteurs se réduit alors à
+presque zéro, et \textbf{un actif qu'un seul acheteur pourrait vouloir n'a pas de découverte de prix} :
+il a un montant décidé unilatéralement par ce seul acheteur.
+
+\begin{piste}
+\textbf{Le plus rare n'est pas le plus cher. Le plus rare est le plus difficile à mettre en vente.}
+\end{piste}
+
+C'est la troisième fois que la série produit ce genre de dissociation --- révolutionnaire $\neq$
+rachetable, meilleur produit $\neq$ plus rare --- et c'est à chaque fois pour la même raison de fond :
+la valeur technique est une propriété de l'objet, la valeur marchande est une propriété de la
+\emph{relation} entre l'objet et quelqu'un qui en a besoin.
+
+\section{4 · L'ancre de reconstruction --- et le plafond que l'historique impose}
+
+Pour un actif N2, l'acheteur calcule une seule chose : \emph{combien de mois pour le refaire ?} La
+réponse honnête a deux moitiés, et elles ne vont pas dans le même sens.
+
+\textbf{Ce qui se refait --- le volume.} Il est mesuré :
+
+\renewcommand{\arraystretch}{1.18}
+\begin{center}\small
+\begin{tabular}{@{}>{\raggedright\arraybackslash}p{4.4cm} c c >{\raggedright\arraybackslash}p{7.3cm}@{}}
+\toprule
+& \textbf{Lignes \code{.rs}} & \textbf{Tests} & \textbf{Extractibilité} \\
+\midrule
+\textbf{C1} · Preuve réglementaire & \textbf{12 862} & 240 & 8 crates, producteur propre, aucun correctif \\
+\textbf{C3} · Relais souverain & 37 448 & --- & 11 crates, déjà découplé \\
+\textbf{C2} · Essaim réfutable & 93 625 & 515 & correctif requis, bloqué par une session concurrente \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\textbf{Ce qui ne se refait pas vite --- les découvertes.} Elles ne sont pas proportionnelles aux
+lignes, et ce sont elles qui coûtent : l'attaque par troncature (le préfixe d'une chaîne HMAC valide est
+lui-même valide), le fail-\emph{open} qu'un \code{.ok()} avalait en traitant les explosions comme des
+hors-domaine, l'identifiant à 31 caractères qui ne corrélait rien, $\hat{L} = 0{,}366$ mesuré contre
+$0{,}17$ annoncé. \textbf{Ce sont des erreurs qu'il faut avoir commises pour les connaître} --- un
+concurrent qui repart de zéro retombe dans les mêmes pièges, et c'est le seul actif immatériel que le
+code ne montre pas.
+
+\begin{alerte}
+\textbf{Mais l'historique impose son plafond, et il faut le dire avant qu'un examinateur ne le
+trouve.}
+
+\begin{center}\normalsize
+\textbf{1 auteur \quad · \quad 377 commits \quad · \quad du 16 mai au 14 août 2026 --- trois mois}
+\end{center}
+
+C'est le premier calcul que fera une revue diligente, et il borne l'argument « difficile à refaire »
+bien plus sûrement que le nombre de lignes ne l'étend. Prenez votre coût mensuel chargé multiplié par
+le nombre de mois-ingénieur : un actif N2 se négocie \textbf{en dessous} de ce coût évité, parce que
+l'acheteur assume en plus le risque d'intégration et le risque de personne clé.
+\end{alerte}
+
+\section{5 · Ce qui plafonne le prix --- tout est mesuré, rien n'est supposé}
+
+\renewcommand{\arraystretch}{1.22}
+\begin{center}\small
+\begin{tabular}{@{}>{\raggedright\arraybackslash}p{6.6cm} >{\raggedright\arraybackslash}p{9.2cm}@{}}
+\toprule
+\textbf{Fait vérifié} & \textbf{Effet sur le prix} \\
+\midrule
+\textbf{1 seul auteur} & risque de personne clé maximal --- et c'est ce qui attire tout vers \textbf{N1} \\
+\textbf{0 client, 0 revenu} & \pire{ferme N3 entièrement}, pour les trois produits \\
+\textbf{3 mois d'historique} & borne l'argument « coûteux à refaire » \\
+\code{main} accuse \textbf{37 commits} de retard & un clone de \code{main} montre un instantané de juillet --- rien de tout cela \\
+Tout opt-in, \textbf{aucun profil} & le build par défaut ne sert rien \\
+\textbf{4 fichiers non-\code{UNLICENSED}} & tous dans le périmètre de \textbf{C2} uniquement \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{acquis}
+\textbf{Une décote a été levée depuis la première version de cette analyse.} Elle portait « le nom d'une
+autre entreprise dans 23 fichiers \code{.rs}, dont 11 dans C1 ». Le nettoyage est fait :
+\textbf{40 remplacements dans 32 fichiers}, build et tests verts. Il subsiste \textbf{cinq lignes},
+dont quatre sont des \emph{citations de documents qui existent réellement} et une appartient à un fichier
+détenu par une session concurrente. Les métadonnées de paquet --- ce qu'un examinateur lit en premier
+--- sont \textbf{intégralement propres}.
+\end{acquis}
+
+\section{6 · Les multiplicateurs --- un seul change de niveau}
+
+C'est la partie actionnable, et elle est ordonnée par levier réel plutôt que par facilité.
+
+\begin{enumerate}[leftmargin=1.6em,itemsep=3pt,topsep=3pt]
+\item \textbf{Un client payant.} C'est \textbf{la seule chose qui fasse changer de régime} (N2
+      $\rightarrow$ N3). Tout le reste ne modifie qu'un montant \emph{à l'intérieur} d'un régime. Un
+      client de C1 --- quelqu'un qui doit produire un registre AI Act art.\,12 --- vaut davantage que six
+      mois de code supplémentaire, parce qu'il transforme la base de calcul au lieu d'en améliorer un
+      terme.
+\item \textbf{L'ancrage tiers (jalon 3b).} Il ferait passer le reçu de \emph{tamper-evident pour un
+      détenteur de clé} à \emph{opposable au détenteur lui-même} --- ce que \code{forensic-export}
+      demande déjà d'exiger, à l'intérieur du bundle qu'il produit. C'est le seul travail technique qui
+      déplace le \emph{prix} plutôt que le \emph{coût}.
+\item \textbf{Fusionner \code{main}, écrire le profil.} Ces travaux ne créent aucune valeur :
+      \textbf{ils suppriment une décote}. C'est pourquoi ils passent en premier dans l'ordre d'exécution
+      et en dernier dans l'ordre de valeur.
+\item \textbf{Un second contributeur.} Réduit le risque de personne clé, donc décolle légèrement de N1.
+\end{enumerate}
+
+\section{7 · Le jugement}
+
+\textbf{C1 est le seul produit qui puisse aujourd'hui prétendre au haut de N2}, parce qu'il est le seul
+à réunir les trois conditions du régime : extractible sans thèse, juridiquement propre, et adossé à un
+problème que l'acheteur a déjà. C3 est dans le même régime mais plus bas --- sa catégorie est
+encombrée, donc son coût de reconstruction est plus faible. C2 est techniquement le plus cher à refaire
+et commercialement le moins vendable.
+
+\begin{piste}
+\textbf{Et le vrai constat est plus important que l'ordre.} Les trois produits sont dans le même
+régime, ou juste en dessous. Aucun n'atteint N3, et \textbf{l'écart entre N2 et N3 est bien plus grand
+que l'écart entre C1 et C2}. Autrement dit : le classement demandé compte moins que la marche qui les
+sépare tous les trois du niveau supérieur --- et cette marche a un seul nom, \textbf{un client}.
+\end{piste}
+
+\begin{these}
+\small\textbf{Ce que ce document est, et ce qu'il n'est pas.} Les \textbf{faits} --- lignes, tests,
+auteurs, commits, dates, licences --- sont mesurés au dépôt et l'annexe donne la commande. Les
+\textbf{régimes} sont une grille d'analyse standard, pas une prédiction. Et il n'y a ici
+\textbf{aucun montant, aucun acquéreur nommé, aucun comparable invoqué} : ces trois choses exigeraient
+des informations que je n'ai pas, et les inventer aurait décrédibilisé tout le reste.
+\end{these}
+
+\section{Annexe · Vérifier chaque affirmation soi-même}
+
+\renewcommand{\arraystretch}{1.22}
+\begin{center}\small
+\begin{tabular}{@{}>{\raggedright\arraybackslash}p{5.4cm} >{\raggedright\arraybackslash}p{10.7cm}@{}}
+\toprule
+\textbf{Affirmation} & \textbf{Ce qui la rejoue} \\
+\midrule
+1 auteur, 377 commits, 3 mois &
+  \code{git log -{}-format='\%aN' | sort -u | wc -l} \newline
+  \code{git rev-list -{}-count HEAD} \; ; \; \code{git log -{}-reverse -{}-format=\%ad -{}-date=short | head -1} \\
+\code{main} accuse 37 commits &
+  \code{git rev-list -{}-count main..HEAD} \\
+Les volumes 12 862 / 37 448 / 93 625 &
+  \code{find crates/<les crates du groupe> -name '*.rs' | xargs wc -l | tail -1} \\
+Les 4 fichiers non propriétaires &
+  \code{grep -rl 'SPDX-License-Identifier: \textbackslash(Apache-2.0\textbackslash|MIT\textbackslash)' crates -{}-include='*.rs'} \\
+Le nettoyage du nommage &
+  \code{grep -rn 'Kovant' crates Cargo.toml -{}-include='*.rs' -{}-include='*.toml'} \sz{$\rightarrow$ 5 lignes} \\
+C1 a son propre producteur &
+  \code{sed -n '1,22p' crates/provenance-capture/src/lib.rs} \\
+Les problèmes, par article de loi &
+  \code{sed -n '1,16p' crates/reg-evidence/src/lib.rs} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Un avertissement pour finir, et il porte sur l'usage. Ce document sert à \textbf{décider où porter
+l'effort}, pas à préparer une négociation : il dit quel régime viser et ce qui empêche d'y accéder. Le
+jour où un montant sera nécessaire, il viendra d'un acquéreur identifié et d'un conseil qui connaît les
+comparables --- deux choses que ce rapport n'a pas et ne prétend pas avoir.
+
+\end{document}
