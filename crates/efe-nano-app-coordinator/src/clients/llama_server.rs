@@ -136,6 +136,24 @@ impl LlamaServerClient {
         })
     }
 
+    /// **Fil B.1 (additif)** — fixe le timeout end-to-end de `complete` ET
+    /// reconstruit le client HTTP avec une marge (+5 s) pour que la borne
+    /// reqwest ne coupe pas avant la borne tokio. Nécessaire dès que
+    /// `max_tokens` dépasse ce qu'un petit modèle génère en ~5 s (le défaut
+    /// historique) : la borne doit suivre le budget de génération.
+    pub fn with_timeouts(mut self, total: Duration) -> RobotResult<Self> {
+        self.http = HttpClient::builder()
+            .timeout(total + Duration::from_secs(5))
+            .pool_max_idle_per_host(8)
+            .build()
+            .map_err(|e| RobotError::Config {
+                robot: self.id,
+                reason: format!("cannot rebuild HTTP client: {e}"),
+            })?;
+        self.timeout = total;
+        Ok(self)
+    }
+
     /// Cœur du contrat : envoie un prompt à `llama-server` et parse la
     /// réponse en type fort `O` (qui doit correspondre à la grammar GBNF).
     ///
@@ -222,12 +240,23 @@ impl LlamaServerClient {
             return Err(err);
         }
 
-        // Parse la réponse llama-server.
-        let raw: LlamaCompletionResponse =
-            resp.json().await.map_err(|e| RobotError::Transport {
-                robot: self.id,
-                source: Box::new(e),
-            })?;
+        // Parse la réponse llama-server. Sur échec (200 mais corps tronqué/
+        // malformé — serveur crashé en pleine écriture, proxy), on enregistre
+        // une entry "Failed" AVANT de remonter : c'était le SEUL chemin
+        // terminal sans entrée d'audit — une invocation réelle doit toujours
+        // en produire exactement une (contrat NanoRobotClient, et depuis
+        // Fil B.3 un invariant du reçu scellé).
+        let raw: LlamaCompletionResponse = match resp.json().await {
+            Ok(r) => r,
+            Err(e) => {
+                let err = RobotError::Transport {
+                    robot: self.id,
+                    source: Box::new(e),
+                };
+                self.record_failure(ctx, &input_hash, started, &err).await;
+                return Err(err);
+            }
+        };
 
         debug!(
             robot = self.id,

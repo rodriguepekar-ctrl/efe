@@ -27,7 +27,8 @@ use crate::canonical::{
 };
 use crate::error::{MultiLlmError, MultiLlmResult};
 
-use super::SourceDialect;
+use super::engine::{Reformulated, ReformulatorEngine};
+use super::{Reformulator, SourceDialect};
 
 /// Reformulator unifié pour les 5 schemas canoniques.
 #[derive(Clone, Default)]
@@ -352,6 +353,46 @@ impl CanonicalReformulator {
                 reason: e.to_string(),
             })?),
         }
+    }
+}
+
+// ─── Fil B.0 : impl du trait pluggable ────────────────────────────
+
+/// Le déterministe **est** un [`Reformulator`] : c'est le défaut et le repli.
+/// Chaque sortie est estampillée [`ReformulatorEngine::Rule`]. On délègue aux
+/// méthodes inhérentes (`route`, `to_argument`) — nommées différemment des
+/// méthodes du trait (`to_canonical`, `to_argument_value`), donc `self.route`
+/// et `self.to_argument` ci-dessous résolvent sans ambiguïté vers l'inhérent.
+#[async_trait::async_trait]
+impl Reformulator for CanonicalReformulator {
+    async fn to_canonical(
+        &self,
+        raw: &str,
+        from: SourceDialect,
+        target: crate::canonical::CanonicalSchemaId,
+        llm_source: &str,
+        // B.4 : le parsing règle est ≈ instantané (pur Rust, zéro réseau) —
+        // la deadline de mission n'a rien à borner ici.
+        _deadline: Option<std::time::Duration>,
+    ) -> MultiLlmResult<Reformulated> {
+        let value = self.route(raw, from, target, llm_source)?;
+        Ok(Reformulated::new(value, ReformulatorEngine::Rule))
+    }
+
+    async fn to_argument_value(
+        &self,
+        raw: &str,
+        stance: ArgumentStance,
+        from: SourceDialect,
+        _deadline: Option<std::time::Duration>,
+    ) -> MultiLlmResult<Reformulated> {
+        let arg = self.to_argument(raw, stance, from)?;
+        let value = serde_json::to_value(arg).map_err(|e| MultiLlmError::ReformulationFailed {
+            from_dialect: from.tag().to_string(),
+            to_schema: "canonical/argument_v1".to_string(),
+            reason: e.to_string(),
+        })?;
+        Ok(Reformulated::new(value, ReformulatorEngine::Rule))
     }
 }
 

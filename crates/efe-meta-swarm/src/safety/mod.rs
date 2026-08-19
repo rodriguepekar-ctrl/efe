@@ -46,6 +46,12 @@ pub trait SafetySet: Send + Sync {
     /// override this with a real SHA-256 over their parameters.
     fn hash(&self) -> [u8; 32] { [0; 32] }
 
+    /// An axis-aligned bounding box `(lo, hi)` of this set, if it is bounded — the
+    /// **operational domain** the Couche 3 M1.c Lipschitz canary samples over
+    /// ([`crate::participants::lipschitz`]). Default `None`: an unbounded or non-box set
+    /// has no natural sampling box, and the caller falls back to a configured radius.
+    fn bounding_box(&self) -> Option<(Vec<f32>, Vec<f32>)> { None }
+
     /// Convenience method.
     #[must_use]
     fn boxed(self) -> Box<dyn SafetySet>

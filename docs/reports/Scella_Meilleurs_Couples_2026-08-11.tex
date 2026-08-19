@@ -1,0 +1,467 @@
+\documentclass[10pt]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage[french]{babel}
+\usepackage{newpxtext,newpxmath}
+\usepackage[a4paper,top=1.5cm,bottom=1.35cm,left=1.65cm,right=1.65cm]{geometry}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{titlesec}
+\usepackage[most]{tcolorbox}
+\usepackage{enumitem}
+\usepackage{array}
+\usepackage{booktabs}
+\usepackage{fancyhdr}
+
+\definecolor{navy}{HTML}{1F3A5F}
+\definecolor{grey}{HTML}{54606E}
+\definecolor{green}{HTML}{2C6E49}
+\definecolor{amber}{HTML}{9C6A16}
+\definecolor{red}{HTML}{A6322E}
+\definecolor{plum}{HTML}{7A4EA8}
+\definecolor{boxgray}{HTML}{F3F5F8}
+\definecolor{boxred}{HTML}{FCF2F1}
+\definecolor{boxgreen}{HTML}{F1F7F3}
+\definecolor{boxplum}{HTML}{F7F3FB}
+\definecolor{boxedge}{HTML}{D9E0EA}
+
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{2.6pt}
+\linespread{1.0}
+
+\pagestyle{fancy}\fancyhf{}
+\lhead{\small\color{grey}Scella}
+\rhead{\small\color{grey}Les meilleurs couples -- 11 août 2026}
+\cfoot{\small\color{grey}\thepage}
+\renewcommand{\headrulewidth}{0.3pt}
+
+\titleformat{\section}{\color{navy}\large\bfseries}{}{0pt}{}
+\titlespacing{\section}{0pt}{9pt}{3pt}
+\titleformat{\subsection}{\color{navy}\bfseries}{}{0pt}{}
+\titlespacing{\subsection}{0pt}{7pt}{1.5pt}
+
+\newtcolorbox{these}{colback=boxgray,colframe=boxedge,boxrule=0.5pt,arc=2.5pt,
+  left=8pt,right=8pt,top=4.5pt,bottom=4.5pt}
+\newtcolorbox{alerte}{colback=boxred,colframe=red!55,boxrule=0.8pt,arc=2.5pt,
+  left=8pt,right=8pt,top=4.5pt,bottom=4.5pt}
+\newtcolorbox{acquis}{colback=boxgreen,colframe=green!45,boxrule=0.8pt,arc=2.5pt,
+  left=8pt,right=8pt,top=4.5pt,bottom=4.5pt}
+\newtcolorbox{piste}{colback=boxplum,colframe=plum!45,boxrule=0.8pt,arc=2.5pt,
+  left=8pt,right=8pt,top=4.5pt,bottom=4.5pt}
+
+\newcommand{\servi}{{\color{green}\textbf{SERVI}}}
+\newcommand{\latent}{{\color{plum}\textbf{LATENT}}}
+\newcommand{\unfil}{{\color{amber}\textbf{À UN FIL}}}
+\newcommand{\faux}{{\color{red}\textbf{FAUX}}}
+\newcommand{\sz}[1]{{\small\color{grey}\textsf{#1}}}
+\newcommand{\code}[1]{\texttt{\small #1}}
+\newcommand{\x}{$\times$}
+
+\begin{document}
+
+\begin{center}
+{\Huge\bfseries\color{navy} Scella}\\[4pt]
+{\large\color{grey}\itshape Les meilleurs couples : où 1 + 1 fait plus que 2, et où il ne fait pas 2}\\[4pt]
+{\small\color{grey} 11 août 2026 \; · \; branche \code{couche2-m0-frontier}, HEAD \code{aac2053} \; · \; 66 crates, analyse au code}
+\end{center}
+\vspace{2pt}
+
+\begin{these}
+\textbf{Le résultat central.} Le meilleur couple \emph{qui existe et se montre} est la \textbf{topologie
+déclarée \x{} le reçu par appel, apparié injectivement} : on ne peut pas prétendre avoir consulté trois
+modèles et n'en consulter qu'un. Il est servi, il mord, et il répond exactement à la question de
+conformité du domaine de Kovant.
+
+Mais le couple le plus important est ailleurs, et je l'ai d'abord manqué. La \textbf{co-signature
+Ed25519 R3} -- le seul dispositif du dépôt qui donne la \textbf{non-répudiation}, donc la vérification
+\emph{par un tiers sans clé} -- \textbf{existe}, et sa moitié difficile est \textbf{déjà servie} :
+vérification, dégradation automatique R3$\rightarrow$R4 sur signature invérifiable, anomalies
+remontées jusqu'au client. Ce qui manque est le \textbf{producteur} : rien, sur le chemin servi, ne
+co-signe. \textbf{C'est le fil le plus court à haute valeur du dépôt.}
+\end{these}
+
+\section{1 · Ce qu'est un couple, et pourquoi c'est la bonne question}
+
+Un couple n'est pas deux composants qui coexistent : c'est deux composants qui, \textbf{ensemble,
+produisent une propriété vérifiable qu'aucun n'a seul}. La distinction est tranchante, et c'est tout
+son intérêt -- elle élimine d'emblée les assemblages qui font bonne figure sur un schéma d'architecture
+et ne prouvent rien. Un diagramme peut relier n'importe quoi à n'importe quoi ; un couple, lui, doit
+survivre à la question « et qu'est-ce que la paire garantit que chaque moitié ne garantissait pas ? ».
+
+Chaque couple est noté sur quatre axes. La \textbf{multiplicativité} : la propriété composée est-elle
+réellement neuve, ou une simple juxtaposition ? Le \textbf{mordant} : existe-t-il un test qui
+\emph{échoue} quand la propriété casse -- car un contrôle qui ne peut pas échouer ne prouve rien. La
+\textbf{distance au servi} : câblé aujourd'hui, ou à une soudure près ? Et la \textbf{valeur dans la
+conversation Kovant} : la paire répond-elle à une question qu'un acheteur conformité pose vraiment ?
+
+Le classement qui suit contient quatre catégories, et les deux dernières ne sont pas du remplissage.
+Les \textbf{couples servis} sont vérifiés dans le code de ce matin. Un couple \textbf{à un fil} a sa
+moitié difficile déjà servie et lui manque une seule pièce -- c'est la catégorie la plus utile, parce
+qu'elle chiffre un travail au lieu de décrire un manque. Les couples \textbf{latents} désignent des
+briques réelles et testées qu'aucune ligne ne relie encore. Et les \textbf{faux couples} sont des
+paires qui \emph{ressemblent} à des couples sans en être : ce sont eux qu'on survend en réunion sans le
+vouloir, et les nommer vaut mieux que de les découvrir en face d'un évaluateur.
+
+\section{2 · Tableau synoptique}
+
+\renewcommand{\arraystretch}{1.16}
+\begin{center}\small
+\begin{tabular}{@{}r >{\raggedright\arraybackslash}p{5.0cm} l >{\raggedright\arraybackslash}p{7.4cm}@{}}
+\toprule
+& \textbf{Le couple} & \textbf{Statut} & \textbf{Ce que la paire produit, et pas les moitiés} \\
+\midrule
+1 & \textbf{Topologie déclarée \x{} reçu par appel} \sz{(injectif)} & \servi &
+  un panel ne peut pas être \emph{prétendu} : l'appel omis casse le verdict \\
+2 & \textbf{Caviardage PII \x{} scellement}, dans cet ordre & \servi &
+  le sceau couvre le texte \emph{caviardé} -- donc ce qui est réellement sorti \\
+3 & \textbf{Reçu v4 \x{} ancre 3a} & \servi &
+  ces agents nommés, ce nombre de pas, \textbf{aucun retiré} \\
+4 & Reçu \x{} coût réel par appel & \servi &
+  une trace de dépense opposable, bornée en amont \\
+-- & \emph{Les deux vérifieurs zéro-dépendance} & \servi &
+  \emph{amplificateur} : rend les quatre précédents \textbf{croyables} \\
+5 & Canari H1 \x{} participants efe-core & \servi &
+  un opérateur falsifié \textbf{refuse de servir} \\
+6 & \code{slm\_mediated} \x{} sa propre chute & \servi &
+  la revendication embarque son falsifieur \\
+\midrule
+\textbf{7} & \textbf{Co-signature R3 \x{} chaîne HMAC} \sz{(vérifieur SERVI, producteur absent)} & \unfil &
+  \textbf{non-répudiation} : forger exige les \textbf{deux} clés -- \emph{le fil le plus court} \\
+8 & Signature de la \emph{racine} du reçu & \latent &
+  l'opérateur s'engage sur la chaîne entière, contrôlable sans clé tenant \\
+9 & \code{AnchorProof} \x{} Couche 3 (jalon 3b) & \latent &
+  « existait au temps T », attesté hors de l'opérateur \\
+\midrule
+F1 & Fil B (relais SLM) \x{} souveraineté & \faux &
+  egress ni gardé ni décompté ; \textbf{trois} implémentations de la règle \\
+F2 & \code{config\_hash} \x{} ce qui a tourné & \faux &
+  v4 scelle le \emph{déclaré}, pas le \emph{rapporté} (M4 = \code{Stub}) \\
+F3 & « vrais SLM » \x{} essaim & \faux &
+  fusion latente Mode-1 numérique, pas des modèles de langue \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\section{3 · Les couples servis}
+
+\subsection{3.1 · Rang 1 -- Topologie déclarée \x{} reçu par appel, apparié \emph{injectivement}}
+
+\sz{\code{efe-swarm-gateway/src/mission\_graph.rs:475} et \code{:492}}
+
+La propriété tient en une phrase : \textbf{on ne peut pas déclarer avoir consulté trois modèles et
+n'en consulter que deux}. Le test-gardien déclare \code{claude\_a}, \code{gpt\_b}, \code{gemini\_c},
+n'exécute que les deux premiers, et obtient \code{fully\_proven = false} avec \code{bridge.broken = 1}
+-- le déclaré-mais-absent est \code{Missing}.
+
+Ce qui rend ce couple excellent n'est pourtant pas ce premier test, c'est le second, et il porte sur
+la partie non évidente : \textbf{l'injectivité de l'appariement}. On y déclare \emph{trois appels au
+même provider} et l'on ne produit qu'un seul enregistrement. Sans injectivité, les trois n\oe uds
+pointeraient le même record et le reçu conclurait \code{Consistent} : un faux positif parfait, et
+indétectable, puisque toutes les empreintes seraient valides. Avec l'injectivité : un n\oe ud apparie,
+deux passent \code{Missing}, verdict faux. Une implémentation naïve aurait exactement ce trou -- et
+c'est précisément le genre de trou qui ne se voit pas en relisant, seulement en l'attaquant.
+
+Un détail de conception mérite d'être relevé, parce qu'il est rare : le verdict est \textbf{décomposé}.
+\code{v.swarm.ok()} reste \emph{vrai} pendant que \code{fully\_proven} est \emph{faux} -- la chaîne
+d'essaim est intègre, c'est le pont vers les appels externes qui est rompu. Le reçu ne dit donc pas
+seulement \emph{que} quelque chose ne va pas, il dit \emph{où}. Un auditeur qui reçoit un verdict
+binaire doit enquêter ; celui-ci reçoit un diagnostic.
+
+\begin{acquis}
+\textbf{Pourquoi c'est le meilleur couple servi.} Kovant construit des essaims de petits modèles pour
+la conformité en achats. « Prouver que le panel a réellement eu lieu comme il a été déclaré » \emph{est}
+la question de conformité de ce domaine -- pas une propriété adjacente, la question centrale. Ce couple
+y répond, et il apporte son propre falsifieur.
+\end{acquis}
+
+\subsection{3.2 · Rang 2 -- Caviardage PII \x{} scellement du reçu, \textbf{dans cet ordre}}
+
+\sz{\code{efe-swarm-gateway/src/routes/llm.rs} -- patron servi : \code{role $\rightarrow$ gate $\rightarrow$ clamp/redact $\rightarrow$ admit $\rightarrow$ scope $\rightarrow$ run $\rightarrow$ seal}}
+
+La propriété n'est pas « on caviarde » \emph{plus} « on scelle ». C'est que \textbf{le sceau couvre le
+texte caviardé}. Le code appelle \code{redact\_for\_egress} \emph{avant tout usage} de
+\code{user\_text} -- avant le hash scellé, avant le calcul d'arité -- de sorte que le reçu commet ce
+qui est réellement sorti. Caviarder après scellement ne vaudrait rien : on scellerait le texte en
+clair et l'on jurerait ensuite l'avoir protégé. \textbf{L'ordre est le mécanisme}, et c'est pour cela
+que ce couple est un vrai couple et pas une addition.
+
+Son mordant est instructif, parce que la faille qu'il ferme était invisible. Sans la feature
+\code{pii}, la ligne de caviardage \emph{disparaissait du binaire} -- sans erreur, sans avertissement,
+sans trace d'exécution. Un opérateur pouvait compiler, lire « préflight frontière OK », et expédier
+chaque prompt en clair à un tiers. Le correctif ne s'est pas contenté d'un \code{\#[cfg]} au site
+d'appel : la porte de boot exige désormais \textbf{soit la feature, soit une reconnaissance explicite}
+de l'opérateur (\code{EFE\_LLM\_ACCEPT\_CLEARTEXT\_EGRESS=true}). Le code résume l'arbitrage mieux que
+je ne le ferais : le défaut \code{Off} par \emph{policy} reste légitime, c'est le \textbf{silence} qui
+ne l'était pas.
+
+La fissure, énoncée par le code lui-même et à répéter en présentation : \textbf{sans policy tenant, le
+prompt sort en clair}. La frontière n'est pas souveraine, et le module le documente au lieu de le taire.
+
+\subsection{3.3 · Rang 3 -- Le reçu v4 qui \emph{nomme} \x{} l'ancre 3a qui \emph{publie}}
+
+\sz{\code{efe-meta-swarm-server/src/controller/iterate.rs:280} $\rightarrow$ \code{:291}}
+
+Pris séparément, chacun a un trou que l'autre bouche exactement. Le reçu v4 nomme ses acteurs, leurs
+versions déclarées et sa règle d'agrégation -- mais l'opérateur peut en publier un préfixe tronqué,
+qui se re-prouve parfaitement. L'ancre garantit qu'aucun pas n'a été retiré -- mais elle ne dit rien de
+qui a contribué. \textbf{Ensemble} : « ces agents nommés, dans ces versions déclarées, ont produit
+exactement ce nombre de pas, et aucun n'a été retiré. »
+
+Vérifié dans le chemin servi : l'ancre est publiée \textbf{avant} la construction de la réponse, et un
+échec de publication fait échouer le RPC. L'ordre compte autant qu'au rang 2 -- une ancre publiée après
+coup n'ancre rien, elle enregistre.
+
+Son mordant est le meilleur du dépôt parce qu'il est \emph{gênant} : la démonstration montre d'abord le
+bundle tronqué \textbf{passer} la re-preuve avec la clé, avant de le faire tomber sur l'ancre sans
+aucune clé. Montrer sa propre garantie échouer là où elle ne s'applique pas est ce qui rend crédible
+l'endroit où elle s'applique.
+
+\subsection{3.4 · Rang 4 -- Le reçu \x{} le coût réel, appel par appel}
+
+\sz{\code{mission\_graph.rs:369-374} ; le plafond dans \code{routes/llm.rs:249}}
+
+Un enregistrement par appel, avec son \code{cost\_cents} scellé dans la chaîne. En amont,
+\code{clamp\_budget} borne \textbf{inconditionnellement} : le cap du tenant s'il existe, \emph{puis} le
+plafond serveur \emph{toujours} -- y compris pour un tenant sans politique, qui était exactement la
+branche manquante. Et la conversion sature vers le budget \textbf{d'origine}, jamais vers
+\code{u32::MAX} : un dépassement arithmétique ne peut pas transformer un plafonnement en autorisation.
+
+La paire donne une trace de dépense opposable : \emph{le budget était borné en amont, et le reçu
+prouve ce qui a réellement été dépensé}. Le cap seul se contourne par un bug de conversion ; le reçu
+seul enregistre une dépense que rien ne bornait.
+
+\section{4 · L'amplificateur : les deux vérifieurs à zéro dépendance}
+
+\sz{\code{cargo tree -p verify-mini -e normal} et \code{-p verify-meta-mini} : chacun \textbf{seul}}
+
+Ce n'est pas tout à fait un couple -- c'est ce qui rend les quatre précédents \emph{croyables}, et à ce
+titre il mérite sa place. Un reçu est une affirmation. Un vérifieur auditable en un après-midi, sans
+chaîne d'approvisionnement à qui faire confiance, transforme cette affirmation en fait contrôlable par
+quelqu'un qui ne nous accorde rien. Réciproquement, le zéro-dépendance n'a aucune valeur détaché d'un
+reçu : c'est un binaire qui ne vérifie rien. La dépendance est mutuelle, donc le couple est réel, mais
+son rôle est d'\textbf{amplifier} plutôt que de produire une propriété nouvelle.
+
+Il y en a \emph{deux}, ce qui est plus significatif qu'il n'y paraît : la contrainte a été tenue deux
+fois, sur deux piles indépendantes, avec deux SHA-256 et deux HMAC écrits à la main. Ce n'est pas un
+accident de dépendances, c'est une discipline.
+
+\section{5 · Deux couples servis plus étroits}
+
+\subsection{5.1 · Rang 5 -- Canari H1 empirique \x{} participants efe-core, fail-closed au boot}
+
+\sz{\code{efe-meta-swarm-server/src/participant/local.rs:342}}
+
+Un participant dont la non-expansivité est falsifiée \textbf{refuse de servir}. Deux honnêtetés portées
+par le code font la valeur de ce couple plutôt qu'elles ne la diminuent. La première : c'est un
+\textbf{falsifieur, jamais une preuve} -- la documentation l'écrit mot pour mot, \emph{« a pass is a
+falsification failure, never a proof »}. La seconde : il a une \textbf{échappatoire déclarée},
+\code{h1\_canary.mode = "off"} dans le manifeste, auquel cas le participant sert avec un avertissement
+bruyant plutôt qu'en silence.
+
+L'actif intellectuel est cependant ailleurs, et il est plus rare qu'un garde-fou : la mesure a
+\textbf{réfuté le certificat analytique} du document de conception. $\hat{L} = 0{,}69$ en topologie
+dynamique et $0{,}366$ en topologie fixe, contre un $\beta_1 \approx 0{,}17$ annoncé. La borne honnête
+est la borne mesurée. Un dépôt qui publie la réfutation de sa propre note théorique dit quelque chose
+sur la manière dont il travaille.
+
+\subsection{5.2 · Rang 6 -- \code{slm\_mediated} \x{} sa propre chute}
+
+\sz{\code{routes/llm.rs:166} -- \code{slm\_mediated: !hops.is\_empty() \&\& slm == hops.len()}}
+
+La revendication « relais médié par le petit modèle » n'est vraie que si \textbf{tous} les hops sont
+SLM ; une seule dégradation la fait tomber, visiblement. Et elle est dérivée de la sortie
+\textbf{scellée}, jamais recalculée ailleurs -- donc la vue ne peut pas diverger de ce qui a été
+attesté.
+
+C'est le micro-patron le plus élégant du dépôt : \textbf{la revendication embarque son propre
+falsifieur, et se calcule depuis la source scellée uniquement}. C'est aussi, thématiquement, le couple
+le plus proche de la thèse de Kovant -- ce qui en fait un bon objet de discussion, à condition de ne
+jamais le confondre avec le faux couple F1 ci-dessous.
+
+\section{6 · Rang 7 -- la co-signature R3 : le vérifieur est servi, le producteur manque}
+
+C'est la découverte de cette analyse, et elle m'a d'abord échappé. J'avais écrit, dans une première
+version de ce classement, que le couple « reçu HMAC \x{} Ed25519 » restait à inventer. C'est faux. Il
+est écrit, il est nommé \textbf{R3 / co-signature T-WITNESS}, il vit dans
+\code{efe-swarm-provenance/src/cosign.rs} -- et il est conçu mieux que ce que j'avais esquissé.
+
+\subsection{6.1 · Ce que R3 fait, et pourquoi l'asymétrie est son essence}
+
+Un n\oe ud distant \textbf{pinné} co-signe sa propre computation avec sa \textbf{propre clé privée
+Ed25519}, dont l'orchestrateur -- et tout tiers -- ne détient que la partie \textbf{publique}. Le
+record passe de « \emph{un} distant a renvoyé X » à « \textbf{le n\oe ud N, dont tu as pinné la clé,
+jure sous sa signature non-répudiable avoir produit X} ».
+
+Le module explique lui-même pourquoi HMAC ne pouvait pas suffire, et c'est exactement l'argument :
+une co-signature symétrique exigerait que le vérifieur \emph{détienne le secret du n\oe ud}, donc
+qu'il puisse le \textbf{forger} -- pas de non-répudiation. Les deux systèmes sont \textbf{orthogonaux} :
+le HMAC tenant scelle le record (co-signature \emph{incluse}) dans le \code{leaf\_hash} ; l'Ed25519 du
+n\oe ud signe le tuple \code{prompt\_hash} $\Vert$ \code{output\_hash}. D'où la propriété composée, qui
+est le c\oe ur du couple : \textbf{forger un R3 exige les DEUX clés}.
+
+\subsection{6.2 · La règle de fer, et pourquoi elle fait la qualité du couple}
+
+R3 embarque une discipline que j'ai rarement vue écrite aussi nettement, la \emph{no false elevation}
+(I-RC9) : le barreau \textbf{scellé} est la \emph{revendication} du producteur, le barreau
+\textbf{vérifié} est ce que la preuve cryptographique \emph{soutient}. Le vérifieur n'accepte jamais R3
+sur parole -- une co-signature invérifiable (n\oe ud non pinné, révoqué, tuple altéré, signature
+fausse) \textbf{redescend} le record à R4, la transaction se re-prouve toujours, et le verdict le
+\textbf{signale} au lieu de se taire.
+
+Et ce n'est pas une intention de documentation : \code{n17\_chain.rs:346} calcule
+\code{(held\_strength, cosign\_anomalies)}, la ligne 365 les place dans le verdict, la ligne 393
+déclenche la dégradation sur échec de \code{verify\_cosignature}. La chaîne va jusqu'au client --
+\code{routes/llm.rs:201-202} sert \code{weakest\_rank} et \code{weakest\_label} dans la réponse de
+mission. \textbf{La moitié difficile est servie de bout en bout.}
+
+\begin{alerte}
+\textbf{Et pourtant la propriété ne se déclenche jamais.} Aucun chemin servi ne \emph{produit} de
+co-signature : les seules constructions de \code{NodeCoSignature} hors définitions de types sont des
+\code{\#[test]} (\code{efe-swarm-sdk/src/n17.rs:322}), et le registre de n\oe uds pinnés n'est peuplé
+que dans des tests (\code{NodeRegistry::empty().with\_node(...)}, \code{attest.rs:219}). En production
+le registre est vide, aucun record n'est R3, et le barreau le plus faible est donc \textbf{R4 par
+construction}. C'est un falsifieur servi qui n'a rien à falsifier.
+\end{alerte}
+
+C'est, une fois de plus, la signature du dépôt : \emph{la capacité est construite, la vérification est
+câblée, le producteur manque}. Exactement la forme du trou « aucun producteur » de la pile B -- qui,
+lui, a été fermé. Le précédent existe donc, et il dit que ce fil-là se pose.
+
+\subsection{6.3 · Les deux chantiers latents qui restent, et qu'il ne faut pas confondre}
+
+R3 donne la non-répudiation \textbf{du calcul d'un n\oe ud} : \emph{qui} a produit cette sortie. Il ne
+donne pas l'engagement de l'opérateur sur \textbf{la chaîne entière}. Ce sont deux propriétés
+distinctes, et les confondre serait exactement le genre de raccourci que ce document existe pour
+éviter.
+
+\textbf{Rang 8 -- signer la \emph{racine} du reçu.} Aucune route ne le fait, et les matériaux sont
+pourtant là. Le crate d'identité de publieur apporte \code{ed25519-dalek} 2.1, le hachage canonique du
+corps, le registre et le journal chaîné. Il est même déjà câblé ailleurs : le runner de conformité de
+\code{efe-compliance-wiring} détient un vérifieur de signature réel derrière un trait
+\sz{(\code{src/runner.rs:79})}, couvert par un test d'audit à contrat d'interface. Le manque est donc
+sur le chemin du reçu, pas dans la brique.
+
+\textbf{Rang 9 -- l'ancrage tiers (3b).} \code{forensic-export/src/anchor.rs:162} porte déjà
+\code{verify\_anchor} et la liaison de racine décisive. L'ancre donne « existait au temps T » ; la
+signature de racine donne « et cet opérateur s'y est engagé ». Ensemble, elles ferment le modèle de
+confiance par ses deux bouts.
+
+\section{7 · Les faux couples -- la section à lire deux fois}
+
+\begin{alerte}
+\textbf{F1 · Fil B (relais SLM) \x{} souveraineté. Ce n'est pas un couple, et le code l'avoue.}
+\code{frontier.rs:118-133} : l'URL du reformulateur SLM \textbf{n'est pas contrainte au local}, son
+egress \textbf{n'est ni gardé par l'allowlist tenant ni décompté} (le hop est budgété 0 ¢), et le
+système \textbf{avertit au boot} plutôt que de prétendre une souveraineté qu'il ne vérifie pas. Pire
+pour la robustesse : la règle de souveraineté existe en \textbf{trois} implémentations --
+\code{provenance-capture/src/guard.rs}, \code{efe-swarm-sdk/src/backend/mod.rs}, et un « miroir
+minimal » \code{slm\_url\_looks\_local} qui, délibérément, ne dépend d'aucune des deux. Elles ont déjà
+divergé une fois en contournement SSRF. \textbf{« Petits modèles locaux, donc vos données restent chez
+vous » serait faux aujourd'hui} -- et c'est la phrase qu'on prononce sans y penser.
+\end{alerte}
+
+\textbf{F2 · \code{config\_hash} \x{} ce qui a réellement tourné.} Le reçu v4 scelle la configuration
+que le \textbf{manifeste demandait}, pas celle que le participant a \textbf{dit servir} : le certificat
+porté sur le fil est encore un \code{Stub} -- un marqueur de phase 1 qui, comme son module l'écrit,
+n'effectue \textbf{aucun contrôle} \sz{(\code{client/remote\_participant.rs:404})}. La
+formule « cet agent, dans cette version précise » atteste donc une \emph{exigence}, pas une
+\emph{réponse}. C'est la surinterprétation la plus tentante de toute l'histoire v4, parce qu'elle est
+vraie à un mot près -- et que le mot compte.
+
+\textbf{F3 · « Vrais SLM » \x{} essaim.} Les participants du mode réel exécutent une fusion latente
+Mode-1 \emph{numérique} sur des templates. Appeler le méta-essaim un « essaim de SLM » serait faux, et
+le dire devant Kovant serait doublement coûteux : c'est leur domaine, ils le verraient.
+
+\section{8 · Le jugement}
+
+\textbf{Le meilleur couple à montrer : le rang 1.} Topologie déclarée \x{} reçu apparié injectivement.
+Il est servi, il mord, son falsifieur couvre le cas non évident que rate une implémentation naïve, et
+il répond à la question de conformité centrale du domaine visé. Il tient dans une démonstration de dix
+minutes, aujourd'hui.
+
+\textbf{Le meilleur couple à finir : le rang 7.} La co-signature R3 est le seul dispositif du dépôt
+qui produise de la \textbf{non-répudiation} -- donc la seule voie hors du caveat répété partout
+ailleurs, \emph{tamper-evident pour un détenteur de clé, pas trustless pour un tiers}. Sa moitié
+difficile est écrite, servie, et remonte jusqu'au client. Il lui manque un producteur.
+
+\begin{acquis}
+\textbf{La recommandation tient en une ligne : montrer le rang 1, poser le fil du rang 7.} Le premier
+est ce que l'on met sur la table ; le second est le plus court chemin identifié vers un changement de
+\emph{nature} -- pas d'étendue -- de ce que Scella a le droit d'affirmer. Et il a un précédent dans ce
+dépôt : le trou « aucun producteur » de la pile B avait la même forme, et il a été fermé.
+\end{acquis}
+
+Un mot sur la méthode, parce qu'il porte sur ce classement lui-même. La première version de ce
+document annonçait le rang 7 comme « à inventer ». Une seule commande de contrôle -- destinée à
+\emph{confirmer} une absence -- a rendu trois lignes inattendues et renversé la recommandation. C'est
+la raison d'être de l'annexe : les affirmations négatives sont celles qui coûtent le plus cher quand
+elles sont fausses, et ce sont précisément celles qu'on ne relit pas.
+
+\section{Annexe · Vérifier chaque couple soi-même}
+
+Un classement de couples est une suite d'affirmations sur ce que le code fait \emph{ensemble} -- c'est
+précisément le genre d'énoncé qu'on ne peut pas contrôler en lisant un fichier à la fois. Chacun est
+donc ramené ici à son emplacement ou à sa commande, depuis la racine du dépôt. Les lignes \faux{} sont
+les plus importantes à pouvoir rejouer : ce sont des affirmations \emph{négatives}, et une affirmation
+négative ne vaut que si elle est réfutable.
+
+\renewcommand{\arraystretch}{1.2}
+\begin{center}\small
+\begin{tabular}{@{}r >{\raggedright\arraybackslash}p{4.35cm} >{\raggedright\arraybackslash}p{11.0cm}@{}}
+\toprule
+& \textbf{Le couple} & \textbf{Où il se vérifie} \\
+\midrule
+1 & Topologie \x{} reçu injectif &
+  \code{mission\_graph.rs:475} \sz{(appel omis)} et \code{:492} \sz{(injectivité)} \\
+2 & PII \x{} scellement &
+  \code{routes/llm.rs} -- \code{redact\_for\_egress} appelé \textbf{avant} le hash scellé \\
+3 & Reçu v4 \x{} ancre &
+  \code{controller/iterate.rs:280} \sz{(publication)} $\rightarrow$ \code{:291} \sz{(réponse)} \\
+4 & Reçu \x{} coût &
+  \code{mission\_graph.rs:369-374} ; le plafond dans \code{routes/llm.rs:249} \\
+-- & Vérifieurs zéro-dép &
+  \code{cargo tree -p verify-mini -e normal} \sz{et} \code{-p verify-meta-mini} \\
+5 & Canari H1 \x{} efe-core &
+  \code{participant/local.rs:342} \\
+6 & \code{slm\_mediated} \x{} sa chute &
+  \code{routes/llm.rs:166} \\
+\textbf{7} & \textbf{Co-signature R3} \sz{(à un fil)} &
+  le vérifieur servi : \code{cosign.rs:276}, \code{n17\_chain.rs:346/365/393},
+  \newline client : \code{routes/llm.rs:201-202} \sz{(\code{weakest\_rank})} ;
+  \newline \textbf{aucun producteur} :
+  \code{grep -rn NodeCoSignature crates --include='*.rs' | grep -v test} \\
+8 & Signature de racine \sz{(latent)} &
+  la brique : \code{efe-compliance-wiring/src/runner.rs:79} \sz{(\code{Arc<dyn SignatureVerifier>})} \\
+9 & \code{AnchorProof} \sz{(latent)} &
+  \code{forensic-export/src/anchor.rs:162} $\rightarrow$ \code{pub fn verify\_anchor} \\
+F1 & Fil B \x{} souveraineté &
+  \code{frontier.rs:118-133} ; les trois copies :
+  \code{grep -rl 'fn is\_local\_endpoint' crates} + \code{slm\_url\_looks\_local} \\
+F2 & \code{config\_hash} \x{} le servi &
+  \code{client/remote\_participant.rs:404} $\rightarrow$ \code{Stub} \\
+-- & 515 tests, 0 échec &
+  \code{cargo test -p efe-meta-verify -p verify-meta-mini -p efe-meta-swarm-server} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Un avertissement sur la ligne 7, parce que c'est celle qui porte la recommandation -- et parce que
+c'est celle qui m'a pris en défaut. Elle affirme deux choses de natures différentes : que le vérifieur
+R3 \textbf{est servi}, contrôlable en ouvrant quatre fichiers, et qu'\textbf{aucun producteur
+n'existe}, ce qui est une \emph{absence}. La seconde a été établie en écartant les fixtures de test ;
+si un producteur existe ailleurs dans les 66 crates, le fil est déjà posé et la recommandation devient
+sans objet. Ce serait une erreur dans le bon sens, et elle se détecte avec la commande ci-dessus.
+
+C'est du reste ainsi que la version précédente de ce classement est tombée : la commande de la ligne 7
+avait été écrite pour \emph{confirmer} que le reçu ne signait rien. Elle a rendu trois lignes, et le
+rang 7 est passé de \mbox{« à inventer »} à \mbox{« à un fil »}.
+
+\begin{these}
+\small\textbf{Portée.} Ce classement a été établi contre le code du 11 août sur les Couches 2 et 3, les
+deux piles de reçu et le Fil B. Il n'a \textbf{pas} examiné la couche nano ni \code{efe-gold-test-gate},
+qui peuvent porter des couples non vus. La chaîne du reçu mesure \textbf{515 tests, 0 échec}
+(35 binaires), par exécution réelle. Et le rappel qui ne se négocie pas : le reçu atteste
+l'\textbf{intégrité} d'une suite de pas, jamais la \textbf{correction} d'une décision.
+\end{these}
+
+\end{document}

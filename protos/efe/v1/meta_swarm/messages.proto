@@ -121,13 +121,25 @@ message LearnedHull {
 message ParticipantDescriptor {
   string id           = 1;   // unique within a MetaSwarm
   uint32 dim          = 2;
-  float  kappa        = 3;   // contraction constant ; MUST be in (0, 1)
-  uint64 seed         = 4;
+  // DEPRECATED SEMANTICS (Couche 3 M1.d) : kappa/seed are MOCK-engine concepts
+  // (Φ(x)=κ·x, pseudo-random initial state).  A real efe-core participant
+  // (features contains "engine:efe-core-mode1") sends the sentinels kappa=0.0 /
+  // seed=0 and identifies its configuration via `config_hash` instead.  Field
+  // numbers 3/4 are FROZEN (never re-used) ; mock participants still fill them.
+  float  kappa        = 3;   // mock contraction constant ; MUST be in (0, 1) for engine=mock
+  uint64 seed         = 4;   // mock initial-state seed
   string build_sha    = 5;   // git short SHA of the participant binary
   string blas_backend = 6;   // "none" | "openblas" | "mkl" | "metal" | ...
-  repeated string features = 7;  // e.g. ["determinism", "metrics", "trace"]
+  repeated string features = 7;  // e.g. ["determinism", "step_index", "engine:efe-core-mode1"]
 
-  reserved 8 to 99;
+  // Couche 3 M1.d — hex-encoded SHA-256 of the participant's manifest
+  // `controller` block (canonical JSON).  Present ⟺ the participant serves a
+  // REAL efe-core engine ;  absent for mock participants.  Consumers MUST treat
+  // absence as "unverified/mock" (fail-closed) : prost drops unknown fields on
+  // re-encode, so an old-binary hop strips this field — never default-allow.
+  optional string config_hash = 8;
+
+  reserved 9 to 99;
 }
 
 // =============================================================================
@@ -192,7 +204,49 @@ message IterateRequest {
   // trace and returns its trace_id in IterateResponse.trace_id.
   string traceparent = 5;
 
-  reserved 6 to 99;
+  // Couche 3 M2 — ask for the FULL re-provable receipt, not just its root.
+  //
+  // The root (IterateResponse.meta_provenance_root) is always returned when the
+  // controller is provenance-configured : it is 64 hex chars and costs nothing.
+  // The BUNDLE (the sealed steps a third party re-proves against that root) is
+  // O(iterations x meta_dim) and is therefore OPT-IN — a caller that never
+  // re-proves should not pay for it on every round.
+  //
+  // Setting this on a controller WITHOUT provenance is not an error : the
+  // response simply carries neither root nor bundle.  A caller that requires a
+  // receipt MUST check for their presence rather than assume it — an absent
+  // receipt is honest, a fabricated one would not be.
+  bool include_provenance_bundle = 6;
+
+  reserved 7 to 99;
+}
+
+// Couche 3 M2 — the re-provable consensus receipt, in the EXACT two-artefact
+// shape the offline verifiers eat : `meta_steps.jsonl` + `meta_manifest.json`
+// (plus the tenant key, which is NEVER on this wire — it is the holder's).
+//
+// Modelled as a MESSAGE, not as two flat fields, so presence is ATOMIC : a
+// caller either has a complete receipt or none.  Half a bundle re-proves
+// nothing and would invite a reader to believe more than it shows.
+//
+// Written to two files verbatim, this is re-proved by `verify_meta` (P1.1) or
+// `verify_meta_mini` (P1.2, literally-empty dependency tree) with no trust in
+// this server :
+//
+//     verify_meta_mini meta_steps.jsonl meta_manifest.json --key-hex <64hex>
+//
+// HONESTY (inherited from the whole provenance family) : this attests
+// INTEGRITY, never the CORRECTNESS of the consensus decision, and it is
+// tamper-evident to a KEY HOLDER — not trustless to a third party.
+message MetaProvenanceBundle {
+  // `meta_steps.jsonl` verbatim — one sealed consensus step per line, each line
+  // self-contained (meta_id repeated).  Public content : no key material.
+  string steps_jsonl = 1;
+  // `meta_manifest.json` verbatim — the CLAIM a third party cross-checks
+  // (meta_id, schema_version, n_steps, root).
+  string manifest_json = 2;
+
+  reserved 3 to 99;
 }
 
 message IterateResponse {
@@ -204,7 +258,18 @@ message IterateResponse {
   uint64     wall_us              = 6;
   string     trace_id             = 7;
 
-  reserved 8 to 99;
+  // Couche 3 M2 — hex root of the HMAC chain sealing every consensus step
+  // (`meta_provenance_root`).  EMPTY ⟺ this controller is not provenance-
+  // configured : the absence is the honest signal, and consumers MUST treat it
+  // as "no receipt" rather than as a pass.  Never populated with a placeholder.
+  string meta_provenance_root = 8;
+
+  // The full receipt — present ONLY when the caller set
+  // `IterateRequest.include_provenance_bundle` AND provenance is configured.
+  // `optional` so that "not asked for" and "empty" are distinguishable.
+  optional MetaProvenanceBundle meta_provenance_bundle = 9;
+
+  reserved 10 to 99;
 }
 
 // Streaming chunk — one inner step per chunk.

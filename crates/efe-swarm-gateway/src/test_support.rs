@@ -14,7 +14,7 @@ use crate::StoredRun;
 /// Fabrique un run Mode C synthétique : un appel LLM lié à sa forensique N17, scellé en chaîne
 /// d'essaim. Renvoie (records d'essaim, `StoredRun` prêt à persister). Le tenant = système
 /// (UUID 00…001), pour s'aligner sur l'appelant par défaut côté HTTP.
-pub(crate) fn synthetic_mode_c_run(model: &str) -> (Vec<efe_swarm_provenance::AgentCallRecord>, StoredRun) {
+pub fn synthetic_mode_c_run(model: &str) -> (Vec<efe_swarm_provenance::AgentCallRecord>, StoredRun) {
     use efe_nano_sdk::{
         Blake3Hash, Completeness, CostAccounting, FinishReason, LlmProvenanceRecord, ModelIdentity,
         NanoAgentId, NanoAgentVersion, PiiStrategy, ProvenanceId, RetryOutcome, SamplingParams,

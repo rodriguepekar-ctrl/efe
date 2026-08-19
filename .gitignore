@@ -20,7 +20,9 @@ eggs/
 *.egg-info/
 .installed.cfg
 *.egg
-MANIFEST
+# Anchored to root : the bare `MANIFEST` rule (Python sdist artifact) was
+# swallowing Rust source dirs named `manifest/` (case-insensitive on macOS).
+/MANIFEST
 .pytest_cache/
 .coverage
 .coverage.*
@@ -114,7 +116,9 @@ docs/**/*.pptx
 
 # Logs
 *.log
-logs/
+# Anchored to root : the bare `logs/` rule was swallowing the Rust source
+# dir crates/efe-telemetry/src/logs/.
+/logs/
 
 # ML artifacts
 *.safetensors

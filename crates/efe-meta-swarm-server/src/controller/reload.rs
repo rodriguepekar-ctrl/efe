@@ -189,11 +189,24 @@ async fn apply_reload(
         let diff = diff_manifests(&current, &new_manifest);
         (compat, diff)
     }; // read guard dropped here.
+    // Couche 3 M1.d — chain the lifetime engine-identity lineage check after
+    // the per-manifest compat check (only when the latter passed) so BOTH
+    // funnel through the single rejection path below (metrics + drift span).
+    // This catches a removed-then-re-added id that swaps its engine across two
+    // reloads — invisible to the consecutive-manifest diff above.  `std::Mutex`
+    // guard, no `.await` held across it.
+    let compat_check = compat_check.and_then(|()| {
+        let lineage = state
+            .engine_lineage
+            .lock()
+            .expect("engine_lineage mutex poisoned");
+        crate::manifest::validate_engine_lineage(&lineage, &new_manifest)
+    });
     if let Err(e) = compat_check {
         state
             .metrics
             .record_reload_failure(ReloadFailureReason::Drift);
-        error!(error = %e, "reload rejected at validate_reload_compatibility");
+        error!(error = %e, "reload rejected at compatibility / lineage check");
         // PR #18 — emit a manifest.reload span on the drift-failure
         // path.  G9 gap-fill.  Audit-pass : `trigger` is now threaded
         // from the outer wrapper so SIGHUP-triggered drift failures
@@ -227,6 +240,20 @@ async fn apply_reload(
 
     // 3. Acquire write lock + atomic swap.
     let participants_count = new_manifest.participants.len();
+    // Extend the engine lineage with any first-seen ids BEFORE `new_manifest`
+    // is moved into the write guard.  Insert-if-absent : the FIRST identity per
+    // id is retained for the process lifetime, so a later legitimate
+    // remove/re-add of the SAME engine still passes, while a drifted re-add is
+    // rejected by the lineage check above.
+    {
+        let mut lineage = state
+            .engine_lineage
+            .lock()
+            .expect("engine_lineage mutex poisoned");
+        for p in &new_manifest.participants {
+            lineage.entry(p.id.clone()).or_insert_with(|| p.clone());
+        }
+    }
     {
         let mut write_guard = state.manifest.write().await;
         *write_guard = new_manifest;
@@ -474,13 +501,18 @@ pub fn build_inline_manifest(
         .map(|p| ParticipantManifest {
             id: p.id.clone(),
             dim: p.dim,
-            kappa: p.kappa,
-            seed: p.seed,
+            // The ReloadConfig RPC carries WIRE descriptors (mock-shaped) ;
+            // it cannot express an efe-core `controller` block (M1.d) — and
+            // engine changes across reload are rejected by
+            // `validate_reload_compatibility` anyway.
+            kappa: Some(p.kappa),
+            seed: Some(p.seed),
             blas_backend: if p.blas_backend.is_empty() {
                 "none".into()
             } else {
                 p.blas_backend.clone()
             },
+            controller: None,
         })
         .collect::<Vec<_>>();
 
@@ -525,23 +557,26 @@ mod tests {
                 ParticipantManifest {
                     id: "supplier-scoring".into(),
                     dim: 8,
-                    kappa: 0.6,
-                    seed: 11,
+                    kappa: Some(0.6),
+                    seed: Some(11),
                     blas_backend: "none".into(),
+                    controller: None,
                 },
                 ParticipantManifest {
                     id: "contract-risk".into(),
                     dim: 8,
-                    kappa: 0.7,
-                    seed: 22,
+                    kappa: Some(0.7),
+                    seed: Some(22),
                     blas_backend: "none".into(),
+                    controller: None,
                 },
                 ParticipantManifest {
                     id: "spend-categorization".into(),
                     dim: 8,
-                    kappa: 0.5,
-                    seed: 33,
+                    kappa: Some(0.5),
+                    seed: Some(33),
                     blas_backend: "none".into(),
+                    controller: None,
                 },
             ],
             iteration: IterationManifest::default(),
@@ -636,12 +671,12 @@ mod tests {
         let m0 = three_p_manifest();
         let state = test_state_with_manifest(m0.clone(), "/dev/null".into());
         let mut new = m0.clone();
-        new.participants[1].kappa = 0.85;
+        new.participants[1].kappa = Some(0.85);
         let err = apply_reload_with_manifest(&state, new).await.unwrap_err();
         assert!(matches!(err, ServerError::Manifest(ref msg) if msg.contains("kappa drift")));
         // Manifest unchanged.
         let post = state.manifest.read().await;
-        assert!((post.participants[1].kappa - 0.7).abs() < 1e-6);
+        assert!((post.participants[1].kappa.unwrap_or(f32::NAN) - 0.7).abs() < 1e-6);
     }
 
     #[tokio::test]
@@ -662,9 +697,10 @@ mod tests {
         new.participants.push(ParticipantManifest {
             id: "fraud-detection".into(),
             dim: 8,
-            kappa: 0.55,
-            seed: 44,
+            kappa: Some(0.55),
+            seed: Some(44),
             blas_backend: "none".into(),
+            controller: None,
         });
         let outcome = apply_reload_with_manifest(&state, new).await.expect("ok");
         assert_eq!(outcome.participants, 4);
@@ -690,6 +726,52 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn apply_reload_lineage_rejects_remove_then_readd_engine_swap() {
+        // Couche 3 M1.d — the reload immutability invariant must survive a
+        // remove-then-re-add across TWO reloads.  The per-manifest diff cannot
+        // see it (the id is absent from the intermediate manifest) ; the
+        // lifetime engine-lineage guard must reject it.
+        let m0 = three_p_manifest();
+        let state = test_state_with_manifest(m0.clone(), "/dev/null".into());
+        let victim = m0.participants[2].id.clone(); // "spend-categorization", κ 0.5
+
+        // Reload 1 : remove the victim (AD5 allows).
+        let mut m1 = m0.clone();
+        m1.participants.remove(2);
+        apply_reload_with_manifest(&state, m1)
+            .await
+            .expect("removal is allowed (AD5)");
+        assert_eq!(state.health.snapshot().reload_gen, 1);
+
+        // Reload 2 : re-add the SAME id with a DIFFERENT engine (κ 0.5 → 0.95).
+        // Pre-fix this slipped through unchecked (the id was "added", not
+        // "changed") ; the lineage guard must now reject it.
+        let mut m2 = m0.clone();
+        m2.participants[2].kappa = Some(0.95);
+        let err = apply_reload_with_manifest(&state, m2).await.unwrap_err();
+        assert!(
+            matches!(err, ServerError::Manifest(ref msg)
+                if msg.contains("lineage") && msg.contains("kappa drift")),
+            "the drifted re-add must be rejected by the engine lineage guard, got : {err:?}",
+        );
+        // Transactional : the rejected reload left the gen at 1.
+        assert_eq!(state.health.snapshot().reload_gen, 1);
+
+        // Sanity : re-adding the victim with its ORIGINAL engine is allowed.
+        let outcome = apply_reload_with_manifest(&state, m0.clone())
+            .await
+            .expect("re-add with the SAME engine identity is allowed");
+        assert_eq!(outcome.participants, 3);
+        assert!(state
+            .manifest
+            .read()
+            .await
+            .participants
+            .iter()
+            .any(|p| p.id == victim));
+    }
+
+    #[tokio::test]
     async fn apply_reload_failed_validation_leaves_state_untouched() {
         // Bad manifest : kappa out of range.  Top-level validate_manifest
         // rejects ; reload_gen must remain 0 and state.manifest must
@@ -697,12 +779,12 @@ mod tests {
         let m0 = three_p_manifest();
         let state = test_state_with_manifest(m0.clone(), "/dev/null".into());
         let mut bad = m0.clone();
-        bad.participants[0].kappa = 1.5; // outside (0, 1)
+        bad.participants[0].kappa = Some(1.5); // outside (0, 1)
         let err = apply_reload_with_manifest(&state, bad).await.unwrap_err();
         assert!(matches!(err, ServerError::Manifest(_)));
         assert_eq!(state.health.snapshot().reload_gen, 0);
         let post = state.manifest.read().await;
-        assert!((post.participants[0].kappa - 0.6).abs() < 1e-6);
+        assert!((post.participants[0].kappa.unwrap_or(f32::NAN) - 0.6).abs() < 1e-6);
     }
 
     #[tokio::test]
@@ -825,6 +907,7 @@ mod tests {
                     build_sha: String::new(),
                     blas_backend: String::new(),
                     features: vec![],
+                    config_hash: None,
                 })
                 .collect(),
             drain_inflight: false,
@@ -878,6 +961,7 @@ mod tests {
                 build_sha: String::new(),
                 blas_backend: String::new(),
                 features: vec![],
+                config_hash: None,
             }],
             drain_inflight: false,
         };
@@ -899,6 +983,7 @@ mod tests {
                 build_sha: String::new(),
                 blas_backend: String::new(),
                 features: vec![],
+                config_hash: None,
             }],
             drain_inflight: false,
         };

@@ -35,7 +35,10 @@ C'est la **réalisation littérale** de la mission utilisateur :
 ## Invariants Phase 3
 
 - **I9** — Early termination : si vote décidé avec n-1 LLMs, le n-ième est cancelé.
-- **I10** — Audit chain complète : `audit_chain_hash` toujours retourné.
+- **I10** — Corrélation de réponse : `swarm_id_hex` (identifiant du swarm, 32 chiffres hex) toujours
+  retourné. Ce champ s'appelait `audit_chain_hash` et l'invariant se lisait « audit chain complète » :
+  c'était faux — **cette crate ne chaîne rien**. La chaîne d'audit réelle est la racine HMAC par
+  tenant de `efe-swarm-provenance`, servie par `GET /v1/swarm/verify/{run_id}` de la passerelle.
 - **I11** — Anti-monoculture : un LLM ne représente jamais > 60 % des sub-tasks.
 - **I12** — Isolation tenant : phéromones tenant A invisibles à tenant B.
 - **I13** — Budget hard-cap : try_charge atomic + revert si dépassement.

@@ -270,9 +270,11 @@ impl SwarmController {
     /// will introduce a dedicated single-step kernel — bypassing
     /// genesis / dissolution / alignment when not strictly needed —
     /// gated behind a separate optimisation feature.  Until then,
-    /// convergence guarantees of the meta-swarm hold under the
-    /// empirical non-expansiveness of `Φ` on the operational domain
-    /// (verified by `efe-prove` at certification time).
+    /// convergence guarantees of the meta-swarm hold **only as long as**
+    /// `Φ` is non-expansive (`L_Φ ≤ 1`) on the operational domain — a
+    /// property that is **not proven here** and must be **checked
+    /// empirically** (the M1.c Lipschitz canary measures `L_Φ`; M1.b
+    /// makes `Φ` deterministic so that measurement is well-defined).
     ///
     /// # Parameters
     ///
@@ -346,26 +348,93 @@ impl SwarmController {
                 "step_with_pull: pull contains NaN or Inf".into(),
             ));
         }
-        // Build a single-round request seeded with the current state.
+        // Φ(current) = one fusion round seeded with `current`, isolated
+        // from the coupling term (Couche 3 M1.a — see `phi_once`).
+        let phi_x = self.phi_once(current, base_spec, tenant_id).await?;
+        // Mix : (1 - α - γ) · current + α · Φ(current) + γ · pull.
+        crate::swarm::coupled::mix_coupled(current, &phi_x, pull, alpha, gamma)
+    }
+
+    /// **Couche 3 (M1.a)** — the participant's internal operator `Φ_m(x)`,
+    /// **isolated** from the Krasnosel'skii-Mann mix.  Runs one fusion round
+    /// seeded with `x` (`spec.problem_embedding = x`, `max_rounds = 1`,
+    /// `DecodeMode::PassThrough`) and returns its raw latent output.
+    ///
+    /// This is the accessor the meta-swarm needs to **measure `Φ`'s
+    /// empirical Lipschitz bound** (the H1 guard-rail of M1.c) *without* the
+    /// `α`/`γ` coupling that [`Self::step_with_pull`] adds on top.  Keeping a
+    /// single implementation of the Φ computation here guarantees the bound
+    /// measured is the one actually applied in the coupled step.
+    ///
+    /// # Determinism (M1.b)
+    ///
+    /// The one stochastic stage on this path is the genesis noise
+    /// `h[i] = prior + init_sigma·N(0,1; seed)` with `seed = compute_seed(spec.id)`
+    /// — derived from the [`crate::types::SwarmSpec`]'s `id`, **not** the fresh
+    /// `SwarmId` that [`Self::execute`] draws for telemetry (that one never reaches
+    /// genesis; see `GenesisEngine::spawn`).  Since `phi_once` clones a *fixed*
+    /// `base_spec`, that seed is constant, so `Φ(x)` is already bit-reproducible for
+    /// a given spec at **any** `init_sigma`.  What the fixed noise realization ε
+    /// still does: it perturbs the nonlinear pipeline, so `Φ` depends on `spec.id`
+    /// and — critically — ε does **not** cancel in `Φ(x) − Φ(y)`, leaving a
+    /// seed-dependent floor that would corrupt the M1.c empirical-Lipschitz ratio.
+    /// The meta-swarm **latent** controller
+    /// (`efe_server::mode1::build_mvp_controller`) is built with `init_sigma = 0`,
+    /// which short-circuits the RNG entirely: `Φ` becomes the **noise-free operator**
+    /// — bit-invariant to `spec.id`, and a clean function of `x` for the canary
+    /// (verified end-to-end in
+    /// `efe-meta-swarm/tests/integration_local_participant.rs`).  Determinism of the
+    /// operator is thus a property of the controller's *construction* (`init_sigma`),
+    /// not of `phi_once` itself; the fresh `SwarmId`/`RequestId` never leak into the
+    /// output (they feed only telemetry).
+    ///
+    /// **Single-flight per controller.**  The fused centroid crosses to the
+    /// dissolver via a per-controller channel, so `Φ` is pure only under
+    /// **sequential** calls on a given controller (the meta-swarm's
+    /// one-controller-per-participant design satisfies this — `step_with_pull`
+    /// awaits `phi_once` to completion).  Do **not** invoke `phi_once`
+    /// concurrently on a *shared* `SwarmController`; give each concurrent
+    /// evaluator its own controller (the M1.c Lipschitz-canary contract).
+    ///
+    /// # Errors
+    ///
+    /// [`EfeError::InvalidConfig`] if `dim(x) != base_spec.dim_latent`, if
+    /// `x` holds NaN/Inf, or if the controller decodes a non-raw output.
+    pub async fn phi_once(
+        &self,
+        x: &[f32],
+        base_spec: &crate::types::SwarmSpec,
+        tenant_id: &str,
+    ) -> Result<Vec<f32>> {
+        let dim = base_spec.dim_latent.get() as usize;
+        if x.len() != dim {
+            return Err(EfeError::InvalidConfig(format!(
+                "phi_once: x length {} != spec dim_latent {dim}",
+                x.len()
+            )));
+        }
+        if !x.iter().all(|v| v.is_finite()) {
+            return Err(EfeError::InvalidConfig(
+                "phi_once: x contains NaN or Inf".into(),
+            ));
+        }
+        // Build a single-round request seeded with `x`.
         let mut spec = base_spec.clone();
-        spec.problem_embedding = current.to_vec();
-        spec.max_rounds = std::num::NonZeroU32::new(1)
-            .expect("1 is non-zero");
+        spec.problem_embedding = x.to_vec();
+        spec.max_rounds = std::num::NonZeroU32::new(1).expect("1 is non-zero");
         let req = crate::swarm::request::Request::synthetic(
             spec,
             tenant_id.to_string(),
             crate::types::RequestId::new(),
         );
-        // Execute one round to get Φ(current).
+        // Execute one round to get Φ(x).
         let resp = self.execute(req).await?;
-        let phi_x = resp
-            .output
-            .as_raw()
-            .ok_or_else(|| EfeError::InvalidConfig(
-                "step_with_pull: expected raw output (controller decoded non-pass-through)".into()
-            ))?;
-        // Mix : (1 - α - γ) · current + α · Φ(current) + γ · pull.
-        crate::swarm::coupled::mix_coupled(current, phi_x, pull, alpha, gamma)
+        let phi_x = resp.output.as_raw().ok_or_else(|| {
+            EfeError::InvalidConfig(
+                "phi_once: expected raw output (controller decoded non-pass-through)".into(),
+            )
+        })?;
+        Ok(phi_x.to_vec())
     }
 
     /// Internal main flow (separated from [`execute`] so telemetry is

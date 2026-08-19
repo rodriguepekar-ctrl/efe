@@ -95,9 +95,10 @@ pub async fn spawn_participant_simple(
         ParticipantManifest {
             id: id.into(),
             dim,
-            kappa,
-            seed,
+            kappa: Some(kappa),
+            seed: Some(seed),
             blas_backend: "none".into(),
+            controller: None,
         },
         IterationParams {
             alpha_default: 0.5,
@@ -117,12 +118,35 @@ pub fn build_controller_state_for(
     max_inflight: usize,
     meta_dim: usize,
 ) -> efe_meta_swarm_server::controller::ControllerState {
+    build_controller_state_with_iteration(
+        statics,
+        max_inflight,
+        meta_dim,
+        efe_meta_swarm_server::manifest::IterationManifest {
+            max_iters: 100,
+            tolerance: 1.0e-4,
+            alpha_default: 0.5,
+            coupling_gamma: 0.2,
+            deterministic: true,
+            max_wall_ms: 15_000,
+            require_convergence: None, // non stipulé (participants mock ⇒ résout à false)
+        },
+    )
+}
+
+/// Couche 3 M1.d — like [`build_controller_state_for`] but with explicit
+/// iteration knobs (e.g. `require_convergence: true` for the fail-closed
+/// non-convergence tests).
+pub fn build_controller_state_with_iteration(
+    statics: &[(String, usize, f32, u64, SocketAddr)],
+    max_inflight: usize,
+    meta_dim: usize,
+    iteration: efe_meta_swarm_server::manifest::IterationManifest,
+) -> efe_meta_swarm_server::controller::ControllerState {
     use efe_meta_swarm_server::config::controller::{
         ControllerConfig, DiscoveryMode, StaticParticipant,
     };
-    use efe_meta_swarm_server::manifest::{
-        IterationManifest, Manifest, MetaSpaceManifest, SafetyManifest,
-    };
+    use efe_meta_swarm_server::manifest::{Manifest, MetaSpaceManifest, SafetyManifest};
 
     let static_participants: Vec<StaticParticipant> = statics
         .iter()
@@ -159,9 +183,10 @@ pub fn build_controller_state_for(
         .map(|(id, dim, kappa, seed, _)| ParticipantManifest {
             id: id.clone(),
             dim: *dim as u32,
-            kappa: *kappa,
-            seed: *seed,
+            kappa: Some(*kappa),
+            seed: Some(*seed),
             blas_backend: "none".into(),
+            controller: None,
         })
         .collect();
     let manifest = Manifest {
@@ -171,14 +196,7 @@ pub fn build_controller_state_for(
             safety: SafetyManifest::Box { radius: 50.0 },
         },
         participants,
-        iteration: IterationManifest {
-            max_iters: 100,
-            tolerance: 1.0e-4,
-            alpha_default: 0.5,
-            coupling_gamma: 0.2,
-            deterministic: true,
-            max_wall_ms: 15_000,
-        },
+        iteration,
     };
 
     efe_meta_swarm_server::controller::ControllerState::new(config, manifest)
@@ -210,5 +228,21 @@ pub fn iterate_request(
         }),
         initial_states: vec![],
         traceparent: String::new(),
+        // Couche 3 M2 — par défaut on ne demande PAS le reçu complet : le root suffit à la
+        // plupart des tests, et le bundle coûte O(itérations × dim).
+        include_provenance_bundle: false,
+    }
+}
+
+/// Couche 3 M2 — la même requête, mais qui RÉCLAME le reçu re-prouvable complet.
+#[allow(dead_code)]
+pub fn iterate_request_with_receipt(
+    meta_dim: u32,
+    max_iters: u32,
+    tolerance: f64,
+) -> efe_meta_swarm_proto::meta_swarm::IterateRequest {
+    efe_meta_swarm_proto::meta_swarm::IterateRequest {
+        include_provenance_bundle: true,
+        ..iterate_request(meta_dim, max_iters, tolerance)
     }
 }

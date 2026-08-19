@@ -383,11 +383,14 @@ async fn reload_config_rpc_with_inline_meta_applies_inline() {
             .map(|r| ParticipantDescriptor {
                 id: r.id.clone(),
                 dim: r.dim,
-                kappa: r.kappa,
-                seed: r.seed,
+                // Wire descriptor kappa/seed stay f32/u64 (frozen fields) —
+                // harness rows are mock-shaped so the Options are Some.
+                kappa: r.kappa.expect("harness rows are mock-shaped"),
+                seed: r.seed.expect("harness rows are mock-shaped"),
                 build_sha: String::new(),
                 blas_backend: String::new(),
                 features: vec![],
+                config_hash: None,
             })
             .collect(),
         drain_inflight: false,
@@ -749,6 +752,7 @@ async fn reload_config_rpc_rejects_dim_drift_and_leaves_state_untouched() {
                 build_sha: String::new(),
                 blas_backend: String::new(),
                 features: vec![],
+                config_hash: None,
             },
             ParticipantDescriptor {
                 id: "contract-risk".into(),
@@ -758,6 +762,7 @@ async fn reload_config_rpc_rejects_dim_drift_and_leaves_state_untouched() {
                 build_sha: String::new(),
                 blas_backend: String::new(),
                 features: vec![],
+                config_hash: None,
             },
             ParticipantDescriptor {
                 id: "spend-categorization".into(),
@@ -767,6 +772,7 @@ async fn reload_config_rpc_rejects_dim_drift_and_leaves_state_untouched() {
                 build_sha: String::new(),
                 blas_backend: String::new(),
                 features: vec![],
+                config_hash: None,
             },
         ],
         drain_inflight: false,
@@ -798,23 +804,26 @@ fn kovant_rows() -> Vec<ParticipantManifest> {
         ParticipantManifest {
             id: "supplier-scoring".into(),
             dim: 8,
-            kappa: 0.6,
-            seed: 11,
+            kappa: Some(0.6),
+            seed: Some(11),
             blas_backend: "none".into(),
+            controller: None,
         },
         ParticipantManifest {
             id: "contract-risk".into(),
             dim: 8,
-            kappa: 0.7,
-            seed: 22,
+            kappa: Some(0.7),
+            seed: Some(22),
             blas_backend: "none".into(),
+            controller: None,
         },
         ParticipantManifest {
             id: "spend-categorization".into(),
             dim: 8,
-            kappa: 0.5,
-            seed: 33,
+            kappa: Some(0.5),
+            seed: Some(33),
             blas_backend: "none".into(),
+            controller: None,
         },
     ]
 }

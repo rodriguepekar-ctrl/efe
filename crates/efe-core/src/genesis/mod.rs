@@ -23,6 +23,7 @@ pub mod cardinality;
 pub mod context;
 pub mod dag;
 pub mod engine;
+pub mod fixed;
 pub mod meta_analyzer;
 pub mod registry;
 pub mod router;
@@ -33,6 +34,7 @@ pub use cardinality::{Cardinality, CardinalityEstimator, HeuristicEstimator};
 pub use context::GenesisContext;
 pub use dag::{TaskClass, TaskDag, TaskMix};
 pub use engine::{GenesisEngine, GenesisEngineBuilder};
+pub use fixed::{FixedCardinality, FixedTemplateRouter};
 pub use meta_analyzer::{HeuristicMetaAnalyzer, MetaAnalyzer};
 pub use registry::{
     ActiveAnchorsSlot, AnchorAwareTemplateRegistry, StubTemplateRegistry, TemplateRegistry,

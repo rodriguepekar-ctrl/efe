@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: UNLICENSED
-//! # `provenance-dag` — Kovant P1 / S0 : le DAG scellé re-prouvable (le **cœur de confiance**)
+//! # `provenance-dag` — Provenance P1 / S0 : le DAG scellé re-prouvable (le **cœur de confiance**)
 //!
 //! Le contrat que tout P1 consomme : un graphe d'actes d'agents et de messages, **scellé** et
 //! **re-prouvable indépendamment**, qui fait de « beaucoup de petits agents auditables » une réalité
@@ -53,12 +53,15 @@
 //! assert!(verify_against_root(dag.records(), &key, &root).ok);
 //! ```
 
+pub mod anchor;
 pub mod dag;
 pub mod hmac;
 pub mod key;
 pub mod node;
 pub mod sha256;
 
+pub use anchor::{
+    verify_against_anchor, AnchorError, AnchorIndex, AnchorRecord, ANCHOR_SCHEMA_V1, meta_anchor_of, META_ANCHOR_PREFIX};
 pub use dag::{reprove_dag, verify_against_root, DagError, Record, SealedDag, Verdict, GENESIS};
 pub use hmac::{ct_eq, hmac_sha256};
 pub use key::TenantKey;

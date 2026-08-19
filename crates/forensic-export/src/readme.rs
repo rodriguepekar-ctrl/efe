@@ -78,7 +78,7 @@ mappe** ce que l'exigence réclame ; elle ne **prononce PAS** la conformité (un
 \n\
 Un **artefact autonome** : ces records sont scellés et **re-prouvables sans nous faire confiance**. \
 Vous ({tenant_label}) ou votre auditeur/régulateur pouvez vérifier leur **intégrité** hors-ligne, en \
-**re-compilant** le vérifieur fourni — sans rien installer de Kovant ni d'EFE, et même si Kovant n'existe \
+**re-compilant** le vérifieur fourni — sans rien installer de l'éditeur, et même si l'éditeur n'existe \
 plus dans dix ans.\n\
 \n\
 - **manifest-root** : `{manifest_root}`\n\

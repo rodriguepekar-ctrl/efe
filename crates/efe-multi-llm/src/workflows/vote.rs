@@ -12,7 +12,7 @@ use crate::budget::BudgetTracker;
 use crate::canonical::{CanonicalClaim, CanonicalSchemaId};
 use crate::error::{MultiLlmError, MultiLlmResult};
 use crate::events_ext::{Phase3EventExt, Phase3Publisher};
-use crate::reformulator_ext::{CanonicalReformulator, SourceDialect};
+use crate::reformulator_ext::{reformulator_for, SourceDialect};
 use crate::request::{VoteMode, Vote3LlmRequest, Vote3LlmResponse};
 use crate::vote_ext::{borda_tally, condorcet_tally};
 use crate::vote_ext::borda::BordaBallot;
@@ -38,7 +38,8 @@ pub async fn run_vote_3llm(
     let swarm_id = Uuid::now_v7();
     let publisher = Phase3Publisher;
     let budget = BudgetTracker::new(req.max_budget_cents);
-    let reformulator = CanonicalReformulator::new();
+    // Fil B.0 : reformulateur pluggable (déterministe par défaut).
+    let reformulator = reformulator_for(coord);
 
     let bus = Arc::clone(&coord.bus);
 
@@ -75,22 +76,38 @@ pub async fn run_vote_3llm(
 
     // ── Étape 3 : reformulation → canonical claim ────────────────────
     let mut claims: Vec<(String, CanonicalClaim, f32)> = Vec::new();
+    // Fil B.3 : un hop estampillé par claim ENTRÉE au vote (le reçu reflète
+    // ce qui a réellement voté, pas les tentatives avortées).
+    let mut reformulation_hops = Vec::with_capacity(responses.len());
     for r in &responses {
         let dialect = SourceDialect::from_provider_id(&r.provider);
-        let value = match reformulator.route(
-            &r.text,
-            dialect,
-            CanonicalSchemaId::ClaimV1,
-            &r.provider,
-        ) {
-            Ok(v) => v,
+        let reff = match reformulator
+            .to_canonical(
+                &r.text,
+                dialect,
+                CanonicalSchemaId::ClaimV1,
+                &r.provider,
+                // B.4 : le hop SLM est borné au temps de mission RESTANT.
+                Some(req.max_total_latency.saturating_sub(started.elapsed())),
+            )
+            .await
+        {
+            Ok(reff) => reff,
             Err(_) => continue, // skip ce LLM si parsing échoue
         };
         publisher
-            .publish_reformulation(&bus, swarm_id, &r.provider, "canonical/claim_v1")
+            .publish_reformulation(
+                &bus,
+                swarm_id,
+                &r.provider,
+                "canonical/claim_v1",
+                reff.engine,
+            )
             .await;
-        if let Ok(claim) = serde_json::from_value::<CanonicalClaim>(value) {
+        let hop = reff.to_hop(&format!("claim:{}", r.provider), &r.provider, "canonical/claim_v1");
+        if let Ok(claim) = serde_json::from_value::<CanonicalClaim>(reff.value) {
             claims.push((r.provider.clone(), claim, r.self_quality));
+            reformulation_hops.push(hop);
         }
     }
 
@@ -188,8 +205,9 @@ pub async fn run_vote_3llm(
         per_llm_scores: scores,
         total_cost_cents: total_cost,
         latency_ms: started.elapsed().as_millis() as u64,
-        audit_chain_hash: format!("{:016x}", swarm_id.as_u128()),
+        swarm_id_hex: swarm_id.simple().to_string(),
         cancelled_llms: vec![],
+        reformulation_hops,
     })
 }
 

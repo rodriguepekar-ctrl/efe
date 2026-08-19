@@ -16,11 +16,15 @@
 
 pub mod mock;
 pub mod certificate;
+/// Couche 3 M1.c — the empirical Lipschitz canary (pure; not feature-gated so
+/// `MockParticipant` and unit tests can exercise it with a synthetic `Φ`).
+pub mod lipschitz;
 #[cfg(feature = "core-integration")]
 pub mod local;
 
 pub use mock::MockParticipant;
 pub use certificate::NonExpansiveCertificate;
+pub use lipschitz::{estimate_lipschitz, LipschitzProbe, LipschitzReport};
 
 #[cfg(feature = "core-integration")]
 pub use local::LocalParticipant;

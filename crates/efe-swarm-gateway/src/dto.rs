@@ -505,10 +505,28 @@ pub struct RunResponse {
 pub struct VerifyResponse {
     pub run_id: Uuid,
     /// Re-preuve COMPLÈTE : chaîne d'essaim OK **ET** (zéro Mode C, ou chaîne N17 intacte
-    /// ET pont entièrement cohérent). Un run keyless/Mode A reste `verified` trivialement.
+    /// ET pont entièrement cohérent) **ET** [`Self::root_matches`] ≠ `Some(false)` (P.0 :
+    /// le run est aussi **complet**, pas seulement intègre). Un run keyless/Mode A reste
+    /// `verified` trivialement.
     pub verified: bool,
     /// `provenance_root` reconstruit depuis les records + la clé tenant.
     pub root: Option<String>,
+    /// **P.0 — la comparaison de COMPLÉTUDE** : la racine reconstruite est-elle égale à la
+    /// racine **scellée au moment du run** (`StoredRun.root`) ?
+    ///
+    /// Sans ce contrôle, l'intégrité seule ne prouve rien contre la **troncature** : un préfixe
+    /// d'une chaîne HMAC valide est lui-même une chaîne HMAC valide. Retirer les derniers
+    /// enregistrements laisse donc `chain_intact`/`content_intact`/`dag_consistent` à `true` —
+    /// mais change la racine.
+    ///
+    /// - `Some(true)`  : le run est **complet** — rien n'a été retiré, ajouté ni substitué.
+    /// - `Some(false)` : **troncature ou substitution détectée** ; `verified` est forcé à
+    ///   `false`. Couvre aussi la **suppression totale** des records (racine scellée présente,
+    ///   racine reconstruite absente).
+    /// - `None`        : **aucune racine scellée n'est persistée** pour ce run (run antérieur à
+    ///   la persistance de la racine, run vide ou keyless). On ne peut ni confirmer ni accuser :
+    ///   le verdict est laissé **inchangé**. *Aucune accusation rétroactive.*
+    pub root_matches: Option<bool>,
     pub chain_intact: bool,
     pub content_intact: bool,
     pub dag_consistent: bool,
@@ -518,6 +536,88 @@ pub struct VerifyResponse {
     pub first_break: Option<Uuid>,
     /// **ADR-016 — la re-preuve forensique N17 (offline, ici en HTTP).**
     pub n17: N17VerifyView,
+}
+
+/// **Fil P (P.2)** : le **bundle de provenance** exporté — la vue du reçu que la pile B sait
+/// re-prouver.
+///
+/// Ce que la réponse contient : les nœuds scellés (JSONL), leur engagement (`manifest_root`) et
+/// leur compte. Ce qu'elle ne contient **jamais** : la clé tenant (elle voyage hors bande vers
+/// l'auditeur) ni les sorties elles-mêmes (le bundle ne porte que des **empreintes**, préfixées
+/// `blake3:` pour qu'aucune ne puisse passer pour une valeur).
+///
+/// Le `manifest_root` rendu ici est **celui du bundle**, calculé à la volée. Tant que P.4 ne l'aura
+/// pas publié **hors** du bundle, il ne prouve la cohérence que contre lui-même : une troncature
+/// reste indétectable pour qui ne détient pas de racine de référence indépendante. C'est dit dans
+/// [`Self::anchored`], et il ne faut pas revendiquer davantage.
+#[derive(Debug, Clone, Serialize)]
+pub struct BundleResponse {
+    pub run_id: Uuid,
+    /// Les records du DAG, une ligne JSON par nœud — le format que lit `verify-mini`.
+    pub bundle_jsonl: String,
+    /// L'engagement sur la totalité du bundle (hex).
+    pub manifest_root: String,
+    /// Le nombre de nœuds — second garde contre la troncature, indépendant de la racine.
+    pub node_count: u32,
+    /// La version de la **règle de traduction** qui a produit ces nœuds. Permet à un auditeur de
+    /// distinguer « le run a changé » de « la règle de lecture a changé ».
+    pub mapping_version: String,
+    /// La racine est-elle **ancrée hors bundle** ? Toujours `false` avant P.4 — et le dire ici
+    /// évite qu'un consommateur prête au bundle une opposabilité qu'il n'a pas encore.
+    pub anchored: bool,
+    /// **Fil P (P.3)** : l'attestation ed25519 de la racine, si une clé est déployée.
+    ///
+    /// `None` ⟹ aucune clé n'est installée : le bundle est servi **non attesté**, et le champ est
+    /// **absent** plutôt que vide — un champ vide se confondrait avec une signature.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub attestation: Option<AttestationView>,
+}
+
+/// **Fil P (P.3)** : l'attestation servie — le seul artefact du fil qu'un tiers vérifie **sans
+/// détenir aucun secret**.
+///
+/// ⚠️ Elle ne vaut que si la **clé publique a été épinglée hors bande**. C'est pourquoi cette vue
+/// porte un `key_id` (une *empreinte* de la clé publique, qui nomme la clé) et **jamais la clé
+/// publique elle-même** : la servir ici rendrait la vérification circulaire, donc vide — n'importe
+/// qui peut engendrer une paire et signer n'importe quelle racine.
+///
+/// Et ce qu'elle ne prouve **pas**, tant que P.4 manque : que la racine attestée soit celle
+/// qu'il fallait attendre. Un producteur malveillant peut tronquer un run *puis* signer
+/// honnêtement la racine du bundle tronqué. P.3 authentifie l'**émetteur** ; P.4 fixera
+/// l'**attendu**.
+#[derive(Debug, Clone, Serialize)]
+pub struct AttestationView {
+    /// Version du format d'attestation.
+    pub schema: u16,
+    /// Le run attesté (empêche de déplacer l'attestation vers un autre run).
+    pub run_id: Uuid,
+    /// Le tenant attesté (empêche le transport inter-tenant).
+    pub tenant_id: String,
+    /// La racine attestée — ce qui est réellement signé.
+    pub manifest_root: String,
+    /// Le compte de nœuds, signé lui aussi (second garde contre la troncature).
+    pub node_count: u32,
+    /// **L'empreinte** de la clé publique — pour savoir *laquelle* de vos clés épinglées appliquer.
+    pub key_id: String,
+    /// Millisecondes depuis l'époque, signées (empêche de rejouer une vieille attestation).
+    pub signed_at: u64,
+    /// La signature ed25519 (128 caractères hexadécimaux).
+    pub sig: String,
+}
+
+impl From<provenance_bridge::RootAttestation> for AttestationView {
+    fn from(a: provenance_bridge::RootAttestation) -> Self {
+        Self {
+            schema: a.schema,
+            run_id: a.run_id,
+            tenant_id: a.tenant_id,
+            manifest_root: a.manifest_root,
+            node_count: a.node_count,
+            key_id: a.key_id,
+            signed_at: a.signed_at,
+            sig: a.sig,
+        }
+    }
 }
 
 /// **ADR-016** : le verdict du pont N17 + de la chaîne forensique, dans la re-preuve.

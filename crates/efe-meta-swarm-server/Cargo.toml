@@ -25,7 +25,22 @@ path = "src/bin/participant.rs"
 efe-meta-swarm-proto = { path = "../efe-meta-swarm-proto" }
 
 # Phase-1 algorithms (PR #8 wires them into the controller).
-efe-meta-swarm = { path = "../efe-meta-swarm" }
+# Couche 3 M2 — `provenance` câble le scellement re-prouvable DANS le moteur
+# (`MetaSwarm::iterate_with_provenance`). Sans elle le contrôleur ne sait pas sceller ;
+# avec elle il PEUT, et ne le fait que si un tenant est configuré (cf. controller::provenance).
+efe-meta-swarm = { path = "../efe-meta-swarm", features = ["provenance"] }
+# Couche 3 · 3a — le vocabulaire d'ancrage (AnchorRecord + son format de ligne). On dépend de
+# provenance-dag et NON de provenance-bridge : celui-ci tire blake3/ed25519/chrono et les deux
+# piles de provenance, ce qui serait un mauvais marché pour six champs de texte.
+provenance-dag = { path = "../provenance-dag", version = "0.0.1" }
+
+# Couche 3 M1.d — OPTIONAL, gated by the `core-integration` feature (see
+# [features]).  efe-server provides `mode1::build_mvp_controller` (Voie A) ;
+# efe-core provides the SwarmSpec types the manifest `controller` block maps
+# to ;  sha2 hashes that block into the wire `config_hash`.
+efe-server = { path = "../efe-server", optional = true }
+efe-core   = { path = "../efe-core",   optional = true }
+sha2       = { version = "0.10" }   # Couche 3 M2/v4 — config_hash déclaré, hors feature
 
 # gRPC.
 #
@@ -51,6 +66,7 @@ tokio-util   = "0.7"  # `sync::CancellationToken` is exposed in default features
 
 # Error + logging.
 thiserror          = { workspace = true }
+uuid               = { workspace = true }   # Couche 3 M2 — parse du tenant de provenance
 tracing            = { workspace = true }
 tracing-subscriber = { workspace = true }
 anyhow             = { workspace = true }
@@ -165,6 +181,15 @@ reflection = []
 # want to ship a TLS-aware binary.
 tls = ["tonic/tls"]
 
+# Couche 3 M1.d — the served participant can wrap the REAL efe-core bridge
+# (`efe_meta_swarm::LocalParticipant` over `efe_server::mode1::
+# build_mvp_controller`).  Off by default : the default dependency graph
+# carries ZERO efe-core/efe-server crates (verify with
+# `cargo tree -p efe-meta-swarm-server -e normal`), and an efe-core manifest
+# row on a default-built binary fails CONSTRUCTION (never a silent mock).
+# `sha2` computes the wire `config_hash` of the manifest controller block.
+core-integration = ["efe-meta-swarm/core-integration", "dep:efe-server", "dep:efe-core"]
+
 # ─────────────────────────────────────────────────────────────────────
 # Dev dependencies.
 # ─────────────────────────────────────────────────────────────────────
@@ -172,6 +197,10 @@ tls = ["tonic/tls"]
 tokio   = { workspace = true, features = ["macros", "rt-multi-thread", "process"] }
 tonic   = { workspace = true }
 efe-meta-swarm-proto = { path = "../efe-meta-swarm-proto" }
+# Couche 3 M2 — LE tiers sceptique de la DoD. En dev-dépendance SEULEMENT : le binaire
+# servi ne doit rien lier du vérifieur, sinon « re-prouvé par un tiers » deviendrait
+# « re-prouvé par du code que le serveur embarque » — ce qui ne prouve plus rien.
+verify-meta-mini = { path = "../verify-meta-mini" }
 tempfile = "3.10"
 reqwest  = { version = "0.12", default-features = false, features = ["http2"] }
 

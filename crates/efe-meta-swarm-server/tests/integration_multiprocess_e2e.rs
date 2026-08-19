@@ -25,7 +25,7 @@ use efe_meta_swarm_proto::meta_swarm::{
 };
 use tonic::Request;
 
-/// AC4 + AC7 : Kovant scenario converges across 4 OS subprocesses.
+/// AC4 + AC7 : procurement scenario converges across 4 OS subprocesses.
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn iterate_e2e_kovant_converges_across_real_processes() {
     let harness = ProcessHarness::spawn_kovant().await;

@@ -2,7 +2,7 @@
 //! # `csddd_seed` — le **seed de démo CSDDD** : un dossier de diligence fournisseur, scellé puis dérivé.
 //!
 //! Ce que ce programme produit, en **une commande**, est un **bundle forensic autoportant** sur lequel les
-//! **trois démos** de la présentation Kovant tournent — sans rien préparer d'autre :
+//! **trois démos** de la présentation tournent — sans rien préparer d'autre :
 //!
 //! - **D1 — la re-preuve sans confiance** : `records.sealed.jsonl` se re-prouve avec `verify-mini`
 //!   (vérifieur à **zéro dépendance** qu'un tiers sceptique re-compile) → `exit 0`.
@@ -322,7 +322,7 @@ fn write(dir: &Path, rel: &str, content: &str) -> std::io::Result<()> {
 /// Embarque le vérifieur **zéro-dépendance** dans `verify/verify-mini/`, avec un `Cargo.toml` **autonome**
 /// (valeurs concrètes, sans héritage de workspace) — pour que le destinataire le **re-compile hors-ligne**
 /// depuis le bundle. Les sources sont **baked à la compilation** (`include_str!`) : la copie embarquée est
-/// donc **octet-à-octet identique** au `verify-mini` du dépôt Kovant (aucune dérive possible).
+/// donc **octet-à-octet identique** au `verify-mini` du dépôt (aucune dérive possible).
 fn write_embedded_verifier(dir: &Path) -> std::io::Result<()> {
     // Les 7 fichiers du vérifieur (arbre de dépendances littéralement vide : SHA-256/HMAC + parseur JSONL
     // + encodage canonique, tout std-only) — chemin résolu depuis la crate reg-evidence à la compilation.
@@ -338,7 +338,7 @@ fn write_embedded_verifier(dir: &Path) -> std::io::Result<()> {
     // Un manifeste AUTONOME (pas de `{ workspace = true }`) : buildable seul, hors de tout workspace.
     const CARGO_TOML: &str = "# Verifieur forensic zero-dependance — copie AUTONOME embarquee dans le bundle\n\
 # (sans heritage de workspace), pour la re-compilation hors-ligne par le destinataire.\n\
-# Octet-a-octet identique au verify-mini du depot Kovant. `cargo tree` = verify-mini SEUL.\n\
+# Octet-a-octet identique au verify-mini du depot. `cargo tree` = verify-mini SEUL.\n\
 [package]\n\
 name = \"verify-mini\"\n\
 version = \"0.0.0\"\n\
@@ -397,7 +397,7 @@ une **fonction déterministe** de deux entrées que vous détenez déjà — les
 - Ils **ne prononcent pas** la conformité : **outillé ≠ conforme**. La conformité est une conclusion\n\
   juridique (classification du système, conseil du client, obligations organisationnelles que le DAG ne\n\
   produit pas — voir les exigences **HORS-PÉRIMÈTRE-DAG**, qui sont **déclarées, jamais tues**).\n\
-- La **lecture** (le mapping) est une **revendication versionnée** de Kovant, datée — pas une vérité. Elle\n\
+- La **lecture** (le mapping) est une **revendication versionnée** de l'éditeur, datée — pas une vérité. Elle\n\
   voyage ici pour que vous puissiez la **lire, la contester, et la re-jouer**.\n"
     )
 }

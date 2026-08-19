@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: UNLICENSED
-//! # `reg-evidence` — Kovant P1 / S6 : le **moteur d'évidence réglementaire** (les gabarits)
+//! # `reg-evidence` — Provenance P1 / S6 : le **moteur d'évidence réglementaire** (les gabarits)
 //!
 //! La dernière marche de valeur de P1 : transformer le DAG scellé re-prouvable (S0/S1), servi (S2) et
 //! exporté sans confiance (S4) en l'**artefact précis** qu'une équipe conformité doit produire **de toute

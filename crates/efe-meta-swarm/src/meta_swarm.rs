@@ -22,6 +22,8 @@ pub struct MetaSwarm {
     pub(crate) gamma: f64,
     pub(crate) criterion: ConvergenceCriterion,
     pub(crate) trace_enabled: bool,
+    /// Couche 3 M1.c — fail-closed mode (H1 rejects `Stub`; non-convergence errors).
+    pub(crate) strict: bool,
     pub(crate) tracer: Box<dyn MetaSwarmTracer>,
 }
 
@@ -44,6 +46,35 @@ pub struct MetaSwarmResult {
     pub trace: Option<IterationTrace>,
     /// Wall time.
     pub elapsed: Duration,
+}
+
+impl MetaSwarmResult {
+    /// Did the iteration actually converge (residual ≤ tolerance)?
+    #[must_use]
+    pub fn converged(&self) -> bool {
+        self.stop_reason == StopReason::Converged
+    }
+
+    /// **Fail-closed accessor** — the meta-consensus, but only if the iteration
+    /// converged. Returns [`MetaSwarmError::ConvergenceFailed`] otherwise, so a caller
+    /// can never *accidentally* consume a non-converged consensus (the honest H1/M1.c
+    /// contract: "never claim consensus if not converged"). In strict mode
+    /// [`MetaSwarm::iterate`] already errors before returning; this is the safe path for
+    /// lenient callers that still want the guarantee at the point of use.
+    ///
+    /// # Errors
+    ///
+    /// [`MetaSwarmError::ConvergenceFailed`] if `stop_reason != Converged`.
+    pub fn require_converged(&self) -> Result<&Tensor> {
+        if self.converged() {
+            Ok(&self.meta_consensus)
+        } else {
+            Err(MetaSwarmError::ConvergenceFailed {
+                iters: self.iterations,
+                residual: self.final_residual,
+            })
+        }
+    }
 }
 
 impl MetaSwarm {
@@ -100,8 +131,19 @@ impl MetaSwarm {
             gamma:        self.gamma,
             criterion:    self.criterion.clone(),
             trace:        self.trace_enabled,
+            strict:       self.strict,
         };
         let out = engine.run(observer)?;
+
+        // Couche 3 M1.c — strict fail-closed on non-convergence: never surface a
+        // non-converged consensus as a result. (In lenient mode, the caller must inspect
+        // `stop_reason` itself — see `MetaSwarmResult::require_converged`.)
+        if self.strict && out.stop_reason != StopReason::Converged {
+            return Err(MetaSwarmError::ConvergenceFailed {
+                iters: out.iterations,
+                residual: out.final_residual,
+            });
+        }
 
         self.tracer.iteration_ended(
             &self.id,
@@ -135,6 +177,7 @@ impl MetaSwarm {
             gamma:        self.gamma,
             criterion:    self.criterion.clone(),
             trace:        false,
+            strict:       self.strict,
         };
         Ok(engine.step_once()?.meta_consensus)
     }

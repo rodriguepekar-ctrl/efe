@@ -1,0 +1,307 @@
+\documentclass[10pt]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage[french]{babel}
+\usepackage{newpxtext,newpxmath}
+\usepackage[a4paper,top=1.5cm,bottom=1.35cm,left=1.65cm,right=1.65cm]{geometry}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{titlesec}
+\usepackage[most]{tcolorbox}
+\usepackage{enumitem}
+\usepackage{array}
+\usepackage{booktabs}
+\usepackage{fancyhdr}
+
+\definecolor{navy}{HTML}{1F3A5F}
+\definecolor{grey}{HTML}{54606E}
+\definecolor{green}{HTML}{2C6E49}
+\definecolor{amber}{HTML}{9C6A16}
+\definecolor{red}{HTML}{A6322E}
+\definecolor{plum}{HTML}{7A4EA8}
+\definecolor{boxgray}{HTML}{F3F5F8}
+\definecolor{boxred}{HTML}{FCF2F1}
+\definecolor{boxgreen}{HTML}{F1F7F3}
+\definecolor{boxplum}{HTML}{F7F3FB}
+\definecolor{boxedge}{HTML}{D9E0EA}
+
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{2.6pt}
+\linespread{1.0}
+
+\pagestyle{fancy}\fancyhf{}
+\lhead{\small\color{grey}Scella}
+\rhead{\small\color{grey}Couples -- classement intrinsèque -- 11 août 2026}
+\cfoot{\small\color{grey}\thepage}
+\renewcommand{\headrulewidth}{0.3pt}
+
+\titleformat{\section}{\color{navy}\large\bfseries}{}{0pt}{}
+\titlespacing{\section}{0pt}{9pt}{3pt}
+\titleformat{\subsection}{\color{navy}\bfseries}{}{0pt}{}
+\titlespacing{\subsection}{0pt}{7pt}{1.5pt}
+
+\newtcolorbox{these}{colback=boxgray,colframe=boxedge,boxrule=0.5pt,arc=2.5pt,
+  left=8pt,right=8pt,top=4.5pt,bottom=4.5pt}
+\newtcolorbox{alerte}{colback=boxred,colframe=red!55,boxrule=0.8pt,arc=2.5pt,
+  left=8pt,right=8pt,top=4.5pt,bottom=4.5pt}
+\newtcolorbox{acquis}{colback=boxgreen,colframe=green!45,boxrule=0.8pt,arc=2.5pt,
+  left=8pt,right=8pt,top=4.5pt,bottom=4.5pt}
+\newtcolorbox{piste}{colback=boxplum,colframe=plum!45,boxrule=0.8pt,arc=2.5pt,
+  left=8pt,right=8pt,top=4.5pt,bottom=4.5pt}
+
+\newcommand{\best}[1]{{\color{green}\textbf{#1}}}
+\newcommand{\pire}[1]{{\color{red}\textbf{#1}}}
+\newcommand{\sz}[1]{{\small\color{grey}\textsf{#1}}}
+\newcommand{\code}[1]{\texttt{\small #1}}
+\newcommand{\x}{$\times$}
+\newcommand{\hausse}{{\color{green}$\uparrow$}}
+\newcommand{\baisse}{{\color{red}$\downarrow$}}
+
+\begin{document}
+
+\begin{center}
+{\Huge\bfseries\color{navy} Scella}\\[4pt]
+{\large\color{grey}\itshape Les couples, reclassés sans finalité extérieure}\\[4pt]
+{\small\color{grey} 11 août 2026 \; · \; après l'abandon de la piste Kovant \; · \; quatre lentilles intrinsèques}
+\end{center}
+\vspace{2pt}
+
+\begin{these}
+\textbf{Le résultat central, et il contredit le précédent.} Le 5 août, retirer la lentille d'objectif
+au niveau des \emph{composants} ne changeait presque rien -- un seul échange entre deux ex \ae quo. Au
+niveau des \textbf{couples}, la retirer change beaucoup. Les \textbf{vérifieurs zéro-dépendance
+passent premiers} alors qu'ils n'étaient \emph{même pas classés} ; \textbf{PII \x{} scellement perd
+trois rangs} ; et la \textbf{co-signature R3} -- que j'avais désignée la veille comme le couple le plus
+important du dépôt -- \textbf{tombe septième}. Aucun des deux exercices n'était mal fait : la lentille
+extérieure filtrait simplement \emph{plus étroitement} sur des propriétés composées que sur des
+composants.
+\end{these}
+
+\section{1 · Ce qui a été retiré, et ce que cela laisse}
+
+Le classement des couples du 10 août notait sur quatre axes, dont le quatrième était \emph{« valeur
+dans la conversation Kovant »}. Cet axe est mort le 11 août avec la piste elle-même. Plutôt que d'en
+inventer un -- et surtout plutôt que de lui substituer en silence une autre finalité non déclarée --
+ce document reprend le cadre \textbf{déjà établi le 5 août} dans le \emph{Classement du potentiel
+intrinsèque} : la \textbf{maturité} rapportée à l'effort restant, la \textbf{rareté} pure,
+l'\textbf{adversaire} en revue diligente, et la \textbf{démontrabilité} devant un ingénieur sceptique.
+
+Ces quatre lentilles ne présupposent aucun objectif. Elles répondent à une question plus simple et
+plus dure : \emph{qu'est-ce qui vaut le plus, indépendamment de ce qu'on veut en faire ?}
+
+La substitution n'est pas neutre, et c'est là que se joue tout le reclassement. Trois de mes anciens
+axes se projettent proprement -- la \emph{distance au servi} devient la maturité, le \emph{mordant}
+devient l'adversaire, et la démontrabilité existait déjà. Mais l'axe Kovant est remplacé par la
+\textbf{rareté}, qui ne mesure pas du tout la même chose. « Un acheteur conformité pose-t-il cette
+question ? » et « cette paire existe-t-elle ailleurs ? » sont deux tests orthogonaux -- et plusieurs
+couples qui réussissaient le premier échouent au second.
+
+\begin{alerte}
+\textbf{Ce que ce document mesure, et ce qu'il juge.} Les rapports précédents affirmaient des faits
+vérifiables : « 515 tests, 0 échec », « \code{remote\_participant.rs:404} renvoie \code{Stub} ». Ce
+document-ci fait autre chose. Les \emph{couples} et leurs \emph{emplacements} restent des faits, et ils
+sont inchangés. Mais les \textbf{notes} ci-dessous sont un \textbf{jugement}, structuré par des
+critères explicites pour être discutable -- pas une mesure. Un désaccord sur « rareté = 3 » est
+légitime et ne se tranche par aucune commande. La distinction est faite ici plutôt que laissée au
+lecteur, parce que confondre les deux régimes serait exactement le défaut que ce dépôt combat.
+\end{alerte}
+
+\section{2 · Le classement intrinsèque}
+
+\renewcommand{\arraystretch}{1.2}
+\begin{center}\small
+\begin{tabular}{@{}r >{\raggedright\arraybackslash}p{5.1cm} cccc c c c >{\raggedright\arraybackslash}p{4.4cm}@{}}
+\toprule
+& \textbf{Le couple} & \sz{Mat} & \sz{Rar} & \sz{Adv} & \sz{Dém} & \textbf{Moy} & \sz{Éc.} & \sz{$\Delta$} & \textbf{Ce qui le porte / le plombe} \\
+\midrule
+\textbf{1} & \textbf{Les vérifieurs zéro-dépendance} & \best{1} & 3 & \best{1} & 3 & \textbf{2,00} & 2 & \hausse\sz{h.c.} &
+  Le seul sans aucun caveat ; tenu \emph{deux} fois \\
+\textbf{2} & \textbf{Topologie déclarée \x{} reçu injectif} & 2 & 4 & 2 & 2 & \textbf{2,50} & \best{2} & \baisse\sz{1} &
+  Couvre le cas qu'une implémentation naïve rate \\
+\textbf{3} & \textbf{Reçu v4 \x{} ancre 3a} & 3 & 5 & 3 & \best{1} & \textbf{3,00} & 4 & \sz{=} &
+  Se démontre par un vert gênant ; ancre détenue \\
+\textbf{4} & \textbf{Canari H1 \x{} participants} & 6 & 2 & 4 & 4 & \textbf{4,00} & 4 & \hausse\sz{1} &
+  Réfute sa propre note ; échappatoire déclarée \\
+5\,= & Caviardage PII \x{} scellement & 4 & 7 & 6 & 6 & 5,75 & 3 & \pire{\baisse\,3} &
+  L'ordre est juste ; sans policy, sortie en clair \\
+5\,= & Reçu \x{} coût réel par appel & 5 & \pire{8} & 5 & 5 & 5,75 & 3 & \baisse\sz{1} &
+  Solide et borné ; catégorie très occupée \\
+7 & \textbf{Co-signature R3 \x{} HMAC} & \pire{8} & \best{1} & \pire{8} & \pire{8} & 6,25 & \pire{7} & \sz{=} &
+  Conception supérieure ; \textbf{ne se déclenche jamais} \\
+8 & \code{slm\_mediated} \x{} sa chute & 7 & 6 & 7 & 7 & 6,75 & \best{1} & \baisse\sz{2} &
+  Patron élégant ; portée étroite, voisin d'une fissure \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\sz{$\Delta$ = déplacement par rapport au classement du 10 août, qui incluait la lentille Kovant.
+« h.c. » = hors concours : les vérifieurs y étaient rangés en « amplificateur », donc non classés.
+Éc. = amplitude entre le meilleur et le pire rang obtenus par un même couple.}
+
+\section{3 · Les trois déplacements qui comptent}
+
+\subsection{3.1 · Les vérifieurs zéro-dépendance passent premiers -- et ils n'étaient pas classés}
+
+C'est le déplacement le plus instructif, parce qu'il porte sur une décision que j'avais prise
+\emph{avant} de noter. Je les avais rangés hors concours, en « amplificateur », au motif qu'ils ne
+produisent aucune propriété neuve : ils rendent les autres croyables. C'était un jugement
+\textbf{avec acheteur}. Un vérifieur ne se vend pas -- il ne fait que permettre de contrôler ce qu'on
+vend.
+
+Sans cible extérieure, ce raisonnement s'inverse : \textbf{permettre de vérifier n'est plus un
+préalable à la valeur, c'est la valeur}. Et une fois admis en concours, ils gagnent sans discussion.
+Ils sont \best{1} en maturité -- les seuls du lot auxquels il ne manque rien et dont aucun caveat n'a
+été relevé. Ils sont \best{1} devant l'adversaire, parce que la revendication se contrôle en une ligne
+(\code{cargo tree -e normal}) et qu'aucune rhétorique n'y résiste. Et leur rareté est haute : atteindre
+zéro dépendance impose un SHA-256 et un HMAC écrits à la main, discipline que presque personne ne tient
+-- et qui a été tenue \textbf{deux fois}, sur deux piles indépendantes. Ce n'est pas un accident de
+graphe de dépendances, c'est une intention répétée.
+
+\subsection{3.2 · PII \x{} scellement perd trois rangs -- la plus grosse perte, et elle est méritée}
+
+Il était deuxième. Son rang était porté par le RGPD et l'achat conformité, c'est-à-dire par
+\emph{la question d'un acheteur} -- pas par une propriété. C'était l'axe le plus dépendant de la cible,
+et il disparaît avec elle.
+
+Ce qui reste est réel mais plus modeste. L'ordre est juste, et c'est ce qui en fait un vrai couple :
+le caviardage précède tout usage du texte, donc le sceau couvre ce qui est réellement sorti. Mais la
+\textbf{rareté est faible} (\sz{7/8}) -- caviarder des données personnelles avant un appel tiers est
+une pratique répandue, et seule la \emph{discipline d'ordre} est distinctive. Et l'adversaire y trouve
+prise (\sz{6/8}) : sans policy tenant, le prompt sort en clair. Le code le documente au lieu de le
+taire, ce qui est à son honneur, mais un examinateur hostile s'y arrête et il a raison de s'y arrêter.
+
+\subsection{3.3 · La co-signature R3 tombe septième -- le résultat inconfortable}
+
+La veille, je vous l'avais présentée comme le couple le plus important du dépôt. Cette phrase était
+adossée à une question qui n'existe plus : \emph{qu'est-ce que cela nous autorise à dire ?} La
+non-répudiation avait un prix élevé parce que les \emph{affirmations} étaient l'enjeu.
+
+Sans cet enjeu, R3 s'effondre. Il est \best{1} en rareté -- la conception est réellement supérieure :
+HMAC tenant et Ed25519 du n\oe ud sont orthogonaux, donc \emph{forger un R3 exige les deux clés}, et la
+règle de non-élévation redescend automatiquement toute co-signature invérifiable sans jamais se taire.
+Mais il est \pire{8} sur les trois autres lentilles, et pour une seule raison : \textbf{aucun
+producteur}. Le registre de n\oe uds est vide en production, rien ne co-signe, et le barreau le plus
+faible est R4 par construction. Devant un adversaire, cela se tue en une phrase. Devant un ingénieur
+sceptique, il n'y a rien à montrer. \textbf{Une valeur réalisée nulle ne se rattrape pas par de la
+rareté.}
+
+\begin{piste}
+\textbf{Mais son écart de \pire{7} est de loin le plus grand du tableau}, et c'est là qu'est
+l'information. Un couple qui obtient le premier rang sur une lentille et le dernier sur trois autres
+n'est pas « moyen » : il est \textbf{instable}. La formule juste est \emph{pire réalisé, meilleur
+latent}. Un seul fil -- un producteur de co-signature sur le chemin servi -- le ferait passer de
+septième à disputer la première place. Ma phrase de la veille était juste sur le potentiel et fausse
+sur l'état ; le classement les sépare enfin.
+\end{piste}
+
+\section{4 · Ce que ce reclassement dit de la méthode}
+
+Le document du 5 août concluait, avec raison, qu'enlever la lentille d'embauche \textbf{ne changeait
+presque rien} -- un seul échange entre deux ex \ae quo -- et en tirait que le classement mesurait bien
+la valeur intrinsèque. Ici, l'inverse : un couple entre en tête depuis le hors-concours, un autre perd
+trois rangs, et celui que j'avais désigné comme le plus important tombe septième.
+
+Les deux résultats sont compatibles, et leur écart est lui-même le résultat le plus utile de ce
+document.
+
+Un \textbf{composant} vaut à peu près ce qu'il vaut : sa maturité, sa rareté et sa solidité ne
+dépendent guère de qui l'examine. Une \textbf{propriété composée}, elle, ne se juge pas dans l'absolu
+-- elle se juge sur \emph{qui pose la question à laquelle elle répond}. Changer le questionneur change
+donc la réponse, et d'autant plus que la question d'origine était spécifique. « Un acheteur conformité
+en achats pose-t-il cette question ? » est un filtre bien plus étroit que « cette paire est-elle rare
+et solide ? ».
+
+\begin{acquis}
+\textbf{La règle réutilisable.} Quand on retire l'axe extérieur d'un classement, ne pas supposer la
+stabilité : \emph{vérifier} si cet axe filtrait plus étroitement que les axes intrinsèques. S'il
+filtrait plus large, rien ne bouge et le classement était déjà intrinsèque. S'il filtrait plus étroit
+-- le cas ici -- il portait des rangs qui ne tenaient qu'à lui, et le reclassement est obligatoire.
+\end{acquis}
+
+\section{5 · Conséquences pratiques}
+
+\textbf{Le rapport du 10 août a une hiérarchie périmée, pas des faits périmés.}
+\code{Scella\_Meilleurs\_Couples\_2026-08-11.tex} note sur la lentille Kovant et recommande « montrer
+le rang 1, poser le fil du rang 7 ». Tout ce qu'il \emph{établit} reste vrai : les couples, les faux
+couples, les emplacements, l'annexe rejouable, et la correction en cours d'écriture qui a fait passer
+R3 de « à inventer » à « à un fil ». C'est son \textbf{ordre} qui ne vaut plus. Les deux documents se
+lisent donc ensemble : celui-là pour les faits, celui-ci pour la hiérarchie.
+
+\textbf{Les faux couples ne bougent pas, et c'est normal.} Fil B \x{} souveraineté, \code{config\_hash}
+\x{} ce qui a tourné, \mbox{« vrais SLM »} \x{} essaim : ce sont des constats de \emph{fausseté}, pas
+des notes. Ils ne dépendaient d'aucune finalité et n'en dépendent toujours pas. Leur seule évolution est
+qu'ils ne risquent plus d'être prononcés devant Kovant -- ils risquent d'être prononcés devant
+quelqu'un d'autre.
+
+\textbf{Aucune cible de remplacement n'est déclarée, et ce document n'en invente pas.} Le classement
+ci-dessus est sans finalité, ce qui est un état parfaitement tenable -- c'était déjà la posture du
+5 août. Si une nouvelle cible apparaît, la quatrième lentille se rejoue et le classement doit être
+refait, en sachant maintenant qu'il bougera.
+
+\section{6 · La sensibilité du classement -- ce qui le ferait bouger}
+
+Un classement fondé sur un jugement doit dire à quoi il est sensible, sinon il se lit comme un verdict
+alors qu'il n'est qu'un instantané. Voici, pour chaque couple, l'événement unique qui déplacerait son
+rang -- et le sens du déplacement. C'est aussi, accessoirement, la liste des chantiers rangés par
+effet plutôt que par envie.
+
+\renewcommand{\arraystretch}{1.2}
+\begin{center}\small
+\begin{tabular}{@{}r >{\raggedright\arraybackslash}p{4.6cm} >{\raggedright\arraybackslash}p{7.1cm} >{\raggedright\arraybackslash}p{3.5cm}@{}}
+\toprule
+& \textbf{Le couple} & \textbf{L'événement unique qui le déplacerait} & \textbf{Effet} \\
+\midrule
+1 & Vérifieurs zéro-dép & \emph{aucun} qui le monte -- il est au plafond. En revanche une seule
+  dépendance ajoutée le ferait chuter de partout & \sz{ne peut que} \baisse \\
+2 & Topologie \x{} reçu injectif & \textbf{M4} : un \code{config\_hash} \emph{rapporté} et non plus
+  déclaré fermerait le faux couple F2 qui le borde & \hausse{} \sz{vers la 1\textsuperscript{re}} \\
+3 & Reçu v4 \x{} ancre & \textbf{3b} : une ancre tierce, l'ôtant des mains de l'opérateur --
+  \code{verify\_anchor} existe déjà & \hausse{} \sz{sur l'adversaire} \\
+4 & Canari H1 \x{} participants & retirer l'échappatoire \code{h1\_canary.mode = "off"}, ou la rendre
+  refusable par configuration & \hausse{} \sz{modeste} \\
+5\,= & PII \x{} scellement & une policy tenant par \textbf{défaut fail-closed} : la sortie en clair
+  cesserait d'être le comportement d'un tenant non configuré & \hausse{} \sz{2 rangs} \\
+5\,= & Reçu \x{} coût & rien de bon marché -- sa faiblesse est la \emph{rareté}, qu'aucun travail
+  interne ne change & \sz{stable} \\
+\textbf{7} & \textbf{Co-signature R3} & \textbf{un producteur} sur le chemin servi, plus un registre
+  de n\oe uds peuplé en production & \best{\hausse{} vers la 1\textsuperscript{re}--2\textsuperscript{e}} \\
+8 & \code{slm\_mediated} & fermer la fissure F1 : contraindre l'URL du SLM et décompter son egress
+  & \hausse{} \sz{modeste} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Deux lectures de ce tableau, et la seconde est la plus utile.
+
+La première est arithmétique : \textbf{un seul chantier déplace un couple de six rangs}, et c'est le
+producteur de co-signature. Tous les autres valent un ou deux rangs. Si l'on classe les travaux par
+\emph{effet sur la valeur} plutôt que par difficulté ressentie, la hiérarchie est donc écrasée par un
+seul item -- ce qui est exactement ce que mesurait l'écart de \pire{7} du tableau précédent.
+
+La seconde est plus dérangeante : \textbf{le couple classé premier ne peut que descendre}. Les
+vérifieurs zéro-dépendance n'ont aucune marge de progression -- ils sont au plafond sur trois lentilles
+sur quatre -- et une seule dépendance ajoutée, un jour, par commodité, les ferait chuter de partout à
+la fois.
+
+\begin{alerte}
+\textbf{Et rien ne les protège. C'est un fait, pas un jugement, et il a été vérifié en écrivant cette
+section.} La contrainte zéro-dépendance est \emph{documentée} en commentaire dans quatre
+\code{Cargo.toml}, et sa \emph{fidélité} est prouvée par des vecteurs golden et un cross-check. Mais
+l'invariant lui-même -- « \code{cargo tree -e normal} ne montre que ce crate » -- n'est gardé par
+\textbf{aucun test et aucun job d'intégration continue}. Le seul contrôle exécutable du dépôt vit dans
+\code{scripts/demo-consensus-receipt.sh}, un script de démonstration que rien ne déclenche
+automatiquement. L'actif le mieux classé du portefeuille est donc protégé par une ligne que personne
+n'exécute, et sa dégradation serait \textbf{silencieuse} : un \code{cargo add} passerait la revue sans
+qu'aucun voyant ne s'allume. \sz{Correctif : porter ce contrôle en test, taille XS.}
+\end{alerte}
+
+\begin{these}
+\small\textbf{Portée et statut.} Les couples, leurs emplacements et les faux couples sont des faits
+établis contre le code du 11 août et re-vérifiables par l'annexe du rapport compagnon. Les
+\textbf{notes} de ce document-ci sont un jugement structuré, pas une mesure. La couche nano et
+\code{efe-gold-test-gate} n'ont été examinés dans aucun des deux. Et le rappel qui ne dépend d'aucune
+cible : le reçu atteste l'\textbf{intégrité} d'une suite de pas, jamais la \textbf{correction} d'une
+décision.
+\end{these}
+
+\end{document}

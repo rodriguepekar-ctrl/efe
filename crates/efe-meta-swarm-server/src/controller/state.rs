@@ -1,6 +1,7 @@
 //! Shared controller state.
 
-use std::sync::Arc;
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
 use efe_meta_swarm_proto::meta_swarm::{InfoResponse, ParticipantDescriptor};
@@ -8,7 +9,7 @@ use tokio::sync::RwLock;
 
 use crate::config::controller::ControllerConfig;
 use crate::controller::inflight::InflightSemaphore;
-use crate::manifest::Manifest;
+use crate::manifest::{Manifest, ParticipantManifest};
 use crate::observability::health::HealthState;
 use crate::observability::metrics::MetricsRegistry;
 use crate::tls::TlsReloader;
@@ -65,6 +66,32 @@ pub struct ControllerState {
     /// participant via mTLS.  See `controller/iterate.rs::
     /// connect_participants` for the consumer.
     pub tls_reloader: Option<Arc<TlsReloader>>,
+    /// Couche 3 M1.d — **lifetime engine-identity lineage**.  Maps every
+    /// participant id the controller has EVER served → the row it was first
+    /// seen with.  Consulted on reload by
+    /// [`crate::manifest::validate_engine_lineage`] so a *removed-then-re-added*
+    /// id cannot swap its engine identity across two reloads — the immutability
+    /// invariant the per-manifest drift check alone cannot uphold (it only sees
+    /// ids present in both manifests).  Populated at boot, monotonically
+    /// extended after each successful reload (first identity per id wins ; a
+    /// process restart resets it, which is the sanctioned way to change an
+    /// engine).
+    pub engine_lineage: Arc<Mutex<HashMap<String, ParticipantManifest>>>,
+    /// Couche 3 M2 — **sous quelle clé et pour quel tenant sceller les reçus de consensus.**
+    ///
+    /// `None` ⟹ le contrôleur sert SANS provenance : `meta_provenance_root` part **vide** sur le
+    /// fil, et c'est le signal honnête (« pas de reçu »), jamais un placeholder. `Some` ⟹ chaque
+    /// `Iterate` scelle ses pas dans une chaîne HMAC re-prouvable hors-ligne.
+    ///
+    /// Résolu **une fois au boot** par [`super::provenance::ProvenanceConfig::from_env`], qui
+    /// refuse de démarrer plutôt que d'émettre un reçu forgeable sans le dire. Derrière un `Arc` :
+    /// l'état est cloné par requête, la source de clé ne l'est pas.
+    pub provenance: Option<Arc<super::provenance::ProvenanceConfig>>,
+    /// Couche 3 · 3a — le journal d'ancres, **partagé avec le Fil P**.
+    ///
+    /// `None` ⟹ ancrage inactif : les reçus sortent sans ancre publiée, donc une TRONCATURE
+    /// resterait indétectable sans la clé. C'est dit au boot plutôt que deviné.
+    pub anchor_log: Option<Arc<super::anchor::FileAnchorLog>>,
 }
 
 impl std::fmt::Debug for ControllerState {
@@ -90,6 +117,12 @@ impl ControllerState {
         // `step_total{participant_id="supplier-scoring"}` render with
         // `0` rather than "no data" before any traffic.
         metrics.pretouch_for_manifest(&manifest);
+        // Seed the engine lineage with every boot-time participant identity.
+        let engine_lineage: HashMap<String, ParticipantManifest> = manifest
+            .participants
+            .iter()
+            .map(|p| (p.id.clone(), p.clone()))
+            .collect();
         Self {
             config: Arc::new(config),
             health: HealthState::serving(),
@@ -98,7 +131,28 @@ impl ControllerState {
             manifest: Arc::new(RwLock::new(manifest)),
             inflight: InflightSemaphore::new(max_inflight),
             tls_reloader: None,
+            engine_lineage: Arc::new(Mutex::new(engine_lineage)),
+            // M2 : éteinte par défaut. `bin/controller.rs` l'allume au boot si — et seulement si —
+            // l'opérateur l'a demandée ET qu'une clé sûre (ou un dev explicitement reconnu) existe.
+            provenance: None,
+            // Éteint par défaut : `bin/controller.rs` l'allume si l'opérateur a désigné un journal.
+            anchor_log: None,
         }
+    }
+
+    /// Couche 3 M2 — attache la configuration de scellement après construction.
+    ///
+    /// Même patron que [`Self::set_tls_reloader`] : le boot résout, l'état porte. Séparé du
+    /// constructeur pour que la résolution (qui peut ÉCHOUER, cf.
+    /// [`super::provenance::ProvenanceConfig::from_env`]) reste au boot, où un échec est un refus
+    /// de démarrer visible, et non un état à-moitié-construit.
+    pub fn set_provenance(&mut self, cfg: Arc<super::provenance::ProvenanceConfig>) {
+        self.provenance = Some(cfg);
+    }
+
+    /// Couche 3 · 3a — attache le journal d'ancres après construction.
+    pub fn set_anchor_log(&mut self, log: Arc<super::anchor::FileAnchorLog>) {
+        self.anchor_log = Some(log);
     }
 
     /// PR #16 — attach a TLS reloader after construction.
@@ -129,9 +183,10 @@ impl ControllerState {
             participants: vec![ParticipantManifest {
                 id: "stub".into(),
                 dim: 1,
-                kappa: 0.5,
-                seed: 0,
+                kappa: Some(0.5),
+                seed: Some(0),
                 blas_backend: "none".into(),
+                controller: None,
             }],
             iteration: IterationManifest::default(),
         };
@@ -154,11 +209,16 @@ impl ControllerState {
                 .map(|p| ParticipantDescriptor {
                     id: p.id.clone(),
                     dim: p.dim,
-                    kappa: p.kappa,
-                    seed: p.seed,
+                    // M1.d : Option in the manifest → wire sentinels (0.0/0
+                    // identify "not a mock" together with the row's
+                    // `controller` block ; the authoritative config_hash
+                    // comes from the participant's own Capabilities).
+                    kappa: p.kappa.unwrap_or(0.0),
+                    seed: p.seed.unwrap_or(0),
                     build_sha: String::new(),
                     blas_backend: p.blas_backend.clone(),
                     features: Vec::new(),
+                    config_hash: None,
                 })
                 .collect(),
             Err(_) => Vec::<ParticipantDescriptor>::new(),

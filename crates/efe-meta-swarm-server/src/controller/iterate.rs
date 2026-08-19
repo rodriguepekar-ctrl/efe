@@ -84,7 +84,24 @@ pub async fn run_iterate(
     let inner_loop_started = std::time::Instant::now();
     let cancel_for_blocking = cancel.clone();
     let meta_for_blocking = Arc::clone(&meta_swarm);
-    let join = tokio::task::spawn_blocking(move || meta_for_blocking.iterate());
+    // Couche 3 M2 — le SEUL endroit où le chemin servi diffère selon la provenance.
+    //
+    // Les deux branches appellent le MÊME moteur : `iterate_with_provenance` n'est
+    // qu'`iterate_observed` avec un observateur qui scelle le pas DÉJÀ calculé. La
+    // non-interférence est donc structurelle, pas une promesse — et elle est épinglée au niveau
+    // SERVI par `provenance_does_not_change_the_numerics`, parce qu'un test de la bibliothèque
+    // ne dit rien du câblage d'ici.
+    let prov_for_blocking = state.provenance.clone();
+    // Couche 3 v4 — la LIAISON : qui contribue, sous quelle configuration déclarée, sous quelle
+    // règle. Construite ICI parce que c'est le seul point qui connaît les trois à la fois : le
+    // manifeste (identités + blocs `controller`), l'opérateur câblé, et les α/γ validés.
+    let binding = build_run_binding(&manifest, &validated);
+    let join = tokio::task::spawn_blocking(move || match prov_for_blocking {
+        Some(p) => meta_for_blocking
+            .iterate_with_provenance(p.key_source(), p.tenant(), binding)
+            .map(|(r, prov)| (r, Some(prov))),
+        None => meta_for_blocking.iterate().map(|r| (r, None)),
+    });
 
     let inner_result = tokio::select! {
         biased;
@@ -108,7 +125,7 @@ pub async fn run_iterate(
         },
     };
 
-    let result = inner_result.map_err(|e| meta_swarm_error_to_status(&e))?;
+    let (result, provenance) = inner_result.map_err(|e| meta_swarm_error_to_status(&e))?;
 
     // PR #17 audit-pass — wire inner-loop observability.  Maps the
     // Phase-1 `StopReason` to the closed `Convergence` taxonomy and
@@ -192,7 +209,91 @@ pub async fn run_iterate(
         }
     }
 
-    let response = build_response(&result, start.elapsed());
+    // Couche 3 M1.d — **fail-closed non-convergence** (architecture §4).
+    // With `iteration.require_convergence` set in the manifest, a run that
+    // did not converge is an ERROR, never an OK response whose non-converged
+    // "consensus" a client might silently trust.  Design notes :
+    //   * gRPC code = ABORTED — deliberately NOT FAILED_PRECONDITION (which
+    //     `classify_grpc_status` buckets as safety_violation) and NOT
+    //     INTERNAL (which conflates non-convergence with bugs).
+    //   * The guard sits AFTER the metrics block so the
+    //     `convergence="max_iters"` histograms keep counting.
+    //   * This is a RESPONSE-layer gate.  Do NOT implement it via
+    //     `MetaSwarmBuilder::strict(true)` : strict also flips the engine's
+    //     H1 pre-check, and `RemoteParticipant::verify_non_expansive` still
+    //     returns `Stub` (no certificate on the wire yet) — strict would
+    //     brick every served Iterate.  Wire-level certificates are the
+    //     Couche 3 M4 milestone.
+    //   * `StepOnce` (max_iters = 1, definitionally non-converged) is exempt.
+    //   * The policy is RESOLVED, not read raw : unstated defaults to `true`
+    //     as soon as a participant carries an efe-core `controller` block (a
+    //     mock is `κ·x`, `κ < 1` — it converges by construction, so a flat
+    //     `false` default left the guard off exactly where it was needed).
+    if manifest.require_convergence() && result.stop_reason != StopReason::Converged {
+        warn!(
+            iterations = result.iterations,
+            final_residual = result.final_residual,
+            stop_reason = ?result.stop_reason,
+            "Iterate did NOT converge and require_convergence is set — failing closed",
+        );
+        // Dire D'OÙ vient la politique : sans cela, un opérateur dont le YAML ne
+        // contient pas le champ chercherait en vain un réglage qu'il n'a pas écrit.
+        let origin = if manifest.iteration.require_convergence.is_some() {
+            "iteration.require_convergence is set"
+        } else {
+            "iteration.require_convergence is unstated and defaults to STRICT \
+             because this manifest serves an efe-core participant"
+        };
+        return Err(Status::aborted(format!(
+            "convergence failed after {} iterations (final_residual = {:e}, \
+             tolerance = {:e}) — {origin} : a non-converged iterate is never \
+             returned as a consensus",
+            result.iterations, result.final_residual, validated.tolerance,
+        )));
+    }
+
+    // ── Couche 3 · 3a — publier l'ancre AVANT de rendre le reçu ─────────────────────────────
+    //
+    // L'ordre est le fond du dispositif : un auditeur qui reçoit un bundle doit pouvoir en trouver
+    // l'ancre. Publier après l'avoir servi laisserait une fenêtre où le reçu circule sans
+    // revendication publiée — exactement l'intervalle qu'une troncature exploiterait.
+    //
+    // Un échec de publication FAIT ÉCHOUER l'appel. C'est délibéré : servir un reçu en taisant que
+    // son ancre n'a pas été écrite enverrait l'auditeur chercher une ligne qui n'existe pas, et il
+    // en conclurait — à tort — que le reçu est falsifié. Mieux vaut refuser la ronde que produire
+    // cette accusation.
+    if let (Some(log), Some(prov), Some(pcfg)) =
+        (state.anchor_log.as_ref(), provenance.as_ref(), state.provenance.as_ref())
+    {
+        let derived_at = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| u64::try_from(d.as_millis()).unwrap_or(u64::MAX))
+            .unwrap_or(0);
+        let anchor = provenance_dag::meta_anchor_of(
+            &prov.meta_id,
+            &pcfg.tenant().as_uuid().to_string(),
+            &prov.root,
+            prov.steps.len(),
+            derived_at,
+        )
+        .map_err(|e| Status::internal(format!("ancre inconstructible — {e}")))?;
+        log.publish(&anchor).map_err(|e| {
+            error!(error = %e, path = %log.path().display(), "ancre NON publiée");
+            Status::internal(format!(
+                "ancre NON publiée dans {} — {e} ; la ronde est refusée plutôt que servie sans \
+                 revendication publiée",
+                log.path().display(),
+            ))
+        })?;
+        debug!(root = %prov.root, n_steps = prov.steps.len(), "ancre publiée");
+    }
+
+    let response = build_response(
+        &result,
+        start.elapsed(),
+        provenance.as_ref(),
+        req_inner.include_provenance_bundle,
+    );
 
     info!(
         iterations = result.iterations,
@@ -207,6 +308,17 @@ pub async fn run_iterate(
 
 /// Run a `StepOnce` RPC end-to-end.  Implementation : invoke
 /// `Iterate` with `max_iters = 1`.
+///
+/// **`iteration.require_convergence` deliberately does NOT gate `StepOnce`.**
+/// That manifest flag fails an *Iterate* closed when the multi-round loop stops
+/// without reaching `Converged` (see [`run_iterate`]).  `StepOnce` is a
+/// single-Φ primitive : with `max_iters = 1` a run essentially never reports
+/// `Converged`, so applying the whole-Iterate gate here would abort EVERY
+/// `StepOnce` the moment an operator set `require_convergence` — bricking the
+/// primitive.  A `StepOnce` caller owns its own stopping logic (it reads
+/// `residual` off the response) ; the fail-closed convergence contract is an
+/// `Iterate`-level guarantee only.  (The response type carries no `stop_reason`
+/// precisely because a single step has no convergence verdict to report.)
 #[instrument(skip(state, _req, cancel))]
 pub async fn run_step_once(
     state: ControllerState,
@@ -410,11 +522,19 @@ fn validate_expected_against_manifest(
         // Reject NaN explicitly : a NaN client-side kappa would slip
         // through `(NaN).abs() > 1e-6 == false` and reach Phase-1's
         // `MetaSwarmBuilder` as a hidden invariant violation.
-        let diff = (e.kappa - m.kappa).abs();
+        //
+        // Couche 3 M1.d : manifest kappa is an Option (absent on efe-core
+        // rows).  An efe-core row advertises the sentinel kappa = 0.0 on the
+        // wire (see `ParticipantState::descriptor`), so the expectation
+        // check compares against `unwrap_or(0.0)` — the engine identity
+        // itself is checked via the manifest `controller` block presence,
+        // not via the deprecated mock constant.
+        let manifest_kappa = m.kappa.unwrap_or(0.0);
+        let diff = (e.kappa - manifest_kappa).abs();
         if diff.is_nan() || diff > 1.0e-6 {
             return Err(ServerError::Config(format!(
-                "expected_participants[{i}].kappa = {} but manifest has {} (or NaN sent)",
-                e.kappa, m.kappa,
+                "expected_participants[{i}].kappa = {} but manifest has {manifest_kappa} (or NaN sent)",
+                e.kappa,
             )));
         }
     }
@@ -648,7 +768,7 @@ fn build_meta_swarm(
             .pull_for(pid, Box::new(pull));
     }
 
-    builder = builder.meta_operator(Box::new(UniformMetaOp::new(meta_dim)));
+    builder = builder.meta_operator(Box::new(wired_meta_operator(meta_dim)));
 
     match &manifest.meta.safety {
         SafetyManifest::Box { radius } => {
@@ -673,8 +793,91 @@ fn build_meta_swarm(
         .map_err(|e| ServerError::Manifest(format!("MetaSwarm build failed: {e}")))
 }
 
-fn build_response(result: &MetaSwarmResult, elapsed: Duration) -> IterateResponse {
-    use efe_meta_swarm_proto::meta_swarm::StopReason as ProtoStop;
+/// **Couche 3 v4 — la liaison du run : qui a contribué, sous quelle config, sous quelle règle.**
+///
+/// Jusqu'en v3, le reçu scellait des `vote_hashes` **purement positionnels** : il prouvait « la
+/// position 1 a contribué l'entrée *h* au pas *k* » sans jamais pouvoir nommer l'agent derrière
+/// cette position, sa version, ni la règle qui a combiné les votes. Un auditeur procurement
+/// demande exactement ces trois choses ; c'est la différence entre une trace mathématique et un
+/// enregistrement auditable.
+///
+/// **L'ordre est porteur de sens** : il doit être celui dans lequel les participants ont été
+/// connectés et votent, donc celui de `manifest.participants` — le même que `build_meta_swarm`
+/// consomme. Un ordre différent rattacherait les votes aux mauvaises identités, ce qui serait pire
+/// que pas d'identités du tout.
+///
+/// **Ce qui est scellé est DÉCLARÉ, pas RAPPORTÉ.** Le `config_hash` vient du bloc `controller` du
+/// manifeste, c'est-à-dire de la configuration *demandée* — pas de celle que le participant a *dit*
+/// servir. Recouper les deux exige un certificat sur le fil, qui est le jalon **M4** ; jusque-là,
+/// prétendre attester la version réellement exécutée serait une sur-vente. Un participant mock n'a
+/// pas de configuration à attester : sa colonne reste vide, ce qui se lit comme tel.
+///
+/// Rend `None` si le manifeste ne déclare aucun participant — un reçu qui lierait une liste vide
+/// n'attesterait rien et vaut mieux absent que décoratif.
+fn build_run_binding(
+    manifest: &Manifest,
+    validated: &ValidatedIterateRequest,
+) -> Option<efe_meta_swarm::provenance::RunBinding> {
+    if manifest.participants.is_empty() {
+        return None;
+    }
+    let ids: Vec<String> = manifest.participants.iter().map(|p| p.id.clone()).collect();
+    let hashes: Vec<String> = manifest
+        .participants
+        .iter()
+        .map(|p| p.controller.as_ref().map_or_else(String::new, crate::manifest::ControllerManifest::config_hash))
+        .collect();
+
+    // `OPERATOR_ID` doit suivre l'opérateur RÉELLEMENT câblé dans `build_meta_swarm`. Les deux
+    // sont volontairement à quelques lignes l'un de l'autre : sceller le nom d'une règle qui n'est
+    // pas celle appliquée serait exactement le mensonge que ce champ existe pour empêcher.
+    efe_meta_swarm::provenance::RunBinding::try_new(
+        ids,
+        hashes,
+        OPERATOR_ID,
+        validated.alpha_default,
+        validated.coupling_gamma,
+    )
+    .map_err(|e| {
+        // Une liaison mal formée n'interrompt PAS la ronde : le consensus reste servi, sans reçu
+        // nominatif. Le contraire — refuser de servir parce qu'un champ d'audit est mal formé —
+        // ferait dépendre la disponibilité d'un détail de traçabilité.
+        warn!(error = %e, "liaison de provenance mal formée — ronde servie SANS reçu nominatif");
+    })
+    .ok()
+}
+
+/// Identité de la règle d'agrégation scellée dans la liaison.
+///
+/// Ce n'est PAS une étiquette libre : c'est le **nom porté par l'opérateur réellement câblé**,
+/// parce que [`wired_meta_operator`] le lui donne. La dérive « on scelle *uniform* mais on
+/// applique autre chose » devient donc structurellement impossible — il n'y a qu'un site de
+/// construction, et il lit cette constante.
+const OPERATOR_ID: &str = "uniform";
+
+/// **Le seul endroit où l'opérateur d'agrégation est construit.**
+///
+/// Extrait de [`build_meta_swarm`] pour que le nom scellé dans la liaison et le nom de
+/// l'opérateur appliqué soient **la même valeur**, et non deux constantes qu'on jurerait garder
+/// synchronisées. `UniformMetaOp::new` aurait nommé l'opérateur `UniformMetaOp(dim=N)` — un nom
+/// qui bouge avec la dimension et qui n'aurait rien voulu dire dans un reçu.
+fn wired_meta_operator(meta_dim: usize) -> UniformMetaOp {
+    UniformMetaOp::with_name(OPERATOR_ID, meta_dim)
+}
+
+/// Couche 3 M2 — projette le reçu sur le fil.
+///
+/// `provenance = None` (contrôleur sans provenance) ⟹ root **vide** et bundle absent. C'est le
+/// signal honnête « pas de reçu » : jamais un placeholder, jamais un root de complaisance qu'un
+/// consommateur pourrait prendre pour une preuve. Le bundle n'accompagne le root que si le client
+/// l'a **demandé** — il coûte O(itérations × dim) et personne ne devrait le payer sans l'avoir voulu.
+fn build_response(
+    result: &MetaSwarmResult,
+    elapsed: Duration,
+    provenance: Option<&efe_meta_swarm::provenance::MetaProvenance>,
+    include_bundle: bool,
+) -> IterateResponse {
+    use efe_meta_swarm_proto::meta_swarm::{MetaProvenanceBundle, StopReason as ProtoStop};
 
     // Phase-1 StopReason → proto StopReason mapping.
     let stop_reason = match result.stop_reason {
@@ -682,6 +885,15 @@ fn build_response(result: &MetaSwarmResult, elapsed: Duration) -> IterateRespons
         StopReason::MaxItersHit => ProtoStop::MaxIters,
         StopReason::Error => ProtoStop::ParticipantDown, // closest semantic
     } as i32;
+
+    let meta_provenance_root = provenance.map(|p| p.root.clone()).unwrap_or_default();
+    let meta_provenance_bundle = provenance.filter(|_| include_bundle).map(|p| MetaProvenanceBundle {
+        // Les DEUX artefacts viennent des mêmes producteurs d'octets que `write_bundle` : ce qui
+        // part sur le fil est byte-identique à ce qu'un opérateur aurait écrit sur disque, donc
+        // re-prouvable par la même commande sans adaptation.
+        steps_jsonl: p.steps_jsonl(),
+        manifest_json: p.manifest_json(),
+    });
 
     IterateResponse {
         iterations: u32::try_from(result.iterations).unwrap_or(u32::MAX),
@@ -695,6 +907,8 @@ fn build_response(result: &MetaSwarmResult, elapsed: Duration) -> IterateRespons
         stop_reason,
         wall_us: u64::try_from(elapsed.as_micros()).unwrap_or(u64::MAX),
         trace_id: String::new(),
+        meta_provenance_root,
+        meta_provenance_bundle,
     }
 }
 
@@ -783,9 +997,10 @@ mod tests {
             participants: vec![ParticipantManifest {
                 id: "p-1".into(),
                 dim: 8,
-                kappa: 0.6,
-                seed: 1,
+                kappa: Some(0.6),
+                seed: Some(1),
                 blas_backend: "none".into(),
+                controller: None,
             }],
             iteration: IterationManifest::default(),
         }
@@ -809,6 +1024,8 @@ mod tests {
             }),
             initial_states: vec![],
             traceparent: String::new(),
+            // M2 : la plupart des tests d'unité n'ont pas besoin du reçu complet.
+            include_provenance_bundle: false,
         }
     }
 
@@ -890,6 +1107,7 @@ mod tests {
             build_sha: String::new(),
             blas_backend: "none".into(),
             features: vec![],
+            config_hash: None,
         }];
         let err = validate_request(&r, &m).unwrap_err();
         assert!(matches!(err, ServerError::Config(ref msg) if msg.contains("kappa")));

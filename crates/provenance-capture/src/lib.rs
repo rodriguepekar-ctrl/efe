@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: UNLICENSED
-//! # `provenance-capture` — Kovant P1 / S1 : la couche de **capture** (taps + store)
+//! # `provenance-capture` — Provenance P1 / S1 : la couche de **capture** (taps + store)
 //!
 //! Produit un **vrai DAG scellé** sur le runtime, via le contrat de S0 ([`provenance_dag`]). Trois
 //! frontières y vivent :

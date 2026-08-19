@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: UNLICENSED
-# Kovant P1 / S1 — provenance-capture : la couche de CAPTURE (taps + store) qui produit un vrai DAG
+# Provenance P1 / S1 — provenance-capture : la couche de CAPTURE (taps + store) qui produit un vrai DAG
 # scellé sur le runtime, via le contrat de S0 (provenance-dag). Souveraine : garde d'egress, store local.
 # Dépend UNIQUEMENT de provenance-dag (lui-même zéro dépendance crypto) → la chaîne de confiance reste mince.
 [package]
@@ -10,7 +10,7 @@ rust-version = { workspace = true }
 authors = { workspace = true }
 license = { workspace = true }
 repository = { workspace = true }
-description = "Kovant P1/S1 — la couche de capture : garde de souveraineté (egress refusé), les trois taps (appel LLM→acte, message→arête, outil/retrieval→évidence, humain→supervision) qui convertissent les événements du runtime en nœuds scellés, et le store local re-prouvable (append + requête par cas/rôle). Le cas est dans le node_id (auditable), sans modifier le contrat S0."
+description = "Provenance P1/S1 — la couche de capture : garde de souveraineté (egress refusé), les trois taps (appel LLM→acte, message→arête, outil/retrieval→évidence, humain→supervision) qui convertissent les événements du runtime en nœuds scellés, et le store local re-prouvable (append + requête par cas/rôle). Le cas est dans le node_id (auditable), sans modifier le contrat S0."
 publish = false
 
 [lib]

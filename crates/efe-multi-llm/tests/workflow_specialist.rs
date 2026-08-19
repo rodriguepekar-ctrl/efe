@@ -92,7 +92,7 @@ async fn specialist_records_audit_hash() {
         max_total_latency: Duration::from_secs(5),
     };
     let resp = run_specialist(&coord, req).await.unwrap();
-    assert!(resp.audit_chain_hash.len() >= 16);
+    assert!(resp.swarm_id_hex.len() >= 16);
 }
 
 #[tokio::test]

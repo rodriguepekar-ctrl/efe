@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: UNLICENSED
-# Kovant P1 / S4 — verify-mini : le vérifieur forensic à arbre de dépendances LITTÉRALEMENT VIDE.
+# Provenance P1 / S4 — verify-mini : le vérifieur forensic à arbre de dépendances LITTÉRALEMENT VIDE.
 # Identique en contrat à provenance-verify (mêmes args, mêmes codes de sortie, même --json), MAIS sans
 # AUCUNE dépendance : SHA-256 (FIPS 180-4) + HMAC (RFC 2104) std-only embarqués, un parseur JSONL FAIT MAIN
 # (pas de serde), et l'encodage canonique binaire ré-implémenté. `cargo tree` (edges normales) = verify-mini
@@ -14,7 +14,7 @@ rust-version = { workspace = true }
 authors = { workspace = true }
 license = { workspace = true }
 repository = { workspace = true }
-description = "Kovant P1/S4 — verify-mini : le vérifieur forensic re-prouvable à arbre de dépendances LITTÉRALEMENT vide (std-only). SHA-256/HMAC faits main + parseur JSONL fait main (pas de serde) + encodage canonique ré-implémenté. Mêmes args/codes/--json que provenance-verify ; fidélité à S0 prouvée par cross-check (root octet-à-octet) en dev-dep. Le « trust-only-the-math » de S4, sans astérisque."
+description = "Provenance P1/S4 — verify-mini : le vérifieur forensic re-prouvable à arbre de dépendances LITTÉRALEMENT vide (std-only). SHA-256/HMAC faits main + parseur JSONL fait main (pas de serde) + encodage canonique ré-implémenté. Mêmes args/codes/--json que provenance-verify ; fidélité à S0 prouvée par cross-check (root octet-à-octet) en dev-dep. Le « trust-only-the-math » de S4, sans astérisque."
 publish = false
 
 [[bin]]

@@ -11,7 +11,14 @@ use std::process::exit;
 use verify_meta_mini::json::parse_object;
 use verify_meta_mini::verify::{from_hex, from_hex32, to_hex, verify, Outcome, Step};
 
-const USAGE: &str = "usage : verify_meta_mini <meta_steps.jsonl> <meta_manifest.json> --key-hex <64hex> [--json]";
+const USAGE: &str = "usage : verify_meta_mini <meta_steps.jsonl> <meta_manifest.json> \
+[--key-hex <64hex>] [--anchor <journal>] [--json]\n\
+\n\
+  --key-hex   RE-PROUVE la chaîne (exige la clé du tenant).\n\
+  --anchor    RECOUPE la racine et le nombre de pas avec le journal publié.\n\
+              Ne demande AUCUN SECRET : c\'est ce qui permet à un tiers sans clé\n\
+              de constater une TRONCATURE, que la re-preuve seule ne voit pas.\n\
+  Au moins l\'un des deux est requis.";
 
 fn main() {
     exit(real_main(&std::env::args().collect::<Vec<_>>()));
@@ -19,12 +26,17 @@ fn main() {
 
 fn real_main(args: &[String]) -> i32 {
     let (mut steps_path, mut manifest_path, mut key_hex, mut json) = (None, None, None, false);
+    let mut anchor_path: Option<String> = None;
     let mut i = 1;
     while i < args.len() {
         match args[i].as_str() {
             "--key-hex" => {
                 i += 1;
                 key_hex = args.get(i).cloned();
+            }
+            "--anchor" => {
+                i += 1;
+                anchor_path = args.get(i).cloned();
             }
             "--json" => json = true,
             "-h" | "--help" => {
@@ -40,19 +52,33 @@ fn real_main(args: &[String]) -> i32 {
         }
         i += 1;
     }
-    let (steps_path, manifest_path, key_hex) = match (steps_path, manifest_path, key_hex) {
-        (Some(a), Some(b), Some(k)) => (a, b, k),
+    let (steps_path, manifest_path) = match (steps_path, manifest_path) {
+        (Some(a), Some(b)) => (a, b),
         _ => {
             eprintln!("erreur : arguments manquants\n\n{USAGE}");
             return 2;
         }
     };
-    let key = match from_hex(&key_hex) {
-        Some(k) if !k.is_empty() => k,
-        _ => {
-            eprintln!("erreur : --key-hex invalide (chaîne hex non vide attendue)");
-            return 2;
+    // Sans clé ET sans ancre, il n'y a rien à constater : refuser vaut mieux que rendre un « OK »
+    // qui ne reposerait sur aucun contrôle.
+    if key_hex.is_none() && anchor_path.is_none() {
+        eprintln!("erreur : ni --key-hex ni --anchor — aucun contrôle à effectuer\n\n{USAGE}");
+        return 2;
+    }
+    // Clé absente ⟹ on ne re-prouvera pas la chaîne, on se limitera au recoupement d'ancre. Le
+    // verdict le dira EXPLICITEMENT plutôt que de laisser croire à une vérification complète.
+    let key_hex = key_hex.unwrap_or_default();
+    let reprove = !key_hex.is_empty();
+    let key = if reprove {
+        match from_hex(&key_hex) {
+            Some(k) if !k.is_empty() => k,
+            _ => {
+                eprintln!("erreur : --key-hex invalide (chaîne hex non vide attendue)");
+                return 2;
+            }
         }
+    } else {
+        Vec::new()
     };
 
     // Les pas (JSONL, une SealedMetaStep par ligne).
@@ -109,6 +135,75 @@ fn real_main(args: &[String]) -> i32 {
     if n_steps != steps.len() {
         eprintln!("erreur : manifeste incohérent (n_steps={n_steps} ≠ {} lignes)", steps.len());
         return 2;
+    }
+
+    // **v4** — recouper la LIAISON (qui / quelle config / quelle règle) AVANT la chaîne.
+    //
+    // Sans ce contrôle, un manifeste dont on aurait réécrit les identités passerait la re-preuve
+    // — qui ne regarde que le condensé scellé — et l'auditeur lirait des noms falsifiés sous un
+    // root parfaitement valide. C'est le contrôle qui donne sa valeur au champ.
+    match verify_meta_mini::verify::Binding::from_manifest(&m) {
+        Ok(binding) => {
+            if let Err(e) = verify_meta_mini::verify::check_binding(&steps, binding.as_ref()) {
+                eprintln!("erreur : {e}");
+                return 1;
+            }
+        }
+        Err(e) => {
+            eprintln!("erreur : {e}");
+            return 2;
+        }
+    }
+
+    // ── Couche 3 · 3a — le recoupement d'ANCRE, qui ne demande AUCUN SECRET ─────────────────
+    //
+    // Il vient AVANT la re-preuve parce qu'il attrape ce qu'elle ne voit pas : une TRONCATURE
+    // laisse une chaîne parfaitement intègre, et seule une revendication publiée ailleurs la
+    // révèle. Un tiers sans clé s'arrête ici, et cela lui apprend déjà quelque chose.
+    if let Some(path) = &anchor_path {
+        let journal = match std::fs::read_to_string(path) {
+            Ok(j) => j,
+            Err(e) => {
+                eprintln!("erreur : journal d'ancres « {path} » illisible : {e}");
+                return 2;
+            }
+        };
+        match verify_meta_mini::verify::find_anchor(&journal, &meta_id) {
+            Err(e) => {
+                eprintln!("erreur : {e}");
+                return 2;
+            }
+            Ok(None) => {
+                // Absence d'ancre : ce n'est PAS un échec d'intégrité, c'est une garantie qu'on
+                // n'a pas. Le dire, plutôt que de rendre un vert qui la laisserait supposer.
+                eprintln!(
+                    "⚠ AUCUNE ANCRE publiée pour « {meta_id} » dans {path} — la troncature reste \
+                     indétectable sans la clé."
+                );
+            }
+            Ok(Some(anchor)) => {
+                let root_hex = to_hex(&expected_root);
+                if let Err(why) =
+                    verify_meta_mini::verify::check_against_anchor(&root_hex, n_steps, &anchor)
+                {
+                    eprintln!("✗ ANCRE DISCORDANTE — {why}");
+                    return 1;
+                }
+                println!(
+                    "✓ ANCRE CONCORDANTE — racine et nombre de pas ({n_steps}) conformes à la \
+                     revendication publiée, **sans clé**."
+                );
+            }
+        }
+        // Sans clé, le recoupement d'ancre est TOUT ce qu'on peut dire. Le dire, et s'arrêter là :
+        // laisser croire à une vérification complète serait le contraire du but.
+        if !reprove {
+            println!(
+                "  (chaîne NON re-prouvée : aucune --key-hex fournie. L'intégrité des pas n'est \
+                 donc PAS attestée ici — seule la concordance avec l'ancre l'est.)"
+            );
+            return 0;
+        }
     }
 
     let outcome = verify(&steps, &key, &expected_root);

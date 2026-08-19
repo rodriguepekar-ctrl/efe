@@ -56,7 +56,7 @@ Cet artefact réglementaire (`reg/{fw}.md`) n'est **pas** une assertion qu'il fa
 - Il **n'est pas** un prononcé de conformité : **outillé ≠ conforme**. La conformité est une conclusion\n\
   juridique (classification du système, conseil du client, obligations organisationnelles que le DAG ne\n\
   produit pas — voir les exigences marquées **HORS-PÉRIMÈTRE-DAG**, qui sont **déclarées, jamais tues**).\n\
-- La **lecture** (le mapping) est une **revendication versionnée** de Kovant, datée — pas une vérité.\n\
+- La **lecture** (le mapping) est une **revendication versionnée** de l'éditeur, datée — pas une vérité.\n\
   Elle voyage ici pour que vous puissiez la **lire, la contester, et la re-jouer**.\n",
         mapping.version, mapping.version, artifact.manifest_root, artifact.mapping_set_hash
     )

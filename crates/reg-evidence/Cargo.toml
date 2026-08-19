@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: UNLICENSED
-# Kovant P1 / S6 — reg-evidence : le MOTEUR D'ÉVIDENCE réglementaire (gabarits EU AI Act / GDPR / CSDDD-LkSG).
+# Provenance P1 / S6 — reg-evidence : le MOTEUR D'ÉVIDENCE réglementaire (gabarits EU AI Act / GDPR / CSDDD-LkSG).
 # Trust-light : il LIT le DAG re-prouvé (S0) et en DÉRIVE des artefacts d'évidence — une VUE re-dérivable,
 # jamais un verdict de conformité (outillé ≠ conforme). AUCUNE crypto neuve : la dérivation re-prouve via
 # provenance-dag (refuse le non-prouvé). Le mapping est une revendication VERSIONNÉE + HACHÉE qui voyage ;
@@ -13,7 +13,7 @@ rust-version = { workspace = true }
 authors = { workspace = true }
 license = { workspace = true }
 repository = { workspace = true }
-description = "Kovant P1/S6 — reg-evidence : dérive du DAG scellé re-prouvé les artefacts d'évidence réglementaire (EU AI Act art. 12/13/14/26, GDPR art. 5/22/30, CSDDD/LkSG). Mapping versionné+haché qui voyage, couverture honnête (montre ses trous), artefact = VUE re-dérivable sans champ « conforme » (outillé ≠ conforme). Trust-light : re-prouve via provenance-dag, zéro crypto neuve."
+description = "Provenance P1/S6 — reg-evidence : dérive du DAG scellé re-prouvé les artefacts d'évidence réglementaire (EU AI Act art. 12/13/14/26, GDPR art. 5/22/30, CSDDD/LkSG). Mapping versionné+haché qui voyage, couverture honnête (montre ses trous), artefact = VUE re-dérivable sans champ « conforme » (outillé ≠ conforme). Trust-light : re-prouve via provenance-dag, zéro crypto neuve."
 publish = false
 
 [dependencies]

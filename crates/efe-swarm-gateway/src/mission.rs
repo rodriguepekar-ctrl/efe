@@ -397,6 +397,80 @@ mod tests {
         assert!(!recs[0].compute_attestation.is_remote(), "loopback ⇒ pas d'egress (R2, pas R4)");
     }
 
+    /// **M1 « Test #4 » — le rejet demandé par la DoD ne peut PAS exister ; voici ce qui le remplace.**
+    ///
+    /// La feuille de route exigeait « un record dont l'endpoint est non-local avec un estampillage
+    /// `< R4` est REJETÉ ». Aucun vérifieur ne peut tenir cette promesse, et la raison est
+    /// structurelle : `R1LocalDeterministic` et `R2LocalWitnessed` **ne portent aucun endpoint**
+    /// (seuls `R3RemoteCosigned` et `R4RemoteChannel` en portent). Un record qui mentirait — « je
+    /// suis local » alors que les octets sont partis chez un tiers — ne contient donc rien à
+    /// confronter : la contradiction est **indétectable a posteriori**. `HeldStrength` rapporte le
+    /// maillon faible, il ne rejette rien ; et le seul écart revendiqué↔vérifié modélisé est
+    /// `CosignAnomaly`, qui exige justement un endpoint pour exister.
+    ///
+    /// L'invariant est donc posé **à la production** : `build_record` estampille depuis l'endpoint
+    /// OBSERVÉ du provider, jamais depuis une revendication de l'appelant — un non-local ne PEUT
+    /// pas naître sous-estampillé. Toute sa sûreté se réduit alors à un unique prédicat,
+    /// `is_local_endpoint`. C'est lui qu'on épingle ici, à la frontière, avec les formes qui ont
+    /// DÉJÀ produit une dérive SSRF dans ce dépôt (fragment, requête, userinfo, backslash, octal).
+    ///
+    /// Le volet local n'est pas décoratif : c'est le **contrôle négatif**. Sans lui, un
+    /// `is_local_endpoint` renvoyant `false` partout passerait la moitié distante en entier.
+    #[tokio::test]
+    async fn no_remote_endpoint_can_be_understamped_at_the_classification_boundary() {
+        // (endpoint, doit_être_distant, pourquoi)
+        let cases: &[(&str, bool, &str)] = &[
+            // — DISTANTS : tout ce qui n'est pas un loopback prouvé ⇒ R4 keyed.
+            ("https://api.anthropic.com/v1/messages", true, "tiers nominal"),
+            ("http://evil.com#@127.0.0.1/", true, "fragment : l'hôte réel est evil.com"),
+            ("http://evil.com?x=@127.0.0.1", true, "requête : l'hôte réel est evil.com"),
+            ("http://127.0.0.1@evil.com/", true, "userinfo : le loopback est l'utilisateur, pas l'hôte"),
+            ("http://evil.com\\@127.0.0.1/", true, "backslash : WHATWG ≠ RFC ⇒ fail-closed"),
+            ("http://127.0.0.1.evil.com/", true, "suffixe : sous-domaine d'un tiers"),
+            ("http://localhost.evil.com/", true, "suffixe : « localhost » n'est qu'une étiquette"),
+            ("http://2130706433/", true, "entier décimal : jamais accepté comme loopback"),
+            ("http://0177.0.0.1/", true, "octal : le parseur d'octets reste strict"),
+            ("http://[::ffff:127.0.0.1]/", true, "IPv4-mappé : refusé par prudence"),
+            // — LOCAUX : le CONTRÔLE NÉGATIF, sans quoi ce test serait vide de sens.
+            ("http://127.0.0.1:11434/api/generate", false, "loopback nominal"),
+            ("http://LOCALHOST:8080/v1", false, "casse normalisée"),
+            ("http://localhost./v1", false, "point final de FQDN"),
+            ("http://[::1]:8080/v1", false, "loopback IPv6"),
+            ("http://127.9.9.9/v1", false, "tout 127.0.0.0/8 est loopback"),
+        ];
+
+        for (endpoint, expect_remote, why) in cases {
+            let p = ProvenanceProvider::wrap(Arc::new(FakeProvider {
+                id: "probe".into(),
+                endpoint: Some((*endpoint).into()),
+                fail: false,
+            }));
+            let s = scope();
+            let sink = s.sink.clone();
+            scoped(s, async {
+                let _ = p.call(LlmCall::simple("x", 8)).await;
+            })
+            .await;
+            let recs = sink.drain();
+            let att = &recs[0].compute_attestation;
+
+            if *expect_remote {
+                // Le cœur de #4 : jamais R2, jamais Legacy — R4 keyed, sans exception.
+                assert!(
+                    matches!(att, ComputeAttestation::R4RemoteChannel { keyed: true, .. }),
+                    "SOUS-ESTAMPILLAGE d'un endpoint distant « {endpoint} » ({why}) : {att:?}"
+                );
+                assert!(att.is_remote(), "« {endpoint} » doit compter comme egress");
+            } else {
+                assert!(
+                    matches!(att, ComputeAttestation::R2LocalWitnessed),
+                    "loopback « {endpoint} » ({why}) devrait être R2 : {att:?}"
+                );
+                assert!(!att.is_remote(), "« {endpoint} » ne quitte pas la boîte");
+            }
+        }
+    }
+
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn capture_survives_bridge_fanout_including_failures() {
         // LE test qui compte : la capture doit survivre au **vrai** chemin

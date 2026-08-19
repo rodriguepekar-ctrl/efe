@@ -82,7 +82,10 @@ pub use cancellation::{CancellationToken, CancellationReason};
 pub use decompose::{Decomposer, DecomposerMode, SubTask};
 pub use error::{MultiLlmError, MultiLlmResult};
 pub use events_ext::Phase3EventExt;
-pub use reformulator_ext::CanonicalReformulator;
+pub use reformulator_ext::{
+    reformulator_for, CanonicalReformulator, Reformulated, ReformulationHop, Reformulator,
+    ReformulatorEngine, SlmHopAudit, SlmReformulator, SLM_REFORMULATOR_CIRCUIT_KEY,
+};
 pub use request::{
     CascadeRequest, CascadeResponse, DebateRequest, DebateResponse, RelayRequest,
     RelayResponse, SpecialistRequest, SpecialistResponse, VoteMode, Vote3LlmRequest,

@@ -130,6 +130,43 @@ struct HeldStrengthView {
     any_remote: bool,
 }
 
+/// **Fil B.3** — vue agrégée des hops de reformulation d'un run (dérivée de la
+/// sortie SCELLÉE, jamais recalculée ailleurs). `slm_mediated` n'est vrai que
+/// si TOUS les hops sont `SLM` — la revendication « relais médié par le petit
+/// modèle » (§6 Fil B), gardée par construction : une seule dégradation la fait
+/// tomber, visiblement.
+#[derive(Serialize)]
+struct ReformulationView {
+    hops: usize,
+    slm: usize,
+    rule: usize,
+    degraded: usize,
+    slm_mediated: bool,
+}
+
+/// Dérive la vue depuis la sortie de mission (champ `reformulation_hops` des
+/// missions vote/relay/debate). `None` si la mission n'en porte pas
+/// (specialist/cascade, ou run antérieur à B.3).
+fn reformulation_view(output: &Value) -> Option<ReformulationView> {
+    let hops = output.get("reformulation_hops")?.as_array()?;
+    let (mut slm, mut rule, mut degraded) = (0usize, 0usize, 0usize);
+    for h in hops {
+        match h.get("engine").and_then(Value::as_str) {
+            Some("SLM") => slm += 1,
+            Some("RULE") => rule += 1,
+            Some("SLM_DEGRADED_TO_RULE") => degraded += 1,
+            _ => {}
+        }
+    }
+    Some(ReformulationView {
+        hops: hops.len(),
+        slm,
+        rule,
+        degraded,
+        slm_mediated: !hops.is_empty() && slm == hops.len(),
+    })
+}
+
 /// Réponse 200 d'une mission servie — `held_strength` vit ICI (PAS dans `N17VerifyView`, qui
 /// est partagé avec `verify.rs`/`replay.rs` et ne peut pas gagner de champ).
 #[derive(Serialize)]
@@ -139,6 +176,10 @@ struct LlmMissionResponse {
     provenance_root: Option<String>,
     n17_root: Option<String>,
     held: HeldStrengthView,
+    /// **Fil B.3** — hops de reformulation estampillés (absent si la mission
+    /// n'en produit pas). Le détail par hop vit dans `output.reformulation_hops`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    reformulation: Option<ReformulationView>,
 }
 
 /// Recharge le run scellé et le re-prouve (offline) pour surfacer roots + `held_strength`.
@@ -150,6 +191,7 @@ async fn mission_response(s: &SwarmGatewayState, run_id: Uuid, tenant: &str, out
         .ok_or_else(|| GatewayError::Internal("run scellé introuvable après persistance".into()))?;
     let key = s.derive_key(tenant)?;
     let v = verify_run_offline(&stored.records, &stored.llm_records, &stored.n17_leaf_bytes(), stored.n17_root_bytes(), &key);
+    let reformulation = reformulation_view(&output);
     let body = LlmMissionResponse {
         run_id,
         output,
@@ -160,6 +202,7 @@ async fn mission_response(s: &SwarmGatewayState, run_id: Uuid, tenant: &str, out
             weakest_label: v.held_strength.weakest_label,
             any_remote: v.held_strength.any_remote,
         },
+        reformulation,
     };
     Ok((StatusCode::OK, Json(body)).into_response())
 }
@@ -173,11 +216,46 @@ fn hash_text(t: &str) -> String {
 /// Le cap vit en **microcents** (`TenantPolicies`), la requête en **cents** — conversion exacte
 /// ×1000 (1 µ¢ = 1/1000 ¢, cf. `savings_report.rs`). Cap absent (`None`) ⟹ no-op. Ferme la
 /// DoS-coût : sans ce clamp, `req.max_budget_cents` (u32, client-contrôlé) va jusqu'à ~42 M$.
+/// **M4 (§2.1)** — le **plafond SERVEUR** par requête, en cents. Env `EFE_LLM_MAX_BUDGET_CENTS`,
+/// défaut **10 000 c (100 $)**.
+///
+/// Il existe parce que le cap *tenant* ne suffit pas : un tenant allowlisté est construit avec
+/// `TenantPolicies::open(tid)`, donc `max_cost_microcents_per_query = None`, et `cap_microcents`
+/// rend alors le budget **inchangé**. Sans plafond serveur, `req.max_budget_cents` — un `u32`
+/// **contrôlé par le client** — pouvait atteindre `u32::MAX`, soit ≈ **42,9 M$ par requête**, sur
+/// le seul chemin qui dépense de l'argent réel.
+///
+/// Un client ne dimensionne pas la dépense d'autrui : même patron que `max_width_cap` (ADR-014),
+/// où le serveur borne un champ que le DTO laisse ouvert.
+pub fn server_budget_ceiling_cents() -> u32 {
+    std::env::var("EFE_LLM_MAX_BUDGET_CENTS")
+        .ok()
+        .and_then(|s| s.parse::<u32>().ok())
+        .unwrap_or(10_000)
+        .max(1) // un plafond à 0 rendrait toute mission impossible ; on refuse de se tirer dessus
+}
+
+/// **M4 (§2.1)** — borne le budget d'une requête : cap du tenant **puis** plafond serveur.
+///
+/// L'ordre et l'inconditionnalité comptent, et c'est tout le correctif :
+///
+/// 1. **le cap du tenant**, s'il en a un — la politique la plus spécifique gagne d'abord ;
+/// 2. **le plafond serveur, TOUJOURS** — y compris quand le tenant n'a aucune politique, ou une
+///    politique sans cap. C'est la branche qui manquait : `if let Some(pol) = …` laissait passer
+///    intact le budget d'un tenant sans policy.
+///
+/// La conversion sature désormais vers le budget **d'origine** et non vers `u32::MAX` : un dépassement
+/// de conversion ne doit pas *augmenter* une dépense. Le plafond serveur la borne ensuite de toute façon.
 fn clamp_budget(coord: &Coordinator, tenant_uuid: &Uuid, budget_cents: &mut u32) {
+    // (1) Le cap du tenant, quand il existe.
     if let Some(pol) = coord.policies.get(tenant_uuid) {
         let capped_microcents = pol.cap_microcents(u64::from(*budget_cents) * 1000);
-        *budget_cents = u32::try_from(capped_microcents / 1000).unwrap_or(u32::MAX);
+        // `unwrap_or(*budget_cents)` et NON `u32::MAX` : un échec de conversion ne peut pas
+        // transformer un plafonnement en autorisation.
+        *budget_cents = u32::try_from(capped_microcents / 1000).unwrap_or(*budget_cents);
     }
+    // (2) Le plafond serveur — inconditionnel. C'est lui qui ferme le DoS-coût.
+    *budget_cents = (*budget_cents).min(server_budget_ceiling_cents());
 }
 
 /// **M4 (§2.2)** : caviarde le texte utilisateur AVANT egress vers le tiers, selon la policy PII
@@ -188,6 +266,23 @@ fn clamp_budget(coord: &Coordinator, tenant_uuid: &Uuid, budget_cents: &mut u32)
 #[cfg(feature = "pii")]
 fn redact_for_egress(s: &SwarmGatewayState, tenant: &str, text: &mut String) {
     *text = crate::pii::redact_text(text, s.pii.policy_for(tenant));
+}
+
+/// **La contrepartie de compilation** — sans la feature `pii`, la caviardage **n'existe pas**.
+///
+/// Elle est écrite explicitement plutôt que laissée à un site d'appel `#[cfg]`, et c'est tout le
+/// correctif : jusqu'ici la ligne d'appel **disparaissait** du binaire sans erreur, sans
+/// avertissement et sans trace d'exécution. Un opérateur pouvait construire sans `pii`, lire
+/// « préflight frontière OK », et expédier chaque prompt **en clair** à un tiers.
+///
+/// Rendre l'absence visible ici ne suffit pas à elle seule — c'est pourquoi la porte de boot
+/// (`main.rs`, `frontier_boot_guard`) exige désormais soit la feature, soit une **reconnaissance
+/// explicite** de l'opérateur (`EFE_LLM_ACCEPT_CLEARTEXT_EGRESS=true`). Le défaut `Off` par
+/// *policy* reste légitime ; c'est le **silence** qui ne l'était pas.
+#[cfg(not(feature = "pii"))]
+fn redact_for_egress(_s: &SwarmGatewayState, _tenant: &str, _text: &mut String) {
+    // No-op assumé : la capacité n'est pas compilée. Aucune caviardage n'est possible, et le boot
+    // l'a déjà dit — bruyamment, ou en refusant de démarrer.
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -204,7 +299,6 @@ pub async fn vote(
     let tid = s.tenant_id(&caller.tenant)?;
     egress_gate(coord, &tid.0, &req.llms)?;
     clamp_budget(coord, &tid.0, &mut req.max_budget_cents); // §2.1 cap coût tenant
-    #[cfg(feature = "pii")]
     redact_for_egress(&s, &caller.tenant, &mut req.user_text); // §2.2 PII avant egress
     let _permit = match s.admit(&caller.tenant) {
         Ok(p) => p,
@@ -216,9 +310,11 @@ pub async fn vote(
     let llms = req.llms.clone();
     let request = json!({ "kind": "llm/vote", "k": llms.len(), "user_text_hash": hash_text(&req.user_text) });
     let resp = scoped(scope, run_vote_3llm(coord, req)).await.map_err(map_mission_err)?;
+    // B.3 : les hops estampillés, extraits de la réponse TYPÉE → scellés en nœuds Mode-A.
+    let hops: Vec<Value> = resp.reformulation_hops.iter().filter_map(|h| serde_json::to_value(h).ok()).collect();
     let output = serde_json::to_value(&resp).unwrap_or(Value::Null);
     let topo = topology_vote(&llms);
-    let run_id = seal_and_store_mission_with_request(&s, &caller.tenant, mission_id, &topo, &sink, output.clone(), request).await?;
+    let run_id = seal_and_store_mission_with_request(&s, &caller.tenant, mission_id, &topo, &sink, output.clone(), request, hops).await?;
     mission_response(&s, run_id, &caller.tenant, output).await
 }
 
@@ -233,7 +329,6 @@ pub async fn relay(
     let (planner, implementer, synthesizer) = (req.planner_llm.clone(), req.implementer_llm.clone(), req.synthesizer_llm.clone());
     egress_gate(coord, &tid.0, &[planner.clone(), implementer.clone(), synthesizer.clone()])?;
     clamp_budget(coord, &tid.0, &mut req.max_budget_cents); // §2.1 cap coût tenant
-    #[cfg(feature = "pii")]
     redact_for_egress(&s, &caller.tenant, &mut req.user_text); // §2.2 PII avant egress
     let _permit = match s.admit(&caller.tenant) {
         Ok(p) => p,
@@ -242,11 +337,13 @@ pub async fn relay(
     let mission_id = Uuid::new_v4();
     let sink = MissionProvenanceSink::new();
     let scope = MissionScope { tenant_id: tid, mission_id, sink: sink.clone() };
-    let request = json!({ "kind": "llm/relay", "user_text_hash": hash_text(&req.user_text) });
+    let request = json!({ "kind": "llm/relay", "user_text_hash": hash_text(&req.user_text), "reform_expected": 3 });
     let resp = scoped(scope, run_relay(coord, req)).await.map_err(map_mission_err)?;
+    // B.3 : les hops estampillés (plan/code/synthesis) → scellés en nœuds Mode-A.
+    let hops: Vec<Value> = resp.reformulation_hops.iter().filter_map(|h| serde_json::to_value(h).ok()).collect();
     let output = serde_json::to_value(&resp).unwrap_or(Value::Null);
     let topo = topology_relay(&planner, &implementer, &synthesizer);
-    let run_id = seal_and_store_mission_with_request(&s, &caller.tenant, mission_id, &topo, &sink, output.clone(), request).await?;
+    let run_id = seal_and_store_mission_with_request(&s, &caller.tenant, mission_id, &topo, &sink, output.clone(), request, hops).await?;
     mission_response(&s, run_id, &caller.tenant, output).await
 }
 
@@ -265,7 +362,6 @@ pub async fn debate(
     let (pro, contra, jury, rounds) = (req.pro_llm.clone(), req.contra_llm.clone(), req.jury_llm.clone(), req.rounds);
     egress_gate(coord, &tid.0, &[pro.clone(), contra.clone(), jury.clone()])?;
     clamp_budget(coord, &tid.0, &mut req.max_budget_cents); // §2.1 cap coût tenant
-    #[cfg(feature = "pii")]
     redact_for_egress(&s, &caller.tenant, &mut req.user_text); // §2.2 PII avant egress
     let _permit = match s.admit(&caller.tenant) {
         Ok(p) => p,
@@ -274,11 +370,13 @@ pub async fn debate(
     let mission_id = Uuid::new_v4();
     let sink = MissionProvenanceSink::new();
     let scope = MissionScope { tenant_id: tid, mission_id, sink: sink.clone() };
-    let request = json!({ "kind": "llm/debate", "rounds": rounds, "user_text_hash": hash_text(&req.user_text) });
+    let request = json!({ "kind": "llm/debate", "rounds": rounds, "user_text_hash": hash_text(&req.user_text), "reform_expected": 2 * usize::from(rounds) });
     let resp = scoped(scope, run_debate(coord, req)).await.map_err(map_mission_err)?;
+    // B.3 : les hops estampillés (2 par round, jury non reformulé) → scellés en nœuds Mode-A.
+    let hops: Vec<Value> = resp.reformulation_hops.iter().filter_map(|h| serde_json::to_value(h).ok()).collect();
     let output = serde_json::to_value(&resp).unwrap_or(Value::Null);
     let topo = topology_debate(&pro, &contra, &jury, rounds); // arité DEPUIS req.rounds
-    let run_id = seal_and_store_mission_with_request(&s, &caller.tenant, mission_id, &topo, &sink, output.clone(), request).await?;
+    let run_id = seal_and_store_mission_with_request(&s, &caller.tenant, mission_id, &topo, &sink, output.clone(), request, hops).await?;
     mission_response(&s, run_id, &caller.tenant, output).await
 }
 
@@ -292,7 +390,6 @@ pub async fn specialist(
     let tid = s.tenant_id(&caller.tenant)?;
     egress_gate(coord, &tid.0, &req.available_llms)?;
     clamp_budget(coord, &tid.0, &mut req.max_budget_cents); // §2.1 cap coût tenant
-    #[cfg(feature = "pii")]
     redact_for_egress(&s, &caller.tenant, &mut req.user_text); // §2.2 PII avant egress (N re-dérivé sur le texte caviardé)
     // Arité N re-dérivée par le Decomposer PUR (le même que run_specialist) DEPUIS le user_text.
     let n = specialist_declared_arity(&req.user_text);
@@ -307,11 +404,12 @@ pub async fn specialist(
     let mission_id = Uuid::new_v4();
     let sink = MissionProvenanceSink::new();
     let scope = MissionScope { tenant_id: tid, mission_id, sink: sink.clone() };
-    let request = json!({ "kind": "llm/specialist", "n": n, "user_text_hash": hash_text(&req.user_text) });
+    let request = json!({ "kind": "llm/specialist", "n": n, "user_text_hash": hash_text(&req.user_text), "reform_expected": 0 });
     let resp = scoped(scope, run_specialist(coord, req)).await.map_err(map_mission_err)?;
     let output = serde_json::to_value(&resp).unwrap_or(Value::Null);
     let topo = topology_specialist(n);
-    let run_id = seal_and_store_mission_with_request(&s, &caller.tenant, mission_id, &topo, &sink, output.clone(), request).await?;
+    // Specialist ne reformule pas (agrégation par règle) — zéro hop, honnête.
+    let run_id = seal_and_store_mission_with_request(&s, &caller.tenant, mission_id, &topo, &sink, output.clone(), request, Vec::new()).await?;
     mission_response(&s, run_id, &caller.tenant, output).await
 }
 
@@ -326,7 +424,6 @@ pub async fn cascade(
     let (drafter, verifier, validator) = (req.drafter_llm.clone(), req.verifier_llm.clone(), req.validator_llm.clone());
     egress_gate(coord, &tid.0, &[drafter.clone(), verifier.clone(), validator.clone()])?;
     clamp_budget(coord, &tid.0, &mut req.max_budget_cents); // §2.1 cap coût tenant
-    #[cfg(feature = "pii")]
     redact_for_egress(&s, &caller.tenant, &mut req.user_text); // §2.2 PII avant egress
     let _permit = match s.admit(&caller.tenant) {
         Ok(p) => p,
@@ -341,9 +438,10 @@ pub async fn cascade(
     // mais non re-dérivable du reçu sans Tier B). Un validator appelé mais mal-déclaré → UndeclaredCall.
     let decision = resp.verifier_decision.clone();
     let output = serde_json::to_value(&resp).unwrap_or(Value::Null);
-    let request = json!({ "kind": "llm/cascade", "verifier_decision": decision, "user_text_hash": user_text_hash });
+    let request = json!({ "kind": "llm/cascade", "verifier_decision": decision, "user_text_hash": user_text_hash, "reform_expected": 0 });
     let topo = topology_cascade(&drafter, &verifier, &validator, &decision);
-    let run_id = seal_and_store_mission_with_request(&s, &caller.tenant, mission_id, &topo, &sink, output.clone(), request).await?;
+    // Cascade ne reformule pas (draft→verify→validate en texte) — zéro hop, honnête.
+    let run_id = seal_and_store_mission_with_request(&s, &caller.tenant, mission_id, &topo, &sink, output.clone(), request, Vec::new()).await?;
     mission_response(&s, run_id, &caller.tenant, output).await
 }
 
@@ -360,6 +458,17 @@ struct LlmAuditView {
     /// `true` si le graphe scellé a MOINS de nœuds Mode-C que la requête scellée n'en implique
     /// (un handler/builder qui aurait sous-déclaré la topologie relativement à la requête).
     under_declared: bool,
+    /// **Fil B.3** — nœuds de hop de reformulation (`reform_*`) scellés dans le graphe.
+    reform_hops_recorded: usize,
+    /// Arité de reformulation ATTENDUE — lue depuis le marqueur `reform_expected` que le
+    /// handler scelle dans le résumé de requête (relay = 3, debate = 2·rounds — jury non
+    /// reformulé —, specialist/cascade = 0). `None` si le marqueur est absent : vote (le nombre
+    /// de hops suit les LLM effectivement répondants ≤ k, non re-dérivable de la requête seule)
+    /// et les runs scellés AVANT B.3 (aucune accusation rétroactive sur un run honnête).
+    reform_hops_expected: Option<usize>,
+    /// `true` si des hops attendus manquent au graphe scellé (producteur/builder qui aurait
+    /// omis des hops — l'axe déclaratif du modèle de confiance B.3).
+    reform_under_declared: bool,
 }
 
 pub async fn audit(
@@ -371,11 +480,12 @@ pub async fn audit(
     let stored = s.store.get(id, &caller.tenant).await?.ok_or(GatewayError::NotFound)?;
     let req = &stored.request;
     let kind = req.get("kind").and_then(|v| v.as_str()).unwrap_or("").to_string();
+    let rounds = req.get("rounds").and_then(Value::as_u64).unwrap_or(0) as usize;
     // Arité DÉCLARÉE re-dérivée depuis la REQUÊTE scellée (jamais l'output producteur).
     let declared_arity = match kind.as_str() {
         "llm/vote" => req.get("k").and_then(Value::as_u64).unwrap_or(0) as usize,
         "llm/relay" => 3,
-        "llm/debate" => 2 * req.get("rounds").and_then(Value::as_u64).unwrap_or(0) as usize + 1,
+        "llm/debate" => 2 * rounds + 1,
         // N (specialist) et la décision (cascade) sont COMMITTÉS (tamper-evident) mais non
         // re-dérivables sans le clair (privacy) / sans Tier B — on lit la valeur scellée.
         "llm/specialist" => req.get("n").and_then(Value::as_u64).unwrap_or(0) as usize,
@@ -383,7 +493,24 @@ pub async fn audit(
         _ => 0,
     };
     let mode_c_records = stored.records.iter().filter(|r| matches!(r.agent_kind, AgentKind::ModeC)).count();
-    Ok(Json(LlmAuditView { kind, declared_arity, mode_c_records, under_declared: declared_arity > mode_c_records }).into_response())
+    // B.3 : les hops de reformulation scellés vs le marqueur déclaratif `reform_expected`
+    // (scellé par le handler DANS le résumé de requête — jamais l'output producteur).
+    // Marqueur absent (vote, ou run antérieur à B.3) ⟹ None ⟹ pas d'accusation : un run
+    // honnête scellé avant B.3 n'a AUCUN nœud reform_* et ne doit pas passer pour frauduleux.
+    let reform_hops_recorded =
+        stored.records.iter().filter(|r| r.agent_id.as_str().starts_with("reform_")).count();
+    let reform_hops_expected = req.get("reform_expected").and_then(Value::as_u64).map(|n| n as usize);
+    let reform_under_declared = reform_hops_expected.is_some_and(|e| e > reform_hops_recorded);
+    Ok(Json(LlmAuditView {
+        kind,
+        declared_arity,
+        mode_c_records,
+        under_declared: declared_arity > mode_c_records,
+        reform_hops_recorded,
+        reform_hops_expected,
+        reform_under_declared,
+    })
+    .into_response())
 }
 
 #[cfg(test)]
@@ -546,7 +673,7 @@ mod tests {
         // Le graphe déclare 2 appels, MAIS la requête scellée prétend k=3 (sous-déclaration).
         let topo = topology_vote(&["claude_a".to_string(), "gpt_b".to_string()]);
         let request = json!({ "kind": "llm/vote", "k": 3 });
-        let run_id = seal_and_store_mission_with_request(&state, tenant, mission_id, &topo, &sink, json!({}), request).await.unwrap();
+        let run_id = seal_and_store_mission_with_request(&state, tenant, mission_id, &topo, &sink, json!({}), request, Vec::new()).await.unwrap();
 
         let app = crate::router(state);
         let resp = app
@@ -587,10 +714,19 @@ mod tests {
         let mission = body_json(resp).await;
         assert!(mission["run_id"].is_string(), "un run scellé est renvoyé");
         assert_eq!(mission["held"]["any_remote"], json!(true), "endpoint distant ⟹ barreau R4 (non-souverain)");
+        // B.3 : la vue reformulation — 3 hops, tous RULE (aucun SLM câblé dans
+        // ce coordinator de test) ⟹ slm_mediated=false, ET C'EST LE POINT :
+        // on ne peut pas revendiquer « SLM-médié » sans SLM.
+        assert_eq!(mission["reformulation"]["hops"], json!(3), "un hop par claim votant");
+        assert_eq!(mission["reformulation"]["rule"], json!(3));
+        assert_eq!(mission["reformulation"]["slm"], json!(0));
+        assert_eq!(mission["reformulation"]["slm_mediated"], json!(false), "pas de SLM ⟹ pas de revendication");
+        assert_eq!(mission["output"]["reformulation_hops"].as_array().map(Vec::len), Some(3), "le détail par hop est dans la sortie scellée");
         let run_id = mission["run_id"].as_str().unwrap().to_string();
 
         // Re-preuve INDÉPENDANTE via la route essaim INCHANGÉE (store partagé, §7).
         let resp = app
+            .clone()
             .oneshot(
                 Request::builder()
                     .uri(format!("/v1/swarm/verify/{run_id}"))
@@ -604,6 +740,171 @@ mod tests {
         let v = body_json(resp).await;
         assert_eq!(v["verified"], json!(true), "mission re-prouvée depuis les records persistés");
         assert_eq!(v["n17"]["bridge_consistent"], json!(true), "pont N17 cohérent ⟹ un seul mission_id threadé (§5)");
+
+        // B.3 : le checker out-of-band compte les nœuds de hop scellés.
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .uri(format!("/v1/llm/audit/{run_id}"))
+                    .header("x-efe-tenant", "system")
+                    .header("x-efe-roles", "auditor")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let a = body_json(resp).await;
+        assert_eq!(a["reform_hops_recorded"], json!(3), "3 nœuds reform_* scellés dans le graphe");
+        assert_eq!(a["reform_hops_expected"], json!(null), "vote : arité non re-dérivable de la requête");
+        assert_eq!(a["reform_under_declared"], json!(false));
+    }
+
+    // ── M3 DoD — l'e2e des CINQ missions servies ─────────────────────────────────
+    // Le critère dit : « POST /v1/llm/{les 5} → GET verify ⟹ verified=true, roots présents ».
+    // Seul `vote` l'avait. Le scellement des cinq était bien testé au niveau GRAPHE
+    // (mission_graph.rs : relay/debate/specialist/cascade `_roundtrip_is_fully_proven`), mais le
+    // chemin SERVI — celui qu'un client emprunte — ne l'était que pour un cinquième d'entre eux.
+
+    /// Le patron commun : POST la mission, puis re-prouver par la route essaim INCHANGÉE.
+    /// Rend la valeur JSON de la mission, pour que chaque test y ajoute ses assertions propres.
+    #[cfg(not(feature = "oidc"))]
+    async fn post_mission_then_verify(app: &axum::Router, uri: &str, body: &Value) -> Value {
+        let resp = app.clone().oneshot(post_req(uri, "operator", body)).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK, "{uri} servie ⟹ 200");
+        let mission = body_json(resp).await;
+        assert!(mission["run_id"].is_string(), "{uri} : un run scellé est renvoyé");
+        assert_eq!(mission["held"]["any_remote"], json!(true), "{uri} : endpoint distant ⟹ R4");
+
+        let run_id = mission["run_id"].as_str().unwrap().to_string();
+        let resp = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri(format!("/v1/swarm/verify/{run_id}"))
+                    .header("x-efe-tenant", "system")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let v = body_json(resp).await;
+        assert_eq!(v["verified"], json!(true), "{uri} : re-prouvée depuis les records persistés");
+        assert!(v["root"].is_string(), "{uri} : provenance_root présente");
+        assert_eq!(v["root_matches"], json!(true), "{uri} : P.0 — la racine SCELLÉE est reproduite");
+        assert_eq!(v["n17"]["bridge_consistent"], json!(true), "{uri} : pont N17 cohérent");
+        mission
+    }
+
+    #[cfg(not(feature = "oidc"))]
+    #[tokio::test]
+    async fn relay_e2e_seals_verifies_and_reports_r4() {
+        let llms = ["claude_a", "gpt_b", "gemini_c"];
+        let app = crate::router(wired_state(&llms, Some(&llms)));
+        let body = json!({
+            "user_text": "écris une fonction de tri",
+            "planner_llm": "claude_a",
+            "implementer_llm": "gpt_b",
+            "synthesizer_llm": "gemini_c"
+        });
+        let m = post_mission_then_verify(&app, "/v1/llm/relay", &body).await;
+        // Le relais produit TROIS hops de traduction (plan → code → synthèse) — et aucun n'est
+        // SLM ici : sans petit modèle câblé, la revendication ne doit pas être faite.
+        assert_eq!(m["reformulation"]["hops"], json!(3), "relay : plan + code + synthèse");
+        assert_eq!(m["reformulation"]["slm_mediated"], json!(false), "aucun SLM ⟹ aucune revendication");
+    }
+
+    #[cfg(not(feature = "oidc"))]
+    #[tokio::test]
+    async fn debate_e2e_seals_verifies_and_reports_r4() {
+        let llms = ["claude_a", "gpt_b", "gemini_c"];
+        let app = crate::router(wired_state(&llms, Some(&llms)));
+        let body = json!({
+            "user_text": "faut-il taxer le carbone ?",
+            "pro_llm": "claude_a",
+            "contra_llm": "gpt_b",
+            "jury_llm": "gemini_c",
+            "rounds": 1
+        });
+        let m = post_mission_then_verify(&app, "/v1/llm/debate", &body).await;
+        // 2 hops par round (PRO + CONTRA). Le verdict du jury n'est PAS reformulé — donc pas de
+        // hop : c'est honnête, et ça se voit dans le compte.
+        assert_eq!(m["reformulation"]["hops"], json!(2), "debate : 2 hops par round, jury non reformulé");
+    }
+
+    #[cfg(not(feature = "oidc"))]
+    #[tokio::test]
+    async fn specialist_e2e_seals_verifies_and_reports_r4() {
+        let llms = ["claude_a", "gpt_b", "gemini_c"];
+        let app = crate::router(wired_state(&llms, Some(&llms)));
+        let body = json!({
+            "user_text": "analyse ce contrat puis résume-le",
+            "available_llms": llms,
+            "capability_scores": {
+                "claude_a": { "analysis": 0.9 },
+                "gpt_b":    { "analysis": 0.5 },
+                "gemini_c": { "analysis": 0.4 }
+            }
+        });
+        let m = post_mission_then_verify(&app, "/v1/llm/specialist", &body).await;
+        // specialist ne reformule pas. Le champ est ABSENT, et non « hops: 0 » — même discipline
+        // que partout ailleurs : ne pas produire de hop n'est pas produire zéro hop, c'est ne rien
+        // avoir à revendiquer. Un champ vide se lirait comme une mesure ; son absence, non.
+        assert!(m.get("reformulation").is_none(), "specialist : aucun hop ⟹ champ ABSENT");
+    }
+
+    #[cfg(not(feature = "oidc"))]
+    #[tokio::test]
+    async fn cascade_e2e_seals_verifies_and_reports_r4() {
+        let llms = ["claude_a", "gpt_b", "gemini_c"];
+        let app = crate::router(wired_state(&llms, Some(&llms)));
+        let body = json!({
+            "user_text": "quelle est la capitale de la France ?",
+            "task_class": "FACTUAL_QA",
+            "drafter_llm": "claude_a",
+            "verifier_llm": "gpt_b",
+            "validator_llm": "gemini_c"
+        });
+        let m = post_mission_then_verify(&app, "/v1/llm/cascade", &body).await;
+        assert!(m.get("reformulation").is_none(), "cascade : aucun hop ⟹ champ ABSENT");
+    }
+
+    // ── M4 §2.1 — le plafond de budget (le DoS-coût fermé) ───────────────────────
+    // `clamp_budget` était appelée aux 5 handlers et n'avait AUCUN test. Elle ne bornait rien
+    // pour un tenant sans policy — or un tenant allowlisté est construit avec
+    // `TenantPolicies::open(tid)`, donc sans cap. Un client pouvait demander `u32::MAX` cents,
+    // soit ≈ 42,9 M$ sur la seule route qui dépense de l'argent réel.
+
+    #[test]
+    fn the_server_ceiling_bounds_a_tenant_that_has_no_policy_at_all() {
+        // LE critère M4 §2.1 : « test d'un tenant sans cap ⟹ défaut serveur borné, pas u32::MAX ».
+        let coord = test_coordinator(&["claude"], None); // `None` = AUCUNE policy : le cas du trou
+        let unknown = Uuid::from_u128(0xDEAD_BEEF);
+
+        let mut budget = u32::MAX; // ≈ 42,9 M$ — ce qu'un client pouvait réclamer
+        clamp_budget(&coord, &unknown, &mut budget);
+
+        assert_ne!(budget, u32::MAX, "un tenant sans policy n'est plus non borné");
+        assert_eq!(budget, server_budget_ceiling_cents(), "il tombe au plafond SERVEUR");
+        assert!(budget <= 10_000, "défaut ≤ 100 $ par requête");
+    }
+
+    #[test]
+    fn a_small_budget_passes_through_untouched() {
+        // Le plafond ne doit pas casser l'usage légitime : il borne, il ne normalise pas.
+        let coord = test_coordinator(&["claude"], None); // `None` = AUCUNE policy : le cas du trou
+        let mut budget = 500; // le défaut documenté
+        clamp_budget(&coord, &Uuid::from_u128(1), &mut budget);
+        assert_eq!(budget, 500, "un budget raisonnable traverse intact");
+    }
+
+    #[test]
+    fn the_ceiling_is_operator_configurable_and_never_zero() {
+        // Un plafond à 0 rendrait toute mission impossible — on refuse de se tirer dessus.
+        // (On lit l'env sans la muter : le test épingle le contrat, pas une valeur d'exécution.)
+        let ceiling = server_budget_ceiling_cents();
+        assert!(ceiling >= 1, "jamais 0");
     }
 
     // ── DoD #2 — souveraineté fail-closed (au niveau HTTP) ───────────────────────
@@ -724,7 +1025,7 @@ mod tests {
         scoped(scope, async move { let _ = bridge.call_many_ok(&ids, LlmCall::simple("q", 8)).await; }).await;
         // Requête HONNÊTE : k=2 == 2 nœuds Mode-C.
         let topo = topology_vote(&["claude_a".to_string(), "gpt_b".to_string()]);
-        let run_id = seal_and_store_mission_with_request(&state, "system", mission_id, &topo, &sink, json!({}), json!({ "kind": "llm/vote", "k": 2 }))
+        let run_id = seal_and_store_mission_with_request(&state, "system", mission_id, &topo, &sink, json!({}), json!({ "kind": "llm/vote", "k": 2 }), Vec::new())
             .await
             .unwrap();
 
@@ -763,7 +1064,7 @@ mod tests {
         let ids = vec!["claude_a".to_string()];
         scoped(scope, async move { let _ = bridge.call_many_ok(&ids, LlmCall::simple("q", 8)).await; }).await;
         let topo = topology_vote(&["claude_a".to_string()]);
-        let run_id = seal_and_store_mission_with_request(&state, "system", mission_id, &topo, &sink, json!({}), json!({ "kind": "llm/vote", "k": 1 }))
+        let run_id = seal_and_store_mission_with_request(&state, "system", mission_id, &topo, &sink, json!({}), json!({ "kind": "llm/vote", "k": 1 }), Vec::new())
             .await
             .unwrap();
 
@@ -781,6 +1082,66 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(resp.status(), StatusCode::NOT_FOUND, "run d'un autre tenant ⟹ 404 (isolation)");
+    }
+
+    // ── Fil B.3 — l'axe déclaratif des hops : marqueur scellé, pas d'accusation rétroactive ──
+    /// Un run LEGACY (scellé avant B.3 : requête sans `reform_expected`, zéro nœud `reform_*`)
+    /// ne doit PAS passer pour frauduleux (`expected=None`) ; à l'inverse, un run dont la
+    /// requête scellée PORTE le marqueur mais dont le graphe n'a pas les hops est détecté.
+    #[cfg(not(feature = "oidc"))]
+    #[tokio::test]
+    async fn audit_reform_marker_absent_no_accusation_present_detects() {
+        let state = wired_state(&["claude_a"], Some(&["claude_a"]));
+        let seal_with_request = |request: Value| {
+            let state = state.clone();
+            async move {
+                let mission_id = Uuid::new_v4();
+                let tenant_id = state.tenant_id("system").unwrap();
+                let sink = MissionProvenanceSink::new();
+                let scope = MissionScope { tenant_id, mission_id, sink: sink.clone() };
+                let coord = state.coordinator.as_ref().unwrap();
+                let bridge = &coord.bridge;
+                scoped(scope, async move {
+                    let _ = bridge.call_many_ok(&["claude_a".to_string()], efe_coordinator::LlmCall::simple("q", 8)).await;
+                })
+                .await;
+                let topo = topology_vote(&["claude_a".to_string()]);
+                seal_and_store_mission_with_request(&state, "system", mission_id, &topo, &sink, json!({}), request, Vec::new())
+                    .await
+                    .unwrap()
+            }
+        };
+        // Run "legacy" : requête relay SANS marqueur (comme scellée avant B.3).
+        let legacy = seal_with_request(json!({ "kind": "llm/relay" })).await;
+        // Run B.3 : marqueur présent (3 hops attendus) mais AUCUN nœud reform_* scellé.
+        let dishonest = seal_with_request(json!({ "kind": "llm/relay", "reform_expected": 3 })).await;
+
+        let app = crate::router(state.clone());
+        let audit_of = |run_id: Uuid| {
+            let app = app.clone();
+            async move {
+                let resp = app
+                    .oneshot(
+                        Request::builder()
+                            .uri(format!("/v1/llm/audit/{run_id}"))
+                            .header("x-efe-tenant", "system")
+                            .header("x-efe-roles", "auditor")
+                            .body(Body::empty())
+                            .unwrap(),
+                    )
+                    .await
+                    .unwrap();
+                assert_eq!(resp.status(), StatusCode::OK);
+                body_json(resp).await
+            }
+        };
+        let a = audit_of(legacy).await;
+        assert_eq!(a["reform_hops_expected"], json!(null), "marqueur absent ⟹ pas d'attente");
+        assert_eq!(a["reform_under_declared"], json!(false), "un run legacy honnête n'est PAS accusé");
+        let a = audit_of(dishonest).await;
+        assert_eq!(a["reform_hops_expected"], json!(3), "marqueur scellé ⟹ attente re-dérivée");
+        assert_eq!(a["reform_hops_recorded"], json!(0));
+        assert_eq!(a["reform_under_declared"], json!(true), "hops attendus absents du graphe ⟹ détecté");
     }
 
     // ── DoD #4 — admission (429 + Retry-After) sur le chemin frontière ───────────

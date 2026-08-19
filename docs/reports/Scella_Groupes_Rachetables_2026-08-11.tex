@@ -1,0 +1,340 @@
+\documentclass[10pt]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage[french]{babel}
+\usepackage{newpxtext,newpxmath}
+\usepackage[a4paper,top=1.5cm,bottom=1.35cm,left=1.6cm,right=1.6cm]{geometry}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{titlesec}
+\usepackage[most]{tcolorbox}
+\usepackage{enumitem}
+\usepackage{array}
+\usepackage{booktabs}
+\usepackage{fancyhdr}
+
+\definecolor{navy}{HTML}{1F3A5F}
+\definecolor{grey}{HTML}{54606E}
+\definecolor{green}{HTML}{2C6E49}
+\definecolor{amber}{HTML}{9C6A16}
+\definecolor{red}{HTML}{A6322E}
+\definecolor{plum}{HTML}{7A4EA8}
+\definecolor{boxgray}{HTML}{F3F5F8}
+\definecolor{boxred}{HTML}{FCF2F1}
+\definecolor{boxgreen}{HTML}{F1F7F3}
+\definecolor{boxplum}{HTML}{F7F3FB}
+\definecolor{boxcode}{HTML}{F7F8FA}
+\definecolor{boxedge}{HTML}{D9E0EA}
+
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{2.6pt}
+\linespread{1.0}
+
+\pagestyle{fancy}\fancyhf{}
+\lhead{\small\color{grey}Scella}
+\rhead{\small\color{grey}Le groupe le plus rachetable -- 11 août 2026}
+\cfoot{\small\color{grey}\thepage}
+\renewcommand{\headrulewidth}{0.3pt}
+
+\titleformat{\section}{\color{navy}\large\bfseries}{}{0pt}{}
+\titlespacing{\section}{0pt}{11pt}{3pt}
+\titleformat{\subsection}{\color{navy}\bfseries}{}{0pt}{}
+\titlespacing{\subsection}{0pt}{7pt}{1.5pt}
+
+\newtcolorbox{these}{colback=boxgray,colframe=boxedge,boxrule=0.5pt,arc=2.5pt,
+  left=8pt,right=8pt,top=4.5pt,bottom=4.5pt}
+\newtcolorbox{alerte}{colback=boxred,colframe=red!55,boxrule=0.8pt,arc=2.5pt,
+  left=8pt,right=8pt,top=4.5pt,bottom=4.5pt}
+\newtcolorbox{acquis}{colback=boxgreen,colframe=green!45,boxrule=0.8pt,arc=2.5pt,
+  left=8pt,right=8pt,top=4.5pt,bottom=4.5pt}
+\newtcolorbox{piste}{colback=boxplum,colframe=plum!45,boxrule=0.8pt,arc=2.5pt,
+  left=8pt,right=8pt,top=4.5pt,bottom=4.5pt}
+\newtcolorbox{extrait}{colback=boxcode,colframe=boxedge,boxrule=0.5pt,arc=1.5pt,
+  left=7pt,right=7pt,top=3.5pt,bottom=3.5pt}
+
+% \textcolor plutôt que {\color …} : en tête de cellule p{}, \color insère un whatsit
+% qui ouvre une ligne vide et décale verticalement toute la colonne.
+\newcommand{\best}[1]{\textcolor{green}{\textbf{#1}}}
+\newcommand{\pire}[1]{\textcolor{red}{\textbf{#1}}}
+\newcommand{\sz}[1]{\textcolor{grey}{\small\textsf{#1}}}
+\newcommand{\code}[1]{\texttt{\small #1}}
+\newcommand{\x}{$\times$}
+\newcommand{\loc}[1]{{\footnotesize\color{grey}\texttt{#1}}}
+
+\begin{document}
+
+\begin{center}
+{\Huge\bfseries\color{navy} Scella}\\[4pt]
+{\large\color{grey}\itshape Le groupe le plus rachetable, maintenant}\\[4pt]
+{\small\color{grey} 11 août 2026 \; · \; axe acquisition \; · \; les problèmes ne sont pas postulés : ils sont écrits dans le code}
+\end{center}
+\vspace{2pt}
+
+\begin{these}
+\textbf{Le résultat central, et il contredit mes deux rapports précédents.} Le groupe le plus
+rachetable est \textbf{la pile preuve} -- huit crates, 12 862 lignes, 240 tests -- que le rapport
+« produit unique » avait \textbf{explicitement jetée}, au motif qu'elle n'avait pas de producteur.
+\textbf{C'est faux} : \code{provenance-capture} produit un DAG scellé sur le runtime, via quatre taps
+\textbf{génériques} qui observent n'importe quel système d'IA, pas le moteur de ce dépôt. Elle est donc
+la seule pièce dont la valeur \textbf{n'exige d'adopter aucune thèse} -- et la seule dont le problème
+soit \textbf{écrit dans la loi} : \code{reg-evidence} nomme l'EU AI Act art.\,12, la CSDDD/LkSG et le
+GDPR. À l'inverse, l'essaim réfutable -- vainqueur des deux analyses précédentes -- \textbf{tombe
+dernier}, parce qu'une chose peut être la plus révolutionnaire \emph{et} la moins rachetable.
+\end{these}
+
+\section{1 · Ce que « rachetable maintenant » exige, et la contrainte que je maintiens}
+
+« Rachetable » suppose un acheteur ; « répondre à un problème » suppose quelqu'un qui souffre. L'axe
+est donc, pour la première fois de la série, tourné vers l'extérieur.
+
+\begin{alerte}
+\textbf{Je maintiens néanmoins la contrainte constante : je ne nomme aucun acquéreur et n'invente aucun
+marché.} Ce n'est pas une précaution rhétorique -- c'est devenu inutile, pour une raison que la mesure
+a révélée. \textbf{Les problèmes sont écrits dans le code}, article de loi à l'appui. Je les
+\emph{lis}, je ne les \emph{postule} pas. Un marché inventé aurait été une opinion ; un docstring qui
+cite « EU AI Act art.\,12 » est un fait vérifiable en une commande.
+\end{alerte}
+
+Cinq critères, choisis pour être évaluables sans destinataire nommé :
+
+\begin{enumerate}[leftmargin=1.5em,itemsep=1.5pt,topsep=2pt]
+\item \textbf{Problème daté et forcé} -- existe-t-il aujourd'hui hors du dépôt, avec une contrainte qui
+      le rend non optionnel ? Non pas « comptera », mais \textbf{coûte déjà}.
+\item \textbf{Transférabilité} -- tourne-t-il dans la pile de quelqu'un d'autre, \textbf{sans que
+      l'acheteur adopte les thèses du dépôt} ?
+\item \textbf{Preuve en une après-midi} -- une équipe de diligence peut-elle vérifier la revendication
+      centrale \textbf{sans moi} ?
+\item \textbf{Indépendance à une croyance} -- la valeur exige-t-elle d'accepter un pari ?
+\item \textbf{Propreté juridique} -- licence, corps étrangers, nommage.
+\end{enumerate}
+
+Deux remarques de méthode. Le critère 3 est précisément celui que l'analyse « révolutionnaire » avait
+\emph{déclassé} ; il redevient central ici. Et le critère 4 est celui qui décide -- il n'apparaissait
+dans aucun des trois axes précédents. \textbf{Attendez-vous donc à un classement différent : c'est le
+signe que l'axe est réellement nouveau, et non un habillage du verdict de la veille.}
+
+\section{2 · Le fait qui renverse tout : la pile preuve a son \emph{propre} producteur}
+
+\begin{alerte}
+\textbf{Une élimination que j'ai faite hier était fausse, et il faut le dire avant tout le reste.} Dans
+le rapport « produit unique », j'ai écarté la pile preuve d'un raisonnement en apparence solide :
+\emph{sans producteur, elle n'a rien à sceller -- c'est une bibliothèque}. Je ne l'avais pas vérifié.
+Cette fois, si.
+\end{alerte}
+
+\code{provenance-capture} l'annonce en en-tête : \emph{« Produit un \textbf{vrai DAG scellé} sur le
+runtime »}. Il porte \textbf{quatre adaptateurs d'observation} -- appel modèle, message inter-agents,
+consultation outil/retrieval, revue humaine -- qui convertissent des événements observés en nœuds
+scellables. Il hache les entrées sensibles (minimisation GDPR), porte le cas dans l'identifiant du
+nœud (donc scellé \emph{et} requêtable), embarque son \textbf{propre garde de souveraineté} -- egress
+refusé, loopback uniquement, records persistés localement -- et \textbf{ne dépend que de
+\code{provenance-dag}}, ce qui garde la chaîne de confiance mince.
+
+\begin{acquis}
+\textbf{Ces quatre taps sont génériques.} Ils n'observent pas le moteur de ce dépôt : ils observent
+\emph{n'importe quel} système d'IA -- un appel de modèle, un message entre agents, une consultation
+d'outil, une revue humaine sont les quatre événements de toute architecture agentique. C'est la
+propriété la plus importante de toute cette analyse, parce que c'est elle qui rend l'actif transférable
+sans adoption.
+\end{acquis}
+
+\section{3 · Les problèmes -- nommés par le code, article par article}
+
+\code{reg-evidence} ne demande pas qu'on lui invente un marché ; il écrit le sien, et je le cite plutôt
+que de le paraphraser :
+
+\begin{extrait}
+\sz{« transformer le DAG scellé re-prouvable en l'\textbf{artefact précis} qu'une équipe conformité doit
+produire \textbf{de toute façon} --- registre de tenue de logs (\textbf{EU AI Act art.\,12}), dossier de
+diligence fournisseur (\textbf{CSDDD/LkSG}), registre de traitement (\textbf{GDPR}) --- et le produire
+\emph{mieux} que la main : automatiquement, traçablement, et \textbf{re-prouvable par le destinataire
+lui-même}. »}
+\end{extrait}
+
+Trois obligations réglementaires \textbf{distinctes}, dont une datée par la loi. C'est la réponse la
+plus directe possible à la question posée : non pas « un problème », mais \textbf{trois, nommés, non
+optionnels}.
+
+Et le gain est énoncé dans les termes mêmes qu'une équipe conformité emploie -- \textbf{heures
+$\rightarrow$ minutes} -- sur un livrable qu'elle produit \emph{déjà}, à la main. C'est la forme de
+valeur la plus facile à faire admettre : elle ne crée pas une dépense, elle en remplace une.
+
+\section{4 · Les quatre candidats, mesurés}
+
+\renewcommand{\arraystretch}{1.24}
+\begin{center}\small
+\begin{tabular}{@{}c >{\raggedright\arraybackslash}p{5.35cm} c c c >{\raggedright\arraybackslash}p{5.0cm}@{}}
+\toprule
+& \textbf{Le groupe} & \sz{Crates} & \sz{Lignes} & \sz{Tests} & \textbf{Les problèmes adressés} \\
+\midrule
+\textbf{V1} & \textbf{La preuve réglementaire} \sz{capture, DAG, verify, API, console, export forensique, gabarits, vérifieur 0-dép} & \best{8} & \best{12 862} & 240 & \textbf{AI Act art.\,12} · \textbf{CSDDD/LkSG} · \textbf{GDPR} · non-fabrication \\
+\textbf{V2} & \textbf{La souveraineté d'egress} \sz{boot guard fail-closed, allowlist + cap, aveu de clair, \code{pii.rs}, reçu par saut, route bundle + ancre} & 11 & --- & --- & Fuite de périmètre en secteur régulé · attribution de coût LLM \\
+\textbf{V3} & \textbf{L'essaim réfutable} \sz{le groupe couronné par mes deux analyses précédentes} & 10 & --- & \best{515} & Attribution multi-agents \sz{(émergent)} \\
+\textbf{V4} & \textbf{Le vérifieur seul} \sz{\code{verify-mini} / \code{verify-meta-mini}} & \best{1} & --- & 29 & « Je ne peux pas auditer l'outil d'audit » \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\section{5 · Le classement}
+
+Rangs de 1 à 4 par critère.
+
+\renewcommand{\arraystretch}{1.2}
+\begin{center}\small
+\begin{tabular}{@{}r >{\raggedright\arraybackslash}p{6.0cm} ccccc c@{}}
+\toprule
+& \textbf{Le groupe} & \sz{Pb forcé} & \sz{Transfér.} & \sz{Preuve} & \sz{Sans croyance} & \sz{Juridique} & \textbf{Moy} \\
+\midrule
+\textbf{1} & \textbf{V1 · La preuve réglementaire} & \best{1} & \best{1} & 2 & \best{1} & \best{1} & \best{1,20} \\
+2= & V2 · La souveraineté d'egress & 2 & 3 & \pire{4} & 2 & 3 & \textbf{2,80} \\
+2= & V4 · Le vérifieur seul & \pire{4} & 2 & 3 & 3 & 2 & \textbf{2,80} \\
+\textbf{4} & \textbf{V3 · L'essaim réfutable} & 3 & \pire{4} & \best{1} & \pire{4} & \pire{4} & \pire{3,20} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\textbf{V1 est premier sur quatre critères sur cinq}, et l'écart -- 1,20 contre 2,80 -- est le plus
+large de toute la série. Les raisons se cumulent au lieu de se compenser, ce qui est rare et mérite
+d'être détaillé.
+
+\textbf{Il ne demande aucune adoption.} Un acheteur branche quatre taps sur \emph{son} système ; il
+n'adopte ni \code{efe-core}, ni l'essaim, ni aucune thèse sur les modèles latents. C'est la seule pièce
+du dépôt dont la valeur ne dépend d'aucun pari -- et un pari est exactement ce qu'une revue
+d'acquisition cherche à éliminer.
+
+\textbf{Son problème porte une échéance légale.} Aucun des trois autres ne peut en dire autant. Un
+problème réglementaire ne se négocie pas : il a une date, un destinataire et une sanction.
+
+\textbf{Il est juridiquement propre.} Ses huit crates sont uniformément \code{UNLICENSED}. Les
+\textbf{quatre seuls fichiers} du dépôt portant Apache-2.0 ou MIT sont ailleurs -- trois dans les tests
+\code{m1d\_*} et un dans \code{efe-nano-sdk} -- c'est-à-dire \textbf{tous dans le périmètre de V3}.
+
+\section{6 · Le renversement : mes deux analyses précédentes avaient écarté le meilleur actif}
+
+Il faut le dire sans détour, et le tableau le dit mieux qu'un paragraphe.
+
+\renewcommand{\arraystretch}{1.18}
+\begin{center}\small
+\begin{tabular}{@{}>{\raggedright\arraybackslash}p{4.6cm} >{\raggedright\arraybackslash}p{11.2cm}@{}}
+\toprule
+\textbf{Analyse} & \textbf{Verdict porté sur V1 (la pile preuve)} \\
+\midrule
+Ensembles \sz{11 août} & 2\textsuperscript{e} --- « la boucle pile B », classée comme une greffe \\
+\textbf{Produit unique} & \pire{explicitement jetée} --- listée parmi les 57 crates à sortir du produit \\
+Révolutionnaire & présente seulement par \code{forensic-export}, 1 levée sur 6 \\
+\textbf{Rachetable} & \best{1\textsuperscript{re}, et de loin} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+D'où vient l'écart ? Mes critères précédents privilégiaient \textbf{la démonstrabilité et l'unicité de
+la promesse}, et V1 se démontre plus lourdement qu'en une commande. Aucun de ces critères ne mesurait
+ce qui décide ici : \emph{quelqu'un a-t-il déjà l'obligation de résoudre ce problème ?} Ce n'est pas
+que les analyses précédentes étaient mal faites -- c'est que la question n'était pas la même, et qu'un
+axe non mesuré ne se devine pas.
+
+\textbf{Et V3, vainqueur des deux analyses précédentes, tombe dernier.} Non parce qu'il est faible : il
+garde la meilleure démonstration du dépôt, seul critère où il reste premier. Mais sa valeur
+\textbf{exige d'accepter une thèse} -- l'essaim latent, le méta-consensus --, il est le moins
+transférable des quatre, et il porte à lui seul les quatre fichiers à licence tierce.
+
+\begin{piste}
+Une chose peut être la \textbf{plus révolutionnaire} et la \textbf{moins rachetable}. Ce n'est pas une
+contradiction entre mes rapports : ce sont deux questions différentes, et le mérite de les avoir posées
+séparément est précisément qu'on peut lire cet écart au lieu de le subir.
+\end{piste}
+
+\section{7 · Ce qu'une revue diligente verrait en premier}
+
+Quatre points vérifiés, bloquants à des degrés divers, tous bon marché à corriger. Les énumérer
+maintenant vaut mieux que de les laisser trouver.
+
+\textbf{\code{main} est figée au 12 juillet et accuse 36 commits de retard.} Une équipe de diligence
+clone \code{main} et ne voit \textbf{rien} de ce qui précède -- ni l'ancre, ni la liaison v4, ni le
+producteur de bundle. C'est le blocage le plus grave, et le moins coûteux à lever.
+
+\textbf{Le nom d'une autre entreprise est dans le code.} « Kovant » apparaît dans \textbf{23 fichiers
+\code{.rs}}, dont \textbf{11 dans la pile preuve} -- jusqu'en en-tête de \code{provenance-capture}
+(« Kovant P1 / S1 »). Techniquement anodin ; en lecture, un acquéreur ouvre le premier fichier de
+l'actif convoité et y trouve le nom d'un tiers.
+
+\textbf{Aucun profil de déploiement.} Établi par le rapport d'état des lieux : sept interrupteurs
+d'environnement, et aucun fichier ni document ne les allume ensemble.
+
+\textbf{Le garde de souveraineté est dupliqué de part et d'autre de la frontière} --
+\code{provenance-capture/src/guard.rs} (dans V1) et \code{efe-swarm-sdk/src/backend/mod.rs} (dans V2).
+Acquérir les deux modules impose donc de les fusionner, et les deux copies ont \textbf{déjà divergé une
+fois} en produisant un contournement SSRF.
+
+\section{8 · Le jugement}
+
+\begin{acquis}
+\textbf{Le groupe le plus rachetable maintenant est V1 -- la preuve réglementaire : huit crates,
+12 862 lignes, 240 tests.}
+\end{acquis}
+
+Il est le seul du dépôt à réunir les trois conditions qui font une acquisition plutôt qu'une
+curiosité : un \textbf{problème que quelqu'un est légalement obligé de résoudre}, une \textbf{valeur
+qui ne dépend d'aucune croyance}, et une \textbf{vérification que l'acheteur mène lui-même} -- le
+destinataire re-prouve l'artefact avec un binaire dont l'arbre de dépendances est vide, et l'export lui
+dit de surcroît, dans le bundle, \emph{ce qu'il ne prouve pas}.
+
+\textbf{Je ne recommande pas de le fusionner avec V2.} Les deux répondent à des problèmes voisins -- la
+preuve et le périmètre -- mais V2 exige que l'acheteur fasse transiter son trafic par la passerelle,
+c'est-à-dire un engagement d'architecture, quand V1 ne demande que quatre points d'observation.
+Garder V2 comme \textbf{second module optionnel} préserve la propriété qui fait toute la valeur de V1 :
+on peut l'adopter sans rien changer. Et si les deux partent ensemble, fusionner les gardes d'abord.
+
+\textbf{Trois actions, par ordre de rendement :} fusionner la branche dans \code{main} · retirer
+« Kovant » des 23 fichiers · écrire le profil.
+
+\begin{these}
+\small\textbf{Rappel de cadrage, inchangé dans toute la série.} Le reçu atteste l'\textbf{intégrité}
+d'une suite de pas, jamais la \textbf{correction} d'une décision. Il est \emph{tamper-evident pour un
+détenteur de clé}, pas \emph{trustless pour un tiers}. Les participants du mode réel exécutent une
+fusion latente Mode-1 numérique : ce ne sont pas des « vrais SLM ». Et ce document évalue des
+\emph{propriétés d'acquérabilité} -- il ne prédit aucun acquéreur et n'en nomme aucun.
+\end{these}
+
+\section{Annexe · Vérifier chaque affirmation soi-même}
+
+Les \emph{notes} des cinq critères sont un jugement. Les \textbf{mesures} et les \textbf{citations},
+elles, se rejouent -- et ce sont elles qui portent le verdict.
+
+\renewcommand{\arraystretch}{1.22}
+\begin{center}\small
+\begin{tabular}{@{}>{\raggedright\arraybackslash}p{5.3cm} >{\raggedright\arraybackslash}p{10.8cm}@{}}
+\toprule
+\textbf{Affirmation} & \textbf{Ce qui la rejoue} \\
+\midrule
+V1 est de 8 crates &
+  \code{ls crates | sort > /tmp/ws.txt} \newline
+  \code{for p in reg-evidence forensic-export audit-api audit-console \textbackslash} \newline
+  \code{\ \ provenance-capture provenance-verify verify-mini ; do \textbackslash} \newline
+  \code{\ \ cargo tree -p \$p -e normal -{}-prefix none ; done \textbackslash} \newline
+  \code{\ \ | awk '\{print \$1\}' | sort -u | comm -12 - /tmp/ws.txt} \\
+La pile preuve \textbf{produit} &
+  \code{sed -n '1,22p' crates/provenance-capture/src/lib.rs} \\
+Les problèmes, par article &
+  \code{sed -n '1,16p' crates/reg-evidence/src/lib.rs} \\
+12 862 lignes, 240 tests &
+  \code{find crates/\{provenance-dag,provenance-capture,…\} -name '*.rs' | xargs wc -l} \\
+Licence : 4 fichiers non propriétaires, tous hors V1 &
+  \code{grep -rl 'SPDX-License-Identifier: \textbackslash(Apache-2.0\textbackslash|MIT\textbackslash)' crates -{}-include='*.rs'} \\
+« Kovant » dans 23 fichiers &
+  \code{grep -rl 'Kovant' crates -{}-include='*.rs' | wc -l} \\
+\code{main} accuse 36 commits &
+  \code{git log -1 -{}-format=\%ci main \; \&\& \; git rev-list -{}-count main..HEAD} \\
+Le garde est dupliqué &
+  \code{grep -rln 'fn is\_local\_endpoint' crates -{}-include='*.rs'} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Un avertissement pour finir, et il porte sur la nature de ce document. Les empreintes, les citations et
+les zéros sont des \textbf{faits}, datés du 11 août. L'appréciation « ce problème est forcé » repose
+sur un texte réglementaire que le code cite lui-même -- c'est plus solide qu'une opinion de marché,
+mais ce n'est pas une mesure : la portée réelle d'une obligation dépend du secteur et de la taille de
+celui qui y est soumis, et ce document n'en sait rien.
+
+\end{document}

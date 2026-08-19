@@ -97,12 +97,16 @@ fn helm_rendered_manifest_round_trips_through_load_and_validate() {
     // `validate_manifest` already checked this, but pinning it here
     // protects against future Rust validator regressions.
     for p in &parsed.participants {
-        assert!(
-            p.kappa > 0.0 && p.kappa < 1.0,
-            "participant {} has kappa = {} (must be in (0, 1))",
-            p.id,
-            p.kappa,
-        );
+        // Couche 3 M1.d : kappa is a mock-only concept — required (and range-
+        // checked) only on rows WITHOUT an efe-core `controller` block.
+        if p.controller.is_none() {
+            let kappa = p.kappa.expect("mock row must declare kappa");
+            assert!(
+                kappa > 0.0 && kappa < 1.0,
+                "participant {} has kappa = {kappa} (must be in (0, 1))",
+                p.id,
+            );
+        }
         assert!(p.dim >= 1, "participant {} has dim = 0", p.id);
     }
 }

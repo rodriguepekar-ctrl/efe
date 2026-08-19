@@ -1,0 +1,354 @@
+\documentclass[10pt]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage[french]{babel}
+\usepackage{newpxtext,newpxmath}
+\usepackage[a4paper,top=1.5cm,bottom=1.35cm,left=1.6cm,right=1.6cm]{geometry}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{titlesec}
+\usepackage[most]{tcolorbox}
+\usepackage{enumitem}
+\usepackage{array}
+\usepackage{booktabs}
+\usepackage{fancyhdr}
+
+\definecolor{navy}{HTML}{1F3A5F}
+\definecolor{grey}{HTML}{54606E}
+\definecolor{green}{HTML}{2C6E49}
+\definecolor{amber}{HTML}{9C6A16}
+\definecolor{red}{HTML}{A6322E}
+\definecolor{plum}{HTML}{7A4EA8}
+\definecolor{boxgray}{HTML}{F3F5F8}
+\definecolor{boxred}{HTML}{FCF2F1}
+\definecolor{boxgreen}{HTML}{F1F7F3}
+\definecolor{boxplum}{HTML}{F7F3FB}
+\definecolor{boxcode}{HTML}{F7F8FA}
+\definecolor{boxedge}{HTML}{D9E0EA}
+
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{2.6pt}
+\linespread{1.0}
+
+\pagestyle{fancy}\fancyhf{}
+\lhead{\small\color{grey}Scella}
+\rhead{\small\color{grey}Les couples -- le croisement complet -- 11 août 2026}
+\cfoot{\small\color{grey}\thepage}
+\renewcommand{\headrulewidth}{0.3pt}
+
+\titleformat{\section}{\color{navy}\large\bfseries}{}{0pt}{}
+\titlespacing{\section}{0pt}{11pt}{3pt}
+\titleformat{\subsection}{\color{navy}\bfseries}{}{0pt}{}
+\titlespacing{\subsection}{0pt}{7pt}{1.5pt}
+
+\newtcolorbox{these}{colback=boxgray,colframe=boxedge,boxrule=0.5pt,arc=2.5pt,
+  left=8pt,right=8pt,top=4.5pt,bottom=4.5pt}
+\newtcolorbox{alerte}{colback=boxred,colframe=red!55,boxrule=0.8pt,arc=2.5pt,
+  left=8pt,right=8pt,top=4.5pt,bottom=4.5pt}
+\newtcolorbox{acquis}{colback=boxgreen,colframe=green!45,boxrule=0.8pt,arc=2.5pt,
+  left=8pt,right=8pt,top=4.5pt,bottom=4.5pt}
+\newtcolorbox{piste}{colback=boxplum,colframe=plum!45,boxrule=0.8pt,arc=2.5pt,
+  left=8pt,right=8pt,top=4.5pt,bottom=4.5pt}
+\newtcolorbox{extrait}{colback=boxcode,colframe=boxedge,boxrule=0.5pt,arc=1.5pt,
+  left=7pt,right=7pt,top=3.5pt,bottom=3.5pt}
+
+\newcommand{\best}[1]{{\color{green}\textbf{#1}}}
+\newcommand{\pire}[1]{{\color{red}\textbf{#1}}}
+\newcommand{\sz}[1]{{\small\color{grey}\textsf{#1}}}
+\newcommand{\code}[1]{\texttt{\small #1}}
+\newcommand{\x}{$\times$}
+\newcommand{\loc}[1]{{\footnotesize\color{grey}\texttt{#1}}}
+
+\begin{document}
+
+\begin{center}
+{\Huge\bfseries\color{navy} Scella}\\[4pt]
+{\large\color{grey}\itshape Les couples : le croisement complet de tous les éléments}\\[4pt]
+{\small\color{grey} 11 août 2026 \; · \; cinquième et dernier document de la série « couples » \; · \; code lu à \code{aac2053}}
+\end{center}
+\vspace{2pt}
+
+\begin{these}
+\textbf{Le résultat central.} Les quatre documents précédents notent \textbf{huit couples choisis}. Le
+croisement systématique des quatorze éléments -- 91 paires -- en fait apparaître \textbf{deux servis qui
+n'étaient pas classés}, dont un qui prend la première place, et \textbf{un latent qui est le meilleur
+rendement du dépôt}. Mais le vrai résultat est ailleurs, et il est inconfortable : le portefeuille
+contient \textbf{neuf chaînes scellées} et \textbf{deux re-prouveurs à dépendances vides}. La propriété
+qui fait toute la valeur de l'édifice -- \emph{un tiers re-prouve sans nous croire} -- couvre
+aujourd'hui \textbf{deux chaînes sur neuf}.
+\end{these}
+
+\section{1 · Ce que la série couvre, et le trou exact}
+
+Les quatre documents du jour partagent une méthode que je reprends sans la modifier : un couple est deux
+éléments \emph{plus un liant}, c'est-à-dire le mécanisme qui leur fait produire ensemble une propriété
+vérifiable qu'aucun n'a seul ; et la notation se fait sur les quatre lentilles intrinsèques du 5 août --
+maturité, rareté, adversaire, démontrabilité -- depuis que la lentille d'objectif extérieur a disparu
+avec la piste qu'elle servait.
+
+Ce qui manque n'est donc pas la méthode, c'est la \textbf{couverture}. Les huit couples ont été choisis,
+non obtenus par balayage. Sur quatorze éléments il existe 91 paires ; la série en documente huit, et rien
+ne dit ce que valent les quatre-vingt-trois autres. Le présent document répond à cette question-là, et
+seulement à celle-là : il ne remplace aucun des quatre, il les complète par le balayage qui manquait.
+
+La plupart des paires balayées ne sont rien -- c'est attendu, et le §5 les nomme plutôt que de laisser
+le silence passer pour de l'exhaustivité. Trois survivent, et une observation de portefeuille les domine
+toutes.
+
+\section{2 · L'inventaire réel de la surface scellée}
+
+C'est le fait qui recadre l'ensemble, et aucun des quatre documents ne le mentionne.
+
+\textbf{Neuf crates scellent une véritable chaîne HMAC-SHA256}, au sens fort : le vocabulaire de
+chaînage y est présent (\code{chain}, \code{ledger}, \code{prev\_trace\_id}), pas seulement une primitive
+cryptographique. Les voici :
+
+\begin{extrait}
+\code{efe-audit-core} \; · \; \code{efe-server} \; · \; \code{efe-gold-test-gate} \; · \;
+\code{efe-publisher-identity} \; · \; \code{efe-nano} \\[1.5pt]
+\code{efe-llm-router} \; · \; \code{efe-curation} \; · \; \code{efe-agent-runner} \; · \;
+\code{efe-active-learning}
+\end{extrait}
+
+La recherche brute en renvoie onze. J'en ai écarté deux -- \code{efe-cache} et \code{efe-multi-region} --
+après lecture : ils emploient HMAC à d'autres fins et ne chaînent rien. Annoncer onze aurait été
+exactement la survente que ce projet s'interdit ; la différence entre « onze » et « neuf » est une
+lecture de fichier, pas une nuance de présentation.
+
+\renewcommand{\arraystretch}{1.15}
+\begin{center}\small
+\begin{tabular}{@{}>{\raggedright\arraybackslash}p{4.5cm} >{\raggedright\arraybackslash}p{4.3cm} c >{\raggedright\arraybackslash}p{5.6cm}@{}}
+\toprule
+\textbf{Chaîne scellée} & \textbf{Re-prouveur} & \textbf{0-dép} & \textbf{Ce que cela vaut} \\
+\midrule
+Bundle DAG (pile B) & \code{verify-mini} & \best{oui} & L'auditeur lit toute la source avant de croire \\
+Reçu méta (Couche 3) & \code{verify\_meta\_mini} & \best{oui} & Idem, sur l'autre pile \\
+Reçu méta (Couche 3) & \code{efe-meta-verify} & \pire{non} & 70 dépendances \\
+\code{audit\_events} & \code{efe\_verify\_audit} & \pire{non} & Exige Postgres \emph{et} un fichier de clés \\
+Registre gold & \code{efe\_gold\_verify} & \pire{non} & Tire tout le crate \\
+Identité éditeur & \code{efe\_publisher\_verify} & \pire{non} & 115 dépendances \\
+\textbf{Six autres chaînes} & \mbox{\pire{aucun}} & --- & Jamais re-prouvables par un tiers \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{alerte}
+\textbf{La conséquence, dite franchement.} Le couple classé n\textsuperscript{o}1 par la série --
+« artefact scellé \x{} re-prouveur zéro-dépendance » -- a été \emph{correctement} identifié comme le
+meilleur. Personne n'a mesuré sa \textbf{couverture} : il vaut pour \textbf{deux chaînes sur neuf}. Sept
+chaînes scellées n'ont aucun re-prouveur qu'un tiers puisse lire intégralement avant de lui accorder sa
+confiance -- et pour six d'entre elles, aucun re-prouveur du tout.
+\end{alerte}
+
+Il faut être juste : sceller sans re-prouveur tiers n'est pas inutile. Une chaîne HMAC reste
+\emph{tamper-evident} pour le détenteur de la clé, et c'est déjà davantage que la plupart des systèmes.
+Mais c'est précisément la propriété que le portefeuille met en avant, et l'écart entre « nous scellons
+partout » et « un tiers peut re-prouver ici et ici » est le genre d'écart qu'un examinateur trouve seul.
+Mieux vaut l'avoir écrit avant lui.
+
+\section{3 · Les trois couples que les huit ont manqués}
+
+\subsection{3.1 · C9 -- Pile A \x{} pile B, par la route bundle \sz{(servi)}}
+
+Le rapport du 5 août désignait ce geste comme « le seul de tout le dépôt à transformer une addition en
+multiplication », et le donnait à faire. \textbf{Il est fait.} \code{GET /v1/swarm/bundle/:id} exporte un
+reçu de la pile A sous la forme exacte que \code{verify-mini} sait re-prouver -- et il porte trois
+propriétés que la série ne relève nulle part, chacune étant une décision de conception et non un détail.
+
+\textbf{L'attestation ed25519} de la racine n'est présente que si une clé d'attestation est déployée ;
+sinon le champ est \textbf{absent}, jamais vide. La nuance décide de tout : un champ vide se confondrait
+avec une signature, et un auditeur pressé conclurait à une attestation qui n'existe pas.
+
+\textbf{La clé publique n'est jamais servie} à côté du bundle. La servir rendrait la vérification
+circulaire -- n'importe qui peut engendrer une paire et signer ce qu'il veut. Seule l'empreinte
+\code{key\_id} sort, pour que l'auditeur sache \emph{laquelle} de ses clés déjà épinglées appliquer.
+
+\textbf{L'échec est fort.} Dérivation refusée $\Rightarrow$ 500 sans bundle partiel, parce qu'un bundle
+amputé est indistinguable d'un bundle tronqué par un attaquant. Et si la publication de l'ancre rate, la
+route rend une erreur plutôt que de servir un bundle annonçant \code{anchored: true} -- un auditeur
+chercherait alors une ancre inexistante.
+
+En toute honnêteté, ce n'est pas un couple entièrement neuf : c'est \textbf{l'instance concrète et
+complète du couple n\textsuperscript{o}1}. La série a décrit le motif sans noter que le pont pile A
+$\rightarrow$ pile B est le seul endroit du dépôt où il soit réalisé avec attestation \emph{et} ancre.
+La distinction n'est pas verbale : c'est la différence entre un principe et une chose qui tourne.
+
+\subsection{3.2 · C10 -- Un journal d'ancres, deux binaires indépendants \sz{(servi)}}
+
+Celui-ci est réellement neuf. \code{efe-swarm-gateway} et \code{efe-meta-swarm-server} -- deux processus
+distincts, deux piles de reçu sans code commun -- écrivent dans \textbf{le même} journal
+\code{EFE\_SWARM\_ANCHOR\_LOG}. Le choix est délibéré et documenté dans le code lui-même
+\loc{(controller/anchor.rs:31 : « le format et le fichier sont ceux du Fil P »)}.
+
+La propriété composée qu'aucune moitié ne possède : un auditeur qui reçoit \textbf{un seul} journal peut
+ordonner temporellement des événements provenant des \emph{deux} piles, et y détecter une troncature
+dans l'une ou l'autre \textbf{sans détenir aucune clé}. Deux systèmes de scellement indépendants qui
+partagent une ancre unique est une discipline peu courante -- l'inclination naturelle est de donner à
+chaque sous-système son propre journal, ce qui interdit précisément l'ordonnancement croisé.
+
+Sa limite est celle de tout l'ancrage aujourd'hui : le journal reste détenu par l'opérateur. Il supprime
+la réécriture rétroactive, pas la confiance. C'est le jalon 3b, et il est moins coûteux qu'il n'y paraît
+-- \code{forensic-export} porte déjà la structure \code{AnchorProof} et le contrôle de liaison de racine.
+
+\subsection{3.3 · C11 -- Le registre gold \x{} un re-prouveur zéro-dép \sz{(latent)}}
+
+\code{efe-gold-test-gate} scelle une chaîne HMAC avec \code{prev\_trace\_id}, et ce qu'elle scelle n'a
+d'équivalent nulle part ailleurs dans le dépôt : \textbf{résultats de runs gold, usages de dérogation,
+détections de dérive, et cérémonies d'approbation par un opérateur}.
+
+La différence de nature mérite d'être posée. Les autres chaînes scellent des \emph{sorties} -- ce que le
+système a produit. Celle-ci scelle \textbf{le processus de qualification lui-même} : qui a approuvé quel
+jeu gold, qui a contourné la porte, et quand. C'est la première chose qu'un examinateur hostile cherche,
+parce que c'est là que se logent les décisions humaines qu'on préfère oublier -- et c'est nettement plus
+rare que de sceller des résultats.
+
+\begin{piste}
+\textbf{Il manque une seule pièce : un re-prouveur à dépendances vides.} \code{efe\_gold\_verify} existe
+mais tire tout le crate, et il importe \code{InMemoryGoldRunLedger} -- point à contrôler avant d'en
+dépendre. \textbf{Deux gabarits complets existent déjà} dans le dépôt (\code{verify-mini} et
+\code{verify\_meta\_mini}, avec SHA-256, HMAC et parseur JSON écrits à la main). C'est le meilleur
+rendement latent du portefeuille. \sz{Taille M.}
+\end{piste}
+
+Le corollaire corrige une erreur d'appréciation qui traîne depuis le 5 août. Le composant « banc de
+mesure » y était noté \emph{« réfute sa propre thèse, rien n'est rejouable »}. C'est vrai de
+\code{efe-bench}, qui ne scelle rien. Ce n'est \textbf{pas} vrai de \code{efe-gold-test-gate}, dont la
+moitié difficile -- la chaîne scellée avec ses quatre natures d'événements -- est déjà faite. Le
+composant avait été jugé comme un bloc alors qu'il en contient deux, de maturités opposées.
+
+\section{4 · Le classement fusionné}
+
+Les onze couples, notés sur les quatre lentilles intrinsèques, rangs de 1 à 11 par lentille.
+
+\renewcommand{\arraystretch}{1.13}
+\begin{center}\small
+\begin{tabular}{@{}r >{\raggedright\arraybackslash}p{7.1cm} cccc c c@{}}
+\toprule
+& \textbf{Le couple} & \sz{Mat} & \sz{Rar} & \sz{Adv} & \sz{Dém} & \textbf{Moy} & \sz{Éc.} \\
+\midrule
+\textbf{1} & \textbf{Pile A \x{} pile B} \sz{(bundle + ed25519 + ancre)} & \best{1} & 2 & \best{1} & 3 & \textbf{1,75} & 2 \\
+2 & Artefact scellé \x{} re-prouveur zéro-dép & 2 & 4 & 2 & 4 & \textbf{3,00} & 2 \\
+3 & Topologie déclarée \x{} appariement injectif & 3 & 6 & 3 & 2 & \textbf{3,50} & 4 \\
+\textbf{4} & \textbf{Ancre partagée, deux binaires} & 4 & 3 & 6 & 5 & \textbf{4,50} & 3 \\
+5 & Liaison v4 \x{} ancre publiée & 5 & 7 & 5 & \best{1} & \textbf{4,50} & 6 \\
+\textbf{6} & \textbf{Registre gold \x{} re-prouveur zéro-dép} & 7 & \best{1} & 4 & \pire{10} & \textbf{5,50} & \pire{9} \\
+7 & Canari de Lipschitz \x{} porte de démarrage & 8 & 5 & 7 & 6 & 6,50 & 3 \\
+8 & Caviardage PII \x{} scellement & 6 & 9 & 8 & 7 & 7,50 & 3 \\
+9 & Plafonnement \x{} coût scellé & 9 & 10 & 9 & 8 & 9,00 & 2 \\
+10 & Co-signature R3 \x{} chaîne HMAC & 10 & 8 & 10 & 9 & 9,25 & 2 \\
+11 & Revendication \x{} sa propre chute & 11 & 11 & 11 & 11 & 11,00 & \best{0} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\sz{En gras : les trois couples absents des quatre documents précédents. Éc. = amplitude entre le
+meilleur et le pire rang.}
+
+\begin{alerte}
+\textbf{Faits et jugements, séparés.} Les mécanismes, emplacements et taxonomies de ce document sont des
+\textbf{faits}, lus dans le code du 11 août ; l'annexe donne la commande qui rejoue chacun. Les
+\textbf{notes} sont un \textbf{jugement} structuré pour être discutable. Un désaccord sur « rareté = 3 »
+est légitime ; un désaccord sur « neuf chaînes scellées » s'ouvre en une commande.
+\end{alerte}
+
+Deux lectures comptent davantage que les rangs eux-mêmes.
+
+\textbf{C11 a un écart de 9} -- premier en rareté, dernier en démontrabilité. C'est exactement le profil
+\emph{pire réalisé, meilleur latent} que la série avait diagnostiqué sur la co-signature R3, mais dans
+une version plus favorable : un seul fil le referme, là où R3 attend un producteur entier.
+
+\textbf{C9 déloge l'ancien premier}, et pas parce que celui-ci était mal jugé. Le couple
+n\textsuperscript{o}1 énonçait un motif ; C9 en est l'incarnation complète, avec deux propriétés que le
+motif seul n'implique pas -- l'attestation non circulaire et l'ancre. Un principe et une chose qui
+tourne ne se classent pas au même rang.
+
+\section{5 · Les croisements morts, nommés}
+
+Le balayage a surtout produit des non-couples. Les taire aurait laissé croire que l'exhaustivité était
+gratuite.
+
+\textbf{Fil B \x{} méta-essaim.} Aucun chemin partagé : ils vivent dans deux binaires distincts, à deux
+couches différentes. C'est précisément l'objet du Fil C -- la Colonne -- et le Fil C fait \textbf{zéro
+ligne}. La paire qu'on croit voir sur un schéma d'architecture n'existe pas dans le code.
+
+\textbf{Runtime nano \x{} tout.} \code{efe-nano-inference-daemon} n'a aucun appelant dans le dépôt.
+Toutes ses paires sont vides par construction, quel que soit le partenaire.
+
+\textbf{Sandwich C.1, essaim médiateur, Fil C \x{} tout.} Zéro occurrence de \code{HopKind},
+\code{SwarmMediator}, \code{EdgePlan}. Ce sont des conceptions, pas des moitiés de couple : on ne peut
+pas apparier ce qui n'existe pas, et un document d'architecture ne compte pas comme une moitié.
+
+\textbf{Flexible MLP \x{} tout.} Hors dépôt.
+
+\begin{alerte}
+\textbf{Une correction, au passage.} L'essaim $\Phi$ est classé dans la série comme si la pureté de sa
+concurrence était acquise. \textbf{Elle ne l'est pas dans \code{HEAD}} : \code{dissolution\_centroid} y
+compte \textbf{zéro occurrence}. Ces 323 lignes appartiennent à la session concurrente et vivent
+uniquement dans l'arbre de travail. Tout couple qui s'appuie sur cette propriété est aujourd'hui
+\emph{latent}, non \emph{servi}.
+\end{alerte}
+
+\section{6 · Le jugement}
+
+Le portefeuille de couples est \textbf{plus riche et plus déséquilibré} que la série ne le montrait. Deux
+couples servis n'étaient pas classés, dont celui qui prend la première place ; un latent de premier plan
+dormait dans un composant jugé en bloc alors qu'il en contient deux.
+
+Mais la conclusion qui compte n'est pas un rang. C'est que la propriété fondatrice de tout l'édifice --
+\emph{un tiers re-prouve sans nous croire} -- \textbf{couvre deux chaînes scellées sur neuf}.
+
+\begin{acquis}
+\textbf{L'écart le plus rentable n'est plus de coder un couple nouveau.} C'est de \textbf{porter les deux
+gabarits zéro-dépendance existants sur les chaînes qui n'en ont pas}, en commençant par le registre gold
+-- la seule qui scelle un processus de décision \emph{humain} plutôt qu'un résultat machine. Le travail
+est de la transcription, pas de l'invention : les deux gabarits sont écrits, testés, et leur arbre de
+dépendances est vérifiablement vide.
+\end{acquis}
+
+\section{Annexe · Vérifier chaque affirmation soi-même}
+
+Les affirmations \textbf{négatives} de ce document -- « six chaînes n'ont aucun re-prouveur », « le
+Sandwich fait zéro ligne » -- sont les plus importantes à pouvoir contrôler, parce qu'un lecteur ne peut
+pas les vérifier en lisant. Une recherche qui revient vide n'est une preuve qu'à condition d'être
+rejouable. Les commandes ci-dessous ont toutes été exécutées avant publication, depuis la racine du
+dépôt.
+
+\renewcommand{\arraystretch}{1.22}
+\begin{center}\small
+\begin{tabular}{@{}>{\raggedright\arraybackslash}p{5.3cm} >{\raggedright\arraybackslash}p{10.8cm}@{}}
+\toprule
+\textbf{Affirmation} & \textbf{Ce qui la rejoue} \\
+\midrule
+Onze crates emploient HMAC \newline \sz{(neuf après lecture)} &
+  \code{grep -rl 'Hmac<Sha256>\textbar HmacSha256' crates -{}-include='*.rs' \textbar\ cut -d/ -f2 \textbar\ sort -u} \\
+Six binaires de vérification & \code{ls crates/*/src/bin/*.rs \textbar\ grep -i verif} \newline
+  \sz{plus} \code{crates/verify-mini/src/main.rs} \sz{(nommé main, pas dans bin/)} \\
+\code{verify-mini} est sans dépendance & \code{cargo tree -p verify-mini -e normal -{}-prefix none} \sz{→ une seule ligne} \\
+\code{verify\_meta\_mini} aussi & \code{cargo tree -p verify-meta-mini -e normal -{}-prefix none} \\
+Les autres vérifieurs sont lourds & \code{cargo tree -p efe-publisher-identity -e normal \textbar\ wc -l} \sz{→ 115} \\
+C9 : la route bundle et ses gardes & \code{crates/efe-swarm-gateway/src/routes/bundle.rs} \sz{(en-tête, P.2 à P.4)} \\
+C10 : l'ancre est partagée & \code{grep -rn 'EFE\_SWARM\_ANCHOR\_LOG\textbar ANCHOR\_LOG\_ENV' crates -{}-include='*.rs'} \\
+C11 : ce que le registre gold scelle & \code{crates/efe-gold-test-gate/src/ledger/mod.rs} \sz{(en-tête, quatre natures)} \\
+$\Phi$ pur non commité & \code{git show HEAD:crates/efe-core/src/els/mod.rs \textbar\ grep -c dissolution\_centroid} \sz{→ 0} \\
+Sandwich / médiateur / Fil C & \code{grep -rn 'HopKind\textbar SwarmMediator\textbar EdgePlan' crates -{}-include='*.rs'} \sz{→ vide} \\
+Runtime nano sans appelant & \code{grep -rn 'efe-nano-inference-daemon' crates/*/Cargo.toml} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Deux avertissements pour que cette annexe ne soit pas lue plus largement qu'elle ne vaut. Les lignes
+portant sur des \emph{absences} valent à la date du document ; et la classification « neuf chaînes sur
+onze » repose sur une \textbf{lecture} des deux crates écartés, pas sur la commande -- c'est le seul
+endroit du document où la commande seule ne suffit pas, et c'est pourquoi il est dit ici plutôt que
+laissé à découvrir.
+
+\vspace{4pt}
+\begin{these}
+\small\textbf{Rappel de cadrage.} Une chaîne scellée atteste l'\textbf{intégrité} d'une suite
+d'enregistrements, jamais la \textbf{correction} de ce qu'ils décrivent. Elle est \emph{tamper-evident
+pour un détenteur de clé}, pas \emph{trustless pour un tiers}. C'est vrai des neuf chaînes de ce
+document, y compris des deux qui disposent d'un re-prouveur à dépendances vides : celui-ci change
+\emph{qui} peut vérifier, pas \emph{ce} qui est attesté.
+\end{these}
+
+\end{document}

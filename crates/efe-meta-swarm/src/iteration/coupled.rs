@@ -75,6 +75,9 @@ pub struct CoupledIteration<'a> {
     pub(crate) gamma:        f64,
     pub(crate) criterion:    ConvergenceCriterion,
     pub(crate) trace:        bool,
+    /// Couche 3 M1.c — strict (fail-closed) mode: the H1 pre-check rejects unverified
+    /// (`Stub`) participants. Empirical / signed certificates are checked in both modes.
+    pub(crate) strict:       bool,
 }
 
 impl<'a> CoupledIteration<'a> {
@@ -140,10 +143,13 @@ impl<'a> CoupledIteration<'a> {
         let start = Instant::now();
         let mut trace = if self.trace { Some(IterationTrace::new()) } else { None };
 
-        // Pre-validation : H1 for each participant.
+        // Pre-validation : H1 (non-expansiveness) for each participant. Couche 3 M1.c —
+        // this guard is now LIVE: a `LocalParticipant` returns a real `Empirical`
+        // certificate from its Lipschitz canary, so `accepts` fails-closed when the canary
+        // measured `L̂ ≥ 1 − margin`. In strict mode an unverified `Stub` is also rejected.
         for p in self.participants {
             let cert = p.verify_non_expansive()?;
-            if !cert.is_valid() {
+            if !cert.accepts(self.strict) {
                 return Err(MetaSwarmError::HypothesisCheckFailed { hypothesis: "H1" });
             }
         }

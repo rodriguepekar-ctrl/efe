@@ -166,6 +166,37 @@ pub struct SwarmGatewayState {
     /// famille (`"anthropic"`) en identifiant de modèle concret (`"anthropic/claude-…"`)
     /// attendu par le routeur. **Aucun secret** (noms de modèles = politique de routage).
     pub router_map: RouterMap,
+    /// **Fil P (P.2)** : l'export du **bundle de provenance** (pile B) est-il servi ?
+    ///
+    /// `false` par défaut, y compris via [`Self::in_memory`] et [`Self::new`] : sans opt-in
+    /// explicite, la route n'est **pas montée** et le comportement servi est byte-identique.
+    /// Câblé depuis l'env par le binaire (`EFE_SWARM_BUNDLE_ENABLED=true`), ou par
+    /// [`Self::with_bundle_export`] — ce dernier évite toute manipulation d'environnement dans
+    /// les tests, qui serait une course en exécution parallèle.
+    ///
+    /// L'export ne révèle **aucune clé** : le bundle ne contient que des empreintes, et la clé
+    /// tenant de la pile B voyage hors bande vers l'auditeur.
+    pub bundle_export: bool,
+    /// **Fil P (P.3)** : la clé privée d'**attestation de racine**, si l'opérateur en a déployé une.
+    ///
+    /// `None` ⟹ les bundles sont servis **sans champ d'attestation** — jamais avec un champ vide
+    /// ou nul, qu'un consommateur pourrait prendre pour une signature. Absent veut dire absent.
+    ///
+    /// La clé ne fuit pas : `BundleSigner` rédige son `Debug`, et `SwarmGatewayState` ne dérive pas
+    /// `Debug`. Elle ne quitte **jamais** le processus — seule l'**empreinte** (`key_id`) est
+    /// servie, et la clé **publique** se publie hors bande.
+    pub bundle_signer: Option<Arc<provenance_bridge::BundleSigner>>,
+    /// **Fil P (P.4)** : le support de publication de l'**ancre** — la racine attendue, écrite
+    /// **hors** du bundle.
+    ///
+    /// `None` ⟹ aucune ancre n'est publiée, et la réponse porte `anchored: false`. C'est la
+    /// vérité : sans référence externe, un bundle tronqué re-prouve parfaitement, et le bundle ne
+    /// prouve sa cohérence que contre lui-même.
+    ///
+    /// Le support est délibérément **abstrait** (`AnchorSink`) : l'architecture (§11.2) laisse la
+    /// question ouverte entre journal interne, horodatage RFC-3161 et journal de transparence.
+    /// Seul le contrat est imposé — hors bundle, append-only, canal distinct.
+    pub anchor_sink: Option<Arc<dyn provenance_bridge::AnchorSink>>,
     /// **Couche 2 (feature `frontier-llm`)** : moteur de coordination multi-LLM
     /// (Claude/Gemini/GPT) — fan-out + vote + provenance par appel. `None` ⇒ frontière
     /// non câblée (les futures routes `/v1/llm/*` répondront 501). Câblé server-side depuis
@@ -173,6 +204,11 @@ pub struct SwarmGatewayState {
     /// providers du coordinator**, jamais copiées dans cet état ni scellées dans un bundle.
     #[cfg(feature = "frontier-llm")]
     pub coordinator: Option<Arc<efe_coordinator::Coordinator>>,
+    /// **Couche 2 (M4 §2.4)** : compteurs d'egress frontière (appels, appels R4, coût µ¢, coût
+    /// par tenant) exposés sur `/metrics`. Alimentés au scellement de mission — le chemin
+    /// PAYANT devient observable (alerting coût/egress). Toujours présent sous la feature.
+    #[cfg(feature = "frontier-llm")]
+    pub frontier_metrics: Arc<crate::frontier_metrics::FrontierMetrics>,
     /// **Prod (feature `oidc`)** : vérificateur de JWT OIDC (clé PUBLIQUE server-side).
     /// `None` ⇒ repli sur l'extracteur d'en-têtes dev. Jamais une clé privée.
     #[cfg(feature = "oidc")]
@@ -236,8 +272,17 @@ impl SwarmGatewayState {
             dash_metrics: DashboardMetrics::new(),
             router_endpoint: None,
             router_map: RouterMap::default(),
+            // Fil P (P.2) : OFF par défaut — la route d'export n'est pas montée.
+            bundle_export: false,
+            // Fil P (P.3) : aucune clé d'attestation par défaut — les bundles sortent SANS
+            // champ d'attestation, ce qui est la vérité plutôt qu'un champ vide.
+            bundle_signer: None,
+            // Fil P (P.4) : aucune publication d'ancre par défaut.
+            anchor_sink: None,
             #[cfg(feature = "frontier-llm")]
             coordinator: None,
+            #[cfg(feature = "frontier-llm")]
+            frontier_metrics: crate::frontier_metrics::FrontierMetrics::new(),
             #[cfg(feature = "oidc")]
             oidc: None,
             #[cfg(feature = "oidc")]
@@ -549,6 +594,75 @@ impl SwarmGatewayState {
         let tid = self.tenant_id(tenant)?;
         self.keys.derive(tid).map_err(|e| GatewayError::Internal(format!("clé tenant : {e}")))
     }
+
+    /// **Fil P (P.2)** : la clé tenant de la **pile B**, dérivée de celle de la pile A.
+    ///
+    /// Ce sont **deux clés distinctes**, et ce n'est pas une précaution de façade : réutiliser les
+    /// mêmes octets à travers deux schémas de scellement différents est la classe d'erreur qui les
+    /// casse tous les deux à la fois. La dérivation passe par le contexte versionné publié par la
+    /// pile B (`efe-prov-dag:v1:tenant:`), via `provenance_bridge::stack_b_key` — source unique de
+    /// vérité, jamais recopiée ici.
+    ///
+    /// Propriétés : octets différents de la pile A ; **sens unique** (confier un bundle à un
+    /// auditeur ne lui donne pas le pouvoir de forger un reçu de la pile A) ; déterministe ; et
+    /// **aucun secret nouveau à garder**.
+    pub fn derive_bundle_key(
+        &self,
+        tenant: &str,
+    ) -> Result<provenance_dag::TenantKey, GatewayError> {
+        let a = self.derive_key(tenant)?;
+        Ok(provenance_bridge::stack_b_key(&a, tenant))
+    }
+
+    /// **Fil P (P.2)** : active l'export du bundle de provenance.
+    ///
+    /// Réservé au câblage explicite (binaire depuis l'env, ou test). Ne lit **pas** l'environnement
+    /// lui-même : un test qui manipulerait `EFE_SWARM_BUNDLE_ENABLED` créerait une course avec les
+    /// autres tests du même processus.
+    #[must_use]
+    pub fn with_bundle_export(mut self, enabled: bool) -> Self {
+        self.bundle_export = enabled;
+        self
+    }
+
+    /// L'export du bundle est-il servi ? (Faux par défaut ⟹ route **non montée**.)
+    #[must_use]
+    pub fn bundle_export_enabled(&self) -> bool {
+        self.bundle_export
+    }
+
+    /// **Fil P (P.3)** : installe la clé privée d'attestation de racine.
+    ///
+    /// Sans elle, les bundles sont servis **non attestés** — et le disent. Avec elle, un tiers qui
+    /// a épinglé la clé **publique** hors bande peut conclure que la racine servie a bien été
+    /// émise ici, sans détenir le moindre secret.
+    #[must_use]
+    pub fn with_bundle_signer(mut self, signer: provenance_bridge::BundleSigner) -> Self {
+        self.bundle_signer = Some(Arc::new(signer));
+        self
+    }
+
+    /// **Fil P (P.4)** : installe le support de publication de l'ancre.
+    ///
+    /// Avec lui, chaque bundle servi publie sa racine attendue **ailleurs**, et la réponse porte
+    /// `anchored: true`. C'est le seul niveau où une troncature devient détectable par quelqu'un
+    /// qui ne détient **aucune clé** — à condition qu'il reçoive le journal par un canal distinct
+    /// de celui du bundle.
+    #[must_use]
+    pub fn with_anchor_sink(mut self, sink: Arc<dyn provenance_bridge::AnchorSink>) -> Self {
+        self.anchor_sink = Some(sink);
+        self
+    }
+}
+
+/// **Fil P (P.2)** : l'opt-in d'environnement de l'export de bundle, lu par le **binaire**.
+///
+/// Fonction libre et non méthode : l'état ne lit jamais l'environnement de lui-même, de sorte
+/// qu'un test puisse construire un état déterministe sans course. Convention identique à
+/// `EFE_LLM_FRONTIER_ENABLED` : seule la chaîne `"true"` active.
+#[must_use]
+pub fn bundle_export_from_env() -> bool {
+    std::env::var("EFE_SWARM_BUNDLE_ENABLED").map(|v| v == "true").unwrap_or(false)
 }
 
 #[cfg(test)]

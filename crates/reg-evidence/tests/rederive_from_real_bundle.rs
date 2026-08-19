@@ -89,7 +89,7 @@ fn third_party_rederives_the_reg_artifact_from_the_real_bundle() {
     let rederived_md = render_md(&rederived);
     let on_disk_md = std::fs::read_to_string(bundle_dir.join("reg/eu_ai_act.md")).unwrap();
     assert_eq!(rederived_md, on_disk_md, "le tiers re-dérive le reg/<cadre>.md octet-à-octet (zéro confiance neuve)");
-    assert_eq!(rederived_md, expected_md, "et c'est bien l'artefact que Kovant a produit");
+    assert_eq!(rederived_md, expected_md, "et c'est bien l'artefact que l'Ã©diteur a produit");
     // L'artefact est lié à l'état du DAG publié.
     assert_eq!(rederived.manifest_root, published_root, "l'artefact est lié au root publié");
 

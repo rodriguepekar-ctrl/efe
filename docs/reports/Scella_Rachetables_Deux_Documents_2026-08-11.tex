@@ -1,0 +1,327 @@
+\documentclass[10pt]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage[french]{babel}
+\usepackage{newpxtext,newpxmath}
+\usepackage[a4paper,top=1.5cm,bottom=1.35cm,left=1.6cm,right=1.6cm]{geometry}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{titlesec}
+\usepackage[most]{tcolorbox}
+\usepackage{enumitem}
+\usepackage{array}
+\usepackage{booktabs}
+\usepackage{fancyhdr}
+
+\definecolor{navy}{HTML}{1F3A5F}
+\definecolor{grey}{HTML}{54606E}
+\definecolor{green}{HTML}{2C6E49}
+\definecolor{amber}{HTML}{9C6A16}
+\definecolor{red}{HTML}{A6322E}
+\definecolor{plum}{HTML}{7A4EA8}
+\definecolor{boxgray}{HTML}{F3F5F8}
+\definecolor{boxred}{HTML}{FCF2F1}
+\definecolor{boxgreen}{HTML}{F1F7F3}
+\definecolor{boxplum}{HTML}{F7F3FB}
+\definecolor{boxcode}{HTML}{F7F8FA}
+\definecolor{boxedge}{HTML}{D9E0EA}
+
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{2.6pt}
+\linespread{1.0}
+
+\pagestyle{fancy}\fancyhf{}
+\lhead{\small\color{grey}Scella}
+\rhead{\small\color{grey}Les plus rachetables -- périmètre des deux documents -- 11 août 2026}
+\cfoot{\small\color{grey}\thepage}
+\renewcommand{\headrulewidth}{0.3pt}
+
+\titleformat{\section}{\color{navy}\large\bfseries}{}{0pt}{}
+\titlespacing{\section}{0pt}{11pt}{3pt}
+\titleformat{\subsection}{\color{navy}\bfseries}{}{0pt}{}
+\titlespacing{\subsection}{0pt}{7pt}{1.5pt}
+
+\newtcolorbox{these}{colback=boxgray,colframe=boxedge,boxrule=0.5pt,arc=2.5pt,
+  left=8pt,right=8pt,top=4.5pt,bottom=4.5pt}
+\newtcolorbox{alerte}{colback=boxred,colframe=red!55,boxrule=0.8pt,arc=2.5pt,
+  left=8pt,right=8pt,top=4.5pt,bottom=4.5pt}
+\newtcolorbox{acquis}{colback=boxgreen,colframe=green!45,boxrule=0.8pt,arc=2.5pt,
+  left=8pt,right=8pt,top=4.5pt,bottom=4.5pt}
+\newtcolorbox{piste}{colback=boxplum,colframe=plum!45,boxrule=0.8pt,arc=2.5pt,
+  left=8pt,right=8pt,top=4.5pt,bottom=4.5pt}
+\newtcolorbox{extrait}{colback=boxcode,colframe=boxedge,boxrule=0.5pt,arc=1.5pt,
+  left=7pt,right=7pt,top=3.5pt,bottom=3.5pt}
+
+% \textcolor plutôt que {\color …} : en tête de cellule p{}, \color insère un whatsit
+% qui ouvre une ligne vide et décale verticalement toute la colonne.
+\newcommand{\best}[1]{\textcolor{green}{\textbf{#1}}}
+\newcommand{\pire}[1]{\textcolor{red}{\textbf{#1}}}
+\newcommand{\sz}[1]{\textcolor{grey}{\small\textsf{#1}}}
+\newcommand{\code}[1]{\texttt{\small #1}}
+\newcommand{\x}{$\times$}
+\newcommand{\loc}[1]{{\footnotesize\color{grey}\texttt{#1}}}
+\newcommand{\pc}{\,\%}
+
+\begin{document}
+
+\begin{center}
+{\Huge\bfseries\color{navy} Scella}\\[4pt]
+{\large\color{grey}\itshape Les groupes les plus rachetables --- dans le périmètre des deux documents}\\[4pt]
+{\small\color{grey} 11 août 2026 \; · \; \code{Scella\_EN-1.pdf} \x{} \code{Scella\_Produit\_Unique} \; · \; croisement de ce qui est promis et de ce que cela coûte}
+\end{center}
+\vspace{2pt}
+
+\begin{these}
+\textbf{Le résultat central, et il tient à une vérification d'une ligne.} Le seul résultat économique
+mesuré en conditions réelles des deux documents --- \emph{« $-$27\pc{} de coût agrégé, jusqu'à
+$-$90\pc, latence jusqu'à 3\x{} inférieure, sur Claude + Gemini »} --- est attribué au
+\textbf{méta-essaim}. Or Claude et Gemini n'existent que dans \code{efe-swarm-gateway} :
+\code{efe-meta-swarm-server} et \code{efe-meta-swarm} en comptent \textbf{zéro occurrence}. Ce chiffre
+appartient donc à la \textbf{passerelle} --- c'est-à-dire au binaire qui héberge le \textbf{Relais}.
+Corrigée, l'attribution déplace le meilleur argument commercial vers le groupe que le document appelle
+déjà lui-même \emph{« la brique la plus finie »}, et que le second PDF a mesuré à \textbf{11 crates
+déjà découplés}. Et le périmètre fermé fait apparaître autre chose : \textbf{la pile preuve
+réglementaire --- l'actif que j'avais classé premier hier --- est totalement absente de
+\code{Scella\_EN}}.
+\end{these}
+
+\section{1 · Ce que « dans ces PDF » change au périmètre}
+
+La contrainte est utile plutôt que restrictive, parce que les deux documents ne disent pas la même
+chose et ne se recouvrent presque pas. \code{Scella\_EN} dit \textbf{quelle brique résout quel
+problème}, avec quelle maturité, et \textbf{ce qui a été mesuré}. \code{Scella\_Produit\_Unique} dit
+\textbf{ce que chaque groupe coûte à livrer}, en nomenclature mesurée par \code{cargo tree}. Ni l'un ni
+l'autre ne répond seul à la question posée ; croisés, ils y répondent complètement.
+
+Je conserve la discipline des rapports précédents : \textbf{aucun acquéreur n'est nommé, aucun marché
+n'est postulé}. C'est d'autant plus facile ici que \code{Scella\_EN} définit ses propres problèmes,
+les numérote, et étiquette chaque brique par les numéros qu'elle résout. Je me contente donc de lire
+son étiquetage et de le croiser avec les empreintes de l'autre document.
+
+\begin{extrait}
+\textbf{Les cinq problèmes, tels que le document les énonce.}
+\textbf{(0)} prouver à un tiers, hors ligne, sans vos données ni la parole de l'opérateur ·
+\textbf{(1)} orchestrer plusieurs fournisseurs avec une trace auditable ·
+\textbf{(2)} garder la donnée chez son propriétaire ·
+\textbf{(3)} des décisions rejouables et re-vérifiables ·
+\textbf{(4)} réduire coût et hallucination.
+\end{extrait}
+
+\section{2 · La carte croisée : brique \x{} problème \x{} maturité \x{} empreinte}
+
+Les colonnes « résout » et « maturité » sont lues dans \code{Scella\_EN} ; la colonne « empreinte »
+vient des mesures de \code{Produit\_Unique}. Rien n'est de mon appréciation dans ce tableau.
+
+\renewcommand{\arraystretch}{1.22}
+\begin{center}\small
+\begin{tabular}{@{}>{\raggedright\arraybackslash}p{3.5cm} c >{\raggedright\arraybackslash}p{7.0cm} >{\raggedright\arraybackslash}p{3.7cm}@{}}
+\toprule
+\textbf{Brique} \sz{(Scella\_EN)} & \textbf{Résout} & \textbf{Maturité --- dite par le document} & \textbf{Empreinte} \sz{(Produit\_Unique)} \\
+\midrule
+\textbf{Le Relais inter-modèles} & (1) & \best{« la brique la plus finie »} --- codée et poussée de bout en bout, servie opt-in, $\sim$220 tests, 4 revues adverses, B.0$\rightarrow$B.4 & \best{11 crates}, déjà découplé \\
+\textbf{Le méta-essaim} & (1)(2) & « réel et testé », mTLS strict, manifeste moteur porté par le protocole & 7 défaut / \pire{26 réel} / $\sim$9 corrigé \\
+\textbf{Le reçu} & (0) & la fondation --- les six briques n'écrivent qu'un seul reçu & présent dans toutes \\
+\textbf{Le Cadrage} & (4) & \pire{« architecture écrite, prête à coder »} & \pire{0 ligne} \\
+\textbf{L'essaim médiateur} & (1)(3) & « deux tiers déjà là » ; la chaîne déclarée n'est pas codée & \pire{0 ligne} \\
+Nano-robots $+$ $\Phi$ & (3) & mesuré, déterministe, $\hat{L}$ empirique & \code{efe-core} $=$ \best{1 crate} \\
+Flexible MLP & (4) & « pièce séparée, non intégrée » & hors dépôt \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\section{3 · Le défaut d'attribution qui déplace le verdict}
+
+C'est la vérification la plus importante de ce rapport, et elle suffit à réordonner le classement.
+
+\code{Scella\_EN} place son \textbf{seul résultat économique mesuré en conditions réelles} sur le
+méta-essaim :
+
+\begin{extrait}
+\sz{« \textbf{Meta-swarm (coordination)} --- validated live on real providers (\textbf{Claude + Gemini}) :
+cost cut ($\sim$$-$27\pc{} aggregate, up to $\sim$90\pc{} on the cheap-routable), quality held, latency up
+to $\sim$3\x{} lower. »}
+\end{extrait}
+
+Or, mesuré dans le code : \textbf{Claude et Gemini n'existent que dans \code{efe-swarm-gateway}} ---
+six fichiers. Et \code{efe-meta-swarm-server} comme \code{efe-meta-swarm} comptent \textbf{zéro
+occurrence} de Claude, Anthropic, OpenAI ou Gemini.
+
+\begin{alerte}
+\textbf{Le méta-essaim de la Section I ne connaît aucun fournisseur frontière.} Il est
+Tensor$\rightarrow$Tensor sur gRPC, et c'est précisément ce que le document en dit par ailleurs. Le
+$-$27\pc{} \textbf{n'a pas pu être produit par lui} : il appartient à la \textbf{passerelle}, c'est-à-dire
+au binaire qui héberge le \textbf{Relais}.
+
+Ce n'est pas une scorie rédactionnelle. C'est le \emph{seul} chiffre d'argent des deux documents, et il
+est adossé à un composant qu'un examinateur disqualifie en un \code{grep}. Corrigée, l'attribution
+\textbf{transfère le meilleur argument commercial} du groupe B vers le groupe A.
+\end{alerte}
+
+Il faut être juste sur l'origine de la confusion : le dépôt contient bien deux couches de coordination
+distinctes --- la frontière LLM dans la passerelle, et le méta-essaim latent en gRPC --- et le document
+les décrit toutes deux honnêtement, séparément. Ce qui manque n'est pas l'honnêteté, c'est le
+rattachement du résultat à la bonne couche.
+
+\section{4 · Le classement}
+
+Quatre groupes constructibles à partir de ces deux documents ; rangs de 1 à 4 par critère.
+
+\renewcommand{\arraystretch}{1.2}
+\begin{center}\small
+\begin{tabular}{@{}r >{\raggedright\arraybackslash}p{5.5cm} c ccccc c@{}}
+\toprule
+& \textbf{Le groupe} & \sz{Résout} & \sz{Chiffré} & \sz{Matur.} & \sz{Empr.} & \sz{Sans croy.} & \sz{Doc/code} & \textbf{Moy} \\
+\midrule
+\textbf{1} & \textbf{A · Le relais souverain} \sz{Relais + frontière + reçu} & \textbf{(0)(1)(2)} & \best{1} & \best{1} & \best{1} & \best{1} & 2 & \best{1,20} \\
+2 & C · Le Cadrage + reçu & (0)(4) & 2 & \pire{4} & \pire{4} & 2 & \best{1} & \textbf{2,60} \\
+3 & B · L'essaim attestable \sz{méta-essaim + reçu} & (0)(1)(2) & 3 & 2 & 3 & 3 & 3 & \textbf{2,80} \\
+4 & D · La lignée latente \sz{nano + $\Phi$ + méta} & (2)(3) & \pire{4} & 3 & 2 & \pire{4} & \pire{4} & \pire{3,40} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\textbf{A gagne sur quatre critères sur cinq}, et chacune des raisons est écrite dans l'un des deux
+documents plutôt que dans mon appréciation.
+
+\textbf{C'est le document lui-même qui l'appelle « la brique la plus finie »} --- codée et poussée de
+bout en bout, servie opt-in, $\sim$220 tests, quatre revues adverses, vingt-six correctifs. Aucune autre
+brique ne reçoit ce qualificatif, et c'est le genre de phrase qu'un auteur n'écrit pas à la légère sur
+son propre travail.
+
+\textbf{C'est là que vit l'argent}, une fois l'attribution du §3 corrigée : $-$27\pc{} agrégé, jusqu'à
+$-$90\pc{} sur le routable-bon-marché, latence 3\x{} inférieure, qualité tenue --- sur de vrais
+fournisseurs, pas en simulation.
+
+\textbf{\code{Produit\_Unique} l'a mesuré à 11 crates, déjà découplé, sans monolithe.} C'est le seul
+candidat qui n'exige \textbf{aucun correctif de packaging}, là où B traîne ses 26 crates tant que la
+recette Mode-1 n'est pas extraite d'\code{efe-server}.
+
+\textbf{Il n'exige aucune croyance.} « Faire coopérer Claude, GPT et un modèle interne sans colle
+tierce, avec une trace auditable » s'évalue sans adhérer à quoi que ce soit sur les essaims latents ---
+et un pari est exactement ce qu'une revue d'acquisition cherche à éliminer.
+
+\begin{alerte}
+\textbf{C arrive deuxième, et ce rang est trompeur --- il faut le dire.} Le Cadrage a un résultat
+mesuré ($-$85\pc{} de tokens d'entrée, 132\,$\rightarrow$\,20, réponse vérifiée SUPPORTED), il ne demande
+aucune croyance, et le document est \emph{franc} sur son état, ce qui lui vaut le premier rang en
+cohérence. Mais votre question dit \textbf{« maintenant »}, et le Cadrage compte \textbf{zéro ligne}.
+Son rang mesure une \emph{promesse}, pas une \emph{disponibilité}. Il ne peut pas être racheté
+aujourd'hui, quelle que soit sa moyenne.
+\end{alerte}
+
+\textbf{Et B tombe troisième}, alors que mes deux rapports précédents le couronnaient. Dans le
+périmètre de ces documents, son argument distinctif --- le $-$27\pc{} --- \textbf{ne lui appartient
+pas}, et ce qui reste exige la thèse latente. C'est la troisième fois de la série qu'un changement
+d'axe déplace le vainqueur ; c'est le signe que les axes mesurent réellement des choses différentes.
+
+\section{5 · Le résultat principal : ce que les deux documents \emph{ne contiennent pas}}
+
+C'est la conclusion la plus utile, et elle ne pouvait apparaître qu'en fermant le périmètre comme vous
+l'avez fait. J'ai cherché dans \code{Scella\_EN} les termes de l'actif que j'avais classé
+\textbf{premier en acquérabilité} la veille.
+
+\renewcommand{\arraystretch}{1.15}
+\begin{center}\small
+\begin{tabular}{@{}>{\raggedright\arraybackslash}p{9.8cm} c@{}}
+\toprule
+\textbf{Terme cherché dans \code{Scella\_EN}} & \textbf{Occurrences} \\
+\midrule
+\code{reg-evidence} · \code{audit-api} · \code{provenance-capture} · \code{forensic} & \pire{0} \\
+\textbf{AI Act} · \textbf{GDPR} · \textbf{CSDDD} & \pire{0} \\
+« zero-dependency » · « tap » & \pire{0} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{acquis}
+\textbf{La pile preuve réglementaire --- huit crates, 12 862 lignes, 240 tests, trois obligations
+légales nommées --- est totalement absente du document qui présente Scella.}
+\end{acquis}
+
+Un acquéreur qui ne lit que ces deux PDF \textbf{n'apprendra jamais qu'elle existe}. Ce n'est donc pas
+un défaut de classement de ma part : dans le périmètre imposé, elle n'est pas classable, et je ne l'ai
+pas classée. Mais son absence \emph{est} le résultat --- le document de présentation omet la pièce qui
+répond à trois obligations non optionnelles, au profit de six briques dont \textbf{deux comptent zéro
+ligne}. C'est le déséquilibre le plus coûteux des deux documents, et il ne se corrige pas par du code.
+
+\section{6 · Deux péremptions qu'un examinateur trouvera seul}
+
+\textbf{« external anchor not yet wired »} \sz{(p.\,3)}. L'ancre \emph{interne} \textbf{a été câblée} ---
+journal append-only, troncature détectable \emph{sans clé}. Ce qui manque est l'ancrage \textbf{tiers}.
+La formulation juste serait : \emph{« internal anchor wired ; third-party anchor not »}. En l'état, le
+document \textbf{sous-vend} une levée réelle, ce qui est le défaut symétrique de la survente et coûte
+tout aussi cher.
+
+\textbf{« nearly 1,200 green tests »} \sz{(p.\,4)}. Portée non définie --- sur quels crates ? Je n'ai
+jamais pu la re-mesurer, et je l'avais déjà signalé. Un chiffre non reproductible dans un document par
+ailleurs rigoureux est exactement ce qui appelle la question suivante, et la question suivante porte
+rarement sur le chiffre.
+
+\section{7 · Le jugement}
+
+\begin{acquis}
+\textbf{Dans le périmètre de ces deux documents, le groupe le plus rachetable maintenant est A --- le
+relais souverain : le Relais inter-modèles, la coordination frontière, et le reçu.}
+\end{acquis}
+
+Onze crates déjà découplés ; la brique que le document lui-même désigne comme la plus finie ; le seul
+résultat économique mesuré sur de vrais fournisseurs ; et une promesse qui n'exige d'adhérer à aucune
+thèse. Il couvre \textbf{(0)}, \textbf{(1)} et une part de \textbf{(2)} --- soit trois des cinq
+problèmes que le document s'est lui-même donnés.
+
+\textbf{Trois actions, par ordre de rendement, et aucune n'est du code :}
+
+\begin{enumerate}[leftmargin=1.6em,itemsep=2.5pt,topsep=3pt]
+\item \textbf{Corriger l'attribution du $-$27\pc} --- le déplacer du méta-essaim vers la couche qui l'a
+      produit. C'est le chiffre le plus fort des deux documents, et il est aujourd'hui \emph{invérifiable
+      là où il est écrit}.
+\item \textbf{Ajouter la pile preuve au document.} Trois obligations légales nommées, un producteur
+      générique, un vérifieur sans dépendance : hors périmètre, c'est l'actif que j'ai classé premier
+      --- et il n'apparaît nulle part.
+\item \textbf{Corriger les deux péremptions} --- l'ancre \emph{est} câblée, et le chiffre de tests doit
+      être mesurable ou retiré.
+\end{enumerate}
+
+\begin{these}
+\small\textbf{Rappel de cadrage, inchangé dans toute la série.} Le reçu atteste l'\textbf{intégrité}
+d'une suite de pas, jamais la \textbf{correction} d'une décision. Il est \emph{tamper-evident pour un
+détenteur de clé}, pas \emph{trustless pour un tiers} --- ce que \code{Scella\_EN} dit d'ailleurs
+correctement. Les participants du mode réel exécutent une fusion latente Mode-1 numérique : ce ne sont
+pas des « vrais SLM ». Et ce document évalue des \emph{propriétés d'acquérabilité} : il ne prédit aucun
+acquéreur et n'en nomme aucun.
+\end{these}
+
+\section{Annexe · Vérifier chaque affirmation soi-même}
+
+Les \emph{rangs} sont un jugement. Les \textbf{citations} et les \textbf{zéros} se rejouent --- et ce
+sont eux qui portent le verdict.
+
+\renewcommand{\arraystretch}{1.22}
+\begin{center}\small
+\begin{tabular}{@{}>{\raggedright\arraybackslash}p{5.5cm} >{\raggedright\arraybackslash}p{10.6cm}@{}}
+\toprule
+\textbf{Affirmation} & \textbf{Ce qui la rejoue} \\
+\midrule
+Le texte des deux documents &
+  \code{pdftotext -layout Scella\_EN-1.pdf -} \\
+Claude/Gemini ne vivent que dans la passerelle &
+  \code{grep -rln 'Gemini' crates -{}-include='*.rs'} \\
+Le méta-essaim ignore les fournisseurs &
+  \code{grep -rlin 'claude\textbackslash|anthropic\textbackslash|openai\textbackslash|gemini' \textbackslash} \newline
+  \code{\ \ crates/efe-meta-swarm-server/src crates/efe-meta-swarm/src} \sz{$\rightarrow$ vide} \\
+La pile preuve est absente du document &
+  \code{pdftotext -layout Scella\_EN-1.pdf - | grep -ci 'AI Act\textbackslash|GDPR\textbackslash|CSDDD'} \sz{$\rightarrow$ 0} \\
+Les empreintes 11 / 7 / 26 crates &
+  \code{Scella\_Produit\_Unique\_2026-08-11.pdf}, §2 --- et son annexe donne la commande \\
+Les deux péremptions &
+  \code{pdftotext -layout Scella\_EN-1.pdf - | grep -n 'anchor not yet\textbackslash|1,200'} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Un avertissement pour finir. Ce rapport est \textbf{borné aux deux documents fournis} : il ne classe pas
+le dépôt, et un actif absent de \code{Scella\_EN} y est absent par construction, non par jugement. Le
+fichier analysé est \code{Scella\_EN-1.pdf} (4 pages, 59 901 octets, 14 août 01\,h\,54) --- il diffère de
+\code{Scella\_EN.pdf} du 10 août, et les deux péremptions du §6 lui appartiennent en propre.
+
+\end{document}

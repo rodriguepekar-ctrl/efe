@@ -1,8 +1,23 @@
 // SPDX-License-Identifier: UNLICENSED
 //! Reformulator étendu Phase 3 — convertit dialecte LLM vers canonical.
+//!
+//! **Fil B.0** rend le reformulateur *pluggable* derrière le trait
+//! [`Reformulator`] : deux moteurs interchangeables — le déterministe
+//! [`CanonicalReformulator`] (parsing Rust, défaut/repli) et le vrai petit
+//! modèle [`SlmReformulator`] (Qwen3-0.6B, dormant en B.0). Les missions
+//! choisissent via [`reformulator_for`] ; chaque sortie porte le moteur effectif
+//! ([`ReformulatorEngine`]) pour un reçu de provenance honnête.
 
 mod canonical;
+mod engine;
+mod slm;
+
 pub use canonical::CanonicalReformulator;
+pub use engine::{Reformulated, ReformulationHop, ReformulatorEngine, SlmHopAudit};
+pub use slm::{reformulator_for, SlmReformulator, SLM_REFORMULATOR_CIRCUIT_KEY};
+
+use crate::canonical::{ArgumentStance, CanonicalSchemaId};
+use crate::error::MultiLlmResult;
 
 /// Dialectes sources reconnus par le reformulator.
 #[allow(missing_docs)]
@@ -42,4 +57,44 @@ impl SourceDialect {
             Self::Unknown
         }
     }
+}
+
+/// **Fil B.0** — reformulateur *pluggable*.
+///
+/// Traduit la sortie d'un gros modèle (dialecte propre) vers une forme
+/// canonique, en déterministe OU via un petit modèle. Deux méthodes distinctes
+/// des méthodes inhérentes de [`CanonicalReformulator`] (`route`, `to_argument`)
+/// — délibérément, pour que les impls puissent appeler l'inhérent sans
+/// ambiguïté de résolution.
+#[async_trait::async_trait]
+pub trait Reformulator: Send + Sync {
+    /// Traduit `raw` (dialecte `from`, produit par `llm_source`) vers la forme
+    /// canonique `target`. Renvoie la valeur **et** le moteur qui l'a produite.
+    ///
+    /// **Fil B.4** — `deadline` : temps de mission RESTANT pour ce hop
+    /// (`max_total_latency − elapsed`, calculé par la mission). `None` = pas
+    /// de contrainte (usage librairie/tests). Un moteur-modèle doit borner son
+    /// invocation à ce reste et **dégrader estampillé** (`deadline_exhausted`)
+    /// s'il ne peut pas tenir — un hop SLM lent ne mange JAMAIS la deadline
+    /// des gros modèles. Le moteur règle (≈ instantané) l'ignore.
+    async fn to_canonical(
+        &self,
+        raw: &str,
+        from: SourceDialect,
+        target: CanonicalSchemaId,
+        llm_source: &str,
+        deadline: Option<std::time::Duration>,
+    ) -> MultiLlmResult<Reformulated>;
+
+    /// Cas particulier de `debate` : reformule un argument en portant sa
+    /// `stance` (que la forme canonique générique `to_canonical` ne transporte
+    /// pas). Renvoie la valeur `CanonicalArgument` sérialisée + le moteur.
+    /// `deadline` : même contrat que [`Self::to_canonical`] (Fil B.4).
+    async fn to_argument_value(
+        &self,
+        raw: &str,
+        stance: ArgumentStance,
+        from: SourceDialect,
+        deadline: Option<std::time::Duration>,
+    ) -> MultiLlmResult<Reformulated>;
 }

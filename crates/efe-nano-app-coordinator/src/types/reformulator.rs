@@ -19,6 +19,14 @@ pub struct ReformulatorInput {
 
     /// Schéma canonique cible.
     pub target_schema_id: SchemaId,
+
+    /// **Fil B.1 (additif)** — indice de position pour `argument_v1`
+    /// (`"PRO"` / `"CONTRA"` / `"NEUTRAL"` / `"REBUTTAL"`). Ignoré par les
+    /// autres schémas. `None` = absent du JSON sérialisé (rétro-compatible :
+    /// les anciens payloads sans ce champ désérialisent inchangés).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[validate(length(max = 24))]
+    pub stance_hint: Option<String>,
 }
 
 /// Sortie du Reformulateur (la structure de `canonical` dépend de `schema_id`).
@@ -55,6 +63,19 @@ pub enum LlmDialect {
 }
 
 /// Identifiants des schémas canoniques cibles supportés.
+///
+/// Deux familles, selon le **profil d'assets** du client (cf.
+/// `clients::reformulator::ReformulatorProfile`) :
+///
+/// * **Provenance v1** (grammaire `reformulator_v1.gbnf`) : les 5 premiers
+///   variants. La forme de `canonical` est celle documentée sur chaque variant.
+/// * **Multi-LLM v1.1 (Fil B.1)** (grammaire `reformulator_multillm_v1.gbnf`) :
+///   `ClaimV1` + les 4 derniers variants ; la forme de `canonical` est alors le
+///   type `CanonicalX` d'`efe-multi-llm` (p. ex. `ClaimV1` ⟹
+///   `{claim, evidence[{source, excerpt}], confidence, domain}` — et NON
+///   `{claim_text, ...}` comme en provenance v1). La grammaire multi-llm LIE
+///   `schema_id` à la forme émise ; la validation typée finale reste côté
+///   appelant (`serde_json::from_value::<CanonicalX>`).
 #[allow(missing_docs)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -65,10 +86,19 @@ pub enum SchemaId {
     FactV1,
     /// `{tool_name, arguments{}, expected_output_schema}`
     ToolCallV1,
-    /// `{claim_text, supporting_evidence[], confidence}`
+    /// Provenance v1 : `{claim_text, supporting_evidence[], confidence}` ;
+    /// profil multi-llm : `{claim, evidence[], confidence, domain}`.
     ClaimV1,
     /// `{ref_id, title, url, accessed_date}`
     SourceRefV1,
+    /// **Fil B.1** — `{plan_id, title, steps[{id, action, deps[]}], rationale}`.
+    PlanV1,
+    /// **Fil B.1** — `{language, source}`.
+    CodeV1,
+    /// **Fil B.1** — `{thesis, reasoning[], sources[], stance}`.
+    ArgumentV1,
+    /// **Fil B.1** — `{summary, citations[{llm_source, snippet}], uncertainty}`.
+    SynthesisV1,
 }
 
 #[cfg(test)]
@@ -111,5 +141,63 @@ mod tests {
             extraction_warnings: vec!["w".to_string(); 20], // > 10
         };
         assert!(out.validate().is_err());
+    }
+
+    // ─── Fil B.1 ──────────────────────────────────────────────────
+
+    #[test]
+    fn multillm_schema_ids_serialize_snake() {
+        for (id, tag) in [
+            (SchemaId::PlanV1, "\"plan_v1\""),
+            (SchemaId::CodeV1, "\"code_v1\""),
+            (SchemaId::ArgumentV1, "\"argument_v1\""),
+            (SchemaId::SynthesisV1, "\"synthesis_v1\""),
+        ] {
+            assert_eq!(serde_json::to_string(&id).unwrap(), tag);
+            let back: SchemaId = serde_json::from_str(tag).unwrap();
+            assert_eq!(back, id);
+        }
+    }
+
+    #[test]
+    fn input_without_stance_hint_deserializes_retrocompat() {
+        // Un payload PRÉ-B.1 (sans le champ) doit désérialiser inchangé.
+        let json = r#"{
+          "raw_text": "some raw output",
+          "source_dialect": "CLAUDE_XML",
+          "target_schema_id": "claim_v1"
+        }"#;
+        let input: ReformulatorInput = serde_json::from_str(json).unwrap();
+        assert!(input.stance_hint.is_none());
+        assert!(input.validate().is_ok());
+        // Et None est absent de la sérialisation (skip_serializing_if).
+        let s = serde_json::to_string(&input).unwrap();
+        assert!(!s.contains("stance_hint"));
+    }
+
+    #[test]
+    fn input_with_stance_hint_roundtrips() {
+        let input = ReformulatorInput {
+            raw_text: "<thesis>rates hold</thesis>".into(),
+            source_dialect: LlmDialect::ClaudeXml,
+            target_schema_id: SchemaId::ArgumentV1,
+            stance_hint: Some("PRO".into()),
+        };
+        assert!(input.validate().is_ok());
+        let s = serde_json::to_string(&input).unwrap();
+        assert!(s.contains("\"stance_hint\":\"PRO\""));
+        let back: ReformulatorInput = serde_json::from_str(&s).unwrap();
+        assert_eq!(back.stance_hint.as_deref(), Some("PRO"));
+    }
+
+    #[test]
+    fn oversized_stance_hint_fails_validation() {
+        let input = ReformulatorInput {
+            raw_text: "x".into(),
+            source_dialect: LlmDialect::Unknown,
+            target_schema_id: SchemaId::ArgumentV1,
+            stance_hint: Some("X".repeat(64)), // > 24
+        };
+        assert!(input.validate().is_err());
     }
 }

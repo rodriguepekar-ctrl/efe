@@ -61,8 +61,14 @@ mod frontier; // Couche 2 : construit le Coordinator frontière (Claude/Gemini/G
 mod mission; // Couche 2 (M1) : capture de provenance par appel LLM (décorateur + scope task-local)
 #[cfg(feature = "frontier-llm")]
 mod mission_graph; // Couche 2 (M2) : le reçu honnête — graphe depuis topologie déclarée + scellement + store
-#[cfg(test)]
-mod test_support; // ADR-016 : synthetic_mode_c_run partagé (lib tests + store_pg tests)
+#[cfg(feature = "frontier-llm")]
+pub mod frontier_metrics; // Couche 2 (M4 §2.4) : compteurs de coût/egress frontière pour /metrics
+// ADR-016 : `synthetic_mode_c_run` partagé (lib tests + store_pg tests). La feature `demo`
+// l'expose hors `#[cfg(test)]` pour l'exemple `local_receipt_demo` : un fixture dupliqué
+// dériverait du seul littéral `LlmProvenanceRecord` de référence, ce que ce module existe
+// précisément pour empêcher. OFF par défaut.
+#[cfg(any(test, feature = "demo"))]
+pub mod test_support;
 #[cfg(feature = "postgres")]
 mod store_pg;
 #[cfg(feature = "postgres")]
@@ -78,7 +84,13 @@ pub use dto::{
 };
 pub use error::GatewayError;
 pub use router_map::RouterMap;
-pub use state::{AdmissionPermit, AdmitReject, SwarmGatewayState};
+// M4 §2.1 : le plafond serveur de budget, re-exporté pour que le binaire l'annonce au boot.
+#[cfg(feature = "frontier-llm")]
+pub use routes::llm::server_budget_ceiling_cents;
+pub use state::{bundle_export_from_env, AdmissionPermit, AdmitReject, SwarmGatewayState};
+// Fil P (P.3) : le signataire d'attestation, re-exporté pour que le binaire le construise
+// depuis l'env sans dépendre directement du pont.
+pub use provenance_bridge::{AnchorSink, BundleSigner, FileAnchorSink};
 pub use store::{InMemoryRunStore, RunStore, StoredRun};
 #[cfg(feature = "frontier-llm")]
 pub use frontier::coordinator_from_env;
@@ -108,12 +120,24 @@ pub fn router(state: SwarmGatewayState) -> Router {
     let app = Router::new()
         .nest("/v1/swarm", routes::routes())
         .route("/metrics", get(routes::metrics::metrics))
+        // Sondes k8s (M4 §G4) : liveness triviale + readiness reflétant le câblage réel
+        // (frontière annoncée mais coordinator absent ⟹ 503, retiré du load-balancer).
+        .route("/healthz", get(routes::health::healthz))
+        .route("/readyz", get(routes::health::readyz))
         .route("/dashboard", get(routes::dashboard::dashboard));
     // Couche 2 (M3) : la surface frontière servie — montée SOUS le feature `frontier-llm`
     // uniquement (build par défaut byte-identique). `#[cfg]` sur un `let` shadow : le type reste
     // `Router<SwarmGatewayState>` jusqu'au `with_state` final.
     #[cfg(feature = "frontier-llm")]
     let app = app.nest("/v1/llm", routes::llm::routes_llm());
+    // Fil P (P.2) : l'export du bundle de provenance — monté **seulement** sur opt-in explicite.
+    // Sans lui, l'URI n'existe pas (404), donc le comportement servi est byte-identique à
+    // l'avant-P.2 : pas de 501 qui trahirait l'existence d'une surface désactivée.
+    let app = if state.bundle_export_enabled() {
+        app.route("/v1/swarm/bundle/:id", get(routes::bundle::bundle))
+    } else {
+        app
+    };
     app.with_state(state)
 }
 
@@ -508,6 +532,419 @@ mod tests {
         assert!(!v["verified"].as_bool().unwrap(), "altération détectée → non vérifié");
         assert!(!v["content_intact"].as_bool().unwrap(), "le contenu ne se recalcule plus");
         assert!(v["first_break"].is_string(), "la faute est localisée");
+    }
+
+    // ── P.0 — la COMPLÉTUDE du reçu ────────────────────────────────────────────────────────
+    // Ces quatre tests couvrent le défaut fermé par P.0 : `verify` recalculait la racine sans
+    // jamais la confronter à la racine scellée, si bien qu'une troncature — invisible à
+    // l'intégrité, puisqu'un préfixe de chaîne HMAC valide l'est aussi — rendait `verified:true`
+    // à un attaquant ne détenant **aucune clé**.
+
+    /// Helper P.0 : exécute un run d'essaim réel (plusieurs records) et rend `(app, store, id)`.
+    async fn seeded_run() -> (Router, std::sync::Arc<InMemoryRunStore>, Uuid) {
+        let (app, store) = app_with_store();
+        let resp = app
+            .clone()
+            .oneshot(post_run(json!({
+                "task": { "text": "hello", "expected": "hello" },
+                "topology": { "kind": "consensus", "generator": "echo_generator",
+                              "judges": ["consistency", "length_band", "j_non_empty"], "k": 5 },
+                "budget": { "max_cents": 1000 }
+            })))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let run = body_json(resp).await;
+        let id: Uuid = run["run_id"].as_str().unwrap().parse().unwrap();
+        (app, store, id)
+    }
+
+    async fn get_verify(app: &Router, id: Uuid) -> Value {
+        let resp = app
+            .clone()
+            .oneshot(Request::builder().uri(format!("/v1/swarm/verify/{id}")).body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        body_json(resp).await
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn verify_reports_root_match_on_healthy_run() {
+        // Nominal : la racine reconstruite reproduit la racine scellée.
+        let (app, _store, id) = seeded_run().await;
+        let v = get_verify(&app, id).await;
+        assert_eq!(v["root_matches"], json!(true), "run intact ⟹ la racine scellée est reproduite");
+        assert_eq!(v["verified"], json!(true), "P.0 ne dégrade pas un run sain");
+        assert_eq!(v["chain_intact"], json!(true));
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn verify_detects_tail_truncation() {
+        // **LE test de P.0.** On retire le dernier enregistrement en base, sans aucune clé.
+        let (app, store, id) = seeded_run().await;
+        let before = get_verify(&app, id).await;
+        assert_eq!(before["verified"], json!(true), "prérequis : le run est vérifié avant l'attaque");
+        let n_before = before["records"].as_u64().unwrap();
+        assert!(n_before >= 2, "le run doit porter assez de records pour être tronqué (obtenu {n_before})");
+
+        assert!(store.truncate_tail(id, 1), "un enregistrement a été retiré");
+
+        let after = get_verify(&app, id).await;
+        // (1) Le point crucial : l'intégrité SEULE ne voit RIEN — le préfixe est valide.
+        assert_eq!(after["chain_intact"], json!(true), "un préfixe de chaîne HMAC valide reste valide");
+        assert_eq!(after["content_intact"], json!(true), "aucun contenu n'a été muté");
+        assert_eq!(after["dag_consistent"], json!(true), "le DAG restant est cohérent");
+        assert!(after["first_break"].is_null(), "aucune faute localisée : rien n'est *cassé*");
+        assert_eq!(after["records"].as_u64().unwrap(), n_before - 1, "il manque bien un record");
+        // (2) …et pourtant le run n'est PAS celui qui a été scellé.
+        assert_eq!(after["root_matches"], json!(false), "la racine scellée n'est plus reproduite");
+        assert_eq!(after["verified"], json!(false), "P.0 : un run tronqué n'est PAS vérifié");
+        assert_ne!(after["root"], before["root"], "la racine a changé");
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn verify_detects_total_record_deletion() {
+        // Cas-limite : tout supprimer. `verify_swarm` déclare un run vide *trivialement* intègre
+        // et ne reconstruit AUCUNE racine — un contrôle naïf (comparer seulement deux `Some`)
+        // laisserait donc passer la suppression totale.
+        let (app, store, id) = seeded_run().await;
+        assert!(store.drop_all_records(id), "tous les records ont été supprimés");
+
+        let v = get_verify(&app, id).await;
+        assert_eq!(v["records"], json!(0));
+        assert_eq!(v["chain_intact"], json!(true), "un run vide est trivialement intègre");
+        assert!(v["root"].is_null(), "aucune racine reconstruite");
+        assert_eq!(v["root_matches"], json!(false), "une racine scellée non reproduite ⟹ faux");
+        assert_eq!(v["verified"], json!(false), "P.0 : la suppression totale n'est PAS vérifiée");
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn verify_without_sealed_root_does_not_accuse() {
+        // Non-accusation rétroactive : un run scellé AVANT la persistance de la racine ne peut
+        // ni être confirmé ni être accusé. Le verdict doit rester celui d'avant P.0.
+        let (app, store, id) = seeded_run().await;
+        assert!(store.clear_root(id), "la racine scellée a été effacée (run « legacy »)");
+
+        let v = get_verify(&app, id).await;
+        assert!(v["root_matches"].is_null(), "sans racine scellée ⟹ None, jamais false");
+        assert_eq!(v["verified"], json!(true), "P.0 n'accuse PAS un run honnête antérieur");
+        assert!(v["root"].is_string(), "la racine reste reconstruite et exposée");
+    }
+
+    // ── Fil P (P.2) — l'export du bundle de provenance ─────────────────────────────────────
+
+    /// État de test avec l'export ACTIVÉ + le store concret conservé. On passe par
+    /// `with_bundle_export` et jamais par l'environnement : manipuler une variable d'env dans un
+    /// test serait une course avec les autres tests du même processus.
+    fn app_with_bundle() -> (Router, Arc<InMemoryRunStore>) {
+        let store = Arc::new(InMemoryRunStore::new());
+        let state = SwarmGatewayState::new(
+            Arc::new(AgentFleet::standard()),
+            HmacKeySource::test_key(),
+            store.clone(),
+            ProvenanceMetrics::new(),
+            Arc::new(SubstrateMetrics::default()),
+        )
+        .with_bundle_export(true);
+        (router(state), store)
+    }
+
+    async fn seed_run(app: &Router) -> Uuid {
+        let resp = app
+            .clone()
+            .oneshot(post_run(json!({
+                "task": { "text": "hello", "expected": "hello" },
+                "topology": { "kind": "consensus", "generator": "echo_generator",
+                              "judges": ["consistency", "length_band", "j_non_empty"], "k": 5 },
+                "budget": { "max_cents": 1000 }
+            })))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        body_json(resp).await["run_id"].as_str().unwrap().parse().unwrap()
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn bundle_route_is_not_mounted_without_the_opt_in() {
+        // L'invariant byte-identique : sans opt-in, l'URI n'EXISTE pas. Pas un 501 — un 404, comme
+        // n'importe quelle route inconnue avant P.2. Une surface désactivée ne doit même pas
+        // trahir son existence.
+        let (app, _store) = app_with_store();
+        let id = seed_run(&app).await;
+        let resp = app
+            .oneshot(Request::builder().uri(format!("/v1/swarm/bundle/{id}")).body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::NOT_FOUND, "route non montée ⟹ l'URI n'existe pas");
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn bundle_export_serves_a_reprovable_bundle() {
+        let (app, _store) = app_with_bundle();
+        let id = seed_run(&app).await;
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .uri(format!("/v1/swarm/bundle/{id}"))
+                    .header("x-efe-roles", HeaderValue::from_static("auditor"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let b = body_json(resp).await;
+
+        let jsonl = b["bundle_jsonl"].as_str().unwrap();
+        let root = b["manifest_root"].as_str().unwrap();
+        let n = b["node_count"].as_u64().unwrap();
+        assert!(n >= 1, "le bundle porte des nœuds");
+        assert_eq!(jsonl.lines().count() as u64, n, "une ligne JSON par nœud");
+        assert_eq!(b["anchored"], json!(false), "P.4 non fait : la racine n'est PAS ancrée, et on le dit");
+        assert!(b["mapping_version"].as_str().unwrap().starts_with("fil-p/"));
+
+        // Aucune clé ne sort par cette route — ni la clé A, ni la clé B.
+        assert!(!jsonl.contains("key"), "le bundle ne transporte aucune clé");
+
+        // …et le bundle se re-prouve réellement, avec la clé de la PILE B dérivée à part.
+        let bkey = provenance_bridge::stack_b_key(&HmacKeySource::test_key().derive(
+            efe_nano_sdk::TenantId::system(),
+        ).unwrap(), "00000000-0000-0000-0000-000000000001");
+        let records = provenance_dag::SealedDag::records_from_jsonl(jsonl).unwrap();
+        let v = provenance_dag::verify_against_root(&records, &bkey, root);
+        assert!(v.ok, "le bundle servi se re-prouve contre sa racine : {:?}", v.reason);
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn bundle_export_refuses_a_viewer() {
+        // Un export de provenance entière n'est pas une lecture ordinaire.
+        let (app, _store) = app_with_bundle();
+        let id = seed_run(&app).await;
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .uri(format!("/v1/swarm/bundle/{id}"))
+                    .header("x-efe-roles", HeaderValue::from_static("viewer"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::FORBIDDEN, "viewer n'exporte pas la provenance");
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn bundle_export_refuses_to_whitewash_a_truncated_run() {
+        // LE refus du jalon : donner un bundle re-prouvable à un run tronqué offrirait un témoin
+        // crédible à un reçu menteur. Aucun bundle, même partiel.
+        let (app, store) = app_with_bundle();
+        let id = seed_run(&app).await;
+        assert!(store.truncate_tail(id, 1), "un enregistrement retiré en base");
+
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .uri(format!("/v1/swarm/bundle/{id}"))
+                    .header("x-efe-roles", HeaderValue::from_static("auditor"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::INTERNAL_SERVER_ERROR, "aucun bundle sur un run tronqué");
+    }
+
+    // ── Fil P (P.3) — l'attestation de racine servie ───────────────────────────────────────
+
+    /// La graine de test. Sa clé publique correspondante est celle qu'un auditeur épinglerait
+    /// hors bande.
+    const TEST_SEED: [u8; 32] = [42u8; 32];
+
+    fn app_with_attested_bundle() -> (Router, Arc<InMemoryRunStore>) {
+        let store = Arc::new(InMemoryRunStore::new());
+        let state = SwarmGatewayState::new(
+            Arc::new(AgentFleet::standard()),
+            HmacKeySource::test_key(),
+            store.clone(),
+            ProvenanceMetrics::new(),
+            Arc::new(SubstrateMetrics::default()),
+        )
+        .with_bundle_export(true)
+        .with_bundle_signer(BundleSigner::from_seed(TEST_SEED));
+        (router(state), store)
+    }
+
+    async fn get_bundle(app: &Router, id: Uuid) -> Value {
+        let resp = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri(format!("/v1/swarm/bundle/{id}"))
+                    .header("x-efe-roles", HeaderValue::from_static("auditor"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        body_json(resp).await
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn without_a_signing_key_the_attestation_field_is_absent_not_empty() {
+        // Un champ vide se confondrait avec une signature. Absent veut dire absent.
+        let (app, _s) = app_with_bundle();
+        let id = seed_run(&app).await;
+        let b = get_bundle(&app, id).await;
+        assert!(b.get("attestation").is_none(), "champ ABSENT, jamais vide ni nul");
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn a_served_attestation_verifies_with_the_public_key_alone() {
+        // LE point de P.3 : l'auditeur ne détient AUCUN secret — seulement la clé publique qu'il a
+        // épinglée hors bande.
+        let (app, _s) = app_with_attested_bundle();
+        let id = seed_run(&app).await;
+        let b = get_bundle(&app, id).await;
+
+        let att = b.get("attestation").expect("clé déployée ⟹ attestation servie");
+        assert_eq!(att["run_id"].as_str().unwrap(), id.to_string());
+        assert_eq!(att["manifest_root"], b["manifest_root"], "atteste LA racine servie");
+        assert_eq!(att["node_count"], b["node_count"]);
+        assert_eq!(att["sig"].as_str().unwrap().len(), 128, "ed25519 = 64 octets");
+
+        // La route ne sert JAMAIS la clé publique : la servir rendrait la vérification circulaire.
+        let signer = BundleSigner::from_seed(TEST_SEED);
+        let body = serde_json::to_string(&b).unwrap();
+        assert!(!body.contains(&signer.public_key_hex()), "la clé publique ne sort PAS par ici");
+        assert_eq!(att["key_id"].as_str().unwrap(), signer.key_id(), "seule l'empreinte la nomme");
+
+        // …et la vérification tient, avec la seule publique épinglée.
+        let attestation = provenance_bridge::RootAttestation {
+            schema: att["schema"].as_u64().unwrap() as u16,
+            run_id: id,
+            tenant_id: att["tenant_id"].as_str().unwrap().to_string(),
+            manifest_root: att["manifest_root"].as_str().unwrap().to_string(),
+            node_count: att["node_count"].as_u64().unwrap() as u32,
+            key_id: att["key_id"].as_str().unwrap().to_string(),
+            signed_at: att["signed_at"].as_u64().unwrap(),
+            sig: att["sig"].as_str().unwrap().to_string(),
+        };
+        let vk = ed25519_dalek::SigningKey::from_bytes(&TEST_SEED).verifying_key();
+        assert!(
+            provenance_bridge::verify_attestation(&attestation, &vk).is_ok(),
+            "vérifiée sans aucun secret"
+        );
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn a_served_attestation_binds_the_served_bundle() {
+        // Une signature authentique portant sur AUTRE CHOSE ne vaut rien : on vérifie qu'elle lie
+        // bien le bundle rendu dans la même réponse.
+        let (app, _s) = app_with_attested_bundle();
+        let id = seed_run(&app).await;
+        let b = get_bundle(&app, id).await;
+        let att = &b["attestation"];
+
+        let bundle = provenance_bridge::Bundle {
+            jsonl: b["bundle_jsonl"].as_str().unwrap().to_string(),
+            manifest_root: b["manifest_root"].as_str().unwrap().to_string(),
+            node_count: b["node_count"].as_u64().unwrap() as u32,
+        };
+        let attestation = provenance_bridge::RootAttestation {
+            schema: att["schema"].as_u64().unwrap() as u16,
+            run_id: id,
+            tenant_id: att["tenant_id"].as_str().unwrap().to_string(),
+            manifest_root: att["manifest_root"].as_str().unwrap().to_string(),
+            node_count: att["node_count"].as_u64().unwrap() as u32,
+            key_id: att["key_id"].as_str().unwrap().to_string(),
+            signed_at: att["signed_at"].as_u64().unwrap(),
+            sig: att["sig"].as_str().unwrap().to_string(),
+        };
+        let vk = ed25519_dalek::SigningKey::from_bytes(&TEST_SEED).verifying_key();
+        let tenant = attestation.tenant_id.clone();
+        assert!(
+            provenance_bridge::verify_attestation_binds(&attestation, &vk, id, &tenant, &bundle)
+                .is_ok(),
+            "l'attestation lie CE bundle, CE run, CE tenant"
+        );
+    }
+
+    // ── Fil P (P.4) — l'ancre publiée hors du bundle ───────────────────────────────────────
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn without_an_anchor_sink_the_bundle_says_it_is_not_anchored() {
+        // Sans support d'ancrage, le bundle ne prouve sa cohérence que CONTRE LUI-MÊME. Le dire.
+        let (app, _s) = app_with_bundle();
+        let id = seed_run(&app).await;
+        let b = get_bundle(&app, id).await;
+        assert_eq!(b["anchored"], json!(false), "aucune ancre ⟹ le bundle l'annonce");
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn serving_a_bundle_publishes_its_anchor_outside_the_bundle() {
+        // LE geste de P.4 : la racine attendue est écrite AILLEURS, et c'est cet « ailleurs » qui
+        // rend une troncature détectable par quelqu'un ne détenant AUCUNE clé.
+        let mut path = std::env::temp_dir();
+        path.push(format!("efe-p4-gw-{}.log", Uuid::new_v4()));
+        let sink = Arc::new(provenance_bridge::FileAnchorSink::new(&path));
+
+        let store = Arc::new(InMemoryRunStore::new());
+        let state = SwarmGatewayState::new(
+            Arc::new(AgentFleet::standard()),
+            HmacKeySource::test_key(),
+            store.clone(),
+            ProvenanceMetrics::new(),
+            Arc::new(SubstrateMetrics::default()),
+        )
+        .with_bundle_export(true)
+        .with_anchor_sink(sink);
+        let app = router(state);
+
+        let id = seed_run(&app).await;
+        let b = get_bundle(&app, id).await;
+        assert_eq!(b["anchored"], json!(true), "l'ancre a RÉELLEMENT été publiée");
+
+        // Le journal existe, hors du bundle, et dit la même chose que lui.
+        let journal = std::fs::read_to_string(&path).expect("le journal d'ancres existe");
+        let idx = provenance_dag::AnchorIndex::parse(&journal).expect("journal relisible");
+        let a = idx.get(&id.to_string()).expect("ce run est ancré");
+        assert_eq!(a.manifest_root, b["manifest_root"].as_str().unwrap());
+        assert_eq!(u64::from(a.node_count), b["node_count"].as_u64().unwrap());
+
+        // …et un bundle tronqué échoue CONTRE cette ancre, alors qu'il reste intègre seul.
+        let bkey = provenance_bridge::stack_b_key(
+            &HmacKeySource::test_key().derive(efe_nano_sdk::TenantId::system()).unwrap(),
+            "00000000-0000-0000-0000-000000000001",
+        );
+        let full = provenance_dag::SealedDag::records_from_jsonl(
+            b["bundle_jsonl"].as_str().unwrap(),
+        )
+        .unwrap();
+        let short = &full[..full.len() - 1];
+        assert!(provenance_dag::reprove_dag(short, &bkey).ok, "tronqué mais intègre — le piège");
+        assert!(
+            !provenance_dag::verify_against_anchor(short, &bkey, a).ok,
+            "l'ancre publiée l'attrape"
+        );
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn bundle_export_unknown_run_is_404() {
+        let (app, _store) = app_with_bundle();
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .uri(format!("/v1/swarm/bundle/{}", Uuid::new_v4()))
+                    .header("x-efe-roles", HeaderValue::from_static("auditor"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::NOT_FOUND);
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]

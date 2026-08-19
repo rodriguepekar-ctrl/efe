@@ -20,11 +20,13 @@
 //! Anthropic/OpenAI/Google) — à opposer proprement au chemin méta-essaim.
 
 use std::sync::Arc;
+use std::time::Duration;
 
 use efe_coordinator::{
-    ClaudeProvider, Coordinator, GeminiProvider, GptProvider, LlmProvider, PolicyRegistry, ProviderRegistry,
-    TenantPolicies,
+    ClaudeProvider, Coordinator, CoordinatorClients, GeminiProvider, GptProvider, LlmProvider,
+    PolicyRegistry, ProviderRegistry, ReformulatorClient, SlmCircuitBreaker, TenantPolicies,
 };
+use efe_multi_llm::SLM_REFORMULATOR_CIRCUIT_KEY;
 use uuid::Uuid;
 
 /// Construit un [`Coordinator`] frontière depuis l'env — **best-effort**.
@@ -74,9 +76,94 @@ pub fn coordinator_from_env() -> Option<Arc<Coordinator>> {
     // fail-closed total — position honnête par défaut.
     let policies = policy_registry_from_env();
 
+    // **Fil B.2 (§3.5)** : câblage OPT-IN du reformulateur SLM (Qwen3-0.6B,
+    // profil multi-llm) — le « petit modèle entre les gros ». Gouverné par
+    // `EFE_SLM_REFORMULATOR_URL` ; absent ⟹ `CoordinatorClients::default()`
+    // (reformulation déterministe, chemin servi STRICTEMENT inchangé).
+    let clients = slm_clients_from(std::env::var("EFE_SLM_REFORMULATOR_URL").ok().as_deref());
+
     // `build()` n'échoue que sur une config invalide (`max_concurrency == 0`) ; le défaut est
     // sain, donc `ok()` ne masque aucun cas atteignable ici.
-    Coordinator::builder().registry(registry).policies(policies).build().ok().map(Arc::new)
+    Coordinator::builder().registry(registry).policies(policies).clients(clients).build().ok().map(Arc::new)
+}
+
+/// **Fil B.2** — construit le bundle `CoordinatorClients` du reformulateur SLM.
+/// Fonction **pure** vis-à-vis de l'env (testable race-free, même pattern que
+/// [`policy_registry_from_str`]) ; seul `coordinator_from_env` lit la variable.
+///
+/// - `None` / URL vide ⟹ bundle par défaut : **aucun** SLM, reformulation
+///   déterministe (`RULE`), comportement pré-B.2 byte-identique.
+/// - URL fournie ⟹ tente `ReformulatorClient::from_assets_multillm` (lecture
+///   des assets GBNF/prompt sur disque — **aucun appel réseau au boot**). En
+///   cas de succès : câble le client + un [`SlmCircuitBreaker`] dédié
+///   (`"reformulator"`, seuil 3 / reset 10 s — mêmes valeurs que les 3 SLM
+///   Phase 1) que `reformulator_for` consommera par hop. En cas d'échec
+///   (assets absents/illisibles) : **warn + déterministe** — le boot n'est
+///   JAMAIS cassé par l'opt-in SLM.
+///
+/// Honnêteté : câbler l'URL ne garantit PAS des hops `SLM` — si le
+/// llama-server ne répond pas, chaque hop dégrade (estampillé
+/// `SLM_DEGRADED_TO_RULE` dans les évènements de mission) et le circuit
+/// s'ouvre après 3 échecs : dégradation sans appel réseau pendant 10 s,
+/// puis UNE seule sonde par fenêtre paie le timeout client (30 s max) —
+/// les hops concurrents dégradent sans appel (porte `try_call`, pas de
+/// troupeau vers un serveur malade). Depuis B.4, chaque hop est de plus
+/// borné au temps de mission RESTANT (deadline threadée par les missions) :
+/// même la sonde ne peut pas manger la deadline des gros modèles, et une
+/// coupure-deadline n'ouvre pas DIRECTEMENT le circuit (raison
+/// `deadline_exhausted` estampillée dans le hop scellé du reçu ; résidu
+/// indirect documenté dans slm.rs : une génération abandonnée qui moud côté
+/// serveur peut faire payer aux hops suivants de vrais timeouts 30 s).
+fn slm_clients_from(url: Option<&str>) -> CoordinatorClients {
+    let mut clients = CoordinatorClients::default();
+    let Some(url) = url.map(str::trim).filter(|u| !u.is_empty()) else {
+        return clients;
+    };
+    // Honnêteté (revue B.4) : l'URL n'est PAS contrainte au local — un
+    // llama-server distant est possible et son egress n'est ni gardé par
+    // l'allowlist tenant ni décompté (le hop est budgété 0 ¢). On prévient
+    // au boot plutôt que de prétendre une souveraineté qu'on ne vérifie pas.
+    // (Le check est un miroir minimal des `is_local_endpoint` maison —
+    // provenance-capture/guard.rs & efe-swarm-sdk — sans en dépendre.)
+    if !slm_url_looks_local(url) {
+        eprintln!(
+            "⚠ EFE_SLM_REFORMULATOR_URL ({url}) ne pointe pas sur un hôte local — \
+             l'egress de ce SLM n'est ni gardé ni décompté ; souveraineté NON garantie"
+        );
+    }
+    match ReformulatorClient::from_assets_multillm(url) {
+        Ok(c) => {
+            clients.reformulator = Some(Arc::new(c));
+            clients.slm_circuits.insert(
+                SLM_REFORMULATOR_CIRCUIT_KEY.to_string(),
+                SlmCircuitBreaker::new(3, Duration::from_secs(10)),
+            );
+            eprintln!(
+                "→ reformulateur SLM câblé (profil multi-llm, {url}) — circuit 3 échecs / reset 10 s ; \
+                 les hops de reformulation seront estampillés SLM quand le robot répond, \
+                 SLM_DEGRADED_TO_RULE sinon"
+            );
+        }
+        Err(e) => {
+            eprintln!(
+                "⚠ EFE_SLM_REFORMULATOR_URL défini mais le client SLM n'a pas pu se construire \
+                 ({e}) — reformulation déterministe (RULE), boot inchangé"
+            );
+        }
+    }
+    clients
+}
+
+/// L'hôte de `url` est-il manifestement local ? (localhost / 127.x / ::1)
+/// Check de BOOT-WARN uniquement — pas une garde de sécurité.
+fn slm_url_looks_local(url: &str) -> bool {
+    let rest = url.split("://").nth(1).unwrap_or(url);
+    let host = rest.split(['/', '?']).next().unwrap_or(rest);
+    let host = host.strip_prefix('[').map_or_else(
+        || host.rsplit_once(':').map_or(host, |(h, _)| h),
+        |h| h.split(']').next().unwrap_or(h),
+    );
+    host == "localhost" || host == "::1" || host.starts_with("127.")
 }
 
 /// Charge l'**allowlist d'egress par tenant** depuis `EFE_LLM_TENANT_ALLOWLIST` (côté binaire).
@@ -160,5 +247,52 @@ mod tests {
             Some(_) => assert!(has_any_key, "un coordinator n'est bâti que si ≥ 1 clé est présente"),
             None => assert!(!has_any_key, "aucune clé → None (frontière non câblée)"),
         }
+    }
+
+    /// **Fil B.2** — la fonction pure du wiring SLM (race-free, pas d'env).
+    /// Sans opt-in : bundle par défaut, strictement pré-B.2. Avec URL : client
+    /// multi-llm + circuit `"reformulator"` présents (aucun réseau au boot —
+    /// `from_assets_multillm` ne fait que lire les assets). URL vide = absent.
+    #[test]
+    fn slm_url_locality_boot_warn_heuristic() {
+        // Locaux manifestes.
+        for u in ["http://127.0.0.1:8080", "http://localhost:8080/x", "http://[::1]:9000", "127.0.0.1:1"] {
+            assert!(slm_url_looks_local(u), "{u} devrait être vu local");
+        }
+        // Distants (⟹ warn de boot : egress ni gardé ni décompté).
+        for u in ["http://10.0.0.5:8080", "https://slm.example.com", "http://192.168.1.10:8080"] {
+            assert!(!slm_url_looks_local(u), "{u} ne doit PAS être vu local");
+        }
+    }
+
+    #[test]
+    fn slm_clients_from_wires_client_and_circuit_only_on_opt_in() {
+        use efe_coordinator::ReformulatorProfile;
+
+        // Pas d'opt-in ⟹ rien : ni client, ni circuit (invariant B.0/B.2).
+        let off = slm_clients_from(None);
+        assert!(off.reformulator.is_none(), "sans URL : pas de SLM");
+        assert!(off.slm_circuits.is_empty(), "sans URL : pas de circuit");
+        let blank = slm_clients_from(Some("   "));
+        assert!(blank.reformulator.is_none(), "URL vide = pas d'opt-in");
+
+        // Opt-in ⟹ client au profil multi-llm + circuit sous la clé partagée.
+        let on = slm_clients_from(Some("http://127.0.0.1:1"));
+        let client = on.reformulator.as_ref().expect("client SLM câblé");
+        assert_eq!(client.profile(), ReformulatorProfile::MultiLlmV1);
+        assert!(
+            on.slm_circuits.contains_key(SLM_REFORMULATOR_CIRCUIT_KEY),
+            "le circuit du reformulateur est enregistré sous la clé partagée"
+        );
+
+        // Et le bundle se BUILD dans un Coordinator (le garde des circuits ne
+        // concerne que analyzer/compressor/verifier — pas de conflit).
+        let coord = Coordinator::builder()
+            .registry(ProviderRegistry::new())
+            .clients(on)
+            .build()
+            .expect("un coordinator avec SLM + circuit se construit");
+        assert!(coord.clients.reformulator.is_some());
+        assert!(coord.clients.slm_circuit(SLM_REFORMULATOR_CIRCUIT_KEY).is_some());
     }
 }

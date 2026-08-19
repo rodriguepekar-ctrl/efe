@@ -134,8 +134,29 @@ async fn async_main(config: ParticipantConfig) -> Result<(), ServerError> {
         dim = local.dim(),
         kappa = local.kappa(),
         seed = local.seed(),
+        engine = if local.is_efe_core() { "efe-core-mode1" } else { "mock" },
+        topology = local
+            .controller_manifest()
+            .map_or("-", |c| match c.topology {
+                efe_meta_swarm_server::manifest::TopologyManifest::Fixed => "fixed",
+                efe_meta_swarm_server::manifest::TopologyManifest::Dynamic => "dynamic",
+            }),
+        config_hash = local.config_hash().unwrap_or("-"),
         "participant loaded from manifest row",
     );
+
+    // 3bis. Couche 3 M1.d — the H1 boot gate (fail-closed).  For an efe-core
+    // participant with `h1_canary.mode = boot` (the default), the M1.c
+    // adversarial Lipschitz canary runs HERE, before the gRPC server binds :
+    // an inconclusive canary or a measured L̂ ≥ 1 − margin refuses to serve.
+    // Mock participants (and `mode = off`, logged loudly) pass through.
+    // Boot cost : ~0.5-3 s per Φ evaluation (default probe ≈ 60 evals).
+    local.h1_boot_gate().await.map_err(|e| {
+        ServerError::Config(format!(
+            "H1 boot canary refused participant {:?} (fail-closed) : {e}",
+            config.id,
+        ))
+    })?;
 
     // 4. Snapshot the iteration knobs.
     let iteration = IterationParams {

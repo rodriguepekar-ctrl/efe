@@ -1,5 +1,5 @@
 //! Sprint A1 Phase 1 — PR #4 — End-to-end latency + algorithmic SLOs
-//! for the three-swarm Kovant scenario.
+//! for the three-swarm procurement scenario.
 //!
 //! ## What this bench measures
 //!
@@ -89,7 +89,7 @@ use efe_meta_swarm::observability::MetaSwarmTracer;
 use efe_meta_swarm::prelude::*;
 
 // =============================================================================
-//  KovantScenario — the standard 3-swarm Kovant configuration.
+//  ProcurementScenario — the standard 3-swarm procurement configuration.
 // =============================================================================
 //
 // Held identical to the PR #1 scenario (verified by `diff` against
@@ -102,7 +102,7 @@ use efe_meta_swarm::prelude::*;
 // same scenario without duplicating literals.
 
 #[derive(Debug, Clone)]
-struct KovantScenario {
+struct ProcurementScenario {
     meta_dim:        usize,
     supplier_dim:    usize,
     contract_dim:    usize,
@@ -120,7 +120,7 @@ struct KovantScenario {
     safety_radius:   f32,
 }
 
-impl Default for KovantScenario {
+impl Default for ProcurementScenario {
     fn default() -> Self {
         // Mirror of `examples/three_swarms_kovant.rs` (PR #1).
         Self {
@@ -143,7 +143,7 @@ impl Default for KovantScenario {
     }
 }
 
-impl KovantScenario {
+impl ProcurementScenario {
     fn build_meta(&self, tracer: Option<Box<dyn MetaSwarmTracer>>) -> MetaSwarm {
         let mut builder = MetaSwarm::builder()
             .id("bench-three-swarms-kovant")
@@ -444,7 +444,7 @@ fn read_peak_rss_mb() -> Option<f64> { None }
 // =============================================================================
 
 fn bench_full_iterate(c: &mut Criterion) {
-    let scenario = KovantScenario::default();
+    let scenario = ProcurementScenario::default();
     let collector = BenchMetricsCollector::default();
 
     // 1 — Standard latency measurement (drives P50/P99 SLO).
@@ -458,7 +458,7 @@ fn bench_full_iterate(c: &mut Criterion) {
     // zero-out the states each time, so `iterate()` converged in 1
     // step (Φ(0) = 0, pull = 0, joint residual already below
     // tolerance).  That measured the wrong thing — a trivial
-    // fixed-point, not the full Kovant convergence trajectory.  The
+    // fixed-point, not the full procurement convergence trajectory.  The
     // baseline values (`last_p99_observed_ms`, `CONVERGENCE-ITERS`
     // threshold) are calibrated against the *real* convergence (~47
     // iters, ~13 ms on M3 Pro), which the iter_batched form
@@ -507,7 +507,7 @@ fn bench_full_iterate(c: &mut Criterion) {
 }
 
 fn bench_step_once(c: &mut Criterion) {
-    let scenario = KovantScenario::default();
+    let scenario = ProcurementScenario::default();
     // Same fix as `bench_full_iterate` : fresh meta per measurement,
     // build excluded from timing via `iter_batched`.
     c.bench_function("three_swarms_kovant_latency_step_once", |b| {
@@ -520,7 +520,7 @@ fn bench_step_once(c: &mut Criterion) {
 }
 
 fn bench_reset(c: &mut Criterion) {
-    let scenario = KovantScenario::default();
+    let scenario = ProcurementScenario::default();
     let meta = scenario.build_meta(None);
     c.bench_function("three_swarms_kovant_latency_reset", |b| {
         b.iter(|| {
@@ -531,14 +531,14 @@ fn bench_reset(c: &mut Criterion) {
 }
 
 fn bench_build(c: &mut Criterion) {
-    let scenario = KovantScenario::default();
+    let scenario = ProcurementScenario::default();
     c.bench_function("three_swarms_kovant_latency_build", |b| {
         b.iter(|| black_box(scenario.build_meta(None)));
     });
 }
 
 fn bench_consensus_norm(c: &mut Criterion) {
-    let scenario = KovantScenario::default();
+    let scenario = ProcurementScenario::default();
     let meta = scenario.build_meta(None);
     let result = meta.iterate().unwrap();
     c.bench_function("three_swarms_kovant_latency_consensus_norm", |b| {
@@ -555,7 +555,7 @@ fn bench_consensus_norm(c: &mut Criterion) {
 // freshly-built MetaSwarm to avoid carry-over state.
 
 fn bench_determinism_check() {
-    let scenario = KovantScenario::default();
+    let scenario = ProcurementScenario::default();
     let mut signatures = Vec::with_capacity(3);
     for _ in 0..3 {
         let meta = scenario.build_meta(None);

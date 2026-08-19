@@ -71,7 +71,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     ds.cases.truncate(n_arg);
     let n = ds.cases.len();
 
-    println!("P2 (b) — TRIAGE demande d'achat : sous-tache adaptee (procurement, vertical Kovant)");
+    println!("P2 (b) — TRIAGE demande d'achat : sous-tache adaptee (procurement)");
     println!("  gros(ref) : {big}  ·  petit : {small}  ·  n={n}  ·  generique vs specialise  ·  a={alpha}  ·  d in {deltas:?}\n");
 
     let models = [big.clone(), small.clone()];

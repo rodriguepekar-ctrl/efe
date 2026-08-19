@@ -32,6 +32,8 @@ pub struct MetaSwarmBuilder {
     gamma: f64,
     criterion: ConvergenceCriterion,
     trace_enabled: bool,
+    /// Couche 3 M1.c — fail-closed mode (default off for Phase-1 backward-compat).
+    strict: bool,
     tenant_id: Option<TenantId>,
     tracer: Option<Box<dyn MetaSwarmTracer>>,
 }
@@ -51,6 +53,7 @@ impl Default for MetaSwarmBuilder {
             gamma: 0.2,
             criterion: ConvergenceCriterion::default(),
             trace_enabled: false,
+            strict: false,
             tenant_id: None,
             tracer: None,
         }
@@ -140,6 +143,22 @@ impl MetaSwarmBuilder {
     #[must_use]
     pub fn max_iters(mut self, n: usize) -> Self {
         self.criterion.max_iters = n;
+        self
+    }
+
+    /// **Couche 3 M1.c** — enable *strict* (fail-closed) mode. When on:
+    ///   * the H1 guard **rejects** a participant that returns a
+    ///     [`crate::participants::NonExpansiveCertificate::Stub`] (an unverified
+    ///     participant — e.g. a `MockParticipant` — can no longer silently pass);
+    ///   * a run that hits `max_iters` without converging returns
+    ///     [`MetaSwarmError::ConvergenceFailed`] instead of a non-converged consensus
+    ///     (never claim "consensus" when the iteration did not converge).
+    ///
+    /// Off by default so Phase-1 mock demos keep working. A `LocalParticipant` is
+    /// checked against its real empirical canary in *both* modes.
+    #[must_use]
+    pub fn strict(mut self, on: bool) -> Self {
+        self.strict = on;
         self
     }
 
@@ -267,6 +286,7 @@ impl MetaSwarmBuilder {
             gamma: self.gamma,
             criterion: self.criterion,
             trace_enabled: self.trace_enabled,
+            strict: self.strict,
             tracer,
         })
     }

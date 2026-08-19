@@ -91,6 +91,10 @@ pub enum FailureReason {
     DeadlineExceeded,
     /// Client cancellation propagated from the request.
     Cancelled,
+    /// Couche 3 M1.d — the inner loop did not converge while the manifest's
+    /// `iteration.require_convergence` was set : the Iterate failed CLOSED
+    /// (gRPC `ABORTED`) instead of returning a non-converged "consensus".
+    NonConvergence,
     /// Catch-all when none of the above apply.  Operators chasing a
     /// growing `other` bucket should add a discriminator.
     Other,
@@ -108,11 +112,12 @@ impl FailureReason {
             Self::Internal => "internal",
             Self::DeadlineExceeded => "deadline_exceeded",
             Self::Cancelled => "cancelled",
+            Self::NonConvergence => "non_convergence",
             Self::Other => "other",
         }
     }
 
-    /// All 8 variants.
+    /// All 9 variants.
     #[must_use]
     pub fn all() -> &'static [Self] {
         &[
@@ -123,6 +128,7 @@ impl FailureReason {
             Self::Internal,
             Self::DeadlineExceeded,
             Self::Cancelled,
+            Self::NonConvergence,
             Self::Other,
         ]
     }
@@ -355,8 +361,10 @@ mod tests {
     }
 
     #[test]
-    fn failure_reason_all_returns_eight() {
-        assert_eq!(FailureReason::all().len(), 8);
+    fn failure_reason_all_returns_nine() {
+        // 9th = NonConvergence (Couche 3 M1.d fail-closed iterate).
+        assert_eq!(FailureReason::all().len(), 9);
+        assert_eq!(FailureReason::NonConvergence.as_str(), "non_convergence");
     }
 
     #[test]

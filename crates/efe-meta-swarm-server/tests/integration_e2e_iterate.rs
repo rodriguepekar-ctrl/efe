@@ -3,7 +3,7 @@
 //! Replaces the `TestParticipantSvc` stand-in from PR #8.  Three real
 //! `ParticipantService` instances + one in-process `ControllerService`.
 //! Asserts :
-//!   * convergence (Kovant-style 3-participant topology)
+//!   * convergence (procurement-style 3-participant topology)
 //!   * bit-identical determinism across 3 reruns (AC8)
 
 mod common;

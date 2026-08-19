@@ -77,6 +77,11 @@ impl SafetySet for BoxSafety {
     }
 
     fn name(&self) -> &str { &self.name }
+
+    /// The box IS its own bounding box — exact domain for the M1.c canary.
+    fn bounding_box(&self) -> Option<(Vec<f32>, Vec<f32>)> {
+        Some((self.lo.clone(), self.hi.clone()))
+    }
 }
 
 #[cfg(test)]

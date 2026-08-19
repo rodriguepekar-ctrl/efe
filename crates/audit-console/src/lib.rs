@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: UNLICENSED
-//! # `audit-console` — Kovant P1 / S3 : la console opérationnelle de conformité (la 2ᵉ surface)
+//! # `audit-console` — Provenance P1 / S3 : la console opérationnelle de conformité (la 2ᵉ surface)
 //!
 //! La surface quotidienne de l'agent de conformité non-cryptographe, et la **dernière** marche de P1.
 //! C'est la **seconde des deux surfaces** (l'autre étant l'export forensic *trustless* de S4) : la console

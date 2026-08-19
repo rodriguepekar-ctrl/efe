@@ -95,9 +95,10 @@ mod tests {
         LocalParticipant::from_manifest_row(&ParticipantManifest {
             id: "p-1".into(),
             dim: 8,
-            kappa: 0.6,
-            seed: 11,
+            kappa: Some(0.6),
+            seed: Some(11),
             blas_backend: "none".into(),
+            controller: None,
         })
         .expect("local")
     }

@@ -11,7 +11,7 @@ use crate::budget::BudgetTracker;
 use crate::canonical::{ArgumentStance, CanonicalArgument};
 use crate::error::{MultiLlmError, MultiLlmResult};
 use crate::events_ext::{Phase3EventExt, Phase3Publisher};
-use crate::reformulator_ext::{CanonicalReformulator, SourceDialect};
+use crate::reformulator_ext::{reformulator_for, SourceDialect};
 use crate::request::{DebateArgumentSummary, DebateRequest, DebateResponse};
 use crate::DEBATE_MAX_ROUNDS;
 
@@ -38,12 +38,16 @@ pub async fn run_debate(
     let swarm_id = Uuid::now_v7();
     let publisher = Phase3Publisher;
     let budget = BudgetTracker::new(req.max_budget_cents);
-    let reformulator = CanonicalReformulator::new();
+    // Fil B.0 : reformulateur pluggable (déterministe par défaut).
+    let reformulator = reformulator_for(coord);
     let bus = Arc::clone(&coord.bus);
 
     let mut arguments_per_round: Vec<Vec<DebateArgumentSummary>> = Vec::new();
     let mut last_pro_argument = String::new();
     let mut last_contra_argument = String::new();
+    // Fil B.3 : 2 hops estampillés par round (le verdict jury n'est pas
+    // reformulé — pas de hop jury, honnête).
+    let mut reformulation_hops = Vec::with_capacity(2 * req.rounds as usize);
 
     for round_idx in 1..=req.rounds {
         publisher
@@ -146,20 +150,61 @@ pub async fn run_debate(
         } else {
             ArgumentStance::Rebuttal
         };
-        let pro_canon: CanonicalArgument = reformulator
-            .to_argument(
+        let pro_ref = reformulator
+            .to_argument_value(
                 &pro_resp.text,
                 pro_stance,
                 SourceDialect::from_provider_id(&req.pro_llm),
+                // B.4 : le hop SLM est borné au temps de mission RESTANT.
+                Some(req.max_total_latency.saturating_sub(started.elapsed())),
             )
-            ?;
-        let contra_canon: CanonicalArgument = reformulator
-            .to_argument(
+            .await?;
+        // Fil B.3 : le hop AVANT le from_value (qui consomme `.value`).
+        let pro_hop = pro_ref.to_hop(
+            &format!("argument:r{round_idx}:PRO"),
+            &req.pro_llm,
+            "canonical/argument_v1",
+        );
+        let pro_canon: CanonicalArgument =
+            serde_json::from_value(pro_ref.value).map_err(|e| {
+                MultiLlmError::ReformulationFailed {
+                    from_dialect: SourceDialect::from_provider_id(&req.pro_llm).tag().to_string(),
+                    to_schema: "canonical/argument_v1".to_string(),
+                    reason: e.to_string(),
+                }
+            })?;
+        let contra_ref = reformulator
+            .to_argument_value(
                 &contra_resp.text,
                 contra_stance,
                 SourceDialect::from_provider_id(&req.contra_llm),
+                // B.4 : le hop SLM est borné au temps de mission RESTANT.
+                Some(req.max_total_latency.saturating_sub(started.elapsed())),
             )
-            ?;
+            .await?;
+        let contra_hop = contra_ref.to_hop(
+            &format!("argument:r{round_idx}:CONTRA"),
+            &req.contra_llm,
+            "canonical/argument_v1",
+        );
+        let contra_canon: CanonicalArgument =
+            serde_json::from_value(contra_ref.value).map_err(|e| {
+                MultiLlmError::ReformulationFailed {
+                    from_dialect: SourceDialect::from_provider_id(&req.contra_llm).tag().to_string(),
+                    to_schema: "canonical/argument_v1".to_string(),
+                    reason: e.to_string(),
+                }
+            })?;
+
+        // Fil B.0 : provenance du moteur de reformulation (par argument).
+        publisher
+            .publish_reformulation(&bus, swarm_id, &req.pro_llm, "canonical/argument_v1", pro_hop.engine)
+            .await;
+        publisher
+            .publish_reformulation(&bus, swarm_id, &req.contra_llm, "canonical/argument_v1", contra_hop.engine)
+            .await;
+        reformulation_hops.push(pro_hop);
+        reformulation_hops.push(contra_hop);
 
         publisher
             .publish_debate_argument(&bus, swarm_id, round_idx, &req.pro_llm, "PRO")
@@ -231,7 +276,8 @@ pub async fn run_debate(
         jury_llm: req.jury_llm,
         total_cost_cents: budget.spent_cents(),
         latency_ms: started.elapsed().as_millis() as u64,
-        audit_chain_hash: format!("{:016x}", swarm_id.as_u128()),
+        swarm_id_hex: swarm_id.simple().to_string(),
+        reformulation_hops,
     })
 }
 

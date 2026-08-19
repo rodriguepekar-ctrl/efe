@@ -33,6 +33,7 @@ use efe_core::{SwarmController, SwarmSpec};
 
 use crate::{MetaSwarmError, Result, Tensor};
 use crate::participants::{NonExpansiveCertificate, SwarmParticipant};
+use crate::participants::lipschitz::{estimate_lipschitz, LipschitzProbe, PhiOutcome};
 use crate::safety::SafetySet;
 
 /// In-process participant wrapping an `efe_core::SwarmController`.
@@ -76,6 +77,11 @@ pub struct LocalParticipant {
     runtime: tokio::runtime::Handle,
     /// Forward-compat — Phase-3 tenant feature gating.  Stored but unused.
     tenant_feature_gate: Option<crate::TenantId>,
+    /// **Couche 3 M1.c** — the Lipschitz-canary probe used by
+    /// [`SwarmParticipant::verify_non_expansive`]. Defaults to
+    /// [`LipschitzProbe::small`] (tuned for a *slow* real `Φ` — a few hundred `phi_once`
+    /// calls); override with [`Self::with_lipschitz_probe`] for a thorough audit.
+    probe: LipschitzProbe,
 }
 
 impl LocalParticipant {
@@ -110,7 +116,17 @@ impl LocalParticipant {
             state: Mutex::new(Tensor::zeros(dim)),
             runtime,
             tenant_feature_gate: None,
+            probe: LipschitzProbe::small(),
         })
+    }
+
+    /// Override the M1.c Lipschitz-canary probe (default [`LipschitzProbe::small`]).
+    /// Use a larger probe ([`LipschitzProbe::default`]) for a more thorough H1 audit at
+    /// the cost of more `phi_once` evaluations.
+    #[must_use]
+    pub fn with_lipschitz_probe(mut self, probe: LipschitzProbe) -> Self {
+        self.probe = probe;
+        self
     }
 
     /// Phase-3 forward-compat — bind to a tenant.  Stored only ;  the
@@ -227,9 +243,42 @@ impl SwarmParticipant for LocalParticipant {
     }
 
     fn verify_non_expansive(&self) -> Result<NonExpansiveCertificate> {
-        // Phase 1 : stub.  Phase 3 will consult an `efe-prove`
-        // certificate keyed on the controller's bundle hash.
-        Ok(NonExpansiveCertificate::Stub)
+        // **Couche 3 M1.c** — run the empirical Lipschitz canary over this participant's
+        // operational domain (its safety box) and return a real `Empirical` verdict, not
+        // the dead `Stub`. The oracle is the ISOLATED, deterministic (M1.b) operator
+        // `Φ = phi_once`, driven **single-flight** on this participant's own controller
+        // (`block_on` awaits each call to completion, so the controller's `LastCentroid`
+        // slot is never raced — the M1.c single-flight contract).
+        //
+        // HONESTY: `L̂` is a *lower bound* — this **falsifies** H1 (`L̂ ≥ 1 − margin` ⇒
+        // fail-closed) but never *certifies* it. The domain is the participant's safety
+        // box; points where `Φ` is out-of-domain (alignment breach) are skipped.
+        let dim = self.dim;
+        let (lo, hi) = self
+            .safety
+            .bounding_box()
+            .unwrap_or_else(|| (vec![-1.0_f32; dim], vec![1.0_f32; dim]));
+        // Classify the outcome so a numerical blow-up is NOT laundered into "out-of-domain"
+        // (adversarial-review soundness fix): only a genuine `AlignmentBreach` means `x`
+        // maps legitimately outside Φ's domain; every other error (NumericalExplosion,
+        // Divergence, ModeCollapse, ConvergenceTimeout, budget, …) is a pathology of Φ
+        // itself and must fail the canary CLOSED.
+        let phi = |x: &[f32]| -> PhiOutcome {
+            match self.runtime.block_on(self.controller.phi_once(x, &self.spec, &self.tenant_id)) {
+                Ok(v) => PhiOutcome::InDomain(v),
+                Err(efe_core::EfeError::AlignmentBreach { .. }) => PhiOutcome::OutOfDomain,
+                Err(_) => PhiOutcome::Failed,
+            }
+        };
+        let report = estimate_lipschitz(dim, &lo, &hi, &self.probe, phi);
+        Ok(NonExpansiveCertificate::Empirical {
+            l_hat:           report.l_hat,
+            margin:          self.probe.margin,
+            n_pairs_scored:  report.n_pairs_scored,
+            n_domain_errors: report.n_domain_errors,
+            // `saw_failure` (a Φ blow-up) ⇒ inconclusive ⇒ fail-closed.
+            inconclusive:    report.insufficient_samples || report.budget_exhausted || report.saw_failure,
+        })
     }
 
     fn reset(&self) -> Result<()> {

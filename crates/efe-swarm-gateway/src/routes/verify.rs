@@ -6,6 +6,23 @@
 //! clé tenant. Même si le store a été altéré après coup, une chaîne casse → `verified=false`
 //! et la faute est localisée. L'endpoint ne demande pas de *croire* le store ; il
 //! *re-prouve* — la forensique LLM comprise (ADR-016).
+//!
+//! # P.0 — l'intégrité ne suffit pas : il faut aussi la COMPLÉTUDE
+//!
+//! Re-calculer prouve que *ce qui est là* n'a pas bougé ; cela ne prouve **pas** que *tout* est
+//! encore là. Un **préfixe** d'une chaîne HMAC valide est lui-même une chaîne HMAC valide :
+//! retirer les derniers enregistrements d'un run laisse `chain_intact`, `content_intact` et
+//! `dag_consistent` à `true`. Seule la **racine** change.
+//!
+//! La racine scellée à l'exécution est pourtant persistée (`StoredRun::root`) — et la comparaison
+//! correcte existait déjà un fichier plus loin, dans le replay R0
+//! (`routes/replay.rs` : `reproduced_root == stored.root`). Elle manquait **ici**, sur la route
+//! qui porte le verdict public. Sans elle, un tiers disposant de l'écriture en base et
+//! **d'aucune clé** obtenait `verified: true` sur un run tronqué.
+//!
+//! Ce module confronte donc la racine **reconstruite** à la racine **scellée** et intègre le
+//! résultat au verdict. Le principe de non-accusation rétroactive est préservé : un run sans
+//! racine persistée rend `root_matches: None` et conserve son verdict.
 
 use axum::extract::{Path, State};
 use axum::Json;
@@ -38,11 +55,35 @@ pub async fn verify(
     // Comptabilise la re-preuve d'essaim dans les métriques partagées (ruptures détectées).
     s.prov_metrics.observe_verify(&v.swarm);
 
+    // ── P.0 : la COMPLÉTUDE ────────────────────────────────────────────────────────────────
+    // `root_hex()` ne rend `Some` que si la chaîne se recompose (`verify_chain` pose
+    // `root: None` sur toute rupture) ; il rend aussi `None` sur un run **vide**, que
+    // `verify_swarm` déclare par ailleurs trivialement intègre.
+    //
+    // D'où la règle, volontairement asymétrique : **c'est la racine SCELLÉE qui commande**.
+    // Dès qu'un run en porte une, la re-preuve DOIT la reproduire — sinon le run n'est pas
+    // celui qui a été scellé. Cette formulation ferme trois cas d'un coup :
+    //   • troncature de queue  → reconstruite ≠ scellée      ⟹ Some(false)
+    //   • suppression totale   → reconstruite None           ⟹ Some(false)  (le trou du run vide)
+    //   • rupture de chaîne    → reconstruite None           ⟹ Some(false)  (déjà non vérifié)
+    // Et elle n'accuse jamais un run sans racine scellée (⟹ None, verdict inchangé).
+    //
+    // Comparaison de chaînes exacte : les deux racines sont produites par le même `hex32`
+    // (minuscules, 64 caractères) — côté scellement comme côté re-preuve.
+    let recomputed_root = v.swarm.root_hex();
+    let root_matches: Option<bool> =
+        stored.root.as_deref().map(|sealed| recomputed_root.as_deref() == Some(sealed));
+
+    // Le verdict public ne peut pas être positif sur un run incomplet.
+    let verified = v.fully_proven && root_matches != Some(false);
+
     Ok(Json(VerifyResponse {
         run_id: id,
-        // ADR-016 : le verdict GLOBAL inclut désormais la forensique N17 + le pont.
-        verified: v.fully_proven,
-        root: v.swarm.root_hex(),
+        // ADR-016 : le verdict GLOBAL inclut la forensique N17 + le pont.
+        // P.0 : il inclut désormais aussi la complétude (racine scellée reproduite).
+        verified,
+        root: recomputed_root,
+        root_matches,
         chain_intact: v.swarm.chain_intact,
         content_intact: v.swarm.content_intact,
         dag_consistent: v.swarm.dag_consistent,

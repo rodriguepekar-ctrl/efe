@@ -278,7 +278,8 @@ mod tests {
                 .into_bytes(),
         )
         .unwrap();
-        // 5 outcomes × 8 failure_reasons = 40 child series, each at 0.
+        // 5 outcomes × 9 failure_reasons = 45 child series, each at 0
+        // (9th = non_convergence, Couche 3 M1.d).
         for outcome in Outcome::all() {
             for reason in FailureReason::all() {
                 let key = format!(

@@ -18,7 +18,7 @@ use crate::iteration::{ObservedStep, StepObserver};
 use crate::{MetaSwarm, MetaSwarmResult, Result};
 
 pub use efe_audit_core::HmacKeySource;
-pub use efe_meta_verify::{MetaChainState, MetaProvenance, SealedMetaStep};
+pub use efe_meta_verify::{MetaChainState, MetaProvenance, RunBinding, SealedMetaStep};
 pub use efe_nano_sdk::TenantId;
 
 /// L'observateur qui **scelle** chaque pas de consensus dans une chaîne HMAC (crypto partagée).
@@ -31,6 +31,15 @@ impl HmacProvenanceSink {
     #[must_use]
     pub fn new(meta_id: &str, key: Vec<u8>) -> Self {
         Self { chain: MetaChainState::new(meta_id, key) }
+    }
+
+    /// **v4** — même chose, en liant le run à ses acteurs et à sa règle ([`RunBinding`]).
+    ///
+    /// La liaison est un invariant de run : elle est posée ici, une fois, et aucun `on_step` ne
+    /// peut la contredire — il n'y a pas d'endroit où l'écrire.
+    #[must_use]
+    pub fn new_bound(meta_id: &str, key: Vec<u8>, binding: RunBinding) -> Self {
+        Self { chain: MetaChainState::new_bound(meta_id, key, binding) }
     }
 
     /// Consomme le sink → l'artefact de provenance (**la clé est droppée**).
@@ -64,11 +73,22 @@ impl MetaSwarm {
     /// # Errors
     /// Erreur si la dérivation de clé échoue (p. ex. master `EnvHkdf` absent) ou si le moteur échoue
     /// (H1 non tenue, etc.) — dans les deux cas, **aucun** artefact à-moitié-scellé n'est produit.
-    pub fn iterate_with_provenance(&self, key_source: &HmacKeySource, tenant: TenantId) -> Result<(MetaSwarmResult, MetaProvenance)> {
+    pub fn iterate_with_provenance(
+        &self,
+        key_source: &HmacKeySource,
+        tenant: TenantId,
+        binding: Option<RunBinding>,
+    ) -> Result<(MetaSwarmResult, MetaProvenance)> {
         let key = key_source
             .derive(tenant)
             .map_err(|e| crate::MetaSwarmError::Internal(format!("dérivation de la clé de provenance : {e}")))?;
-        let mut sink = HmacProvenanceSink::new(self.id(), key);
+        let mut sink = match binding {
+            // v4 : le reçu nomme ses acteurs et sa règle.
+            Some(b) => HmacProvenanceSink::new_bound(self.id(), key, b),
+            // v3 : trace positionnelle seule — conservé pour que les bundles antérieurs restent
+            // re-prouvables à l'identique, pas comme un mode « allégé » qu'on recommanderait.
+            None => HmacProvenanceSink::new(self.id(), key),
+        };
         let result = self.iterate_observed(&mut sink)?;
         Ok((result, sink.finish()))
     }

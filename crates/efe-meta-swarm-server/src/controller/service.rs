@@ -371,6 +371,8 @@ fn classify_grpc_status(
         Code::InvalidArgument => (Outcome::Error, FailureReason::DimMismatch),
         Code::Unavailable => (Outcome::Error, FailureReason::ParticipantDown),
         Code::FailedPrecondition => (Outcome::Error, FailureReason::SafetyViolation),
+        // Couche 3 M1.d — `require_convergence` fail-closed (iterate.rs).
+        Code::Aborted => (Outcome::Error, FailureReason::NonConvergence),
         Code::Unauthenticated | Code::PermissionDenied => (Outcome::Error, FailureReason::Other),
         Code::Internal | Code::DataLoss | Code::Unknown => {
             (Outcome::Error, FailureReason::Internal)
@@ -580,16 +582,18 @@ mod tests {
                 ParticipantManifest {
                     id: "supplier-scoring".into(),
                     dim: 8,
-                    kappa: 0.6,
-                    seed: 11,
+                    kappa: Some(0.6),
+                    seed: Some(11),
                     blas_backend: "none".into(),
+                    controller: None,
                 },
                 ParticipantManifest {
                     id: "contract-risk".into(),
                     dim: 8,
-                    kappa: 0.7,
-                    seed: 22,
+                    kappa: Some(0.7),
+                    seed: Some(22),
                     blas_backend: "none".into(),
+                    controller: None,
                 },
             ],
             iteration: IterationManifest::default(),
@@ -680,6 +684,7 @@ mod tests {
                     build_sha: String::new(),
                     blas_backend: String::new(),
                     features: vec![],
+                    config_hash: None,
                 },
                 ParticipantDescriptor {
                     id: "contract-risk".into(),
@@ -689,6 +694,7 @@ mod tests {
                     build_sha: String::new(),
                     blas_backend: String::new(),
                     features: vec![],
+                    config_hash: None,
                 },
             ],
             drain_inflight: false,
@@ -760,6 +766,7 @@ mod tests {
                     build_sha: String::new(),
                     blas_backend: String::new(),
                     features: vec![],
+                    config_hash: None,
                 },
                 ParticipantDescriptor {
                     id: "contract-risk".into(),
@@ -769,6 +776,7 @@ mod tests {
                     build_sha: String::new(),
                     blas_backend: String::new(),
                     features: vec![],
+                    config_hash: None,
                 },
             ],
             drain_inflight: false,

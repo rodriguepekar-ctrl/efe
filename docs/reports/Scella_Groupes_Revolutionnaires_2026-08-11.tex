@@ -1,0 +1,361 @@
+\documentclass[10pt]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage[french]{babel}
+\usepackage{newpxtext,newpxmath}
+\usepackage[a4paper,top=1.5cm,bottom=1.35cm,left=1.6cm,right=1.6cm]{geometry}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{titlesec}
+\usepackage[most]{tcolorbox}
+\usepackage{enumitem}
+\usepackage{array}
+\usepackage{booktabs}
+\usepackage{fancyhdr}
+
+\definecolor{navy}{HTML}{1F3A5F}
+\definecolor{grey}{HTML}{54606E}
+\definecolor{green}{HTML}{2C6E49}
+\definecolor{amber}{HTML}{9C6A16}
+\definecolor{red}{HTML}{A6322E}
+\definecolor{plum}{HTML}{7A4EA8}
+\definecolor{boxgray}{HTML}{F3F5F8}
+\definecolor{boxred}{HTML}{FCF2F1}
+\definecolor{boxgreen}{HTML}{F1F7F3}
+\definecolor{boxplum}{HTML}{F7F3FB}
+\definecolor{boxcode}{HTML}{F7F8FA}
+\definecolor{boxedge}{HTML}{D9E0EA}
+
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{2.6pt}
+\linespread{1.0}
+
+\pagestyle{fancy}\fancyhf{}
+\lhead{\small\color{grey}Scella}
+\rhead{\small\color{grey}Le groupe le plus révolutionnaire -- 11 août 2026}
+\cfoot{\small\color{grey}\thepage}
+\renewcommand{\headrulewidth}{0.3pt}
+
+\titleformat{\section}{\color{navy}\large\bfseries}{}{0pt}{}
+\titlespacing{\section}{0pt}{11pt}{3pt}
+\titleformat{\subsection}{\color{navy}\bfseries}{}{0pt}{}
+\titlespacing{\subsection}{0pt}{7pt}{1.5pt}
+
+\newtcolorbox{these}{colback=boxgray,colframe=boxedge,boxrule=0.5pt,arc=2.5pt,
+  left=8pt,right=8pt,top=4.5pt,bottom=4.5pt}
+\newtcolorbox{alerte}{colback=boxred,colframe=red!55,boxrule=0.8pt,arc=2.5pt,
+  left=8pt,right=8pt,top=4.5pt,bottom=4.5pt}
+\newtcolorbox{acquis}{colback=boxgreen,colframe=green!45,boxrule=0.8pt,arc=2.5pt,
+  left=8pt,right=8pt,top=4.5pt,bottom=4.5pt}
+\newtcolorbox{piste}{colback=boxplum,colframe=plum!45,boxrule=0.8pt,arc=2.5pt,
+  left=8pt,right=8pt,top=4.5pt,bottom=4.5pt}
+\newtcolorbox{extrait}{colback=boxcode,colframe=boxedge,boxrule=0.5pt,arc=1.5pt,
+  left=7pt,right=7pt,top=3.5pt,bottom=3.5pt}
+
+% \textcolor plutôt que {\color …} : en tête de cellule p{}, \color insère un whatsit
+% qui ouvre une ligne vide et décale verticalement toute la colonne.
+\newcommand{\best}[1]{\textcolor{green}{\textbf{#1}}}
+\newcommand{\pire}[1]{\textcolor{red}{\textbf{#1}}}
+\newcommand{\sz}[1]{\textcolor{grey}{\small\textsf{#1}}}
+\newcommand{\code}[1]{\texttt{\small #1}}
+\newcommand{\x}{$\times$}
+\newcommand{\loc}[1]{{\footnotesize\color{grey}\texttt{#1}}}
+
+\begin{document}
+
+\begin{center}
+{\Huge\bfseries\color{navy} Scella}\\[4pt]
+{\large\color{grey}\itshape Le groupe le plus révolutionnaire}\\[4pt]
+{\small\color{grey} 11 août 2026 \; · \; axe orthogonal au classement produit \; · \; six levées d'impossibilité, localisées}
+\end{center}
+\vspace{2pt}
+
+\begin{these}
+\textbf{Le résultat central : les crates ne changent presque pas, la thèse change entièrement.} Le
+dépôt contient \textbf{six levées d'impossibilité}, et j'ai vérifié où chacune vit :
+\textbf{cinq sur six sont déjà co-localisées} dans les neuf crates du produit désigné la veille. La
+sixième n'en coûte qu'\textbf{un seul de plus}. Mais l'analyse précédente, qui optimisait la
+\emph{cohérence produit}, avait retenu une promesse plus faible que son contenu -- « l'essaim \textbf{attestable} », c'est-à-dire
+\emph{le système peut prouver qu'il a raison}. Sur l'axe révolutionnaire, la promesse juste est son
+\textbf{inverse épistémique} : \emph{le système peut être \textbf{pris en défaut}} -- par lui-même au
+démarrage, par n'importe qui ensuite sans clé ni dépendance, et il dit lui-même comment le défier. La
+première catégorie est saturée ; la seconde est presque vide.
+\end{these}
+
+\section{1 · Ce que « révolutionnaire » exige, défini pour être vérifiable}
+
+Le mot ne vaut rien s'il reste une appréciation, et il serait facile de s'en servir pour re-couronner
+la conclusion de la veille. Je l'opérationnalise donc, autour d'un test \textbf{binaire} :
+
+\begin{extrait}
+\textbf{Quelle phrase devient vraie pour la première fois ?} \\[2pt]
+Si la phrase est « X est 30 \% plus rapide, plus propre, moins cher », c'est une \emph{amélioration}. \\
+Si la phrase est « X peut désormais être fait, \textbf{par quelqu'un qui ne le pouvait pas} », c'est une
+\textbf{levée}.
+\end{extrait}
+
+Cinq critères en découlent. L'\textbf{impossibilité levée} -- binaire, jamais graduelle. Le
+\textbf{transfert de pouvoir} : une révolution déplace un pouvoir, pas une métrique, et la question
+utile est \emph{qui peut désormais contrôler ce qu'il devait croire ?} L'\textbf{irréversibilité} :
+une fois la chose vue, l'attente par défaut est-elle changée ? L'\textbf{absence d'équivalent} -- non
+pas « rare », ce qui était la lentille précédente, mais « personne ne sait le faire ». Et la
+\textbf{portée} : cela dépasse-t-il le cas d'usage du dépôt ?
+
+\begin{alerte}
+\textbf{Cet axe déclasse explicitement ceux qui portaient le verdict de la veille.} La
+\textbf{maturité} et la \textbf{démontrabilité} avaient désigné l'essaim attestable parce qu'il tourne
+en une commande aujourd'hui. Ici elles ne comptent presque pas : une levée d'impossibilité reste une
+levée même si elle se montre mal. C'est précisément pour cela que le résultat pouvait différer -- et
+qu'il fallait refaire le travail plutôt que défendre la conclusion.
+
+Je maintiens en revanche la contrainte constante de la série : \textbf{aucune cible extérieure n'est
+déclarée, et je n'en invente pas}. Les cinq critères se jugent sans destinataire.
+\end{alerte}
+
+\section{2 · Les six levées, localisées dans le code}
+
+\renewcommand{\arraystretch}{1.22}
+\begin{center}\small
+\begin{tabular}{@{}c >{\raggedright\arraybackslash}p{3.15cm} >{\raggedright\arraybackslash}p{6.55cm} >{\raggedright\arraybackslash}p{5.0cm}@{}}
+\toprule
+& \textbf{La levée} & \textbf{La phrase qui devient vraie} & \textbf{Où} \\
+\midrule
+\textbf{A} & Vérifieur zéro-dépendance & L'auditeur lit l'\textbf{intégralité} du vérifieur avant de lui accorder sa confiance & \code{verify-meta-mini} \sz{arbre : 1 ligne} \\
+\textbf{B} & Ancre $\rightarrow$ troncature sans clé & Un tiers ne détenant \textbf{aucune} clé détecte qu'on lui a montré la moitié qui arrange & \code{provenance-dag/anchor.rs} \newline \code{controller/anchor.rs} \\
+\textbf{C} & Liaison v4 nominative & Renommer un acteur \textbf{casse la preuve} & \code{efe-meta-verify/src/lib.rs} \\
+\textbf{D} & Canari + porte H1 & Le système \textbf{mesure} sa garantie, \textbf{se réfute}, et \textbf{refuse de démarrer} & \code{participants/lipschitz.rs} \newline \code{participant/local.rs} \\
+\textbf{E} & Triangle croisé & Deux implémentations doivent s'accorder $\rightarrow$ le format devient une \textbf{spécification} & \code{verify-meta-mini/tests/} \newline \code{cross\_check.rs} \\
+\textbf{F} & Frontière PROUVÉ / CONFIANCE & L'artefact dit lui-même \textbf{comment le défier} & \code{forensic-export/src/} \newline \code{readme.rs} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Deux d'entre elles doivent être lues avant d'être notées, parce que leur formulation abrégée ne rend
+pas ce qu'elles font.
+
+\subsection{2.1 · D -- le système qui réfute sa propre documentation}
+
+Le document d'architecture de la Couche 3 porte, \emph{dans son propre texte}, la réfutation de son
+propre certificat : \emph{« le chiffre 0.17 est RÉFUTÉ (mesure : $\hat{L} = 0{,}366$) »}, l'ancien
+nombre barré partout où il apparaissait, et -- c'est la partie qui compte -- la séparation explicite
+de ce qui survit et de ce qui tombe : \emph{« Φ reste largement contractant ($0{,}366 \ll 1$, H1
+tient) »} d'un côté, \emph{« la forme fermée est réfutée comme certificat »} de l'autre.
+
+Un système, normalement, \textbf{affirme} ses propriétés de sûreté dans sa documentation, et la
+documentation fait foi jusqu'à preuve du contraire. Celui-ci les \textbf{mesure}, se contredit, retient
+la mesure défavorable, et pose une porte de démarrage qui refuse de servir si la mesure sort du
+domaine. Le rapport de force entre la fiche technique et le binaire est inversé.
+
+\subsection{2.2 · F -- l'artefact de conformité qui argumente contre lui-même}
+
+\code{forensic-export} \textbf{génère, à l'intérieur du bundle livré}, un paragraphe destiné à
+l'auditeur. Quand l'ancrage est purement interne, il écrit :
+
+\begin{extrait}
+\sz{« … une \textbf{déclaration interne}, \textbf{sans force probante externe} par construction. Elle
+\textbf{n'établit PAS} que le record n'a pas été fabriqué a posteriori (le déclarant et le détenteur de
+la clé peuvent être la même partie). Pour une preuve \textbf{opposable au détenteur}, exigez un ancrage
+à \textbf{reçu externe vérifiable} (RFC 3161 / log de transparence / dépôt régulateur). »}
+\end{extrait}
+
+Et quand il n'y a aucun ancrage, il le dit aussi -- avec une section intitulée littéralement
+\mbox{\textbf{« Ce que ça NE prouve PAS »}}.
+
+C'est un artefact de conformité qui \textbf{instruit son lecteur sur la manière de le défaire}, et qui
+\textbf{nomme le remède à exiger} du fournisseur -- c'est-à-dire de lui-même. Toutes les incitations
+du domaine vont dans l'autre sens : un artefact de conformité est habituellement écrit pour clore la
+discussion, pas pour l'armer.
+
+\section{3 · Le classement sur les cinq critères}
+
+Rangs de 1 à 6 par critère ; \emph{Éc.} est l'amplitude entre le meilleur et le pire rang.
+
+\renewcommand{\arraystretch}{1.16}
+\begin{center}\small
+\begin{tabular}{@{}r >{\raggedright\arraybackslash}p{7.0cm} ccccc c c@{}}
+\toprule
+& \textbf{La levée} & \sz{Imposs.} & \sz{Pouvoir} & \sz{Irrév.} & \sz{Sans éq.} & \sz{Portée} & \textbf{Moy} & \sz{Éc.} \\
+\midrule
+\textbf{1=} & \textbf{B · Ancre sans clé} & \best{1} & \best{1} & 4 & 4 & 2 & \textbf{2,40} & 3 \\
+\textbf{1=} & \textbf{F · L'artefact qui dit comment le défier} & 3 & 2 & 2 & 2 & 3 & \textbf{2,40} & \best{1} \\
+\textbf{3=} & \textbf{A · Vérifieur zéro-dépendance} & 4 & 3 & 3 & 3 & \best{1} & \textbf{2,80} & 3 \\
+\textbf{3=} & \textbf{D · Auto-réfutation + refus de démarrer} & 2 & 4 & \best{1} & \best{1} & \pire{6} & \textbf{2,80} & \pire{5} \\
+5 & C · Liaison v4 nominative & 5 & 5 & 5 & \pire{6} & 4 & \textbf{5,00} & 2 \\
+6 & E · Triangle croisé & \pire{6} & \pire{6} & \pire{6} & 5 & 5 & \textbf{5,60} & \best{1} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Trois lectures comptent davantage que les rangs eux-mêmes.
+
+\textbf{B est premier là où c'est le plus difficile} -- impossibilité \emph{et} transfert de pouvoir.
+C'est la seule levée du dépôt qui fonctionne \textbf{contre le détenteur de la clé lui-même}. Une
+chaîne HMAC ne peut pas, \emph{par construction}, détecter sa propre troncature : le préfixe d'une
+chaîne valide est une chaîne valide. Tout ce que la cryptographie du reçu peut faire s'arrête là.
+L'ancre est le seul mécanisme qui retire un pouvoir à celui qui détient le secret, et le contrôle qui
+l'exerce ne demande aucune clé -- c'est une comparaison de chaînes de caractères.
+
+\textbf{F arrive premier ex \ae quo avec un écart de 1} : bon partout, faible nulle part. C'est le
+profil d'une levée \emph{structurelle} plutôt que spectaculaire, et c'est la seule des six à se
+trouver \textbf{hors} du produit retenu la veille.
+
+\textbf{D porte un écart de 5} -- premier en irréversibilité et en absence d'équivalent,
+\textbf{dernier en portée}. La chose la plus inimitable du dépôt ne s'applique qu'aux systèmes
+numériques contractants. C'est exactement le profil haute-variance déjà diagnostiqué au niveau des
+ensembles, retrouvé ici sur un axe entièrement différent : une convergence entre deux méthodes
+indépendantes, qui rend le diagnostic plus crédible que chacune prise seule.
+
+\sz{Et E tombe dernier, ce qui est cohérent : le triangle croisé rend la correction plus \emph{probable},
+il ne rend rien \emph{possible}. C'était une force au classement produit ; c'en est une faible ici. Les
+deux axes ne mesurent pas la même chose, et il faut l'accepter plutôt que le lisser.}
+
+\section{4 · Le groupe -- et le fait qu'il était déjà là}
+
+La vérification des emplacements donne le résultat le plus utile du document.
+\textbf{Cinq levées sur six sont déjà co-localisées} dans les neuf crates du produit désigné la veille.
+La sixième, F, coûte \code{forensic-export}, dont la fermeture mesurée est de deux crates --- mais
+le second est \code{provenance-dag}, \textbf{déjà présent} dans le produit. Le coût marginal réel est
+donc d'\textbf{un seul crate}.
+
+\begin{acquis}
+\textbf{Le groupe le plus révolutionnaire} $=$ A $+$ B $+$ C $+$ D $+$ E $+$ F, soit
+\textbf{dix crates} sur soixante-six. Les crates ne changent quasiment pas.
+\textbf{C'est la promesse qui change} -- et c'est elle qui sépare « bien empaqueté » de
+« révolutionnaire ».
+\end{acquis}
+
+\subsection{4.1 · Le renversement de la promesse}
+
+C'est le résultat central, et il corrige l'analyse précédente sans l'annuler.
+
+\renewcommand{\arraystretch}{1.2}
+\begin{center}\small
+\begin{tabular}{@{}l >{\raggedright\arraybackslash}p{5.0cm} >{\raggedright\arraybackslash}p{8.0cm}@{}}
+\toprule
+& \textbf{La promesse} & \textbf{Ce qu'elle revendique} \\
+\midrule
+Avant & « L'essaim \textbf{attestable} » & \emph{le système peut prouver qu'il a raison} \\
+\textbf{Après} & « Le système \textbf{réfutable} » & \emph{le système peut être \textbf{pris en défaut}} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+La première est une assertion de fiabilité : la catégorie la plus encombrée qui soit, et celle où
+chaque affirmation ressemble à celle du voisin. La seconde est son \textbf{inverse épistémique}, et
+elle est presque vide.
+
+\begin{piste}
+\textbf{« Un système qui peut être pris en défaut : par lui-même au démarrage, par n'importe qui
+ensuite -- sans clé et sans dépendance -- et qui dit lui-même comment le défier. »}
+\end{piste}
+
+Les quatre levées de tête s'y rangent sans forcer, et c'est le signe qu'il s'agit bien d'une thèse et
+non d'un slogan : \textbf{D} le prend en défaut au démarrage, \textbf{B} permet à un tiers sans clé de
+le prendre en défaut ensuite, \textbf{A} permet d'auditer l'auditeur lui-même, et \textbf{F} apprend au
+lecteur comment s'y prendre. L'analyse de la veille avait choisi les bons crates pour une raison plus
+faible que ce qu'ils contiennent.
+
+\section{5 · Le second groupe, et il faut le dire honnêtement}
+
+Si « révolutionnaire » autorise ce qui n'est pas encore construit, la réponse change.
+
+\textbf{L'interstice gouverné} -- Fil B (servi) $+$ Sandwich C.1 $+$ essaim médiateur.
+
+\begin{piste}
+\textbf{« L'espace entre deux modèles frontière n'est plus un tuyau opaque : c'est un lieu où des
+agents déclarés opèrent, chacun scellé et attribuable. »}
+\end{piste}
+
+C'est la levée \textbf{conceptuellement la plus grande} du dépôt, et pour une raison de nature : elle
+ne donne pas une propriété nouvelle à un objet existant, elle \textbf{crée un objet qui n'existait
+pas} -- l'interstice comme lieu gouverné. Aucune des six levées précédentes ne fait cela ; toutes
+améliorent le statut épistémique d'une chose déjà là.
+
+Ce qui l'empêche de l'emporter est factuel et se rejoue en une commande : \code{HopKind},
+\code{SwarmMediator} et \code{EdgePlan} comptent \textbf{zéro occurrence}. Le tiers servi -- Fil B, dont
+le \code{slm\_mediated} vit dans \code{routes/llm.rs} -- est réel et complet ; les deux autres tiers
+sont des documents d'architecture. Le substrat commun, lui, existe déjà : les deux binaires partagent
+\code{provenance-dag} et le même \code{AnchorIndex}.
+
+\textbf{Ma position, sans arrondi.} Le groupe réfutable est le plus révolutionnaire \textbf{parmi ce
+qui existe} ; l'interstice gouverné l'est \textbf{en potentiel}, et son terrain est préparé. Je ne les
+mets pas au même rang, parce qu'une révolution non écrite n'en est pas une -- mais je ne dissimule pas
+que le second a le plafond le plus haut.
+
+\section{6 · Ce que j'écarte, et pourquoi}
+
+\textbf{SOMNIA-MLP} aurait le plafond le plus élevé de tous -- auto-adaptation embarquée certifiable,
+Invariant 1 prouvé sous Frama-C. Je l'écarte pour des raisons déjà consignées et qui n'ont pas bougé :
+il est \textbf{hors dépôt}, le matériel n'a \textbf{jamais été flashé}, le gold n'est pas résolu, et
+empiler deux dépendances-gold non validées est exactement ce qu'il ne faut pas faire.
+
+\textbf{La Colonne} reste écartée pour la raison du rapport précédent : sa phrase décrit une
+\emph{architecture}, pas une levée -- un lecteur en ressort en sachant comment c'est bâti, pas ce qui
+devient possible.
+
+\section{7 · Le jugement}
+
+Les crates bougent à peine : \textbf{dix au lieu de neuf}, l'unique ajout étant \code{forensic-export}. Ce qui
+bouge est la \textbf{thèse}, et sur l'axe demandé c'est elle qui décide.
+
+Le dépôt contient six levées d'impossibilité. Quatre sont de premier rang, et elles convergent toutes
+vers la même propriété inhabituelle : \textbf{ce système est construit pour être attrapé}. C'est cela
+qui n'a pas d'équivalent -- pas le consensus, pas le scellement, pas même le reçu pris isolément.
+
+\textbf{Trois actions}, inchangées quant au code mais réordonnées quant au sens :
+\textbf{absorber \code{forensic-export}} dans le produit -- un seul crate de plus, la sixième levée, et de loin
+la moins chère ; \textbf{extraire la recette Mode-1 hors d'\code{efe-server}} -- mécanique, en
+coordination avec la session concurrente ; \textbf{écrire le profil} qui allume les interrupteurs.
+
+\begin{these}
+\small\textbf{Rappel de cadrage, inchangé dans toute la série.} Le reçu atteste l'\textbf{intégrité}
+d'une suite de pas, jamais la \textbf{correction} d'une décision. Il est \emph{tamper-evident pour un
+détenteur de clé}, pas \emph{trustless pour un tiers} -- et c'est précisément pourquoi l'ancre (B) et
+la frontière PROUVÉ/CONFIANCE (F) comptent autant : elles disent ce que le reçu seul ne peut pas
+faire. Les participants du mode réel exécutent une fusion latente Mode-1 numérique : ce ne sont pas des
+« vrais SLM ».
+\end{these}
+
+\section{Annexe · Vérifier chaque affirmation soi-même}
+
+Les \emph{notes} des cinq critères sont un jugement, structuré pour être discutable et non mesurable.
+Les \textbf{emplacements} et les \textbf{zéros}, eux, se rejouent.
+
+\renewcommand{\arraystretch}{1.22}
+\begin{center}\small
+\begin{tabular}{@{}>{\raggedright\arraybackslash}p{5.3cm} >{\raggedright\arraybackslash}p{10.8cm}@{}}
+\toprule
+\textbf{Affirmation} & \textbf{Ce qui la rejoue} \\
+\midrule
+A · le vérifieur est sans dépendance &
+  \code{cargo tree -p verify-meta-mini -e normal -{}-prefix none} \sz{(1 ligne)} \\
+B · l'ancre sans clé &
+  \code{grep -rl 'meta\_anchor\_of\textbackslash|META\_ANCHOR\_PREFIX' crates -{}-include='*.rs'} \\
+C · la liaison nominative &
+  \code{grep -rl 'struct RunBinding' crates -{}-include='*.rs'} \\
+D · le canari et la porte &
+  \code{crates/efe-meta-swarm/src/participants/lipschitz.rs} \newline
+  \code{grep -rl 'fn h1\_boot\_gate' crates -{}-include='*.rs'} \\
+D · l'auto-réfutation, écrite &
+  \code{grep -n 'RÉFUT' docs/architecture/COUCHE3-M1-*.md} \\
+E · le triangle croisé &
+  \code{crates/verify-meta-mini/tests/cross\_check.rs} \\
+F · l'artefact qui dit ses limites &
+  \code{sed -n '28,56p' crates/forensic-export/src/readme.rs} \\
+F · son coût de packaging &
+  \code{cargo tree -p forensic-export -e normal -{}-prefix none} \newline \sz{2 crates, dont \code{provenance-dag} déjà dans le produit $\Rightarrow$ coût marginal $= 1$} \\
+Le second groupe est à zéro &
+  \code{grep -rc 'HopKind\textbackslash|SwarmMediator\textbackslash|EdgePlan' crates -{}-include='*.rs'} \\
+Fil B, lui, est servi &
+  \code{grep -rl 'slm\_mediated' crates -{}-include='*.rs'} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Un avertissement pour finir, et il porte sur la nature même de ce document. Les six levées sont des
+\textbf{faits} localisés ; leur \textbf{hiérarchie} est un jugement. Un désaccord sur « B avant F » est
+légitime et ne se tranche par aucune commande -- mais un désaccord sur « \code{HopKind} : zéro
+occurrence » s'ouvre en une seconde, et c'est cette asymétrie qui rend le classement discutable plutôt
+qu'arbitraire.
+
+\end{document}

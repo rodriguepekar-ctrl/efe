@@ -75,6 +75,14 @@ impl Obj {
             Some((_, other)) => Err(format!("champ « {key} » : tableau de chaînes attendu, trouvé {other:?}")),
         }
     }
+    /// **v4** — la valeur chaîne d'un champ **optionnel** : `None` si absent (v1/v2/v3).
+    pub fn get_str_opt(&self, key: &str) -> Result<Option<String>, String> {
+        match self.fields.iter().find(|(k, _)| k == key) {
+            None => Ok(None),
+            Some((_, JsonValue::Str(v))) => Ok(Some(v.clone())),
+            Some((_, other)) => Err(format!("champ « {key} » : chaîne attendue, trouvé {other:?}")),
+        }
+    }
     fn lookup(&self, key: &str) -> Result<&JsonValue, String> {
         self.fields.iter().find(|(k, _)| k == key).map(|(_, v)| v).ok_or_else(|| format!("champ manquant : « {key} »"))
     }

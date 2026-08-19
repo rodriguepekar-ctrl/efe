@@ -32,6 +32,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let master_present = std::env::var(MASTER_ENV).map(|v| !v.trim().is_empty()).unwrap_or(false);
     let (keys, key_label) = key_source_for(master_present);
 
+    // GAP-SHORT-MASTER : un master FOURNI mais invalide (< 32 o, non-blanc) booterait "vert" en
+    // EnvHkdf puis échouerait 500 à CHAQUE scellement de provenance. On refuse tout de suite (tous
+    // chemins, pas seulement la frontière) via le MÊME contrat que le scellement (dry-run derive).
+    if master_present && HmacKeySource::EnvHkdf.derive(efe_nano_sdk::TenantId::system()).is_err() {
+        eprintln!(
+            "FATAL : {MASTER_ENV} fourni mais invalide (≥ 32 octets requis) — refus de démarrer \
+             (provenance non-scellable, chaque run échouerait 500)."
+        );
+        std::process::exit(78);
+    }
+
     // ── M4 : préflight go/no-go de la frontière — la TRIADE (non-forgeable + authentifiée + durable) ──
     // La frontière est un egress PAYANT vers un TIERS : chaque invariant manquant REFUSE de démarrer,
     // jamais ne dégrade en silence. Calculé depuis l'INTENTION env, AVANT tout câblage d'état (with_keys,
@@ -48,11 +59,32 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let auth_ok = false; // feature oidc absente ⟹ egress tiers sans authentification cryptographique ⟹ refus.
         // #3 durable : intention (postgres compilé + DATABASE_URL) ; connect/migrate re-valident plus bas.
         let store_durable = cfg!(feature = "postgres") && std::env::var("DATABASE_URL").is_ok();
-        if let Err(why) = frontier_boot_guard(true, key_ok, auth_ok, store_durable) {
+        // §2.2 : la CAPACITÉ de caviarder — la feature, ou une reconnaissance explicite du risque.
+        let accepted_cleartext =
+            std::env::var("EFE_LLM_ACCEPT_CLEARTEXT_EGRESS").map(|v| v == "true").unwrap_or(false);
+        let pii_ok = cfg!(feature = "pii") || accepted_cleartext;
+        if let Err(why) = frontier_boot_guard(true, key_ok, auth_ok, store_durable, pii_ok) {
             eprintln!("FATAL (M4 gate production) : {why}");
             std::process::exit(78); // EX_CONFIG (sysexits.h) — config invalide, non-retryable
         }
-        println!("→ préflight frontière OK (provenance non-forgeable + auth OIDC efe-llm + store durable).");
+        // Le message de préflight ne dit QUE ce qui est vrai : si la capacité PII est absente et
+        // que l'opérateur l'a reconnu, on le répète ici plutôt que d'imprimer un « OK » lisse.
+        if cfg!(feature = "pii") {
+            println!(
+                "→ préflight frontière OK (provenance non-forgeable + auth OIDC efe-llm + store \
+                 durable + capacité PII compilée)."
+            );
+        } else {
+            println!(
+                "→ préflight frontière OK (provenance non-forgeable + auth OIDC efe-llm + store \
+                 durable) — ATTENTION : capacité PII ABSENTE, reconnue par \
+                 EFE_LLM_ACCEPT_CLEARTEXT_EGRESS : les prompts sortent EN CLAIR vers un tiers."
+            );
+        }
+        println!(
+            "→ plafond serveur de budget par requête : {} c (EFE_LLM_MAX_BUDGET_CENTS).",
+            efe_swarm_gateway::server_budget_ceiling_cents()
+        );
     }
 
     if !master_present {
@@ -72,6 +104,75 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         if let Ok(models) = std::env::var("EFE_SWARM_ROUTER_MODELS") {
             state = state.with_router_models(efe_swarm_gateway::RouterMap::from_env_str(&models));
             println!("→ mapping provider→modèle surchargé (EFE_SWARM_ROUTER_MODELS).");
+        }
+    }
+
+    // ── Fil P (P.2) : l'export du bundle de provenance (pile B) ──
+    // OFF par défaut : sans opt-in, la route n'est PAS montée (l'URI n'existe pas), donc la
+    // surface servie est byte-identique à l'avant-P.2. Le bundle n'expose aucune clé — seulement
+    // des empreintes ; la clé tenant de la pile B voyage hors bande vers l'auditeur.
+    if efe_swarm_gateway::bundle_export_from_env() {
+        state = state.with_bundle_export(true);
+        println!(
+            "→ export du bundle de provenance ACTIVÉ (GET /v1/swarm/bundle/:id, rôle auditor) — \
+             re-prouvable par verify-mini."
+        );
+
+        // ── Fil P (P.3) : la clé d'attestation de racine ──
+        // Fail-fast DÉLIBÉRÉ : une graine posée mais illisible signifie qu'un opérateur CROIT
+        // signer ses bundles. Servir en silence des bundles non attestés serait un « vert
+        // malhonnête » — précisément la classe de défaut que ce fil corrige. On refuse de
+        // démarrer plutôt que de laisser croire. Même discipline que la porte de boot M4.
+        match std::env::var("EFE_SWARM_BUNDLE_SIGNING_SEED") {
+            Ok(seed_hex) if !seed_hex.is_empty() => {
+                match efe_swarm_gateway::BundleSigner::from_seed_hex(&seed_hex) {
+                    Ok(signer) => {
+                        // On imprime l'EMPREINTE et la clé PUBLIQUE — jamais la graine. La publique
+                        // est destinée à être épinglée hors bande par l'auditeur ; sans cet
+                        // épinglage, la signature ne prouve rien.
+                        println!(
+                            "→ attestation de racine ACTIVE — key_id={} ; clé PUBLIQUE à publier \
+                             hors bande : {}",
+                            signer.key_id(),
+                            signer.public_key_hex()
+                        );
+                        state = state.with_bundle_signer(signer);
+                    }
+                    Err(e) => {
+                        eprintln!(
+                            "ERREUR FATALE: EFE_SWARM_BUNDLE_SIGNING_SEED illisible ({e}). \
+                             Attendu 64 caractères hexadécimaux (graine ed25519 de 32 octets). \
+                             Refus de démarrer : servir des bundles NON attestés alors qu'une clé \
+                             est configurée ferait croire à une signature inexistante."
+                        );
+                        std::process::exit(1);
+                    }
+                }
+            }
+            _ => println!(
+                "→ attestation de racine INACTIVE (aucune graine) — les bundles sortiront SANS \
+                 champ d'attestation."
+            ),
+        }
+
+        // ── Fil P (P.4) : la publication de l'ancre ──
+        // Sans elle, un bundle tronqué re-prouve parfaitement : il ne prouve sa cohérence que
+        // CONTRE LUI-MÊME. L'ancre est la racine attendue, écrite AILLEURS — et c'est ce
+        // « ailleurs » qui fait tout le travail, pas la cryptographie.
+        match std::env::var("EFE_SWARM_ANCHOR_LOG") {
+            Ok(path) if !path.is_empty() => {
+                let sink = std::sync::Arc::new(efe_swarm_gateway::FileAnchorSink::new(&path));
+                println!(
+                    "→ ancrage ACTIF — {} ; REMETTEZ ce journal à l'auditeur par un canal DISTINCT \
+                     du bundle, sans quoi l'ancre ne prouve rien.",
+                    efe_swarm_gateway::AnchorSink::describe(sink.as_ref())
+                );
+                state = state.with_anchor_sink(sink);
+            }
+            _ => println!(
+                "→ ancrage INACTIF (aucun EFE_SWARM_ANCHOR_LOG) — les bundles sortiront avec \
+                 anchored=false : une TRONCATURE resterait indétectable sans clé."
+            ),
         }
     }
 
@@ -125,9 +226,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // ── G9 (feature `pii`) : politique PII par défaut depuis l'env (détection locale) ──
     #[cfg(feature = "pii")]
     if let Ok(p) = std::env::var("EFE_PII_DEFAULT_POLICY") {
-        if let Ok(policy) = p.parse::<efe_swarm_gateway::PolicyKind>() {
-            state = state.with_pii(efe_swarm_gateway::PiiConfig::new(policy));
-            println!("→ PII opt-in : politique par défaut = {}", policy.as_str());
+        match p.parse::<efe_swarm_gateway::PolicyKind>() {
+            Ok(policy) => {
+                state = state.with_pii(efe_swarm_gateway::PiiConfig::new(policy));
+                println!("→ PII opt-in : politique par défaut = {}", policy.as_str());
+            }
+            // GAP-PII : une valeur invalide (typo 'reduct') ne doit PAS être ignorée en silence —
+            // sinon redact_for_egress devient no-op et le prompt sort EN CLAIR vers le tiers.
+            Err(_) => eprintln!(
+                "AVERTISSEMENT: EFE_PII_DEFAULT_POLICY='{p}' invalide (attendu off|detect|redact|strict) — \
+                 PII par défaut OFF : les prompts frontière sortiront EN CLAIR vers les providers."
+            ),
         }
     }
 
@@ -172,7 +281,13 @@ fn frontier_flag_enabled() -> bool {
 /// authentification (OIDC `aud=efe-llm`), durabilité (store Postgres). L'ordre des messages suit
 /// la gravité : une clé forgeable rend TOUT le reste sans valeur.
 #[cfg(feature = "frontier-llm")]
-fn frontier_boot_guard(frontier_on: bool, key_ok: bool, auth_ok: bool, store_durable: bool) -> Result<(), &'static str> {
+fn frontier_boot_guard(
+    frontier_on: bool,
+    key_ok: bool,
+    auth_ok: bool,
+    store_durable: bool,
+    pii_ok: bool,
+) -> Result<(), &'static str> {
     if !frontier_on {
         return Ok(()); // frontière OFF ⟹ dev/essaim souverain intact (InMemory + test_key légitimes)
     }
@@ -187,6 +302,24 @@ fn frontier_boot_guard(frontier_on: bool, key_ok: bool, auth_ok: bool, store_dur
     if !store_durable {
         return Err("EFE_LLM_FRONTIER_ENABLED exige un store DURABLE (feature `postgres` + DATABASE_URL) — \
                     sinon les reçus R4 (la preuve) sont perdus à chaque rollout.");
+    }
+    // **M4 (§2.2) — le quatrième invariant : la CAPACITÉ de caviarder.**
+    //
+    // Nuance qui décide de la forme du garde : un défaut PII `Off` **par policy** est légitime et
+    // documenté. Ce qui ne l'était pas, c'est le **silence** — sans la feature `pii`, le site
+    // d'appel disparaissait à la compilation, et l'opérateur lisait « préflight frontière OK »
+    // pendant que chaque prompt sortait en clair vers un tiers. Il n'avait même pas le MOYEN de
+    // l'activer.
+    //
+    // On ne force donc pas la caviardage (ce serait changer la politique produit) ; on exige que
+    // l'absence de capacité soit **choisie**, jamais subie. Deux remèdes, tous deux explicites :
+    // compiler avec `pii`, ou reconnaître le risque par `EFE_LLM_ACCEPT_CLEARTEXT_EGRESS=true`.
+    if !pii_ok {
+        return Err("EFE_LLM_FRONTIER_ENABLED exige la CAPACITÉ de caviarder (feature `pii`) — sinon \
+                    le prompt utilisateur sort EN CLAIR vers un tiers, sans que rien ne le signale. \
+                    Deux remèdes : compiler avec `--features pii` (le défaut de policy reste `Off`, \
+                    donc rien ne change sans policy), ou reconnaître le risque explicitement avec \
+                    EFE_LLM_ACCEPT_CLEARTEXT_EGRESS=true.");
     }
     Ok(())
 }
@@ -237,10 +370,31 @@ mod tests {
     #[cfg(feature = "frontier-llm")]
     #[test]
     fn frontier_boot_guard_enforces_the_triad() {
-        assert!(frontier_boot_guard(false, false, false, false).is_ok(), "frontière OFF ⟹ dev toujours OK");
-        assert!(frontier_boot_guard(true, false, true, true).is_err(), "#2 clé forgeable ⟹ refus");
-        assert!(frontier_boot_guard(true, true, false, true).is_err(), "#7 auth absente ⟹ refus");
-        assert!(frontier_boot_guard(true, true, true, false).is_err(), "#3 store volatil ⟹ refus");
-        assert!(frontier_boot_guard(true, true, true, true).is_ok(), "triade complète ⟹ GO");
+        assert!(frontier_boot_guard(false, false, false, false, false).is_ok(), "frontière OFF ⟹ dev toujours OK");
+        assert!(frontier_boot_guard(true, false, true, true, true).is_err(), "#2 clé forgeable ⟹ refus");
+        assert!(frontier_boot_guard(true, true, false, true, true).is_err(), "#7 auth absente ⟹ refus");
+        assert!(frontier_boot_guard(true, true, true, false, true).is_err(), "#3 store volatil ⟹ refus");
+        assert!(frontier_boot_guard(true, true, true, true, true).is_ok(), "les quatre invariants ⟹ GO");
+    }
+
+    /// La fonction gardée est `#[cfg(feature = "frontier-llm")]` : sans ce gate, la cible **binaire**
+    /// du profil par défaut ne compilait plus (`cannot find function frontier_boot_guard`). Le test
+    /// jumeau ci-dessus le portait, celui-ci ne l'avait pas.
+    #[cfg(feature = "frontier-llm")]
+    #[test]
+    fn frontier_boot_guard_refuses_a_silent_cleartext_egress() {
+        // **M4 §2.2** — le correctif du fail-open PII. Sans la CAPACITÉ de caviarder (feature `pii`
+        // absente ET risque non reconnu), la frontière refuse de démarrer : jusqu'ici elle
+        // imprimait « préflight frontière OK » pendant que chaque prompt sortait en clair, et
+        // l'opérateur n'avait même pas le moyen d'activer la caviardage.
+        let err = frontier_boot_guard(true, true, true, true, false)
+            .expect_err("capacité PII absente et non reconnue ⟹ refus de démarrer");
+        assert!(err.contains("EN CLAIR"), "le message dit ce qui se passerait : {err}");
+        assert!(err.contains("EFE_LLM_ACCEPT_CLEARTEXT_EGRESS"), "…et comment le reconnaître");
+        assert!(err.contains("pii"), "…et comment le corriger vraiment");
+
+        // Le défaut PII `Off` PAR POLICY reste légitime : on n'exige pas la caviardage, seulement
+        // que son absence soit CHOISIE. Les deux remèdes débloquent.
+        assert!(frontier_boot_guard(true, true, true, true, true).is_ok());
     }
 }

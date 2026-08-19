@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: UNLICENSED
-# Kovant P1 / S4a — forensic-export : l'ASSEMBLEUR du bundle trustless (le fossé).
+# Provenance P1 / S4a — forensic-export : l'ASSEMBLEUR du bundle trustless (le fossé).
 # Consomme le seam d'export de S2 + RE-PROUVE (défense en profondeur, ne fait pas confiance à un flag),
 # vendore la SOURCE du vérifieur (provenance-verify + provenance-dag, embarquée par include_str!) pour que
 # le tiers la re-compile, écrit le récit (une vue), le MANIFEST de hachages, et le README du sceptique.
@@ -12,7 +12,7 @@ rust-version = { workspace = true }
 authors = { workspace = true }
 license = { workspace = true }
 repository = { workspace = true }
-description = "Kovant P1/S4a — assembleur du bundle forensic trustless : re-prouve les records, vendore la source du vérifieur (à re-compiler par un tiers), écrit records scellés + root + récit + MANIFEST + README du sceptique. La clé re-prouve mais n'est jamais écrite. Le bundle se vérifie hors-ligne, sans Kovant/EFE."
+description = "Provenance P1/S4a — assembleur du bundle forensic trustless : re-prouve les records, vendore la source du vérifieur (à re-compiler par un tiers), écrit records scellés + root + récit + MANIFEST + README du sceptique. La clé re-prouve mais n'est jamais écrite. Le bundle se vérifie hors-ligne, sans l'Ã©diteur."
 publish = false
 
 [dependencies]

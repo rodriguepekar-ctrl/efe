@@ -68,6 +68,9 @@ use efe_core::genesis::{
     registry::{
         ActiveAnchorsSlot, AnchorAwareTemplateRegistry, StubTemplateRegistry, TemplateRegistry,
     },
+    // Couche 3 M1.b — the latent controller injects a zero-noise spawner (init_sigma=0) so Φ is
+    // a bit-reproducible pure function of x (see `build_mvp_parts`, `latent_init_sigma`).
+    spawner::{DefaultSpawner, SpawnerConfig},
 };
 use efe_core::memory::{HostBackend, MemoryPool, NanoAgentBatch, PoolConfig};
 use efe_core::streams::{StreamPool, StreamPoolConfig};
@@ -1146,7 +1149,24 @@ where
 /// Propagates any pool / registry / fusion / controller construction
 /// failure as [`EfeError`] (converted back to `anyhow::Error` by the
 /// caller in `main.rs`).
-pub fn build_mvp_backend(cfg: Mode1Config) -> Result<Arc<dyn ExecuteBackend>> {
+/// `latent_init_sigma`:
+///   * `None` — the server Mode-1 request path (real MultiCriteria detector +
+///     `SpawnerConfig::default()`, i.e. `init_sigma = 0.02`). Byte-identical to
+///     the pre-Couche-3 build.
+///   * `Some(sigma)` — the Couche 3 latent controller (converge-now detector +
+///     single-round Φ), built with genesis `init_sigma = sigma`. `build_mvp_controller`
+///     passes `Some(0.0)` (deterministic, noise-free Φ — M1.b); the value is only
+///     ever non-zero via the doc-hidden `build_mvp_controller_with_init_sigma`, used
+///     by the determinism test suite as a negative control.
+fn build_mvp_parts(
+    cfg: Mode1Config,
+    latent_init_sigma: Option<f32>,
+) -> Result<(
+    SwarmController,
+    LastCentroid,
+    LastSpecTrace,
+    Option<ActiveAnchorsSlot>,
+)> {
     // --- 1. Device backend ---
     let device_backend: Arc<dyn efe_core::memory::DeviceBackend> = Arc::new(HostBackend::new());
 
@@ -1189,11 +1209,42 @@ pub fn build_mvp_backend(cfg: Mode1Config) -> Result<Arc<dyn ExecuteBackend>> {
         };
 
     // --- 5. Genesis (M3) ---
-    let genesis: Arc<dyn GenesisStrategy> = Arc::new(GenesisEngine::builder().build_mvp(
-        memory_pool,
-        template_registry,
-        stream_pool,
-    )?);
+    //
+    // **Couche 3 M1.b — deterministic Φ for a clean Lipschitz measurement.** The M1.c
+    // empirical-Lipschitz canary measures ‖Φ(x)−Φ(y)‖/‖x−y‖, which requires Φ to be a
+    // clean function of x. The one stochastic stage on the Φ path is the genesis noise
+    // `h[i] = prior + init_sigma·N(0,1; seed)` with `seed = compute_seed(spec.id)`
+    // (`spawner.rs`; note the seed is derived from `spec.id`, NOT the fresh `SwarmId`
+    // that `execute()` draws for telemetry — the latter never reaches genesis, see
+    // `GenesisEngine::spawn`). Because `phi_once` clones a *fixed* `base_spec`, that seed
+    // is constant, so Φ is already reproducible for a given spec at any `init_sigma`.
+    // BUT the fixed noise realization ε perturbs the nonlinear pipeline, so (a) Φ depends
+    // on `spec.id`, and (b) the ε-perturbation does not cancel in Φ(x)−Φ(y) — it leaves a
+    // seed-dependent noise floor that would corrupt the Lipschitz ratio. Injecting a
+    // spawner with `init_sigma = 0` short-circuits the RNG entirely (no draw,
+    // `spawn_kernel.rs:165`): Φ becomes the noise-free operator — bit-invariant to
+    // `spec.id` and clean for the canary. The server request path (`latent_init_sigma =
+    // None`) keeps `SpawnerConfig::default()` (init_sigma=0.02) untouched — the production
+    // binary stays byte-identical.
+    let genesis: Arc<dyn GenesisStrategy> = if let Some(sigma) = latent_init_sigma {
+        let mut spawner_cfg = SpawnerConfig::default();
+        // M1.b: 0.0 = deterministic Φ (no noise draw); a non-zero value is used ONLY by
+        // the determinism suite's negative control (proving noise ⇒ seed-dependent Φ).
+        spawner_cfg.init_sigma = sigma;
+        let spawner = Arc::new(DefaultSpawner::new(
+            memory_pool.clone(),
+            template_registry.clone(),
+            stream_pool.clone(),
+            spawner_cfg,
+        ));
+        Arc::new(
+            GenesisEngine::builder()
+                .spawner(spawner)
+                .build_mvp(memory_pool, template_registry, stream_pool)?,
+        )
+    } else {
+        Arc::new(GenesisEngine::builder().build_mvp(memory_pool, template_registry, stream_pool)?)
+    };
 
     // --- 6. Fusion core ---
     let fusion_core = Arc::new(
@@ -1217,12 +1268,52 @@ pub fn build_mvp_backend(cfg: Mode1Config) -> Result<Arc<dyn ExecuteBackend>> {
         last_spec_trace.clone(),
     ));
 
-    // --- 8. Consensus factory — a fresh detector per request ---
-    let consensus_cfg = cfg.consensus.clone();
-    let consensus_factory = move || -> Box<dyn SwarmConsensusDetector> {
-        Box::new(
-            ConsensusAdapter::new(consensus_cfg.clone())
-                .expect("consensus config validated at build time"),
+    // --- 8. Consensus factory + controller config — two profiles ---
+    //
+    //  * server Mode-1 (`latent_init_sigma = None`) : the real MultiCriteria detector
+    //    (`cfg.consensus`) + Mode-1 controller config (min_rounds=4, hysteresis)
+    //    — the request path runs to convergence over many rounds.
+    //  * **Couche 3 latent controller** (`latent_init_sigma = Some(σ)`) : a participant
+    //    step is exactly ONE fusion round (`phi_once` / `step_with_pull` force
+    //    `max_rounds = 1`).  The Mode-1 detector needs `hysteresis_rounds = 3`
+    //    (D6 ; see `Mode1Config::default`) consecutive high-confidence rounds and
+    //    the controller floors at
+    //    `min_rounds = 4`, so a single round can NEVER converge — `execute()`
+    //    returns `ConvergenceTimeout` on every step (`StubDetector` is no good
+    //    either : it *always* returns `Continue`, so it never converges).  We
+    //    therefore build a **converge-now** detector : the SAME signal weights /
+    //    window as Mode-1 but `confidence_threshold = 0` + `hysteresis_rounds = 1`
+    //    (any finite round-1 confidence converges, absent a divergence/NaN gate),
+    //    paired with `ControllerConfig::default()` (`min_rounds = 0`).  Meta-swarm
+    //    convergence is driven by the coupled Krasnoselskii–Mann OUTER iteration
+    //    (`mix_coupled` + the safety projection), not by this inner per-round
+    //    detector : the inner round is just the operator `Φ`.
+    type ConsensusFactory = Box<dyn Fn() -> Box<dyn SwarmConsensusDetector> + Send + Sync>;
+    let (consensus_factory, controller_cfg): (ConsensusFactory, ControllerConfig) = if latent_init_sigma.is_some() {
+        let converge_now = cfg
+            .consensus
+            .clone()
+            .with_confidence_threshold(0.0)
+            .with_hysteresis(1);
+        (
+            Box::new(move || {
+                Box::new(
+                    ConsensusAdapter::new(converge_now.clone())
+                        .expect("converge-now consensus config is valid"),
+                ) as Box<dyn SwarmConsensusDetector>
+            }),
+            ControllerConfig::default(),
+        )
+    } else {
+        let consensus_cfg = cfg.consensus.clone();
+        (
+            Box::new(move || {
+                Box::new(
+                    ConsensusAdapter::new(consensus_cfg.clone())
+                        .expect("consensus config validated at build time"),
+                ) as Box<dyn SwarmConsensusDetector>
+            }),
+            cfg.controller.clone(),
         )
     };
 
@@ -1241,23 +1332,11 @@ pub fn build_mvp_backend(cfg: Mode1Config) -> Result<Arc<dyn ExecuteBackend>> {
     let telemetry: Arc<dyn efe_core::swarm::strategies::TelemetryCollector> =
         Arc::new(NullTelemetryCollector);
 
-    // --- 11. Controller config ---
+    // --- 11. Build controller ---
     //
-    // `ControllerConfig` and `CollapseRecoveryPolicy` are `#[non_exhaustive]`
-    // cross-crate so we cannot override individual fields from outside
-    // `efe-core`. The default policy sets `max_retries = 2`; if a
-    // ModeCollapse fires, the controller will invoke
-    // `FusionAdapter::inject_noise` which we document as a no-op (so
-    // the essaim runs the same rounds again but with the same data).
-    // In practice, `na-sem / na-log / na-crit` priors + MVP fusion
-    // rarely trigger ModeCollapse on a valid anchor catalog.
-    // D6 — Mode 1 carries its own controller config (min_rounds=4).
-    // We clone here so the `cfg` Mode1Config remains intact for the
-    // `Mode1Backend` wrapper below (the controller takes ownership
-    // through the builder).
-    let controller_cfg = cfg.controller.clone();
-
-    // --- 12. Build controller ---
+    // (`consensus_factory` + `controller_cfg` were selected in step 8 above,
+    // branching on `latent_init_sigma`; the server path keeps Mode-1's own config —
+    // D6 `min_rounds=4` — while the latent path uses `ControllerConfig::default()`.)
     let controller = SwarmController::builder()
         .genesis(genesis)
         .fusion(fusion)
@@ -1268,6 +1347,15 @@ pub fn build_mvp_backend(cfg: Mode1Config) -> Result<Arc<dyn ExecuteBackend>> {
         .config(controller_cfg)
         .build()?;
 
+    Ok((controller, last_centroid, last_spec_trace, anchor_slot))
+}
+
+/// Build the Mode-1 `ExecuteBackend` (server request path).
+pub fn build_mvp_backend(cfg: Mode1Config) -> Result<Arc<dyn ExecuteBackend>> {
+    // `None` — the server request path runs to convergence with the real
+    // MultiCriteria detector + Mode-1 controller config (D6 `min_rounds=4`),
+    // genesis `init_sigma=0.02`. Byte-identical to the pre-Couche-3 build.
+    let (controller, last_centroid, last_spec_trace, anchor_slot) = build_mvp_parts(cfg, None)?;
     let backend_inner = SwarmControllerBackend::new(controller);
     let backend: Arc<dyn ExecuteBackend> = Arc::new(Mode1Backend::new(
         backend_inner,
@@ -1276,6 +1364,51 @@ pub fn build_mvp_backend(cfg: Mode1Config) -> Result<Arc<dyn ExecuteBackend>> {
         anchor_slot, // Sprint D8.5 — Some(slot) iff AnchorAware ; None otherwise.
     ));
     Ok(backend)
+}
+
+/// **Couche 3 (M1.a)** — the bare `Arc<SwarmController>` used by the meta-swarm's
+/// real `LocalParticipant` bridge (`step_with_pull` → `phi_once` → `mix_coupled`).
+///
+/// Same genesis/fusion/dissolve/align strategies as [`build_mvp_backend`] **minus** the
+/// `ExecuteBackend` wrapper : the controller is self-contained — its `PassThroughDissolver`
+/// reads the `LastCentroid` channel that its own fusion populates within a single
+/// `execute()`, so the discarded outer channel handles are not needed on the step path.
+///
+/// **Key difference (`latent_init_sigma = Some(0.0)`)** : a participant step is a **single** fusion
+/// round (`phi_once` / `step_with_pull` force `max_rounds = 1`), so this controller is
+/// built with a **converge-now** MultiCriteria detector (same signal weights as Mode-1
+/// but `confidence_threshold = 0` + `hysteresis_rounds = 1`) + `ControllerConfig::default()`
+/// (`min_rounds = 0`). The Mode-1 request profile (D6 `hysteresis_rounds = 3` +
+/// `min_rounds = 4`) can never converge in one round — it would return
+/// `ConvergenceTimeout` on every step. Convergence of the *meta-swarm* is driven by the
+/// coupled Krasnoselskii–Mann outer iteration, not by the inner per-round detector.
+///
+/// **Honesty (Couche 3)** : participants coordinated this way run efe-core's
+/// **numerical** Mode-1 fusion on **stub templates** — real efe-core latent swarms,
+/// **not** language-model SLMs (no model weights / tokenizer on the step path ;
+/// `problem_embedding` is overwritten by the current latent state). See
+/// `docs/architecture/COUCHE3-M1-vrais-participants-ARCHITECTURE.md`.
+pub fn build_mvp_controller(cfg: Mode1Config) -> Result<Arc<SwarmController>> {
+    // `Some(0.0)` — latent single-round Φ profile (converge-now MultiCriteria +
+    // min_rounds=0) with a NOISE-FREE genesis ⇒ deterministic Φ (M1.b).
+    build_mvp_controller_with_init_sigma(cfg, 0.0)
+}
+
+/// **Test-only escape hatch (Couche 3 M1.b negative control).** Builds the latent
+/// controller with an explicit genesis `init_sigma`. Production code must use
+/// [`build_mvp_controller`] (`init_sigma = 0`, deterministic Φ); this variant exists
+/// so the determinism test suite can build a *noisy* controller (`init_sigma > 0`)
+/// and prove the lever has teeth — i.e. that with noise ON, Φ(x) becomes
+/// **seed-dependent** (varies with `spec.id`), whereas at `init_sigma = 0` it is
+/// seed-invariant. Not for general use: a non-zero value makes Φ non-deterministic.
+#[doc(hidden)]
+pub fn build_mvp_controller_with_init_sigma(
+    cfg: Mode1Config,
+    init_sigma: f32,
+) -> Result<Arc<SwarmController>> {
+    let (controller, _last_centroid, _last_spec_trace, _anchor_slot) =
+        build_mvp_parts(cfg, Some(init_sigma))?;
+    Ok(Arc::new(controller))
 }
 
 // =====================================================================

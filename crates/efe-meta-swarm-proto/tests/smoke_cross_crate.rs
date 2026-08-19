@@ -390,6 +390,7 @@ fn participant_descriptor_utf8_roundtrip() {
         build_sha: "abc123".into(),
         blas_backend: "none".into(),
         features: vec!["determinism".into(), "métriques".into()],
+        config_hash: None,
     };
     let mut bytes = Vec::new();
     pd.encode(&mut bytes).expect("encode");

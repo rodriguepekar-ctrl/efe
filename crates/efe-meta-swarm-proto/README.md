@@ -99,8 +99,17 @@ If a backward-incompatible change is needed :
 This README is the **source of truth** for field-number allocation
 within v1.  Adding a new field requires :
 
-1. Picking an unused number ≥ 100 within the message's reserved
-   block.
+1. Picking the message's **`Next free`** number from the table below — i.e.
+   the lowest unused number inside its reserved block — then narrowing that
+   `reserved` range in the `.proto` by exactly one slot.
+   > ⚠ **Contradiction connue, tranchée par le précédent.** La ligne « Field
+   > numbers >= 100 are RESERVED for v1 additions » de l'en-tête de
+   > `messages.proto` dit l'inverse de cette table, qui est pourtant déclarée
+   > *source of truth* ci-dessus. La PRATIQUE suit la table : Couche 3 M1.d a
+   > alloué `ParticipantDescriptor.config_hash = 8` (pas 100), et Couche 3 M2
+   > a suivi (`IterateResponse` 8/9, `IterateRequest` 6). Aucun champ ≥ 100
+   > n'existe. À réconcilier explicitement avant la prochaine addition — mais
+   > ne PAS changer de convention en cours de route sans le décider.
 2. Documenting the allocation in the table below in the same PR.
 3. Adding a smoke test that pins the new field's wire identity.
 
@@ -111,11 +120,12 @@ within v1.  Adding a new field requires :
 | `BoxSafety` | 1 | 2-99 | 2 |
 | `Polyhedron` | 1, 2, 3 | 4-99 | 4 |
 | `LearnedHull` | 1, 2 | 3-99 | 3 |
-| `ParticipantDescriptor` | 1-7 | 8-99 | 8 |
+| `ParticipantDescriptor` | 1-8 (8 = `config_hash`, Couche 3 M1.d) | 9-99 | 9 |
 | `IterationConfig` | 1-6 | 7-9, 10-99 | 7 |
-| `IterateRequest` | 1-5 | 6-99 | 6 |
-| `IterateResponse` | 1-7 | 8-99 | 8 |
+| `IterateRequest` | 1-6 (6 = `include_provenance_bundle`, Couche 3 M2) | 7-99 | 7 |
+| `IterateResponse` | 1-9 (8 = `meta_provenance_root`, 9 = `meta_provenance_bundle`, Couche 3 M2) | 10-99 | 10 |
 | `IterateChunk` | 1-3 | 4-99 | 4 |
+| `MetaProvenanceBundle` (Couche 3 M2) | 1, 2 | 3-99 | 3 |
 | `StepOnceRequest` | — | 1-99 | 1 |
 | `StepOnceResponse` | 1, 2 | 3-99 | 3 |
 | `ResetRequest` | 1 | 2-99 | 2 |

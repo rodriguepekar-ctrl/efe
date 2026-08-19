@@ -155,8 +155,10 @@ fn render_manifest_yaml_with_iteration(
         // Test ids are plain ASCII (no YAML-special chars).
         buf.push_str(&format!("  - id: {}\n", r.id));
         buf.push_str(&format!("    dim: {}\n", r.dim));
-        buf.push_str(&format!("    kappa: {}\n", r.kappa));
-        buf.push_str(&format!("    seed: {}\n", r.seed));
+        // Mock harness rows always carry kappa/seed (Couche 3 M1.d made
+        // them Options in the schema ; the rendered YAML keeps the old shape).
+        buf.push_str(&format!("    kappa: {}\n", r.kappa.expect("harness rows are mock-shaped")));
+        buf.push_str(&format!("    seed: {}\n", r.seed.expect("harness rows are mock-shaped")));
         buf.push_str("    blas_backend: \"none\"\n");
     }
     buf.push_str("iteration:\n");
@@ -186,23 +188,26 @@ fn kovant_rows() -> Vec<ParticipantManifest> {
         ParticipantManifest {
             id: "supplier-scoring".into(),
             dim: 8,
-            kappa: 0.6,
-            seed: 11,
+            kappa: Some(0.6),
+            seed: Some(11),
             blas_backend: "none".into(),
+            controller: None,
         },
         ParticipantManifest {
             id: "contract-risk".into(),
             dim: 8,
-            kappa: 0.7,
-            seed: 22,
+            kappa: Some(0.7),
+            seed: Some(22),
             blas_backend: "none".into(),
+            controller: None,
         },
         ParticipantManifest {
             id: "spend-categorization".into(),
             dim: 8,
-            kappa: 0.5,
-            seed: 33,
+            kappa: Some(0.5),
+            seed: Some(33),
             blas_backend: "none".into(),
+            controller: None,
         },
     ]
 }
@@ -252,7 +257,7 @@ fn spawn_controller_process(
 }
 
 impl ProcessHarness {
-    /// Default Kovant topology : 3 participants on `dim = 8` with
+    /// Default procurement topology : 3 participants on `dim = 8` with
     /// (κ, seed) = (0.6, 11), (0.7, 22), (0.5, 33).  Used by every
     /// happy-path test.
     pub async fn spawn_kovant() -> Self {
@@ -316,7 +321,7 @@ impl ProcessHarness {
         }
     }
 
-    /// Kovant manifest declares 3 participants ; one is **not** spawned.
+    /// procurement manifest declares 3 participants ; one is **not** spawned.
     /// The controller's `EFE_META_SWARM_PARTICIPANTS` env var still
     /// includes the absent id, but pointing at a closed port —
     /// `RemoteParticipant::connect` will fail with `ECONNREFUSED`.

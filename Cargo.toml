@@ -250,37 +250,42 @@ members = [
     # + Borda/Condorcet + BudgetTracker + tenant isolation + 8 SSE events.
     # Cf. `EFE_PROJET/03_a_construire/PHASE_3_MULTI_LLM.pdf` (22 pages).
     "crates/efe-multi-llm",
-    # Kovant P1 / S0 — provenance-dag : le DAG scellé re-prouvable (cœur de confiance, crypto
+    # Provenance P1 / S0 — provenance-dag : le DAG scellé re-prouvable (cœur de confiance, crypto
     # SHA-256 + HMAC écrite à la main, zéro dépendance crypto externe → auditable/trustless).
     # Cf. docs/reports/EFE_Kovant_P1_Code_Roadmap_2026-06-29.html (S0).
     "crates/provenance-dag",
-    # Kovant P1 / S1 — provenance-capture : la couche de capture (taps + store). Produit un vrai
+    # Provenance P1 / S1 — provenance-capture : la couche de capture (taps + store). Produit un vrai
     # DAG scellé sur le runtime ; garde de souveraineté (egress refusé) ; requête par cas/rôle.
     # Dépend uniquement de provenance-dag. Cf. la même roadmap (S1).
     "crates/provenance-capture",
-    # Kovant P1 / S4 — provenance-verify : le vérifieur forensic AUTONOME (binaire-fossé).
+    # Fil P / P.1 — provenance-bridge : la DÉRIVATION PURE du reçu servi (pile A) vers le DAG
+    # scellé auditable (pile B) — le producteur qui manquait à la pile B. Sens des dépendances
+    # imposé : pont → piles, jamais l'inverse (verify-mini garde son arbre VIDE).
+    # Cf. docs/architecture/FIL-P-pont-pile-A-vers-pile-B-ARCHITECTURE.md.
+    "crates/provenance-bridge",
+    # Provenance P1 / S4 — provenance-verify : le vérifieur forensic AUTONOME (binaire-fossé).
     # Dépend UNIQUEMENT de provenance-dag → re-compilable et auditable par un tiers (régulateur),
     # sortie JSON faite main (zéro dépendance). Cf. la même roadmap (S4).
     "crates/provenance-verify",
-    # Kovant P1 / S4 — verify-mini : le vérifieur forensic à arbre de dépendances LITTÉRALEMENT VIDE.
+    # Provenance P1 / S4 — verify-mini : le vérifieur forensic à arbre de dépendances LITTÉRALEMENT VIDE.
     # Comme provenance-verify, MAIS sans serde : SHA-256/HMAC std-only embarqués + parseur JSONL fait main
     # + encodage canonique ré-implémenté. `cargo tree` = verify-mini SEUL. Prouvé FIDÈLE à S0 par un
     # cross-check (manifest-root octet-à-octet) en dev-dep. Le raffinement « trust-only-the-math » de S4.
     "crates/verify-mini",
-    # Kovant P1 / S2 — audit-api : le service de LECTURE (« servir »), pivot entre S0/S1 et les
+    # Provenance P1 / S2 — audit-api : le service de LECTURE (« servir »), pivot entre S0/S1 et les
     # surfaces S3/S4/S6. Projection pure + intégrité-à-la-lecture + enveloppe « intègre ≠ correct »
     # + isolation tenant + gate d'écriture humaine. Dépend de provenance-dag/-capture + serde.
     "crates/audit-api",
-    # Kovant P1 / S4a — forensic-export : l'assembleur du bundle trustless (le fossé). Re-prouve, vendore
+    # Provenance P1 / S4a — forensic-export : l'assembleur du bundle trustless (le fossé). Re-prouve, vendore
     # la SOURCE du vérifieur (à re-compiler par un tiers), écrit records scellés + root + récit + MANIFEST
     # + README du sceptique (« intègre ≠ inforgeable »). La clé re-prouve mais n'est jamais écrite.
     "crates/forensic-export",
-    # Kovant P1 / S6 — reg-evidence : le moteur d'évidence réglementaire (gabarits EU AI Act / GDPR /
+    # Provenance P1 / S6 — reg-evidence : le moteur d'évidence réglementaire (gabarits EU AI Act / GDPR /
     # CSDDD-LkSG). Trust-light : LIT le DAG re-prouvé (S0) et en DÉRIVE une VUE re-dérivable — mapping
     # versionné+haché qui voyage, couverture honnête (montre ses trous), aucun champ « conforme »
     # (outillé ≠ conforme). Zéro crypto neuve (re-prouve via provenance-dag). Cf. la roadmap (S6).
     "crates/reg-evidence",
-    # Kovant P1 / S3 — audit-console : la console opérationnelle (la 2ᵉ surface). NON trust-critique par
+    # Provenance P1 / S3 — audit-console : la console opérationnelle (la 2ᵉ surface). NON trust-critique par
     # conception : deux coquilles (transport HTTP + UI rendue serveur) au-dessus du routeur PUR de S2.
     # Elle REND la confiance (badge, cadenas vert + fraîcheur + fail-loud), elle ne l'ÉTABLIT pas — l'export
     # (S4+S6) l'établit. Honnêteté : « montré vérifié ≠ prouvé sans confiance ». Zéro dépendance externe
