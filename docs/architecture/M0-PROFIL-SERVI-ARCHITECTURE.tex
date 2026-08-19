@@ -1,0 +1,308 @@
+\documentclass[10pt]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage[french]{babel}
+\usepackage{newpxtext,newpxmath}
+\usepackage[a4paper,top=1.5cm,bottom=1.35cm,left=1.6cm,right=1.6cm]{geometry}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{titlesec}
+\usepackage[most]{tcolorbox}
+\usepackage{enumitem}
+\usepackage{array}
+\usepackage{booktabs}
+\usepackage{fancyhdr}
+
+\definecolor{navy}{HTML}{1F3A5F}
+\definecolor{grey}{HTML}{54606E}
+\definecolor{green}{HTML}{2C6E49}
+\definecolor{amber}{HTML}{9C6A16}
+\definecolor{red}{HTML}{A6322E}
+\definecolor{plum}{HTML}{7A4EA8}
+\definecolor{boxgray}{HTML}{F3F5F8}
+\definecolor{boxred}{HTML}{FCF2F1}
+\definecolor{boxgreen}{HTML}{F1F7F3}
+\definecolor{boxplum}{HTML}{F7F3FB}
+\definecolor{boxcode}{HTML}{F7F8FA}
+\definecolor{boxedge}{HTML}{D9E0EA}
+
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{2.6pt}
+\linespread{1.0}
+
+\pagestyle{fancy}\fancyhf{}
+\lhead{\small\color{grey}Scella · architecture}
+\rhead{\small\color{grey}M0 --- Le profil servi --- 20 août 2026}
+\cfoot{\small\color{grey}\thepage}
+\renewcommand{\headrulewidth}{0.3pt}
+
+\titleformat{\section}{\color{navy}\large\bfseries}{}{0pt}{}
+\titlespacing{\section}{0pt}{11pt}{3pt}
+\titleformat{\subsection}{\color{navy}\bfseries}{}{0pt}{}
+\titlespacing{\subsection}{0pt}{7pt}{1.5pt}
+
+\newtcolorbox{these}{colback=boxgray,colframe=boxedge,boxrule=0.5pt,arc=2.5pt,
+  left=8pt,right=8pt,top=4.5pt,bottom=4.5pt}
+\newtcolorbox{alerte}{colback=boxred,colframe=red!55,boxrule=0.8pt,arc=2.5pt,
+  left=8pt,right=8pt,top=4.5pt,bottom=4.5pt}
+\newtcolorbox{acquis}{colback=boxgreen,colframe=green!45,boxrule=0.8pt,arc=2.5pt,
+  left=8pt,right=8pt,top=4.5pt,bottom=4.5pt}
+\newtcolorbox{piste}{colback=boxplum,colframe=plum!45,boxrule=0.8pt,arc=2.5pt,
+  left=8pt,right=8pt,top=4.5pt,bottom=4.5pt}
+\newtcolorbox{extrait}{colback=boxcode,colframe=boxedge,boxrule=0.5pt,arc=1.5pt,
+  left=7pt,right=7pt,top=3.5pt,bottom=3.5pt}
+
+\newcommand{\best}[1]{\textcolor{green}{\textbf{#1}}}
+\newcommand{\pire}[1]{\textcolor{red}{\textbf{#1}}}
+\newcommand{\sz}[1]{\textcolor{grey}{\small\textsf{#1}}}
+\newcommand{\code}[1]{\texttt{\small #1}}
+\newcommand{\fl}{$\rightarrow$}
+
+\begin{document}
+
+\begin{center}
+{\Huge\bfseries\color{navy} Scella}\\[4pt]
+{\large\color{grey}\itshape M0 --- Le profil servi · architecture}\\[4pt]
+{\small\color{grey} 20 août 2026 \; · \; premier module du chemin critique \; · \; trois jours}
+\end{center}
+\vspace{2pt}
+
+\begin{these}
+\textbf{Le principe tient en une phrase.} \emph{Le binaire dit ce qu'il sert ; le profil déclare ce
+qu'on attend ; un vérificateur compare les deux --- et aucun des trois ne peut diverger sans casser un
+test.} Un profil n'est pas un fichier \code{.env} documenté : ce serait un second dépôt de vérité, et
+il dériverait au premier interrupteur ajouté. C'est un \textbf{triplet contraint}.
+
+\textbf{Et le manque n'est pas la rigueur.} La passerelle refuse déjà de démarrer sur un master de
+clés invalide (\code{exit 78}), garde la frontière derrière quatre préconditions, et se refuse à
+imprimer un « OK » lisse quand la capacité PII manque. Ce qui manque est la \textbf{complétude} et la
+\textbf{lisibilité machine} : les \code{println!("→ …")} sont une auto-description en prose, partielle,
+que rien ne contraint.
+\end{these}
+
+\section{1 · Le problème exact --- et une correction}
+
+\begin{alerte}
+\textbf{La feuille de route disait « sept interrupteurs ». C'est faux}, et l'écart est instructif.
+Mesuré : \textbf{25} variables d'environnement lues par \code{efe-swarm-gateway}, \textbf{7} par
+\code{audit-console}. Trente-deux, sur deux binaires.
+
+Deux corrections de détail au passage : \code{EFE\_K} \textbf{n'existe pas} --- mon relevé attrapait
+\code{EFE\_Kovant\_P1\_*} dans des commentaires ; et \code{EFE\_META\_PROVENANCE\_TENANT} appartient à
+\textbf{C2}, pas au périmètre C1/C3 de ce module.
+\end{alerte}
+
+Trente-deux variables, et \textbf{aucun endroit qui dise ce que la configuration résultante sert
+réellement}. C'est cela, et rien d'autre, que M0 corrige.
+
+\section{2 · Ce qui existe déjà --- et qu'il ne faut pas réinventer}
+
+\renewcommand{\arraystretch}{1.22}
+\begin{center}\small
+\begin{tabular}{@{}>{\raggedright\arraybackslash}p{5.4cm} >{\raggedright\arraybackslash}p{10.4cm}@{}}
+\toprule
+\textbf{Acquis} & \textbf{Ce qu'il fait déjà} \\
+\midrule
+\code{exit 78} \sz{(EX\_CONFIG)} & master de clés fourni mais invalide \fl{} \textbf{refus de démarrer}, non-retryable \\
+\code{frontier\_boot\_guard(…)} & fonction \textbf{pure}, testée, \textbf{quatre préconditions} fail-closed sur l'egress payant \\
+Le préflight honnête & \textbf{refuse d'imprimer un « OK » lisse} quand la capacité PII est absente --- il répète le risque \\
+\code{/readyz} & readiness \emph{réelle} : 503 si la frontière est annoncée mais non câblée \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{acquis}
+\textbf{M0 généralise cette discipline au reste de la surface. Il ne l'invente pas.} C'est important
+pour le périmètre : le module est un travail d'\emph{extension} et de \emph{mise en ordre}, pas de
+conception d'un système de configuration.
+\end{acquis}
+
+\section{3 · Les quatre pièces}
+
+\subsection{3.1 · Le registre --- source unique de vérité}
+
+Chaque interrupteur déclaré \textbf{une seule fois}, avec ce qu'il achète \emph{et ce que son absence
+coûte} :
+
+\begin{extrait}
+\code{Switch \{} \\
+\code{\ \ \ \ name:\ \ \ \ \ \ \ \ \ \ "EFE\_NANO\_AUDIT\_HMAC\_MASTER",} \\
+\code{\ \ \ \ buys:\ \ \ \ \ \ \ \ \ \ "provenance non-forgeable",} \\
+\code{\ \ \ \ absence\_costs:\ "repli sur la clé de TEST PUBLIQUE --- le reçu devient forgeable",} \\
+\code{\ \ \ \ class:\ \ \ \ \ \ \ \ \ Class::Degraded,} \\
+\code{\ \ \ \ surface:\ \ \ \ \ \ \ Surface::Receipt,\ \ // où l'absence se voit, côté servi} \\
+\code{\}}
+\end{extrait}
+
+\begin{alerte}
+\textbf{Contrainte dure : le registre est le seul endroit du crate qui lit l'environnement.} Sans
+cela il devient une documentation parallèle --- c'est-à-dire exactement ce que M0 existe pour
+supprimer.
+\end{alerte}
+
+\subsection{3.2 · La taxonomie --- trois classes, une règle d'or}
+
+\begin{center}\small
+\begin{tabular}{@{}>{\raggedright\arraybackslash}p{3.4cm} >{\raggedright\arraybackslash}p{4.6cm} >{\raggedright\arraybackslash}p{7.6cm}@{}}
+\toprule
+\textbf{Classe} & \textbf{Absence \fl{}} & \textbf{Réservée à} \\
+\midrule
+\textbf{A · Fatale} & \pire{\code{exit 78}}, refus de démarrer & ce dont l'absence rendrait une affirmation \textbf{fausse} \sz{(la frontière l'utilise déjà)} \\
+\textbf{B · Dégradée annoncée} & démarre, capacité \textbf{éteinte}, \textbf{dite en clair} & tout le reste qui touche à la sûreté \\
+\textbf{C · Réglage} & défaut sûr, silence acceptable & capacité, adresses, tailles \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{acquis}
+\textbf{La règle d'or : aucune classe B silencieuse.} Une capacité éteinte se dit à \textbf{trois}
+endroits --- le rapport au démarrage, la surface servie, et le reçu. Le précédent existe déjà dans le
+dépôt : \emph{racine vide $\Leftrightarrow$ aucun scellement}. M0 ne fait que le généraliser.
+\end{acquis}
+
+\subsection{3.3 · Le rapport --- dérivé du code qui décide}
+
+Deux formes, \textbf{une seule source} : la forme \textbf{humaine} au démarrage --- les lignes
+\code{→} d'aujourd'hui, mais \emph{complètes} --- et la forme \textbf{machine}, via
+\code{-{}-profile-report}, qui imprime le JSON et \textbf{sort} sans écouter.
+
+Par capacité, le rapport dit : \best{SERVIE} · \textcolor{amber}{\textbf{DÉGRADÉE}} ·
+\pire{REFUSÉE} --- et pour dégradée, \textbf{ce que ça coûte}.
+
+\begin{piste}
+\textbf{Pourquoi un drapeau et non une route \code{/profile}.} Le rapport dit ce qui est \emph{éteint} :
+« capacité PII absente » est un renseignement pour un attaquant. Un drapeau de ligne de commande
+n'ajoute \textbf{aucune surface d'attaque} ; une route en ajoute une qu'il faudrait ensuite protéger,
+authentifier et tester. Pour trois jours, le drapeau gagne --- et il suffit au vérificateur.
+\end{piste}
+
+\subsection{3.4 · Les profils nommés}
+
+\begin{center}\small
+\begin{tabular}{@{}>{\raggedright\arraybackslash}p{2.5cm} >{\raggedright\arraybackslash}p{6.4cm} >{\raggedright\arraybackslash}p{6.6cm}@{}}
+\toprule
+\textbf{Profil} & \textbf{Ce qu'il sert} & \textbf{Ce qu'il refuse} \\
+\midrule
+\code{demo} & tout local, clé de dev, aucun egress & prétendre que le reçu vaut quelque chose --- le rapport dit \pire{« forgeable »} \\
+\code{souverain} & scellement réel, ancre, bundle, SLM local & tout appel frontière \\
+\code{frontiere} & souverain \textbf{+} frontière & démarrer si l'une des 4 préconditions manque \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Chaque profil est livré avec son \code{profiles/<nom>.expected.json} --- le rapport que le binaire
+\textbf{doit} produire.
+
+\section{4 · Le garde-fou --- ce qui empêche la dérive}
+
+C'est la pièce qui sépare M0 d'un document qui pourrit en trois semaines. Deux tests, tous deux dans
+l'idiome du dépôt : \emph{les invariants sont des tests qui cassent le build}.
+
+\begin{center}\small
+\begin{tabular}{@{}>{\raggedright\arraybackslash}p{4.6cm} >{\raggedright\arraybackslash}p{11.2cm}@{}}
+\toprule
+\textbf{Test} & \textbf{Ce qu'il interdit} \\
+\midrule
+\textbf{T1} \code{aucun\_env\_var\_hors\_registre} & toute occurrence de \code{std::env::var(} \textbf{hors} du module \code{profile} fait échouer le test. C'est ce qui rend le registre réellement unique \\
+\textbf{T2} \code{le\_rapport\_couvre\_le\_registre} & chaque interrupteur apparaît dans le rapport, et chaque profil produit exactement son \code{expected.json}. \textbf{Ajouter un interrupteur sans le documenter casse les tests} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\section{5 · Le critère d'acceptation, exécutable}
+
+\begin{extrait}
+\code{git clone <dépôt> \&\& cd efe} \\
+\code{set -a \&\& . ./profiles/souverain.env \&\& set +a} \\[3pt]
+\code{cargo run -q -p efe-swarm-gateway -- -{}-profile-report | jq -e '.provenance == "SERVIE"'} \\
+\code{cargo run -q -p efe-swarm-gateway \&} \\
+\code{curl -s localhost:8080/v1/swarm/run -d @examples/run.json \textbackslash} \\
+\code{\ \ | jq -e '.provenance.root | length == 64'}
+\end{extrait}
+
+\textbf{Fini quand les deux \code{jq -e} sortent 0.} Le premier prouve que le binaire \emph{déclare}
+servir ; le second qu'il \emph{sert}. Ensemble, ils ferment l'écart entre le déclaré et le servi ---
+ce qui est l'objet même du module.
+
+\section{6 · Le périmètre --- ce que M0 ne fait pas}
+
+Trois jours, donc l'exclusion est structurante.
+
+\begin{itemize}[leftmargin=1.2em,itemsep=2pt,topsep=2pt]
+\item \textbf{Pas de langage de configuration} --- des fichiers \code{.env} et un registre suffisent.
+\item \textbf{Pas de gestionnaire de secrets} --- le master reste une variable d'environnement ; sa
+      provenance est un problème d'exploitation, pas d'architecture.
+\item \textbf{Pas de rechargement à chaud} --- un profil se change par redémarrage.
+\item \textbf{Pas de configuration par tenant} --- l'isolation existe déjà, c'est un autre sujet.
+\item \textbf{Pas de crate partagé} --- les deux binaires ont des surfaces \textbf{disjointes} (25 et 7,
+      \emph{zéro recouvrement}). Un module \code{src/profile.rs} par binaire, format de rapport commun
+      par convention. Créer une infrastructure partagée pour deux consommateurs serait de
+      l'anticipation.
+\end{itemize}
+
+\section{7 · Les risques}
+
+\renewcommand{\arraystretch}{1.22}
+\begin{center}\small
+\begin{tabular}{@{}>{\raggedright\arraybackslash}p{6.2cm} >{\raggedright\arraybackslash}p{9.6cm}@{}}
+\toprule
+\textbf{Risque} & \textbf{Mitigation} \\
+\midrule
+Le registre devient une \emph{seconde} vérité & \textbf{T1} --- aucun \code{env::var} hors registre \\
+Le rapport \textbf{affirme plus} que le code ne fait & le rapport est calculé depuis les mêmes valeurs que le constructeur d'état consomme, jamais depuis une liste parallèle \\
+Les profils pourrissent & un \code{expected.json} par profil, comparé en intégration continue \\
+Le rapport renseigne un attaquant & drapeau de ligne de commande, jamais de route \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\section{8 · Le découpage --- trois jours}
+
+\begin{center}\small
+\begin{tabular}{@{}c >{\raggedright\arraybackslash}p{14.4cm}@{}}
+\toprule
+& \textbf{Ce qui se fait} \\
+\midrule
+\textbf{J1} & Le registre : inventorier les 25 $+$ 7, classer A/B/C, router \emph{toutes} les lectures. \textbf{T1 écrit en premier} --- il révèle immédiatement ce qui a été oublié. \\
+\textbf{J2} & Le rapport, humain et JSON, dérivé du registre. \code{main.rs} consomme le rapport au lieu des \code{println!} épars. \textbf{T2} et les trois \code{expected.json}. \\
+\textbf{J3} & Les trois profils, le critère d'acceptation de bout en bout, et le même travail --- plus court --- sur \code{audit-console}. \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{acquis}
+\textbf{Commencez par T1.} C'est le seul test qui vous dira, en une exécution, l'étendue réelle du
+travail --- et il est probable qu'il trouve des lectures d'environnement dont ni vous ni moi ne
+soupçonnons l'existence. Mon propre inventaire est passé de sept à trente-deux en une commande.
+\end{acquis}
+
+\section{Annexe · Vérifier l'état de départ}
+
+\renewcommand{\arraystretch}{1.22}
+\begin{center}\small
+\begin{tabular}{@{}>{\raggedright\arraybackslash}p{5.2cm} >{\raggedright\arraybackslash}p{10.8cm}@{}}
+\toprule
+\textbf{Affirmation} & \textbf{Ce qui la rejoue} \\
+\midrule
+25 variables dans la passerelle &
+  \code{grep -rho 'EFE\_[A-Z0-9\_]*' crates/efe-swarm-gateway/src | sort -u | wc -l} \\
+7 dans la console &
+  \code{grep -rho 'EFE\_[A-Z0-9\_]*' crates/audit-console/src | sort -u | wc -l} \\
+La discipline existe déjà &
+  \code{sed -n '26,100p' crates/efe-swarm-gateway/src/main.rs} \\
+Le garde est une fonction pure testée &
+  \code{grep -n 'fn frontier\_boot\_guard' -A 6 crates/efe-swarm-gateway/src/main.rs} \\
+\code{/readyz} fait une readiness réelle &
+  \code{sed -n '1,45p' crates/efe-swarm-gateway/src/routes/health.rs} \\
+Aucun document ne pose le profil &
+  \code{grep -rl EFE\_LLM\_FRONTIER\_ENABLED . -{}-include='*.md' -{}-include='*.yml'} \sz{\fl{} vide} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Un avertissement pour finir. Ce document décrit une \textbf{architecture}, pas un état : rien de ce
+qu'il propose n'existe encore. Ce qui \emph{est} vérifiable aujourd'hui, ce sont les \textbf{trous} et
+les \textbf{acquis} --- l'annexe donne la commande pour chacun. Le reste est une intention, et se
+jugera au critère d'acceptation du §5.
+
+\end{document}

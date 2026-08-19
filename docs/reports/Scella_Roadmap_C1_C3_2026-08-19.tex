@@ -1,0 +1,353 @@
+\documentclass[10pt]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage[french]{babel}
+\usepackage{newpxtext,newpxmath}
+\usepackage[a4paper,top=1.5cm,bottom=1.35cm,left=1.6cm,right=1.6cm]{geometry}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{titlesec}
+\usepackage[most]{tcolorbox}
+\usepackage{enumitem}
+\usepackage{array}
+\usepackage{booktabs}
+\usepackage{fancyhdr}
+
+\definecolor{navy}{HTML}{1F3A5F}
+\definecolor{grey}{HTML}{54606E}
+\definecolor{green}{HTML}{2C6E49}
+\definecolor{amber}{HTML}{9C6A16}
+\definecolor{red}{HTML}{A6322E}
+\definecolor{plum}{HTML}{7A4EA8}
+\definecolor{boxgray}{HTML}{F3F5F8}
+\definecolor{boxred}{HTML}{FCF2F1}
+\definecolor{boxgreen}{HTML}{F1F7F3}
+\definecolor{boxplum}{HTML}{F7F3FB}
+\definecolor{boxcode}{HTML}{F7F8FA}
+\definecolor{boxedge}{HTML}{D9E0EA}
+\definecolor{barC3}{HTML}{2C6E49}
+\definecolor{barC1}{HTML}{1F3A5F}
+
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{2.6pt}
+\linespread{1.0}
+
+\pagestyle{fancy}\fancyhf{}
+\lhead{\small\color{grey}Scella}
+\rhead{\small\color{grey}Feuille de route --- finir C1 et C3 --- 19 août 2026}
+\cfoot{\small\color{grey}\thepage}
+\renewcommand{\headrulewidth}{0.3pt}
+
+\titleformat{\section}{\color{navy}\large\bfseries}{}{0pt}{}
+\titlespacing{\section}{0pt}{11pt}{3pt}
+\titleformat{\subsection}{\color{navy}\bfseries}{}{0pt}{}
+\titlespacing{\subsection}{0pt}{7pt}{1.5pt}
+
+\newtcolorbox{these}{colback=boxgray,colframe=boxedge,boxrule=0.5pt,arc=2.5pt,
+  left=8pt,right=8pt,top=4.5pt,bottom=4.5pt}
+\newtcolorbox{alerte}{colback=boxred,colframe=red!55,boxrule=0.8pt,arc=2.5pt,
+  left=8pt,right=8pt,top=4.5pt,bottom=4.5pt}
+\newtcolorbox{acquis}{colback=boxgreen,colframe=green!45,boxrule=0.8pt,arc=2.5pt,
+  left=8pt,right=8pt,top=4.5pt,bottom=4.5pt}
+\newtcolorbox{piste}{colback=boxplum,colframe=plum!45,boxrule=0.8pt,arc=2.5pt,
+  left=8pt,right=8pt,top=4.5pt,bottom=4.5pt}
+\newtcolorbox{extrait}{colback=boxcode,colframe=boxedge,boxrule=0.5pt,arc=1.5pt,
+  left=7pt,right=7pt,top=3.5pt,bottom=3.5pt}
+
+% \textcolor plutot que {\color ...} : en tete de cellule p{}, \color insere un whatsit
+% qui ouvre une ligne vide et decale verticalement toute la colonne.
+\newcommand{\best}[1]{\textcolor{green}{\textbf{#1}}}
+\newcommand{\pire}[1]{\textcolor{red}{\textbf{#1}}}
+\newcommand{\sz}[1]{\textcolor{grey}{\small\textsf{#1}}}
+\newcommand{\code}[1]{\texttt{\small #1}}
+\newcommand{\x}{$\times$}
+\newcommand{\fl}{$\rightarrow$}
+% une barre de Gantt : \bar{couleur}{largeur en cm}
+\newcommand{\gbar}[2]{\textcolor{#1}{\rule[-0.4ex]{#2}{1.5ex}}}
+
+\begin{document}
+
+\begin{center}
+{\Huge\bfseries\color{navy} Scella}\\[4pt]
+{\large\color{grey}\itshape Feuille de route --- finir C1 et C3}\\[4pt]
+{\small\color{grey} 19 août 2026 \; · \; trous mesurés, pas supposés \; · \; douze semaines, et un jalon en semaine 5}
+\end{center}
+\vspace{2pt}
+
+\begin{these}
+\textbf{Le plan tient en une idée : C3 est aussi une surface d'ingestion.} Ce qui bloque C1 --- il n'a
+\textbf{aucune voie d'entrée} autre qu'une API Rust en processus --- cesse d'être un problème dès que
+la passerelle est déployée, puisqu'elle capture déjà ce que le registre doit enregistrer. Vous
+n'avez donc pas deux produits à finir, mais \textbf{un coin, une jonction, puis une expansion}. Douze
+semaines à votre vélocité démontrée --- mais le jalon qui décide est en \textbf{semaine 5}, quand un
+premier prospect installe la passerelle en mode observation. Le reste du plan ne vaut rien tant que
+cela n'est pas arrivé.
+\end{these}
+
+\section{0 · Une correction, avant le plan}
+
+\begin{alerte}
+J'ai écrit plusieurs fois que C1 \emph{« s'adopte sans changer d'architecture --- quatre taps, en
+observation »}. \textbf{C'est vrai sémantiquement et faux en pratique}, et il faut le corriger avant de
+bâtir un plan dessus.
+
+Les quatre taps sont une \textbf{API Rust en processus} : \code{record\_llm(\&LlmCall)},
+\code{record\_message}, \code{record\_evidence}, \code{record\_human}. \code{audit-api} est une
+\textbf{bibliothèque pure} --- son propre en-tête dit « HTTP-as-pure-function » --- et n'expose
+\textbf{aucun binaire}. Le seul exécutable de C1 est \code{audit-console}.
+
+Concrètement : \textbf{pour adopter C1 aujourd'hui, un client doit écrire du Rust et lier le crate.}
+Pour une équipe Python, c'est un sidecar à construire --- donc bel et bien un changement
+d'architecture. Ce n'est pas fatal, et le §2 montre pourquoi ; mais l'écrire noir sur blanc évite de
+fonder douze semaines sur une facilité qui n'existe pas.
+\end{alerte}
+
+\section{1 · Les trous, mesurés}
+
+\subsection{1.1 · C1 --- la preuve réglementaire}
+
+\renewcommand{\arraystretch}{1.22}
+\begin{center}\small
+\begin{tabular}{@{}>{\raggedright\arraybackslash}p{3.9cm} >{\raggedright\arraybackslash}p{8.6cm} >{\centering\arraybackslash}p{2.7cm}@{}}
+\toprule
+\textbf{Trou} & \textbf{État vérifié} & \textbf{Gravité} \\
+\midrule
+\textbf{Ingestion} & aucune --- API Rust en processus ; \code{audit-api} sans binaire & \pire{bloquant} \\
+\textbf{Rétention / cycle de vie} & \pire{0 occurrence} de \code{retention} / \code{purge} / \code{ttl} & \pire{bloquant RGPD} \\
+Ancrage tiers (3b) & \code{AnchorProof} et \code{verify\_anchor} existent ; \textbf{seul \code{Declared} est produit} & haute \\
+Profil de déploiement & absent & moyenne \\
+3 citations « Kovant » & pointeurs vers des fichiers réels & cosmétique \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{alerte}
+\textbf{Un produit qui vend la conformité RGPD sans politique de rétention est auto-contradictoire.}
+C'est le trou le plus embarrassant de C1 --- l'article 5 impose la limitation de conservation --- et
+aucune des analyses précédentes ne l'avait relevé.
+\end{alerte}
+
+\subsection{1.2 · C3 --- le relais souverain}
+
+\begin{center}\small
+\begin{tabular}{@{}>{\raggedright\arraybackslash}p{3.9cm} >{\raggedright\arraybackslash}p{8.6cm} >{\centering\arraybackslash}p{2.7cm}@{}}
+\toprule
+\textbf{Trou} & \textbf{État vérifié} & \textbf{Gravité} \\
+\midrule
+\textbf{Mode observation / fail-open} & \pire{absent} --- aucun \code{observe\_only}, \code{shadow}, \code{fail\_open} & \pire{bloquant adoption} \\
+Profil de déploiement & absent --- rien n'est servi par défaut & \pire{bloquant} \\
+Garde d'egress dupliqué & 2 copies, \textbf{a déjà divergé} (contournement SSRF) & haute \\
+Master de clés & \best{existe et fail-closed} ($\geq$ 32 octets exigés) & \best{rien à faire} \\
+Le Cadrage & 0 ligne --- mesurer d'abord & séparé \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\section{2 · La décision pivot --- elle change tout le plan}
+
+\textbf{C3 est lui-même une surface d'ingestion.} Il est dans le chemin, il capture. La question
+devient donc : faut-il un collecteur générique, ou la passerelle suffit-elle ?
+
+\renewcommand{\arraystretch}{1.24}
+\begin{center}\small
+\begin{tabular}{@{}>{\raggedright\arraybackslash}p{3.6cm} >{\raggedright\arraybackslash}p{5.9cm} >{\raggedright\arraybackslash}p{5.7cm}@{}}
+\toprule
+& \textbf{(A) C1 en expansion de C3} & \textbf{(B) C1 aussi en autonome} \\
+\midrule
+Collecteur générique & \best{inutile} --- la passerelle est le collecteur & indispensable : HTTP $+$ SDK Python/TS \\
+Effort supplémentaire & --- & \pire{$+$3 à 4 semaines} \\
+Marché de C1 & limité aux clients de C3 & tous ceux qui veulent le registre \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{piste}
+\textbf{Je recommande (A) d'abord.} Un fondateur seul ne peut pas construire un collecteur générique
+\emph{et} vendre. Et (B) reste ouvert : si trois prospects demandent le registre sans vouloir router
+leur trafic, vous le construirez \textbf{avec leur argent}, ce qui est le bon moment.
+\end{piste}
+
+\section{3 · La feuille de route}
+
+\sz{Estimations calibrées sur votre vélocité démontrée : 66 crates, 377 commits, trois mois, un auteur.}
+
+\subsection{3.1 · Socle --- les deux en dépendent \sz{(~1 semaine)}}
+
+\renewcommand{\arraystretch}{1.2}
+\begin{center}\small
+\begin{tabular}{@{}c >{\raggedright\arraybackslash}p{5.6cm} >{\raggedright\arraybackslash}p{8.4cm}@{}}
+\toprule
+& \textbf{Tâche} & \textbf{Pourquoi} \\
+\midrule
+\textbf{S1} & \textbf{Le profil} --- les 7 interrupteurs, ce que chacun achète, ce que son absence coûte & Sans lui, « Scella fait X » n'est vrai que dans deux scripts de démonstration \\
+\textbf{S2} & \textbf{Fusionner les deux gardes d'egress} & Un contrôle de sécurité en double a déjà divergé une fois \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{3.2 · Voie C3 --- le coin \sz{(~4 semaines)}}
+
+\begin{center}\small
+\begin{tabular}{@{}c >{\raggedright\arraybackslash}p{9.6cm} >{\centering\arraybackslash}p{2.2cm}@{}}
+\toprule
+& \textbf{Tâche} & \textbf{Effort} \\
+\midrule
+\textbf{A1} & \textbf{Mode observation} --- la passerelle capture sans intercepter & \textbf{1--2 sem.} \\
+\textbf{A2} & \textbf{Fail-open configurable} --- une panne ne coupe jamais l'accès aux modèles & 3 j \\
+\textbf{A3} & \textbf{Packaging} --- \code{docker compose}, binaire, doc d'installation, mode \code{-{}-ollama} de la démo & 1 sem. \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{acquis}
+\textbf{A1 est le déblocage central de tout le plan.} Sans lui, aucun assureur ne met votre passerelle
+dans son chemin critique --- c'est l'écart que j'avais identifié comme décisif contre C3. Avec lui,
+C3 s'installe avec le même risque que C1, c'est-à-dire \textbf{aucun}.
+\end{acquis}
+
+\subsection{3.3 · La jonction \sz{(~2 semaines)}}
+
+\begin{center}\small
+\begin{tabular}{@{}c >{\raggedright\arraybackslash}p{6.0cm} >{\raggedright\arraybackslash}p{8.0cm}@{}}
+\toprule
+& \textbf{Tâche} & \textbf{Pourquoi} \\
+\midrule
+\textbf{J1} & Les records de la passerelle produisent les nœuds que \code{reg-evidence} consomme & \code{provenance-bridge} et la route bundle en font déjà une partie \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\textbf{C'est la pièce qui vaut le plus cher du plan.} Elle transforme C1 d'une vente froide de
+dix-huit mois en un \textbf{upsell sur un client déjà déployé} --- la seule forme sous laquelle une
+personne seule peut vendre de la conformité.
+
+\subsection{3.4 · Voie C1 --- l'expansion \sz{(~3 semaines)}}
+
+\begin{center}\small
+\begin{tabular}{@{}c >{\raggedright\arraybackslash}p{9.6cm} >{\centering\arraybackslash}p{2.2cm}@{}}
+\toprule
+& \textbf{Tâche} & \textbf{Effort} \\
+\midrule
+\textbf{B1} & \textbf{Rétention et cycle de vie} --- politique, purge, \emph{preuve} de purge & \textbf{1 sem.} \\
+\textbf{B2} & \textbf{Le binaire de service} --- \code{audit-api} est une bibliothèque, il lui faut un serveur & 1 sem. \\
+\textbf{B3} & \textbf{\code{audit-console} en production} --- auth, TLS, isolation tenant & 1 sem. \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{3.5 · L'opposabilité \sz{(~2 semaines)}}
+
+\begin{center}\small
+\begin{tabular}{@{}c >{\raggedright\arraybackslash}p{6.0cm} >{\raggedright\arraybackslash}p{8.0cm}@{}}
+\toprule
+& \textbf{Tâche} & \textbf{Pourquoi} \\
+\midrule
+\textbf{O1} & \textbf{Ancrage tiers (3b)} --- RFC 3161 ou log de transparence & Fait passer de \emph{tamper-evident pour un détenteur} à \textbf{opposable au détenteur lui-même}. \code{AnchorProof} et \code{verify\_anchor} existent : c'est un \textbf{raccordement}, pas une invention \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\section{4 · La ligne du temps}
+
+\renewcommand{\arraystretch}{1.3}
+\begin{center}\small
+\begin{tabular}{@{}>{\raggedright\arraybackslash}p{2.0cm} >{\raggedright\arraybackslash}p{4.6cm} l@{}}
+\toprule
+\textbf{Semaine} & \textbf{Ce qui se fait} & \textbf{Avancement} \\
+\midrule
+1        & Socle : profil $+$ gardes fusionnés & \gbar{grey}{0.9cm} \\
+2--5     & \textbf{C3} : observation \fl{} fail-open \fl{} packaging & \gbar{barC3}{3.6cm} \\
+\multicolumn{3}{@{}l@{}}{\hspace{2.2cm}\textcolor{green}{\textbf{$\bigstar$ Semaine 5 --- C3 VENDABLE : chercher le premier client}}} \\
+6--7     & Jonction : la passerelle alimente le registre & \hspace{3.6cm}\gbar{plum}{1.8cm} \\
+8--10    & \textbf{C1} : rétention \fl{} service \fl{} console & \hspace{5.4cm}\gbar{barC1}{2.7cm} \\
+\multicolumn{3}{@{}l@{}}{\hspace{2.2cm}\textcolor{navy}{\textbf{$\bigstar$ Semaine 10 --- C1 LIVRABLE : upsell sur le client existant}}} \\
+11--12   & Opposabilité : ancrage tiers & \hspace{8.1cm}\gbar{amber}{1.8cm} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\textbf{Douze semaines pour les deux.} Et le jalon qui compte est en \textbf{semaine 5}, pas en
+semaine 12.
+
+\section{5 · Ce qu'il faut exclure --- et c'est la moitié du travail}
+
+\begin{itemize}[leftmargin=1.2em,itemsep=2pt,topsep=2pt]
+\item \textbf{Le runtime nano} --- six crates, aucun appelant. Le retirer, pas le porter.
+\item \textbf{La lignée latente comme produit} --- elle exige une thèse. Gardez le canari de Lipschitz
+      comme \emph{lettre de créance}, pas comme catalogue.
+\item \textbf{Fil C, le Cadrage, l'essaim médiateur} --- feuille de route, pas produit.
+\item \textbf{Le collecteur générique} --- tant que personne ne l'a demandé \emph{et payé}.
+\item \textbf{Le Cadrage} --- jusqu'à la mesure. \sz{Rappel : les phases 1 et 2 de la feuille de route
+      de mesure sont \textbf{gratuites et locales} (1,5 jour) et peuvent tuer l'hypothèse sans rien coûter.}
+\end{itemize}
+
+\section{6 · Les points où l'on s'arrête et où l'on décide}
+
+\renewcommand{\arraystretch}{1.24}
+\begin{center}\small
+\begin{tabular}{@{}>{\raggedright\arraybackslash}p{2.6cm} >{\raggedright\arraybackslash}p{6.0cm} >{\raggedright\arraybackslash}p{7.0cm}@{}}
+\toprule
+\textbf{Quand} & \textbf{La question} & \textbf{Ce qui fait bifurquer} \\
+\midrule
+\textbf{Fin sem. 5} & Un prospect installe-t-il C3 en mode observation ? & \pire{Non \fl{} le problème est la distribution, pas le produit. Arrêtez de coder.} \\
+Fin sem. 7 & La jonction produit-elle un registre à partir de vrai trafic ? & Non \fl{} C1 redevient une vente froide ; réévaluez avant B1--B3 \\
+Après B1 & La rétention satisfait-elle un DPO réel ? & Faites-la relire par un juriste \emph{avant} de coder la purge \\
+À tout moment & Trois prospects veulent C1 sans C3 ? & Alors seulement, financez le collecteur (option B) \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\section{7 · Le seul risque qui compte}
+
+Rien dans ces douze semaines n'est techniquement incertain. Tout est du travail d'ingénierie sur un
+socle qui tient : \textbf{575 tests verts} sur les deux périmètres, deux démonstrations qui tournent,
+et un dépôt désormais fusionné dans \code{main}.
+
+\begin{alerte}
+\textbf{Le risque est ailleurs, et il est entier : personne n'a encore rien installé.} La semaine 5
+existe pour le découvrir tôt. Et si le premier prospect n'installe pas, la bonne réaction n'est
+\textbf{pas} de coder les semaines 6 à 12 --- c'est de comprendre pourquoi.
+\end{alerte}
+
+\begin{these}
+\small\textbf{Rappel de cadrage, inchangé dans toute la série.} Le reçu atteste l'\textbf{intégrité}
+d'une suite de pas, jamais la \textbf{correction} d'une décision. Il est \emph{tamper-evident pour un
+détenteur de clé}, pas \emph{trustless pour un tiers} --- et c'est précisément ce que le jalon O1
+corrige. Les participants du mode réel exécutent une fusion latente Mode-1 numérique : ce ne sont pas
+des « vrais SLM ». Les \textbf{trous} de ce document sont mesurés ; les \textbf{durées} sont des
+estimations.
+\end{these}
+
+\section{Annexe · Vérifier chaque trou soi-même}
+
+\renewcommand{\arraystretch}{1.22}
+\begin{center}\small
+\begin{tabular}{@{}>{\raggedright\arraybackslash}p{5.4cm} >{\raggedright\arraybackslash}p{10.6cm}@{}}
+\toprule
+\textbf{Affirmation} & \textbf{Ce qui la rejoue} \\
+\midrule
+C1 n'a aucune ingestion &
+  \code{grep -nE '\textasciicircum pub (fn|struct|mod)' crates/provenance-capture/src/lib.rs} \newline
+  \code{ls crates/audit-api/src/bin} \sz{\fl{} absent} \; ; \; \code{grep -n 'fn main' crates/audit-api/src/*.rs} \sz{\fl{} vide} \\
+Aucune rétention &
+  \code{grep -rniE 'retention|purge|ttl|expire' crates/audit-api/src crates/provenance-capture/src} \sz{\fl{} 0} \\
+Aucun mode observation &
+  \code{grep -rniE 'observe\_only|shadow|fail\_open' crates/efe-swarm-gateway/src} \sz{\fl{} 0} \\
+Le garde est dupliqué &
+  \code{grep -rln 'fn is\_local\_endpoint' crates -{}-include='*.rs'} \sz{\fl{} 2 fichiers} \\
+Seul \code{Declared} est produit &
+  \code{grep -rn 'Rfc3161' crates/provenance-bridge/src} \sz{\fl{} vide} \\
+Le master de clés est fail-closed &
+  \code{grep -n 'EFE\_NANO\_AUDIT\_HMAC\_MASTER' crates/efe-swarm-gateway/src/main.rs} \\
+575 tests sur les deux &
+  compter \code{\#[test]} sur les 8 crates de C1 (240) et les 4 de C3 (335) \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Un avertissement pour finir. Les \textbf{trous} sont des faits, mesurés le 19 août et rejouables
+ci-dessus. Les \textbf{durées} sont des estimations calibrées sur l'historique du dépôt, pas des
+engagements --- et la seule d'entre elles qui compte vraiment est la semaine 5, parce qu'elle ne
+dépend pas de votre vitesse mais de la réponse de quelqu'un d'autre.
+
+\end{document}

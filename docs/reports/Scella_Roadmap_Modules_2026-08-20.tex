@@ -1,0 +1,254 @@
+\documentclass[10pt]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage[french]{babel}
+\usepackage{newpxtext,newpxmath}
+\usepackage[a4paper,top=1.5cm,bottom=1.35cm,left=1.5cm,right=1.5cm]{geometry}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{titlesec}
+\usepackage[most]{tcolorbox}
+\usepackage{enumitem}
+\usepackage{array}
+\usepackage{booktabs}
+\usepackage{fancyhdr}
+
+\definecolor{navy}{HTML}{1F3A5F}
+\definecolor{grey}{HTML}{54606E}
+\definecolor{green}{HTML}{2C6E49}
+\definecolor{amber}{HTML}{9C6A16}
+\definecolor{red}{HTML}{A6322E}
+\definecolor{plum}{HTML}{7A4EA8}
+\definecolor{boxgray}{HTML}{F3F5F8}
+\definecolor{boxred}{HTML}{FCF2F1}
+\definecolor{boxgreen}{HTML}{F1F7F3}
+\definecolor{boxplum}{HTML}{F7F3FB}
+\definecolor{boxcode}{HTML}{F7F8FA}
+\definecolor{boxedge}{HTML}{D9E0EA}
+
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{2.6pt}
+\linespread{1.0}
+
+\pagestyle{fancy}\fancyhf{}
+\lhead{\small\color{grey}Scella}
+\rhead{\small\color{grey}Feuille de route en modules --- 20 août 2026}
+\cfoot{\small\color{grey}\thepage}
+\renewcommand{\headrulewidth}{0.3pt}
+
+\titleformat{\section}{\color{navy}\large\bfseries}{}{0pt}{}
+\titlespacing{\section}{0pt}{11pt}{3pt}
+\titleformat{\subsection}{\color{navy}\bfseries}{}{0pt}{}
+\titlespacing{\subsection}{0pt}{7pt}{1.5pt}
+
+\newtcolorbox{these}{colback=boxgray,colframe=boxedge,boxrule=0.5pt,arc=2.5pt,
+  left=8pt,right=8pt,top=4.5pt,bottom=4.5pt}
+\newtcolorbox{alerte}{colback=boxred,colframe=red!55,boxrule=0.8pt,arc=2.5pt,
+  left=8pt,right=8pt,top=4.5pt,bottom=4.5pt}
+\newtcolorbox{acquis}{colback=boxgreen,colframe=green!45,boxrule=0.8pt,arc=2.5pt,
+  left=8pt,right=8pt,top=4.5pt,bottom=4.5pt}
+\newtcolorbox{piste}{colback=boxplum,colframe=plum!45,boxrule=0.8pt,arc=2.5pt,
+  left=8pt,right=8pt,top=4.5pt,bottom=4.5pt}
+\newtcolorbox{extrait}{colback=boxcode,colframe=boxedge,boxrule=0.5pt,arc=1.5pt,
+  left=7pt,right=7pt,top=3.5pt,bottom=3.5pt}
+
+\newcommand{\best}[1]{\textcolor{green}{\textbf{#1}}}
+\newcommand{\pire}[1]{\textcolor{red}{\textbf{#1}}}
+\newcommand{\sz}[1]{\textcolor{grey}{\small\textsf{#1}}}
+\newcommand{\code}[1]{\texttt{\small #1}}
+\newcommand{\fl}{$\rightarrow$}
+\newcommand{\mm}[1]{\textbf{\textcolor{navy}{#1}}}
+
+\begin{document}
+
+\begin{center}
+{\Huge\bfseries\color{navy} Scella}\\[4pt]
+{\large\color{grey}\itshape Finir C1 et C3 --- la feuille de route en modules}\\[4pt]
+{\small\color{grey} 20 août 2026 \; · \; douze modules, chacun avec son critère d'acceptation vérifiable}
+\end{center}
+\vspace{2pt}
+
+\begin{these}
+\textbf{Pourquoi des modules plutôt qu'un calendrier.} Un calendrier suppose que rien ne bouge ; des
+modules survivent au premier imprévu. Chacun de ceux qui suivent porte un \textbf{critère
+d'acceptation vérifiable} --- une commande, pas une impression --- et ne dépend que de modules
+nommés. Vous pouvez en faire deux et vous arrêter, ou changer l'ordre, sans réécrire le plan.
+
+\textbf{Le chemin critique tient en quatre modules} : \mm{M0} le profil, \mm{M2} l'observation non
+intrusive, \mm{M5} le pont vers le registre, \mm{M6} la conservation. Les huit autres sont utiles
+mais ne bloquent personne.
+\end{these}
+
+\section{1 · Les douze modules}
+
+\renewcommand{\arraystretch}{1.28}
+\begin{center}\footnotesize
+\begin{tabular}{@{}l >{\raggedright\arraybackslash}p{3.5cm} >{\raggedright\arraybackslash}p{6.6cm} >{\raggedright\arraybackslash}p{2.0cm} c@{}}
+\toprule
+& \textbf{Module} & \textbf{Fini quand} \sz{(vérifiable)} & \textbf{Dépend de} & \sz{Taille} \\
+\midrule
+\multicolumn{5}{@{}l@{}}{\textit{\textcolor{grey}{— Socle —}}} \\
+\mm{M0} & \textbf{Le profil servi} & un clone frais $+$ le profil documenté sert un reçu \textbf{non vide} & --- & \sz{3 j} \\
+\mm{M1} & Le garde unique & \code{grep -rln 'fn is\_local\_endpoint'} renvoie \textbf{un} fichier & --- & \sz{2 j} \\
+\addlinespace[3pt]
+\multicolumn{5}{@{}l@{}}{\textit{\textcolor{green}{— Voie C3 : le coin —}}} \\
+\mm{M2} & \textbf{L'observation non intrusive} & on \textbf{tue} la passerelle en plein run : le client reçoit quand même sa réponse & M0 & \sz{1--2 sem} \\
+\mm{M3} & La panne qui ne coupe rien & un test tue le SLM et le store : l'appel passe, \code{degrade\_reason} estampillé & M2 & \sz{3 j} \\
+\mm{M4} & L'installation en une commande & machine vierge, \code{docker compose up} \fl{} un reçu re-prouvé, \textbf{sans clé} & M0, M2 & \sz{1 sem} \\
+\addlinespace[3pt]
+\multicolumn{5}{@{}l@{}}{\textit{\textcolor{plum}{— La jonction —}}} \\
+\mm{M5} & \textbf{Le pont vers le registre} & un run de la passerelle produit un dossier \code{reg-evidence} \textbf{sans geste manuel} & M2 & \sz{1--2 sem} \\
+\addlinespace[3pt]
+\multicolumn{5}{@{}l@{}}{\textit{\textcolor{navy}{— Voie C1 : l'expansion —}}} \\
+\mm{M6} & \textbf{La conservation limitée} & un cas expiré disparaît, et \textbf{tout le reste se re-prouve encore} & M5 & \sz{1 sem} \\
+\mm{M7} & Le service de lecture & \code{audit-api} répond en HTTP sur un port \sz{(aujourd'hui : bibliothèque)} & M0 & \sz{1 sem} \\
+\mm{M8} & La console opposable & auth $+$ TLS $+$ un tenant ne voit \textbf{jamais} l'autre & M7 & \sz{1 sem} \\
+\addlinespace[3pt]
+\multicolumn{5}{@{}l@{}}{\textit{\textcolor{amber}{— L'opposabilité —}}} \\
+\mm{M9} & L'ancre tierce (3b) & \code{AnchorProof} de méthode \code{rfc3161} produite et vérifiée & M4 & \sz{2 sem} \\
+\addlinespace[3pt]
+\multicolumn{5}{@{}l@{}}{\textit{\textcolor{grey}{— Hors chemin —}}} \\
+\mm{MZ} & \textbf{La mesure du Cadrage} & le plafond du compresseur et le taux de préservation sont \textbf{chiffrés} & --- & \sz{1,5 j} \\
+\mm{MX} & Le collecteur ouvert & un client Python écrit un nœud scellé sans toucher à Rust & M7 & \sz{3--4 sem} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\sz{\mm{MZ} est indépendant, local et \textbf{gratuit} : faisable n'importe quand, il peut tuer le
+Cadrage sans rien coûter. \mm{MX} est \textbf{conditionnel} — ne le faites que si trois prospects
+demandent le registre sans vouloir router leur trafic.}
+
+\section{2 · Les quatre modules qui méritent un mot}
+
+\subsection{2.1 · \mm{M2} --- l'observation non intrusive \sz{(le déblocage)}}
+
+C'est le seul module dont dépend la vente. Aujourd'hui la passerelle est dans le \textbf{chemin
+critique} : si elle tombe, l'accès aux modèles tombe. Aucune équipe plateforme d'assureur n'accepte
+cela d'un fournisseur inconnu.
+
+En mode observation, la passerelle \emph{voit} le trafic et le scelle, mais ne le \emph{porte} pas.
+Le risque d'adoption tombe alors au niveau de C1 --- c'est-à-dire à zéro.
+
+\begin{acquis}
+\textbf{Le critère d'acceptation est brutal, et c'est voulu :} on tue le processus de la passerelle
+au milieu d'un run, et le client reçoit quand même sa réponse. Tant que ce test n'existe pas, le
+module n'est pas fini --- et la promesse « sans risque » est une affirmation, pas une propriété.
+\end{acquis}
+
+\subsection{2.2 · \mm{M5} --- le pont vers le registre \sz{(la valeur)}}
+
+C'est le module qui vaut le plus cher du plan, et il est court. Il transforme C1 d'une vente froide
+de dix-huit mois en un \textbf{upsell sur un client déjà déployé}.
+
+Le substrat existe : \code{provenance-bridge} traduit déjà un run en nœuds de la pile B, et la route
+\code{bundle} les sert. Ce qui manque est le dernier maillon --- que ces nœuds nourrissent les
+gabarits de \code{reg-evidence} sans intervention.
+
+\subsection{2.3 · \mm{M6} --- la conservation limitée \sz{(le risque levé)}}
+
+Je le croyais difficile : purger dans une chaîne scellée casse la re-preuve. \textbf{Vérification
+faite, ce n'est pas le cas ici.}
+
+\begin{acquis}
+Les taps ne stockent que des \textbf{empreintes} --- \code{inputs\_hash}, \code{query\_hash},
+\code{content\_hash} --- et un test nommé \code{hash\_is\_deterministic\_and\_minimizes} le fige.
+\textbf{L'effacement RGPD et la chaîne inforgeable ne s'opposent donc pas par construction} : le
+contenu vit chez le client, la chaîne ne porte que des empreintes.
+\end{acquis}
+
+Reste une règle de conception à respecter, et elle est simple : \textbf{purger par \emph{cas} entier,
+jamais par nœud.} Chaque cas a sa propre chaîne et sa propre racine ; supprimer un cas complet laisse
+tous les autres re-prouvables. Retirer un nœud au milieu d'une chaîne la casserait --- c'est
+exactement l'attaque par troncature, faite par soi-même.
+
+\begin{alerte}
+\textbf{La tension à arbitrer n'est pas technique, elle est juridique.} L'AI Act art.\,12 impose de
+\emph{conserver} les journaux ; le RGPD art.\,5 impose de \emph{limiter} la conservation. La politique
+est donc un \textbf{intervalle}, pas une durée --- et c'est un juriste qui le fixe, pas vous. Faites
+relire avant de coder la purge.
+\end{alerte}
+
+\subsection{2.4 · \mm{M9} --- l'ancre tierce \sz{(un raccordement, pas une invention)}}
+
+\code{forensic-export} porte déjà \code{AnchorMethod::Rfc3161}, une \code{AnchorProof} structurée et
+un \code{verify\_anchor} qui exécute le contrôle décisif --- la liaison de racine. Ce qui manque est
+d'en \textbf{produire} une : aujourd'hui seule la méthode \code{Declared} sort du pont.
+
+C'est ce module qui fait passer le reçu de \emph{tamper-evident pour un détenteur de clé} à
+\textbf{opposable au détenteur lui-même}.
+
+\section{3 · L'ordre, et les deux jalons}
+
+\begin{extrait}
+\small
+\code{M0 -> M2 -> M3} \hfill \sz{la panne qui ne coupe rien} \\
+\code{M0 -> M2 -> M4 -> M9} \hfill \sz{l'installation, puis l'opposabilité} \\
+\code{M0 -> M2 -> M5 -> M6} \hfill \sz{\textbf{le chemin critique}} \\
+\code{M0 -> M7 -> M8} \hfill \sz{la surface de lecture} \\[3pt]
+\code{M1} \sz{et} \code{MZ} \sz{: indépendants, faisables n'importe quand \quad ·\quad}
+\code{MX} \sz{: conditionnel}
+\end{extrait}
+
+\begin{center}\small
+\renewcommand{\arraystretch}{1.25}
+\begin{tabular}{@{}>{\raggedright\arraybackslash}p{4.6cm} >{\raggedright\arraybackslash}p{5.0cm} >{\raggedright\arraybackslash}p{6.0cm}@{}}
+\toprule
+\textbf{Jalon} & \textbf{Atteint après} & \textbf{Ce qu'il autorise} \\
+\midrule
+\best{C3 vendable} & \mm{M0} $+$ \mm{M2} $+$ \mm{M3} $+$ \mm{M4} & chercher le premier client \\
+\textcolor{navy}{\textbf{C1 livrable}} & $+$ \mm{M5} $+$ \mm{M6} $+$ \mm{M7} $+$ \mm{M8} & l'upsell sur ce client \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{alerte}
+\textbf{Le premier jalon est le seul qui décide.} S'il est atteint et qu'aucun prospect n'installe la
+passerelle, le problème n'est \textbf{pas} le produit --- c'est la distribution, et coder \mm{M5} à
+\mm{M9} n'y changera rien. Arrêtez-vous là et cherchez pourquoi.
+\end{alerte}
+
+\section{4 · Ce qui reste exclu}
+
+\begin{itemize}[leftmargin=1.2em,itemsep=2pt,topsep=2pt]
+\item \textbf{Le runtime nano} --- six crates, aucun appelant. Le retirer, pas le porter.
+\item \textbf{La lignée latente comme produit} --- gardez le canari de Lipschitz comme lettre de
+      créance, pas comme catalogue.
+\item \textbf{Fil C et l'essaim médiateur} --- feuille de route, pas produit.
+\item \textbf{Le Cadrage} --- jusqu'à \mm{MZ}. Il est gratuit : faites-le avant d'en parler à quiconque.
+\item \textbf{\mm{MX}} --- jusqu'à ce que trois prospects le demandent \emph{et} le paient.
+\end{itemize}
+
+\begin{these}
+\small\textbf{Rappel de cadrage, inchangé dans toute la série.} Le reçu atteste l'\textbf{intégrité}
+d'une suite de pas, jamais la \textbf{correction} d'une décision. Il est \emph{tamper-evident pour un
+détenteur de clé}, pas \emph{trustless pour un tiers} --- et c'est \mm{M9} qui corrige cela. Les
+participants du mode réel exécutent une fusion latente Mode-1 numérique : ce ne sont pas des « vrais
+SLM ». Les \textbf{trous} et les \textbf{critères} de ce document sont vérifiables ; les
+\textbf{tailles} sont des estimations.
+\end{these}
+
+\section{Annexe · Vérifier l'état de départ}
+
+\renewcommand{\arraystretch}{1.22}
+\begin{center}\small
+\begin{tabular}{@{}>{\raggedright\arraybackslash}p{5.0cm} >{\raggedright\arraybackslash}p{11.0cm}@{}}
+\toprule
+\textbf{Le trou que le module comble} & \textbf{Ce qui le montre aujourd'hui} \\
+\midrule
+\mm{M0} aucun profil & \code{grep -rl EFE\_META\_PROVENANCE . -{}-include='*.md' -{}-include='*.yml'} \sz{\fl{} vide} \\
+\mm{M1} garde dupliqué & \code{grep -rln 'fn is\_local\_endpoint' crates -{}-include='*.rs'} \sz{\fl{} 2 fichiers} \\
+\mm{M2} pas d'observation & \code{grep -rniE 'observe\_only|shadow|fail\_open' crates/efe-swarm-gateway/src} \sz{\fl{} 0} \\
+\mm{M6} pas de rétention & \code{grep -rniE 'retention|purge|ttl' crates/audit-api/src crates/provenance-capture/src} \sz{\fl{} 0} \\
+\mm{M6} la chaîne ne porte que des empreintes & \code{grep -n 'hash\_hex' crates/provenance-capture/src/tap.rs} \\
+\mm{M7} \code{audit-api} est une bibliothèque & \code{ls crates/audit-api/src/bin} \sz{\fl{} absent} \\
+\mm{M9} seul \code{Declared} est produit & \code{grep -rn 'Rfc3161' crates/provenance-bridge/src} \sz{\fl{} vide} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Un avertissement pour finir. Les \textbf{critères d'acceptation} de ce document sont écrits pour être
+exécutables : si l'un d'eux ne peut pas l'être, c'est le critère qu'il faut réécrire, pas le module
+qu'il faut déclarer fini. Et le seul jalon qui ne dépende pas de votre vitesse est le premier ---
+parce qu'il attend la réponse de quelqu'un d'autre.
+
+\end{document}
