@@ -63,8 +63,12 @@ mod mission; // Couche 2 (M1) : capture de provenance par appel LLM (décorateur
 mod mission_graph; // Couche 2 (M2) : le reçu honnête — graphe depuis topologie déclarée + scellement + store
 #[cfg(feature = "frontier-llm")]
 pub mod frontier_metrics; // Couche 2 (M4 §2.4) : compteurs de coût/egress frontière pour /metrics
-#[cfg(test)]
-mod test_support; // ADR-016 : synthetic_mode_c_run partagé (lib tests + store_pg tests)
+// ADR-016 : `synthetic_mode_c_run` partagé (lib tests + store_pg tests). La feature `demo`
+// l'expose hors `#[cfg(test)]` pour l'exemple `local_receipt_demo` : un fixture dupliqué
+// dériverait du seul littéral `LlmProvenanceRecord` de référence, ce que ce module existe
+// précisément pour empêcher. OFF par défaut.
+#[cfg(any(test, feature = "demo"))]
+pub mod test_support;
 #[cfg(feature = "postgres")]
 mod store_pg;
 #[cfg(feature = "postgres")]

@@ -24,6 +24,10 @@ default = []
 # Expose `InMemoryRunStore::tamper_first_output` hors `#[cfg(test)]` pour permettre
 # un test de falsification depuis un harnais externe. OFF par défaut (jamais en prod).
 tamper-testkit = []
+# Démo locale **sans clé** : expose `test_support::synthetic_mode_c_run` hors `#[cfg(test)]`
+# pour l'exemple `local_receipt_demo`. Même motif que `tamper-testkit` — un harnais externe a
+# besoin du fixture — et OFF par défaut (jamais en prod).
+demo = []
 # `PgRunStore` (prod) : persistance Postgres write-once des records (la preuve durable).
 postgres = ["dep:sqlx"]
 # `OidcVerifier` (prod) : auth `Caller` via JWT OIDC ES256 (clé PUBLIQUE server-side ;
