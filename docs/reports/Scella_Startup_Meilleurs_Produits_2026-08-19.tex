@@ -1,0 +1,333 @@
+\documentclass[10pt]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage[french]{babel}
+\usepackage{newpxtext,newpxmath}
+\usepackage[a4paper,top=1.5cm,bottom=1.35cm,left=1.6cm,right=1.6cm]{geometry}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{titlesec}
+\usepackage[most]{tcolorbox}
+\usepackage{enumitem}
+\usepackage{array}
+\usepackage{booktabs}
+\usepackage{fancyhdr}
+
+\definecolor{navy}{HTML}{1F3A5F}
+\definecolor{grey}{HTML}{54606E}
+\definecolor{green}{HTML}{2C6E49}
+\definecolor{amber}{HTML}{9C6A16}
+\definecolor{red}{HTML}{A6322E}
+\definecolor{plum}{HTML}{7A4EA8}
+\definecolor{boxgray}{HTML}{F3F5F8}
+\definecolor{boxred}{HTML}{FCF2F1}
+\definecolor{boxgreen}{HTML}{F1F7F3}
+\definecolor{boxplum}{HTML}{F7F3FB}
+\definecolor{boxcode}{HTML}{F7F8FA}
+\definecolor{boxedge}{HTML}{D9E0EA}
+
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{2.6pt}
+\linespread{1.0}
+
+\pagestyle{fancy}\fancyhf{}
+\lhead{\small\color{grey}Scella}
+\rhead{\small\color{grey}Quels produits pour fonder une startup -- 19 août 2026}
+\cfoot{\small\color{grey}\thepage}
+\renewcommand{\headrulewidth}{0.3pt}
+
+\titleformat{\section}{\color{navy}\large\bfseries}{}{0pt}{}
+\titlespacing{\section}{0pt}{11pt}{3pt}
+\titleformat{\subsection}{\color{navy}\bfseries}{}{0pt}{}
+\titlespacing{\subsection}{0pt}{7pt}{1.5pt}
+
+\newtcolorbox{these}{colback=boxgray,colframe=boxedge,boxrule=0.5pt,arc=2.5pt,
+  left=8pt,right=8pt,top=4.5pt,bottom=4.5pt}
+\newtcolorbox{alerte}{colback=boxred,colframe=red!55,boxrule=0.8pt,arc=2.5pt,
+  left=8pt,right=8pt,top=4.5pt,bottom=4.5pt}
+\newtcolorbox{acquis}{colback=boxgreen,colframe=green!45,boxrule=0.8pt,arc=2.5pt,
+  left=8pt,right=8pt,top=4.5pt,bottom=4.5pt}
+\newtcolorbox{piste}{colback=boxplum,colframe=plum!45,boxrule=0.8pt,arc=2.5pt,
+  left=8pt,right=8pt,top=4.5pt,bottom=4.5pt}
+\newtcolorbox{extrait}{colback=boxcode,colframe=boxedge,boxrule=0.5pt,arc=1.5pt,
+  left=7pt,right=7pt,top=3.5pt,bottom=3.5pt}
+
+% \textcolor plutot que {\color ...} : en tete de cellule p{}, \color insere un whatsit
+% qui ouvre une ligne vide et decale verticalement toute la colonne.
+\newcommand{\best}[1]{\textcolor{green}{\textbf{#1}}}
+\newcommand{\pire}[1]{\textcolor{red}{\textbf{#1}}}
+\newcommand{\sz}[1]{\textcolor{grey}{\small\textsf{#1}}}
+\newcommand{\code}[1]{\texttt{\small #1}}
+\newcommand{\x}{$\times$}
+\newcommand{\pc}{\,\%}
+
+\begin{document}
+
+\begin{center}
+{\Huge\bfseries\color{navy} Scella}\\[4pt]
+{\large\color{grey}\itshape Quels produits pour fonder une startup}\\[4pt]
+{\small\color{grey} 19 août 2026 \; · \; sixième axe de la série \; · \; une trajectoire, plus un actif}
+\end{center}
+\vspace{2pt}
+
+\begin{these}
+\textbf{Le résultat central, et il renverse mes deux verdicts précédents.} \textbf{C1 --- la preuve
+réglementaire ---, que j'ai classée première deux fois comme \emph{actif}, est la plus mauvaise
+\emph{startup} des trois} : vendre à un service conformité demande six à dix-huit mois, des références
+clients qu'on n'a pas, et une patience qu'un fondateur seul ne peut pas financer. Le bon produit de
+départ est \textbf{C3, la passerelle souveraine à reçu} --- parce qu'un développeur l'installe
+lui-même, parce qu'elle s'autofinance ($-$27\pc{} mesuré), et parce qu'une vérification faite pour ce
+rapport a montré qu'elle tourne \textbf{en local, sans aucune clé d'API}. Mais il ne faut pas choisir :
+C3 est le \textbf{coin}, C1 est l'\textbf{expansion}, et la séquence résout précisément ce qui rend C1
+invendable seul --- une fois la passerelle en place, \emph{les données du registre réglementaire sont
+déjà capturées}.
+\end{these}
+
+\section{1 · Pourquoi l'axe change le vainqueur}
+
+Les cinq analyses précédentes évaluaient des \textbf{actifs}. Une startup évalue une
+\textbf{trajectoire}, et les critères n'ont presque rien en commun. Ce n'est pas un raffinement : c'est
+un changement de nature, et c'est pourquoi le classement bouge.
+
+\renewcommand{\arraystretch}{1.2}
+\begin{center}\small
+\begin{tabular}{@{}>{\raggedright\arraybackslash}p{7.4cm} >{\raggedright\arraybackslash}p{8.0cm}@{}}
+\toprule
+\textbf{Critère d'actif} \sz{(mes analyses précédentes)} & \textbf{Critère de startup} \sz{(celui-ci)} \\
+\midrule
+Extractible, juridiquement propre & Marché durable et croissant \\
+Coût de reconstruction évité & Qui paie, de quelle ligne, de façon récurrente \\
+Ne demande d'adhérer à aucune thèse & \textbf{Chemin vers le 1\textsuperscript{er} client accessible à UNE personne} \\
+Démontrable en une après-midi & \textbf{Vitesse jusqu'au premier euro} \\
+Rare & \textbf{Défendable dans la durée} \sz{($\neq$ dur à refaire une fois)} \\
+--- & \textbf{Adéquation fondateur--marché} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Les quatre critères en gras sont ceux qui tuent les fondateurs seuls, et \textbf{aucun n'apparaissait
+dans mes grilles précédentes}. « Rare » et « défendable dans la durée » semblent proches ; ils sont
+opposés en pratique. Une chose peut être unique aujourd'hui et rattrapée en dix-huit mois par une
+équipe financée --- c'est le cas de la plupart des raretés techniques.
+
+\section{2 · L'inversion : le meilleur actif est une mauvaise startup}
+
+\renewcommand{\arraystretch}{1.25}
+\begin{center}\small
+\begin{tabular}{@{}>{\raggedright\arraybackslash}p{3.4cm} >{\raggedright\arraybackslash}p{6.0cm} >{\raggedright\arraybackslash}p{6.0cm}@{}}
+\toprule
+& \textbf{C1 · Preuve réglementaire} & \textbf{C3 · Relais souverain} \\
+\midrule
+Marché & \best{excellent} --- échéance légale & bon et croissant \\
+Ligne budgétaire & conformité, récurrente & infra IA / FinOps --- \best{et il s'autofinance} \\
+\textbf{1\textsuperscript{er} client seul ?} & \pire{très difficile} --- achat, juridique, revue sécurité, DPA, références exigées & \best{facile} --- le développeur l'installe lui-même \\
+\textbf{Vitesse jusqu'au revenu} & \pire{6 à 18 mois} & \best{semaines} \\
+Défendabilité & bonne, mais la catégorie se remplit vite & faible sur le routage, \best{forte sur le reçu} \\
+\textbf{Fondateur--marché} & \pire{mauvaise} --- vendre à un service conformité est la motion B2B la plus dure & \best{excellente} --- technique vers technique \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+C1 exige exactement ce qu'un fondateur seul n'a pas : du temps, des références, et la patience d'un
+cycle d'achat conformité. La première question d'un acheteur conformité est \emph{« qui d'autre
+l'utilise ? »} --- et la réponse, aujourd'hui, est \textbf{personne}. Ce n'est pas un défaut du produit,
+c'est un défaut d'adéquation entre ce produit et un fondateur unique sans trésorerie.
+
+\section{3 · La mesure qui décide : la passerelle tourne en local, sans clé}
+
+C'est la vérification faite pour ce rapport, et elle change la faisabilité du coin.
+
+\begin{extrait}
+\code{crates/efe-swarm-gateway/src/lib.rs:1391} \\[3pt]
+\sz{« \textbf{E2E self-host RÉEL} (Ollama local, keyless). \code{ollama serve} + \code{gemma3:12b}
+requis. La passerelle exécute un consensus LLM par HTTP, persiste les records, puis re-prouve via
+\code{verify/:id}. »}
+\end{extrait}
+
+Et le garde de souveraineté n'est pas déclaratif : \code{frontier.rs:130} \textbf{avertit au démarrage}
+si le point de terminaison SLM ne pointe pas sur un hôte local --- \emph{« souveraineté NON
+garantie »}. La promesse est vérifiée par le binaire, pas par la plaquette.
+
+\begin{acquis}
+\textbf{Conséquence commerciale.} Un prospect peut faire tourner l'ensemble \textbf{sur sa propre
+machine} : aucun compte, aucune carte, aucune clé d'API, aucun octet qui sort. C'est le seul argument
+de souveraineté qu'un acheteur ne peut pas contester --- il le vérifie lui-même. Et c'est un canal de
+distribution, pas seulement une démonstration.
+\end{acquis}
+
+\begin{alerte}
+\textbf{La nuance qu'il faut dire.} Ce chemin est un test marqué \code{\#[ignore]}, pas une démo
+empaquetée. La \emph{capacité} est prouvée de bout en bout et exercée ; le \emph{produit} reste à
+emballer. C'est précisément pour cela que la démo locale est le livrable du premier jour et non une
+tâche de confort.
+\end{alerte}
+
+\section{4 · La recommandation : un coin et une expansion, pas un choix}
+
+\begin{piste}
+\textbf{Le coin --- C3, la passerelle souveraine à reçu.} Vendue sur le \textbf{coût} et la
+\textbf{souveraineté}. Adoptée par les développeurs. Revenu en semaines. \\[4pt]
+\textbf{L'expansion --- C1, le registre réglementaire.} Vendu \textbf{au client déjà déployé}, dont
+vous capturez déjà les données.
+\end{piste}
+
+\textbf{Pourquoi la séquence \emph{est} la thèse.} Une fois la passerelle dans le chemin, vous captez
+déjà tout ce qu'exige l'article 12 : les taps de C1, c'est la passerelle. Le produit conformité cesse
+d'être une vente froide de dix-huit mois et devient un \textbf{upsell sur un déploiement existant} ---
+la seule forme sous laquelle un fondateur seul peut vendre de la conformité. Et le substrat est déjà
+commun : les deux binaires partagent \code{provenance-dag} et le même \code{AnchorIndex}, mesuré.
+
+\begin{center}\small\itshape
+Vous monétisez l'urgent --- le coût --- et vous accumulez le durable --- la preuve. \\
+Le client achète du FinOps et découvre six mois plus tard qu'il est prêt pour l'AI Act.
+\end{center}
+
+\section{5 · Le produit, concrètement}
+
+\textbf{Ce que c'est :} une passerelle placée devant vos appels de modèles, qui
+
+\begin{enumerate}[leftmargin=1.5em,itemsep=1.5pt,topsep=2pt]
+\item \textbf{coupe le coût} --- $-$27\pc{} agrégé mesuré, jusqu'à $-$90\pc{} sur le
+      routable-bon-marché, latence 3\x{} inférieure sur les cas rapides ;
+\item \textbf{refuse de laisser sortir} ce que vous n'avez pas autorisé --- garde de démarrage
+      fail-closed, allowlist par tenant, aveu explicite de sortie en clair, caviardage PII ;
+\item \textbf{émet un reçu scellé par saut}, re-prouvable hors ligne par un binaire à \textbf{zéro
+      dépendance}, dont la troncature se détecte \textbf{sans aucune clé}.
+\end{enumerate}
+
+\textbf{Qui paie :} équipes plateforme et IA des entreprises régulées européennes --- assurance, santé,
+banque, secteur public. Budget infrastructure, \emph{pas} conformité. Puis, en expansion, le budget
+conformité pour le registre.
+
+\textbf{Modèle :} open-core. La passerelle et le vérifieur sont \textbf{gratuits et ouverts} --- le
+vérifieur zéro-dépendance est votre lettre de créance, il faut que n'importe qui puisse le lire
+\emph{en entier}. Le payant est la \textbf{couche de preuve} : ancrage, rétention, et génération du
+registre réglementaire.
+
+\section{6 · Pourquoi vous ne perdez pas contre la catégorie encombrée}
+
+Portkey, Helicone, LiteLLM, OpenRouter, Kong, Cloudflare AI Gateway : ils optimisent le coût et
+observent le trafic. \textbf{Aucun ne produit un artefact qu'un tiers peut re-prouver sans faire
+confiance à l'opérateur.}
+
+\begin{alerte}
+Ne vous positionnez donc \textbf{pas} comme « une passerelle LLM » : vous perdriez contre des produits
+gratuits et mieux financés, sur leur terrain. Positionnez-vous sur ce que vous êtes seul à faire ---
+\textbf{le périmètre scellé}. Le routage est la porte d'entrée ; \textbf{le reçu est le fossé.}
+\end{alerte}
+
+\section{7 · Les risques, sans adoucissement}
+
+\textbf{Le risque n'est pas le produit, c'est la distribution.} Un auteur, trois mois d'historique,
+zéro client. Tout ce qui précède suppose que vous mettiez le binaire dans les mains de gens --- et
+c'est la partie que le dépôt ne fait pas pour vous.
+
+\textbf{La passerelle est dans le chemin critique.} Je l'ai moi-même identifié comme l'écart décisif
+contre C3 : un tap qui tombe ne fait rien tomber, une passerelle qui tombe coupe l'accès aux modèles.
+\textbf{Mitigation non négociable} : livrer un mode observation d'abord, et un fail-open configurable.
+Sans cela vous ne franchirez pas la revue d'architecture d'un assureur.
+
+\textbf{Rien n'est servi par défaut.} Sept interrupteurs, aucun profil. À corriger avant le premier
+utilisateur.
+
+\textbf{C1 a une démo qui tourne, C3 n'en a pas.} J'ai exécuté celle de la pile preuve ; la passerelle
+a dix-sept exemples mais aucune démonstration en une commande. C'est le premier livrable.
+
+\textbf{Vous serez gratuit face à des gratuits.} L'open-core n'est viable que si la couche payante est
+nettement séparée --- d'où le reçu et le registre distincts dès le premier jour.
+
+\section{8 · Les 90 premiers jours}
+
+\renewcommand{\arraystretch}{1.25}
+\begin{center}\small
+\begin{tabular}{@{}>{\raggedright\arraybackslash}p{2.2cm} >{\raggedright\arraybackslash}p{13.4cm}@{}}
+\toprule
+\textbf{Période} & \textbf{Ce que vous livrez} \\
+\midrule
+\textbf{J1--J10} & Fusionner \code{main} \sz{(37 commits de retard --- un clone ne montre rien)} · écrire le profil · \textbf{la démo locale sans clé} : \code{docker compose up} $\rightarrow$ Ollama $+$ passerelle $+$ reçu $+$ vérifieur \\
+\textbf{J11--J30} & Ouvrir le cœur en open source. Publier le \textbf{vérifieur séparément} --- c'est l'artefact qui vous rend crédible, il doit se lire intégralement \\
+\textbf{J31--J60} & Dix conversations design-partner : équipes plateforme d'ETI régulées européennes. Vous vendez le coût, vous montrez le reçu \\
+\textbf{J61--J90} & \textbf{Premier pilote payant}, tarifé sur le coût économisé --- le seul jalon qui change votre régime \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\section{9 · Ce qu'il faut abandonner}
+
+Une startup se définit par l'exclusion, exactement comme un produit.
+
+\begin{itemize}[leftmargin=1.2em,itemsep=2pt,topsep=2pt]
+\item \textbf{Le runtime nano} --- six crates, aucun appelant dans le dépôt. Le retirer ou le câbler,
+      mais ne pas le porter.
+\item \textbf{La lignée latente comme produit} --- nano, $\Phi$, méta-essaim. Elle exige d'adhérer à
+      une thèse ; aucun client n'achète cela.
+\item \textbf{Fil C, le Cadrage, l'essaim médiateur} --- zéro ligne. Feuille de route, pas produit.
+      \sz{Le Cadrage a un $-$85\pc{} de tokens mesuré : c'est votre v2 du coin, pas votre v1.}
+\item \textbf{SOMNIA} --- hors dépôt, matériel jamais flashé, gold non résolu.
+\end{itemize}
+
+\begin{piste}
+\textbf{Une exception qui compte : gardez C2 comme preuve, pas comme produit.} Le canari de Lipschitz
+qui réfute son propre certificat ne se vend pas --- mais c'est ce qui fera croire à un acheteur
+technique que vous êtes sérieux. C'est votre lettre de créance, pas votre catalogue.
+\end{piste}
+
+\section{10 · Le jugement}
+
+\begin{acquis}
+\textbf{Votre instinct vaut mieux que mes cinq analyses précédentes.} Elles butaient toutes sur le
+même mur : sans client, le régime « acquisition produit » est fermé, donc tout plafonne à un montant
+d'actif modeste. \textbf{Une startup est exactement le chemin qui \emph{crée} ce client au lieu de
+constater son absence} --- et le dépôt est mieux taillé pour cela que pour un rachat, puisque ce qui
+manquait à l'actif est précisément ce qu'une startup fabrique.
+\end{acquis}
+
+\textbf{Faites la passerelle souveraine à reçu. Vendez le coût, livrez la preuve, et laissez le
+registre réglementaire devenir l'évidence de l'année suivante.}
+
+\begin{these}
+\small\textbf{Rappel de cadrage, inchangé dans toute la série.} Le reçu atteste l'\textbf{intégrité}
+d'une suite de pas, jamais la \textbf{correction} d'une décision. Il est \emph{tamper-evident pour un
+détenteur de clé}, pas \emph{trustless pour un tiers}. Les participants du mode réel exécutent une
+fusion latente Mode-1 numérique : ce ne sont pas des « vrais SLM ». Et les jugements de marché de ce
+document sont des \textbf{appréciations}, pas des mesures : ma connaissance du paysage concurrentiel
+s'arrête à mai 2026.
+\end{these}
+
+\section{Annexe · Vérifier chaque affirmation soi-même}
+
+\renewcommand{\arraystretch}{1.22}
+\begin{center}\small
+\begin{tabular}{@{}>{\raggedright\arraybackslash}p{5.6cm} >{\raggedright\arraybackslash}p{10.4cm}@{}}
+\toprule
+\textbf{Affirmation} & \textbf{Ce qui la rejoue} \\
+\midrule
+La passerelle tourne en local, sans clé &
+  \code{sed -n '1391,1400p' crates/efe-swarm-gateway/src/lib.rs} \newline
+  \code{cargo test -p efe-swarm-gateway -{}-lib -- -{}-ignored selfhost\_e2e\_real} \\
+Le garde exige un hôte local &
+  \code{sed -n '125,140p' crates/efe-swarm-gateway/src/frontier.rs} \\
+Le substrat est commun aux deux &
+  \code{grep -rn 'provenance\_dag::AnchorIndex' crates/efe-swarm-gateway/src \textbackslash} \newline
+  \code{\ \ crates/efe-meta-swarm-server/src} \\
+C3 fait 11 crates, déjà découplé &
+  \code{Scella\_Produit\_Unique}, §2 --- son annexe donne la commande \\
+C1 a une démo qui tourne &
+  \code{cargo run -q -{}-release -p reg-evidence -{}-example csddd\_seed} \\
+La passerelle n'a pas de démo &
+  \code{ls scripts/ | grep -i demo} \sz{$\rightarrow$ seulement celle du méta-essaim} \\
+\code{main} accuse 37 commits &
+  \code{git rev-list -{}-count main..HEAD} \\
+Le runtime nano n'a aucun appelant &
+  \code{grep -rl efe-nano-inference-daemon crates/*/Cargo.toml} \sz{$\rightarrow$ vide} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Un avertissement pour finir, et il porte sur la nature du document. Les \textbf{faits techniques} sont
+mesurés au dépôt et rejouables. Les \textbf{jugements de marché} --- qui achète, à quelle vitesse,
+contre qui --- sont des appréciations structurées pour être discutées, et elles reposent sur une
+connaissance du paysage arrêtée à mai 2026. Le seul moyen de les trancher n'est pas une analyse de
+plus : \textbf{ce sont les dix conversations design-partner de la période J31--J60.}
+
+\end{document}
