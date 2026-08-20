@@ -684,6 +684,88 @@ mod tests {
         assert_eq!(resp.status(), StatusCode::NOT_FOUND, "route non montée ⟹ l'URI n'existe pas");
     }
 
+    /// **M0 · une capacité éteinte se dit — mais pas au même public selon le cas.**
+    ///
+    /// L'architecture de M0 posait la règle des « trois endroits » : une capacité de classe B
+    /// éteinte doit être dite dans le rapport de démarrage, sur la surface servie, ET dans le reçu.
+    /// Écrire ce test a montré que la règle, telle que rédigée, est **trop forte** — et le code
+    /// avait raison contre elle. Ce test fige ce qui est réellement vrai, et pourquoi.
+    ///
+    /// **`export de bundle` éteint** : la route n'est pas montée, donc 404 — délibérément
+    /// indistinguable d'une URI inconnue (voir le test juste au-dessus). Répondre 501 dirait à un
+    /// client anonyme « cette surface existe, elle est seulement fermée » : c'est une fuite de
+    /// capacité. Les deux règles se contredisent ici, et c'est la discrétion qui gagne. Le prix est
+    /// que l'extinction se dit à l'**opérateur** — dans le rapport de démarrage — et à lui seul.
+    ///
+    /// **`ancre` éteinte** : la route sert quand même, et le bundle porte `anchored: false`. La
+    /// différence tient en une phrase : ici l'absence **change la garantie d'un artefact servi**.
+    /// Un auditeur qui reçoit un bundle sans savoir qu'il n'est pas ancré croit tenir une preuve
+    /// contre la troncature alors qu'il n'en tient aucune. L'artefact doit donc porter sa propre
+    /// dégradation, quel qu'en soit le lecteur.
+    ///
+    /// La règle juste, celle que ce test garde : **le rapport de démarrage toujours ; l'artefact
+    /// servi si et seulement si l'absence change la garantie de cet artefact ; la surface jamais,
+    /// quand la révéler la trahit.**
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn une_capacite_eteinte_se_dit_a_qui_de_droit() {
+        use crate::profile::{Observed, Report, Status};
+
+        // ── cas 1 : export de bundle éteint ─────────────────────────────────────────────
+        let rapport = Report::from_observed(&Observed { bundle: false, ..Observed::default() });
+        assert_eq!(
+            rapport.status_of("export de bundle"),
+            Some(Status::Degradee),
+            "l'opérateur DOIT le lire au démarrage — c'est le seul endroit où il l'apprendra"
+        );
+
+        let (app, _store) = app_with_store();
+        let id = seed_run(&app).await;
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .uri(format!("/v1/swarm/bundle/{id}"))
+                    .header("x-efe-roles", HeaderValue::from_static("auditor"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(
+            resp.status(),
+            StatusCode::NOT_FOUND,
+            "et le client, lui, n'apprend RIEN : 404, pas 501 — une surface fermée ne s'annonce pas"
+        );
+
+        // ── cas 2 : ancre éteinte, bundle servi ─────────────────────────────────────────
+        let rapport =
+            Report::from_observed(&Observed { bundle: true, anchor: false, ..Observed::default() });
+        assert_eq!(
+            rapport.status_of("ancre"),
+            Some(Status::Degradee),
+            "le rapport le dit — premier endroit"
+        );
+
+        let (app, _store) = app_with_bundle();
+        let id = seed_run(&app).await;
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .uri(format!("/v1/swarm/bundle/{id}"))
+                    .header("x-efe-roles", HeaderValue::from_static("auditor"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK, "sans ancre, le bundle se sert quand même");
+        assert_eq!(
+            body_json(resp).await["anchored"],
+            json!(false),
+            "et il PORTE sa dégradation — second endroit. Sans cette ligne, l'auditeur croirait \
+             tenir une preuve contre la troncature."
+        );
+    }
+
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     async fn bundle_export_serves_a_reprovable_bundle() {
         let (app, _store) = app_with_bundle();

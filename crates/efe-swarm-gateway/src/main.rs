@@ -107,14 +107,23 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut state = SwarmGatewayState::in_memory().with_keys(keys);
     println!("→ clé de provenance : {key_label}");
 
-    // ── M0 : le profil servi, en clair, AVANT d'écouter ────────────────────────────────
-    // Ce que le binaire sert réellement — dérivé du même registre que les lectures
-    // ci-dessus, donc incapable d'affirmer plus que le code ne fait.
-    print!("{}", efe_swarm_gateway::profile::Report::from_env().render_human());
+    // ── M0 : on OBSERVE ce qui se câble, on ne DÉDUIT pas de l'environnement ──────────
+    // Le rapport s'imprime en toute fin, alimenté par ce qui a réellement été branché.
+    // L'imprimer ICI — avant le store, l'auth, le coordinator — annoncerait des capacités
+    // que le processus ne sert pas encore : le défaut exact que M0 existe pour supprimer.
+    let mut observed = efe_swarm_gateway::profile::Observed {
+        provenance_non_forgeable: master_present,
+        frontier_intended: efe_swarm_gateway::profile::read::frontier_enabled(),
+        allowlist: efe_swarm_gateway::profile::read::tenant_allowlist().is_some(),
+        slm: efe_swarm_gateway::profile::read::slm_reformulator_url().is_some(),
+        attestation: efe_swarm_gateway::profile::read::bundle_signing_seed().is_some(),
+        ..Default::default()
+    };
 
     // ── Routeur frontière (Network) + mapping provider→modèle (Inc.4 / Inc.4.b) ──
     if let Some(router_ep) = efe_swarm_gateway::profile::read::router_endpoint() {
         state = state.with_router_endpoint(router_ep);
+        observed.router = true;
         println!("→ routeur frontière câblé (Network activé) — clés provider détenues server-side.");
         if let Some(models) = efe_swarm_gateway::profile::read::router_models() {
             state = state.with_router_models(efe_swarm_gateway::RouterMap::from_env_str(&models));
@@ -200,6 +209,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         match efe_swarm_gateway::coordinator_from_env() {
             Some(coord) => {
                 state = state.with_coordinator(coord);
+                observed.frontier = true;
                 println!("→ coordination frontière (Couche 2) activée — providers câblés depuis l'env.");
             }
             None => eprintln!(
@@ -220,6 +230,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let pg_mem = efe_swarm_gateway::PgMemoryStore::connect(&url, state.keys.clone()).await?;
         pg_mem.migrate().await?;
         state = state.with_memory_store(std::sync::Arc::new(pg_mem));
+        observed.durable_store = true;
         println!("→ PgRunStore + PgMemoryStore câblés (persistance durable, write-once).");
     }
 
@@ -227,6 +238,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     #[cfg(feature = "oidc")]
     if let Some(verifier) = efe_swarm_gateway::OidcVerifier::from_env()? {
         state = state.with_oidc(std::sync::Arc::new(verifier));
+        observed.oidc = true;
         println!("→ auth OIDC activée (JWT ES256, clé publique server-side).");
     }
 
@@ -244,6 +256,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         match p.parse::<efe_swarm_gateway::PolicyKind>() {
             Ok(policy) => {
                 state = state.with_pii(efe_swarm_gateway::PiiConfig::new(policy));
+                observed.pii = true;
                 println!("→ PII opt-in : politique par défaut = {}", policy.as_str());
             }
             // GAP-PII : une valeur invalide (typo 'reduct') ne doit PAS être ignorée en silence —
@@ -254,6 +267,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             ),
         }
     }
+
+    // ── M0 : le profil SERVI — après TOUT le câblage, depuis l'état réel ─────────────
+    observed.anchor = state.anchor_sink.is_some();
+    observed.bundle = state.bundle_export;
+    print!(
+        "{}",
+        efe_swarm_gateway::profile::Report::from_observed(&observed)
+            // Les valeurs REFUSÉES se lisent à la source : une fois `Observed` réduit à des
+            // booléens, « posé avec une mauvaise valeur » est indistinguable de « pas posé ».
+            .with_invalides(efe_swarm_gateway::profile::invalides_from_env())
+            .render_human()
+    );
 
     let app = router(state);
     let listener = tokio::net::TcpListener::bind(&addr).await?;
@@ -275,20 +300,6 @@ fn key_source_for(master_present: bool) -> (HmacKeySource, &'static str) {
     }
 }
 
-/// **M4 (§1.4)** : le flag d'activation de la frontière — **source UNIQUE** de vérité,
-/// réutilisée par le préflight ET le câblage du coordinator (interdit tout drift). Égalité
-/// stricte `"true"` (fail-closed) ; une valeur non-vide ≠ `"true"` émet un avertissement ops
-/// (activation silencieusement ignorée, footgun `1`/`TRUE`/`yes`).
-fn frontier_flag_enabled() -> bool {
-    match efe_swarm_gateway::profile::read::frontier_raw() {
-        Some(v) if v == "true" => true,
-        Some(v) if !v.trim().is_empty() => {
-            eprintln!("AVERTISSEMENT: EFE_LLM_FRONTIER_ENABLED='{v}' ≠ 'true' ⟹ frontière NON activée (attendu exactement 'true').");
-            false
-        }
-        _ => false,
-    }
-}
 
 /// **M4 (§1)** : le préflight go/no-go de la frontière — la **triade** de production. **Pur**
 /// (testable sans muter l'env, sur le patron de `key_source_for`). Refuse de démarrer si la

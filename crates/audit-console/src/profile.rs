@@ -38,7 +38,7 @@ pub struct Switch {
     pub class: Class,
 }
 
-/// Les sept interrupteurs, déclarés une seule fois.
+/// Les six interrupteurs, déclarés une seule fois.
 pub const REGISTRY: &[Switch] = &[
     Switch {
         name: "EFE_CONSOLE_ADDR",
@@ -90,6 +90,16 @@ pub fn switch(name: &str) -> Option<&'static Switch> {
     REGISTRY.iter().find(|s| s.name == name)
 }
 
+/// « L'opérateur a-t-il réellement posé cette variable ? » — posée vide, elle ne compte pas.
+///
+/// Fonction **pure**, partagée par la lecture d'environnement et par la résolution depuis un
+/// fichier de profil : une seule sémantique, donc aucune divergence possible entre ce que le
+/// binaire fait et ce que le test vérifie.
+#[must_use]
+pub fn present_of(v: Option<&str>) -> bool {
+    v.map(|s| !s.trim().is_empty()).unwrap_or(false)
+}
+
 /// Les lectures — **le seul endroit du crate qui lit l'environnement**.
 pub mod read {
     /// La valeur effective d'un interrupteur : celle de l'environnement, sinon le défaut du
@@ -103,7 +113,7 @@ pub mod read {
     /// `true` si l'opérateur a réellement posé la variable (par opposition au défaut).
     #[must_use]
     pub fn is_set(name: &str) -> bool {
-        std::env::var(name).map(|v| !v.trim().is_empty()).unwrap_or(false)
+        super::present_of(std::env::var(name).ok().as_deref())
     }
 
     /// Le chemin de réhydratation, s'il y en a un.
@@ -130,12 +140,24 @@ pub struct Report {
 }
 
 impl Report {
+    /// Le rapport que dicte l'environnement du process — ce que le binaire imprime au démarrage.
     #[must_use]
     pub fn from_env() -> Self {
+        Self::from_lookup(|n| std::env::var(n).ok())
+    }
+
+    /// Le rapport que dicte une **table de valeurs quelconque** — un fichier de profil, par exemple.
+    ///
+    /// C'est la seule forme testable sans muter l'environnement partagé du process : deux tests qui
+    /// posent la même variable en parallèle se voleraient mutuellement leur réponse. `from_env`
+    /// n'en est plus qu'un cas particulier, donc le chemin servi et le chemin testé **ne peuvent
+    /// pas** diverger — c'est exactement la garantie que M0 existe pour donner.
+    #[must_use]
+    pub fn from_lookup(f: impl Fn(&str) -> Option<String>) -> Self {
         let mut lines = Vec::new();
         let mut secrets_par_defaut = Vec::new();
         for s in REGISTRY {
-            let set = read::is_set(s.name);
+            let set = present_of(f(s.name).as_deref());
             let (status, detail) = match (set, s.class) {
                 (true, _) => ("SERVIE", s.buys.to_string()),
                 (false, Class::DegradedSecret) => {

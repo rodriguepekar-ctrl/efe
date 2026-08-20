@@ -37,8 +37,14 @@ use serde_json::{json, Value};
 /// reçu. Le précédent existait déjà dans le dépôt : *racine vide ⟺ aucun scellement*.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Class {
-    /// Absence ou invalidité ⟹ **refus de démarrer** (`exit 78`, `EX_CONFIG`).
-    /// Réservée à ce dont l'absence rendrait une affirmation **fausse**.
+    /// Invalidité ⟹ **refus de démarrer** (`exit 78`, `EX_CONFIG`).
+    ///
+    /// Deux formes existent dans ce binaire, et il fallait les distinguer plutôt que de laisser la
+    /// classe vide : `EFE_NANO_AUDIT_HMAC_MASTER` est **dégradée si absente** (repli sur la clé
+    /// publique) mais **fatale si fournie et invalide** (< 32 octets : chaque scellement
+    /// échouerait 500) ; `EFE_LLM_FRONTIER_ENABLED=true` est **fatale si l'une des quatre
+    /// préconditions manque**. D'où le drapeau [`Switch::fatal_if_invalid`] plutôt qu'une classe
+    /// à part : la même variable peut relever de deux régimes selon sa valeur.
     Fatal,
     /// Absence ⟹ démarre, mais une **capacité s'éteint** — et le rapport le dit en clair.
     Degraded,
@@ -71,6 +77,12 @@ pub struct Switch {
     pub absence_costs: &'static str,
     /// La classe (voir [`Class`]).
     pub class: Class,
+    /// `true` ⟹ **fournie mais invalide ⟹ `exit 78`**, même si son absence n'est que dégradante.
+    ///
+    /// Sans ce drapeau la taxonomie serait morte : `Class::Fatal` n'aurait aucun porteur, alors
+    /// que le binaire refuse bel et bien de démarrer dans deux cas. Une classe déclarée et jamais
+    /// employée fait paraître la conception plus rigoureuse que le code.
+    pub fatal_if_invalid: bool,
 }
 
 // ═════════════════════════════════════════════════════════════════════════════════════════════
@@ -88,36 +100,42 @@ pub const REGISTRY: &[Switch] = &[
         buys: "l'adresse d'écoute",
         absence_costs: "écoute sur 0.0.0.0:8080",
         class: Class::Tuning,
+        fatal_if_invalid: false,
     },
     Switch {
         name: "EFE_GATEWAY_MAX_INFLIGHT_RUNS",
         buys: "le plafond de runs simultanés",
         absence_costs: "défaut max(4, cœurs) — backpressure honnête en 429 au-delà",
         class: Class::Tuning,
+        fatal_if_invalid: false,
     },
     Switch {
         name: "EFE_GATEWAY_MAX_INFLIGHT_PER_TENANT",
         buys: "l'équité entre tenants",
         absence_costs: "défaut max(1, global−1) : aucun tenant ne prend le dernier permit",
         class: Class::Tuning,
+        fatal_if_invalid: false,
     },
     Switch {
         name: "EFE_GATEWAY_MAX_WIDTH",
         buys: "le plafond serveur de largeur",
         absence_costs: "défaut 32 — un client ne dimensionne pas la machine d'autrui",
         class: Class::Tuning,
+        fatal_if_invalid: false,
     },
     Switch {
         name: "EFE_GATEWAY_MAX_DEADLINE_MS",
         buys: "le plafond serveur de deadline",
         absence_costs: "défaut 300 000 ms (5 min)",
         class: Class::Tuning,
+        fatal_if_invalid: false,
     },
     Switch {
         name: "EFE_SWARM_WIDTH",
         buys: "une largeur fixe par défaut",
         absence_costs: "largeur automatique (cœurs / backend déclaré)",
         class: Class::Tuning,
+        fatal_if_invalid: false,
     },
     // ── Provenance : le cœur ──────────────────────────────────────────────────────────────────
     Switch {
@@ -126,67 +144,82 @@ pub const REGISTRY: &[Switch] = &[
         absence_costs: "repli sur la clé de TEST PUBLIQUE — le reçu devient FORGEABLE, \
                         `verify` cesse d'être fiable. Jamais en production.",
         class: Class::Degraded,
+        // FOURNIE mais < 32 octets ⟹ `exit 78` : booter « vert » puis échouer 500 à chaque
+        // scellement serait exactement le vert malhonnête que ce dépôt combat.
+        fatal_if_invalid: true,
     },
     Switch {
         name: "EFE_SWARM_ANCHOR_LOG",
         buys: "le journal d'ancres — une troncature devient détectable SANS CLÉ",
         absence_costs: "aucune ancre publiée : un bundle tronqué se re-prouve parfaitement",
         class: Class::Degraded,
+        fatal_if_invalid: false,
     },
     Switch {
         name: "EFE_SWARM_BUNDLE_ENABLED",
         buys: "la route d'export `GET /v1/swarm/bundle/:id`",
         absence_costs: "route NON montée (404) — aucun export vers un vérifieur tiers",
         class: Class::Degraded,
+        fatal_if_invalid: false,
     },
     Switch {
         name: "EFE_SWARM_BUNDLE_SIGNING_SEED",
         buys: "l'attestation ed25519 de la racine du bundle",
         absence_costs: "bundle servi NON attesté — le champ est absent, jamais vide",
         class: Class::Degraded,
+        fatal_if_invalid: false,
     },
     Switch {
         name: "DATABASE_URL",
         buys: "un store DURABLE (Postgres, write-once)",
         absence_costs: "store en mémoire : la provenance ne survit pas au redémarrage",
         class: Class::Degraded,
+        fatal_if_invalid: false,
     },
     // ── Souveraineté et frontière ─────────────────────────────────────────────────────────────
     Switch {
         name: "EFE_LLM_FRONTIER_ENABLED",
         buys: "les appels aux modèles frontière (egress PAYANT vers un tiers)",
         absence_costs: "aucun appel frontière — `/v1/llm/*` inactif",
-        class: Class::Degraded,
+        class: Class::Fatal,
+        // `=true` sans l'une des quatre préconditions (clé, OIDC, store durable, capacité PII)
+        // ⟹ `exit 78`. Un egress PAYANT vers un tiers ne dégrade jamais en silence.
+        fatal_if_invalid: true,
     },
     Switch {
         name: "EFE_LLM_TENANT_ALLOWLIST",
         buys: "l'allowlist d'egress par tenant",
         absence_costs: "registre VIDE — fail-closed total, aucun egress autorisé",
         class: Class::Degraded,
+        fatal_if_invalid: false,
     },
     Switch {
         name: "EFE_LLM_ACCEPT_CLEARTEXT_EGRESS",
         buys: "la reconnaissance EXPLICITE que les prompts sortent en clair",
         absence_costs: "sans la feature `pii`, la frontière REFUSE de démarrer",
         class: Class::Degraded,
+        fatal_if_invalid: false,
     },
     Switch {
         name: "EFE_LLM_MAX_BUDGET_CENTS",
         buys: "le plafond serveur de dépense par requête",
         absence_costs: "défaut 10 000 c — un client ne dimensionne pas la dépense d'autrui",
         class: Class::Tuning,
+        fatal_if_invalid: false,
     },
     Switch {
         name: "EFE_PII_DEFAULT_POLICY",
         buys: "la politique de caviardage par défaut",
         absence_costs: "politique `Off` — aucun caviardage appliqué",
         class: Class::Degraded,
+        fatal_if_invalid: false,
     },
     Switch {
         name: "EFE_SLM_REFORMULATOR_URL",
         buys: "le relais SLM local entre modèles frontière",
         absence_costs: "aucune médiation SLM — les dialectes ne sont pas traduits",
         class: Class::Degraded,
+        fatal_if_invalid: false,
     },
     // ── Routage ───────────────────────────────────────────────────────────────────────────────
     Switch {
@@ -194,12 +227,14 @@ pub const REGISTRY: &[Switch] = &[
         buys: "le point de terminaison du routeur de modèles",
         absence_costs: "mode réseau indisponible",
         class: Class::Tuning,
+        fatal_if_invalid: false,
     },
     Switch {
         name: "EFE_SWARM_ROUTER_MODELS",
         buys: "la table famille→modèle",
         absence_costs: "table vide — tout en passthrough",
         class: Class::Tuning,
+        fatal_if_invalid: false,
     },
     // ── Authentification ──────────────────────────────────────────────────────────────────────
     Switch {
@@ -207,26 +242,112 @@ pub const REGISTRY: &[Switch] = &[
         buys: "l'authentification OIDC (clé PUBLIQUE, aucun secret manipulé)",
         absence_costs: "extraction des rôles par en-têtes `x-efe-*` — dev/standalone uniquement",
         class: Class::Degraded,
+        fatal_if_invalid: false,
     },
     Switch {
         name: "EFE_OIDC_ISSUER_URL",
         buys: "la validation de l'émetteur du jeton",
         absence_costs: "émetteur non vérifié",
         class: Class::Tuning,
+        fatal_if_invalid: false,
     },
     Switch {
         name: "EFE_OIDC_AUDIENCE",
         buys: "la validation d'audience (chemin essaim)",
         absence_costs: "audience non vérifiée",
         class: Class::Tuning,
+        fatal_if_invalid: false,
     },
     Switch {
         name: "EFE_OIDC_LLM_AUDIENCE",
         buys: "la validation d'audience (chemin frontière)",
         absence_costs: "défaut `efe-llm`",
         class: Class::Tuning,
+        fatal_if_invalid: false,
     },
 ];
+
+/// Les interrupteurs **booléens stricts** : seule la chaîne exacte `"true"` active.
+///
+/// Cette liste existe parce que le contraire est un piège silencieux. `EFE_LLM_FRONTIER_ENABLED=1`
+/// n'active rien : `flag_of` exige `"true"`. Le déploiement démarre, la capacité reste éteinte, et
+/// le rapport annonce « DÉGRADÉE » — ce qui est exact, mais laisse croire à l'opérateur qu'il a
+/// oublié la variable alors qu'il l'a posée. Il cherchera au mauvais endroit, potentiellement
+/// longtemps.
+///
+/// Le dépôt savait : `main.rs` portait une fonction qui imprimait précisément cet avertissement,
+/// documentée « source UNIQUE de vérité (interdit tout drift) ». **Elle n'était appelée par
+/// personne**, et le diagnostic était donc perdu. Il est ici, pour les trois drapeaux au lieu d'un.
+///
+/// Le test `les_flags_stricts_sont_exactement_ceux_lus_par_flag` interdit à cette liste de dériver
+/// des appels réels à `read::flag`.
+pub const FLAGS_STRICTS: &[&str] =
+    &["EFE_LLM_ACCEPT_CLEARTEXT_EGRESS", "EFE_LLM_FRONTIER_ENABLED", "EFE_SWARM_BUNDLE_ENABLED"];
+
+/// Les écritures qui expriment sans ambiguïté « éteint ». Y répondre par un avertissement serait
+/// reprocher à l'opérateur d'avoir obtenu ce qu'il demandait.
+const NEGATIONS: &[&str] = &["false", "0", "no", "off", "n"];
+
+/// Une valeur **fournie mais refusée** — le cas que ni « présente » ni « absente » ne décrit, et
+/// le seul où l'opérateur a agi sans que son geste ait le moindre effet.
+///
+/// N'imprimer la valeur reçue est sûr **uniquement** parce que le champ est restreint aux drapeaux
+/// booléens de [`FLAGS_STRICTS`] : aucun d'eux ne porte de secret. Étendre ce mécanisme à un
+/// interrupteur porteur de secret exigerait de masquer `fourni`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Invalide {
+    pub name: &'static str,
+    /// La valeur que l'opérateur a réellement posée.
+    pub fourni: String,
+    pub attendu: &'static str,
+    /// Ce qui se passe en conséquence — repris tel quel du registre, jamais réécrit.
+    pub consequence: &'static str,
+}
+
+/// Les valeurs fournies mais refusées, depuis une table quelconque — un fichier de profil compris.
+///
+/// Fonction **pure**, donc un test de profil peut refuser qu'un `.env` livré contienne un footgun :
+/// une faute de frappe versionnée se propagerait à chaque déploiement qui suit ce fichier.
+#[must_use]
+pub fn invalides_from_lookup(get: impl Fn(&str) -> Option<String>) -> Vec<Invalide> {
+    FLAGS_STRICTS
+        .iter()
+        .filter_map(|name| {
+            let v = get(name)?;
+            let t = v.trim();
+            // Absente ou vide : ce n'est pas une valeur refusée, c'est une absence. Le rapport la
+            // traite déjà, et la confondre avec un footgun noierait le vrai signal.
+            if t.is_empty() || t == "true" {
+                return None;
+            }
+            // Une extinction DÉLIBÉRÉE n'est pas un footgun. `profiles/demo.env` écrit
+            // `EFE_LLM_FRONTIER_ENABLED=false` : la capacité est éteinte, et c'est exactement ce
+            // que l'opérateur a demandé. Crier ici reviendrait à reprocher à quelqu'un d'avoir
+            // obtenu ce qu'il voulait — et un rapport qui crie à tort n'est plus lu du tout.
+            //
+            // Le critère n'est donc pas « la valeur est-elle acceptée ? » mais « le résultat
+            // correspond-il à l'intention ? ». `false` → éteint : intention respectée. `1` →
+            // éteint : intention trahie. La comparaison à `true` reste sensible à la casse, elle,
+            // car `TRUE` est une TENTATIVE D'ACTIVATION, et c'est précisément le piège documenté.
+            if NEGATIONS.contains(&t.to_ascii_lowercase().as_str()) {
+                return None;
+            }
+            let sw = switch(name)?;
+            Some(Invalide {
+                name: sw.name,
+                fourni: t.to_string(),
+                attendu: "exactement `true` pour activer, ou `false` pour éteindre explicitement",
+                consequence: sw.absence_costs,
+            })
+        })
+        .collect()
+}
+
+/// Les valeurs fournies mais refusées dans l'environnement du process.
+#[must_use]
+pub fn invalides_from_env() -> Vec<Invalide> {
+    invalides_from_lookup(|k| std::env::var(k).ok())
+}
 
 /// Cherche un interrupteur par nom. `None` ⟹ il n'est pas déclaré, donc T1 aurait dû mordre.
 #[must_use]
@@ -260,11 +381,35 @@ pub mod read {
         v.map(|s| !s.trim().is_empty()).unwrap_or(false)
     }
 
+    /// **Le goulot d'étranglement de M0.** Les trois primitives ci-dessous sont les SEULS endroits
+    /// du binaire qui touchent `std::env::var` — `profile_no_raw_env.rs` (T1) l'impose pour tout le
+    /// reste du crate. Chacune passe d'abord par ici.
+    ///
+    /// Une variable lue sans être déclarée au [`REGISTRY`] n'apparaîtrait dans **aucun** rapport :
+    /// ce serait un levier invisible, que l'opérateur ne pourrait ni voir ni actionner sciemment.
+    /// Comme les trois primitives reçoivent leur nom en paramètre — aucun littéral ne se cache
+    /// ailleurs —, il suffit de le vérifier ici pour que le trou soit fermé partout, y compris
+    /// pour un nom construit à l'exécution qu'aucun balayage de source n'attraperait.
+    ///
+    /// L'assertion est de **debug** : elle tombe pendant les tests et en développement, et ne coûte
+    /// rien en production. Un profil est lu au démarrage, pas dans une boucle chaude.
+    #[track_caller]
+    fn declare(name: &str) {
+        debug_assert!(
+            super::switch(name).is_some(),
+            "`{name}` est lu par le binaire mais N'EST PAS déclaré au registre : il n'apparaîtra \
+             dans aucun rapport de profil. Ajouter son `Switch` — avec ce qu'il achète et ce que \
+             son absence coûte — plutôt que de le lire en douce."
+        );
+    }
+
     fn flag(name: &str) -> bool {
+        declare(name);
         flag_of(std::env::var(name).ok().as_deref())
     }
 
     fn raw(name: &str) -> Option<String> {
+        declare(name);
         std::env::var(name).ok()
     }
 
@@ -272,6 +417,7 @@ pub mod read {
     /// jamais imprimer un secret.
     #[must_use]
     pub fn present(name: &str) -> bool {
+        declare(name);
         present_of(std::env::var(name).ok().as_deref())
     }
 
@@ -450,6 +596,56 @@ impl Status {
     }
 }
 
+/// Ce que le binaire a **réellement câblé**, observé APRÈS l'assemblage de l'état.
+///
+/// ## Pourquoi ce type existe — et c'est un correctif, pas un raffinement
+///
+/// [`Resolved`] décrit l'**intention** lue dans l'environnement ; `Observed` décrit le **service**.
+/// Les deux divergent : `DATABASE_URL` présent ne prouve pas qu'un store durable soit branché, et
+/// `EFE_LLM_FRONTIER_ENABLED=true` sans la feature `frontier-llm` ne sert **aucune** frontière.
+///
+/// Un rapport calculé depuis la seule intention porterait donc exactement le défaut que M0 existe
+/// pour supprimer : *décrire le déclaré en croyant décrire le servi*. C'est ce qu'il faisait avant
+/// ce type — et le rapport s'imprimait de surcroît AVANT le câblage.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct Observed {
+    /// La clé de provenance est-elle dérivée d'un master (et non la clé de test publique) ?
+    pub provenance_non_forgeable: bool,
+    pub anchor: bool,
+    pub bundle: bool,
+    pub attestation: bool,
+    pub durable_store: bool,
+    /// Un coordinator frontière est-il réellement câblé ?
+    pub frontier: bool,
+    /// La frontière était-elle **demandée** ? Demandée sans être câblée ⟹ [`Status::Refusee`].
+    pub frontier_intended: bool,
+    pub allowlist: bool,
+    pub pii: bool,
+    pub slm: bool,
+    pub oidc: bool,
+    pub router: bool,
+}
+
+/// Le régime d'un rapport : ce qu'il décrit réellement.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Mode {
+    /// Calculé depuis l'environnement, **sans rien câbler** (`--profile-report`). Décrit ce que la
+    /// configuration *demande*. Le dire évite qu'un lecteur y voie une garantie de service.
+    Intention,
+    /// Calculé depuis l'état assemblé, après câblage. Décrit ce qui est **servi**.
+    Servi,
+}
+
+impl Mode {
+    #[must_use]
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Mode::Intention => "intention",
+            Mode::Servi => "servi",
+        }
+    }
+}
+
 /// Une ligne du rapport : une capacité, son état, et **ce que son absence coûte** si elle est
 /// dégradée.
 #[derive(Debug, Clone)]
@@ -464,10 +660,16 @@ pub struct CapabilityReport {
 /// Le rapport complet — ce que le binaire **sert réellement**.
 #[derive(Debug, Clone)]
 pub struct Report {
+    /// Ce que ce rapport décrit : l'intention, ou le service. Jamais implicite.
+    pub mode: Mode,
     pub capabilities: Vec<CapabilityReport>,
     /// Les features compilées, qui ne sont pas des variables d'environnement mais changent
     /// autant le comportement servi.
     pub features: Vec<&'static str>,
+    /// Les interrupteurs posés avec une valeur que le binaire **refuse**. Vide dans le cas normal ;
+    /// non vide, c'est le renseignement le plus utile du rapport, car il désigne une action de
+    /// l'opérateur restée sans effet.
+    pub invalides: Vec<Invalide>,
 }
 
 /// Fabrique la ligne d'une capacité gouvernée par un interrupteur du registre.
@@ -479,6 +681,24 @@ fn line(governed_by: &'static str, capability: &'static str, on: bool) -> Capabi
         (Status::Degradee, sw.map(|s| s.absence_costs.to_string()).unwrap_or_default())
     };
     CapabilityReport { capability, status, detail, governed_by }
+}
+
+/// La ligne d'une capacité **demandée mais non servie** — le seul cas qui mérite `REFUSÉE`.
+///
+/// L'exemple concret : `EFE_LLM_FRONTIER_ENABLED=true` sans la feature `frontier-llm` compilée, ou
+/// sans clé provider. Annoncer « DÉGRADÉE » y serait trop doux : l'opérateur a **demandé** la
+/// capacité et ne l'aura pas. Il doit lire un refus, pas une nuance.
+fn line_refusee(
+    governed_by: &'static str,
+    capability: &'static str,
+    why: &str,
+) -> CapabilityReport {
+    CapabilityReport {
+        capability,
+        status: Status::Refusee,
+        detail: format!("DEMANDÉE mais non servie — {why}"),
+        governed_by,
+    }
 }
 
 /// L'état **résolu** des capacités — ce que le rapport consomme.
@@ -550,7 +770,60 @@ impl Report {
     /// code ne fait.
     #[must_use]
     pub fn from_env() -> Self {
-        Self::from_resolved(&Resolved::from_env())
+        Self::from_resolved(&Resolved::from_env()).with_invalides(invalides_from_env())
+    }
+
+    /// Greffe les valeurs refusées sur un rapport déjà calculé.
+    ///
+    /// Séparé plutôt que fondu dans les constructeurs pour une raison précise : [`Resolved`] a déjà
+    /// réduit chaque interrupteur à un booléen, et une valeur refusée n'est plus distinguable d'une
+    /// absence une fois cette réduction faite. Il faut donc la lire à la source — et c'est aussi ce
+    /// qui permet à un test de la calculer depuis un fichier.
+    #[must_use]
+    pub fn with_invalides(mut self, v: Vec<Invalide>) -> Self {
+        self.invalides = v;
+        self
+    }
+
+    /// Le rapport du **service** — construit depuis ce qui a été réellement câblé.
+    ///
+    /// C'est celui qu'imprime le binaire au démarrage, APRÈS l'assemblage de l'état. Le calculer
+    /// avant, ou depuis l'environnement seul, annoncerait des capacités que le processus ne sert
+    /// pas encore (ou pas du tout).
+    #[must_use]
+    pub fn from_observed(o: &Observed) -> Self {
+        let mut capabilities = vec![
+            line("EFE_NANO_AUDIT_HMAC_MASTER", "provenance", o.provenance_non_forgeable),
+            line("EFE_SWARM_ANCHOR_LOG", "ancre", o.anchor),
+            line("EFE_SWARM_BUNDLE_ENABLED", "export de bundle", o.bundle),
+            line("EFE_SWARM_BUNDLE_SIGNING_SEED", "attestation", o.attestation),
+            line("DATABASE_URL", "store durable", o.durable_store),
+        ];
+        // Le seul cas de REFUS servi : demandée, et pas là.
+        capabilities.push(if o.frontier_intended && !o.frontier {
+            line_refusee(
+                "EFE_LLM_FRONTIER_ENABLED",
+                "frontière",
+                "aucun coordinator câblé (feature `frontier-llm` absente, ou clés provider manquantes). \
+                 `/v1/llm/*` répondra 501 et `/readyz` refusera le trafic.",
+            )
+        } else {
+            line("EFE_LLM_FRONTIER_ENABLED", "frontière", o.frontier)
+        });
+        capabilities.extend([
+            line("EFE_LLM_TENANT_ALLOWLIST", "allowlist d'egress", o.allowlist),
+            line("EFE_PII_DEFAULT_POLICY", "caviardage PII", o.pii),
+            line("EFE_SLM_REFORMULATOR_URL", "relais SLM", o.slm),
+            line("EFE_OIDC_PUBLIC_KEY_PEM", "authentification", o.oidc),
+            line("EFE_SWARM_ROUTER_ENDPOINT", "routeur de modèles", o.router),
+        ]);
+        let mut r = Self::from_resolved(&Resolved::default());
+        // On garde les lignes de RÉGLAGE (plafonds, admission) telles que calculées, et on
+        // remplace les capacités par celles observées : les réglages ne dépendent pas du câblage.
+        capabilities.extend(r.capabilities.drain(..).filter(|c| {
+            matches!(c.capability, "plafond de dépense" | "admission" | "plafonds de requête")
+        }));
+        Report { mode: Mode::Servi, capabilities, features: r.features, invalides: Vec::new() }
     }
 
     /// Le cœur : les capacités, leur état, et **ce que leur absence coûte**.
@@ -600,19 +873,27 @@ impl Report {
         if cfg!(feature = "tamper-testkit") { features.push("tamper-testkit"); }
         if cfg!(feature = "demo") { features.push("demo"); }
 
-        Report { capabilities, features }
+        Report { mode: Mode::Intention, capabilities, features, invalides: Vec::new() }
     }
 
     /// La forme **humaine**, imprimée au démarrage. Complète, là où les `println!` épars ne
     /// l'étaient pas.
     #[must_use]
     pub fn render_human(&self) -> String {
-        let mut out = String::from("┌─ profil servi\n");
+        let mut out = format!("┌─ profil {} ({})\n", self.mode.as_str(),
+            if self.mode == Mode::Servi { "ce qui est réellement câblé" } else { "ce que la config demande, RIEN n'est câblé" });
         for c in &self.capabilities {
             out.push_str(&format!("│  {:<22} {:<9} {}\n", c.capability, c.status.as_str(), c.detail));
         }
         let feats = if self.features.is_empty() { "(aucune)".to_string() } else { self.features.join(", ") };
         out.push_str(&format!("└─ features compilées : {feats}\n"));
+        for i in &self.invalides {
+            out.push_str(&format!(
+                "\n⚠  {} = '{}' — REFUSÉ (attendu : {}).\n   \
+                 Vous avez posé cet interrupteur et il n'a EU AUCUN EFFET : {}.\n",
+                i.name, i.fourni, i.attendu, i.consequence
+            ));
+        }
         out
     }
 
@@ -632,7 +913,17 @@ impl Report {
                 })
             })
             .collect();
-        json!({ "capabilities": caps, "features": self.features })
+        let inv: Vec<Value> = self
+            .invalides
+            .iter()
+            .map(|i| json!({ "switch": i.name, "fourni": i.fourni, "attendu": i.attendu }))
+            .collect();
+        json!({
+            "mode":         self.mode.as_str(),
+            "capabilities": caps,
+            "features":     self.features,
+            "invalides":    inv,
+        })
     }
 
     /// Le raccourci du critère d'acceptation : `.provenance == "SERVIE"`.
@@ -649,6 +940,96 @@ impl Report {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// **La liste des drapeaux stricts ne doit pas dériver des appels réels.**
+    ///
+    /// [`FLAGS_STRICTS`] est une liste écrite à la main : si quelqu'un ajoute un `read::flag(…)`
+    /// sans l'y inscrire, son footgun redevient silencieux — et le mécanisme entier serait un
+    /// filet troué qu'on croirait plein. Ce test lit **le source de ce fichier même** et compare.
+    ///
+    /// Le balayage est fiable ici, et seulement ici : `flag` reçoit toujours un **littéral** au
+    /// point d'appel (`flag("EFE_…")`). Les trois primitives qui touchent `std::env::var`, elles,
+    /// reçoivent leur nom en paramètre — d'où l'assertion d'exécution dans `read::declare`, qui
+    /// couvre ce qu'aucun balayage ne pourrait voir.
+    #[test]
+    fn les_flags_stricts_sont_exactement_ceux_lus_par_flag() {
+        let src = include_str!("profile.rs");
+        let mut lus: Vec<String> = Vec::new();
+        for morceau in src.split("flag(\"").skip(1) {
+            if let Some(nom) = morceau.split('"').next() {
+                // Écarter `flag_of("…")`, qui n'est pas une lecture d'environnement, et tout ce qui
+                // ne ressemble pas à un nom de variable.
+                if nom.chars().all(|c| c.is_ascii_uppercase() || c.is_ascii_digit() || c == '_')
+                    && nom.len() > 3
+                    && !lus.iter().any(|d| d == nom)
+                {
+                    lus.push(nom.to_string());
+                }
+            }
+        }
+        lus.sort();
+        let mut declares: Vec<String> = FLAGS_STRICTS.iter().map(|s| (*s).to_string()).collect();
+        declares.sort();
+        assert_eq!(
+            lus, declares,
+            "\n`FLAGS_STRICTS` a dérivé des appels réels à `read::flag`.\n\
+             Un drapeau lu mais non déclaré ici ne dira JAMAIS à l'opérateur que sa valeur a été \
+             refusée.\n"
+        );
+    }
+
+    /// Le cas concret que le dépôt savait diagnostiquer, puis avait perdu.
+    #[test]
+    fn une_valeur_footgun_est_nommee_et_sa_consequence_dite() {
+        let vars = [("EFE_LLM_FRONTIER_ENABLED", "1")];
+        let inv = invalides_from_lookup(|k| {
+            vars.iter().find(|(n, _)| *n == k).map(|(_, v)| (*v).to_string())
+        });
+        assert_eq!(inv.len(), 1, "`1` doit être signalé — c'est le footgun documenté");
+        assert_eq!(inv[0].name, "EFE_LLM_FRONTIER_ENABLED");
+        assert_eq!(inv[0].fourni, "1");
+        assert!(
+            !inv[0].consequence.is_empty(),
+            "dire « refusé » sans dire ce que ça coûte laisse l'opérateur juger à l'aveugle"
+        );
+    }
+
+    /// L'absence et le vide ne sont **pas** des valeurs refusées. Les confondre noierait le signal :
+    /// un rapport qui crie à chaque interrupteur non posé ne se lit plus.
+    #[test]
+    fn ni_labsence_ni_le_vide_ni_true_ne_sont_des_refus() {
+        assert!(invalides_from_lookup(|_| None).is_empty(), "absence ≠ refus");
+        assert!(invalides_from_lookup(|_| Some("   ".into())).is_empty(), "vide ≠ refus");
+        assert!(invalides_from_lookup(|_| Some("true".into())).is_empty(), "`true` est accepté");
+        for eteint in ["false", "FALSE", "0", "no", "off"] {
+            assert!(
+                invalides_from_lookup(|_| Some(eteint.into())).is_empty(),
+                "`{eteint}` éteint DÉLIBÉRÉMENT : le résultat correspond à l'intention, donc silence"
+            );
+        }
+        assert_eq!(
+            invalides_from_lookup(|_| Some("TRUE".into())).len(),
+            FLAGS_STRICTS.len(),
+            "`TRUE` est refusé partout — la casse compte, et c'est précisément le piège"
+        );
+    }
+
+    /// Un diagnostic que le rapport ne montre pas n'existe pas. Il doit nommer la variable, la
+    /// valeur reçue, et le fait que le geste de l'opérateur est resté sans effet.
+    #[test]
+    fn le_rapport_humain_crie_la_valeur_refusee() {
+        let r = Report::from_resolved(&Resolved::default()).with_invalides(vec![Invalide {
+            name: "EFE_SWARM_BUNDLE_ENABLED",
+            fourni: "yes".into(),
+            attendu: "exactement `true`",
+            consequence: "aucun export de bundle",
+        }]);
+        let h = r.render_human();
+        assert!(h.contains("EFE_SWARM_BUNDLE_ENABLED"), "la variable doit être nommée");
+        assert!(h.contains("'yes'"), "la valeur reçue doit être montrée telle quelle");
+        assert!(h.contains("AUCUN EFFET"), "le rapport doit dire que le geste n'a rien fait");
+        assert_eq!(r.to_json()["invalides"].as_array().map(Vec::len), Some(1));
+    }
 
     #[test]
     fn le_registre_na_pas_de_doublon() {

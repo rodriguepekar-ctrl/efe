@@ -15,7 +15,7 @@
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 
-use efe_swarm_gateway::profile::{Report, Resolved};
+use efe_swarm_gateway::profile::{invalides_from_lookup, Report, Resolved};
 
 fn profiles_dir() -> PathBuf {
     // `CARGO_MANIFEST_DIR` = crates/efe-swarm-gateway ; les profils vivent à la racine du dépôt.
@@ -149,5 +149,31 @@ fn aucun_profil_ne_contient_de_secret() {
                  rapport « SERVIE » avec une valeur publiquement connue. Injecter au déploiement."
             );
         }
+    }
+}
+
+/// **Aucun profil livré ne doit contenir une valeur que le binaire refuse.**
+///
+/// Un footgun dans un `.env` versionné est bien pire qu'un footgun tapé à la main : il se propage
+/// à chaque déploiement qui suit ce fichier, et il porte l'autorité du dépôt. Quelqu'un lirait
+/// `EFE_SWARM_BUNDLE_ENABLED=1` dans un profil officiel et en conclurait, raisonnablement, que
+/// c'est la forme attendue.
+///
+/// Ce test ne peut pas passer par les `.expected.json` : ceux-ci comparent des **statuts**, et un
+/// interrupteur posé avec une mauvaise valeur produit exactement le même statut qu'un interrupteur
+/// non posé. C'est tout l'intérêt du mécanisme — voir ce que la réduction en booléen efface.
+#[test]
+fn aucun_profil_livre_ne_pose_une_valeur_refusee() {
+    for profile in ["demo", "souverain", "frontiere"] {
+        let text = std::fs::read_to_string(profiles_dir().join(format!("{profile}.env")))
+            .unwrap_or_else(|e| panic!("profiles/{profile}.env illisible : {e}"));
+        let vars = parse_env(&text);
+        let inv = invalides_from_lookup(|k| vars.get(k).cloned());
+        assert!(
+            inv.is_empty(),
+            "profiles/{profile}.env pose une valeur REFUSÉE : {:?}\n\
+             Seule la chaîne exacte `true` active un drapeau strict.",
+            inv.iter().map(|i| format!("{}={}", i.name, i.fourni)).collect::<Vec<_>>()
+        );
     }
 }
