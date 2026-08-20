@@ -92,11 +92,7 @@ const MIN_DEADLINE_MS: u64 = 50;
 /// **ADR-018** : plafond serveur du deadline run. Env `EFE_GATEWAY_MAX_DEADLINE_MS` ;
 /// défaut 300 000 (5 min). Borne le temps machine qu'un client peut réserver.
 fn max_deadline_ms() -> u64 {
-    std::env::var("EFE_GATEWAY_MAX_DEADLINE_MS")
-        .ok()
-        .and_then(|s| s.parse::<u64>().ok())
-        .unwrap_or(300_000)
-        .max(MIN_DEADLINE_MS)
+    crate::profile::read::max_deadline_ms(MIN_DEADLINE_MS)
 }
 
 /// **ADR-019 (MEM-3)** : l'empreinte de famille de fil — `structural` (défaut souverain) ou

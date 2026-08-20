@@ -78,6 +78,13 @@ efe-coordinator = { path = "../efe-coordinator", version = "0.0.1", optional = t
 efe-multi-llm   = { path = "../efe-multi-llm",   version = "0.0.1", optional = true }  # 5 missions (servies en M3)
 provenance-capture = { path = "../provenance-capture", version = "0.0.1", optional = true }  # egress guard is_local_endpoint (réutilisé — pas de 3e copie)
 
+# L'exemple de démo consomme `test_support`, exposé par la feature `demo` seule. Sans cette
+# déclaration, `cargo test -p efe-swarm-gateway` (qui construit TOUS les targets) échoue à
+# compiler l'exemple — défaut introduit avec la démo et attrapé par la suite complète de M0.
+[[example]]
+name = "local_receipt_demo"
+required-features = ["demo"]
+
 [dev-dependencies]
 tokio = { workspace = true, features = ["macros", "rt-multi-thread", "time"] }
 tower = { workspace = true }                    # ServiceExt::oneshot (tests axum)

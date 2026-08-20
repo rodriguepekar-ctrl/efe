@@ -12,32 +12,42 @@
 //! - `EFE_CONSOLE_SUBJECT` (défaut `officer:demo`)
 //! - `EFE_CONSOLE_RECORDS` (optionnel) — chemin d'un `records.sealed.jsonl` à réhydrater.
 
+use audit_console::profile::{read, Report};
 use audit_console::{Console, serve, Role};
 use provenance_dag::{SealedDag, TenantKey};
 
-fn env_or(key: &str, default: &str) -> String {
-    std::env::var(key).unwrap_or_else(|_| default.to_string())
-}
-
 fn main() -> std::io::Result<()> {
-    let addr = env_or("EFE_CONSOLE_ADDR", "127.0.0.1:8088");
-    let tenant = env_or("EFE_CONSOLE_TENANT", "acme");
-    let root = env_or("EFE_CONSOLE_ROOT", "demo-root-secret");
-    let token = env_or("EFE_CONSOLE_TOKEN", "demo-token");
-    let subject = env_or("EFE_CONSOLE_SUBJECT", "officer:demo");
+    // ── M0 : `--profile-report` — la forme MACHINE, par drapeau et jamais par route.
+    if std::env::args().any(|a| a == "--profile-report") {
+        let json = Report::from_env().to_json();
+        println!("{}", serde_json::to_string_pretty(&json).unwrap_or_else(|_| json.to_string()));
+        return Ok(());
+    }
+
+    // Les valeurs viennent du registre (défauts inclus) — plus de littéral dispersé ici.
+    let addr = read::value("EFE_CONSOLE_ADDR");
+    let tenant = read::value("EFE_CONSOLE_TENANT");
+    let root = read::value("EFE_CONSOLE_ROOT");
+    let token = read::value("EFE_CONSOLE_TOKEN");
+    let subject = read::value("EFE_CONSOLE_SUBJECT");
+
+    // ── M0 : le profil servi, AVANT d'écouter. Et surtout l'avertissement que la console
+    // n'émettait pas : un secret racine laissé au défaut est PUBLIC, donc la clé tenant l'est
+    // aussi, donc la re-preuve ne prouve rien. La passerelle criait déjà dans le cas symétrique.
+    eprint!("{}", Report::from_env().render_human());
 
     // La clé est dérivée dans le backend (déploiement réel : un KMS), jamais exposée au navigateur.
     let key = TenantKey::derive(root.as_bytes(), &tenant);
     let mut console = Console::new();
 
-    match std::env::var("EFE_CONSOLE_RECORDS") {
-        Ok(path) => {
+    match read::records_path() {
+        Some(path) => {
             let jsonl = std::fs::read_to_string(&path)?;
             let records = SealedDag::records_from_jsonl(&jsonl).map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e.to_string()))?;
             console.rehydrate(&tenant, key, records);
             eprintln!("réhydraté le tenant « {tenant} » depuis {path}");
         }
-        Err(_) => {
+        None => {
             console.provision(&tenant, key);
             eprintln!("tenant « {tenant} » provisionné (vide — alimenté par la capture S1 du runtime)");
         }

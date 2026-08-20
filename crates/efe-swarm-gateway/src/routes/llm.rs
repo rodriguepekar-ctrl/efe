@@ -228,11 +228,7 @@ fn hash_text(t: &str) -> String {
 /// Un client ne dimensionne pas la dépense d'autrui : même patron que `max_width_cap` (ADR-014),
 /// où le serveur borne un champ que le DTO laisse ouvert.
 pub fn server_budget_ceiling_cents() -> u32 {
-    std::env::var("EFE_LLM_MAX_BUDGET_CENTS")
-        .ok()
-        .and_then(|s| s.parse::<u32>().ok())
-        .unwrap_or(10_000)
-        .max(1) // un plafond à 0 rendrait toute mission impossible ; on refuse de se tirer dessus
+    crate::profile::read::max_budget_cents()
 }
 
 /// **M4 (§2.1)** — borne le budget d'une requête : cap du tenant **puis** plafond serveur.

@@ -63,6 +63,11 @@ mod mission; // Couche 2 (M1) : capture de provenance par appel LLM (décorateur
 mod mission_graph; // Couche 2 (M2) : le reçu honnête — graphe depuis topologie déclarée + scellement + store
 #[cfg(feature = "frontier-llm")]
 pub mod frontier_metrics; // Couche 2 (M4 §2.4) : compteurs de coût/egress frontière pour /metrics
+// M0 — le profil servi : le registre des interrupteurs, le SEUL lecteur d'environnement du
+// crate, et le rapport de ce qui est réellement servi. T1 (`tests/profile_no_raw_env.rs`)
+// interdit tout `std::env::var` hors de ce module.
+pub mod profile;
+
 // ADR-016 : `synthetic_mode_c_run` partagé (lib tests + store_pg tests). La feature `demo`
 // l'expose hors `#[cfg(test)]` pour l'exemple `local_receipt_demo` : un fixture dupliqué
 // dériverait du seul littéral `LlmProvenanceRecord` de référence, ce que ce module existe

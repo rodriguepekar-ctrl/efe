@@ -28,21 +28,13 @@ const DASHBOARD_REGISTRY_CAP: usize = 256;
 /// Env `EFE_GATEWAY_MAX_INFLIGHT_RUNS` ; défaut `max(4, cœurs)`. Au-delà : 429 visible
 /// (backpressure honnête) plutôt qu'une file invisible qui finit en timeouts.
 fn admission_permits() -> usize {
-    std::env::var("EFE_GATEWAY_MAX_INFLIGHT_RUNS")
-        .ok()
-        .and_then(|s| s.parse::<usize>().ok())
-        .unwrap_or_else(|| std::thread::available_parallelism().map(|n| n.get()).unwrap_or(4).max(4))
-        .max(1)
+    crate::profile::read::max_inflight_runs()
 }
 
 /// **ADR-014 (CP-2)** : plafond serveur du champ DTO `width` (un client ne dimensionne
 /// pas la machine d'autrui). Env `EFE_GATEWAY_MAX_WIDTH` ; défaut 32.
 fn max_width_cap() -> usize {
-    std::env::var("EFE_GATEWAY_MAX_WIDTH")
-        .ok()
-        .and_then(|s| s.parse::<usize>().ok())
-        .unwrap_or(32)
-        .max(1)
+    crate::profile::read::max_width()
 }
 
 /// **ADR-018 (admission équitable)** : plafond de runs en vol simultanés **par tenant**,
@@ -55,11 +47,7 @@ fn max_width_cap() -> usize {
 /// `EFE_GATEWAY_MAX_INFLIGHT_PER_TENANT` ; un opérateur peut l'égaler au global (désactive
 /// l'équité) ou le baisser (équité stricte).
 fn admission_per_tenant_permits(global: usize) -> usize {
-    std::env::var("EFE_GATEWAY_MAX_INFLIGHT_PER_TENANT")
-        .ok()
-        .and_then(|s| s.parse::<usize>().ok())
-        .unwrap_or_else(|| global.saturating_sub(1).max(1))
-        .clamp(1, global.max(1))
+    crate::profile::read::max_inflight_per_tenant(global)
 }
 
 /// **ADR-018** : pourquoi l'admission a refusé — distingue les deux plafonds pour que le
@@ -531,7 +519,7 @@ impl SwarmGatewayState {
     fn width_spec(&self, requested: Option<usize>) -> WidthSpec {
         match requested {
             Some(w) => WidthSpec::Fixed(w.clamp(1, self.max_width)),
-            None => match std::env::var("EFE_SWARM_WIDTH").ok().and_then(|s| s.parse::<usize>().ok()) {
+            None => match crate::profile::read::swarm_width() {
                 Some(w) => WidthSpec::Fixed(w.clamp(1, self.max_width)),
                 None => WidthSpec::Auto,
             },
@@ -662,7 +650,7 @@ impl SwarmGatewayState {
 /// `EFE_LLM_FRONTIER_ENABLED` : seule la chaîne `"true"` active.
 #[must_use]
 pub fn bundle_export_from_env() -> bool {
-    std::env::var("EFE_SWARM_BUNDLE_ENABLED").map(|v| v == "true").unwrap_or(false)
+    crate::profile::read::bundle_enabled()
 }
 
 #[cfg(test)]

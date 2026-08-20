@@ -47,6 +47,9 @@
 //! assert!(!html.to_lowercase().contains(">correct<"));
 //! ```
 
+// M0 — le profil servi : registre des interrupteurs, seul lecteur d'environnement, et rapport.
+pub mod profile;
+
 pub mod app;
 pub mod export;
 pub mod handler;

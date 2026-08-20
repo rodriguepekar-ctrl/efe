@@ -80,7 +80,7 @@ pub fn coordinator_from_env() -> Option<Arc<Coordinator>> {
     // profil multi-llm) — le « petit modèle entre les gros ». Gouverné par
     // `EFE_SLM_REFORMULATOR_URL` ; absent ⟹ `CoordinatorClients::default()`
     // (reformulation déterministe, chemin servi STRICTEMENT inchangé).
-    let clients = slm_clients_from(std::env::var("EFE_SLM_REFORMULATOR_URL").ok().as_deref());
+    let clients = slm_clients_from(crate::profile::read::slm_reformulator_url().as_deref());
 
     // `build()` n'échoue que sur une config invalide (`max_concurrency == 0`) ; le défaut est
     // sain, donc `ok()` ne masque aucun cas atteignable ici.
@@ -170,7 +170,7 @@ fn slm_url_looks_local(url: &str) -> bool {
 /// Var absente ⟹ registre **vide** (`fail-closed` total, §2). Délègue au parseur pur pour être
 /// testable sans muter l'env du process.
 fn policy_registry_from_env() -> PolicyRegistry {
-    std::env::var("EFE_LLM_TENANT_ALLOWLIST").map(|raw| policy_registry_from_str(&raw)).unwrap_or_default()
+    crate::profile::read::tenant_allowlist().map(|raw| policy_registry_from_str(&raw)).unwrap_or_default()
 }
 
 /// Parseur **pur** de l'allowlist. Format :
