@@ -8,7 +8,19 @@
 
 /// Extrait l'hôte d'un endpoint : `http://127.0.0.1:11434/v1` → `127.0.0.1` ; `http://[::1]:8080` → `::1`.
 /// Minimal, sans dépendance (pas de crate `url`).
-fn host_of(endpoint: &str) -> Option<&str> {
+///
+/// **Public depuis P1, et pour une raison de sûreté, pas de commodité.** Journaliser un endpoint en
+/// imprimant l'URL BRUTE recopie son `userinfo` dans les logs : `http://user:pass@hôte/` met un
+/// secret dans la sortie de démarrage, là où il sera collecté, archivé et lu par des gens qui
+/// n'auraient jamais dû l'avoir. Un appelant qui veut nommer un endpoint doit donc pouvoir n'en
+/// nommer que l'**hôte** — ce que cette fonction produit, et elle seule : la retirer du `userinfo`
+/// est précisément l'étape que le durcissement anti-SSRF a rendue correcte (premier `@`, pas le
+/// dernier). Rendre l'hôte accessible évite qu'un appelant se rabatte sur l'URL entière faute de
+/// mieux — ou pire, réécrive un sixième analyseur.
+///
+/// `None` a un sens fort : l'autorité est **inanalysable ou dangereuse** (vide, ou contenant
+/// `\`/espace/contrôle). Un appelant qui journalise doit alors écrire un marqueur, jamais l'entrée.
+pub fn host_of(endpoint: &str) -> Option<&str> {
     // Après le schéma `://` (ou tout si absent).
     let after_scheme = endpoint.split_once("://").map(|(_, rest)| rest).unwrap_or(endpoint);
     // L'autorité s'arrête au PREMIER de `/`, `?` ou `#` (chemin, requête, fragment) — RFC 3986. Sans

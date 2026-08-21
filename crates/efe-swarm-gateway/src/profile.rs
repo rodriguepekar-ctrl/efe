@@ -621,7 +621,15 @@ pub struct Observed {
     pub frontier_intended: bool,
     pub allowlist: bool,
     pub pii: bool,
+    /// Le relais SLM est-il **réellement câblé** ? Il vit DANS le coordinator frontière : sans
+    /// coordinator, l'URL est lue par ce rapport et consommée par personne.
     pub slm: bool,
+    /// Une URL de relais a-t-elle été **posée** ? Posée sans câblage ⟹ [`Status::Refusee`], sur le
+    /// même patron que la frontière.
+    pub slm_intended: bool,
+    /// Câblé — mais l'hôte est-il DANS le périmètre ? Câblé hors périmètre, la capacité fonctionne
+    /// et la garantie de souveraineté est nulle : c'est une dégradation, pas une absence.
+    pub slm_local: bool,
     pub oidc: bool,
     pub router: bool,
 }
@@ -688,6 +696,60 @@ fn line(governed_by: &'static str, capability: &'static str, on: bool) -> Capabi
 /// L'exemple concret : `EFE_LLM_FRONTIER_ENABLED=true` sans la feature `frontier-llm` compilée, ou
 /// sans clé provider. Annoncer « DÉGRADÉE » y serait trop doux : l'opérateur a **demandé** la
 /// capacité et ne l'aura pas. Il doit lire un refus, pas une nuance.
+/// La ligne du **relais SLM**, seule capacité à connaître trois issues distinctes.
+///
+/// * URL posée, mais rien ne la consomme ⟹ [`Status::Refusee`]. Le relais vit dans le coordinator
+///   frontière : feature `frontier-llm` absente, ou `EFE_LLM_FRONTIER_ENABLED` non activé, et l'URL
+///   est alors lue par ce rapport et par personne d'autre. La dire « SERVIE » était le défaut.
+/// * Câblé hors périmètre ⟹ dégradée, motif en capitales.
+/// * Sinon, la ligne ordinaire : servie si câblée, absente sinon.
+fn slm_line(o: &Observed) -> CapabilityReport {
+    const VAR: &str = "EFE_SLM_REFORMULATOR_URL";
+    if o.slm_intended && !o.slm {
+        line_refusee(
+            VAR,
+            "relais SLM",
+            "une URL est posée, mais aucun client ne la consomme : le relais vit DANS le coordinator \
+             frontière, et celui-ci n'est pas câblé (feature `frontier-llm` absente, ou \
+             `EFE_LLM_FRONTIER_ENABLED` non activé). Aucun prompt ne passera par ce relais.",
+        )
+    } else if o.slm && !o.slm_local {
+        line_hors_perimetre(
+            VAR,
+            "relais SLM",
+            "le relais est câblé et fonctionne, mais son hôte n'est PAS la machine locale : chaque \
+             prompt reformulé quitte le périmètre, et cet egress n'est ni gardé par l'allowlist \
+             tenant ni décompté du budget. La souveraineté n'est pas garantie sur ce chemin.",
+        )
+    } else {
+        line(VAR, "relais SLM", o.slm)
+    }
+}
+
+/// La ligne d'une capacité **servie, mais hors du périmètre de souveraineté**.
+///
+/// Ni « absente » ni « servie » ne décrit ce cas, et les confondre est exactement le défaut que P1
+/// ferme : le relais SLM pointé sur un hôte distant **fonctionne** — les prompts sont bien
+/// reformulés — mais ils quittent la machine, et leur egress n'est ni gardé ni décompté. Annoncer
+/// « SERVIE » serait vrai sur la fonction et faux sur la promesse.
+///
+/// Le statut reste [`Status::Degradee`] plutôt qu'une quatrième valeur : pour le lecteur, « je ne
+/// peux pas m'appuyer là-dessus pour la souveraineté » est la même réponse que pour une absence.
+/// C'est le **détail** qui porte la différence, et il commence en capitales pour qu'on ne puisse pas
+/// le confondre avec un coût d'absence en parcourant la colonne.
+fn line_hors_perimetre(
+    governed_by: &'static str,
+    capability: &'static str,
+    why: &str,
+) -> CapabilityReport {
+    CapabilityReport {
+        capability,
+        status: Status::Degradee,
+        detail: format!("SERVI HORS PÉRIMÈTRE — {why}"),
+        governed_by,
+    }
+}
+
 fn line_refusee(
     governed_by: &'static str,
     capability: &'static str,
@@ -813,7 +875,7 @@ impl Report {
         capabilities.extend([
             line("EFE_LLM_TENANT_ALLOWLIST", "allowlist d'egress", o.allowlist),
             line("EFE_PII_DEFAULT_POLICY", "caviardage PII", o.pii),
-            line("EFE_SLM_REFORMULATOR_URL", "relais SLM", o.slm),
+            slm_line(o),
             line("EFE_OIDC_PUBLIC_KEY_PEM", "authentification", o.oidc),
             line("EFE_SWARM_ROUTER_ENDPOINT", "routeur de modèles", o.router),
         ]);
@@ -940,6 +1002,69 @@ impl Report {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// **P1 — les trois issues du relais SLM.**
+    ///
+    /// Avant P1, la ligne était calculée par `line(VAR, "relais SLM", url.is_some())` : poser
+    /// l'URL suffisait à faire imprimer « SERVIE ». Deux situations très différentes se cachaient
+    /// derrière ce vert, et aucune des deux ne servait quoi que ce soit de souverain.
+    #[test]
+    fn le_relais_slm_a_trois_issues_et_une_seule_est_verte() {
+        let statut = |o: &Observed| Report::from_observed(o).status_of("relais SLM").unwrap();
+        let detail = |o: &Observed| {
+            Report::from_observed(o)
+                .capabilities
+                .iter()
+                .find(|c| c.capability == "relais SLM")
+                .unwrap()
+                .detail
+                .clone()
+        };
+
+        // (1) URL posée, coordinator absent : rien ne la consomme. C'était le vert le plus faux —
+        //     le build par défaut ne compile même pas le code qui lirait cette URL.
+        let demande = Observed { slm_intended: true, slm: false, ..Observed::default() };
+        assert_eq!(statut(&demande), Status::Refusee, "posée mais consommée par personne");
+        assert!(
+            detail(&demande).contains("coordinator"),
+            "le rapport doit dire OÙ vit le relais, sinon l'opérateur cherchera la mauvaise variable"
+        );
+
+        // (2) Câblé, hôte distant : la capacité FONCTIONNE, et la promesse est morte.
+        let hors = Observed { slm_intended: true, slm: true, slm_local: false, ..Observed::default() };
+        assert_eq!(statut(&hors), Status::Degradee);
+        assert!(
+            detail(&hors).starts_with("SERVI HORS PÉRIMÈTRE"),
+            "en capitales et en tête : impossible à confondre avec un coût d'absence"
+        );
+
+        // (3) Câblé, hôte local : le seul cas où « SERVIE » est vrai.
+        let local = Observed { slm_intended: true, slm: true, slm_local: true, ..Observed::default() };
+        assert_eq!(statut(&local), Status::Servie);
+
+        // (4) Rien de posé : l'absence ordinaire, inchangée depuis M0.
+        let absent = Observed::default();
+        assert_eq!(statut(&absent), Status::Degradee);
+        assert!(
+            !detail(&absent).starts_with("SERVI HORS PÉRIMÈTRE"),
+            "une absence n'est pas un hors-périmètre : les deux détails doivent rester distincts"
+        );
+    }
+
+    /// Le hors-périmètre doit être **lisible** dans la forme humaine, pas seulement dans le JSON :
+    /// c'est celle que l'opérateur voit défiler au démarrage.
+    #[test]
+    fn le_hors_perimetre_se_lit_dans_le_rapport_humain() {
+        let h = Report::from_observed(&Observed {
+            slm_intended: true,
+            slm: true,
+            slm_local: false,
+            ..Observed::default()
+        })
+        .render_human();
+        assert!(h.contains("SERVI HORS PÉRIMÈTRE"), "le motif doit apparaître tel quel");
+        assert!(h.contains("ni décompté"), "et dire ce que ça coûte, pas seulement que c'est dégradé");
+    }
 
     /// **La liste des drapeaux stricts ne doit pas dériver des appels réels.**
     ///

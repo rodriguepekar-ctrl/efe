@@ -123,11 +123,25 @@ fn slm_clients_from(url: Option<&str>) -> CoordinatorClients {
     // llama-server distant est possible et son egress n'est ni gardé par
     // l'allowlist tenant ni décompté (le hop est budgété 0 ¢). On prévient
     // au boot plutôt que de prétendre une souveraineté qu'on ne vérifie pas.
-    // (Le check est un miroir minimal des `is_local_endpoint` maison —
-    // provenance-capture/guard.rs & efe-swarm-sdk — sans en dépendre.)
-    if !slm_url_looks_local(url) {
+    //
+    // **P1.** Le prédicat était un « miroir minimal » réécrit sur place, et ce miroir avait perdu le
+    // durcissement qu'il prétendait refléter : il concluait au loopback sur `starts_with("127.")`,
+    // de sorte que `http://127.evil.com` — un NOM DNS ordinaire, qui résout où son propriétaire veut
+    // — ne déclenchait AUCUN avertissement. La conception était juste (prévenir plutôt que prétendre)
+    // ; c'est le prédicat qui mentait, et il mentait dans la direction dangereuse.
+    //
+    // La copie se justifiait par « sans en dépendre ». Or ce fichier n'est compilé que sous
+    // `frontier-llm`, précisément la feature qui active `provenance-capture` — le fichier voisin
+    // `mission.rs` l'appelle déjà. La dépendance était donc DÉJÀ payée : le miroir minimal
+    // n'économisait rien et n'achetait que la faille.
+    let hote = provenance_capture::host_of(url).unwrap_or("«autorité inanalysable»");
+    if !provenance_capture::is_local_endpoint(url) {
+        // On nomme l'HÔTE, jamais l'URL. `http://user:pass@hôte/v1` recopierait un secret dans la
+        // sortie de démarrage, où il sera collecté et archivé par une chaîne de logs qui n'a aucune
+        // raison de le détenir. `host_of` retire le `userinfo` au PREMIER `@` — le même durcissement
+        // qui rend le garde correct rend le journal sûr.
         eprintln!(
-            "⚠ EFE_SLM_REFORMULATOR_URL ({url}) ne pointe pas sur un hôte local — \
+            "⚠ EFE_SLM_REFORMULATOR_URL pointe sur « {hote} », hors de la machine locale — \
              l'egress de ce SLM n'est ni gardé ni décompté ; souveraineté NON garantie"
         );
     }
@@ -139,7 +153,7 @@ fn slm_clients_from(url: Option<&str>) -> CoordinatorClients {
                 SlmCircuitBreaker::new(3, Duration::from_secs(10)),
             );
             eprintln!(
-                "→ reformulateur SLM câblé (profil multi-llm, {url}) — circuit 3 échecs / reset 10 s ; \
+                "→ reformulateur SLM câblé (profil multi-llm, hôte « {hote} ») — circuit 3 échecs / reset 10 s ; \
                  les hops de reformulation seront estampillés SLM quand le robot répond, \
                  SLM_DEGRADED_TO_RULE sinon"
             );
@@ -154,17 +168,6 @@ fn slm_clients_from(url: Option<&str>) -> CoordinatorClients {
     clients
 }
 
-/// L'hôte de `url` est-il manifestement local ? (localhost / 127.x / ::1)
-/// Check de BOOT-WARN uniquement — pas une garde de sécurité.
-fn slm_url_looks_local(url: &str) -> bool {
-    let rest = url.split("://").nth(1).unwrap_or(url);
-    let host = rest.split(['/', '?']).next().unwrap_or(rest);
-    let host = host.strip_prefix('[').map_or_else(
-        || host.rsplit_once(':').map_or(host, |(h, _)| h),
-        |h| h.split(']').next().unwrap_or(h),
-    );
-    host == "localhost" || host == "::1" || host.starts_with("127.")
-}
 
 /// Charge l'**allowlist d'egress par tenant** depuis `EFE_LLM_TENANT_ALLOWLIST` (côté binaire).
 /// Var absente ⟹ registre **vide** (`fail-closed` total, §2). Délègue au parseur pur pour être
@@ -249,22 +252,77 @@ mod tests {
         }
     }
 
+    /// **P1 — le défaut que ce fichier portait, désormais gardé.**
+    ///
+    /// L'ancien prédicat local concluait au loopback par `starts_with("127.")`. Le premier bloc
+    /// ci-dessous est la raison d'être de ce test : `127.evil.com` passait pour local, donc aucun
+    /// avertissement ne partait, donc l'opérateur ne savait pas que son relais SLM était hors du
+    /// périmètre — pendant que le rapport de démarrage annonçait « relais SLM SERVIE ».
+    ///
+    /// Le test porte désormais sur le garde durci, celui-là même que ce fichier importait déjà.
+    /// Il ne vérifie pas une implémentation : il vérifie que ce fichier consulte **la bonne**.
+    #[test]
+    fn le_predicat_de_localite_du_slm_est_le_garde_durci() {
+        // ── ce qui doit AVERTIR, et n'avertissait pas ────────────────────────────────────────
+        for u in [
+            "http://127.evil.com",           // LE défaut : un NOM préfixé 127., pas du loopback
+            "http://127.evil.com:8091/v1",   // idem avec port et chemin
+            "http://localhost.evil.com",     // symétrique, sur le nom
+            "http://evil.com#@127.0.0.1",    // différentiel de fragment : l'hôte réel est evil.com
+            "http://evil.com?x@127.0.0.1",   // différentiel de requête
+            "http://127.0.0.1@evil.com",     // userinfo leurre : l'hôte réel est evil.com
+            "http://evil.com\\@127.0.0.1/v1", // WHATWG normalise `\` → `/` ⟹ fail-closed
+        ] {
+            assert!(
+                !provenance_capture::is_local_endpoint(u),
+                "{u} est HORS périmètre : l'opérateur doit être averti"
+            );
+        }
+
+        // ── ce qui ne doit PAS avertir : les formes légitimement locales ─────────────────────
+        // `LOCALHOST` est ici un gain collatéral : l'ancien prédicat comparait la casse
+        // strictement et avertissait donc à tort. Un avertissement qui crie à tort finit par ne
+        // plus être lu du tout — c'est l'autre moitié du même défaut.
+        for u in [
+            "http://127.0.0.1:8080",
+            "http://localhost:8080/x",
+            "http://[::1]:9000",
+            "127.0.0.1:1",
+            "http://LOCALHOST:8091",
+            "http://localhost.:8091",
+            "http://127.0.0.1.:8091",
+        ] {
+            assert!(provenance_capture::is_local_endpoint(u), "{u} est local : ne pas avertir");
+        }
+
+        // ── les distants ordinaires, inchangés ──────────────────────────────────────────────
+        for u in ["http://10.0.0.5:8080", "https://slm.example.com", "http://192.168.1.10:8080"] {
+            assert!(!provenance_capture::is_local_endpoint(u), "{u} est distant");
+        }
+    }
+
+    /// **P1 — le journal de démarrage ne doit jamais recopier un `userinfo`.**
+    ///
+    /// Les deux `eprintln!` du câblage SLM imprimaient l'URL ENTIÈRE, y compris dans le cas
+    /// nominal (« reformulateur SLM câblé »). Une URL de la forme `http://user:pass@hôte/` mettait
+    /// donc un secret dans la sortie de démarrage à chaque boot réussi, où il est collecté et
+    /// archivé par une chaîne de logs qui n'a aucune raison de le détenir.
+    #[test]
+    fn le_boot_nomme_lhote_jamais_les_identifiants() {
+        assert_eq!(
+            provenance_capture::host_of("http://admin:s3cr3t@slm.interne:8091/v1"),
+            Some("slm.interne"),
+            "l'hôte seul — le mot de passe ne doit apparaître nulle part"
+        );
+        // Autorité dangereuse ⟹ `None` ⟹ l'appelant écrit un marqueur, jamais l'entrée brute.
+        assert_eq!(provenance_capture::host_of("http://evil.com\\@127.0.0.1/v1"), None);
+        assert_eq!(provenance_capture::host_of("http://"), None);
+    }
+
     /// **Fil B.2** — la fonction pure du wiring SLM (race-free, pas d'env).
     /// Sans opt-in : bundle par défaut, strictement pré-B.2. Avec URL : client
     /// multi-llm + circuit `"reformulator"` présents (aucun réseau au boot —
     /// `from_assets_multillm` ne fait que lire les assets). URL vide = absent.
-    #[test]
-    fn slm_url_locality_boot_warn_heuristic() {
-        // Locaux manifestes.
-        for u in ["http://127.0.0.1:8080", "http://localhost:8080/x", "http://[::1]:9000", "127.0.0.1:1"] {
-            assert!(slm_url_looks_local(u), "{u} devrait être vu local");
-        }
-        // Distants (⟹ warn de boot : egress ni gardé ni décompté).
-        for u in ["http://10.0.0.5:8080", "https://slm.example.com", "http://192.168.1.10:8080"] {
-            assert!(!slm_url_looks_local(u), "{u} ne doit PAS être vu local");
-        }
-    }
-
     #[test]
     fn slm_clients_from_wires_client_and_circuit_only_on_opt_in() {
         use efe_coordinator::ReformulatorProfile;

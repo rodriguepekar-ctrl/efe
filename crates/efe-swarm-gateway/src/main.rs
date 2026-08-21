@@ -58,7 +58,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // jamais ne dégrade en silence. Calculé depuis l'INTENTION env, AVANT tout câblage d'état (with_keys,
     // with_coordinator) : aucun état forgeable/non-authentifié/volatil n'est même assemblé.
     #[cfg(feature = "frontier-llm")]
-    if frontier_flag_enabled() {
+    if efe_swarm_gateway::profile::read::frontier_enabled() {
         // #2 non-forgeable : le MÊME contrat que le scellement (dry-run derive, PAS master_present —
         // qui n'attrape pas un master < 32 o : il booterait "vert" puis 500 à chaque seal).
         let key_ok = HmacKeySource::EnvHkdf.derive(efe_nano_sdk::TenantId::system()).is_ok();
@@ -115,7 +115,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         provenance_non_forgeable: master_present,
         frontier_intended: efe_swarm_gateway::profile::read::frontier_enabled(),
         allowlist: efe_swarm_gateway::profile::read::tenant_allowlist().is_some(),
-        slm: efe_swarm_gateway::profile::read::slm_reformulator_url().is_some(),
+        // P1 : poser l'URL est une INTENTION. Le relais vit DANS le coordinator frontière ; tant
+        // que celui-ci n'est pas bâti, l'URL est lue par ce rapport et consommée par personne.
+        // L'annoncer « SERVIE » ici était le second mensonge de la chaîne du défaut SLM.
+        slm_intended: efe_swarm_gateway::profile::read::slm_reformulator_url().is_some(),
         attestation: efe_swarm_gateway::profile::read::bundle_signing_seed().is_some(),
         ..Default::default()
     };
@@ -205,11 +208,23 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // server-side par les `from_env` du coordinator. Off, ou aucune clé ⇒ frontière NON
     // servie (aucune route `/v1/llm/*` ne pourra l'utiliser — 501). Aucune clé loggée.
     #[cfg(feature = "frontier-llm")]
-    if frontier_flag_enabled() {
+    if efe_swarm_gateway::profile::read::frontier_enabled() {
         match efe_swarm_gateway::coordinator_from_env() {
             Some(coord) => {
                 state = state.with_coordinator(coord);
                 observed.frontier = true;
+                // P1 : c'est ICI, et seulement ici, que le relais SLM devient servi — le
+                // coordinator qui le porte existe. La localité de son hôte décide ensuite si la
+                // garantie de souveraineté tient : câblé hors périmètre, il fonctionne et laisse
+                // sortir chaque prompt reformulé, ce que le rapport doit dire en toutes lettres.
+                //
+                // Limite assumée : on observe que le PORTEUR est bâti, pas que le client HTTP du
+                // relais a pu se construire — `slm_clients_from` crie déjà ce cas-là au démarrage,
+                // et le remonter jusqu'ici exigerait de traverser `efe-coordinator`.
+                if let Some(u) = efe_swarm_gateway::profile::read::slm_reformulator_url() {
+                    observed.slm = true;
+                    observed.slm_local = provenance_capture::is_local_endpoint(&u);
+                }
                 println!("→ coordination frontière (Couche 2) activée — providers câblés depuis l'env.");
             }
             None => eprintln!(
