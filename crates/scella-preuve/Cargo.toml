@@ -1,0 +1,32 @@
+# SPDX-License-Identifier: UNLICENSED
+# M4 — scella-preuve : le PILOTE de la démonstration en une commande.
+#
+# Il conduit la démonstration ; il ne demande à être cru par personne. C'est une distinction qui
+# décide de ses dépendances. `verify-mini` doit être lisible EN ENTIER parce qu'un auditeur doit
+# le croire — c'est lui qui dit « ce reçu tient », et son arbre de dépendances vide est un
+# argument produit. Ce binaire-ci ne dit rien qu'on ne puisse recontrôler à la main : il laisse le
+# bundle et l'ancre sur le volume, et ses comptages se refont avec `grep -c` et `awk`.
+#
+# Il prend donc `serde_json` sans complexe. Le rendre zéro-dép pour l'esthétique aurait élargi le
+# parseur étroit de `verify-mini` — dont l'étroitesse EST la propriété — au profit d'un pilote.
+# HTTP, en revanche, est écrit à la main sur `std::net` : parler à un serveur connu ne justifie
+# pas de faire entrer un client asynchrone complet dans une image de démonstration.
+[package]
+name = "scella-preuve"
+version = { workspace = true }
+edition = { workspace = true }
+rust-version = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
+description = "M4 — le pilote de la démonstration en une commande : il fait servir un reçu par la passerelle, l'exporte, et le re-prouve SANS CLÉ en confrontant le bundle à l'ancre publiée hors bande. Une troncature y est démasquée par un comptage."
+publish = false
+
+[[bin]]
+name = "scella-preuve"
+path = "src/main.rs"
+
+[dependencies]
+serde_json = { workspace = true }
+# La re-preuve AVEC clé, quand une clé est fournie — le vérifieur tiers lui-même, à zéro dépendance.
+verify-mini = { path = "../verify-mini" }

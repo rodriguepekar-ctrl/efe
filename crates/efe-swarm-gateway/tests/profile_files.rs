@@ -97,6 +97,14 @@ fn t2_profil_frontiere() {
     check("frontiere");
 }
 
+/// **M4** — le profil de la démonstration en une commande. Il est vérifié comme les autres, et
+/// pour la même raison : un profil que personne ne contrôle est un profil qui peut mentir, et
+/// celui-ci est justement celui qu'un inconnu exécutera en premier.
+#[test]
+fn t2_profil_docker() {
+    check("docker");
+}
+
 /// **Le test qui prouve que les profils sont complets — secret excepté.**
 ///
 /// `souverain` ne pose délibérément AUCUN secret : le rapport y annonce donc
@@ -138,7 +146,7 @@ fn aucun_profil_ne_contient_de_secret() {
         "EFE_OIDC_PUBLIC_KEY_PEM",
         "DATABASE_URL",
     ];
-    for profile in ["demo", "souverain", "frontiere"] {
+    for profile in ["demo", "souverain", "frontiere", "docker"] {
         let text = std::fs::read_to_string(profiles_dir().join(format!("{profile}.env")))
             .unwrap_or_else(|e| panic!("{profile}.env : {e}"));
         let vars = parse_env(&text);
@@ -164,7 +172,7 @@ fn aucun_profil_ne_contient_de_secret() {
 /// non posé. C'est tout l'intérêt du mécanisme — voir ce que la réduction en booléen efface.
 #[test]
 fn aucun_profil_livre_ne_pose_une_valeur_refusee() {
-    for profile in ["demo", "souverain", "frontiere"] {
+    for profile in ["demo", "souverain", "frontiere", "docker"] {
         let text = std::fs::read_to_string(profiles_dir().join(format!("{profile}.env")))
             .unwrap_or_else(|e| panic!("profiles/{profile}.env illisible : {e}"));
         let vars = parse_env(&text);

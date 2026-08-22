@@ -9,6 +9,43 @@ une population de **nano-agents éphémères** qui communiquent via un
 **espace latent partagé** et convergent vers un consensus tensoriel en
 millisecondes.
 
+## Scella — le reçu souverain, en **une** commande
+
+Sur une machine où rien n'est installé, Docker excepté :
+
+```bash
+docker compose up
+```
+
+Vous verrez d'abord la passerelle **annoncer ce qu'elle sert réellement** — son
+rapport de démarrage nomme chaque capacité et ce que son absence coûte. Puis une
+démonstration : un run, son reçu, son export, et une **troncature démasquée par
+un simple comptage — sans aucune clé, sans cryptographie, sans accorder sa
+confiance à qui que ce soit**.
+
+Cette dernière propriété est la seule qui vaille d'être regardée. Le sceau d'une
+chaîne a une faiblesse que rien, de l'intérieur, ne trahit : *le préfixe d'une
+chaîne valide est lui-même valide*. Un bundle tronqué se re-prouve parfaitement.
+Le seul témoin possible est **hors** du bundle — l'ancre publiée à l'export, qui
+annonce le nombre de nœuds. La confronter est un comptage, que vous refaites
+vous-même avec `grep -c` et `awk` sur les fichiers laissés dans le volume.
+
+> **Ce que cette démonstration ne prouve PAS.** Aucune clé n'est fournie : la
+> passerelle tourne sur la clé de **test publique**, connue de quiconque a lu ce
+> dépôt. Le reçu produit démontre le **mécanisme**, jamais la **substance** — il
+> n'oppose rien à personne. Pour cela il faut une clé que vous seul détenez :
+> `EFE_NANO_AUDIT_HMAC_MASTER=$(openssl rand -hex 32) docker compose up`.
+> Et ce qu'un reçu atteste, même avec une vraie clé, reste l'**intégrité** de ce
+> qui a été enregistré — jamais la **correction** de la décision.
+
+Le détail se lit dans [`compose.yaml`](compose.yaml),
+[`profiles/docker.env`](profiles/docker.env) et
+[`crates/scella-preuve`](crates/scella-preuve). Sans démon Docker, la charge
+utile — passerelle, reçu, ancre, détection de troncature — se vérifie seule :
+`bash scripts/m4-check.sh`.
+
+---
+
 ## Quickstart (5 minutes)
 
 ```bash

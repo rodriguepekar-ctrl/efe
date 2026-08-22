@@ -1,0 +1,65 @@
+# syntax=docker/dockerfile:1.7
+#
+# ═══ Scella — M4 : la démonstration en une commande ═══════════════════════════
+#
+# Une image, trois binaires, aucun shell.
+#
+#   efe-swarm-gateway   la passerelle souveraine
+#   scella-preuve       le pilote de la démonstration (il conduit, il ne prouve pas)
+#   verify-mini         le vérifieur tiers — arbre de dépendances VIDE
+#
+# Pourquoi les trois dans UNE image : la démonstration doit tenir en un `docker
+# compose up`. Deux images, ce serait deux builds d'un même workspace, donc deux
+# fois la même attente pour rien.
+#
+# Pourquoi distroless : ni shell, ni gestionnaire de paquets, ni utilitaires.
+# Une image de démonstration est ce qu'un inconnu exécute EN PREMIER — c'est le
+# pire moment pour lui livrer une surface d'attaque en cadeau. C'est aussi
+# pourquoi le pilote est un binaire Rust et non un script : sans shell, un
+# script n'aurait rien pour tourner.
+#
+# Build (depuis la racine du dépôt) :
+#   docker compose build
+#
+# Le premier build est LONG : il compile la fermeture de la passerelle depuis
+# zéro. Les suivants réutilisent le cache de couches.
+
+ARG RUST_VERSION=1.88
+
+# ── Étage 1 : compilation ─────────────────────────────────────────────────────
+FROM rust:${RUST_VERSION}-bookworm AS builder
+WORKDIR /src
+
+# Le contexte exclut `target/` via .dockerignore — sans quoi il pèserait ~116 Go.
+COPY . .
+
+# `--locked` : le build échoue si `Cargo.lock` n'est pas à jour, plutôt que de
+# résoudre silencieusement d'autres versions que celles qui ont été testées.
+# On ne compile QUE les trois fermetures nécessaires, pas les 68 membres.
+RUN cargo build --release --locked \
+      -p efe-swarm-gateway \
+      -p scella-preuve \
+      -p verify-mini
+
+# Le dossier de travail partagé, créé ICI avec le bon propriétaire : distroless
+# n'a pas de shell pour faire un `chown`, et un volume nommé hérite du
+# propriétaire du dossier de l'image lors de sa première initialisation.
+RUN mkdir -p /preuve && chown -R 65532:65532 /preuve
+
+# ── Étage 2 : exécution ───────────────────────────────────────────────────────
+FROM gcr.io/distroless/cc-debian12:nonroot AS runtime
+
+COPY --from=builder /src/target/release/efe-swarm-gateway /usr/local/bin/efe-swarm-gateway
+COPY --from=builder /src/target/release/scella-preuve     /usr/local/bin/scella-preuve
+COPY --from=builder /src/target/release/verify-mini       /usr/local/bin/verify-mini
+COPY --from=builder --chown=65532:65532 /preuve /preuve
+
+# Le profil est livré dans l'image pour être LISIBLE par qui inspecte l'image.
+# Il n'est pas lu par elle : c'est `compose.yaml` qui l'injecte via `env_file`,
+# depuis le dépôt — le même fichier que le test T2 de M0 vérifie. Une seule
+# source de vérité, et elle est sous test.
+COPY --from=builder /src/profiles/docker.env /etc/scella/docker.env
+
+USER 65532:65532
+EXPOSE 8080
+ENTRYPOINT ["/usr/local/bin/efe-swarm-gateway"]

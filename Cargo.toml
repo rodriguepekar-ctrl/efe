@@ -294,6 +294,8 @@ members = [
     # M1 — l'unique analyseur d'autorité, partagé par le périmètre preuve ET le périmètre essaim.
     # Zéro dépendance, donc une feuille : chacun des deux la prend sans gagner de chemin vers l'autre.
     "crates/scella-authority",
+    # M4 — le pilote de la démonstration en une commande (`docker compose up`).
+    "crates/scella-preuve",
 ]
 
 [workspace.package]

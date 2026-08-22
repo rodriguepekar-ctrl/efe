@@ -7384,6 +7384,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "scella-preuve"
+version = "0.0.1"
+dependencies = [
+ "serde_json",
+ "verify-mini",
+]
+
+[[package]]
 name = "schannel"
 version = "0.1.29"
 source = "registry+https://github.com/rust-lang/crates.io-index"
