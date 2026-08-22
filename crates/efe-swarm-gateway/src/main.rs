@@ -133,6 +133,25 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         ..Default::default()
     };
 
+    // ── M5 : le pont vers le registre réglementaire ────────────────────────────────────────
+    // Il exige les DEUX interrupteurs. Un dossier de sortie sans cadre ne peut rien dériver, et un
+    // cadre sans dossier n'a nulle part où écrire — câbler un demi-pont produirait un rapport qui
+    // annonce une capacité que rien ne sert.
+    #[cfg(feature = "reg-evidence")]
+    {
+        let dir = efe_swarm_gateway::profile::read::reg_evidence_dir();
+        let cadre = efe_swarm_gateway::reg_pont::cadre_de(
+            efe_swarm_gateway::profile::read::reg_framework().as_deref(),
+        );
+        if let (Some(d), Some(f)) = (dir, cadre) {
+            state = state.with_reg_pont(efe_swarm_gateway::reg_pont::RegPont {
+                dir: std::path::PathBuf::from(d),
+                framework: f,
+            });
+            observed.reg_pont = true;
+        }
+    }
+
     // ── Routeur frontière (Network) + mapping provider→modèle (Inc.4 / Inc.4.b) ──
     if let Some(router_ep) = efe_swarm_gateway::profile::read::router_endpoint() {
         state = state.with_router_endpoint(router_ep);

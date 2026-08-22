@@ -10,6 +10,8 @@ pub mod health; // Sondes k8s (M4 §G4) : /healthz (liveness) + /readyz (readine
 pub mod memory;
 pub mod metrics;
 pub mod records;
+#[cfg(feature = "reg-evidence")]
+pub mod reg; // M5 : /v1/swarm/reg/:id — re-dériver le dossier réglementaire
 pub mod replay;
 pub mod run;
 pub mod verify;
@@ -24,7 +26,8 @@ use crate::state::SwarmGatewayState;
 /// Le `Router` des routes d'essaim (**relatif** : `run`, `verify/:id`, `runs/:id`,
 /// `runs/:id/records`, `runs/:id/events`, `events`). Montez-le sous `/v1/swarm` (`.nest`).
 pub fn routes() -> Router<SwarmGatewayState> {
-    Router::new()
+    #[allow(unused_mut)]
+    let mut r = Router::new()
         .route("/run", post(run::run))
         .route("/verify/:id", get(verify::verify))
         // M2 : le canal de l'AUDITEUR. Monté dans les deux postures — sous `blocking` il rend un
@@ -39,5 +42,12 @@ pub fn routes() -> Router<SwarmGatewayState> {
         .route("/events", get(events::tenant_events)) // SSE : firehose tenant (Inc.3)
         // ADR-019 (MEM-3) : mémoire inter-runs — instantané + re-preuve du memory_root.
         .route("/memory/:family", get(memory::get_memory))
-        .route("/memory/:family/verify", get(memory::verify_memory_chain))
+        .route("/memory/:family/verify", get(memory::verify_memory_chain));
+    // M5 : la contrepartie de la dérivation automatique — sans elle, un dossier manqué serait
+    // perdu, et la décision de ne pas couper la requête deviendrait une perte silencieuse.
+    #[cfg(feature = "reg-evidence")]
+    {
+        r = r.route("/reg/:id", post(reg::rederiver));
+    }
+    r
 }

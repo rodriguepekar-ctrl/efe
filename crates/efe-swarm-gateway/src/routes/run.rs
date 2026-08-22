@@ -152,6 +152,19 @@ pub async fn run(
                         persistance,
                         &state.gaps,
                     );
+                    // **M5** — le même geste qu'en synchrone. Ici il n'y a pas de réponse à
+                    // porter (le 202 est parti depuis longtemps), donc l'échec se dit au
+                    // journal d'exploitation ; le dossier reste re-dérivable par la route.
+                    if let Some(r) =
+                        state.reg_dossier(run_id, &tenant, &crate::store::StoredRun::from_outcome(&tenant, &outcome))
+                    {
+                        if !r.produced {
+                            eprintln!(
+                                "⚠ run {run_id} (mode job) : dossier réglementaire NON produit — {}",
+                                r.degrade_reason.as_deref().unwrap_or("raison inconnue")
+                            );
+                        }
+                    }
                 }
                 Err(e) => {
                     bus.emit(DashboardEvent::RunFailed { message: e.to_string() });
@@ -191,7 +204,21 @@ pub async fn run(
             capture.degrade_reason.as_deref().unwrap_or("inconnue")
         );
     }
-    Ok((StatusCode::OK, Json(RunResponse { run_id, run: outcome.run, capture })).into_response())
+    // ── M5 : le dossier réglementaire, sans geste manuel ──────────────────────────────────
+    // Le run vient d'avoir lieu ; le dossier se dérive DE LUI, ici, sans que personne n'ait à
+    // rappeler la passerelle. `reg_dossier` ne peut pas échouer : un dossier manquant est
+    // récupérable par `POST /v1/swarm/reg/:id`, contrairement à une persistance manquée.
+    let reg = s.reg_dossier(run_id, &caller.tenant, &crate::store::StoredRun::from_outcome(&caller.tenant, &outcome));
+    if let Some(r) = &reg {
+        if !r.produced {
+            eprintln!(
+                "⚠ run {run_id} : dossier réglementaire NON produit — {} (le run est persisté, \
+                 `POST /v1/swarm/reg/{run_id}` le re-dérive)",
+                r.degrade_reason.as_deref().unwrap_or("raison inconnue")
+            );
+        }
+    }
+    Ok((StatusCode::OK, Json(RunResponse { run_id, run: outcome.run, capture, reg })).into_response())
 }
 
 /// **ADR-019 (MEM-3)** : incrémente les compteurs `/metrics` de recall/learn d'après le résumé

@@ -2971,6 +2971,7 @@ dependencies = [
  "provenance-bridge",
  "provenance-capture",
  "provenance-dag",
+ "reg-evidence",
  "regex",
  "serde",
  "serde_json",

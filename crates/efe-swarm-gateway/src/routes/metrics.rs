@@ -32,6 +32,22 @@ fn render_capture(s: &SwarmGatewayState) -> String {
     )
 }
 
+/// **M5** — le pont vers le registre. Deux séries, comme pour les brèches de M2 : le compteur dit
+/// l'ampleur, la jauge dit si un dossier est seulement POSSIBLE. Sans la seconde, un compteur à
+/// zéro se lirait comme « rien à signaler » alors qu'il peut être nul parce que le pont n'existe pas.
+fn render_reg(s: &SwarmGatewayState) -> String {
+    format!(
+        "# HELP efe_swarm_reg_dossiers_total Dossiers d'évidence réglementaire écrits (M5).\n\
+         # TYPE efe_swarm_reg_dossiers_total counter\n\
+         efe_swarm_reg_dossiers_total {}\n\
+         # HELP efe_swarm_reg_pont Pont vers le registre : 1 = câblé (un dossier est possible), 0 = non.\n\
+         # TYPE efe_swarm_reg_pont gauge\n\
+         efe_swarm_reg_pont {}\n",
+        s.reg_dossiers.load(std::sync::atomic::Ordering::Relaxed),
+        u8::from(s.reg_pont_cable()),
+    )
+}
+
 fn render_admission(s: &SwarmGatewayState) -> String {
     let inflight = s.admission_max.saturating_sub(s.admission.available_permits());
     format!(
@@ -83,7 +99,7 @@ fn render_frontier(_s: &SwarmGatewayState) -> String {
 
 pub async fn metrics(State(s): State<SwarmGatewayState>) -> impl IntoResponse {
     let body = format!(
-        "{}{}{}{}{}{}",
+        "{}{}{}{}{}{}{}",
         s.prov_metrics.render_prometheus(),
         s.substrate_metrics.render_prometheus(),
         // Inc.3 : surfaces du dashboard (events émis/perdus + jauges live).
@@ -92,6 +108,8 @@ pub async fn metrics(State(s): State<SwarmGatewayState>) -> impl IntoResponse {
         render_admission(&s),
         // M2 : brèches de capture + posture en vigueur.
         render_capture(&s),
+        // M5 : dossiers réglementaires + état du pont.
+        render_reg(&s),
         // Couche 2 (M4 §2.4) : egress frontière (vide hors feature).
         render_frontier(&s),
     );

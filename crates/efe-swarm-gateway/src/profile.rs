@@ -233,6 +233,26 @@ pub const REGISTRY: &[Switch] = &[
         class: Class::Degraded,
         fatal_if_invalid: false,
     },
+    // ── Pont réglementaire (M5) ───────────────────────────────────────────────────────────────
+    Switch {
+        name: "EFE_SWARM_REG_EVIDENCE_DIR",
+        buys: "le pont vers le REGISTRE : chaque run produit son dossier d'évidence \
+               réglementaire, sans geste manuel",
+        absence_costs: "aucun dossier réglementaire — le reçu reste re-prouvable, mais rien ne le \
+                        met en regard des exigences (EU AI Act art. 12, GDPR, CSDDD/LkSG). Le \
+                        travail de mise en correspondance reste manuel, à faire après coup",
+        class: Class::Degraded,
+        fatal_if_invalid: false,
+    },
+    Switch {
+        name: "EFE_SWARM_REG_FRAMEWORK",
+        buys: "le cadre visé par les dossiers dérivés",
+        absence_costs: "aucun cadre choisi ⟹ le pont reste ÉTEINT même si un dossier de sortie est \
+                        posé. On ne devine jamais un cadre : se tromper produit un dossier qui a \
+                        l'air correct et répond à la mauvaise question",
+        class: Class::Degraded,
+        fatal_if_invalid: false,
+    },
     // ── Routage ───────────────────────────────────────────────────────────────────────────────
     Switch {
         name: "EFE_SWARM_ROUTER_ENDPOINT",
@@ -323,8 +343,12 @@ pub struct Invalide {
 /// retombe silencieusement sur le défaut, et l'opérateur croit avoir choisi une posture qu'il n'a
 /// pas. Généraliser le mécanisme plutôt que d'ajouter un cas particulier, c'est ce qui évite que le
 /// prochain interrupteur énuméré rate le filet à son tour.
-pub const ENUMS: &[(&str, &[&str])] =
-    &[("EFE_SWARM_CAPTURE_POLICY", &["blocking", "observation"])];
+pub const ENUMS: &[(&str, &[&str])] = &[
+    ("EFE_SWARM_CAPTURE_POLICY", &["blocking", "observation"]),
+    // M5 : la liste vit dans `reg_pont`, à côté du code qui l'interprète — la publier ici en dur
+    // rouvrirait l'écart entre ce que le rapport annonce et ce que le binaire accepte.
+    ("EFE_SWARM_REG_FRAMEWORK", crate::reg_pont::CADRES),
+];
 
 /// Les valeurs fournies mais refusées, depuis une table quelconque — un fichier de profil compris.
 ///
@@ -578,6 +602,19 @@ pub mod read {
         raw("EFE_SWARM_CAPTURE_POLICY")
     }
 
+    /// **M5** : où écrire les dossiers réglementaires. Absent ⟹ pont éteint.
+    #[must_use]
+    pub fn reg_evidence_dir() -> Option<String> {
+        raw("EFE_SWARM_REG_EVIDENCE_DIR")
+    }
+
+    /// **M5** : le cadre visé. Une valeur hors énumération est signalée par
+    /// [`super::invalides_from_env`] et laisse le pont ÉTEINT — jamais un cadre deviné.
+    #[must_use]
+    pub fn reg_framework() -> Option<String> {
+        raw("EFE_SWARM_REG_FRAMEWORK")
+    }
+
     // ── Routage ───────────────────────────────────────────────────────────────────────────────
 
     #[must_use]
@@ -671,6 +708,8 @@ pub struct Observed {
     /// Une URL de relais a-t-elle été **posée** ? Posée sans câblage ⟹ [`Status::Refusee`], sur le
     /// même patron que la frontière.
     pub slm_intended: bool,
+    /// **M5** : le pont réglementaire est-il réellement câblé sur l'état servi ?
+    pub reg_pont: bool,
     /// **M2** : la posture d'observation est-elle réellement câblée sur l'état servi ?
     pub capture_observation: bool,
     /// Câblé — mais l'hôte est-il DANS le périmètre ? Câblé hors périmètre, la capacité fonctionne
@@ -817,6 +856,10 @@ fn line_refusee(
 /// (`bundle_export_from_env` est une fonction libre pour la même raison).
 #[derive(Debug, Clone, Copy, Default)]
 pub struct Resolved {
+    /// **M5** : le pont réglementaire est-il demandé ? Il exige les DEUX interrupteurs — un
+    /// dossier de sortie sans cadre ne peut rien dériver, et un cadre sans dossier n'a nulle part
+    /// où écrire. Les compter séparément laisserait croire à un demi-câblage qui n'existe pas.
+    pub reg_pont: bool,
     /// **M2** : la posture d'observation est-elle demandée ? Porté par `Resolved` — et non lu par
     /// `read::` au moment de rendre le rapport — parce que `from_resolved` doit rester résoluble
     /// depuis une TABLE quelconque : sans quoi un test de profil devrait muter l'environnement du
@@ -840,6 +883,8 @@ impl Resolved {
     #[must_use]
     pub fn from_env() -> Self {
         Self {
+            reg_pont: read::reg_evidence_dir().is_some()
+                && read::reg_framework().is_some_and(|f| crate::reg_pont::CADRES.contains(&f.trim())),
             capture_observation: read::capture_policy().as_deref() == Some("observation"),
             master: read::master_present(),
             anchor: read::anchor_log().is_some(),
@@ -863,6 +908,9 @@ impl Resolved {
         let p = |k: &str| read::present_of(get(k).as_deref());
         let f = |k: &str| read::flag_of(get(k).as_deref());
         Self {
+            reg_pont: p("EFE_SWARM_REG_EVIDENCE_DIR")
+                && get("EFE_SWARM_REG_FRAMEWORK")
+                    .is_some_and(|f| crate::reg_pont::CADRES.contains(&f.trim())),
             capture_observation: get("EFE_SWARM_CAPTURE_POLICY").as_deref() == Some("observation"),
             master: p("EFE_NANO_AUDIT_HMAC_MASTER"),
             anchor: p("EFE_SWARM_ANCHOR_LOG"),
@@ -932,6 +980,7 @@ impl Report {
             line("EFE_OIDC_PUBLIC_KEY_PEM", "authentification", o.oidc),
             line("EFE_SWARM_ROUTER_ENDPOINT", "routeur de modèles", o.router),
             line("EFE_SWARM_CAPTURE_POLICY", "posture de capture", o.capture_observation),
+            line("EFE_SWARM_REG_EVIDENCE_DIR", "pont réglementaire", o.reg_pont),
         ]);
         let mut r = Self::from_resolved(&Resolved::default());
         // On garde les lignes de RÉGLAGE (plafonds, admission) telles que calculées, et on
@@ -978,6 +1027,7 @@ impl Report {
         // défaut sûr pour la preuve. Mais la capacité « observation non intrusive » y est bel et
         // bien éteinte, et son coût doit être lisible : le rapport nomme ce que le client perd.
         capabilities.push(line("EFE_SWARM_CAPTURE_POLICY", "posture de capture", r.capture_observation));
+        capabilities.push(line("EFE_SWARM_REG_EVIDENCE_DIR", "pont réglementaire", r.reg_pont));
         capabilities.push(CapabilityReport {
             capability: "plafonds de requête",
             status: Status::Servie,

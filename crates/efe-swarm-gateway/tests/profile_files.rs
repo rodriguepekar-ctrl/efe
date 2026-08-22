@@ -105,6 +105,14 @@ fn t2_profil_docker() {
     check("docker");
 }
 
+/// **M5** — le profil qui prend LES DEUX produits. Vérifié comme les autres : c'est le seul qui
+/// annonce le pont servi, et un profil qui annoncerait à tort une capacité réglementaire serait
+/// le plus coûteux des mensonges de ce dépôt.
+#[test]
+fn t2_profil_jonction() {
+    check("jonction");
+}
+
 /// **Le test qui prouve que les profils sont complets — secret excepté.**
 ///
 /// `souverain` ne pose délibérément AUCUN secret : le rapport y annonce donc
@@ -146,7 +154,7 @@ fn aucun_profil_ne_contient_de_secret() {
         "EFE_OIDC_PUBLIC_KEY_PEM",
         "DATABASE_URL",
     ];
-    for profile in ["demo", "souverain", "frontiere", "docker"] {
+    for profile in ["demo", "souverain", "frontiere", "docker", "jonction"] {
         let text = std::fs::read_to_string(profiles_dir().join(format!("{profile}.env")))
             .unwrap_or_else(|e| panic!("{profile}.env : {e}"));
         let vars = parse_env(&text);
@@ -172,7 +180,7 @@ fn aucun_profil_ne_contient_de_secret() {
 /// non posé. C'est tout l'intérêt du mécanisme — voir ce que la réduction en booléen efface.
 #[test]
 fn aucun_profil_livre_ne_pose_une_valeur_refusee() {
-    for profile in ["demo", "souverain", "frontiere", "docker"] {
+    for profile in ["demo", "souverain", "frontiere", "docker", "jonction"] {
         let text = std::fs::read_to_string(profiles_dir().join(format!("{profile}.env")))
             .unwrap_or_else(|e| panic!("profiles/{profile}.env illisible : {e}"));
         let vars = parse_env(&text);

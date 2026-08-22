@@ -49,6 +49,9 @@ mod auth;
 /// Public : le rapport de capture voyage dans le DTO de réponse, donc dans l'API.
 pub mod capture;
 mod dto;
+/// **M5** — le pont vers le registre réglementaire. Sous feature : le coin et l'expansion sont
+/// deux produits séparables, et la séparation est mécanique plutôt que déclarative.
+pub mod reg_pont;
 mod error;
 #[cfg(feature = "oidc")]
 mod oidc;
@@ -383,6 +386,160 @@ mod tests {
             fini.is_terminal(),
             "`run_finished` ferme le flux ; tout ce qui suit la persistance est inaudible"
         );
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════════════════
+    //  M5 — la jonction : un run produit son dossier réglementaire, sans geste manuel
+    // ═══════════════════════════════════════════════════════════════════════════════════════
+
+    #[cfg(feature = "reg-evidence")]
+    fn app_avec_pont(dir: &std::path::Path) -> Router {
+        let state = SwarmGatewayState::new(
+            Arc::new(AgentFleet::standard()),
+            HmacKeySource::test_key(),
+            Arc::new(InMemoryRunStore::new()),
+            ProvenanceMetrics::new(),
+            Arc::new(SubstrateMetrics::default()),
+        )
+        .with_reg_pont(crate::reg_pont::RegPont {
+            dir: dir.to_path_buf(),
+            framework: crate::reg_pont::Framework::EuAiAct,
+        });
+        router(state)
+    }
+
+    /// **LE CRITÈRE DE FIN DE M5** — *« un run de la passerelle produit un dossier `reg-evidence`
+    /// **sans geste manuel** »*.
+    ///
+    /// « Sans geste manuel » est le mot qui compte. Les pièces existaient déjà toutes : le pont de
+    /// provenance traduit un run en nœuds de DAG scellés, `reg-evidence` les re-prouve et en dérive
+    /// l'artefact. Ce qui manquait, c'était que cela arrive **tout seul** — sans qu'un agent de
+    /// conformité doive rappeler la passerelle, exporter un bundle, puis lancer une dérivation.
+    ///
+    /// Ce test ne regarde donc pas seulement la réponse : il va voir **sur le disque**.
+    #[cfg(feature = "reg-evidence")]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn m5_un_run_produit_son_dossier_sans_geste_manuel() {
+        let dir = std::env::temp_dir().join(format!("m5-dossier-{}", Uuid::new_v4()));
+        let app = app_avec_pont(&dir);
+
+        let resp = app
+            .oneshot(post_run(json!({ "task": { "text": "x" }, "topology": { "kind": "auto" } })))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let b = body_json(resp).await;
+        let run_id = b["run_id"].as_str().expect("run_id").to_string();
+
+        // 1. La réponse dit que le dossier a été produit, et à quelle question il répond.
+        assert_eq!(b["reg"]["produced"], json!(true));
+        assert_eq!(b["reg"]["framework"], json!("eu_ai_act"));
+        assert!(
+            b["reg"]["manifest_root"].as_str().is_some_and(|r| !r.is_empty()),
+            "le manifest-root lie le dossier à un état PRÉCIS du DAG — sans lui, un lecteur ne \
+             saurait pas de quoi le dossier parle"
+        );
+        assert!(
+            b["reg"]["mapping_version"].as_str().is_some(),
+            "la version de lecture distingue « le run a changé » de « la règle a changé »"
+        );
+
+        // 2. Et le dossier est SUR LE DISQUE — personne n'a rappelé la passerelle.
+        let reg = dir.join(&run_id).join("reg");
+        let fichiers: Vec<String> = std::fs::read_dir(&reg)
+            .unwrap_or_else(|e| panic!("dossier {} absent : {e}", reg.display()))
+            .flatten()
+            .map(|e| e.file_name().to_string_lossy().into_owned())
+            .collect();
+        assert_eq!(fichiers.len(), 3, "l'artefact, la lecture versionnée, le mode d'emploi : {fichiers:?}");
+        assert!(fichiers.iter().any(|f| f == "eu_ai_act.md"), "{fichiers:?}");
+        assert!(fichiers.iter().any(|f| f.starts_with("mapping.")), "la LECTURE voyage : {fichiers:?}");
+        assert!(fichiers.iter().any(|f| f == "REDERIVE.md"), "{fichiers:?}");
+
+        // 3. Le dossier ne prononce PAS la conformité. `reg-evidence` l'interdit par construction
+        //    — sa sémantique est une énumération à une seule valeur — mais ce test fige la promesse
+        //    au niveau du FICHIER réellement écrit, qui est ce qu'un régulateur lira.
+        //
+        //    L'assertion la plus forte n'est pas la présence d'un marqueur mais l'ABSENCE d'un
+        //    verdict : un artefact qui contiendrait « compliant » aurait franchi la ligne, quels
+        //    que soient les avertissements qui l'entourent.
+        let md = std::fs::read_to_string(reg.join("eu_ai_act.md")).expect("artefact lisible");
+        assert!(
+            !md.to_lowercase().contains("compliant"),
+            "aucun verdict de conformité ne doit apparaître dans l'artefact servi"
+        );
+        assert!(
+            md.to_lowercase().contains("outillé ≠ conforme"),
+            "l'avertissement doit voyager AVEC le dossier — un régulateur lit le fichier, pas notre \
+             documentation"
+        );
+        assert!(
+            md.contains("pas nécessairement correcte"),
+            "« intègre ≠ correct » doit être propagé : le reçu atteste ce qui a été enregistré, \
+             jamais la justesse de la décision"
+        );
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    /// Sans pont câblé, le champ est ABSENT — et il l'est de la même façon dans les deux builds.
+    /// Un client n'a pas à savoir comment le binaire a été construit pour lire sa réponse.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn m5_sans_pont_la_reponse_ne_promet_rien() {
+        let (app, _store) = app_with_store();
+        let resp = app
+            .oneshot(post_run(json!({ "task": { "text": "x" }, "topology": { "kind": "auto" } })))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let b = body_json(resp).await;
+        assert!(b.get("reg").is_none(), "pont non câblé ⟹ aucun champ, aucune promesse");
+    }
+
+    /// **La contrepartie de la non-fatalité.** `deriver` ne fait jamais tomber la requête ; cette
+    /// tolérance n'est défendable que si un dossier manqué se rattrape. Ce test exige que la route
+    /// de re-dérivation existe et rende le MÊME artefact — sinon « pas écrit » deviendrait
+    /// « perdu », et la décision de ne pas couper se changerait en perte silencieuse.
+    #[cfg(feature = "reg-evidence")]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn m5_un_dossier_manque_se_rattrape_a_lidentique() {
+        let dir = std::env::temp_dir().join(format!("m5-rederive-{}", Uuid::new_v4()));
+        let app = app_avec_pont(&dir);
+
+        let run = app
+            .clone()
+            .oneshot(post_run(json!({ "task": { "text": "x" }, "topology": { "kind": "auto" } })))
+            .await
+            .unwrap();
+        let b = body_json(run).await;
+        let run_id = b["run_id"].as_str().unwrap().to_string();
+        let racine_1 = b["reg"]["manifest_root"].as_str().unwrap().to_string();
+
+        // On efface le dossier, comme si la dérivation avait échoué à l'écriture.
+        std::fs::remove_dir_all(dir.join(&run_id)).expect("effacement");
+
+        let re = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri(format!("/v1/swarm/reg/{run_id}"))
+                    .header("x-efe-roles", HeaderValue::from_static("auditor"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(re.status(), StatusCode::OK, "le run est persisté : le dossier se re-dérive");
+        let rb = body_json(re).await;
+        assert_eq!(rb["produced"], json!(true));
+        assert_eq!(
+            rb["manifest_root"].as_str(), Some(racine_1.as_str()),
+            "À L'IDENTIQUE : la dérivation est une fonction du run, pas une reconstitution de mémoire"
+        );
+        assert!(dir.join(&run_id).join("reg").join("eu_ai_act.md").exists(), "et le dossier est revenu");
+
+        std::fs::remove_dir_all(&dir).ok();
     }
 
     const TENANT_A: &str = "11111111-1111-1111-1111-111111111111";

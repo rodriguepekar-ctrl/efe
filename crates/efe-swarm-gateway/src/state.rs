@@ -141,6 +141,14 @@ pub struct SwarmGatewayState {
     /// [`crate::capture::CapturePolicy::Bloquante`] — comportement d'avant M2, à l'octet près.
     /// La posture d'observation est un opt-in déclaré au registre M0, jamais un défaut silencieux.
     pub capture_policy: crate::capture::CapturePolicy,
+    /// **M5** : le pont vers le registre réglementaire. `None` ⟹ non câblé, et le rapport M0 le
+    /// dit. Sous feature : le coin et l'expansion sont deux produits séparables.
+    #[cfg(feature = "reg-evidence")]
+    pub reg_pont: Option<crate::reg_pont::RegPont>,
+    /// **M5** : dossiers réglementaires écrits. Compteur présent dans les DEUX builds — un
+    /// exploitant qui compare deux déploiements doit lire la même série, pas en chercher une qui
+    /// n'existerait que d'un côté.
+    pub reg_dossiers: Arc<AtomicU64>,
     /// **M2** : le journal des brèches — les runs servis qu'on n'a PAS pu persister. Une brèche
     /// invisible serait pire que pas de chaîne du tout : la valeur d'une chaîne EST d'être complète.
     pub gaps: Arc<crate::capture::GapJournal>,
@@ -262,6 +270,9 @@ impl SwarmGatewayState {
             memory_recalls: Arc::new(AtomicU64::new(0)),
             memory_learns: Arc::new(AtomicU64::new(0)),
             capture_policy: crate::capture::CapturePolicy::default(),
+            #[cfg(feature = "reg-evidence")]
+            reg_pont: None,
+            reg_dossiers: Arc::new(AtomicU64::new(0)),
             gaps: Arc::new(crate::capture::GapJournal::new()),
             prov_metrics,
             substrate_metrics,
@@ -462,6 +473,80 @@ impl SwarmGatewayState {
         tenant: &str,
     ) -> Result<Option<crate::store::StoredRun>, crate::error::GatewayError> {
         self.store.get(id, tenant).await
+    }
+
+    /// **M5** : câble le pont vers le registre. Réservé au binaire et aux tests.
+    #[cfg(feature = "reg-evidence")]
+    #[must_use]
+    pub fn with_reg_pont(mut self, pont: crate::reg_pont::RegPont) -> Self {
+        self.reg_pont = Some(pont);
+        self
+    }
+
+    /// **M5** — dérive le dossier réglementaire d'un run, si le pont est câblé.
+    ///
+    /// Point d'entrée UNIQUE : les deux chemins qui produisent un run (l'essaim et la mission
+    /// frontière) l'appellent à l'identique, et aucun ne décide dans son coin. C'est la même
+    /// discipline que `capture::decider` pour la panne, et pour la même raison — deux décisions
+    /// indépendantes finissent par diverger.
+    ///
+    /// **Ne peut pas échouer.** Un dossier manquant est récupérable (`POST /v1/swarm/reg/:id`) ;
+    /// faire tomber la requête d'un client pour un artefact qu'on saura reconstituer serait
+    /// injustifiable. `None` ⟹ le pont n'est pas câblé, ce que le rapport de démarrage annonce.
+    #[cfg(feature = "reg-evidence")]
+    #[must_use]
+    pub fn reg_dossier(
+        &self,
+        run_id: uuid::Uuid,
+        tenant: &str,
+        stored: &crate::store::StoredRun,
+    ) -> Option<crate::reg_pont::RegReport> {
+        let pont = self.reg_pont.as_ref()?;
+        // La clé de pile A : sans elle, rien ne peut être re-prouvé, donc rien ne peut être dérivé.
+        // On le DIT plutôt que de rendre `None`, qui se confondrait avec « pont non câblé ».
+        let a_key = match self.derive_key(tenant) {
+            Ok(k) => k,
+            Err(e) => {
+                return Some(crate::reg_pont::RegReport::echec(
+                    crate::reg_pont::slug(pont.framework),
+                    format!("clé tenant indisponible : {e}"),
+                ))
+            }
+        };
+        let r = crate::reg_pont::deriver(pont, run_id, tenant, &a_key, stored);
+        if r.produced {
+            self.reg_dossiers.fetch_add(1, Ordering::Relaxed);
+        }
+        Some(r)
+    }
+
+    /// Sans la feature, le pont n'existe pas — et la réponse le dit par un `None`, dans la MÊME
+    /// forme que lorsqu'il est simplement non câblé. Un client n'a donc pas à savoir comment le
+    /// binaire a été construit pour lire sa réponse.
+    #[cfg(not(feature = "reg-evidence"))]
+    #[must_use]
+    pub fn reg_dossier(
+        &self,
+        _run_id: uuid::Uuid,
+        _tenant: &str,
+        _stored: &crate::store::StoredRun,
+    ) -> Option<crate::reg_pont::RegReport> {
+        None
+    }
+
+    /// **M5** : le pont est-il câblé ? Répond dans les deux builds — sans la feature, il ne peut
+    /// pas l'être, et le dire vaut mieux que de laisser une jauge absente.
+    #[cfg(feature = "reg-evidence")]
+    #[must_use]
+    pub fn reg_pont_cable(&self) -> bool {
+        self.reg_pont.is_some()
+    }
+
+    /// Sans la feature, le pont n'existe pas — la jauge vaut 0, jamais « absente ».
+    #[cfg(not(feature = "reg-evidence"))]
+    #[must_use]
+    pub fn reg_pont_cable(&self) -> bool {
+        false
     }
 
     /// **M2** : pose la politique de capture. Réservé au binaire et aux tests — comme

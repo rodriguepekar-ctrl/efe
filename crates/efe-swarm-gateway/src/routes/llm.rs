@@ -208,6 +208,9 @@ struct LlmMissionResponse {
     /// qu'ailleurs, puisque les appels frontière ont été facturés : un client doit savoir si la
     /// preuve de ce qu'il a payé est récupérable.
     capture: crate::capture::CaptureReport,
+    /// **M5** : le dossier réglementaire de cette mission, si le pont est câblé.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    reg: Option<crate::reg_pont::RegReport>,
 }
 
 /// Recharge le run scellé et le re-prouve (offline) pour surfacer roots + `held_strength`.
@@ -234,6 +237,19 @@ async fn mission_response(
     capture: crate::capture::CaptureReport,
 ) -> Result<Response, GatewayError> {
     let key = s.derive_key(tenant)?;
+    // **M5** — une mission frontière est un run de la passerelle comme un autre : son dossier
+    // réglementaire se dérive ici, sans geste manuel. L'audit de M2 avait trouvé que le premier
+    // passage n'avait câblé que le chemin d'essaim ; ne pas répéter l'omission coûte trois lignes.
+    let reg = s.reg_dossier(run_id, tenant, &stored);
+    if let Some(r) = &reg {
+        if !r.produced {
+            eprintln!(
+                "⚠ mission {run_id} : dossier réglementaire NON produit — {} (la mission est \
+                 persistée, `POST /v1/swarm/reg/{run_id}` le re-dérive)",
+                r.degrade_reason.as_deref().unwrap_or("raison inconnue")
+            );
+        }
+    }
     let v = verify_run_offline(&stored.records, &stored.llm_records, &stored.n17_leaf_bytes(), stored.n17_root_bytes(), &key);
     let reformulation = reformulation_view(&output);
     let body = LlmMissionResponse {
@@ -248,6 +264,7 @@ async fn mission_response(
         },
         reformulation,
         capture,
+        reg,
     };
     Ok((StatusCode::OK, Json(body)).into_response())
 }
