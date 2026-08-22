@@ -72,6 +72,36 @@
 //! le client serait tombé dix lignes plus loin. Les deux défauts se corrigent ensemble ou pas du
 //! tout, ce que seule une lecture du chemin complet fait apparaître.
 //!
+//! ## M3 — l'inventaire des pannes : ce qui dégrade, ce qui coupe, et pourquoi
+//!
+//! Une politique de dégradation ne vaut que si l'on sait **sur quoi elle porte**. Sans inventaire,
+//! rien ne distingue une coupure *décidée* d'une coupure *oubliée* — et c'est la seconde qui fait
+//! tomber un client en production. Le voici, pour le chemin d'appel de la passerelle.
+//!
+//! | Dépendance | Régime | Ce qui le prouve |
+//! |---|---|---|
+//! | reformulateur SLM mort | **dégrade**, raison estampillée dans le hop scellé | `m3_le_slm_mort_ne_coupe_pas_et_sa_raison_remonte` |
+//! | store (persistance) | **dégrade** sous la posture d'observation | `m2_le_client_recoit_sa_reponse_meme_quand_la_persistance_meurt`, `m2_une_mission_survit_a_la_mort_du_store` |
+//! | **les deux à la fois** | **dégrade** | `m3_le_slm_et_le_store_meurent_ensemble_et_lappel_passe` |
+//! | provider frontière mort | **écarté** du fan-out ; l'arité DÉCLARÉE reste re-dérivable du reçu | `call_many_ok_drops_errors`, `audit_detects_under_declaration` |
+//! | caviardage PII | infaillible (pas de `Result`) | — |
+//! | bus de supervision | best-effort borné (ring + compteur de pertes) | — |
+//! | `tenant_id` | **coupe** — et c'est correct | le tenant est une **entrée du client** ; invalide, c'est une requête malformée, pas une panne |
+//! | `derive_key` | **coupe** — et c'est correct | sans clé, rien ne peut être scellé : dégrader produirait une réponse **sans aucun reçu possible**, et la condition est déjà gardée au démarrage (`frontier_boot_guard`, `key_ok`) |
+//! | publication d'ancre (`/bundle`) | **coupe** — et c'est délibéré | servir un bundle en annonçant `anchored: true` alors que la publication a échoué serait un mensonge sur la garantie ; mieux vaut refuser la réponse. Hors chemin d'appel |
+//!
+//! **Les deux régimes ne se choisissent pas au cas par cas, mais selon une seule question :** est-ce
+//! que dégrader produit quelque chose d'**utile et d'honnête** ? Le SLM mort laisse une
+//! reformulation déterministe — utile. Le store mort laisse une réponse scellée dont le client
+//! tient la racine — utile, et l'aveu la rend honnête. Une clé cassée ne laisse **rien** : ni reçu,
+//! ni racine, ni possibilité d'en produire un plus tard. Il n'y a alors rien à dégrader *vers*, et
+//! la coupure est la seule réponse qui ne mente pas.
+//!
+//! **Limite assumée.** Cet inventaire est tenu à la main. Aucun test n'interdit qu'une dépendance
+//! future coupe sans être inscrite ici — un `?` sur un appel faillible suffirait. Les lignes
+//! ci-dessus gardent contre la **régression**, pas contre l'**oubli**. Le dire vaut mieux que
+//! laisser croire à un filet qui n'existe pas.
+//!
 //! ## Ce que M2 ne fait délibérément pas
 //!
 //! **La capture reste synchrone.** La rendre concurrente sortirait aussi sa *latence* du chemin du

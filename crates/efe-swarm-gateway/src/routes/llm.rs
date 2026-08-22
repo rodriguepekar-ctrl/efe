@@ -135,6 +135,17 @@ struct HeldStrengthView {
 /// si TOUS les hops sont `SLM` — la revendication « relais médié par le petit
 /// modèle » (§6 Fil B), gardée par construction : une seule dégradation la fait
 /// tomber, visiblement.
+///
+/// **M3** — `degraded` est un **compte**, et un compte ne se décide pas. Un client qui lit
+/// « 2 hops dégradés » ne sait pas s'il doit réessayer (robot momentanément mort), attendre
+/// (circuit ouvert), allonger sa fenêtre (deadline épuisée) ou corriger sa requête (schéma non
+/// supporté). Ces quatre situations demandent quatre gestes différents, et la vue les rendait
+/// indistinguables.
+///
+/// La raison EXISTAIT pourtant : Fil B l'estampille dans chaque hop scellé, et elle voyage dans
+/// `output.reformulation_hops`. Elle était donc récupérable — au prix de savoir qu'il faut aller
+/// la chercher dans un tableau imbriqué. C'est la forme exacte du défaut que M2 a nommé : une
+/// dégradation qu'il faut deviner est une dégradation que personne ne remarque.
 #[derive(Serialize)]
 struct ReformulationView {
     hops: usize,
@@ -142,6 +153,9 @@ struct ReformulationView {
     rule: usize,
     degraded: usize,
     slm_mediated: bool,
+    /// **M3** : `raison → nombre de hops`. Vide quand rien n'a dégradé — jamais absent, pour que
+    /// le champ soit lu dans le cas nominal aussi et pas seulement découvert le jour de la panne.
+    reasons: std::collections::BTreeMap<String, usize>,
 }
 
 /// Dérive la vue depuis la sortie de mission (champ `reformulation_hops` des
@@ -150,12 +164,21 @@ struct ReformulationView {
 fn reformulation_view(output: &Value) -> Option<ReformulationView> {
     let hops = output.get("reformulation_hops")?.as_array()?;
     let (mut slm, mut rule, mut degraded) = (0usize, 0usize, 0usize);
+    let mut reasons: std::collections::BTreeMap<String, usize> = std::collections::BTreeMap::new();
     for h in hops {
         match h.get("engine").and_then(Value::as_str) {
             Some("SLM") => slm += 1,
             Some("RULE") => rule += 1,
             Some("SLM_DEGRADED_TO_RULE") => degraded += 1,
             _ => {}
+        }
+        // **M3** : la raison est lue du hop SCELLÉ, jamais recalculée — c'est la même discipline
+        // que le reste de cette vue. Un hop dégradé sans raison est possible (run antérieur à
+        // B.4) : on le compte sous un libellé explicite plutôt que de le laisser disparaître,
+        // sans quoi la somme des raisons ne rendrait pas le compte des dégradations.
+        if h.get("engine").and_then(Value::as_str) == Some("SLM_DEGRADED_TO_RULE") {
+            let r = h.get("degrade_reason").and_then(Value::as_str).unwrap_or("raison_non_estampillée");
+            *reasons.entry(r.to_string()).or_insert(0) += 1;
         }
     }
     Some(ReformulationView {
@@ -164,6 +187,7 @@ fn reformulation_view(output: &Value) -> Option<ReformulationView> {
         rule,
         degraded,
         slm_mediated: !hops.is_empty() && slm == hops.len(),
+        reasons,
     })
 }
 
@@ -547,6 +571,159 @@ mod tests {
     /// point d'injection `with_coordinator` que le chemin servi utilise en prod.
     fn wired_state(registered: &[&str], allowed: Option<&[&str]>) -> SwarmGatewayState {
         SwarmGatewayState::in_memory().with_coordinator(Arc::new(test_coordinator(registered, allowed)))
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════════════════
+    //  M3 — la panne qui ne coupe rien
+    // ═══════════════════════════════════════════════════════════════════════════════════════
+
+    /// Un reformulateur SLM **mort**, câblé exactement comme en production.
+    ///
+    /// Le port 1 est fermé par convention : la connexion est **refusée immédiatement**, pas mise
+    /// en attente. C'est bien « le robot est mort » et non « le robot est lent » — la seconde
+    /// panne relève de la deadline (`deadline_exhausted`) et se teste ailleurs.
+    ///
+    /// Le circuit est inséré comme le fait `frontier.rs` : sans lui, le test éprouverait un
+    /// câblage qui n'existe pas. `default_slm_circuits()` ne couvre PAS le reformulateur — elle
+    /// s'arrête à analyzer/compressor/verifier — d'où l'insertion explicite, à l'identique.
+    fn clients_slm_mort() -> efe_coordinator::CoordinatorClients {
+        use efe_coordinator::{CoordinatorClients, ReformulatorClient, SlmCircuitBreaker};
+        use efe_multi_llm::SLM_REFORMULATOR_CIRCUIT_KEY;
+        use std::time::Duration;
+
+        let mut clients = CoordinatorClients::default();
+        clients.reformulator = Some(Arc::new(
+            ReformulatorClient::from_assets_multillm("http://127.0.0.1:1")
+                .expect("le client se construit sans serveur — il ne fait que lire les assets"),
+        ));
+        clients
+            .slm_circuits
+            .insert(SLM_REFORMULATOR_CIRCUIT_KEY.to_string(), SlmCircuitBreaker::new(3, Duration::from_secs(10)));
+        clients
+    }
+
+    /// Un état câblé comme la production, avec un SLM mort et un store au choix.
+    fn etat_slm_mort(llms: &[&str], store_mort: bool) -> SwarmGatewayState {
+        let reg = ProviderRegistry::new();
+        for id in llms {
+            reg.register(ProvenanceProvider::wrap(Arc::new(FakeProvider { id: (*id).into() })));
+        }
+        let pol = TenantPolicies {
+            allowed_llms: Some(llms.iter().map(|s| (*s).to_string()).collect()),
+            ..TenantPolicies::open(sys_uuid())
+        };
+        let coord = Coordinator::builder()
+            .registry(reg)
+            .policies(PolicyRegistry::new().with(pol))
+            .clients(clients_slm_mort())
+            .build()
+            .expect("coordinator de test");
+
+        let state = SwarmGatewayState::in_memory().with_coordinator(Arc::new(coord));
+        if store_mort {
+            state
+                .with_store(Arc::new(crate::test_support::StoreEnPanne))
+                .with_capture_policy(crate::capture::CapturePolicy::Observation)
+        } else {
+            state
+        }
+    }
+
+    /// La moitié « SLM » du critère, isolée : le robot est mort, la mission passe, et la RAISON
+    /// remonte jusqu'au client — pas seulement un compte.
+    #[cfg(not(feature = "oidc"))]
+    #[tokio::test]
+    async fn m3_le_slm_mort_ne_coupe_pas_et_sa_raison_remonte() {
+        let llms = ["claude_a", "gpt_b", "gemini_c"];
+        let app = crate::router(etat_slm_mort(&llms, false));
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/v1/llm/vote")
+                    .header("content-type", "application/json")
+                    .header("x-efe-roles", "operator")
+                    .body(Body::from(vote_body(&llms).to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(resp.status(), StatusCode::OK, "le robot est mort ; la mission passe");
+        let b = body_json(resp).await;
+        let r = &b["reformulation"];
+        assert!(r["degraded"].as_u64().is_some_and(|n| n > 0), "les hops ont dégradé");
+        assert_eq!(r["slm_mediated"], json!(false), "et la revendication de médiation tombe");
+        // **Le cœur de M3.a** : avant, le client lisait `degraded: 3` et ne pouvait rien décider.
+        // « robot mort » se réessaie, « circuit ouvert » s'attend, « deadline » s'allonge,
+        // « schéma » se corrige — quatre gestes différents derrière un seul compteur.
+        assert_eq!(
+            r["reasons"]["robot_error"].as_u64(),
+            r["degraded"].as_u64(),
+            "chaque dégradation porte sa raison, et la somme des raisons rend le compte"
+        );
+    }
+
+    /// **LE CRITÈRE DE FIN DE M3** — *« un test tue le SLM et le store : l'appel passe,
+    /// `degrade_reason` estampillé »*.
+    ///
+    /// Les deux mécanismes existaient séparément : Fil B dégrade le SLM, M2 rend la persistance
+    /// non fatale. Mais **personne ne les avait jamais tués ensemble**, et deux dégradations qui
+    /// fonctionnent isolément peuvent parfaitement se contredire — la seconde s'exécute après la
+    /// première, sur un chemin que la première a déjà modifié.
+    ///
+    /// Ce que ce test exige, et qu'aucun autre n'exigeait : que le client reçoive **sa réponse**,
+    /// **la raison de la dégradation SLM**, et **l'aveu que ce run n'est pas persisté** — les trois
+    /// en même temps, dans la même réponse.
+    #[cfg(not(feature = "oidc"))]
+    #[tokio::test]
+    async fn m3_le_slm_et_le_store_meurent_ensemble_et_lappel_passe() {
+        let llms = ["claude_a", "gpt_b", "gemini_c"];
+        let app = crate::router(etat_slm_mort(&llms, true));
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/v1/llm/vote")
+                    .header("content-type", "application/json")
+                    .header("x-efe-roles", "operator")
+                    .body(Body::from(vote_body(&llms).to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(
+            resp.status(),
+            StatusCode::OK,
+            "SLM mort ET store mort : l'appel passe quand même — c'est tout le module"
+        );
+        let b = body_json(resp).await;
+
+        // 1. La réponse existe, entière.
+        assert!(b["output"].is_object(), "la sortie de mission est servie");
+        assert!(b["run_id"].is_string());
+
+        // 2. La dégradation SLM est estampillée ET sa raison remonte.
+        assert!(b["reformulation"]["degraded"].as_u64().is_some_and(|n| n > 0));
+        assert!(
+            b["reformulation"]["reasons"]["robot_error"].as_u64().is_some_and(|n| n > 0),
+            "`degrade_reason` estampillé — la formulation exacte du critère de fin"
+        );
+
+        // 3. Et la brèche de persistance est dite dans la MÊME réponse.
+        assert_eq!(b["capture"]["persisted"], json!(false));
+        assert!(
+            b["capture"]["consequence"].as_str().is_some_and(|c| c.contains("ne le retrouvera jamais")),
+            "le client apprend que ce run — payé, dégradé — ne sera pas re-prouvable"
+        );
+
+        // 4. La racine est là malgré tout : c'est ce qui rend l'aveu actionnable. Sans elle, dire
+        //    « conservez votre racine » n'aurait aucun sens.
+        assert!(
+            b["provenance_root"].as_str().is_some_and(|r| r.len() == 64),
+            "la mission a bien été SCELLÉE ; seule sa PERSISTANCE a échoué"
+        );
     }
 
     /// Corps `vote` minimal (task_class SCREAMING_SNAKE).
