@@ -47,14 +47,30 @@
 //! sa conséquence est précise : *plus personne ne pourra re-prouver ce run*. Le rapport de capture
 //! le dit dans ces termes, parce qu'un client qui lit « dégradé » sans savoir quoi ne fera rien.
 //!
-//! ## Trois endroits, parce qu'une brèche que personne ne voit est pire que pas de chaîne
+//! ## Quatre endroits, parce qu'une brèche que personne ne voit est pire que pas de chaîne
 //!
 //! Le silence serait le vrai danger : une chaîne trouée que l'on croit complète vaut moins que pas
 //! de chaîne du tout, puisque sa valeur *est* d'être complète. Toute brèche se dit donc :
 //!
 //! 1. **au client**, dans la réponse — il tient une racine que personne ne pourra recouper ;
-//! 2. **à l'exploitant**, dans `/metrics` et sur le bus de supervision ;
-//! 3. **à l'auditeur**, dans le journal des brèches servi par `GET /v1/swarm/gaps`.
+//! 2. **à l'exploitant**, dans `/metrics` (deux séries : le décompte *et* la posture, sans quoi un
+//!    zéro se lirait comme une bonne nouvelle alors qu'il peut être nul par construction) ;
+//! 3. **à l'auditeur qui liste**, dans `GET /v1/swarm/gaps` ;
+//! 4. **à quiconque redemande ce run**, par [`absence_expliquee`] : les huit routes qui lisent un
+//!    run rendent `410` et non `404`. Ce quatrième canal n'était pas dans la première rédaction de
+//!    ce module — l'audit de M2 a trouvé que `verify` avait été corrigé et que **sept autres
+//!    routes** rendaient encore un `404` muet, c'est-à-dire affirmaient qu'un run servi n'avait
+//!    jamais existé.
+//!
+//! ## Les deux chemins qui persistent passent par la même couture
+//!
+//! Le chemin d'**essaim** (`POST /v1/swarm/run`) et le chemin de **mission frontière**
+//! (`/v1/llm/*`) persistent tous deux, et tous deux appellent [`decider`]. Le second est le plus
+//! coûteux à perdre : les appels aux modèles ont déjà été **facturés** quand la persistance
+//! intervient. La première rédaction de M2 ne traitait que le premier — et n'aurait de toute façon
+//! rien changé au second, dont l'appelant **relisait le store** juste après pour bâtir sa réponse :
+//! le client serait tombé dix lignes plus loin. Les deux défauts se corrigent ensemble ou pas du
+//! tout, ce que seule une lecture du chemin complet fait apparaître.
 //!
 //! ## Ce que M2 ne fait délibérément pas
 //!
@@ -64,10 +80,29 @@
 //! vraie brèche. La revendication du coin porte sur la **panne**, pas sur la latence. On tient la
 //! même promesse sans inventer une ambiguïté.
 //!
-//! **Le défaut ne change pas.** `Bloquante` reste la politique par défaut, et le comportement servi
-//! est alors byte-identique à l'avant-M2. Changer en silence le code de statut d'un chemin servi
-//! est précisément ce que M0 existe pour interdire : la posture d'observation est un **opt-in
-//! déclaré**, gouverné par un interrupteur du registre, et annoncé au démarrage.
+//! **Le défaut ne change pas** — mais disons exactement en quel sens. `Bloquante` reste la
+//! politique par défaut, et sous elle **les codes de statut et le comportement sont ceux
+//! d'avant M2** : un échec de persistance fait toujours échouer la requête.
+//!
+//! Ce n'est pas pour autant « byte-identique », et l'affirmer serait la sur-vente que ce dépôt
+//! traque partout ailleurs : la réponse a gagné un champ `capture`, dans **toutes** les postures,
+//! y compris la posture par défaut. C'est additif — un client JSON qui ignore les champs inconnus
+//! ne voit rien — mais l'octet a changé, et le dire compte.
+//!
+//! Ce qui reste vrai sans réserve : changer en silence le **code de statut** d'un chemin servi est
+//! ce que M0 existe pour interdire ; la posture d'observation est donc un **opt-in déclaré**,
+//! gouverné par un interrupteur du registre, et annoncé au démarrage.
+//!
+//! ## Le vocabulaire, pour qui cherche par les noms usuels
+//!
+//! Ce module implémente ce que l'industrie appelle **`fail_open`** sur le chemin de capture, sous
+//! une posture **`observe_only`** : la passerelle observe et enregistre, elle ne refuse jamais
+//! *pour une raison de provenance*. Les noms de code sont français (`Observation`, `Bloquante`)
+//! comme le reste du dépôt ; ces trois mots sont écrits ici pour qu'une recherche par le terme
+//! usuel — celui de la feuille de route — tombe sur le module qui les réalise.
+//!
+//! Le troisième terme de cette liste, **`shadow`** (capture concurrente, hors du chemin de la
+//! réponse), est délibérément **non implémenté** : voir la section suivante.
 
 use std::collections::VecDeque;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -287,6 +322,31 @@ pub fn decider(
     }
 }
 
+/// **Pourquoi ce run n'est-il pas là ?** — le point de décision UNIQUE de l'absence.
+///
+/// Une route qui répond `404` à un run manquant affirme *« cet identifiant n'existe pas »*. Si le
+/// run a eu lieu et n'a pas pu être persisté, c'est faux : cela **efface un fait** au lieu de le
+/// documenter — exactement ce que la chaîne de provenance existe pour empêcher.
+///
+/// Cette fonction est séparée de la route pour la même raison que [`decider`] : sept routes lisent
+/// un run persisté, et sept décisions indépendantes finiraient par diverger. Le premier audit de M2
+/// l'a prouvé — `verify` avait été corrigé, les six autres avaient gardé leur `404` muet.
+///
+/// `None` du journal **ne prouve pas** l'absence de brèche : l'échantillon est borné et ne survit
+/// pas au redémarrage. On ne dit donc jamais « ce run n'a jamais eu lieu » — seulement
+/// « introuvable », qui est tout ce que l'on sait.
+#[must_use]
+pub fn absence_expliquee(journal: &GapJournal, id: Uuid, tenant: &str) -> GatewayError {
+    match journal.trouve(id, tenant) {
+        Some(g) => GatewayError::Gone(format!(
+            "ce run a bien été SERVI puis n'a PAS pu être persisté : il ne sera jamais \
+             re-prouvable. Raison enregistrée : {}",
+            g.reason
+        )),
+        None => GatewayError::NotFound,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -310,7 +370,7 @@ mod tests {
     fn en_mode_bloquant_lechec_reste_lechec() {
         let j = Arc::new(GapJournal::new());
         let r = decider(CapturePolicy::Bloquante, Uuid::nil(), "acme", panne(), &j);
-        assert!(r.is_err(), "le défaut doit rester byte-identique à l'avant-M2");
+        assert!(r.is_err(), "sous la posture par défaut, l'échec reste l'échec — comme avant M2");
         assert_eq!(j.total(), 0, "aucun run n'a été servi sans trace : pas de brèche à journaliser");
     }
 
@@ -353,6 +413,26 @@ mod tests {
         }
         assert_eq!(j.recentes_du_tenant("acme").len(), JOURNAL_CAP, "l'échantillon est borné");
         assert_eq!(j.total(), JOURNAL_CAP as u64 + 20, "le décompte ne se perd pas");
+    }
+
+    #[test]
+    fn une_absence_ne_se_confond_pas_avec_une_breche() {
+        let j = Arc::new(GapJournal::new());
+        let vu = Uuid::from_u128(3);
+        decider(CapturePolicy::Observation, vu, "acme", panne(), &j).unwrap();
+
+        // Le run a eu lieu : 410, avec la raison ET la conséquence.
+        match absence_expliquee(&j, vu, "acme") {
+            GatewayError::Gone(m) => {
+                assert!(m.contains("SERVI"), "le fait doit être affirmé, pas effacé");
+                assert!(m.contains("jamais re-prouvable"), "et sa conséquence dite");
+            }
+            autre => panic!("attendu Gone, obtenu {autre:?}"),
+        }
+        // Un identifiant inconnu reste un 404 : le journal borné ne permet pas d'affirmer plus.
+        assert!(matches!(absence_expliquee(&j, Uuid::from_u128(99), "acme"), GatewayError::NotFound));
+        // Et le cloisonnement tient jusque dans l'explication : un autre tenant voit un 404.
+        assert!(matches!(absence_expliquee(&j, vu, "globex"), GatewayError::NotFound));
     }
 
     #[test]

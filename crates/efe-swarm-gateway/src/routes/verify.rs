@@ -47,18 +47,12 @@ pub async fn verify(
     // exactement ce que la chaîne de provenance existe pour empêcher. On consulte donc le journal
     // avant de conclure, et on répond 410 (« la ressource a existé, elle est définitivement
     // partie ») plutôt que 404.
-    let Some(stored) = s.store.get(id, &caller.tenant).await? else {
-        return Err(match s.gaps.trouve(id, &caller.tenant) {
-            Some(g) => GatewayError::Gone(format!(
-                "ce run a bien été SERVI puis n'a PAS pu être persisté : il ne sera jamais \
-                 re-prouvable. Raison enregistrée : {}",
-                g.reason
-            )),
-            // Le journal est borné : son silence ne prouve pas l'absence de brèche. On ne dit donc
-            // rien de plus que ce qu'on sait — « introuvable », sans affirmer « n'a jamais eu lieu ».
-            None => GatewayError::NotFound,
-        });
-    };
+    // **M2** : `charger_run` distingue « inconnu » (404) de « servi mais non persisté » (410).
+    // Un 404 nu EFFACERAIT un fait au lieu de le documenter. La décision vit en un seul endroit —
+    // `capture::absence_expliquee` — parce que sept routes lisent un run, et que sept décisions
+    // indépendantes divergent : le premier audit de M2 avait justement corrigé celle-ci et laissé
+    // les six autres.
+    let stored = s.charger_run(id, &caller.tenant).await?;
     let key = s.derive_key(&caller.tenant)?; // HKDF par tenant (server-side)
 
     // ← le vérificateur INDÉPENDANT : essaim + chaîne N17 + pont, sans aucun provider.

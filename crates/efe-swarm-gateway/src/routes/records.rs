@@ -23,7 +23,10 @@ pub async fn get_run(
     Path(id): Path<Uuid>,
 ) -> Result<Json<RunStatusView>, GatewayError> {
     caller.require_any_role(&["viewer", "operator", "admin", "auditor"])?;
-    if let Some(stored) = s.store.get(id, &caller.tenant).await? {
+    // **M2** : `peek_run` — on REGARDE sans conclure, parce que cette route a une troisième
+    // réponse à donner (un job peut être en vol). La conclusion, elle, passe par
+    // `absence_expliquee` en fin de fonction : sans quoi le 404 muet reviendrait par cette porte.
+    if let Some(stored) = s.peek_run(id, &caller.tenant).await? {
         return Ok(Json(RunStatusView::Finished {
             run_id: id,
             output: stored.output.clone(),
@@ -38,7 +41,9 @@ pub async fn get_run(
     if s.dashboards.get(id, &tid).is_some() {
         return Ok(Json(RunStatusView::Running { run_id: id, events: format!("/v1/swarm/runs/{id}/events") }));
     }
-    Err(GatewayError::NotFound)
+    // **M2** : ni persisté, ni en vol. Reste la troisième possibilité, que le 404 taisait —
+    // le run a eu lieu et n'a PAS pu être persisté. `absence_expliquee` la distingue.
+    Err(crate::capture::absence_expliquee(&s.gaps, id, &caller.tenant))
 }
 
 /// **Export hors-ligne** : les `AgentCallRecord` bruts. Un tiers les re-prouve avec sa
@@ -49,7 +54,7 @@ pub async fn get_records(
     Path(id): Path<Uuid>,
 ) -> Result<Json<Vec<AgentCallRecord>>, GatewayError> {
     caller.require_any_role(&["viewer", "operator", "admin", "auditor"])?;
-    let stored = s.store.get(id, &caller.tenant).await?.ok_or(GatewayError::NotFound)?;
+    let stored = s.charger_run(id, &caller.tenant).await?;
     Ok(Json(stored.records))
 }
 
@@ -74,7 +79,7 @@ pub async fn get_n17(
     Path(id): Path<Uuid>,
 ) -> Result<Json<N17Export>, GatewayError> {
     caller.require_any_role(&["viewer", "operator", "admin", "auditor"])?;
-    let stored = s.store.get(id, &caller.tenant).await?.ok_or(GatewayError::NotFound)?;
+    let stored = s.charger_run(id, &caller.tenant).await?;
     Ok(Json(N17Export {
         run_id: id,
         llm_records: stored.llm_records,

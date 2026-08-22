@@ -187,36 +187,10 @@ mod tests {
     //  M2 — l'observation non intrusive : la panne de persistance et ce qu'elle ne coûte plus
     // ═══════════════════════════════════════════════════════════════════════════════════════
 
-    /// Un store qui échoue **toujours** à persister : l'équivalent testable de « on tue le store
-    /// en plein run ». `get` reste honnête et rend `None` — rien n'a été écrit, donc rien à lire.
-    #[derive(Debug, Default)]
-    struct StoreEnPanne;
-
-    #[async_trait::async_trait]
-    impl RunStore for StoreEnPanne {
-        async fn put(
-            &self,
-            _: Uuid,
-            _: &str,
-            _: &efe_swarm_sdk::RunOutcome,
-        ) -> Result<(), crate::error::GatewayError> {
-            Err(crate::error::GatewayError::Internal("store injoignable : connexion refusée".into()))
-        }
-        async fn put_stored(
-            &self,
-            _: Uuid,
-            _: crate::store::StoredRun,
-        ) -> Result<(), crate::error::GatewayError> {
-            Err(crate::error::GatewayError::Internal("store injoignable : connexion refusée".into()))
-        }
-        async fn get(
-            &self,
-            _: Uuid,
-            _: &str,
-        ) -> Result<Option<crate::store::StoredRun>, crate::error::GatewayError> {
-            Ok(None)
-        }
-    }
+    // Le store en panne vit dans `test_support` : les deux chemins de persistance (essaim et
+    // mission frontière) doivent être éprouvés par la MÊME panne, sans quoi les deux définitions
+    // finiraient par diverger — le défaut exact que l'audit de M2 a trouvé sur les routes.
+    use crate::test_support::StoreEnPanne;
 
     fn app_avec_store_en_panne(policy: crate::capture::CapturePolicy) -> Router {
         let state = SwarmGatewayState::new(

@@ -180,15 +180,35 @@ struct LlmMissionResponse {
     /// n'en produit pas). Le détail par hop vit dans `output.reformulation_hops`.
     #[serde(skip_serializing_if = "Option::is_none")]
     reformulation: Option<ReformulationView>,
+    /// **M2** : ce que la capture a fait de cette mission. Toujours présent — sur ce chemin plus
+    /// qu'ailleurs, puisque les appels frontière ont été facturés : un client doit savoir si la
+    /// preuve de ce qu'il a payé est récupérable.
+    capture: crate::capture::CaptureReport,
 }
 
 /// Recharge le run scellé et le re-prouve (offline) pour surfacer roots + `held_strength`.
-async fn mission_response(s: &SwarmGatewayState, run_id: Uuid, tenant: &str, output: Value) -> Result<Response, GatewayError> {
-    let stored = s
-        .store
-        .get(run_id, tenant)
-        .await?
-        .ok_or_else(|| GatewayError::Internal("run scellé introuvable après persistance".into()))?;
+/// **M2** — le `StoredRun` est passé, plus relu.
+///
+/// Cette fonction faisait `store.get(run_id).ok_or(Internal("run scellé introuvable après
+/// persistance"))`. Deux défauts en une ligne : un aller-retour inutile — les données venaient
+/// d'être scellées, elles étaient en mémoire — et surtout un mode de panne qui rendait la
+/// correction de la persistance INOPÉRANTE : dès que `put_stored` échouait, cette relecture
+/// échouait à son tour et le client tombait quand même, dix lignes plus loin.
+///
+/// **Ce que le changement coûte, déclaré.** La relecture exerçait accidentellement l'aller-retour
+/// du store : une corruption silencieuse à la sérialisation (chemin Postgres) s'y serait vue tout
+/// de suite, puisque la re-preuve portait sur la forme relue. Désormais elle porte sur la forme
+/// **scellée**, en mémoire. C'est le bon choix — le reçu couvre ce qui a été scellé, et sous une
+/// brèche il n'existe aucune forme persistée à relire — mais un contrôle a bien disparu. Il n'est
+/// pas perdu pour autant : `GET /v1/swarm/verify/:id` relit et re-prouve, et c'est sa fonction.
+async fn mission_response(
+    s: &SwarmGatewayState,
+    run_id: Uuid,
+    tenant: &str,
+    output: Value,
+    stored: crate::StoredRun,
+    capture: crate::capture::CaptureReport,
+) -> Result<Response, GatewayError> {
     let key = s.derive_key(tenant)?;
     let v = verify_run_offline(&stored.records, &stored.llm_records, &stored.n17_leaf_bytes(), stored.n17_root_bytes(), &key);
     let reformulation = reformulation_view(&output);
@@ -203,6 +223,7 @@ async fn mission_response(s: &SwarmGatewayState, run_id: Uuid, tenant: &str, out
             any_remote: v.held_strength.any_remote,
         },
         reformulation,
+        capture,
     };
     Ok((StatusCode::OK, Json(body)).into_response())
 }
@@ -310,8 +331,8 @@ pub async fn vote(
     let hops: Vec<Value> = resp.reformulation_hops.iter().filter_map(|h| serde_json::to_value(h).ok()).collect();
     let output = serde_json::to_value(&resp).unwrap_or(Value::Null);
     let topo = topology_vote(&llms);
-    let run_id = seal_and_store_mission_with_request(&s, &caller.tenant, mission_id, &topo, &sink, output.clone(), request, hops).await?;
-    mission_response(&s, run_id, &caller.tenant, output).await
+    let (run_id, capture, stored) = seal_and_store_mission_with_request(&s, &caller.tenant, mission_id, &topo, &sink, output.clone(), request, hops).await?;
+    mission_response(&s, run_id, &caller.tenant, output, stored, capture).await
 }
 
 pub async fn relay(
@@ -339,8 +360,8 @@ pub async fn relay(
     let hops: Vec<Value> = resp.reformulation_hops.iter().filter_map(|h| serde_json::to_value(h).ok()).collect();
     let output = serde_json::to_value(&resp).unwrap_or(Value::Null);
     let topo = topology_relay(&planner, &implementer, &synthesizer);
-    let run_id = seal_and_store_mission_with_request(&s, &caller.tenant, mission_id, &topo, &sink, output.clone(), request, hops).await?;
-    mission_response(&s, run_id, &caller.tenant, output).await
+    let (run_id, capture, stored) = seal_and_store_mission_with_request(&s, &caller.tenant, mission_id, &topo, &sink, output.clone(), request, hops).await?;
+    mission_response(&s, run_id, &caller.tenant, output, stored, capture).await
 }
 
 pub async fn debate(
@@ -372,8 +393,8 @@ pub async fn debate(
     let hops: Vec<Value> = resp.reformulation_hops.iter().filter_map(|h| serde_json::to_value(h).ok()).collect();
     let output = serde_json::to_value(&resp).unwrap_or(Value::Null);
     let topo = topology_debate(&pro, &contra, &jury, rounds); // arité DEPUIS req.rounds
-    let run_id = seal_and_store_mission_with_request(&s, &caller.tenant, mission_id, &topo, &sink, output.clone(), request, hops).await?;
-    mission_response(&s, run_id, &caller.tenant, output).await
+    let (run_id, capture, stored) = seal_and_store_mission_with_request(&s, &caller.tenant, mission_id, &topo, &sink, output.clone(), request, hops).await?;
+    mission_response(&s, run_id, &caller.tenant, output, stored, capture).await
 }
 
 pub async fn specialist(
@@ -405,8 +426,8 @@ pub async fn specialist(
     let output = serde_json::to_value(&resp).unwrap_or(Value::Null);
     let topo = topology_specialist(n);
     // Specialist ne reformule pas (agrégation par règle) — zéro hop, honnête.
-    let run_id = seal_and_store_mission_with_request(&s, &caller.tenant, mission_id, &topo, &sink, output.clone(), request, Vec::new()).await?;
-    mission_response(&s, run_id, &caller.tenant, output).await
+    let (run_id, capture, stored) = seal_and_store_mission_with_request(&s, &caller.tenant, mission_id, &topo, &sink, output.clone(), request, Vec::new()).await?;
+    mission_response(&s, run_id, &caller.tenant, output, stored, capture).await
 }
 
 pub async fn cascade(
@@ -437,8 +458,8 @@ pub async fn cascade(
     let request = json!({ "kind": "llm/cascade", "verifier_decision": decision, "user_text_hash": user_text_hash, "reform_expected": 0 });
     let topo = topology_cascade(&drafter, &verifier, &validator, &decision);
     // Cascade ne reformule pas (draft→verify→validate en texte) — zéro hop, honnête.
-    let run_id = seal_and_store_mission_with_request(&s, &caller.tenant, mission_id, &topo, &sink, output.clone(), request, Vec::new()).await?;
-    mission_response(&s, run_id, &caller.tenant, output).await
+    let (run_id, capture, stored) = seal_and_store_mission_with_request(&s, &caller.tenant, mission_id, &topo, &sink, output.clone(), request, Vec::new()).await?;
+    mission_response(&s, run_id, &caller.tenant, output, stored, capture).await
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -473,7 +494,7 @@ pub async fn audit(
     Path(id): Path<Uuid>,
 ) -> Result<Response, GatewayError> {
     caller.require_any_role(&["viewer", "operator", "admin", "auditor"])?;
-    let stored = s.store.get(id, &caller.tenant).await?.ok_or(GatewayError::NotFound)?;
+    let stored = s.charger_run(id, &caller.tenant).await?;
     let req = &stored.request;
     let kind = req.get("kind").and_then(|v| v.as_str()).unwrap_or("").to_string();
     let rounds = req.get("rounds").and_then(Value::as_u64).unwrap_or(0) as usize;
@@ -669,7 +690,7 @@ mod tests {
         // Le graphe déclare 2 appels, MAIS la requête scellée prétend k=3 (sous-déclaration).
         let topo = topology_vote(&["claude_a".to_string(), "gpt_b".to_string()]);
         let request = json!({ "kind": "llm/vote", "k": 3 });
-        let run_id = seal_and_store_mission_with_request(&state, tenant, mission_id, &topo, &sink, json!({}), request, Vec::new()).await.unwrap();
+        let (run_id, _capture, _stored) = seal_and_store_mission_with_request(&state, tenant, mission_id, &topo, &sink, json!({}), request, Vec::new()).await.unwrap();
 
         let app = crate::router(state);
         let resp = app
@@ -1021,7 +1042,7 @@ mod tests {
         scoped(scope, async move { let _ = bridge.call_many_ok(&ids, LlmCall::simple("q", 8)).await; }).await;
         // Requête HONNÊTE : k=2 == 2 nœuds Mode-C.
         let topo = topology_vote(&["claude_a".to_string(), "gpt_b".to_string()]);
-        let run_id = seal_and_store_mission_with_request(&state, "system", mission_id, &topo, &sink, json!({}), json!({ "kind": "llm/vote", "k": 2 }), Vec::new())
+        let (run_id, _capture, _stored) = seal_and_store_mission_with_request(&state, "system", mission_id, &topo, &sink, json!({}), json!({ "kind": "llm/vote", "k": 2 }), Vec::new())
             .await
             .unwrap();
 
@@ -1060,7 +1081,7 @@ mod tests {
         let ids = vec!["claude_a".to_string()];
         scoped(scope, async move { let _ = bridge.call_many_ok(&ids, LlmCall::simple("q", 8)).await; }).await;
         let topo = topology_vote(&["claude_a".to_string()]);
-        let run_id = seal_and_store_mission_with_request(&state, "system", mission_id, &topo, &sink, json!({}), json!({ "kind": "llm/vote", "k": 1 }), Vec::new())
+        let (run_id, _capture, _stored) = seal_and_store_mission_with_request(&state, "system", mission_id, &topo, &sink, json!({}), json!({ "kind": "llm/vote", "k": 1 }), Vec::new())
             .await
             .unwrap();
 
@@ -1102,9 +1123,12 @@ mod tests {
                 })
                 .await;
                 let topo = topology_vote(&["claude_a".to_string()]);
+                // M2 : la fonction rend désormais (run_id, capture, StoredRun) ; cette
+                // fermeture n'a besoin que de l'identifiant.
                 seal_and_store_mission_with_request(&state, "system", mission_id, &topo, &sink, json!({}), request, Vec::new())
                     .await
                     .unwrap()
+                    .0
             }
         };
         // Run "legacy" : requête relay SANS marqueur (comme scellée avant B.3).

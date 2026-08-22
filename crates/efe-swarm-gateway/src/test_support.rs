@@ -99,3 +99,33 @@ pub fn synthetic_mode_c_run(model: &str) -> (Vec<efe_swarm_provenance::AgentCall
     };
     (records, stored)
 }
+
+/// **M2** — un store qui échoue **toujours** à persister : l'équivalent testable de « on tue le
+/// store en plein run ».
+///
+/// Vit ici, et non dans un module de test particulier, pour la raison qui a fait naître ce
+/// fichier : deux chemins de la passerelle persistent (l'essaim et la mission frontière), les deux
+/// doivent être éprouvés de la même façon, et deux définitions finiraient par diverger — ce qui
+/// est exactement le défaut que l'audit de M2 a trouvé sur les routes.
+///
+/// `get` reste honnête et rend `None` : rien n'a été écrit, donc il n'y a rien à lire.
+#[derive(Debug, Default)]
+pub struct StoreEnPanne;
+
+#[async_trait::async_trait]
+impl crate::store::RunStore for StoreEnPanne {
+    async fn put(
+        &self,
+        _: Uuid,
+        _: &str,
+        _: &efe_swarm_sdk::RunOutcome,
+    ) -> Result<(), crate::error::GatewayError> {
+        Err(crate::error::GatewayError::Internal("store injoignable : connexion refusée".into()))
+    }
+    async fn put_stored(&self, _: Uuid, _: StoredRun) -> Result<(), crate::error::GatewayError> {
+        Err(crate::error::GatewayError::Internal("store injoignable : connexion refusée".into()))
+    }
+    async fn get(&self, _: Uuid, _: &str) -> Result<Option<StoredRun>, crate::error::GatewayError> {
+        Ok(None)
+    }
+}

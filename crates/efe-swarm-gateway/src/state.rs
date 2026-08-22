@@ -423,6 +423,47 @@ impl SwarmGatewayState {
         self
     }
 
+    /// **M2** — charge un run persisté, ou explique honnêtement pourquoi il manque.
+    ///
+    /// À utiliser partout où une route lit un run : `store.get(...).ok_or(NotFound)` répond
+    /// « cet identifiant n'existe pas », ce qui est FAUX pour un run servi mais non persisté.
+    /// Le premier audit de M2 a trouvé six routes qui le faisaient encore ; ce point d'entrée
+    /// unique est ce qui empêche la septième.
+    ///
+    /// # Errors
+    /// `410 Gone` si une brèche est enregistrée pour ce run, `404` sinon.
+    pub async fn charger_run(
+        &self,
+        id: uuid::Uuid,
+        tenant: &str,
+    ) -> Result<crate::store::StoredRun, crate::error::GatewayError> {
+        match self.store.get(id, tenant).await? {
+            Some(r) => Ok(r),
+            None => Err(crate::capture::absence_expliquee(&self.gaps, id, tenant)),
+        }
+    }
+
+    /// **M2** — lit un run **sans conclure**. Le cas légitime, et le seul.
+    ///
+    /// `charger_run` conclut : absent ⟹ erreur. Une route comme `get_run` ne peut pas s'en
+    /// contenter, parce qu'elle a une **troisième** réponse à donner — un job peut être en vol,
+    /// ni persisté ni perdu. Elle doit donc regarder sans trancher.
+    ///
+    /// Ce nom existe pour que ce choix soit **visible et greppable** plutôt que noyé dans un
+    /// `store.get` indistinguable des huit autres. Une route qui l'emploie doit conclure par
+    /// [`crate::capture::absence_expliquee`] — le test `absence_expliquee.rs` l'exige, faute de
+    /// quoi elle se retrouverait à rendre un `404` muet par une autre porte.
+    ///
+    /// # Errors
+    /// Propage l'erreur du store (une panne de LECTURE, distincte d'une absence).
+    pub async fn peek_run(
+        &self,
+        id: uuid::Uuid,
+        tenant: &str,
+    ) -> Result<Option<crate::store::StoredRun>, crate::error::GatewayError> {
+        self.store.get(id, tenant).await
+    }
+
     /// **M2** : pose la politique de capture. Réservé au binaire et aux tests — comme
     /// `with_bundle_export`, ce constructeur évite toute lecture d'environnement depuis l'état,
     /// de sorte qu'un test puisse construire une posture déterministe sans course.

@@ -137,6 +137,13 @@ mod tests {
     #[test]
     fn statuses_are_stable() {
         assert_eq!(GatewayError::NotFound.parts().0, StatusCode::NOT_FOUND);
+        // **M2** : 410 et 404 disent deux choses différentes, et le code d'enveloppe aussi —
+        // un client doit pouvoir distinguer « n'a jamais existé » de « a existé, définitivement
+        // perdu » sans lire le message en français.
+        let gap = GatewayError::Gone("x".into());
+        assert_eq!(gap.parts().0, StatusCode::GONE);
+        assert_eq!(gap.parts().1, "gap");
+        assert_ne!(gap.parts().1, GatewayError::NotFound.parts().1);
         assert_eq!(GatewayError::Forbidden("x".into()).parts().0, StatusCode::FORBIDDEN);
         assert_eq!(GatewayError::Budget("x".into()).parts().0, StatusCode::PAYMENT_REQUIRED);
     }
