@@ -5,6 +5,7 @@
 pub mod bundle; // Fil P (P.2) : /v1/swarm/bundle/:id — l'export re-prouvable par verify-mini
 pub mod dashboard;
 pub mod events;
+pub mod gaps; // M2 : /v1/swarm/gaps — le journal des runs servis mais NON persistés
 pub mod health; // Sondes k8s (M4 §G4) : /healthz (liveness) + /readyz (readiness réelle)
 pub mod memory;
 pub mod metrics;
@@ -26,6 +27,9 @@ pub fn routes() -> Router<SwarmGatewayState> {
     Router::new()
         .route("/run", post(run::run))
         .route("/verify/:id", get(verify::verify))
+        // M2 : le canal de l'AUDITEUR. Monté dans les deux postures — sous `blocking` il rend un
+        // journal vide en le disant, ce qui vaut mieux qu'une route absente qu'on interpréterait.
+        .route("/gaps", get(gaps::gaps))
         // ADR-017 : rejeu déterministe — R0 (GET, re-sceller) + R1 (POST, re-exécuter).
         .route("/replay/:id", get(replay::get_replay).post(replay::post_replay))
         .route("/runs/:id", get(records::get_run))

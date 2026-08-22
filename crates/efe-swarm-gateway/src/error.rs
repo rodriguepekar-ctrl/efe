@@ -23,6 +23,11 @@ pub enum GatewayError {
     Forbidden(String),
     /// 404 — run introuvable (ou hors du tenant de l'appelant).
     NotFound,
+    /// **M2** — 410 : le run a bien eu lieu, et il n'est PAS persisté. Distinct de 404, qui dit
+    /// « cet identifiant n'existe pas ». Confondre les deux ferait croire à un auditeur qu'un run
+    /// n'a jamais existé alors qu'il a été servi — c'est-à-dire effacer un fait au lieu de le
+    /// documenter. 410 « Gone » est exact : la ressource a existé, elle est définitivement partie.
+    Gone(String),
     /// 400 — DTO invalide (topologie vide, paramètre incohérent…).
     BadRequest(String),
     /// 402 — budget : estimation > plafond, ou épuisé en cours (politique `Error`).
@@ -43,6 +48,7 @@ impl GatewayError {
             GatewayError::Unauthenticated(m) => (StatusCode::UNAUTHORIZED, "unauthenticated", m.clone()),
             GatewayError::Forbidden(m) => (StatusCode::FORBIDDEN, "forbidden", m.clone()),
             GatewayError::NotFound => (StatusCode::NOT_FOUND, "not_found", "run introuvable".into()),
+            GatewayError::Gone(m) => (StatusCode::GONE, "gap", m.clone()),
             GatewayError::BadRequest(m) => (StatusCode::BAD_REQUEST, "bad_request", m.clone()),
             GatewayError::Budget(m) => (StatusCode::PAYMENT_REQUIRED, "budget", m.clone()),
             GatewayError::TooManyRequests(m) => (StatusCode::TOO_MANY_REQUESTS, "too_many_requests", m.clone()),

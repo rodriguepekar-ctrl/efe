@@ -104,7 +104,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         );
     }
 
-    let mut state = SwarmGatewayState::in_memory().with_keys(keys);
+    // **M2** : la posture de capture, lue par le REGISTRE (jamais par un `env::var` local) et
+    // posée avant tout câblage. Défaut `Bloquante` ⟹ comportement d'avant M2 à l'octet près ;
+    // l'observation est un opt-in déclaré, que le rapport de démarrage annonce.
+    let capture_policy = efe_swarm_gateway::capture::CapturePolicy::from_str_or_default(
+        efe_swarm_gateway::profile::read::capture_policy().as_deref(),
+    );
+    let mut state =
+        SwarmGatewayState::in_memory().with_keys(keys).with_capture_policy(capture_policy);
     println!("→ clé de provenance : {key_label}");
 
     // ── M0 : on OBSERVE ce qui se câble, on ne DÉDUIT pas de l'environnement ──────────
@@ -113,6 +120,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // que le processus ne sert pas encore : le défaut exact que M0 existe pour supprimer.
     let mut observed = efe_swarm_gateway::profile::Observed {
         provenance_non_forgeable: master_present,
+        // M2 : la posture RÉELLEMENT posée sur l'état, pas celle que la config demande. C'est le
+        // même geste que pour tout le reste du rapport servi : on observe le câblage.
+        capture_observation: capture_policy.peut_degrader(),
         frontier_intended: efe_swarm_gateway::profile::read::frontier_enabled(),
         allowlist: efe_swarm_gateway::profile::read::tenant_allowlist().is_some(),
         // P1 : poser l'URL est une INTENTION. Le relais vit DANS le coordinator frontière ; tant

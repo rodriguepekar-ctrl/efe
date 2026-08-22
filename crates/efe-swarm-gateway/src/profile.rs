@@ -221,6 +221,18 @@ pub const REGISTRY: &[Switch] = &[
         class: Class::Degraded,
         fatal_if_invalid: false,
     },
+    // ── Capture (M2) ──────────────────────────────────────────────────────────────────────────
+    Switch {
+        name: "EFE_SWARM_CAPTURE_POLICY",
+        buys: "l'observation NON INTRUSIVE : un échec de persistance ne fait plus échouer la \
+               requête du client — la réponse part, et la brèche est dite en trois endroits",
+        absence_costs: "posture BLOQUANTE (défaut) — un échec de persistance fait échouer la \
+                        requête, et le client PERD une réponse pourtant calculée. Sûr pour la \
+                        preuve, coûteux pour l'adoption : c'est l'engagement d'architecture qu'un \
+                        client refuse de prendre pour une fonction de conformité",
+        class: Class::Degraded,
+        fatal_if_invalid: false,
+    },
     // ── Routage ───────────────────────────────────────────────────────────────────────────────
     Switch {
         name: "EFE_SWARM_ROUTER_ENDPOINT",
@@ -304,6 +316,16 @@ pub struct Invalide {
     pub consequence: &'static str,
 }
 
+/// Les interrupteurs **énumérés** : leur valeur doit appartenir à un ensemble fini.
+///
+/// `FLAGS_STRICTS` couvrait les booléens (`"true"` et rien d'autre). M2 a introduit le premier
+/// interrupteur à plusieurs valeurs, et le piège y est identique : `EFE_SWARM_CAPTURE_POLICY=observe`
+/// retombe silencieusement sur le défaut, et l'opérateur croit avoir choisi une posture qu'il n'a
+/// pas. Généraliser le mécanisme plutôt que d'ajouter un cas particulier, c'est ce qui évite que le
+/// prochain interrupteur énuméré rate le filet à son tour.
+pub const ENUMS: &[(&str, &[&str])] =
+    &[("EFE_SWARM_CAPTURE_POLICY", &["blocking", "observation"])];
+
 /// Les valeurs fournies mais refusées, depuis une table quelconque — un fichier de profil compris.
 ///
 /// Fonction **pure**, donc un test de profil peut refuser qu'un `.env` livré contienne un footgun :
@@ -340,6 +362,20 @@ pub fn invalides_from_lookup(get: impl Fn(&str) -> Option<String>) -> Vec<Invali
                 consequence: sw.absence_costs,
             })
         })
+        .chain(ENUMS.iter().filter_map(|(name, valeurs)| {
+            let v = get(name)?;
+            let t = v.trim();
+            if t.is_empty() || valeurs.contains(&t) {
+                return None;
+            }
+            let sw = switch(name)?;
+            Some(Invalide {
+                name: sw.name,
+                fourni: t.to_string(),
+                attendu: "une valeur de l'énumération déclarée",
+                consequence: sw.absence_costs,
+            })
+        }))
         .collect()
 }
 
@@ -534,6 +570,14 @@ pub mod read {
         raw("EFE_SLM_REFORMULATOR_URL")
     }
 
+    /// **M2** : la posture de capture. Toute valeur hors de l'énumération retombe sur le défaut
+    /// sûr — et [`super::invalides_from_env`] la signale, pour que l'opérateur sache que son geste
+    /// n'a rien fait.
+    #[must_use]
+    pub fn capture_policy() -> Option<String> {
+        raw("EFE_SWARM_CAPTURE_POLICY")
+    }
+
     // ── Routage ───────────────────────────────────────────────────────────────────────────────
 
     #[must_use]
@@ -627,6 +671,8 @@ pub struct Observed {
     /// Une URL de relais a-t-elle été **posée** ? Posée sans câblage ⟹ [`Status::Refusee`], sur le
     /// même patron que la frontière.
     pub slm_intended: bool,
+    /// **M2** : la posture d'observation est-elle réellement câblée sur l'état servi ?
+    pub capture_observation: bool,
     /// Câblé — mais l'hôte est-il DANS le périmètre ? Câblé hors périmètre, la capacité fonctionne
     /// et la garantie de souveraineté est nulle : c'est une dégradation, pas une absence.
     pub slm_local: bool,
@@ -771,6 +817,11 @@ fn line_refusee(
 /// (`bundle_export_from_env` est une fonction libre pour la même raison).
 #[derive(Debug, Clone, Copy, Default)]
 pub struct Resolved {
+    /// **M2** : la posture d'observation est-elle demandée ? Porté par `Resolved` — et non lu par
+    /// `read::` au moment de rendre le rapport — parce que `from_resolved` doit rester résoluble
+    /// depuis une TABLE quelconque : sans quoi un test de profil devrait muter l'environnement du
+    /// process, et deux tests se voleraient leur réponse.
+    pub capture_observation: bool,
     pub master: bool,
     pub anchor: bool,
     pub bundle: bool,
@@ -789,6 +840,7 @@ impl Resolved {
     #[must_use]
     pub fn from_env() -> Self {
         Self {
+            capture_observation: read::capture_policy().as_deref() == Some("observation"),
             master: read::master_present(),
             anchor: read::anchor_log().is_some(),
             bundle: read::bundle_enabled(),
@@ -811,6 +863,7 @@ impl Resolved {
         let p = |k: &str| read::present_of(get(k).as_deref());
         let f = |k: &str| read::flag_of(get(k).as_deref());
         Self {
+            capture_observation: get("EFE_SWARM_CAPTURE_POLICY").as_deref() == Some("observation"),
             master: p("EFE_NANO_AUDIT_HMAC_MASTER"),
             anchor: p("EFE_SWARM_ANCHOR_LOG"),
             bundle: f("EFE_SWARM_BUNDLE_ENABLED"),
@@ -878,6 +931,7 @@ impl Report {
             slm_line(o),
             line("EFE_OIDC_PUBLIC_KEY_PEM", "authentification", o.oidc),
             line("EFE_SWARM_ROUTER_ENDPOINT", "routeur de modèles", o.router),
+            line("EFE_SWARM_CAPTURE_POLICY", "posture de capture", o.capture_observation),
         ]);
         let mut r = Self::from_resolved(&Resolved::default());
         // On garde les lignes de RÉGLAGE (plafonds, admission) telles que calculées, et on
@@ -920,6 +974,10 @@ impl Report {
             detail: format!("{global} runs simultanés, {} par tenant", read::max_inflight_per_tenant(global)),
             governed_by: "EFE_GATEWAY_MAX_INFLIGHT_RUNS",
         });
+        // M2 : la posture de capture. `Degradee` sous `blocking` n'est PAS un reproche — c'est le
+        // défaut sûr pour la preuve. Mais la capacité « observation non intrusive » y est bel et
+        // bien éteinte, et son coût doit être lisible : le rapport nomme ce que le client perd.
+        capabilities.push(line("EFE_SWARM_CAPTURE_POLICY", "posture de capture", r.capture_observation));
         capabilities.push(CapabilityReport {
             capability: "plafonds de requête",
             status: Status::Servie,
@@ -1125,18 +1183,57 @@ mod tests {
     fn ni_labsence_ni_le_vide_ni_true_ne_sont_des_refus() {
         assert!(invalides_from_lookup(|_| None).is_empty(), "absence ≠ refus");
         assert!(invalides_from_lookup(|_| Some("   ".into())).is_empty(), "vide ≠ refus");
-        assert!(invalides_from_lookup(|_| Some("true".into())).is_empty(), "`true` est accepté");
+        // `true` n'est accepté que pour les DRAPEAUX. La première rédaction de ce test posait
+        // `true` sur TOUTES les variables et exigeait zéro refus — prémisse vraie tant que seuls
+        // des booléens existaient, devenue fausse avec le premier interrupteur ÉNUMÉRÉ (M2) :
+        // `EFE_SWARM_CAPTURE_POLICY=true` doit être signalé, et l'est. On cible donc les drapeaux.
+        let drapeaux_seuls =
+            |k: &str| FLAGS_STRICTS.contains(&k).then(|| "true".to_string());
+        assert!(invalides_from_lookup(drapeaux_seuls).is_empty(), "`true` est accepté d'un drapeau");
         for eteint in ["false", "FALSE", "0", "no", "off"] {
+            let f = |k: &str| FLAGS_STRICTS.contains(&k).then(|| eteint.to_string());
             assert!(
-                invalides_from_lookup(|_| Some(eteint.into())).is_empty(),
+                invalides_from_lookup(f).is_empty(),
                 "`{eteint}` éteint DÉLIBÉRÉMENT : le résultat correspond à l'intention, donc silence"
             );
         }
+        let tout_majuscule = |k: &str| FLAGS_STRICTS.contains(&k).then(|| "TRUE".to_string());
         assert_eq!(
-            invalides_from_lookup(|_| Some("TRUE".into())).len(),
+            invalides_from_lookup(tout_majuscule).len(),
             FLAGS_STRICTS.len(),
             "`TRUE` est refusé partout — la casse compte, et c'est précisément le piège"
         );
+    }
+
+    /// **M2** — le mécanisme s'étend aux interrupteurs à plusieurs valeurs, et pour la même raison.
+    ///
+    /// `EFE_SWARM_CAPTURE_POLICY=observe` retombe silencieusement sur le défaut : l'opérateur croit
+    /// avoir choisi la posture d'observation, la passerelle reste bloquante, et le premier incident
+    /// de store lui coûtera les réponses de ses clients. Généraliser plutôt que d'ajouter un cas
+    /// particulier, c'est ce qui évite que le prochain interrupteur énuméré rate le filet.
+    #[test]
+    fn une_valeur_hors_enumeration_est_signalee() {
+        let inv = |v: &'static str| {
+            invalides_from_lookup(move |k| (k == "EFE_SWARM_CAPTURE_POLICY").then(|| v.to_string()))
+        };
+        for accepte in ["blocking", "observation"] {
+            assert!(inv(accepte).is_empty(), "`{accepte}` appartient à l'énumération");
+        }
+        for refuse in ["observe", "Observation", "true", "on", "OBSERVATION"] {
+            let r = inv(refuse);
+            assert_eq!(r.len(), 1, "`{refuse}` doit être signalé");
+            assert_eq!(r[0].name, "EFE_SWARM_CAPTURE_POLICY");
+            assert!(
+                r[0].consequence.contains("BLOQUANTE"),
+                "et le rapport doit dire ce que l'opérateur subira faute d'avoir été entendu"
+            );
+        }
+        // Chaque nom déclaré au registre des énumérations doit y être vraiment déclaré, sinon la
+        // ligne serait muette dans le rapport.
+        for (name, valeurs) in ENUMS {
+            assert!(switch(name).is_some(), "{name} : énuméré mais absent du registre");
+            assert!(valeurs.len() >= 2, "{name} : une énumération à une valeur n'en est pas une");
+        }
     }
 
     /// Un diagnostic que le rapport ne montre pas n'existe pas. Il doit nommer la variable, la

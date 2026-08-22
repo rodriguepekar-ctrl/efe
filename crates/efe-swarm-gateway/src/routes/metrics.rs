@@ -13,6 +13,25 @@ use crate::state::SwarmGatewayState;
 /// **ADR-014 (CP-2) + ADR-018** : surfaces d'admission — runs en vol (jauge dérivée des
 /// permits global), plafond process, plafond **par-tenant** (équité ADR-018), tenants
 /// actifs, refus cumulés. Rendu inline (même style sans-dépendance que les registres).
+/// **M2** — les brèches : des runs SERVIS que l'on n'a pas pu persister.
+///
+/// Deux séries, et il faut les deux. Le **compteur** ne se perd jamais et dit l'ampleur ; la
+/// **jauge** de posture dit si une brèche est seulement POSSIBLE. Sans la seconde, un compteur à
+/// zéro se lit comme une bonne nouvelle alors qu'il peut être nul par construction — sous la
+/// posture bloquante, aucun run non persistable n'est jamais servi.
+fn render_capture(s: &SwarmGatewayState) -> String {
+    format!(
+        "# HELP efe_swarm_capture_gaps_total Runs servis mais NON persistés (M2) — jamais re-prouvables.\n\
+         # TYPE efe_swarm_capture_gaps_total counter\n\
+         efe_swarm_capture_gaps_total {}\n\
+         # HELP efe_swarm_capture_observation Posture de capture : 1 = observation (une brèche est possible), 0 = bloquante.\n\
+         # TYPE efe_swarm_capture_observation gauge\n\
+         efe_swarm_capture_observation {}\n",
+        s.gaps.total(),
+        u8::from(s.capture_policy.peut_degrader()),
+    )
+}
+
 fn render_admission(s: &SwarmGatewayState) -> String {
     let inflight = s.admission_max.saturating_sub(s.admission.available_permits());
     format!(
@@ -64,13 +83,15 @@ fn render_frontier(_s: &SwarmGatewayState) -> String {
 
 pub async fn metrics(State(s): State<SwarmGatewayState>) -> impl IntoResponse {
     let body = format!(
-        "{}{}{}{}{}",
+        "{}{}{}{}{}{}",
         s.prov_metrics.render_prometheus(),
         s.substrate_metrics.render_prometheus(),
         // Inc.3 : surfaces du dashboard (events émis/perdus + jauges live).
         s.dash_metrics.render_prometheus(s.dashboards.len(), s.dashboards.total_subscribers()),
         // ADR-014 : admission process.
         render_admission(&s),
+        // M2 : brèches de capture + posture en vigueur.
+        render_capture(&s),
         // Couche 2 (M4 §2.4) : egress frontière (vide hors feature).
         render_frontier(&s),
     );

@@ -45,6 +45,9 @@
 #![warn(rust_2018_idioms)]
 
 mod auth;
+/// **M2** — la couture qui empêche un échec de PERSISTANCE de renverser la réponse du client.
+/// Public : le rapport de capture voyage dans le DTO de réponse, donc dans l'API.
+pub mod capture;
 mod dto;
 mod error;
 #[cfg(feature = "oidc")]
@@ -179,6 +182,234 @@ mod tests {
     use std::sync::Arc;
     use tower::ServiceExt; // oneshot
     use uuid::Uuid;
+
+    // ═══════════════════════════════════════════════════════════════════════════════════════
+    //  M2 — l'observation non intrusive : la panne de persistance et ce qu'elle ne coûte plus
+    // ═══════════════════════════════════════════════════════════════════════════════════════
+
+    /// Un store qui échoue **toujours** à persister : l'équivalent testable de « on tue le store
+    /// en plein run ». `get` reste honnête et rend `None` — rien n'a été écrit, donc rien à lire.
+    #[derive(Debug, Default)]
+    struct StoreEnPanne;
+
+    #[async_trait::async_trait]
+    impl RunStore for StoreEnPanne {
+        async fn put(
+            &self,
+            _: Uuid,
+            _: &str,
+            _: &efe_swarm_sdk::RunOutcome,
+        ) -> Result<(), crate::error::GatewayError> {
+            Err(crate::error::GatewayError::Internal("store injoignable : connexion refusée".into()))
+        }
+        async fn put_stored(
+            &self,
+            _: Uuid,
+            _: crate::store::StoredRun,
+        ) -> Result<(), crate::error::GatewayError> {
+            Err(crate::error::GatewayError::Internal("store injoignable : connexion refusée".into()))
+        }
+        async fn get(
+            &self,
+            _: Uuid,
+            _: &str,
+        ) -> Result<Option<crate::store::StoredRun>, crate::error::GatewayError> {
+            Ok(None)
+        }
+    }
+
+    fn app_avec_store_en_panne(policy: crate::capture::CapturePolicy) -> Router {
+        let state = SwarmGatewayState::new(
+            Arc::new(AgentFleet::standard()),
+            HmacKeySource::test_key(),
+            Arc::new(StoreEnPanne),
+            ProvenanceMetrics::new(),
+            Arc::new(SubstrateMetrics::default()),
+        )
+        .with_capture_policy(policy);
+        router(state)
+    }
+
+    /// **LE CRITÈRE DE FIN DE M2.**
+    ///
+    /// La feuille de route le formule ainsi : *« on tue la passerelle en plein run : le client
+    /// reçoit quand même sa réponse »*. Le store est mort, le run a réussi — et la réponse part.
+    ///
+    /// Ce test échouerait avant M2 : le chemin synchrone finissait par
+    /// `s.store.put(...).await?`, et ce `?` jetait une réponse pourtant complète.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn m2_le_client_recoit_sa_reponse_meme_quand_la_persistance_meurt() {
+        let app = app_avec_store_en_panne(crate::capture::CapturePolicy::Observation);
+        let resp = app
+            .oneshot(post_run(json!({ "task": { "text": "x" }, "topology": { "kind": "auto" } })))
+            .await
+            .unwrap();
+
+        assert_eq!(resp.status(), StatusCode::OK, "le store est mort ; la réponse, elle, existe");
+        let b = body_json(resp).await;
+
+        // 1. La réponse est bien là, entière.
+        assert!(b["run_id"].is_string(), "le run a un identifiant");
+        assert!(b["run"].is_object(), "et sa sortie est servie");
+
+        // 2. Et elle ne ment pas sur son état : la brèche est dite AU CLIENT.
+        assert_eq!(b["capture"]["persisted"], json!(false));
+        assert_eq!(b["capture"]["policy"], json!("observation"));
+        assert!(
+            b["capture"]["degrade_reason"].as_str().is_some_and(|r| r.contains("store")),
+            "la RAISON technique est dite"
+        );
+        assert!(
+            b["capture"]["consequence"]
+                .as_str()
+                .is_some_and(|c| c.contains("ne le retrouvera jamais")),
+            "et la CONSÉQUENCE — sans elle, le client ne sait pas s'il doit conserver sa racine"
+        );
+    }
+
+    /// Le contrôle négatif, qui est ce qui donne son sens au test précédent : **sans l'opt-in,
+    /// rien n'a changé**. Le défaut reste byte-identique à l'avant-M2.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn m2_sans_optin_le_comportement_est_celui_davant() {
+        let app = app_avec_store_en_panne(crate::capture::CapturePolicy::Bloquante);
+        let resp = app
+            .oneshot(post_run(json!({ "task": { "text": "x" }, "topology": { "kind": "auto" } })))
+            .await
+            .unwrap();
+        assert_eq!(
+            resp.status(),
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "posture bloquante : l'échec de persistance reste l'échec de la requête"
+        );
+    }
+
+    /// Le cas nominal dit lui aussi quelque chose. Un champ qui n'apparaît qu'en cas de problème
+    /// produit des clients qui ne le lisent jamais — donc une dégradation que personne ne remarque.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn m2_le_rapport_de_capture_est_present_meme_quand_tout_va_bien() {
+        let (app, _store) = app_with_store();
+        let resp = app
+            .oneshot(post_run(json!({ "task": { "text": "x" }, "topology": { "kind": "auto" } })))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let b = body_json(resp).await;
+        assert_eq!(b["capture"]["persisted"], json!(true));
+        assert!(b["capture"]["degrade_reason"].is_null(), "aucune raison quand il n'y a rien à dire");
+    }
+
+    /// **La brèche se dit à qui de droit** — et les trois lecteurs n'ont pas les mêmes besoins.
+    ///
+    /// Le client a eu la sienne dans sa réponse (test ci-dessus), mais lui seul et une seule fois.
+    /// L'exploitant a besoin d'une grandeur ; l'auditeur, d'identifiants. Aucun canal ne remplace
+    /// l'autre, et ce test l'exige des trois à la fois.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn m2_la_breche_se_dit_a_lexploitant_et_a_lauditeur() {
+        let app = app_avec_store_en_panne(crate::capture::CapturePolicy::Observation);
+        let run = app
+            .clone()
+            .oneshot(post_run(json!({ "task": { "text": "x" }, "topology": { "kind": "auto" } })))
+            .await
+            .unwrap();
+        let id = body_json(run).await["run_id"].as_str().unwrap().to_string();
+
+        // ── l'exploitant : une grandeur, plus la posture qui dit si une brèche est POSSIBLE ──
+        let m = app
+            .clone()
+            .oneshot(Request::builder().uri("/metrics").body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        let txt = String::from_utf8(m.into_body().collect().await.unwrap().to_bytes().to_vec()).unwrap();
+        assert!(txt.contains("efe_swarm_capture_gaps_total 1"), "le compteur monte");
+        assert!(
+            txt.contains("efe_swarm_capture_observation 1"),
+            "et la posture est servie : sans elle, un compteur à zéro se lirait comme une bonne \
+             nouvelle alors qu'il peut être nul par construction"
+        );
+
+        // ── l'auditeur : les identifiants, les raisons, et l'aveu des limites du journal ──
+        let g = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/v1/swarm/gaps")
+                    .header("x-efe-roles", HeaderValue::from_static("auditor"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(g.status(), StatusCode::OK);
+        let gj = body_json(g).await;
+        assert_eq!(gj["policy"], json!("observation"));
+        assert_eq!(gj["total_process"], json!(1));
+        assert_eq!(gj["recent"][0]["run_id"], json!(id));
+        assert!(gj["recent"][0]["reason"].as_str().is_some_and(|r| r.contains("store")));
+        assert!(
+            gj["note"].as_str().is_some_and(|n| n.contains("PANNE, pas la malveillance")),
+            "le journal doit avouer ce qu'il n'est pas : en mémoire, borné, non scellé"
+        );
+    }
+
+    /// **Une brèche n'est pas une absence.** Un 404 nu dirait « ce run n'a jamais existé », ce qui
+    /// est faux et efface un fait au lieu de le documenter. 410 dit exactement ce qui s'est passé.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn m2_verify_distingue_le_run_inconnu_du_run_non_persiste() {
+        let app = app_avec_store_en_panne(crate::capture::CapturePolicy::Observation);
+        let run = app
+            .clone()
+            .oneshot(post_run(json!({ "task": { "text": "x" }, "topology": { "kind": "auto" } })))
+            .await
+            .unwrap();
+        let id = body_json(run).await["run_id"].as_str().unwrap().to_string();
+
+        let v = app
+            .clone()
+            .oneshot(Request::builder().uri(format!("/v1/swarm/verify/{id}")).body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        assert_eq!(v.status(), StatusCode::GONE, "le run a EU LIEU : 410, pas 404");
+        let vb = body_json(v).await;
+        assert!(
+            vb["message"].as_str().is_some_and(|m| m.contains("jamais re-prouvable")),
+            "et le message dit la conséquence, pas seulement l'état"
+        );
+
+        // Un identifiant qui n'a jamais rien été reste un 404 : le journal borné ne permet pas
+        // d'affirmer plus que ce qu'il sait.
+        let inconnu = Uuid::new_v4();
+        let v404 = app
+            .oneshot(Request::builder().uri(format!("/v1/swarm/verify/{inconnu}")).body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        assert_eq!(v404.status(), StatusCode::NOT_FOUND);
+    }
+
+    /// **Pourquoi le bus de supervision n'est PAS un canal pour la brèche du mode JOB.**
+    ///
+    /// Ce test ne vérifie pas une fonctionnalité : il fige le raisonnement qui a fait retirer une
+    /// émission trompeuse. Le flux SSE se ferme au PREMIER événement terminal, et `RunFinished`
+    /// en est un — or il part avant la persistance. Un `RunFailed` émis ensuite tombait donc dans
+    /// un flux que le client avait déjà quitté, y compris au rejeu depuis le ring.
+    ///
+    /// Si un jour `RunFinished` cessait d'être terminal, ce test tomberait et la décision devrait
+    /// être reprise — c'est précisément ce qu'on attend de lui.
+    #[test]
+    fn m2_le_flux_sse_se_ferme_avant_la_persistance_donc_le_bus_ne_peut_rien_dire() {
+        use efe_swarm_dashboard::DashboardEvent;
+        let fini = DashboardEvent::RunFinished {
+            elapsed_ms: 1,
+            agents_used: 1,
+            output_preview: String::new(),
+            verified: true,
+            root: None,
+            termination: "completed".into(),
+        };
+        assert!(
+            fini.is_terminal(),
+            "`run_finished` ferme le flux ; tout ce qui suit la persistance est inaudible"
+        );
+    }
 
     const TENANT_A: &str = "11111111-1111-1111-1111-111111111111";
     const TENANT_B: &str = "22222222-2222-2222-2222-222222222222";

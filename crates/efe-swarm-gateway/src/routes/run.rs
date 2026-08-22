@@ -114,15 +114,44 @@ pub async fn run(
                     record_memory_metrics(&state, &outcome.run); // ADR-019 : compteurs recall/learn
                     // G9 : caviarde la sortie au repos selon la politique du tenant (records intacts).
                     state.redact_output(&tenant, &mut outcome.run);
-                    // persiste la PREUVE (records) — re-vérifiable via verify/:id. Un échec
-                    // ici rendrait le run invérifiable : il se SIGNALE sur le bus (revue
-                    // ADR-014 — jamais d'échec de persistance avalé, le moat n'est pas
-                    // négociable), même si `run_finished` est déjà parti.
-                    if let Err(e) = state.store.put(run_id, &tenant, &outcome).await {
-                        bus.emit(DashboardEvent::RunFailed {
-                            message: format!("persistance des records échouée (run invérifiable) : {e}"),
-                        });
+                    // persiste la PREUVE (records) — re-vérifiable via verify/:id.
+                    //
+                    // **M2 — deux corrections, toutes deux vérifiées dans le code.**
+                    //
+                    // (1) L'émission d'un `RunFailed` MENTAIT : le run a réussi, c'est la
+                    //     persistance qui a échoué. Un client qui lit `run_failed` conclut que
+                    //     son travail est perdu alors que sa réponse était juste.
+                    //
+                    // (2) Personne ne l'entendait. `events.rs` ferme le flux SSE au PREMIER
+                    //     événement terminal (`is_terminal`), et `RunFinished` en est un — or il
+                    //     part AVANT la persistance, comme le notait le commentaire d'origine.
+                    //     La promesse « jamais d'échec de persistance avalé » décrivait donc
+                    //     exactement ce qui se produisait : l'échec était avalé par la fermeture
+                    //     du flux. Le rejeu depuis le ring ne rattrape rien — il s'arrête, lui
+                    //     aussi, au premier terminal.
+                    //
+                    // Les canaux qui atteignent réellement quelqu'un sont donc : le journal des
+                    // brèches (`GET /v1/swarm/gaps`), `/metrics`, le log d'exploitation, et
+                    // `GET /verify/:id` qui distingue désormais « inconnu » de « non persisté ».
+                    //
+                    // Ici la politique ne s'applique pas : il n'y a plus de requête à faire
+                    // échouer, le 202 est parti depuis longtemps. La seule posture honnête est
+                    // l'observation. Le journal enregistre des FAITS ; la politique décide
+                    // seulement si une requête tombe.
+                    let persistance = state.store.put(run_id, &tenant, &outcome).await;
+                    if let Err(e) = &persistance {
+                        eprintln!(
+                            "⚠ run {run_id} (mode job) SERVI mais NON PERSISTÉ — jamais \
+                             re-prouvable. Raison : {e}"
+                        );
                     }
+                    let _ = crate::capture::decider(
+                        crate::capture::CapturePolicy::Observation,
+                        run_id,
+                        &tenant,
+                        persistance,
+                        &state.gaps,
+                    );
                 }
                 Err(e) => {
                     bus.emit(DashboardEvent::RunFailed { message: e.to_string() });
@@ -147,8 +176,22 @@ pub async fn run(
     // G9 : caviarde la sortie selon la politique PII du tenant (réponse + au repos).
     s.redact_output(&caller.tenant, &mut outcome.run);
     let run_id = Uuid::new_v4();
-    s.store.put(run_id, &caller.tenant, &outcome).await?;
-    Ok((StatusCode::OK, Json(RunResponse { run_id, run: outcome.run })).into_response())
+    // ── M2 : la persistance ne peut plus renverser la réponse ─────────────────────────────
+    // C'était un `?` : le run avait réussi, la réponse était là dans `outcome.run`, et l'échec
+    // de PERSISTANCE la jetait. `decider` est le point de décision UNIQUE — sous la politique
+    // par défaut il propage l'erreur exactement comme avant, sous la posture d'observation il
+    // rend la réponse en disant la brèche.
+    let persistance = s.store.put(run_id, &caller.tenant, &outcome).await;
+    let capture = crate::capture::decider(s.capture_policy, run_id, &caller.tenant, persistance, &s.gaps)?;
+    if !capture.persisted {
+        // L'exploitant doit le voir dans ses logs même s'il ne lit ni `/metrics` ni `/gaps`.
+        eprintln!(
+            "⚠ run {run_id} SERVI mais NON PERSISTÉ — il ne sera jamais re-prouvable par \
+             /v1/swarm/verify/{run_id}. Raison : {}",
+            capture.degrade_reason.as_deref().unwrap_or("inconnue")
+        );
+    }
+    Ok((StatusCode::OK, Json(RunResponse { run_id, run: outcome.run, capture })).into_response())
 }
 
 /// **ADR-019 (MEM-3)** : incrémente les compteurs `/metrics` de recall/learn d'après le résumé

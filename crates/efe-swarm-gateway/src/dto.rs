@@ -494,6 +494,13 @@ pub struct RunResponse {
     pub run_id: Uuid,
     /// Le `SwarmRun` (sortie + coût + budget + provenance{root,verified} + qualité).
     pub run: SwarmRun,
+    /// **M2** : ce que la capture a fait de ce run. TOUJOURS présent, y compris quand tout va
+    /// bien — un champ qui n'apparaît qu'en cas de problème produit des clients qui ne le lisent
+    /// jamais, et donc une dégradation que personne ne remarque.
+    ///
+    /// `persisted: false` veut dire quelque chose de précis : la racine ci-dessus est correcte, le
+    /// run a bien eu lieu, et `GET /v1/swarm/verify/:id` ne le retrouvera **jamais**.
+    pub capture: crate::capture::CaptureReport,
 }
 
 /// Réponse de `GET /v1/swarm/verify/:id` — **la re-preuve indépendante** (le *moat*).

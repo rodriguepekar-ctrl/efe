@@ -137,6 +137,13 @@ pub struct SwarmGatewayState {
     pub memory_recalls: Arc<AtomicU64>,
     /// **ADR-019** : replis mémoire cumulés (compteur `/metrics`) — un run propre a appris.
     pub memory_learns: Arc<AtomicU64>,
+    /// **M2** : ce que la passerelle fait quand la PERSISTANCE d'un run échoue. Défaut
+    /// [`crate::capture::CapturePolicy::Bloquante`] — comportement d'avant M2, à l'octet près.
+    /// La posture d'observation est un opt-in déclaré au registre M0, jamais un défaut silencieux.
+    pub capture_policy: crate::capture::CapturePolicy,
+    /// **M2** : le journal des brèches — les runs servis qu'on n'a PAS pu persister. Une brèche
+    /// invisible serait pire que pas de chaîne du tout : la valeur d'une chaîne EST d'être complète.
+    pub gaps: Arc<crate::capture::GapJournal>,
     /// Métriques de provenance **partagées** : chaque run les alimente (→ `/metrics`).
     pub prov_metrics: Arc<ProvenanceMetrics>,
     /// Métriques de substrat (Blackboard/EventBus) — exposées en `/metrics`.
@@ -254,6 +261,8 @@ impl SwarmGatewayState {
             memory: Arc::new(InMemoryMemoryStore::with_keys(memory_keys)),
             memory_recalls: Arc::new(AtomicU64::new(0)),
             memory_learns: Arc::new(AtomicU64::new(0)),
+            capture_policy: crate::capture::CapturePolicy::default(),
+            gaps: Arc::new(crate::capture::GapJournal::new()),
             prov_metrics,
             substrate_metrics,
             dashboards: Arc::new(DashboardRegistry::new(DASHBOARD_REGISTRY_CAP)),
@@ -411,6 +420,15 @@ impl SwarmGatewayState {
     #[cfg(feature = "oidc")]
     pub fn with_oidc_llm(mut self, verifier: Arc<crate::oidc::OidcVerifier>) -> Self {
         self.oidc_llm = Some(verifier);
+        self
+    }
+
+    /// **M2** : pose la politique de capture. Réservé au binaire et aux tests — comme
+    /// `with_bundle_export`, ce constructeur évite toute lecture d'environnement depuis l'état,
+    /// de sorte qu'un test puisse construire une posture déterministe sans course.
+    #[must_use]
+    pub fn with_capture_policy(mut self, policy: crate::capture::CapturePolicy) -> Self {
+        self.capture_policy = policy;
         self
     }
 
