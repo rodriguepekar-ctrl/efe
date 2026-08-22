@@ -482,6 +482,37 @@ mod tests {
         std::fs::remove_dir_all(&dir).ok();
     }
 
+    /// **Le garde du raccourci.** `reg_pont_cable()` existe pour éviter de cloner tout le matériel
+    /// de preuve d'un run quand le pont n'est pas câblé. Ce n'est légitime que si les deux disent
+    /// exactement la même chose — sinon des dérivations sauteraient en silence, ce qui est pire que
+    /// le clone qu'on économise.
+    #[cfg(feature = "reg-evidence")]
+    #[test]
+    fn le_raccourci_ne_ment_jamais_sur_le_pont() {
+        let (_, stored) = crate::test_support::synthetic_mode_c_run("phi4");
+        let id = Uuid::new_v4();
+
+        let sans = SwarmGatewayState::in_memory();
+        assert!(!sans.reg_pont_cable(), "aucun pont câblé");
+        assert!(
+            sans.reg_dossier(id, "system", &stored).is_none(),
+            "le raccourci dit « pas de pont » : l'autorité doit dire pareil"
+        );
+
+        let dir = std::env::temp_dir().join(format!("m5-accord-{id}"));
+        let avec = SwarmGatewayState::in_memory().with_reg_pont(crate::reg_pont::RegPont {
+            dir: dir.clone(),
+            framework: crate::reg_pont::Framework::EuAiAct,
+        });
+        assert!(avec.reg_pont_cable(), "pont câblé");
+        assert!(
+            avec.reg_dossier(id, "system", &stored).is_some(),
+            "le raccourci dit « pont là » : l'autorité DOIT dériver — sinon le raccourci ferait \
+             sauter des dossiers sans que rien ne le signale"
+        );
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
     /// Sans pont câblé, le champ est ABSENT — et il l'est de la même façon dans les deux builds.
     /// Un client n'a pas à savoir comment le binaire a été construit pour lire sa réponse.
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]

@@ -25,6 +25,10 @@
 # zéro. Les suivants réutilisent le cache de couches.
 
 ARG RUST_VERSION=1.88
+# **M5** — les features à compiler. Vide par défaut : l'image du coin ne contient RIEN de
+# l'expansion, ce qui est la propriété que `deux_produits_separables.rs` garde au niveau du crate.
+# `compose.yaml` passe `reg-evidence` pour le service « jonction », et lui seul.
+ARG CARGO_FEATURES=
 
 # ── Étage 1 : compilation ─────────────────────────────────────────────────────
 FROM rust:${RUST_VERSION}-bookworm AS builder
@@ -36,10 +40,12 @@ COPY . .
 # `--locked` : le build échoue si `Cargo.lock` n'est pas à jour, plutôt que de
 # résoudre silencieusement d'autres versions que celles qui ont été testées.
 # On ne compile QUE les trois fermetures nécessaires, pas les 68 membres.
+ARG CARGO_FEATURES
 RUN cargo build --release --locked \
       -p efe-swarm-gateway \
       -p scella-preuve \
-      -p verify-mini
+      -p verify-mini \
+      ${CARGO_FEATURES:+--features "$CARGO_FEATURES"}
 
 # Le dossier de travail partagé, créé ICI avec le bon propriétaire : distroless
 # n'a pas de shell pour faire un `chown`, et un volume nommé hérite du

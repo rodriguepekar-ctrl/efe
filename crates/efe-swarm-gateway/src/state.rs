@@ -145,6 +145,11 @@ pub struct SwarmGatewayState {
     /// dit. Sous feature : le coin et l'expansion sont deux produits séparables.
     #[cfg(feature = "reg-evidence")]
     pub reg_pont: Option<crate::reg_pont::RegPont>,
+    /// **M5** : dérivations qui ont ÉCHOUÉ. Sans elle, `reg_dossiers_total` à zéro se confond
+    /// avec « aucun run » alors qu'il peut vouloir dire « toutes les dérivations échouent » — deux
+    /// situations opposées. C'est la leçon de M2 (compteur ET jauge) poussée d'un cran : il faut
+    /// aussi le DÉNOMINATEUR.
+    pub reg_echecs: Arc<AtomicU64>,
     /// **M5** : dossiers réglementaires écrits. Compteur présent dans les DEUX builds — un
     /// exploitant qui compare deux déploiements doit lire la même série, pas en chercher une qui
     /// n'existerait que d'un côté.
@@ -273,6 +278,7 @@ impl SwarmGatewayState {
             #[cfg(feature = "reg-evidence")]
             reg_pont: None,
             reg_dossiers: Arc::new(AtomicU64::new(0)),
+            reg_echecs: Arc::new(AtomicU64::new(0)),
             gaps: Arc::new(crate::capture::GapJournal::new()),
             prov_metrics,
             substrate_metrics,
@@ -507,15 +513,18 @@ impl SwarmGatewayState {
         let a_key = match self.derive_key(tenant) {
             Ok(k) => k,
             Err(e) => {
+                self.reg_echecs.fetch_add(1, Ordering::Relaxed);
                 return Some(crate::reg_pont::RegReport::echec(
                     crate::reg_pont::slug(pont.framework),
                     format!("clé tenant indisponible : {e}"),
-                ))
+                ));
             }
         };
         let r = crate::reg_pont::deriver(pont, run_id, tenant, &a_key, stored);
         if r.produced {
             self.reg_dossiers.fetch_add(1, Ordering::Relaxed);
+        } else {
+            self.reg_echecs.fetch_add(1, Ordering::Relaxed);
         }
         Some(r)
     }
@@ -534,8 +543,20 @@ impl SwarmGatewayState {
         None
     }
 
-    /// **M5** : le pont est-il câblé ? Répond dans les deux builds — sans la feature, il ne peut
-    /// pas l'être, et le dire vaut mieux que de laisser une jauge absente.
+    /// **M5** : le pont est-il câblé ?
+    ///
+    /// À consulter **avant** de construire un `StoredRun`, qui clone les records, les
+    /// `llm_records`, les feuilles N17, la sortie et la topologie d'un run. Le premier câblage de
+    /// M5 écrivait `reg_dossier(id, tenant, &StoredRun::from_outcome(…))` : l'argument étant évalué
+    /// avant l'appel, **chaque run du build par défaut payait ce clone** pour un pont qui n'y est
+    /// jamais câblé. Un coût sur le chemin servi, invisible à tout test, visible d'un profileur.
+    ///
+    /// Ce n'est **pas** une seconde décision : l'autorité reste `reg_dossier`, qui refait le même
+    /// `is_some()`. C'est un garde de raccourci, et `le_raccourci_ne_ment_jamais_sur_le_pont` fige
+    /// leur accord — sans quoi une divergence ferait sauter des dérivations en silence.
+    ///
+    /// Répond dans les deux builds : sans la feature, le pont ne peut pas être câblé, et le dire
+    /// vaut mieux que de laisser une jauge absente.
     #[cfg(feature = "reg-evidence")]
     #[must_use]
     pub fn reg_pont_cable(&self) -> bool {

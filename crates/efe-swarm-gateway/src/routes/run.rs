@@ -155,8 +155,11 @@ pub async fn run(
                     // **M5** — le même geste qu'en synchrone. Ici il n'y a pas de réponse à
                     // porter (le 202 est parti depuis longtemps), donc l'échec se dit au
                     // journal d'exploitation ; le dossier reste re-dérivable par la route.
-                    if let Some(r) =
-                        state.reg_dossier(run_id, &tenant, &crate::store::StoredRun::from_outcome(&tenant, &outcome))
+                    // Même raccourci qu'en synchrone : pas de clone quand le pont n'est pas câblé.
+                    if let Some(r) = state
+                        .reg_pont_cable()
+                        .then(|| crate::store::StoredRun::from_outcome(&tenant, &outcome))
+                        .and_then(|st| state.reg_dossier(run_id, &tenant, &st))
                     {
                         if !r.produced {
                             eprintln!(
@@ -208,7 +211,14 @@ pub async fn run(
     // Le run vient d'avoir lieu ; le dossier se dérive DE LUI, ici, sans que personne n'ait à
     // rappeler la passerelle. `reg_dossier` ne peut pas échouer : un dossier manquant est
     // récupérable par `POST /v1/swarm/reg/:id`, contrairement à une persistance manquée.
-    let reg = s.reg_dossier(run_id, &caller.tenant, &crate::store::StoredRun::from_outcome(&caller.tenant, &outcome));
+    // `StoredRun::from_outcome` clone tout le matériel de preuve du run. On ne le construit donc
+    // QUE si le pont est câblé : sinon chaque run du build par défaut paierait ce clone pour une
+    // capacité que personne n'a demandée. L'autorité reste `reg_dossier` ; ceci est un raccourci,
+    // et un test fige l'accord des deux.
+    let reg = s
+        .reg_pont_cable()
+        .then(|| crate::store::StoredRun::from_outcome(&caller.tenant, &outcome))
+        .and_then(|st| s.reg_dossier(run_id, &caller.tenant, &st));
     if let Some(r) = &reg {
         if !r.produced {
             eprintln!(

@@ -1325,18 +1325,70 @@ mod tests {
     }
 
     /// **T2** — toute capacité du rapport est gouvernée par un interrupteur **déclaré**.
+    ///
+    /// Les DEUX rapports, et c'est l'audit croisé des modules qui l'a exigé : cette version ne
+    /// vérifiait que le rapport d'INTENTION (`from_env`). Or les lignes ajoutées depuis vivent
+    /// toutes dans le rapport **SERVI** — `line_refusee` et `line_hors_perimetre` (M2), la ligne du
+    /// pont réglementaire (M5). Une capacité servie gouvernée par un interrupteur absent du
+    /// registre serait passée sans un bruit : l'opérateur lirait un nom de variable qu'il ne
+    /// trouverait nulle part, et qu'aucun rapport ne saurait expliquer.
+    ///
+    /// La propriété tenait — les 12 citations du rapport servi sont toutes déclarées — mais elle
+    /// n'était pas gardée. Une propriété vraie et non gardée est une propriété qui attend son
+    /// accident.
     #[test]
     fn t2_le_rapport_couvre_le_registre() {
-        let r = Report::from_env();
-        assert!(!r.capabilities.is_empty(), "rapport vide");
-        for c in &r.capabilities {
-            assert!(
-                switch(c.governed_by).is_some(),
-                "la capacité « {} » est gouvernée par {} qui n'est PAS dans le registre",
-                c.capability,
-                c.governed_by
-            );
-        }
+        let verifie = |r: &Report, quoi: &str| {
+            assert!(!r.capabilities.is_empty(), "rapport {quoi} vide");
+            for c in &r.capabilities {
+                assert!(
+                    switch(c.governed_by).is_some(),
+                    "rapport {quoi} : la capacité « {} » est gouvernée par {} qui n'est PAS dans \
+                     le registre",
+                    c.capability,
+                    c.governed_by
+                );
+            }
+        };
+        verifie(&Report::from_env(), "d'intention");
+
+        // Le rapport SERVI, dans ses trois régimes : rien câblé, tout câblé, et les cas
+        // particuliers (frontière demandée sans coordinator ⟹ REFUSÉE ; relais SLM hors périmètre)
+        // qui produisent des lignes qu'aucun autre chemin ne fabrique.
+        verifie(&Report::from_observed(&Observed::default()), "servi (rien câblé)");
+        verifie(
+            &Report::from_observed(&Observed {
+                provenance_non_forgeable: true,
+                anchor: true,
+                bundle: true,
+                attestation: true,
+                durable_store: true,
+                frontier: true,
+                frontier_intended: true,
+                allowlist: true,
+                pii: true,
+                slm: true,
+                slm_intended: true,
+                slm_local: true,
+                oidc: true,
+                router: true,
+                capture_observation: true,
+                reg_pont: true,
+            }),
+            "servi (tout câblé)",
+        );
+        verifie(
+            &Report::from_observed(&Observed {
+                // frontière DEMANDÉE sans coordinator ⟹ la ligne REFUSÉE de M2
+                frontier_intended: true,
+                // relais SLM câblé HORS périmètre ⟹ la ligne « SERVI HORS PÉRIMÈTRE » de P1
+                slm_intended: true,
+                slm: true,
+                slm_local: false,
+                ..Observed::default()
+            }),
+            "servi (refus + hors périmètre)",
+        );
     }
 
     #[test]

@@ -84,6 +84,7 @@
 //! | store (persistance) | **dégrade** sous la posture d'observation | `m2_le_client_recoit_sa_reponse_meme_quand_la_persistance_meurt`, `m2_une_mission_survit_a_la_mort_du_store` |
 //! | **les deux à la fois** | **dégrade** | `m3_le_slm_et_le_store_meurent_ensemble_et_lappel_passe` |
 //! | provider frontière mort | **écarté** du fan-out ; l'arité DÉCLARÉE reste re-dérivable du reçu | `call_many_ok_drops_errors`, `audit_detects_under_declaration` |
+//! | dérivation réglementaire (M5) | **dégrade**, et plus franchement que tout le reste | `m5_un_dossier_manque_se_rattrape_a_lidentique` |
 //! | caviardage PII | infaillible (pas de `Result`) | — |
 //! | bus de supervision | best-effort borné (ring + compteur de pertes) | — |
 //! | `tenant_id` | **coupe** — et c'est correct | le tenant est une **entrée du client** ; invalide, c'est une requête malformée, pas une panne |
@@ -96,6 +97,17 @@
 //! tient la racine — utile, et l'aveu la rend honnête. Une clé cassée ne laisse **rien** : ni reçu,
 //! ni racine, ni possibilité d'en produire un plus tard. Il n'y a alors rien à dégrader *vers*, et
 //! la coupure est la seule réponse qui ne mente pas.
+//!
+//! **Le cas de M5 mérite sa phrase**, parce qu'il est le plus tranché de la table et qu'il a été
+//! ajouté **après coup** : l'audit croisé des modules a trouvé que M5 avait introduit une
+//! dépendance sur le chemin d'appel sans inscrire sa ligne ici. L'inventaire était périmé un module
+//! après avoir été écrit — ce qui est exactement le mode de panne qu'il dénonce chez les autres.
+//!
+//! Sa règle : la dérivation d'un dossier réglementaire ne coupe jamais, et pour une raison plus
+//! forte que la persistance. Un run non persisté est **perdu** ; un dossier non écrit est
+//! seulement **différé**, puisque le run est intact dans le store et que
+//! `POST /v1/swarm/reg/:id` le re-dérive à l'identique. Il n'y a donc même pas de brèche à
+//! journaliser : rien n'a disparu.
 //!
 //! **Limite assumée.** Cet inventaire est tenu à la main. Aucun test n'interdit qu'une dépendance
 //! future coupe sans être inscrite ici — un `?` sur un appel faillible suffirait. Les lignes

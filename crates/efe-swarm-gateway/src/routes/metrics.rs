@@ -32,18 +32,29 @@ fn render_capture(s: &SwarmGatewayState) -> String {
     )
 }
 
-/// **M5** — le pont vers le registre. Deux séries, comme pour les brèches de M2 : le compteur dit
-/// l'ampleur, la jauge dit si un dossier est seulement POSSIBLE. Sans la seconde, un compteur à
-/// zéro se lirait comme « rien à signaler » alors qu'il peut être nul parce que le pont n'existe pas.
+/// **M5** — le pont vers le registre. **Trois** séries, et il en faut trois.
+///
+/// La jauge dit si un dossier est seulement POSSIBLE : sans elle, un compteur à zéro se lirait
+/// comme « rien à signaler » alors qu'il peut être nul parce que le pont n'existe pas. C'était la
+/// leçon de M2.
+///
+/// Mais deux ne suffisaient pas non plus, et l'audit l'a trouvé : avec le seul compteur de SUCCÈS,
+/// « aucun run n'est passé » et « toutes les dérivations échouent » rendent le même zéro. Le
+/// compteur d'ÉCHEC est le dénominateur qui les sépare — et il compte quelque chose de
+/// **récupérable**, puisque `POST /v1/swarm/reg/:id` re-dérive.
 fn render_reg(s: &SwarmGatewayState) -> String {
     format!(
         "# HELP efe_swarm_reg_dossiers_total Dossiers d'évidence réglementaire écrits (M5).\n\
          # TYPE efe_swarm_reg_dossiers_total counter\n\
          efe_swarm_reg_dossiers_total {}\n\
+         # HELP efe_swarm_reg_echecs_total Dérivations réglementaires qui ont ÉCHOUÉ (M5) — récupérables par POST /v1/swarm/reg/:id.\n\
+         # TYPE efe_swarm_reg_echecs_total counter\n\
+         efe_swarm_reg_echecs_total {}\n\
          # HELP efe_swarm_reg_pont Pont vers le registre : 1 = câblé (un dossier est possible), 0 = non.\n\
          # TYPE efe_swarm_reg_pont gauge\n\
          efe_swarm_reg_pont {}\n",
         s.reg_dossiers.load(std::sync::atomic::Ordering::Relaxed),
+        s.reg_echecs.load(std::sync::atomic::Ordering::Relaxed),
         u8::from(s.reg_pont_cable()),
     )
 }
