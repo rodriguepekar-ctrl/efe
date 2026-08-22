@@ -3042,6 +3042,7 @@ dependencies = [
  "efe-swarm-memory",
  "efe-swarm-provenance",
  "efe-swarm-topology",
+ "scella-authority",
  "serde",
  "serde_json",
  "tokio",
@@ -6338,6 +6339,7 @@ name = "provenance-capture"
 version = "0.0.1"
 dependencies = [
  "provenance-dag",
+ "scella-authority",
 ]
 
 [[package]]
@@ -7372,6 +7374,13 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "46e6f046b7fef48e2660c57ed794263155d713de679057f2d0c169bfc6e756cc"
 dependencies = [
  "sdd",
+]
+
+[[package]]
+name = "scella-authority"
+version = "0.0.1"
+dependencies = [
+ "url",
 ]
 
 [[package]]

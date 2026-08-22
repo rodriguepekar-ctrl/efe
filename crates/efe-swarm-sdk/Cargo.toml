@@ -27,6 +27,9 @@ efe-swarm-provenance = { path = "../efe-swarm-provenance", version = "0.0.1" }
 efe-swarm-memory     = { path = "../efe-swarm-memory", version = "0.0.1" }  # ADR-019 (MEM-2) : recall/learn
 efe-blackboard       = { path = "../efe-blackboard", version = "0.0.1" }  # WriteSink (cast du sink)
 efe-nano-sdk         = { path = "../efe-nano-sdk", version = "0.0.1" }
+# M1 — l'analyseur d'autorité, partagé avec le périmètre preuve. FEUILLE sans dépendance : la
+# prendre n'ouvre aucun chemin de ce crate vers `provenance-capture` ni l'inverse.
+scella-authority     = { path = "../scella-authority" }
 
 serde       = { workspace = true }
 serde_json  = { workspace = true }

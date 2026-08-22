@@ -36,6 +36,6 @@ pub mod tap;
 // que l'hôte. Imprimer l'URL brute recopie son `userinfo` (`http://user:pass@hôte/`) dans la sortie
 // de démarrage, où il sera collecté et archivé. Sans cet export, un appelant se rabat sur l'URL
 // entière — ou réécrit un analyseur, ce qui est le défaut que P1 a fermé.
-pub use guard::{assert_local, host_of, is_local_endpoint, SovereigntyError};
+pub use guard::{assert_local, authority_of, host_of, is_local_endpoint, Authority, SovereigntyError};
 pub use store::{CaptureError, CaptureStore, LoadError};
 pub use tap::{hash_hex, node_id, HumanReview, LlmCall, MessageEvent, ToolCall};

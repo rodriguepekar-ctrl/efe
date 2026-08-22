@@ -19,3 +19,7 @@ path = "src/lib.rs"
 
 [dependencies]
 provenance-dag = { path = "../provenance-dag" }
+# M1 — l'analyseur d'autorité n'est plus réimplémenté ici : `guard.rs` le réexporte. Une seconde
+# arête, vers une FEUILLE sans dépendance : la chaîne de confiance reste mince, et le périmètre
+# essaim prend la même feuille sans qu'aucun chemin n'apparaisse entre les deux périmètres.
+scella-authority = { path = "../scella-authority" }
