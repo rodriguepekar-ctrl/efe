@@ -338,6 +338,35 @@ appellera}. Jamais un troisième cas. C'est le même geste que M0 : remplacer «
 attaques » par « nous l'avons prouvé, ou nous refusons ».
 \end{acquis}
 
+\begin{alerte}
+\textbf{Vérifié à l'implémentation (M1.a) : la propriété a trouvé \pire{deux} différentiels réels
+dès sa première exécution hostile} --- deux que ni la rédaction de cette architecture, ni deux tours
+de durcissement, ni aucune revue n'avaient vus.
+
+\smallskip
+\code{http://2130706433} : \code{url} --- donc \code{reqwest} --- normalise l'entier décimal en
+\code{127.0.0.1} ; l'analyseur rendait \code{2130706433}. Même famille pour \code{0177.0.0.1} (le
+zéro initial vaut octal pour un résolveur historique) et \code{127.1} (forme courte).
+
+\smallskip
+\code{http://[::0001]} : \code{url} canonise en \code{::1} ; l'analyseur rendait \code{::0001}. Et
+en instrumentant, un troisième cas est apparu, présent dans les \emph{deux} implémentations
+historiques : \code{http://fe80::1:8080} --- IPv6 nue --- produisait l'hôte \code{fe80}, une chaîne
+qui ne désigne rien.
+
+\smallskip
+Les trois étaient \best{sûrs pour la localité} : « non local » dans tous les cas, donc jamais un
+laissez-passer. Mais \code{host\_of} sert aussi à \textbf{apparier une épingle TLS} et à
+\textbf{nommer un endpoint dans un journal} : désigner un hôte différent de celui appelé y a des
+conséquences propres. La règle retenue n'est pas d'imiter ces normalisations --- les imiter
+reviendrait à parier sur celle qu'applique le client --- mais de \textbf{refuser toute écriture
+ambiguë}. Le crate compte donc \textbf{six} cas de refus, non quatre.
+
+\smallskip
+C'est l'argument de l'option C, réalisé : une liste noire contient ce à quoi quelqu'un a pensé ;
+une propriété contient ce qui est vrai.
+\end{alerte}
+
 \section{7 · La migration, site par site}
 
 \begin{center}\footnotesize
@@ -374,6 +403,13 @@ rend un hôte vide, donc \code{None}, donc « non local ». Or dans ce fichier, 
 verrait donc du TLS apparaître là où il n'y en avait pas. C'est un durcissement, pas une panne, mais
 c'est un changement observable en production : il exige son propre test, sa propre note de version,
 et c'est la raison pour laquelle ces deux sites sont sortis du premier incrément.
+
+\smallskip
+\textbf{Corrigé après M1.a : la portée est plus large qu'écrit ici.} L'analyseur partagé refuse
+\emph{trois} familles et non une --- IPv6 nue, IPv6 non canonique (\code{[::0001]}), et écritures
+numériques ambiguës d'IPv4. Un déploiement qui emploie l'une d'elles verra donc TLS s'allumer là où
+il était coupé. Toujours un durcissement, toujours la direction sûre, mais la note de version de
+M1.b doit nommer les trois.
 \end{alerte}
 
 Il faut être juste envers ces deux fichiers : ils sont \emph{sûrs aujourd'hui}. Les charges de
@@ -452,14 +488,19 @@ sauf à découper, ce qui est ici la bonne réponse.
 \toprule
 & \textbf{Contenu} & \textbf{Fini quand} & \sz{Taille} \\
 \midrule
-\textbf{M1.a} & le crate feuille, le type \code{Authority}, le corpus ; les \textbf{trois} sites de souveraineté migrés ; le test d'unicité ; la propriété d'accord & critères 1 à 4 & \sz{2 j} \\
+\textbf{M1.a} \best{fait} & le crate feuille (843 l.), le type \code{Authority}, le corpus exporté ; les sites de souveraineté migrés --- \code{frontier.rs} par P1, \code{guard.rs} devenu ré-export, le SDK adopté ; le test d'unicité ; la propriété d'accord & critères 2 à 4 ; le 1\textsuperscript{er} tombe à \textbf{3} & \sz{2 j} \\
 \textbf{M1.b} & les \textbf{deux} sites méta-essaim ; convergence de la règle d'acceptation ; note de version sur l'IPv6 nue & critère 1 étendu au méta-essaim & \sz{1--2 j} \\
 \bottomrule
 \end{tabular}
 \end{center}
 
 M1.a livre le critère de la roadmap, ferme le défaut vivant, et n'a \emph{aucun} changement de
-comportement en dehors de l'avertissement qu'on voulait corriger. M1.b porte tout le risque et
+comportement en dehors de l'avertissement qu'on voulait corriger --- ce que prouve directement le
+fait que les \textbf{tests historiques} de \code{guard.rs}, laissés en place et pointés sur la
+nouvelle implémentation, passent sans être touchés. La couture annoncée est tenue : le critère
+\code{"://"} tombe de cinq à \textbf{trois}, pas à un, et les deux analyseurs restants sont
+\textbf{exemptés nommément}, avec leur raison et le module qui les supprimera --- une assertion
+interdit à cette liste de grandir, et le critère de fin de M1.b est qu'elle soit vide. M1.b porte tout le risque et
 aucune urgence : ses deux sites sont sûrs aujourd'hui. Les séparer n'est pas un report, c'est mettre
 le risque là où il se voit.
 
