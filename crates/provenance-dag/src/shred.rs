@@ -243,6 +243,23 @@ impl Trousseau {
         true
     }
 
+    /// Restaure une pierre tombale **depuis un état persisté** — sans jamais avoir tenu la clé.
+    ///
+    /// Un trousseau vit en mémoire ; un redémarrage le reconstruit depuis un fichier. Sans cette
+    /// porte, un cas broyé avant l'arrêt reviendrait en `Inconnu` : la destruction serait toujours
+    /// effective (la clé n'est nulle part) mais sa **date** serait perdue, et « détruit le 12 mars »
+    /// redeviendrait « jamais vu ». Or c'est la date qu'un régulateur demande, et c'est la
+    /// distinction que ce module existe pour tenir.
+    ///
+    /// Rend `false` si le cas est déjà connu — on ne réécrit pas l'histoire d'un cas vivant.
+    pub fn poser_broye(&mut self, cas: &str, le: u64) -> bool {
+        if self.vivants.contains_key(cas) || self.broyes.contains_key(cas) {
+            return false;
+        }
+        self.broyes.insert(cas.to_string(), le);
+        true
+    }
+
     /// **Broie** un cas : la clé est détruite, la date retenue. Irréversible.
     ///
     /// Rend `false` si le cas était inconnu ou déjà broyé — un broyage qui n'a rien détruit ne doit
@@ -403,6 +420,24 @@ mod tests {
         assert_eq!(t.lire("jamais-vu", "ctx", &e), Lecture::CleAbsente);
         assert_eq!(t.etat("connu"), EtatCas::Broye { le: 42 });
         assert_eq!(t.etat("jamais-vu"), EtatCas::Inconnu);
+    }
+
+    /// La pierre tombale restaurée depuis un état persisté vaut celle d'un broyage vécu : même
+    /// état, même date. Sans quoi un redémarrage transformerait « détruit le 12 mars » en
+    /// « jamais vu ».
+    #[test]
+    fn une_pierre_tombale_se_restaure_avec_sa_date() {
+        let mut t = Trousseau::new();
+        assert!(t.poser_broye("cas", 12345));
+        assert_eq!(t.etat("cas"), EtatCas::Broye { le: 12345 });
+
+        let e = sceller(&cle(1), "ctx", "COMPLIANT");
+        assert_eq!(t.lire("cas", "ctx", &e), Lecture::Broye { le: 12345 }, "et non « clé absente »");
+
+        assert!(!t.poser_broye("cas", 999), "on ne réécrit pas une date de destruction");
+        let mut u = Trousseau::new();
+        u.poser("vivant", cle(2), 0);
+        assert!(!u.poser_broye("vivant", 1), "ni l'histoire d'un cas vivant");
     }
 
     #[test]

@@ -101,6 +101,16 @@ impl Console {
         self.keys.get(tenant)
     }
 
+    /// Le service d'un tenant, par son identifiant.
+    ///
+    /// Fabrique un contexte interne : `TenantRegistry::resolve` ne lit que `auth.tenant`, et faire
+    /// écrire ce détail à chaque appelant multiplierait les endroits où un rôle est choisi au
+    /// hasard. Réservé au câblage (provisionnement, balayage de conservation) — jamais une route.
+    pub fn service_de(&mut self, tenant: &str) -> Option<&mut audit_api::AuditService> {
+        let auth = AuthContext::new(tenant, Role::Admin, "scella:cablage");
+        self.reg.resolve(&auth).ok()
+    }
+
     /// Ingestion de capture (S1) — exposée pour le `main` de démo / les tests, pas une route HTTP.
     /// (La capture réelle est alimentée par le runtime ; la console ne capte pas.)
     pub fn resolve_service(&mut self, auth: &AuthContext) -> Option<&mut audit_api::AuditService> {

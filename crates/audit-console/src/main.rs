@@ -19,7 +19,8 @@
 
 use audit_console::canal::Plancher;
 use audit_console::profile::{read, Report};
-use audit_console::provisioning::{appliquer, Deploiement, Resume};
+use audit_console::provisioning::{appliquer, balayer, Deploiement, Resume};
+use audit_console::server::{journaliser_balayage, Balayeur};
 use audit_console::{serve, Console, Role};
 use provenance_dag::{SealedDag, TenantKey};
 
@@ -41,10 +42,11 @@ fn main() -> std::io::Result<()> {
 
     let mut console = Console::new();
     let declaration = read::value("EFE_CONSOLE_DEPLOIEMENT");
-    let resume = if declaration.trim().is_empty() {
-        monter_demonstration(&mut console, root.as_bytes())?
+    let (resume, deploiement) = if declaration.trim().is_empty() {
+        (monter_demonstration(&mut console, root.as_bytes())?, None)
     } else {
-        monter_declare(&declaration, &mut console, root.as_bytes())?
+        let (r, d) = monter_declare(&declaration, &mut console, root.as_bytes())?;
+        (r, Some(d))
     };
 
     // ── M8 : la déclaration du terminateur de canal ──
@@ -59,11 +61,31 @@ fn main() -> std::io::Result<()> {
     }
 
     annoncer(&addr, &resume, declaration.trim().is_empty(), terminateur.as_deref(), &console);
-    serve(&addr, console, terminateur)
+
+    // ── M6, câblé : un balayage D'AMORÇAGE, puis le fil ──
+    //
+    // L'amorçage compte : sans lui, un cas expiré pendant l'arrêt du service attendrait un
+    // intervalle entier avant d'être détruit — et le redémarrage est précisément le moment où
+    // l'horizon a le plus de chances d'avoir été franchi.
+    let balayeur = deploiement.map(|dep| {
+        let maintenant = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0);
+        journaliser_balayage(&balayer(&mut console, &dep, maintenant));
+        let intervalle_s = read::value("EFE_CONSOLE_BALAYAGE_S").parse::<u64>().unwrap_or(3600);
+        Balayeur { intervalle_s, deploiement: dep }
+    });
+
+    serve(&addr, console, terminateur, balayeur)
 }
 
 /// La posture de **service** : la déclaration décide, et elle est validée avant toute mutation.
-fn monter_declare(chemin: &str, console: &mut Console, root: &[u8]) -> std::io::Result<Resume> {
+fn monter_declare(
+    chemin: &str,
+    console: &mut Console,
+    root: &[u8],
+) -> std::io::Result<(Resume, Deploiement)> {
     let brut = std::fs::read_to_string(chemin).map_err(|e| {
         // Un chemin déclaré mais illisible est fatal : retomber sur la démonstration donnerait un
         // service mono-tenant à qui croit en avoir déployé cinq.
@@ -83,7 +105,7 @@ fn monter_declare(chemin: &str, console: &mut Console, root: &[u8]) -> std::io::
         .map(|d| d.as_secs())
         .unwrap_or(0);
     match appliquer(&dep, console, root, maintenant) {
-        Ok(r) => Ok(r),
+        Ok(r) => Ok((r, dep)),
         Err(refus) => {
             eprintln!("\n╔═ DÉMARRAGE REFUSÉ ═══════════════════════════════════════════════════");
             eprintln!("║ La déclaration « {chemin} » ne peut pas être servie :");
@@ -125,6 +147,11 @@ fn monter_demonstration(console: &mut Console, root: &[u8]) -> std::io::Result<R
         tenants: vec![tenant.clone()],
         rehydrates,
         sessions_par_tenant: std::iter::once((tenant, 1)).collect(),
+        // La posture de démonstration ne déclare rien : pas de conservation, donc rien à broyer et
+        // rien à taire.
+        conservation_par_tenant: std::collections::BTreeMap::new(),
+        cas_sans_cle: std::collections::BTreeMap::new(),
+        trousseaux_larges: Vec::new(),
     })
 }
 
@@ -178,6 +205,29 @@ fn annoncer(
             eprintln!("          « protégé » — ce processus ne peut pas faire la différence.");
         }
     }
+    // ── M6, câblé : ce que la conservation fait, et ce qu'elle ne peut PAS lire ──
+    if resume.conservation_par_tenant.is_empty() {
+        eprintln!("  conservation : AUCUNE — rien n'expire, et un contenu enrobé resterait illisible");
+    } else {
+        for (t, n) in &resume.conservation_par_tenant {
+            eprintln!("  conservation « {t} » : {n} clé(s) de cas chargée(s) · balayage toutes les {} s",
+                      read::value("EFE_CONSOLE_BALAYAGE_S"));
+        }
+    }
+    for (t, n) in &resume.cas_sans_cle {
+        eprintln!(
+            "  ⚠ « {t} » : {n} cas présent(s) dans les records SANS clé — leur contenu enrobé se \n\
+             \x20  lira « clé absente », jamais « broyé ». On n'affirme pas une destruction qu'on \n\
+             \x20  n'a pas faite ; mais un trousseau incomplet est une perte, pas un effacement."
+        );
+    }
+    for f in &resume.trousseaux_larges {
+        eprintln!(
+            "  ⚠ le trousseau « {f} » est lisible au-delà de son propriétaire : ses clés sont \n\
+             \x20  des SECRETS, et un effacement dont la clé traîne n'efface rien. chmod 600."
+        );
+    }
+
     let nb = console.sessions().sans_expiration();
     if nb > 0 {
         eprintln!("  ⚠ {nb} session(s) SANS ÉCHÉANCE — un identifiant qui ne meurt jamais est");

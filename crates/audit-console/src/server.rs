@@ -7,6 +7,7 @@
 
 use crate::app::Console;
 use crate::canal::Canal;
+use crate::provisioning::{balayer, Deploiement};
 use crate::handler::handle;
 use crate::http::{HttpRequest, HttpResponse};
 use audit_api::assert_local;
@@ -39,7 +40,21 @@ const MAX_INFLIGHT: usize = 256;
 /// réécrire une ici triplerait l'arbre de dépendances d'un crate feuille et serait moins sûr qu'un
 /// terminateur mûr. Ce que M8 refuse, c'est de servir à distance **en silence** ; ce qu'il n'a
 /// jamais prétendu, c'est de chiffrer lui-même.
-pub fn serve(addr: &str, console: Console, terminateur: Option<String>) -> std::io::Result<()> {
+/// Ce qui fait EXPIRER les cas : la déclaration à appliquer, et à quel rythme.
+///
+/// Sans ce fil, une politique de conservation déclarée ne s'exécuterait **jamais** — un horizon
+/// écrit dans un fichier, et rien qui ne l'atteigne. C'est le trou que l'audit M6→M8 a trouvé.
+pub struct Balayeur {
+    pub intervalle_s: u64,
+    pub deploiement: Deploiement,
+}
+
+pub fn serve(
+    addr: &str,
+    console: Console,
+    terminateur: Option<String>,
+    balayeur: Option<Balayeur>,
+) -> std::io::Result<()> {
     let declare = terminateur.as_deref().map(str::trim).filter(|t| !t.is_empty()).map(str::to_string);
     if declare.is_none() {
         // I-S3-SOUVERAIN : sans déclaration, le bind DOIT rester local.
@@ -57,6 +72,26 @@ pub fn serve(addr: &str, console: Console, terminateur: Option<String>) -> std::
     let listener = TcpListener::bind(addr)?;
     let console = Arc::new(Mutex::new(console));
     let inflight = Arc::new(AtomicUsize::new(0));
+
+    // ── M6, câblé : le fil qui fait réellement expirer ──
+    //
+    // ⚠ Il tient le verrou pendant la réécriture du trousseau, `fsync` compris : toutes les
+    // requêtes se sérialisent derrière, quelques millisecondes, une fois par intervalle. C'est
+    // assumé — libérer le verrou entre le calcul des expirés et leur broyage ouvrirait une course
+    // pour ne gagner qu'une latence qu'une console de conformité ne remarquera pas.
+    if let Some(b) = balayeur {
+        let console = Arc::clone(&console);
+        std::thread::spawn(move || loop {
+            std::thread::sleep(Duration::from_secs(b.intervalle_s.max(1)));
+            let maintenant =
+                SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
+            let rapports = {
+                let mut g = console.lock().unwrap_or_else(|p| p.into_inner());
+                balayer(&mut g, &b.deploiement, maintenant)
+            };
+            journaliser_balayage(&rapports);
+        });
+    }
     for stream in listener.incoming() {
         match stream {
             Ok(stream) => {
@@ -78,6 +113,28 @@ pub fn serve(addr: &str, console: Console, terminateur: Option<String>) -> std::
         }
     }
     Ok(())
+}
+
+/// Journalise un balayage. **Un échec est crié**, un succès reste bref : un journal qui répète
+/// « rien à faire » à chaque heure ne se lit plus, et c'est celui-là qui avalera la ligne qui compte.
+pub fn journaliser_balayage(rapports: &[crate::provisioning::RapportBalayage]) {
+    for r in rapports {
+        match &r.echec {
+            None => eprintln!(
+                "conservation « {} » : {} cas broyé(s), destruction DURABLE (trousseau réécrit)",
+                r.tenant,
+                r.broyes.len()
+            ),
+            Some(e) => eprintln!(
+                "⚠ conservation « {} » : {} cas ONT EXPIRÉ et n'ont PAS été broyés — {e}\n\
+                 \x20  Rien n'a été détruit, ni sur le disque ni en mémoire : broyer en mémoire \n\
+                 \x20  pendant que les clés restent sur le disque déclarerait détruit ce qui est \n\
+                 \x20  intact, et le redémarrage suivant les ressusciterait.",
+                r.tenant,
+                r.expires.len()
+            ),
+        }
+    }
 }
 
 /// Traite UNE connexion : lit (avec timeout + bornes), dispatche, écrit, ferme.
@@ -124,7 +181,7 @@ mod tests {
         // I-S3-SOUVERAIN : un bind non-local est refusé AVANT toute écoute (rien ne sort de la frontière).
         let mut c = Console::new();
         c.provision("acme", TenantKey::from_bytes([1u8; 32]));
-        let err = serve("203.0.113.5:8088", c, None).unwrap_err();
+        let err = serve("203.0.113.5:8088", c, None, None).unwrap_err();
         assert_eq!(err.kind(), std::io::ErrorKind::PermissionDenied, "endpoint public refusé (souveraineté)");
         assert!(err.to_string().contains("souveraineté"));
     }
@@ -134,7 +191,7 @@ mod tests {
     fn le_refus_de_bind_indique_la_declaration_qui_le_leve() {
         let mut c = Console::new();
         c.provision("acme", TenantKey::from_bytes([1u8; 32]));
-        let msg = serve("203.0.113.5:8088", c, None).unwrap_err().to_string();
+        let msg = serve("203.0.113.5:8088", c, None, None).unwrap_err().to_string();
         assert!(msg.contains("DÉCLAREZ le terminateur"), "le geste : {msg}");
         assert!(msg.contains("en clair"), "et le danger que le silence ferait courir : {msg}");
     }
@@ -145,7 +202,7 @@ mod tests {
         for d in [Some(String::new()), Some("   ".to_string())] {
             let mut c = Console::new();
             c.provision("acme", TenantKey::from_bytes([1u8; 32]));
-            let e = serve("203.0.113.5:8088", c, d).unwrap_err();
+            let e = serve("203.0.113.5:8088", c, d, None).unwrap_err();
             assert_eq!(e.kind(), std::io::ErrorKind::PermissionDenied);
         }
     }

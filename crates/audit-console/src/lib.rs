@@ -64,6 +64,8 @@ pub mod http;
 pub mod render;
 pub mod server;
 pub mod session;
+/// **M6, câblé** — le trousseau rendu durable : chargé au démarrage, réécrit à chaque broyage.
+pub mod trousseau_fichier;
 pub mod tar;
 
 pub use app::Console;

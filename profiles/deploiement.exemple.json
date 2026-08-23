@@ -1,14 +1,27 @@
 {
-  "note": "EXEMPLE — NE PAS DÉPLOYER TEL QUEL. Les jetons ci-dessous sont des marqueurs, pas des secrets. Générez-en : openssl rand -hex 32. Ce fichier se monte comme un secret (montage k8s, fichier hors dépôt) ; le profil ne porte que son CHEMIN.",
+  "note": "EXEMPLE — NE PAS DÉPLOYER TEL QUEL. Ce fichier se monte comme un secret (montage k8s, fichier hors dépôt) ; le profil ne porte que son CHEMIN. Préférez « token_sha256 » à « token » : le fichier cesse alors d'être un magasin d'identifiants — le lire ne donne rien de présentable. Générez : T=$(openssl rand -hex 32) ; printf %s \"$T\" | shasum -a 256.",
 
   "tenants": [
-    { "id": "acme" },
-    { "id": "globex", "records": "/var/lib/scella/globex.sealed.jsonl" }
+    { "id": "acme",
+       "conservation": {
+         "horizon_s": 7776000,
+         "trousseau": "/etc/scella/keys/acme.keys"
+       } },
+
+    { "id": "globex",
+       "records": "/var/lib/scella/globex.sealed.jsonl" }
   ],
 
   "sessions": [
-    { "token": "REMPLACEZ-MOI-acme-officier", "tenant": "acme",   "role": "compliance_officer", "subject": "officer:hanna" },
-    { "token": "REMPLACEZ-MOI-acme-lecteur",  "tenant": "acme",   "role": "viewer",             "subject": "support:niveau1" },
-    { "token": "REMPLACEZ-MOI-globex-audit",  "tenant": "globex", "role": "auditor",            "subject": "auditor:cabinet-x" }
+    { "token_sha256": "041f2fa46fdd28e1269c68e7cfba4074a632eb3e771237eb95d3a8e0ca9a1f05",
+       "tenant": "acme", "role": "compliance_officer", "subject": "officer:hanna",
+       "expire_le": 4102444800 },
+
+    { "token_sha256": "0198d1bab3233af5dd4e6e42a51100946bbe19e4882456cb0b07f82e23e9d942",
+       "tenant": "acme", "role": "viewer", "subject": "support:niveau1",
+       "expire_le": 4102444800 },
+
+    { "token": "REMPLACEZ-MOI-globex-audit",
+       "tenant": "globex", "role": "auditor", "subject": "auditor:cabinet-x" }
   ]
 }

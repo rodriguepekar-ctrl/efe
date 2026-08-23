@@ -67,6 +67,103 @@ ok "manifest-root avant = après = ${AVANT:0:16}…"
 printf '%s' "$SORTIE" | grep -q 'détruit à t=' || ko "aucun contenu n'a été détruit — la démo serait vide"
 ok "et le contenu des dossiers expirés est détruit"
 
+titre "6. M6 CÂBLÉ — sur un vrai processus"
+#
+#  L'audit M6→M8 a trouvé que M6 n'était allumé par AUCUN binaire : la façade
+#  existait sur AuditService, personne ne l'appelait. Cette section démarre le
+#  service réel avec une conservation déclarée, et vérifie que la destruction
+#  atteint le DISQUE et SURVIT au redémarrage.
+#
+cargo test -q -p audit-console --test m6_cable_au_service >/dev/null 2>&1 \
+  || ko "les tests du câblage ne passent pas"
+ok "critère du câblage, durabilité, et l'ordre disque-avant-mémoire"
+
+TRAVAIL="$(mktemp -d)"
+trap 'rm -rf "$TRAVAIL"' EXIT
+MAINTENANT=$(date +%s)
+CLE_A=$(printf 'a%.0s' {1..64})
+CLE_B=$(printf 'b%.0s' {1..64})
+
+printf '# trousseau de vérification\nVIEUX\t%s\t0\nRECENT\t%s\t%s\n' \
+  "$CLE_A" "$CLE_B" "$MAINTENANT" > "$TRAVAIL/acme.keys"
+chmod 600 "$TRAVAIL/acme.keys"
+
+cat > "$TRAVAIL/decl.json" <<JSON
+{
+  "tenants": [{ "id": "acme",
+                "conservation": { "horizon_s": 3600, "trousseau": "$TRAVAIL/acme.keys" } }],
+  "sessions": [{ "token": "jeton-verif-m6", "tenant": "acme", "role": "auditor", "subject": "a" }]
+}
+JSON
+
+cargo build -q -p audit-console 2>/dev/null || ko "le binaire ne compile pas"
+BIN="target/debug/audit-console"
+PORT=18266
+
+demarrer() {
+  EFE_CONSOLE_ADDR="127.0.0.1:$PORT" \
+  EFE_CONSOLE_ROOT="$(printf '0%.0s' {1..64})" \
+  EFE_CONSOLE_DEPLOIEMENT="$TRAVAIL/decl.json" \
+    "$BIN" >/dev/null 2> "$1" &
+  PID=$!
+  for _ in $(seq 1 100); do
+    curl -sf "http://127.0.0.1:$PORT/healthz" >/dev/null 2>&1 && break
+    sleep 0.1
+  done
+  kill "$PID" 2>/dev/null || true
+  wait "$PID" 2>/dev/null || true
+}
+
+demarrer "$TRAVAIL/boot1.log"
+grep -q "conservation « acme » : 2 clé(s) de cas chargée(s)" "$TRAVAIL/boot1.log" \
+  || { cat "$TRAVAIL/boot1.log"; ko "la conservation n'a pas été activée au démarrage"; }
+ok "la conservation est ACTIVÉE par le binaire (2 clés chargées)"
+
+grep -q "1 cas broyé(s), destruction DURABLE" "$TRAVAIL/boot1.log" \
+  || { cat "$TRAVAIL/boot1.log"; ko "le balayage d'amorçage n'a rien broyé"; }
+ok "le balayage d'amorçage a broyé le cas expiré"
+
+grep -q "^VIEUX	BROYE	" "$TRAVAIL/acme.keys" || ko "la clé de VIEUX est encore sur le disque"
+grep -q "$CLE_A" "$TRAVAIL/acme.keys" && ko "la clé de VIEUX est encore lisible dans le fichier"
+grep -q "$CLE_B" "$TRAVAIL/acme.keys" || ko "la clé de RECENT a disparu — trop broyé"
+DATE_BROYAGE=$(awk '$1=="VIEUX"{print $3}' "$TRAVAIL/acme.keys")
+ok "sur le DISQUE : clé détruite, cas conservé, date inscrite ($DATE_BROYAGE)"
+
+demarrer "$TRAVAIL/boot2.log"
+grep -q "conservation « acme » : 1 clé(s) de cas chargée(s)" "$TRAVAIL/boot2.log" \
+  || { cat "$TRAVAIL/boot2.log"; ko "le redémarrage n'a pas rechargé le trousseau amputé"; }
+DATE_APRES=$(awk '$1=="VIEUX"{print $3}' "$TRAVAIL/acme.keys")
+[ "$DATE_BROYAGE" = "$DATE_APRES" ] \
+  || ko "la date de destruction a changé au redémarrage ($DATE_BROYAGE → $DATE_APRES)"
+ok "après REDÉMARRAGE : toujours broyé, et à la MÊME date"
+
+titre "7. Une destruction qui n'atteint pas le disque n'a PAS lieu"
+# Le RENAME atomique a besoin d'écrire dans le DOSSIER : c'est lui qu'on verrouille, pas le
+# fichier. Les journaux restent dans le parent, sans quoi le binaire ne pourrait pas s'exprimer —
+# la première version de cette section verrouillait le dossier des journaux et se dégradait en un
+# faux succès.
+mkdir -p "$TRAVAIL/verrou"
+printf 'VIEUX2\t%s\t0\n' "$CLE_A" > "$TRAVAIL/verrou/fige.keys"
+sed "s|$TRAVAIL/acme.keys|$TRAVAIL/verrou/fige.keys|" "$TRAVAIL/decl.json" > "$TRAVAIL/decl2.json"
+chmod 500 "$TRAVAIL/verrou"
+EFE_CONSOLE_ADDR="127.0.0.1:$((PORT+1))" \
+EFE_CONSOLE_ROOT="$(printf '0%.0s' {1..64})" \
+EFE_CONSOLE_DEPLOIEMENT="$TRAVAIL/decl2.json" \
+  "$BIN" >/dev/null 2> "$TRAVAIL/boot3.log" &
+PID=$!
+sleep 2
+kill "$PID" 2>/dev/null || true
+wait "$PID" 2>/dev/null || true
+chmod 700 "$TRAVAIL/verrou"
+if grep -q "ONT EXPIRÉ et n'ont PAS été broyés" "$TRAVAIL/boot3.log"; then
+  grep -q "$CLE_A" "$TRAVAIL/verrou/fige.keys" || ko "la clé a disparu alors que l'écriture avait échoué"
+  ok "écriture impossible ⟹ RIEN n'est détruit, et le journal le CRIE"
+else
+  cat "$TRAVAIL/boot3.log" >&2
+  ko "l'écriture aurait dû échouer et être CRIÉE — un balayage muet sur un trousseau verrouillé \
+      serait la panne silencieuse que ce module existe pour supprimer"
+fi
+
 titre "Ce que M6 NE fait PAS, et qu'il faut redire"
 cat <<'FIN'
   · Le NŒUD reste. Un auditeur voit toujours qu'un acte a eu lieu, son rôle,
@@ -77,9 +174,16 @@ cat <<'FIN'
   · Ce n'est pas une PREUVE de destruction : sauvegardes et instantanés
     peuvent conserver une clé ailleurs. La discipline des copies reste une
     affaire d'exploitation.
-  · Le trousseau ne se recharge pas au redémarrage — sa persistance est le
-    geste du déployeur. Un trousseau perdu se lit « clé absente », jamais
-    « broyé » : on n'affirme pas une destruction qu'on n'a pas faite.
+  · Le trousseau se recharge désormais au redémarrage, depuis le fichier
+    déclaré — mais son ENTROPIE reste le geste du déployeur : ce service lit
+    des clés, il n'en fabrique aucune. Une clé qu'il pourrait dériver se
+    re-dériverait, et le broyage ne détruirait rien.
+    (Cette ligne disait le contraire jusqu'à l'audit M6→M8 : la limite
+    déclarée par M6 était devenue fausse un module plus tard.)
+  · Un trousseau perdu se lit « clé absente », jamais « broyé » : on n'affirme
+    pas une destruction qu'on n'a pas faite. Un cas broyé, lui, garde sa DATE
+    dans le fichier — supprimer sa ligne aurait effacé le procès-verbal de
+    l'effacement.
 FIN
 
 printf '\n\033[32mM6 tient.\033[0m\n'

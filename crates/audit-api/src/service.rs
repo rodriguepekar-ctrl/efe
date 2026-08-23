@@ -201,6 +201,26 @@ impl AuditService {
         self.store.ouvrir_cas(cas, cle, depuis)
     }
 
+    /// Restaure une pierre tombale depuis un état persisté — la destruction a déjà eu lieu.
+    ///
+    /// Sans cette porte, un redémarrage ferait revenir un cas broyé en « clé absente » : la
+    /// destruction resterait effective, mais sa **date** serait perdue. C'est elle qu'un régulateur
+    /// demande, et c'est la distinction que M6 tient (`Broye{le}` ≠ `Inconnu`).
+    pub fn restaurer_broyage(&mut self, cas: &str, le: u64) -> bool {
+        self.store.conservation_mut().map(|t| t.poser_broye(cas, le)).unwrap_or(false)
+    }
+
+    /// Les cas **expirés**, sans rien détruire.
+    ///
+    /// Séparer « calculer » de « détruire » n'est pas une commodité : la destruction doit être
+    /// rendue DURABLE (le fichier de trousseau réécrit) **avant** d'être appliquée en mémoire.
+    /// Sinon un échec d'écriture laisserait un processus qui déclare détruit ce qui est intact, et
+    /// que le redémarrage suivant ressusciterait.
+    #[must_use]
+    pub fn cas_expires(&self, politique: Conservation, maintenant: u64) -> Option<Vec<String>> {
+        Some(self.store.conservation()?.expires(politique.horizon_s, maintenant))
+    }
+
     /// Applique une politique de conservation : broie les cas expirés, rend le compte rendu.
     ///
     /// `None` si la conservation n'est pas active — et non un balayage vide, qui se lirait « rien

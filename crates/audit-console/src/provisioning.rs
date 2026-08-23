@@ -58,6 +58,10 @@ use serde::Deserialize;
 
 use crate::app::Console;
 use crate::session::{empreinte, empreinte_de_hex, Empreinte};
+use crate::trousseau_fichier;
+use provenance_capture::cas_de;
+use provenance_capture::conservation::Conservation;
+use provenance_dag::shred::{EtatCas, Trousseau};
 
 /// Le vocabulaire des rôles, déclaré **une seule fois**.
 ///
@@ -105,6 +109,26 @@ pub struct TenantDecl {
     pub id: String,
     #[serde(default)]
     pub records: Option<String>,
+    /// **M6, câblé** — la conservation limitée de ce tenant. Absente, rien n'expire jamais et un
+    /// contenu enrobé reste illisible faute de clés : c'est licite (tous les déploiements ne
+    /// chiffrent pas), et le démarrage le **compte** plutôt que de le taire.
+    #[serde(default)]
+    pub conservation: Option<ConservationDecl>,
+}
+
+/// La conservation d'un tenant : combien de temps, et où sont les clés.
+///
+/// Les deux champs sont **requis ensemble**, et serde l'impose. Un horizon sans trousseau ne
+/// pourrait rien broyer (rien n'est chiffré) ; un trousseau sans horizon ouvrirait les contenus
+/// sans jamais les faire expirer — ce qui est une politique de conservation qui ne conserve pas.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ConservationDecl {
+    /// L'âge au-delà duquel un cas est broyé, en secondes.
+    pub horizon_s: u64,
+    /// Le fichier de trousseau (« cas  clé_hex64  ouvert_à »). **C'est un secret** : il porte les
+    /// clés. Le broyage le **réécrit** — c'est ce qui rend la destruction durable.
+    pub trousseau: String,
 }
 
 /// Une session : un jeton porteur, le tenant qu'il ouvre, le rôle qu'il porte, et le sujet.
@@ -189,6 +213,10 @@ pub enum Refus {
     /// silencieusement vide ferait conclure à un auditeur que rien ne s'est passé, ce qui est la
     /// pire réponse possible d'un registre de preuve — fausse, et rassurante.
     RecordsIllisible { tenant: String, chemin: String, cause: String },
+    /// **M6-câblé** — un horizon de conservation nul : le premier balayage broierait TOUT.
+    HorizonNul { tenant: String },
+    /// **M6-câblé** — le fichier de trousseau est illisible ou malformé.
+    TrousseauIllisible { tenant: String, cause: String },
     /// Aucun tenant : le service ouvrirait un port pour ne rien pouvoir servir.
     AucunTenant,
     /// Des tenants mais aucune session : personne ne peut lire, et rien ne le dirait.
@@ -261,6 +289,19 @@ impl fmt::Display for Refus {
                 "le log scellé du tenant « {tenant} » ({chemin}) est illisible — {cause}. Démarrer \
                  vide ferait conclure qu'il ne s'est rien passé : c'est faux, et rassurant"
             ),
+            Refus::HorizonNul { tenant } => write!(
+                f,
+                "le tenant « {tenant} » déclare un horizon de conservation NUL : le premier balayage \
+                 broierait tout son registre, irréversiblement. Dans un fichier de configuration, un \
+                 zéro est une faute de frappe bien plus souvent qu'une intention. Pour détruire \
+                 délibérément, supprimez le fichier de trousseau — c'est la façon honnête d'effacer \
+                 des clés"
+            ),
+            Refus::TrousseauIllisible { tenant, cause } => write!(
+                f,
+                "le trousseau du tenant « {tenant} » est inexploitable — {cause}. Démarrer sans lui \
+                 rendrait tout son contenu enrobé illisible, et le broyage ne serait pas durable"
+            ),
             Refus::TenantVide => write!(f, "identifiant de tenant vide"),
             Refus::AucunTenant => {
                 write!(f, "aucun tenant : le service ouvrirait un port sans rien pouvoir servir")
@@ -283,6 +324,16 @@ pub struct Resume {
     /// Combien de sessions, **par tenant** — l'exploitant a besoin de savoir qu'un tenant sans
     /// session est illisible, ce qu'un total masquerait.
     pub sessions_par_tenant: BTreeMap<String, usize>,
+    /// **M6-câblé** — les tenants dont la conservation est ACTIVE, avec le nombre de clés chargées.
+    pub conservation_par_tenant: BTreeMap<String, usize>,
+    /// Les cas présents dans les records **sans clé** dans le trousseau, par tenant.
+    ///
+    /// Leur contenu enrobé se lira « clé absente » — jamais « broyé », parce qu'on n'affirme pas une
+    /// destruction qu'on n'a pas faite. Mais il faut le **dire** : c'est la forme silencieuse de la
+    /// perte, celle qu'un exploitant ne découvrirait qu'en ouvrant un dossier.
+    pub cas_sans_cle: BTreeMap<String, usize>,
+    /// Les fichiers de trousseau lisibles au-delà de leur propriétaire.
+    pub trousseaux_larges: Vec<String>,
 }
 
 impl Resume {
@@ -316,6 +367,11 @@ impl Deploiement {
             }
             if vus.insert(t.id.as_str(), ()).is_some() {
                 refus.push(Refus::TenantDuplique { id: t.id.clone() });
+            }
+            if let Some(c) = &t.conservation {
+                if c.horizon_s == 0 {
+                    refus.push(Refus::HorizonNul { tenant: t.id.clone() });
+                }
             }
         }
         if self.tenants.is_empty() {
@@ -432,6 +488,60 @@ pub fn appliquer(
         return Err(refus);
     }
 
+    // ── M6, câblé : charger les trousseaux et ACTIVER la conservation ──
+    //
+    // Sans ce bloc, M6 restait un mécanisme qu'aucun binaire n'allumait : implémenté, testé,
+    // démontré par un exemple — et activé par rien de ce qui tourne.
+    let mut conservation_par_tenant: BTreeMap<String, usize> = BTreeMap::new();
+    let mut cas_sans_cle: BTreeMap<String, usize> = BTreeMap::new();
+    let mut trousseaux_larges: Vec<String> = Vec::new();
+
+    for t in &dep.tenants {
+        let Some(c) = &t.conservation else { continue };
+        let chemin = std::path::Path::new(&c.trousseau);
+        let (entrees, tombes, large) = match trousseau_fichier::charger(chemin) {
+            Ok(v) => v,
+            Err(e) => {
+                refus.push(Refus::TrousseauIllisible {
+                    tenant: t.id.clone(),
+                    cause: e.to_string(),
+                });
+                continue;
+            }
+        };
+        if large {
+            trousseaux_larges.push(c.trousseau.clone());
+        }
+        let Some(svc) = console.service_de(&t.id) else { continue };
+        svc.avec_conservation(Trousseau::new());
+        let mut poses = 0usize;
+        for e in entrees {
+            if svc.ouvrir_cas(&e.cas, e.cle, e.depuis) {
+                poses += 1;
+            }
+        }
+        // Les pierres tombales AVANT tout le reste de la lecture : sans elles, un cas broyé avant
+        // l'arrêt reviendrait « clé absente » et sa DATE de destruction serait perdue — « détruit le
+        // 12 mars » redeviendrait « jamais vu », ce que M6 existe pour empêcher.
+        for (cas, le) in tombes {
+            svc.restaurer_broyage(&cas, le);
+        }
+        conservation_par_tenant.insert(t.id.clone(), poses);
+
+        // Les cas présents dans les records SANS clé : leur contenu enrobé se lira « clé absente ».
+        // C'est la forme silencieuse de la perte — celle qu'un exploitant ne découvrirait qu'en
+        // ouvrant un dossier. On la compte ici pour pouvoir la crier au démarrage.
+        let cas: std::collections::BTreeSet<String> =
+            svc.store().records().iter().map(|r| cas_de(r.node.id()).to_string()).collect();
+        let sans = cas.iter().filter(|c| svc.etat_conservation(c) == Some(EtatCas::Inconnu)).count();
+        if sans > 0 {
+            cas_sans_cle.insert(t.id.clone(), sans);
+        }
+    }
+    if !refus.is_empty() {
+        return Err(refus);
+    }
+
     let mut sessions_par_tenant: BTreeMap<String, usize> = BTreeMap::new();
     for t in &dep.tenants {
         sessions_par_tenant.insert(t.id.clone(), 0);
@@ -447,7 +557,88 @@ pub fn appliquer(
 
     let mut tenants: Vec<String> = dep.tenants.iter().map(|t| t.id.clone()).collect();
     tenants.sort();
-    Ok(Resume { tenants, rehydrates, sessions_par_tenant })
+    Ok(Resume {
+        tenants,
+        rehydrates,
+        sessions_par_tenant,
+        conservation_par_tenant,
+        cas_sans_cle,
+        trousseaux_larges,
+    })
+}
+
+/// Ce qu'un balayage de conservation a fait pour **un** tenant.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RapportBalayage {
+    pub tenant: String,
+    /// Les cas broyés — **vides si la destruction n'a pas pu être rendue durable**.
+    pub broyes: Vec<String>,
+    /// Les cas qui ONT expiré, qu'ils aient été broyés ou non. Sans ce champ, un échec se lirait
+    /// « rien n'a expiré ».
+    pub expires: Vec<String>,
+    /// La destruction a-t-elle atteint le disque ?
+    pub durable: bool,
+    /// Pourquoi elle ne l'a pas atteint.
+    pub echec: Option<String>,
+}
+
+/// **Le balayage de conservation** — et l'ordre de ses deux gestes est toute sa correction.
+///
+/// 1. calculer les expirés (**sans rien détruire**) ;
+/// 2. réécrire le fichier de trousseau **sans eux** — la destruction durable ;
+/// 3. **et seulement alors** broyer en mémoire.
+///
+/// Inverser 2 et 3 donnerait, sur un échec d'écriture, un processus qui déclare détruit ce qui est
+/// intact sur le disque — et que le redémarrage suivant ressusciterait. Un broyage qui n'est pas
+/// durable est un **mensonge sur une destruction**, et le seul comportement honnête est de ne pas
+/// broyer du tout et de le dire.
+///
+/// Ne rend un rapport que pour les tenants où **quelque chose s'est passé** (des expirés, ou un
+/// échec) : un journal qui répète « rien » à chaque intervalle ne se lit plus.
+pub fn balayer(console: &mut Console, dep: &Deploiement, maintenant: u64) -> Vec<RapportBalayage> {
+    let mut out = Vec::new();
+    for t in &dep.tenants {
+        let Some(c) = &t.conservation else { continue };
+        let politique = Conservation::nouvelle(c.horizon_s);
+
+        let expires = {
+            let Some(svc) = console.service_de(&t.id) else { continue };
+            match svc.cas_expires(politique, maintenant) {
+                Some(e) if !e.is_empty() => e,
+                _ => continue,
+            }
+        };
+
+        // (2) D'ABORD le disque.
+        match trousseau_fichier::broyer(
+            std::path::Path::new(&c.trousseau),
+            &expires,
+            maintenant,
+        ) {
+            Ok(_) => {
+                // (3) Puis la mémoire — la même politique, donc les mêmes cas.
+                if let Some(b) =
+                    console.service_de(&t.id).and_then(|s| s.balayer(politique, maintenant))
+                {
+                    out.push(RapportBalayage {
+                        tenant: t.id.clone(),
+                        broyes: b.broyes,
+                        expires,
+                        durable: true,
+                        echec: None,
+                    });
+                }
+            }
+            Err(e) => out.push(RapportBalayage {
+                tenant: t.id.clone(),
+                broyes: Vec::new(),
+                expires,
+                durable: false,
+                echec: Some(e.to_string()),
+            }),
+        }
+    }
+    out
 }
 
 /// Lit un log scellé. L'erreur est rendue en texte pour être **citée** dans le refus : « fichier

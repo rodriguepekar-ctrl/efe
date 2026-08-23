@@ -405,6 +405,7 @@ dependencies = [
  "provenance-capture",
  "provenance-dag",
  "reg-evidence",
+ "scella-authority",
  "serde",
  "serde_json",
 ]

@@ -38,7 +38,7 @@ pub struct Switch {
     pub class: Class,
 }
 
-/// Les huit interrupteurs, déclarés une seule fois.
+/// Les neuf interrupteurs, déclarés une seule fois.
 pub const REGISTRY: &[Switch] = &[
     Switch {
         name: "EFE_CONSOLE_ADDR",
@@ -74,6 +74,15 @@ pub const REGISTRY: &[Switch] = &[
         default: "officer:demo",
         buys: "l'identité de l'agent",
         absence_costs: "sujet de démonstration — les actions humaines scellées seront attribuées à « officer:demo »",
+        class: Class::Tuning,
+    },
+    Switch {
+        name: "EFE_CONSOLE_BALAYAGE_S",
+        default: "3600",
+        buys: "l'intervalle du balayage de conservation (secondes) — c'est lui qui fait EXPIRER \
+               réellement les cas déclarés dans la conservation d'un tenant",
+        absence_costs: "balayage toutes les heures — suffisant pour une rétention exprimée en jours \
+                        ou en années, et sans effet si aucun tenant ne déclare de conservation",
         class: Class::Tuning,
     },
     Switch {
@@ -270,10 +279,10 @@ mod tests {
     use super::*;
 
     #[test]
-    fn le_registre_couvre_les_huit_interrupteurs() {
+    fn le_registre_couvre_les_neuf_interrupteurs() {
         // SIX, pas sept : le « septième » de mon relevé initial était `EFE_K`, un faux positif —
         // le motif attrapait `EFE_Kovant_P1_*` dans des commentaires.
-        assert_eq!(REGISTRY.len(), 8, "ADDR, TENANT, ROOT, TOKEN, SUBJECT, TERMINATEUR_CANAL, DEPLOIEMENT, RECORDS");
+        assert_eq!(REGISTRY.len(), 9, "ADDR, TENANT, ROOT, TOKEN, SUBJECT, BALAYAGE_S, TERMINATEUR_CANAL, DEPLOIEMENT, RECORDS");
         for s in REGISTRY {
             assert!(!s.buys.trim().is_empty(), "{} : `buys` vide", s.name);
             assert!(!s.absence_costs.trim().is_empty(), "{} : `absence_costs` vide", s.name);

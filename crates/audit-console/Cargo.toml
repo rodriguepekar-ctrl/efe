@@ -33,6 +33,10 @@ provenance-dag = { path = "../provenance-dag" }
 # extrait cet analyseur dans un crate feuille ZÉRO-DÉPENDANCE pour qu'il n'en existe qu'un ; en
 # écrire un ici en serait un quatrième, et le test `un_seul_analyseur` de M1 l'interdit.
 scella-authority = { path = "../scella-authority" }
+# M6-câblé — la convention d'identifiants de cas (`{cas}::{étape}`) appartient à S1. La ré-écrire
+# ici en ferait une seconde définition d'une convention partagée : le défaut que M1 a supprimé.
+# Coût marginal NUL : `audit-api` en dépend déjà, elle est dans la fermeture.
+provenance-capture = { path = "../provenance-capture" }
 serde = { workspace = true }
 serde_json = { workspace = true }
 

@@ -46,7 +46,12 @@ impl CaptureStore {
         // ⚠ Le trousseau ne se recharge PAS ici : il n'est pas dans les records (par construction —
         // s'il y était, le broyage ne détruirait rien). Un redémarrage repart donc sans conservation,
         // et les champs enrobés se lisent « clé absente » — **pas** « broyé », ce qui serait affirmer
-        // une destruction qu'on n'a pas faite. Restaurer le trousseau est le geste du déployeur.
+        // une destruction qu'on n'a pas faite.
+        //
+        // Restaurer le trousseau est le geste du déployeur — et depuis l'audit M6→M8, le service de
+        // lecture le FAIT : `audit_console::trousseau_fichier` charge un fichier déclaré et repose
+        // les clés vivantes ET les pierres tombales (avec leur date). Ce constructeur reste nu
+        // exprès : S1 n'a pas à savoir où un déploiement range ses secrets.
         CaptureStore { dag: SealedDag::from_records(records), key, conservation: None, sans_cle: BTreeMap::new() }
     }
 
