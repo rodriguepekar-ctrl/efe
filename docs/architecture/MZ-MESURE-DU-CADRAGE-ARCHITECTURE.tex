@@ -1,0 +1,317 @@
+\documentclass[10pt]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage[french]{babel}
+\usepackage{newpxtext,newpxmath}
+\usepackage[a4paper,top=1.5cm,bottom=1.35cm,left=1.6cm,right=1.6cm]{geometry}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{titlesec}
+\usepackage[most]{tcolorbox}
+\usepackage{enumitem}
+\usepackage{array}
+\usepackage{booktabs}
+\usepackage{fancyhdr}
+
+\definecolor{navy}{HTML}{1F3A5F}
+\definecolor{grey}{HTML}{54606E}
+\definecolor{green}{HTML}{2C6E49}
+\definecolor{amber}{HTML}{9C6A16}
+\definecolor{red}{HTML}{A6322E}
+\definecolor{plum}{HTML}{7A4EA8}
+\definecolor{boxgray}{HTML}{F3F5F8}
+\definecolor{boxred}{HTML}{FCF2F1}
+\definecolor{boxgreen}{HTML}{F1F7F3}
+\definecolor{boxplum}{HTML}{F7F3FB}
+\definecolor{boxcode}{HTML}{F7F8FA}
+\definecolor{boxedge}{HTML}{D9E0EA}
+
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{2.6pt}
+\linespread{1.0}
+
+\pagestyle{fancy}\fancyhf{}
+\lhead{\small\color{grey}Scella · architecture}
+\rhead{\small\color{grey}MZ --- La mesure du Cadrage --- 23 août 2026}
+\cfoot{\small\color{grey}\thepage}
+\renewcommand{\headrulewidth}{0.3pt}
+
+\titleformat{\section}{\color{navy}\large\bfseries}{}{0pt}{}
+\titlespacing{\section}{0pt}{11pt}{3pt}
+\titleformat{\subsection}{\color{navy}\bfseries}{}{0pt}{}
+\titlespacing{\subsection}{0pt}{7pt}{1.5pt}
+
+\newtcolorbox{these}{colback=boxgray,colframe=boxedge,boxrule=0.5pt,arc=2.5pt,
+  left=8pt,right=8pt,top=4.5pt,bottom=4.5pt}
+\newtcolorbox{alerte}{colback=boxred,colframe=red!55,boxrule=0.8pt,arc=2.5pt,
+  left=8pt,right=8pt,top=4.5pt,bottom=4.5pt}
+\newtcolorbox{acquis}{colback=boxgreen,colframe=green!45,boxrule=0.8pt,arc=2.5pt,
+  left=8pt,right=8pt,top=4.5pt,bottom=4.5pt}
+\newtcolorbox{piste}{colback=boxplum,colframe=plum!45,boxrule=0.8pt,arc=2.5pt,
+  left=8pt,right=8pt,top=4.5pt,bottom=4.5pt}
+\newtcolorbox{extrait}{colback=boxcode,colframe=boxedge,boxrule=0.5pt,arc=1.5pt,
+  left=7pt,right=7pt,top=3.5pt,bottom=3.5pt}
+
+\newcommand{\best}[1]{\textcolor{green}{\textbf{#1}}}
+\newcommand{\pire}[1]{\textcolor{red}{\textbf{#1}}}
+\newcommand{\sz}[1]{\textcolor{grey}{\small\textsf{#1}}}
+\newcommand{\code}[1]{\texttt{\small #1}}
+\newcommand{\fl}{$\rightarrow$}
+\newcommand{\mm}[1]{\textbf{\textcolor{navy}{#1}}}
+
+\begin{document}
+
+\begin{center}
+{\Huge\bfseries\color{navy} Scella}\\[4pt]
+{\large\color{grey}\itshape MZ --- La mesure du Cadrage · architecture}\\[4pt]
+{\small\color{grey} 23 août 2026 \; · \; hors chemin \; · \; indépendant, local, \textbf{gratuit}}
+\end{center}
+\vspace{2pt}
+
+\begin{these}
+\small \mm{MZ} n'est pas une fonctionnalité : c'est une \textbf{mesure}, et la feuille de route dit
+qu'elle « peut tuer le Cadrage sans rien coûter ». Un module dont le produit attendu est peut-être un
+\textbf{refus} se conçoit autrement qu'un module qui livre : ses critères de réfutation s'écrivent
+\emph{avant} l'expérience, et sa réussite se juge à sa capacité de dire non.
+
+Ce document établit d'abord ce que la lecture du code apprend --- trois faits qui changent la
+question posée --- puis définit les quantités, le protocole, et \textbf{ce qui tue le Cadrage},
+déclaré d'avance.
+\end{these}
+
+\section{1 · Ce que le Cadrage promet, et ce que le code en dit}
+
+\subsection{1.1 · La promesse}
+
+Le Cadrage --- le « pré-mâchage » --- fait passer l'entrée par un petit modèle local
+(\code{compressor.gguf}, Llama-3.2-1B Q5, 911\,Mo) avant de l'envoyer au modèle frontière. Le type
+qui le décrit annonce sa thèse en une ligne :
+
+\begin{extrait}\small
+\code{//! Compresse un texte long \textbf{en préservant des entités spécifiées} et en}\\
+\code{//! produisant un ratio mesurable (compression typique \textbf{8:1 à 12:1}).}
+\end{extrait}
+
+Deux promesses, donc, et non une : un \textbf{ratio} et une \textbf{préservation}. L'économie vient
+de la première ; la sûreté d'employer le procédé vient de la seconde.
+
+\subsection{1.2 · Ce qui a déjà été mesuré, et ce que cela ne dit pas}
+
+Un rapport existe (\code{CHEWING\_SAVINGS\_REPORT\_v2.md}, 30 mai 2026) :
+
+\begin{center}\small
+\renewcommand{\arraystretch}{1.2}
+\begin{tabular}{@{}>{\raggedright\arraybackslash}p{5.2cm} >{\raggedright\arraybackslash}p{3.2cm} >{\raggedright\arraybackslash}p{3.2cm} >{\raggedright\arraybackslash}p{2.6cm}@{}}
+\toprule
+& \textbf{Baseline} & \textbf{Full (S4+S6)} & \textbf{Écart} \\
+\midrule
+Coût total (6 fixtures) & 2{,}426 ¢ & 2{,}246 ¢ & \best{-7 \%} \\
+Latence moyenne & 5\,282 ms & 9\,473 ms & \pire{+79 \%} \\
+Modes de panne observés & 0 & 4 & \pire{+4} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Ce rapport mesure un \textbf{pipeline de bout en bout}, sur six fixtures, avec de vraies API. Il ne
+dit rien du \textbf{levier} lui-même : ni jusqu'où le compresseur peut aller, ni ce qu'il perd en
+chemin. C'est exactement la distinction que \mm{HB.3} et \mm{HB.4} ont payée ailleurs dans ce
+dépôt --- mesurer le levier \emph{avant} de bâtir dessus, faute de quoi on optimise un pipeline
+autour d'un composant dont personne ne connaît le plafond.
+
+\subsection{1.3 · Trois faits établis en lisant le code}
+
+\begin{alerte}
+\textbf{F1 --- La préservation n'est jamais demandée.} Les \textbf{deux seuls} sites de production
+qui appellent le compresseur (\code{mission\_a.rs:398}, \code{mission\_b.rs:219}) passent
+\code{must\_preserve: vec![]}. Le $-7\,\%$ mesuré ci-dessus a donc été obtenu \textbf{sans aucune
+contrainte de préservation} : le compresseur pouvait jeter n'importe quoi sans que rien ne
+proteste. Et \code{analyzer.rs:73} note que les sorties de l'analyseur « n'alimentent NI le router NI
+le \code{must\_preserve} du compresseur » --- le seul composant capable de nommer les entités à
+garder n'y est pas branché.
+\end{alerte}
+
+\begin{alerte}
+\textbf{F2 --- La validation est circulaire.} \code{CompressorOutput::validate\_preservation}
+compare \code{must\_preserve} à \code{self.preserved} --- la liste que le compresseur \textbf{déclare}
+avoir préservée. Elle ne regarde \textbf{jamais} \code{self.summary}. Un compresseur qui rend un
+résumé vide en déclarant \code{preserved: ["ACME", "2024-03-11"]} \textbf{passe la validation}.
+
+C'est le cercle de \mm{M9} : on compare une affirmation à une exigence, jamais l'artefact à l'une ou
+l'autre. \mm{M9} l'a cassé en lisant le jeton ; \mm{MZ} doit le casser en lisant le résumé.
+\end{alerte}
+
+\textbf{F3 --- Le modèle recrache parfois son gabarit.} \code{is\_degenerate\_summary} détecte une
+sortie vide ou contenant \code{<the compressed text>} / \code{<source text>}. Ce détecteur n'existe
+pas par précaution théorique : il existe parce que cela arrive. Son \emph{taux} n'a jamais été
+chiffré, et c'est une des trois inconnues de \mm{MZ}.
+
+\section{2 · Les trois quantités --- et non deux}
+
+La feuille de route en demande deux : « le plafond du compresseur et le taux de préservation ». La
+lecture du code en impose une troisième, et c'est celle qui décide.
+
+\subsection{2.1 · Le plafond n'est pas un scalaire}
+
+Comprimer davantage, c'est préserver moins. Le « plafond » n'est donc pas un nombre isolé mais le
+point où la \textbf{courbe d'arbitrage} cesse d'être acceptable :
+
+\begin{extrait}\small
+\code{plafond := max\{ r : preservation\_verifiee(r) $\geq$ seuil \textbf{et} degenerescence(r) $\leq$ seuil \}}
+\end{extrait}
+
+où $r$ est le ratio effectif \code{compression\_ratio} (mots source / \code{word\_count}). Sans
+seuil déclaré, « plafond » ne veut rien dire : §4 les fixe \emph{avant} l'expérience.
+
+\subsection{2.2 · Deux taux de préservation, et leur écart}
+
+\begin{center}\small
+\renewcommand{\arraystretch}{1.25}
+\begin{tabular}{@{}>{\raggedright\arraybackslash}p{3.4cm} >{\raggedright\arraybackslash}p{6.4cm} >{\raggedright\arraybackslash}p{6.0cm}@{}}
+\toprule
+& \textbf{Définition} & \textbf{Ce que sa mesure apprend} \\
+\midrule
+\textbf{Déclaré} & $|\,$\code{preserved} $\cap$ \code{must\_preserve}$\,| \;/\; |\,$\code{must\_preserve}$\,|$ & ce que le compresseur \emph{dit} de lui-même \\
+\textbf{Vérifié} & entités retrouvées \textbf{dans \code{summary}} $/$ $|\,$\code{must\_preserve}$\,|$ & ce qui a \emph{réellement} survécu \\
+\textbf{L'écart} & vérifié $-$ déclaré & si l'écart est non nul, \code{validate\_preservation} est \pire{décorative}, et toute garantie bâtie dessus est nulle \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+L'écart est la quantité que personne n'a jamais regardée, et c'est la seule dont la valeur puisse
+invalider un mécanisme plutôt qu'un réglage.
+
+\subsection{2.3 · Pourquoi cela compte PLUS ici qu'ailleurs}
+
+\begin{these}
+\small Le Cadrage vit \textbf{à l'intérieur} d'un produit de preuve. La chaîne scelle fidèlement ce
+qui a été enregistré --- donc si le compresseur laisse tomber une entité, le reçu prouve, avec toute
+la rigueur cryptographique du dépôt, que \textbf{ce fait n'a jamais existé}. Le sceau serait parfait
+et le contenu faux.
+
+Ailleurs, perdre 5 \% des entités est une régression de qualité. Ici, c'est une
+\textbf{falsification scellée}. C'est pourquoi les seuils de §4 sont plus durs qu'ils ne le seraient
+pour un résumeur ordinaire.
+\end{these}
+
+\section{3 · Le protocole}
+
+\subsection{3.1 · Ce qui rend MZ gratuit}
+
+\code{models/compressor.gguf} est présent (911\,Mo). La mesure ne touche \textbf{aucune API
+payante}, ne dépend d'aucun réseau, et n'exerce pas le pipeline --- seulement le compresseur. C'est
+ce qui permet de la faire « avant d'en parler à quiconque », comme le dit la feuille de route.
+
+\subsection{3.2 · Le corpus}
+
+Un corpus \textbf{à entités connues}, construit et non trouvé : chaque document porte une liste
+d'entités qu'on y a placées (identifiants de dossier, dates, montants, noms de fournisseurs,
+clauses). Sans vérité de terrain, la préservation ne se mesure pas.
+
+Trois familles, parce que le plafond n'a aucune raison d'être le même :
+\begin{itemize}[leftmargin=1.2em,itemsep=1.5pt,topsep=2pt]
+\item \textbf{dense} --- beaucoup d'entités par millier de mots (un dossier fournisseur) ;
+\item \textbf{diffus} --- peu d'entités noyées dans de la prose (un compte rendu) ;
+\item \textbf{adverse} --- entités en fin de document, ou répétées sous des formes voisines
+      (« ACME S.A. », « ACME », « la société ») --- là où un résumeur extractif coupe en premier.
+\end{itemize}
+
+\subsection{3.3 · Le balayage}
+
+Pour chaque document et chaque \code{target\_words} allant du généreux à l'agressif, on relève :
+
+\begin{center}\small
+\renewcommand{\arraystretch}{1.22}
+\begin{tabular}{@{}>{\raggedright\arraybackslash}p{4.4cm} >{\raggedright\arraybackslash}p{11.4cm}@{}}
+\toprule
+\textbf{Mesure} & \textbf{Comment} \\
+\midrule
+ratio effectif & mots source $/$ \code{word\_count} --- \emph{effectif}, car \code{target\_words} est une consigne à $\pm$20 \%, pas un résultat \\
+préservation déclarée & \code{preserved} $\cap$ \code{must\_preserve} \\
+préservation \best{vérifiée} & recherche de chaque entité \textbf{dans le texte du résumé}, indépendamment de ce que le compresseur déclare \\
+dégénérescence & \code{is\_degenerate\_summary} sur la sortie \\
+déterminisme & deux passes identiques : la sortie est-elle stable ? \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\textbf{Un point de méthode.} La recherche « vérifiée » doit être \emph{stricte et déclarée} :
+correspondance exacte, insensible à la casse, sur les frontières de mots. Toute tolérance
+(lemmatisation, correspondance approchée) transformerait la mesure en jugement, et un jugement qu'on
+règle soi-même donne toujours le résultat qu'on espère. Les formes voisines sont traitées par le
+corpus \textbf{adverse}, pas par un assouplissement du contrôle.
+
+\section{4 · Ce qui tue le Cadrage --- déclaré d'avance}
+
+\begin{alerte}
+Ces seuils sont écrits \textbf{avant} l'expérience. Les ajuster après avoir vu les chiffres
+reviendrait à déplacer la cible après le tir --- exactement ce qu'on a refusé de faire au critère
+« TLS » de \mm{M8}.
+\end{alerte}
+
+\begin{center}\small
+\renewcommand{\arraystretch}{1.25}
+\begin{tabular}{@{}>{\raggedright\arraybackslash}p{4.2cm} >{\raggedright\arraybackslash}p{11.6cm}@{}}
+\toprule
+\textbf{Verdict} & \textbf{Condition} \\
+\midrule
+\pire{TUÉ} & \textbf{L'écart déclaré/vérifié est non nul.} Le compresseur affirme préserver ce qu'il n'a pas préservé. Aucune valeur de ratio ne rachète cela : la garantie est un mensonge, et le pipeline la sceller\emph{ait}. \\
+\pire{TUÉ} & Préservation \textbf{vérifiée} $< 99\,\%$ au ratio où l'économie devient intéressante. Dans un produit de preuve, une entité perdue sur cent est une falsification scellée, pas une imprécision. \\
+\pire{TUÉ} & Dégénérescence $> 1\,\%$ à ce même ratio : le chemin de repli serait le chemin normal. \\
+\midrule
+\textbf{DÉCLASSÉ} & Le plafond existe mais l'économie qu'il autorise reste sous $\sim$20 \%. Avec $+79\,\%$ de latence déjà mesurés, le Cadrage ne paie pas --- il redevient une piste, pas un produit. \\
+\midrule
+\best{SAUVÉ} & Préservation vérifiée $\geq 99\,\%$ jusqu'à un ratio donnant $>$20 \% d'économie, écart nul, dégénérescence négligeable. \textbf{Le défaut est alors le CÂBLAGE}, pas le levier : \code{must\_preserve} vide (F1) devient un bogue à corriger, et non une limite à accepter. \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{piste}
+\small \textbf{L'issue la plus probable mérite d'être nommée.} Le compresseur peut très bien être
+bon et le \emph{câblage} mauvais. C'est ce que suggère F1 : on n'a jamais demandé la préservation, on
+ne peut donc pas savoir si elle tient. Dans ce cas \mm{MZ} ne tue rien --- il transforme une promesse
+invérifiable en un défaut nommé, ce qui est déjà tout ce qu'on lui demande.
+\end{piste}
+
+\section{5 · Ce que MZ ne mesure pas}
+
+\begin{itemize}[leftmargin=1.2em,itemsep=2pt,topsep=2pt]
+\item \textbf{La qualité de la réponse finale.} \mm{MZ} mesure le compresseur, pas le pipeline. Un
+      résumé qui préserve toutes les entités peut malgré tout mal servir le modèle frontière ; c'est
+      une autre expérience, et elle coûte des API.
+\item \textbf{La latence en charge.} Les $+79\,\%$ du rapport existant restent la référence ;
+      \mm{MZ} relève le temps par appel, sans prétendre modéliser un service.
+\item \textbf{Les autres robots.} Analyseur, vérifieur et reformulateur ont leurs propres plafonds.
+      Les mesurer ensemble mélangerait les causes.
+\item \textbf{La correction.} Comme partout dans cette série : ce qui est mesuré est ce qui a été
+      \emph{préservé}, jamais ce qui est \emph{vrai}.
+\end{itemize}
+
+\section{6 · Livrables et ordre des gestes}
+
+\begin{center}\small
+\renewcommand{\arraystretch}{1.22}
+\begin{tabular}{@{}>{\raggedright\arraybackslash}p{1.0cm} >{\raggedright\arraybackslash}p{7.4cm} >{\raggedright\arraybackslash}p{7.4cm}@{}}
+\toprule
+& \textbf{Geste} & \textbf{Pourquoi dans cet ordre} \\
+\midrule
+1 & Le corpus à entités connues, commité & sans vérité de terrain, rien n'est mesurable ; et un corpus écrit \emph{après} avoir vu les résultats n'est plus un corpus \\
+2 & Le vérificateur \best{indépendant} de préservation & il ne doit rien devoir au compresseur : c'est lui qui casse le cercle de F2 \\
+3 & Le balayage, et la courbe & la seule sortie qui compte \\
+4 & Le verdict contre les seuils de §4 & écrits d'avance, appliqués sans discussion \\
+5 & \code{scripts/mz-check.sh} & pour que la mesure se refasse, et qu'un chiffre cesse d'être une affirmation \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\textbf{Coût} --- 1,5 jour, aucune API, aucun réseau. Le seul coût réel est le temps de calcul local
+du balayage.
+
+\begin{these}
+\small \textbf{Ce que MZ change, quel que soit son verdict.} Aujourd'hui le Cadrage est
+\emph{exclu du produit} (feuille de route §4) sans que personne sache pourquoi au juste. Après
+\mm{MZ}, il sera exclu \textbf{pour une raison chiffrée}, ou réintégré avec son plafond écrit. Les
+deux valent mieux que l'état actuel --- et c'est pour cela que la feuille de route dit de le faire
+\textbf{avant d'en parler à quiconque}.
+\end{these}
+
+\end{document}
