@@ -39,26 +39,74 @@ fn lu(profil: &str) -> BTreeMap<String, String> {
     parse_env(&std::fs::read_to_string(&p).unwrap_or_else(|e| panic!("{} illisible : {e}", p.display())))
 }
 
+/// Les profils de ce binaire. `console` = la posture de DÉMONSTRATION (un tenant, une session) ;
+/// `service` = la posture de SERVICE que M7 rend possible (N tenants déclarés).
+const PROFILS: &[&str] = &["console", "service"];
+
 #[test]
-fn le_profil_console_produit_exactement_le_rapport_quil_annonce() {
-    let vars = lu("console");
-    let rapport = Report::from_lookup(|k| vars.get(k).cloned());
+fn chaque_profil_produit_exactement_le_rapport_quil_annonce() {
+    for profil in PROFILS {
+        let vars = lu(profil);
+        let rapport = Report::from_lookup(|k| vars.get(k).cloned());
 
-    let attendu: BTreeMap<String, String> = serde_json::from_str(
-        &std::fs::read_to_string(profiles_dir().join("console.expected.json"))
-            .expect("console.expected.json lisible"),
-    )
-    .expect("console.expected.json bien formé");
+        let attendu: BTreeMap<String, String> = serde_json::from_str(
+            &std::fs::read_to_string(profiles_dir().join(format!("{profil}.expected.json")))
+                .unwrap_or_else(|e| panic!("{profil}.expected.json lisible : {e}")),
+        )
+        .unwrap_or_else(|e| panic!("{profil}.expected.json bien formé : {e}"));
 
-    let obtenu: BTreeMap<String, String> =
-        rapport.lines.iter().map(|l| (l.name.to_string(), l.status.to_string())).collect();
+        let obtenu: BTreeMap<String, String> =
+            rapport.lines.iter().map(|l| (l.name.to_string(), l.status.to_string())).collect();
+
+        assert_eq!(
+            obtenu, attendu,
+            "\nLe profil `{profil}` ne sert PAS ce que son `.expected.json` annonce.\n\
+             Corriger le `.env` ou son attendu — mais ne jamais laisser les deux diverger : c'est\n\
+             exactement le défaut que M0 existe pour supprimer.\n"
+        );
+    }
+}
+
+/// **M7.** En posture de service, la déclaration supplante quatre interrupteurs — et le rapport ne
+/// crie plus que sur **UN** secret, pas deux.
+///
+/// C'est tout l'objet du statut « SANS OBJET » : sans lui, chaque démarrage d'un service annoncerait
+/// « JETON PUBLIC — n'importe qui ouvre une session » à propos d'un jeton que ce service n'emploie
+/// pas. Une fausse alarme au démarrage est la manière dont une vraie finit par être ignorée.
+#[test]
+fn le_profil_service_ne_crie_que_sur_le_secret_qui_reste_en_vigueur() {
+    let vars = lu("service");
+    let r = Report::from_lookup(|k| vars.get(k).cloned());
 
     assert_eq!(
-        obtenu, attendu,
-        "\nLe profil `console` ne sert PAS ce que son `.expected.json` annonce.\n\
-         Corriger le `.env` ou son attendu — mais ne jamais laisser les deux diverger : c'est\n\
-         exactement le défaut que M0 existe pour supprimer.\n"
+        r.secrets_par_defaut,
+        vec!["EFE_CONSOLE_ROOT"],
+        "seul le secret RACINE reste en vigueur : la déclaration n'en porte aucun, les N clés en \
+         sont toutes dérivées. Le jeton, lui, vient du fichier déclaré"
     );
+
+    let sans_objet: Vec<&str> =
+        r.lines.iter().filter(|l| l.status == "SANS OBJET").map(|l| l.name).collect();
+    assert_eq!(
+        sans_objet,
+        audit_console::profile::SUPPLANTES_PAR_DECLARATION.to_vec(),
+        "exactement les quatre interrupteurs de la posture de démonstration"
+    );
+}
+
+/// Poser un interrupteur supplanté n'est pas neutre : l'opérateur croit qu'il agit. Le rapport doit
+/// le lui dire, et lui dire de le retirer.
+#[test]
+fn un_interrupteur_supplante_mais_pose_est_signale_comme_ignore() {
+    let mut vars = lu("service");
+    vars.insert("EFE_CONSOLE_TOKEN".into(), "un-vrai-jeton".into());
+    let r = Report::from_lookup(|k| vars.get(k).cloned());
+
+    let l = r.lines.iter().find(|l| l.name == "EFE_CONSOLE_TOKEN").expect("déclaré");
+    assert_eq!(l.status, "SANS OBJET", "posé ne veut pas dire servi");
+    assert!(l.detail.contains("IGNORÉ"), "et on le DIT : {}", l.detail);
+    assert!(l.detail.contains("Retirez-le"), "avec le geste à faire : {}", l.detail);
+    assert!(!r.render_human().contains("un-vrai-jeton"), "sans jamais imprimer sa valeur");
 }
 
 /// La propriété centrale de ce profil : **il ne lui manque que les secrets**, et les injecter
@@ -97,14 +145,16 @@ fn au_profil_console_il_ne_manque_que_les_deux_secrets() {
 /// Le profil livré ne doit poser aucun secret : un secret versionné est un secret public, et il
 /// ferait dire « SERVIE » à une ligne dont la valeur est connue de tous.
 #[test]
-fn le_profil_console_ne_pose_aucun_secret() {
-    let vars = lu("console");
-    for s in REGISTRY.iter().filter(|s| s.class == Class::DegradedSecret) {
-        assert!(
-            !vars.contains_key(s.name),
-            "{} est un secret : il ne doit JAMAIS être versionné dans un profil",
-            s.name
-        );
+fn aucun_profil_ne_pose_de_secret() {
+    for profil in PROFILS {
+        let vars = lu(profil);
+        for s in REGISTRY.iter().filter(|s| s.class == Class::DegradedSecret) {
+            assert!(
+                !vars.contains_key(s.name),
+                "{} est un secret : il ne doit JAMAIS être versionné dans un profil ({profil})",
+                s.name
+            );
+        }
     }
 }
 

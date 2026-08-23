@@ -43,6 +43,25 @@ for f in profiles/*.env; do
     fi
   done
 done
+
+# ── M7 : les déclarations de déploiement (.json) portent des JETONS ──
+#
+# Un profil `.env` ne pose jamais de secret, et la boucle ci-dessus le garde. M7 ajoute une
+# configuration versionnée d'une forme NOUVELLE — le fichier de déclaration — qui porte, lui, des
+# jetons de session. Seuls des EXEMPLES sont commités, et un exemple n'a que des marqueurs : un
+# jeton réel qui atterrirait ici serait public le jour de son commit, et le garde des `.env` ne
+# l'aurait jamais vu (il ne regarde pas cette extension).
+for f in profiles/*.json; do
+  case "$f" in *.expected.json) continue ;; esac
+  # chaque valeur de "token" doit être un marqueur explicite
+  while IFS= read -r jeton; do
+    case "$jeton" in
+      REMPLACEZ-MOI*) : ;;
+      *) echo "  ÉCHEC : $f pose un jeton qui n'est pas un marqueur (« $jeton »)" >&2; FAUTE=1 ;;
+    esac
+  done < <(grep -oE '"token"[[:space:]]*:[[:space:]]*"[^"]*"' "$f" | sed -E 's/.*"([^"]*)"$/\1/')
+done
+
 [ "$FAUTE" -eq 0 ] || exit 1
 echo "  aucun secret dans les profils livrés — ils s'injectent au déploiement"
 

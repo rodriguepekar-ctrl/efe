@@ -49,6 +49,8 @@
 
 // M0 — le profil servi : registre des interrupteurs, seul lecteur d'environnement, et rapport.
 pub mod profile;
+/// **M7** — la déclaration d'un déploiement, et les refus qui gardent l'isolation.
+pub mod provisioning;
 
 pub mod app;
 pub mod export;

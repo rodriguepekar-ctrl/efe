@@ -38,7 +38,7 @@ pub struct Switch {
     pub class: Class,
 }
 
-/// Les six interrupteurs, déclarés une seule fois.
+/// Les sept interrupteurs, déclarés une seule fois.
 pub const REGISTRY: &[Switch] = &[
     Switch {
         name: "EFE_CONSOLE_ADDR",
@@ -77,6 +77,15 @@ pub const REGISTRY: &[Switch] = &[
         class: Class::Tuning,
     },
     Switch {
+        name: "EFE_CONSOLE_DEPLOIEMENT",
+        default: "",
+        buys: "la déclaration du déploiement — quels tenants, quelles sessions (chemin d'un fichier JSON)",
+        absence_costs: "MONO-TENANT DE DÉMONSTRATION : un tenant, une session, rôle figé. Le registre \
+                        est multi-tenant et route() refuse en 403 un tenant étranger, mais cette \
+                        isolation ne peut PAS être exercée dans un service qui n'a qu'un tenant",
+        class: Class::Tuning,
+    },
+    Switch {
         name: "EFE_CONSOLE_RECORDS",
         default: "",
         buys: "la réhydratation d'un log scellé persisté",
@@ -84,6 +93,22 @@ pub const REGISTRY: &[Switch] = &[
         class: Class::Tuning,
     },
 ];
+
+/// **M7** — les interrupteurs de la posture de DÉMONSTRATION, que `EFE_CONSOLE_DEPLOIEMENT`
+/// supplante.
+///
+/// Quand une déclaration est posée, le binaire ne lit plus ces quatre-là : la déclaration porte les
+/// tenants, les sessions, les rôles, les sujets et les logs à réhydrater. Les annoncer « DÉGRADÉE »
+/// ferait crier « JETON PUBLIC ! » à **chaque démarrage** d'un service qui n'utilise pas ce jeton —
+/// une fausse alarme, et une fausse alarme est la manière dont une vraie finit par être ignorée.
+///
+/// L'annonce est **encore plus utile quand l'opérateur les a posés** : il croit alors qu'ils
+/// agissent, et ils n'agissent pas.
+///
+/// `EFE_CONSOLE_ROOT` n'y figure PAS, et c'est essentiel : la déclaration ne porte aucun secret
+/// racine — les clés des N tenants en sont toutes dérivées. Il reste donc pleinement en vigueur.
+pub const SUPPLANTES_PAR_DECLARATION: &[&str] =
+    &["EFE_CONSOLE_TENANT", "EFE_CONSOLE_TOKEN", "EFE_CONSOLE_SUBJECT", "EFE_CONSOLE_RECORDS"];
 
 #[must_use]
 pub fn switch(name: &str) -> Option<&'static Switch> {
@@ -116,10 +141,23 @@ pub mod read {
         super::present_of(std::env::var(name).ok().as_deref())
     }
 
-    /// Le chemin de réhydratation, s'il y en a un.
+    /// La valeur d'un interrupteur **de chemin**, absente quand elle est vide.
+    ///
+    /// Prend le nom en paramètre plutôt que de le cacher. Un accesseur qui code en dur son
+    /// interrupteur — `records_path()` était de ceux-là — rend le registre **invisible au point
+    /// d'appel** : ni un lecteur ni un garde ne peuvent alors dire quelle variable le binaire lit,
+    /// et le registre cesse d'être le point de décision unique qu'il prétend être. C'est un garde
+    /// de M7 qui l'a trouvé, en n'arrivant pas à voir une lecture qui avait pourtant lieu.
+    #[must_use]
+    pub fn chemin(name: &str) -> Option<String> {
+        std::env::var(name).ok().filter(|v| !v.trim().is_empty())
+    }
+
+    /// Le chemin de réhydratation de la posture de démonstration. Conservé pour les appelants
+    /// existants ; les nouveaux nomment leur interrupteur via [`chemin`].
     #[must_use]
     pub fn records_path() -> Option<String> {
-        std::env::var("EFE_CONSOLE_RECORDS").ok().filter(|v| !v.trim().is_empty())
+        chemin("EFE_CONSOLE_RECORDS")
     }
 }
 
@@ -156,8 +194,22 @@ impl Report {
     pub fn from_lookup(f: impl Fn(&str) -> Option<String>) -> Self {
         let mut lines = Vec::new();
         let mut secrets_par_defaut = Vec::new();
+        let declare = present_of(f("EFE_CONSOLE_DEPLOIEMENT").as_deref());
         for s in REGISTRY {
             let set = present_of(f(s.name).as_deref());
+            // M7 : la déclaration supplante la posture de démonstration. On le DIT, plutôt que de
+            // crier sur un secret que ce déploiement n'emploie pas.
+            if declare && SUPPLANTES_PAR_DECLARATION.contains(&s.name) {
+                let detail = if set {
+                    "posé mais IGNORÉ — la déclaration de déploiement porte tenants, sessions, \
+                     rôles, sujets et logs. Retirez-le : le laisser laisse croire qu'il agit."
+                } else {
+                    "sans objet — la déclaration de déploiement porte tenants, sessions, rôles, \
+                     sujets et logs"
+                };
+                lines.push(Line { name: s.name, status: "SANS OBJET", detail: detail.to_string() });
+                continue;
+            }
             let (status, detail) = match (set, s.class) {
                 (true, _) => ("SERVIE", s.buys.to_string()),
                 (false, Class::DegradedSecret) => {
@@ -208,10 +260,10 @@ mod tests {
     use super::*;
 
     #[test]
-    fn le_registre_couvre_les_six_interrupteurs() {
+    fn le_registre_couvre_les_sept_interrupteurs() {
         // SIX, pas sept : le « septième » de mon relevé initial était `EFE_K`, un faux positif —
         // le motif attrapait `EFE_Kovant_P1_*` dans des commentaires.
-        assert_eq!(REGISTRY.len(), 6, "ADDR, TENANT, ROOT, TOKEN, SUBJECT, RECORDS");
+        assert_eq!(REGISTRY.len(), 7, "ADDR, TENANT, ROOT, TOKEN, SUBJECT, DEPLOIEMENT, RECORDS");
         for s in REGISTRY {
             assert!(!s.buys.trim().is_empty(), "{} : `buys` vide", s.name);
             assert!(!s.absence_costs.trim().is_empty(), "{} : `absence_costs` vide", s.name);

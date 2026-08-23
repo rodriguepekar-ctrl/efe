@@ -1,0 +1,14 @@
+{
+  "note": "EXEMPLE — NE PAS DÉPLOYER TEL QUEL. Les jetons ci-dessous sont des marqueurs, pas des secrets. Générez-en : openssl rand -hex 32. Ce fichier se monte comme un secret (montage k8s, fichier hors dépôt) ; le profil ne porte que son CHEMIN.",
+
+  "tenants": [
+    { "id": "acme" },
+    { "id": "globex", "records": "/var/lib/scella/globex.sealed.jsonl" }
+  ],
+
+  "sessions": [
+    { "token": "REMPLACEZ-MOI-acme-officier", "tenant": "acme",   "role": "compliance_officer", "subject": "officer:hanna" },
+    { "token": "REMPLACEZ-MOI-acme-lecteur",  "tenant": "acme",   "role": "viewer",             "subject": "support:niveau1" },
+    { "token": "REMPLACEZ-MOI-globex-audit",  "tenant": "globex", "role": "auditor",            "subject": "auditor:cabinet-x" }
+  ]
+}
