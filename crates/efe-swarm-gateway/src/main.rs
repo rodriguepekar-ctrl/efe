@@ -26,10 +26,20 @@ use efe_swarm_provenance::{HmacKeySource, MASTER_ENV};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let addr = std::env::var("EFE_SWARM_GATEWAY_ADDR").unwrap_or_else(|_| "0.0.0.0:8080".to_string());
+    // ── M0 : `--profile-report` — la forme MACHINE du profil servi ──────────────────
+    // Un drapeau, jamais une route : le rapport dit ce qui est ÉTEINT (« capacité PII
+    // absente »), ce qui est un renseignement pour un attaquant. Un drapeau n'ajoute
+    // aucune surface d'écoute ; il calcule, imprime et sort — sans jamais binder.
+    if std::env::args().any(|a| a == "--profile-report") {
+        let report = efe_swarm_gateway::profile::Report::from_env();
+        println!("{}", serde_json::to_string_pretty(&report.to_json())?);
+        return Ok(());
+    }
+
+    let addr = efe_swarm_gateway::profile::read::gateway_addr();
 
     // ── Source de clé de provenance — le cœur du durcissement prod ──────────────
-    let master_present = std::env::var(MASTER_ENV).map(|v| !v.trim().is_empty()).unwrap_or(false);
+    let master_present = efe_swarm_gateway::profile::read::master_present();
     let (keys, key_label) = key_source_for(master_present);
 
     // GAP-SHORT-MASTER : un master FOURNI mais invalide (< 32 o, non-blanc) booterait "vert" en
@@ -48,7 +58,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // jamais ne dégrade en silence. Calculé depuis l'INTENTION env, AVANT tout câblage d'état (with_keys,
     // with_coordinator) : aucun état forgeable/non-authentifié/volatil n'est même assemblé.
     #[cfg(feature = "frontier-llm")]
-    if frontier_flag_enabled() {
+    if efe_swarm_gateway::profile::read::frontier_enabled() {
         // #2 non-forgeable : le MÊME contrat que le scellement (dry-run derive, PAS master_present —
         // qui n'attrape pas un master < 32 o : il booterait "vert" puis 500 à chaque seal).
         let key_ok = HmacKeySource::EnvHkdf.derive(efe_nano_sdk::TenantId::system()).is_ok();
@@ -58,10 +68,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         #[cfg(not(feature = "oidc"))]
         let auth_ok = false; // feature oidc absente ⟹ egress tiers sans authentification cryptographique ⟹ refus.
         // #3 durable : intention (postgres compilé + DATABASE_URL) ; connect/migrate re-valident plus bas.
-        let store_durable = cfg!(feature = "postgres") && std::env::var("DATABASE_URL").is_ok();
+        let store_durable = cfg!(feature = "postgres") && efe_swarm_gateway::profile::read::database_url().is_some();
         // §2.2 : la CAPACITÉ de caviarder — la feature, ou une reconnaissance explicite du risque.
         let accepted_cleartext =
-            std::env::var("EFE_LLM_ACCEPT_CLEARTEXT_EGRESS").map(|v| v == "true").unwrap_or(false);
+            efe_swarm_gateway::profile::read::accept_cleartext_egress();
         let pii_ok = cfg!(feature = "pii") || accepted_cleartext;
         if let Err(why) = frontier_boot_guard(true, key_ok, auth_ok, store_durable, pii_ok) {
             eprintln!("FATAL (M4 gate production) : {why}");
@@ -94,14 +104,60 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         );
     }
 
-    let mut state = SwarmGatewayState::in_memory().with_keys(keys);
+    // **M2** : la posture de capture, lue par le REGISTRE (jamais par un `env::var` local) et
+    // posée avant tout câblage. Défaut `Bloquante` ⟹ comportement d'avant M2 à l'octet près ;
+    // l'observation est un opt-in déclaré, que le rapport de démarrage annonce.
+    let capture_policy = efe_swarm_gateway::capture::CapturePolicy::from_str_or_default(
+        efe_swarm_gateway::profile::read::capture_policy().as_deref(),
+    );
+    let mut state =
+        SwarmGatewayState::in_memory().with_keys(keys).with_capture_policy(capture_policy);
     println!("→ clé de provenance : {key_label}");
 
+    // ── M0 : on OBSERVE ce qui se câble, on ne DÉDUIT pas de l'environnement ──────────
+    // Le rapport s'imprime en toute fin, alimenté par ce qui a réellement été branché.
+    // L'imprimer ICI — avant le store, l'auth, le coordinator — annoncerait des capacités
+    // que le processus ne sert pas encore : le défaut exact que M0 existe pour supprimer.
+    let mut observed = efe_swarm_gateway::profile::Observed {
+        provenance_non_forgeable: master_present,
+        // M2 : la posture RÉELLEMENT posée sur l'état, pas celle que la config demande. C'est le
+        // même geste que pour tout le reste du rapport servi : on observe le câblage.
+        capture_observation: capture_policy.peut_degrader(),
+        frontier_intended: efe_swarm_gateway::profile::read::frontier_enabled(),
+        allowlist: efe_swarm_gateway::profile::read::tenant_allowlist().is_some(),
+        // P1 : poser l'URL est une INTENTION. Le relais vit DANS le coordinator frontière ; tant
+        // que celui-ci n'est pas bâti, l'URL est lue par ce rapport et consommée par personne.
+        // L'annoncer « SERVIE » ici était le second mensonge de la chaîne du défaut SLM.
+        slm_intended: efe_swarm_gateway::profile::read::slm_reformulator_url().is_some(),
+        attestation: efe_swarm_gateway::profile::read::bundle_signing_seed().is_some(),
+        ..Default::default()
+    };
+
+    // ── M5 : le pont vers le registre réglementaire ────────────────────────────────────────
+    // Il exige les DEUX interrupteurs. Un dossier de sortie sans cadre ne peut rien dériver, et un
+    // cadre sans dossier n'a nulle part où écrire — câbler un demi-pont produirait un rapport qui
+    // annonce une capacité que rien ne sert.
+    #[cfg(feature = "reg-evidence")]
+    {
+        let dir = efe_swarm_gateway::profile::read::reg_evidence_dir();
+        let cadre = efe_swarm_gateway::reg_pont::cadre_de(
+            efe_swarm_gateway::profile::read::reg_framework().as_deref(),
+        );
+        if let (Some(d), Some(f)) = (dir, cadre) {
+            state = state.with_reg_pont(efe_swarm_gateway::reg_pont::RegPont {
+                dir: std::path::PathBuf::from(d),
+                framework: f,
+            });
+            observed.reg_pont = true;
+        }
+    }
+
     // ── Routeur frontière (Network) + mapping provider→modèle (Inc.4 / Inc.4.b) ──
-    if let Ok(router_ep) = std::env::var("EFE_SWARM_ROUTER_ENDPOINT") {
+    if let Some(router_ep) = efe_swarm_gateway::profile::read::router_endpoint() {
         state = state.with_router_endpoint(router_ep);
+        observed.router = true;
         println!("→ routeur frontière câblé (Network activé) — clés provider détenues server-side.");
-        if let Ok(models) = std::env::var("EFE_SWARM_ROUTER_MODELS") {
+        if let Some(models) = efe_swarm_gateway::profile::read::router_models() {
             state = state.with_router_models(efe_swarm_gateway::RouterMap::from_env_str(&models));
             println!("→ mapping provider→modèle surchargé (EFE_SWARM_ROUTER_MODELS).");
         }
@@ -123,8 +179,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         // signer ses bundles. Servir en silence des bundles non attestés serait un « vert
         // malhonnête » — précisément la classe de défaut que ce fil corrige. On refuse de
         // démarrer plutôt que de laisser croire. Même discipline que la porte de boot M4.
-        match std::env::var("EFE_SWARM_BUNDLE_SIGNING_SEED") {
-            Ok(seed_hex) if !seed_hex.is_empty() => {
+        match efe_swarm_gateway::profile::read::bundle_signing_seed() {
+            Some(seed_hex) if !seed_hex.is_empty() => {
                 match efe_swarm_gateway::BundleSigner::from_seed_hex(&seed_hex) {
                     Ok(signer) => {
                         // On imprime l'EMPREINTE et la clé PUBLIQUE — jamais la graine. La publique
@@ -159,8 +215,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         // Sans elle, un bundle tronqué re-prouve parfaitement : il ne prouve sa cohérence que
         // CONTRE LUI-MÊME. L'ancre est la racine attendue, écrite AILLEURS — et c'est ce
         // « ailleurs » qui fait tout le travail, pas la cryptographie.
-        match std::env::var("EFE_SWARM_ANCHOR_LOG") {
-            Ok(path) if !path.is_empty() => {
+        match efe_swarm_gateway::profile::read::anchor_log() {
+            Some(path) if !path.is_empty() => {
                 let sink = std::sync::Arc::new(efe_swarm_gateway::FileAnchorSink::new(&path));
                 println!(
                     "→ ancrage ACTIF — {} ; REMETTEZ ce journal à l'auditeur par un canal DISTINCT \
@@ -181,10 +237,23 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // server-side par les `from_env` du coordinator. Off, ou aucune clé ⇒ frontière NON
     // servie (aucune route `/v1/llm/*` ne pourra l'utiliser — 501). Aucune clé loggée.
     #[cfg(feature = "frontier-llm")]
-    if frontier_flag_enabled() {
+    if efe_swarm_gateway::profile::read::frontier_enabled() {
         match efe_swarm_gateway::coordinator_from_env() {
             Some(coord) => {
                 state = state.with_coordinator(coord);
+                observed.frontier = true;
+                // P1 : c'est ICI, et seulement ici, que le relais SLM devient servi — le
+                // coordinator qui le porte existe. La localité de son hôte décide ensuite si la
+                // garantie de souveraineté tient : câblé hors périmètre, il fonctionne et laisse
+                // sortir chaque prompt reformulé, ce que le rapport doit dire en toutes lettres.
+                //
+                // Limite assumée : on observe que le PORTEUR est bâti, pas que le client HTTP du
+                // relais a pu se construire — `slm_clients_from` crie déjà ce cas-là au démarrage,
+                // et le remonter jusqu'ici exigerait de traverser `efe-coordinator`.
+                if let Some(u) = efe_swarm_gateway::profile::read::slm_reformulator_url() {
+                    observed.slm = true;
+                    observed.slm_local = provenance_capture::is_local_endpoint(&u);
+                }
                 println!("→ coordination frontière (Couche 2) activée — providers câblés depuis l'env.");
             }
             None => eprintln!(
@@ -196,7 +265,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // ── Prod (feature `postgres`) : persistance durable write-once des records ───
     #[cfg(feature = "postgres")]
-    if let Ok(url) = std::env::var("DATABASE_URL") {
+    if let Some(url) = efe_swarm_gateway::profile::read::database_url() {
         let pg = efe_swarm_gateway::PgRunStore::connect(&url).await?;
         pg.migrate().await?;
         state = state.with_store(std::sync::Arc::new(pg));
@@ -205,6 +274,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let pg_mem = efe_swarm_gateway::PgMemoryStore::connect(&url, state.keys.clone()).await?;
         pg_mem.migrate().await?;
         state = state.with_memory_store(std::sync::Arc::new(pg_mem));
+        observed.durable_store = true;
         println!("→ PgRunStore + PgMemoryStore câblés (persistance durable, write-once).");
     }
 
@@ -212,6 +282,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     #[cfg(feature = "oidc")]
     if let Some(verifier) = efe_swarm_gateway::OidcVerifier::from_env()? {
         state = state.with_oidc(std::sync::Arc::new(verifier));
+        observed.oidc = true;
         println!("→ auth OIDC activée (JWT ES256, clé publique server-side).");
     }
 
@@ -225,10 +296,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // ── G9 (feature `pii`) : politique PII par défaut depuis l'env (détection locale) ──
     #[cfg(feature = "pii")]
-    if let Ok(p) = std::env::var("EFE_PII_DEFAULT_POLICY") {
+    if let Some(p) = efe_swarm_gateway::profile::read::pii_default_policy() {
         match p.parse::<efe_swarm_gateway::PolicyKind>() {
             Ok(policy) => {
                 state = state.with_pii(efe_swarm_gateway::PiiConfig::new(policy));
+                observed.pii = true;
                 println!("→ PII opt-in : politique par défaut = {}", policy.as_str());
             }
             // GAP-PII : une valeur invalide (typo 'reduct') ne doit PAS être ignorée en silence —
@@ -239,6 +311,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             ),
         }
     }
+
+    // ── M0 : le profil SERVI — après TOUT le câblage, depuis l'état réel ─────────────
+    observed.anchor = state.anchor_sink.is_some();
+    observed.bundle = state.bundle_export;
+    print!(
+        "{}",
+        efe_swarm_gateway::profile::Report::from_observed(&observed)
+            // Les valeurs REFUSÉES se lisent à la source : une fois `Observed` réduit à des
+            // booléens, « posé avec une mauvaise valeur » est indistinguable de « pas posé ».
+            .with_invalides(efe_swarm_gateway::profile::invalides_from_env())
+            .render_human()
+    );
 
     let app = router(state);
     let listener = tokio::net::TcpListener::bind(&addr).await?;
@@ -260,20 +344,6 @@ fn key_source_for(master_present: bool) -> (HmacKeySource, &'static str) {
     }
 }
 
-/// **M4 (§1.4)** : le flag d'activation de la frontière — **source UNIQUE** de vérité,
-/// réutilisée par le préflight ET le câblage du coordinator (interdit tout drift). Égalité
-/// stricte `"true"` (fail-closed) ; une valeur non-vide ≠ `"true"` émet un avertissement ops
-/// (activation silencieusement ignorée, footgun `1`/`TRUE`/`yes`).
-fn frontier_flag_enabled() -> bool {
-    match std::env::var("EFE_LLM_FRONTIER_ENABLED") {
-        Ok(v) if v == "true" => true,
-        Ok(v) if !v.trim().is_empty() => {
-            eprintln!("AVERTISSEMENT: EFE_LLM_FRONTIER_ENABLED='{v}' ≠ 'true' ⟹ frontière NON activée (attendu exactement 'true').");
-            false
-        }
-        _ => false,
-    }
-}
 
 /// **M4 (§1)** : le préflight go/no-go de la frontière — la **triade** de production. **Pur**
 /// (testable sans muter l'env, sur le patron de `key_source_for`). Refuse de démarrer si la

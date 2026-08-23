@@ -92,11 +92,7 @@ const MIN_DEADLINE_MS: u64 = 50;
 /// **ADR-018** : plafond serveur du deadline run. Env `EFE_GATEWAY_MAX_DEADLINE_MS` ;
 /// défaut 300 000 (5 min). Borne le temps machine qu'un client peut réserver.
 fn max_deadline_ms() -> u64 {
-    std::env::var("EFE_GATEWAY_MAX_DEADLINE_MS")
-        .ok()
-        .and_then(|s| s.parse::<u64>().ok())
-        .unwrap_or(300_000)
-        .max(MIN_DEADLINE_MS)
+    crate::profile::read::max_deadline_ms(MIN_DEADLINE_MS)
 }
 
 /// **ADR-019 (MEM-3)** : l'empreinte de famille de fil — `structural` (défaut souverain) ou
@@ -498,6 +494,23 @@ pub struct RunResponse {
     pub run_id: Uuid,
     /// Le `SwarmRun` (sortie + coût + budget + provenance{root,verified} + qualité).
     pub run: SwarmRun,
+    /// **M2** : ce que la capture a fait de ce run. TOUJOURS présent, y compris quand tout va
+    /// bien — un champ qui n'apparaît qu'en cas de problème produit des clients qui ne le lisent
+    /// jamais, et donc une dégradation que personne ne remarque.
+    ///
+    /// `persisted: false` veut dire quelque chose de précis : la racine ci-dessus est correcte, le
+    /// run a bien eu lieu, et `GET /v1/swarm/verify/:id` ne le retrouvera **jamais**.
+    pub capture: crate::capture::CaptureReport,
+    /// **M5** : le dossier réglementaire de ce run, si le pont est câblé.
+    ///
+    /// `None` a UN seul sens — « le pont n'est pas câblé » — que le binaire ait été construit avec
+    /// ou sans le registre. Le rapport de démarrage de M0 dit lequel des deux, et c'est là que la
+    /// question se pose ; elle n'a pas à remonter jusqu'au client.
+    ///
+    /// Câblé, le champ est TOUJOURS présent, y compris quand la dérivation a échoué : un dossier
+    /// manquant qu'on ne dit pas est un dossier que personne ne re-demandera.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reg: Option<crate::reg_pont::RegReport>,
 }
 
 /// Réponse de `GET /v1/swarm/verify/:id` — **la re-preuve indépendante** (le *moat*).

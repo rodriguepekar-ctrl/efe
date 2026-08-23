@@ -155,10 +155,52 @@ supprimer.
 \end{center}
 
 \begin{acquis}
-\textbf{La règle d'or : aucune classe B silencieuse.} Une capacité éteinte se dit à \textbf{trois}
-endroits --- le rapport au démarrage, la surface servie, et le reçu. Le précédent existe déjà dans le
-dépôt : \emph{racine vide $\Leftrightarrow$ aucun scellement}. M0 ne fait que le généraliser.
+\textbf{La règle d'or : aucune classe B silencieuse.} Une capacité éteinte doit se dire. Le
+précédent existe déjà dans le dépôt : \emph{racine vide $\Leftrightarrow$ aucun scellement}.
 \end{acquis}
+
+\begin{alerte}
+\textbf{Correction --- la règle des « trois endroits » était trop forte.} La première rédaction de
+ce document exigeait qu'une capacité éteinte se dise au rapport de démarrage, \emph{sur la surface
+servie}, et dans le reçu. Écrire le test l'a réfutée, et c'est le code qui avait raison.
+
+\code{export de bundle} éteint $\Rightarrow$ la route n'est pas montée : \textbf{404}, délibérément
+indistinguable d'une URI inconnue. Répondre \code{501} dirait à un client anonyme « cette surface
+existe, elle est seulement fermée » --- une \pire{fuite de capacité}. Ici les deux règles se
+contredisent, et c'est la discrétion qui gagne : l'extinction se dit à l'\textbf{opérateur}, et à
+lui seul.
+
+\code{ancre} éteinte $\Rightarrow$ la route sert, et le bundle porte \code{anchored: false}. La
+différence tient en une phrase : ici l'absence \textbf{change la garantie d'un artefact servi}. Un
+auditeur qui reçoit un bundle sans savoir qu'il n'est pas ancré croit tenir une preuve contre la
+troncature alors qu'il n'en tient aucune.
+
+\medskip
+\textbf{La règle juste :} le rapport de démarrage \best{toujours} ; l'artefact servi \best{si et
+seulement si} son absence change la garantie de cet artefact ; la surface \best{jamais}, quand la
+révéler la trahit. Gardée par \code{une\_capacite\_eteinte\_se\_dit\_a\_qui\_de\_droit}.
+\end{alerte}
+
+\subsection{3.2\,bis · Le cas que ni « présente » ni « absente » ne décrit}
+
+Un troisième état existe, et il n'était nommé nulle part : la valeur \textbf{fournie mais refusée}.
+\code{EFE\_LLM\_FRONTIER\_ENABLED=1} n'active rien --- seule la chaîne exacte \code{true} active. Le
+déploiement démarre, la capacité reste éteinte, et le rapport annonce « DÉGRADÉE » : \emph{exact},
+mais l'opérateur en conclut qu'il a oublié la variable alors qu'il l'a posée. Il cherchera au
+mauvais endroit, potentiellement longtemps.
+
+Le dépôt \emph{savait}. Une fonction de \code{main.rs} imprimait précisément cet avertissement, et
+sa documentation la disait « source UNIQUE de vérité (interdit tout drift) ». \pire{Elle n'était
+appelée par personne.} Le diagnostic vit désormais dans le module de profil, pour les trois drapeaux
+stricts au lieu d'un seul, et il est \emph{pur} --- donc un test peut refuser qu'un profil livré
+contienne un footgun, qui se propagerait sinon à chaque déploiement suivant ce fichier.
+
+\begin{these}
+Le critère n'est pas « la valeur est-elle acceptée ? » mais \textbf{« le résultat correspond-il à
+l'intention ? »}. \code{false} $\rightarrow$ éteint : intention respectée, \best{silence}.
+\code{1} $\rightarrow$ éteint : intention trahie, \pire{cri}. Un rapport qui crie à tort n'est plus
+lu du tout --- et \code{profiles/demo.env} écrit bien \code{=false}, délibérément.
+\end{these}
 
 \subsection{3.3 · Le rapport --- dérivé du code qui décide}
 
@@ -195,19 +237,42 @@ Chaque profil est livré avec son \code{profiles/<nom>.expected.json} --- le rap
 
 \section{4 · Le garde-fou --- ce qui empêche la dérive}
 
-C'est la pièce qui sépare M0 d'un document qui pourrit en trois semaines. Deux tests, tous deux dans
-l'idiome du dépôt : \emph{les invariants sont des tests qui cassent le build}.
+C'est la pièce qui sépare M0 d'un document qui pourrit en trois semaines, dans l'idiome du dépôt :
+\emph{les invariants sont des tests qui cassent le build}. Ils se referment en anneau --- chacun
+couvre l'angle mort du précédent.
 
 \begin{center}\small
-\begin{tabular}{@{}>{\raggedright\arraybackslash}p{4.6cm} >{\raggedright\arraybackslash}p{11.2cm}@{}}
+\begin{tabular}{@{}>{\raggedright\arraybackslash}p{3.9cm} >{\raggedright\arraybackslash}p{11.6cm}@{}}
 \toprule
-\textbf{Test} & \textbf{Ce qu'il interdit} \\
+\textbf{Garde} & \textbf{Ce qu'il interdit} \\
 \midrule
-\textbf{T1} \code{aucun\_env\_var\_hors\_registre} & toute occurrence de \code{std::env::var(} \textbf{hors} du module \code{profile} fait échouer le test. C'est ce qui rend le registre réellement unique \\
-\textbf{T2} \code{le\_rapport\_couvre\_le\_registre} & chaque interrupteur apparaît dans le rapport, et chaque profil produit exactement son \code{expected.json}. \textbf{Ajouter un interrupteur sans le documenter casse les tests} \\
+\textbf{T1} \code{profile\_no\_raw\_env} & toute occurrence de \code{std::env::var} \textbf{hors} du
+module \code{profile}, dans les deux binaires. C'est ce qui rend le registre réellement unique.
+Il a trouvé \textbf{27} lectures dispersées dans la seule passerelle \\
+\addlinespace[2pt]
+\textbf{T2} \code{profile\_files} & chaque profil livré produit \emph{exactement} son
+\code{.expected.json} --- passerelle \textbf{et} console. Résolu depuis une table, jamais en mutant
+l'environnement : deux tests qui posent la même variable se voleraient leur réponse \\
+\addlinespace[2pt]
+\textbf{T3} \code{read::declare} & l'angle mort de T1 : une variable lue \emph{dedans} sans être
+déclarée n'apparaîtrait dans aucun rapport. Assertion à l'\textbf{exécution}, au goulot des trois
+primitives --- elle attrape même un nom construit dynamiquement \\
+\addlinespace[2pt]
+\textbf{T4} \code{flags\_stricts} & le sens inverse : \code{FLAGS\_STRICTS} ne peut pas dériver des
+appels réels à \code{read::flag}, sinon un footgun redeviendrait silencieux et le filet aurait un
+trou qu'on croirait plein \\
+\addlinespace[2pt]
+\textbf{T5} \code{se\_dit\_a\_qui\_de\_droit} & que le rapport et la surface servie se
+contredisent --- et fige \emph{pourquoi} l'un parle quand l'autre se tait \\
 \bottomrule
 \end{tabular}
 \end{center}
+
+\begin{these}
+Aucun de ces gardes n'est une opinion : chacun est né d'un trou réel trouvé pendant la vérification,
+et échouerait aujourd'hui si on retirait le correctif. Un test écrit \emph{avant} d'avoir vu le
+défaut garde une hypothèse ; un test écrit \emph{après} garde un fait.
+\end{these}
 
 \section{5 · Le critère d'acceptation, exécutable}
 
@@ -216,13 +281,24 @@ l'idiome du dépôt : \emph{les invariants sont des tests qui cassent le build}.
 \code{set -a \&\& . ./profiles/souverain.env \&\& set +a} \\[3pt]
 \code{cargo run -q -p efe-swarm-gateway -- -{}-profile-report | jq -e '.provenance == "SERVIE"'} \\
 \code{cargo run -q -p efe-swarm-gateway \&} \\
-\code{curl -s localhost:8080/v1/swarm/run -d @examples/run.json \textbackslash} \\
-\code{\ \ | jq -e '.provenance.root | length == 64'}
+\code{ID=\$(curl -s localhost:8080/v1/swarm/run -d @examples/run.json | jq -r .run\_id)} \\
+\code{curl -s localhost:8080/v1/swarm/verify/\$ID | jq -e '.root | length == 64'}
 \end{extrait}
 
 \textbf{Fini quand les deux \code{jq -e} sortent 0.} Le premier prouve que le binaire \emph{déclare}
 servir ; le second qu'il \emph{sert}. Ensemble, ils ferment l'écart entre le déclaré et le servi ---
 ce qui est l'objet même du module.
+
+\begin{alerte}
+\textbf{Correction --- la première rédaction citait \code{.provenance.root}, qui n'existe pas.} La
+réponse d'un run porte \code{run\_id} et \code{run} ; la racine vient de
+\code{GET /v1/swarm/verify/:id}. L'erreur a survécu à la rédaction et n'est tombée qu'à
+l'implémentation --- ce qui est exactement l'argument pour un critère \textbf{exécutable} plutôt que
+rédigé : une phrase peut citer un champ imaginaire pendant des mois, une commande non. Le critère
+complet vit dans \code{scripts/profile-check.sh} (4 étapes, sortie 0), et il couvre les deux
+binaires : la console est vérifiée comme la passerelle, sinon M0 ne couvrirait qu'une moitié du
+produit --- et l'autre moitié est celle qui dérive une clé d'un secret \pire{à défaut public}.
+\end{alerte}
 
 \section{6 · Le périmètre --- ce que M0 ne fait pas}
 

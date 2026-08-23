@@ -114,14 +114,59 @@ pub async fn run(
                     record_memory_metrics(&state, &outcome.run); // ADR-019 : compteurs recall/learn
                     // G9 : caviarde la sortie au repos selon la politique du tenant (records intacts).
                     state.redact_output(&tenant, &mut outcome.run);
-                    // persiste la PREUVE (records) — re-vérifiable via verify/:id. Un échec
-                    // ici rendrait le run invérifiable : il se SIGNALE sur le bus (revue
-                    // ADR-014 — jamais d'échec de persistance avalé, le moat n'est pas
-                    // négociable), même si `run_finished` est déjà parti.
-                    if let Err(e) = state.store.put(run_id, &tenant, &outcome).await {
-                        bus.emit(DashboardEvent::RunFailed {
-                            message: format!("persistance des records échouée (run invérifiable) : {e}"),
-                        });
+                    // persiste la PREUVE (records) — re-vérifiable via verify/:id.
+                    //
+                    // **M2 — deux corrections, toutes deux vérifiées dans le code.**
+                    //
+                    // (1) L'émission d'un `RunFailed` MENTAIT : le run a réussi, c'est la
+                    //     persistance qui a échoué. Un client qui lit `run_failed` conclut que
+                    //     son travail est perdu alors que sa réponse était juste.
+                    //
+                    // (2) Personne ne l'entendait. `events.rs` ferme le flux SSE au PREMIER
+                    //     événement terminal (`is_terminal`), et `RunFinished` en est un — or il
+                    //     part AVANT la persistance, comme le notait le commentaire d'origine.
+                    //     La promesse « jamais d'échec de persistance avalé » décrivait donc
+                    //     exactement ce qui se produisait : l'échec était avalé par la fermeture
+                    //     du flux. Le rejeu depuis le ring ne rattrape rien — il s'arrête, lui
+                    //     aussi, au premier terminal.
+                    //
+                    // Les canaux qui atteignent réellement quelqu'un sont donc : le journal des
+                    // brèches (`GET /v1/swarm/gaps`), `/metrics`, le log d'exploitation, et
+                    // `GET /verify/:id` qui distingue désormais « inconnu » de « non persisté ».
+                    //
+                    // Ici la politique ne s'applique pas : il n'y a plus de requête à faire
+                    // échouer, le 202 est parti depuis longtemps. La seule posture honnête est
+                    // l'observation. Le journal enregistre des FAITS ; la politique décide
+                    // seulement si une requête tombe.
+                    let persistance = state.store.put(run_id, &tenant, &outcome).await;
+                    if let Err(e) = &persistance {
+                        eprintln!(
+                            "⚠ run {run_id} (mode job) SERVI mais NON PERSISTÉ — jamais \
+                             re-prouvable. Raison : {e}"
+                        );
+                    }
+                    let _ = crate::capture::decider(
+                        crate::capture::CapturePolicy::Observation,
+                        run_id,
+                        &tenant,
+                        persistance,
+                        &state.gaps,
+                    );
+                    // **M5** — le même geste qu'en synchrone. Ici il n'y a pas de réponse à
+                    // porter (le 202 est parti depuis longtemps), donc l'échec se dit au
+                    // journal d'exploitation ; le dossier reste re-dérivable par la route.
+                    // Même raccourci qu'en synchrone : pas de clone quand le pont n'est pas câblé.
+                    if let Some(r) = state
+                        .reg_pont_cable()
+                        .then(|| crate::store::StoredRun::from_outcome(&tenant, &outcome))
+                        .and_then(|st| state.reg_dossier(run_id, &tenant, &st))
+                    {
+                        if !r.produced {
+                            eprintln!(
+                                "⚠ run {run_id} (mode job) : dossier réglementaire NON produit — {}",
+                                r.degrade_reason.as_deref().unwrap_or("raison inconnue")
+                            );
+                        }
                     }
                 }
                 Err(e) => {
@@ -147,8 +192,43 @@ pub async fn run(
     // G9 : caviarde la sortie selon la politique PII du tenant (réponse + au repos).
     s.redact_output(&caller.tenant, &mut outcome.run);
     let run_id = Uuid::new_v4();
-    s.store.put(run_id, &caller.tenant, &outcome).await?;
-    Ok((StatusCode::OK, Json(RunResponse { run_id, run: outcome.run })).into_response())
+    // ── M2 : la persistance ne peut plus renverser la réponse ─────────────────────────────
+    // C'était un `?` : le run avait réussi, la réponse était là dans `outcome.run`, et l'échec
+    // de PERSISTANCE la jetait. `decider` est le point de décision UNIQUE — sous la politique
+    // par défaut il propage l'erreur exactement comme avant, sous la posture d'observation il
+    // rend la réponse en disant la brèche.
+    let persistance = s.store.put(run_id, &caller.tenant, &outcome).await;
+    let capture = crate::capture::decider(s.capture_policy, run_id, &caller.tenant, persistance, &s.gaps)?;
+    if !capture.persisted {
+        // L'exploitant doit le voir dans ses logs même s'il ne lit ni `/metrics` ni `/gaps`.
+        eprintln!(
+            "⚠ run {run_id} SERVI mais NON PERSISTÉ — il ne sera jamais re-prouvable par \
+             /v1/swarm/verify/{run_id}. Raison : {}",
+            capture.degrade_reason.as_deref().unwrap_or("inconnue")
+        );
+    }
+    // ── M5 : le dossier réglementaire, sans geste manuel ──────────────────────────────────
+    // Le run vient d'avoir lieu ; le dossier se dérive DE LUI, ici, sans que personne n'ait à
+    // rappeler la passerelle. `reg_dossier` ne peut pas échouer : un dossier manquant est
+    // récupérable par `POST /v1/swarm/reg/:id`, contrairement à une persistance manquée.
+    // `StoredRun::from_outcome` clone tout le matériel de preuve du run. On ne le construit donc
+    // QUE si le pont est câblé : sinon chaque run du build par défaut paierait ce clone pour une
+    // capacité que personne n'a demandée. L'autorité reste `reg_dossier` ; ceci est un raccourci,
+    // et un test fige l'accord des deux.
+    let reg = s
+        .reg_pont_cable()
+        .then(|| crate::store::StoredRun::from_outcome(&caller.tenant, &outcome))
+        .and_then(|st| s.reg_dossier(run_id, &caller.tenant, &st));
+    if let Some(r) = &reg {
+        if !r.produced {
+            eprintln!(
+                "⚠ run {run_id} : dossier réglementaire NON produit — {} (le run est persisté, \
+                 `POST /v1/swarm/reg/{run_id}` le re-dérive)",
+                r.degrade_reason.as_deref().unwrap_or("raison inconnue")
+            );
+        }
+    }
+    Ok((StatusCode::OK, Json(RunResponse { run_id, run: outcome.run, capture, reg })).into_response())
 }
 
 /// **ADR-019 (MEM-3)** : incrémente les compteurs `/metrics` de recall/learn d'après le résumé

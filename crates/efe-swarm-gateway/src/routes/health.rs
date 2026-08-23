@@ -29,7 +29,7 @@ pub async fn readyz(State(s): State<SwarmGatewayState>) -> impl IntoResponse {
     #[cfg(feature = "frontier-llm")]
     {
         let frontier_intended =
-            std::env::var("EFE_LLM_FRONTIER_ENABLED").map(|v| v == "true").unwrap_or(false);
+            crate::profile::read::frontier_enabled();
         if frontier_intended && s.coordinator.is_none() {
             return (
                 StatusCode::SERVICE_UNAVAILABLE,

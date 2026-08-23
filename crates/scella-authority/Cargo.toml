@@ -1,0 +1,29 @@
+# SPDX-License-Identifier: UNLICENSED
+# M1 — scella-authority : LE seul analyseur d'autorité du dépôt.
+#
+# Volontairement hors des deux familles de noms (`efe-*` = calcul, `provenance-*` = preuve) : ce
+# crate n'appartient à aucune des deux, il est partagé PAR les deux. C'est aussi pourquoi il n'a
+# AUCUNE dépendance — une feuille se prend des deux côtés sans souder les périmètres entre eux.
+# `url` n'apparaît qu'en dev-dependencies : il sert à PROUVER l'accord avec le client HTTP réel,
+# jamais à l'exécution (cf. tests/accord_avec_url.rs).
+[package]
+name = "scella-authority"
+version = { workspace = true }
+edition = { workspace = true }
+rust-version = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
+description = "M1 — l'unique analyseur d'autorité : extrait d'un endpoint l'hôte que le client HTTP contactera RÉELLEMENT, ou refuse. Durci contre les différentiels d'analyseur (fragment, requête, userinfo, backslash, non-ASCII) et contre le loopback de façade (127.evil.com). Zéro dépendance : partagé par le périmètre preuve et le périmètre essaim sans les souder."
+publish = false
+
+[lib]
+name = "scella_authority"
+path = "src/lib.rs"
+
+[dependencies]
+
+[dev-dependencies]
+# Uniquement pour le test différentiel : `url` est ce sur quoi `reqwest` s'appuie, donc l'oracle
+# de « quel hôte sera RÉELLEMENT contacté ». Le crate livré, lui, reste sans dépendance.
+url = "2"

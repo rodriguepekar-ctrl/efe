@@ -28,21 +28,13 @@ const DASHBOARD_REGISTRY_CAP: usize = 256;
 /// Env `EFE_GATEWAY_MAX_INFLIGHT_RUNS` ; défaut `max(4, cœurs)`. Au-delà : 429 visible
 /// (backpressure honnête) plutôt qu'une file invisible qui finit en timeouts.
 fn admission_permits() -> usize {
-    std::env::var("EFE_GATEWAY_MAX_INFLIGHT_RUNS")
-        .ok()
-        .and_then(|s| s.parse::<usize>().ok())
-        .unwrap_or_else(|| std::thread::available_parallelism().map(|n| n.get()).unwrap_or(4).max(4))
-        .max(1)
+    crate::profile::read::max_inflight_runs()
 }
 
 /// **ADR-014 (CP-2)** : plafond serveur du champ DTO `width` (un client ne dimensionne
 /// pas la machine d'autrui). Env `EFE_GATEWAY_MAX_WIDTH` ; défaut 32.
 fn max_width_cap() -> usize {
-    std::env::var("EFE_GATEWAY_MAX_WIDTH")
-        .ok()
-        .and_then(|s| s.parse::<usize>().ok())
-        .unwrap_or(32)
-        .max(1)
+    crate::profile::read::max_width()
 }
 
 /// **ADR-018 (admission équitable)** : plafond de runs en vol simultanés **par tenant**,
@@ -55,11 +47,7 @@ fn max_width_cap() -> usize {
 /// `EFE_GATEWAY_MAX_INFLIGHT_PER_TENANT` ; un opérateur peut l'égaler au global (désactive
 /// l'équité) ou le baisser (équité stricte).
 fn admission_per_tenant_permits(global: usize) -> usize {
-    std::env::var("EFE_GATEWAY_MAX_INFLIGHT_PER_TENANT")
-        .ok()
-        .and_then(|s| s.parse::<usize>().ok())
-        .unwrap_or_else(|| global.saturating_sub(1).max(1))
-        .clamp(1, global.max(1))
+    crate::profile::read::max_inflight_per_tenant(global)
 }
 
 /// **ADR-018** : pourquoi l'admission a refusé — distingue les deux plafonds pour que le
@@ -149,6 +137,26 @@ pub struct SwarmGatewayState {
     pub memory_recalls: Arc<AtomicU64>,
     /// **ADR-019** : replis mémoire cumulés (compteur `/metrics`) — un run propre a appris.
     pub memory_learns: Arc<AtomicU64>,
+    /// **M2** : ce que la passerelle fait quand la PERSISTANCE d'un run échoue. Défaut
+    /// [`crate::capture::CapturePolicy::Bloquante`] — comportement d'avant M2, à l'octet près.
+    /// La posture d'observation est un opt-in déclaré au registre M0, jamais un défaut silencieux.
+    pub capture_policy: crate::capture::CapturePolicy,
+    /// **M5** : le pont vers le registre réglementaire. `None` ⟹ non câblé, et le rapport M0 le
+    /// dit. Sous feature : le coin et l'expansion sont deux produits séparables.
+    #[cfg(feature = "reg-evidence")]
+    pub reg_pont: Option<crate::reg_pont::RegPont>,
+    /// **M5** : dérivations qui ont ÉCHOUÉ. Sans elle, `reg_dossiers_total` à zéro se confond
+    /// avec « aucun run » alors qu'il peut vouloir dire « toutes les dérivations échouent » — deux
+    /// situations opposées. C'est la leçon de M2 (compteur ET jauge) poussée d'un cran : il faut
+    /// aussi le DÉNOMINATEUR.
+    pub reg_echecs: Arc<AtomicU64>,
+    /// **M5** : dossiers réglementaires écrits. Compteur présent dans les DEUX builds — un
+    /// exploitant qui compare deux déploiements doit lire la même série, pas en chercher une qui
+    /// n'existerait que d'un côté.
+    pub reg_dossiers: Arc<AtomicU64>,
+    /// **M2** : le journal des brèches — les runs servis qu'on n'a PAS pu persister. Une brèche
+    /// invisible serait pire que pas de chaîne du tout : la valeur d'une chaîne EST d'être complète.
+    pub gaps: Arc<crate::capture::GapJournal>,
     /// Métriques de provenance **partagées** : chaque run les alimente (→ `/metrics`).
     pub prov_metrics: Arc<ProvenanceMetrics>,
     /// Métriques de substrat (Blackboard/EventBus) — exposées en `/metrics`.
@@ -266,6 +274,12 @@ impl SwarmGatewayState {
             memory: Arc::new(InMemoryMemoryStore::with_keys(memory_keys)),
             memory_recalls: Arc::new(AtomicU64::new(0)),
             memory_learns: Arc::new(AtomicU64::new(0)),
+            capture_policy: crate::capture::CapturePolicy::default(),
+            #[cfg(feature = "reg-evidence")]
+            reg_pont: None,
+            reg_dossiers: Arc::new(AtomicU64::new(0)),
+            reg_echecs: Arc::new(AtomicU64::new(0)),
+            gaps: Arc::new(crate::capture::GapJournal::new()),
             prov_metrics,
             substrate_metrics,
             dashboards: Arc::new(DashboardRegistry::new(DASHBOARD_REGISTRY_CAP)),
@@ -426,6 +440,145 @@ impl SwarmGatewayState {
         self
     }
 
+    /// **M2** — charge un run persisté, ou explique honnêtement pourquoi il manque.
+    ///
+    /// À utiliser partout où une route lit un run : `store.get(...).ok_or(NotFound)` répond
+    /// « cet identifiant n'existe pas », ce qui est FAUX pour un run servi mais non persisté.
+    /// Le premier audit de M2 a trouvé six routes qui le faisaient encore ; ce point d'entrée
+    /// unique est ce qui empêche la septième.
+    ///
+    /// # Errors
+    /// `410 Gone` si une brèche est enregistrée pour ce run, `404` sinon.
+    pub async fn charger_run(
+        &self,
+        id: uuid::Uuid,
+        tenant: &str,
+    ) -> Result<crate::store::StoredRun, crate::error::GatewayError> {
+        match self.store.get(id, tenant).await? {
+            Some(r) => Ok(r),
+            None => Err(crate::capture::absence_expliquee(&self.gaps, id, tenant)),
+        }
+    }
+
+    /// **M2** — lit un run **sans conclure**. Le cas légitime, et le seul.
+    ///
+    /// `charger_run` conclut : absent ⟹ erreur. Une route comme `get_run` ne peut pas s'en
+    /// contenter, parce qu'elle a une **troisième** réponse à donner — un job peut être en vol,
+    /// ni persisté ni perdu. Elle doit donc regarder sans trancher.
+    ///
+    /// Ce nom existe pour que ce choix soit **visible et greppable** plutôt que noyé dans un
+    /// `store.get` indistinguable des huit autres. Une route qui l'emploie doit conclure par
+    /// [`crate::capture::absence_expliquee`] — le test `absence_expliquee.rs` l'exige, faute de
+    /// quoi elle se retrouverait à rendre un `404` muet par une autre porte.
+    ///
+    /// # Errors
+    /// Propage l'erreur du store (une panne de LECTURE, distincte d'une absence).
+    pub async fn peek_run(
+        &self,
+        id: uuid::Uuid,
+        tenant: &str,
+    ) -> Result<Option<crate::store::StoredRun>, crate::error::GatewayError> {
+        self.store.get(id, tenant).await
+    }
+
+    /// **M5** : câble le pont vers le registre. Réservé au binaire et aux tests.
+    #[cfg(feature = "reg-evidence")]
+    #[must_use]
+    pub fn with_reg_pont(mut self, pont: crate::reg_pont::RegPont) -> Self {
+        self.reg_pont = Some(pont);
+        self
+    }
+
+    /// **M5** — dérive le dossier réglementaire d'un run, si le pont est câblé.
+    ///
+    /// Point d'entrée UNIQUE : les deux chemins qui produisent un run (l'essaim et la mission
+    /// frontière) l'appellent à l'identique, et aucun ne décide dans son coin. C'est la même
+    /// discipline que `capture::decider` pour la panne, et pour la même raison — deux décisions
+    /// indépendantes finissent par diverger.
+    ///
+    /// **Ne peut pas échouer.** Un dossier manquant est récupérable (`POST /v1/swarm/reg/:id`) ;
+    /// faire tomber la requête d'un client pour un artefact qu'on saura reconstituer serait
+    /// injustifiable. `None` ⟹ le pont n'est pas câblé, ce que le rapport de démarrage annonce.
+    #[cfg(feature = "reg-evidence")]
+    #[must_use]
+    pub fn reg_dossier(
+        &self,
+        run_id: uuid::Uuid,
+        tenant: &str,
+        stored: &crate::store::StoredRun,
+    ) -> Option<crate::reg_pont::RegReport> {
+        let pont = self.reg_pont.as_ref()?;
+        // La clé de pile A : sans elle, rien ne peut être re-prouvé, donc rien ne peut être dérivé.
+        // On le DIT plutôt que de rendre `None`, qui se confondrait avec « pont non câblé ».
+        let a_key = match self.derive_key(tenant) {
+            Ok(k) => k,
+            Err(e) => {
+                self.reg_echecs.fetch_add(1, Ordering::Relaxed);
+                return Some(crate::reg_pont::RegReport::echec(
+                    crate::reg_pont::slug(pont.framework),
+                    format!("clé tenant indisponible : {e}"),
+                ));
+            }
+        };
+        let r = crate::reg_pont::deriver(pont, run_id, tenant, &a_key, stored);
+        if r.produced {
+            self.reg_dossiers.fetch_add(1, Ordering::Relaxed);
+        } else {
+            self.reg_echecs.fetch_add(1, Ordering::Relaxed);
+        }
+        Some(r)
+    }
+
+    /// Sans la feature, le pont n'existe pas — et la réponse le dit par un `None`, dans la MÊME
+    /// forme que lorsqu'il est simplement non câblé. Un client n'a donc pas à savoir comment le
+    /// binaire a été construit pour lire sa réponse.
+    #[cfg(not(feature = "reg-evidence"))]
+    #[must_use]
+    pub fn reg_dossier(
+        &self,
+        _run_id: uuid::Uuid,
+        _tenant: &str,
+        _stored: &crate::store::StoredRun,
+    ) -> Option<crate::reg_pont::RegReport> {
+        None
+    }
+
+    /// **M5** : le pont est-il câblé ?
+    ///
+    /// À consulter **avant** de construire un `StoredRun`, qui clone les records, les
+    /// `llm_records`, les feuilles N17, la sortie et la topologie d'un run. Le premier câblage de
+    /// M5 écrivait `reg_dossier(id, tenant, &StoredRun::from_outcome(…))` : l'argument étant évalué
+    /// avant l'appel, **chaque run du build par défaut payait ce clone** pour un pont qui n'y est
+    /// jamais câblé. Un coût sur le chemin servi, invisible à tout test, visible d'un profileur.
+    ///
+    /// Ce n'est **pas** une seconde décision : l'autorité reste `reg_dossier`, qui refait le même
+    /// `is_some()`. C'est un garde de raccourci, et `le_raccourci_ne_ment_jamais_sur_le_pont` fige
+    /// leur accord — sans quoi une divergence ferait sauter des dérivations en silence.
+    ///
+    /// Répond dans les deux builds : sans la feature, le pont ne peut pas être câblé, et le dire
+    /// vaut mieux que de laisser une jauge absente.
+    #[cfg(feature = "reg-evidence")]
+    #[must_use]
+    pub fn reg_pont_cable(&self) -> bool {
+        self.reg_pont.is_some()
+    }
+
+    /// Sans la feature, le pont n'existe pas — la jauge vaut 0, jamais « absente ».
+    #[cfg(not(feature = "reg-evidence"))]
+    #[must_use]
+    pub fn reg_pont_cable(&self) -> bool {
+        false
+    }
+
+    /// **M2** : pose la politique de capture. Réservé au binaire et aux tests — comme
+    /// `with_bundle_export`, ce constructeur évite toute lecture d'environnement depuis l'état,
+    /// de sorte qu'un test puisse construire une posture déterministe sans course.
+    #[must_use]
+    pub fn with_capture_policy(mut self, policy: crate::capture::CapturePolicy) -> Self {
+        self.capture_policy = policy;
+        self
+    }
+
     /// Remplace le store des runs (ex. `PgRunStore` en prod via la feature `postgres`).
     pub fn with_store(mut self, store: Arc<dyn RunStore>) -> Self {
         self.store = store;
@@ -531,7 +684,7 @@ impl SwarmGatewayState {
     fn width_spec(&self, requested: Option<usize>) -> WidthSpec {
         match requested {
             Some(w) => WidthSpec::Fixed(w.clamp(1, self.max_width)),
-            None => match std::env::var("EFE_SWARM_WIDTH").ok().and_then(|s| s.parse::<usize>().ok()) {
+            None => match crate::profile::read::swarm_width() {
                 Some(w) => WidthSpec::Fixed(w.clamp(1, self.max_width)),
                 None => WidthSpec::Auto,
             },
@@ -662,7 +815,7 @@ impl SwarmGatewayState {
 /// `EFE_LLM_FRONTIER_ENABLED` : seule la chaîne `"true"` active.
 #[must_use]
 pub fn bundle_export_from_env() -> bool {
-    std::env::var("EFE_SWARM_BUNDLE_ENABLED").map(|v| v == "true").unwrap_or(false)
+    crate::profile::read::bundle_enabled()
 }
 
 #[cfg(test)]

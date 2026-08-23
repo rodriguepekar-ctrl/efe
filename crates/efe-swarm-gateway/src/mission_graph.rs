@@ -341,7 +341,11 @@ pub async fn seal_and_store_mission(
 ) -> Result<Uuid, crate::GatewayError> {
     // Résumé de requête minimal (callers non-handler) — le `kind` suffit au store.
     let request = json!({ "kind": topology.kind });
-    seal_and_store_mission_with_request(state, tenant, mission_id, topology, sink, output, request, Vec::new()).await
+    // Le rapport de capture et le `StoredRun` n'intéressent que les handlers ; ce raccourci les
+    // laisse tomber pour garder sa signature historique (ses appelants sont des tests).
+    seal_and_store_mission_with_request(state, tenant, mission_id, topology, sink, output, request, Vec::new())
+        .await
+        .map(|(id, _, _)| id)
 }
 
 /// **Couche 2 (M3)** : variante qui **scelle le résumé de requête** (`request`) — la source
@@ -361,7 +365,7 @@ pub async fn seal_and_store_mission_with_request(
     output: Value,
     request: Value,
     reformulation_hops: Vec<Value>,
-) -> Result<Uuid, crate::GatewayError> {
+) -> Result<(Uuid, crate::capture::CaptureReport, crate::StoredRun), crate::GatewayError> {
     let tenant_id = state.tenant_id(tenant)?;
     let key = state.derive_key(tenant)?;
     let drained = sink.drain();
@@ -389,8 +393,30 @@ pub async fn seal_and_store_mission_with_request(
         request,
     );
     let run_id = Uuid::new_v4();
-    state.store.put_stored(run_id, stored).await?;
-    Ok(run_id)
+    // **M2 — le même défaut que `routes/run.rs:150`, sur le chemin qui coûte le plus cher.**
+    //
+    // C'était `state.store.put_stored(run_id, stored).await?`. Or à cet endroit les appels aux
+    // modèles frontière ont DÉJÀ eu lieu et ont DÉJÀ été facturés — `microcents` est calculé une
+    // vingtaine de lignes plus haut. Ce `?` faisait donc perdre au client une réponse qu'il venait
+    // de PAYER, parce que la persistance avait hoqueté. Le premier passage de M2 avait corrigé le
+    // chemin d'essaim et laissé celui-ci : l'audit du module l'a trouvé.
+    //
+    // On rend aussi le `StoredRun`. L'appelant construisait sa réponse en RELISANT le store, ce
+    // qui échouait par construction dès que la persistance avait échoué — rendre la persistance
+    // non fatale n'aurait donc rien changé, le client serait tombé dix lignes plus loin. Les
+    // données sont ici, en mémoire, déjà scellées : les rendre supprime un aller-retour ET un
+    // mode de panne.
+    let copie = stored.clone();
+    let persistance = state.store.put_stored(run_id, stored).await;
+    if let Err(e) = &persistance {
+        eprintln!(
+            "⚠ mission {run_id} SERVIE mais NON PERSISTÉE — les appels frontière ont été payés, \
+             et ce run ne sera jamais re-prouvable. Raison : {e}"
+        );
+    }
+    let capture =
+        crate::capture::decider(state.capture_policy, run_id, tenant, persistance, &state.gaps)?;
+    Ok((run_id, capture, copie))
 }
 
 #[cfg(test)]
@@ -451,6 +477,58 @@ mod tests {
         })
         .await;
         (sink, mission_id)
+    }
+
+    /// **M2 sur le chemin qui coûte le plus cher.**
+    ///
+    /// À ce point, les appels aux modèles frontière ont eu lieu et ont été **facturés**. Un `?` sur
+    /// la persistance y faisait perdre au client une réponse qu'il venait de payer. Le premier
+    /// passage de M2 avait corrigé le chemin d'essaim et laissé celui-ci ; l'audit du module l'a
+    /// trouvé, et ce test l'empêche de revenir.
+    #[tokio::test]
+    async fn m2_une_mission_survit_a_la_mort_du_store() {
+        let state = SwarmGatewayState::in_memory()
+            .with_store(Arc::new(crate::test_support::StoreEnPanne))
+            .with_capture_policy(crate::capture::CapturePolicy::Observation);
+        let providers = ["claude_a", "gpt_b", "gemini_c"];
+        let (sink, mission_id) = run_fanout(&state, &providers).await;
+        let topo = topology_vote(&providers.iter().map(|s| (*s).to_string()).collect::<Vec<_>>());
+
+        let (run_id, capture, stored) = seal_and_store_mission_with_request(
+            &state, TENANT, mission_id, &topo, &sink,
+            json!({"winner": "claude_a"}), json!({"kind": "llm/vote", "k": 3}), Vec::new(),
+        )
+        .await
+        .expect("la posture d'observation ne renverse pas une mission déjà payée");
+
+        assert!(!capture.persisted, "le store est mort");
+        assert!(capture.consequence.is_some(), "et le client apprend ce que ça lui coûte");
+        assert!(
+            state.gaps.trouve(run_id, TENANT).is_some(),
+            "la brèche est journalisée : un run payé et perdu ne s'efface pas"
+        );
+
+        // Le `StoredRun` rendu est ce qui permet à l'appelant de bâtir sa réponse SANS relire le
+        // store — sans lui, la correction de la persistance serait restée inopérante, l'appelant
+        // tombant dix lignes plus loin sur `store.get`.
+        assert!(!stored.records.is_empty(), "la preuve est en main, même si le store l'a refusée");
+        assert!(stored.root.is_some(), "et sa racine aussi : le client peut la conserver hors bande");
+    }
+
+    /// Contrôle négatif : sans l'opt-in, le chemin de mission échoue comme avant M2.
+    #[tokio::test]
+    async fn m2_sans_optin_la_mission_echoue_comme_avant() {
+        let state = SwarmGatewayState::in_memory()
+            .with_store(Arc::new(crate::test_support::StoreEnPanne));
+        let providers = ["claude_a", "gpt_b"];
+        let (sink, mission_id) = run_fanout(&state, &providers).await;
+        let topo = topology_vote(&providers.iter().map(|s| (*s).to_string()).collect::<Vec<_>>());
+        let r = seal_and_store_mission_with_request(
+            &state, TENANT, mission_id, &topo, &sink, json!({}), json!({"kind": "llm/vote"}), Vec::new(),
+        )
+        .await;
+        assert!(r.is_err(), "posture bloquante : l'échec de persistance reste l'échec de la mission");
+        assert_eq!(state.gaps.total(), 0, "aucune mission servie sans trace : pas de brèche");
     }
 
     #[tokio::test]

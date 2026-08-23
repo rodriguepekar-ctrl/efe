@@ -158,7 +158,7 @@ pub async fn get_replay(
     Path(id): Path<Uuid>,
 ) -> Result<Json<ReplayReport>, GatewayError> {
     caller.require_any_role(&["viewer", "operator", "admin", "auditor"])?;
-    let stored = s.store.get(id, &caller.tenant).await?.ok_or(GatewayError::NotFound)?;
+    let stored = s.charger_run(id, &caller.tenant).await?;
     let key = s.derive_key(&caller.tenant)?;
     Ok(Json(build_r0(id, &stored, &key, "R0")))
 }
@@ -174,7 +174,7 @@ pub async fn post_replay(
     GatewayJson(req): GatewayJson<RunRequest>,
 ) -> Result<Response, GatewayError> {
     caller.require_any_role(&["operator", "admin"])?; // re-exécution = compute → rôle opérateur
-    let stored = s.store.get(id, &caller.tenant).await?.ok_or(GatewayError::NotFound)?;
+    let stored = s.charger_run(id, &caller.tenant).await?;
     let key = s.derive_key(&caller.tenant)?;
     let mut report = build_r0(id, &stored, &key, "R1");
 

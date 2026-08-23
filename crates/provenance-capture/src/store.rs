@@ -7,30 +7,124 @@
 //! causal** du workflow. Le store ne fait PAS sortir les records (egress refusé) : la persistance est un
 //! **chemin local** que le client détient.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
 use provenance_dag::{reprove_dag, DagError, Node, Record, SealedDag, TenantKey, Verdict};
 
+use provenance_dag::shred::{CaseKey, EtatCas, Trousseau};
+
+use crate::conservation::{a_du_contenu_effacable, cas_de, enrober_par};
 use crate::tap::{HumanReview, LlmCall, MessageEvent, ToolCall};
 
 /// Le store : le DAG scellé + la clé tenant (que le client détient).
 pub struct CaptureStore {
     dag: SealedDag,
     key: TenantKey,
+    /// **M6** — le trousseau des clés de cas. `None` est la posture par défaut, et le comportement y
+    /// est **octet pour octet celui d'avant M6** : changer en silence ce qui est scellé sur un chemin
+    /// servi est exactement ce que le registre de profil interdit.
+    conservation: Option<Trousseau>,
+    /// Les nœuds scellés **en clair faute de clé**, par cas.
+    ///
+    /// Un compteur nu se lirait « tout va bien » ; il faut savoir **quels** cas ne seront jamais
+    /// effaçables, parce que c'est irréversible et que la réponse est un geste de câblage
+    /// (ouvrir le cas avant d'ingérer), pas un réglage.
+    sans_cle: BTreeMap<String, u64>,
 }
 
 impl CaptureStore {
     /// Un store neuf pour un tenant (sa clé).
     pub fn new(key: TenantKey) -> Self {
-        CaptureStore { dag: SealedDag::new(), key }
+        CaptureStore { dag: SealedDag::new(), key, conservation: None, sans_cle: BTreeMap::new() }
     }
 
     /// **Recharge** un store depuis des records **déjà scellés** (p. ex. via [`Self::load_records_local`])
     /// — le chemin de **redémarrage** d'un log persisté. Ne re-scelle ni ne valide : [`Self::reprove`]
     /// tranchera (fail-loud si le fichier a été altéré au repos).
     pub fn from_records(key: TenantKey, records: Vec<Record>) -> Self {
-        CaptureStore { dag: SealedDag::from_records(records), key }
+        // ⚠ Le trousseau ne se recharge PAS ici : il n'est pas dans les records (par construction —
+        // s'il y était, le broyage ne détruirait rien). Un redémarrage repart donc sans conservation,
+        // et les champs enrobés se lisent « clé absente » — **pas** « broyé », ce qui serait affirmer
+        // une destruction qu'on n'a pas faite. Restaurer le trousseau est le geste du déployeur.
+        CaptureStore { dag: SealedDag::from_records(records), key, conservation: None, sans_cle: BTreeMap::new() }
+    }
+
+    // ── M6 : la conservation limitée ──
+
+    /// Active la conservation limitée : les champs effaçables seront scellés **chiffrés**.
+    ///
+    /// Opt-in, et sans effet rétroactif — les records déjà scellés portent leur contenu en clair
+    /// **pour toujours** (les re-chiffrer changerait leurs octets, donc la chaîne). Ce qui est
+    /// protégé, c'est ce qui vient après.
+    pub fn avec_conservation(&mut self, trousseau: Trousseau) {
+        self.conservation = Some(trousseau);
+    }
+
+    /// Confie la clé d'un cas. À faire **avant** d'y ingérer quoi que ce soit.
+    ///
+    /// ⚠ Cette clé doit être **aléatoire**. Une clé dérivée se re-dérive, donc la broyer ne
+    /// détruirait rien : le store n'en fabrique aucune, exprès (cf. `provenance_dag::shred`).
+    /// Rend `false` si la conservation n'est pas active, ou si le cas a déjà été broyé.
+    pub fn ouvrir_cas(&mut self, cas: &str, cle: CaseKey, depuis: u64) -> bool {
+        match &mut self.conservation {
+            Some(t) => t.poser(cas, cle, depuis),
+            None => false,
+        }
+    }
+
+    /// Le trousseau, en lecture — pour relire un champ et savoir **pourquoi** il ne se lit pas.
+    #[must_use]
+    pub fn conservation(&self) -> Option<&Trousseau> {
+        self.conservation.as_ref()
+    }
+
+    /// Le trousseau, en écriture — c'est par là qu'on **broie** (directement ou via
+    /// [`crate::conservation::Conservation`]).
+    pub fn conservation_mut(&mut self) -> Option<&mut Trousseau> {
+        self.conservation.as_mut()
+    }
+
+    /// Les cas dont des nœuds ont été scellés **en clair** faute de clé, et combien.
+    ///
+    /// Non vide = ces cas ne seront **jamais** effaçables. C'est un fait acquis, pas une alerte
+    /// transitoire : le seul remède est d'ouvrir le cas avant d'y ingérer, à l'avenir.
+    #[must_use]
+    pub fn sans_cle(&self) -> &BTreeMap<String, u64> {
+        &self.sans_cle
+    }
+
+    /// **Le point de scellement unique.** Tout nœud passe ici, et par ici seulement.
+    ///
+    /// C'est ce qui rend structurel le fait qu'un tap ne puisse pas oublier d'enrober : les quatre
+    /// `record_*` étaient quatre `append` identiques — la forme exacte où le cinquième diverge.
+    ///
+    /// Sans clé pour le cas, on scelle **en clair** et on le compte. Refuser perdrait le nœud
+    /// d'audit définitivement ; sceller en clair ne perd que son effaçabilité future. Pour un
+    /// registre de preuve, l'enregistrement manquant est la pire des deux — mais le choix ne vaut
+    /// que parce qu'il est **annoncé** (cf. [`Self::sans_cle`]).
+    fn sceller(&mut self, noeud: Node) -> Result<&Record, CaptureError> {
+        let etat = self.conservation.as_ref().map(|t| {
+            let cas = cas_de(noeud.id()).to_string();
+            let e = t.etat(&cas);
+            (cas, e)
+        });
+        let noeud = match etat {
+            None => noeud,
+            Some((_, EtatCas::Vivant { .. })) => {
+                let t = self.conservation.as_ref().expect("posture active");
+                enrober_par(noeud, t).expect("cas vivant ⟹ enrobage possible")
+            }
+            Some((cas, _)) => {
+                // On ne compte que ce qui PERD quelque chose : une arête ne porte aucun contenu, et
+                // la compter enverrait un exploitant chercher un problème qui n'existe pas.
+                if a_du_contenu_effacable(&noeud) {
+                    *self.sans_cle.entry(cas).or_insert(0) += 1;
+                }
+                noeud
+            }
+        };
+        self.dag.append(&self.key, noeud).map_err(CaptureError::Dag)
     }
 
     // ── enregistrement via les taps (scelle au fil de l'eau) ──
@@ -42,7 +136,7 @@ impl CaptureStore {
         for ev in call.evidence_steps {
             check_segment(ev, "evidence_step")?;
         }
-        self.dag.append(&self.key, call.to_node()).map_err(CaptureError::Dag)
+        self.sceller(call.to_node())
     }
     /// Scelle un **message** (arête). Les nœuds `from`/`to` doivent déjà exister (ordre causal).
     pub fn record_message(&mut self, ev: &MessageEvent) -> Result<&Record, CaptureError> {
@@ -50,21 +144,21 @@ impl CaptureStore {
         check_segment(ev.step, "step")?;
         check_segment(ev.from_step, "from_step")?;
         check_segment(ev.to_step, "to_step")?;
-        self.dag.append(&self.key, ev.to_node()).map_err(CaptureError::Dag)
+        self.sceller(ev.to_node())
     }
     /// Scelle une **évidence** (source). L'étape consommatrice est annotée (non-causale).
     pub fn record_evidence(&mut self, ev: &ToolCall) -> Result<&Record, CaptureError> {
         check_segment(ev.case_id, "case_id")?;
         check_segment(ev.step, "step")?;
         check_segment(ev.consumed_by_step, "consumed_by_step")?;
-        self.dag.append(&self.key, ev.to_node()).map_err(CaptureError::Dag)
+        self.sceller(ev.to_node())
     }
     /// Scelle un acte de **supervision humaine**. Le nœud visé doit déjà exister.
     pub fn record_human(&mut self, h: &HumanReview) -> Result<&Record, CaptureError> {
         check_segment(h.case_id, "case_id")?;
         check_segment(h.step, "step")?;
         check_segment(h.target_step, "target_step")?;
-        self.dag.append(&self.key, h.to_node()).map_err(CaptureError::Dag)
+        self.sceller(h.to_node())
     }
 
     // ── intégrité & accès ──

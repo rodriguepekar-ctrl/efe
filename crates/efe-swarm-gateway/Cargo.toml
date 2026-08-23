@@ -28,6 +28,16 @@ tamper-testkit = []
 # pour l'exemple `local_receipt_demo`. Même motif que `tamper-testkit` — un harnais externe a
 # besoin du fixture — et OFF par défaut (jamais en prod).
 demo = []
+# **M5 — le pont vers le registre réglementaire.** OFF par défaut, et c'est structurel : ce dépôt
+# porte DEUX produits séparables — le coin (la passerelle souveraine à reçu) et l'expansion (le
+# registre d'évidence réglementaire). L'analyse « produit unique » avait explicitement conclu de ne
+# PAS les fusionner : l'un exige de l'acheteur qu'il route son trafic par la passerelle, l'autre ne
+# demande que des points d'observation. Joindre n'est pas souder — la feature rend la séparation
+# MÉCANIQUE, et un test la garde (`tests/deux_produits_separables.rs`).
+#
+# Coût marginal quand elle est active : UN crate. `provenance-dag` est déjà dans la fermeture par
+# défaut (via `provenance-bridge`, qui produit les bundles), et `reg-evidence` n'en dépend que.
+reg-evidence = ["dep:reg-evidence"]
 # `PgRunStore` (prod) : persistance Postgres write-once des records (la preuve durable).
 postgres = ["dep:sqlx"]
 # `OidcVerifier` (prod) : auth `Caller` via JWT OIDC ES256 (clé PUBLIQUE server-side ;
@@ -76,7 +86,16 @@ regex   = { version = "1", optional = true }                            # détec
 # frontière) ; AUCUN tonic/prost (ni l'un ni l'autre n'en dépend) → pas de conflit de versions.
 efe-coordinator = { path = "../efe-coordinator", version = "0.0.1", optional = true }  # Coordinator + providers Claude/GPT/Gemini
 efe-multi-llm   = { path = "../efe-multi-llm",   version = "0.0.1", optional = true }  # 5 missions (servies en M3)
-provenance-capture = { path = "../provenance-capture", version = "0.0.1", optional = true }  # egress guard is_local_endpoint (réutilisé — pas de 3e copie)
+provenance-capture = { path = "../provenance-capture", version = "0.0.1", optional = true }
+# M5 : la dérivation d'évidence réglementaire. Optionnel — voir la feature `reg-evidence`.
+reg-evidence = { path = "../reg-evidence", version = "0.0.1", optional = true }  # egress guard is_local_endpoint (réutilisé — pas de 3e copie)
+
+# L'exemple de démo consomme `test_support`, exposé par la feature `demo` seule. Sans cette
+# déclaration, `cargo test -p efe-swarm-gateway` (qui construit TOUS les targets) échoue à
+# compiler l'exemple — défaut introduit avec la démo et attrapé par la suite complète de M0.
+[[example]]
+name = "local_receipt_demo"
+required-features = ["demo"]
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["macros", "rt-multi-thread", "time"] }

@@ -70,7 +70,7 @@ pub async fn bundle(
     // n'y ont pas accès.
     caller.require_any_role(&["auditor", "admin"])?;
 
-    let stored = s.store.get(id, &caller.tenant).await?.ok_or(GatewayError::NotFound)?;
+    let stored = s.charger_run(id, &caller.tenant).await?;
     // La clé de la PILE A : elle sert à re-prouver la complétude du run, puis à dériver la clé de
     // la pile B (voir `derive_bundle_key` — deux clés distinctes, dérivation à sens unique).
     let a_key = s.derive_key(&caller.tenant)?;

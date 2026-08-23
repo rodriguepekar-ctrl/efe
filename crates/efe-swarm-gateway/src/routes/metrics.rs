@@ -13,6 +13,52 @@ use crate::state::SwarmGatewayState;
 /// **ADR-014 (CP-2) + ADR-018** : surfaces d'admission — runs en vol (jauge dérivée des
 /// permits global), plafond process, plafond **par-tenant** (équité ADR-018), tenants
 /// actifs, refus cumulés. Rendu inline (même style sans-dépendance que les registres).
+/// **M2** — les brèches : des runs SERVIS que l'on n'a pas pu persister.
+///
+/// Deux séries, et il faut les deux. Le **compteur** ne se perd jamais et dit l'ampleur ; la
+/// **jauge** de posture dit si une brèche est seulement POSSIBLE. Sans la seconde, un compteur à
+/// zéro se lit comme une bonne nouvelle alors qu'il peut être nul par construction — sous la
+/// posture bloquante, aucun run non persistable n'est jamais servi.
+fn render_capture(s: &SwarmGatewayState) -> String {
+    format!(
+        "# HELP efe_swarm_capture_gaps_total Runs servis mais NON persistés (M2) — jamais re-prouvables.\n\
+         # TYPE efe_swarm_capture_gaps_total counter\n\
+         efe_swarm_capture_gaps_total {}\n\
+         # HELP efe_swarm_capture_observation Posture de capture : 1 = observation (une brèche est possible), 0 = bloquante.\n\
+         # TYPE efe_swarm_capture_observation gauge\n\
+         efe_swarm_capture_observation {}\n",
+        s.gaps.total(),
+        u8::from(s.capture_policy.peut_degrader()),
+    )
+}
+
+/// **M5** — le pont vers le registre. **Trois** séries, et il en faut trois.
+///
+/// La jauge dit si un dossier est seulement POSSIBLE : sans elle, un compteur à zéro se lirait
+/// comme « rien à signaler » alors qu'il peut être nul parce que le pont n'existe pas. C'était la
+/// leçon de M2.
+///
+/// Mais deux ne suffisaient pas non plus, et l'audit l'a trouvé : avec le seul compteur de SUCCÈS,
+/// « aucun run n'est passé » et « toutes les dérivations échouent » rendent le même zéro. Le
+/// compteur d'ÉCHEC est le dénominateur qui les sépare — et il compte quelque chose de
+/// **récupérable**, puisque `POST /v1/swarm/reg/:id` re-dérive.
+fn render_reg(s: &SwarmGatewayState) -> String {
+    format!(
+        "# HELP efe_swarm_reg_dossiers_total Dossiers d'évidence réglementaire écrits (M5).\n\
+         # TYPE efe_swarm_reg_dossiers_total counter\n\
+         efe_swarm_reg_dossiers_total {}\n\
+         # HELP efe_swarm_reg_echecs_total Dérivations réglementaires qui ont ÉCHOUÉ (M5) — récupérables par POST /v1/swarm/reg/:id.\n\
+         # TYPE efe_swarm_reg_echecs_total counter\n\
+         efe_swarm_reg_echecs_total {}\n\
+         # HELP efe_swarm_reg_pont Pont vers le registre : 1 = câblé (un dossier est possible), 0 = non.\n\
+         # TYPE efe_swarm_reg_pont gauge\n\
+         efe_swarm_reg_pont {}\n",
+        s.reg_dossiers.load(std::sync::atomic::Ordering::Relaxed),
+        s.reg_echecs.load(std::sync::atomic::Ordering::Relaxed),
+        u8::from(s.reg_pont_cable()),
+    )
+}
+
 fn render_admission(s: &SwarmGatewayState) -> String {
     let inflight = s.admission_max.saturating_sub(s.admission.available_permits());
     format!(
@@ -64,13 +110,17 @@ fn render_frontier(_s: &SwarmGatewayState) -> String {
 
 pub async fn metrics(State(s): State<SwarmGatewayState>) -> impl IntoResponse {
     let body = format!(
-        "{}{}{}{}{}",
+        "{}{}{}{}{}{}{}",
         s.prov_metrics.render_prometheus(),
         s.substrate_metrics.render_prometheus(),
         // Inc.3 : surfaces du dashboard (events émis/perdus + jauges live).
         s.dash_metrics.render_prometheus(s.dashboards.len(), s.dashboards.total_subscribers()),
         // ADR-014 : admission process.
         render_admission(&s),
+        // M2 : brèches de capture + posture en vigueur.
+        render_capture(&s),
+        // M5 : dossiers réglementaires + état du pont.
+        render_reg(&s),
         // Couche 2 (M4 §2.4) : egress frontière (vide hors feature).
         render_frontier(&s),
     );

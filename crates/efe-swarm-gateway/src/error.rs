@@ -23,6 +23,11 @@ pub enum GatewayError {
     Forbidden(String),
     /// 404 — run introuvable (ou hors du tenant de l'appelant).
     NotFound,
+    /// **M2** — 410 : le run a bien eu lieu, et il n'est PAS persisté. Distinct de 404, qui dit
+    /// « cet identifiant n'existe pas ». Confondre les deux ferait croire à un auditeur qu'un run
+    /// n'a jamais existé alors qu'il a été servi — c'est-à-dire effacer un fait au lieu de le
+    /// documenter. 410 « Gone » est exact : la ressource a existé, elle est définitivement partie.
+    Gone(String),
     /// 400 — DTO invalide (topologie vide, paramètre incohérent…).
     BadRequest(String),
     /// 402 — budget : estimation > plafond, ou épuisé en cours (politique `Error`).
@@ -43,6 +48,7 @@ impl GatewayError {
             GatewayError::Unauthenticated(m) => (StatusCode::UNAUTHORIZED, "unauthenticated", m.clone()),
             GatewayError::Forbidden(m) => (StatusCode::FORBIDDEN, "forbidden", m.clone()),
             GatewayError::NotFound => (StatusCode::NOT_FOUND, "not_found", "run introuvable".into()),
+            GatewayError::Gone(m) => (StatusCode::GONE, "gap", m.clone()),
             GatewayError::BadRequest(m) => (StatusCode::BAD_REQUEST, "bad_request", m.clone()),
             GatewayError::Budget(m) => (StatusCode::PAYMENT_REQUIRED, "budget", m.clone()),
             GatewayError::TooManyRequests(m) => (StatusCode::TOO_MANY_REQUESTS, "too_many_requests", m.clone()),
@@ -131,6 +137,13 @@ mod tests {
     #[test]
     fn statuses_are_stable() {
         assert_eq!(GatewayError::NotFound.parts().0, StatusCode::NOT_FOUND);
+        // **M2** : 410 et 404 disent deux choses différentes, et le code d'enveloppe aussi —
+        // un client doit pouvoir distinguer « n'a jamais existé » de « a existé, définitivement
+        // perdu » sans lire le message en français.
+        let gap = GatewayError::Gone("x".into());
+        assert_eq!(gap.parts().0, StatusCode::GONE);
+        assert_eq!(gap.parts().1, "gap");
+        assert_ne!(gap.parts().1, GatewayError::NotFound.parts().1);
         assert_eq!(GatewayError::Forbidden("x".into()).parts().0, StatusCode::FORBIDDEN);
         assert_eq!(GatewayError::Budget("x".into()).parts().0, StatusCode::PAYMENT_REQUIRED);
     }

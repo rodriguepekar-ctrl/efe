@@ -7,13 +7,17 @@
 //! Tout passe par les contrats RÉELS de S0/S1 : `CaptureStore` (le store scellé encapsulant la clé),
 //! `reprove`, `record_human`. La console ne touche jamais ce module sans passer par le routeur (§11).
 
+use std::collections::BTreeMap;
+
 use crate::auth::{AuthContext, Role, REDACTED};
 use crate::envelope::IntegrityEnvelope;
 use crate::index::CaseIndex;
 use crate::monitor::IntegrityMonitor;
 use crate::project::{project, DecisionStatus, DecisionView, ProjectionConfig};
 use crate::report;
+use provenance_capture::conservation::{Balayage, Conservation};
 use provenance_capture::{CaptureError, CaptureStore, HumanReview, LlmCall, MessageEvent, ToolCall};
+use provenance_dag::shred::{CaseKey, EtatCas, Trousseau};
 use provenance_dag::{HumanAction, Node, Record, TenantKey};
 use serde::Serialize;
 
@@ -178,6 +182,44 @@ impl AuditService {
     /// Accès en LECTURE au store (la projection l'utilise en interne ; un read externe est inoffensif).
     pub fn store(&self) -> &CaptureStore {
         &self.store
+    }
+
+    // ── M6 : la conservation limitée, atteignable depuis la façade ──
+    //
+    // Sans ces passages, le mécanisme existerait dans S0/S1 sans qu'aucune API servie ne puisse
+    // l'atteindre — un outillage que personne ne peut employer, ce qui est la forme la plus coûteuse
+    // de « fait ». On n'ouvre PAS `store_mut` pour autant : la seule mutation qu'on expose est celle
+    // de la conservation, pas du DAG (l'invariant du gate humain resterait sinon contournable).
+
+    /// Active la conservation limitée sur le store de ce tenant. Opt-in ; sans effet rétroactif.
+    pub fn avec_conservation(&mut self, trousseau: Trousseau) {
+        self.store.avec_conservation(trousseau);
+    }
+
+    /// Confie la clé — **aléatoire** — d'un cas, avant d'y ingérer. Cf. `provenance_dag::shred`.
+    pub fn ouvrir_cas(&mut self, cas: &str, cle: CaseKey, depuis: u64) -> bool {
+        self.store.ouvrir_cas(cas, cle, depuis)
+    }
+
+    /// Applique une politique de conservation : broie les cas expirés, rend le compte rendu.
+    ///
+    /// `None` si la conservation n'est pas active — et non un balayage vide, qui se lirait « rien
+    /// n'a expiré » alors que la vraie réponse est « rien n'est protégé ».
+    pub fn balayer(&mut self, politique: Conservation, maintenant: u64) -> Option<Balayage> {
+        let t = self.store.conservation_mut()?;
+        Some(politique.appliquer(t, maintenant))
+    }
+
+    /// Les cas dont des nœuds ont été scellés **en clair** faute de clé — donc ineffaçables à jamais.
+    #[must_use]
+    pub fn cas_sans_cle(&self) -> BTreeMap<String, u64> {
+        self.store.sans_cle().clone()
+    }
+
+    /// L'état d'un cas dans le trousseau : vivant, broyé (avec sa date), ou inconnu.
+    #[must_use]
+    pub fn etat_conservation(&self, cas: &str) -> Option<EtatCas> {
+        Some(self.store.conservation()?.etat(cas))
     }
 
     // ── ingestion S1 (capture) — ACTES, ARÊTES, ÉVIDENCES uniquement ──
@@ -595,5 +637,50 @@ mod tests {
         // from_records → from_store → next_human_seq : aucune panique (le store est cassé, fail-loud à la lecture).
         let svc = AuditService::from_records(TenantKey::from_bytes([7u8; 32]), vec![forged], ProjectionConfig::default());
         assert!(!svc.store().reprove().ok, "store forgé → re-preuve échoue (fail-loud)");
+    }
+    // ── M6 : la conservation, vue de la façade ──
+
+    #[test]
+    fn sans_conservation_balayer_rend_none_et_non_un_balayage_vide() {
+        let mut svc = AuditService::new(TenantKey::derive(b"r", "t"), ProjectionConfig::default());
+        assert!(
+            svc.balayer(Conservation::nouvelle(1), 100).is_none(),
+            "un balayage vide se lirait « rien n'a expiré » ; la vraie réponse est « rien n'est protégé »"
+        );
+        assert!(svc.etat_conservation("C").is_none(), "aucun trousseau ⟹ aucun état à affirmer");
+        assert!(!svc.ouvrir_cas("C", CaseKey::from_bytes([1u8; 32]), 0), "rien à ouvrir");
+    }
+
+    #[test]
+    fn la_facade_ouvre_ingere_broie_et_le_dag_tient() {
+        let mut svc = AuditService::new(TenantKey::derive(b"r", "t"), ProjectionConfig::default());
+        svc.avec_conservation(Trousseau::new());
+        assert!(svc.ouvrir_cas("D-1", CaseKey::from_bytes([9u8; 32]), 0));
+
+        svc.ingest_llm(&LlmCall {
+            case_id: "D-1",
+            step: "verdict",
+            agent_role: "verdict_aggregate",
+            inputs: b"e",
+            model: "phi4",
+            version: "1",
+            output: "COMPLIANT",
+            evidence_steps: &[],
+            timestamp: 0,
+        })
+        .expect("ingestion");
+
+        let racine = svc.store().reprove().manifest_root.clone().expect("racine");
+        assert!(svc.cas_sans_cle().is_empty(), "le cas avait sa clé");
+        assert!(matches!(svc.etat_conservation("D-1"), Some(EtatCas::Vivant { .. })));
+
+        let b = svc.balayer(Conservation::nouvelle(10), 500).expect("conservation active");
+        assert_eq!(b.broyes, vec!["D-1".to_string()]);
+        assert_eq!(svc.etat_conservation("D-1"), Some(EtatCas::Broye { le: 500 }));
+        assert_eq!(
+            svc.store().reprove().manifest_root.as_ref(),
+            Some(&racine),
+            "le cas est broyé et la chaîne du tenant se re-prouve sur la MÊME racine"
+        );
     }
 }

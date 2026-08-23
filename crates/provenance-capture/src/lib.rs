@@ -28,10 +28,17 @@
 //! assert_eq!(store.by_case("SUP-2024").len(), 1); // requêtable par cas
 //! ```
 
+/// **M6** — ce qu'on chiffre à la capture, et l'inventaire de ce qui survit à un broyage.
+pub mod conservation;
 pub mod guard;
 pub mod store;
 pub mod tap;
 
-pub use guard::{assert_local, is_local_endpoint, SovereigntyError};
+// `host_of` est exporté depuis P1 : un appelant qui JOURNALISE un endpoint doit pouvoir n'en nommer
+// que l'hôte. Imprimer l'URL brute recopie son `userinfo` (`http://user:pass@hôte/`) dans la sortie
+// de démarrage, où il sera collecté et archivé. Sans cet export, un appelant se rabat sur l'URL
+// entière — ou réécrit un analyseur, ce qui est le défaut que P1 a fermé.
+pub use conservation::{a_du_contenu_effacable, cas_de, enrober, enrober_par, lire, Balayage, Conservation, SansCle};
+pub use guard::{assert_local, authority_of, host_of, is_local_endpoint, Authority, SovereigntyError};
 pub use store::{CaptureError, CaptureStore, LoadError};
 pub use tap::{hash_hex, node_id, HumanReview, LlmCall, MessageEvent, ToolCall};

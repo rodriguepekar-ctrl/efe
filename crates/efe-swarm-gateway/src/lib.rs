@@ -45,7 +45,13 @@
 #![warn(rust_2018_idioms)]
 
 mod auth;
+/// **M2** — la couture qui empêche un échec de PERSISTANCE de renverser la réponse du client.
+/// Public : le rapport de capture voyage dans le DTO de réponse, donc dans l'API.
+pub mod capture;
 mod dto;
+/// **M5** — le pont vers le registre réglementaire. Sous feature : le coin et l'expansion sont
+/// deux produits séparables, et la séparation est mécanique plutôt que déclarative.
+pub mod reg_pont;
 mod error;
 #[cfg(feature = "oidc")]
 mod oidc;
@@ -63,6 +69,11 @@ mod mission; // Couche 2 (M1) : capture de provenance par appel LLM (décorateur
 mod mission_graph; // Couche 2 (M2) : le reçu honnête — graphe depuis topologie déclarée + scellement + store
 #[cfg(feature = "frontier-llm")]
 pub mod frontier_metrics; // Couche 2 (M4 §2.4) : compteurs de coût/egress frontière pour /metrics
+// M0 — le profil servi : le registre des interrupteurs, le SEUL lecteur d'environnement du
+// crate, et le rapport de ce qui est réellement servi. T1 (`tests/profile_no_raw_env.rs`)
+// interdit tout `std::env::var` hors de ce module.
+pub mod profile;
+
 // ADR-016 : `synthetic_mode_c_run` partagé (lib tests + store_pg tests). La feature `demo`
 // l'expose hors `#[cfg(test)]` pour l'exemple `local_receipt_demo` : un fixture dupliqué
 // dériverait du seul littéral `LlmProvenanceRecord` de référence, ce que ce module existe
@@ -174,6 +185,393 @@ mod tests {
     use std::sync::Arc;
     use tower::ServiceExt; // oneshot
     use uuid::Uuid;
+
+    // ═══════════════════════════════════════════════════════════════════════════════════════
+    //  M2 — l'observation non intrusive : la panne de persistance et ce qu'elle ne coûte plus
+    // ═══════════════════════════════════════════════════════════════════════════════════════
+
+    // Le store en panne vit dans `test_support` : les deux chemins de persistance (essaim et
+    // mission frontière) doivent être éprouvés par la MÊME panne, sans quoi les deux définitions
+    // finiraient par diverger — le défaut exact que l'audit de M2 a trouvé sur les routes.
+    use crate::test_support::StoreEnPanne;
+
+    fn app_avec_store_en_panne(policy: crate::capture::CapturePolicy) -> Router {
+        let state = SwarmGatewayState::new(
+            Arc::new(AgentFleet::standard()),
+            HmacKeySource::test_key(),
+            Arc::new(StoreEnPanne),
+            ProvenanceMetrics::new(),
+            Arc::new(SubstrateMetrics::default()),
+        )
+        .with_capture_policy(policy);
+        router(state)
+    }
+
+    /// **LE CRITÈRE DE FIN DE M2.**
+    ///
+    /// La feuille de route le formule ainsi : *« on tue la passerelle en plein run : le client
+    /// reçoit quand même sa réponse »*. Le store est mort, le run a réussi — et la réponse part.
+    ///
+    /// Ce test échouerait avant M2 : le chemin synchrone finissait par
+    /// `s.store.put(...).await?`, et ce `?` jetait une réponse pourtant complète.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn m2_le_client_recoit_sa_reponse_meme_quand_la_persistance_meurt() {
+        let app = app_avec_store_en_panne(crate::capture::CapturePolicy::Observation);
+        let resp = app
+            .oneshot(post_run(json!({ "task": { "text": "x" }, "topology": { "kind": "auto" } })))
+            .await
+            .unwrap();
+
+        assert_eq!(resp.status(), StatusCode::OK, "le store est mort ; la réponse, elle, existe");
+        let b = body_json(resp).await;
+
+        // 1. La réponse est bien là, entière.
+        assert!(b["run_id"].is_string(), "le run a un identifiant");
+        assert!(b["run"].is_object(), "et sa sortie est servie");
+
+        // 2. Et elle ne ment pas sur son état : la brèche est dite AU CLIENT.
+        assert_eq!(b["capture"]["persisted"], json!(false));
+        assert_eq!(b["capture"]["policy"], json!("observation"));
+        assert!(
+            b["capture"]["degrade_reason"].as_str().is_some_and(|r| r.contains("store")),
+            "la RAISON technique est dite"
+        );
+        assert!(
+            b["capture"]["consequence"]
+                .as_str()
+                .is_some_and(|c| c.contains("ne le retrouvera jamais")),
+            "et la CONSÉQUENCE — sans elle, le client ne sait pas s'il doit conserver sa racine"
+        );
+    }
+
+    /// Le contrôle négatif, qui est ce qui donne son sens au test précédent : **sans l'opt-in,
+    /// rien n'a changé**. Le défaut reste byte-identique à l'avant-M2.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn m2_sans_optin_le_comportement_est_celui_davant() {
+        let app = app_avec_store_en_panne(crate::capture::CapturePolicy::Bloquante);
+        let resp = app
+            .oneshot(post_run(json!({ "task": { "text": "x" }, "topology": { "kind": "auto" } })))
+            .await
+            .unwrap();
+        assert_eq!(
+            resp.status(),
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "posture bloquante : l'échec de persistance reste l'échec de la requête"
+        );
+    }
+
+    /// Le cas nominal dit lui aussi quelque chose. Un champ qui n'apparaît qu'en cas de problème
+    /// produit des clients qui ne le lisent jamais — donc une dégradation que personne ne remarque.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn m2_le_rapport_de_capture_est_present_meme_quand_tout_va_bien() {
+        let (app, _store) = app_with_store();
+        let resp = app
+            .oneshot(post_run(json!({ "task": { "text": "x" }, "topology": { "kind": "auto" } })))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let b = body_json(resp).await;
+        assert_eq!(b["capture"]["persisted"], json!(true));
+        assert!(b["capture"]["degrade_reason"].is_null(), "aucune raison quand il n'y a rien à dire");
+    }
+
+    /// **La brèche se dit à qui de droit** — et les trois lecteurs n'ont pas les mêmes besoins.
+    ///
+    /// Le client a eu la sienne dans sa réponse (test ci-dessus), mais lui seul et une seule fois.
+    /// L'exploitant a besoin d'une grandeur ; l'auditeur, d'identifiants. Aucun canal ne remplace
+    /// l'autre, et ce test l'exige des trois à la fois.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn m2_la_breche_se_dit_a_lexploitant_et_a_lauditeur() {
+        let app = app_avec_store_en_panne(crate::capture::CapturePolicy::Observation);
+        let run = app
+            .clone()
+            .oneshot(post_run(json!({ "task": { "text": "x" }, "topology": { "kind": "auto" } })))
+            .await
+            .unwrap();
+        let id = body_json(run).await["run_id"].as_str().unwrap().to_string();
+
+        // ── l'exploitant : une grandeur, plus la posture qui dit si une brèche est POSSIBLE ──
+        let m = app
+            .clone()
+            .oneshot(Request::builder().uri("/metrics").body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        let txt = String::from_utf8(m.into_body().collect().await.unwrap().to_bytes().to_vec()).unwrap();
+        assert!(txt.contains("efe_swarm_capture_gaps_total 1"), "le compteur monte");
+        assert!(
+            txt.contains("efe_swarm_capture_observation 1"),
+            "et la posture est servie : sans elle, un compteur à zéro se lirait comme une bonne \
+             nouvelle alors qu'il peut être nul par construction"
+        );
+
+        // ── l'auditeur : les identifiants, les raisons, et l'aveu des limites du journal ──
+        let g = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/v1/swarm/gaps")
+                    .header("x-efe-roles", HeaderValue::from_static("auditor"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(g.status(), StatusCode::OK);
+        let gj = body_json(g).await;
+        assert_eq!(gj["policy"], json!("observation"));
+        assert_eq!(gj["total_process"], json!(1));
+        assert_eq!(gj["recent"][0]["run_id"], json!(id));
+        assert!(gj["recent"][0]["reason"].as_str().is_some_and(|r| r.contains("store")));
+        assert!(
+            gj["note"].as_str().is_some_and(|n| n.contains("PANNE, pas la malveillance")),
+            "le journal doit avouer ce qu'il n'est pas : en mémoire, borné, non scellé"
+        );
+    }
+
+    /// **Une brèche n'est pas une absence.** Un 404 nu dirait « ce run n'a jamais existé », ce qui
+    /// est faux et efface un fait au lieu de le documenter. 410 dit exactement ce qui s'est passé.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn m2_verify_distingue_le_run_inconnu_du_run_non_persiste() {
+        let app = app_avec_store_en_panne(crate::capture::CapturePolicy::Observation);
+        let run = app
+            .clone()
+            .oneshot(post_run(json!({ "task": { "text": "x" }, "topology": { "kind": "auto" } })))
+            .await
+            .unwrap();
+        let id = body_json(run).await["run_id"].as_str().unwrap().to_string();
+
+        let v = app
+            .clone()
+            .oneshot(Request::builder().uri(format!("/v1/swarm/verify/{id}")).body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        assert_eq!(v.status(), StatusCode::GONE, "le run a EU LIEU : 410, pas 404");
+        let vb = body_json(v).await;
+        assert!(
+            vb["message"].as_str().is_some_and(|m| m.contains("jamais re-prouvable")),
+            "et le message dit la conséquence, pas seulement l'état"
+        );
+
+        // Un identifiant qui n'a jamais rien été reste un 404 : le journal borné ne permet pas
+        // d'affirmer plus que ce qu'il sait.
+        let inconnu = Uuid::new_v4();
+        let v404 = app
+            .oneshot(Request::builder().uri(format!("/v1/swarm/verify/{inconnu}")).body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        assert_eq!(v404.status(), StatusCode::NOT_FOUND);
+    }
+
+    /// **Pourquoi le bus de supervision n'est PAS un canal pour la brèche du mode JOB.**
+    ///
+    /// Ce test ne vérifie pas une fonctionnalité : il fige le raisonnement qui a fait retirer une
+    /// émission trompeuse. Le flux SSE se ferme au PREMIER événement terminal, et `RunFinished`
+    /// en est un — or il part avant la persistance. Un `RunFailed` émis ensuite tombait donc dans
+    /// un flux que le client avait déjà quitté, y compris au rejeu depuis le ring.
+    ///
+    /// Si un jour `RunFinished` cessait d'être terminal, ce test tomberait et la décision devrait
+    /// être reprise — c'est précisément ce qu'on attend de lui.
+    #[test]
+    fn m2_le_flux_sse_se_ferme_avant_la_persistance_donc_le_bus_ne_peut_rien_dire() {
+        use efe_swarm_dashboard::DashboardEvent;
+        let fini = DashboardEvent::RunFinished {
+            elapsed_ms: 1,
+            agents_used: 1,
+            output_preview: String::new(),
+            verified: true,
+            root: None,
+            termination: "completed".into(),
+        };
+        assert!(
+            fini.is_terminal(),
+            "`run_finished` ferme le flux ; tout ce qui suit la persistance est inaudible"
+        );
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════════════════
+    //  M5 — la jonction : un run produit son dossier réglementaire, sans geste manuel
+    // ═══════════════════════════════════════════════════════════════════════════════════════
+
+    #[cfg(feature = "reg-evidence")]
+    fn app_avec_pont(dir: &std::path::Path) -> Router {
+        let state = SwarmGatewayState::new(
+            Arc::new(AgentFleet::standard()),
+            HmacKeySource::test_key(),
+            Arc::new(InMemoryRunStore::new()),
+            ProvenanceMetrics::new(),
+            Arc::new(SubstrateMetrics::default()),
+        )
+        .with_reg_pont(crate::reg_pont::RegPont {
+            dir: dir.to_path_buf(),
+            framework: crate::reg_pont::Framework::EuAiAct,
+        });
+        router(state)
+    }
+
+    /// **LE CRITÈRE DE FIN DE M5** — *« un run de la passerelle produit un dossier `reg-evidence`
+    /// **sans geste manuel** »*.
+    ///
+    /// « Sans geste manuel » est le mot qui compte. Les pièces existaient déjà toutes : le pont de
+    /// provenance traduit un run en nœuds de DAG scellés, `reg-evidence` les re-prouve et en dérive
+    /// l'artefact. Ce qui manquait, c'était que cela arrive **tout seul** — sans qu'un agent de
+    /// conformité doive rappeler la passerelle, exporter un bundle, puis lancer une dérivation.
+    ///
+    /// Ce test ne regarde donc pas seulement la réponse : il va voir **sur le disque**.
+    #[cfg(feature = "reg-evidence")]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn m5_un_run_produit_son_dossier_sans_geste_manuel() {
+        let dir = std::env::temp_dir().join(format!("m5-dossier-{}", Uuid::new_v4()));
+        let app = app_avec_pont(&dir);
+
+        let resp = app
+            .oneshot(post_run(json!({ "task": { "text": "x" }, "topology": { "kind": "auto" } })))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let b = body_json(resp).await;
+        let run_id = b["run_id"].as_str().expect("run_id").to_string();
+
+        // 1. La réponse dit que le dossier a été produit, et à quelle question il répond.
+        assert_eq!(b["reg"]["produced"], json!(true));
+        assert_eq!(b["reg"]["framework"], json!("eu_ai_act"));
+        assert!(
+            b["reg"]["manifest_root"].as_str().is_some_and(|r| !r.is_empty()),
+            "le manifest-root lie le dossier à un état PRÉCIS du DAG — sans lui, un lecteur ne \
+             saurait pas de quoi le dossier parle"
+        );
+        assert!(
+            b["reg"]["mapping_version"].as_str().is_some(),
+            "la version de lecture distingue « le run a changé » de « la règle a changé »"
+        );
+
+        // 2. Et le dossier est SUR LE DISQUE — personne n'a rappelé la passerelle.
+        let reg = dir.join(&run_id).join("reg");
+        let fichiers: Vec<String> = std::fs::read_dir(&reg)
+            .unwrap_or_else(|e| panic!("dossier {} absent : {e}", reg.display()))
+            .flatten()
+            .map(|e| e.file_name().to_string_lossy().into_owned())
+            .collect();
+        assert_eq!(fichiers.len(), 3, "l'artefact, la lecture versionnée, le mode d'emploi : {fichiers:?}");
+        assert!(fichiers.iter().any(|f| f == "eu_ai_act.md"), "{fichiers:?}");
+        assert!(fichiers.iter().any(|f| f.starts_with("mapping.")), "la LECTURE voyage : {fichiers:?}");
+        assert!(fichiers.iter().any(|f| f == "REDERIVE.md"), "{fichiers:?}");
+
+        // 3. Le dossier ne prononce PAS la conformité. `reg-evidence` l'interdit par construction
+        //    — sa sémantique est une énumération à une seule valeur — mais ce test fige la promesse
+        //    au niveau du FICHIER réellement écrit, qui est ce qu'un régulateur lira.
+        //
+        //    L'assertion la plus forte n'est pas la présence d'un marqueur mais l'ABSENCE d'un
+        //    verdict : un artefact qui contiendrait « compliant » aurait franchi la ligne, quels
+        //    que soient les avertissements qui l'entourent.
+        let md = std::fs::read_to_string(reg.join("eu_ai_act.md")).expect("artefact lisible");
+        assert!(
+            !md.to_lowercase().contains("compliant"),
+            "aucun verdict de conformité ne doit apparaître dans l'artefact servi"
+        );
+        assert!(
+            md.to_lowercase().contains("outillé ≠ conforme"),
+            "l'avertissement doit voyager AVEC le dossier — un régulateur lit le fichier, pas notre \
+             documentation"
+        );
+        assert!(
+            md.contains("pas nécessairement correcte"),
+            "« intègre ≠ correct » doit être propagé : le reçu atteste ce qui a été enregistré, \
+             jamais la justesse de la décision"
+        );
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    /// **Le garde du raccourci.** `reg_pont_cable()` existe pour éviter de cloner tout le matériel
+    /// de preuve d'un run quand le pont n'est pas câblé. Ce n'est légitime que si les deux disent
+    /// exactement la même chose — sinon des dérivations sauteraient en silence, ce qui est pire que
+    /// le clone qu'on économise.
+    #[cfg(feature = "reg-evidence")]
+    #[test]
+    fn le_raccourci_ne_ment_jamais_sur_le_pont() {
+        let (_, stored) = crate::test_support::synthetic_mode_c_run("phi4");
+        let id = Uuid::new_v4();
+
+        let sans = SwarmGatewayState::in_memory();
+        assert!(!sans.reg_pont_cable(), "aucun pont câblé");
+        assert!(
+            sans.reg_dossier(id, "system", &stored).is_none(),
+            "le raccourci dit « pas de pont » : l'autorité doit dire pareil"
+        );
+
+        let dir = std::env::temp_dir().join(format!("m5-accord-{id}"));
+        let avec = SwarmGatewayState::in_memory().with_reg_pont(crate::reg_pont::RegPont {
+            dir: dir.clone(),
+            framework: crate::reg_pont::Framework::EuAiAct,
+        });
+        assert!(avec.reg_pont_cable(), "pont câblé");
+        assert!(
+            avec.reg_dossier(id, "system", &stored).is_some(),
+            "le raccourci dit « pont là » : l'autorité DOIT dériver — sinon le raccourci ferait \
+             sauter des dossiers sans que rien ne le signale"
+        );
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    /// Sans pont câblé, le champ est ABSENT — et il l'est de la même façon dans les deux builds.
+    /// Un client n'a pas à savoir comment le binaire a été construit pour lire sa réponse.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn m5_sans_pont_la_reponse_ne_promet_rien() {
+        let (app, _store) = app_with_store();
+        let resp = app
+            .oneshot(post_run(json!({ "task": { "text": "x" }, "topology": { "kind": "auto" } })))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let b = body_json(resp).await;
+        assert!(b.get("reg").is_none(), "pont non câblé ⟹ aucun champ, aucune promesse");
+    }
+
+    /// **La contrepartie de la non-fatalité.** `deriver` ne fait jamais tomber la requête ; cette
+    /// tolérance n'est défendable que si un dossier manqué se rattrape. Ce test exige que la route
+    /// de re-dérivation existe et rende le MÊME artefact — sinon « pas écrit » deviendrait
+    /// « perdu », et la décision de ne pas couper se changerait en perte silencieuse.
+    #[cfg(feature = "reg-evidence")]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn m5_un_dossier_manque_se_rattrape_a_lidentique() {
+        let dir = std::env::temp_dir().join(format!("m5-rederive-{}", Uuid::new_v4()));
+        let app = app_avec_pont(&dir);
+
+        let run = app
+            .clone()
+            .oneshot(post_run(json!({ "task": { "text": "x" }, "topology": { "kind": "auto" } })))
+            .await
+            .unwrap();
+        let b = body_json(run).await;
+        let run_id = b["run_id"].as_str().unwrap().to_string();
+        let racine_1 = b["reg"]["manifest_root"].as_str().unwrap().to_string();
+
+        // On efface le dossier, comme si la dérivation avait échoué à l'écriture.
+        std::fs::remove_dir_all(dir.join(&run_id)).expect("effacement");
+
+        let re = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri(format!("/v1/swarm/reg/{run_id}"))
+                    .header("x-efe-roles", HeaderValue::from_static("auditor"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(re.status(), StatusCode::OK, "le run est persisté : le dossier se re-dérive");
+        let rb = body_json(re).await;
+        assert_eq!(rb["produced"], json!(true));
+        assert_eq!(
+            rb["manifest_root"].as_str(), Some(racine_1.as_str()),
+            "À L'IDENTIQUE : la dérivation est une fonction du run, pas une reconstitution de mémoire"
+        );
+        assert!(dir.join(&run_id).join("reg").join("eu_ai_act.md").exists(), "et le dossier est revenu");
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
 
     const TENANT_A: &str = "11111111-1111-1111-1111-111111111111";
     const TENANT_B: &str = "22222222-2222-2222-2222-222222222222";
@@ -677,6 +1075,88 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(resp.status(), StatusCode::NOT_FOUND, "route non montée ⟹ l'URI n'existe pas");
+    }
+
+    /// **M0 · une capacité éteinte se dit — mais pas au même public selon le cas.**
+    ///
+    /// L'architecture de M0 posait la règle des « trois endroits » : une capacité de classe B
+    /// éteinte doit être dite dans le rapport de démarrage, sur la surface servie, ET dans le reçu.
+    /// Écrire ce test a montré que la règle, telle que rédigée, est **trop forte** — et le code
+    /// avait raison contre elle. Ce test fige ce qui est réellement vrai, et pourquoi.
+    ///
+    /// **`export de bundle` éteint** : la route n'est pas montée, donc 404 — délibérément
+    /// indistinguable d'une URI inconnue (voir le test juste au-dessus). Répondre 501 dirait à un
+    /// client anonyme « cette surface existe, elle est seulement fermée » : c'est une fuite de
+    /// capacité. Les deux règles se contredisent ici, et c'est la discrétion qui gagne. Le prix est
+    /// que l'extinction se dit à l'**opérateur** — dans le rapport de démarrage — et à lui seul.
+    ///
+    /// **`ancre` éteinte** : la route sert quand même, et le bundle porte `anchored: false`. La
+    /// différence tient en une phrase : ici l'absence **change la garantie d'un artefact servi**.
+    /// Un auditeur qui reçoit un bundle sans savoir qu'il n'est pas ancré croit tenir une preuve
+    /// contre la troncature alors qu'il n'en tient aucune. L'artefact doit donc porter sa propre
+    /// dégradation, quel qu'en soit le lecteur.
+    ///
+    /// La règle juste, celle que ce test garde : **le rapport de démarrage toujours ; l'artefact
+    /// servi si et seulement si l'absence change la garantie de cet artefact ; la surface jamais,
+    /// quand la révéler la trahit.**
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn une_capacite_eteinte_se_dit_a_qui_de_droit() {
+        use crate::profile::{Observed, Report, Status};
+
+        // ── cas 1 : export de bundle éteint ─────────────────────────────────────────────
+        let rapport = Report::from_observed(&Observed { bundle: false, ..Observed::default() });
+        assert_eq!(
+            rapport.status_of("export de bundle"),
+            Some(Status::Degradee),
+            "l'opérateur DOIT le lire au démarrage — c'est le seul endroit où il l'apprendra"
+        );
+
+        let (app, _store) = app_with_store();
+        let id = seed_run(&app).await;
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .uri(format!("/v1/swarm/bundle/{id}"))
+                    .header("x-efe-roles", HeaderValue::from_static("auditor"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(
+            resp.status(),
+            StatusCode::NOT_FOUND,
+            "et le client, lui, n'apprend RIEN : 404, pas 501 — une surface fermée ne s'annonce pas"
+        );
+
+        // ── cas 2 : ancre éteinte, bundle servi ─────────────────────────────────────────
+        let rapport =
+            Report::from_observed(&Observed { bundle: true, anchor: false, ..Observed::default() });
+        assert_eq!(
+            rapport.status_of("ancre"),
+            Some(Status::Degradee),
+            "le rapport le dit — premier endroit"
+        );
+
+        let (app, _store) = app_with_bundle();
+        let id = seed_run(&app).await;
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .uri(format!("/v1/swarm/bundle/{id}"))
+                    .header("x-efe-roles", HeaderValue::from_static("auditor"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK, "sans ancre, le bundle se sert quand même");
+        assert_eq!(
+            body_json(resp).await["anchored"],
+            json!(false),
+            "et il PORTE sa dégradation — second endroit. Sans cette ligne, l'auditeur croirait \
+             tenir une preuve contre la troncature."
+        );
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]

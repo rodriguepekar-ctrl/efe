@@ -135,6 +135,17 @@ struct HeldStrengthView {
 /// si TOUS les hops sont `SLM` — la revendication « relais médié par le petit
 /// modèle » (§6 Fil B), gardée par construction : une seule dégradation la fait
 /// tomber, visiblement.
+///
+/// **M3** — `degraded` est un **compte**, et un compte ne se décide pas. Un client qui lit
+/// « 2 hops dégradés » ne sait pas s'il doit réessayer (robot momentanément mort), attendre
+/// (circuit ouvert), allonger sa fenêtre (deadline épuisée) ou corriger sa requête (schéma non
+/// supporté). Ces quatre situations demandent quatre gestes différents, et la vue les rendait
+/// indistinguables.
+///
+/// La raison EXISTAIT pourtant : Fil B l'estampille dans chaque hop scellé, et elle voyage dans
+/// `output.reformulation_hops`. Elle était donc récupérable — au prix de savoir qu'il faut aller
+/// la chercher dans un tableau imbriqué. C'est la forme exacte du défaut que M2 a nommé : une
+/// dégradation qu'il faut deviner est une dégradation que personne ne remarque.
 #[derive(Serialize)]
 struct ReformulationView {
     hops: usize,
@@ -142,6 +153,9 @@ struct ReformulationView {
     rule: usize,
     degraded: usize,
     slm_mediated: bool,
+    /// **M3** : `raison → nombre de hops`. Vide quand rien n'a dégradé — jamais absent, pour que
+    /// le champ soit lu dans le cas nominal aussi et pas seulement découvert le jour de la panne.
+    reasons: std::collections::BTreeMap<String, usize>,
 }
 
 /// Dérive la vue depuis la sortie de mission (champ `reformulation_hops` des
@@ -150,12 +164,21 @@ struct ReformulationView {
 fn reformulation_view(output: &Value) -> Option<ReformulationView> {
     let hops = output.get("reformulation_hops")?.as_array()?;
     let (mut slm, mut rule, mut degraded) = (0usize, 0usize, 0usize);
+    let mut reasons: std::collections::BTreeMap<String, usize> = std::collections::BTreeMap::new();
     for h in hops {
         match h.get("engine").and_then(Value::as_str) {
             Some("SLM") => slm += 1,
             Some("RULE") => rule += 1,
             Some("SLM_DEGRADED_TO_RULE") => degraded += 1,
             _ => {}
+        }
+        // **M3** : la raison est lue du hop SCELLÉ, jamais recalculée — c'est la même discipline
+        // que le reste de cette vue. Un hop dégradé sans raison est possible (run antérieur à
+        // B.4) : on le compte sous un libellé explicite plutôt que de le laisser disparaître,
+        // sans quoi la somme des raisons ne rendrait pas le compte des dégradations.
+        if h.get("engine").and_then(Value::as_str) == Some("SLM_DEGRADED_TO_RULE") {
+            let r = h.get("degrade_reason").and_then(Value::as_str).unwrap_or("raison_non_estampillée");
+            *reasons.entry(r.to_string()).or_insert(0) += 1;
         }
     }
     Some(ReformulationView {
@@ -164,6 +187,7 @@ fn reformulation_view(output: &Value) -> Option<ReformulationView> {
         rule,
         degraded,
         slm_mediated: !hops.is_empty() && slm == hops.len(),
+        reasons,
     })
 }
 
@@ -180,16 +204,52 @@ struct LlmMissionResponse {
     /// n'en produit pas). Le détail par hop vit dans `output.reformulation_hops`.
     #[serde(skip_serializing_if = "Option::is_none")]
     reformulation: Option<ReformulationView>,
+    /// **M2** : ce que la capture a fait de cette mission. Toujours présent — sur ce chemin plus
+    /// qu'ailleurs, puisque les appels frontière ont été facturés : un client doit savoir si la
+    /// preuve de ce qu'il a payé est récupérable.
+    capture: crate::capture::CaptureReport,
+    /// **M5** : le dossier réglementaire de cette mission, si le pont est câblé.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    reg: Option<crate::reg_pont::RegReport>,
 }
 
 /// Recharge le run scellé et le re-prouve (offline) pour surfacer roots + `held_strength`.
-async fn mission_response(s: &SwarmGatewayState, run_id: Uuid, tenant: &str, output: Value) -> Result<Response, GatewayError> {
-    let stored = s
-        .store
-        .get(run_id, tenant)
-        .await?
-        .ok_or_else(|| GatewayError::Internal("run scellé introuvable après persistance".into()))?;
+/// **M2** — le `StoredRun` est passé, plus relu.
+///
+/// Cette fonction faisait `store.get(run_id).ok_or(Internal("run scellé introuvable après
+/// persistance"))`. Deux défauts en une ligne : un aller-retour inutile — les données venaient
+/// d'être scellées, elles étaient en mémoire — et surtout un mode de panne qui rendait la
+/// correction de la persistance INOPÉRANTE : dès que `put_stored` échouait, cette relecture
+/// échouait à son tour et le client tombait quand même, dix lignes plus loin.
+///
+/// **Ce que le changement coûte, déclaré.** La relecture exerçait accidentellement l'aller-retour
+/// du store : une corruption silencieuse à la sérialisation (chemin Postgres) s'y serait vue tout
+/// de suite, puisque la re-preuve portait sur la forme relue. Désormais elle porte sur la forme
+/// **scellée**, en mémoire. C'est le bon choix — le reçu couvre ce qui a été scellé, et sous une
+/// brèche il n'existe aucune forme persistée à relire — mais un contrôle a bien disparu. Il n'est
+/// pas perdu pour autant : `GET /v1/swarm/verify/:id` relit et re-prouve, et c'est sa fonction.
+async fn mission_response(
+    s: &SwarmGatewayState,
+    run_id: Uuid,
+    tenant: &str,
+    output: Value,
+    stored: crate::StoredRun,
+    capture: crate::capture::CaptureReport,
+) -> Result<Response, GatewayError> {
     let key = s.derive_key(tenant)?;
+    // **M5** — une mission frontière est un run de la passerelle comme un autre : son dossier
+    // réglementaire se dérive ici, sans geste manuel. L'audit de M2 avait trouvé que le premier
+    // passage n'avait câblé que le chemin d'essaim ; ne pas répéter l'omission coûte trois lignes.
+    let reg = s.reg_dossier(run_id, tenant, &stored);
+    if let Some(r) = &reg {
+        if !r.produced {
+            eprintln!(
+                "⚠ mission {run_id} : dossier réglementaire NON produit — {} (la mission est \
+                 persistée, `POST /v1/swarm/reg/{run_id}` le re-dérive)",
+                r.degrade_reason.as_deref().unwrap_or("raison inconnue")
+            );
+        }
+    }
     let v = verify_run_offline(&stored.records, &stored.llm_records, &stored.n17_leaf_bytes(), stored.n17_root_bytes(), &key);
     let reformulation = reformulation_view(&output);
     let body = LlmMissionResponse {
@@ -203,6 +263,8 @@ async fn mission_response(s: &SwarmGatewayState, run_id: Uuid, tenant: &str, out
             any_remote: v.held_strength.any_remote,
         },
         reformulation,
+        capture,
+        reg,
     };
     Ok((StatusCode::OK, Json(body)).into_response())
 }
@@ -228,11 +290,7 @@ fn hash_text(t: &str) -> String {
 /// Un client ne dimensionne pas la dépense d'autrui : même patron que `max_width_cap` (ADR-014),
 /// où le serveur borne un champ que le DTO laisse ouvert.
 pub fn server_budget_ceiling_cents() -> u32 {
-    std::env::var("EFE_LLM_MAX_BUDGET_CENTS")
-        .ok()
-        .and_then(|s| s.parse::<u32>().ok())
-        .unwrap_or(10_000)
-        .max(1) // un plafond à 0 rendrait toute mission impossible ; on refuse de se tirer dessus
+    crate::profile::read::max_budget_cents()
 }
 
 /// **M4 (§2.1)** — borne le budget d'une requête : cap du tenant **puis** plafond serveur.
@@ -314,8 +372,8 @@ pub async fn vote(
     let hops: Vec<Value> = resp.reformulation_hops.iter().filter_map(|h| serde_json::to_value(h).ok()).collect();
     let output = serde_json::to_value(&resp).unwrap_or(Value::Null);
     let topo = topology_vote(&llms);
-    let run_id = seal_and_store_mission_with_request(&s, &caller.tenant, mission_id, &topo, &sink, output.clone(), request, hops).await?;
-    mission_response(&s, run_id, &caller.tenant, output).await
+    let (run_id, capture, stored) = seal_and_store_mission_with_request(&s, &caller.tenant, mission_id, &topo, &sink, output.clone(), request, hops).await?;
+    mission_response(&s, run_id, &caller.tenant, output, stored, capture).await
 }
 
 pub async fn relay(
@@ -343,8 +401,8 @@ pub async fn relay(
     let hops: Vec<Value> = resp.reformulation_hops.iter().filter_map(|h| serde_json::to_value(h).ok()).collect();
     let output = serde_json::to_value(&resp).unwrap_or(Value::Null);
     let topo = topology_relay(&planner, &implementer, &synthesizer);
-    let run_id = seal_and_store_mission_with_request(&s, &caller.tenant, mission_id, &topo, &sink, output.clone(), request, hops).await?;
-    mission_response(&s, run_id, &caller.tenant, output).await
+    let (run_id, capture, stored) = seal_and_store_mission_with_request(&s, &caller.tenant, mission_id, &topo, &sink, output.clone(), request, hops).await?;
+    mission_response(&s, run_id, &caller.tenant, output, stored, capture).await
 }
 
 pub async fn debate(
@@ -376,8 +434,8 @@ pub async fn debate(
     let hops: Vec<Value> = resp.reformulation_hops.iter().filter_map(|h| serde_json::to_value(h).ok()).collect();
     let output = serde_json::to_value(&resp).unwrap_or(Value::Null);
     let topo = topology_debate(&pro, &contra, &jury, rounds); // arité DEPUIS req.rounds
-    let run_id = seal_and_store_mission_with_request(&s, &caller.tenant, mission_id, &topo, &sink, output.clone(), request, hops).await?;
-    mission_response(&s, run_id, &caller.tenant, output).await
+    let (run_id, capture, stored) = seal_and_store_mission_with_request(&s, &caller.tenant, mission_id, &topo, &sink, output.clone(), request, hops).await?;
+    mission_response(&s, run_id, &caller.tenant, output, stored, capture).await
 }
 
 pub async fn specialist(
@@ -409,8 +467,8 @@ pub async fn specialist(
     let output = serde_json::to_value(&resp).unwrap_or(Value::Null);
     let topo = topology_specialist(n);
     // Specialist ne reformule pas (agrégation par règle) — zéro hop, honnête.
-    let run_id = seal_and_store_mission_with_request(&s, &caller.tenant, mission_id, &topo, &sink, output.clone(), request, Vec::new()).await?;
-    mission_response(&s, run_id, &caller.tenant, output).await
+    let (run_id, capture, stored) = seal_and_store_mission_with_request(&s, &caller.tenant, mission_id, &topo, &sink, output.clone(), request, Vec::new()).await?;
+    mission_response(&s, run_id, &caller.tenant, output, stored, capture).await
 }
 
 pub async fn cascade(
@@ -441,8 +499,8 @@ pub async fn cascade(
     let request = json!({ "kind": "llm/cascade", "verifier_decision": decision, "user_text_hash": user_text_hash, "reform_expected": 0 });
     let topo = topology_cascade(&drafter, &verifier, &validator, &decision);
     // Cascade ne reformule pas (draft→verify→validate en texte) — zéro hop, honnête.
-    let run_id = seal_and_store_mission_with_request(&s, &caller.tenant, mission_id, &topo, &sink, output.clone(), request, Vec::new()).await?;
-    mission_response(&s, run_id, &caller.tenant, output).await
+    let (run_id, capture, stored) = seal_and_store_mission_with_request(&s, &caller.tenant, mission_id, &topo, &sink, output.clone(), request, Vec::new()).await?;
+    mission_response(&s, run_id, &caller.tenant, output, stored, capture).await
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -477,7 +535,7 @@ pub async fn audit(
     Path(id): Path<Uuid>,
 ) -> Result<Response, GatewayError> {
     caller.require_any_role(&["viewer", "operator", "admin", "auditor"])?;
-    let stored = s.store.get(id, &caller.tenant).await?.ok_or(GatewayError::NotFound)?;
+    let stored = s.charger_run(id, &caller.tenant).await?;
     let req = &stored.request;
     let kind = req.get("kind").and_then(|v| v.as_str()).unwrap_or("").to_string();
     let rounds = req.get("rounds").and_then(Value::as_u64).unwrap_or(0) as usize;
@@ -530,6 +588,159 @@ mod tests {
     /// point d'injection `with_coordinator` que le chemin servi utilise en prod.
     fn wired_state(registered: &[&str], allowed: Option<&[&str]>) -> SwarmGatewayState {
         SwarmGatewayState::in_memory().with_coordinator(Arc::new(test_coordinator(registered, allowed)))
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════════════════
+    //  M3 — la panne qui ne coupe rien
+    // ═══════════════════════════════════════════════════════════════════════════════════════
+
+    /// Un reformulateur SLM **mort**, câblé exactement comme en production.
+    ///
+    /// Le port 1 est fermé par convention : la connexion est **refusée immédiatement**, pas mise
+    /// en attente. C'est bien « le robot est mort » et non « le robot est lent » — la seconde
+    /// panne relève de la deadline (`deadline_exhausted`) et se teste ailleurs.
+    ///
+    /// Le circuit est inséré comme le fait `frontier.rs` : sans lui, le test éprouverait un
+    /// câblage qui n'existe pas. `default_slm_circuits()` ne couvre PAS le reformulateur — elle
+    /// s'arrête à analyzer/compressor/verifier — d'où l'insertion explicite, à l'identique.
+    fn clients_slm_mort() -> efe_coordinator::CoordinatorClients {
+        use efe_coordinator::{CoordinatorClients, ReformulatorClient, SlmCircuitBreaker};
+        use efe_multi_llm::SLM_REFORMULATOR_CIRCUIT_KEY;
+        use std::time::Duration;
+
+        let mut clients = CoordinatorClients::default();
+        clients.reformulator = Some(Arc::new(
+            ReformulatorClient::from_assets_multillm("http://127.0.0.1:1")
+                .expect("le client se construit sans serveur — il ne fait que lire les assets"),
+        ));
+        clients
+            .slm_circuits
+            .insert(SLM_REFORMULATOR_CIRCUIT_KEY.to_string(), SlmCircuitBreaker::new(3, Duration::from_secs(10)));
+        clients
+    }
+
+    /// Un état câblé comme la production, avec un SLM mort et un store au choix.
+    fn etat_slm_mort(llms: &[&str], store_mort: bool) -> SwarmGatewayState {
+        let reg = ProviderRegistry::new();
+        for id in llms {
+            reg.register(ProvenanceProvider::wrap(Arc::new(FakeProvider { id: (*id).into() })));
+        }
+        let pol = TenantPolicies {
+            allowed_llms: Some(llms.iter().map(|s| (*s).to_string()).collect()),
+            ..TenantPolicies::open(sys_uuid())
+        };
+        let coord = Coordinator::builder()
+            .registry(reg)
+            .policies(PolicyRegistry::new().with(pol))
+            .clients(clients_slm_mort())
+            .build()
+            .expect("coordinator de test");
+
+        let state = SwarmGatewayState::in_memory().with_coordinator(Arc::new(coord));
+        if store_mort {
+            state
+                .with_store(Arc::new(crate::test_support::StoreEnPanne))
+                .with_capture_policy(crate::capture::CapturePolicy::Observation)
+        } else {
+            state
+        }
+    }
+
+    /// La moitié « SLM » du critère, isolée : le robot est mort, la mission passe, et la RAISON
+    /// remonte jusqu'au client — pas seulement un compte.
+    #[cfg(not(feature = "oidc"))]
+    #[tokio::test]
+    async fn m3_le_slm_mort_ne_coupe_pas_et_sa_raison_remonte() {
+        let llms = ["claude_a", "gpt_b", "gemini_c"];
+        let app = crate::router(etat_slm_mort(&llms, false));
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/v1/llm/vote")
+                    .header("content-type", "application/json")
+                    .header("x-efe-roles", "operator")
+                    .body(Body::from(vote_body(&llms).to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(resp.status(), StatusCode::OK, "le robot est mort ; la mission passe");
+        let b = body_json(resp).await;
+        let r = &b["reformulation"];
+        assert!(r["degraded"].as_u64().is_some_and(|n| n > 0), "les hops ont dégradé");
+        assert_eq!(r["slm_mediated"], json!(false), "et la revendication de médiation tombe");
+        // **Le cœur de M3.a** : avant, le client lisait `degraded: 3` et ne pouvait rien décider.
+        // « robot mort » se réessaie, « circuit ouvert » s'attend, « deadline » s'allonge,
+        // « schéma » se corrige — quatre gestes différents derrière un seul compteur.
+        assert_eq!(
+            r["reasons"]["robot_error"].as_u64(),
+            r["degraded"].as_u64(),
+            "chaque dégradation porte sa raison, et la somme des raisons rend le compte"
+        );
+    }
+
+    /// **LE CRITÈRE DE FIN DE M3** — *« un test tue le SLM et le store : l'appel passe,
+    /// `degrade_reason` estampillé »*.
+    ///
+    /// Les deux mécanismes existaient séparément : Fil B dégrade le SLM, M2 rend la persistance
+    /// non fatale. Mais **personne ne les avait jamais tués ensemble**, et deux dégradations qui
+    /// fonctionnent isolément peuvent parfaitement se contredire — la seconde s'exécute après la
+    /// première, sur un chemin que la première a déjà modifié.
+    ///
+    /// Ce que ce test exige, et qu'aucun autre n'exigeait : que le client reçoive **sa réponse**,
+    /// **la raison de la dégradation SLM**, et **l'aveu que ce run n'est pas persisté** — les trois
+    /// en même temps, dans la même réponse.
+    #[cfg(not(feature = "oidc"))]
+    #[tokio::test]
+    async fn m3_le_slm_et_le_store_meurent_ensemble_et_lappel_passe() {
+        let llms = ["claude_a", "gpt_b", "gemini_c"];
+        let app = crate::router(etat_slm_mort(&llms, true));
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/v1/llm/vote")
+                    .header("content-type", "application/json")
+                    .header("x-efe-roles", "operator")
+                    .body(Body::from(vote_body(&llms).to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(
+            resp.status(),
+            StatusCode::OK,
+            "SLM mort ET store mort : l'appel passe quand même — c'est tout le module"
+        );
+        let b = body_json(resp).await;
+
+        // 1. La réponse existe, entière.
+        assert!(b["output"].is_object(), "la sortie de mission est servie");
+        assert!(b["run_id"].is_string());
+
+        // 2. La dégradation SLM est estampillée ET sa raison remonte.
+        assert!(b["reformulation"]["degraded"].as_u64().is_some_and(|n| n > 0));
+        assert!(
+            b["reformulation"]["reasons"]["robot_error"].as_u64().is_some_and(|n| n > 0),
+            "`degrade_reason` estampillé — la formulation exacte du critère de fin"
+        );
+
+        // 3. Et la brèche de persistance est dite dans la MÊME réponse.
+        assert_eq!(b["capture"]["persisted"], json!(false));
+        assert!(
+            b["capture"]["consequence"].as_str().is_some_and(|c| c.contains("ne le retrouvera jamais")),
+            "le client apprend que ce run — payé, dégradé — ne sera pas re-prouvable"
+        );
+
+        // 4. La racine est là malgré tout : c'est ce qui rend l'aveu actionnable. Sans elle, dire
+        //    « conservez votre racine » n'aurait aucun sens.
+        assert!(
+            b["provenance_root"].as_str().is_some_and(|r| r.len() == 64),
+            "la mission a bien été SCELLÉE ; seule sa PERSISTANCE a échoué"
+        );
     }
 
     /// Corps `vote` minimal (task_class SCREAMING_SNAKE).
@@ -673,7 +884,7 @@ mod tests {
         // Le graphe déclare 2 appels, MAIS la requête scellée prétend k=3 (sous-déclaration).
         let topo = topology_vote(&["claude_a".to_string(), "gpt_b".to_string()]);
         let request = json!({ "kind": "llm/vote", "k": 3 });
-        let run_id = seal_and_store_mission_with_request(&state, tenant, mission_id, &topo, &sink, json!({}), request, Vec::new()).await.unwrap();
+        let (run_id, _capture, _stored) = seal_and_store_mission_with_request(&state, tenant, mission_id, &topo, &sink, json!({}), request, Vec::new()).await.unwrap();
 
         let app = crate::router(state);
         let resp = app
@@ -1025,7 +1236,7 @@ mod tests {
         scoped(scope, async move { let _ = bridge.call_many_ok(&ids, LlmCall::simple("q", 8)).await; }).await;
         // Requête HONNÊTE : k=2 == 2 nœuds Mode-C.
         let topo = topology_vote(&["claude_a".to_string(), "gpt_b".to_string()]);
-        let run_id = seal_and_store_mission_with_request(&state, "system", mission_id, &topo, &sink, json!({}), json!({ "kind": "llm/vote", "k": 2 }), Vec::new())
+        let (run_id, _capture, _stored) = seal_and_store_mission_with_request(&state, "system", mission_id, &topo, &sink, json!({}), json!({ "kind": "llm/vote", "k": 2 }), Vec::new())
             .await
             .unwrap();
 
@@ -1064,7 +1275,7 @@ mod tests {
         let ids = vec!["claude_a".to_string()];
         scoped(scope, async move { let _ = bridge.call_many_ok(&ids, LlmCall::simple("q", 8)).await; }).await;
         let topo = topology_vote(&["claude_a".to_string()]);
-        let run_id = seal_and_store_mission_with_request(&state, "system", mission_id, &topo, &sink, json!({}), json!({ "kind": "llm/vote", "k": 1 }), Vec::new())
+        let (run_id, _capture, _stored) = seal_and_store_mission_with_request(&state, "system", mission_id, &topo, &sink, json!({}), json!({ "kind": "llm/vote", "k": 1 }), Vec::new())
             .await
             .unwrap();
 
@@ -1106,9 +1317,12 @@ mod tests {
                 })
                 .await;
                 let topo = topology_vote(&["claude_a".to_string()]);
+                // M2 : la fonction rend désormais (run_id, capture, StoredRun) ; cette
+                // fermeture n'a besoin que de l'identifiant.
                 seal_and_store_mission_with_request(&state, "system", mission_id, &topo, &sink, json!({}), request, Vec::new())
                     .await
                     .unwrap()
+                    .0
             }
         };
         // Run "legacy" : requête relay SANS marqueur (comme scellée avant B.3).

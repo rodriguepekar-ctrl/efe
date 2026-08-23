@@ -221,65 +221,20 @@ pub(crate) fn curl_json(url: &str, body: &Value, max_time_s: u32) -> Option<Valu
 //  Garde-fou souveraineté : endpoint local uniquement (par défaut)
 // ─────────────────────────────────────────────────────────────────────────────
 
-/// Extrait l'hôte d'un endpoint (`scheme://[user:pass@]host[:port][/path][?query][#frag]`), gère IPv6 `[::1]`.
-///
-/// **Durci (anti-différentiel d'analyseur).** Vise l'accord avec l'hôte que curl/reqwest contactent
-/// réellement (cf. [`curl_json`]/[`health_probe`]) ; à défaut, les autorités qui divergeraient d'un
-/// client WHATWG (`\`, espace, contrôle) sont **fail-closed** (retour `None`, §3.2 F3), jamais
-/// faussement acceptées — sinon la garde [`is_local_endpoint`] et l'épinglage [`matched_pin`]
-/// raisonneraient sur un hôte ≠ de celui appelé → **bypass SSRF/egress**. Miroir exact de
-/// `provenance-capture::guard::host_of` (même règle, ré-implémentée pour garder le SDK autonome).
-fn host_of(endpoint: &str) -> Option<String> {
-    // Après le schéma `://` (ou tout l'endpoint si absent). `split_once` — PAS `split("://").last()`,
-    // qui prendrait le dernier `://` (un `://` glissé dans la query/le fragment renverrait le mauvais segment).
-    let after_scheme = endpoint.split_once("://").map(|(_, rest)| rest).unwrap_or(endpoint);
-    // L'autorité s'arrête au PREMIER de `/`, `?` ou `#` (chemin, requête, fragment) — RFC 3986. Ne couper
-    // que sur `/` laissait `http://evil.com#@127.0.0.1` (et `…?x@127.0.0.1`) exhiber « 127.0.0.1 » alors
-    // que curl appelle evil.com : le fragment/la query DOIVENT être tranchés AVANT d'isoler l'hôte.
-    let authority = after_scheme.split(['/', '?', '#']).next().unwrap_or(after_scheme);
-    if authority.is_empty() {
-        return None; // `http://` sans autorité → pas d'hôte (fail-closed : traité comme non-local).
-    }
-    // §3.2 (F3) : fail-close les autorités contenant `\`, espace ou contrôle — un client WHATWG
-    // (`url`/`reqwest`) normalise `\` → `/`, divergeant de notre analyse RFC-3986 (bypass SSRF
-    // latent). Refuser plutôt que MENTIR sur la localité. Miroir EXACT de
-    // `provenance-capture::guard::host_of` (discipline #4 : les deux copies durcies ENSEMBLE).
-    if authority.bytes().any(|b| b == b'\\' || b == b' ' || b.is_ascii_control()) {
-        return None;
-    }
-    // Retire un éventuel `userinfo@` sur le PREMIER `@` (RFC : `user:pass@host`), JAMAIS le dernier :
-    // `rsplit('@')` faisait passer `http://evil.com#@127.0.0.1` / `http://127.0.0.1@evil.com` pour du loopback.
-    let hostport = authority.split_once('@').map(|(_, h)| h).unwrap_or(authority);
-    if let Some(rest) = hostport.strip_prefix('[') {
-        // IPv6 littéral : [::1]:port
-        return rest.split(']').next().filter(|h| !h.is_empty()).map(|h| h.to_string());
-    }
-    hostport.split(':').next().filter(|h| !h.is_empty()).map(|h| h.to_string())
-}
-
-/// Un hôte est-il une IPv4 de **loopback** (`127.0.0.0/8`) — 4 octets NUMÉRIQUES dont le premier 127 ?
-/// Durci vs un naïf `starts_with("127.")` : `127.evil.com` (un NOM, qui résout vers l'externe) ne doit PAS
-/// passer la frontière. Seul un littéral IPv4 `127.x.x.x` compte (octal/hex/décimal-entier refusés faute de
-/// 4 octets `u8`). Miroir de `provenance-capture::guard::is_loopback_ipv4`.
-fn is_loopback_ipv4(h: &str) -> bool {
-    let octets: Vec<&str> = h.split('.').collect();
-    octets.len() == 4 && octets[0] == "127" && octets.iter().all(|o| o.parse::<u8>().is_ok())
-}
-
-/// L'endpoint cible-t-il la **machine locale** (boucle locale) ? Base du garde-fou egress (G2 souveraineté).
-///
-/// L'hôte est normalisé (minuscule + retrait d'**un** point final de FQDN) pour que `LOCALHOST`,
-/// `localhost.` et `127.0.0.1.` (formes légitimement locales) passent ; la normalisation n'ouvre AUCUNE
-/// porte vers l'externe (`localhost.evil.com` / `127.0.0.1.evil.com` restent refusés — 4 octets exigés).
-pub(crate) fn is_local_endpoint(endpoint: &str) -> bool {
-    match host_of(endpoint) {
-        Some(h) => {
-            let n = h.strip_suffix('.').unwrap_or(h.as_str()).to_ascii_lowercase();
-            n == "localhost" || n == "::1" || is_loopback_ipv4(&n)
-        }
-        None => false,
-    }
-}
+// **M1.** Ce module portait sa propre analyse d'autorité — `host_of`, `is_loopback_ipv4`,
+// `is_local_endpoint` — déclarée « miroir EXACT de provenance-capture::guard », maintenue d'accord
+// par une discipline écrite en commentaire (« les deux copies durcies ENSEMBLE »). Elle a tenu deux
+// fois, puis échoué trois fois ailleurs dans le dépôt : une vigilance ne se compile pas.
+//
+// L'analyse vient désormais de `scella-authority`, une FEUILLE sans dépendance. Le SDK ne gagne
+// aucun chemin vers le périmètre preuve, et réciproquement — c'était la seule raison sérieuse
+// d'avoir dupliqué.
+//
+// Ce module a DEUX consommateurs de l'hôte, pas un, et c'est pourquoi il ne suffisait pas
+// d'extraire `is_local_endpoint` : `matched_pin` compare l'hôte d'un endpoint à celui d'une
+// épingle, ce qui exige que les deux viennent du MÊME analyseur — garantie que le type `Authority`
+// rend structurelle au lieu de la laisser au hasard.
+use scella_authority::{host_of, is_local_endpoint};
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  RC-1 — épinglage d'endpoint distant (G2-remote) + barreau de confiance
@@ -307,7 +262,7 @@ impl EndpointPin {
 /// épinglée — est l'infra de canal, hors de cet incrément ; ici on pose le schéma + le gate.)
 pub(crate) fn matched_pin(endpoint: &str, pins: &[EndpointPin]) -> Option<String> {
     let host = host_of(endpoint)?;
-    pins.iter().find(|p| p.host == host).map(|p| p.spki_fingerprint.clone())
+    pins.iter().find(|p| p.host.as_str() == host).map(|p| p.spki_fingerprint.clone())
 }
 
 /// **RC-1** — le **barreau de confiance de computation** d'un endpoint, calculé *avant* l'appel
@@ -326,7 +281,9 @@ fn attestation_for(endpoint: &str, matched_fingerprint: Option<String>, keyed: b
     } else {
         ComputeAttestation::R4RemoteChannel {
             endpoint: EndpointIdentity::new(
-                host_of(endpoint).unwrap_or_default(),
+                // `None` (autorité inanalysable) ⟹ identité VIDE plutôt qu'une chaîne qui ne
+                // désigne pas l'hôte réel : ce champ part dans un record scellé.
+                host_of(endpoint).map(str::to_string).unwrap_or_default(),
                 matched_fingerprint.unwrap_or_default(),
             ),
             keyed,
@@ -606,12 +563,12 @@ mod tests {
             assert!(!is_local_endpoint(e), "bypass egress doit être refusé : {e}");
         }
         // L'hôte extrait est bien evil.com (pas le leurre loopback) : l'extracteur s'accorde avec curl.
-        assert_eq!(host_of("http://evil.com#@127.0.0.1").as_deref(), Some("evil.com"));
-        assert_eq!(host_of("http://evil.com?x@127.0.0.1").as_deref(), Some("evil.com"));
-        assert_eq!(host_of("http://127.0.0.1@evil.com").as_deref(), Some("evil.com"));
-        assert_eq!(host_of("http://").as_deref(), None, "autorité vide → pas d'hôte (fail-closed)");
+        assert_eq!(host_of("http://evil.com#@127.0.0.1"), Some("evil.com"));
+        assert_eq!(host_of("http://evil.com?x@127.0.0.1"), Some("evil.com"));
+        assert_eq!(host_of("http://127.0.0.1@evil.com"), Some("evil.com"));
+        assert_eq!(host_of("http://"), None, "autorité vide → pas d'hôte (fail-closed)");
         // §3.2 (F3) : les autorités WHATWG-divergentes ⟹ None (fail-closed), jamais faussement local.
-        assert_eq!(host_of("http://evil.com\\@127.0.0.1/v1").as_deref(), None, "backslash ⟹ None");
+        assert_eq!(host_of("http://evil.com\\@127.0.0.1/v1"), None, "backslash ⟹ None");
     }
 
     /// La normalisation (casse + point final de FQDN) corrige des FAUX NÉGATIFS (hôtes légitimement

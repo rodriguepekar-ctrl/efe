@@ -59,6 +59,8 @@ pub mod hmac;
 pub mod key;
 pub mod node;
 pub mod sha256;
+/// **M6** — le crypto-shredding : la conservation limitée sur une chaîne qui ne se coupe pas.
+pub mod shred;
 
 pub use anchor::{
     verify_against_anchor, AnchorError, AnchorIndex, AnchorRecord, ANCHOR_SCHEMA_V1, meta_anchor_of, META_ANCHOR_PREFIX};
@@ -67,3 +69,4 @@ pub use hmac::{ct_eq, hmac_sha256};
 pub use key::TenantKey;
 pub use node::{HumanAction, Node};
 pub use sha256::sha256;
+pub use shred::{est_enveloppe, ouvrir, sceller, CaseKey, EtatCas, Lecture, Trousseau};

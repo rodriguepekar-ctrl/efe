@@ -1,0 +1,516 @@
+\documentclass[10pt]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage[french]{babel}
+\usepackage{newpxtext,newpxmath}
+\usepackage[a4paper,top=1.5cm,bottom=1.35cm,left=1.6cm,right=1.6cm]{geometry}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{titlesec}
+\usepackage[most]{tcolorbox}
+\usepackage{enumitem}
+\usepackage{array}
+\usepackage{booktabs}
+\usepackage{fancyhdr}
+
+\definecolor{navy}{HTML}{1F3A5F}
+\definecolor{grey}{HTML}{54606E}
+\definecolor{green}{HTML}{2C6E49}
+\definecolor{amber}{HTML}{9C6A16}
+\definecolor{red}{HTML}{A6322E}
+\definecolor{plum}{HTML}{7A4EA8}
+\definecolor{boxgray}{HTML}{F3F5F8}
+\definecolor{boxred}{HTML}{FCF2F1}
+\definecolor{boxgreen}{HTML}{F1F7F3}
+\definecolor{boxplum}{HTML}{F7F3FB}
+\definecolor{boxcode}{HTML}{F7F8FA}
+\definecolor{boxedge}{HTML}{D9E0EA}
+
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{2.6pt}
+\linespread{1.0}
+
+\pagestyle{fancy}\fancyhf{}
+\lhead{\small\color{grey}Scella · architecture}
+\rhead{\small\color{grey}M1 --- Le garde unique --- 20 août 2026}
+\cfoot{\small\color{grey}\thepage}
+\renewcommand{\headrulewidth}{0.3pt}
+
+\titleformat{\section}{\color{navy}\large\bfseries}{}{0pt}{}
+\titlespacing{\section}{0pt}{11pt}{3pt}
+\titleformat{\subsection}{\color{navy}\bfseries}{}{0pt}{}
+\titlespacing{\subsection}{0pt}{7pt}{1.5pt}
+
+\newtcolorbox{these}{colback=boxgray,colframe=boxedge,boxrule=0.5pt,arc=2.5pt,
+  left=8pt,right=8pt,top=4.5pt,bottom=4.5pt}
+\newtcolorbox{alerte}{colback=boxred,colframe=red!55,boxrule=0.8pt,arc=2.5pt,
+  left=8pt,right=8pt,top=4.5pt,bottom=4.5pt}
+\newtcolorbox{acquis}{colback=boxgreen,colframe=green!45,boxrule=0.8pt,arc=2.5pt,
+  left=8pt,right=8pt,top=4.5pt,bottom=4.5pt}
+\newtcolorbox{piste}{colback=boxplum,colframe=plum!45,boxrule=0.8pt,arc=2.5pt,
+  left=8pt,right=8pt,top=4.5pt,bottom=4.5pt}
+\newtcolorbox{extrait}{colback=boxcode,colframe=boxedge,boxrule=0.5pt,arc=1.5pt,
+  left=7pt,right=7pt,top=3.5pt,bottom=3.5pt}
+
+\newcommand{\best}[1]{\textcolor{green}{\textbf{#1}}}
+\newcommand{\pire}[1]{\textcolor{red}{\textbf{#1}}}
+\newcommand{\sz}[1]{\textcolor{grey}{\small\textsf{#1}}}
+\newcommand{\code}[1]{\texttt{\small #1}}
+\newcommand{\fl}{$\rightarrow$}
+
+\begin{document}
+
+\begin{center}
+{\Huge\bfseries\color{navy} Scella}\\[4pt]
+{\large\color{grey}\itshape M1 --- Le garde unique · architecture}\\[4pt]
+{\small\color{grey} 20 août 2026 \; · \; second module du socle \; · \; indépendant de M0}
+\end{center}
+\vspace{2pt}
+
+\begin{these}
+\textbf{Le module ne s'appelle pas comme ce qu'il fait.} La roadmap demande d'unifier \emph{un
+garde} --- la fonction \code{is\_local\_endpoint}, dupliquée en deux exemplaires. L'inventaire dit
+autre chose : l'unité qui compte n'est pas le garde mais l'\textbf{analyseur d'autorité} qui le
+nourrit, il en existe \pire{cinq} et non deux, et trois d'entre eux prennent une décision de
+sécurité. Le critère de fin écrit dans la roadmap peut être atteint \emph{sans fermer la faille pour
+laquelle il a été écrit}. M1 doit donc commencer par corriger sa propre définition.
+\end{these}
+
+\section{1 · Ce que la roadmap demande, et ce que le dépôt contient}
+
+La roadmap modulaire fixe M1 en une ligne --- deux jours, aucune dépendance, faisable n'importe
+quand --- et donne la preuve du trou sous la même forme, exécutable :
+
+\begin{extrait}
+\code{\sz{fini quand :}\ \ grep -rln 'fn is\_local\_endpoint' \ \fl{} \textbf{un} fichier} \\
+\code{\sz{aujourd'hui :}\ \ \ \fl{} provenance-capture/src/guard.rs} \\
+\code{\sz{\ \ \ \ \ \ \ \ \ \ \ \ \ \ }\ \ \fl{} efe-swarm-sdk/src/backend/mod.rs}
+\end{extrait}
+
+C'est exact, et c'est insuffisant. La commande compte \emph{un nom de fonction}. La classe de
+vulnérabilité, elle, s'appelle \textbf{différentiel d'analyseur} : elle survient dès que deux morceaux
+de code déduisent un hôte d'une même chaîne et n'obtiennent pas le même résultat, ou n'obtiennent pas
+celui que le client HTTP contactera réellement. Ce qu'il faut compter, ce sont donc les
+\emph{analyseurs}, pas les gardes. Le dépôt en contient cinq.
+
+\begin{center}\footnotesize
+\renewcommand{\arraystretch}{1.25}
+\begin{tabular}{@{}>{\raggedright\arraybackslash}p{4.4cm} >{\raggedright\arraybackslash}p{4.3cm} >{\raggedright\arraybackslash}p{6.6cm}@{}}
+\toprule
+\textbf{Emplacement} & \textbf{Ce qu'il décide} & \textbf{Durcissement} \\
+\midrule
+\code{provenance-capture/} \code{src/guard.rs:11} &
+\textcolor{navy}{\textbf{référence}} --- refus d'egress, \code{assert\_local} &
+\best{durci} : coupe \code{/ ? \#}, \emph{fail-close} sur \code{\textbackslash}\,/espace/contrôle, \code{userinfo} au \emph{premier} \code{@}, 4 octets numériques exigés \\
+\code{efe-swarm-sdk/} \code{src/backend/mod.rs:232} &
+garde G2 \textbf{+} appariement d'épingle TLS \textbf{+} barreau d'attestation &
+\best{durci} --- miroir déclaré « exact », vérifié identique ligne à ligne \\
+\code{efe-swarm-gateway/} \code{src/frontier.rs:159} &
+avertissement de démarrage sur l'URL du SLM &
+\pire{non durci} : ne coupe pas \code{\#}, et surtout \code{starts\_with("127.")} \\
+\code{efe-meta-swarm-server/} \code{controller/iterate.rs:687} &
+le \textbf{SAN} attendu de la vérification mTLS &
+\textcolor{amber}{\textbf{non durci}} --- aucun traitement du \code{userinfo}, ne coupe pas \code{\#} \\
+\code{efe-meta-swarm-server/} \code{tls/mod.rs:145} &
+\textbf{si TLS peut être coupé} sur ce lien &
+\textcolor{amber}{\textbf{non durci}} --- mais sauvé par un \code{IpAddr::from\_str} strict en aval \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{alerte}
+\textbf{Le critère de fin est jouable.} Le SDK n'a pas besoin de \code{is\_local\_endpoint} seulement :
+il appelle \code{host\_of} \emph{directement} pour apparier une épingle TLS
+(\code{matched\_pin}) et pour estampiller l'identité d'endpoint dans un record scellé
+(\code{attestation\_for}). On peut donc extraire \code{is\_local\_endpoint} dans un crate commun,
+faire renvoyer \textbf{un} fichier au \code{grep} --- et laisser \code{host\_of} dupliqué, avec les
+trois autres analyseurs intacts. Le module serait déclaré fini, la commande de la roadmap
+sortirait 0, et \emph{le différentiel d'analyseur serait toujours là}. C'est le premier livrable de
+M1 : un critère qu'on ne peut pas satisfaire sans avoir fait le travail.
+\end{alerte}
+
+\section{2 · Trois devoirs pour un seul prédicat}
+
+Avant de décider où mettre le code, il faut voir ce qu'on lui demande. « Cet endpoint est-il local ? »
+sert dans le dépôt à trois choses qui n'ont ni la même gravité, ni le même mode d'échec, ni le même
+lecteur --- et c'est la raison pour laquelle la duplication a paru anodine.
+
+\subsection{2.1 · Le devoir d'\emph{application}}
+
+\code{assert\_local} refuse. La console de conformité l'appelle sur son adresse d'écoute
+(\code{audit-console/src/server.rs:27}) : refuser de \emph{binder} ailleurs qu'en local est ce qui
+rend crédible la phrase « la console ne s'expose pas ». Le SDK l'appelle sur son gate G2. C'est le
+seul des trois devoirs que tout le monde reconnaît comme de la sécurité, et c'est celui que les deux
+copies durcies servent correctement aujourd'hui.
+
+\subsection{2.2 · Le devoir d'\emph{attestation} --- celui qu'on ne voit pas}
+
+\code{efe-swarm-gateway/src/mission.rs:139} et \code{efe-swarm-sdk::attestation\_for} n'interdisent
+rien. Ils \textbf{classent} : localité \fl{} \code{ComputeAttestation::R2LocalWitnessed}, distance
+\fl{} \code{R4RemoteChannel}. Cette classe est ensuite \emph{scellée dans le record de provenance}.
+
+La différence de nature est décisive et mérite d'être dite lentement. Un garde qui se trompe laisse
+passer un appel ; c'est grave, c'est réparable, et cela ne laisse pas de trace mensongère. Un
+\emph{attesteur} qui se trompe écrit dans un reçu non répudiable la phrase \emph{« le récepteur de
+provenance était co-localisé avec l'inférence, il témoigne de la computation »} à propos d'un appel
+parti à l'autre bout du monde. Le reçu est le produit. Un reçu qui ment sur la localité ne se répare
+pas : il se re-prouve parfaitement, avec sa fausse affirmation dedans, et sa signature garantit
+seulement que \emph{personne ne l'a modifié depuis}. C'est le pire résultat possible pour une pile
+dont l'argument de vente est l'intégrité.
+
+\begin{these}
+Le devoir d'attestation transforme un faux positif de parseur en \textbf{fausse déclaration scellée}.
+C'est l'argument le plus fort pour l'unicité, et c'est celui que personne n'invoque, parce que le
+site d'appel ne ressemble pas à un contrôle de sécurité --- c'est un \code{match} qui remplit un
+champ.
+\end{these}
+
+\subsection{2.3 · Le devoir de \emph{conseil}}
+
+\code{frontier.rs:128} n'interdit ni ne classe : il \emph{prévient}. Si l'URL du SLM ne semble pas
+locale, un avertissement part sur \code{stderr}. Le commentaire qui l'entoure est d'une honnêteté
+remarquable et vaut d'être cité : \emph{« l'URL n'est PAS contrainte au local --- un llama-server
+distant est possible et son egress n'est ni gardé par l'allowlist tenant ni décompté. On prévient au
+boot plutôt que de prétendre une souveraineté qu'on ne vérifie pas. »} La conception est juste : on
+ne ment pas, on avertit. C'est le \emph{prédicat} qui est faux --- et c'est l'objet de la section
+suivante.
+
+\section{3 · Le défaut vivant}
+
+\subsection{3.1 · La chaîne, vérifiée bout en bout}
+
+\code{frontier.rs:159} conclut à la localité par \code{host.starts\_with("127.")}. Or
+\code{guard.rs:41} --- dans le même dépôt, dans le crate que ce même fichier importe déjà ---
+documente précisément ce test comme celui contre lequel il a été durci : \emph{« Durci vs un naïf
+\code{starts\_with("127.")} : \code{127.evil.com} (un NOM, qui pourrait résoudre vers l'externe) ne
+doit PAS passer la frontière de souveraineté. »}
+
+\begin{extrait}
+\code{EFE\_SLM\_REFORMULATOR\_URL=http://127.evil.com:8091} \\[3pt]
+\code{\ \ slm\_url\_looks\_local} \fl{} \code{host = "127.evil.com"} \fl{} \code{starts\_with("127.")} \fl{} \pire{true} \\
+\code{\ \ } \fl{} aucun avertissement de démarrage \\
+\code{\ \ } \fl{} le client SLM est câblé (l'URL n'est \emph{délibérément} pas contrainte) \\
+\code{\ \ } \fl{} l'egress n'est ni gardé par l'allowlist tenant, ni décompté (hop budgété 0 ¢) \\
+\code{\ \ } \fl{} \textbf{M0 imprime} \code{relais SLM \ \ SERVIE} \\
+\code{\ \ } \fl{} \pire{chaque prompt reformulé sort du périmètre, en silence, sur un rapport vert}
+\end{extrait}
+
+Chaque maillon a été vérifié dans le code. \code{127.evil.com} est un nom DNS ordinaire, que
+n'importe qui peut faire pointer où il veut ; le préfixe \code{127.} n'a aucune signification pour un
+résolveur. Le test qui accompagne la fonction
+(\code{slm\_url\_locality\_boot\_warn\_heuristic}) éprouve \code{10.0.0.5},
+\code{slm.example.com} et \code{192.168.1.10} --- jamais un nom préfixé \code{127.}. Le défaut n'est
+donc figé par aucun test : \textbf{le corriger ne casse rien}.
+
+\subsection{3.2 · La phrase qui condamne la copie}
+
+Le commentaire de \code{frontier.rs} justifie ainsi la troisième copie : \emph{« Le check est un
+miroir minimal des \code{is\_local\_endpoint} maison --- provenance-capture/guard.rs \&
+efe-swarm-sdk --- \textbf{sans en dépendre}. »} L'auteur savait donc qu'il écrivait une troisième
+copie, et l'a voulue « minimale » pour éviter une dépendance.
+
+\begin{alerte}
+\textbf{La dépendance était déjà payée.} \code{frontier.rs} n'est compilé que sous la feature
+\code{frontier-llm} (\code{lib.rs:58}), et c'est exactement cette feature qui active
+\code{provenance-capture} dans le \code{Cargo.toml} du crate. À l'intérieur de ce fichier,
+\code{provenance\_capture::is\_local\_endpoint} est \emph{déjà dans la portée} --- le fichier voisin
+\code{mission.rs}, sous la même feature, l'appelle. Le « miroir minimal » n'a donc économisé
+\best{aucune} dépendance. Il n'a acheté que la perte du durcissement.
+\end{alerte}
+
+Et l'ironie se referme une ligne plus loin. Le \code{Cargo.toml} de la passerelle annote ainsi la
+dépendance qu'elle prend :
+
+\begin{extrait}
+\code{provenance-capture = \{ path = "../provenance-capture", optional = true \}} \\
+\code{\ \ \ \ \sz{\# egress guard is\_local\_endpoint (réutilisé --- \textbf{pas de 3e copie})}}
+\end{extrait}
+
+L'annotation qui affirme qu'il n'y a pas de troisième copie et la troisième copie voyagent dans le
+même crate, sous la même feature, dans le même commit.
+
+\section{4 · La duplication était un choix --- et pourquoi il ne tient plus}
+
+Il serait faux de présenter M1 comme la correction d'un oubli. Les deux copies durcies sont
+délibérées, documentées, et défendues par un argument sérieux. \code{guard.rs:5} :
+\emph{« la même règle, ré-implémentée ici pour garder la couche de capture autonome »}. Le miroir du
+SDK dit la même chose, et ajoute la discipline qui devait tenir l'ensemble : \emph{« discipline
+\#4 : les deux copies durcies ENSEMBLE »}.
+
+L'argument d'autonomie n'est pas décoratif. \code{provenance-capture} ne dépend que de
+\code{provenance-dag} --- une seule arête. C'est cette maigreur qui fait de la pile preuve un actif
+propre : elle s'observe sur n'importe quel système d'IA sans traîner le moteur du dépôt derrière
+elle. \code{efe-swarm-sdk}, lui, tire cinq crates d'essaim. Les deux fermetures sont \emph{disjointes},
+et elles appartiennent à deux périmètres produit que l'analyse de rachetabilité a explicitement
+demandé de ne pas souder. Faire dépendre l'un de l'autre pour économiser soixante lignes serait un
+mauvais échange.
+
+\begin{these}
+Le vrai reproche à faire à la duplication n'est pas d'exister, c'est de reposer sur une
+\textbf{vigilance}. « Durcir les deux ensemble » est une règle que des humains doivent se rappeler.
+Elle a tenu deux fois --- les deux copies sont aujourd'hui identiques, l'audit l'a vérifié ligne à
+ligne --- puis elle a échoué trois fois, dont une dans le crate qui l'avait écrite. M1 remplace une
+discipline par une structure, exactement comme M0 a remplacé « pensez à documenter vos variables »
+par un registre dont un test interdit de sortir.
+\end{these}
+
+\section{5 · L'architecture : un analyseur, un type, un corpus}
+
+\subsection{5.1 · Un crate feuille, à zéro dépendance}
+
+La contrainte de périmètre se satisfait sans compromis, parce que l'analyseur n'a besoin de rien :
+\code{guard.rs} le dit lui-même, \emph{« minimal, sans dépendance (pas de crate \code{url}) »}. Un
+crate \code{scella-authority} sans aucune dépendance est une \textbf{feuille} : chacun des deux
+périmètres en prend une, et aucun des deux ne gagne de chemin vers l'autre. Le graphe grossit d'un
+nœud ; il ne se soude pas.
+
+Le précédent existe déjà et n'a coûté à personne : \code{audit-api/src/lib.rs:72} réexporte
+\code{assert\_local}, \code{is\_local\_endpoint} et \code{SovereigntyError} depuis
+\code{provenance-capture}, et c'est par cette chaîne que la console obtient son garde de \emph{bind}.
+Le dépôt sait donc déjà partager ce garde --- il ne l'a simplement pas fait par-dessus la frontière
+de périmètre.
+
+\subsection{5.2 · Pourquoi un \emph{type}, et pas une chaîne}
+
+Le crate n'exporte pas une fonction \code{host\_of} rendant \code{Option<String>}. Il exporte un type :
+
+\begin{extrait}
+\code{pub struct Authority(String);\ \ \ \sz{// constructible UNIQUEMENT par authority\_of}} \\
+\code{pub fn authority\_of(endpoint: \&str) -> Option<Authority>} \\
+\code{impl Authority \{ pub fn host(\&self) -> \&str ; pub fn is\_loopback(\&self) -> bool \}} \\[3pt]
+\code{pub fn is\_local\_endpoint(endpoint: \&str) -> bool \ \sz{// = authority\_of(..).is\_loopback()}} \\
+\code{pub fn assert\_local(endpoint: \&str) -> Result<(), SovereigntyError>}
+\end{extrait}
+
+La raison est structurelle, pas esthétique. Toute la classe de bugs se résume à : \emph{quelqu'un a
+re-dérivé un hôte depuis une chaîne}. Un \code{String} nu invite à la re-dérivation --- on le
+concatène, on le recoupe, on le compare à un autre hôte obtenu autrement. Un \code{Authority} que
+seul \code{authority\_of} peut fabriquer rend l'accident coûteux : pour obtenir un hôte, il faut
+passer par l'analyseur. C'est ce dont \code{matched\_pin} a besoin --- comparer l'hôte d'un endpoint
+à celui d'une épingle exige que les \emph{deux} viennent du même analyseur, ce que le type impose et
+qu'une fonction rendant \code{String} laisserait au hasard.
+
+\subsection{5.3 · Le corpus de conformité, exporté}
+
+Le crate exporte enfin, en \code{pub const}, la table des cas qui l'ont durci : les six bypass SSRF,
+les formes normalisées, les autorités \emph{fail-close}. Tout consommateur qui, pour une raison
+légitime, garderait un analyseur propre peut alors lui faire passer \emph{le même} corpus. C'est le
+filet pour les cas où l'extraction est impossible --- et c'est ce qui aurait attrapé les copies
+\#4 et \#5, que personne n'a jamais confrontées aux cas du garde.
+
+\section{6 · La question de fond : à la main, ou sur \code{url} ?}
+
+C'est la décision structurante de M1, et elle mérite d'être posée franchement plutôt que héritée du
+statu quo. L'analyseur cherche à répondre à une question qui n'est pas « que dit la RFC 3986 ? » mais
+\textbf{« quel hôte \code{reqwest} va-t-il réellement contacter ? »}. Ce sont deux questions
+différentes, et tout l'écart entre elles est de la surface d'attaque.
+
+\begin{center}\footnotesize
+\renewcommand{\arraystretch}{1.25}
+\begin{tabular}{@{}>{\raggedright\arraybackslash}p{3.1cm} >{\raggedright\arraybackslash}p{6.2cm} >{\raggedright\arraybackslash}p{6.0cm}@{}}
+\toprule
+\textbf{Option} & \textbf{Ce qu'elle donne} & \textbf{Ce qu'elle coûte} \\
+\midrule
+\textbf{A} --- à la main, zéro dépendance \sz{(statu quo extrait)} &
+crate feuille, auditable en un écran, aucun périmètre alourdi &
+\pire{la liste \emph{fail-close}} (\code{\textbackslash}, espace, contrôle) est une \textbf{liste noire} --- elle n'est jamais complète, et a déjà exigé deux tours de durcissement \\
+\textbf{B} --- bâti sur \code{url} &
+\best{accord avec \code{reqwest} par construction} : la classe entière disparaît, pas seulement ses instances connues &
+\code{url} tire \code{idna}, \code{percent-encoding}, \code{unicode-*} \fl{} un arbre réel dans une pile preuve qui n'a \textbf{qu'une} arête ; et l'IDNA ouvre sa propre surface (homographes punycode) \\
+\textbf{C} --- à la main, \best{prouvé} contre \code{url} en \code{dev-dependencies} &
+le crate livré reste une feuille, \emph{et} la liste noire devient une \textbf{propriété vérifiée} &
+le test ne vaut que son corpus --- mais un corpus engendré couvre incomparablement plus que six cas écrits à la main \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{acquis}
+\textbf{Décision : C.} Le crate reste sans dépendance en production, et un test de propriété --- avec
+\code{url} en \code{dev-dependencies} seulement --- vérifie sur un corpus engendré l'invariant
+suivant, qui est la formulation exacte de ce que le garde promet :
+
+\smallskip
+\code{pour tout endpoint \emph{x} : \ authority\_of(x) == None \ \ \textbf{OU} \ \ authority\_of(x).host() == Url::parse(x).host\_str()}
+\smallskip
+
+Autrement dit : \emph{ou bien nous refusons, ou bien nous désignons exactement l'hôte que le client
+appellera}. Jamais un troisième cas. C'est le même geste que M0 : remplacer « nous avons pensé à ces
+attaques » par « nous l'avons prouvé, ou nous refusons ».
+\end{acquis}
+
+\begin{alerte}
+\textbf{Vérifié à l'implémentation (M1.a) : la propriété a trouvé \pire{deux} différentiels réels
+dès sa première exécution hostile} --- deux que ni la rédaction de cette architecture, ni deux tours
+de durcissement, ni aucune revue n'avaient vus.
+
+\smallskip
+\code{http://2130706433} : \code{url} --- donc \code{reqwest} --- normalise l'entier décimal en
+\code{127.0.0.1} ; l'analyseur rendait \code{2130706433}. Même famille pour \code{0177.0.0.1} (le
+zéro initial vaut octal pour un résolveur historique) et \code{127.1} (forme courte).
+
+\smallskip
+\code{http://[::0001]} : \code{url} canonise en \code{::1} ; l'analyseur rendait \code{::0001}. Et
+en instrumentant, un troisième cas est apparu, présent dans les \emph{deux} implémentations
+historiques : \code{http://fe80::1:8080} --- IPv6 nue --- produisait l'hôte \code{fe80}, une chaîne
+qui ne désigne rien.
+
+\smallskip
+Les trois étaient \best{sûrs pour la localité} : « non local » dans tous les cas, donc jamais un
+laissez-passer. Mais \code{host\_of} sert aussi à \textbf{apparier une épingle TLS} et à
+\textbf{nommer un endpoint dans un journal} : désigner un hôte différent de celui appelé y a des
+conséquences propres. La règle retenue n'est pas d'imiter ces normalisations --- les imiter
+reviendrait à parier sur celle qu'applique le client --- mais de \textbf{refuser toute écriture
+ambiguë}. Le crate compte donc \textbf{six} cas de refus, non quatre.
+
+\smallskip
+C'est l'argument de l'option C, réalisé : une liste noire contient ce à quoi quelqu'un a pensé ;
+une propriété contient ce qui est vrai.
+\end{alerte}
+
+\section{7 · La migration, site par site}
+
+\begin{center}\footnotesize
+\renewcommand{\arraystretch}{1.25}
+\begin{tabular}{@{}>{\raggedright\arraybackslash}p{3.6cm} >{\raggedright\arraybackslash}p{6.3cm} >{\raggedright\arraybackslash}p{5.4cm}@{}}
+\toprule
+\textbf{Site} & \textbf{Geste} & \textbf{Changement de comportement} \\
+\midrule
+\code{provenance-capture/} \code{guard.rs} &
+devient une \textbf{réexportation} du crate feuille &
+\best{aucun} --- et les 5 dépendants (\code{audit-api}, \code{audit-console}, \code{reg-evidence}, \code{forensic-export}, passerelle) ne bougent pas \\
+\code{efe-swarm-sdk/} \code{backend/mod.rs} &
+supprime \code{host\_of} et \code{is\_local\_endpoint} ; \code{matched\_pin} compare des \code{Authority} &
+\best{aucun} --- les deux copies étaient déjà identiques \\
+\code{efe-swarm-gateway/} \code{frontier.rs} &
+supprime \code{slm\_url\_looks\_local}, appelle le prédicat \textbf{déjà dans la portée} &
+\textcolor{amber}{\textbf{oui, et c'est le but}} : \code{127.evil.com} avertit désormais ; \code{LOCALHOST} cesse d'avertir à tort \\
+\code{meta-swarm/} \code{iterate.rs} \sz{(SAN)} &
+\code{authority\_of} pour l'\emph{analyse}, décision de SAN inchangée &
+à mesurer : les entrées malformées tombaient déjà sur le SAN configuré \\
+\code{meta-swarm/} \code{tls/mod.rs} &
+\code{authority\_of} pour l'analyse, \code{IpAddr} conservé pour l'\emph{acceptation} &
+\pire{oui} --- voir ci-dessous \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{alerte}
+\textbf{Le seul risque de régression, déclaré.} \code{tls/mod.rs} accepte aujourd'hui une IPv6 nue
+sans crochets (\code{authority.contains("::")} \fl{} l'autorité entière est traitée comme l'hôte).
+L'analyseur durci, lui, \emph{refuse} \code{http://::1:8080} : sans crochets, la coupe sur \code{:}
+rend un hôte vide, donc \code{None}, donc « non local ». Or dans ce fichier, « non local » veut dire
+\best{TLS reste allumé} --- la direction sûre. Un déploiement qui écrit ses endpoints en IPv6 nue
+verrait donc du TLS apparaître là où il n'y en avait pas. C'est un durcissement, pas une panne, mais
+c'est un changement observable en production : il exige son propre test, sa propre note de version,
+et c'est la raison pour laquelle ces deux sites sont sortis du premier incrément.
+
+\smallskip
+\textbf{Corrigé après M1.a : la portée est plus large qu'écrit ici.} L'analyseur partagé refuse
+\emph{trois} familles et non une --- IPv6 nue, IPv6 non canonique (\code{[::0001]}), et écritures
+numériques ambiguës d'IPv4. Un déploiement qui emploie l'une d'elles verra donc TLS s'allumer là où
+il était coupé. Toujours un durcissement, toujours la direction sûre, mais la note de version de
+M1.b doit nommer les trois.
+\end{alerte}
+
+Il faut être juste envers ces deux fichiers : ils sont \emph{sûrs aujourd'hui}. Les charges de
+différentiel (\code{\#@}, \code{userinfo@}) leur font produire un hôte qui n'est ni
+\code{localhost} ni une IP analysable, donc \code{false}, donc TLS maintenu et SAN inutilisable. Mais
+cette sûreté vient de la \emph{sévérité de ce qui suit} --- \code{IpAddr::from\_str}, l'égalité
+stricte de chaîne, l'absence de certificat correspondant --- et non de l'analyseur. Ils sont sûrs par
+composition, pas par conception : ce sont eux qui casseront le jour où quelqu'un les
+« améliorera ».
+
+\section{8 · Le critère d'acceptation --- exécutable et non jouable}
+
+Le critère de la roadmap est conservé mais \textbf{subordonné} : il reste vrai, il ne suffit plus.
+
+\begin{extrait}
+\code{\sz{1.}\ grep -rl '"://"' crates/*/src \ \fl{} \textbf{1} fichier \ \sz{(5 aujourd'hui)}} \\
+\code{\sz{2.}\ cargo test -p scella-authority --test un\_seul\_analyseur \ \fl{} vert} \\
+\code{\sz{3.}\ cargo test -p scella-authority --test accord\_avec\_url \ \fl{} vert} \\
+\code{\sz{4.}\ EFE\_SLM\_REFORMULATOR\_URL=http://127.evil.com cargo run ... 2>\&1 | grep 'NON garantie'}
+\end{extrait}
+
+Le premier compte les \emph{analyseurs}, pas les gardes : c'est lui qui rend le critère non jouable,
+et c'est lui qui aurait signalé les copies \#3, \#4 et \#5 le jour où elles ont été écrites.
+
+\begin{alerte}
+\textbf{Ce critère a lui-même dû être mesuré, et sa première rédaction était fausse.} Elle cherchait
+\code{split\_once("://")} --- la forme employée par quatre des cinq analyseurs. Le cinquième,
+\code{frontier.rs}, écrit \code{url.split("://").nth(1)}. Le grep aurait donc renvoyé \textbf{quatre}
+fichiers, serait tombé à un après extraction des quatre, aurait déclaré M1 fini --- et aurait laissé
+en place \emph{précisément la copie qui porte le défaut vivant}. C'est le même piège que le critère
+de la roadmap, une couche plus bas. Le motif retenu est le littéral \code{"://"} seul : mesuré, il
+désigne exactement les cinq analyseurs et rien d'autre. \best{Un critère qui n'a pas été exécuté
+n'est pas un critère.}
+\end{alerte} Le
+deuxième est l'analogue direct du \code{T1} de M0 --- un test qui parcourt l'arbre des sources et
+échoue sur toute occurrence hors du crate, avec une liste d'exemptions qui doit rester
+\textbf{vide}. Le troisième est la propriété d'accord de la section 6. Le quatrième est le défaut
+vivant : il \emph{échoue aujourd'hui}, et c'est la meilleure garantie qu'il mesure quelque chose.
+
+\begin{these}
+Un critère de fin qu'on peut atteindre sans faire le travail n'est pas un critère, c'est une
+formalité. Celui-ci a été écrit \emph{après} l'inventaire, ce qui est la seule façon d'obtenir un
+critère qui garde un fait plutôt qu'une hypothèse.
+\end{these}
+
+\section{9 · Le périmètre --- ce que M1 ne fait pas}
+
+\textbf{M1 ne contraint pas l'URL du SLM.} La liberté d'un \code{llama-server} distant est un choix
+assumé et documenté ; M1 corrige l'\emph{avertissement}, il ne ferme pas la porte. Contraindre serait
+un changement de produit, pas d'architecture, et il appartiendrait à M0 (un interrupteur, sa classe,
+son coût d'absence) ou à la voie C3.
+
+\textbf{M1 n'ajoute pas de résolution DNS.} Le garde raisonne sur le \emph{littéral}. Un nom qui
+résout vers \code{127.0.0.1} n'est pas « local » pour lui, et c'est correct : résoudre au moment du
+contrôle ouvrirait un TOCTOU (la réponse DNS peut changer entre le contrôle et l'appel), qui est un
+piège plus profond que celui qu'on referme.
+
+\textbf{M1 ne touche pas à l'allowlist d'egress par tenant} ni au comptage de budget. Ce sont des
+mécanismes voisins, avec leur propre analyse ; les mêler ferait de M1 un module d'une semaine.
+
+\textbf{M1 n'unifie pas les \emph{décisions}, seulement l'\emph{analyse}.} \code{tls/mod.rs} peut
+continuer d'accepter \code{127.1.2.3} par \code{IpAddr} et le SDK d'exiger quatre octets : ce sont des
+politiques distinctes, légitimement distinctes. Ce qui doit être unique, c'est la réponse à
+« \emph{quel hôte} ? ». Confondre les deux serait la sur-ingénierie qui fait échouer ce genre de
+module.
+
+\section{10 · L'ordre, et la taille réelle}
+
+La roadmap donne deux jours. L'inventaire ayant fait passer le périmètre de deux sites à cinq, dont
+deux avec un changement de comportement observable, la taille honnête est de trois à quatre jours ---
+sauf à découper, ce qui est ici la bonne réponse.
+
+\begin{center}\small
+\renewcommand{\arraystretch}{1.25}
+\begin{tabular}{@{}l >{\raggedright\arraybackslash}p{9.3cm} >{\raggedright\arraybackslash}p{3.5cm} c@{}}
+\toprule
+& \textbf{Contenu} & \textbf{Fini quand} & \sz{Taille} \\
+\midrule
+\textbf{M1.a} \best{fait} & le crate feuille (843 l.), le type \code{Authority}, le corpus exporté ; les sites de souveraineté migrés --- \code{frontier.rs} par P1, \code{guard.rs} devenu ré-export, le SDK adopté ; le test d'unicité ; la propriété d'accord & critères 2 à 4 ; le 1\textsuperscript{er} tombe à \textbf{3} & \sz{2 j} \\
+\textbf{M1.b} & les \textbf{deux} sites méta-essaim ; convergence de la règle d'acceptation ; note de version sur l'IPv6 nue & critère 1 étendu au méta-essaim & \sz{1--2 j} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+M1.a livre le critère de la roadmap, ferme le défaut vivant, et n'a \emph{aucun} changement de
+comportement en dehors de l'avertissement qu'on voulait corriger --- ce que prouve directement le
+fait que les \textbf{tests historiques} de \code{guard.rs}, laissés en place et pointés sur la
+nouvelle implémentation, passent sans être touchés. La couture annoncée est tenue : le critère
+\code{"://"} tombe de cinq à \textbf{trois}, pas à un, et les deux analyseurs restants sont
+\textbf{exemptés nommément}, avec leur raison et le module qui les supprimera --- une assertion
+interdit à cette liste de grandir, et le critère de fin de M1.b est qu'elle soit vide. M1.b porte tout le risque et
+aucune urgence : ses deux sites sont sûrs aujourd'hui. Les séparer n'est pas un report, c'est mettre
+le risque là où il se voit.
+
+\begin{acquis}
+\textbf{Ce que M1 achète, en une phrase.} Aujourd'hui, la souveraineté du produit --- « vos données
+ne sortent pas » --- repose sur cinq réponses indépendantes à une même question, dont trois sont
+fausses ou fragiles, et sur une discipline humaine qui a déjà échoué trois fois. Après M1, elle
+repose sur \textbf{un} analyseur, dont un test interdit la copie et dont une propriété prouve
+l'accord avec le client HTTP réel. Le gain n'est pas soixante lignes de moins : c'est que la question
+« et si les deux copies divergeaient ? » \best{cesse d'être posable}.
+\end{acquis}
+
+\end{document}

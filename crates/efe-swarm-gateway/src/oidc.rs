@@ -61,11 +61,11 @@ impl OidcVerifier {
     /// Construit depuis l'env **server-side** : `EFE_OIDC_PUBLIC_KEY_PEM` (requis),
     /// `EFE_OIDC_ISSUER_URL` + `EFE_OIDC_AUDIENCE` (optionnels). `None` si non configuré.
     pub fn from_env() -> Result<Option<Self>, GatewayError> {
-        let Ok(pem) = std::env::var("EFE_OIDC_PUBLIC_KEY_PEM") else {
+        let Some(pem) = crate::profile::read::oidc_public_key_pem() else {
             return Ok(None);
         };
-        let issuer = std::env::var("EFE_OIDC_ISSUER_URL").ok();
-        let audience = std::env::var("EFE_OIDC_AUDIENCE").ok();
+        let issuer = crate::profile::read::oidc_issuer_url();
+        let audience = crate::profile::read::oidc_audience();
         Ok(Some(Self::from_pem(&pem, issuer.as_deref(), audience.as_deref())?))
     }
 
@@ -75,11 +75,11 @@ impl OidcVerifier {
     /// coûteux (§4). `EFE_OIDC_LLM_AUDIENCE` surcharge l'audience (défaut `efe-llm`) ; même
     /// clé publique + issuer que [`Self::from_env`]. `None` si `EFE_OIDC_PUBLIC_KEY_PEM` absent.
     pub fn llm_from_env() -> Result<Option<Self>, GatewayError> {
-        let Ok(pem) = std::env::var("EFE_OIDC_PUBLIC_KEY_PEM") else {
+        let Some(pem) = crate::profile::read::oidc_public_key_pem() else {
             return Ok(None);
         };
-        let issuer = std::env::var("EFE_OIDC_ISSUER_URL").ok();
-        let audience = std::env::var("EFE_OIDC_LLM_AUDIENCE").unwrap_or_else(|_| "efe-llm".to_string());
+        let issuer = crate::profile::read::oidc_issuer_url();
+        let audience = crate::profile::read::oidc_llm_audience();
         Ok(Some(Self::from_pem(&pem, issuer.as_deref(), Some(&audience))?))
     }
 

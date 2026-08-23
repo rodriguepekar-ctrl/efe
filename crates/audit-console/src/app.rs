@@ -47,6 +47,17 @@ impl Console {
         self.sessions.insert(token, tenant, role, subject);
     }
 
+    /// **M7** — le service est-il en état de servir quelqu'un ?
+    ///
+    /// Un tenant sans session est illisible ; une session sans tenant ne résout rien. Il faut les
+    /// deux, et c'est exactement ce qu'un montage de configuration manquant fait rater — donc
+    /// exactement ce qu'un redémarrage peut réparer. C'est le critère de [`crate::handler`] pour
+    /// `/readyz`, et rien de plus.
+    #[must_use]
+    pub fn est_provisionne(&self) -> bool {
+        !self.keys.is_empty() && !self.sessions.is_empty()
+    }
+
     pub fn sessions(&self) -> &Sessions {
         &self.sessions
     }

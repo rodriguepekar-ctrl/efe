@@ -21,6 +21,24 @@ use reg_evidence::{CaseScope, Framework};
 
 /// Le point d'entrée de la coquille. Pur ; `now` est l'horloge injectée (le serveur passe l'heure réelle).
 pub fn handle(console: &mut Console, req: &HttpRequest, now: u64) -> HttpResponse {
+    // ── 0. M7 — les sondes d'exploitation, AVANT l'authentification ──
+    //
+    // Un superviseur n'a pas de jeton. Exiger l'authentification rendrait la sonde inutilisable ;
+    // lui donner un jeton de service créerait un identifiant de plus à protéger, pour surveiller.
+    // Le prix à payer est que ces DEUX réponses sont publiques — elles ne révèlent donc ni nom de
+    // tenant, ni compte, ni état d'intégrité : rien qu'un fait binaire sur le processus.
+    //
+    // C'est la SEULE exception à « tout passe par l'authentification », et le test
+    // `seules_les_deux_sondes_sont_publiques` interdit qu'il y en ait une troisième.
+    if req.method == HttpMethod::Get {
+        let segs: Vec<&str> = req.path.split('/').filter(|s| !s.is_empty()).collect();
+        match segs.as_slice() {
+            ["healthz"] => return sante(),
+            ["readyz"] => return pret(console),
+            _ => {}
+        }
+    }
+
     // ── 1. authentification : la coquille construit un AuthContext DÉJÀ vérifié, ou 401 ──
     let token = match extract_token(req) {
         Some(t) => t,
@@ -199,6 +217,37 @@ fn api_passthrough(console: &mut Console, auth: &AuthContext, method: &HttpMetho
 
 // ── helpers ──
 
+/// `/healthz` — **le processus vit**, et rien d'autre.
+///
+/// Une sonde de vivacité qui consulterait l'état finirait par faire tuer un processus parfaitement
+/// sain dont une dépendance hoquette. Elle répond donc toujours, tant qu'elle peut répondre.
+fn sante() -> HttpResponse {
+    HttpResponse::json(200, b"{\"status\":\"ok\"}".to_vec())
+}
+
+/// `/readyz` — le service est **provisionné**.
+///
+/// Délibérément **pas** l'intégrité des chaînes, et cette décision mérite d'être écrite ici parce
+/// qu'elle paraît contre-intuitive. Le dépôt a déjà tranché ailleurs : `case_view` *« sert même un
+/// store cassé — mais avec une enveloppe `ok:false` (échec FORT et VISIBLE) »*. Servir du cassé est
+/// **voulu**, et c'est visible là où c'est utile. Or un superviseur qui voit `readyz` rouge
+/// **redémarre** — et un redémarrage ne répare pas une chaîne corrompue. On obtiendrait une boucle
+/// de redémarrage qui ne corrige rien, et qui masquerait le vrai signal.
+///
+/// Une sonde de disponibilité ne doit signaler que **ce qu'un redémarrage peut réparer**. Ici : un
+/// fichier de déclaration non monté, un secret absent, un log illisible — tout ce qui laisse le
+/// service incapable de servir qui que ce soit.
+///
+/// Ne révèle **ni le nombre de tenants ni leurs noms** : la réponse est publique, et compter les
+/// tenants d'un déploiement est déjà un renseignement.
+fn pret(console: &Console) -> HttpResponse {
+    if console.est_provisionne() {
+        HttpResponse::json(200, b"{\"ready\":true}".to_vec())
+    } else {
+        HttpResponse::json(503, b"{\"ready\":false,\"reason\":\"non provisionne\"}".to_vec())
+    }
+}
+
 fn unauth(req: &HttpRequest) -> HttpResponse {
     // Pour /api, un JSON ; pour la console, la page « connexion requise ». Aucune donnée révélée.
     if req.path.starts_with("/api/") {
@@ -288,6 +337,71 @@ mod tests {
     fn get(path: &str, token: Option<&str>) -> HttpRequest {
         let auth = token.map(|t| format!("Authorization: Bearer {t}\r\n")).unwrap_or_default();
         HttpRequest::parse(format!("GET {path} HTTP/1.1\r\n{auth}\r\n").as_bytes()).unwrap()
+    }
+
+    // ── M7 : les sondes d'exploitation ──
+
+    /// **Le garde de la seule exception à l'authentification.** Deux routes sont publiques ; ce test
+    /// interdit qu'il y en ait une troisième. Il balaie tout ce que la console sert, plus quelques
+    /// contournements classiques : sans jeton, tout le reste doit rendre 401.
+    #[test]
+    fn seules_les_deux_sondes_sont_publiques() {
+        let mut c = console();
+        const PUBLIQUES: [&str; 2] = ["/healthz", "/readyz"];
+        const TOUT_LE_RESTE: [&str; 12] = [
+            "/",
+            "/exceptions",
+            "/cases/SUP-A",
+            "/export",
+            "/cases/SUP-A/export",
+            "/api/tenants/acme/cases",
+            "/api/tenants/acme/cases/SUP-A",
+            "/api/tenants/acme/cases/SUP-A/report",
+            "/api/tenants/acme/export",
+            // contournements : casse, chemin relatif, préfixe voisin
+            "/HEALTHZ",
+            "/../healthz",
+            "/healthz/../api/tenants/acme/cases",
+        ];
+
+        for p in PUBLIQUES {
+            let r = handle(&mut c, &get(p, None), 100);
+            assert_eq!(r.status, 200, "{p} doit répondre sans jeton");
+            assert!(r.content_type.starts_with("application/json"), "{p} parle à une machine");
+        }
+        for p in TOUT_LE_RESTE {
+            let r = handle(&mut c, &get(p, None), 100);
+            assert_eq!(r.status, 401, "{p} doit exiger un jeton");
+        }
+    }
+
+    /// Les sondes ne révèlent **ni nom de tenant, ni compte**. Elles sont publiques : compter les
+    /// tenants d'un déploiement est déjà un renseignement.
+    #[test]
+    fn les_sondes_ne_revelent_rien() {
+        let mut c = console();
+        for p in ["/healthz", "/readyz"] {
+            let corps = String::from_utf8_lossy(&handle(&mut c, &get(p, None), 100).body).to_string();
+            assert!(!corps.contains("acme"), "{p} ne doit nommer aucun tenant : {corps}");
+            assert!(!corps.contains('1'), "{p} ne doit compter personne : {corps}");
+            assert!(corps.len() < 64, "{p} : une sonde répond court");
+        }
+    }
+
+    /// Une console non provisionnée **vit** (healthz) mais n'est **pas prête** (readyz) — et c'est
+    /// exactement ce qu'un redémarrage peut réparer.
+    #[test]
+    fn une_console_non_provisionnee_vit_mais_nest_pas_prete() {
+        let mut vide = Console::new();
+        assert_eq!(handle(&mut vide, &get("/healthz", None), 100).status, 200);
+        let r = handle(&mut vide, &get("/readyz", None), 100);
+        assert_eq!(r.status, 503, "aucun tenant, aucune session : rien à servir");
+        assert!(String::from_utf8_lossy(&r.body).contains("non provisionne"));
+
+        // Un tenant SANS session ne suffit pas : personne ne pourrait le lire.
+        let mut muet = Console::new();
+        muet.provision("acme", TenantKey::from_bytes([1u8; 32]));
+        assert_eq!(handle(&mut muet, &get("/readyz", None), 100).status, 503, "illisible = pas prêt");
     }
 
     #[test]

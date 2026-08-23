@@ -41,7 +41,18 @@ pub async fn verify(
 ) -> Result<Json<VerifyResponse>, GatewayError> {
     caller.require_any_role(&["viewer", "operator", "admin", "auditor"])?;
 
-    let stored = s.store.get(id, &caller.tenant).await?.ok_or(GatewayError::NotFound)?;
+    // **M2.** Un 404 nu confond deux faits très différents : « cet identifiant n'existe pas » et
+    // « ce run a bien eu lieu, et nous n'avons pas pu le persister ». Le second est une BRÈCHE, et
+    // la présenter comme une absence reviendrait à EFFACER un fait au lieu de le documenter —
+    // exactement ce que la chaîne de provenance existe pour empêcher. On consulte donc le journal
+    // avant de conclure, et on répond 410 (« la ressource a existé, elle est définitivement
+    // partie ») plutôt que 404.
+    // **M2** : `charger_run` distingue « inconnu » (404) de « servi mais non persisté » (410).
+    // Un 404 nu EFFACERAIT un fait au lieu de le documenter. La décision vit en un seul endroit —
+    // `capture::absence_expliquee` — parce que sept routes lisent un run, et que sept décisions
+    // indépendantes divergent : le premier audit de M2 avait justement corrigé celle-ci et laissé
+    // les six autres.
+    let stored = s.charger_run(id, &caller.tenant).await?;
     let key = s.derive_key(&caller.tenant)?; // HKDF par tenant (server-side)
 
     // ← le vérificateur INDÉPENDANT : essaim + chaîne N17 + pont, sans aucun provider.

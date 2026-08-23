@@ -1,0 +1,110 @@
+# ═══ Scella — le reçu souverain, en une commande ══════════════════════════════
+#
+#   docker compose up
+#
+# Sur une machine où rien n'est installé. Aucun compte, aucune clé d'API, aucun
+# octet qui sort de la machine.
+#
+# Ce que vous verrez défiler, dans l'ordre :
+#   1. le RAPPORT DE DÉMARRAGE de la passerelle — il dit ce qu'elle sert
+#      réellement, et notamment « provenance DÉGRADÉE », parce qu'aucune clé
+#      n'a été fournie ;
+#   2. la démonstration du service « preuve » : un run, un reçu, son export,
+#      et une TRONCATURE démasquée par un simple comptage — sans aucune clé.
+#
+# Le service « preuve » s'arrête quand il a fini ; la passerelle continue de
+# tourner, pour que vous puissiez l'interroger vous-même. Ctrl-C pour sortir.
+#
+# ── Pour un reçu qui oppose quelque chose à quelqu'un ────────────────────────
+# La démonstration tourne SANS CLÉ, donc sur la clé de test publique : elle
+# démontre le mécanisme, jamais la substance. Avec une vraie clé :
+#
+#   EFE_NANO_AUDIT_HMAC_MASTER=$(openssl rand -hex 32) docker compose up
+#
+name: scella
+
+services:
+  # ── La passerelle ──────────────────────────────────────────────────────────
+  passerelle:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.coin
+    image: scella-coin:local
+    # Le profil vient du DÉPÔT, pas d'une copie recopiée ici : c'est exactement
+    # le fichier que le test T2 de M0 vérifie ligne à ligne. Le dupliquer dans
+    # ce `compose.yaml` rouvrirait l'écart entre le déclaré et le servi que M0
+    # existe pour fermer.
+    env_file:
+      - ./profiles/docker.env
+    environment:
+      # Passe la clé si l'opérateur en a fourni une ; sinon la variable reste
+      # absente et M0 annonce « provenance DÉGRADÉE ». Jamais de valeur par
+      # défaut ici : un secret écrit dans un fichier versionné est un secret public.
+      EFE_NANO_AUDIT_HMAC_MASTER: ${EFE_NANO_AUDIT_HMAC_MASTER:-}
+    volumes:
+      - preuve:/preuve
+    ports:
+      # Publié sur la boucle locale UNIQUEMENT. `8080:8080` exposerait la
+      # passerelle sur toutes les interfaces de l'hôte — ce n'est pas ce qu'on
+      # offre à quelqu'un qui découvre le produit.
+      - "127.0.0.1:8080:8080"
+
+  # ── Le pilote de la démonstration ──────────────────────────────────────────
+  preuve:
+    image: scella-coin:local
+    depends_on:
+      - passerelle
+    # Pas de `condition: service_healthy` : l'image est distroless, elle n'a ni
+    # shell ni `curl` pour exécuter une sonde. Le pilote attend lui-même que la
+    # passerelle réponde (jusqu'à 60 s) — c'est plus robuste qu'une sonde qui
+    # dépendrait d'outils qu'on a délibérément retirés de l'image.
+    environment:
+      SCELLA_PASSERELLE: passerelle:8080
+      SCELLA_ANCRE: /preuve/anchors.log
+      SCELLA_SORTIE: /preuve
+      # Si une clé est fournie, le pilote fait AUSSI la re-preuve complète.
+      SCELLA_CLE_HEX: ${SCELLA_CLE_HEX:-}
+    volumes:
+      - preuve:/preuve
+    entrypoint: ["/usr/local/bin/scella-preuve"]
+    restart: "no"
+
+  # ── M5 : la jonction — le coin ET l'expansion ──────────────────────────────
+  #
+  #   docker compose --profile jonction up
+  #
+  # Une SECONDE passerelle, sur le port 8081, construite avec la feature
+  # `reg-evidence`. Chaque run y produit son dossier d'évidence réglementaire
+  # dans le volume partagé, sans geste manuel :
+  #
+  #   curl -X POST localhost:8081/v1/swarm/run   #        -H 'content-type: application/json' -d @examples/run.json
+  #   docker compose run --rm --entrypoint ls jonction -R /preuve/reg
+  #
+  # Elle vit sous un PROFIL, donc `docker compose up` sans argument reste
+  # exactement le coin — le critère de M4 n'est pas touché. Et son image est
+  # DISTINCTE : celle du coin ne contient toujours pas une ligne du registre,
+  # ce que `deux_produits_separables.rs` garde au niveau du crate.
+  jonction:
+    profiles: ["jonction"]
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.coin
+      args:
+        CARGO_FEATURES: reg-evidence
+    image: scella-jonction:local
+    # Le profil du dépôt, celui que T2 vérifie — il désigne /preuve/reg, qui
+    # n'avait de sens que dans un conteneur. Il en a un, maintenant.
+    env_file:
+      - ./profiles/jonction.env
+    environment:
+      EFE_NANO_AUDIT_HMAC_MASTER: ${EFE_NANO_AUDIT_HMAC_MASTER:-}
+    volumes:
+      - preuve:/preuve
+    ports:
+      - "127.0.0.1:8081:8080"
+
+volumes:
+  # Le bundle, sa copie tronquée, l'ancre — et, sous le profil « jonction », les
+  # dossiers réglementaires. Tout ce que la démonstration affirme se recontrôle
+  # à la main sur ces fichiers.
+  preuve:
