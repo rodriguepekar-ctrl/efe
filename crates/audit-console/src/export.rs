@@ -49,13 +49,14 @@ impl std::fmt::Debug for BundleTar {
     }
 }
 
-/// La lecture (mapping) pour un cadre donné.
+/// La lecture (mapping) pour un cadre donné — **la courante**, décidée en un seul endroit.
+///
+/// Elle était recopiée ici, cadre par cadre. C'était sans risque tant que les trois portaient le même
+/// numéro ; ça ne l'est plus depuis que le GDPR est passé en `2026-08` (l'art. 5(1)(e), que M6 outille).
+/// Un dossier exporté par la console doit porter la même lecture que celui qu'émet la passerelle — sans
+/// quoi deux dossiers du même produit, sur le même cadre, se contrediraient devant un régulateur.
 fn mapping_for(framework: Framework) -> MappingSet {
-    match framework {
-        Framework::EuAiAct => templates::eu_ai_act_2026_06(),
-        Framework::Gdpr => templates::gdpr_2026_06(),
-        Framework::Csddd | Framework::Lksg => templates::csddd_lksg_2026_06(),
-    }
+    templates::courant(framework)
 }
 
 static EXPORT_SEQ: AtomicU64 = AtomicU64::new(0);

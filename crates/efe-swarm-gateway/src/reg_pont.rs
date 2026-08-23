@@ -111,13 +111,11 @@ pub fn slug(f: Framework) -> &'static str {
 /// re-dériver l'artefact **sans nous**, et donc de ne rien avoir à croire.
 #[cfg(feature = "reg-evidence")]
 fn mapping_pour(f: Framework) -> reg_evidence::MappingSet {
-    match f {
-        Framework::EuAiAct => reg_evidence::templates::eu_ai_act_2026_06(),
-        Framework::Gdpr => reg_evidence::templates::gdpr_2026_06(),
-        // Les deux devoirs de vigilance partagent une lecture : la CSDDD européenne et la LkSG
-        // allemande posent les mêmes exigences de traçabilité fournisseur.
-        Framework::Csddd | Framework::Lksg => reg_evidence::templates::csddd_lksg_2026_06(),
-    }
+    // La lecture **courante**, décidée en un seul endroit (`reg_evidence::templates::courant`) — et non
+    // recopiée ici. Les versions ne marchent plus au pas depuis que le GDPR est passé en `2026-08`
+    // (l'art. 5(1)(e), que M6 outille) : un producteur qui choisirait son gabarit à la main resterait en
+    // arrière à la montée suivante, et servirait un dossier neuf sous une lecture périmée.
+    reg_evidence::templates::courant(f)
 }
 
 /// Le pont, tel que l'état le porte. `None` sur l'état ⟹ le pont n'est pas câblé.
