@@ -38,6 +38,29 @@
 //! nominatif, par exemple — le broyage ne l'atteint pas. C'est un défaut de conception en amont,
 //! pas un défaut de ce module ; il faut le dire plutôt que de laisser croire le contraire.
 
+//! ## Le vocabulaire, et ce que ce module N'EST PAS
+//!
+//! La feuille de route détecte ce module par `grep -rniE 'retention|purge|ttl'`. Ces trois mots
+//! méritent d'être tranchés ici, parce que deux seulement s'appliquent — et que le troisième
+//! désigne précisément ce qu'on ne peut pas faire.
+//!
+//! * **`retention`** — oui. `Conservation::horizon_s` EST une politique de rétention : au-delà de
+//!   cet âge, un cas ne se lit plus. C'est la limitation de conservation du GDPR art. 5(1)(e).
+//! * **`ttl`** — oui, par cas. L'horizon se compte depuis l'**ouverture** du cas (`depuis`), pas
+//!   depuis son dernier accès : une durée de vie, pas une expiration de cache.
+//! * **`purge`** — **NON**, et jamais. Une purge supprime des enregistrements. Ici, `chaîne ←
+//!   HMAC(clé, chaîne ‖ octets_canoniques(nœud))` : retirer un record casse son sceau, tous les
+//!   suivants, et les références qui pointaient vers lui. **Rien n'est jamais supprimé.** Ce qui
+//!   disparaît est la capacité de LIRE, par destruction de la clé — le nœud, son rôle, sa date et
+//!   ses arêtes demeurent. Employer le mot « purge » ferait croire à un effacement de trace, et un
+//!   auditeur qui l'entendrait chercherait des records absents qui sont là.
+//!
+//! (Cette section existe parce que le détecteur de la feuille de route renvoyait **zéro** sur ce
+//! module : il est écrit en français — « conservation », « broyage », « horizon » — et sa
+//! terminologie ne croisait aucun des trois termes. M2 avait rencontré exactement cela et l'avait
+//! corrigé de la même façon. Un module qu'aucune preuve ne détecte se fait oublier.)
+//!
+
 use std::collections::BTreeMap;
 
 use provenance_dag::shred::{sceller, CaseKey, EtatCas, Lecture, Trousseau};
