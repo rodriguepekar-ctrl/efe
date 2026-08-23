@@ -47,3 +47,24 @@ __pycache__/
 .pytest_cache/
 .ruff_cache/
 .mypy_cache/
+
+# ─────────────────────────────────────────────────────────────────────────
+# M4, corrigé le 2026-08-23 : trouvé en exécutant `docker compose build`
+# pour la PREMIÈRE fois. `target/` était exclu, mais le contexte pesait
+# encore ~7 Go — dominés par des dossiers dont l'image n'a aucun besoin.
+# Un contexte de 7 Go se traverse avant la première ligne de compilation,
+# et la promesse de M4 est « machine vierge, une commande ».
+#
+# ⚠ NE JAMAIS exclure `tools/`, `bench/`, `smoke/`, `slos/` : ce sont des
+#   MEMBRES du workspace (hors `crates/`), et `cargo --locked` a besoin de
+#   leur manifeste pour résoudre, même sans les compiler.
+models/
+node_modules/
+.venv*/
+preview-lab/
+apps/
+platform/
+playground/
+# Copie restaurée, non-membre, qui porte son propre Cargo.toml : sa présence
+# ne sert à rien et pourrait troubler la résolution du workspace racine.
+efe-restored/

@@ -47,7 +47,11 @@ services:
       # Publié sur la boucle locale UNIQUEMENT. `8080:8080` exposerait la
       # passerelle sur toutes les interfaces de l'hôte — ce n'est pas ce qu'on
       # offre à quelqu'un qui découvre le produit.
-      - "127.0.0.1:8080:8080"
+      # Le port HÔTE est configurable — trouvé en exécutant `docker compose up` pour la
+      # première fois, sur une machine où 8080 était déjà pris (il l'est souvent). Sans cela,
+      # un prospect doit ÉDITER ce fichier, et « une commande » n'en est plus une :
+      #     SCELLA_PORT=18080 docker compose up
+      - "127.0.0.1:${SCELLA_PORT:-8080}:8080"
 
   # ── Le pilote de la démonstration ──────────────────────────────────────────
   preuve:
