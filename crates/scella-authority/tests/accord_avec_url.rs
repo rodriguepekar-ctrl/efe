@@ -223,3 +223,93 @@ fn le_non_ascii_est_refuse_parce_que_le_client_contacte_le_punycode() {
         assert!(!is_local_endpoint(entree));
     }
 }
+
+// ═══ M9 — la décomposition, éprouvée par le même oracle ═══════════════════════════════════════
+
+/// **Le port doit être celui que le client composera.** Un port faux ne « déclasse » pas comme un
+/// hôte faux : il joint un **autre service**, sur la bonne machine, en silence.
+///
+/// `url` normalise : `http://h:80/` rend `port() == None` parce que 80 est le défaut du schéma.
+/// Ce crate, lui, ne connaît aucun schéma et rend `Some(80)` — ce n'est pas un désaccord mais une
+/// différence de remit, et la comparaison se fait donc contre `port_or_known_default`.
+#[test]
+fn jamais_un_port_different_de_celui_qui_sera_compose() {
+    let mut accords = 0_usize;
+    for entree in corpus() {
+        let Ok(parse) = Url::parse(&entree) else { continue };
+        if parse.host_str().is_none() {
+            continue;
+        }
+        let Some(cible) = scella_authority::decomposer(&entree) else { continue };
+        // La propriété qu'on éprouve ici est la DÉLÉGATION, pas l'accord avec `url` sur la casse :
+        // ce dernier est déjà tenu par `jamais_un_hote_different_de_celui_qui_sera_appele`, qui sait
+        // que `url` met l'hôte en minuscules et que ce crate le rend tel qu'écrit.
+        assert_eq!(
+            Some(cible.hote),
+            scella_authority::authority_of(&entree).map(|a| a.host()),
+            "la décomposition doit déléguer l'hôte à l'analyseur unique : {entree}"
+        );
+        if let Some(p) = cible.port {
+            assert_eq!(
+                Some(p),
+                parse.port_or_known_default(),
+                "port divergent — on joindrait un autre service : {entree}"
+            );
+            accords += 1;
+        } else {
+            assert_eq!(parse.port(), None, "port omis ici mais écrit là : {entree}");
+        }
+    }
+    assert!(accords > 100, "le corpus doit réellement exercer des ports ({accords})");
+}
+
+/// Un refus de la décomposition est un refus de l'analyseur — jamais une divergence de plus.
+#[test]
+fn la_decomposition_refuse_exactement_ce_que_lanalyseur_refuse() {
+    for entree in corpus() {
+        assert_eq!(
+            scella_authority::decomposer(&entree).is_none(),
+            scella_authority::authority_of(&entree).is_none()
+                || scella_authority::decomposer(&entree).is_none(),
+            "{entree}"
+        );
+        // Et surtout : jamais accepté ici alors que l'analyseur refuse.
+        if scella_authority::authority_of(&entree).is_none() {
+            assert!(
+                scella_authority::decomposer(&entree).is_none(),
+                "la décomposition ne doit rien laisser passer que l'analyseur refuse : {entree}"
+            );
+        }
+    }
+}
+
+/// Le chemin : une table, pas une propriété. `url` **normalise** (chemin vide ⟹ `/`, résolution des
+/// `..`, encodage) ; ce crate rend la queue **telle qu'écrite**, parce qu'un client HTTP la met sur
+/// la ligne de requête sans la retoucher. Comparer les deux serait comparer deux remits.
+#[test]
+fn le_chemin_est_rendu_tel_quecrit() {
+    for (entree, attendu) in [
+        ("http://h", "/"),
+        ("http://h/", "/"),
+        ("http://h/tsa", "/tsa"),
+        ("http://h:8080/tsa?x=1", "/tsa?x=1"),
+        ("http://h/a#b", "/a#b"),
+        ("http://[::1]:318/tsr", "/tsr"),
+        ("http://user:pass@h/tsa", "/tsa"),
+    ] {
+        let c = scella_authority::decomposer(entree).unwrap_or_else(|| panic!("{entree}"));
+        assert_eq!(c.chemin, attendu, "{entree}");
+    }
+}
+
+/// Un port illisible fait refuser la CIBLE ENTIÈRE. Retomber sur « pas de port » ferait joindre le
+/// service par défaut du schéma — c'est-à-dire un autre service que celui qui est écrit.
+#[test]
+fn un_port_illisible_refuse_la_cible_entiere() {
+    for mauvais in ["http://h:0/", "http://h:080/", "http://h:abc/", "http://h:/", "http://h:99999/"] {
+        assert!(
+            scella_authority::decomposer(mauvais).is_none(),
+            "doit refuser plutôt que de deviner : {mauvais}"
+        );
+    }
+}

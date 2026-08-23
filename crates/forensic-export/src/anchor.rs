@@ -148,6 +148,14 @@ pub enum AnchorOutcome {
     RootMismatch { bound: String, expected: String },
     /// Preuve mal formée (champ vide, reçu manquant pour une méthode crypto…).
     Malformed(String),
+    /// **M9** — le reçu engage un **autre** condensé que celui que la preuve annonce.
+    ///
+    /// C'est le défaut que la lecture du jeton existe pour attraper, et il est **indétectable** sans
+    /// elle : `bound_root` est déclaratif, le reçu est le fait. Les comparer l'un à l'autre est ce
+    /// qui casse le cercle « notre affirmation contre notre racine ».
+    ReceiptMismatch { engage: String, annonce: String },
+    /// **M9** — le reçu ne se lit pas comme un jeton d'horodatage.
+    ReceiptUnreadable(String),
 }
 impl AnchorOutcome {
     pub fn is_bound(&self) -> bool {
@@ -157,8 +165,13 @@ impl AnchorOutcome {
 
 /// **Vérifie l'ancrage, hors-ligne** : (1) la **liaison de root** — `proof.bound_root == expected_root`
 /// (le seul contrôle cryptographiquement signifiant et faisable ici : la preuve commet bien CE DAG) ; (2)
-/// la **bonne forme** (émetteur non vide, timestamp > 0, reçu présent pour une méthode crypto). La
-/// vérification du **contenu** du reçu (DER RFC 3161 / signature) est **déléguée à l'émetteur** — différée.
+/// la **bonne forme** (émetteur non vide, timestamp > 0, reçu présent pour une méthode crypto) ; et
+/// **(3) depuis M9**, pour un jeton RFC 3161, la **liaison du reçu lui-même** : le `TSTInfo` est lu
+/// et son `messageImprint` comparé à la racine. Sans ce troisième contrôle, (1) comparait notre
+/// affirmation à notre racine — un cercle.
+///
+/// La vérification de la **signature** du jeton (chaîne de certificats de l'horodateur) reste
+/// déléguée au tiers, avec l'outil de son choix : `openssl ts -verify -digest <root> -in anchor.tsr`.
 pub fn verify_anchor(proof: &AnchorProof, expected_root: &str) -> AnchorOutcome {
     if proof.bound_root != expected_root {
         return AnchorOutcome::RootMismatch { bound: proof.bound_root.clone(), expected: expected_root.to_string() };
@@ -175,7 +188,37 @@ pub fn verify_anchor(proof: &AnchorProof, expected_root: &str) -> AnchorOutcome 
     if proof.method.carries_crypto_receipt() && proof.receipt.is_empty() {
         return AnchorOutcome::Malformed(format!("reçu vide pour la méthode {}", proof.method.as_str()));
     }
+    // ── M9 : pour un jeton RFC 3161, on LIT ce qu'il engage. ──
+    //
+    // Sans ce pas, `bound_root` est une affirmation et le contrôle ci-dessus compare notre
+    // affirmation à notre racine — un cercle que n'importe quel jeton satisfait, y compris celui
+    // d'un autre document ou d'un autre jour. Lire le TSTInfo le casse : le jeton dit lui-même ce
+    // qu'il couvre.
+    //
+    // On ne vérifie toujours PAS sa signature — « aucune crypto maison, aucune 3e pile ». La
+    // division reste nette : nous garantissons que le jeton livré engage la racine livrée, le tiers
+    // garantit que l'horodateur l'a signé (`openssl ts -verify`).
+    if proof.method == AnchorMethod::Rfc3161 {
+        let Some(racine) = racine_32(&proof.bound_root) else {
+            return AnchorOutcome::Malformed("bound_root n'est pas 64 caractères hexadécimaux".into());
+        };
+        return match scella_rfc3161::jeton::lire_jeton(&proof.receipt) {
+            Err(e) => AnchorOutcome::ReceiptUnreadable(e.to_string()),
+            Ok(info) if info.engage(&racine) => AnchorOutcome::Bound { crypto_receipt_checked: true },
+            Ok(info) => AnchorOutcome::ReceiptMismatch {
+                engage: to_hex(&info.empreinte),
+                annonce: proof.bound_root.clone(),
+            },
+        };
+    }
     AnchorOutcome::Bound { crypto_receipt_checked: false }
+}
+
+/// La racine en 32 octets, ou rien. Un `bound_root` qui n'est pas un condensé SHA-256 ne peut être
+/// comparé à aucun `messageImprint`.
+fn racine_32(hex: &str) -> Option<[u8; 32]> {
+    let v = from_hex(hex)?;
+    <[u8; 32]>::try_from(v.as_slice()).ok()
 }
 
 // ── hex (zéro dépendance) ──
@@ -226,13 +269,102 @@ mod tests {
         assert!(AnchorProof::decode(dup).is_err(), "clé dupliquée (bound_root) refusée");
     }
 
+    /// Une preuve SANS reçu cryptographique : c'est la liaison DÉCLARATIVE qu'on éprouve ici, et
+    /// M9 lui a ajouté une seconde couche pour les méthodes qui portent un jeton.
+    fn preuve_declaree(root: &str) -> AnchorProof {
+        AnchorProof {
+            method: AnchorMethod::Declared,
+            issuer: "notaire-interne".into(),
+            bound_root: root.into(),
+            timestamp: 1_700_000_000,
+            receipt: vec![],
+        }
+    }
+
     #[test]
     fn root_binding_is_the_decisive_check() {
         let root = "f4".repeat(32);
-        // bon root → lié (la vérif crypto du reçu reste déléguée).
-        assert_eq!(verify_anchor(&proof(&root), &root), AnchorOutcome::Bound { crypto_receipt_checked: false });
+        // bon root → lié. La méthode `Declared` ne porte aucun reçu : rien à lire, donc
+        // `crypto_receipt_checked: false` — et c'est HONNÊTE, pas un manque.
+        assert_eq!(
+            verify_anchor(&preuve_declaree(&root), &root),
+            AnchorOutcome::Bound { crypto_receipt_checked: false }
+        );
         // root commis ≠ attendu → NON probant pour CE DAG (le coeur de l'attaque « ancrer un autre DAG »).
-        assert!(matches!(verify_anchor(&proof(&"00".repeat(32)), &root), AnchorOutcome::RootMismatch { .. }));
+        assert!(matches!(
+            verify_anchor(&preuve_declaree(&"00".repeat(32)), &root),
+            AnchorOutcome::RootMismatch { .. }
+        ));
+    }
+
+    /// Ce qui a changé avec M9, dit côté `Declared` : une déclaration interne ne prétend à AUCUNE
+    /// force probante externe, et son `crypto_receipt_checked: false` le dit. Le drapeau n'est pas
+    /// un aveu de travail non fait — c'est la mesure de ce que la méthode achète.
+    #[test]
+    fn m9_une_declaration_interne_nachete_aucune_verification_de_recu() {
+        let root = "aa".repeat(32);
+        assert_eq!(
+            verify_anchor(&preuve_declaree(&root), &root),
+            AnchorOutcome::Bound { crypto_receipt_checked: false }
+        );
+        assert!(!AnchorMethod::Declared.carries_crypto_receipt());
+    }
+
+    // ── M9 : la liaison du REÇU lui-même ──
+
+    fn preuve_rfc3161(root_annonce: &str, empreinte_du_jeton: &[u8; 32]) -> AnchorProof {
+        AnchorProof {
+            method: AnchorMethod::Rfc3161,
+            issuer: "horodateur-de-test".into(),
+            bound_root: root_annonce.to_string(),
+            timestamp: 1_787_486_400,
+            receipt: scella_rfc3161::fabrique::jeton_non_signe(empreinte_du_jeton, "20260823120000Z"),
+        }
+    }
+
+    /// Un reçu qui engage bien la racine : `crypto_receipt_checked` devient enfin **vrai**.
+    #[test]
+    fn m9_un_recu_qui_engage_la_racine_est_verifie() {
+        let root = "f4".repeat(32);
+        let brut = [0xf4u8; 32];
+        assert_eq!(
+            verify_anchor(&preuve_rfc3161(&root, &brut), &root),
+            AnchorOutcome::Bound { crypto_receipt_checked: true }
+        );
+    }
+
+    /// ⭐ **Le défaut que la lecture existe pour attraper**, et qui était INDÉTECTABLE sans elle :
+    /// la preuve annonce une racine, le reçu en engage une autre. Les deux contrôles précédents
+    /// passent — `bound_root == expected_root` est vrai — et pourtant l'ancre ne prouve rien.
+    #[test]
+    fn m9_un_recu_qui_engage_une_autre_racine_est_demasque() {
+        let root = "f4".repeat(32);
+        let autre = [0x11u8; 32];
+        let p = preuve_rfc3161(&root, &autre);
+        // La liaison DÉCLARATIVE passe : c'est bien la racine attendue qui est annoncée.
+        assert_eq!(p.bound_root, root);
+        // Et pourtant :
+        match verify_anchor(&p, &root) {
+            AnchorOutcome::ReceiptMismatch { engage, annonce } => {
+                assert_eq!(engage, "11".repeat(32));
+                assert_eq!(annonce, root);
+            }
+            autre => panic!("le reçu menteur doit être démasqué, obtenu : {autre:?}"),
+        }
+    }
+
+    #[test]
+    fn m9_un_recu_illisible_est_nomme_et_non_avale() {
+        let root = "f4".repeat(32);
+        let mut p = preuve_rfc3161(&root, &[0xf4; 32]);
+        p.receipt = vec![0xde, 0xad, 0xbe, 0xef];
+        assert!(matches!(verify_anchor(&p, &root), AnchorOutcome::ReceiptUnreadable(_)));
+    }
+
+    #[test]
+    fn m9_une_racine_qui_nest_pas_un_condense_est_refusee() {
+        let p = preuve_rfc3161("pas-un-condense", &[0xf4; 32]);
+        assert!(matches!(verify_anchor(&p, "pas-un-condense"), AnchorOutcome::Malformed(_)));
     }
 
     #[test]

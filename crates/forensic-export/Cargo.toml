@@ -17,6 +17,10 @@ publish = false
 
 [dependencies]
 provenance-dag = { path = "../provenance-dag" }
+# M9 — la lecture du jeton RFC 3161 (STRUCTURE, pas signature). Crate feuille à arbre VIDE : sans
+# lui, `bound_root` resterait NOTRE affirmation sur ce que le reçu couvre, et `verify_anchor`
+# comparerait notre affirmation à notre racine — un cercle qu'un jeton quelconque satisferait.
+scella-rfc3161 = { path = "../scella-rfc3161" }
 
 # Tests d'intégration (tests/) : produire un ExportContent via S2 + re-rendre le récit (récit = vue).
 [dev-dependencies]

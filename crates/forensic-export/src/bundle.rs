@@ -69,6 +69,13 @@ pub enum ExportError {
     /// La preuve d'ancrage est **mal formée** (émetteur vide, caractère de contrôle, reçu manquant pour
     /// une méthode cryptographique…) — on n'empaquette pas un ancrage non vérifiable.
     AnchorMalformed(String),
+    /// **M9** — le reçu d'horodatage engage un **autre** condensé que celui que la preuve annonce.
+    ///
+    /// C'est un ancrage qui **ment**, et il est pire que pas d'ancrage : un auditeur qui le reçoit
+    /// croit tenir un témoin tiers. On refuse d'empaqueter.
+    AnchorReceiptMismatch { engage: String, annonce: String },
+    /// **M9** — le reçu ne se lit pas comme un jeton RFC 3161.
+    AnchorReceiptUnreadable(String),
     /// Une **pièce jointe réglementaire** (`reg/…`) a un chemin invalide (hors `reg/`, traversée « .. »,
     /// absolu, caractère de contrôle/antislash, ou doublon) — refusée pour ne **jamais** écrire hors du bundle.
     RegAttachment(String),
@@ -93,6 +100,15 @@ impl std::fmt::Display for ExportError {
                 write!(f, "ancrage non probant : commet « {bound} » ≠ root du DAG « {expected} »")
             }
             ExportError::AnchorMalformed(m) => write!(f, "ancrage mal formé : {m}"),
+            ExportError::AnchorReceiptMismatch { engage, annonce } => write!(
+                f,
+                "le reçu d'horodatage engage « {engage} » alors que la preuve annonce « {annonce} » \
+                 — un ancrage qui ment est pire que pas d'ancrage : l'auditeur croirait tenir un \
+                 témoin tiers"
+            ),
+            ExportError::AnchorReceiptUnreadable(m) => {
+                write!(f, "reçu d'horodatage illisible : {m}")
+            }
             ExportError::RegAttachment(m) => write!(f, "pièce jointe réglementaire invalide : {m}"),
         }
     }
@@ -153,6 +169,12 @@ pub fn assemble(
             anchor::AnchorOutcome::Bound { .. } => {}
             anchor::AnchorOutcome::RootMismatch { bound, expected } => return Err(ExportError::AnchorRootMismatch { bound, expected }),
             anchor::AnchorOutcome::Malformed(m) => return Err(ExportError::AnchorMalformed(m)),
+            anchor::AnchorOutcome::ReceiptMismatch { engage, annonce } => {
+                return Err(ExportError::AnchorReceiptMismatch { engage, annonce })
+            }
+            anchor::AnchorOutcome::ReceiptUnreadable(m) => {
+                return Err(ExportError::AnchorReceiptUnreadable(m))
+            }
         }
     }
 
@@ -411,7 +433,21 @@ mod tests {
             issuer: "acme-tsa".into(),
             bound_root: input.manifest_root.clone(), // ancre CE root
             timestamp: 1_700_000_000,
-            receipt: vec![0xde, 0xad, 0xbe, 0xef],
+            // M9 — un reçu qui engage RÉELLEMENT ce root. Avant M9 quatre octets quelconques
+            // suffisaient : personne ne les lisait, et c'est précisément ce qui rendait la
+            // liaison circulaire.
+            receipt: scella_rfc3161::fabrique::jeton_non_signe(
+                &<[u8; 32]>::try_from(
+                    (0..32)
+                        .map(|i| {
+                            u8::from_str_radix(&input.manifest_root[2 * i..2 * i + 2], 16).unwrap()
+                        })
+                        .collect::<Vec<u8>>()
+                        .as_slice(),
+                )
+                .unwrap(),
+                "20260823120000Z",
+            ),
         };
         let opts = BundleOpts { anchor: Some(proof.clone()), ..Default::default() };
         assemble(&input, &key(), &opts, &dir).unwrap();

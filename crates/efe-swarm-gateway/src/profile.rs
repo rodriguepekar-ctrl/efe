@@ -156,6 +156,24 @@ pub const REGISTRY: &[Switch] = &[
         fatal_if_invalid: false,
     },
     Switch {
+        name: "EFE_SWARM_TSA_URL",
+        buys: "l'ancre TIERCE — un horodateur RFC 3161 atteste que la racine existait avant T, avec \
+               SA clé. Le reçu passe de « tamper-evident pour un détenteur de clé » à OPPOSABLE au \
+               détenteur lui-même",
+        absence_costs: "l'« ailleurs » de l'ancre reste NOTRE fichier, remis par nous : il détecte \
+                        une troncature, il ne dit rien à qui doute de nous. ⚠ Poser cette URL fait \
+                        DÉPENDRE la route de bundle d'un tiers : horodateur muet ⟹ export en échec",
+        class: Class::Tuning,
+        fatal_if_invalid: false,
+    },
+    Switch {
+        name: "EFE_SWARM_TSA_DIR",
+        buys: "le répertoire où déposer les jetons d'horodatage et leurs preuves",
+        absence_costs: "sans objet si aucun horodateur n'est déclaré ; requis avec EFE_SWARM_TSA_URL",
+        class: Class::Tuning,
+        fatal_if_invalid: false,
+    },
+    Switch {
         name: "EFE_SWARM_BUNDLE_ENABLED",
         buys: "la route d'export `GET /v1/swarm/bundle/:id`",
         absence_costs: "route NON montée (404) — aucun export vers un vérifieur tiers",
@@ -537,6 +555,17 @@ pub mod read {
         raw("EFE_SWARM_ANCHOR_LOG")
     }
 
+    /// **M9** — l'URL de l'horodateur tiers, et où déposer ses jetons.
+    #[must_use]
+    pub fn tsa_url() -> Option<String> {
+        raw("EFE_SWARM_TSA_URL")
+    }
+
+    #[must_use]
+    pub fn tsa_dir() -> Option<String> {
+        raw("EFE_SWARM_TSA_DIR")
+    }
+
     #[must_use]
     pub fn bundle_enabled() -> bool {
         flag("EFE_SWARM_BUNDLE_ENABLED")
@@ -693,6 +722,12 @@ pub struct Observed {
     /// La clé de provenance est-elle dérivée d'un master (et non la clé de test publique) ?
     pub provenance_non_forgeable: bool,
     pub anchor: bool,
+    /// **M9** — l'ancre est-elle TIERCE (horodateur RFC 3161) ou seulement la nôtre ?
+    ///
+    /// Sans ce bit, « ancre : SERVIE » recouvrirait deux choses opposées : notre propre fichier,
+    /// remis par nous, et l'attestation d'un tiers avec SA clé. Dire la même chose des deux
+    /// cacherait très exactement ce que M9 apporte.
+    pub anchor_tierce: bool,
     pub bundle: bool,
     pub attestation: bool,
     pub durable_store: bool,
@@ -867,6 +902,8 @@ pub struct Resolved {
     pub capture_observation: bool,
     pub master: bool,
     pub anchor: bool,
+    /// **M9** — cf. [`Observed::anchor_tierce`].
+    pub anchor_tierce: bool,
     pub bundle: bool,
     pub attestation: bool,
     pub durable_store: bool,
@@ -888,6 +925,10 @@ impl Resolved {
             capture_observation: read::capture_policy().as_deref() == Some("observation"),
             master: read::master_present(),
             anchor: read::anchor_log().is_some(),
+            // TIERCE seulement si les DEUX sont posés : sans répertoire, le binaire refuse de
+            // démarrer, donc annoncer « tierce » sur la seule URL décrirait un service qui n'existe
+            // pas.
+            anchor_tierce: read::tsa_url().is_some() && read::tsa_dir().is_some(),
             bundle: read::bundle_enabled(),
             attestation: read::bundle_signing_seed().is_some(),
             durable_store: read::database_url().is_some(),
@@ -914,6 +955,7 @@ impl Resolved {
             capture_observation: get("EFE_SWARM_CAPTURE_POLICY").as_deref() == Some("observation"),
             master: p("EFE_NANO_AUDIT_HMAC_MASTER"),
             anchor: p("EFE_SWARM_ANCHOR_LOG"),
+            anchor_tierce: p("EFE_SWARM_TSA_URL") && p("EFE_SWARM_TSA_DIR"),
             bundle: f("EFE_SWARM_BUNDLE_ENABLED"),
             attestation: p("EFE_SWARM_BUNDLE_SIGNING_SEED"),
             durable_store: p("DATABASE_URL"),
@@ -958,6 +1000,7 @@ impl Report {
         let mut capabilities = vec![
             line("EFE_NANO_AUDIT_HMAC_MASTER", "provenance", o.provenance_non_forgeable),
             line("EFE_SWARM_ANCHOR_LOG", "ancre", o.anchor),
+            line("EFE_SWARM_TSA_URL", "ancre tierce", o.anchor_tierce),
             line("EFE_SWARM_BUNDLE_ENABLED", "export de bundle", o.bundle),
             line("EFE_SWARM_BUNDLE_SIGNING_SEED", "attestation", o.attestation),
             line("DATABASE_URL", "store durable", o.durable_store),
@@ -997,6 +1040,7 @@ impl Report {
         let mut capabilities = vec![
             line("EFE_NANO_AUDIT_HMAC_MASTER", "provenance", r.master),
             line("EFE_SWARM_ANCHOR_LOG", "ancre", r.anchor),
+            line("EFE_SWARM_TSA_URL", "ancre tierce", r.anchor_tierce),
             line("EFE_SWARM_BUNDLE_ENABLED", "export de bundle", r.bundle),
             line("EFE_SWARM_BUNDLE_SIGNING_SEED", "attestation", r.attestation),
             line("DATABASE_URL", "store durable", r.durable_store),
@@ -1360,6 +1404,7 @@ mod tests {
             &Report::from_observed(&Observed {
                 provenance_non_forgeable: true,
                 anchor: true,
+                anchor_tierce: false,
                 bundle: true,
                 attestation: true,
                 durable_store: true,

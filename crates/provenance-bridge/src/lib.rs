@@ -79,6 +79,8 @@ pub mod derive;
 pub mod error;
 pub mod mapping;
 pub mod anchor;
+/// **M9** — l'ancre tierce : un horodateur RFC 3161 comme « ailleurs ».
+pub mod rfc3161;
 pub mod attest;
 pub mod seal;
 pub mod view;

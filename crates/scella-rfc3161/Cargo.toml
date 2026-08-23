@@ -1,0 +1,26 @@
+# SPDX-License-Identifier: UNLICENSED
+# M9 — le lecteur/écrivain RFC 3161 à arbre de dépendances LITTÉRALEMENT VIDE.
+#
+# Pourquoi un crate à part, et pas du code dans forensic-export ou provenance-bridge : les DEUX en
+# ont besoin (l'un pour lier une preuve à sa racine, l'autre pour en produire une). L'écrire aux
+# deux endroits ferait deux analyseurs d'un même format — le défaut que M1 a passé un module entier
+# à supprimer. Un crate feuille, comme `scella-authority`.
+#
+# Aucune dépendance, et ce n'est pas une coquetterie : ce code lit une réponse VENUE DU RÉSEAU,
+# c'est-à-dire l'entrée la plus hostile de tout le dépôt. Il doit être relisible en entier par
+# quelqu'un qui ne fait confiance à personne.
+#
+# ⚠ Ce crate ne vérifie AUCUNE signature — il lit une STRUCTURE. La vérification cryptographique du
+# jeton (chaîne de certificats de l'horodateur, signature CMS) reste déléguée au tiers, qui la fait
+# avec `openssl ts -verify`. Écrire une vérification de signature à la main violerait la règle du
+# dépôt : « aucune crypto maison, aucune 3e pile ».
+[package]
+name = "scella-rfc3161"
+version = { workspace = true }
+edition = { workspace = true }
+license = "UNLICENSED"
+publish = false
+
+[dependencies]
+
+[dev-dependencies]

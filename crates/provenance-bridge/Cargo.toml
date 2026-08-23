@@ -29,6 +29,13 @@ provenance-dag        = { path = "../provenance-dag", version = "0.0.1" }       
 efe-swarm-provenance  = { path = "../efe-swarm-provenance", version = "0.0.1" }  # AgentCallRecord, deterministic_order, verify_swarm (pile A)
 efe-nano-sdk          = { path = "../efe-nano-sdk", version = "0.0.1" }          # LlmProvenanceRecord, Blake3Hash, ProvenanceId
 uuid                  = { workspace = true }
+# M9 — l'ancre tierce. `scella-rfc3161` : la demande et la lecture du jeton (arbre VIDE).
+# `scella-authority` : la décomposition de l'URL de l'horodateur — l'analyseur UNIQUE du dépôt, et
+# en écrire un ici en ferait un second. `forensic-export` : le format `AnchorProof` déposé à côté du
+# jeton (direction pont → pile, celle qui est permise).
+scella-rfc3161        = { path = "../scella-rfc3161",  version = "0.0.1" }
+scella-authority      = { path = "../scella-authority", version = "0.0.1" }
+forensic-export       = { path = "../forensic-export",  version = "0.0.1" }
 # P.3 — l'attestation ed25519 de la racine. MÊME bibliothèque que la co-signature R3 de
 # efe-swarm-provenance et que N18 publisher-identity : aucune crypto maison, aucune 3e pile.
 ed25519-dalek         = "2.1"

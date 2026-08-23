@@ -294,6 +294,8 @@ members = [
     # M1 — l'unique analyseur d'autorité, partagé par le périmètre preuve ET le périmètre essaim.
     # Zéro dépendance, donc une feuille : chacun des deux la prend sans gagner de chemin vers l'autre.
     "crates/scella-authority",
+    # M9 — le lecteur/écrivain RFC 3161, arbre de dépendances VIDE (cf. son Cargo.toml).
+    "crates/scella-rfc3161",
     # M4 — le pilote de la démonstration en une commande (`docker compose up`).
     "crates/scella-preuve",
 ]

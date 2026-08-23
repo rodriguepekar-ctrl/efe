@@ -3440,6 +3440,7 @@ dependencies = [
  "audit-api",
  "provenance-capture",
  "provenance-dag",
+ "scella-rfc3161",
 ]
 
 [[package]]
@@ -6331,7 +6332,10 @@ dependencies = [
  "ed25519-dalek",
  "efe-nano-sdk",
  "efe-swarm-provenance",
+ "forensic-export",
  "provenance-dag",
+ "scella-authority",
+ "scella-rfc3161",
  "uuid",
  "verify-mini",
 ]
@@ -7392,6 +7396,10 @@ dependencies = [
  "serde_json",
  "verify-mini",
 ]
+
+[[package]]
+name = "scella-rfc3161"
+version = "0.0.1"
 
 [[package]]
 name = "schannel"

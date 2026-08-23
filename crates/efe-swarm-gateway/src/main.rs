@@ -217,12 +217,69 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         // « ailleurs » qui fait tout le travail, pas la cryptographie.
         match efe_swarm_gateway::profile::read::anchor_log() {
             Some(path) if !path.is_empty() => {
-                let sink = std::sync::Arc::new(efe_swarm_gateway::FileAnchorSink::new(&path));
+                let journal = efe_swarm_gateway::FileAnchorSink::new(&path);
+
+                // ── M9 : l'ancre TIERCE, si un horodateur est déclaré ──
+                //
+                // Sans elle, l'« ailleurs » de l'ancre est NOTRE fichier, remis par nous : il
+                // détecte une troncature, il ne dit rien à qui doute de nous. Un horodateur atteste
+                // avec SA clé — c'est le pas de « tamper-evident pour un détenteur de clé » à
+                // « opposable au détenteur lui-même ».
+                //
+                // L'horodateur ENVELOPPE le journal, il ne le remplace pas : la ligne de journal est
+                // ce qui détecte une troncature, et un horodatage ne fait pas ce travail-là.
+                let url = efe_swarm_gateway::profile::read::tsa_url().unwrap_or_default();
+                let sink: std::sync::Arc<dyn efe_swarm_gateway::AnchorSink> = if url.trim().is_empty()
+                {
+                    std::sync::Arc::new(journal)
+                } else {
+                    let dir = efe_swarm_gateway::profile::read::tsa_dir().unwrap_or_default();
+                    if dir.trim().is_empty() {
+                        eprintln!(
+                            "\n╔═ DÉMARRAGE REFUSÉ ═══════════════════════════════════════════════\n\
+                             ║ EFE_SWARM_TSA_URL est posé, mais EFE_SWARM_TSA_DIR manque : les\n\
+                             ║ jetons n'auraient nulle part où être déposés.\n\
+                             ║ Retomber en silence sur le journal local donnerait à un exploitant\n\
+                             ║ qui a DEMANDÉ une ancre tierce une ancre qui est la nôtre.\n\
+                             ╚══════════════════════════════════════════════════════════════════\n"
+                        );
+                        std::process::exit(2);
+                    }
+                    match provenance_bridge::rfc3161::Rfc3161Sink::nouveau(
+                        &url,
+                        &dir,
+                        Box::new(journal),
+                    ) {
+                        Ok(s) => std::sync::Arc::new(s),
+                        Err(e) => {
+                            eprintln!(
+                                "\n╔═ DÉMARRAGE REFUSÉ ═══════════════════════════════════════════\n\
+                                 ║ EFE_SWARM_TSA_URL : {e}\n\
+                                 ╚══════════════════════════════════════════════════════════════\n"
+                            );
+                            std::process::exit(2);
+                        }
+                    }
+                };
+
                 println!(
                     "→ ancrage ACTIF — {} ; REMETTEZ ce journal à l'auditeur par un canal DISTINCT \
                      du bundle, sans quoi l'ancre ne prouve rien.",
                     efe_swarm_gateway::AnchorSink::describe(sink.as_ref())
                 );
+                if url.trim().is_empty() {
+                    println!(
+                        "   ancre DÉCLARÉE (notre propre journal) : elle détecte une troncature, \
+                         elle ne prouve rien CONTRE NOUS. Posez EFE_SWARM_TSA_URL pour une ancre \
+                         tierce."
+                    );
+                } else {
+                    println!(
+                        "   ancre TIERCE : l'horodateur atteste avec SA clé. ⚠ La route de bundle \
+                         en DÉPEND désormais — un horodateur muet fait échouer l'export, par le \
+                         dessin qui refuse d'annoncer « anchored » sans ancre."
+                    );
+                }
                 state = state.with_anchor_sink(sink);
             }
             _ => println!(

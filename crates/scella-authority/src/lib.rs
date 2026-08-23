@@ -255,6 +255,70 @@ pub fn authority_of(endpoint: &str) -> Option<Authority<'_>> {
     Some(Authority(host))
 }
 
+/// Une cible joignable : l'hôte, le port s'il est écrit, et ce qui suit l'autorité.
+///
+/// **Pourquoi cela vit ici et pas chez l'appelant.** Un client qui doit *joindre* un endpoint a
+/// besoin des trois morceaux. Les découper chez lui recréerait le découpage d'URL que ce crate
+/// existe pour tenir en un seul endroit — et deux découpages qui divergent d'un caractère
+/// contactent deux machines différentes. La décision d'**hôte** reste celle d'[`authority_of`],
+/// à l'octet près : [`decomposer`] la lui délègue et ne fait qu'ajouter ce qu'elle ne rendait pas.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Cible<'a> {
+    /// L'hôte, décidé par [`authority_of`] — donc soumis à tous ses refus.
+    pub hote: &'a str,
+    /// Le port **tel qu'il est écrit**. `None` = absent : ce crate ne connaît aucun schéma et
+    /// n'invente donc pas de 80 ou de 443. Deviner un port serait décider à la place de l'appelant.
+    pub port: Option<u16>,
+    /// Ce qui suit l'autorité (chemin, requête, fragment), ou `"/"` si rien.
+    pub chemin: &'a str,
+}
+
+/// Décompose un endpoint en [`Cible`]. Rend `None` exactement quand [`authority_of`] refuse.
+#[must_use]
+pub fn decomposer(endpoint: &str) -> Option<Cible<'_>> {
+    // L'hôte vient de l'analyseur unique : aucune décision de localité n'est reprise ici.
+    let hote = authority_of(endpoint)?.host();
+
+    let apres_schema = endpoint.split_once("://").map(|(_, r)| r).unwrap_or(endpoint);
+    let coupe = apres_schema.find(['/', '?', '#']).unwrap_or(apres_schema.len());
+    let (autorite, reste) = apres_schema.split_at(coupe);
+    let chemin = if reste.is_empty() { "/" } else { reste };
+
+    let hostport = autorite.split_once('@').map(|(_, h)| h).unwrap_or(autorite);
+    // Le port se lit après le `]` d'une IPv6 littérale, ou après le seul `:` d'un hôte simple.
+    // `authority_of` a déjà refusé toute IPv6 nue, donc il n'y a jamais d'ambiguïté ici.
+    let queue = match hostport.split_once(']') {
+        Some((_, apres)) => apres,
+        None => match hostport.split_once(':') {
+            Some((_, p)) => return Some(Cible { hote, port: port_de(p)?, chemin }),
+            None => "",
+        },
+    };
+    let port = match queue.strip_prefix(':') {
+        Some(p) => port_de(p)?,
+        None => None,
+    };
+    Some(Cible { hote, port, chemin })
+}
+
+/// Un port écrit en décimal, non vide, sans zéro de tête superflu et non nul.
+///
+/// `Some(None)` n'existe pas : un port présent mais illisible fait **refuser** la cible entière.
+/// Retomber sur « pas de port » ferait joindre un service différent de celui qui est écrit.
+fn port_de(p: &str) -> Option<Option<u16>> {
+    if p.is_empty() || !p.bytes().all(|b| b.is_ascii_digit()) {
+        return None;
+    }
+    if p.len() > 1 && p.starts_with('0') {
+        return None; // « 080 » se lit 80 chez certains, 0 chez d'autres : on refuse.
+    }
+    let n: u16 = p.parse().ok()?;
+    if n == 0 {
+        return None;
+    }
+    Some(Some(n))
+}
+
 /// L'hôte d'un endpoint, ou `None`. Raccourci de [`authority_of`] pour les appelants qui n'ont
 /// besoin que de la chaîne — typiquement pour **journaliser** sans recopier un `userinfo`.
 #[must_use]
