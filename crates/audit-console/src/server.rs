@@ -6,6 +6,7 @@
 //! garder l'arbre de dépendances **vide**, cohérent avec le reste de P1.
 
 use crate::app::Console;
+use crate::canal::Canal;
 use crate::handler::handle;
 use crate::http::{HttpRequest, HttpResponse};
 use audit_api::assert_local;
@@ -19,12 +20,40 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 /// on refuse net (503) plutôt que d'empiler des threads/tampons sans fin.
 const MAX_INFLIGHT: usize = 256;
 
-/// Sert la console sur `addr` (ex. `127.0.0.1:8088`). **Refuse** un endpoint non-local (souveraineté :
-/// rien ne sort de la frontière du tenant). Boucle bloquante (un thread par connexion ; l'état est
-/// partagé sous `Mutex`). Ne rend `Ok` que si le listener s'arrête proprement.
-pub fn serve(addr: &str, console: Console) -> std::io::Result<()> {
-    // I-S3-SOUVERAIN : le bind DOIT être local.
-    assert_local(addr).map_err(|e| std::io::Error::new(std::io::ErrorKind::PermissionDenied, e.to_string()))?;
+/// Sert la console sur `addr` (ex. `127.0.0.1:8088`). Boucle bloquante (un thread par connexion ;
+/// l'état est partagé sous `Mutex`). Ne rend `Ok` que si le listener s'arrête proprement.
+///
+/// ## M8 — le bind non-local, et ce qu'il coûte
+///
+/// `I-S3-SOUVERAIN` exigeait un bind **local**, sans exception : la console ne pouvait pas servir un
+/// auditeur distant, donc « TLS » ne pouvait même pas se poser. M8 lève l'interdit — **contre une
+/// déclaration explicite** du terminateur de canal placé devant le service (`terminateur`).
+///
+/// Ce n'est pas une case à cocher. La déclaration est **portante** : elle qualifie chaque connexion
+/// en [`Canal::A2ProtegeDeclare`], ce qui est le seul barreau, hors boucle locale, qui franchisse le
+/// plancher d'un **scellement**. Sans elle, un pair distant est [`Canal::A3NonProtege`] : il peut
+/// lire, il ne peut rien sceller.
+///
+/// **Ce processus ne termine PAS TLS**, et il faut le dire. Le dépôt possède déjà une pile TLS
+/// complète (TLS 1.3, mTLS, rotation à chaud) dans `efe-meta-swarm-server`, hors du produit ; en
+/// réécrire une ici triplerait l'arbre de dépendances d'un crate feuille et serait moins sûr qu'un
+/// terminateur mûr. Ce que M8 refuse, c'est de servir à distance **en silence** ; ce qu'il n'a
+/// jamais prétendu, c'est de chiffrer lui-même.
+pub fn serve(addr: &str, console: Console, terminateur: Option<String>) -> std::io::Result<()> {
+    let declare = terminateur.as_deref().map(str::trim).filter(|t| !t.is_empty()).map(str::to_string);
+    if declare.is_none() {
+        // I-S3-SOUVERAIN : sans déclaration, le bind DOIT rester local.
+        assert_local(addr).map_err(|e| {
+            std::io::Error::new(
+                std::io::ErrorKind::PermissionDenied,
+                format!(
+                    "{e} — pour servir hors de la boucle locale, DÉCLAREZ le terminateur de canal \
+                     placé devant ce service. Servir à distance sans le dire ferait traverser les \
+                     jetons de session en clair sans qu'une ligne ne proteste."
+                ),
+            )
+        })?;
+    }
     let listener = TcpListener::bind(addr)?;
     let console = Arc::new(Mutex::new(console));
     let inflight = Arc::new(AtomicUsize::new(0));
@@ -39,8 +68,9 @@ pub fn serve(addr: &str, console: Console) -> std::io::Result<()> {
                 inflight.fetch_add(1, Ordering::Relaxed);
                 let console = Arc::clone(&console);
                 let inflight = Arc::clone(&inflight);
+                let declare = declare.clone();
                 std::thread::spawn(move || {
-                    let _ = handle_conn(stream, &console);
+                    let _ = handle_conn(stream, &console, declare.as_deref());
                     inflight.fetch_sub(1, Ordering::Relaxed);
                 });
             }
@@ -51,7 +81,11 @@ pub fn serve(addr: &str, console: Console) -> std::io::Result<()> {
 }
 
 /// Traite UNE connexion : lit (avec timeout + bornes), dispatche, écrit, ferme.
-fn handle_conn(stream: TcpStream, console: &Arc<Mutex<Console>>) -> std::io::Result<()> {
+fn handle_conn(
+    stream: TcpStream,
+    console: &Arc<Mutex<Console>>,
+    terminateur: Option<&str>,
+) -> std::io::Result<()> {
     // Anti-slowloris minimal : un client muet est coupé.
     stream.set_read_timeout(Some(Duration::from_secs(15)))?;
     stream.set_write_timeout(Some(Duration::from_secs(15)))?;
@@ -60,8 +94,11 @@ fn handle_conn(stream: TcpStream, console: &Arc<Mutex<Console>>) -> std::io::Res
         Ok(req) => {
             let now = SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
             // Le verrou n'est tenu QUE pendant le dispatch (handle est rapide et pur).
+            // M8 — le barreau vient de la CONNEXION, jamais de la requête. Un client qui pourrait
+            // annoncer son propre niveau de confiance rendrait l'échelle décorative.
+            let canal = Canal::observer(stream.peer_addr().ok(), terminateur);
             let mut guard = console.lock().unwrap_or_else(|p| p.into_inner());
-            handle(&mut guard, &req, now)
+            handle(&mut guard, &req, now, &canal)
         }
         Err(e) => HttpResponse::html(400, format!("<!doctype html><h1>400</h1><p>requête invalide : {}</p>", html_escape(&e.to_string()))),
     };
@@ -87,9 +124,30 @@ mod tests {
         // I-S3-SOUVERAIN : un bind non-local est refusé AVANT toute écoute (rien ne sort de la frontière).
         let mut c = Console::new();
         c.provision("acme", TenantKey::from_bytes([1u8; 32]));
-        let err = serve("203.0.113.5:8088", c).unwrap_err();
+        let err = serve("203.0.113.5:8088", c, None).unwrap_err();
         assert_eq!(err.kind(), std::io::ErrorKind::PermissionDenied, "endpoint public refusé (souveraineté)");
         assert!(err.to_string().contains("souveraineté"));
+    }
+
+    /// **M8** — le refus dit désormais *quel geste* le lève, et pourquoi le taire serait pire.
+    #[test]
+    fn le_refus_de_bind_indique_la_declaration_qui_le_leve() {
+        let mut c = Console::new();
+        c.provision("acme", TenantKey::from_bytes([1u8; 32]));
+        let msg = serve("203.0.113.5:8088", c, None).unwrap_err().to_string();
+        assert!(msg.contains("DÉCLAREZ le terminateur"), "le geste : {msg}");
+        assert!(msg.contains("en clair"), "et le danger que le silence ferait courir : {msg}");
+    }
+
+    /// Une déclaration BLANCHE n'est pas une déclaration : elle ne lève pas la garde.
+    #[test]
+    fn une_declaration_blanche_ne_leve_pas_la_garde() {
+        for d in [Some(String::new()), Some("   ".to_string())] {
+            let mut c = Console::new();
+            c.provision("acme", TenantKey::from_bytes([1u8; 32]));
+            let e = serve("203.0.113.5:8088", c, d).unwrap_err();
+            assert_eq!(e.kind(), std::io::ErrorKind::PermissionDenied);
+        }
     }
 
     #[test]

@@ -41,7 +41,7 @@ fn lu(profil: &str) -> BTreeMap<String, String> {
 
 /// Les profils de ce binaire. `console` = la posture de DÉMONSTRATION (un tenant, une session) ;
 /// `service` = la posture de SERVICE que M7 rend possible (N tenants déclarés).
-const PROFILS: &[&str] = &["console", "service"];
+const PROFILS: &[&str] = &["console", "service", "expose"];
 
 #[test]
 fn chaque_profil_produit_exactement_le_rapport_quil_annonce() {

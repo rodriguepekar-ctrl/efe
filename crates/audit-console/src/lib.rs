@@ -30,6 +30,7 @@
 //! ## Usage de bout en bout
 //! ```
 //! use audit_console::{Console, handle, HttpRequest, Role};
+//! use audit_console::canal::Canal;
 //! use provenance_dag::TenantKey;
 //!
 //! // Le backend détient la clé (souveraineté) ; la console est dans la frontière du tenant.
@@ -39,7 +40,9 @@
 //!
 //! // Une requête sans session est refusée (401) ; avec session, on REND la vue.
 //! let req = HttpRequest::parse(b"GET / HTTP/1.1\r\nAuthorization: Bearer tok\r\n\r\n").unwrap();
-//! let resp = handle(&mut console, &req, 0);
+//! // M8 — le barreau du canal vient de la CONNEXION, jamais de la requête : il est donc un
+//! // paramètre à part. Ici, la boucle locale — le seul barreau qu'un processus puisse témoigner.
+//! let resp = handle(&mut console, &req, 0, &Canal::A1LoopbackTemoin);
 //! assert_eq!(resp.status, 200);
 //! let html = String::from_utf8(resp.body).unwrap();
 //! // Le rendu porte l'honnêteté cardinale, et n'affiche jamais « correct » comme verdict.
@@ -48,6 +51,8 @@
 //! ```
 
 // M0 — le profil servi : registre des interrupteurs, seul lecteur d'environnement, et rapport.
+/// **M8** — le barreau de confiance du canal, et le plancher qu'un acte humain exige.
+pub mod canal;
 pub mod profile;
 /// **M7** — la déclaration d'un déploiement, et les refus qui gardent l'isolation.
 pub mod provisioning;

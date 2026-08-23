@@ -4,7 +4,11 @@
 //! **extrait le vrai tar** d'export avec le `tar` système (compatibilité réelle), en vérifiant que la
 //! **clé tenant n'y figure pas** (souveraineté). Enfin, la **rédaction** d'un `Viewer` est rendue.
 
+use audit_console::canal::Canal;
 use audit_api::AuthContext;
+
+/// M8 — ces tests s'exécutaient implicitement en boucle locale ; on le DIT désormais.
+const LOCAL: Canal = Canal::A1LoopbackTemoin;
 use audit_console::{handle, Console, HttpRequest, Role};
 use provenance_capture::LlmCall;
 use provenance_dag::TenantKey;
@@ -30,7 +34,7 @@ fn console() -> Console {
 /// Joue une requête au FIL : octets bruts → parse → handle → to_bytes.
 fn wire(c: &mut Console, raw: &str, now: u64) -> (String, Vec<u8>) {
     let req = HttpRequest::parse(raw.as_bytes()).expect("requête parsable");
-    let resp = handle(c, &req, now);
+    let resp = handle(c, &req, now, &LOCAL);
     let bytes = resp.to_bytes();
     let text = String::from_utf8_lossy(&bytes).to_string();
     (text, resp.body)

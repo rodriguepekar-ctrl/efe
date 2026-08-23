@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: UNLICENSED
-//! **Le cœur de la coquille de transport** — `handle(console, req, now)`, **pur** (aucun socket, aucune
+//! **Le cœur de la coquille de transport** — `handle(console, req, now, &LOCAL)`, **pur** (aucun socket, aucune
 //! horloge cachée : `now` est injecté), donc **air-gap-testable** comme le routeur de S2. Il fait trois
 //! choses, et **aucune décision de confiance** : (1) résoudre la session → `AuthContext` (401 sinon),
 //! (2) router le chemin console vers un appel S2, (3) **rendre** la réponse (HTML pour la console, JSON
@@ -19,8 +19,11 @@ use audit_api::{route, ApiError, AuthContext, Cursor, DecisionStatus, ListQuery,
 use provenance_dag::HumanAction;
 use reg_evidence::{CaseScope, Framework};
 
+use crate::canal::{Canal, Plancher};
+use crate::session::Provenance;
+
 /// Le point d'entrée de la coquille. Pur ; `now` est l'horloge injectée (le serveur passe l'heure réelle).
-pub fn handle(console: &mut Console, req: &HttpRequest, now: u64) -> HttpResponse {
+pub fn handle(console: &mut Console, req: &HttpRequest, now: u64, canal: &Canal) -> HttpResponse {
     // ── 0. M7 — les sondes d'exploitation, AVANT l'authentification ──
     //
     // Un superviseur n'a pas de jeton. Exiger l'authentification rendrait la sonde inutilisable ;
@@ -30,24 +33,44 @@ pub fn handle(console: &mut Console, req: &HttpRequest, now: u64) -> HttpRespons
     //
     // C'est la SEULE exception à « tout passe par l'authentification », et le test
     // `seules_les_deux_sondes_sont_publiques` interdit qu'il y en ait une troisième.
-    if req.method == HttpMethod::Get {
-        let segs: Vec<&str> = req.path.split('/').filter(|s| !s.is_empty()).collect();
-        match segs.as_slice() {
-            ["healthz"] => return sante(),
-            ["readyz"] => return pret(console),
-            _ => {}
-        }
+    let segs_pre: Vec<&str> = req.path.split('/').filter(|s| !s.is_empty()).collect();
+    match (&req.method, segs_pre.as_slice()) {
+        (HttpMethod::Get, ["healthz"]) => return sante(),
+        (HttpMethod::Get, ["readyz"]) => return pret(console),
+        // M8 — la CONNEXION doit être atteignable sans être connecté. C'est la seule raison pour
+        // laquelle ces routes précèdent l'authentification, et le garde
+        // `seules_les_routes_publiques_declarees_le_sont` interdit qu'il y en ait une sixième.
+        (HttpMethod::Get, ["login"]) => return formulaire_connexion(None),
+        (HttpMethod::Post, ["login"]) => return connexion(console, req, now, canal),
+        (HttpMethod::Post, ["logout"]) => return deconnexion(),
+        _ => {}
     }
 
     // ── 1. authentification : la coquille construit un AuthContext DÉJÀ vérifié, ou 401 ──
-    let token = match extract_token(req) {
+    let (token, provenance) = match extract_token(req) {
         Some(t) => t,
         None => return unauth(req),
     };
-    let auth = match console.sessions().resolve(&token) {
+    let auth = match console.sessions().resolve(&token, now) {
         Some(a) => a,
         None => return unauth(req),
     };
+
+    // ── 2. M8 — CSRF : une requête qui CHANGE l'état et qui s'authentifie par COOKIE doit prouver
+    //    son origine. Un cookie part TOUT SEUL, y compris sur une requête déclenchée par un autre
+    //    site ; un en-tête `Authorization` ne le peut pas — il est donc lui-même la défense.
+    //    Sans cela, un site tiers ferait sceller une approbation sous l'identité d'un officier qui
+    //    n'a rien fait, et le record serait indistinguable d'une vraie.
+    if req.method == HttpMethod::Post {
+        if let Err(refus) = origine_sure(req, provenance == Provenance::EnTete) {
+            return refus;
+        }
+    }
+
+    // ── 3. M8 — le PLANCHER DE CANAL, point de décision unique pour les actes scellés. ──
+    if scelle_un_acte(&req.method, &segs_pre) && !console.plancher().franchi_par(canal) {
+        return refus_canal(req, console.plancher(), canal);
+    }
     let tenant = auth.tenant.as_str().to_string();
     let role = auth.role;
 
@@ -248,6 +271,197 @@ fn pret(console: &Console) -> HttpResponse {
     }
 }
 
+/// **Les routes PUBLIQUES** — les seules atteignables sans session, déclarées en un seul endroit.
+///
+/// Toute autre route rend 401. Cette liste est le pendant exact du `match` qui ouvre [`handle`] :
+/// le garde `seules_les_routes_publiques_declarees_le_sont` compte les arms de ce `match` et exige
+/// qu'ils soient aussi nombreux — une sixième route publique ajoutée sans être déclarée ici fait
+/// tomber le test.
+///
+/// Chacune se justifie séparément, et aucune ne révèle quoi que ce soit :
+/// * les deux **sondes** — un superviseur n'a pas de jeton, et lui en donner un créerait un
+///   identifiant de plus à protéger, pour surveiller ;
+/// * les trois de **session** — se connecter ne peut pas exiger d'être connecté, et se déconnecter
+///   ne doit jamais être empêché par une session déjà cassée.
+pub const PUBLIQUES: &[(&str, &str)] = &[
+    ("GET", "/healthz"),
+    ("GET", "/readyz"),
+    ("GET", "/login"),
+    ("POST", "/login"),
+    ("POST", "/logout"),
+];
+
+// ── M8 : la défense CSRF, le plancher de canal, et la connexion ──
+
+/// Cette requête **scellerait-elle** un acte de supervision ?
+///
+/// **Point de décision unique.** Deux routes atteignent `record_human_action` : le passe-plat
+/// `/api/tenants/{t}/cases/{id}/human-action` et le formulaire `/cases/{id}/action`. Les tenir ici,
+/// en un seul endroit, est ce qui empêche une troisième d'apparaître sans plancher — et le garde
+/// `le_predicat_de_scellement_connait_toutes_les_routes_scellantes` compte les arms des deux tables
+/// de routage pour que ce commentaire ne devienne pas faux.
+fn scelle_un_acte(m: &HttpMethod, segs: &[&str]) -> bool {
+    if *m != HttpMethod::Post {
+        return false;
+    }
+    matches!(segs, ["cases", _, "action"])
+        || matches!(segs, ["api", "tenants", _, "cases", _, "human-action"])
+}
+
+/// Le refus de canal — un 403 qui dit **ce qui manque** et **quel geste corrige**.
+fn refus_canal(req: &HttpRequest, plancher: Plancher, canal: &Canal) -> HttpResponse {
+    let msg = plancher.refus(canal);
+    if req.path.starts_with("/api/") {
+        HttpResponse::json(
+            403,
+            format!(
+                "{{\"error\":{},\"status\":403,\"canal\":\"{}\"}}",
+                json_str(&msg),
+                canal.code()
+            )
+            .into_bytes(),
+        )
+    } else {
+        HttpResponse::html(
+            403,
+            render::page("Canal insuffisant", "", audit_api::Role::Viewer, &render::error_page(403, "Canal insuffisant pour sceller", &msg, None)),
+        )
+    }
+}
+
+/// Échappe une chaîne pour un littéral JSON — la coquille n'a pas serde côté réponse d'erreur.
+fn json_str(s: &str) -> String {
+    let mut out = String::with_capacity(s.len() + 2);
+    out.push('"');
+    for c in s.chars() {
+        match c {
+            '"' => out.push_str("\\\""),
+            '\\' => out.push_str("\\\\"),
+            '\n' => out.push_str("\\n"),
+            c if (c as u32) < 0x20 => out.push_str(&format!("\\u{:04x}", c as u32)),
+            c => out.push(c),
+        }
+    }
+    out.push('"');
+    out
+}
+
+/// **La défense CSRF.** `dispense` vaut pour un jeton présenté en **en-tête** : un site tiers ne peut
+/// pas faire poser `Authorization` par un navigateur sur une requête simple, donc l'en-tête est
+/// lui-même la preuve d'intention. Un **cookie**, lui, part tout seul.
+///
+/// Sans preuve d'origine, on refuse. C'est volontairement strict : la seule chose qu'un client
+/// légitime perd est de devoir envoyer `Origin` (que tout navigateur envoie sur POST depuis des
+/// années) ou d'utiliser l'en-tête porteur (que fait tout client machine).
+fn origine_sure(req: &HttpRequest, dispense: bool) -> Result<(), HttpResponse> {
+    if dispense {
+        return Ok(());
+    }
+    // `Sec-Fetch-Site` est posé par le navigateur lui-même et n'est pas falsifiable par une page.
+    if let Some(sfs) = req.header("sec-fetch-site") {
+        return match sfs.trim() {
+            "same-origin" | "none" => Ok(()),
+            autre => Err(refus_csrf(req, &format!("Sec-Fetch-Site: {autre}"))),
+        };
+    }
+    // Sinon `Origin`, comparé à `Host`. La comparaison est une comparaison d'AUTORITÉ : elle passe
+    // par l'analyseur unique de M1, jamais par un `split` local (ce serait un quatrième analyseur).
+    match (req.header("origin"), req.header("host")) {
+        (Some(o), Some(h)) => {
+            let a = scella_authority::authority_of(o.trim()).map(|a| a.host().to_string());
+            let b = scella_authority::authority_of(&format!("http://{}", h.trim()))
+                .map(|a| a.host().to_string());
+            match (a, b) {
+                (Some(x), Some(y)) if x == y => Ok(()),
+                _ => Err(refus_csrf(req, "Origin ne correspond pas à Host")),
+            }
+        }
+        _ => Err(refus_csrf(req, "ni Sec-Fetch-Site ni Origin")),
+    }
+}
+
+fn refus_csrf(req: &HttpRequest, pourquoi: &str) -> HttpResponse {
+    let msg = format!(
+        "requête inter-site refusée ({pourquoi}). Une requête authentifiée par COOKIE et qui change \
+         l'état doit prouver son origine : sans cela, un autre site ferait sceller un acte de \
+         supervision sous une identité qui n'a rien demandé — et le record serait indistinguable \
+         d'un vrai. Un client machine emploie « Authorization: Bearer », qui est dispensé."
+    );
+    if req.path.starts_with("/api/") {
+        HttpResponse::json(403, format!("{{\"error\":{},\"status\":403}}", json_str(&msg)).into_bytes())
+    } else {
+        HttpResponse::html(403, render::page("Requête refusée", "", audit_api::Role::Viewer, &render::error_page(403, "Requête inter-site", &msg, None)))
+    }
+}
+
+/// `GET /login` — le formulaire. Public, par nécessité.
+fn formulaire_connexion(erreur: Option<&str>) -> HttpResponse {
+    let alerte = erreur
+        .map(|e| format!("<p style=\"color:#b00\">{}</p>", html_echappe(e)))
+        .unwrap_or_default();
+    HttpResponse::html(
+        200,
+        format!(
+            "<!doctype html><meta charset=\"utf-8\"><title>Connexion</title>\
+             <body style=\"font-family:system-ui;max-width:32rem;margin:4rem auto\">\
+             <h1>Console de conformité</h1>{alerte}\
+             <form method=\"post\" action=\"/login\">\
+             <p><label>Jeton de session<br><input name=\"token\" type=\"password\" style=\"width:100%\" autofocus></label></p>\
+             <button>Ouvrir la session</button></form>\
+             <p style=\"color:#666;font-size:.9em\">Le jeton n'est jamais conservé en clair : seule son empreinte l'est.</p>"
+        ),
+    )
+}
+
+/// `POST /login` — échange un jeton contre un cookie de session.
+///
+/// Le cookie porte `HttpOnly` (aucun script ne le lit), `SameSite=Strict` (aucun site tiers ne le
+/// fait partir) et `Secure` **dès que le canal n'est pas la boucle locale** — poser `Secure` sur du
+/// `http://127.0.0.1` empêcherait purement le navigateur d'enregistrer le cookie, donc casserait la
+/// console locale. C'est le barreau de canal qui tranche, et c'est sa deuxième utilité.
+fn connexion(console: &mut Console, req: &HttpRequest, now: u64, canal: &Canal) -> HttpResponse {
+    // Une connexion CHANGE l'état du navigateur : elle exige une preuve d'origine, sans dispense —
+    // une connexion forcée depuis un autre site ferait travailler l'officier dans la session de
+    // l'attaquant, et les actes qu'il scellerait iraient chez lui.
+    if let Err(refus) = origine_sure(req, false) {
+        return refus;
+    }
+    let body = String::from_utf8_lossy(&req.body);
+    let form = parse_urlencoded(&body);
+    let token = match form.iter().find(|(k, _)| k == "token").map(|(_, v)| v.clone()) {
+        Some(t) if !t.is_empty() => t,
+        _ => return formulaire_connexion(Some("jeton manquant")),
+    };
+    if console.sessions().resolve(&token, now).is_none() {
+        // Aucune distinction entre « inconnu » et « échu » : la faire apprendrait à un porteur non
+        // authentifié que ce jeton a existé.
+        return formulaire_connexion(Some("jeton refusé"));
+    }
+    let secure = if matches!(canal, Canal::A1LoopbackTemoin) { "" } else { "; Secure" };
+    let mut r = HttpResponse::html(303, "");
+    r.headers.push(("Location".into(), "/".into()));
+    r.headers.push((
+        "Set-Cookie".into(),
+        format!("session={token}; HttpOnly; SameSite=Strict; Path=/{secure}"),
+    ));
+    r
+}
+
+/// `POST /logout` — efface le cookie. Public : se déconnecter ne doit jamais exiger d'être connecté.
+fn deconnexion() -> HttpResponse {
+    let mut r = HttpResponse::html(303, "");
+    r.headers.push(("Location".into(), "/login".into()));
+    r.headers.push((
+        "Set-Cookie".into(),
+        "session=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0".into(),
+    ));
+    r
+}
+
+fn html_echappe(s: &str) -> String {
+    s.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;").replace('"', "&quot;")
+}
+
 fn unauth(req: &HttpRequest) -> HttpResponse {
     // Pour /api, un JSON ; pour la console, la page « connexion requise ». Aucune donnée révélée.
     if req.path.starts_with("/api/") {
@@ -317,8 +531,11 @@ fn parse_framework(s: Option<&str>) -> Framework {
 mod tests {
     use super::*;
     use audit_api::{ProjectionConfig, TenantRegistry};
+    use crate::canal::Canal;
     use provenance_capture::LlmCall;
     use provenance_dag::TenantKey;
+
+    const LOCAL: Canal = Canal::A1LoopbackTemoin;
 
     fn console() -> Console {
         let mut c = Console::new();
@@ -341,13 +558,44 @@ mod tests {
 
     // ── M7 : les sondes d'exploitation ──
 
-    /// **Le garde de la seule exception à l'authentification.** Deux routes sont publiques ; ce test
-    /// interdit qu'il y en ait une troisième. Il balaie tout ce que la console sert, plus quelques
-    /// contournements classiques : sans jeton, tout le reste doit rendre 401.
+    /// **Le garde des routes publiques.** La version de M7 énumérait deux chemins et vérifiait que
+    /// d'autres étaient protégés — mais elle ne voyait PAS l'apparition d'une troisième route
+    /// publique. M8 en a ajouté trois, et elle est restée verte : un garde qui ne peut pas tomber
+    /// quand la propriété se casse ne garde rien.
+    ///
+    /// Il repose désormais sur [`PUBLIQUES`], la liste employée par le dispatch lui-même, et il
+    /// compte les arms du `match` d'entrée pour qu'aucune route ne devienne publique sans y figurer.
     #[test]
-    fn seules_les_deux_sondes_sont_publiques() {
+    fn seules_les_routes_publiques_declarees_le_sont() {
         let mut c = console();
-        const PUBLIQUES: [&str; 2] = ["/healthz", "/readyz"];
+
+        // (1) Le nombre d'arms pré-authentification doit égaler la liste déclarée.
+        let src = include_str!("handler.rs");
+        let entree = &src[src.find("pub fn handle(").expect("handle")..];
+        let entree = &entree[..entree.find("// ── 1. authentification").expect("frontière")];
+        let code: String =
+            entree.lines().filter(|l| !l.trim_start().starts_with("//")).collect::<Vec<_>>().join("\n");
+        let arms = code.matches("=> return ").count();
+        assert_eq!(
+            arms,
+            PUBLIQUES.len(),
+            "le dispatch pré-authentification a {arms} routes et PUBLIQUES en déclare {} : toute \
+             route rendue publique doit être déclarée, sinon personne ne la relit",
+            PUBLIQUES.len()
+        );
+
+        // (2) Chaque route déclarée répond SANS jeton.
+        for (m, p) in PUBLIQUES {
+            let r = if *m == "GET" { handle(&mut c, &get(p, None), 100, &LOCAL) } else {
+                let req = HttpRequest::parse(
+                    format!("POST {p} HTTP/1.1\r\nSec-Fetch-Site: same-origin\r\nContent-Length: 0\r\n\r\n").as_bytes(),
+                ).expect("requête");
+                handle(&mut c, &req, 100, &LOCAL)
+            };
+            assert_ne!(r.status, 401, "{m} {p} est déclarée publique : elle ne doit pas exiger de jeton");
+        }
+
+        // (3) Et tout le reste exige un jeton.
         const TOUT_LE_RESTE: [&str; 12] = [
             "/",
             "/exceptions",
@@ -364,14 +612,19 @@ mod tests {
             "/healthz/../api/tenants/acme/cases",
         ];
 
-        for p in PUBLIQUES {
-            let r = handle(&mut c, &get(p, None), 100);
-            assert_eq!(r.status, 200, "{p} doit répondre sans jeton");
-            assert!(r.content_type.starts_with("application/json"), "{p} parle à une machine");
-        }
         for p in TOUT_LE_RESTE {
-            let r = handle(&mut c, &get(p, None), 100);
+            let r = handle(&mut c, &get(p, None), 100, &LOCAL);
             assert_eq!(r.status, 401, "{p} doit exiger un jeton");
+        }
+    }
+
+    #[test]
+    fn les_sondes_parlent_a_une_machine() {
+        let mut c = console();
+        for p in ["/healthz", "/readyz"] {
+            let r = handle(&mut c, &get(p, None), 100, &LOCAL);
+            assert_eq!(r.status, 200);
+            assert!(r.content_type.starts_with("application/json"), "{p} parle à une machine");
         }
     }
 
@@ -381,7 +634,7 @@ mod tests {
     fn les_sondes_ne_revelent_rien() {
         let mut c = console();
         for p in ["/healthz", "/readyz"] {
-            let corps = String::from_utf8_lossy(&handle(&mut c, &get(p, None), 100).body).to_string();
+            let corps = String::from_utf8_lossy(&handle(&mut c, &get(p, None), 100, &LOCAL).body).to_string();
             assert!(!corps.contains("acme"), "{p} ne doit nommer aucun tenant : {corps}");
             assert!(!corps.contains('1'), "{p} ne doit compter personne : {corps}");
             assert!(corps.len() < 64, "{p} : une sonde répond court");
@@ -393,21 +646,21 @@ mod tests {
     #[test]
     fn une_console_non_provisionnee_vit_mais_nest_pas_prete() {
         let mut vide = Console::new();
-        assert_eq!(handle(&mut vide, &get("/healthz", None), 100).status, 200);
-        let r = handle(&mut vide, &get("/readyz", None), 100);
+        assert_eq!(handle(&mut vide, &get("/healthz", None), 100, &LOCAL).status, 200);
+        let r = handle(&mut vide, &get("/readyz", None), 100, &LOCAL);
         assert_eq!(r.status, 503, "aucun tenant, aucune session : rien à servir");
         assert!(String::from_utf8_lossy(&r.body).contains("non provisionne"));
 
         // Un tenant SANS session ne suffit pas : personne ne pourrait le lire.
         let mut muet = Console::new();
         muet.provision("acme", TenantKey::from_bytes([1u8; 32]));
-        assert_eq!(handle(&mut muet, &get("/readyz", None), 100).status, 503, "illisible = pas prêt");
+        assert_eq!(handle(&mut muet, &get("/readyz", None), 100, &LOCAL).status, 503, "illisible = pas prêt");
     }
 
     #[test]
     fn unauthenticated_is_401_and_reveals_nothing() {
         let mut c = console();
-        let resp = handle(&mut c, &get("/cases/SUP-A", None), 100);
+        let resp = handle(&mut c, &get("/cases/SUP-A", None), 100, &LOCAL);
         assert_eq!(resp.status, 401);
         let body = String::from_utf8_lossy(&resp.body);
         assert!(body.contains("Connexion requise"));
@@ -417,10 +670,10 @@ mod tests {
     #[test]
     fn officer_sees_cases_and_decision() {
         let mut c = console();
-        let list = handle(&mut c, &get("/", Some("offtok")), 100);
+        let list = handle(&mut c, &get("/", Some("offtok")), 100, &LOCAL);
         assert_eq!(list.status, 200);
         assert!(String::from_utf8_lossy(&list.body).contains("SUP-A"));
-        let dec = handle(&mut c, &get("/cases/SUP-A", Some("offtok")), 100);
+        let dec = handle(&mut c, &get("/cases/SUP-A", Some("offtok")), 100, &LOCAL);
         assert_eq!(dec.status, 200);
         let html = String::from_utf8_lossy(&dec.body);
         assert!(html.contains("SUP-A::sanction"), "la décision cite ses nœuds");
@@ -431,7 +684,7 @@ mod tests {
     fn api_passthrough_matches_route_exactly() {
         // I-S3-VUE-PURE : /api/tenants/{t}/… rend EXACTEMENT ce que route() rendrait (parité).
         let mut c = console();
-        let via_shell = handle(&mut c, &get("/api/tenants/acme/cases/SUP-A", Some("offtok")), 100);
+        let via_shell = handle(&mut c, &get("/api/tenants/acme/cases/SUP-A", Some("offtok")), 100, &LOCAL);
         // appel direct de route(), avec la même Request logique.
         let mut reg = TenantRegistry::new();
         reg.provision("acme", TenantKey::from_bytes([8u8; 32]), ProjectionConfig::default());
@@ -453,13 +706,13 @@ mod tests {
         let body = "target_step=aggregate&action=OVERRIDE&justification=x";
         let raw = format!("POST /cases/SUP-A/action HTTP/1.1\r\nAuthorization: Bearer vtok\r\nContent-Length: {}\r\n\r\n{}", body.len(), body);
         let req = HttpRequest::parse(raw.as_bytes()).unwrap();
-        let resp = handle(&mut c, &req, 100);
+        let resp = handle(&mut c, &req, 100, &LOCAL);
         assert_eq!(resp.status, 403, "S2 refuse l'action d'un Viewer, quoi qu'affiche l'UI");
         // …et la MÊME action via le passe-plat /api est aussi 403 (RBAC enforcé par S2 sur les DEUX surfaces).
         let body2 = r#"{"target_step":"aggregate","action":"OVERRIDE","justification":"x"}"#;
         let raw2 = format!("POST /api/tenants/acme/cases/SUP-A/human-action HTTP/1.1\r\nAuthorization: Bearer vtok\r\nContent-Length: {}\r\n\r\n{}", body2.len(), body2);
         let req2 = HttpRequest::parse(raw2.as_bytes()).unwrap();
-        let resp2 = handle(&mut c, &req2, 100);
+        let resp2 = handle(&mut c, &req2, 100, &LOCAL);
         assert_eq!(resp2.status, 403, "le Viewer est aussi refusé via /api — la sécurité est dans S2, pas dans l'UI");
     }
 
@@ -468,11 +721,11 @@ mod tests {
         // I-S3-VUE-PURE, finition : le passe-plat /api étiquette le récit (Markdown) correctement, sans
         // changer le corps/statut de route().
         let mut c = console();
-        let resp = handle(&mut c, &get("/api/tenants/acme/cases/SUP-A/report", Some("offtok")), 100);
+        let resp = handle(&mut c, &get("/api/tenants/acme/cases/SUP-A/report", Some("offtok")), 100, &LOCAL);
         assert_eq!(resp.status, 200);
         assert_eq!(resp.content_type, "text/markdown; charset=utf-8", "le récit est du Markdown, pas du JSON");
         // les autres routes /api restent du JSON.
-        let cases = handle(&mut c, &get("/api/tenants/acme/cases/SUP-A", Some("offtok")), 100);
+        let cases = handle(&mut c, &get("/api/tenants/acme/cases/SUP-A", Some("offtok")), 100, &LOCAL);
         assert!(cases.content_type.starts_with("application/json"));
     }
 
@@ -482,18 +735,18 @@ mod tests {
         let body = "target_step=aggregate&action=APPROVE&justification=revue%20conforme";
         let raw = format!("POST /cases/SUP-A/action HTTP/1.1\r\nAuthorization: Bearer offtok\r\nContent-Length: {}\r\n\r\n{}", body.len(), body);
         let req = HttpRequest::parse(raw.as_bytes()).unwrap();
-        let resp = handle(&mut c, &req, 100);
+        let resp = handle(&mut c, &req, 100, &LOCAL);
         assert_eq!(resp.status, 303, "PRG après l'action scellée");
         assert_eq!(resp.headers.iter().find(|(k, _)| k == "location").map(|(_, v)| v.as_str()), Some("/cases/SUP-A"));
         // l'oversight apparaît désormais dans la décision.
-        let dec = handle(&mut c, &get("/cases/SUP-A", Some("offtok")), 101);
+        let dec = handle(&mut c, &get("/cases/SUP-A", Some("offtok")), 101, &LOCAL);
         assert!(String::from_utf8_lossy(&dec.body).contains("APPROUVER"), "la revue scellée est tracée");
     }
 
     #[test]
     fn export_streams_a_tar_download() {
         let mut c = console();
-        let resp = handle(&mut c, &get("/cases/SUP-A/export?fw=eu_ai_act", Some("offtok")), 100);
+        let resp = handle(&mut c, &get("/cases/SUP-A/export?fw=eu_ai_act", Some("offtok")), 100, &LOCAL);
         assert_eq!(resp.status, 200);
         assert_eq!(resp.content_type, "application/x-tar");
         assert!(resp.headers.iter().any(|(k, v)| k == "content-disposition" && v.contains("attachment")));
@@ -516,18 +769,18 @@ mod tests {
             svc.ingest_llm(&LlmCall { case_id: "SUP-BAD", step: "sanction", agent_role: "sanction_check", inputs: b"i", model: "phi4", version: "1", output: "FAIL", evidence_steps: &[], timestamp: 20 }).unwrap();
         }
         // ?status=FAIL → ne garde que SUP-BAD ; le formulaire pré-sélectionne FAIL.
-        let r = handle(&mut c, &get("/?status=FAIL", Some("offtok")), 100);
+        let r = handle(&mut c, &get("/?status=FAIL", Some("offtok")), 100, &LOCAL);
         assert_eq!(r.status, 200);
         let body = String::from_utf8_lossy(&r.body);
         assert!(body.contains("SUP-BAD") && !body.contains("SUP-OK"), "filtre statut FAIL");
         assert!(body.contains("Recherche &amp; filtre"), "le formulaire de filtre apparaît");
         assert!(body.contains("value=\"FAIL\" selected"), "le statut FAIL est pré-sélectionné");
         // ?from/?to (période) sur last_ts : [15,25] garde SUP-BAD (ts 20), pas SUP-OK (ts 10).
-        let p = handle(&mut c, &get("/?from=15&to=25", Some("offtok")), 100);
+        let p = handle(&mut c, &get("/?from=15&to=25", Some("offtok")), 100, &LOCAL);
         let pbody = String::from_utf8_lossy(&p.body);
         assert!(pbody.contains("SUP-BAD") && !pbody.contains("SUP-OK"), "filtre période");
         // statut inconnu → 400 (erreur d'usage lisible).
-        assert_eq!(handle(&mut c, &get("/?status=BOGUS", Some("offtok")), 100).status, 400);
+        assert_eq!(handle(&mut c, &get("/?status=BOGUS", Some("offtok")), 100, &LOCAL).status, 400);
     }
 
     #[test]
@@ -541,15 +794,15 @@ mod tests {
             svc.ingest_llm(&LlmCall { case_id: "SUP-B", step: "sanction", agent_role: "sanction_check", inputs: b"i", model: "phi4", version: "1", output: "PASS", evidence_steps: &[], timestamp: 3 }).unwrap();
         }
         // page 1 (limit=1) → un lien « page suivante » porteur d'un curseur.
-        let p1 = handle(&mut c, &get("/?limit=1", Some("offtok")), 100);
+        let p1 = handle(&mut c, &get("/?limit=1", Some("offtok")), 100, &LOCAL);
         let b1 = String::from_utf8_lossy(&p1.body).to_string();
         let cur = b1.split("after=").nth(1).and_then(|s| s.split('"').next()).expect("un curseur dans le lien").to_string();
         // le DAG avance (action humaine scellée) → le root change.
         let pb = "target_step=aggregate&action=APPROVE&justification=x";
         let raw = format!("POST /cases/SUP-A/action HTTP/1.1\r\nAuthorization: Bearer offtok\r\nContent-Length: {}\r\n\r\n{}", pb.len(), pb);
-        assert_eq!(handle(&mut c, &HttpRequest::parse(raw.as_bytes()).unwrap(), 101).status, 303);
+        assert_eq!(handle(&mut c, &HttpRequest::parse(raw.as_bytes()).unwrap(), 101, &LOCAL).status, 303);
         // rejouer le curseur périmé → 409, et l'UX dit « actualiser » (pas une page muette).
-        let stale = handle(&mut c, &get(&format!("/?after={cur}"), Some("offtok")), 102);
+        let stale = handle(&mut c, &get(&format!("/?after={cur}"), Some("offtok")), 102, &LOCAL);
         assert_eq!(stale.status, 409, "curseur périmé → 409");
         assert!(String::from_utf8_lossy(&stale.body).to_lowercase().contains("actualis"), "l'UX dit « actualiser »");
     }

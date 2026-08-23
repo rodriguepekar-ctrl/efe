@@ -29,6 +29,10 @@ audit-api = { path = "../audit-api" }
 forensic-export = { path = "../forensic-export" }
 reg-evidence = { path = "../reg-evidence" }
 provenance-dag = { path = "../provenance-dag" }
+# M8 — la comparaison `Origin` ↔ `Host` de la défense CSRF est une comparaison d'AUTORITÉ. M1 a
+# extrait cet analyseur dans un crate feuille ZÉRO-DÉPENDANCE pour qu'il n'en existe qu'un ; en
+# écrire un ici en serait un quatrième, et le test `un_seul_analyseur` de M1 l'interdit.
+scella-authority = { path = "../scella-authority" }
 serde = { workspace = true }
 serde_json = { workspace = true }
 

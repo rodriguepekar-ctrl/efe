@@ -17,6 +17,7 @@
 //! Variables d'environnement : **toutes** déclarées dans [`audit_console::profile::REGISTRY`], et
 //! lues par lui seul (`--profile-report` en rend la forme machine).
 
+use audit_console::canal::Plancher;
 use audit_console::profile::{read, Report};
 use audit_console::provisioning::{appliquer, Deploiement, Resume};
 use audit_console::{serve, Console, Role};
@@ -46,8 +47,19 @@ fn main() -> std::io::Result<()> {
         monter_declare(&declaration, &mut console, root.as_bytes())?
     };
 
-    annoncer(&addr, &resume, declaration.trim().is_empty());
-    serve(&addr, console)
+    // ── M8 : la déclaration du terminateur de canal ──
+    //
+    // Elle achète deux choses INDISSOCIABLES, et c'est voulu : le droit de binder hors de la boucle
+    // locale, ET le plancher de scellement abaissé à A2. Les séparer permettrait de servir à
+    // distance sans jamais pouvoir sceller (inutile) ou de sceller sans avoir rien déclaré
+    // (malhonnête).
+    let terminateur = read::chemin("EFE_CONSOLE_TERMINATEUR_CANAL");
+    if terminateur.is_some() {
+        console.avec_plancher(Plancher::protege_declare());
+    }
+
+    annoncer(&addr, &resume, declaration.trim().is_empty(), terminateur.as_deref(), &console);
+    serve(&addr, console, terminateur)
 }
 
 /// La posture de **service** : la déclaration décide, et elle est validée avant toute mutation.
@@ -64,7 +76,13 @@ fn monter_declare(chemin: &str, console: &mut Console, root: &[u8]) -> std::io::
     let dep = Deploiement::depuis_json(&brut)
         .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
 
-    match appliquer(&dep, console, root) {
+    // L'heure réelle : une échéance déjà passée doit être refusée AU DÉMARRAGE, pas découverte par
+    // un porteur dont le jeton « ne marche pas ».
+    let maintenant = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    match appliquer(&dep, console, root, maintenant) {
         Ok(r) => Ok(r),
         Err(refus) => {
             eprintln!("\n╔═ DÉMARRAGE REFUSÉ ═══════════════════════════════════════════════════");
@@ -111,7 +129,13 @@ fn monter_demonstration(console: &mut Console, root: &[u8]) -> std::io::Result<R
 }
 
 /// Ce qu'on imprime au démarrage — et surtout ce qu'on n'imprime pas.
-fn annoncer(addr: &str, resume: &Resume, demonstration: bool) {
+fn annoncer(
+    addr: &str,
+    resume: &Resume,
+    demonstration: bool,
+    terminateur: Option<&str>,
+    console: &Console,
+) {
     eprintln!("service de lecture (S3) — http://{addr}");
     eprintln!(
         "  {} tenant(s) monté(s) · {} réhydraté(s) · {} session(s)",
@@ -141,7 +165,26 @@ fn annoncer(addr: &str, resume: &Resume, demonstration: bool) {
         eprintln!("  jeton(s) : posé(s) par l'opérateur — non imprimé(s).");
     }
 
+    // ── M8 : le canal, et ce qu'il autorise ──
+    match terminateur {
+        None => eprintln!(
+            "  canal : bind LOCAL uniquement · scellement d'actes humains exigé en boucle locale (A1)"
+        ),
+        Some(t) => {
+            eprintln!("  canal : terminateur DÉCLARÉ « {t} » — non vérifiable par ce processus.");
+            eprintln!("          bind hors boucle locale autorisé ; scellement admis jusqu'à A2.");
+            eprintln!("          ce processus ne termine PAS TLS : la déclaration engage l'exploitant,");
+            eprintln!("          pas le binaire. Un client qui contourne le terminateur est crédité");
+            eprintln!("          « protégé » — ce processus ne peut pas faire la différence.");
+        }
+    }
+    let nb = console.sessions().sans_expiration();
+    if nb > 0 {
+        eprintln!("  ⚠ {nb} session(s) SANS ÉCHÉANCE — un identifiant qui ne meurt jamais est");
+        eprintln!("    une décision, pas un défaut. Posez « expire_le » dans la déclaration.");
+    }
     eprintln!("  sondes : GET /healthz (le processus vit) · GET /readyz (le service est provisionné)");
-    eprintln!("  souveraineté : bind LOCAL uniquement ; les clés tenant ne quittent pas le backend.");
+    eprintln!("  connexion : GET /login (cookie HttpOnly + SameSite=Strict) · POST /logout");
+    eprintln!("  souveraineté : les clés tenant ne quittent pas le backend.");
     eprintln!("  « montré vérifié ≠ prouvé sans confiance » — pour une preuve opposable, exportez.");
 }

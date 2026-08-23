@@ -28,9 +28,11 @@ use provenance_capture::LlmCall;
 use audit_console::handler::handle;
 use audit_console::http::HttpRequest;
 use audit_console::provisioning::{appliquer, Deploiement};
+use audit_console::canal::Canal;
 use audit_console::Console;
 use provenance_dag::TenantKey;
 
+const LOCAL: Canal = Canal::A1LoopbackTemoin;
 const RACINE: &[u8] = b"racine-de-test-m7";
 const MAINTENANT: u64 = 1000;
 
@@ -91,7 +93,7 @@ fn semer(console: &mut Console, tenant: &str, cas: &str, verdict: &str) {
 fn service_a_deux_tenants() -> Console {
     let mut c = Console::new();
     let dep = Deploiement::depuis_json(DEUX_TENANTS).expect("déclaration lisible");
-    appliquer(&dep, &mut c, RACINE).expect("déclaration saine");
+    appliquer(&dep, &mut c, RACINE, 0).expect("déclaration saine");
     semer(&mut c, "acme", "SUP-ACME", "COMPLIANT");
     semer(&mut c, "globex", "SUP-GLOBEX", "FAIL");
     c
@@ -105,17 +107,17 @@ fn m7_un_seul_service_sert_deux_tenants_et_aucun_ne_voit_lautre() {
     let mut c = service_a_deux_tenants();
 
     // Chacun lit CHEZ LUI — et lit bien SES données, pas « quelque chose ».
-    let a = handle(&mut c, &get("/api/tenants/acme/cases/SUP-ACME", Some("jeton-acme")), MAINTENANT);
+    let a = handle(&mut c, &get("/api/tenants/acme/cases/SUP-ACME", Some("jeton-acme")), MAINTENANT, &LOCAL);
     assert_eq!(a.status, 200, "acme lit son cas");
     let corps_a = String::from_utf8_lossy(&a.body).to_string();
     assert!(corps_a.contains("SUP-ACME"), "et c'est bien le sien");
 
-    let g = handle(&mut c, &get("/api/tenants/globex/cases/SUP-GLOBEX", Some("jeton-globex")), MAINTENANT);
+    let g = handle(&mut c, &get("/api/tenants/globex/cases/SUP-GLOBEX", Some("jeton-globex")), MAINTENANT, &LOCAL);
     assert_eq!(g.status, 200, "globex lit le sien");
     assert!(String::from_utf8_lossy(&g.body).contains("SUP-GLOBEX"));
 
     // ── L'ISOLATION : acme vise globex. 403, et rien ne fuit. ──
-    let croise = handle(&mut c, &get("/api/tenants/globex/cases/SUP-GLOBEX", Some("jeton-acme")), MAINTENANT);
+    let croise = handle(&mut c, &get("/api/tenants/globex/cases/SUP-GLOBEX", Some("jeton-acme")), MAINTENANT, &LOCAL);
     assert_eq!(croise.status, 403, "le jeton d'acme ne franchit pas la frontière de globex");
     let fuite = String::from_utf8_lossy(&croise.body).to_string();
     assert!(!fuite.contains("SUP-GLOBEX"), "aucune donnée : {fuite}");
@@ -123,7 +125,7 @@ fn m7_un_seul_service_sert_deux_tenants_et_aucun_ne_voit_lautre() {
 
     // Et le refus est le MÊME pour un tenant qui n'existe pas — sinon comparer les deux réponses
     // révélerait quels tenants ce déploiement héberge.
-    let inexistant = handle(&mut c, &get("/api/tenants/inexistant/cases/X", Some("jeton-acme")), MAINTENANT);
+    let inexistant = handle(&mut c, &get("/api/tenants/inexistant/cases/X", Some("jeton-acme")), MAINTENANT, &LOCAL);
     assert_eq!(
         (inexistant.status, String::from_utf8_lossy(&inexistant.body).to_string()),
         (croise.status, fuite),
@@ -151,7 +153,7 @@ fn m7_un_jeton_partage_arrete_le_demarrage_avant_douvrir_le_port() {
     )
     .expect("lisible");
 
-    let refus = appliquer(&dep, &mut c, RACINE).expect_err("doit refuser");
+    let refus = appliquer(&dep, &mut c, RACINE, 0).expect_err("doit refuser");
     assert!(refus.iter().any(|r| r.to_string().contains("JETON PARTAGÉ ENTRE DEUX TENANTS")));
     assert!(c.sessions().is_empty(), "aucune session ouverte");
     assert!(!c.est_provisionne(), "et le service n'est pas prêt : le port ne doit pas s'ouvrir");
@@ -168,6 +170,7 @@ fn m7_les_roles_declares_sont_appliques() {
         &mut c,
         &post("/api/tenants/acme/cases/SUP-ACME/human-action", "jeton-acme", corps),
         MAINTENANT,
+        &LOCAL,
     );
     assert_eq!(officier.status, 200, "l'agent de conformité agit");
 
@@ -175,6 +178,7 @@ fn m7_les_roles_declares_sont_appliques() {
         &mut c,
         &post("/api/tenants/globex/cases/SUP-GLOBEX/human-action", "jeton-globex", corps),
         MAINTENANT,
+        &LOCAL,
     );
     assert_eq!(auditeur.status, 403, "l'auditeur atteste, il ne décide pas");
 }
@@ -237,9 +241,9 @@ fn m7_la_coquille_rend_exactement_ce_que_route_rendrait_sur_les_six_routes() {
         let mut jumeau = registre_jumeau();
 
         let via_coquille = match (*methode, corps) {
-            ("GET", _) => handle(&mut console, &get(&format!("/api{chemin}"), Some("jeton-acme")), MAINTENANT),
-            ("POST", Some(b)) => handle(&mut console, &post(&format!("/api{chemin}"), "jeton-acme", b), MAINTENANT),
-            ("POST", None) => handle(&mut console, &post(&format!("/api{chemin}"), "jeton-acme", ""), MAINTENANT),
+            ("GET", _) => handle(&mut console, &get(&format!("/api{chemin}"), Some("jeton-acme")), MAINTENANT, &LOCAL),
+            ("POST", Some(b)) => handle(&mut console, &post(&format!("/api{chemin}"), "jeton-acme", b), MAINTENANT, &LOCAL),
+            ("POST", None) => handle(&mut console, &post(&format!("/api{chemin}"), "jeton-acme", ""), MAINTENANT, &LOCAL),
             _ => unreachable!(),
         };
 
@@ -358,7 +362,7 @@ fn m7_lexemple_livre_est_valide() {
     let chemin = concat!(env!("CARGO_MANIFEST_DIR"), "/../../profiles/deploiement.exemple.json");
     let brut = std::fs::read_to_string(chemin).expect("profiles/deploiement.exemple.json lisible");
     let dep = Deploiement::depuis_json(&brut).expect("exemple bien formé");
-    dep.valider().expect("exemple valide — sinon il enseigne une erreur");
+    dep.valider(0).expect("exemple valide — sinon il enseigne une erreur");
 
     assert_eq!(dep.tenants.len(), 2, "l'exemple MONTRE le multi-tenant, c'est tout son objet");
     assert!(dep.sessions.len() >= 3, "et plusieurs rôles");

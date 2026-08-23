@@ -5,6 +5,7 @@
 //! (aucune réponse HTTP ne la contient). Le backend en a besoin pour l'**export** (S4 `assemble` et S6
 //! `derive` re-prouvent), pas la console ; c'est cohérent avec « la clé re-prouve, elle ne s'écrit pas ».
 
+use crate::canal::Plancher;
 use crate::session::Sessions;
 use audit_api::{AuthContext, ProjectionConfig, Role, TenantRegistry};
 use provenance_dag::{Record, TenantKey};
@@ -17,6 +18,11 @@ pub struct Console {
     keys: HashMap<String, TenantKey>,
     sessions: Sessions,
     config: ProjectionConfig,
+    /// **M8** — le plancher de canal exigé pour **sceller** un acte humain. Défaut : boucle locale,
+    /// c'est-à-dire exactement le comportement d'avant M8 (`assert_local` interdisait tout bind
+    /// distant). Lire n'est pas concerné : lire sur un canal faible perd de la confidentialité,
+    /// sceller y inscrit une attestation non répudiable que rien ne soutient.
+    plancher: Plancher,
 }
 
 impl Default for Console {
@@ -27,7 +33,13 @@ impl Default for Console {
 
 impl Console {
     pub fn new() -> Self {
-        Console { reg: TenantRegistry::new(), keys: HashMap::new(), sessions: Sessions::new(), config: ProjectionConfig::default() }
+        Console {
+            reg: TenantRegistry::new(),
+            keys: HashMap::new(),
+            sessions: Sessions::new(),
+            config: ProjectionConfig::default(),
+            plancher: Plancher::default(),
+        }
     }
 
     /// Provisionne un tenant : le registre S2 **et** la clé détenue par le backend (pour l'export).
@@ -56,6 +68,23 @@ impl Console {
     #[must_use]
     pub fn est_provisionne(&self) -> bool {
         !self.keys.is_empty() && !self.sessions.is_empty()
+    }
+
+    /// **M8** — abaisse le plancher d'écriture à A2, pour un déploiement qui **déclare** un
+    /// terminateur de canal. Il n'existe aucun moyen de descendre plus bas (cf. [`Plancher`]).
+    pub fn avec_plancher(&mut self, p: Plancher) {
+        self.plancher = p;
+    }
+
+    /// Le plancher exigé pour sceller un acte humain.
+    #[must_use]
+    pub fn plancher(&self) -> Plancher {
+        self.plancher
+    }
+
+    /// Les sessions, en écriture — la connexion (`POST /login`) y pose la session d'un porteur.
+    pub fn sessions_mut(&mut self) -> &mut Sessions {
+        &mut self.sessions
     }
 
     pub fn sessions(&self) -> &Sessions {

@@ -38,7 +38,7 @@ pub struct Switch {
     pub class: Class,
 }
 
-/// Les sept interrupteurs, déclarés une seule fois.
+/// Les huit interrupteurs, déclarés une seule fois.
 pub const REGISTRY: &[Switch] = &[
     Switch {
         name: "EFE_CONSOLE_ADDR",
@@ -74,6 +74,16 @@ pub const REGISTRY: &[Switch] = &[
         default: "officer:demo",
         buys: "l'identité de l'agent",
         absence_costs: "sujet de démonstration — les actions humaines scellées seront attribuées à « officer:demo »",
+        class: Class::Tuning,
+    },
+    Switch {
+        name: "EFE_CONSOLE_TERMINATEUR_CANAL",
+        default: "",
+        buys: "le droit de servir HORS de la boucle locale, et le plancher de scellement abaissé à \
+               A2 — c'est une DÉCLARATION que ce processus ne peut pas vérifier : le nom qu'on y \
+               pose est une trace de responsabilité",
+        absence_costs: "bind LOCAL obligatoire (souveraineté), et un pair distant — s'il en \
+                        existait un — ne pourrait RIEN sceller : lire dégrade, sceller coupe",
         class: Class::Tuning,
     },
     Switch {
@@ -260,10 +270,10 @@ mod tests {
     use super::*;
 
     #[test]
-    fn le_registre_couvre_les_sept_interrupteurs() {
+    fn le_registre_couvre_les_huit_interrupteurs() {
         // SIX, pas sept : le « septième » de mon relevé initial était `EFE_K`, un faux positif —
         // le motif attrapait `EFE_Kovant_P1_*` dans des commentaires.
-        assert_eq!(REGISTRY.len(), 7, "ADDR, TENANT, ROOT, TOKEN, SUBJECT, DEPLOIEMENT, RECORDS");
+        assert_eq!(REGISTRY.len(), 8, "ADDR, TENANT, ROOT, TOKEN, SUBJECT, TERMINATEUR_CANAL, DEPLOIEMENT, RECORDS");
         for s in REGISTRY {
             assert!(!s.buys.trim().is_empty(), "{} : `buys` vide", s.name);
             assert!(!s.absence_costs.trim().is_empty(), "{} : `absence_costs` vide", s.name);

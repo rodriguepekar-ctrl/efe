@@ -9,7 +9,11 @@
 //! 3. il **exporte** un dossier ;
 //! 4. son **auditeur RE-PROUVE** le bundle exporté contre le root publié, **sans nous** — la patte forensic.
 
+use audit_console::canal::Canal;
 use audit_api::AuthContext;
+
+/// M8 — ces tests s'exécutaient implicitement en boucle locale ; on le DIT désormais.
+const LOCAL: Canal = Canal::A1LoopbackTemoin;
 use audit_console::{handle, Console, HttpRequest, Role};
 use provenance_capture::{LlmCall, MessageEvent, ToolCall};
 use provenance_dag::{verify_against_root, SealedDag, TenantKey};
@@ -54,12 +58,12 @@ fn the_full_gate_loop_holds_mechanically() {
     let mut c = demo_console();
 
     // ── 1. L'OFFICIER REVOIT un dossier conforme : il voit le cadenas VERT + le « pourquoi » tracé. ──
-    let dossiers = handle(&mut c, &get("/"), 1000);
+    let dossiers = handle(&mut c, &get("/"), 1000, &LOCAL);
     assert_eq!(dossiers.status, 200);
     let dl = String::from_utf8_lossy(&dossiers.body);
     assert!(dl.contains("SUP-2024") && dl.contains("SUP-2099"), "les deux dossiers apparaissent");
 
-    let sup = handle(&mut c, &get("/cases/SUP-2024"), 1000);
+    let sup = handle(&mut c, &get("/cases/SUP-2024"), 1000, &LOCAL);
     assert_eq!(sup.status, 200);
     let s = String::from_utf8_lossy(&sup.body);
     assert!(s.contains("Vérifié — record authentique"), "cadenas VERT — il fait confiance");
@@ -67,19 +71,19 @@ fn the_full_gate_loop_holds_mechanically() {
     assert!(s.contains("Exporter"), "l'export est à un clic");
 
     // ── 2. L'OFFICIER TRAITE UNE EXCEPTION : SUP-2099 (échec) remonte ; il SCELLE un OVERRIDE. ──
-    let exceptions = handle(&mut c, &get("/exceptions"), 1000);
+    let exceptions = handle(&mut c, &get("/exceptions"), 1000, &LOCAL);
     assert!(String::from_utf8_lossy(&exceptions.body).contains("SUP-2099"), "l'échec remonte dans la file d'exceptions");
 
-    let act = handle(&mut c, &post_form("/cases/SUP-2099/action", "target_step=aggregate&action=OVERRIDE&justification=revu%20manuellement%20%3A%20faux%20positif"), 1001);
+    let act = handle(&mut c, &post_form("/cases/SUP-2099/action", "target_step=aggregate&action=OVERRIDE&justification=revu%20manuellement%20%3A%20faux%20positif"), 1001, &LOCAL);
     assert_eq!(act.status, 303, "PRG après la revue scellée");
 
-    let after = handle(&mut c, &get("/cases/SUP-2099"), 1002);
+    let after = handle(&mut c, &get("/cases/SUP-2099"), 1002, &LOCAL);
     let a = String::from_utf8_lossy(&after.body);
     assert!(a.contains("OUTREPASSER") && a.contains("officer:hanna"), "l'oversight est SCELLÉ et tracé");
     assert!(a.contains("EXCEPTION"), "le dossier reflète sa nouvelle réalité (exception tracée)");
 
     // ── 3. L'OFFICIER EXPORTE un dossier (un clic) → un tar autonome. ──
-    let exp = handle(&mut c, &get("/cases/SUP-2024/export?fw=eu_ai_act"), 1003);
+    let exp = handle(&mut c, &get("/cases/SUP-2024/export?fw=eu_ai_act"), 1003, &LOCAL);
     assert_eq!(exp.status, 200);
     assert_eq!(exp.content_type, "application/x-tar");
     assert!(!exp.body.is_empty() && exp.body.len() % 512 == 0);
