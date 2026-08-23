@@ -101,7 +101,7 @@ mais ne bloquent personne.
 \addlinespace[3pt]
 \multicolumn{5}{@{}l@{}}{\textit{\textcolor{navy}{— Voie C1 : l'expansion —}}} \\
 \mm{M6} & \textbf{La conservation limitée} & un cas expiré disparaît, et \textbf{tout le reste se re-prouve encore} & M5 & \sz{1 sem} \\
-\mm{M7} & Le service de lecture & \code{audit-api} répond en HTTP sur un port \sz{(aujourd'hui : bibliothèque)} & M0 & \sz{1 sem} \\
+\mm{M7} & Le service de lecture & un processus sert \textbf{plusieurs} tenants, et aucun ne voit l'autre \sz{(critère réécrit --- cf. §5)} & M0 & \sz{1 sem} \\
 \mm{M8} & La console opposable & auth $+$ TLS $+$ un tenant ne voit \textbf{jamais} l'autre & M7 & \sz{1 sem} \\
 \addlinespace[3pt]
 \multicolumn{5}{@{}l@{}}{\textit{\textcolor{amber}{— L'opposabilité —}}} \\
@@ -226,6 +226,94 @@ participants du mode réel exécutent une fusion latente Mode-1 numérique : ce 
 SLM ». Les \textbf{trous} et les \textbf{critères} de ce document sont vérifiables ; les
 \textbf{tailles} sont des estimations.
 \end{these}
+
+\section{5 · L'état au 23 août 2026}
+
+\begin{acquis}
+\textbf{\mm{M0} à \mm{M9} sont construits}, à une exception près (\mm{M1.b}, ci-dessous). Les deux
+jalons du §3 sont atteints. Chaque critère est incarné par un test nommé, et \mm{M4} à \mm{M9} sont
+en outre éprouvés sur un \textbf{processus réel} par un script (\code{scripts/mN-check.sh}).
+\end{acquis}
+
+\begin{center}\small
+\renewcommand{\arraystretch}{1.22}
+\begin{tabular}{@{}>{\raggedright\arraybackslash}p{1.1cm} >{\raggedright\arraybackslash}p{9.4cm} >{\raggedright\arraybackslash}p{5.2cm}@{}}
+\toprule
+& \textbf{Ce qui prouve le critère} & \textbf{Éprouvé sur} \\
+\midrule
+\mm{M2} & \code{m2\_le\_client\_recoit\_sa\_reponse\_meme\_quand\_la\_persistance\_meurt} & test \\
+\mm{M3} & \code{m3\_le\_slm\_et\_le\_store\_meurent\_ensemble\_et\_lappel\_passe} & test \\
+\mm{M4} & \code{docker compose up} \fl{} les 5 étapes du pilote, sortie 0 & \best{processus réel} \\
+\mm{M5} & \code{m5-check.sh} --- un run POSTé, le dossier sur le disque & \best{processus réel} \\
+\mm{M6} & \code{m6\_cable\_un\_cas\_expire\_disparait\_et\_la\_destruction\_survit\_au\_redemarrage} & \best{processus réel} \\
+\mm{M7} & \code{m7\_un\_seul\_service\_sert\_deux\_tenants\_et\_aucun\_ne\_voit\_lautre} & \best{processus réel} \\
+\mm{M8} & 12 tests \code{m8\_*} --- CSRF, plancher de canal, isolation & \best{processus réel} \\
+\mm{M9} & \code{m9\_une\_preuve\_rfc3161\_est\_produite\_puis\_verifiee} & \best{socket réelle} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{5.1 · Pourquoi le critère de \mm{M7} a été réécrit}
+
+L'original disait « \code{audit-api} répond en HTTP sur un port », et se prouvait par
+\code{ls crates/audit-api/src/bin} \fl{} absent. \textbf{La propriété était déjà vraie} :
+\code{audit-console} servait les six routes de \code{audit\_api::router::route} sur
+\code{/api/tenants/\{t\}/…}, en \code{Authorization: Bearer}, avec un invariant de parité qui exige
+que le corps et le statut soient \emph{ceux de} \code{route()}.
+
+Le critère mesurait donc \textbf{l'emplacement d'un binaire}, pas la propriété qu'il énonce. Et lui
+obéir aurait été nuisible : donner à \code{audit-api} sa propre coquille HTTP, c'est soit dupliquer
+les 570 lignes de serveur écrites à la main dans S3, soit faire dépendre S2 de S3 --- une inversion
+de couche, c'est-à-dire le défaut que \mm{M1} existe pour supprimer.
+
+Le trou réel était ailleurs, et il bloquait \mm{M8} : le binaire ne provisionnait qu'\textbf{un}
+tenant. \code{route()} refuse en 403 un tenant étranger « sans même révéler l'existence d'autres
+tenants » --- mais cette isolation, qui \emph{est} la promesse de \mm{M8}, n'avait aucun moyen
+d'être exercée dans un service vivant. D'où la flèche \code{M7 -> M8}, et d'où le critère réécrit.
+
+\subsection{5.2 · Ce qui n'est pas tenu à la lettre}
+
+\begin{alerte}
+\textbf{\mm{M1.b} --- non fait.} Le critère de \mm{M1} (\code{grep -rln 'fn is\_local\_endpoint'}
+renvoie \emph{un} fichier) en renvoie \textbf{deux} : la seule implémentation, et le commentaire du
+garde \emph{citant ce critère}. Substantiellement, un seul analyseur existe. Mais \mm{M1} avait été
+scindé en \mm{M1.a} (fait) et \mm{M1.b} (jamais fait) : \textbf{deux analyseurs d'autorité
+subsistent} dans \code{efe-meta-swarm-server}, exemptés nommément avec leur raison et le module qui
+les supprime. Ils sont hors du produit --- le méta-essaim n'est pas dans la fermeture de la
+passerelle --- mais la DoD de \mm{M1.b} est « liste d'exemptions vide », et elle ne l'est pas.
+\end{alerte}
+
+\textbf{\mm{M8} --- « TLS » satisfait par substitution, non à la lettre.} Le processus ne
+\emph{termine} pas TLS. Il exige la \textbf{déclaration} du terminateur de canal placé devant lui,
+et refuse de servir hors de la boucle locale sans elle. Cette déclaration est \emph{portante} : elle
+fixe le barreau de confiance du canal, donc le droit de \textbf{sceller} un acte humain --- lire
+dégrade, sceller coupe. Le dépôt possède pourtant une pile TLS complète (TLS 1.3, mTLS, rotation à
+chaud) dans \code{efe-meta-swarm-server} : la tirer dans un crate feuille triplerait son arbre de
+dépendances et serait moins sûr qu'un terminateur mûr. Ce que \mm{M8} refuse, c'est de servir à
+distance \textbf{en silence} ; ce qu'il n'a jamais prétendu, c'est de chiffrer lui-même.
+
+\textbf{\mm{M9} --- aucune signature vérifiée, et ce n'est pas un oubli.} Le jeton RFC 3161 est
+déposé \emph{tel quel} ; le tiers le vérifie avec
+\code{openssl ts -verify -digest <root> -in <root>.tsr}. Écrire cette vérification dans le dépôt
+violerait sa propre règle --- « aucune crypto maison, aucune 3\textsuperscript{e} pile » --- et un
+vérifieur qu'on écrit soi-même ne prouve rien à qui doute de soi. Ce que le module garantit est que
+le jeton déposé \textbf{engage} la racine déposée : sans cette lecture, \code{bound\_root} serait
+une affirmation, et la liaison un cercle.
+
+\subsection{5.3 · L'annexe n'a pas été touchée, délibérément}
+
+L'annexe s'intitule « Vérifier \textbf{l'état de départ} », et c'est ce qu'elle est. La réécrire pour
+montrer les trous comblés lui ferait dire qu'il n'y avait pas de trou. Ses commandes rendent
+aujourd'hui d'autres résultats --- c'est précisément la preuve que les modules ont servi.
+
+Une exception mérite d'être signalée, parce qu'elle a failli coûter cher : la ligne \mm{M6}
+(\code{grep -rniE 'retention|purge|ttl'}) rendait \textbf{zéro} \emph{même après} que \mm{M6} fut
+construit. Le module est écrit en français --- « conservation », « broyage », « horizon » --- et sa
+terminologie ne croisait aucun des trois termes. \mm{M2} avait rencontré exactement cela et l'avait
+corrigé en nommant son propre vocabulaire ; \mm{M6} ne l'avait pas fait. \textbf{Un module qu'aucune
+preuve ne détecte se fait oublier.} Corrigé depuis --- et l'occasion de trancher un mot : \mm{M6} ne
+\emph{purge} pas. Une purge supprime des enregistrements, ce que la chaîne rend impossible. Ce qui
+disparaît est la capacité de \emph{lire}, par destruction d'une clé.
 
 \section{Annexe · Vérifier l'état de départ}
 
