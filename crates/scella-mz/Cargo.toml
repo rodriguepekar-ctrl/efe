@@ -1,0 +1,30 @@
+# SPDX-License-Identifier: UNLICENSED
+# MZ — la mesure du Cadrage.
+#
+# Ce crate MESURE, il ne sert rien. Son produit attendu est peut-être un REFUS : la feuille de route
+# dit que MZ « peut tuer le Cadrage sans rien coûter ». Il est donc bâti pour pouvoir dire non — ses
+# seuils sont écrits avant l'expérience, et son vérificateur de préservation ne doit RIEN au
+# composant qu'il mesure.
+#
+# Découpage voulu : `corpus`, `verifieur` et `mesure` sont PURS et testables sans modèle ; seul le
+# binaire touche llama-server. Un verdict qu'on ne peut pas éprouver hors ligne est un verdict qu'on
+# ne relit jamais.
+[package]
+name = "scella-mz"
+version = { workspace = true }
+edition = { workspace = true }
+license = "UNLICENSED"
+publish = false
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+# Le compresseur RÉEL. Mesurer une ré-implémentation ne mesurerait rien.
+efe-nano-app-coordinator = { path = "../efe-nano-app-coordinator" }
+tokio = { workspace = true }
+# Le `TenantId` du contexte d'appel est un UUID. Une mesure n'a pas de tenant : on en fige un.
+uuid = { workspace = true }
+
+[[bin]]
+name = "scella-mz"
+path = "src/main.rs"

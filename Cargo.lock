@@ -7390,6 +7390,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "scella-mz"
+version = "0.0.1"
+dependencies = [
+ "efe-nano-app-coordinator",
+ "serde",
+ "serde_json",
+ "tokio",
+ "uuid",
+]
+
+[[package]]
 name = "scella-preuve"
 version = "0.0.1"
 dependencies = [

@@ -296,6 +296,8 @@ members = [
     "crates/scella-authority",
     # M9 — le lecteur/écrivain RFC 3161, arbre de dépendances VIDE (cf. son Cargo.toml).
     "crates/scella-rfc3161",
+    # MZ — la mesure du Cadrage (corpus, vérificateur indépendant, balayage).
+    "crates/scella-mz",
     # M4 — le pilote de la démonstration en une commande (`docker compose up`).
     "crates/scella-preuve",
 ]
