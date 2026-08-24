@@ -106,6 +106,9 @@ docs/_build/
 docs/*.pdf
 docs/**/*.pdf
 docs/**/*.pptx
+# Exception : l'archive de mai 2026 contient des PDF SANS source dans ce dépôt
+# (4 des 5 n'ont aucun .md ni générateur suivi). Les exclure les perdrait.
+!docs/archive-2026-05/*.pdf
 # PDF de livraison à la racine (compendium, roadmap, généré)
 /EFE_*.pdf
 # Bundles de démo re-prouvables (csddd-demo, meta-provenance) — SORTIES régénérables des exemples
