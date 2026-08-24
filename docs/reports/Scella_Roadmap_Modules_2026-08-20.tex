@@ -230,7 +230,7 @@ SLM ». Les \textbf{trous} et les \textbf{critères} de ce document sont vérifi
 \section{5 · L'état au 23 août 2026}
 
 \begin{acquis}
-\textbf{\mm{M0} à \mm{M9} sont construits}, à une exception près (\mm{M1.b}, ci-dessous). Les deux
+\textbf{\mm{M0} à \mm{M9} sont construits}, \mm{M1.b} compris depuis le 24 août 2026. Les deux
 jalons du §3 sont atteints. Chaque critère est incarné par un test nommé, et \mm{M4} à \mm{M9} sont
 en outre éprouvés sur un \textbf{processus réel} par un script (\code{scripts/mN-check.sh}).
 \end{acquis}
@@ -241,6 +241,7 @@ en outre éprouvés sur un \textbf{processus réel} par un script (\code{scripts
 \toprule
 & \textbf{Ce qui prouve le critère} & \textbf{Éprouvé sur} \\
 \midrule
+\mm{M1.b} & \code{tout\_ce\_que\_nous\_declarons\_local\_est\_local\_pour\_tonic} + sa contre-épreuve & \best{socket réelle} \\
 \mm{M2} & \code{m2\_le\_client\_recoit\_sa\_reponse\_meme\_quand\_la\_persistance\_meurt} & test \\
 \mm{M3} & \code{m3\_le\_slm\_et\_le\_store\_meurent\_ensemble\_et\_lappel\_passe} & test \\
 \mm{M4} & \code{docker compose up} \fl{} les 5 étapes du pilote, sortie 0 & \best{processus réel} \\
@@ -273,14 +274,33 @@ d'être exercée dans un service vivant. D'où la flèche \code{M7 -> M8}, et d'
 
 \subsection{5.2 · Ce qui n'est pas tenu à la lettre}
 
+\begin{acquis}
+\textbf{\mm{M1.b} --- fait le 24 août 2026, et il n'était pas cosmétique.} La dette de \mm{M1.a}
+exemptait deux analyseurs d'autorité dans \code{efe-meta-swarm-server} au motif écrit qu'ils étaient
+« sûrs aujourd'hui par composition ». \textbf{Ce motif était faux.} L'un des deux décidait si TLS
+pouvait être \emph{retiré} d'un lien, et son \code{rsplit\_once(':')} coupait au \textbf{dernier}
+deux-points : sur \code{http://127.0.0.1:8080@evil.com}, il rendait l'hôte \code{127.0.0.1} tandis
+que \code{tonic::transport::Endpoint} --- construit trois lignes plus loin --- part vers
+\code{evil.com}. \code{IpAddr::from\_str} recevait donc une IP \emph{propre} : la composition
+invoquée pour rassurer était exactement ce qui faisait échouer le garde. Du gRPC en clair vers un
+hôte distant, annoncé en \code{debug!}. Mesuré contre le vrai client sur un corpus engendré :
+\textbf{875 formes distinctes} où l'ancien découpage coupait TLS.
+
+Le premier site est désormais un \textbf{ré-export} (un corps vide ne peut pas dériver), le second
+est \textbf{supprimé}. La liste d'exemptions est \textbf{vide}, et \code{scripts/m1b-check.sh}
+\emph{réintroduit} un analyseur pour vérifier que le garde tombe.
+\end{acquis}
+
 \begin{alerte}
-\textbf{\mm{M1.b} --- non fait.} Le critère de \mm{M1} (\code{grep -rln 'fn is\_local\_endpoint'}
-renvoie \emph{un} fichier) en renvoie \textbf{deux} : la seule implémentation, et le commentaire du
-garde \emph{citant ce critère}. Substantiellement, un seul analyseur existe. Mais \mm{M1} avait été
-scindé en \mm{M1.a} (fait) et \mm{M1.b} (jamais fait) : \textbf{deux analyseurs d'autorité
-subsistent} dans \code{efe-meta-swarm-server}, exemptés nommément avec leur raison et le module qui
-les supprime. Ils sont hors du produit --- le méta-essaim n'est pas dans la fermeture de la
-passerelle --- mais la DoD de \mm{M1.b} est « liste d'exemptions vide », et elle ne l'est pas.
+\textbf{Deux défauts trouvés en construisant le falsifieur, au-delà de \mm{M1.b}.} En tonic 0.12,
+\code{ClientTlsConfig} ne s'applique \textbf{que} si le schéma est \code{https} : conserver un
+\code{http://} écrit par l'opérateur donnait du gRPC en clair avec la pile mTLS entièrement
+configurée --- et le commentaire du dépôt affirmait le contraire. Symétriquement, \code{https://}
+\emph{sans} configuration TLS fait échouer la connexion : le contournement loopback d'\textsc{ad18}
+ne pouvait donc \textbf{pas} fonctionner dès que TLS était configuré. Cause commune, et c'est celle
+que \mm{M1} existe pour fermer : \textbf{deux endroits décidaient d'une même chose} --- le schéma
+d'un côté, la localité de l'autre. Le schéma est désormais une fonction du prédicat qui décide TLS,
+et les deux comportements de tonic sont épinglés par un test plutôt que par une phrase.
 \end{alerte}
 
 \textbf{\mm{M8} --- « TLS » satisfait par substitution, non à la lettre.} Le processus ne

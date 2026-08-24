@@ -570,16 +570,69 @@ async fn connect_participants(
             ServerError::Discovery(format!("no endpoint resolved for participant {:?}", p.id))
         })?;
 
-        // PR #16 — choose the URI scheme based on TLS state.  tonic
-        // tolerates `http://` over a TLS-configured channel but emits
-        // a runtime warning ; using `https://` is cleaner.
-        let scheme_endpoint = if endpoint.starts_with("http") {
-            endpoint.clone()
-        } else if tls_client_snapshot.is_some() {
-            format!("https://{endpoint}")
-        } else {
-            format!("http://{endpoint}")
-        };
+        // ── Le schéma est une FONCTION de la décision TLS de ce lien ──────────────────────
+        //
+        // ⚠ Ce bloc corrige DEUX défauts trouvés en construisant le falsifieur de M1.b, et qui
+        // dépassent sa lettre. Ils sont mesurés dans
+        // `tests/m1b_pas_de_degradation_silencieuse.rs`, pas déduits.
+        //
+        // **Mesure 1** — en tonic 0.12, `ClientTlsConfig` ne s'applique QUE si le schéma de l'URI
+        // est `https`. Sur `http://`, `tls_config()` réussit **en silence** et TLS n'est pas posé.
+        // Le code précédent conservait tel quel tout endpoint commençant par « http » : un
+        // `EFE_META_SWARM_PARTICIPANTS=id=http://p.efe.svc:50091` donnait donc du gRPC en clair
+        // avec la pile mTLS entièrement configurée. Le commentaire d'origine affirmait le
+        // contraire (« tonic accepts `http://` too but emits a runtime warning ») — il n'avait
+        // jamais été éprouvé.
+        //
+        // **Mesure 2** — symétriquement, `https://` **sans** `tls_config` fait ÉCHOUER la
+        // connexion. Or `connect_with_tls` retire TLS sur un lien loopback (AD18). Avec TLS
+        // configuré et un participant en `127.0.0.1`, l'ancien code fabriquait `https://…`, puis
+        // le contournement retirait la configuration : la connexion échouait systématiquement.
+        // **Le contournement loopback d'AD18 ne pouvait pas fonctionner** dès que TLS était
+        // configuré — et le cas « TLS actif + participants loopback » n'était couvert par aucun
+        // test (AC25 n'éprouve que le mode TLS *désactivé*).
+        //
+        // La cause commune est la faute que M1 existe pour fermer : **deux endroits décidaient
+        // d'une même chose**. Ici, « TLS est-il configuré globalement » ; là-bas, « ce lien
+        // est-il local ». Le comportement de tonic dépendait de leur accord, que rien ne tenait.
+        //
+        // Correctif : le schéma se déduit du MÊME prédicat qui décide TLS. Le schéma écrit par
+        // l'opérateur est retiré d'abord — le conserver rendrait le résultat dépendant de ce
+        // qu'il a tapé, ce qui est exactement le désaccord qu'on ferme.
+        let sans_schema = endpoint
+            .strip_prefix("https://")
+            .or_else(|| endpoint.strip_prefix("http://"))
+            .unwrap_or(endpoint);
+        // `endpoint_is_loopback` est indifférent au schéma : le retirer ne change pas la décision,
+        // et c'est ce qui rend l'accord avec `connect_with_tls` structurel plutôt qu'espéré.
+        let tls_sur_ce_lien =
+            tls_client_snapshot.is_some() && !crate::tls::endpoint_is_loopback(sans_schema);
+        let scheme_endpoint =
+            format!("{}://{sans_schema}", if tls_sur_ce_lien { "https" } else { "http" });
+
+        // ── L'accord des deux lectures est VÉRIFIÉ, pas affirmé ────────────────────────────
+        //
+        // `connect_with_tls` reprend la décision de localité, mais sur `scheme_endpoint` — pas
+        // sur `sans_schema`. Les deux chaînes ne diffèrent que par le schéma, que l'analyseur
+        // ignore… sauf si `sans_schema` portait déjà un séparateur de schéma (un `ftp://`, une
+        // coquille, un préfixe recollé deux fois). Dans ce cas les deux lectures désignent des
+        // hôtes différents, et la décision prise ici ne serait pas celle appliquée là-bas.
+        //
+        // Deux lectures du MÊME analyseur, comparées : c'est la seule forme de garantie
+        // admissible pour une propriété dont dépend l'application de TLS. L'écrire en
+        // commentaire — « les deux chaînes sont équivalentes » — est exactement ce que la dette
+        // de M1.a avait fait avec « sûr par composition ».
+        if tls_client_snapshot.is_some()
+            && scella_authority::host_of(sans_schema) != scella_authority::host_of(&scheme_endpoint)
+        {
+            return Err(ServerError::Discovery(format!(
+                "participant {:?} : l'endpoint désigne un hôte différent selon qu'on lui préfixe \
+                 un schéma — il en porte probablement déjà un, ou un séparateur parasite. La \
+                 décision d'appliquer TLS prise ici ne serait pas celle appliquée à la connexion. \
+                 Corriger EFE_META_SWARM_PARTICIPANTS ; l'endpoint n'est pas recopié ici.",
+                p.id
+            )));
+        }
 
         // PR #16 — when TLS is active, derive the expected peer SAN
         // from the resolved endpoint URL itself : `host:port` ⇒ host.
@@ -589,28 +642,55 @@ async fn connect_participants(
         //
         // We do NOT use `state.config.tls_peer_san` here — that env
         // var is a single-string fallback for *all* participants (used
-        // in dev) ; for production we derive per-participant.  The
-        // env-var hint is honoured only when it's set AND the derived
-        // SAN is empty (defensive fallback for static-localhost).
-        let participant_tls = tls_client_snapshot.as_ref().map(|base| {
-            let san = extract_san_from_endpoint(&scheme_endpoint);
-            let resolved_san = if san.is_empty() {
-                state
-                    .config
-                    .tls_peer_san
-                    .clone()
-                    .unwrap_or_else(|| p.id.clone())
-            } else {
-                san
-            };
-            crate::tls::TlsClientConfig {
-                cert_chain_pem: base.cert_chain_pem.clone(),
-                key_pem: base.key_pem.clone(),
-                server_ca_pem: base.server_ca_pem.clone(),
-                min_protocol: base.min_protocol,
-                expected_server_san: resolved_san,
+        // in dev) ; for production we derive per-participant.
+        //
+        // ── M1.b · l'hôte vient de l'analyseur UNIQUE, et son refus est FATAL ──────────────
+        //
+        // Ce site portait le second des deux derniers analyseurs d'autorité du dépôt
+        // (`extract_san_from_endpoint`, supprimé). Sa migration cache un piège que la
+        // délégation seule n'aurait pas fermé, et qui allait dans le mauvais sens.
+        //
+        // L'ancien découpage ne rendait `""` que sur une entrée dégénérée (`"http://"`), donc le
+        // « repli défensif » vers `tls_peer_san` puis `p.id` ne se déclenchait **presque jamais** :
+        // un endpoint illisible produisait un SAN absurde, aucun certificat ne le portait, et la
+        // poignée de main échouait. Sûr — par composition, pas par intention.
+        //
+        // `host_of` rend `None` sur SIX familles d'écritures (non-ASCII, `\`/espace/contrôle,
+        // IPv6 nue, IPv6 non canonique, IPv4 ambiguë, autorité vide). Conserver le repli aurait
+        // donc donné à ces six familles un SAN **plausible** — `p.id`, ou pire le
+        // `EFE_META_SWARM_TLS_PEER_SAN` que l'opérateur a posé pour le développement. Un SAN
+        // plausible peut **correspondre**. Le repli aurait converti un échec-fermé en
+        // succès-ouvert : une connexion établie vers un endpoint que nous ne savons pas lire.
+        //
+        // Donc : pas de repli. Un endpoint illisible **empêche l'itération**, et le message ne
+        // recopie PAS l'endpoint — les formes refusées sont précisément celles qui peuvent porter
+        // un `userinfo`, et le journal ne doit pas en devenir le dépôt (le geste de P1).
+        //
+        // Le SAN n'est dérivé que si TLS sert SUR CE LIEN. Sans TLS, aucune identité de pair
+        // n'est vérifiée : dériver un SAN — et refuser sur un endpoint illisible — punirait une
+        // configuration sans rien protéger. Le refus mord là où il compte.
+        let participant_tls = match tls_client_snapshot.as_ref().filter(|_| tls_sur_ce_lien) {
+            None => None,
+            Some(base) => {
+                let Some(san) = scella_authority::host_of(&scheme_endpoint) else {
+                    return Err(ServerError::Discovery(format!(
+                        "participant {:?} : endpoint illisible, connexion refusée. L'autorité n'est \
+                         pas analysable sans ambiguïté (IPv6 nue sans crochets, IPv4 numérique \
+                         ambiguë, non-ASCII, ou caractère interdit). Corriger \
+                         EFE_META_SWARM_PARTICIPANTS ; l'endpoint n'est pas recopié ici car les \
+                         formes refusées peuvent porter un userinfo.",
+                        p.id
+                    )));
+                };
+                Some(crate::tls::TlsClientConfig {
+                    cert_chain_pem: base.cert_chain_pem.clone(),
+                    key_pem: base.key_pem.clone(),
+                    server_ca_pem: base.server_ca_pem.clone(),
+                    min_protocol: base.min_protocol,
+                    expected_server_san: san.to_string(),
+                })
             }
-        });
+        };
 
         // PR #18 Span 2b — per-participant connect span (CLIENT
         // kind).  Wraps the actual RemoteParticipant::connect_with_tls
@@ -668,39 +748,19 @@ async fn connect_participants(
     Ok(out)
 }
 
-/// PR #16 helper — extract the DNS-only part of a participant
-/// endpoint URL.  Used to derive the expected SAN for the TLS
-/// handshake from the resolved Service FQDN.
-///
-/// Examples :
-///
-/// ```text
-/// "https://controller.efe.svc.cluster.local:50080" → "controller.efe.svc.cluster.local"
-/// "http://10.0.0.5:50091"                          → "10.0.0.5"
-/// "supplier-scoring.efe.svc:50091"                 → "supplier-scoring.efe.svc"
-/// "127.0.0.1:50091"                                → "127.0.0.1"
-/// ```
-///
-/// Strips the scheme + path + port.  IPv6-bracket form is handled.
-/// On malformed input, returns the empty string ; the caller falls
-/// back to `state.config.tls_peer_san`.
-fn extract_san_from_endpoint(endpoint: &str) -> String {
-    let after_scheme = endpoint
-        .split_once("://")
-        .map_or(endpoint, |(_scheme, rest)| rest);
-    let authority = after_scheme
-        .split(['/', '?'])
-        .next()
-        .unwrap_or(after_scheme);
-    let host = if let Some(stripped) = authority.strip_prefix('[') {
-        stripped.split_once(']').map(|(h, _)| h).unwrap_or(stripped)
-    } else if authority.contains("::") {
-        authority
-    } else {
-        authority.rsplit_once(':').map_or(authority, |(h, _)| h)
-    };
-    host.to_string()
-}
+// ─── M1.b — `extract_san_from_endpoint` est SUPPRIMÉ ────────────────────────────────────────
+//
+// Ce helper (PR #16) extrayait l'hôte d'un endpoint pour en déduire le SAN attendu. C'était le
+// **cinquième et dernier** analyseur d'autorité du dépôt, et son découpage était identique, au
+// caractère près, à celui de `tls::endpoint_is_loopback` — deux copies dans le MÊME crate.
+//
+// Il n'est pas remplacé par un wrapper : le site d'appel interroge directement
+// `scella_authority::host_of`, l'analyseur unique. Un helper local, même délégant, aurait rouvert
+// l'endroit où la logique repousse — et c'est exactement ainsi que les cinq copies étaient nées.
+//
+// Ses cas historiques n'ont pas été perdus : ils sont conservés dans le module de tests plus bas
+// (`extract_san_tests`), pointés sur `host_of`. C'est la même preuve de non-régression que M1.a
+// avait employée pour `provenance-capture/src/guard.rs`.
 
 /// Resolve participant endpoints.  Phase 2 uses the static-localhost
 /// discovery : the controller's `ControllerConfig.static_participants`
@@ -931,60 +991,103 @@ mod tests {
         BoxSafety as ProtoBoxSafety, IterateRequest, IterationConfig, MetaSpaceConfig, TensorF32,
     };
 
-    // ─── PR #16 — `extract_san_from_endpoint` unit tests ───────────
+    // ─── PR #16 — dérivation du SAN. Cas HISTORIQUES conservés, pointés sur M1.b ──────────
+    //
+    // `extract_san_from_endpoint` n'existe plus ; le site d'appel interroge
+    // `scella_authority::host_of`. Ces tests ne sont pas réécrits mais **redirigés** : c'est ce
+    // qui en fait une preuve de non-régression et non une preuve écrite après coup. Deux d'entre
+    // eux ont dû changer, et chacun porte sa raison.
+    //
+    // `san` rend l'ancien contrat (`String`, vide sur refus) afin que les assertions historiques
+    // restent lisibles telles quelles ; les tests de M1.b, eux, éprouvent `host_of` directement
+    // pour distinguer « refus » de « chaîne vide » — deux choses que l'ancien type confondait.
+    fn san(endpoint: &str) -> String {
+        scella_authority::host_of(endpoint).unwrap_or_default().to_string()
+    }
 
     #[test]
     fn pr16_extract_san_strips_scheme_and_port() {
-        assert_eq!(
-            extract_san_from_endpoint("https://controller.efe.svc.cluster.local:50080"),
-            "controller.efe.svc.cluster.local"
-        );
-        assert_eq!(
-            extract_san_from_endpoint("http://controller.efe.svc:50080"),
-            "controller.efe.svc"
-        );
+        assert_eq!(san("https://controller.efe.svc.cluster.local:50080"), "controller.efe.svc.cluster.local");
+        assert_eq!(san("http://controller.efe.svc:50080"), "controller.efe.svc");
     }
 
     #[test]
     fn pr16_extract_san_handles_no_scheme() {
-        assert_eq!(
-            extract_san_from_endpoint("supplier-scoring.efe.svc:50091"),
-            "supplier-scoring.efe.svc"
-        );
-        assert_eq!(extract_san_from_endpoint("10.0.0.5:50091"), "10.0.0.5");
+        assert_eq!(san("supplier-scoring.efe.svc:50091"), "supplier-scoring.efe.svc");
+        assert_eq!(san("10.0.0.5:50091"), "10.0.0.5");
     }
 
     #[test]
     fn pr16_extract_san_handles_ipv6_bracket() {
-        assert_eq!(
-            extract_san_from_endpoint("https://[2001:db8::1]:50080"),
-            "2001:db8::1"
-        );
-        assert_eq!(extract_san_from_endpoint("[::1]:50080"), "::1");
+        assert_eq!(san("https://[2001:db8::1]:50080"), "2001:db8::1");
+        assert_eq!(san("[::1]:50080"), "::1");
     }
 
+    /// ⭐ **CHANGEMENT ASSUMÉ (M1.b).** L'ancien test exigeait `san("::1") == "::1"` et
+    /// `san("2001:db8::1") == "2001:db8::1"`.
+    ///
+    /// Une IPv6 **nue** n'est pas une autorité valide (RFC 3986 exige les crochets) et
+    /// `tonic::transport::Endpoint` la refuse : dériver un SAN d'une chaîne que le client ne sait
+    /// pas lire, c'est affirmer une identité de pair sans rapport avec la connexion. L'ancienne
+    /// branche `contains("::")` faisait pire qu'un refus — sur `fe80::1:8080` elle rendait
+    /// l'hôte `fe80`.
+    ///
+    /// Le sens du changement est **fail-closed** : le site d'appel refuse l'itération au lieu de
+    /// se replier sur un SAN plausible. Voir le commentaire de `participant_tls`.
     #[test]
-    fn pr16_extract_san_handles_bare_ipv6() {
-        // No bracket, no port — bare IPv6 (the `contains("::")` branch).
-        assert_eq!(extract_san_from_endpoint("::1"), "::1");
-        assert_eq!(extract_san_from_endpoint("2001:db8::1"), "2001:db8::1");
+    fn m1b_ipv6_nue_est_refusee_et_non_devinee() {
+        assert_eq!(scella_authority::host_of("::1"), None);
+        assert_eq!(scella_authority::host_of("2001:db8::1"), None);
+        assert_eq!(scella_authority::host_of("fe80::1:8080"), None, "et surtout pas « fe80 »");
+        // Les formes légitimes restent lues — c'est ce qui distingue un durcissement d'une perte.
+        assert_eq!(scella_authority::host_of("[::1]:50080"), Some("::1"));
+        assert_eq!(scella_authority::host_of("https://[2001:db8::1]:50080"), Some("2001:db8::1"));
     }
 
     #[test]
     fn pr16_extract_san_strips_path() {
-        assert_eq!(
-            extract_san_from_endpoint("https://controller.efe.svc:50080/grpc"),
-            "controller.efe.svc"
-        );
+        assert_eq!(san("https://controller.efe.svc:50080/grpc"), "controller.efe.svc");
     }
 
     #[test]
     fn pr16_extract_san_no_port() {
-        assert_eq!(
-            extract_san_from_endpoint("controller.efe.svc"),
-            "controller.efe.svc"
+        assert_eq!(san("controller.efe.svc"), "controller.efe.svc");
+        assert_eq!(san("127.0.0.1"), "127.0.0.1");
+    }
+
+    /// ⭐⭐ **Ce que la suppression du repli protège.** Onze des formes mesurées faisaient dériver
+    /// un SAN qui n'était pas l'hôte contacté. Le SAN dérivé est désormais l'hôte de
+    /// `tonic::transport::Endpoint`, ou rien — jamais une supposition.
+    #[test]
+    fn m1b_le_san_derive_est_lhote_reellement_contacte() {
+        for (charge, attendu) in [
+            ("http://127.0.0.1:8080@evil.com/", Some("evil.com")),
+            ("http://localhost:8080@evil.com/", Some("evil.com")),
+            ("http://[::1]:8080@evil.com/", Some("evil.com")),
+            ("http://127.0.0.1@evil.com", Some("evil.com")),
+            ("http://evil.com#@127.0.0.1", Some("evil.com")),
+            ("http://evil.com?x@127.0.0.1", Some("evil.com")),
+            ("http://evil.com/x@127.0.0.1", Some("evil.com")),
+            // Le format de production, intact.
+            ("tst-efe-meta-swarm-participant-supplier-scoring.efe.svc:50091",
+             Some("tst-efe-meta-swarm-participant-supplier-scoring.efe.svc")),
+        ] {
+            assert_eq!(scella_authority::host_of(charge), attendu, "charge : {charge}");
+        }
+    }
+
+    /// **Le corpus d'extraction de M1**, dont l'export existait précisément pour que ce crate
+    /// puisse éprouver ses analyseurs restants. Il n'en a plus — donc il l'éprouve sur le seul.
+    #[test]
+    fn m1b_le_corpus_dextraction_passe() {
+        assert!(
+            scella_authority::CORPUS_HOTE.len() >= 20,
+            "corpus suspicieusement court ({})",
+            scella_authority::CORPUS_HOTE.len()
         );
-        assert_eq!(extract_san_from_endpoint("127.0.0.1"), "127.0.0.1");
+        for (entree, attendu) in scella_authority::CORPUS_HOTE {
+            assert_eq!(scella_authority::host_of(entree), *attendu, "{entree}");
+        }
     }
 
     fn good_manifest() -> Manifest {

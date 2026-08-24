@@ -34,6 +34,13 @@ efe-meta-swarm = { path = "../efe-meta-swarm", features = ["provenance"] }
 # piles de provenance, ce qui serait un mauvais marché pour six champs de texte.
 provenance-dag = { path = "../provenance-dag", version = "0.0.1" }
 
+# M1.b — L'UNIQUE analyseur d'autorité du dépôt. Crate FEUILLE, zéro dépendance : l'arête est
+# gratuite et ne soude aucun périmètre. Ce crate hébergeait les deux DERNIÈRES copies de
+# l'analyseur, et l'une d'elles COUPAIT TLS vers un hôte distant (cf. src/tls/mod.rs).
+# Ne pas réécrire de découpage d'URL ici : `grep '"://"'` est gardé par
+# `scella-authority/tests/un_seul_analyseur.rs`, exemptions VIDES depuis M1.b.
+scella-authority = { path = "../scella-authority" }
+
 # Couche 3 M1.d — OPTIONAL, gated by the `core-integration` feature (see
 # [features]).  efe-server provides `mode1::build_mvp_controller` (Voie A) ;
 # efe-core provides the SwarmSpec types the manifest `controller` block maps
@@ -219,6 +226,9 @@ libc = "0.2"
 # cert-manager would write to the Secret mount in production.  Pure
 # Rust, no OpenSSL FFI ; matches our crypto-stack policy.
 rcgen = { version = "0.13", default-features = false, features = ["pem", "ring"] }
+# M1.b — `CancellationToken`, pour appeler la VRAIE `connect_with_tls` depuis un test
+# d'intégration plutôt que d'en recopier le corps (ce serait la copie que M1 combat).
+tokio-util = "0.7"
 
 # ─────────────────────────────────────────────────────────────────────
 # Profile override : panic = "unwind".

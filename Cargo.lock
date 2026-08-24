@@ -2434,6 +2434,7 @@ dependencies = [
  "rustls 0.23.40",
  "rustls-pemfile 2.2.0",
  "rustls-pki-types",
+ "scella-authority",
  "serde",
  "serde_json",
  "serde_yaml",

@@ -412,13 +412,34 @@ il était coupé. Toujours un durcissement, toujours la direction sûre, mais la
 M1.b doit nommer les trois.
 \end{alerte}
 
-Il faut être juste envers ces deux fichiers : ils sont \emph{sûrs aujourd'hui}. Les charges de
-différentiel (\code{\#@}, \code{userinfo@}) leur font produire un hôte qui n'est ni
-\code{localhost} ni une IP analysable, donc \code{false}, donc TLS maintenu et SAN inutilisable. Mais
-cette sûreté vient de la \emph{sévérité de ce qui suit} --- \code{IpAddr::from\_str}, l'égalité
-stricte de chaîne, l'absence de certificat correspondant --- et non de l'analyseur. Ils sont sûrs par
-composition, pas par conception : ce sont eux qui casseront le jour où quelqu'un les
-« améliorera ».
+\begin{alerte}
+\textbf{Le paragraphe qui suivait ici était FAUX, et sa fausseté est le principal enseignement de
+M1.} Il disait : « il faut être juste envers ces deux fichiers, ils sont \emph{sûrs aujourd'hui} ;
+les charges de différentiel (\code{\#@}, \code{userinfo@}) leur font produire un hôte qui n'est ni
+\code{localhost} ni une IP analysable, donc \code{false}, donc TLS maintenu et SAN inutilisable ».
+
+Le raisonnement énumérait les charges et concluait sur chacune. Il a manqué celle qui comptait :
+\code{userinfo@} \textbf{portant un port}. Sur \code{http://127.0.0.1:8080@evil.com}, le
+\code{rsplit\_once(':')} coupe au \emph{dernier} deux-points, rend l'hôte \code{127.0.0.1} et le
+« port » \code{8080@evil.com}. \code{IpAddr::from\_str} ne reçoit donc pas une chaîne bancale mais
+une IP \pire{parfaitement propre} : il répond « loopback », et \code{connect\_with\_tls} retire TLS
+--- vers \code{evil.com}, où \code{tonic::transport::Endpoint} part réellement. La
+« sévérité de ce qui suit », invoquée comme filet, était exactement ce qui laissait passer.
+
+Ce que cela dit de la méthode, et pas seulement de ce fichier : \best{un argument de sûreté
+analytique, écrit avec soin, révisé, et cité dans une liste d'exemptions, s'est trompé sur une
+famille de formes qu'il croyait avoir couverte}. Ce qui l'a trouvée n'est pas une relecture de plus
+--- c'est un \emph{corpus engendré} confronté au client réel : \textbf{875 formes distinctes} où
+l'ancien découpage coupait TLS. La leçon est le §6 de ce document, retournée contre lui-même : nous
+avions raison de refuser d'imiter la normalisation d'un client, et tort de croire qu'une énumération
+manuelle suffisait à s'en dispenser.
+\end{alerte}
+
+Ce qui restait juste dans ce paragraphe, en revanche : cette sûreté --- lorsqu'elle existait --- ne
+venait pas de l'analyseur mais de la \emph{sévérité de ce qui suit} (\code{IpAddr::from\_str},
+l'égalité stricte de chaîne, l'absence de certificat correspondant). Sûrs par composition et non par
+conception. La conclusion était même trop douce : ce ne sont pas eux qui « casseraient le jour où
+quelqu'un les améliorerait », ils étaient \pire{déjà cassés}.
 
 \section{8 · Le critère d'acceptation --- exécutable et non jouable}
 
@@ -500,9 +521,11 @@ fait que les \textbf{tests historiques} de \code{guard.rs}, laissés en place et
 nouvelle implémentation, passent sans être touchés. La couture annoncée est tenue : le critère
 \code{"://"} tombe de cinq à \textbf{trois}, pas à un, et les deux analyseurs restants sont
 \textbf{exemptés nommément}, avec leur raison et le module qui les supprimera --- une assertion
-interdit à cette liste de grandir, et le critère de fin de M1.b est qu'elle soit vide. M1.b porte tout le risque et
-aucune urgence : ses deux sites sont sûrs aujourd'hui. Les séparer n'est pas un report, c'est mettre
-le risque là où il se voit.
+interdit à cette liste de grandir, et le critère de fin de M1.b est qu'elle soit vide. M1.b porte tout
+le risque. \pire{Il portait aussi une urgence, contrairement à ce que cette phrase disait} : « ses
+deux sites sont sûrs aujourd'hui » a été réfuté à la mesure (cf. §7 et §11). Les séparer restait le
+bon découpage --- cela a mis le risque là où il se voit --- mais l'estimation de ce risque était
+fausse, et elle l'était \emph{par raisonnement}, dans un document qui se croyait prudent.
 
 \begin{acquis}
 \textbf{Ce que M1 achète, en une phrase.} Aujourd'hui, la souveraineté du produit --- « vos données
@@ -512,5 +535,105 @@ repose sur \textbf{un} analyseur, dont un test interdit la copie et dont une pro
 l'accord avec le client HTTP réel. Le gain n'est pas soixante lignes de moins : c'est que la question
 « et si les deux copies divergeaient ? » \best{cesse d'être posable}.
 \end{acquis}
+
+\section{11 · M1.b, fait --- et ce que la mesure a trouvé}
+
+\subsection{11.1 · Le défaut, et pourquoi il était invisible}
+
+Les deux analyseurs que M1.a laissait au méta-essaim étaient, au caractère près, le même découpage
+écrit deux fois \emph{dans le même crate} : \code{tls::endpoint\_is\_loopback} (qui décide si TLS
+peut être retiré d'un lien) et \code{controller::iterate::extract\_san\_from\_endpoint} (qui déduit
+le SAN attendu). Le premier était faux, et sa fausseté était \emph{conditionnelle} --- ce qui
+explique qu'aucune relecture ne l'ait vue.
+
+Sans port dans le \code{userinfo}, \code{http://127.0.0.1@evil.com} produit l'« hôte »
+\code{127.0.0.1@evil.com}, que \code{IpAddr::from\_str} refuse : la fonction rend \code{false}, TLS
+reste allumé, tout va bien. C'est ce cas-là que le §7 avait examiné. Avec un port,
+\code{http://127.0.0.1:8080@evil.com}, la coupe au dernier deux-points isole \code{127.0.0.1} d'un
+côté et \code{8080@evil.com} de l'autre : l'analyseur rend \code{true}, et le contournement
+d'\textsc{ad18} pose \code{effective\_tls = None}. Le gRPC part en clair vers \code{evil.com}, et le
+seul témoignage de l'événement est un \code{debug!} qui recopiait par ailleurs l'URL entière ---
+\code{userinfo} compris --- dans une sortie collectée et archivée.
+
+Il faut nommer précisément la portée : ces formes viennent de
+\code{EFE\_META\_SWARM\_PARTICIPANTS}, donc d'un opérateur ou de l'outillage qui écrit sa ConfigMap.
+Ce n'est pas une entrée d'attaquant distant, et le méta-essaim n'est pas dans la fermeture du
+produit servi. Ce que M1.b supprime est un \best{déclassement silencieux} : une configuration
+inhabituelle faisait disparaître une pile mTLS complète --- TLS 1.3, mTLS, rotation à chaud,
+vérifieur de SAN strict --- sans qu'aucune sortie ne le dise à un niveau qu'un opérateur lit.
+
+\subsection{11.2 · La forme du correctif : ré-export, suppression, refus}
+
+\code{endpoint\_is\_loopback} devient un \textbf{ré-export} de
+\code{scella\_authority::is\_local\_endpoint}. Le geste importe : un \emph{wrapper}, même délégant,
+laisse un corps où la logique repousse --- et c'est ainsi que les cinq copies étaient nées. Un
+ré-export n'a pas de corps. \code{extract\_san\_from\_endpoint} est \textbf{supprimé} ; son site
+d'appel interroge l'analyseur directement.
+
+Le point délicat n'était ni l'un ni l'autre : c'était le \textbf{repli}. L'ancien découpage ne
+rendait la chaîne vide que sur une entrée dégénérée, donc le « repli défensif » vers
+\code{tls\_peer\_san} puis \code{p.id} ne se déclenchait presque jamais ; un endpoint illisible
+produisait un SAN absurde et la poignée de main échouait. \code{host\_of}, lui, rend \code{None} sur
+six familles d'écritures. Conserver le repli aurait donné à ces six familles un SAN
+\emph{plausible}, et un SAN plausible peut \pire{correspondre} --- notamment le
+\code{EFE\_META\_SWARM\_TLS\_PEER\_SAN} qu'un opérateur pose en développement. La migration naïve
+aurait donc converti un échec-fermé en \pire{succès-ouvert}. D'où : pas de repli, refus d'itérer, et
+un message qui ne recopie pas l'endpoint --- les formes refusées sont précisément celles qui peuvent
+porter un \code{userinfo}.
+
+\subsection{11.3 · Deux défauts adjacents, trouvés en construisant le falsifieur}
+
+\begin{alerte}
+\textbf{Ces deux points dépassent la lettre de M1.b.} Ils ont été trouvés en essayant de
+\emph{prouver} sur une socket la phrase « déclarer local retire TLS », et ils sont mesurés, non
+déduits.
+
+\textbf{Un.} En tonic 0.12, \code{ClientTlsConfig} ne s'applique que si le schéma de l'URI est
+\code{https}. Sur \code{http://}, \code{tls\_config()} réussit \emph{en silence} et TLS n'est pas
+posé. Or \code{iterate.rs} conservait tel quel tout endpoint commençant par « http » : un
+\code{EFE\_META\_SWARM\_PARTICIPANTS=id=http://p.efe.svc:50091} donnait donc du gRPC en clair avec
+la pile mTLS entièrement configurée. Le commentaire du dépôt affirmait l'inverse --- « tonic accepts
+\code{http://} too but emits a runtime warning » --- et n'avait jamais été éprouvé.
+
+\textbf{Deux.} Symétriquement, \code{https://} \emph{sans} \code{tls\_config} fait échouer la
+connexion. Comme \code{iterate.rs} composait \code{https://} dès que TLS était configuré, et que
+\code{connect\_with\_tls} retirait ensuite la configuration sur un lien loopback, le contournement
+d'\textsc{ad18} \pire{ne pouvait pas fonctionner} dans cette configuration. Le cas « TLS actif +
+participants loopback » n'était couvert par aucun test : \textsc{ac25} n'éprouve que le mode TLS
+\emph{désactivé}.
+\end{alerte}
+
+La cause est commune, et c'est celle que ce document tout entier existe pour fermer :
+\textbf{deux endroits décidaient d'une même chose}. Ici « TLS est-il configuré globalement », là-bas
+« ce lien est-il local » ; et le comportement de tonic dépendait de leur accord, que rien ne tenait.
+Le correctif est donc de la même nature que M1 : le schéma devient une \emph{fonction} du prédicat
+qui décide TLS. Et parce que les deux appels portent sur deux chaînes différant par le schéma,
+l'accord n'est plus \emph{affirmé} en commentaire mais \textbf{vérifié} --- deux lectures du même
+analyseur, comparées, qui refusent l'itération si elles divergent. Un endpoint portant déjà un
+séparateur de schéma est la forme où elles divergent, et un test l'exhibe.
+
+\subsection{11.4 · Le critère, et ce qu'il ne prouve pas}
+
+La liste d'exemptions est \textbf{vide}. Elle n'est pas seulement vide dans la source :
+\code{scripts/m1b-check.sh} \emph{réintroduit} un analyseur dans un crate quelconque et exige que le
+garde tombe, puis le retire et exige qu'il redevienne vert. Le balayage couvre désormais tout
+\code{.rs} de chaque crate --- pas seulement \code{src/} --- parce qu'une copie de travail se dépose
+justement dans un harnais de test pendant qu'on migre. Mesuré avant l'élargissement : l'arbre était
+déjà propre, donc il ne coûte rien.
+
+Le garde principal ne pouvant plus jamais échouer une fois la liste vide, son \emph{détecteur} et sa
+\emph{validation d'exemption} ont été isolés en fonctions pures et reçoivent leurs propres
+contre-épreuves. Sans cela, un \code{contains} mal écrit produirait un vert éternel --- le défaut
+exact que M7 avait laissé et que M8 a promené sans le réveiller.
+
+\begin{these}
+\textbf{Ce que M1.b ne prouve pas.} Ni que \code{scella-authority} soit correct dans l'absolu --- il
+est prouvé d'accord avec \code{url} et avec \code{tonic} sur des corpus engendrés, et un corpus est
+un falsifieur qui n'a pas encore tiré, pas une preuve. Ni que la production soit à l'abri d'une
+mauvaise configuration : M1.b supprime le déclassement \emph{silencieux}, pas la faute de frappe. Ni
+que le méta-essaim soit dans le produit --- il n'y est pas. Ce que M1.b achète est plus étroit et
+plus solide : la question « et si les deux lectures divergeaient ? » n'a plus de sujet, et la
+réponse ne repose plus sur un paragraphe bien écrit.
+\end{these}
 
 \end{document}

@@ -179,10 +179,38 @@ impl RemoteParticipant {
         // dev with `discovery: static-localhost`.  Skipping TLS on
         // loopback removes per-connection handshake overhead in the
         // hot inner-loop of unit tests + dev-mode benchmarks.
+        //
+        // ── M1.b — deux corrections ici, et la seconde n'est pas cosmétique ─────────────────
+        //
+        // 1. `endpoint_is_loopback` est désormais l'analyseur UNIQUE (ré-export). L'ancienne
+        //    lecture déclarait `http://127.0.0.1:8080@evil.com` loopback alors que
+        //    `tonic::transport::Endpoint` — construit trois lignes plus bas — part vers
+        //    `evil.com`. Cette ligne-ci retirait donc TLS sur un lien distant.
+        //
+        // 2. Le journal imprimait `endpoint_str` **en entier**. Or les formes qui trompaient
+        //    l'analyseur sont précisément celles qui portent un `@` : `http://user:pass@hôte/`
+        //    déposait un secret dans une sortie collectée, archivée et relue. On nomme l'HÔTE
+        //    (le geste de P1 sur l'avertissement de boot du SLM), jamais l'URL. `host_of` ne
+        //    peut pas rendre `None` ici — nous sommes dans la branche où il a rendu un hôte
+        //    loopback — mais le repli reste explicite plutôt que dénoué par `unwrap`.
+        //
+        // 3. Le niveau passe de `debug!` à `info!` : retirer TLS d'un lien pour lequel un
+        //    appelant a fourni des certificats est un acte de souveraineté, pas un détail de mise
+        //    au point. Il reste conditionné à `tls.is_some()` — annoncer un contournement là où
+        //    rien n'était demandé serait une fausse alarme, et c'est ainsi qu'une vraie finit
+        //    ignorée.
+        //
+        // ⚠ Exactitude sur la portée de cette branche : depuis M1.b, `controller::iterate` ne
+        // fabrique PLUS de configuration TLS pour un lien local (le schéma et le SAN suivent le
+        // même prédicat). La combinaison « `Some(tls)` + endpoint local » ne vient donc plus du
+        // chemin de production, et cette branche est une ceinture pour les AUTRES appelants de
+        // cette fonction publique. Elle reste utile — `connect_with_tls` doit être sûre pour qui
+        // l'appelle — mais le journal d'`info!` qu'elle produit ne s'observe pas en itération
+        // normale, et le prétendre serait la fausse alarme qu'on vient d'éviter.
         let effective_tls = if crate::tls::endpoint_is_loopback(&endpoint_str) {
             if tls.is_some() {
-                tracing::debug!(
-                    endpoint = %endpoint_str,
+                tracing::info!(
+                    host = scella_authority::host_of(&endpoint_str).unwrap_or("(illisible)"),
                     "tls.loopback_bypass: connection to loopback skipping TLS (AD18)"
                 );
             }

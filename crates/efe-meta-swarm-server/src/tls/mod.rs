@@ -128,67 +128,61 @@ pub const CERT_EXPIRY_SAMPLE_INTERVAL_S: u64 = 60;
 /// Default 30-second drain grace period quoted in AD10.
 pub const DEFAULT_DRAIN_GRACE_S: u64 = 30;
 
-/// AD18 / AC25 / T44 — return `true` if the endpoint URL targets a
-/// loopback address (IPv4 `127.0.0.0/8` or IPv6 `::1`).
+/// AD18 / AC25 / T44 — `true` lorsque l'endpoint désigne le **loopback** (IPv4 `127.0.0.0/8`,
+/// IPv6 `::1`, ou `localhost`). Une connexion loopback contourne TLS quel que soit `tls.enabled`.
 ///
-/// Connections to loopback bypass TLS regardless of `tls.enabled`.
-/// The rationale (per architecture § 30 T44) : in-pod overhead is
-/// non-trivial and the threat model for `127.0.0.1` is trivially
-/// trusted — anyone able to dial loopback on a Pod already has the
-/// same trust scope as the workload itself.  Production K8s does not
-/// route via loopback ; this only fires in dev / single-process tests.
+/// Le raisonnement (architecture § 30 T44) : le surcoût intra-pod n'est pas négligeable et le
+/// modèle de menace de `127.0.0.1` est trivialement confiant — quiconque peut composer le loopback
+/// d'un Pod possède déjà la portée de confiance de la charge elle-même. La production Kubernetes
+/// ne route pas par le loopback ; ceci ne se déclenche qu'en développement et dans les tests
+/// mono-processus.
 ///
-/// Accepts URI schemes `http://`, `https://`, `grpc://`, and bare
-/// `host:port` forms.  Returns `false` on parse failure (fail-safe :
-/// when in doubt, keep TLS on).
-#[must_use]
-pub fn endpoint_is_loopback(endpoint: &str) -> bool {
-    use std::net::IpAddr;
-
-    // Strip scheme if present.
-    let after_scheme = endpoint
-        .split_once("://")
-        .map_or(endpoint, |(_scheme, rest)| rest);
-
-    // Strip path/query if present (everything after the first `/` or `?`).
-    let authority = after_scheme
-        .split(['/', '?'])
-        .next()
-        .unwrap_or(after_scheme);
-
-    // Split host from port.  Three cases :
-    //   1. `[ipv6]:port` — bracket form, port follows the `]`.
-    //   2. `ipv6` (bare, no port) — contains `::`, no brackets.
-    //   3. `hostname:port` or `ipv4:port` — last colon separates host.
-    let host = if let Some(stripped) = authority.strip_prefix('[') {
-        // IPv6 bracket form : [::1]:50080
-        stripped.split_once(']').map(|(h, _)| h).unwrap_or(stripped)
-    } else if authority.contains("::") {
-        // Bare IPv6 (no port).  ":: " is the IPv6 abbreviation marker
-        // ; if the input contains it AND is not bracketed, treat the
-        // whole authority as the host.
-        authority
-    } else {
-        // hostname:port or ipv4:port — split on the last colon.
-        authority.rsplit_once(':').map_or(authority, |(h, _)| h)
-    };
-
-    // Literal hostname cases.
-    if host.eq_ignore_ascii_case("localhost") {
-        return true;
-    }
-
-    // Parse as IP if possible.
-    match host.parse::<IpAddr>() {
-        Ok(IpAddr::V4(v4)) => v4.is_loopback(),
-        Ok(IpAddr::V6(v6)) => v6.is_loopback(),
-        Err(_) => false,
-    }
-}
+/// # M1.b — pourquoi ceci est un RÉ-EXPORT et non une fonction
+///
+/// Ce nom désignait la **cinquième** copie d'un analyseur d'autorité du dépôt, et la dernière à
+/// décider quelque chose d'aussi lourd que « TLS peut-il être retiré ». Elle était **fausse**, et
+/// pas d'une manière théorique : `rsplit_once(':')` coupait au **dernier** deux-points, donc
+///
+/// ```text
+/// http://127.0.0.1:8080@evil.com/
+///        └──────── « hôte » ────┘ selon l'ancienne lecture : 127.0.0.1
+///                              └── selon `tonic::transport::Endpoint` : evil.com
+/// ```
+///
+/// `IpAddr::from_str` recevait un `127.0.0.1` parfaitement propre, répondait « loopback », et
+/// `RemoteParticipant::connect_with_tls` **retirait TLS** — du gRPC en clair vers `evil.com`,
+/// annoncé au journal en `debug!`. La dette de M1.a affirmait que ces deux analyseurs étaient
+/// « sûrs aujourd'hui par composition » : pour celui-ci, la composition invoquée était exactement
+/// ce qui le faisait échouer. Cinq formes mesurées contre le vrai client, cinq contournements.
+///
+/// Un *wrapper* aurait laissé un corps où la logique peut repousser. Un **ré-export n'a pas de
+/// corps** : il n'existe plus qu'un seul analyseur dans le dépôt, et
+/// `scella-authority/tests/un_seul_analyseur.rs` (exemptions **vides** depuis M1.b) interdit qu'un
+/// second réapparaisse.
+///
+/// ## Ce qui change, observable
+///
+/// | forme | avant | après | pourquoi |
+/// |---|---|---|---|
+/// | `http://127.0.0.1:8080@evil.com` | loopback ⟹ **TLS retiré** | non locale ⟹ TLS gardé | le `userinfo` se coupe au PREMIER `@` |
+/// | `::1` (IPv6 **nue**) | loopback | non locale ⟹ TLS gardé | la RFC exige les crochets ; `tonic` et `url` la refusent |
+/// | `2130706433`, `0177.0.0.1`, `127.1` | non locale | non locale (**refus** explicite) | écritures qu'aucun résolveur ne lit pareil |
+/// | `[::0001]` | non locale | non locale (**refus** explicite) | même adresse, autre texte : faux pour l'identité |
+/// | `127.0.0.1`, `[::1]:p`, `localhost`, `127.1.2.3` | loopback | loopback | inchangé |
+///
+/// Les trois familles nouvellement refusées vont toutes dans le sens **fail-closed** : TLS reste
+/// allumé là où il pouvait être coupé. Aucune n'apparaît dans une charte ni dans un fichier de
+/// configuration du dépôt — seulement dans les tests des analyseurs supprimés.
+pub use scella_authority::is_local_endpoint as endpoint_is_loopback;
 
 #[cfg(test)]
 mod loopback_tests {
     use super::endpoint_is_loopback;
+
+    // ─── Les tests HISTORIQUES, conservés, pointés sur la nouvelle implémentation ──────────
+    //
+    // Non réécrits : c'est ce qui en fait une preuve de non-régression. Deux seulement ont dû
+    // changer, et chacun porte sa raison.
 
     #[test]
     fn loopback_ipv4_variants_detected() {
@@ -204,7 +198,27 @@ mod loopback_tests {
         assert!(endpoint_is_loopback("http://[::1]:50080"));
         assert!(endpoint_is_loopback("https://[::1]:50080"));
         assert!(endpoint_is_loopback("[::1]:50080"));
-        assert!(endpoint_is_loopback("::1"));
+    }
+
+    /// ⭐ **CHANGEMENT ASSUMÉ (M1.b).** L'ancien test exigeait `endpoint_is_loopback("::1")`.
+    ///
+    /// Une IPv6 **nue** n'est pas une autorité valide : la RFC 3986 exige les crochets, et
+    /// `tonic::transport::Endpoint` comme `url` la refusent. L'ancienne lecture rendait pire
+    /// qu'un refus — sur `fe80::1:8080` elle rendait l'hôte **`fe80`**, une chaîne qui ne
+    /// désigne rien et qui aurait été journalisée puis comparée à une épingle TLS.
+    ///
+    /// Le sens du changement est **fail-closed** : ce qui était « local, TLS retiré » devient
+    /// « illisible, TLS gardé ». Cette forme n'apparaît dans aucune charte ni configuration du
+    /// dépôt : la seule chose qu'elle cassait était l'assertion ci-dessus.
+    #[test]
+    fn ipv6_nue_nest_plus_locale_et_cest_un_durcissement() {
+        assert!(!endpoint_is_loopback("::1"), "IPv6 nue : illisible, donc non locale");
+        assert!(!endpoint_is_loopback("::1:8080"));
+        assert!(!endpoint_is_loopback("fe80::1:8080"));
+        // La forme LÉGITIME, elle, reste reconnue — c'est ce qui distingue un durcissement
+        // d'une régression.
+        assert!(endpoint_is_loopback("[::1]:8080"));
+        assert!(endpoint_is_loopback("http://[::1]"));
     }
 
     #[test]
@@ -223,7 +237,7 @@ mod loopback_tests {
 
     #[test]
     fn malformed_endpoints_are_not_loopback() {
-        // Fail-safe : when in doubt, keep TLS on.
+        // Fail-safe : dans le doute, TLS reste allumé.
         assert!(!endpoint_is_loopback(""));
         assert!(!endpoint_is_loopback("not a url"));
     }
@@ -232,5 +246,59 @@ mod loopback_tests {
     fn endpoint_with_path_still_detected() {
         assert!(endpoint_is_loopback("http://127.0.0.1:50080/grpc"));
         assert!(endpoint_is_loopback("http://[::1]:50080/grpc"));
+    }
+
+    // ─── Ce que M1.b ferme ────────────────────────────────────────────────────────────────
+
+    /// ⭐⭐ **Le défaut, nommé et mort.** Chacune de ces cinq formes faisait dire « loopback »
+    /// à l'ancien analyseur alors que `tonic::transport::Endpoint` part vers `evil.com` —
+    /// mesuré, pas supposé (cf. `tests/m1b_pas_de_degradation_silencieuse.rs`, qui le vérifie
+    /// contre le vrai client plutôt que contre une liste écrite à la main).
+    #[test]
+    fn le_userinfo_a_port_ne_coupe_plus_tls() {
+        for charge in [
+            "http://127.0.0.1:8080@evil.com/",
+            "http://127.0.0.1:8080@evil.com",
+            "https://127.0.0.1:443@evil.com/grpc",
+            "http://localhost:8080@evil.com/",
+            "http://[::1]:8080@evil.com/",
+        ] {
+            assert!(
+                !endpoint_is_loopback(charge),
+                "{charge} : l'hôte contacté est evil.com — le déclarer local RETIRE TLS"
+            );
+        }
+    }
+
+    /// Le loopback de façade : un **nom** qui commence par `127.` résout où son propriétaire veut.
+    #[test]
+    fn le_loopback_de_facade_reste_refuse() {
+        assert!(!endpoint_is_loopback("http://127.evil.com:50080"));
+        assert!(!endpoint_is_loopback("http://localhost.evil.com:50080"));
+        assert!(!endpoint_is_loopback("http://2130706433:50080"));
+        assert!(!endpoint_is_loopback("http://0177.0.0.1:50080"));
+        assert!(!endpoint_is_loopback("http://127.1:50080"));
+    }
+
+    /// **Le corpus de conformité de M1**, passé par le nom que ce crate expose.
+    ///
+    /// Tant que la ligne ci-dessus est un `pub use`, ce test est une tautologie — et c'est
+    /// précisément son emploi : il cesse de l'être à la seconde où quelqu'un redonne un **corps**
+    /// à `endpoint_is_loopback`. C'est le fil qui casse si la copie revient sous forme de wrapper,
+    /// là où le garde `"://"` ne verrait qu'un appel de fonction.
+    #[test]
+    fn le_corpus_de_localite_passe_par_le_nom_de_ce_crate() {
+        assert!(
+            scella_authority::CORPUS_LOCALITE.len() >= 20,
+            "corpus suspicieusement court ({}) — un test vert sur rien",
+            scella_authority::CORPUS_LOCALITE.len()
+        );
+        for (entree, attendu) in scella_authority::CORPUS_LOCALITE {
+            assert_eq!(
+                endpoint_is_loopback(entree),
+                *attendu,
+                "{entree} : le nom exposé par ce crate a divergé de l'analyseur unique"
+            );
+        }
     }
 }
