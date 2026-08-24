@@ -1,0 +1,442 @@
+\documentclass[10pt]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage[french]{babel}
+\usepackage{newpxtext,newpxmath}
+\usepackage[a4paper,top=1.5cm,bottom=1.35cm,left=1.6cm,right=1.6cm]{geometry}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{titlesec}
+\usepackage[most]{tcolorbox}
+\usepackage{enumitem}
+\usepackage{array}
+\usepackage{booktabs}
+\usepackage{fancyhdr}
+
+\definecolor{navy}{HTML}{1F3A5F}
+\definecolor{grey}{HTML}{54606E}
+\definecolor{green}{HTML}{2C6E49}
+\definecolor{amber}{HTML}{9C6A16}
+\definecolor{red}{HTML}{A6322E}
+\definecolor{plum}{HTML}{7A4EA8}
+\definecolor{boxgray}{HTML}{F3F5F8}
+\definecolor{boxred}{HTML}{FCF2F1}
+\definecolor{boxgreen}{HTML}{F1F7F3}
+\definecolor{boxplum}{HTML}{F7F3FB}
+\definecolor{boxcode}{HTML}{F7F8FA}
+\definecolor{boxedge}{HTML}{D9E0EA}
+
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{2.6pt}
+\linespread{1.0}
+
+\pagestyle{fancy}\fancyhf{}
+\lhead{\small\color{grey}Scella}
+\rhead{\small\color{grey}P1 --- le profil de production --- 24 août 2026}
+\cfoot{\small\color{grey}\thepage}
+\renewcommand{\headrulewidth}{0.3pt}
+
+\titleformat{\section}{\color{navy}\large\bfseries}{}{0pt}{}
+\titlespacing{\section}{0pt}{11pt}{3pt}
+\titleformat{\subsection}{\color{navy}\bfseries}{}{0pt}{}
+\titlespacing{\subsection}{0pt}{7pt}{1.5pt}
+
+\newtcolorbox{these}{colback=boxgray,colframe=boxedge,boxrule=0.5pt,arc=2.5pt,
+  left=8pt,right=8pt,top=4.5pt,bottom=4.5pt}
+\newtcolorbox{alerte}{colback=boxred,colframe=red!55,boxrule=0.8pt,arc=2.5pt,
+  left=8pt,right=8pt,top=4.5pt,bottom=4.5pt}
+\newtcolorbox{acquis}{colback=boxgreen,colframe=green!45,boxrule=0.8pt,arc=2.5pt,
+  left=8pt,right=8pt,top=4.5pt,bottom=4.5pt}
+\newtcolorbox{piste}{colback=boxplum,colframe=plum!45,boxrule=0.8pt,arc=2.5pt,
+  left=8pt,right=8pt,top=4.5pt,bottom=4.5pt}
+\newtcolorbox{extrait}{colback=boxcode,colframe=boxedge,boxrule=0.5pt,arc=1.5pt,
+  left=7pt,right=7pt,top=3.5pt,bottom=3.5pt}
+
+\newcommand{\best}[1]{\textcolor{green}{\textbf{#1}}}
+\newcommand{\pire}[1]{\textcolor{red}{\textbf{#1}}}
+\newcommand{\moyen}[1]{\textcolor{amber}{\textbf{#1}}}
+\newcommand{\sz}[1]{\textcolor{grey}{\small\textsf{#1}}}
+\newcommand{\code}[1]{\texttt{\small #1}}
+\newcommand{\fl}{$\rightarrow$}
+\newcommand{\mm}[1]{\textbf{\textcolor{navy}{#1}}}
+
+\begin{document}
+
+\begin{center}
+{\Huge\bfseries\color{navy} Scella}\\[4pt]
+{\large\color{grey}\itshape \mm{P1} --- le profil de production}\\[4pt]
+{\small\color{grey} 24 août 2026 \; · \; architecture \; · \; tout ce qui suit a été
+\emph{exécuté} avant d'être écrit}
+\end{center}
+\vspace{2pt}
+
+\begin{these}
+\textbf{\mm{P1} n'est pas « faire marcher la frontière ».} Elle marche : la configuration complète a
+été montée à la main ce matin, en une douzaine de commandes --- garde franchi, \code{PgRunStore}
+câblé, auth \textsc{oidc} \textsc{es}256 active, un run souverain servi en \textsc{http} 200 avec un
+vrai jeton, la passerelle \textbf{tuée puis redémarrée}, et \code{verify} répondant
+\code{verified:true, chain\_intact:true} sur le processus neuf. Rien n'a manqué.
+
+\mm{P1} est donc autre chose, et de plus utile : rendre cette configuration \textbf{déclarée}
+plutôt que tacite. Aujourd'hui elle n'existe que dans l'historique d'un terminal. Un profil, une
+image, une charte et un contrôle qui la \emph{démarre} --- voilà le livrable.
+
+Et l'exercice manuel a trouvé, en chemin, un défaut réel qui n'était pas au programme : le profil
+\code{frontiere} livré affirme \code{frontière : SERVIE} dans une configuration où le binaire
+\pire{fait exit 78}. Le test des profils ne peut pas le voir. C'est ce défaut, plus que le
+packaging, qui justifie \mm{P1}.
+\end{these}
+
+\section{1 · Ce que le garde exige --- mesuré marche par marche}
+
+\code{frontier\_boot\_guard} est une fonction pure à quatre préconditions, appelée avant tout
+câblage d'état. Son contrat est écrit dans \code{main.rs} : \emph{« calculé depuis l'\textsc{intention}
+env, \textsc{avant} tout câblage (\code{with\_keys}, \code{with\_coordinator}) : aucun état
+forgeable / non-authentifié / volatil n'est même assemblé »}. Chaque manque \textbf{refuse de
+démarrer} avec \code{exit 78} (\textsc{ex\_config}, non-retryable), jamais ne dégrade en silence.
+
+Les quatre marches, éprouvées sur le binaire compilé \code{-{}-features postgres,oidc,pii,frontier-llm} :
+
+\begin{center}\small
+\renewcommand{\arraystretch}{1.3}
+\begin{tabular}{@{}c >{\raggedright\arraybackslash}p{4.3cm} >{\raggedright\arraybackslash}p{10.2cm}@{}}
+\toprule
+& \textbf{Ce qui est ajouté} & \textbf{Ce que le binaire répond} \sz{(mesuré)} \\
+\midrule
+\textsc{e}1 & \code{FRONTIER\_ENABLED} seul & \pire{exit 78} --- « exige \code{EFE\_NANO\_AUDIT\_HMAC\_MASTER} valide ($\geq$ 32 o) --- sinon la provenance est scellée sous \code{test\_key()} \textsc{publique} $\Rightarrow$ reçus \textsc{r}4 \textsc{forgeables} » \\
+\textsc{e}2 & $+$ master 32 o & \pire{exit 78} --- « exige l'auth \textsc{oidc} frontière --- sinon egress tiers \textsc{payant} sans authentification (tenant/rôles en clair) » \\
+\textsc{e}3 & $+$ clé publique \textsc{es}256 & \pire{exit 78} --- « exige un store \textsc{durable} --- sinon les reçus \textsc{r}4 (la preuve) sont perdus à chaque rollout » \\
+\textsc{e}4 & $+$ \code{DATABASE\_URL} & \best{préflight \textsc{ok}} --- provenance non-forgeable $+$ auth \textsc{oidc} \code{efe-llm} $+$ store durable $+$ capacité \textsc{pii} compilée \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{1.1 · Le détail qui fait la différence entre un garde et une décoration}
+
+\code{key\_ok} n'est pas « la variable est présente ». C'est
+\code{HmacKeySource::EnvHkdf.derive(TenantId::system()).is\_ok()} --- une \textbf{dérivation à
+blanc}, c'est-à-dire exactement le calcul que fera chaque scellement. Le commentaire du code dit
+pourquoi, et c'est la leçon centrale du dépôt appliquée ici : un contrôle de \emph{présence}
+laisserait démarrer « vert » un master de 8 octets, puis rendrait 500 à chaque reçu. \best{Le garde
+exécute le même contrat que ce qu'il protège}, plutôt que d'en vérifier un voisin plus facile.
+
+\code{pii\_ok} suit la même honnêteté par l'autre bout : c'est
+\code{cfg!(feature = "pii") || accept\_cleartext\_egress()} --- la \emph{capacité} de caviarder, ou
+un aveu explicite. Le préflight refuse ensuite d'imprimer un « \textsc{ok} » lisse : sans la
+capacité, il répète que \emph{« les prompts sortent \textsc{en clair} vers un tiers »}. Une
+politique produit n'est pas forcée ; ce qui est exigé est que l'opérateur ait eu le \emph{moyen} de
+choisir.
+
+\code{store\_durable}, lui, n'est qu'une \textbf{intention} au moment du garde
+(\code{cfg!(postgres) \&\& DATABASE\_URL.is\_some()}) --- le \code{connect}/\code{migrate} revalide
+plus bas, et échoue franchement s'il ne peut pas. C'est le bon découpage : refuser tôt sur ce qu'on
+peut savoir sans réseau, échouer tard et clairement sur ce qui exige une base.
+
+\section{2 · Ce qui marche déjà --- la séquence exécutée ce matin}
+
+\begin{acquis}
+\textbf{Huit étapes, toutes vertes, sur de vrais processus.} Aucune n'est un test unitaire ; chacune
+est ce qu'un opérateur ferait.
+\end{acquis}
+
+\begin{center}\small
+\renewcommand{\arraystretch}{1.24}
+\begin{tabular}{@{}c >{\raggedright\arraybackslash}p{7.0cm} >{\raggedright\arraybackslash}p{7.4cm}@{}}
+\toprule
+& \textbf{Geste} & \textbf{Résultat mesuré} \\
+\midrule
+1 & \code{cargo build -{}-features postgres,oidc,pii,frontier-llm} & \best{exit 0} --- les quatre features cohabitent \\
+2 & un Postgres 16 réel \sz{(conteneur)} & prêt en 2 s \\
+3 & une paire \textsc{ec} P-256, clé publique en \textsc{pem} & \code{openssl ecparam}, deux commandes \\
+4 & démarrage avec la triade & \best{préflight \textsc{ok}}, \code{PgRunStore + PgMemoryStore câblés}, auth \textsc{oidc} active \\
+5 & le rapport \mm{M0} au démarrage & provenance \best{\textsc{servie}}, store durable \best{\textsc{servie}}, authentification \best{\textsc{servie}}, frontière \moyen{\textsc{refusée}} \\
+6 & \code{POST /v1/swarm/run} avec un \textsc{jwt} \textsc{es}256 & \best{\textsc{http} 200}, un \code{run\_id}, une racine \\
+7 & la passerelle \textbf{tuée}, un \textbf{nouveau} processus démarré & 1 ligne en base avant, le processus remplacé après \\
+8 & \code{GET /v1/swarm/verify/:id} sur le processus neuf & \best{\textsc{http} 200} --- \code{verified:true}, \code{root\_matches:true}, \code{chain\_intact:true}, \code{content\_intact:true} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Deux choses méritent d'être soulignées dans cette liste, parce qu'elles ne sont pas évidentes.
+
+\textbf{La ligne 5 est un succès, pas un demi-échec.} \code{frontière : REFUSÉE} est la bonne
+réponse : aucune clé de fournisseur n'était posée, donc \code{coordinator\_from\_env()} rend
+\code{None}, donc rien n'est câblé --- et \mm{M0} le dit dans son \emph{troisième état}, « fournie
+mais refusée », en nommant la cause et la conséquence (\code{/v1/llm/*} répondra 501,
+\code{/readyz} refusera le trafic). Un rapport qui aurait dit « \textsc{servie} » là aurait été le
+mensonge que \mm{M0} existe pour rendre impossible.
+
+\textbf{La ligne 7 est ce que le garde protège.} Le message d'\textsc{e}3 dit \emph{« les reçus
+\textsc{r}4 sont perdus à chaque rollout »} ; l'étape 7 est ce rollout, joué pour de vrai. Et la
+persistance Postgres est câblée \textbf{indépendamment} de la frontière --- un run souverain y va
+aussi. C'est ce qui rend le critère de \mm{P1} démontrable \best{sans dépenser un centime}.
+
+\section{3 · Le défaut trouvé en chemin --- et c'est lui qui justifie \mm{P1}}
+
+\begin{alerte}
+\textbf{Le profil \code{frontiere} livré ne peut pas démarrer, et son \code{.expected.json} affirme
+qu'il sert la frontière.}
+
+\code{profiles/frontiere.env}, tel quel, sur le binaire de production : \pire{exit 78} --- « exige
+\code{EFE\_NANO\_AUDIT\_HMAC\_MASTER} valide ». Son \code{frontiere.expected.json}, lui, déclare :
+
+\begin{center}\small
+\begin{tabular}{@{}ll@{\hspace{2cm}}ll@{}}
+\code{frontière} & \best{\textsc{servie}} & \code{store durable} & \pire{\textsc{dégradée}} \\
+\code{provenance} & \pire{\textsc{dégradée}} & \code{authentification} & \pire{\textsc{dégradée}} \\
+\end{tabular}
+\end{center}
+
+C'est un état qui \textbf{ne peut pas exister} : la frontière servie \emph{exige} les trois autres.
+Le test \code{profile\_files} passe pourtant, et il a raison de passer --- il compare deux artefacts
+qui ne modélisent ni l'un ni l'autre le garde.
+\end{alerte}
+
+\subsection{3.1 · Pourquoi le test ne peut pas le voir}
+
+Le module \code{profile} porte \textbf{deux} chemins de rapport, et c'est légitime :
+
+\begin{itemize}[leftmargin=1.2em,itemsep=1.5pt,topsep=2pt]
+\item \code{Observed} --- le rapport \emph{vivant}, imprimé au démarrage. Il sait qu'aucun
+      coordinator n'est câblé, et rend « \textsc{refusée} ». C'est lui qu'on a lu à l'étape 5.
+\item \code{Resolved} --- le rapport \emph{dérivé d'un fichier} \code{.env}, sans processus. C'est
+      celui que \code{profile\_files} compare au \code{.expected.json}. Pour la frontière, il ne lit
+      que le drapeau, \code{f("EFE\_LLM\_FRONTIER\_ENABLED")}, sans jamais consulter le garde.
+\end{itemize}
+
+Le garde, lui, vit dans \code{main.rs}, sous \code{\#[cfg(feature = "frontier-llm")]}. Il n'est ni
+compilé dans le build par défaut, ni atteint par le chemin \code{Resolved}. \textbf{Aucun des trois
+--- profil, attendu, garde --- ne regarde les deux autres.}
+
+\subsection{3.2 · Pourquoi cela compte ici plus qu'ailleurs}
+
+Il faut être juste : le profil \emph{sait} qu'il est incomplet. Son en-tête énumère les secrets
+« injectés au déploiement, jamais ici ». La lecture bienveillante est donc : \emph{ce}
+\code{.expected.json} \emph{décrit le fichier seul, pas un démarrage}.
+
+Mais cette lecture ne tient pas, pour une raison précise. \best{Le mot « \textsc{servie} » a un sens
+unique dans tout le dépôt} --- \mm{M0} l'a défini, et \mm{M2} a ajouté « fournie mais refusée »
+justement pour ne pas avoir à l'étirer. L'employer pour signifier « serait servie si les secrets
+étaient là » rouvre l'écart entre le déclaré et le servi que \mm{M0} existe pour fermer. Et
+l'endroit où il le rouvre est le pire possible : le seul chemin \textbf{payant} et
+\textbf{non-souverain} du produit.
+
+Un profil qui déclare la frontière et qui oublierait l'un des trois secrets ne serait rattrapé par
+\emph{rien} avant le premier démarrage en production --- et il démarrerait alors en \code{exit 78},
+c'est-à-dire au meilleur moment possible pour la sûreté et au pire pour la confiance.
+
+\section{4 · L'architecture de \mm{P1} --- quatre pièces}
+
+\subsection{4.1 · \mm{P1.a} --- le profil déclare ce qu'il ne porte PAS}
+
+C'est la seule pièce qui invente quelque chose ; les trois autres assemblent.
+
+Un profil \code{.env} ne peut pas porter ses trois exigences : \code{DATABASE\_URL} contient un mot
+de passe, \code{EFE\_OIDC\_PUBLIC\_KEY\_PEM} est un blob \textbf{multiligne} qu'un fichier
+\code{.env} ne sait pas représenter, et le master est un secret par construction. Le dépôt le sait
+déjà et l'interdit : \code{profile-check.sh} \S2 échoue si un \code{.env} pose l'un des neuf noms
+sensibles.
+
+\mm{P1.a} ajoute donc la contrepartie qui manquait. Le profil déclare, dans une forme
+\emph{lisible par une machine}, les variables qu'il \textbf{exige sans les porter} --- et un test
+lie cette déclaration aux préconditions de \code{frontier\_boot\_guard} :
+
+\begin{extrait}\small
+\textbf{L'invariant :} pour tout profil livré dont \code{EFE\_LLM\_FRONTIER\_ENABLED=true},
+l'ensemble des injections déclarées doit être \textbf{exactement} l'ensemble des préconditions du
+garde --- ni moins (le profil mentirait par omission), ni plus (il exigerait ce que le binaire ne
+demande pas). Le test lit les deux, et tombe si l'un bouge sans l'autre.
+\end{extrait}
+
+Ce que cela achète, précisément : le jour où une cinquième précondition sera ajoutée au garde, tout
+profil frontière devient rouge \emph{immédiatement}, au lieu d'être découvert par un opérateur en
+\code{exit 78}. C'est le même geste que \mm{M1} --- remplacer une vigilance par une structure --- et
+c'est aussi le remède que \code{m9-check.sh} vient d'appliquer : \textbf{ne pas recopier un juge,
+lier les deux à la même source}.
+
+Et l'état déclaré du profil \code{frontiere} doit être corrigé : sans ses injections, il ne sert pas
+la frontière, il la \emph{demande}. Le troisième état de \mm{M0} existe pour cela.
+
+\subsection{4.2 · \mm{P1.b} --- l'image et la charte}
+
+L'image du coin se construit déjà avec un argument de features : \code{docker/Dockerfile.coin}
+accepte \code{CARGO\_FEATURES}, et \code{compose.yaml} s'en sert pour le profil « jonction »
+(\code{reg-evidence}). \mm{P1.b} en fait une seconde cible avec
+\code{postgres}, \code{oidc}, \code{pii} et \code{frontier-llm} --- \best{le build a été vérifié :
+les quatre cohabitent}.
+
+La charte \code{charts/efe-swarm-gateway} connaît déjà l'\textsc{oidc} (clé publique montée depuis
+un \code{Secret} existant, jamais saisie dans les valeurs). Mesuré : elle ne connaît \pire{ni}
+\code{DATABASE\_URL}, \pire{ni} \code{EFE\_LLM\_FRONTIER\_ENABLED}, \pire{ni}
+\code{EFE\_PII\_DEFAULT\_POLICY} --- zéro occurrence. Trois des quatre préconditions n'ont donc
+\textbf{aucun logement} dans la cible de déploiement. C'est mécanique à ajouter, et il faut le faire
+avec la même discipline que l'\textsc{oidc} : la valeur vient d'un \code{Secret} référencé, jamais
+d'un \code{values.yaml}.
+
+\subsection{4.3 · \mm{P1.c} --- \code{scripts/p1-check.sh}, qui \emph{démarre} au lieu de décrire}
+
+La règle du dépôt, apprise trois fois : \emph{une vérification qui ne lance pas ce que le client
+lancerait ne vérifie pas le produit}. \code{m6-check.sh} avait lancé des tests et un exemple,
+\code{m4-check.sh} avait validé un fichier compose --- les deux étaient verts pendant que le module
+ne marchait pas.
+
+\code{p1-check.sh} rejoue donc les huit étapes du \S2, plus la contre-épreuve du \S1 :
+
+\begin{enumerate}[leftmargin=1.5em,itemsep=1.5pt,topsep=2pt]
+\item \textbf{L'échelle du garde}, marche par marche : chacune des trois configurations incomplètes
+      doit rendre \code{exit 78}, \emph{et le bon message}. Sans cela on ne saurait pas si le garde
+      refuse pour la raison qu'il annonce.
+\item Un Postgres réel, une paire \textsc{es}256 réelle, un démarrage réel.
+\item Le rapport doit dire \code{provenance/store durable/authentification : SERVIE} et
+      \code{frontière : REFUSÉE}. \best{Cette dernière assertion est la plus importante du script} :
+      elle interdit de maquiller le résultat avec une fausse clé.
+\item Un run souverain, un \code{kill}, un \textbf{nouveau} processus, un \code{verify} qui répond
+      \code{verified:true}.
+\item Le nettoyage, y compris en cas d'échec --- un conteneur Postgres qui survit à un script rouge
+      fait passer le suivant pour de mauvaises raisons.
+\end{enumerate}
+
+\subsection{4.4 · \mm{P1.d} --- le moyen de forger un jeton}
+
+Découvert à l'usage, et non prévu : \textbf{activer l'\textsc{oidc} change aussi le chemin
+souverain}. \code{POST /v1/swarm/run} sans jeton répond \code{401 \{"error":"unauthenticated"\}}.
+C'est correct --- mais un opérateur qui adopte le profil de production découvre que \emph{tout}
+exige désormais un \textsc{jwt}, sans qu'aucune page ne lui dise comment en obtenir un.
+
+\mm{P1.d} est donc une demi-journée de documentation exécutable : comment un \textsc{idp} doit
+émettre le jeton (\textsc{es}256, \code{aud}, \code{tenant}, \code{roles}), et une recette locale
+pour en forger un de test. Sans elle, \mm{P1} livre une passerelle que personne ne sait appeler.
+
+\section{5 · Ce que \mm{P1} ne peut pas prouver --- et pourquoi c'est structurel}
+
+\begin{alerte}
+\textbf{Un aller-retour frontière réel est hors de portée de \mm{P1}, et pas seulement à cause du
+prix.} \code{ANTHROPIC\_URL} est une \textbf{constante en dur} ---
+\code{https://api.anthropic.com/v1/messages} --- employée à trois endroits, sans surcharge.
+Idem pour les autres fournisseurs. Il n'existe donc \pire{aucun moyen} de pointer la frontière vers
+un faux fournisseur local pour l'éprouver, ni vers un Azure OpenAI, un Bedrock, un mandataire
+d'entreprise ou un modèle sur site.
+
+Pour un produit dont la promesse est la \emph{souveraineté}, c'est une tension qu'il faut nommer :
+un prospect qui exige un point de terminaison privé --- exactement le prospect que ce produit
+devrait attirer --- ne peut pas être servi aujourd'hui. Ce n'est pas du ressort de \mm{P1} ; c'est
+une ligne pour la feuille de route, et elle vaut probablement plus que \mm{P3}.
+\end{alerte}
+
+Deux autres limites, plus étroites mais qui mordront tôt :
+
+\textbf{\textsc{es}256 seulement.} \code{DecodingKey::from\_ec\_pem} $+$
+\code{Validation::new(Algorithm::ES256)} : une clé \textsc{rsa} est refusée. Or \textsc{rs}256 est
+le défaut de Keycloak et d'Auth0. Le premier prospect qui branche son \textsc{idp} aura une chance
+sur deux de tomber dessus. Et la clé est \textbf{statique} : ni \textsc{jwks}, ni découverte, donc
+aucune rotation automatique.
+
+\textbf{L'allowlist d'egress est fail-closed \emph{total}.} \code{EFE\_LLM\_TENANT\_ALLOWLIST}
+absente $\Rightarrow$ registre vide $\Rightarrow$ \code{403 pour tout tenant} sur la frontière.
+C'est la bonne position par défaut, mais elle signifie que même avec une vraie clé de fournisseur,
+la frontière ne sert \emph{rien} tant que l'allowlist n'est pas écrite --- et ses identifiants
+portent le suffixe du modèle (\code{claude\_<model>}), que le démarrage journalise justement pour
+qu'on n'ait pas à le deviner.
+
+\section{6 · Les pièges, nommés avant de les rencontrer}
+
+\begin{center}\small
+\renewcommand{\arraystretch}{1.26}
+\begin{tabular}{@{}>{\raggedright\arraybackslash}p{5.2cm} >{\raggedright\arraybackslash}p{10.3cm}@{}}
+\toprule
+\textbf{Piège} & \textbf{Ce qu'il fait, et la parade} \\
+\midrule
+Le \textsc{pem} multiligne & Un \code{.env} ne le représente pas. Il doit venir d'un \code{Secret} monté ou d'une injection --- ce que la charte fait déjà bien pour l'\textsc{oidc}, et qu'il faut imiter pour \code{DATABASE\_URL} \\
+La fausse clé de fournisseur & \code{ApiKey::from\_env} ne valide qu'un \emph{préfixe} (\code{sk-ant-}) sans appel réseau : une clé bidon suffirait à faire dire \code{frontière : SERVIE}. \pire{Ne jamais s'en servir} --- ce serait produire le vert malhonnête que tout le dépôt combat \\
+L'\textsc{oidc} gagne le chemin souverain & 401 partout dès qu'il est activé. Attendu, mais à documenter (\mm{P1.d}) \\
+Le nettoyage du contrôle & Un conteneur Postgres qui survit à un échec rend le run suivant vert pour de mauvaises raisons. \code{trap} qui \emph{compose} avec le ménage existant --- l'erreur commise dans \code{mz-check.sh}, où un second \code{trap ... EXIT} allait écraser celui qui tuait le serveur \\
+\code{profile-check.sh} vieillit & Il annonce « les quatre profils » alors qu'il en existe \textbf{huit} (5 passerelle $+$ 3 console). Même famille que le compte périmé de \code{m9-check.sh} : un texte qui devient faux un module plus tard \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\section{7 · Le critère d'acceptation --- exécutable et non jouable}
+
+\begin{acquis}
+\code{bash scripts/p1-check.sh} sort \best{0}, et il n'y arrive qu'en ayant :
+
+\begin{enumerate}[leftmargin=1.5em,itemsep=1pt,topsep=2pt]
+\item obtenu \code{exit 78} \textbf{trois fois}, chacune avec le message de sa précondition ;
+\item démarré une passerelle dont le rapport dit \code{provenance}, \code{store durable} et
+      \code{authentification} \best{\textsc{servie}}, et \code{frontière} \moyen{\textsc{refusée}} ;
+\item servi un run souverain en \textsc{http} 200 avec un \textsc{jwt} \textsc{es}256 ;
+\item \textbf{tué} le processus et servi un \code{verify} \code{verified:true} depuis un
+      \textbf{autre} processus ;
+\item et laissé la machine dans l'état où il l'a trouvée.
+\end{enumerate}
+
+Plus, côté source : le test qui lie les injections déclarées d'un profil aux préconditions du
+garde, et qui \textbf{tombe} si l'on en retire une.
+\end{acquis}
+
+Ce critère est \emph{non jouable} au sens du dépôt : on ne peut pas le satisfaire en écrivant un
+document, ni en ajoutant une assertion complaisante. Chacun de ses cinq points exige un processus
+qui démarre, un port qui répond, ou un processus qui meurt.
+
+\section{8 · L'ordre, et ce que cela coûte}
+
+\begin{center}\small
+\renewcommand{\arraystretch}{1.26}
+\begin{tabular}{@{}c >{\raggedright\arraybackslash}p{8.4cm} >{\raggedright\arraybackslash}p{4.4cm} c@{}}
+\toprule
+& \textbf{Pièce} & \textbf{Pourquoi dans cet ordre} & \textbf{Effort} \\
+\midrule
+1 & \mm{P1.c} --- le contrôle qui démarre & Il existe déjà en douze commandes ; l'écrire d'abord fige le critère avant de toucher au code & \sz{1 j} \\
+2 & \mm{P1.a} --- le profil et son invariant & C'est la seule pièce qui ferme un défaut réel & \sz{1,5 j} \\
+3 & \mm{P1.d} --- le jeton, documenté & Sans lui la passerelle est injoignable & \sz{0,5 j} \\
+4 & \mm{P1.b} --- image et charte & Mécanique, et sans surprise mesurée & \sz{1,5 j} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{piste}
+\textbf{Commencer par le contrôle, pas par le profil.} La séquence du \S2 a déjà tourné ; l'écrire
+en script pendant qu'elle est fraîche coûte une journée et fixe le critère \emph{avant} que le code
+ne bouge. C'est aussi ce qui distinguera un \mm{P1} fini d'un \mm{P1} déclaré fini : le jour où
+quelqu'un ajoutera une cinquième précondition au garde, c'est ce script qui le dira.
+\end{piste}
+
+\section{Annexe · Rejouer chaque affirmation}
+
+\renewcommand{\arraystretch}{1.22}
+\begin{center}\small
+\begin{tabular}{@{}>{\raggedright\arraybackslash}p{4.8cm} >{\raggedright\arraybackslash}p{11.2cm}@{}}
+\toprule
+\textbf{Affirmation} & \textbf{Ce qui la rejoue} \\
+\midrule
+Les 4 features cohabitent &
+  \code{cargo build -p efe-swarm-gateway -{}-features postgres,oidc,pii,frontier-llm} \\
+L'échelle du garde &
+  \code{EFE\_LLM\_FRONTIER\_ENABLED=true target/debug/efe-swarm-gateway} \sz{\fl{} exit 78}, puis
+  ajouter le master, puis le \textsc{pem}, puis \code{DATABASE\_URL} \\
+Le profil \code{frontiere} ne démarre pas &
+  \code{(set -a; . ./profiles/frontiere.env; set +a; target/debug/efe-swarm-gateway)} \sz{\fl{} exit 78} \\
+\dots{} et son attendu dit le contraire &
+  \code{python3 -m json.tool profiles/frontiere.expected.json} \sz{\fl{} la clé « frontière » vaut SERVIE} \\
+Le rapport dit « refusée » sans clé &
+  démarrer avec la triade, lire la ligne \code{frontière} du bloc « profil servi » \\
+Un reçu survit au redémarrage &
+  \code{POST /v1/swarm/run} \fl{} \code{kill} \fl{} redémarrer \fl{} \code{GET /v1/swarm/verify/:id} \\
+L'\textsc{url} du fournisseur est en dur &
+  \code{grep -n ANTHROPIC\_URL crates/efe-coordinator/src/llm/providers/anthropic.rs} \\
+La charte ignore 3 préconditions sur 4 &
+  \code{grep -rc 'DATABASE\_URL\textbar FRONTIER\textbar PII\_DEFAULT' charts/efe-swarm-gateway} \sz{\fl{} 0} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{these}
+\small\textbf{Rappel de cadrage, inchangé dans toute la série.} Le reçu atteste l'\textbf{intégrité}
+d'une suite de pas, jamais la \textbf{correction} d'une décision. Il est \emph{tamper-evident pour
+un détenteur de clé}, pas \emph{trustless pour un tiers}. \mm{P1} ne change aucune de ces deux
+phrases : il rend seulement \emph{reproductible} la configuration dans laquelle elles sont vraies.
+Les \textbf{mesures} de ce document ont été exécutées avant d'être écrites et sont rejouables
+ci-dessus ; les \textbf{durées} sont des estimations.
+\end{these}
+
+\end{document}
