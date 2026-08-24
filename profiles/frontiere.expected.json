@@ -5,7 +5,7 @@
   "export de bundle": "SERVIE",
   "attestation": "DÉGRADÉE",
   "store durable": "DÉGRADÉE",
-  "frontière": "SERVIE",
+  "frontière": "REFUSÉE",
   "allowlist d'egress": "DÉGRADÉE",
   "caviardage PII": "SERVIE",
   "relais SLM": "DÉGRADÉE",

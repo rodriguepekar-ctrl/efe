@@ -29,7 +29,11 @@ cargo test -q -p efe-swarm-gateway --test profile_files 2>/dev/null | grep -E '^
 # du produit — et l'autre moitié est celle qui dérive une clé d'un secret versionné.
 cargo test -q -p audit-console --test profile_files 2>/dev/null | grep -E '^test result' \
   || { echo "ÉCHEC : le profil de la console a dérivé de son attendu." >&2; exit 1; }
-echo "  les quatre profils concordent avec leur .expected.json (3 passerelle + 1 console)"
+#  ⚠ Ce message annonçait « les quatre profils (3 passerelle + 1 console) » alors qu'il y en a
+#  huit. Un compte figé dans une phrase vieillit à chaque profil ajouté, et personne ne le voit —
+#  c'est le même défaut que le « 3 analyseurs attendus » de `m9-check.sh`, corrigé le même jour.
+#  On le COMPTE plutôt que de le réciter.
+echo "  les $(ls profiles/*.env | wc -l | tr -d ' ') profils livrés concordent avec leur .expected.json"
 
 echo
 echo "═══ 2/3 · aucun profil ne pose de secret ═══"
@@ -123,7 +127,7 @@ kill "$GW" 2>/dev/null || true
 
 echo
 echo "═══ M0 OK ═══"
-echo "  · les quatre profils disent la vérité sur ce qu'ils servent ;"
+echo "  · les $(ls profiles/*.env | wc -l | tr -d ' ') profils disent la vérité sur ce qu'ils servent ;"
 echo "  · aucun n'embarque de secret ;"
 echo "  · le seul manque de « souverain » est le secret, injecté au déploiement ;"
 echo "  · et un clone frais, ce profil appliqué, SERT un reçu de 64 caractères qui se re-prouve."

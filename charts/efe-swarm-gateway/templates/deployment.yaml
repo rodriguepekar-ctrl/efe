@@ -73,6 +73,15 @@ spec:
                   name: {{ .Values.oidc.existingSecret }}
                   key: {{ .Values.oidc.existingSecretKey }}
             {{- end }}
+            {{- if and .Values.store.enabled .Values.store.existingSecret }}
+            # P1 — l'URL Postgres. Elle porte un mot de passe : jamais dans les
+            # values, toujours par référence à un Secret.
+            - name: {{ .Values.store.urlEnv }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.store.existingSecret }}
+                  key: {{ .Values.store.existingSecretKey }}
+            {{- end }}
             {{- with .Values.gateway.extraEnv }}
             {{- toYaml . | nindent 12 }}
             {{- end }}

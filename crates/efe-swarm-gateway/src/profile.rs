@@ -204,6 +204,33 @@ pub const REGISTRY: &[Switch] = &[
         // ⟹ `exit 78`. Un egress PAYANT vers un tiers ne dégrade jamais en silence.
         fatal_if_invalid: true,
     },
+    // P1 — les clés de fournisseur. Elles ne sont pas lues par ce crate pour APPELER quoi que ce
+    // soit (c'est `efe-coordinator` qui le fait) mais leur présence décide si un coordinator est
+    // câblé, donc si la frontière est servie. Sans elles au registre, `--profile-report` annonçait
+    // « frontière SERVIE » là où le démarrage réel dit « REFUSÉE » : le même écart déclaré/servi,
+    // un cran plus bas. Ce sont des SECRETS : `profile-check.sh` §2 interdit déjà qu'un profil les
+    // pose, et le rapport ne rend jamais leur valeur — seulement leur présence.
+    Switch {
+        name: "ANTHROPIC_API_KEY",
+        buys: "un fournisseur frontière Claude",
+        absence_costs: "aucun fournisseur Claude — la frontière reste REFUSÉE si aucun autre n'est posé",
+        class: Class::Degraded,
+        fatal_if_invalid: false,
+    },
+    Switch {
+        name: "OPENAI_API_KEY",
+        buys: "un fournisseur frontière GPT",
+        absence_costs: "aucun fournisseur GPT — la frontière reste REFUSÉE si aucun autre n'est posé",
+        class: Class::Degraded,
+        fatal_if_invalid: false,
+    },
+    Switch {
+        name: "GOOGLE_AI_KEY",
+        buys: "un fournisseur frontière Gemini",
+        absence_costs: "aucun fournisseur Gemini — la frontière reste REFUSÉE si aucun autre n'est posé",
+        class: Class::Degraded,
+        fatal_if_invalid: false,
+    },
     Switch {
         name: "EFE_LLM_TENANT_ALLOWLIST",
         buys: "l'allowlist d'egress par tenant",
@@ -600,6 +627,17 @@ pub mod read {
         raw("EFE_LLM_TENANT_ALLOWLIST")
     }
 
+    /// **P1** — au moins un fournisseur frontière est-il configuré ?
+    ///
+    /// `coordinator_from_env()` enregistre chaque fournisseur dont la clé est présente et rend
+    /// `None` si aucun ne l'est. Sans cette lecture, le rapport dérivé de l'environnement ne
+    /// pouvait pas distinguer « frontière demandée et servie » de « demandée et sans fournisseur ».
+    /// La valeur n'est jamais rendue — seulement le fait qu'elle existe.
+    #[must_use]
+    pub fn frontier_provider_present() -> bool {
+        ["ANTHROPIC_API_KEY", "OPENAI_API_KEY", "GOOGLE_AI_KEY"].iter().any(|k| present(k))
+    }
+
     #[must_use]
     pub fn accept_cleartext_egress() -> bool {
         flag("EFE_LLM_ACCEPT_CLEARTEXT_EGRESS")
@@ -883,6 +921,77 @@ fn line_refusee(
     }
 }
 
+/// **P1.a — les variables que la frontière EXIGE et qu'un profil ne peut pas porter.**
+///
+/// `frontier_boot_guard` (dans `main.rs`) refuse de démarrer — `exit 78`, `EX_CONFIG` — si l'une
+/// manque. Or aucune des trois ne peut vivre dans un `profiles/*.env` :
+///
+/// * `EFE_NANO_AUDIT_HMAC_MASTER` est un **secret** ;
+/// * `DATABASE_URL` en contient un (le mot de passe) ;
+/// * `EFE_OIDC_PUBLIC_KEY_PEM` n'est pas un secret mais un blob **multiligne**, qu'un fichier
+///   `.env` ne sait pas représenter.
+///
+/// `profile-check.sh` §2 interdit d'ailleurs déjà qu'un profil les pose. Ce que le dépôt n'avait
+/// pas, c'est la **contrepartie** : un profil qui déclare ce qu'il exige sans le porter. Sans elle,
+/// `profiles/frontiere.env` annonçait « frontière SERVIE » dans une configuration où le binaire
+/// fait `exit 78` — et rien ne pouvait l'attraper, parce que le garde vit dans `main.rs` sous
+/// `#[cfg(feature = "frontier-llm")]`, hors de portée du chemin qui dérive un rapport d'un fichier.
+///
+/// La quatrième précondition du garde (`pii_ok`) n'est **pas** ici : elle porte sur une *feature
+/// compilée*, pas sur une variable. Un fichier de profil ne peut rien en dire, et prétendre le
+/// contraire serait le genre d'affirmation que ce module existe pour rendre impossible.
+pub const INJECTIONS_FRONTIERE: &[&str] = &[
+    "EFE_NANO_AUDIT_HMAC_MASTER",
+    "EFE_OIDC_PUBLIC_KEY_PEM",
+    "DATABASE_URL",
+];
+
+/// **P1.a — la ligne « frontière » d'un rapport dérivé, qui modélise le garde de démarrage.**
+///
+/// Avant P1, cette ligne se contentait du drapeau : `EFE_LLM_FRONTIER_ENABLED=true` donnait
+/// « SERVIE », même dans une configuration où le binaire refuse de démarrer. Le mot « SERVIE » a
+/// un sens unique dans tout le dépôt, et M2 a ajouté « fournie mais refusée » précisément pour ne
+/// pas avoir à l'étirer : l'employer pour dire « *serait* servie si les secrets étaient là »
+/// rouvrait l'écart déclaré/servi que M0 existe pour fermer — à l'endroit le pire, le seul chemin
+/// **payant** et **non souverain** du produit.
+///
+/// Elle ne recopie aucun jugement : les trois préconditions sont déjà dans [`Resolved`], lues par
+/// les mêmes fonctions pures que le chemin servi. Un fichier de profil, par construction, ne
+/// portera jamais les injections — donc un profil qui active la frontière est **toujours** rendu
+/// « REFUSÉE » tant qu'on le lit seul. C'est la vérité : un profil seul ne sert pas la frontière,
+/// il la **demande**.
+fn ligne_frontiere(r: &Resolved) -> CapabilityReport {
+    if !r.frontier {
+        return line("EFE_LLM_FRONTIER_ENABLED", "frontière", false);
+    }
+    let manquantes = r.injections_frontiere_manquantes();
+    if !manquantes.is_empty() {
+        return line_refusee(
+            "EFE_LLM_FRONTIER_ENABLED",
+            "frontière",
+            &format!(
+                "le garde de démarrage REFUSERA (exit 78) tant que {} manque(nt). Ces variables ne \
+                 vivent jamais dans un profil — secret, ou blob multiligne — elles s'injectent au \
+                 déploiement. Un profil qui active la frontière la DEMANDE, il ne la sert pas.",
+                manquantes.join(", ")
+            ),
+        );
+    }
+    // Les injections y sont, mais aucun fournisseur : le binaire DÉMARRE (le garde ne les regarde
+    // pas) et ne sert pourtant rien — `coordinator_from_env` rend `None`, `/v1/llm/*` répond 501.
+    // Dire « SERVIE » ici serait le même écart déclaré/servi, un cran plus bas.
+    if !r.frontier_provider {
+        return line_refusee(
+            "EFE_LLM_FRONTIER_ENABLED",
+            "frontière",
+            "aucune clé de fournisseur (ANTHROPIC_API_KEY / OPENAI_API_KEY / GOOGLE_AI_KEY) — le \
+             binaire démarrera, et `/v1/llm/*` répondra 501. Le garde ne regarde pas les \
+             fournisseurs : il protège la PREUVE, pas la disponibilité.",
+        );
+    }
+    line("EFE_LLM_FRONTIER_ENABLED", "frontière", true)
+}
+
 /// L'état **résolu** des capacités — ce que le rapport consomme.
 ///
 /// Exister séparément a un seul but, et il est décisif : permettre de calculer un rapport
@@ -908,6 +1017,9 @@ pub struct Resolved {
     pub attestation: bool,
     pub durable_store: bool,
     pub frontier: bool,
+    /// **P1** — au moins une clé de fournisseur est-elle posée ? Sans elle, `coordinator_from_env`
+    /// rend `None` et la frontière n'est pas servie, quelles que soient les injections.
+    pub frontier_provider: bool,
     pub allowlist: bool,
     pub pii: bool,
     pub slm: bool,
@@ -933,6 +1045,7 @@ impl Resolved {
             attestation: read::bundle_signing_seed().is_some(),
             durable_store: read::database_url().is_some(),
             frontier: read::frontier_enabled(),
+            frontier_provider: read::frontier_provider_present(),
             allowlist: read::tenant_allowlist().is_some(),
             pii: read::pii_default_policy().is_some(),
             slm: read::slm_reformulator_url().is_some(),
@@ -960,11 +1073,34 @@ impl Resolved {
             attestation: p("EFE_SWARM_BUNDLE_SIGNING_SEED"),
             durable_store: p("DATABASE_URL"),
             frontier: f("EFE_LLM_FRONTIER_ENABLED"),
+            frontier_provider: p("ANTHROPIC_API_KEY") || p("OPENAI_API_KEY") || p("GOOGLE_AI_KEY"),
             allowlist: p("EFE_LLM_TENANT_ALLOWLIST"),
             pii: p("EFE_PII_DEFAULT_POLICY"),
             slm: p("EFE_SLM_REFORMULATOR_URL"),
             oidc: p("EFE_OIDC_PUBLIC_KEY_PEM"),
             router: p("EFE_SWARM_ROUTER_ENDPOINT"),
+        }
+    }
+
+    /// **P1.a** — celles des [`INJECTIONS_FRONTIERE`] qui manquent, dans l'ordre du tableau.
+    ///
+    /// Itère sur la **même** liste que celle qu'un profil déclare : deux sources se seraient
+    /// séparées au premier ajout, et c'est exactement le défaut que M1 a passé deux modules à
+    /// fermer. Un nom ajouté à la liste sans être câblé ci-dessous compte comme **manquant pour
+    /// toujours** (`_ => false`) — le test devient rouge immédiatement plutôt que silencieux.
+    #[must_use]
+    pub fn injections_frontiere_manquantes(&self) -> Vec<&'static str> {
+        INJECTIONS_FRONTIERE.iter().copied().filter(|n| !self.a_linjection(n)).collect()
+    }
+
+    /// Cette injection est-elle présente ? Fail-closed sur un nom inconnu — cf. ci-dessus.
+    #[must_use]
+    fn a_linjection(&self, nom: &str) -> bool {
+        match nom {
+            "EFE_NANO_AUDIT_HMAC_MASTER" => self.master,
+            "EFE_OIDC_PUBLIC_KEY_PEM" => self.oidc,
+            "DATABASE_URL" => self.durable_store,
+            _ => false,
         }
     }
 }
@@ -1044,7 +1180,7 @@ impl Report {
             line("EFE_SWARM_BUNDLE_ENABLED", "export de bundle", r.bundle),
             line("EFE_SWARM_BUNDLE_SIGNING_SEED", "attestation", r.attestation),
             line("DATABASE_URL", "store durable", r.durable_store),
-            line("EFE_LLM_FRONTIER_ENABLED", "frontière", r.frontier),
+            ligne_frontiere(r),
             line("EFE_LLM_TENANT_ALLOWLIST", "allowlist d'egress", r.allowlist),
             line("EFE_PII_DEFAULT_POLICY", "caviardage PII", r.pii),
             line("EFE_SLM_REFORMULATOR_URL", "relais SLM", r.slm),

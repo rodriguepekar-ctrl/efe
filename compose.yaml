@@ -107,8 +107,59 @@ services:
     ports:
       - "127.0.0.1:8081:8080"
 
+  # ── P1 : le profil de PRODUCTION ────────────────────────────────────────────
+  #
+  #   EFE_NANO_AUDIT_HMAC_MASTER=$(openssl rand -hex 32) \
+  #   EFE_OIDC_PUBLIC_KEY_PEM="$(cat cle.pub)" \
+  #   docker compose --profile production up
+  #
+  # Une TROISIÈME image, construite avec les quatre features que le garde exige.
+  # Elle vit sous un profil, donc `docker compose up` sans argument reste
+  # exactement le coin — le critère de M4 n'est pas touché.
+  #
+  # ⚠ Sans les deux variables ci-dessus, la passerelle SORT EN 78 au lieu de
+  # démarrer dégradée. C'est voulu, et c'est la meilleure démonstration du garde :
+  # essayez sans, lisez le message — il nomme ce qui manque. Aucune valeur par
+  # défaut ici : un secret écrit dans un fichier versionné est un secret public.
+  base:
+    profiles: ["production"]
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_PASSWORD: ${SCELLA_PG_MDP:-scella}
+      POSTGRES_DB: scella
+    volumes:
+      - base:/var/lib/postgresql/data
+
+  production:
+    profiles: ["production"]
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.coin
+      args:
+        CARGO_FEATURES: postgres,oidc,pii,frontier-llm
+    image: scella-production:local
+    depends_on:
+      - base
+    env_file:
+      - ./profiles/production.env
+    environment:
+      # Les trois injections déclarées par `#!injection` dans le profil. Aucune
+      # n'a de défaut : absente ⟹ exit 78, jamais un démarrage dégradé. Le
+      # schéma Postgres s'applique tout seul : aucun Job de migration.
+      EFE_NANO_AUDIT_HMAC_MASTER: ${EFE_NANO_AUDIT_HMAC_MASTER:-}
+      EFE_OIDC_PUBLIC_KEY_PEM: ${EFE_OIDC_PUBLIC_KEY_PEM:-}
+      DATABASE_URL: postgres://postgres:${SCELLA_PG_MDP:-scella}@base:5432/scella
+    volumes:
+      - preuve:/var/lib/scella
+    ports:
+      - "127.0.0.1:${SCELLA_PORT_PROD:-8082}:8080"
+
 volumes:
   # Le bundle, sa copie tronquée, l'ancre — et, sous le profil « jonction », les
   # dossiers réglementaires. Tout ce que la démonstration affirme se recontrôle
   # à la main sur ces fichiers.
   preuve:
+  # P1 — les données de Postgres, pour que le reçu SURVIVE au rollout. Sans ce
+  # volume, la démonstration de durabilité ne montrerait que le redémarrage d'un
+  # processus, jamais la persistance de la preuve.
+  base:

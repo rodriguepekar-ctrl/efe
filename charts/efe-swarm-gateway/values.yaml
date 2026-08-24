@@ -46,6 +46,49 @@ oidc:
   existingSecret: ""      # Secret portant la clé publique PEM (jamais une clé privée)
   existingSecretKey: public-key-pem
 
+# ── P1 · Le store DURABLE (Postgres) — précondition du garde de frontière ───────
+#
+# Le binaire doit être construit avec la feature `postgres` :
+#     docker build --build-arg CARGO_FEATURES=postgres,oidc,pii,frontier-llm
+#
+# DATABASE_URL contient un MOT DE PASSE : elle ne se saisit jamais ici, seulement
+# par référence à un Secret existant. Sans elle, `EFE_LLM_FRONTIER_ENABLED=true`
+# fait sortir le pod en 78 (EX_CONFIG) — « les reçus R4 (la preuve) sont perdus à
+# chaque rollout ». Le schéma s'applique tout seul au démarrage : aucun Job de
+# migration à prévoir.
+store:
+  enabled: false
+  urlEnv: DATABASE_URL
+  existingSecret: ""      # Secret portant l'URL Postgres complète
+  existingSecretKey: url
+
+# ── P1 · La frontière — egress PAYANT vers un TIERS ─────────────────────────────
+#
+# ⚠ L'activer sans les TROIS préconditions fait échouer le démarrage, délibérément :
+#     hkdf.enabled + store.enabled + oidc.enabled (avec leurs Secrets)
+# C'est voulu : un egress payant ne dégrade jamais en silence. Le chart ne peut
+# pas le vérifier lui-même — c'est le binaire qui refuse, et c'est mieux ainsi :
+# un seul juge.
+#
+# Les clés de fournisseur (ANTHROPIC_API_KEY / OPENAI_API_KEY / GOOGLE_AI_KEY) ne
+# sont PAS gérées ici : elles s'injectent par `gateway.extraEnv` depuis vos propres
+# Secrets. Sans aucune d'elles le pod démarre et `/v1/llm/*` répond 501 — le
+# rapport de démarrage annonce alors « frontière : REFUSÉE », ce qui est exact.
+frontiere:
+  enabled: false
+  enabledEnv: EFE_LLM_FRONTIER_ENABLED
+  # La politique de caviardage, appliquée AVANT l'envoi au tiers. Exige la feature
+  # `pii`. `redact` est le seul réglage défendable quand la frontière est active.
+  piiPolicyEnv: EFE_PII_DEFAULT_POLICY
+  piiPolicy: redact
+  # L'allowlist d'egress par tenant. VIDE ⟹ 403 pour TOUT tenant : la frontière ne
+  # sert alors rien, même avec une clé. Format documenté dans profiles/production.env.
+  allowlistEnv: EFE_LLM_TENANT_ALLOWLIST
+  allowlist: ""
+  # Le plafond SERVEUR par requête, en centimes.
+  budgetCentsEnv: EFE_LLM_MAX_BUDGET_CENTS
+  budgetCents: 10000
+
 # ── Mode Network (frontière) — OPT-IN, NON souverain ────────────────────────────
 # Si activé : la passerelle route ClientMode::Network vers ce routeur server-side
 # (efe-llm-router), qui détient les clés provider. Active aussi l'egress vers le routeur.

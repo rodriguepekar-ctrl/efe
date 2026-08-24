@@ -1,0 +1,19 @@
+{
+  "provenance": "DÉGRADÉE",
+  "ancre": "SERVIE",
+  "ancre tierce": "DÉGRADÉE",
+  "export de bundle": "SERVIE",
+  "attestation": "DÉGRADÉE",
+  "store durable": "DÉGRADÉE",
+  "frontière": "REFUSÉE",
+  "allowlist d'egress": "DÉGRADÉE",
+  "caviardage PII": "SERVIE",
+  "relais SLM": "DÉGRADÉE",
+  "authentification": "DÉGRADÉE",
+  "routeur de modèles": "DÉGRADÉE",
+  "plafond de dépense": "SERVIE",
+  "admission": "SERVIE",
+  "posture de capture": "DÉGRADÉE",
+  "pont réglementaire": "DÉGRADÉE",
+  "plafonds de requête": "SERVIE"
+}

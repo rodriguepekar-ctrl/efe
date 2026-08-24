@@ -82,36 +82,73 @@ fn check(profile: &str) {
     }
 }
 
+/// **P1 — les profils de la passerelle, déclarés UNE fois.**
+///
+/// Cette liste existait en **trois** exemplaires dans ce fichier : les `t2_profil_*`, et les deux
+/// boucles plus bas. Ajouter un profil obligeait donc à modifier trois endroits, et en oublier un
+/// ne se voyait pas — c'est la forme la plus discrète du défaut que M1 a passé deux modules à
+/// fermer. Un seul tableau, et `t2_profils` les parcourt tous.
+const PROFILS: &[&str] = &["demo", "souverain", "frontiere", "docker", "jonction", "production"];
+
+/// Chaque profil de la passerelle produit EXACTEMENT le rapport qu'il annonce.
+///
+/// Un seul test pour tous : un `#[test]` par profil rendait la liste triplement recopiée sans rien
+/// acheter, puisqu'ils échouaient sur le même message.
 #[test]
-fn t2_profil_demo() {
-    check("demo");
+fn t2_profils() {
+    for p in PROFILS {
+        check(p);
+    }
 }
 
+/// ⭐ **P1 — aucun profil livré n'échappe à un test.**
+///
+/// Un `.env` que personne ne compare est un profil qui peut mentir sans bruit, et le répertoire
+/// `profiles/` est partagé entre deux binaires. La liste de la console est **lue dans sa source**
+/// plutôt que recopiée ici : deux listes se seraient séparées, et ce test aurait alors garanti le
+/// contraire de ce qu'il promet.
 #[test]
-fn t2_profil_souverain() {
-    check("souverain");
+fn p1_chaque_profil_livre_est_couvert_par_un_test() {
+    let src = std::fs::read_to_string(
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../audit-console/tests/profile_files.rs"),
+    )
+    .expect("la source du test de profils de la console est lisible");
+    let ligne = src
+        .lines()
+        .find(|l| l.trim_start().starts_with("const PROFILS"))
+        .expect("`const PROFILS` introuvable dans le test de la console — l'a-t-on renommé ?");
+    let console: Vec<String> = ligne
+        .split('"')
+        .skip(1)
+        .step_by(2)
+        .map(str::to_string)
+        .collect();
+    assert!(!console.is_empty(), "la liste de la console est vide — le parseur a-t-il dérivé ?");
+
+    let dir = profiles_dir();
+    let mut orphelins = Vec::new();
+    for e in std::fs::read_dir(&dir).expect("profiles/ lisible").flatten() {
+        let p = e.path();
+        if p.extension().is_none_or(|x| x != "env") {
+            continue;
+        }
+        let nom = p.file_stem().expect("tige").to_string_lossy().to_string();
+        if PROFILS.contains(&nom.as_str()) || console.contains(&nom) {
+            continue;
+        }
+        orphelins.push(nom);
+    }
+    assert!(
+        orphelins.is_empty(),
+        "profil(s) livré(s) que AUCUN test ne compare : {orphelins:?}\n\
+         Ajoutez-les à `PROFILS` (passerelle) ou à celui de la console, avec leur `.expected.json`."
+    );
 }
 
-#[test]
-fn t2_profil_frontiere() {
-    check("frontiere");
-}
 
-/// **M4** — le profil de la démonstration en une commande. Il est vérifié comme les autres, et
-/// pour la même raison : un profil que personne ne contrôle est un profil qui peut mentir, et
-/// celui-ci est justement celui qu'un inconnu exécutera en premier.
-#[test]
-fn t2_profil_docker() {
-    check("docker");
-}
 
-/// **M5** — le profil qui prend LES DEUX produits. Vérifié comme les autres : c'est le seul qui
-/// annonce le pont servi, et un profil qui annoncerait à tort une capacité réglementaire serait
-/// le plus coûteux des mensonges de ce dépôt.
-#[test]
-fn t2_profil_jonction() {
-    check("jonction");
-}
+
 
 /// **Le test qui prouve que les profils sont complets — secret excepté.**
 ///
@@ -154,7 +191,7 @@ fn aucun_profil_ne_contient_de_secret() {
         "EFE_OIDC_PUBLIC_KEY_PEM",
         "DATABASE_URL",
     ];
-    for profile in ["demo", "souverain", "frontiere", "docker", "jonction"] {
+    for profile in PROFILS {
         let text = std::fs::read_to_string(profiles_dir().join(format!("{profile}.env")))
             .unwrap_or_else(|e| panic!("{profile}.env : {e}"));
         let vars = parse_env(&text);
@@ -180,7 +217,7 @@ fn aucun_profil_ne_contient_de_secret() {
 /// non posé. C'est tout l'intérêt du mécanisme — voir ce que la réduction en booléen efface.
 #[test]
 fn aucun_profil_livre_ne_pose_une_valeur_refusee() {
-    for profile in ["demo", "souverain", "frontiere", "docker", "jonction"] {
+    for profile in PROFILS {
         let text = std::fs::read_to_string(profiles_dir().join(format!("{profile}.env")))
             .unwrap_or_else(|e| panic!("profiles/{profile}.env illisible : {e}"));
         let vars = parse_env(&text);

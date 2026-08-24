@@ -423,8 +423,11 @@ fn frontier_boot_guard(
                     sinon la provenance est scellée sous test_key() PUBLIQUE ⟹ reçus R4 FORGEABLES.");
     }
     if !auth_ok {
-        return Err("EFE_LLM_FRONTIER_ENABLED exige l'auth OIDC frontière (feature `oidc` + clé publique, \
-                    aud=efe-llm) — sinon egress tiers PAYANT sans authentification (tenant/rôles en clair).");
+        // P1 : le message NOMME sa variable. Les deux autres le faisaient déjà ; celui-ci disait
+        // « clé publique » sans dire laquelle, et un opérateur qui lit `exit 78` n'a que ce texte.
+        return Err("EFE_LLM_FRONTIER_ENABLED exige l'auth OIDC frontière (feature `oidc` + \
+                    EFE_OIDC_PUBLIC_KEY_PEM, clé PUBLIQUE ES256, aud=efe-llm) — sinon egress tiers \
+                    PAYANT sans authentification (tenant/rôles en clair).");
     }
     if !store_durable {
         return Err("EFE_LLM_FRONTIER_ENABLED exige un store DURABLE (feature `postgres` + DATABASE_URL) — \
@@ -504,9 +507,54 @@ mod tests {
         assert!(frontier_boot_guard(true, true, true, true, true).is_ok(), "les quatre invariants ⟹ GO");
     }
 
-    /// La fonction gardée est `#[cfg(feature = "frontier-llm")]` : sans ce gate, la cible **binaire**
-    /// du profil par défaut ne compilait plus (`cannot find function frontier_boot_guard`). Le test
-    /// jumeau ci-dessus le portait, celui-ci ne l'avait pas.
+    #[cfg(feature = "frontier-llm")]
+    #[test]
+
+    /// ⭐ **P1.a — chaque injection déclarée est une précondition RÉELLE du garde.**
+    ///
+    /// `profile::INJECTIONS_FRONTIERE` est ce qu'un profil déclare exiger sans le porter. Rien ne
+    /// garantissait que cette liste corresponde au garde : deux listes, deux vérités, et la
+    /// divergence n'aurait été découverte qu'en production, en `exit 78`.
+    ///
+    /// Le lien se fait ici parce que c'est le **seul** endroit où les deux sont atteignables — le
+    /// garde vit dans ce binaire. Pour chaque nom, on construit la configuration où SEULE cette
+    /// précondition manque, et on exige que le garde refuse **en nommant la variable**. Un
+    /// opérateur qui lit `exit 78` n'a que ce texte pour savoir quoi poser.
+    #[cfg(feature = "frontier-llm")]
+    #[test]
+    fn p1_chaque_injection_declaree_est_une_precondition_du_garde() {
+        use efe_swarm_gateway::profile::INJECTIONS_FRONTIERE;
+        // (nom déclaré, la configuration où seule CETTE précondition manque)
+        let cas: &[(&str, (bool, bool, bool, bool))] = &[
+            ("EFE_NANO_AUDIT_HMAC_MASTER", (false, true, true, true)),
+            ("EFE_OIDC_PUBLIC_KEY_PEM", (true, false, true, true)),
+            ("DATABASE_URL", (true, true, false, true)),
+        ];
+        assert_eq!(
+            cas.len(),
+            INJECTIONS_FRONTIERE.len(),
+            "INJECTIONS_FRONTIERE a {} entrée(s) et ce test en couvre {} — une précondition a été \
+             ajoutée sans être éprouvée ici, ou l'inverse",
+            INJECTIONS_FRONTIERE.len(),
+            cas.len()
+        );
+        for (nom, (k, a, st, pii)) in cas {
+            assert!(
+                INJECTIONS_FRONTIERE.contains(nom),
+                "{nom} est éprouvé ici mais absent de INJECTIONS_FRONTIERE"
+            );
+            let err = frontier_boot_guard(true, *k, *a, *st, *pii)
+                .expect_err("la précondition manquante doit faire refuser");
+            assert!(
+                err.contains(nom),
+                "le garde refuse pour {nom} sans le NOMMER — l'opérateur ne saura pas quoi \
+                 poser :\n  {err}"
+            );
+        }
+    }
+
+    /// La fonction gardée est `#[cfg(feature = "frontier-llm")]` : sans ce gate, la cible
+    /// **binaire** du profil par défaut ne compile plus.
     #[cfg(feature = "frontier-llm")]
     #[test]
     fn frontier_boot_guard_refuses_a_silent_cleartext_egress() {
