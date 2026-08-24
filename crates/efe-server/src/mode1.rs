@@ -97,6 +97,17 @@ use crate::services::{ExecuteBackend, SwarmControllerBackend};
 /// round; consumed by [`PassThroughDissolver::extract_centroid`]. The
 /// mutex section is minimal (clone of a `Vec<f32>`), so contention is
 /// negligible in practice.
+///
+/// # Scope (Couche 3)
+///
+/// This slot backs the **server request path** only. Because it lives for
+/// the whole life of the controller, it is safe only under **sequential**
+/// `execute()` calls on a given controller (publish overwrites, take
+/// drains). The meta-swarm **latent** controller — which the M1.c
+/// Lipschitz canary evaluates *concurrently* — instead carries the
+/// centroid on the per-execute ELS (see [`ElsCarriedDissolver`] and
+/// [`FusionAdapter::with_centroid_carry`]) so `Φ` is pure by construction
+/// rather than by single-flight discipline.
 #[derive(Clone, Default, Debug)]
 pub struct LastCentroid(Arc<Mutex<Option<Vec<f32>>>>);
 
@@ -307,6 +318,14 @@ pub struct FusionAdapter {
     /// AND the slot has been populated by `Mode1Backend::execute`.
     last_spec_trace: LastSpecTrace,
     extractor: Arc<dyn CentroidExtractor>,
+    /// **Couche 3 (M1.c)** — when `true`, the round's centroid is stashed
+    /// on the per-execute ELS (`els.set_dissolution_centroid`) instead of
+    /// the controller-wide [`LastCentroid`] slot, so `Φ` is pure under
+    /// concurrent `phi_once` calls on a shared controller. Set **only** by
+    /// the latent controller (`build_mvp_controller`); the server request
+    /// path leaves it `false` and keeps the exact shared-slot behaviour
+    /// (byte-identical). See [`FusionAdapter::with_centroid_carry`].
+    carry_centroid_via_els: bool,
 }
 
 impl std::fmt::Debug for FusionAdapter {
@@ -337,7 +356,24 @@ impl FusionAdapter {
             last_centroid,
             last_spec_trace,
             extractor: Arc::new(WeightedMeanExtractor::default()),
+            // Default: publish to the shared slot (server request path).
+            carry_centroid_via_els: false,
         }
+    }
+
+    /// **Couche 3 (M1.c)** — opt into carrying the round's centroid on the
+    /// per-execute ELS instead of the shared [`LastCentroid`] slot.
+    ///
+    /// Enabled by the latent controller so that `Φ` (`phi_once`) is a pure
+    /// function of its input under **concurrent** evaluation on a shared
+    /// `SwarmController` (the M1.c Lipschitz-canary wants `Φ(x)‖Φ(y)`).
+    /// Pass `false` (the default) on the server request path to preserve
+    /// the exact shared-slot behaviour bit-for-bit. Must be paired with an
+    /// [`ElsCarriedDissolver`] on the controller (see `build_mvp_parts`).
+    #[must_use]
+    pub fn with_centroid_carry(mut self, on: bool) -> Self {
+        self.carry_centroid_via_els = on;
+        self
     }
 }
 
@@ -360,10 +396,13 @@ impl SwarmFusionStrategy for FusionAdapter {
         let stats = fusion_round.stats;
 
         // 3. Capture centroid from the updated ELS for the dissolver.
+        //    On the server path this publishes to the shared `LastCentroid`
+        //    slot; on the latent path (`carry_centroid_via_els`) it is
+        //    stashed on the per-execute ELS instead — pure under concurrency.
         //    Errors here are non-fatal for the round (stats already
         //    travelled), but we still log to help diagnose mismatches.
-        if let Err(e) = self.publish_centroid(els, arena, round) {
-            tracing::warn!(round, error = %e, "FusionAdapter: centroid publish failed");
+        if let Err(e) = self.capture_centroid(els, arena, round) {
+            tracing::warn!(round, error = %e, "FusionAdapter: centroid capture failed");
         }
 
         Ok(stats)
@@ -385,24 +424,47 @@ impl SwarmFusionStrategy for FusionAdapter {
 }
 
 impl FusionAdapter {
-    fn publish_centroid(
+    /// Extract the round's centroid from the (updated) ELS and route it to
+    /// the dissolver's channel.
+    ///
+    /// Takes `&mut els` because the latent path stashes the centroid **on
+    /// the ELS itself** (`set_dissolution_centroid`) — the per-execute
+    /// carrier that makes `Φ` pure by construction. The centroid is
+    /// extracted through *immutable* views (scoped so their borrow ends
+    /// before the stash), so the `&mut` is only used for the final write.
+    ///
+    /// Routing:
+    ///   * `carry_centroid_via_els == false` (server request path) —
+    ///     publish to the shared [`LastCentroid`] slot, **exactly** as
+    ///     before (D7 trace included). Byte-identical.
+    ///   * `carry_centroid_via_els == true` (latent controller) — stash on
+    ///     the ELS; the shared slot is never touched, so two concurrent
+    ///     `phi_once` calls on a shared controller cannot clobber each
+    ///     other's centroid.
+    fn capture_centroid(
         &self,
-        els: &EpistemicLatentSpace,
+        els: &mut EpistemicLatentSpace,
         arena: &efe_core::memory::Arena,
         round: u32,
     ) -> Result<()> {
-        let latent = els
-            .latent_view(arena)?
-            .ok_or(EfeError::Internal("FusionAdapter: ELS has no latent"))?;
-        let mask = els
-            .mask_view(arena)?
-            .ok_or(EfeError::Internal("FusionAdapter: ELS has no mask"))?;
-        let c = self.extractor.extract(&latent, &mask)?;
+        // Scope the immutable views so the shared borrow of `els` ends
+        // before the mutable stash below.
+        let c = {
+            let latent = els
+                .latent_view(arena)?
+                .ok_or(EfeError::Internal("FusionAdapter: ELS has no latent"))?;
+            let mask = els
+                .mask_view(arena)?
+                .ok_or(EfeError::Internal("FusionAdapter: ELS has no mask"))?;
+            self.extractor.extract(&latent, &mask)?
+        };
 
         // Sprint D7 — diagnostic centroid trace. Activated by
         // `EFE_LOG_CENTROID_TRACE=1` ; gated on the env var being set
         // AND the per-request spec being available, so the cost is
         // a single atomic load + a `None` mutex peek when disabled.
+        // (Inert on the latent path: `last_spec_trace` is only populated
+        // by `Mode1Backend`, which is not in the latent controller's path.)
         if centroid_trace_enabled() {
             if let Some(ctx) = self.last_spec_trace.peek() {
                 let cos_problem = cosine_sim(&c, &ctx.problem_embedding);
@@ -423,7 +485,13 @@ impl FusionAdapter {
             }
         }
 
-        self.last_centroid.publish(c);
+        if self.carry_centroid_via_els {
+            // Latent path — pure by construction (per-execute carrier).
+            els.set_dissolution_centroid(c);
+        } else {
+            // Server request path — shared publication slot (unchanged).
+            self.last_centroid.publish(c);
+        }
         Ok(())
     }
 }
@@ -531,6 +599,55 @@ impl Dissolver for PassThroughDissolver {
         // Always return the raw projected centroid in Mode 1.
         // Client-side code does the nearest-anchor cosine + threshold
         // policy.
+        Ok(DecodedOutput::Raw(centroid.to_vec()))
+    }
+}
+
+// =====================================================================
+// ElsCarriedDissolver — Couche 3 M1.c, pure-Φ-by-construction dissolver
+// =====================================================================
+
+/// Dissolver that reads the centroid **from the ELS it is handed**
+/// (`els.dissolution_centroid()`), rather than from a controller-wide
+/// [`LastCentroid`] slot.
+///
+/// # Why this exists
+///
+/// [`PassThroughDissolver`] and the [`FusionAdapter`] communicate the
+/// fused centroid through a shared `Arc<Mutex<Option<Vec<f32>>>>` that
+/// lives for the whole life of the controller. Under **sequential**
+/// `execute()` calls that is self-correcting (publish overwrites, take
+/// drains), but two `phi_once` calls running **concurrently** on the same
+/// `Arc<SwarmController>` race on it: B's publish can overwrite the slot
+/// before A's take, so A decodes B's centroid (or `None → Err`). `Φ` is
+/// then pure only by single-flight discipline, not by construction.
+///
+/// This dissolver closes that hole for the meta-swarm *latent* controller.
+/// The ELS is spawned fresh by genesis on every `execute()` and is the
+/// only per-request object shared between fusion and dissolution, so a
+/// centroid stashed on it (by [`FusionAdapter`] built with
+/// `with_centroid_carry(true)`) cannot be seen by any other in-flight
+/// call. `Φ` becomes a pure function of its input for concurrent
+/// evaluators — the contract the M1.c empirical-Lipschitz canary needs.
+///
+/// Only wired on the latent path; the server request path keeps
+/// [`PassThroughDissolver`] unchanged (byte-identical).
+#[derive(Clone, Debug, Default)]
+pub struct ElsCarriedDissolver;
+
+#[async_trait]
+impl Dissolver for ElsCarriedDissolver {
+    async fn extract_centroid(&self, els: &EpistemicLatentSpace) -> Result<Vec<f32>> {
+        els.dissolution_centroid().map(<[f32]>::to_vec).ok_or(
+            EfeError::Internal(
+                "ElsCarriedDissolver: no centroid on ELS (no fusion round ran?)",
+            ),
+        )
+    }
+
+    async fn decode(&self, centroid: &[f32], _mode: &DecodeMode) -> Result<DecodedOutput> {
+        // Identical decode contract to `PassThroughDissolver`: return the
+        // raw projected centroid so the client applies its own policy.
         Ok(DecodedOutput::Raw(centroid.to_vec()))
     }
 }
@@ -1261,12 +1378,22 @@ fn build_mvp_parts(
     // The slot is always wired ; the env var simply gates whether
     // it is populated by `Mode1Backend::execute`.
     let last_spec_trace = LastSpecTrace::new();
-    let fusion: Arc<dyn SwarmFusionStrategy> = Arc::new(FusionAdapter::new(
-        fusion_core,
-        cfg.fusion,
-        last_centroid.clone(),
-        last_spec_trace.clone(),
-    ));
+    // **Couche 3 (M1.c)** — the latent controller carries the fused
+    // centroid on the per-execute ELS (making Φ pure under *concurrent*
+    // `phi_once`), while the server request path keeps the shared
+    // `LastCentroid` publication slot byte-for-byte. This one boolean
+    // selects both halves of the channel (adapter write-side here, and the
+    // dissolver read-side in step 9).
+    let latent = latent_init_sigma.is_some();
+    let fusion: Arc<dyn SwarmFusionStrategy> = Arc::new(
+        FusionAdapter::new(
+            fusion_core,
+            cfg.fusion,
+            last_centroid.clone(),
+            last_spec_trace.clone(),
+        )
+        .with_centroid_carry(latent),
+    );
 
     // --- 8. Consensus factory + controller config — two profiles ---
     //
@@ -1318,7 +1445,17 @@ fn build_mvp_parts(
     };
 
     // --- 9. Dissolver ---
-    let dissolver: Arc<dyn Dissolver> = Arc::new(PassThroughDissolver::new(last_centroid.clone()));
+    //
+    // **Couche 3 (M1.c)** — the latent controller reads the centroid from
+    // the per-execute ELS (`ElsCarriedDissolver`, race-free by
+    // construction under concurrent `phi_once`). The server request path
+    // keeps `PassThroughDissolver` on the shared `LastCentroid` slot,
+    // byte-identical to the pre-Couche-3 build.
+    let dissolver: Arc<dyn Dissolver> = if latent {
+        Arc::new(ElsCarriedDissolver)
+    } else {
+        Arc::new(PassThroughDissolver::new(last_centroid.clone()))
+    };
 
     // --- 10. Alignment ---
     let alignment: Arc<dyn SwarmAlignmentProjector> = Arc::new(AlignmentAdapter::strict_default()?);
@@ -1369,10 +1506,14 @@ pub fn build_mvp_backend(cfg: Mode1Config) -> Result<Arc<dyn ExecuteBackend>> {
 /// **Couche 3 (M1.a)** — the bare `Arc<SwarmController>` used by the meta-swarm's
 /// real `LocalParticipant` bridge (`step_with_pull` → `phi_once` → `mix_coupled`).
 ///
-/// Same genesis/fusion/dissolve/align strategies as [`build_mvp_backend`] **minus** the
-/// `ExecuteBackend` wrapper : the controller is self-contained — its `PassThroughDissolver`
-/// reads the `LastCentroid` channel that its own fusion populates within a single
-/// `execute()`, so the discarded outer channel handles are not needed on the step path.
+/// Same genesis/fusion/align strategies as [`build_mvp_backend`] **minus** the
+/// `ExecuteBackend` wrapper, and with an [`ElsCarriedDissolver`] in place of the
+/// server's `PassThroughDissolver`. The controller is self-contained: the centroid
+/// crosses from fusion to the dissolver on the **per-execute ELS**
+/// (`els.set_dissolution_centroid` → `els.dissolution_centroid`), *not* the
+/// controller-wide `LastCentroid` slot, so the discarded outer channel handles are
+/// unused on the step path and — crucially — `Φ` is pure under **concurrent**
+/// `phi_once` on a shared controller (M1.c), not merely under single-flight.
 ///
 /// **Key difference (`latent_init_sigma = Some(0.0)`)** : a participant step is a **single** fusion
 /// round (`phi_once` / `step_with_pull` force `max_rounds = 1`), so this controller is

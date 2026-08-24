@@ -325,3 +325,97 @@ async fn real_step_with_pull_is_deterministic() {
         "the coupled KM step must be bit-identical across calls.\n a={a:?}\n b={b:?}"
     );
 }
+
+// =====================================================================
+// Couche 3 · M1.c — Φ is PURE UNDER CONCURRENCY (not just single-flight)
+// =====================================================================
+
+/// **The decisive concurrency guard.** `real_phi_once_is_call_order_invariant`
+/// proves purity under *sequential* interleaving; this proves it under genuine
+/// *concurrency* on a **shared** `Arc<SwarmController>` — the contract the M1.c
+/// Lipschitz canary needs when it evaluates `Φ(x)‖Φ(y)` in parallel.
+///
+/// We fire `N` `phi_once` calls at once on one controller — half computing
+/// Φ(x), half computing Φ(y) with a *distinct* in-domain input — releasing them
+/// together through a [`tokio::sync::Barrier`] so their genesis → fusion →
+/// dissolution windows overlap, and repeating the burst to shake out
+/// probabilistic interleavings. Every Φ(x) must equal the sequential reference
+/// Φ(x), and every Φ(y) the reference Φ(y).
+///
+/// **Why this fails on the legacy shared-`LastCentroid` channel** (the residual
+/// hole M1.c closes): that slot lives for the whole life of the controller, so
+/// an overlapping Φ(y) round publishing its centroid before a Φ(x) call `take`s
+/// the slot makes Φ(x) decode *y's* centroid (bit mismatch) — or drain a `None`
+/// and error. Interleaving *distinct* inputs is essential: two identical Φ(x)
+/// calls would publish identical centroids and mask the leak. The
+/// `ElsCarriedDissolver` carries each centroid on its own **per-execute ELS**,
+/// so there is no shared mutable slot to race on — purity by construction.
+///
+/// `N == 4` matches `Mode1Config` default `prealloc_arenas`, so every concurrent
+/// `execute()` draws a pre-allocated arena — no on-demand allocation, no pool
+/// semaphore waiting, identical memory footprint to the other tests. The spec is
+/// given a generous wall-clock budget so scheduling jitter under N-way CPU
+/// contention never trips the arbiter deadline (default 500 ms) — this probe
+/// asserts *centroid purity*, not latency.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn real_phi_once_is_concurrency_pure_on_shared_controller() {
+    const N: usize = 4; // == Mode1Config default prealloc_arenas (no on-demand alloc)
+    // Each `phi_once` inherently costs ~2.6 s (the wiring zeroes a 1 GiB arena
+    // per swarm — the same cost the determinism tests above pay), and a round
+    // runs N of them with genuine 4-way overlap. A few rounds is ample to expose
+    // a shared-slot race; more would only inflate wall-clock with no added signal.
+    const ROUNDS: usize = 3; // repeat the concurrent burst to expose probabilistic races
+
+    let controller =
+        build_mvp_controller(Mode1Config::for_dim(DIM as u32)).expect("build real SwarmController");
+    // Generous budget: isolate this probe from the 500 ms default deadline, which
+    // scheduling jitter under contention would otherwise trip (a latency
+    // confound, not a centroid leak). `phi_once` preserves `spec.budget`.
+    let mut spec = base_spec();
+    spec.budget.max_wall_clock_ms = 60_000;
+    let x = vec![0.2f32; DIM];
+    let y = vec![0.08f32; DIM]; // distinct but in-domain (uniform positive, aligned with the cone)
+
+    // Sequential references, computed with no contention.
+    let ref_x = controller.phi_once(&x, &spec, "tenant-m1c").await.expect("reference Φ(x)");
+    let ref_y = controller.phi_once(&y, &spec, "tenant-m1c").await.expect("reference Φ(y)");
+    // Precondition: the two inputs must produce *different* centroids, else a
+    // cross-call leak would be invisible and the probe would pass vacuously.
+    assert!(
+        !bit_identical(&ref_x, &ref_y),
+        "test precondition: Φ(x) and Φ(y) must differ so a shared-slot leak is observable\n \
+         Φ(x)={ref_x:?}\n Φ(y)={ref_y:?}"
+    );
+
+    for r in 0..ROUNDS {
+        let barrier = Arc::new(tokio::sync::Barrier::new(N));
+        let mut handles = Vec::with_capacity(N);
+        for i in 0..N {
+            let c = controller.clone();
+            let spec_i = spec.clone();
+            let b = barrier.clone();
+            // Even tasks probe Φ(x); odd tasks run Φ(y) as active interference.
+            let (input, want) = if i % 2 == 0 {
+                (x.clone(), ref_x.clone())
+            } else {
+                (y.clone(), ref_y.clone())
+            };
+            handles.push(tokio::spawn(async move {
+                // Release all N calls together to maximise the overlap window.
+                b.wait().await;
+                let got = c
+                    .phi_once(&input, &spec_i, "tenant-m1c")
+                    .await
+                    .expect("concurrent phi_once errored (a None-slot drain would do this)");
+                assert!(
+                    bit_identical(&got, &want),
+                    "round {r} task {i}: a concurrent Φ leaked another call's centroid \
+                     (shared-slot race — Φ is not pure by construction).\n got={got:?}\n want={want:?}"
+                );
+            }));
+        }
+        for h in handles {
+            h.await.expect("a concurrent phi_once task panicked (assertion failed or Φ errored)");
+        }
+    }
+}

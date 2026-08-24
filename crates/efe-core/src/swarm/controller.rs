@@ -388,13 +388,22 @@ impl SwarmController {
     /// not of `phi_once` itself; the fresh `SwarmId`/`RequestId` never leak into the
     /// output (they feed only telemetry).
     ///
-    /// **Single-flight per controller.**  The fused centroid crosses to the
-    /// dissolver via a per-controller channel, so `Φ` is pure only under
-    /// **sequential** calls on a given controller (the meta-swarm's
-    /// one-controller-per-participant design satisfies this — `step_with_pull`
-    /// awaits `phi_once` to completion).  Do **not** invoke `phi_once`
-    /// concurrently on a *shared* `SwarmController`; give each concurrent
-    /// evaluator its own controller (the M1.c Lipschitz-canary contract).
+    /// **Concurrency and the centroid channel.**  `phi_once` itself holds no
+    /// mutable per-call state; whether `Φ` is pure under *concurrent* calls on
+    /// a **shared** controller depends on how the injected [`Dissolver`]
+    /// receives the fused centroid.  A dissolver that reads it from a
+    /// controller-wide slot (e.g. efe-server's `PassThroughDissolver` +
+    /// `LastCentroid`) is pure only under **sequential** calls — two concurrent
+    /// `phi_once` would race, one clobbering the other's slot.  A dissolver
+    /// that reads the centroid from the **per-execute ELS**
+    /// ([`crate::els::EpistemicLatentSpace::dissolution_centroid`], written by
+    /// the fusion strategy that round) is pure **by construction**, because
+    /// each `execute()` owns a distinct ELS.  The meta-swarm latent controller
+    /// (`efe_server::mode1::build_mvp_controller`) uses the ELS-carried variant
+    /// and so is safe to evaluate concurrently — the M1.c Lipschitz-canary
+    /// contract (`Φ(x)‖Φ(y)` on one shared controller).  `step_with_pull`
+    /// awaits `phi_once` to completion, so the coupled step never overlaps its
+    /// own operator regardless.
     ///
     /// # Errors
     ///

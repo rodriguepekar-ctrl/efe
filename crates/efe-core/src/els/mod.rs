@@ -64,6 +64,28 @@ pub struct EpistemicLatentSpace {
     /// lazily on first fusion round; persists across rounds, re-used
     /// via pointer swap.
     scratch_latent: Option<RawAllocation>,
+    /// **Couche 3 (M1.c)** — per-execute carrier for the fused consensus
+    /// centroid, used by the meta-swarm *latent* controller to make `Φ`
+    /// (`SwarmController::phi_once`) pure **by construction** rather than
+    /// by single-flight discipline.
+    ///
+    /// The ELS is created fresh by genesis on every `execute()` and flows
+    /// (by `&mut`) through fusion and (by `&`) into dissolution *within a
+    /// single call stack*, so it is the only per-request object both the
+    /// fusion strategy and the [`crate::swarm::strategies::Dissolver`]
+    /// share. Threading the centroid here — the fusion round (which holds
+    /// the arena) writes it, an ELS-reading dissolver takes it — removes
+    /// the controller-wide `Mutex<Option<Vec<f32>>>` publication slot that
+    /// two concurrent `phi_once` calls on a *shared* controller would race
+    /// on (B's publish overwriting A's slot before A's take).
+    ///
+    /// **Left `None` on the efe-server Mode-1 request path**, which keeps
+    /// its `PassThroughDissolver` + shared-slot wiring untouched (the
+    /// "byte-identical server binary" invariant). Only the latent
+    /// controller (`efe_server::mode1::build_mvp_controller`) populates and
+    /// reads it. Not part of any snapshot / hash (see [`snapshot`]), so an
+    /// unpopulated slot is invisible to telemetry and reproducibility pins.
+    dissolution_centroid: Option<Vec<f32>>,
 }
 
 impl EpistemicLatentSpace {
@@ -81,6 +103,7 @@ impl EpistemicLatentSpace {
             anchors: None,
             problem_emb: None,
             scratch_latent: None,
+            dissolution_centroid: None,
         }
     }
 
@@ -137,6 +160,7 @@ impl EpistemicLatentSpace {
             anchors: Some(anchors),
             problem_emb: Some(problem_emb),
             scratch_latent: None,
+            dissolution_centroid: None,
         }
     }
 
@@ -206,6 +230,31 @@ impl EpistemicLatentSpace {
     #[must_use]
     pub fn problem_embedding_raw(&self) -> Option<RawAllocation> {
         self.problem_emb
+    }
+
+    // ---------- Dissolution-centroid carrier (Couche 3 M1.c) ----------
+
+    /// Stash the fused consensus centroid on this (per-execute) ELS.
+    ///
+    /// Called by the fusion strategy — which holds the arena needed to
+    /// read the latent/mask views — at the end of a round on the latent
+    /// meta-swarm path. Overwrites any previously stashed value so the
+    /// last round to run wins, matching the legacy "last round wins"
+    /// dissolution semantics but scoped to *this* ELS instead of a
+    /// controller-wide slot. See the field docstring for the concurrency
+    /// rationale ([`dissolution_centroid`](Self::dissolution_centroid)).
+    pub fn set_dissolution_centroid(&mut self, centroid: Vec<f32>) {
+        self.dissolution_centroid = Some(centroid);
+    }
+
+    /// The centroid stashed by [`Self::set_dissolution_centroid`], if any.
+    ///
+    /// Read by the latent controller's ELS-carrying dissolver. Returns
+    /// `None` on the server request path (which never stashes) and until
+    /// the first fusion round has run.
+    #[must_use]
+    pub fn dissolution_centroid(&self) -> Option<&[f32]> {
+        self.dissolution_centroid.as_deref()
     }
 
     // ---------- View accessors ----------
