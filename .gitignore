@@ -109,8 +109,30 @@ docs/**/*.pptx
 # Exception : l'archive de mai 2026 contient des PDF SANS source dans ce dépôt
 # (4 des 5 n'ont aucun .md ni générateur suivi). Les exclure les perdrait.
 !docs/archive-2026-05/*.pdf
+
+# ── PDF SANS SOURCE dans ce dépôt — l'exclusion les perdrait ────────────────
+# Critère appliqué le 2026-08-24 aux 119 PDF ignorés : 106 se régénèrent depuis
+# un .tex/.md/générateur SUIVI et restent donc exclus, à juste titre. Les 13
+# ci-dessous n'ont AUCUNE source. Une politique « on suit la source, pas
+# l'artefact » n'a plus de sens quand la source n'existe pas.
+!docs/EFE_Projet_Technologie_Fonctionnement.pdf
+!docs/EFE_Technologie_Schemas.pdf
+!docs/investors/EFE-engineering-state-report-2026-05-16.pdf
+!docs/investors/Kovant-investor-brief-2026-05-17.pdf
+!docs/investors/Meta-Swarm-state-report-2026-05-16.pdf
+!docs/reports/EFE_Agent_Exchange_Concepts_2026-07-14_EN.pdf
+!docs/reports/EFE_Agent_Info_Exchange_Report_2026-07-14_EN.pdf
+!docs/reports/EFE_Audit_HMAC_et_DRR_2026-07-19.pdf
+!docs/reports/EFE_FilB_Planches_2026-07-17.pdf
+!docs/reports/EFE_FilB_Rapport_Schemas_2026-07-17.pdf
+!docs/reports/EFE_Nano_Swarm_MetaSwarm_Report_2026-07-14_EN.pdf
+!docs/reports/EFE_Pitch_Deck_EN_2026-07-17.pdf
 # PDF de livraison à la racine (compendium, roadmap, généré)
 /EFE_*.pdf
+# ⚠ Négation APRÈS sa règle : dans un .gitignore la DERNIÈRE correspondance gagne.
+# Placée avant, elle était écrasée en silence — et ce PDF de 1,2 Mo sans source
+# serait resté dehors sans que rien ne le signale.
+!/EFE_A1_PHASE2_META_SWARM_COMPENDIUM.pdf
 # Bundles de démo re-prouvables (csddd-demo, meta-provenance) — SORTIES régénérables des exemples
 # (reg-evidence::csddd_seed, efe-meta-swarm::meta_provenance), pas du source. Le code qui les produit
 # reste suivi ; ces artefacts non. NB : `bundles/` (modèles + pubkeys) est un dossier SUIVI distinct.
