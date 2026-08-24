@@ -33,3 +33,13 @@ Il est conservé comme trace, **pas** comme travail en attente. Ne pas le ré-ap
 la plateforme. S&S n'est mentionné que dans deux fichiers suivis (`README_POC.md`,
 `crates/efe-nano-app-coordinator/README.md`) — c'est donc ici que sa description la plus complète
 se trouve.
+
+## Les deux fichiers de permissions Claude Code
+
+`claude-permissions.vrai.local.json` et `claude-permissions.jjjj-copie.local.json` sont les
+`.claude/settings.local.json` des deux répertoires parents, archivés **à plat et renommés**.
+
+Ils ne sont **pas** placés dans un `.claude/` du dépôt, et c'est délibéré : le suffixe
+`.local.json` désigne le fichier que Claude Code n'attend justement pas en partage. Actif dans le
+dépôt, il ferait hériter tout clone d'autorisations d'exécution que son propriétaire n'a jamais
+accordées. Ici ils sont conservés comme trace, inertes.

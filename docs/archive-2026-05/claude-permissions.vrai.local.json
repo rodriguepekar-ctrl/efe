@@ -1,0 +1,35 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__24db77a4-29b0-42ad-ab19-5815b5ab4b9b__paper_search",
+      "mcp__24db77a4-29b0-42ad-ab19-5815b5ab4b9b__hub_repo_search",
+      "WebFetch(domain:hf.co)",
+      "WebFetch(domain:github.com)",
+      "mcp__24db77a4-29b0-42ad-ab19-5815b5ab4b9b__hub_repo_details",
+      "Bash(exit 0)",
+      "Bash(chmod +x scripts/bootstrap.sh scripts/health-check.sh)",
+      "Bash(make help *)",
+      "Bash(docker compose *)",
+      "Bash(echo \"=== Docker Desktop installé ? ===\" && \\\\ *)",
+      "Bash(open -a Docker)",
+      "Bash(docker info *)",
+      "Bash(echo \"DOCKER_READY $\\(docker info --format '{{.ServerVersion}}'\\)\")",
+      "Bash(make bootstrap *)",
+      "Bash(sysctl -n hw.model)",
+      "Bash(docker version *)",
+      "Bash(docker run *)",
+      "Bash(docker image *)",
+      "Bash(docker pull *)",
+      "Bash(echo \"exit=$?\")",
+      "Bash(./scripts/health-check.sh)",
+      "Bash(curl -sf \"http://localhost:13143/\" -o /dev/null -w \"status=%{http_code}\\\\n\")",
+      "Bash(docker exec *)",
+      "Bash(rustc --version)",
+      "Bash(cargo check *)",
+      "Bash(python3.12 --version)",
+      "Bash(PYO3_PYTHON=$\\(which python3.12\\) cargo check --workspace --message-format=short)",
+      "Bash(grep -nA14 \"fn from_outcome\" crates/efe-swarm-gateway/src/store.rs)",
+      "Bash(cargo test *)"
+    ]
+  }
+}
