@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>EFE — le concept, expliqué simplement</title>
+<style>
+  :root{--ink:#0f172a;--muted:#334155;--soft:#64748b;--line:#dbe2ea;--teal:#0d9488;--teal-d:#0f766e;--indigo:#4f46e5;--indigo-d:#4338ca;--ok:#16a34a;--warn:#d97706;--bg-tint:#f5faf9;--bg-card:#eef2f1;}
+  *{box-sizing:border-box;} html{font-size:12.1px;}
+  body{font-family:Arial,"Helvetica Neue",Helvetica,sans-serif;color:var(--ink);margin:0;line-height:1.54;background:#fff;-webkit-font-smoothing:antialiased;}
+  .wrap{max-width:182mm;margin:0 auto;padding:0 1mm;}
+  h1,h2,h3{line-height:1.18;font-weight:700;}
+  p{margin:.4rem 0;text-align:justify;} .muted{color:var(--soft);}
+  .page{break-before:page;}
+  .band{border-bottom:3px solid var(--teal);padding:.1rem 0 .42rem;margin-bottom:.5rem;display:flex;align-items:baseline;}
+  .band .kick{font-size:.72rem;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:var(--teal);display:block;}
+  .band h1{font-size:1.5rem;margin:.05rem 0 0;}
+  .band .pg{margin-left:auto;font-size:2.4rem;font-weight:800;color:var(--bg-card);line-height:.7;}
+  .lede{font-size:1.0rem;color:var(--muted);margin:0 0 .55rem;font-style:italic;}
+  h3{font-size:1.13rem;margin:.7rem 0 .18rem;color:var(--teal-d);}
+  h3 .s{color:var(--soft);font-weight:400;font-size:.88rem;}
+  .line{font-size:1.2rem;font-weight:700;color:var(--indigo-d);text-align:center;margin:.55rem 0;padding:.4rem;background:#eef1ff;border-radius:8px;}
+  .box{border-left:4px solid var(--teal);background:var(--bg-tint);padding:.5rem .82rem;border-radius:0 8px 8px 0;margin:.5rem 0;break-inside:avoid;}
+  .box.key{border-color:var(--indigo);background:#eef1ff;} .box.warn{border-color:var(--warn);background:#fffbeb;}
+  .box .lbl{font-weight:800;text-transform:uppercase;letter-spacing:.05em;font-size:.72rem;display:block;margin-bottom:.12rem;color:var(--teal-d);}
+  .box.key .lbl{color:var(--indigo-d);} .box.warn .lbl{color:#92400e;}
+  .box p{margin:.2rem 0;}
+  ul{margin:.3rem 0;padding-left:0;list-style:none;}
+  ul>li{position:relative;padding-left:1.05rem;margin:.24rem 0;}
+  ul>li::before{content:"";position:absolute;left:0;top:.62em;width:.4rem;height:.4rem;background:var(--teal);border-radius:50%;}
+  ul>li b{color:var(--ink);}
+  .foot{margin-top:.5rem;border-top:1px solid var(--line);padding-top:.24rem;font-size:.78rem;color:var(--soft);}
+  @page{size:A4;margin:12mm 13mm;}
+</style>
+</head>
+<body>
+
+<!-- PAGE 1 -->
+<div class="wrap">
+  <div class="band"><div><span class="kick">Le concept, expliqué simplement · page 1 / 3</span><h1>EFE — des agents d'IA en parallèle, dont on peut tout prouver</h1></div><span class="pg">1</span></div>
+  <div class="lede">De nombreux agents — Claude, Gemini, et d'autres — travaillent ensemble, en même temps, en se partageant l'information ; et chaque étape qu'ils franchissent laisse une preuve que n'importe qui peut re-vérifier.</div>
+
+  <h3>L'idée : plusieurs agents en parallèle, qui se partagent l'information</h3>
+  <p>La plupart des systèmes d'intelligence artificielle reposent sur un <b>seul</b> grand assistant à qui l'on confie tout, appelé encore et encore, l'un après l'autre, dans une longue file. C'est lent, c'est opaque, et l'on ne voit au bout qu'une réponse finale qu'il faut croire. EFE fait l'inverse. Il met au travail <b>de nombreux agents en même temps</b> — chacun spécialisé sur une petite partie de la tâche — qui <b>se partagent leur avancement</b> à mesure, à travers un espace commun où chacun dépose ce qu'il trouve et lit ce que les autres ont trouvé. Ces agents sont les modèles que vous connaissez — <b>Claude, Gemini, GPT</b> — mais aussi des modèles plus petits, ou même du simple code, selon ce que chaque étape réclame. C'est le point de départ du système : remplacer une longue file d'appels solitaires par une <b>équipe qui avance en parallèle et met ses trouvailles en commun</b>.</p>
+  <div class="box"><span class="lbl">En clair</span>
+    <p>Au lieu d'un seul cerveau qui fait tout, seul et à la chaîne, EFE fait travailler beaucoup d'agents côte à côte, qui échangent ce qu'ils trouvent au fur et à mesure. C'est plus rapide ; et comme chaque agent ne se charge que d'une seule chose claire, on peut suivre le travail étape par étape, au lieu de subir une grande réponse opaque.</p></div>
+
+  <h3>Et tout ce qu'ils font se prouve</h3>
+  <p>Faire travailler des agents en parallèle, beaucoup savent désormais le faire. Ce qui est rare — et ce qui fait toute la valeur d'EFE — c'est que <b>chaque échange, chaque étape, laisse une preuve</b>. Chaque chose que fait un agent est <b>scellée</b> au moment où elle se produit : enfermée dans un enregistrement qu'on ne peut plus modifier, compléter ni raturer en secret. Quand quelqu'un doit vérifier ce que l'équipe a fait, on lui remet un dossier complet, et il refait la vérification <b>lui-même, sur sa propre machine, sans connexion à internet</b> — sans avoir à vous croire. Deux issues, comme un feu de signalisation : feu vert, tout est intact ; feu rouge, quelque chose a été modifié, et le dossier dit <i>à quel endroit précis</i>.</p>
+
+  <div class="line">Des agents qui travaillent ensemble — et dont on peut tout prouver.</div>
+
+  <p>Ces deux idées sont indissociables, et c'est le point à retenir. C'est parce que le travail est découpé en petites étapes parallèles et indépendantes que chacune est facile à sceller et à re-vérifier. Et c'est la preuve qui rend cette équipe d'agents digne de confiance : beaucoup de systèmes font travailler des IA ensemble, mais presque aucun ne rend chaque étape re-vérifiable de bout en bout, par un tiers, sans le fabricant. L'un est la façon de travailler ; l'autre est ce qui la rend vérifiable.</p>
+
+  <div class="box warn"><span class="lbl">Une honnêteté dite d'emblée — c'est elle qui rend le reste crédible</span>
+    <p>À répéter partout : cela prouve <b>ce qui s'est passé</b>, jamais qu'une décision était <i>juste</i>. C'est un procès-verbal infalsifiable, pas un juge. Une décision fausse mais scellée reste fausse — simplement, elle devient visible, attribuable et rejouable, au lieu d'être invérifiable.</p></div>
+</div>
+
+<!-- PAGE 2 -->
+<div class="wrap page">
+  <div class="band"><div><span class="kick">Le concept · page 2 / 3</span><h1>Les trois produits, simplement</h1></div><span class="pg">2</span></div>
+  <div class="lede">Trois produits emboîtés : un agent seul, une équipe d'agents en parallèle, puis plusieurs équipes qui s'accordent. C'est au niveau de l'équipe que les agents se partagent vraiment l'information.</div>
+
+  <h3>Les nano-robots <span class="s">— les agents, un par un</span></h3>
+  <p>Chaque agent est une petite unité qui ne fait qu'<b>une seule chose</b>. Un agent peut être Claude qui lit un contrat et en extrait une clause, Gemini qui résume un document, ou du simple code qui compare deux montants. Chacun reçoit une entrée, effectue son unique travail, renvoie un résultat, et laisse une trace. Cette étroitesse est délibérée : une unité qui ne fait qu'une chose peut être examinée, testée séparément, et refaite à l'identique plus tard. Ce sont les <b>briques</b> — à partir desquelles tout le reste est construit.</p>
+
+  <h3>L'essaim <span class="s">— les agents en parallèle, qui se partagent l'information</span></h3>
+  <p>C'est ici que se joue l'idée maîtresse. Une décision réelle — vérifier un fournisseur, approuver un contrat — n'est pas l'affaire d'un seul agent. On met donc <b>beaucoup d'agents au travail en même temps</b>, et ils <b>se partagent leur avancement à travers un espace commun</b> : chacun y dépose ce qu'il trouve et y lit ce que les autres ont trouvé, plutôt que d'attendre son tour dans une file. C'est précisément ce qui permet de faire collaborer un grand nombre d'agents sans que cela devienne ingérable. Selon l'importance de la décision, on choisit comment l'équipe s'organise : plusieurs avis qui se recoupent pour un enjeu élevé, un vote pour approuver une clause, une répartition des rôles pour accueillir un fournisseur. Et chaque décision collective vient avec un <b>reçu</b> — la preuve de qui a apporté quoi — qu'un tiers peut re-vérifier seul, sans aucun accès à vos systèmes.</p>
+
+  <h3>Le méta-essaim <span class="s">— plusieurs équipes qui partagent, sans se dévoiler</span></h3>
+  <p>Au dernier étage, ce sont des <b>équipes entières</b> qui se partagent l'information — y compris entre organisations qui ne se font pas confiance (un acheteur, un fournisseur, un auditeur), ou entre deux filiales que la loi oblige à cloisonner leurs données. Mais elles ne partagent qu'une <b>position d'accord</b>, jamais leurs dossiers. Chacune garde ses données ; seule circule entre elles ce qu'il faut pour converger vers une décision commune. Des décisions aujourd'hui impossibles à prendre proprement le deviennent — s'accorder sur un risque commun sans ouvrir ses livres — avec, en plus, des limites que l'on peut prouver et la garantie qu'aucune partie n'a imposé son avis aux autres.</p>
+
+  <div class="box key"><span class="lbl">Les trois ensemble — un exemple simple</span>
+    <p>Prenons l'évaluation d'un fournisseur. <b>Les agents, un par un</b>, font les contrôles élémentaires : Claude lit les certificats, un autre vérifie les sanctions, un autre lit les comptes — chaque contrôle laissé en preuve. <b>L'équipe</b> réunit ces contrôles, ses membres se partageant leurs résultats en parallèle, pour aboutir à une note de risque scellée dans un reçu. <b>L'assemblée d'équipes</b> permet enfin à l'acheteur, au fournisseur et à l'auditeur — chacun gardant ses propres données — de converger vers une note commune. À la fin, une seule chose circule vers l'extérieur : un dossier re-vérifiable, que n'importe laquelle des trois parties peut contrôler elle-même, réseau coupé.</p></div>
+</div>
+
+<!-- PAGE 3 -->
+<div class="wrap page">
+  <div class="band"><div><span class="kick">Le concept · page 3 / 3</span><h1>Ce que ça change — et pourquoi c'est honnête</h1></div><span class="pg">3</span></div>
+
+  <h3>Ce que ça change, concrètement</h3>
+  <p>D'un côté, EFE change la <b>façon de travailler</b> : d'un seul assistant qui fait tout, en file, on passe à une équipe d'agents qui avancent en parallèle et se partagent l'information — plus rapide, et lisible étape par étape. De l'autre, il change la <b>façon de faire confiance</b> :</p>
+  <ul>
+    <li>De « <b>faites-moi confiance</b> » à « <b>re-vérifiez vous-même</b> ».</li>
+    <li>Du <b>rapport que l'on rédige</b> (et qu'il faut croire) à la <b>preuve que l'on recalcule</b> (et qui ne ment pas).</li>
+    <li>De l'<b>audit qui exige un accès</b> à vos systèmes à la <b>preuve qui circule sans aucun accès</b> — vous remettez un dossier, pas les clés de la maison.</li>
+  </ul>
+  <p>Cela compte de plus en plus, car les lois récentes ne demandent plus seulement de bien faire son travail : elles demandent de pouvoir le <b>démontrer</b>, parfois des années plus tard. Aujourd'hui, cette démonstration se fait avec des captures d'écran ; demain, avec un dossier que le contrôleur re-vérifie lui-même, et que l'on ne peut pas contester.</p>
+
+  <h3>Ce qui rend cela crédible — l'honnêteté</h3>
+  <ul>
+    <li>Cela prouve <b>ce qui s'est passé</b>, jamais qu'une décision était juste. On ne vend pas un juge, on livre un procès-verbal infalsifiable.</li>
+    <li>Le système fonctionne avec <b>n'importe quel agent</b> — Claude, Gemini, un petit modèle local, ou du simple code. Il ne parie pas sur l'un contre l'autre ; il ajoute la preuve <i>par-dessus</i>, quels que soient les agents que vous employez.</li>
+    <li>Tout n'est pas encore terminé. Le cœur fonctionne ; quelques branchements restent à faire — et nous le disons franchement, plutôt que de le cacher. Un vendeur qui montre les défauts inspire plus confiance que celui qui les dissimule.</li>
+  </ul>
+
+  <h3>Pourquoi cela dure</h3>
+  <p>Faire travailler des agents d'IA en parallèle deviendra de plus en plus courant : ce n'est pas seul que cela fait la différence. Ce qui reste rare et difficile à imiter, c'est de rendre chaque échange, chaque étape, <b>re-vérifiable de bout en bout par un tiers, sans le fabricant</b> — et c'est cette propriété dont la valeur ne s'érode pas. Une équipe d'agents qui se partagent l'information, <i>et</i> dont on peut tout prouver : c'est la combinaison des deux qui fait EFE.</p>
+
+  <div class="box key"><span class="lbl">L'essentiel, en une ligne</span>
+    <p>De nombreux agents d'IA — Claude, Gemini, et d'autres — qui travaillent en parallèle en se partageant l'information, et dont on peut <b>prouver</b> chaque étape sans avoir à croire personne.</p></div>
+  <div class="foot">EFE — le concept en trois pages, expliqué simplement · sans terminologie technique · 2026-07-09.</div>
+</div>
+
+</body>
+</html>

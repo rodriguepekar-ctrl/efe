@@ -1,0 +1,382 @@
+\documentclass[10pt]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage[french]{babel}
+\usepackage{newpxtext,newpxmath}
+\usepackage[a4paper,top=1.5cm,bottom=1.35cm,left=1.65cm,right=1.65cm]{geometry}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{titlesec}
+\usepackage[most]{tcolorbox}
+\usepackage{enumitem}
+\usepackage{array}
+\usepackage{booktabs}
+\usepackage{fancyhdr}
+
+\definecolor{navy}{HTML}{1F3A5F}
+\definecolor{grey}{HTML}{54606E}
+\definecolor{green}{HTML}{2C6E49}
+\definecolor{amber}{HTML}{9C6A16}
+\definecolor{red}{HTML}{A6322E}
+\definecolor{plum}{HTML}{7A4EA8}
+\definecolor{boxgray}{HTML}{F3F5F8}
+\definecolor{boxred}{HTML}{FCF2F1}
+\definecolor{boxedge}{HTML}{D9E0EA}
+
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{2.6pt}
+\linespread{1.0}
+
+\pagestyle{fancy}\fancyhf{}
+\lhead{\small\color{grey}Scella}
+\rhead{\small\color{grey}Composants -- ce qu'il reste à faire}
+\cfoot{\small\color{grey}\thepage}
+\renewcommand{\headrulewidth}{0.3pt}
+
+\titleformat{\section}{\color{navy}\large\bfseries}{}{0pt}{}
+\titlespacing{\section}{0pt}{9pt}{3pt}
+\titleformat{\subsection}{\color{navy}\bfseries}{}{0pt}{}
+\titlespacing{\subsection}{0pt}{7pt}{1.5pt}
+
+\newtcolorbox{these}{colback=boxgray,colframe=boxedge,boxrule=0.5pt,arc=2.5pt,
+  left=8pt,right=8pt,top=4.5pt,bottom=4.5pt}
+\newtcolorbox{alerte}{colback=boxred,colframe=red!55,boxrule=0.8pt,arc=2.5pt,
+  left=8pt,right=8pt,top=4.5pt,bottom=4.5pt}
+
+\newcommand{\ok}{{\color{green}\textbf{SERVI}}}
+\newcommand{\partiel}{{\color{amber}\textbf{PARTIEL}}}
+\newcommand{\design}{{\color{grey}\textbf{CONÇU}}}
+\newcommand{\nope}{{\color{red}\textbf{NON SERVI}}}
+\newcommand{\sz}[1]{{\small\color{grey}\textsf{#1}}}
+\newcommand{\code}[1]{\texttt{\small #1}}
+
+\begin{document}
+
+\begin{center}
+{\Huge\bfseries\color{navy} Scella}\\[4pt]
+{\large\color{grey}\itshape Analyse complète des composants : ce qu'il reste à faire pour chacun}\\[4pt]
+{\small\color{grey} 3 août 2026 \; · \; audit de code, 6 cartographes en parallèle \; · \; 1,84 M tokens de lecture, 549 appels d'outils}
+\end{center}
+\vspace{2pt}
+
+\begin{these}
+\textbf{Le résultat central.} \emph{Presque tout est construit ; presque rien n'est servi.} Et le seul
+actif réellement différenciant -- \textbf{le reçu} -- porte un défaut d'une ligne qui lui fait renvoyer
+\code{verified: true} sur une chaîne tronquée. Le correctif existe déjà, dans le fichier d'à côté.
+\end{these}
+
+\section{1 · Méthode et portée}
+
+Cette analyse ne repose sur aucun document de conception pris pour argent comptant. Chaque composant a
+été relu \emph{dans le code d'aujourd'hui} par un cartographe dédié, avec pour consigne explicite de
+séparer trois natures de reste-à-faire : les \textbf{jalons déclarés} (nommés dans un document, avec
+leur libellé exact), les \textbf{trous découverts} qu'aucun document ne nomme, et les \textbf{résidus
+assumés} que le code lui-même documente comme connus et tolérés. Les tailles sont notées XS à XL.
+
+Trois de mes affirmations antérieures ont été \textbf{réfutées} par cette relecture ; elles sont
+signalées à leur place plutôt que corrigées en silence. C'est la discipline habituelle du projet :
+mesurer plutôt que supposer, et dire quand la mesure contredit.
+
+\begin{alerte}
+\textbf{Le défaut qui domine tout.} \code{GET /v1/swarm/verify/:id} recalcule la racine de la chaîne et
+\textbf{ne la compare jamais} à la racine scellée (\code{routes/verify.rs:41}), alors que la comparaison
+est faite correctement, un fichier plus loin, dans le replay R0 (\code{routes/replay.rs:79}).
+Conséquence directe : un tiers disposant d'un accès en écriture à la base de données, \textbf{et
+d'aucune clé}, peut supprimer les derniers enregistrements d'un run et obtenir malgré tout
+\code{verified: true}. C'est \emph{exactement} le modèle de menace contre lequel le reçu est censé
+protéger. Le correctif tient en une ligne : ajouter \code{root\_matches} à la réponse et le combiner
+au verdict. \sz{Taille S.}
+\end{alerte}
+
+\section{2 · Tableau synoptique}
+
+\renewcommand{\arraystretch}{1.12}
+\begin{center}\small
+\begin{tabular}{@{}rl l >{\raggedright\arraybackslash}p{8.1cm}c@{}}
+\toprule
+& \textbf{Composant} & \textbf{Statut réel} & \textbf{Ce qui reste} & \textbf{Taille} \\
+\midrule
+1 & Le Relais (Fil B) & \ok & servi opt-in ; durcir le point d'extension + 4 résidus & \sz{S} \\
+2 & L'Encadrement & \design & 0 code : les 4 jalons C.1.a$\rightarrow$d & \sz{L} \\
+3 & L'essaim médiateur & \design & 0 code : les 5 jalons E.0$\rightarrow$E.4 & \sz{L} \\
+4 & Fil C, la Colonne & \design & 0 code : les 5 jalons C.0$\rightarrow$C.4 & \sz{XL} \\
+5 & Lignée latente & \partiel & \emph{mock par défaut} ; M0 + M2 + M3 + M4 + 15 trous & \sz{XL} \\
+6 & Le reçu, pile A & \partiel & non résistant à la troncature ; 13 trous, dont 3 critiques & \sz{M} \\
+7 & Le reçu, pile B & \ok & S0$\rightarrow$S6, 245 tests ; \textbf{aucun producteur}, aucun ancrage & \sz{L} \\
+8 & Couche 2 servie & \partiel & off par défaut ; PII fail-open, budget no-op, e2e 1/5 & \sz{M} \\
+9 & Runtime nano & \nope & rien ne l'exécute ; 7 défauts confirmés + 2 nouveaux graves & \sz{L} \\
+10 & Banc de mesure & \partiel & statistiques solides, non régressible ; cassettes record-replay & \sz{L} \\
+11 & Flexible MLP & \design & hors dépôt ; validation gold, matériel & \sz{XL} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\section{3 · Composant par composant}
+
+\subsection{3.1 · Le Relais (Fil B) -- le seul composant vraiment fini}
+
+C'est la brique aboutie, et elle mérite d'être décrite comme telle sans emphase : les jalons B.0 à B.4
+sont complets et \textbf{réellement servis} en opt-in via \code{EFE\_SLM\_REFORMULATOR\_URL}. La
+couverture est de 49 tests dédiés, dont 44 tournent hors ligne contre un faux serveur llama monté sur
+un \code{TcpListener} réel -- ce ne sont donc pas de simples doublures en mémoire -- et 5 tests live
+marqués \code{\#[ignore]}. Quatre revues adverses ont été passées. Le trait asynchrone, les estampilles
+de moteur, le disjoncteur à sonde unique, les deadlines de mission, la capture d'audit par hop et le
+scellement individuel de chaque hop dans la chaîne : tout cela existe et tourne.
+
+Ce qui reste y est de nature défensive plutôt que constructive. Le point le plus important est que
+\emph{le point d'extension est piégé} : la vue qui calcule les compteurs de moteurs comporte un bras
+\code{\_ => \{\}} (\code{routes/llm.rs:159}) qui avalerait silencieusement toute variante future, et
+l'invariant d'honnêteté \code{slm\_mediated} n'est asserté \textbf{qu'au cas négatif}. Autrement dit :
+le garde-fou central du Fil B tient par construction, pas par test. Rendre ce filtrage exhaustif et
+écrire les tests de vue manquants coûte une demi-journée et supprime la classe de bug la plus probable
+de tout le chantier à venir. Trois résidus documentés subsistent par ailleurs : une double défaillance
+(le petit modèle \emph{et} son repli) fait sortir la tentative hors du reçu ; l'URL du petit modèle
+n'est pas contrainte au local, si bien que son egress n'est ni gardé ni décompté ; et la concurrence
+du disjoncteur n'est assertée que séquentiellement.
+
+\subsection{3.2 · L'Encadrement, l'essaim médiateur, Fil C -- conçus, rien codé}
+
+Les trois pistes de continuation ont été reconfirmées par recherche directe : \code{HopKind},
+\code{sandwich.rs}, \code{MediationRegistry}, \code{EdgePlan}, \code{SwarmMediator} et
+\code{CanonicalSwarmTask} totalisent \textbf{zéro occurrence} dans le code source. Leur contenu détaillé
+figure dans la feuille de route livrée séparément et n'a pas bougé. Un seul point mérite d'être répété
+ici, parce qu'il gouverne l'ordonnancement : \code{HopKind} est le goulot partagé -- il est conçu par
+l'Encadrement mais consommé aussi par l'essaim médiateur \emph{et} par la Colonne, de sorte que le
+premier incrément à écrire débloque les trois pistes d'un coup.
+
+\subsection{3.3 · La lignée latente -- le plus grand écart entre le dit et le servi}
+
+\textbf{Réfutation n\textsuperscript{o}1 : le méta-essaim sert encore le mock.} La vérification est
+empirique et sans ambiguïté : la liste des features par défaut du serveur est \code{["tls"]},
+\code{core-integration} n'y figure pas, et \code{cargo tree} sur le binaire de production ne trouve
+\textbf{aucune} trace d'efe-core. Un participant dont le manifeste ne porte pas de bloc
+\code{controller} construit un \code{MockParticipant} dont l'opérateur est littéralement
+$\Phi(x) = \kappa \cdot x$.
+
+Il faut être juste : les jalons M1.a à M1.d \emph{sont} codés, et le code est d'une honnêteté
+remarquable -- la borne analytique $\beta_1 \approx 0{,}17$ est explicitement réfutée en trois endroits
+du code au profit de la seule borne mesurée ($\hat{L}$ = 0,366 en topologie fixe, 0,691 en dynamique),
+et le canari de non-expansivité refuse de servir quand il falsifie l'hypothèse. Mais tout cela vit
+derrière un drapeau qui n'est ni activé par défaut, ni construit en intégration continue, ni rendu par
+la charte de déploiement -- et qui, sous la sonde de vivacité livrée, redémarrerait en boucle parce que
+le canari de démarrage s'exécute avant l'ouverture du port.
+
+Le reste-à-faire est massif et se lit dans la feuille de route M0--M6 du document Couche 3. Le jalon
+\textbf{M0} (honnêteté) n'est pas fait : la porte qui doit refuser un opérateur expansif au moment de
+la construction n'existe pas, si bien qu'un opérateur dont la constante de Lipschitz dépasse 1 reste
+installable silencieusement. Le jalon \textbf{M2} (servi et reçu) est à \textbf{zéro ligne} : le mot
+\emph{provenance} n'apparaît même pas dans le manifeste de dépendances du serveur, ce qui signifie que
+\textbf{le méta-essaim n'écrit aucun reçu} -- la colonne vertébrale du projet s'arrête à sa porte. Le
+jalon \textbf{M3} (agrégateur robuste) est également à zéro : une recherche de \code{median},
+\code{trimmed}, \code{krum} ou \code{outlier} ne retourne rien, et l'opérateur uniforme est codé en dur
+côté serveur, la configuration n'étant que lue et jamais appliquée. Le jalon \textbf{M4} (certificat
+réel) est le manque porteur : le certificat est toujours un \code{Stub} déclaré valide par
+construction, la crate \code{efe-prove} est citée dans les commentaires mais \textbf{n'existe pas}, et
+le hachage de l'ensemble de sûreté retourne encore trente-deux octets nuls.
+
+À ces jalons s'ajoute un trou qu'aucun document ne nomme et qui est sans doute le plus grave :
+\textbf{le contrôleur ne vérifie jamais à quel moteur il parle}. Le service de capacités est bien
+servi, avec l'empreinte de configuration et le jeton d'identité du moteur, mais il n'a
+\textbf{aucun appelant}. Un manifeste déclarant des participants efe-core peut donc être servi de bout
+en bout par des mocks, sans qu'aucune erreur ne se déclenche nulle part. C'est précisément la
+précondition que le jalon C.3 de la Colonne suppose acquise. Enfin, le correctif de pureté de $\Phi$
+sous concurrence est toujours \textbf{non commité} après vingt-et-un jours.
+
+\subsection{3.4 · Le reçu, pile A -- l'actif-roi, et son défaut}
+
+Il faut commencer par ce qui est solide, car c'est réel : environ 9\,600 lignes et 320 tests, une
+chaîne HMAC par tenant, une chaîne N17 parallèle pour les appels de modèles, un pont entre les deux, et
+une re-preuve hors ligne qui fonctionne. Le modèle de confiance est honnêtement borné dans ses propres
+documents comme vérifiable par le détenteur de la clé, jamais comme sans confiance.
+
+Mais trois défauts critiques doivent être fermés avant toute revendication. Le premier est le défaut de
+troncature décrit en tête de ce document. Le deuxième est que \textbf{le résumé de requête n'est pas
+scellé} alors que son commentaire de documentation le qualifie de « scellé » : c'est une simple colonne
+JSON, et c'est pourtant elle que le vérificateur d'arité interroge -- si bien que qui écrit dans la base
+réécrit l'arité déclarée et fait disparaître l'accusation. Le troisième est que la déclaration engagée
+dans le n\oe{}ud de dispatch est \textbf{inouvrable} : l'empreinte engage la liste des fournisseurs,
+mais celle-ci n'est persistée nulle part, de sorte que personne -- pas même le détenteur de la clé -- ne
+peut reconstituer la préimage. La « déclaration inviolable » ne prouve donc rien à personne.
+
+S'y ajoutent des manques de moindre gravité mais réels : les axes d'honnêteté (le barreau le plus
+faible, les anomalies de cosignature et de modèle) sont \emph{calculés puis jetés} avant d'atteindre la
+surface HTTP, alors que les invariants exigent qu'ils soient « toujours rapportés, jamais silencieux » ;
+le registre de n\oe{}uds n'étant jamais câblé, \textbf{toute} revendication R3 se dégrade
+systématiquement en R4 ; la clé de développement, publique, est utilisée lorsque la frontière est
+désactivée ; aucune version de clé n'est enregistrée, si bien qu'une rotation rendrait tous les reçus
+antérieurs indistinguables d'une falsification ; et le champ \code{audit\_chain\_hash}, servi dans
+chaque réponse de mission et documenté comme une « preuve d'intégrité BLAKE3 », est en réalité
+l'identifiant de la mission rendu en hexadécimal.
+
+\begin{these}
+\textbf{La bonne nouvelle, et elle est structurelle.} La vérifiabilité par un tiers est bien plus proche
+qu'il n'y paraît. Les empreintes de contenu -- celle de chaque enregistrement comme celle de chaque
+feuille -- sont \textbf{sans clé} : n'importe qui peut déjà les recalculer depuis les enregistrements
+persistés. Seuls le HMAC de chaque maillon et le pli de racine exigent le secret. Il suffit donc de
+\textbf{signer la racine} avec une paire de clés asymétrique pour qu'un tiers vérifie sans rien
+détenir -- et la bibliothèque ed25519 est \textbf{déjà présente} dans la crate, avec toute la machinerie
+de cosignature. La cryptographie est une affaire de taille S ; la garde et la rotation des clés, de
+taille M. C'est le meilleur rapport valeur-effort de tout le dépôt.
+\end{these}
+
+\subsection{3.5 · Le reçu, pile B -- le moat, complet mais sans producteur}
+
+\textbf{Réfutation n\textsuperscript{o}2 : les sept tranches sont construites.} Ma note antérieure
+indiquait que la console, l'export forensique et le moteur d'évidence restaient à faire. C'est faux :
+les neuf crates existent, totalisent environ 11\,700 lignes et \textbf{245 tests}. Mieux, la
+revendication centrale est \emph{tenue et testée} : le vérificateur minimal a une arborescence de
+dépendances littéralement vide, et un test de bout en bout recompile réellement la source vendorée hors
+ligne puis re-prouve un dossier. « Un tiers vérifie sans nous faire confiance » est ici un test qui
+passe, pas une diapositive.
+
+Le reste-à-faire est donc d'une autre nature : il ne s'agit plus d'écrire de la cryptographie, mais de
+brancher ce qui existe. Et le trou est béant : \textbf{il n'y a aucun producteur}. Les « prises » que la
+feuille de route inventoriait comme un proxy de passerelle, un crochet d'orchestration et un
+intercepteur d'outils sont en réalité \textbf{quatre structures de conversion}. Rien, dans tout le
+dépôt, ne construit un graphe de provenance en dehors des exemples et des tests. S'y ajoutent trois
+manques opérationnels sérieux : la décision humaine scellée par un opérateur est \textbf{perdue au
+redémarrage}, parce que la console n'appelle jamais la fonction de persistance ; \textbf{aucun ancrage
+n'est jamais produit}, de sorte que la racine que l'auditeur doit comparer \emph{voyage à l'intérieur du
+dossier qu'on lui tend} ; et la seule route qui scelle dans le graphe n'a aucune protection contre la
+soumission inter-site, ce qui permettrait de sceller une décision humaine cryptographiquement
+indistinguable d'une vraie. L'authentification, enfin, se réduit à un jeton de démonstration en
+mémoire. Le seul jalon formellement restant, \textbf{S7}, n'est pas du code : c'est une porte humaine,
+un essai d'utilisabilité et la conversion d'un partenaire de conception.
+
+\subsection{3.6 · La Couche 2 servie -- complète, mais pas sûre en production}
+
+Les cinq jalons M0 à M4 ont du code réel, des tests réels et des documents réels : le test-gardien qui
+fait échouer la vérification quand un appel a été omis, la triade de démarrage, le décompte des coûts en
+microcentimes, la clé Gemini déplacée dans un en-tête, la fermeture du contournement SSRF sur les deux
+copies du garde, le document de modèle de confiance et un manuel d'opérateur de 164 lignes existent
+tous. Rien de tout cela n'est servi par défaut, ce qui est un choix assumé.
+
+Ce qui reste tient en deux défauts de sûreté et un déficit de preuve. Le premier défaut est que
+\textbf{la rédaction des données personnelles est fail-open à la compilation} : elle est conditionnée à
+une feature qui n'a \emph{aucune contrepartie} et que la porte de démarrage ne vérifie pas. Un binaire
+construit avec exactement la triade que cette porte exige passe donc le contrôle, affiche « préflight
+frontière OK », et expédie tous les prompts en clair sans le moindre signal. Le second est que
+\textbf{le plafond de budget est inopérant} pour tout tenant dont la politique ne porte pas la mention
+de plafond : une requête peut alors réclamer un budget de l'ordre de quarante-deux millions de dollars,
+ce qui est précisément le cas que le critère d'acceptation du jalon M4 demandait de fermer -- et il
+n'existe aucun test de cette fonction. Le déficit de preuve, lui, est que le test de bout en bout ne
+couvre \textbf{qu'une mission sur cinq} : ni le relais ni la cascade n'ont de test HTTP. S'y ajoutent
+l'absence de limitation de débit, l'absence de quota cumulé, l'absence totale de journalisation de
+requête sur le seul chemin qui dépense de l'argent réel, et une charte de déploiement dont la politique
+réseau bloque en réalité les fournisseurs qu'elle prétend appeler.
+
+\subsection{3.7 · Le runtime nano -- une bibliothèque que rien n'exécute}
+
+Les sept défauts relevés lors de l'audit précédent sont \textbf{tous confirmés et aucun n'est corrigé} ;
+trois se révèlent plus graves que décrits. Le plus sérieux concerne la canonicalisation JSON : les
+\emph{clés} d'objet sont écrites \textbf{sans échappement} alors que les valeurs, elles, sont échappées.
+On peut donc forger deux entrées distinctes produisant la même empreinte. Or cette fonction n'alimente
+pas seulement le cache, comme je l'avais d'abord estimé : elle alimente l'empreinte de charge utile de
+la \textbf{chaîne d'audit} elle-même. Ce n'est donc pas une nuisance de cache, c'est une
+\textbf{primitive de forge de provenance qui se re-vérifie verte}. Le deuxième défaut aggravé est une
+\textbf{dérive entre canonicaliseurs} : la pile de provenance échappe correctement les clés, le runtime
+nano non, et un commentaire affirme pourtant que les deux sont identiques -- exactement la classe de bug
+de la duplication du garde de souveraineté déjà survenue. Le troisième est que les écritures
+concurrentes d'audit pour un même tenant relâchent le verrou avant l'ajout, si bien que des traces sont
+\textbf{silencieusement perdues} -- et l'exécuteur, lui, est parallèle par tenant, ce qui rend le cas
+non pas théorique mais systématique. Deux commentaires de documentation affirment le contraire, et le
+cas dangereux n'est pas testé.
+
+À cela s'ajoute une composition redoutable : l'écriture d'audit est fail-open et la source de clé
+retourne une erreur quand la variable d'environnement maîtresse est absente. Déployer sans cette
+variable revient donc à \textbf{désactiver entièrement l'audit}, sans aucun signal, le processus
+paraissant en parfaite santé. Il n'existe aucune porte de démarrage. Le poids d'équité de
+l'ordonnanceur reste inerte -- et son test d'acceptation déclaré n'a jamais été écrit --, les
+comparaisons de vérification ne sont pas à temps constant, l'empreinte de pierre tombale est calculée
+mais \textbf{jamais vérifiée}, et l'interface d'effacement n'a aucun appelant en production.
+
+\subsection{3.8 · Le banc de mesure -- des statistiques vraies, des mesures non régressibles}
+
+\textbf{Réfutation n\textsuperscript{o}3} : il n'existe \textbf{aucun} test live marqué
+\code{\#[ignore]} dans les crates de banc. Les pilotes live sont des exemples lancés \emph{à la main}.
+Le c\oe{}ur analytique, lui, est solide et je l'ai vérifié : 118 tests verts, non-infériorité appariée,
+bootstrap déterministe, correction de Holm, constantes gelées avant l'expérience. Ses verdicts
+\emph{négatifs} -- l'agrégation ne comble pas l'écart, aucune des trois cellules de terrain ne creuse --
+sont les artefacts les plus crédibles du dépôt.
+
+Le problème n'est pas la statistique, c'est l'infrastructure autour. Le seul test de bout en bout du
+harnais est \textbf{compilé hors intégration continue} par une condition de feature, ce qui se corrige
+en une ligne. \textbf{Aucun nombre publié n'est reproductible depuis un script commité} : ni dans la
+CI, ni dans un fichier de commandes, ni dans le document de benchmarks. Et la porte de test gold, censée
+protéger la qualité, garde en réalité un simulateur d'écho avec un fournisseur d'embeddings factice,
+tandis que son balayage de dérive retourne « à jour » pour tout agent quel que soit son état. Le levier
+décisif reste les \textbf{cassettes d'enregistrement et de rejeu} : elles transforment chaque chiffre
+des six rapports d'une assertion de fichier markdown en un résultat que la CI re-dérive.
+
+\section{4 · Les cinq fils transverses}
+
+\textbf{Le fossé construit-servi.} Le méta-essaim, la Couche 2, le runtime nano et la pile B sont
+écrits ; presque rien ne tourne. Le travail restant relève plus souvent du \emph{câblage} que de la
+construction, ce qui est une bonne nouvelle sur l'effort et une mauvaise sur ce qu'on peut revendiquer
+aujourd'hui.
+
+\textbf{Le motif du « vert malhonnête ».} Cinq occurrences indépendantes ont été trouvées : la
+vérification sans comparaison de racine, le service de capacités jamais appelé, le balayage de dérive
+toujours favorable, le certificat déclaré valide par construction, et l'audit fail-open. C'est la
+\emph{classe de bug signature} du dépôt -- celle qu'il faut désormais chercher systématiquement, parce
+qu'elle ne casse rien : elle rassure à tort.
+
+\textbf{L'ancrage externe manque aux deux piles.} Ni la pile A ni la pile B ne peut détecter une
+troncature de queue par le détenteur de la clé. C'est le même trou, deux fois, et c'est celui qui sépare
+« re-vérifiable » de « opposable ».
+
+\textbf{Rien de critique n'est en intégration continue} : ni le vrai moteur latent, ni le banc, ni les
+tests de base de données durable. Les revendications reposent donc sur des exécutions manuelles.
+
+\textbf{Les canonicaliseurs dérivent} -- avec un commentaire qui affirme l'inverse. Deux implémentations
+qui doivent s'accorder au bit près et qui ne s'accordent plus.
+
+\section{5 · L'ordre recommandé}
+
+\begin{center}\small
+\begin{tabular}{@{}r>{\raggedright\arraybackslash}p{9.5cm}c>{\raggedright\arraybackslash}p{3.9cm}@{}}
+\toprule
+& \textbf{Action} & \textbf{Taille} & \textbf{Ce qu'elle ferme} \\
+\midrule
+1 & Comparer la racine dans \code{verify} & \sz{S} & le reçu ment aujourd'hui \\
+2 & Sceller le résumé de requête, persister la déclaration & \sz{S} & l'arité redevient une preuve \\
+3 & Échapper les clés dans la canonicalisation & \sz{XS} & la forge verte \\
+4 & Porte de démarrage : PII dans la triade, clé nano exigée & \sz{S} & deux fail-open \\
+5 & Plafond de budget serveur par défaut, avec test & \sz{S} & le critère M4 non tenu \\
+6 & Rendre le filtrage de moteurs exhaustif & \sz{XS} & avant toute extension \\
+\midrule
+7 & Signature asymétrique sur la racine & \sz{S+M} & la vérifiabilité \textbf{tierce} \\
+8 & Cassettes d'enregistrement et de rejeu & \sz{L} & les chiffres deviennent régressibles \\
+9 & L'Encadrement (C.1.a$\rightarrow$d) & \sz{L} & la première capacité neuve \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Les six premiers items totalisent \textbf{moins d'une semaine} et font passer le reçu de « il se
+re-prouve » à « il prouve ce qu'il dit ». Tant qu'ils ne sont pas faits, chaque brique supplémentaire
+s'appuie sur une fondation qui renvoie \code{verified: true} à tort. Le septième est le seul qui change
+la \emph{nature} de l'actif : il le rend opposable à un tiers, ce qui est précisément ce que le marché
+de la conformité achète.
+
+\enlargethispage{3.2\baselineskip}
+\section{6 · Ce qu'il ne faut jamais revendiquer, en l'état}
+
+Que le reçu détecte une troncature -- il ne la détecte pas aujourd'hui. Qu'il soit sans confiance ou
+vérifiable par un tiers -- il est tamper-evident pour le détenteur de la clé, sans ancrage externe. Que
+le méta-essaim coordonne de vrais essaims en production -- il sert le mock par défaut. Qu'il coordonne
+des petits modèles de langage -- les priors sont un simple sinus, auto-qualifiés de « non signifiants »,
+et aucun poids de modèle ni tokenizer ne se trouve sur le chemin. Que la ronde servie vérifie
+l'hypothèse de non-expansivité -- le contrôleur est construit en mode indulgent. Que le runtime nano
+soit servi, que son ordonnanceur assure l'équité, ou que l'effacement au titre du RGPD fonctionne de
+bout en bout. Que les chiffres publiés soient re-prouvés cryptographiquement -- ce sont des comptages de
+drapeaux. Et que l'agrégation apporte quoi que ce soit : elle a été \textbf{réfutée par les benchmarks
+du projet lui-même}, et c'est un actif d'honnêteté, pas une faiblesse à masquer.
+
+\vspace{4pt}
+{\color{grey}\hrule height 0.4pt}
+\vspace{2pt}
+{\footnotesize\color{grey}Analyse produite par relecture du code au 3 août 2026, non des documents de
+conception. Les tailles (XS à XL) sont des estimations d'effort, pas des engagements. Trois
+affirmations antérieures de l'auteur y sont réfutées et signalées comme telles.}
+
+\end{document}

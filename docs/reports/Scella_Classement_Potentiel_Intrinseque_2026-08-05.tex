@@ -1,0 +1,190 @@
+\documentclass[10pt]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage[french]{babel}
+\usepackage{newpxtext,newpxmath}
+\usepackage[a4paper,top=1.5cm,bottom=1.35cm,left=1.6cm,right=1.6cm]{geometry}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{titlesec}
+\usepackage[most]{tcolorbox}
+\usepackage{enumitem}
+\usepackage{array}
+\usepackage{booktabs}
+\usepackage{fancyhdr}
+
+\definecolor{navy}{HTML}{1F3A5F}
+\definecolor{grey}{HTML}{54606E}
+\definecolor{green}{HTML}{2C6E49}
+\definecolor{amber}{HTML}{9C6A16}
+\definecolor{red}{HTML}{A6322E}
+\definecolor{boxgray}{HTML}{F3F5F8}
+\definecolor{boxgreen}{HTML}{F1F6F2}
+\definecolor{boxedge}{HTML}{D9E0EA}
+
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{2.6pt}
+\linespread{1.0}
+
+\pagestyle{fancy}\fancyhf{}
+\lhead{\small\color{grey}Scella}
+\rhead{\small\color{grey}Classement par potentiel -- valeur intrinsèque}
+\cfoot{\small\color{grey}\thepage}
+\renewcommand{\headrulewidth}{0.3pt}
+
+\titleformat{\section}{\color{navy}\large\bfseries}{}{0pt}{}
+\titlespacing{\section}{0pt}{9pt}{3pt}
+
+\newtcolorbox{these}{colback=boxgray,colframe=boxedge,boxrule=0.5pt,arc=2.5pt,
+  left=8pt,right=8pt,top=4.5pt,bottom=4.5pt}
+\newtcolorbox{cle}{colback=boxgreen,colframe=green!45,boxrule=0.8pt,arc=2.5pt,
+  left=8pt,right=8pt,top=5pt,bottom=5pt}
+
+\newcommand{\code}[1]{\texttt{\small #1}}
+\newcommand{\best}[1]{{\color{green}\textbf{#1}}}
+\newcommand{\sz}[1]{{\small\color{grey}\textsf{#1}}}
+
+\begin{document}
+
+\begin{center}
+{\Huge\bfseries\color{navy} Scella}\\[4pt]
+{\large\color{grey}\itshape Classement des composants par potentiel -- valeur intrinsèque, hors tout objectif}\\[4pt]
+{\small\color{grey} 5 août 2026 \; · \; 4 lentilles intrinsèques \; · \; variante du classement à 5 lentilles}
+\end{center}
+\vspace{2pt}
+
+\begin{these}
+\textbf{Le résultat central, et il est inattendu.} Retirer l'objectif ne change \emph{presque rien} :
+sur treize composants, \textbf{un seul échange de place}, entre deux composants à égalité. Le classement
+n'était donc pas un artefact du but poursuivi -- il mesurait bien la valeur intrinsèque. Deux choses
+bougent néanmoins, et elles comptent : \textbf{le Relais et le reçu deviennent quasiment à égalité}, et
+\textbf{le banc de mesure perd son avocat} tout en devenant le composant le plus consensuellement placé
+de tout le portefeuille.
+\end{these}
+
+\section{1 · Ce qui a été retiré, et pourquoi c'est propre}
+
+Le classement précédent reposait sur cinq lentilles. Quatre d'entre elles -- la \textbf{maturité}
+rapportée à l'effort restant, la \textbf{rareté} pure, l'\textbf{adversaire} en revue diligente, et la
+\textbf{démontrabilité} devant un ingénieur sceptique -- ne présupposent \emph{aucun} objectif : elles
+mesurent ce qu'une chose vaut en elle-même. La cinquième, l'argument d'embauche, était la seule à
+dépendre d'un but extérieur. La retirer ne mutile donc pas l'analyse : elle la rend \textbf{neutre quant
+à la finalité}. Le classement ci-dessous répond à une question plus simple et plus dure -- \emph{qu'est-ce
+qui a le plus de valeur, indépendamment de ce qu'on veut en faire ?}
+
+\section{2 · Le classement intrinsèque}
+
+\renewcommand{\arraystretch}{1.1}
+\begin{center}\small
+\begin{tabular}{@{}r>{\raggedright\arraybackslash}p{3.2cm}cccc c c c >{\raggedright\arraybackslash}p{5.4cm}@{}}
+\toprule
+& \textbf{Composant} & \sz{Mat} & \sz{Rar} & \sz{Adv} & \sz{Dém} & \textbf{Moy} & \sz{Éc.} & \sz{$\Delta$} & \textbf{Ce qui le porte, ce qui le plombe} \\
+\midrule
+\textbf{1} & \textbf{Le Relais} & 2 & 3 & 3 & \best{1} & \textbf{2,25} & 2 & \sz{=} & Original \emph{et} construit \emph{et} servi ; le seul sans caveat \\
+\textbf{2} & \textbf{Le reçu, pile A} & \best{1} & 2 & \best{1} & 6 & \textbf{2,50} & 5 & \sz{=} & Scelle le réel ; rend \code{verified:true} sur une chaîne tronquée \\
+\textbf{3} & \textbf{Le reçu, pile B} & 5 & \best{1} & 6 & 2 & \textbf{3,50} & 5 & \sz{=} & Vérifieur à dépendances vides \emph{testé} ; rien à vérifier \\
+\textbf{4} & \textbf{Le banc de mesure} & 4 & 4 & 4 & 4 & \textbf{4,00} & \best{0} & \sz{=} & Réfute sa propre thèse ; rien n'est rejouable \\
+5 & La Couche 2 servie & 3 & 10 & \best{2} & 5 & 5,00 & \textbf{8} & \sz{=} & Seule mesure en argent réel ; catégorie saturée \\
+6 & L'essaim $\Phi$ & 7 & 5 & 7 & 3 & 5,50 & 4 & \sz{=} & Tue sa propre borne en source ; concurrence non pure \\
+7 & Le Sandwich & 6 & 9 & 5 & 7 & 6,75 & 4 & \sz{=} & Substrat prêt ; rareté seulement dérivée du reçu \\
+8 & L'essaim médiateur & 9 & 8 & 9 & 10 & 9,00 & 2 & \sz{=} & Anti-émergence assumée ; catégorie encombrée, 0 ligne \\
+9\,= & Fil C, la Colonne & 12 & 7 & 8 & 11 & 9,50 & 5 & \sz{+1} & Objet visé unique ; rareté empruntée, précondition absente \\
+9\,= & Le Flexible MLP & 13 & 6 & 10 & 9 & 9,50 & \textbf{7} & \sz{--1} & Seul actif \emph{déductif} ; jamais flashé, hors dépôt \\
+11 & Les nano-robots & 8 & 13 & 11 & 8 & 10,00 & 5 & \sz{=} & Réels ; priors \code{sin(i)} auto-qualifiés « non signifiants » \\
+12 & Le méta-essaim & 11 & 11 & 12 & 12 & 11,50 & \best{1} & \sz{=} & Volume maximal, valeur réalisée nulle \\
+13 & Le runtime nano & 10 & 12 & 13 & 13 & 12,00 & 3 & \sz{=} & Ré-implémente du résolu, et le ré-implémente faux \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\sz{$\Delta$ = déplacement par rapport au classement incluant la lentille d'embauche. Éc. = amplitude
+entre le meilleur et le pire rang.}
+
+\section{3 · Les deux seuls changements réels -- et ce qu'ils disent}
+
+\textbf{Le Relais et le reçu passent à égalité.} C'est le changement de fond. Dans le classement à cinq
+lentilles, l'écart entre eux était net (2,00 contre 3,20) ; il tombe ici à \textbf{2,25 contre 2,50},
+c'est-à-dire à rien. La raison est instructive : la lentille d'embauche était \emph{celle qui punissait
+le plus durement la pile A}, parce qu'un candidat qui vend la vérifiabilité et dont la route de
+vérification ne compare jamais la racine se livre un contre-argument. Ce raisonnement est parfaitement
+juste pour un entretien -- et parfaitement hors sujet pour évaluer un actif. Retirée cette pénalité de
+présentation, \textbf{le reçu qui scelle les missions réellement servies remonte au niveau du Relais}, et
+domine même trois lentilles sur quatre : premier en maturité rapportée à l'effort, premier chez
+l'adversaire, deuxième en rareté. Il ne perd que sur la démontrabilité, à cause du défaut de troncature
+-- lequel est de taille S.
+
+\textbf{Le banc de mesure perd son avocat, et gagne un titre.} Il était deuxième pour l'embauche, sur un
+argument fort : savoir réfuter sa propre thèse est un signal rare chez un ingénieur. Hors de ce cadre,
+cet argument perd sa force -- personne n'achète un outil interne pour la vertu de son propriétaire. Il
+reste donc quatrième, exactement là où il était. Mais il gagne au passage une distinction que personne
+d'autre n'a : \textbf{un écart de zéro}. Les quatre lentilles intrinsèques, qui se disputent sur presque
+tout, le placent \emph{toutes les quatre} au quatrième rang. C'est le composant le plus consensuellement
+situé du portefeuille -- ni surestimé ni sous-estimé par aucune façon de regarder.
+
+\textbf{Et un non-changement qui vaut un résultat.} Fil C et le Flexible MLP échangent leurs places, mais
+à égalité stricte (9,50 chacun) : ce n'est pas un mouvement, c'est un départage. \emph{Aucun autre
+composant ne bouge d'un rang.} Un classement qui survit intact au retrait de son cadre stratégique est un
+classement qui mesurait la chose et non le contexte.
+
+\section{4 · Ce que la lentille adverse voit, et qui ne dépend d'aucun objectif}
+
+Les trois découvertes structurelles du panel sont, elles aussi, indépendantes de toute finalité, et
+c'est ce qui fait leur solidité.
+
+\textbf{Le défaut récurrent est l'auto-attestation.} Cinq fois, dans cinq organes indépendants, la boucle
+de vérification se referme à l'intérieur du processus qui a produit la chose : le reçu de la pile A
+recalcule la racine sans jamais la comparer à la racine scellée ; celui de la pile B n'ancre rien, si
+bien que la racine de référence \emph{voyage dans le dossier} tendu à l'auditeur ; le méta-essaim possède
+le service qui prouverait à quel moteur on parle, et ce service n'a aucun appelant ; la Couche 2 affiche
+« préflight OK » alors que la rédaction des données personnelles est compilée dehors ; le banc gèle ses
+constantes mais ne commite aucun script rejouable. Ce ne sont pas cinq chantiers, c'est \textbf{un seul
+principe de réparation} : déplacer chaque point de vérification \emph{hors} du producteur.
+
+\textbf{Les quelque 9\,500 tests forment une seule réserve de crédibilité partagée.} Un examinateur qui
+attrape \textbf{un seul} faux vert cesse de croire aux 320, aux 245, aux 118 et aux 49 autres, y compris
+ceux qui sont irréprochables. Cinq défauts localisés tiennent l'ensemble en otage. Le corollaire inverse
+l'ordre des priorités : le meilleur rendement n'est pas de coder le Sandwich, l'essaim médiateur ou la
+Colonne -- qui n'ajouteraient que des lignes à défendre -- mais \textbf{d'éteindre les cinq faux verts},
+dont trois sont petits et déjà outillés.
+
+\textbf{Le reçu se scinde, et les deux moitiés ne se touchent jamais.} La pile A scelle les missions
+réellement servies mais échoue à la première sonde du métier -- tronquer, re-vérifier, obtenir
+\code{verified:true} sans détenir la moindre clé. La pile B tient une revendication extraordinaire et
+\emph{testée} -- un vérificateur dont l'arborescence de dépendances est littéralement vide, une
+recompilation hors ligne de la source vendorée, puis une re-preuve -- mais n'a rien à vérifier et n'ancre
+rien. Chacune porte très exactement le défaut que l'autre corrigerait.
+
+\section{5 · Le geste, désormais encore plus évident}
+
+Sans objectif extérieur, la conclusion du panel ne s'affaiblit pas : elle se durcit. Les deux premiers du
+classement sont \emph{les deux moitiés d'un même actif}, et le geste qui les réunit est le seul de tout
+le dépôt à transformer une addition en multiplication.
+
+\begin{cle}
+\textbf{Brancher les reçus de la pile A dans le graphe de la pile B, signer la racine en \emph{ed25519}
+-- la bibliothèque est \underline{déjà} dans la crate -- et publier l'ancrage \emph{hors} du dossier.}
+Ce qui rend le geste court : les empreintes de contenu de la pile A sont \textbf{déjà sans clé}, donc
+n'importe qui peut déjà les recalculer ; seuls le HMAC de maillon et le pli de racine exigent le secret.
+\sz{Cryptographie : taille S. Garde et rotation des clés : taille M.}
+\end{cle}
+
+L'objet obtenu -- \emph{un reçu de mission multi-modèles re-prouvable par un binaire dont l'auditeur peut
+lire la totalité de la source} -- n'existe nulle part ailleurs, et sa valeur ne dépend d'aucun
+destinataire particulier. C'est aussi le seul chemin par lequel le profil de souveraineté visé par la
+Colonne cesse d'être une idée empruntée.
+
+\textbf{Le classement intrinsèque se lit donc ainsi :} le reçu \emph{réuni} est premier, sans discussion ;
+le Relais est premier parmi les composants \emph{tels qu'ils existent}, à égalité avec la moitié servie du
+reçu. Tout le reste est loin derrière -- et les quatre derniers (nano-robots, méta-essaim, runtime nano,
+et la Colonne tant que sa précondition manque) ne méritent aucun effort avant que les cinq faux verts
+soient éteints.
+
+\vspace{3pt}
+{\color{grey}\hrule height 0.4pt}
+\vspace{2pt}
+{\footnotesize\color{grey}Variante du classement à cinq lentilles, la lentille d'embauche retirée. Les
+rangs par lentille sont inchangés -- seule la moyenne est recalculée sur les quatre lentilles
+intrinsèques. Base factuelle : l'état des composants vérifié dans le code, non dans les documents de
+conception.}
+
+\end{document}

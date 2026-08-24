@@ -1,0 +1,229 @@
+\documentclass[10pt]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage[french]{babel}
+\usepackage{newpxtext,newpxmath}
+\usepackage[a4paper,top=1.5cm,bottom=1.35cm,left=1.6cm,right=1.6cm]{geometry}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{titlesec}
+\usepackage[most]{tcolorbox}
+\usepackage{enumitem}
+\usepackage{array}
+\usepackage{booktabs}
+\usepackage{fancyhdr}
+
+\definecolor{navy}{HTML}{1F3A5F}
+\definecolor{grey}{HTML}{54606E}
+\definecolor{green}{HTML}{2C6E49}
+\definecolor{amber}{HTML}{9C6A16}
+\definecolor{red}{HTML}{A6322E}
+\definecolor{plum}{HTML}{7A4EA8}
+\definecolor{boxgray}{HTML}{F3F5F8}
+\definecolor{boxgreen}{HTML}{F1F6F2}
+\definecolor{boxedge}{HTML}{D9E0EA}
+
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{2.6pt}
+\linespread{1.0}
+
+\pagestyle{fancy}\fancyhf{}
+\lhead{\small\color{grey}Scella}
+\rhead{\small\color{grey}Classement par potentiel}
+\cfoot{\small\color{grey}\thepage}
+\renewcommand{\headrulewidth}{0.3pt}
+
+\titleformat{\section}{\color{navy}\large\bfseries}{}{0pt}{}
+\titlespacing{\section}{0pt}{9pt}{3pt}
+\titleformat{\subsection}{\color{navy}\bfseries}{}{0pt}{}
+\titlespacing{\subsection}{0pt}{7pt}{1.5pt}
+
+\newtcolorbox{these}{colback=boxgray,colframe=boxedge,boxrule=0.5pt,arc=2.5pt,
+  left=8pt,right=8pt,top=4.5pt,bottom=4.5pt}
+\newtcolorbox{cle}{colback=boxgreen,colframe=green!45,boxrule=0.8pt,arc=2.5pt,
+  left=8pt,right=8pt,top=5pt,bottom=5pt}
+
+\newcommand{\code}[1]{\texttt{\small #1}}
+\newcommand{\best}[1]{{\color{green}\textbf{#1}}}
+\newcommand{\sz}[1]{{\small\color{grey}\textsf{#1}}}
+
+\begin{document}
+
+\begin{center}
+{\Huge\bfseries\color{navy} Scella}\\[4pt]
+{\large\color{grey}\itshape Classement complet des composants par potentiel}\\[4pt]
+{\small\color{grey} 5 août 2026 \; · \; panel de 5 juges indépendants, 5 lentilles, une base factuelle commune}
+\end{center}
+\vspace{2pt}
+
+\begin{these}
+\textbf{Le verdict.} \textbf{Le Relais gagne} -- non parce qu'il est le plus rare, mais parce qu'il est
+\emph{le seul que personne n'attaque}. Et \textbf{le reçu, qui devrait être premier, se fait battre par
+lui-même} : ses deux moitiés ne se touchent jamais, et chacune porte exactement le défaut que l'autre
+corrigerait.
+\end{these}
+
+\section{1 · Méthode}
+
+Un classement est le genre de jugement où une seule perspective biaise le plus. Cinq juges ont donc reçu
+\emph{la même base factuelle} -- l'état vérifié dans le code des treize composants -- et \emph{une
+lentille distincte chacun}, sans connaissance des verdicts des autres : la \textbf{maturité} rapportée à
+l'effort restant ; l'\textbf{argument d'embauche} chez Kovant ; la \textbf{rareté} pure, maturité
+délibérément ignorée ; l'\textbf{adversaire}, un directeur technique hostile en revue diligente ; et la
+\textbf{démontrabilité}, c'est-à-dire ce qui tient vingt minutes devant un ingénieur sceptique. Le
+composite ci-dessous est la moyenne de leurs rangs. La colonne \emph{écart} mesure l'amplitude entre le
+meilleur et le pire rang : un écart faible en haut signale un consensus solide, un écart fort signale un
+composant dont la valeur dépend entièrement de la question qu'on pose.
+
+\section{2 · Le classement composite}
+
+\renewcommand{\arraystretch}{1.1}
+\begin{center}\small
+\begin{tabular}{@{}r>{\raggedright\arraybackslash}p{3.05cm}ccccc c c >{\raggedright\arraybackslash}p{5.5cm}@{}}
+\toprule
+& \textbf{Composant} & \sz{Mat} & \sz{Kov} & \sz{Rar} & \sz{Adv} & \sz{Dém} & \textbf{Moy} & \sz{Éc.} & \textbf{Ce qui le porte, ce qui le plombe} \\
+\midrule
+\textbf{1} & \textbf{Le Relais} & 2 & \best{1} & 3 & 3 & \best{1} & \textbf{2,0} & 2 & Original \emph{et} construit \emph{et} servi ; le seul sans caveat \\
+\textbf{2} & \textbf{Le reçu, pile A} & \best{1} & 6 & 2 & \best{1} & 6 & \textbf{3,2} & 5 & Scelle le réel ; mais rend \code{verified:true} sur une chaîne tronquée \\
+\textbf{3} & \textbf{Le reçu, pile B} & 5 & 3 & \best{1} & 6 & 2 & \textbf{3,4} & 5 & Vérifieur à dépendances vides \emph{testé} ; mais rien à vérifier \\
+\textbf{4} & \textbf{Le banc de mesure} & 4 & \best{2} & 4 & 4 & 4 & \textbf{3,6} & 2 & Réfute sa propre thèse avec rigueur ; rien n'est rejouable \\
+5 & La Couche 2 servie & 3 & 5 & 10 & \best{2} & 5 & 5,0 & \textbf{8} & Seule mesure en argent réel ; catégorie saturée \\
+6 & L'essaim $\Phi$ & 7 & 4 & 5 & 7 & 3 & 5,2 & 4 & Tue sa propre borne en source ; concurrence non pure \\
+7 & Le Sandwich & 6 & 7 & 9 & 5 & 7 & 6,8 & 4 & Substrat prêt ; rareté seulement dérivée du reçu \\
+8 & L'essaim médiateur & 9 & 9 & 8 & 9 & 10 & 9,0 & 2 & Anti-émergence assumée ; catégorie encombrée, 0 ligne \\
+9 & Le Flexible MLP & 13 & 8 & 6 & 10 & 9 & 9,2 & \textbf{7} & Seul actif \emph{déductif} ; jamais flashé, hors dépôt \\
+10 & Fil C, la Colonne & 12 & 10 & 7 & 8 & 11 & 9,6 & 5 & Objet visé unique ; rareté empruntée, précondition absente \\
+11 & Les nano-robots & 8 & 11 & 13 & 11 & 8 & 10,2 & 5 & Réels ; priors \code{sin(i)} auto-qualifiés « non signifiants » \\
+12 & Le méta-essaim & 11 & 12 & 11 & 12 & 12 & 11,6 & \textbf{1} & Volume maximal, valeur réalisée nulle -- \emph{seul consensus total} \\
+13 & Le runtime nano & 10 & 13 & 12 & 13 & 13 & 12,2 & 3 & Ré-implémente du résolu, et le ré-implémente faux \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\section{3 · Les trois découvertes structurelles}
+
+\textbf{Le défaut récurrent n'est pas l'inachèvement, c'est l'auto-attestation.} Le juge adverse a vu ce
+qu'une analyse composant par composant ratait nécessairement : \textbf{cinq fois, dans cinq organes
+indépendants, la boucle de vérification se referme à l'intérieur du processus qui a produit la chose.}
+Le reçu de la pile A recalcule la racine sans jamais la comparer à la racine scellée. Le reçu de la pile
+B n'ancre rien, si bien que la racine de référence \emph{voyage dans le dossier} qu'on tend à l'auditeur.
+Le méta-essaim \emph{possède} le service qui prouverait à quel moteur on parle, et ce service n'a aucun
+appelant. La Couche 2 affiche « préflight frontière OK » alors que la rédaction des données personnelles
+est compilée dehors. Le banc gèle ses constantes avant l'expérience mais ne commite aucun script
+rejouable, et sa porte de test gold répond « à jour » quel que soit l'état réel. Un audit organe par
+organe produit cinq bugs sans lien ; la lentille adverse y voit \textbf{une seule thèse} : tout tient
+tant que l'évaluateur est l'auteur, et rien ne survit au passage à un tiers. C'est aussi la bonne
+nouvelle, car ce ne sont pas cinq chantiers mais \textbf{un seul principe de réparation} -- déplacer
+chaque point de vérification \emph{hors} du producteur. Et corriger l'auto-attestation est exactement ce
+que le marché achat-conformité paie ; c'est même à peu près la seule chose qu'il paie.
+
+\textbf{Les quelque 9\,500 tests forment une seule réserve de crédibilité partagée.} C'est la trouvaille
+de la lentille de démontrabilité, et elle inverse l'ordre des priorités. Un sceptique qui attrape
+\textbf{un seul} faux vert -- \code{verified:true} sur une chaîne tronquée sans clé, « préflight OK »
+avec les prompts en clair, un manifeste de vrais participants servi par $\kappa \cdot x$, un balayage de
+dérive toujours favorable, une empreinte d'audit forgeable qui repasse verte -- cesse instantanément de
+croire aux 320, aux 245, aux 118 et aux 49 autres, \emph{y compris ceux qui sont irréprochables}. Cinq
+défauts localisés tiennent ainsi en otage l'ensemble du dépôt. Le corollaire est contre-intuitif et
+opérationnellement décisif : le meilleur rendement n'est pas de coder le Sandwich, l'essaim médiateur ou
+la Colonne -- qui n'ajouteraient que des lignes à défendre -- mais \textbf{d'éteindre les cinq faux
+verts}, dont trois sont petits et déjà outillés. Corollaire de présentation, plus surprenant encore :
+les composants à zéro ligne sont aujourd'hui \emph{plus sûrs à montrer} que trois des composants
+construits, parce qu'un plan ne peut pas mentir -- à condition d'être présentés comme des plans, jamais
+glissés dans le même souffle que le code servi.
+
+\textbf{Le reçu se scinde, et les deux moitiés ne se touchent jamais.} C'est le fait le plus important du
+classement. La pile A scelle les missions réellement servies, mais elle \textbf{échoue à la première
+sonde du métier} : tronquer, re-vérifier, et obtenir \code{verified:true} sans détenir la moindre clé.
+La pile B, elle, tient une revendication extraordinaire et \emph{testée} -- un vérificateur dont
+l'arborescence de dépendances est littéralement vide, une recompilation de la source vendorée hors
+ligne, puis une re-preuve : « un tiers vérifie sans nous faire confiance » est ici un test qui passe, pas
+une diapositive -- mais elle \textbf{n'a rien à vérifier}, aucun producteur ne construisant de graphe
+hors des exemples et des tests, et elle \textbf{n'ancre rien}. Chacune porte très exactement le défaut
+que l'autre corrigerait.
+
+\section{4 · Là où les juges se battent}
+
+\textbf{La Couche 2, écart 8 -- le plus grand désaccord du panel.} Deuxième pour l'adversaire, qui
+observe qu'elle détient \emph{la seule mesure en argent réel} du dépôt ($-$27\,\% de coût à qualité
+tenue, 27 runs, vraies clés Claude et Gemini) et que ses deux défauts disqualifiants sont des jours de
+travail. Dixième pour la rareté, qui objecte que le routage multi-LLM est la catégorie la plus encombrée
+du marché, que $-$27\,\% est le résultat le plus reproductible du secteur, et que sa seule propriété non
+banale -- la vérification qui échoue si un appel a été omis -- \textbf{appartient au reçu, pas à elle}.
+Les deux ont raison : elle a de la valeur \emph{prouvée} et zéro valeur \emph{rare}.
+
+\textbf{Le banc de mesure, deuxième pour Kovant.} L'argument est le plus fort du panel, et il mérite
+d'être cité dans son esprit : Kovant peut embaucher dix ingénieurs capables d'écrire un relais SLM ; il
+en trouvera très peu qui \emph{gèlent les constantes avant l'expérience}, appliquent une non-infériorité
+appariée et une correction de Holm, puis \textbf{publient que leur propre idée ne paie pas}. Pour une
+équipe pre-seed dont toute la thèse repose sur « les petits modèles coordonnés suffisent », l'appareil
+capable de dire \emph{quand c'est faux} vaut plus qu'une fonctionnalité de plus -- et c'est le même
+appareil qui leur remet le seul résultat positif crédible du dépôt, un modèle de 3,8 milliards de
+paramètres à hauteur d'un 12 milliards, obtenu par quelqu'un qui cherchait à le réfuter.
+
+\textbf{Le Flexible MLP, écart 7.} Sixième en rareté pure : c'est le \emph{seul actif déductif} d'un
+portefeuille entièrement fait de tests et de mesures, et prouver formellement un invariant sur du code
+qui s'adapte sur l'appareil est un front de recherche, pas un exercice. Treizième en délai-valeur, pour
+des raisons factuelles et non impressionnistes. La nuance juste, apportée par la lentille de rareté : le
+brevet déjà déposé rend \textbf{l'idée} non rare, mais un brevet ne porte pas de preuve -- l'artefact
+reste rare même si le mécanisme ne l'est pas.
+
+\textbf{Le méta-essaim, écart 1 -- le seul consensus total.} Unanimement avant-dernier, sur les cinq
+lentilles, sans exception. Volume de code maximal, valeur réalisée nulle.
+
+\section{5 · Où je me sépare du composite}
+
+Je ne classe pas la pile A et la pile B comme deux actifs distincts, et voici pourquoi : \textbf{les cinq
+juges ont convergé, indépendamment et sans y être invités, sur le même geste}. C'est le signal le plus
+fort de tout l'exercice.
+
+\begin{cle}
+\textbf{Brancher les reçus de la pile A dans le graphe de la pile B, signer la racine en \emph{ed25519}
+-- la bibliothèque est \underline{déjà} dans la crate -- et publier l'ancrage \emph{hors} du dossier.}
+Le fait structurel qui rend ce geste court : les empreintes de contenu de la pile A sont \textbf{déjà
+sans clé}, donc n'importe qui peut déjà les recalculer ; seuls le HMAC de maillon et le pli de racine
+exigent le secret. \sz{Cryptographie : taille S. Garde et rotation des clés : taille M.}
+\end{cle}
+
+Ce geste transforme deux raretés aujourd'hui \emph{isolées}, qui s'additionnent, en une seule rareté
+\emph{composée}, qui se multiplie : un reçu de mission multi-modèles re-prouvable par un binaire dont
+l'auditeur peut lire la totalité de la source. Personne ne détient cela. C'est accessoirement le seul
+chemin par lequel le profil de souveraineté visé par la Colonne cesse d'être une idée empruntée.
+
+\textbf{Mon classement réel est donc celui-ci : le reçu \emph{réuni} est premier, loin devant.} Le Relais
+est premier \emph{parmi les composants tels qu'ils existent aujourd'hui} -- et c'est cette version-là,
+honnêtement, que dit le tableau.
+
+Une correction s'impose au passage. L'analyse de partenariats concluait que « le seul actif réellement
+différenciant est le reçu ». Le panel montre que cette phrase est \textbf{vraie de la pile B et fausse
+de la pile A} -- or c'est la pile A qui scelle les missions réellement servies. La phrase était trop
+grosse d'une moitié.
+
+\section{6 · Ce que ça implique pour Kovant}
+
+L'ordre à tenir est \textbf{l'inverse} de ce que suggérait l'analyse de partenariats. \textbf{Ne pas
+ouvrir sur le reçu} : il exige deux caveats immédiats -- la pile A rend \code{verified:true} à un
+attaquant \emph{sans clé} qui dispose de l'écriture en base, la pile B n'a aucun producteur.
+\textbf{Ouvrir sur le Relais}, qui n'en exige aucun : servi, complet, et sur leur thèse exacte. Puis le
+banc, en offrant le résultat positif comme soutien à \emph{leur} thèse et les agrégations réfutées comme
+preuve qu'on dira la vérité quand une idée d'essaim ne paie pas. Puis la pile B, en présentant le trou du
+producteur comme la moitié que le poste fournit.
+
+Et le retournement le plus fort du dossier : le pire défaut du dépôt -- \emph{le contrôleur du
+méta-essaim ne vérifie jamais à quel moteur il parle} -- devient, reformulé en question posée à Kovant,
+le meilleur moment de l'entretien.
+
+\begin{cle}
+\textbf{« Comment prouvez-vous que l'agent qui a répondu est celui que votre manifeste déclarait ? »}
+C'est le problème qu'aucun essaim de petits modèles en conformité ne peut éluder, et il arrive avec la
+cicatrice qui prouve qu'on l'a vécu.
+\end{cle}
+
+\vspace{3pt}
+{\color{grey}\hrule height 0.4pt}
+\vspace{2pt}
+{\footnotesize\color{grey}Classement produit par un panel de cinq juges indépendants recevant la même
+base factuelle -- l'état des composants vérifié dans le code, non dans les documents de conception -- et
+une lentille distincte chacun. Les rangs par lentille sont ceux rendus par les juges ; le composite est
+la moyenne non pondérée de leurs rangs. Une conclusion antérieure de l'auteur est corrigée au §5.}
+
+\end{document}

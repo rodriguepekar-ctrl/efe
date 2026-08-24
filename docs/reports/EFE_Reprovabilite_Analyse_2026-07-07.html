@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>EFE — La re-prouvabilité : ce qu'elle apporte, exactement</title>
+<style>
+  :root{--ink:#0f172a;--muted:#475569;--soft:#64748b;--line:#e2e8f0;--teal:#0d9488;--teal-d:#0f766e;--indigo:#4f46e5;--indigo-d:#4338ca;--ok:#16a34a;--warn:#d97706;--bad:#dc2626;--bg-tint:#f6fbfa;--bg-card:#eef2f1;}
+  *{box-sizing:border-box;} html{font-size:11.1px;}
+  body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,Arial,sans-serif;color:var(--ink);margin:0;line-height:1.55;background:#fff;-webkit-font-smoothing:antialiased;}
+  .wrap{max-width:178mm;margin:0 auto;padding:0 2mm;}
+  h1,h2,h3,h4{line-height:1.2;font-weight:700;}
+  h2{font-size:1.4rem;margin:0 0 .5rem;padding-bottom:.3rem;border-bottom:3px solid var(--teal);}
+  h2 .num{color:var(--teal);} h3{font-size:1.06rem;margin:.9rem 0 .25rem;color:var(--teal-d);}
+  h4{font-size:.96rem;margin:.65rem 0 .15rem;color:var(--indigo-d);}
+  p{margin:.42rem 0;text-align:justify;hyphens:auto;} a{color:var(--indigo);text-decoration:none;}
+  code{font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace;font-size:.83em;background:var(--bg-card);padding:.05em .35em;border-radius:4px;color:#0b3b36;}
+  .muted{color:var(--muted);} .small{font-size:.87rem;}
+  section{break-inside:avoid;} .page{break-before:page;} h2{break-after:avoid;}
+  table{border-collapse:collapse;width:100%;margin:.5rem 0;font-size:.76rem;}
+  th,td{border:1px solid var(--line);padding:.3rem .45rem;text-align:left;vertical-align:top;}
+  th{background:var(--bg-card);font-weight:700;} tbody tr:nth-child(even){background:var(--bg-tint);}
+  td.c,th.c{text-align:center;} td.n{text-align:right;white-space:nowrap;}
+  .s{font-weight:800;color:var(--teal-d);white-space:nowrap;}
+  .callout{border-left:4px solid var(--teal);background:var(--bg-tint);padding:.5rem .8rem;border-radius:0 8px 8px 0;margin:.55rem 0;break-inside:avoid;}
+  .callout p{text-align:left;margin:.25rem 0;}
+  .callout.key{border-color:var(--indigo);background:#eef2ff;} .callout.warn{border-color:var(--warn);background:#fffbeb;} .callout.ok{border-color:var(--ok);background:#f0fdf4;}
+  .callout .lbl{font-weight:800;text-transform:uppercase;letter-spacing:.05em;font-size:.72rem;display:block;margin-bottom:.1rem;}
+  .callout.key .lbl{color:var(--indigo-d);} .callout.warn .lbl{color:var(--warn);} .callout.ok .lbl{color:var(--ok);} .callout .lbl.teal{color:var(--teal-d);}
+  .quote{font-style:italic;color:#0b3b36;}
+  ul,ol{margin:.3rem 0 .45rem 1.1rem;padding:0;} li{margin:.16rem 0;}
+  .cover{height:262mm;display:flex;flex-direction:column;justify-content:center;position:relative;padding:0 6mm;}
+  .cover .eyebrow{color:var(--teal);font-weight:800;letter-spacing:.16em;font-size:.83rem;text-transform:uppercase;}
+  .cover h1{font-size:2.0rem;margin:.4rem 0 .2rem;line-height:1.08;} .cover .sub{font-size:1.15rem;color:var(--muted);margin-bottom:1.1rem;}
+  .cover .tagline{font-size:1.0rem;color:var(--ink);max-width:163mm;border-left:4px solid var(--teal);padding-left:1rem;font-style:italic;text-align:left;}
+  .cover .meta{position:absolute;bottom:6mm;left:6mm;right:6mm;display:flex;justify-content:space-between;border-top:1px solid var(--line);padding-top:.6rem;font-size:.8rem;color:var(--soft);}
+  .cover .pills{margin:1rem 0;} .cover .pills .tag{display:inline-block;font-size:.77rem;font-weight:700;padding:.08em .5em;border-radius:20px;margin-right:.3rem;margin-bottom:.3rem;}
+  .t-ok{background:#dcfce7;color:#166534;} .t-info{background:#e0e7ff;color:#3730a3;} .t-teal{background:#ccfbf1;color:#115e59;} .t-warn{background:#fef3c7;color:#92400e;}
+  hr{border:none;border-top:1px solid var(--line);margin:.9rem 0;}
+  .toc{columns:2;column-gap:2rem;font-size:.9rem;} .toc div{margin:.12rem 0;break-inside:avoid;} .toc .m{font-weight:700;color:var(--teal-d);}
+  .lead{font-size:1.02rem;color:var(--ink);} .lead b{color:var(--teal-d);}
+  .qa h4{color:var(--indigo-d);margin-top:.7rem;} .qa h4::before{content:"Q — ";color:var(--teal);}
+  .kbd{display:inline-block;background:#0f172a;color:#5eead4;font-family:"SF Mono",monospace;font-size:.8em;padding:.05em .45em;border-radius:5px;}
+  .apport{break-inside:avoid;}
+  .apport h3{margin-top:1.1rem;}
+  .oral{border-left:4px solid var(--indigo);background:#eef2ff;padding:.4rem .8rem;border-radius:0 8px 8px 0;margin:.45rem 0 .9rem;font-size:.92rem;}
+  .oral b{color:var(--indigo-d);text-transform:uppercase;font-size:.72rem;letter-spacing:.05em;margin-right:.4rem;}
+  @page{size:A4;margin:12mm 12mm;}
+</style>
+</head>
+<body>
+
+<!-- COVER -->
+<div class="wrap"><div class="cover">
+  <div class="eyebrow">Analyse de fond · EFE → Kovant · à usage interne</div>
+  <h1>La re-prouvabilité :<br>ce qu'elle apporte, exactement</h1>
+  <div class="sub">Une analyse chirurgicale — du mécanisme aux conséquences : ce que la re-preuve <b>change</b>, ce qu'elle <b>ne change pas</b>, et pourquoi c'est précisément la marche entre « démo impressionnante » et « infrastructure de décision dans un domaine régulé ».</div>
+  <div class="tagline">La thèse de ce document tient en une phrase : la re-prouvabilité <b>déplace la frontière de confiance hors du vendeur</b> — elle transforme la confiance, qui était une <i>croyance sur une organisation</i>, en un <i>calcul que n'importe quelle partie exécute elle-même, hors-ligne</i>. Tout le reste — l'audit sans accès, le litige qui devient un recalcul, la conformité dérivée, le fossé économique, l'absorption dé-risquée — en découle mécaniquement. Et parce que la précision exige le négatif : six limites sont énoncées à voix haute, car un argument qui connaît ses bornes est le seul qu'un board croit.</div>
+  <div class="pills">
+    <span class="tag t-teal">1 définition · 4 mouvements</span>
+    <span class="tag t-info">12 apports analysés</span>
+    <span class="tag t-warn">6 limites dites à voix haute</span>
+    <span class="tag t-ok">10 objections → réponses</span>
+  </div>
+  <div class="meta"><span>EFE — le substrat de confiance sous nano · essaim · méta-essaim · analyse de fond</span><span>2026-07-07</span></div>
+</div></div>
+
+<!-- TOC -->
+<div class="wrap page">
+  <h2>Sommaire</h2>
+  <div class="toc">
+    <div class="m">§0 — L'idée en une page</div>
+    <div class="m">§1 — Définition chirurgicale (et ce que le mot exclut)</div>
+    <div class="m">§2 — Le mécanisme : quatre mouvements, deux modes</div>
+    <div class="m">§3 — Les douze apports, un par un</div>
+    <div>A · La preuve remplace la parole</div>
+    <div>B · L'évidence sans l'accès</div>
+    <div>C · L'altération localisée</div>
+    <div>D · Le litige devient un calcul</div>
+    <div>E · La preuve qui survit au vendeur</div>
+    <div>F · La conformité comme sous-produit</div>
+    <div>G · L'effacement sans rupture (RGPD)</div>
+    <div>H · S'accorder sans révéler</div>
+    <div>I · Des garde-fous prouvés</div>
+    <div>J · Le silence signé</div>
+    <div>K · Le fossé qui ne s'érode pas</div>
+    <div>L · L'absorption dé-risquée</div>
+    <div class="m">§4 — Ce que ça n'apporte pas : six limites</div>
+    <div class="m">§5 — Dix objections, dix réponses</div>
+    <div class="m">§6 — Le cas Kovant : hiérarchie des apports</div>
+    <div class="m">§7 — Table de synthèse</div>
+    <div class="m">§8 — Lexique chirurgical</div>
+  </div>
+  <div class="callout ok"><span class="lbl">Mode d'emploi</span>
+    <p>Chaque apport suit la même dissection : <b>le mécanisme qui le porte</b> (quelle pièce du substrat produit cet effet), <b>le monde sans</b> (le contrefactuel — ce qui se passe aujourd'hui, sans re-preuve), <b>la valeur pour un acheteur procurement/conformité</b> (le terrain de Kovant), et <b>la phrase à l'oral</b> (la formule du deck, en anglais, prête à dire). Les limites (§4) ne sont pas une annexe défensive : elles font partie de l'argument — c'est la slide « honnêteté » généralisée. Les objections (§5) sont celles qu'un CTO ou un investisseur posera réellement.</p>
+  </div>
+</div>
+
+<!-- §0 -->
+<div class="wrap page">
+  <h2><span class="num">§0</span> — L'idée en une page</h2>
+  <p class="lead">Aujourd'hui, croire un système d'IA — ou son journal d'audit — exige de croire <b>une organisation</b> : le vendeur, ses logs, son cloud, ses employés, ses process, ses intentions, sa pérennité. Chacun de ces maillons est humain, donc faillible, influençable, et mortel. La re-prouvabilité remplace cette pile institutionnelle par trois choses que personne ne contrôle : <b>des mathématiques publiques</b> (SHA-256 et HMAC, prouvées sur les vecteurs officiels NIST FIPS 180-4 et RFC 2104), <b>un compilateur</b>, et <b>votre propre machine</b>. La phrase du deck : <span class="quote">« no trust in us required — only in the maths »</span>.</p>
+  <p>Concrètement : chaque action d'agent — aux trois étages, nano-robots, essaim, méta-essaim — se scelle à l'exécution dans une chaîne inviolable par tenant. On remet au tiers un <b>bundle</b> : les enregistrements scellés <i>plus le code source du vérifieur lui-même</i> — la clé qui a fabriqué les sceaux n'y figure jamais. Le tiers recompile ce vérifieur (zéro dépendance : <code>cargo tree</code> tient sur une ligne), <b>coupe le réseau</b>, et recalcule chaque maillon : <code>exit 0</code> = intact ; <code>exit 1</code> = altéré, <i>et l'étape fautive est désignée</i>. Personne n'a eu à croire personne.</p>
+  <p>De ce déplacement découlent mécaniquement les douze apports analysés au §3. Trois familles :</p>
+  <ul>
+    <li><b>Épistémique</b> — ce qu'on peut savoir : la preuve remplace la parole (A) ; l'altération est localisée, pas seulement détectée (C) ; même le silence est attesté (J) ; les garde-fous sont des théorèmes, pas des espoirs (I).</li>
+    <li><b>Opérationnelle</b> — ce que ça coûte : l'audit se fait sans ouvrir l'accès (B) ; le litige devient un recalcul de quelques minutes (D) ; le dossier réglementaire se dérive au lieu de se reconstruire (F) ; le RGPD coexiste avec l'immuabilité (G) ; des parties qui refusent de partager leurs données convergent quand même, prouvablement (H) ; la preuve survit au vendeur (E).</li>
+    <li><b>Stratégique</b> — ce que ça vaut : l'orchestration d'agents se commoditise, la re-prouvabilité non (K) ; et dans la transaction avec Kovant, elle dé-risque l'absorption elle-même, puisqu'on re-vérifie ce qu'on absorbe (L).</li>
+  </ul>
+  <p>Et la borne, énoncée d'emblée parce qu'elle sera répétée : la re-preuve établit l'<b>intégrité</b> — <i>ce qui s'est passé, fidèlement, sans altération</i> — jamais la <b>correction</b> — <i>que la décision était bonne</i>. Un mauvais score parfaitement scellé reste un mauvais score. Cette limite n'affaiblit pas l'argument : elle le rend croyable, et elle délimite exactement où la re-preuve s'arrête et où commencent les gold-gates, les évaluations, et le jugement humain.</p>
+  <div class="callout key"><span class="lbl">La formule de synthèse</span>
+    <p>La re-prouvabilité ne rend pas l'IA plus intelligente — <b>elle la rend opposable</b>, au sens juridique : quelque chose qu'on peut faire valoir face à un tiers, y compris hostile, y compris des années plus tard, y compris si le producteur a disparu. C'est exactement la marche qui manque entre une démo d'agents et une infrastructure de décision dans un domaine régulé.</p>
+  </div>
+</div>
+
+<!-- §1 -->
+<div class="wrap page">
+  <h2><span class="num">§1</span> — Définition chirurgicale (et ce que le mot exclut)</h2>
+  <p class="lead">Un système est <b>re-prouvable</b> quand un tiers peut, <b>seul</b>, établir la validité de chaque enregistrement produit — et localiser toute altération — sous trois négations simultanées :</p>
+  <ol>
+    <li><b>Sans le producteur.</b> Aucune coopération du vendeur au moment de la vérification : pas d'API à appeler, pas de service à solliciter, pas de support à contacter. Le vendeur peut être en faillite, hostile, ou disparu — la vérification fonctionne à l'identique.</li>
+    <li><b>Sans accès.</b> Aucun login, aucun compte, aucune visite des systèmes du producteur. Le tiers ne pénètre rien : un objet autonome lui a été <i>remis</i>.</li>
+    <li><b>Sans réseau.</b> Hors-ligne, sur une machine à air-gap si on veut. Pas d'oracle distant, pas de « phone home », pas de service de transparence à interroger. La procédure entière tient dans : lire, compiler, exécuter.</li>
+  </ol>
+  <p>Les trois négations sont chacune nécessaire. Retirez la première : vous avez un audit assisté par le vendeur — c'est-à-dire un audit dont le vendeur choisit ce qu'il montre. Retirez la deuxième : vous avez un droit d'accès — coûteux, risqué, négocié, et qui prouve l'état <i>au moment de la visite</i> seulement. Retirez la troisième : vous avez une dépendance à une infrastructure tierce (un service de transparence, une chaîne publique) qui doit elle-même être crue, disponible, et pérenne. Les trois ensemble définissent quelque chose de qualitativement différent : <b>un artefact qui porte sa propre vérifiabilité</b>.</p>
+
+  <h3>La re-prouvabilité est une propriété d'un triplet, pas d'un logiciel</h3>
+  <p>Ce qui est re-prouvable, ce n'est pas « EFE » : c'est le triplet <b>{enregistrements scellés · vérifieur recompilable · procédure}</b>. Les enregistrements sans le vérifieur sont des données qu'il faut croire. Le vérifieur sans les enregistrements est un outil sans objet. Les deux sans procédure documentée (recompiler, couper le réseau, exécuter, lire le code de sortie) sont un kit dont personne ne se sert. Le produit livrable — le <b>bundle</b> — empaquette les trois. C'est un choix de conception profond : on ne livre pas un service de vérification, on livre <i>le moyen de se passer de nous</i>.</p>
+
+  <h3>Cinq distinctions — ce que le mot n'est pas</h3>
+  <p><b>Re-prouvable ≠ auditable.</b> Être auditable, c'est avoir des logs. Mais un log se <i>lit</i>, il ne se <i>recalcule</i> pas : sa valeur probante est exactement la confiance qu'on accorde à celui qui le tient. Un log est une déclaration ; une chaîne re-prouvable est une démonstration. L'analogie du deck : un notaire contre une capture d'écran — l'un est opposable, l'autre non.</p>
+  <p><b>Re-prouvable ≠ observable.</b> L'observabilité (dashboards, traces, métriques) montre le présent à ceux qui regardent. Elle ne prouve rien après coup, à quelqu'un qui n'était pas là — c'est-à-dire précisément à l'auditeur, au juge, au régulateur, qui arrivent toujours <i>après</i>. EFE a les deux (le tableau de bord SSE de l'essaim est l'observabilité ; la chaîne scellée est la preuve), mais il ne faut jamais les confondre : l'une regarde, l'autre atteste.</p>
+  <p><b>Re-prouvable ≠ traçable.</b> La traçabilité corrèle des identifiants à travers un système. Tracer sans sceller, c'est écrire une histoire <i>modifiable</i> : les IDs relient des enregistrements que rien n'empêche de réécrire. La traçabilité est le squelette ; le scellement est ce qui le rend incontestable.</p>
+  <p><b>Re-prouvable ≠ certifié.</b> Une certification est le jugement d'un tiers <i>à une date</i> : elle vieillit dès qu'elle est émise, et elle déplace la confiance vers le certificateur. La re-preuve vaut <i>à chaque exécution</i> du vérifieur, par n'importe qui, indéfiniment. L'une est un instantané institutionnel ; l'autre est une propriété permanente de l'objet.</p>
+  <p><b>Re-prouvable ≠ blockchain.</b> L'objection revient toujours, donc la distinction doit être nette. Une blockchain résout un problème qu'on n'a pas : établir un ordre public mondial entre inconnus <i>sans</i> tiers de confiance, au prix d'un réseau, d'un consensus distribué et d'une infrastructure permanente. Ici le problème est l'inverse : l'intégrité d'un <b>journal privé</b> remis à des <b>parties identifiées</b>, vérifiable <b>réseau coupé</b>. Une chaîne de hachage, des sceaux par tenant et un vérifieur zéro-dépendance font cela sans infrastructure — et surtout, <i>hors-ligne</i>, ce qu'aucune blockchain ne peut offrir par construction. (Le §5, objection 5, développe.)</p>
+
+  <div class="callout key"><span class="lbl">La réduction quantitative</span>
+    <p>Ce que la re-preuve réduit, c'est la <b>surface de confiance</b> : l'ensemble des choses qu'il faut croire pour accepter une conclusion. Avant : une organisation entière — personnel, infrastructure, process, sous-traitants, intentions, survie. Après : SHA-256 et HMAC (mathématiques publiques, vecteurs de test officiels), un compilateur Rust, et sa propre machine. Ce n'est pas une amélioration de degré ; c'est un changement de <b>nature</b> — d'une croyance sociale à un calcul privé. Et une conséquence discrète mais décisive : la confiance calculée est <b>transférable sans coût</b> — le même bundle convainc l'auditeur A, le juge B et le client C, sans que chacun refasse une diligence sur l'organisation. La confiance institutionnelle, elle, ne se transfère jamais : chaque nouvelle partie doit re-croire depuis zéro.</p>
+  </div>
+</div>
+
+<!-- §2 -->
+<div class="wrap page">
+  <h2><span class="num">§2</span> — Le mécanisme : quatre mouvements, deux modes</h2>
+  <p class="lead">Tous les apports du §3 découlent de quatre mouvements. Il faut les connaître précisément, parce que chaque apport se rattache à un mouvement — et chaque objection s'y réfute.</p>
+
+  <h3>Mouvement 1 — Sceller (à l'exécution, pas après coup)</h3>
+  <p>Chaque action d'agent devient un enregistrement atomique — l'<code>AgentCallRecord</code> : <i>qui</i> a agi, <i>quoi</i> a été fait, <i>quand</i>, <i>à partir de quoi</i> (les entrées). Cet atome est haché (BLAKE3 + SHA-256), puis chaîné aux précédents par <b>HMAC-SHA256 sous une clé par tenant</b>, dérivée par HKDF ; les maillons sont regroupés en <b>epochs Merkle</b>. Trois propriétés du scellement méritent l'attention. <b>D'abord</b>, il est <i>sur le chemin d'exécution</i> : l'enregistrement se crée au moment de l'action, pas dans un post-traitement — c'est ce qui rend le bolt-on impossible à un concurrent (un log ajouté après coup n'a pas de chaîne ; voir apport K). <b>Ensuite</b>, il est <i>byte-identique aux trois étages</i> : le même sceau scelle la chaîne d'un nano-robot, celle d'un essaim et celle du méta-essaim — les trois chaînes sont donc mutuellement vérifiables, un seul vérifieur les recalcule toutes. <b>Enfin</b>, la clé de scellement <i>ne voyage jamais</i> : elle re-prouve côté serveur (<code>GET /verify/:id</code>), mais elle n'est jamais écrite dans un bundle, jamais exposée sur le fil.</p>
+
+  <h3>Mouvement 2 — Remettre (la preuve et l'instrument de mesure)</h3>
+  <p>Le bundle remis au tiers contient les enregistrements scellés <b>plus la source du vérifieur</b>. Pas un binaire : la source, lisible. C'est le geste le plus contre-intuitif et le plus important du dispositif — on remet à l'auditeur <i>l'instrument de mesure lui-même</i>, pour qu'il n'ait pas à croire l'instrument. Et l'absence est aussi éloquente que le contenu : <b>la clé n'est jamais dans le bundle</b>. Posséder le bundle ne donne aucun pouvoir de forger ; il donne uniquement le pouvoir de vérifier.</p>
+
+  <h3>Mouvement 3 — Recompiler (zéro dépendance, crypto lisible)</h3>
+  <p>Le tiers compile le vérifieur : <code>cargo tree</code> = <b>une ligne</b>. Zéro dépendance externe, <code>std</code> seulement ; la cryptographie est <b>écrite à la main</b> et prouvée sur les vecteurs de test officiels — NIST FIPS 180-4 pour SHA-256, RFC 2104 pour HMAC. Ce point renverse un réflexe d'ingénieur (« never roll your own crypto ») et il faut savoir le défendre : le réflexe standard délègue la confiance à une chaîne d'approvisionnement de centaines de crates — c'est-à-dire qu'il <i>déplace</i> le problème de confiance vers des inconnus. Ici, la base de confiance entière se lit en une après-midi ; et au pire des cas, la spécification permet à l'auditeur d'écrire <b>son propre</b> vérifieur — le format est re-implémentable. Un vérifieur à 300 dépendances ruinerait l'argument entier : on aurait remplacé « croyez notre service » par « croyez notre supply-chain ».</p>
+
+  <h3>Mouvement 4 — Re-prouver (réseau coupé, verdict localisé)</h3>
+  <p>Le tiers coupe le réseau et exécute. Le vérifieur recompute chaque maillon de la chaîne : <code>exit 0</code> — tout est intact ; <code>exit 1</code> — quelque chose a été altéré, <b>et l'étape précise est désignée</b>. Pas de télémétrie, pas d'oracle, pas de dépendance à un service. La force du verdict tient à sa provenance : <i>c'est l'auditeur qui l'a calculé, sur sa machine</i>. La question « pourquoi croirais-je exit 1 ? » n'a qu'une réponse, et elle est définitive : <span class="quote">« because you computed it, on your machine, offline — not us »</span>.</p>
+
+  <h3>Les deux modes — le quotidien et le litige</h3>
+  <p>Le dispositif a deux régimes complémentaires. <b>En ligne</b> : <code>GET /verify/:id</code> re-prouve n'importe quel run stocké, sur le fil, la clé ne quittant jamais le serveur — c'est le contrôle du quotidien, intégrable dans un pipeline. <b>Hors-ligne</b> : <code>verify-mini</code> (et son homologue méta, <code>verify_meta_mini</code>) — la re-preuve d'audit, de litige, de due diligence, celle qui fonctionne sans nous. Le premier mode rend la vérification <i>banale</i> ; le second la rend <i>souveraine</i>. À l'étage méta, la preuve existe en trois niveaux de profondeur : <b>v1</b> — la valeur atteinte à chaque pas de la convergence ; <b>v2</b> — plus le moment exact où le garde-fou a agi (« au pas 12 » — prouvé, pas reconstitué après coup) ; <b>v3</b> — plus la contribution de chaque partie et le rejeu complet, reproductible à l'identique des années plus tard.</p>
+
+  <div class="callout"><span class="lbl teal">Le socle qui porte tout</span>
+    <p>Le substrat de confiance : 8 crates, 224 tests, 0 dépendance cryptographique externe — passés en revue adversariale (21 bugs trouvés et corrigés, dont un « dishonest-green » — un vérifieur qui disait vrai à tort — et une fuite PII qui a réfuté notre propre correctif : la revue a attaqué la revue). Les chiffres comptent moins que leur signification : le socle est <i>petit</i>, <i>lisible</i> et <i>testé contre des attaques</i> — les trois conditions pour que « lisez la source » soit un argument et non une esquive.</p>
+  </div>
+</div>
+
+<!-- §3 -->
+<div class="wrap page">
+  <h2><span class="num">§3</span> — Les douze apports, un par un</h2>
+  <p class="lead">Chaque apport : le mécanisme qui le porte → le monde sans (contrefactuel) → la valeur procurement/conformité → la phrase à l'oral. Les quatre premiers sont épistémiques et opérationnels ; les suivants élargissent ; les deux derniers sont stratégiques.</p>
+
+  <div class="apport">
+  <h3>A · La preuve remplace la parole — le déplacement de la frontière de confiance</h3>
+  <p><b>Le mécanisme.</b> Les quatre mouvements ensemble. Le point de bascule est le mouvement 3 : tant que le vérifieur est un service du vendeur, la « preuve » est encore une parole (celle du service). Dès que le vérifieur est recompilable et lisible par le tiers, la chaîne entière de la conviction — de l'enregistrement au verdict — passe entre les mains de celui qui doute.</p>
+  <p><b>Le monde sans.</b> La confiance dans un système d'IA est aujourd'hui <i>institutionnelle</i> : on croit un fournisseur, c'est-à-dire une somme de personnes, de process et d'intérêts. Cette confiance a trois défauts structurels : elle est <b>coûteuse à établir</b> (due diligence, contrats, réputation — des mois), <b>impossible à transférer</b> (le régulateur qui fait confiance à l'audité n'engage pas le juge, qui n'engage pas le client — chacun refait sa diligence), et <b>périssable</b> (un changement d'actionnaire, un incident, une faillite, et tout est à refaire). La confiance calculée inverse les trois : <b>quasi gratuite</b> à établir (compiler, exécuter), <b>parfaitement transférable</b> (le même bundle convainc toutes les parties, présentes et futures), <b>impérissable</b> (les maths ne changent pas de gouvernance).</p>
+  <p><b>Pour Kovant.</b> Leur marché — les achats et la conformité des grandes entreprises — est précisément celui où la confiance institutionnelle coûte le plus cher : chaque acheteur régulé refait la diligence de chaque fournisseur d'IA, et la parole d'un éditeur n'y suffit jamais. Vendre une orchestration <i>plus sa preuve transférable</i>, c'est vendre le produit et le raccourci de sa propre diligence.</p>
+  <div class="oral"><b>À l'oral</b><span class="quote">« No trust in us required — only in the maths. »</span> — et l'analogie de secours : tout le monde sait cuisiner ; personne ne sait <i>prouver</i> la recette suivie.</div>
+  </div>
+
+  <div class="apport">
+  <h3>B · L'évidence sans l'accès — l'inversion de la relation d'audit</h3>
+  <p><b>Le mécanisme.</b> Le bundle (mouvement 2) est un objet <i>auto-porteur</i> : il contient tout ce qu'il faut pour se vérifier. La vérification n'a donc besoin d'aucune ouverture des systèmes du producteur.</p>
+  <p><b>Le monde sans.</b> Auditer, aujourd'hui, c'est <i>ouvrir</i> : créer des comptes, accorder des VPN, escorter dans les systèmes, signer des NDAs, planifier des fenêtres. Chaque ouverture est un coût (semaines de préparation), un risque (chaque accès est une surface d'attaque et une fuite potentielle), et une friction juridique (que voit l'auditeur au passage ?). Et le résultat prouve l'état <i>du jour de la visite</i> — rien d'autre. Avec le bundle, le sens du flux s'inverse : rien ne s'ouvre, quelque chose <i>sort</i>. Le régulateur re-vérifie un hash, hors-ligne, sans login. Trois conséquences opérationnelles : le <b>coût marginal d'un audit s'effondre</b> (la millième vérification coûte comme la première : quelques minutes de calcul) ; l'audit peut être <b>asymétrique et hostile</b> (une fois le bundle remis, la bonne volonté de l'audité n'est plus requise — il ne peut ni retarder ni filtrer) ; et la <b>confidentialité est préservée par construction</b> — on prouve le pipeline de décision sans montrer l'infrastructure, le reste du portefeuille, ou les données des autres tenants.</p>
+  <p><b>Pour Kovant.</b> C'est l'apport qui se <i>contractualise</i> : « chaque décision automatisée vous est remise sous forme de bundle re-prouvable » est une clause qu'un acheteur peut écrire dans un contrat-cadre, et qu'aucun concurrent orchestration-seule ne peut signer. Le régulateur audite sans clé d'accès au SI — pour un directeur conformité, c'est la différence entre subir un audit et le <i>livrer</i>.</p>
+  <div class="oral"><b>À l'oral</b><span class="quote">« Evidence, not access. »</span> — un régulateur re-vérifie un hash offline, sans login dans vos systèmes.</div>
+  </div>
+
+  <div class="apport">
+  <h3>C · L'altération localisée — du booléen au diagnostic</h3>
+  <p><b>Le mécanisme.</b> Le chaînage <i>par maillon</i> (mouvement 1). Parce que chaque enregistrement est scellé individuellement puis chaîné, le vérifieur ne dit pas seulement « la chaîne est rompue » : il recompute maillon par maillon et désigne <b>le premier qui ne colle plus</b>.</p>
+  <p><b>Le monde sans.</b> Le tamper-evident naïf (un hash global sur l'archive) rend un booléen : « quelque chose a changé ». Un booléen déclenche une <i>enquête</i> — des semaines à chercher où, qui, quand, avec des experts et des hypothèses. Une localisation déclenche une <i>correction</i> — des heures : on sait quelle étape, donc quel composant, quelle donnée, quelle fenêtre temporelle. La différence n'est pas de confort, elle est de régime probatoire : « l'étape 12 a été modifiée » est une constatation qu'on peut opposer ; « quelque chose ne va pas quelque part » est un début de dispute. Et la charge de la preuve change de camp — ce n'est plus à celui qui allègue l'altération de la démontrer : le calcul la montre, et la question devient « qui a touché l'étape 12 ? », adressée à celui qui tenait le système.</p>
+  <p><b>Pour Kovant.</b> Dans un litige fournisseur — un score contesté, une exclusion d'appel d'offres, une diligence attaquée — la localisation transforme la défense : on ne plaide pas sur la foi des logs, on recalcule et on désigne. C'est, mot pour mot, le rêve d'un auditeur : la ligne fautive, pas « quelque part ».</p>
+  <div class="oral"><b>À l'oral</b><span class="quote">« Exit 1 — and it tells you exactly which step. »</span></div>
+  </div>
+
+  <div class="apport">
+  <h3>D · Le litige devient un calcul — l'économie du contentieux</h3>
+  <p><b>Le mécanisme.</b> A + B + C combinés : une preuve transférable (A), vérifiable par chaque partie sans accès (B), et qui localise (C). Toutes les parties d'un différend peuvent recalculer <i>le même</i> verdict, indépendamment.</p>
+  <p><b>Le monde sans.</b> Un contentieux sur « qui a fait quoi » dans une chaîne de décision automatisée suit toujours le même chemin de croix : discovery (des mois), expertises contradictoires (chaque partie paie la sienne), dépositions, et au centre, des journaux que chaque camp accuse l'autre d'avoir arrangés. L'essentiel du coût n'est pas le désaccord juridique — c'est l'<b>établissement des faits</b>. La re-preuve évacue exactement cette part : chaque partie exécute le vérifieur, le désaccord factuel disparaît en minutes (les faits sont ce que le calcul dit, et le calcul est le même pour tous), et il ne reste que le désaccord d'<i>interprétation</i> — la qualification, qui est le vrai travail du juriste. La re-preuve ne supprime pas le contentieux : elle le <b>purifie</b> — elle retire la partie chère et lente, elle laisse la partie noble.</p>
+  <p><b>Pour Kovant.</b> L'analogie historique à avoir en réserve : ce que l'horodatage certifié a fait au « quand » (plus personne ne plaide sur la date d'un acte horodaté), la re-preuve le fait au « quoi et comment ». Un différend fournisseur se re-tranche à l'identique, deux ans après, en salle fermée, réseau coupé.</p>
+  <div class="oral"><b>À l'oral</b> le ticket de caisse infalsifiable d'une décision de groupe — chacun recompte, personne ne témoigne.</div>
+  </div>
+
+  <div class="apport">
+  <h3>E · La preuve qui survit au vendeur — indépendance temporelle et commerciale</h3>
+  <p><b>Le mécanisme.</b> Deux pièces. Le bundle contient la <i>source</i> du vérifieur (mouvement 2) — donc la capacité de vérifier ne dépend d'aucun service vivant. Et le rejeu est <i>déterministe</i> : un run se re-déroule à l'identique, octet pour octet — versions épinglées, catalogue signé, mémoire scellée (<code>memory_root</code>).</p>
+  <p><b>Le monde sans.</b> La preuve façon SaaS meurt avec son vendeur : si l'éditeur disparaît, pivote, ou coupe le service, les journaux deviennent des fichiers morts que plus rien ne peut authentifier. Pour un acheteur, c'est un risque de dépendance rarement chiffré mais réel : la valeur probante de <i>tout l'historique</i> est adossée à la survie commerciale d'un tiers. Avec le bundle, la relation s'inverse : le client détient, pour toujours, tout ce qu'il faut pour prouver — les enregistrements, l'instrument, la procédure. EFE peut disparaître demain : les maths sont publiques, n'importe quel compilateur Rust suffit, les bundles restent vérifiables dans dix ans. C'est l'exact opposé du lock-in : <b>le vendeur s'est rendu inutile à sa propre preuve</b> — et c'est précisément pour ça que la preuve vaut quelque chose.</p>
+  <p><b>Pour Kovant.</b> Les horizons réglementaires se comptent en années de rétention (AI Act, DORA) ; un régulateur qui pense en décennies ne peut accepter durablement qu'une preuve dont la validité expire avec un contrat de service. Et l'argument retourne élégamment une objection de due diligence : « et si EFE/vous disparaissez ? » — réponse : c'est le seul modèle de preuve auquel cette question ne pose aucun problème.</p>
+  <div class="oral"><b>À l'oral</b> re-run it identically, two years later — la preuve n'a pas de date de péremption ni de fournisseur.</div>
+  </div>
+
+  <div class="apport">
+  <h3>F · La conformité comme sous-produit de l'exécution — pas comme projet</h3>
+  <p><b>Le mécanisme.</b> Les enregistrements scellés sont la matière première ; les dossiers réglementaires en sont des <b>vues dérivées</b>, recalculables (<code>reg-evidence</code>). Et une pièce du dispositif change la nature du contrôle : <b>N24</b> met la conformité <i>sur le chemin de la requête</i>, en <b>fail-closed</b> — un contrôle manquant ne génère pas un rapport, il <b>refuse la requête</b>.</p>
+  <p><b>Le monde sans.</b> La conformité classique est un <i>projet parallèle</i> à l'exploitation : on opère d'un côté, on documente de l'autre, et l'écart entre les deux se paie en reconstructions (retrouver après coup ce qui s'est passé), en trous (ce qu'on n'a pas loggé n'existe plus), et en dérive (la documentation décrit le système d'il y a six mois). Ici, le dossier n'est pas <i>écrit</i>, il est <b>dérivé</b> : la même chaîne scellée qui fait tourner le système produit, par projection, la pièce réglementaire. Le mapping est direct et il faut le connaître : <b>N17</b> → l'article 12 de l'AI Act européen (journalisation/traçabilité : un enregistrement forensique par appel de modèle) ; <b>N18</b> → la non-répudiation (signatures Ed25519, identités KYC) ; <b>N19</b> → la qualité (gold-gates) ; <b>N16</b> → la résidence des données et DORA (rejeu déterministe inter-régions) ; <b>N24</b> → le contrôle en ligne, fail-closed. 533 tests couvrent les trois premières séries. Un détail de conception dit l'éthique du produit : <code>reg-evidence</code> n'a <b>pas de champ « compliant »</b> — délibérément. L'outil fournit la preuve ; la conclusion juridique appartient au juriste. On vend l'évidence, jamais le verdict.</p>
+  <p><b>Pour Kovant.</b> C'est la langue exacte de leurs acheteurs régulés — « article 12 », « DORA », « CSDDD » — parlée <i>en code</i>. Et la ligne de vente est une inversion : pas « nous avons un module conformité », mais <span class="quote">« compliance runs on every request, and refuses if a control is missing »</span> — un portique de sécurité, pas un panneau qui recommande.</p>
+  <div class="oral"><b>À l'oral</b> le dossier réglementaire n'est pas rédigé après coup — il est <b>dérivé</b> de la chaîne, et re-dérivable par le régulateur lui-même.</div>
+  </div>
+
+  <div class="apport">
+  <h3>G · L'effacement sans rupture — RGPD × intégrité, un conflit frontal résolu</h3>
+  <p><b>Le mécanisme.</b> Le <b>tombstone</b> : quand une donnée personnelle doit être effacée, elle l'est réellement — et sa <i>place</i> dans la chaîne est occupée par une pierre tombale qui préserve le chaînage. La chaîne reste intacte et vérifiable ; la donnée n'existe plus ; l'effacement lui-même est un événement daté, scellé, prouvable.</p>
+  <p><b>Le monde sans.</b> C'est un conflit de première importance et la plupart des architectures d'audit y échouent d'un côté ou de l'autre. Le RGPD exige l'effacement effectif ; l'intégrité probante exige l'immuabilité. Naïvement, les deux sont incompatibles : effacer casse la chaîne (les hachages ne se recalculent plus — la preuve entière devient invalide), et l'immuabilité stricte interdit d'effacer (illégal en Europe ; c'est d'ailleurs l'impasse structurelle des blockchains publiques face au droit à l'effacement). Le tombstone dissout le dilemme en séparant deux choses que le naïf confond : l'<i>existence de la donnée</i> (supprimée) et la <i>continuité de la chaîne</i> (préservée). Résultat : on peut prouver <b>simultanément</b> que la chaîne est intègre <i>et</i> que telle donnée a été effacée tel jour — l'effacement devient une pièce du dossier au lieu d'en être la destruction. La formule : <b>delete ≠ break</b>.</p>
+  <p><b>Pour Kovant.</b> Leurs clients traitent des données de fournisseurs, de contacts, de bénéficiaires effectifs — des données personnelles au cœur des workflows procurement. « Erase this person's data » sans invalider trois ans de piste d'audit n'est pas un luxe : c'est la condition de possibilité d'un audit trail européen.</p>
+  <div class="oral"><b>À l'oral</b> effacer une personne sans casser la preuve — et prouver qu'on l'a effacée. Delete ≠ break.</div>
+  </div>
+
+  <div class="apport">
+  <h3>H · S'accorder sans révéler — confidentialité et accountability co-construites</h3>
+  <p><b>Le mécanisme.</b> L'étage méta : plusieurs essaims indépendants convergent vers une réponse partagée dans un espace latent (consensus 256 dimensions ; opérateurs lift/pull), <b>sans échanger de données brutes ni exposer de poids de modèles</b> — et cette délibération se scelle nativement (provenance v1/v2/v3), jusqu'au rejeu identique et à la contribution prouvée de chaque partie.</p>
+  <p><b>Le monde sans.</b> Deux exigences se combattent dans toute collaboration inter-organisations : la <b>confidentialité</b> (chacun protège ses données, ses modèles, ses secrets d'affaires) et l'<b>accountability</b> (pouvoir établir qui a contribué quoi à la décision commune). D'ordinaire, on sacrifie l'une : soit on centralise les données chez un tiers (accountability, mais la confidentialité est morte), soit chacun garde tout et la décision commune est une boîte noire de réunions (confidentialité, mais aucune trace opposable). L'étage méta tient les deux <i>en même temps</i> : les parties convergent sans rien montrer — <b>0 donnée brute échangée, 0 poids exposé</b> — et pourtant chacune peut prouver sa contribution, et nul ne peut avoir dominé en silence (v3 : les contributions par partie, re-jouables). Le scénario canonique : un <b>acheteur</b>, un <b>fournisseur</b> et un <b>auditeur</b> convergent vers un score de risque partagé, chacun gardant ses données privées — et le verdict commun est re-prouvable par les trois.</p>
+  <p><b>Pour Kovant.</b> C'est le déblocage réel de la chaîne d'approvisionnement : les scénarios cross-silos (filiales qui ne partagent pas, acheteur/fournisseur mutuellement méfiants, auditeur tiers) sont aujourd'hui résolus par... des réunions et des PDFs. Un consensus <i>gouverné et prouvable</i> entre parties qui refusent de partager est une catégorie de produit neuve. Nuance à tenir si on évoque le federated learning : même esprit (accord sans centralisation), autre objet — ici c'est un <b>consensus d'inférence gouverné et re-prouvable</b>, pas un entraînement.</p>
+  <div class="oral"><b>À l'oral</b> trois banques calculent un risque commun sans se montrer leurs livres — et chacune peut prouver sa part.</div>
+  </div>
+
+  <div class="apport">
+  <h3>I · Des garde-fous prouvés — la sûreté comme théorème, pas comme espoir</h3>
+  <p><b>Le mécanisme.</b> Le <b>safety envelope</b> de l'étage méta : l'ensemble admissible est <i>déclaré</i> (une boîte ou un polyèdre dans l'espace de décision) ; chaque pas de la convergence est <b>projeté</b> à l'intérieur par une projection <b>non-expansive</b> — propriété mathématique qui garantit la convergence, y compris depuis une graine hostile ; et l'ampleur de chaque correction, <code>safety_delta = ‖z−z̃‖</code>, est <b>scellée dans la chaîne</b>.</p>
+  <p><b>Le monde sans.</b> Les « guardrails » du marché sont des prompts : « ne fais pas X », espéré. Rien ne garantit qu'ils tiennent, rien ne prouve après coup qu'ils ont agi, et un agent compromis les ignore. Ici, trois propriétés rares se cumulent. <b>La contrainte est mathématique</b> — pas une instruction qu'un modèle peut ignorer, une projection qu'aucune sortie ne peut éviter. <b>Elle tient face à l'adversaire</b> — un essaim manipulé ou en dérive est <i>ramené</i> dans les bornes, prouvablement (la démo <code>safety_violation_attempt</code> montre exactement cela : une tentative hostile, clampée, scellée). <b>La correction est elle-même auditable</b> — on peut établir après coup que le garde-fou a agi, quand, et de combien : le clamp n'est pas un événement invisible, c'est un enregistrement. C'est le renversement complet du rapport à la sûreté : d'un espoir de comportement à une <b>propriété démontrable du système</b>, dont chaque activation laisse une trace opposable.</p>
+  <p><b>Pour Kovant.</b> La traduction contractuelle est immédiate et c'est elle qu'il faut dire : « aucun fournisseur ne sera jamais auto-scoré hors de la bande de politique » — une garantie qu'un client peut <b>écrire dans un contrat</b>, parce qu'elle est projetée mathématiquement et que chaque clamp est scellé. Aucun concurrent à guardrails-par-prompt ne peut signer cette phrase.</p>
+  <div class="oral"><b>À l'oral</b><span class="quote">« Guardrails you can prove, not hope for. »</span> — le rail de sécurité en montagne : peu importe l'erreur, la voiture est ramenée sur la route — et le choc est enregistré.</div>
+  </div>
+
+  <div class="apport">
+  <h3>J · Le silence signé — l'absence d'anomalie devient un fait</h3>
+  <p><b>Le mécanisme.</b> Dans l'essaim, <i>tous</i> les agents entrent dans la chaîne de provenance par agent — y compris les agents Mode A, purs Rust, qui n'émettent <b>aucun texte</b>. Leur passage, leurs entrées, leur « rien à signaler » sont hachés et chaînés comme le reste.</p>
+  <p><b>Le monde sans.</b> Dans un audit classique, l'absence d'enregistrement est un <b>trou</b> — et un trou est indécidable : impossible de distinguer « il ne s'est rien passé » de « la trace a été perdue » de « la trace a été supprimée ». Les trous sont exploités dans les deux sens : par la défense (« l'absence de log prouve qu'il n'y a pas eu d'incident ») et par l'accusation (« l'absence de log prouve la dissimulation »). En scellant aussi le silence — chaque agent, même muet, laisse un maillon daté et signé — le dispositif ferme cette classe entière d'ambiguïté : une main courante où même « RAS » est signé. L'absence d'anomalie cesse d'être une inférence fragile tirée du vide ; elle devient un <b>fait positivement attesté</b>.</p>
+  <p><b>Pour Kovant.</b> En conformité, prouver qu'un contrôle <i>a tourné et n'a rien trouvé</i> vaut autant que détecter : c'est la différence entre « nous n'avons pas de preuve de problème » (faible) et « nous avons la preuve de l'absence de problème détecté, contrôle par contrôle » (opposable). Le screening sanctions qui n'a rien trouvé est un événement scellé, pas un néant.</p>
+  <div class="oral"><b>À l'oral</b> even silent workers are hashed — même « rien à signaler » est daté et signé.</div>
+  </div>
+
+  <div class="apport">
+  <h3>K · Le fossé qui ne s'érode pas — l'économie du moat</h3>
+  <p><b>Le mécanisme.</b> Aucune pièce isolée : une <b>propriété architecturale transversale</b>. Le scellement est sur le chemin d'exécution des trois étages (pas un module optionnel), la crypto est zéro-dépendance (pas un import), le vérifieur est un produit livré (pas un service), le RGPD coexiste (tombstones), la non-répudiation existe (N18), le fail-closed existe (N24). C'est un <i>ensemble de décisions de conception prises à la racine</i>.</p>
+  <p><b>Le monde sans — c'est-à-dire le marché.</b> Le raisonnement économique en trois temps. <b>Un</b> : le prix des tokens s'effondre (~10× moins cher en ~18 mois) et les frameworks d'orchestration prolifèrent — câbler un graphe d'agents, qui était un problème d'ingénierie, est devenu un après-midi de travail. La marge d'un pur orchestrateur s'érode donc vers zéro : tout ce que le client peut refaire lui-même finit par ne plus se vendre. <b>Deux</b> : ce que le client ne peut <i>pas</i> refaire en un après-midi, c'est la re-prouvabilité — non parce qu'elle est secrète, mais parce qu'elle est <b>architecturale</b>. Un concurrent qui veut la copier découvre que le bolt-on échoue par construction : un log ajouté <i>après coup</i> n'a pas de chaîne (le sceau doit être sur le chemin d'exécution dès la conception — il faut ré-architecturer, pas ajouter) ; une crypto à dépendances ruine l'argument du vérifieur lisible (retour à « croyez notre supply-chain ») ; un vérifieur propriétaire ruine l'argument « sans nous ». Copier la re-prouvabilité, c'est reconstruire le système — et arriver deuxième, des années plus tard, sur la seule dimension où l'antériorité prouvée compte. <b>Trois</b> : la valeur de la re-prouvabilité <i>monte</i> quand l'orchestration se banalise — plus il y a d'agents partout, plus la question « qui peut prouver ce que les siens ont fait ? » devient discriminante. Le moat est donc non seulement résistant à la commoditisation : il en est le <b>bénéficiaire</b>.</p>
+  <p><b>Pour Kovant.</b> C'est la réponse à la question d'investisseur « pourquoi vous et pas un fork de LangChain ? » : n'importe qui copie l'orchestration ; personne ne copie à bas coût une discipline de construction de trois ans, testée adversarialement, avec le vérifieur comme produit. <span class="quote">« Re-provability with a zero-dep verifier is what doesn't erode. »</span></p>
+  <div class="oral"><b>À l'oral</b> token prices collapse ; anyone wires an agent graph ; almost no one can <b>prove</b> what those agents did.</div>
+  </div>
+
+  <div class="apport">
+  <h3>L · L'absorption dé-risquée — la preuve comme mécanisme de la transaction elle-même</h3>
+  <p><b>Le mécanisme.</b> L'application réflexive de tout ce qui précède : le pitch lui-même est re-prouvable. L'ask final n'est pas « croyez-nous », c'est un protocole — une tâche procurement réelle de Kovant, livrée en bundle re-prouvable ; ils recompilent le vérifieur zéro-dépendance, coupent le réseau, re-prouvent chaque étage eux-mêmes.</p>
+  <p><b>Le monde sans.</b> Toute acquisition de technologie souffre d'une asymétrie d'information structurelle : le vendeur sait ce que son système fait vraiment, l'acheteur doit le croire — et la due diligence classique (lire du code pendant des semaines, interviewer l'équipe) ne comble qu'une fraction de l'écart, au prix fort. C'est le marché des « lemons » : faute de signal vérifiable, l'acheteur décote tout, et les bons produits sont sous-payés comme les mauvais. La re-prouvabilité est exactement le <b>signal vérifiable</b> qui manque : l'acheteur ne lit pas une promesse sur le système — il <i>exécute la preuve</i> de ce que le système a fait sur <i>sa propre</i> tâche. L'asymétrie ne se plaide pas, elle se dissout. « You re-verify what you absorb » transforme la due diligence de lecture-et-confiance en calcul-et-constat — et réduit d'autant le risque, donc la décote, donc la friction de la transaction.</p>
+  <p><b>Pour Kovant.</b> C'est l'argument de clôture et il est auto-référent à dessein : l'absorption des trois étages est <i>sûre</i> précisément parce que la propriété qu'on vend s'applique à la vente. Ils n'achètent pas une boîte noire — ils achètent quelque chose dont ils auront produit eux-mêmes la preuve, en salle fermée, avant de signer. Aucune slide d'aucun concurrent ne peut offrir ce geste, parce qu'il présuppose le produit.</p>
+  <div class="oral"><b>À l'oral</b><span class="quote">« Proof, not promise. You don't take our word for any of it. »</span></div>
+  </div>
+</div>
+
+<!-- §4 -->
+<div class="wrap page">
+  <h2><span class="num">§4</span> — Ce que ça n'apporte pas : six limites, dites à voix haute</h2>
+  <p class="lead">La précision chirurgicale exige le négatif. Ces limites ne sont pas des concessions arrachées : elles sont <b>dans le pitch</b>, volontairement — un vendeur qui borne lui-même son produit est le seul qu'un board croit. Chacune vient avec sa réponse architecturale ou sa redirection honnête.</p>
+
+  <h3>1 · Intégrité ≠ correction — la limite cardinale</h3>
+  <p>La re-preuve établit <b>ce qui s'est passé</b>, fidèlement, sans altération — jamais que la décision était <b>bonne</b>. Un score de risque erroné, parfaitement scellé, re-prouvé <code>exit 0</code>, reste un score erroné : la chaîne atteste le processus, pas la qualité du jugement. C'est la première chose à dire et à répéter (le deck la répète à chaque étage) : <span class="quote">« this proves what happened, never that a decision was right »</span>. La correction relève d'autres instruments — les gold-gates (N19), les évaluations mesurées (la « science » du deck), et le jugement humain qui reste le décideur. Confondre les deux serait vendre de la magie ; les distinguer, c'est vendre un instrument dont on connaît la portée. Noter le corollaire positif : c'est <i>parce que</i> la re-preuve ne prétend pas à la correction qu'elle peut être totale sur l'intégrité — les deux garanties ont des natures différentes, et un produit qui prétendrait aux deux d'un même geste mentirait sur au moins une.</p>
+
+  <h3>2 · Sealed garbage — la fidélité n'est pas la vérité des entrées</h3>
+  <p>La chaîne prouve que les enregistrements sont <b>fidèles</b> (ce qui est entré est ce qui a été traité, sans réécriture) — pas que les entrées étaient <b>vraies</b>. Si la donnée source est fausse — un fournisseur qui déclare un faux siège social, un document falsifié en amont — on prouvera, impeccablement, qu'on a fidèlement traité une donnée fausse. <i>Garbage in, sealed garbage out.</i> La valeur résiduelle est réelle mais il faut la nommer exactement : la provenance montre <b>d'où</b> vient l'entrée fautive (« à partir de quoi » est dans chaque <code>AgentCallRecord</code>), donc la remédiation est rapide et la responsabilité assignable — mais la validation du monde extérieur reste un problème de grounding et de sources, pas de scellement.</p>
+
+  <h3>3 · Consensus ≠ vérité — l'accord peut être unanimement faux</h3>
+  <p>La re-preuve du méta-essaim montre <b>comment</b> le groupe a décidé — qui a contribué, quand le garde-fou a agi, que nul n'a dominé. « Comment » n'est pas « correctement » : N essaims peuvent converger, proprement, prouvablement... vers une erreur partagée. Notre propre recherche documente le phénomène sans complaisance : un apprentissage par consensus qui crédite la <i>présence et l'accord</i> renforce l'unanimement-faux — d'où l'option d'un <b>juge-oracle de correction</b> dans le panel quand la tâche s'y prête. Là encore, l'honnêteté est l'argument : nous savons précisément ce que le consensus garantit (l'absence de capture unilatérale, la traçabilité de la délibération) et ce qu'il ne garantit pas (la justesse).</p>
+
+  <h3>4 · Le périmètre est une discipline — la preuve couvre ce qui est routé</h3>
+  <p>Est prouvé <b>ce qui passe par le substrat</b>. Une action hors-chaîne — un humain qui court-circuite, un script à côté, un export manuel — n'est couverte par rien. La re-prouvabilité crée donc une exigence d'intégration : tout ce qui doit être opposable doit être routé par le sceau. L'architecture aide à tenir la discipline — N24 en fail-closed <i>refuse</i> la requête dont un contrôle manque (le trou ne passe pas silencieusement) ; la garde d'egress verrouille les sorties non autorisées — mais la couverture du périmètre reste une décision de déploiement, pas un théorème. Dit autrement : le système prouve tout ce qu'on lui confie ; il ne peut rien pour ce qu'on lui cache.</p>
+
+  <h3>5 · La crypto symétrique a une conséquence — et une réponse à deux étages</h3>
+  <p>Il faut être exact sur ce point, car un CTO le verra. HMAC est <b>symétrique</b> : qui détient la clé peut sceller. Contre un <b>tiers sans clé</b> — l'écrasante majorité des menaces : altération en transit, modification en base, falsification par un tiers — la chaîne est inviolable et localisante. Mais l'<b>opérateur détenteur de la clé</b> pourrait, en théorie, réécrire une histoire alternative <i>complète et cohérente</i> et la re-sceller. La chaîne HMAC seule ne prétend pas fermer cette porte — et il ne faut pas prétendre qu'elle le fait. Ce qui la ferme, dans l'architecture : <b>N18</b> — signatures <b>Ed25519</b>, asymétriques, adossées à des identités KYC : la non-répudiation, précisément le régime où le signataire ne peut pas nier ni réécrire ; et les <b>epochs Merkle</b> — des racines périodiques qui, une fois remises à un tiers (l'acheteur, l'auditeur), rendent toute réécriture ultérieure du passé détectable par simple comparaison. La posture honnête à l'oral : « HMAC protège contre la falsification externe ; pour la répudiation interne, c'est N18 plus l'ancrage d'epochs — et c'est déployable selon votre modèle de menace. »</p>
+
+  <h3>6 · Un coût de conception — le prix d'entrée du moat</h3>
+  <p>La re-prouvabilité ne s'ajoute pas, elle se <i>construit</i> : chaque action doit passer par l'enregistrement, les clés par tenant doivent être gérées (HKDF, rotation, garde), les epochs ancrés, la non-interférence maintenue. Le coût runtime est faible et mesuré — l'observateur est <b>hors du chemin de calcul</b>, la non-interférence est testée (résultats byte-identiques avec et sans provenance), et le hachage est négligeable devant un appel LLM — mais le coût de <i>conception</i> est réel : c'est une contrainte qui pèse sur chaque nouvelle feature, à jamais. Il faut le dire sans détour, car c'est l'autre face de l'apport K : si c'était gratuit, tout le monde l'aurait — le prix que nous avons payé <i>est</i> la barrière à l'entrée.</p>
+
+  <div class="callout warn"><span class="lbl">La limite transversale</span>
+    <p>La re-prouvabilité <b>outille la responsabilité, elle ne la transfère pas</b>. Le juriste conclut (jamais l'outil — pas de champ « compliant »), l'humain décide, l'organisation assume. L'artefact rend leur travail possible, rapide et opposable — il ne les remplace pas. Toute présentation qui laisserait entendre l'inverse vendrait trop, et se ferait démonter par le premier directeur juridique de la salle.</p>
+  </div>
+</div>
+
+<!-- §5 -->
+<div class="wrap page qa">
+  <h2><span class="num">§5</span> — Dix objections, dix réponses</h2>
+  <p class="lead">Les objections réelles d'un CTO, d'un directeur conformité ou d'un investisseur — avec la réponse courte (à dire) et la substance (à dérouler si on creuse).</p>
+
+  <h4>« Et si vous truquez le vérifieur ? »</h4>
+  <p><b>Réponse courte :</b> vous en lisez la source — minuscule, écrite à la main, prouvée sur les vecteurs NIST/RFC — et vous pouvez écrire le vôtre. <b>Substance :</b> le vérifieur n'est pas un oracle à croire, c'est une procédure à lire : <code>cargo tree</code> = 1 ligne signifie que la base de confiance entière tient dans une lecture d'après-midi. Et le format est re-implémentable depuis la spec : l'argument ultime n'est pas « notre vérifieur est honnête », c'est « vous n'avez pas besoin du nôtre ».</p>
+
+  <h4>« Pourquoi croirais-je un exit 1 ? »</h4>
+  <p><b>Réponse courte :</b> parce que c'est <i>vous</i> qui l'avez calculé, sur votre machine, réseau coupé. <b>Substance :</b> il n'y a littéralement personne d'autre à croire dans la boucle — ni service, ni réseau, ni nous. Le verdict est un produit de votre CPU sur des maths publiques. C'est toute la différence avec un rapport de conformité : le rapport se lit, le verdict se calcule.</p>
+
+  <h4>« Un audit log signé suffit. »</h4>
+  <p><b>Réponse courte :</b> un log se lit ; il ne se recalcule pas. Sa valeur probante égale la confiance dans son gardien. <b>Substance :</b> même signé, un log est une <i>déclaration</i> du système qui l'a écrit — il prouve au mieux que le fichier n'a pas changé depuis la signature, pas que son contenu reflète l'exécution. La chaîne re-prouvable lie chaque enregistrement à l'exécution elle-même (scellement sur le chemin, chaînage par maillon) et se re-vérifie de bout en bout. Notaire vs capture d'écran.</p>
+
+  <h4>« La provenance, c'est déjà résolu — W3C PROV, sigstore, etc. »</h4>
+  <p><b>Réponse courte :</b> la provenance <i>montrée</i> n'est pas la provenance <i>re-prouvable</i> hors-ligne, par un tiers, sans le vendeur. <b>Substance :</b> les standards de provenance décrivent des graphes de dérivation (un vocabulaire) ; sigstore signe des artefacts logiciels en s'appuyant sur une infrastructure de transparence <i>en ligne</i>. Ni l'un ni l'autre ne livre le triplet qui fait la re-preuve : un journal d'exécution d'agents scellé au fil de l'eau + un vérifieur zéro-dépendance recompilable + une procédure air-gap. Le différenciateur n'est pas le mot « provenance », c'est <b>qui peut vérifier, dans quelles conditions, en dépendant de qui</b>.</p>
+
+  <h4>« Pourquoi pas une blockchain ? »</h4>
+  <p><b>Réponse courte :</b> mauvais problème. Nous n'avons pas besoin d'un consensus mondial entre inconnus ; nous avons besoin qu'un journal privé, remis à des parties identifiées, soit vérifiable réseau coupé. <b>Substance :</b> une blockchain achète la résistance à la censure et l'ordre public au prix d'un réseau permanent, d'un consensus coûteux et d'une immuabilité qui la met frontalement en conflit avec le RGPD (impossible d'effacer). Notre dispositif fait l'inverse exact : hors-ligne par construction, coût nul à la vérification, et l'effacement RGPD résolu par tombstones. Là où un ancrage public a du sens (rendre la réécriture interne détectable), les epochs Merkle le fournissent — sans token, sans réseau, sans infrastructure.</p>
+
+  <h4>« HMAC est symétrique : l'opérateur peut forger sa propre histoire. »</h4>
+  <p><b>Réponse courte :</b> exact — contre les tiers, HMAC suffit ; contre la répudiation interne, c'est N18 (Ed25519, KYC) plus l'ancrage d'epochs. <b>Substance :</b> voir §4, limite 5. L'architecture distingue explicitement les deux modèles de menace, et c'est un signe de maturité, pas une faiblesse : un produit qui prétendrait qu'une chaîne symétrique fait de la non-répudiation se disqualifierait devant tout cryptographe. Le déploiement choisit son niveau selon le modèle de menace du client.</p>
+
+  <h4>« Quel overhead sur la performance ? »</h4>
+  <p><b>Réponse courte :</b> l'observateur est hors du chemin de calcul, et la non-interférence est testée — résultats byte-identiques avec et sans provenance. <b>Substance :</b> le coût est du hachage (BLAKE3/SHA-256), négligeable devant un appel de modèle. Et la propriété forte n'est pas « c'est rapide », c'est « c'est <i>sans effet</i> » : la capture n'altère pas les résultats, et on peut le prouver — le test de non-interférence fait partie de la suite.</p>
+
+  <h4>« Et le RGPD ? L'immuabilité est illégale en Europe. »</h4>
+  <p><b>Réponse courte :</b> tombstones — l'effacement est réel, la chaîne reste intacte, et l'effacement lui-même devient prouvable. <b>Substance :</b> voir apport G. La donnée disparaît, sa place est marquée, le chaînage se recalcule. On prouve à la fois l'intégrité de la piste et l'exécution de l'effacement — delete ≠ break. (Borne honnête : on prouve l'effacement <i>à partir de</i> sa date ; on ne réécrit pas l'histoire antérieure — c'est précisément ce qu'on ne veut pas pouvoir faire.)</p>
+
+  <h4>« Et si EFE disparaît ? »</h4>
+  <p><b>Réponse courte :</b> les bundles restent vérifiables pour toujours — la source du vérifieur est dedans, les maths sont publiques. <b>Substance :</b> voir apport E. C'est le seul modèle de preuve auquel la disparition du vendeur ne fait rien : ni service à maintenir, ni licence à renouveler, ni serveur à joindre. Pour l'acheteur, la question « et si vous mourez ? » est même l'endroit où ce produit brille le plus — retournement rare en due diligence.</p>
+
+  <h4>« Prouvez-le. »</h4>
+  <p><b>Réponse courte :</b> c'est exactement l'ask. <b>Substance :</b> une tâche procurement réelle, choisie par vous ; nous la livrons en bundle re-prouvable ; vous recompilez le vérifieur, coupez le réseau, re-prouvez chaque étage vous-mêmes — en salle fermée si vous voulez. Des semaines, pas des trimestres. La demande de preuve n'est pas une objection au pitch : elle <i>est</i> le pitch. <span class="quote">« Proof, not promise. »</span></p>
+</div>
+
+<!-- §6 -->
+<div class="wrap page">
+  <h2><span class="num">§6</span> — Le cas Kovant : la hiérarchie des apports</h2>
+  <p class="lead">Les douze apports ne pèsent pas pareil selon l'interlocuteur. Pour Kovant — SLM-swarms pour le procurement et la conformité, pré-seed, équipe produit ex-Spotify — la hiérarchie utile est celle-ci :</p>
+
+  <h3>Rang 1 — L'apport transactionnel : l'absorption dé-risquée (L)</h3>
+  <p>C'est l'apport qui s'adresse à <i>eux</i>, maintenant, dans la décision qu'ils ont à prendre. Absorber une technologie externe est un pari sur ce qu'on ne voit pas ; ici, la propriété vendue s'applique à la vente — ils re-vérifient ce qu'ils absorbent, avant d'absorber. Ce n'est pas un argument de plus, c'est le cadre de la négociation : le pilote proposé (une de leurs tâches, un bundle, leur re-preuve) est la due diligence <i>et</i> la démonstration produit en un seul geste.</p>
+
+  <h3>Rang 2 — Les apports produit : l'évidence sans accès (B) + la conformité dérivée (F) + les garde-fous prouvés (I)</h3>
+  <p>Ce sont les trois qui deviennent des <b>lignes vendables</b> dans <i>leur</i> produit à <i>leurs</i> clients régulés : la clause contractuelle « chaque décision livrée re-prouvable » (B), la langue réglementaire parlée en code — article 12, DORA, CSDDD (F), et la garantie signable « jamais hors de la bande de politique » (I). C'est la partie qui transforme leur pitch commercial : ils ne vendent plus « des agents pour le procurement », ils vendent « des décisions d'achat dont vos auditeurs re-calculent la preuve ». Le différenciateur de leurs concurrents directs — qui, eux, gesticuleront des PDFs.</p>
+
+  <h3>Rang 3 — L'apport thèse : le fossé (K)</h3>
+  <p>Pour leurs investisseurs (et les nôtres, dans un cadre commun) : l'orchestration se commoditise, la re-prouvabilité s'apprécie. La réponse structurelle à « pourquoi ce produit gardera-t-il sa marge ? ». S'utilise en fin d'argumentaire, jamais en ouverture — c'est un argument de board, pas de démo.</p>
+
+  <h3>Rang 4 — L'ampleur : tout le reste (A, C, D, E, G, H, J)</h3>
+  <p>Le déplacement de confiance (A) est le socle conceptuel qu'on énonce en ouverture puis qu'on laisse irriguer ; la localisation (C), le litige-calcul (D), la survie au vendeur (E), le RGPD (G), le consensus sans partage (H), le silence signé (J) sont les munitions de profondeur — chacune sort quand la conversation passe sur son terrain (un juriste → D et G ; un architecte → C et J ; un stratège → E et H). Il ne faut jamais les dérouler toutes : la densité est dans ce document, la présentation choisit.</p>
+
+  <div class="callout ok"><span class="lbl">Le fil à tenir, en trois phrases</span>
+    <p>1. Tout le monde sait faire des agents ; presque personne ne sait <b>prouver</b> ce qu'ils ont fait — et votre marché est celui où la preuve est l'obligation. 2. Nous apportons les trois étages d'orchestration <b>plus</b> le substrat qui rend chaque pas re-prouvable — hors-ligne, par un tiers, sans nous. 3. Et vous n'avez pas à nous croire : <b>re-prouvez-le vous-mêmes</b> — c'est l'ask.</p>
+  </div>
+
+  <div class="callout warn"><span class="lbl">Les deux interdits, rappelés</span>
+    <p>Ne jamais attaquer leur thèse SLM — notre science dit <i>quand</i> l'essaim de petits modèles gagne (mesuré, publié même quand ça nous réfute), elle <b>raffine</b> leur pari, elle ne le conteste pas. Et ne jamais laisser croire que la re-preuve valide la <i>décision</i> : intégrité, pas correction — c'est la limite cardinale, et c'est nous qui devons la dire en premier.</p>
+  </div>
+</div>
+
+<!-- §7 -->
+<div class="wrap page">
+  <h2><span class="num">§7</span> — Table de synthèse</h2>
+  <p class="lead">Les douze apports en une vue : le mécanisme porteur, le monde sans, le monde avec.</p>
+  <table>
+    <thead><tr><th style="width:16%">Apport</th><th style="width:21%">Mécanisme porteur</th><th style="width:31%">Sans re-preuve</th><th>Avec</th></tr></thead>
+    <tbody>
+      <tr><td class="s">A · Preuve vs parole</td><td>Les 4 mouvements ; vérifieur recompilable</td><td>Confiance institutionnelle : chère, non transférable, périssable</td><td>Confiance calculée : quasi gratuite, transférable, impérissable</td></tr>
+      <tr><td class="s">B · Évidence sans accès</td><td>Bundle auto-porteur ; clé jamais dedans</td><td>Audit = ouvrir des accès ; coût, risque, état du jour de visite</td><td>Un objet sort ; re-vérification offline, sans login ; contractualisable</td></tr>
+      <tr><td class="s">C · Altération localisée</td><td>Chaînage par maillon</td><td>Booléen « quelque chose a changé » → enquête (semaines)</td><td>« L'étape 12 » → correction (heures) ; charge de preuve renversée</td></tr>
+      <tr><td class="s">D · Litige = calcul</td><td>A + B + C : même verdict pour toutes les parties</td><td>Discovery, expertises contradictoires — établir les faits coûte des mois</td><td>Le factuel se recalcule en minutes ; reste l'interprétation</td></tr>
+      <tr><td class="s">E · Survit au vendeur</td><td>Source du vérifieur dans le bundle ; rejeu déterministe</td><td>La preuve SaaS meurt avec le vendeur ; historique adossé à sa survie</td><td>Vérifiable dans 10 ans, vendeur disparu ; anti-lock-in par construction</td></tr>
+      <tr><td class="s">F · Conformité dérivée</td><td><code>reg-evidence</code> (vues) ; N17/18/19/16 ; N24 fail-closed</td><td>Conformité = projet parallèle : reconstruction, trous, dérive</td><td>Dossier dérivé de l'exécution ; contrôle sur le chemin, qui refuse</td></tr>
+      <tr><td class="s">G · Effacement sans rupture</td><td>Tombstones</td><td>RGPD contre intégrité : effacer casse, ou immuable = illégal</td><td>Delete ≠ break : chaîne intacte + effacement prouvé</td></tr>
+      <tr><td class="s">H · Accord sans révéler</td><td>Méta : consensus latent 256-dim ; v1/v2/v3</td><td>Centraliser (confidentialité morte) ou réunions (aucune trace)</td><td>0 donnée échangée, 0 poids exposé — et contributions prouvables</td></tr>
+      <tr><td class="s">I · Garde-fous prouvés</td><td>Projection non-expansive ; <code>safety_delta</code> scellé</td><td>Guardrails = prompts espérés ; rien ne prouve qu'ils ont agi</td><td>Contrainte mathématique, tient face à l'hostile, correction auditable</td></tr>
+      <tr><td class="s">J · Silence signé</td><td>Provenance par agent, y compris Mode A muets</td><td>L'absence de log = trou indécidable, exploitable des deux côtés</td><td>« Rien à signaler » daté et signé — l'absence devient un fait</td></tr>
+      <tr><td class="s">K · Fossé durable</td><td>Propriété architecturale ; zéro-dép ; pas de bolt-on possible</td><td>Marge d'orchestrateur érodée par la commoditisation</td><td>La valeur de la preuve monte quand les agents se banalisent</td></tr>
+      <tr><td class="s">L · Absorption dé-risquée</td><td>L'ask = un protocole de re-preuve sur leur tâche</td><td>Due diligence = lecture + confiance ; asymétrie d'information, décote</td><td>L'acheteur exécute la preuve lui-même avant de signer</td></tr>
+    </tbody>
+  </table>
+  <p class="small muted">Lecture verticale utile : la colonne « Sans » est la liste des douleurs actuelles d'un acheteur régulé — c'est aussi, très exactement, le plan d'un discovery call.</p>
+</div>
+
+<!-- §8 -->
+<div class="wrap page">
+  <h2><span class="num">§8</span> — Lexique chirurgical</h2>
+  <p class="lead">Les termes exacts, pour ne jamais flotter en séance.</p>
+  <table>
+    <thead><tr><th style="width:24%">Terme</th><th>Définition exacte</th></tr></thead>
+    <tbody>
+      <tr><td class="s">Re-prouvable</td><td>Vérifiable par un tiers <b>sans le producteur, sans accès, sans réseau</b> — avec localisation de toute altération. Propriété du triplet {enregistrements scellés · vérifieur recompilable · procédure}.</td></tr>
+      <tr><td class="s">Bundle</td><td>L'objet remis : enregistrements scellés + <b>source</b> du vérifieur. La clé de scellement n'y figure jamais.</td></tr>
+      <tr><td class="s">AgentCallRecord</td><td>L'atome de preuve : qui / quoi / quand / à partir de quoi — haché BLAKE3 + SHA-256.</td></tr>
+      <tr><td class="s">Chaîne HMAC</td><td>Chaînage HMAC-SHA256 des enregistrements sous clé par tenant (dérivée HKDF). Sceau byte-identique aux trois étages → chaînes mutuellement vérifiables.</td></tr>
+      <tr><td class="s">Epoch Merkle</td><td>Regroupement périodique des maillons sous une racine ; remise à un tiers = ancrage rendant toute réécriture ultérieure détectable.</td></tr>
+      <tr><td class="s">Tombstone</td><td>Marqueur d'effacement RGPD : la donnée disparaît, la place chaînée reste, l'effacement devient prouvable. Delete ≠ break.</td></tr>
+      <tr><td class="s"><code>verify-mini</code> / <code>verify_meta_mini</code></td><td>Les vérifieurs hors-ligne, zéro dépendance (<code>cargo tree</code> = 1 ligne, std-only) ; crypto à la main prouvée NIST FIPS 180-4 / RFC 2104. <code>exit 0</code> intact ; <code>exit 1</code> altéré + étape désignée.</td></tr>
+      <tr><td class="s"><code>GET /verify/:id</code></td><td>La re-preuve en ligne, sur le fil, pour n'importe quel run stocké — la clé ne quitte jamais le serveur.</td></tr>
+      <tr><td class="s"><code>provenance_root</code></td><td>La racine unique scellant qui-a-contribué-quoi dans un run d'essaim — c'est le hash qu'un régulateur re-vérifie.</td></tr>
+      <tr><td class="s">v1 / v2 / v3</td><td>Les trois profondeurs de preuve méta : la valeur à chaque pas (v1) ; + quand le garde-fou a agi (v2) ; + contribution par partie et rejeu identique (v3).</td></tr>
+      <tr><td class="s"><code>safety_delta</code></td><td>‖z−z̃‖ : l'ampleur de la correction du safety envelope, scellée à chaque clamp. La preuve que le garde-fou a agi, quand, de combien.</td></tr>
+      <tr><td class="s">Non-expansif</td><td>Propriété de la projection du safety envelope : garantit la convergence, y compris depuis une graine hostile — le fondement mathématique de « guardrails you can prove ».</td></tr>
+      <tr><td class="s">Fail-closed (N24)</td><td>Un contrôle de conformité manquant <b>refuse</b> la requête au lieu de la laisser passer en le notant. Le portique, pas le panneau.</td></tr>
+      <tr><td class="s">Mode A / B / C</td><td>Les régimes d'exécution des nano-robots (isolation/latence) ; les agents Mode A n'émettent aucun texte — et sont hashés quand même (le silence signé).</td></tr>
+      <tr><td class="s">Non-interférence</td><td>Propriété testée : résultats byte-identiques avec et sans capture de provenance — l'observateur est hors du chemin de calcul.</td></tr>
+      <tr><td class="s">Garde d'egress</td><td>Le verrou de souveraineté : en mode keyless/self-host, aucune donnée ne sort du périmètre — les sorties non autorisées sont bloquées.</td></tr>
+      <tr><td class="s"><code>reg-evidence</code> / <code>forensic-export</code></td><td>La dérivation de dossiers réglementaires comme vues recalculables — sans champ « compliant » (le juriste conclut) — et l'export forensique des chaînes.</td></tr>
+      <tr><td class="s">N17 / N18 / N19 / N16</td><td>Les primitives conformité : art. 12 AI Act (journal forensique par appel modèle) ; non-répudiation Ed25519/KYC ; gold-gates qualité ; résidence & DORA (rejeu déterministe inter-régions). 533 tests sur N17-19.</td></tr>
+      <tr><td class="s">Dishonest-green</td><td>Le bug le plus instructif de la revue adversariale : un vérifieur qui disait « intact » à tort. Trouvé, corrigé, testé — la raison d'être de la revue.</td></tr>
+    </tbody>
+  </table>
+
+  <hr>
+  <p class="small muted">EFE — analyse de fond « la re-prouvabilité : ce qu'elle apporte » · complète le deck (28 slides), le cours (13 modules) et le script de pitch · usage interne · 2026-07-07. La formule qui résume tout : <span class="quote">la re-preuve ne rend pas l'IA plus intelligente — elle la rend opposable.</span></p>
+</div>
+
+</body>
+</html>

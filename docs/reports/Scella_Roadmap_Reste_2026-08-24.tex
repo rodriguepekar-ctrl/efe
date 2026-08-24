@@ -1,0 +1,399 @@
+\documentclass[10pt]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage[french]{babel}
+\usepackage{newpxtext,newpxmath}
+\usepackage[a4paper,top=1.5cm,bottom=1.35cm,left=1.5cm,right=1.5cm]{geometry}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{titlesec}
+\usepackage[most]{tcolorbox}
+\usepackage{enumitem}
+\usepackage{array}
+\usepackage{booktabs}
+\usepackage{fancyhdr}
+
+\definecolor{navy}{HTML}{1F3A5F}
+\definecolor{grey}{HTML}{54606E}
+\definecolor{green}{HTML}{2C6E49}
+\definecolor{amber}{HTML}{9C6A16}
+\definecolor{red}{HTML}{A6322E}
+\definecolor{plum}{HTML}{7A4EA8}
+\definecolor{boxgray}{HTML}{F3F5F8}
+\definecolor{boxred}{HTML}{FCF2F1}
+\definecolor{boxgreen}{HTML}{F1F7F3}
+\definecolor{boxplum}{HTML}{F7F3FB}
+\definecolor{boxcode}{HTML}{F7F8FA}
+\definecolor{boxedge}{HTML}{D9E0EA}
+
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{2.6pt}
+\linespread{1.0}
+
+\pagestyle{fancy}\fancyhf{}
+\lhead{\small\color{grey}Scella}
+\rhead{\small\color{grey}Ce qui reste --- 24 août 2026}
+\cfoot{\small\color{grey}\thepage}
+\renewcommand{\headrulewidth}{0.3pt}
+
+\titleformat{\section}{\color{navy}\large\bfseries}{}{0pt}{}
+\titlespacing{\section}{0pt}{11pt}{3pt}
+\titleformat{\subsection}{\color{navy}\bfseries}{}{0pt}{}
+\titlespacing{\subsection}{0pt}{7pt}{1.5pt}
+
+\newtcolorbox{these}{colback=boxgray,colframe=boxedge,boxrule=0.5pt,arc=2.5pt,
+  left=8pt,right=8pt,top=4.5pt,bottom=4.5pt}
+\newtcolorbox{alerte}{colback=boxred,colframe=red!55,boxrule=0.8pt,arc=2.5pt,
+  left=8pt,right=8pt,top=4.5pt,bottom=4.5pt}
+\newtcolorbox{acquis}{colback=boxgreen,colframe=green!45,boxrule=0.8pt,arc=2.5pt,
+  left=8pt,right=8pt,top=4.5pt,bottom=4.5pt}
+\newtcolorbox{piste}{colback=boxplum,colframe=plum!45,boxrule=0.8pt,arc=2.5pt,
+  left=8pt,right=8pt,top=4.5pt,bottom=4.5pt}
+\newtcolorbox{extrait}{colback=boxcode,colframe=boxedge,boxrule=0.5pt,arc=1.5pt,
+  left=7pt,right=7pt,top=3.5pt,bottom=3.5pt}
+
+\newcommand{\best}[1]{\textcolor{green}{\textbf{#1}}}
+\newcommand{\pire}[1]{\textcolor{red}{\textbf{#1}}}
+\newcommand{\sz}[1]{\textcolor{grey}{\small\textsf{#1}}}
+\newcommand{\code}[1]{\texttt{\small #1}}
+\newcommand{\fl}{$\rightarrow$}
+\newcommand{\mm}[1]{\textbf{\textcolor{navy}{#1}}}
+
+\begin{document}
+
+\begin{center}
+{\Huge\bfseries\color{navy} Scella}\\[4pt]
+{\large\color{grey}\itshape Ce qui reste --- la feuille de route d'après les modules}\\[4pt]
+{\small\color{grey} 24 août 2026 \; · \; trois travaux de code, trois décisions, et un constat qui les commande}
+\end{center}
+\vspace{2pt}
+
+\begin{these}
+\textbf{Cette feuille de route commence par une mauvaise nouvelle pour qui aime coder.} La feuille
+de route en modules du 20 août est \textbf{close} : \mm{M0} à \mm{M9} sont faits, \mm{M1.b} compris
+depuis aujourd'hui, \mm{MZ} a rendu son verdict, et \mm{MX} attend un déclencheur qui n'a pas
+commencé à exister. Les deux jalons qu'elle nommait --- \emph{C3 vendable} et \emph{C1 livrable} ---
+sont structurellement atteints.
+
+Ce document ne propose donc pas une liste de fonctionnalités. Il fait trois choses : il
+\textbf{mesure} ce que le dépôt est devenu, il isole les \textbf{trois} travaux de code qui
+restent réellement chiffrables, et il nomme les \textbf{trois décisions} qui ne se codent pas. Tous
+les chiffres qui suivent ont été mesurés le 24 août 2026 sur l'arbre, pas repris d'un document
+antérieur --- et l'un d'eux contredit la feuille de route précédente.
+\end{these}
+
+\section{0 · Le constat qui commande tout le reste}
+
+La feuille de route en modules porte, en son §3, une alerte qu'il faut relire maintenant qu'elle
+s'applique :
+
+\begin{alerte}
+\textbf{« Le premier jalon est le seul qui décide.} S'il est atteint et qu'aucun prospect n'installe
+la passerelle, le problème n'est \textbf{pas} le produit --- c'est la distribution, et coder \mm{M5}
+à \mm{M9} n'y changera rien. \textbf{Arrêtez-vous là et cherchez pourquoi. »}
+\end{alerte}
+
+\mm{M5} à \mm{M9} \emph{ont} été codés depuis. La condition de l'alerte est donc dépassée dans les
+deux sens : le jalon est atteint, et le travail qu'elle déconseillait a été fait quand même. Ce
+n'est pas un reproche --- ce travail a produit un registre réglementaire livrable et une ancre
+tierce --- mais cela change ce que « la suite » peut vouloir dire. La suite n'est plus un module.
+
+Il faut aussi nommer le contexte extérieur sans le déguiser : la piste Kovant a été abandonnée le
+11 août 2026, et \textbf{aucune cible extérieure n'a été déclarée depuis}. Le compteur de prospects
+n'est donc pas « pas encore trois » ; il est à \textbf{zéro}. Toute décision de ce document qui
+dépend d'un signal de marché dépend d'un signal qui n'a pas encore de source.
+
+\section{1 · L'état mesuré au 24 août 2026}
+
+\subsection{1.1 · Le chiffre qui structure la suite}
+
+Le dépôt compte \textbf{70 crates} et \textbf{499\,799 lignes} de Rust. La fermeture de
+dépendances du produit --- soit la passerelle, la console, et les deux vérifieurs autonomes
+(\code{efe-swarm-gateway}, \code{audit-console}, \code{verify-mini},
+\code{verify-meta-mini}) --- en compte \textbf{20}, pour \textbf{90\,265 lignes}.
+
+\begin{center}\small
+\renewcommand{\arraystretch}{1.24}
+\begin{tabular}{@{}>{\raggedright\arraybackslash}p{6.4cm} r r r@{}}
+\toprule
+\textbf{Groupe} & \textbf{Crates} & \textbf{Lignes} & \textbf{Part} \\
+\midrule
+\best{Le produit} \sz{(passerelle $\cup$ console $\cup$ vérifieurs)} & 20 & 90\,265 & \best{18 \%} \\
+\addlinespace[2pt]
+La pile applicative \code{efe-server} & 20 & 167\,462 & 33 \% \\
+Le reste --- dix-huit crates sans groupe & 18 & 111\,845 & 22 \% \\
+Le runtime nano & 5 & 67\,424 & 13 \% \\
+Le méta-essaim \sz{(durci par \mm{M1.b})} & 4 & 38\,326 & 8 \% \\
+L'outillage de mesure & 4 & 25\,233 & 5 \% \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\sz{Les groupes totalisent 71 pour 70 crates : \code{efe-meta-swarm-proto} appartient à la fois au
+méta-essaim et à la fermeture d'\code{efe-server}. Un chevauchement, pas une erreur --- mais une
+partition propre n'existe pas, et prétendre le contraire serait déjà une déformation.}
+
+\begin{these}
+\textbf{Ce que ce tableau dit, et ce qu'il ne dit pas.} Il dit que \best{quatre lignes sur cinq}
+vivent hors de ce que le produit exécute. Il ne dit \textbf{pas} que ces lignes sont mortes : le
+recensement complet --- manifestes de tous types, scripts, CI, chartes Helm --- ne trouve que
+\textbf{deux} crates que \emph{rien} n'atteint. Il ne dit pas non plus qu'elles sont sans valeur :
+une ligne compte des caractères, pas des idées. Ce qu'il mesure est un \textbf{coût de possession}
+--- ce qu'il faut compiler, tester, mettre à jour et expliquer à quiconque regarde le dépôt.
+\end{these}
+
+\subsection{1.2 · La méthode, et son unique correctif}
+
+La fermeture est calculée sur les \code{[dependencies]} par chemin, hors dépendances
+\emph{optionnelles} et hors \code{dev-dependencies} : c'est la définition qui répond à « qu'est-ce
+que le binaire servi embarque ». Le recensement des \emph{référents}, lui, est plus large ---
+tous types de dépendances, plus les scripts, la CI et les chartes --- parce que la question y est
+inverse : « quelque chose s'appuie-t-il là-dessus ? ».
+
+Cette distinction a corrigé une conclusion en cours de route. Une première passe, comptant les
+seules dépendances non optionnelles, désignait \textbf{six} bibliothèques comme injoignables. Le
+recensement large en a démenti \textbf{quatre} : \code{efe-multi-llm} est une dépendance
+\emph{optionnelle} de la passerelle, \code{efe-ffi} est appelée par trois scripts de vérification
+d'assemblage, \code{efe-saga} par deux ateliers GitHub, \code{efe-active-learning} par un script de
+mesure. Deux résistent :
+
+\begin{center}\small
+\begin{tabular}{@{}>{\raggedright\arraybackslash}p{5.4cm} r >{\raggedright\arraybackslash}p{7.6cm}@{}}
+\toprule
+\textbf{Orphelin strict} & \textbf{Lignes} & \textbf{Ce qui l'atteint} \\
+\midrule
+\code{efe-bench-inference} & 6\,858 & rien : 0 manifeste, 0 binaire, 0 script, 0 charte \\
+\code{efe-cluster-provisioner} & 714 & idem \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{1.3 · Une affirmation de la feuille de route précédente est fausse}
+
+\begin{alerte}
+Le §4 de la feuille de route en modules exclut « \textbf{le runtime nano --- six crates, aucun
+appelant. Le retirer, pas le porter.} » La mesure contredit la seconde moitié : \code{efe-nano} a
+\textbf{quatre} référents dans les manifestes (\code{efe-blackboard}, \code{efe-multi-region},
+\code{efe-nano-inference-daemon}, \code{efe-swarm-topology}), et deux d'entre eux ---
+\code{efe-blackboard} et \code{efe-swarm-topology} --- sont \textbf{dans la fermeture du produit}.
+
+Le groupe nano compte cinq crates, pas six, et \code{efe-nano-app-coordinator} est atteint par
+quatre crates dont \code{scella-mz}. « Le retirer » n'est donc pas une opération de suppression :
+c'est une opération de \textbf{découplage}, et elle n'a pas été chiffrée. La recommandation reste
+peut-être bonne ; son coût annoncé, lui, était sous-évalué parce que personne n'avait compté.
+\end{alerte}
+
+\section{2 · Ce qui reste à coder --- trois travaux, chiffrés}
+
+\subsection{2.1 · \mm{R1} --- L'extraction de \code{mode1.rs} \sz{(le seul travail mécanique et payant)}}
+
+\textbf{Le fait.} Servir de \emph{vrais} participants dans le méta-essaim exige la feature
+\code{core-integration}. Mesurée aujourd'hui, elle fait passer la fermeture du crate de
+\textbf{8 à 27 crates du dépôt} : elle tire \code{efe-server}, et avec lui \code{efe-billing},
+\code{efe-graphrag}, \code{efe-kg}, \code{efe-llm-router}, \code{efe-multimodal}, \code{efe-pii},
+\code{efe-vector}, \code{efe-retrieval}, \code{efe-curation} --- une pile applicative entière, pour
+une seule fonction : \code{mode1::build\_mvp\_controller}.
+
+\textbf{Pourquoi c'est mécanique.} \code{efe-server/src/mode1.rs} fait \textbf{1\,979 lignes} et
+contient \textbf{un seul} \code{use crate::} : il importe, du module \code{services}, les deux
+traits \code{ExecuteBackend} et \code{SwarmControllerBackend}. Tout le reste est autonome. L'extraire en crate feuille, sur
+le modèle exact de \code{scella-authority} en \mm{M1.a}, coupe les dix-neuf crates de trop.
+
+\textbf{Critère d'acceptation.} \code{cargo tree -p efe-meta-swarm-server -F core-integration}
+énumère \textbf{au plus dix} crates du dépôt, et les tests de \mm{M1.d} --- le bout-en-bout du vrai
+contrôleur sur gRPC --- passent inchangés. \sz{Taille : 1 jour.}
+
+\begin{piste}
+\textbf{Ce que \mm{R1} achète vraiment}, et il faut être précis : \emph{pas} de la performance,
+\emph{pas} de la sécurité. Il achète la \textbf{cohérence entre le discours et l'artefact}. Le
+dépôt affirme, dans le manifeste même du méta-essaim, que « le graphe de dépendances par défaut
+porte ZÉRO crate \code{efe-core}/\code{efe-server} » --- ce qui est vrai par défaut et cesse de
+l'être dès qu'on sert. Un produit qui se présente comme un périmètre scellé ne peut pas avoir une
+feature de production qui triple son périmètre.
+\end{piste}
+
+\subsection{2.2 · \mm{R2} --- Retirer les deux orphelins stricts \sz{(une heure)}}
+
+7\,572 lignes que rien n'atteint : ni un manifeste, ni un binaire, ni un script, ni une charte.
+\code{efe-bench-inference} et \code{efe-cluster-provisioner}. \textbf{Critère} : le recensement
+d'orphelins stricts rend zéro, et \code{cargo build --workspace --locked} passe.
+
+Le geste importe moins que sa \emph{répétabilité}. Le recensement qui les a trouvés est un script
+de trente lignes ; l'inscrire dans \code{scripts/} avec les autres en fait un contrôle, et non une
+trouvaille. Sans cela, la même mesure sera refaite dans six mois par quelqu'un qui croira découvrir
+quelque chose. \sz{Taille : 1 heure, script compris.}
+
+\subsection{2.3 · \mm{R3} --- La suite de tests qui crie au loup \sz{(non re-mesuré ici)}}
+
+\code{cargo test --workspace} produit des échecs qui \textbf{passent en isolement} : le mTLS de
+PR \#16, un compteur global dans \code{efe-metering}, un port au démarrage d'un démon. Le coût n'est
+pas le temps perdu : c'est qu'une suite qui échoue parfois \textbf{cesse d'être lue}, et qu'une
+vraie régression y devient invisible.
+
+\begin{alerte}
+\textbf{Honnêteté sur ce point} : contrairement à tout le reste de ce document, ce constat n'a
+\textbf{pas} été re-mesuré le 24 août. Il vient d'une observation antérieure consignée. Le premier
+geste de \mm{R3} n'est donc pas de corriger, c'est de \textbf{reproduire} --- et si la suite est
+devenue stable, de retirer \mm{R3} plutôt que de chercher un défaut qui n'existe plus.
+\end{alerte}
+
+\textbf{Critère} : \code{cargo test --workspace} rendu \textbf{trois fois de suite} sans échec, ou
+bien chaque test instable explicitement sérialisé (\code{serial\_test}) avec la ressource partagée
+nommée en commentaire. \sz{Taille : 1 à 3 jours selon ce que la reproduction montre.}
+
+\section{3 · Les trois décisions --- elles ne se codent pas}
+
+\subsection{3.1 · \mm{D1} --- Le Cadrage : \mm{MZ} a dit TUÉ}
+
+\mm{MZ} a mesuré le compresseur sur un corpus figé, à cibles décroissantes, sur deux bras. Le
+verdict est \textbf{TUÉ}, et il est robuste : aucun des douze paliers n'atteint 99 \% de
+préservation, le meilleur point toutes cibles confondues est \textbf{22,6 \%}, et le bras qui
+reproduit la configuration réellement servie reste tué à 10,5 \% pour un ratio revendiqué de 8,9:1.
+Le second bras a par ailleurs \emph{réfuté} l'attribution d'intention : le modèle recopie la
+demande, il ne trompe personne --- mais \code{validate\_preservation} ne lit que la liste déclarée,
+jamais le texte, donc la garantie qu'elle prétend offrir est vide, et le pipeline la scellerait.
+
+\begin{acquis}
+\textbf{La qualification qui change la nature de la décision.} La passerelle a une fermeture de
+\textbf{14 crates} et \best{ne tire pas} le coordinateur nano. Le Cadrage n'est donc \textbf{pas}
+sur le chemin servi. \mm{MZ} tue une \textbf{option}, pas une promesse livrée : il n'y a rien à
+retirer d'urgence, et rien qui mente à un client aujourd'hui.
+\end{acquis}
+
+La décision est binaire et elle n'a pas de bonne réponse évidente. \textbf{L'abandonner} : le
+Cadrage sort du discours, et \code{scella-mz} reste comme preuve qu'on sait tuer ses propres
+options --- ce qui vaut quelque chose. \textbf{Changer de modèle} : le compresseur actuel est un
+Llama-3.2-1B quantifié ; l'écart mesuré est un écart de \emph{modélisation}, pas de calcul, donc un
+modèle plus grand pourrait le franchir --- mais ce serait un pari, et \mm{MZ} coûte une journée à
+rejouer sur un nouveau modèle, ce qui est la manière honnête de le prendre.
+
+\subsection{3.2 · \mm{D2} --- La disposition des cinquante crates hors produit}
+
+C'est la décision la plus lourde du document, et la seule qui touche quatre lignes de code sur
+cinq. Elle ne se prend pas en bloc : chaque groupe pose une question différente.
+
+\begin{center}\small
+\renewcommand{\arraystretch}{1.3}
+\begin{tabular}{@{}>{\raggedright\arraybackslash}p{3.5cm} >{\raggedright\arraybackslash}p{5.4cm} >{\raggedright\arraybackslash}p{6.0cm}@{}}
+\toprule
+\textbf{Groupe} & \textbf{La question} & \textbf{Ce que la mesure apporte} \\
+\midrule
+Pile \code{efe-server} \sz{20 crates, 167 k} &
+Est-ce un produit, une archive, ou la dette de \mm{R1} ? &
+\mm{R1} la retire du chemin servi. Après lui, la question devient « la garde-t-on du tout ? ». \\
+Le reste \sz{18 crates, 112 k} &
+Dix-huit crates sans groupe : y a-t-il un groupe, ou dix-huit décisions ? &
+Six ont un binaire, sept ont zéro référent de manifeste. Aucun n'est dans le produit. \\
+Runtime nano \sz{5 crates, 67 k} &
+Retirer, ou découpler ? &
+\pire{Deux de ses référents sont dans le produit} : « le retirer » n'est pas chiffré (cf. §1.3). \\
+Méta-essaim \sz{4 crates, 38 k} &
+Produit, lettre de créance, ou archive ? &
+Vient d'être durci par \mm{M1.b} --- un contournement TLS réel y a été fermé. \\
+Outillage \sz{4 crates, 25 k} &
+Rien à décider. &
+\code{scella-mz} et les bancs sont des instruments : ils ne se livrent pas, ils servent. \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{these}
+\textbf{Le piège à éviter, et il est nommé dans la série depuis longtemps} : le meilleur
+\emph{actif} n'est pas la meilleure \emph{startup}. Un dépôt de 500\,000 lignes dont 18 \% servent
+un produit peut se lire de deux façons opposées --- « 82 \% de dette » ou « quatre pistes
+adjacentes déjà écrites ». Les deux lectures sont défendables et elles conduisent à des entreprises
+différentes. Ce document ne tranche pas : il refuse seulement qu'on tranche \emph{sans avoir
+compté}, ce qui était le cas jusqu'à aujourd'hui.
+\end{these}
+
+\subsection{3.3 · \mm{D3} --- \mm{MX}, et le compteur à zéro}
+
+\mm{MX} --- « le collecteur ouvert », un client Python qui écrit un nœud scellé sans toucher à Rust
+--- est conditionné à \textbf{trois prospects qui le demandent \emph{et} le paient}. La raison
+écrite est une raison de capacité : un fondateur seul ne peut pas construire un collecteur générique
+\emph{et} vendre ; l'argent rachète les trois à quatre semaines.
+
+Mais le contenu de la demande est lui-même un signal : trois prospects qui veulent le registre
+\textbf{et refusent} la passerelle ne réclament pas un module, ils \textbf{réfutent le coin}.
+Exiger le paiement, c'est refuser d'agir sur cette réfutation tant qu'elle n'est pas assez solide
+pour financer sa conséquence. La décision \mm{D3} n'est donc pas « faire \mm{MX} ou non » ---
+elle est : \textbf{aller chercher le signal}, puisqu'il n'existe pas encore.
+
+\section{4 · Ce qui ressemble à un trou et n'en est pas}
+
+Deux points de la feuille de route précédente reviendront à chaque relecture. Il faut les redire
+pour qu'ils cessent de coûter une réflexion.
+
+\mm{M8} --- \textbf{le processus ne \emph{termine} pas TLS}, et ce n'est pas un manque. Il exige la
+\emph{déclaration} du terminateur de canal placé devant lui, et refuse de servir hors de la boucle
+locale sans elle. Cette déclaration est portante : elle fixe le barreau de confiance du canal, donc
+le droit de \textbf{sceller} un acte humain. Lire dégrade, sceller coupe. Le dépôt possède une pile
+TLS complète dans le méta-essaim ; la tirer dans un crate feuille triplerait son arbre de
+dépendances et serait moins sûr qu'un terminateur mûr.
+
+\mm{M9} --- \textbf{aucune signature n'est vérifiée}, et ce n'est pas un oubli. Le jeton RFC 3161
+est déposé tel quel ; le tiers le vérifie avec \code{openssl ts -verify}. Écrire cette vérification
+dans le dépôt exigerait une pile ASN.1 et X.509 complète --- « aucune crypto maison, aucune
+troisième pile » est une règle de ce dépôt, et elle est plus protectrice ici que partout ailleurs.
+
+\section{5 · L'ordre, et le seul jalon qui décide}
+
+\begin{extrait}
+\small
+\code{R2} \fl{} \code{R1} \hfill \sz{une heure, puis un jour --- le périmètre redevient ce qu'il dit être} \\
+\code{R3} \hfill \sz{indépendant : reproduire d'abord, corriger seulement si ça se reproduit} \\
+\code{D1} \hfill \sz{gratuit : le Cadrage n'est pas servi, la décision n'a pas d'horloge} \\
+\code{D2} \hfill \sz{à prendre \emph{après} \mm{R1}, qui change le tableau} \\[3pt]
+\code{D3} \hfill \sz{\textbf{le seul qui décide} --- et il ne se code pas}
+\end{extrait}
+
+\begin{alerte}
+\textbf{Les trois travaux de code de ce document totalisent moins d'une semaine.} C'est le fait le
+plus important qu'il contient. Il ne reste pas de travail d'ingénierie substantiel avant de savoir
+si quelqu'un veut ce produit --- et il n'en restait déjà plus le 20 août, ce que l'alerte de la
+feuille de route précédente disait explicitement. Faire \mm{R1}, \mm{R2} et \mm{R3} ne rapprochera
+pas d'un client. Ce sont de bons gestes d'hygiène, pas une stratégie, et les présenter autrement
+serait la forme la plus confortable de procrastination.
+\end{alerte}
+
+\section{6 · La méthode, et ce que \mm{M1.b} vient de lui apprendre}
+
+\mm{M1.b} devait vider une liste d'exemptions --- une dette de forme. Il a fermé un
+\textbf{contournement TLS réel} : un analyseur d'autorité déclarait
+\code{http://127.0.0.1:8080@evil.com} « loopback », et le contournement d'\textsc{ad18} retirait TLS
+sur un lien qui partait vers \code{evil.com}. \textbf{875 formes distinctes}, mesurées contre le
+client réel.
+
+Ce qui compte ici n'est pas le défaut mais \textbf{ce qui le couvrait}. L'exemption portait une
+raison écrite --- « sûrs aujourd'hui par composition » --- développée charge par charge sur une
+page entière du document d'architecture de \mm{M1}. Ce raisonnement était soigné, révisé, et
+\pire{faux} : il avait examiné \code{userinfo@} sans port et conclu pour toute la famille.
+
+\begin{these}
+\textbf{Une raison écrite qui n'a jamais été mesurée n'est pas une raison} --- c'est un défaut qui a
+la forme d'un choix. Et ce n'est pas une relecture de plus qui l'attrape : c'est un artefact
+confronté à sa source. \mm{M1.b} l'a fait en comparant notre décision de localité à l'hôte que
+\code{tonic} compose. \mm{MZ} l'avait fait un module plus tôt en re-fabriquant son rapport depuis ses
+mesures --- et y avait trouvé que \code{serde\_json} abîmait d'un \emph{ulp} les flottants qu'il
+relisait. Deux modules de suite, la même leçon.
+
+C'est aussi le critère que ce document s'applique à lui-même : chaque chiffre du §1 a été mesuré
+aujourd'hui, et le seul point qui ne l'a pas été --- \mm{R3} --- le dit en toutes lettres.
+\end{these}
+
+\section{7 · Ce que cette feuille de route ne mesure pas}
+
+\begin{itemize}[leftmargin=1.2em,itemsep=2.5pt,topsep=2pt]
+\item \textbf{La valeur des groupes, seulement leur taille.} Une ligne compte des caractères. Le
+      §1 mesure un coût de possession, jamais un intérêt : \code{efe-core} et ses 54\,000 lignes
+      peuvent être une dette ou la meilleure chose du dépôt, et ce tableau n'en dit rien.
+\item \textbf{Si les vingt crates du produit sont les \emph{bons} vingt.} La fermeture décrit ce que
+      le binaire embarque, pas ce qu'un client achète.
+\item \textbf{La correction du produit.} Le reçu atteste l'\textbf{intégrité} d'une suite de pas,
+      jamais la \textbf{correction} d'une décision. Il est \emph{tamper-evident pour un détenteur de
+      clé}, pas \emph{trustless pour un tiers} --- \mm{M9} déplace ce curseur sans le supprimer.
+\item \textbf{Le marché.} Aucun chiffre de ce document ne vient d'un prospect, parce qu'il n'y en a
+      pas. C'est la seule mesure qui manque, et c'est celle qui décide.
+\end{itemize}
+
+\end{document}

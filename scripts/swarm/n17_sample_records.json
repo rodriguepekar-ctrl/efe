@@ -1,0 +1,140 @@
+[
+  {
+    "record_id": "1aca0f34-f248-4204-a411-026f5b0d0066",
+    "swarm_id": "00000000-0000-0000-0000-000000005eed",
+    "tenant_id": "00000000-0000-0000-0000-000000000001",
+    "agent_id": "generator",
+    "agent_role": "generator",
+    "agent_kind": "mode_c",
+    "input_hash": "0404040404040404040404040404040404040404040404040404040404040404",
+    "reads": [],
+    "output_hash": "6767676767676767676767676767676767676767676767676767676767676767",
+    "writes": [],
+    "variant": null,
+    "causal_parents": [],
+    "llm_provenance_id": "00000000-0000-0000-0000-0000c0ffee03",
+    "wall_at": {
+      "secs_since_epoch": 1781697879,
+      "nanos_since_epoch": 510448000
+    },
+    "seq": 0,
+    "chain_parent_hmac": null,
+    "payload_hash": "0b285791d06c3dca0bd77247e34e6eeee4acc3fd5f83e2241a2296a9aefafb78",
+    "hmac": "27a75bc917382392335055ba5d3bbeb67a6e206c6df5cb57611e36cde38be32a"
+  },
+  {
+    "record_id": "ec77f504-dd65-48c9-9b23-b3edda525d28",
+    "swarm_id": "00000000-0000-0000-0000-000000005eed",
+    "tenant_id": "00000000-0000-0000-0000-000000000001",
+    "agent_id": "generator",
+    "agent_role": "generator",
+    "agent_kind": "mode_c",
+    "input_hash": "0303030303030303030303030303030303030303030303030303030303030303",
+    "reads": [],
+    "output_hash": "6666666666666666666666666666666666666666666666666666666666666666",
+    "writes": [],
+    "variant": null,
+    "causal_parents": [],
+    "llm_provenance_id": "00000000-0000-0000-0000-0000c0ffee02",
+    "wall_at": {
+      "secs_since_epoch": 1781697879,
+      "nanos_since_epoch": 510448000
+    },
+    "seq": 1,
+    "chain_parent_hmac": "27a75bc917382392335055ba5d3bbeb67a6e206c6df5cb57611e36cde38be32a",
+    "payload_hash": "28ca483ddcdae3734918e770a80ea7635d6d35f7c4146abdf2a5b0b4bf9ee31a",
+    "hmac": "3c682baa3f1a7c6d5d10387a1b2c28f4ea2de76fdbdd7ff4061db0cd627011fb"
+  },
+  {
+    "record_id": "108fca7e-cb86-4e05-a871-11c70244a65d",
+    "swarm_id": "00000000-0000-0000-0000-000000005eed",
+    "tenant_id": "00000000-0000-0000-0000-000000000001",
+    "agent_id": "judge",
+    "agent_role": "judge",
+    "agent_kind": "mode_a",
+    "input_hash": "c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8",
+    "reads": [],
+    "output_hash": "c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9",
+    "writes": [],
+    "variant": null,
+    "causal_parents": [],
+    "llm_provenance_id": null,
+    "wall_at": {
+      "secs_since_epoch": 1781697879,
+      "nanos_since_epoch": 510450000
+    },
+    "seq": 2,
+    "chain_parent_hmac": "3c682baa3f1a7c6d5d10387a1b2c28f4ea2de76fdbdd7ff4061db0cd627011fb",
+    "payload_hash": "2cf19cba338bda556637d67b30e79d7b4a6c11d7545b50343450f288409b5eaf",
+    "hmac": "a2b3b601f4adeb6c016c1afbb969dcd79625a61ae9cc4f3046e4759d95afcac8"
+  },
+  {
+    "record_id": "884dc87f-1c77-4cc3-b8df-fd38b6230ab8",
+    "swarm_id": "00000000-0000-0000-0000-000000005eed",
+    "tenant_id": "00000000-0000-0000-0000-000000000001",
+    "agent_id": "generator",
+    "agent_role": "generator",
+    "agent_kind": "mode_c",
+    "input_hash": "0101010101010101010101010101010101010101010101010101010101010101",
+    "reads": [],
+    "output_hash": "6464646464646464646464646464646464646464646464646464646464646464",
+    "writes": [],
+    "variant": null,
+    "causal_parents": [],
+    "llm_provenance_id": "00000000-0000-0000-0000-0000c0ffee00",
+    "wall_at": {
+      "secs_since_epoch": 1781697879,
+      "nanos_since_epoch": 510444000
+    },
+    "seq": 3,
+    "chain_parent_hmac": "a2b3b601f4adeb6c016c1afbb969dcd79625a61ae9cc4f3046e4759d95afcac8",
+    "payload_hash": "38d79ce10336982e1fcf76193c8ff56906400b87af7d46f9ae795a61632af7c6",
+    "hmac": "061b63e1c7ec07cf8d0ab7205a85f658b01dea6eaf8c7bc2dda2d547050b2483"
+  },
+  {
+    "record_id": "6e66c3ac-e5cd-476f-966c-b143e1297ecb",
+    "swarm_id": "00000000-0000-0000-0000-000000005eed",
+    "tenant_id": "00000000-0000-0000-0000-000000000001",
+    "agent_id": "generator",
+    "agent_role": "generator",
+    "agent_kind": "mode_c",
+    "input_hash": "0202020202020202020202020202020202020202020202020202020202020202",
+    "reads": [],
+    "output_hash": "6565656565656565656565656565656565656565656565656565656565656565",
+    "writes": [],
+    "variant": null,
+    "causal_parents": [],
+    "llm_provenance_id": "00000000-0000-0000-0000-0000c0ffee01",
+    "wall_at": {
+      "secs_since_epoch": 1781697879,
+      "nanos_since_epoch": 510446000
+    },
+    "seq": 4,
+    "chain_parent_hmac": "061b63e1c7ec07cf8d0ab7205a85f658b01dea6eaf8c7bc2dda2d547050b2483",
+    "payload_hash": "58e4ceb96b8da1f602c3c29cff222f821c9240d76c9a0dd6180efcc5632f4ae6",
+    "hmac": "6a6366a93ec7c6ae672eeeafad4dd9580e9d39c136d4454f09d28d87e9386977"
+  },
+  {
+    "record_id": "129515dc-c330-4556-a33d-70c4b969329f",
+    "swarm_id": "00000000-0000-0000-0000-000000005eed",
+    "tenant_id": "00000000-0000-0000-0000-000000000001",
+    "agent_id": "generator",
+    "agent_role": "generator",
+    "agent_kind": "mode_c",
+    "input_hash": "0505050505050505050505050505050505050505050505050505050505050505",
+    "reads": [],
+    "output_hash": "6868686868686868686868686868686868686868686868686868686868686868",
+    "writes": [],
+    "variant": null,
+    "causal_parents": [],
+    "llm_provenance_id": "00000000-0000-0000-0000-0000c0ffee04",
+    "wall_at": {
+      "secs_since_epoch": 1781697879,
+      "nanos_since_epoch": 510449000
+    },
+    "seq": 5,
+    "chain_parent_hmac": "6a6366a93ec7c6ae672eeeafad4dd9580e9d39c136d4454f09d28d87e9386977",
+    "payload_hash": "5c082d04941726faccf9959c8e714f2662927d95f98266d05857eacea50c2c7f",
+    "hmac": "17031c803b52c0c5975defc5eb8c5d90bb792014320ddc0bf959bf4768dd2af7"
+  }
+]

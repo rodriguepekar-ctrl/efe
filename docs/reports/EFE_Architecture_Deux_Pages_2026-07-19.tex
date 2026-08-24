@@ -1,0 +1,151 @@
+\documentclass[11pt]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage[french]{babel}
+\usepackage{newpxtext,newpxmath}
+\usepackage[a4paper,top=1.55cm,bottom=1.5cm,left=1.85cm,right=1.85cm]{geometry}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{titlesec}
+\usepackage[most]{tcolorbox}
+\usepackage{fancyhdr}
+\usepackage{enumitem}
+
+\definecolor{efenavy}{HTML}{1F3A5F}
+\definecolor{efeteal}{HTML}{0E7A6E}
+\definecolor{efeamber}{HTML}{B25A1E}
+\definecolor{efeplum}{HTML}{7A4EA8}
+\definecolor{efegray}{HTML}{54606E}
+\definecolor{boxgray}{HTML}{F3F5F8}
+\definecolor{boxedge}{HTML}{D9E0EA}
+
+\titleformat{\section}{\color{efenavy}\large\bfseries}{}{0pt}{}
+\titlespacing{\section}{0pt}{11pt}{4pt}
+
+\linespread{1.12}
+\setlength{\parskip}{4.0pt}
+\setlength{\parindent}{0pt}
+\setlength{\emergencystretch}{3em}
+
+\pagestyle{fancy}\fancyhf{}
+\renewcommand{\headrulewidth}{0.3pt}
+\lhead{\small\color{efegray}EFE — Architecture (2 pages)}
+\rhead{\small\color{efegray}2026-07-19}
+\cfoot{\small\color{efegray}\thepage}
+
+\newcommand{\concept}[1]{{\color{efenavy}\textbf{Concept —} }#1\par}
+\newcommand{\exemple}[1]{{\color{efeamber}\textbf{Exemple —} }#1\par}
+\newcommand{\utilite}[1]{{\color{efeplum}\textbf{Utilité réelle —} }#1\par}
+
+\newtcolorbox{these}{colback=boxgray,colframe=boxedge,boxrule=0.5pt,arc=2.5pt,
+  left=7pt,right=7pt,top=5pt,bottom=5pt}
+
+\begin{document}
+
+\begin{center}
+{\LARGE\bfseries\color{efenavy} EFE — Architecture, en deux pages}\\[2pt]
+{\color{efegray}\itshape La lignée latente en un bloc ; le poids sur l'interstice :
+Le Relais, L'Encadrement, l'essaim médiateur SLM}\\[3pt]
+{\small\color{efegray}Rodrigue Pekar \quad$\cdot$\quad 2026-07-19}
+\end{center}
+\vspace{1pt}
+
+\begin{these}
+EFE tient sur \textbf{deux lignées}. La \textbf{lignée latente} — nano-robots, essaim, méta-essaim
+— fusionne beaucoup de petits calculs dans un espace latent partagé, sous une exécution
+\textbf{déterministe, scellée et fail-closed} ; elle est ici résumée en \emph{un bloc}. La
+\textbf{lignée interstice} — Le Relais inter-modèles, L'Encadrement, l'essaim médiateur SLM —
+instrumente l'espace \emph{entre} les appels frontière : de petits agents scellés traduisent,
+compressent et vérifient, et en tirent une \textbf{provenance re-vérifiable}. C'est sur cette
+seconde lignée que ce dossier appuie.
+\end{these}
+
+\section{La lignée latente : nano-robots, essaim, méta-essaim}
+Le \textbf{nano-agent} est l'unité élémentaire : une \emph{ligne d'un tenseur} dans l'espace de
+\texttt{efe-core}, mise à jour par un pas de couplage fixe — un vecteur de nombres, pas un
+processus. Population fixe, priors neutres, une seule ronde. C'est l'unité adressable qui rend
+chaque calcul \emph{traçable et rejouable à l'identique}. L'\textbf{essaim} fusionne ces
+nano-agents par un point-fixe latent $\Phi$ : une ronde déterministe (\texttt{init\_sigma}=0,
+graine dérivée de la spec) qui condense la population en un \textbf{centroïde de consensus},
+reproductible bit à bit et donc rejouable, ce qui alimente l'audit. Le point-fixe est caractérisé
+par un \textbf{estimateur de Lipschitz adverse} ($\hat{L}\approx0{,}69$ dynamique, $0{,}37$ fixe)
+qui sert de garde fail-closed. Le \textbf{méta-essaim} coordonne plusieurs essaims par gRPC :
+participants purs Tensor$\rightarrow$Tensor, manifeste de moteur transmis dans le protocole,
+contrôle strict au démarrage, \textbf{mTLS strict} (TLS 1.3, vérification SAN). C'est la couche de
+déploiement qui \emph{exécutera} les hops de la lignée interstice, sous les mêmes garanties
+d'intégrité.
+\utilite{Faire tourner l'IA \emph{là où sont les données} (multi-région, multi-tenant) avec une
+coordination scellée et auditable : résidence des données, souveraineté (banque, santé, public).}
+
+\section{Le Relais inter-modèles}
+Le Relais intercale \textbf{un petit modèle} (Qwen3-0.6B, décodage contraint par grammaire GBNF)
+entre deux appels frontière : il traduit le dialecte de l'un (\texttt{ClaudeXml}) vers une forme
+canonique, puis vers le dialecte de l'autre (\texttt{Gpt4Json}). C'est la brique la plus
+\textbf{aboutie} : codée et poussée de bout en bout, servie en opt-in, protégée par un disjoncteur
+à sonde unique, avec une \textbf{provenance par-hop scellée et re-vérifiable} (chaque hop est un
+n\oe ud HMAC ; \texttt{slm\_mediated} n'est vrai que si \emph{tous} les hops sont SLM) et des
+\textbf{deadlines de mission qui bornent le hop} (dégradation estampillée, six raisons stables).
+\concept{Entre deux gros modèles, un petit modèle réécrit la sortie de l'un dans la forme exacte
+qu'attend l'autre, et scelle cette réécriture.}
+\utilite{Faire coopérer plusieurs fournisseurs d'IA (Claude, GPT, modèle interne) \emph{sans glue
+tierce}, avec une trace auditable : orchestration multi-fournisseur en entreprise réglementée
+(finance, assurance, défense).}
+\exemple{Une banque extrait via Claude une clause d'un contrat fournisseur, rendue en XML ;
+l'étape suivante attend du JSON pour la confronter à une politique interne. Le petit modèle traduit
+via une forme canonique ; le reçu garde les hash. \emph{Autre cas :} Gemini rend la même clause en
+Markdown $\rightarrow$ canonique $\rightarrow$ la forme XML qu'attend Claude.}
+
+\section{L'Encadrement}
+L'Encadrement généralise le Relais : au lieu de \emph{traduire entre} deux modèles, il
+\emph{encadre} un appel frontière — un \textbf{compresseur} avant, un \textbf{vérificateur} après —
+dans le même reçu. \textbf{La règle : au petit modèle les tâches \emph{simples}} (compresser,
+confronter à des sources, valider une forme), \textbf{au gros modèle le raisonnement}. Les petits
+agents sont bornés, contraints par grammaire, et \textbf{agnostiques du LLM} qu'ils encadrent : le
+même encadrement sert autour de \textbf{Claude, GPT ou Gemini} — et peut router le raisonnement
+vers \textbf{plusieurs d'entre eux} pour la même question. Le compresseur (Llama-3.2-1B, map-reduce
+au-delà de $\sim$512 tokens) réduit le prompt ; le vérificateur (Phi-4-mini, verdict fermé) annote
+chaque réponse — un \textbf{ajout au reçu}, en parité stricte avec le chemin non-vérifié.
+\concept{Autour d'un appel frontière : un petit modèle avant (compresse), un autre après (vérifie) ;
+le gros modèle ne fait que le raisonnement — éventuellement plusieurs gros modèles en parallèle.}
+\utilite{Analyse de documents longs (juridique, assurance, achat) : réduire ce qu'on envoie au
+modèle et vérifier sa réponse contre les sources, pour éviter une hallucination coûteuse sur un
+contrat.}
+\exemple{Un assureur pose une question sur un contrat de 40 pages : le compresseur réduit le contrat
+aux passages pertinents ; le raisonnement part à \emph{deux} LLM (Claude et GPT) ; le vérificateur
+confronte chaque réponse (« clause 7 : notification sous 72 h ») aux passages cités $\rightarrow$
+SUPPORTED, en annotation. \emph{Autre cas :} une réponse contredit la clause $\rightarrow$
+CONTRADICTED, signalé, la divergence entre les deux LLM apparaît dans le reçu.}
+
+\section{L'essaim médiateur SLM}
+L'essaim médiateur est un \textbf{autre type d'essaim} que celui de la lignée latente : au lieu de
+fusionner des tenseurs, de petits modèles de langage \emph{transportent} l'information entre les
+gros. Une arête entre deux agents LLM devient une \textbf{chaîne déclarée de petits agents
+spécialisés} — traduire, compresser, vérifier — chacun un \emph{hop scellé}, borné en temps,
+attribuable. On ne produit pas « plus d'intelligence » : on produit un reçu re-vérifiable de tout
+ce qui a transité. Environ \textbf{les deux tiers} de l'architecture sont déjà là, hérités du
+Relais ; le neuf tient en \textbf{trois pièces} : un registre d'agents par rôle, une chaîne typée,
+et un runtime qui enchaîne les sorties et scelle $N$ n\oe uds.
+\par\smallskip
+{\color{efenavy}\textbf{En parallèle d'un LLM (agent de code) —}} autre topologie : l'essaim tourne
+\emph{à côté} d'un seul modèle, pas entre deux. Pendant qu'un agent Claude écrit du code, de petits
+agents traitent son flux en parallèle — vérifier une affirmation contre le dépôt, compresser le
+contexte, contrôler qu'une édition respecte un schéma — sans bloquer sa boucle, chacun un hop
+scellé dans le reçu.
+\utilite{Pipelines de décision réglementés (achat, conformité, KYC, sinistres) : chaque étape
+scellée, la décision arrive avec un reçu re-vérifiable — l'audit est intégré, pas ajouté après.}
+\exemple{Demande d'achat : Claude rédige l'évaluation de risque du fournisseur $\rightarrow$
+traduire $\rightarrow$ vérifier le fournisseur contre une liste de sanctions $\rightarrow$
+compresser $\rightarrow$ GPT recommande une décision ; le reçu trace les 4 hops. \emph{Autre cas :}
+le vérificateur de sanctions tombe $\rightarrow$ son hop dégrade, estampillé, la chaîne continue et
+le reçu le dit.}
+
+\vspace{3pt}
+{\color{boxedge}\hrule height 0.6pt}
+\vspace{3pt}
+{\color{efenavy}\textbf{Le reçu — la colonne.}} Les deux lignées n'écrivent qu'\textbf{un seul reçu
+re-vérifiable} : chaque étape y est le même \textbf{n\oe ud HMAC scellé et chaîné} (clé dérivée par
+tenant), re-dérivable par tout détenteur de la clé. \emph{Tamper-evident pour qui détient la clé et
+épingle le dernier maillon hors-bande} — un actif de \textbf{discipline vérifiable}, pas un
+coffre-fort distribué.
+
+\end{document}

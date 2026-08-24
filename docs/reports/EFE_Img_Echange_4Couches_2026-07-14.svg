@@ -1,0 +1,57 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1360" viewBox="0 0 680 350" role="img"><rect x="0" y="0" width="680" height="4000" fill="#ffffff"/>
+<title>Les quatre couches d'échange d'informations entre agents d'EFE</title>
+<desc>Quatre boîtes représentant quatre binaires indépendants : essaim latent (servi par défaut), panel multi-LLM (off par défaut), méta-essaim gRPC (mock par défaut), blackboard agentique (réponse en dur sans clé). Aucune flèche entre eux : aucun chemin de données partagé.</desc>
+<style>
+text{font-family:'Helvetica Neue',Helvetica,Arial,sans-serif}
+.t{font-size:14px;fill:#12161c}
+.th{font-size:14px;font-weight:500;fill:#12161c}
+.ts{font-size:12px;fill:#3a4552}
+rect.box{fill:#f4f6f9;stroke:#b4b2a9;stroke-width:0.5}
+.arr{stroke:#5f5e5a;stroke-width:1.5;fill:none}
+.leader{stroke:#888780;stroke-width:0.7;stroke-dasharray:3 3;fill:none}
+.c-green>rect{fill:#EAF3DE;stroke:#3B6D11}
+.c-green>text.th{fill:#27500A}.c-green>text.ts{fill:#3B6D11}
+.c-amber>rect{fill:#FAEEDA;stroke:#854F0B}
+.c-amber>text.th{fill:#633806}.c-amber>text.ts{fill:#854F0B}
+.c-purple>rect{fill:#EEEDFE;stroke:#534AB7}
+.c-purple>text.th{fill:#3C3489}.c-purple>text.ts{fill:#534AB7}
+.c-teal>rect{fill:#E1F5EE;stroke:#0F6E56}
+.c-teal>text.th{fill:#085041}.c-teal>text.ts{fill:#0F6E56}
+circle.c-gray{fill:#F1EFE8;stroke:#5F5E5A}
+circle.c-teal{fill:#5DCAA5;stroke:#0F6E56}
+marker path{stroke:#5f5e5a}
+</style><defs><marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></marker></defs>
+<g class="node c-green">
+  <rect x="50" y="40" width="280" height="74" rx="8" stroke-width="0.5"/>
+  <text class="th" x="190" y="59" text-anchor="middle" dominant-baseline="central">couche 1 · essaim latent</text>
+  <text class="ts" x="190" y="80" text-anchor="middle" dominant-baseline="central">efe-server · attention → centroïde</text>
+  <text class="ts" x="190" y="98" text-anchor="middle" dominant-baseline="central">servi par défaut</text>
+</g>
+<g class="node c-amber">
+  <rect x="350" y="40" width="280" height="74" rx="8" stroke-width="0.5"/>
+  <text class="th" x="490" y="59" text-anchor="middle" dominant-baseline="central">couche 2 · panel multi-LLM</text>
+  <text class="ts" x="490" y="80" text-anchor="middle" dominant-baseline="central">efe-swarm-gateway · 5 missions LLM</text>
+  <text class="ts" x="490" y="98" text-anchor="middle" dominant-baseline="central">réel · testé · off par défaut</text>
+</g>
+<g class="node c-amber">
+  <rect x="50" y="134" width="280" height="74" rx="8" stroke-width="1.2"/>
+  <text class="th" x="190" y="153" text-anchor="middle" dominant-baseline="central">couche 3 · méta-essaim gRPC</text>
+  <text class="ts" x="190" y="174" text-anchor="middle" dominant-baseline="central">efe-meta-swarm-server · pull couplé</text>
+  <text class="ts" x="190" y="192" text-anchor="middle" dominant-baseline="central">mock κ·x par défaut</text>
+</g>
+<g class="node c-amber">
+  <rect x="350" y="134" width="280" height="74" rx="8" stroke-width="0.5"/>
+  <text class="th" x="490" y="153" text-anchor="middle" dominant-baseline="central">couche 4 · blackboard agentique</text>
+  <text class="ts" x="490" y="174" text-anchor="middle" dominant-baseline="central">efe-gateway · DAG + pont Claude</text>
+  <text class="ts" x="490" y="192" text-anchor="middle" dominant-baseline="central">réponse en dur sans clé</text>
+</g>
+<g>
+  <rect x="50" y="232" width="580" height="56" rx="8" fill="none" stroke="#888780" stroke-width="0.7" stroke-dasharray="5 4"/>
+  <text class="th" x="340" y="252" text-anchor="middle" dominant-baseline="central">quatre binaires indépendants</text>
+  <text class="ts" x="340" y="272" text-anchor="middle" dominant-baseline="central">aucun chemin de données partagé à l'exécution</text>
+</g>
+<rect x="70" y="312" width="10" height="10" rx="2" fill="#639922"/>
+<text class="ts" x="86" y="317" dominant-baseline="central">actif par défaut</text>
+<rect x="230" y="312" width="10" height="10" rx="2" fill="#BA7517"/>
+<text class="ts" x="246" y="317" dominant-baseline="central">réel mais pas par défaut (off / mock / en dur)</text>
+</svg>

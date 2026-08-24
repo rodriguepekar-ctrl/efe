@@ -1,0 +1,150 @@
+\documentclass[11pt]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage[french]{babel}
+\usepackage{newpxtext,newpxmath}
+\usepackage[a4paper,top=1.7cm,bottom=1.6cm,left=1.9cm,right=1.9cm]{geometry}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{titlesec}
+\usepackage[most]{tcolorbox}
+\usepackage{enumitem}
+\usepackage{array}
+\usepackage{booktabs}
+\usepackage{hyperref}
+
+\definecolor{navy}{HTML}{1F3A5F}
+\definecolor{green}{HTML}{2C6E49}
+\definecolor{amber}{HTML}{9C6A16}
+\definecolor{grey}{HTML}{5B6472}
+\definecolor{red}{HTML}{A6322E}
+\definecolor{plum}{HTML}{7A4EA8}
+\definecolor{boxgray}{HTML}{F3F5F8}
+\definecolor{boxamber}{HTML}{FBF3EA}
+\definecolor{boxedge}{HTML}{D9E0EA}
+\definecolor{ink}{HTML}{16202B}
+
+\hypersetup{colorlinks=true,linkcolor=navy,urlcolor=plum}
+
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{3pt}
+\linespread{1.04}
+
+\titleformat{\section}{\color{navy}\large\bfseries}{}{0pt}{}
+\titlespacing{\section}{0pt}{9pt}{3pt}
+
+\newtcolorbox{these}{colback=boxgray,colframe=boxedge,boxrule=0.5pt,arc=2.5pt,
+  left=8pt,right=8pt,top=6pt,bottom=6pt}
+\newtcolorbox{warn}{colback=boxamber,colframe=amber!60,boxrule=0.7pt,arc=2.5pt,
+  left=8pt,right=8pt,top=6pt,bottom=6pt}
+
+\newcommand{\hi}{{\color{green}\textbf{ÉLEVÉ}}}
+\newcommand{\me}{{\color{amber}\textbf{MOYEN}}}
+\newcommand{\lo}{{\color{grey}\textbf{FAIBLE}}}
+\newcommand{\nul}{{\color{red}\textbf{NUL}}}
+
+\begin{document}
+
+\begin{center}
+{\LARGE\bfseries\color{navy} Scella — Carte des partenariats}\\[3pt]
+{\color{grey}\itshape Quelles parties ont un vrai potentiel de partenariat avec des startups —
+lecture honnête, maturité $\times$ marché 2026}\\[3pt]
+{\small\color{grey}23 juillet 2026}
+\end{center}
+\vspace{2pt}
+
+\begin{these}
+\textbf{Le résultat central.} Dans \emph{presque chaque} catégorie étudiée, le seul actif réellement
+différenciant qu'une startup voudrait n'est \textbf{pas la brique} — c'est \textbf{le reçu} (la
+provenance scellée). La valeur « partenariale » du Relais, de l'essaim médiateur, du hop \emph{verify}
+et du pitch souverain \textbf{y revient à chaque fois}. Le reste est soit une \textbf{couche que Scella
+consomme et scelle} (compresseur, vérifieur, data-layer — pas d'IP de Scella), soit une \textbf{arête
+déjà occupée par des concurrents} (les gateways / routeurs).
+\end{these}
+
+\section{Le classement}
+\renewcommand{\arraystretch}{1.32}
+\begin{center}\small
+\begin{tabular}{@{}p{3.0cm} c p{5.4cm} p{5.2cm}@{}}
+\toprule
+\textbf{Partie de Scella} & \textbf{Potentiel} & \textbf{Pourquoi} & \textbf{Partenaires concrets} \\
+\midrule
+\textbf{Le reçu / provenance} & \hi & Seul actif réel, testé, canonique, \emph{sans équivalent} ; le seam qui \textbf{revient partout}. & Gouvernance (\textbf{Credo AI}, \textbf{Vanta}) en OEM ; identité-agent (\textbf{Nyne}, \textbf{Oasis}) ; souverain (\textbf{TensorX}, \textbf{Avendar}, \textbf{Aleph Alpha}) \\
+\textbf{« Sceller la sortie d'un tiers »} \emph{(verify $\times$ data / grounding)} & \me & Seam de \emph{consommation} réel ; Scella \textbf{n'apporte aucune IP de vérif}, il scelle ce qu'un tiers produit. & Faits : \textbf{Cala}, \textbf{Valyu}, \textbf{Castellum.AI} · Moteurs : \textbf{Vectara HHEM-open}, \textbf{Cleanlab}, \textbf{Guardrails AI} \\
+\textbf{Le Relais (Fil B)} & \me & 2\ieme actif \emph{livré} ; mais les gateways \textbf{possèdent} l'interop → plugin, pas pair. & \textbf{LiteLLM}, \textbf{Not Diamond}, \textbf{TrueFoundry} \\
+\textbf{Souveraineté} \emph{(espace Kovant)} & \me & Le vrai seam = \textbf{le reçu}, pas l'essaim ; couche d'évidence AI Act. & \textbf{TensorX}, \textbf{Aleph Alpha (PhariaAI)}, \textbf{Avendar} \\
+\textbf{L'Encadrement} \emph{(compresseur / vérifieur)} & \lo & HopKind \textbf{non codé}, une seule preuve (n=1) ; Scella = \emph{consommateur}. & \textbf{The Token Company}, \textbf{Compresr}, \textbf{TokenShift} \emph{(intégration)} \\
+\textbf{L'essaim médiateur SLM} & \lo & \textbf{Archi seule}, « rien codé » ; arête absorbée par les gateways. & \emph{(plugin futur, pas un deal)} \\
+\textbf{Le Flexible MLP (SOMNIA)} & \lo & \emph{Séparé}, \textbf{sim seule}, jamais flashé ; concurrents en prod (NanoEdge/Cartesiam, Neuton), brevet occupé. & \textbf{Plumerai}, \textbf{Latent AI} \emph{(collab recherche)} \\
+\textbf{L'agrégation $\Phi$} & \nul & \textbf{Réfutée} par nos propres benchmarks. On ne bâtit pas sur une thèse réfutée. & \emph{(aucun)} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\section{Les 5 appariements les plus concrets}
+\begin{enumerate}[leftmargin=1.5em,itemsep=2pt,topsep=2pt]
+\item \textbf{Reçu → Credo AI ou Vanta} : OEM la chaîne HMAC comme \textbf{l'artefact d'évidence
+runtime, par-décision} derrière leurs revendications \emph{EU AI Act Art.\,12 / oversight humain} —
+ils tiennent la politique et le registre, mais \textbf{ne produisent pas} de trace inviolable
+par-décision.
+\item \textbf{Reçu → TensorX} (inférence souveraine EU, $\sim$8\,M€ seed) : le bolt-on
+\textbf{non-concurrentiel} le plus propre — inférence souveraine, zéro rétention, \textbf{aucune
+couche d'audit}.
+\item \textbf{Reçu → Avendar} (GovTech law-enforcement, $\sim$2,2\,M€ seed) : la verticale la plus
+propre — la \textbf{chain-of-custody probante} y est existentielle.
+\item \textbf{Reçu + hop verify → Cala.ai} ($\sim$7\,M€ pre-seed, MCP-native) : friction quasi-nulle —
+chaque fait Cala est \emph{typé + pointeur de source}, exactement ce que le hop \emph{verify}
+confronte puis scelle.
+\item \textbf{Relais → LiteLLM} (gateway OSS, YC) : livrer Fil B comme \textbf{plugin
+« sealed-provenance transform »} dans un gateway qui a déjà le point d'extension.
+\end{enumerate}
+
+\section{Le point stratégique : fermer le vrai trou du reçu}
+Le reçu est le meilleur actif — \textbf{mais avec la limite qui mord exactement dans le marché de la
+gouvernance} : c'est du \textbf{HMAC symétrique} (vérifiable \emph{par le détenteur de la clé},
+tamper-evident — \textbf{pas} par un tiers), \textbf{sans ancrage externe} (troncature de queue non
+défendue), \textbf{bibliothèque seule} (pas d'API hébergée). Or le marché dérive vers du
+\textbf{publiquement vérifiable} (Sigstore, C2PA, signatures asymétriques).
+
+Les partenaires qui \textbf{transforment le reçu en actif partenariable} (catégorie décisive, non
+couverte par les briques) : \textbf{horodatage / journaux de transparence / notarisation} (TSA
+RFC-3161, Sigstore keyless, ledgers append-only) ; \textbf{QTSP eIDAS} (le chemin HMAC → signature
+publiquement vérifiable) ; \textbf{confidential-compute / TEE} ; \textbf{legal-tech e-discovery}
+(chain-of-custody) ; alignement standard \textbf{C2PA}. \emph{C'est là que se joue la vraie valeur} :
+un partenariat d'ancrage rend le reçu \emph{third-party-verifiable}, ce que veulent les acheteurs
+conformité.
+
+\section{Le prisme Kovant (le vrai but)}
+Ce classement \textbf{n'est pas un pipeline BD, c'est un argument d'embauche.} Scella est la
+\textbf{dot}, pas un produit à vendre — courtiser des partenaires est en \emph{tension} avec le fait
+de se faire embaucher. Lu correctement :
+
+\begin{itemize}[leftmargin=1.3em,itemsep=2pt,topsep=2pt]
+\item \textbf{Le reçu est l'artefact le plus « sur-thèse » pour Kovant} (achat/conformité par
+SLM-swarms) : l'IA d'achat/conformité \textbf{vit ou meurt} sur la provenance auditable (AI Act
+Art.\,12, chain-of-custody de sanctions). Tu as \textbf{déjà} construit la primitive d'audit scellé
+canonique dont Kovant aura besoin. \textbf{À mettre en avant en premier.}
+\item \textbf{Le Relais} prouve une \textbf{plomberie SLM-entre-frontière qui marche}, provenance
+par-hop scellée : une instance concrète et servie de la thèse même de Kovant.
+\item \textbf{L'agrégation réfutée = un atout} : elle montre l'\textbf{honnêteté adverse} sur ce que
+l'agrégation de SLM apporte (et n'apporte pas) — la rigueur d'un founding engineer — \textbf{sans
+attaquer la thèse SLM de Kovant} (le gain « un petit modèle égale un gros, moins cher » tient et la
+\emph{soutient}).
+\end{itemize}
+
+\begin{warn}
+\textbf{\color{amber}Deux garde-fous absolus.} \textbf{(1)} Ne courtise \textbf{pas} Procure AI /
+Pivot / Prewave (startups d'agents d'achat) : ce sont les \textbf{concurrents directs de Kovant} →
+les approcher \textbf{sabote} l'embauche. \textbf{(2)} Ne survends \textbf{pas} le reçu comme
+\emph{trustless} : il est \emph{tamper-evident détenteur-de-clé}, non ancré. \textbf{Nommer ce trou
++ les partenaires d'ancrage qui le ferment (TSA / QTSP / Sigstore), c'est précisément le signal
+« founding engineer » que Kovant achète.}
+\end{warn}
+
+\vspace{4pt}
+{\footnotesize\color{grey}Chiffres de financement/stade issus de recherche web (2026) —
+approximatifs, à revérifier avant tout contact. Concurrents-plutôt-que-partenaires signalés :
+OpenRouter, Martian, Portkey (racheté Palo Alto), Knowlee, Castellum.AI, NanoEdge/Cartesiam,
+Neuton.}
+
+\end{document}

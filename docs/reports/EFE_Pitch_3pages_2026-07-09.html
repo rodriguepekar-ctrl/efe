@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>EFE — pitch</title>
+<style>
+  :root{--ink:#0f172a;--muted:#1e293b;--soft:#64748b;--line:#dbe2ea;--teal:#0d9488;--teal-d:#0f766e;--indigo:#4f46e5;--indigo-d:#4338ca;--ok:#16a34a;--warn:#d97706;--bad:#dc2626;--bg-tint:#f5faf9;--bg-card:#eef2f1;}
+  *{box-sizing:border-box;} html{font-size:11.5px;}
+  body{font-family:Arial,"Helvetica Neue",Helvetica,sans-serif;color:var(--ink);margin:0;line-height:1.46;background:#fff;-webkit-font-smoothing:antialiased;}
+  .wrap{max-width:184mm;margin:0 auto;padding:0 1mm;}
+  h1,h2,h3{line-height:1.16;font-weight:700;}
+  p{margin:.35rem 0;text-align:justify;} .muted{color:var(--soft);}
+  code{font-family:Menlo,"Courier New",monospace;font-size:.85em;background:var(--bg-card);padding:.01em .26em;border-radius:3px;color:#0b3b36;}
+  .page{break-before:page;}
+  .band{border-bottom:3px solid var(--teal);padding:.1rem 0 .4rem;margin-bottom:.5rem;display:flex;align-items:baseline;}
+  .band .kick{font-size:.72rem;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:var(--teal);display:block;}
+  .band h1{font-size:1.5rem;margin:.05rem 0 0;}
+  .band .pg{margin-left:auto;font-size:2.3rem;font-weight:800;color:var(--bg-card);line-height:.7;}
+  .lede{font-size:.98rem;color:var(--muted);margin:0 0 .5rem;font-style:italic;}
+  h3{font-size:1.08rem;margin:.6rem 0 .18rem;color:var(--teal-d);}
+  h3 .s{color:var(--soft);font-weight:400;font-size:.86rem;}
+  .line{font-size:1.18rem;font-weight:700;color:var(--indigo-d);text-align:center;margin:.5rem 0;padding:.35rem;background:#eef1ff;border-radius:8px;}
+  .box{border-left:4px solid var(--teal);background:var(--bg-tint);padding:.5rem .8rem;border-radius:0 8px 8px 0;margin:.5rem 0;break-inside:avoid;}
+  .box.key{border-color:var(--indigo);background:#eef1ff;} .box.warn{border-color:var(--warn);background:#fffbeb;}
+  .box .lbl{font-weight:800;text-transform:uppercase;letter-spacing:.05em;font-size:.72rem;display:block;margin-bottom:.12rem;color:var(--teal-d);}
+  .box.key .lbl{color:var(--indigo-d);} .box.warn .lbl{color:#92400e;}
+  .box p{margin:.2rem 0;}
+  .ex{font-size:.95rem;color:var(--muted);border-left:2px solid var(--soft);padding-left:.55rem;margin:.28rem 0;}
+  .ex b{color:var(--ink);}
+  .foot{margin-top:.5rem;border-top:1px solid var(--line);padding-top:.24rem;font-size:.76rem;color:var(--soft);}
+  @page{size:A4;margin:11mm 12mm;}
+</style>
+</head>
+<body>
+
+<!-- PAGE 1 -->
+<div class="wrap">
+  <div class="band"><div><span class="kick">Pitch · le problème, le produit, l'offre</span><h1>EFE — prouvez ce que vos agents font</h1></div><span class="pg">1</span></div>
+  <div class="lede">Trois tiers d'agents d'IA sur un socle de preuve que n'importe qui peut re-vérifier lui-même, hors ligne, sans vous croire sur parole.</div>
+
+  <h3>Le problème — tout le monde fabrique, personne ne prouve</h3>
+  <p>Construire des agents d'intelligence artificielle est devenu banal. Une demi-douzaine de frameworks le font en un après-midi, et le prix des modèles s'effondre. Ce qui n'est <i>pas</i> banal — ce que presque personne ne sait livrer — c'est la <b>preuve de ce que ces agents ont réellement fait</b> : un dossier qu'un régulateur, un auditeur ou une contrepartie peut re-vérifier lui-même, sans avoir à vous croire. Un journal d'activité classique n'y suffit pas : c'est un fichier que son propriétaire peut modifier ; il faut le croire.</p>
+  <p>Dans les achats et la conformité, cette preuve <i>est</i> le métier. Une directive comme la CSDDD, ou l'article 12 de l'AI Act européen, ne demandent pas un rapport <i>sur</i> votre diligence : ils demandent de pouvoir <b>re-vérifier la diligence elle-même</b>, parfois des années plus tard. Aujourd'hui, cette démonstration se fait avec des captures d'écran, des tableurs et beaucoup de bonne volonté — c'est-à-dire des affirmations. Le jour où un contrôle est contesté, tout cet édifice ne pèse rien. C'est exactement le trou que comble EFE : la même orchestration que tout le monde construit, <b>plus sa preuve</b>.</p>
+
+  <h3>L'idée — un mécanisme, décliné partout</h3>
+  <p>EFE fait travailler les agents comme tout le monde, mais chaque action se <b>scelle au moment où elle se produit</b>, dans une chaîne inviolable — pas ajoutée après coup pour un audit, mais présente par construction. Quand quelqu'un doit vérifier, on lui remet un dossier : les enregistrements scellés, <i>plus le code source du vérifieur</i>. La clé qui a produit les sceaux n'y est jamais. Il recompile ce vérifieur lui-même — zéro dépendance, littéralement une ligne — puis débranche le réseau. À partir de là, plus personne ne peut influencer le résultat, pas même nous. Le programme recalcule chaque maillon : intact, ou altéré avec l'<b>étape exacte</b> qui a été touchée.</p>
+  <div class="line">Un tiers re-prouve — sans vous.</div>
+  <p>C'est un renversement de la charge de la confiance. Les outils d'observabilité existants vous montrent un tableau de bord <i>dans leur périmètre</i> : vous lisez une trace et vous la croyez. Ici, la vérification se <b>recalcule</b>, chez le destinataire, réseau coupé, avec un outil qu'il a lui-même reconstruit à partir d'une source qu'il peut lire en entier. Au moment de l'audit, le fournisseur du système sort du circuit de confiance : il ne reste que les mathématiques. C'est la seule propriété qui ne s'érode pas quand tout le monde sait déjà orchestrer des agents.</p>
+
+  <div class="box warn"><span class="lbl">Une honnêteté qui fait la crédibilité</span>
+    <p>Un mot répété partout dans ce dossier : cela prouve <b>ce qui s'est passé</b>, jamais qu'une décision était <i>juste</i>. C'est un procès-verbal infalsifiable, pas un juge. Une décision erronée mais scellée reste erronée — simplement, elle devient attribuable, contestable et rejouable. Dire cette limite d'emblée est précisément ce qui rend le reste crédible.</p></div>
+
+  <h3>Pourquoi maintenant</h3>
+  <p>Deux forces convergent, et aucune ne dépend d'un pari technologique. Les agents d'IA se multiplient dans les entreprises et l'orchestration se banalise : ce qui différenciera ne sera plus de <i>faire</i> agir des agents, mais de pouvoir <i>prouver</i> ce qu'ils ont fait. En même temps, la réglementation rend cette preuve obligatoire — l'AI Act impose un enregistrement automatique des systèmes à haut risque dès août 2026, et la CSDDD étend l'exigence d'une diligence démontrable à toute la chaîne de fournisseurs. Le « prouvable par défaut » cesse d'être un luxe pour devenir une condition d'accès aux marchés régulés. Celui qui tient cette couche de preuve arrive au bon moment, sur le terrain qui compte.</p>
+</div>
+
+<!-- PAGE 2 -->
+<div class="wrap page">
+  <div class="band"><div><span class="kick">Pitch · le produit</span><h1>Trois tiers, une même valeur</h1></div><span class="pg">2</span></div>
+  <div class="lede">Le nano-robot est l'unité, l'essaim la compose, le méta-essaim fait décider plusieurs organisations. La même cryptographie scelle les trois — un tiers re-prouve tout le pipeline, hors ligne.</div>
+
+  <h3>Les nano-robots <span class="s">— déléguer, et tracer sans effort</span></h3>
+  <p>Plutôt qu'un seul grand modèle opaque appelé cent fois, une tâche est découpée en petites unités spécialisées et déterministes, chacune scellant son geste. <b>Ce que cela vous apporte :</b> chaque étape devient inspectable, testable et rejouable ; l'audit s'écrit tout seul (reconstituer une décision de mars, prouver qu'une vérification a eu lieu, effacer une donnée personnelle pour le RGPD sans rompre la chaîne) ; et chaque capacité est une pièce gouvernée — signée, versionnée, testée — donc rien ne change à votre insu.</p>
+  <div class="ex"><b>Concrètement :</b> une facture devient cinq étapes scellées (extraction, classification, rapprochement au bon de commande, signalement d'écart) au lieu d'une réponse à croire ; un criblage de sanctions où même « aucune correspondance » est une preuve datée, pas une absence de trace.</div>
+
+  <h3>L'essaim <span class="s">— une décision collective, avec son reçu</span></h3>
+  <p>Les unités se composent en un collectif qui traite une tâche entière, et l'on choisit la <b>forme de coopération selon l'enjeu</b> : plusieurs agents qui produisent puis vérifient pour un scoring à gros enjeu, un vote pour approuver une clause, une décomposition pour accueillir un fournisseur. <b>Ce que cela vous apporte :</b> chaque décision collective vient avec un <b>reçu</b> — une empreinte unique qui scelle qui a contribué quoi, que l'on re-vérifie hors ligne, sans aucun accès à vos systèmes. Si un résultat stocké est modifié, la re-preuve le détecte et <i>nomme l'étape</i>. Et tout se regarde en direct, ou se rejoue à l'identique deux ans après.</p>
+  <div class="ex"><b>Concrètement :</b> une approbation de fournisseur (sanctions, finances, audit de site) scellée en un seul hash ; un an plus tard, un différend — <code>/verify</code> répond « altéré, étape 2 » : on ne soupçonne plus, on sait.</div>
+
+  <h3>Le méta-essaim <span class="s">— s'accorder entre organisations, sans se dévoiler</span></h3>
+  <p>Plusieurs parties qui ne se font pas confiance — un acheteur, un fournisseur, un auditeur ; ou deux filiales cloisonnées par la loi — doivent parfois aboutir à une décision commune. <b>Ce que cela vous apporte :</b> elles convergent vers une réponse partagée <b>sans échanger leurs données</b> — seuls des signaux de consensus circulent, jamais les dossiers ; des garde-fous que l'on peut <i>prouver</i> (aucune notation ne sort de la bande de politique que vous déclarez, et chaque correction est scellée) ; et la preuve que la décision n'a été <b>dominée par personne</b>.</p>
+  <div class="ex"><b>Concrètement :</b> acheteur, fournisseur et auditeur aboutissent à une note de risque commune, chacun gardant ses données ; la preuve démontre qu'aucun n'a imposé son verdict — un déblocage qu'aucun cadre d'agents ni outil d'observabilité ne permet aujourd'hui.</div>
+
+  <div class="box"><span class="lbl">Le fil</span><p>Ce ne sont pas trois produits, mais trois échelles d'un même geste, sur un socle unique. Les données montent et la preuve s'agrège (chaque action → le reçu d'un essaim → l'accord entre organisations) ; les contraintes descendent (votre politique → le budget d'un run → les capacités signées). Beaucoup exécutent des agents en parallèle ; ce qui ne se copie pas, c'est que chaque étape, à chaque échelle, soit prouvable de bout en bout, sans vous.</p></div>
+
+  <h3>En complément <span class="s">— vos documents, et les grands modèles</span></h3>
+  <p>Deux compléments, brièvement. <b>Le grounding :</b> les agents raisonnent sur <i>vos</i> contrats, fournisseurs et réglementations — recherche hybride, graphe de connaissances, multi-hop, documents scannés — et non sur la seule mémoire d'un modèle ; « quels fournisseurs partagent un bénéficiaire effectif ? » devient une requête, et son résultat entre dans la même chaîne de preuve. <b>Scout &amp; Synthesize :</b> une application qui coordonne les grands modèles du marché (Claude, GPT, Gemini) à travers les nano-robots, avec une sortie contrainte par grammaire — un JSON garanti par construction, pas un texte à re-parser, scellé à chaque appel. C'est la preuve que le socle model-agnostique tient aussi avec de gros modèles frontière, et pas seulement avec des composants maison.</p>
+</div>
+
+<!-- PAGE 3 -->
+<div class="wrap page">
+  <div class="band"><div><span class="kick">Pitch · défendable &amp; l'offre</span><h1>Pourquoi c'est solide — et ce qu'on vous propose</h1></div><span class="pg">3</span></div>
+
+  <h3>Le rempart — ce qui ne se copie pas en six mois</h3>
+  <p>L'orchestration se copie ; le socle, non. La cryptographie est écrite à la main et prouvée contre les vecteurs officiels des standards, sans aucune dépendance externe — le vérifieur tient en une ligne, se lit en une après-midi et se recompile chez vous. Le système est <b>model-agnostique</b> : il rend auditable aussi bien un essaim de petits modèles qu'un pipeline de grands modèles frontière. Presque personne n'offre cette propriété — la re-preuve hors ligne, par un tiers, sans le fournisseur — et c'est elle, pas l'orchestration, qui rend une <b>absorption</b> sûre : vous ne rachetez pas une boîte noire, mais quelque chose dont vous re-vérifiez chaque pièce.</p>
+
+  <h3>La crédibilité — nous publions ce qui nous donne tort</h3>
+  <p>Nous mesurons notre propre système sur de vrais modèles, et nous publions les résultats même quand ils nous contredisent : un petit assemblage d'experts a battu notre propre routeur d'essaim sur le coût — nous l'avons publié tel quel. Nous ne prétendons <b>jamais</b> que « le petit bat le gros » ; nous sommes la couche de mesure et de preuve qui indique, sur <i>votre</i> tâche, quelle architecture est avantageuse. Réfuter sa propre thèse devant un comité est, en soi, un signal de confiance.</p>
+
+  <h3>Machine-lisible, opéré, honnête</h3>
+  <p>La conformité n'est pas un classeur à côté du produit : les exigences de l'AI Act (article 12, application pleine le 2 août 2026), de DORA et de la CSDDD se mappent une à une sur des briques testées, placées sur le chemin de chaque requête, qui <b>refusent</b> si un contrôle manque. Et ce n'est pas une maquette : un système opéré, environ 5 200 tests automatiques, une revue de sécurité adverse interne qui a trouvé et corrigé 21 défauts. Nous disons aussi où sont les limites : le cœur est prêt (le socle de confiance, l'essaim, la provenance du méta-essaim) ; quelques branchements restent — bac à sable des modèles locaux, connecteurs d'identité, transport inter-région — des travaux d'intégration, pas de recherche. La candeur réduit le risque de qui nous évalue.</p>
+
+  <h3>Voir, pas croire — une démonstration, pas une brochure</h3>
+  <p>Rien de tout cela n'est un support de présentation. Nous pouvons l'exécuter <b>en direct, sur votre matériel, réseau débranché</b> : sceller un traitement, en modifier un seul octet, puis relancer la vérification — qui échoue en désignant l'étape falsifiée. La re-preuve hors ligne d'un workflow réel prend environ une minute, et c'est vous qui lisez le résultat. Un support de présentation ne survit pas à un réseau débranché ; une re-preuve, si.</p>
+
+  <h3>Le cadre — une absorption sûre</h3>
+  <p>Les trois tiers sont le produit à absorber : ils deviennent votre propriété, co-développés puis intégrés dans votre pile, le socle de confiance voyageant dessous comme garantie. Ce n'est pas « un framework d'agents de plus » — c'est la seule orchestration à trois étages dont chaque pas se re-prouve, hors ligne, sans nous. Et l'absorber est sûr précisément parce que <b>vous re-vérifiez ce que vous absorbez</b> : vous ne reprenez pas une boîte à croire, mais quelque chose dont vous tenez la preuve, pièce par pièce.</p>
+
+  <div class="box key"><span class="lbl">L'offre — la preuve, pas la promesse</span>
+    <p>Donnez-nous <b>une tâche réelle</b>, choisie par vous. Nous la livrons en quelques semaines sous forme de <b>dossier re-prouvable</b>. Vous recompilez un vérifieur à dépendance nulle, coupez le réseau, et re-prouvez chaque tier vous-mêmes — en salle fermée si vous le souhaitez. Des semaines, pas des trimestres. C'est la seule chose qu'aucun pitch ne peut vous offrir : <b>vous n'avez à nous croire sur rien.</b> J'aimerais définir ce premier cas avec vous.</p></div>
+  <div class="foot">Pitch · trois pages · chaque affirmation a, derrière elle, un test, une démonstration exécutable ou une mesure recalculable · 2026-07-09.</div>
+</div>
+
+</body>
+</html>

@@ -1,0 +1,268 @@
+{
+  "llm_records": [
+    {
+      "agent_id": "generator",
+      "agent_version": "1.0.0",
+      "completeness": {
+        "kind": "complete"
+      },
+      "cost_accounting": {
+        "cost_cents": 0.0,
+        "overflow_capped": false,
+        "prices_table_version": 0
+      },
+      "final_prompt_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+      "model_hash_verified": false,
+      "model_identity": {
+        "model_id": "gemma3:12b",
+        "provider": "ollama",
+        "requested_version": "local",
+        "supports_tool_use": false
+      },
+      "op_id": "swarm.generator",
+      "output_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+      "pii_strategy_applied": "none",
+      "prompt_inputs_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+      "prompt_template_id": "swarm.selfhost",
+      "prompt_template_version": "1.0.0",
+      "provenance_id": "00000000-0000-0000-0000-0000c0ffee00",
+      "provider_finish_reason": "stop",
+      "provider_response_time_ms": 42,
+      "recorded_at": {
+        "nanos_since_epoch": 0,
+        "secs_since_epoch": 0
+      },
+      "retry_count": 0,
+      "retry_outcome": "no_retry",
+      "sampling": {
+        "max_tokens": 256,
+        "seed": 7,
+        "temperature": 0.20000000298023224
+      },
+      "streaming_mode": false,
+      "swarm_request_id": "00000000-0000-0000-0000-000000005eed",
+      "system_prompt_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+      "tenant_id": "00000000-0000-0000-0000-000000000001",
+      "token_usage": {
+        "client_estimated_input": 120,
+        "client_estimated_output": 64,
+        "is_estimated": true
+      },
+      "trace_id": "00000000-0000-0000-0000-0000c1009800",
+      "user_prompt_hash": "0000000000000000000000000000000000000000000000000000000000000000"
+    },
+    {
+      "agent_id": "generator",
+      "agent_version": "1.0.0",
+      "completeness": {
+        "kind": "complete"
+      },
+      "cost_accounting": {
+        "cost_cents": 0.0,
+        "overflow_capped": false,
+        "prices_table_version": 0
+      },
+      "final_prompt_hash": "0101010101010101010101010101010101010101010101010101010101010101",
+      "model_hash_verified": false,
+      "model_identity": {
+        "model_id": "gemma3:12b",
+        "provider": "ollama",
+        "requested_version": "local",
+        "supports_tool_use": false
+      },
+      "op_id": "swarm.generator",
+      "output_hash": "0707070707070707070707070707070707070707070707070707070707070707",
+      "pii_strategy_applied": "none",
+      "prompt_inputs_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+      "prompt_template_id": "swarm.selfhost",
+      "prompt_template_version": "1.0.0",
+      "provenance_id": "00000000-0000-0000-0000-0000c0ffee01",
+      "provider_finish_reason": "stop",
+      "provider_response_time_ms": 42,
+      "recorded_at": {
+        "nanos_since_epoch": 0,
+        "secs_since_epoch": 0
+      },
+      "retry_count": 0,
+      "retry_outcome": "no_retry",
+      "sampling": {
+        "max_tokens": 256,
+        "seed": 7,
+        "temperature": 0.20000000298023224
+      },
+      "streaming_mode": false,
+      "swarm_request_id": "00000000-0000-0000-0000-000000005eed",
+      "system_prompt_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+      "tenant_id": "00000000-0000-0000-0000-000000000001",
+      "token_usage": {
+        "client_estimated_input": 120,
+        "client_estimated_output": 64,
+        "is_estimated": true
+      },
+      "trace_id": "00000000-0000-0000-0000-0000c1009801",
+      "user_prompt_hash": "0101010101010101010101010101010101010101010101010101010101010101"
+    },
+    {
+      "agent_id": "generator",
+      "agent_version": "1.0.0",
+      "completeness": {
+        "kind": "complete"
+      },
+      "cost_accounting": {
+        "cost_cents": 0.0,
+        "overflow_capped": false,
+        "prices_table_version": 0
+      },
+      "final_prompt_hash": "0202020202020202020202020202020202020202020202020202020202020202",
+      "model_hash_verified": false,
+      "model_identity": {
+        "model_id": "gemma3:12b",
+        "provider": "ollama",
+        "requested_version": "local",
+        "supports_tool_use": false
+      },
+      "op_id": "swarm.generator",
+      "output_hash": "0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e",
+      "pii_strategy_applied": "none",
+      "prompt_inputs_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+      "prompt_template_id": "swarm.selfhost",
+      "prompt_template_version": "1.0.0",
+      "provenance_id": "00000000-0000-0000-0000-0000c0ffee02",
+      "provider_finish_reason": "stop",
+      "provider_response_time_ms": 42,
+      "recorded_at": {
+        "nanos_since_epoch": 0,
+        "secs_since_epoch": 0
+      },
+      "retry_count": 0,
+      "retry_outcome": "no_retry",
+      "sampling": {
+        "max_tokens": 256,
+        "seed": 7,
+        "temperature": 0.20000000298023224
+      },
+      "streaming_mode": false,
+      "swarm_request_id": "00000000-0000-0000-0000-000000005eed",
+      "system_prompt_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+      "tenant_id": "00000000-0000-0000-0000-000000000001",
+      "token_usage": {
+        "client_estimated_input": 120,
+        "client_estimated_output": 64,
+        "is_estimated": true
+      },
+      "trace_id": "00000000-0000-0000-0000-0000c1009802",
+      "user_prompt_hash": "0202020202020202020202020202020202020202020202020202020202020202"
+    },
+    {
+      "agent_id": "generator",
+      "agent_version": "1.0.0",
+      "completeness": {
+        "kind": "complete"
+      },
+      "cost_accounting": {
+        "cost_cents": 0.0,
+        "overflow_capped": false,
+        "prices_table_version": 0
+      },
+      "final_prompt_hash": "0303030303030303030303030303030303030303030303030303030303030303",
+      "model_hash_verified": false,
+      "model_identity": {
+        "model_id": "gemma3:12b",
+        "provider": "ollama",
+        "requested_version": "local",
+        "supports_tool_use": false
+      },
+      "op_id": "swarm.generator",
+      "output_hash": "1515151515151515151515151515151515151515151515151515151515151515",
+      "pii_strategy_applied": "none",
+      "prompt_inputs_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+      "prompt_template_id": "swarm.selfhost",
+      "prompt_template_version": "1.0.0",
+      "provenance_id": "00000000-0000-0000-0000-0000c0ffee03",
+      "provider_finish_reason": "stop",
+      "provider_response_time_ms": 42,
+      "recorded_at": {
+        "nanos_since_epoch": 0,
+        "secs_since_epoch": 0
+      },
+      "retry_count": 0,
+      "retry_outcome": "no_retry",
+      "sampling": {
+        "max_tokens": 256,
+        "seed": 7,
+        "temperature": 0.20000000298023224
+      },
+      "streaming_mode": false,
+      "swarm_request_id": "00000000-0000-0000-0000-000000005eed",
+      "system_prompt_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+      "tenant_id": "00000000-0000-0000-0000-000000000001",
+      "token_usage": {
+        "client_estimated_input": 120,
+        "client_estimated_output": 64,
+        "is_estimated": true
+      },
+      "trace_id": "00000000-0000-0000-0000-0000c1009803",
+      "user_prompt_hash": "0303030303030303030303030303030303030303030303030303030303030303"
+    },
+    {
+      "agent_id": "generator",
+      "agent_version": "1.0.0",
+      "completeness": {
+        "kind": "complete"
+      },
+      "cost_accounting": {
+        "cost_cents": 0.0,
+        "overflow_capped": false,
+        "prices_table_version": 0
+      },
+      "final_prompt_hash": "0404040404040404040404040404040404040404040404040404040404040404",
+      "model_hash_verified": false,
+      "model_identity": {
+        "model_id": "gemma3:12b",
+        "provider": "ollama",
+        "requested_version": "local",
+        "supports_tool_use": false
+      },
+      "op_id": "swarm.generator",
+      "output_hash": "1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c",
+      "pii_strategy_applied": "none",
+      "prompt_inputs_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+      "prompt_template_id": "swarm.selfhost",
+      "prompt_template_version": "1.0.0",
+      "provenance_id": "00000000-0000-0000-0000-0000c0ffee04",
+      "provider_finish_reason": "stop",
+      "provider_response_time_ms": 42,
+      "recorded_at": {
+        "nanos_since_epoch": 0,
+        "secs_since_epoch": 0
+      },
+      "retry_count": 0,
+      "retry_outcome": "no_retry",
+      "sampling": {
+        "max_tokens": 256,
+        "seed": 7,
+        "temperature": 0.20000000298023224
+      },
+      "streaming_mode": false,
+      "swarm_request_id": "00000000-0000-0000-0000-000000005eed",
+      "system_prompt_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+      "tenant_id": "00000000-0000-0000-0000-000000000001",
+      "token_usage": {
+        "client_estimated_input": 120,
+        "client_estimated_output": 64,
+        "is_estimated": true
+      },
+      "trace_id": "00000000-0000-0000-0000-0000c1009804",
+      "user_prompt_hash": "0404040404040404040404040404040404040404040404040404040404040404"
+    }
+  ],
+  "n17_leaves": [
+    "2e292c8fcf4ef399dbb2dbf9678d2275bdd9e95686ea9dc736ccfb7313cd190f",
+    "15ddd1aadf55dc95143d4fb4cf169fd9bdba258fe1816388ed3171c1734a087c",
+    "71fd55841c273792af5c726f988ca54069d5e278b3b1acadc2664b639d3d383f",
+    "585a874b8123e6e3edeeb71a0663ad5fc435f2b98144019c63f813703b7a4a03",
+    "b2f2c0fba817e86ab164d99f3f51a6a56c6eb51318e42f083347c866cad2ac89"
+  ],
+  "n17_root": "0e2bd8f19548f3cdd92b18cea0d1c37b559fd575021f035e1c62b8bd891f637b",
+  "run_id": "00000000-0000-0000-0000-000000005eed"
+}

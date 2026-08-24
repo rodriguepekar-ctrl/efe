@@ -1,0 +1,187 @@
+\documentclass[11pt]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage[french]{babel}
+\usepackage{newpxtext,newpxmath}
+\usepackage[a4paper,top=1.9cm,bottom=2.0cm,left=2.1cm,right=2.1cm]{geometry}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{titlesec}
+\usepackage[most]{tcolorbox}
+\usepackage{fancyhdr}
+\usepackage{listings}
+
+\definecolor{efenavy}{HTML}{1F3A5F}
+\definecolor{efeteal}{HTML}{0E7A6E}
+\definecolor{efeamber}{HTML}{B25A1E}
+\definecolor{efeplum}{HTML}{7A4EA8}
+\definecolor{efegray}{HTML}{54606E}
+\definecolor{boxgray}{HTML}{F3F5F8}
+\definecolor{boxamber}{HTML}{FBF3EA}
+\definecolor{boxedge}{HTML}{D9E0EA}
+\definecolor{codebg}{HTML}{F5F7FA}
+
+\lstdefinestyle{rs}{basicstyle=\ttfamily\footnotesize,backgroundcolor=\color{codebg},
+  keywordstyle=\color{efenavy}\bfseries,commentstyle=\color{efegray}\itshape,
+  stringstyle=\color{efeteal},breaklines=true,columns=fullflexible,keepspaces=true,
+  xleftmargin=8pt,framexleftmargin=8pt,aboveskip=5pt,belowskip=3pt,
+  morekeywords={pub,struct,enum,fn,impl,let,match,Result,Ok,Err,const,for,assert,use,mod,None,Some}}
+\lstset{style=rs}
+
+\titleformat{\section}{\color{efenavy}\large\bfseries}{}{0pt}{}
+\titlespacing{\section}{0pt}{11pt}{4pt}
+
+\setlength{\parskip}{3pt}\setlength{\parindent}{0pt}\setlength{\emergencystretch}{3em}
+
+\pagestyle{fancy}\fancyhf{}\renewcommand{\headrulewidth}{0.3pt}
+\lhead{\small\color{efegray}reg-evidence — outillé $\neq$ conforme}
+\rhead{\small\color{efegray}2026-07-19}
+\cfoot{\small\color{efegray}\thepage}
+
+\newtcolorbox{these}{colback=boxgray,colframe=boxedge,boxrule=0.5pt,arc=2.5pt,left=8pt,right=8pt,top=5pt,bottom=5pt}
+\newtcolorbox{cadre}{colback=boxamber,colframe=efeamber!55,boxrule=0.6pt,arc=2.5pt,left=8pt,right=8pt,top=5pt,bottom=5pt}
+
+\begin{document}
+
+\begin{center}
+{\LARGE\bfseries\color{efenavy} reg-evidence — outillé $\neq$ conforme}\\[3pt]
+{\large\color{efegray}\itshape Le reçu re-vérifiable, et l'artefact réglementaire qui refuse
+par construction de dire « conforme »}\\[5pt]
+{\color{efegray}Rodrigue Pekar \quad$\cdot$\quad Note technique \quad$\cdot$\quad 2026-07-19}
+\end{center}
+\vspace{2pt}
+
+\begin{these}
+Tout outil de conformité vend une \textbf{coche verte} : « votre système est conforme ».
+\texttt{reg-evidence} fait l'inverse — et il l'impose par le \textbf{type} et par la
+\textbf{cryptographie}, pas par un discours. L'artefact réglementaire qu'il produit n'a
+\emph{structurellement aucun champ} où écrire « conforme » : seulement de la \textbf{couverture}
+(couvert / partiel / hors-périmètre). Et il est dérivé d'un \textbf{reçu scellé} qu'un tiers
+\emph{sceptique} re-prouve sans jamais faire confiance au producteur. La conformité reste la
+conclusion du juriste ; l'outil ne fournit que de l'évidence re-vérifiable. Refuser le verdict
+est plus dur à vendre qu'une coche verte — et bien plus solide.
+\end{these}
+
+\section{1 \;\textbar\; La coche verte que tout le monde vend}
+Le marché de la conformité repose sur une phrase : « conforme SOC 2 », « prêt RGPD »,
+« AI-Act-ready ». C'est un \emph{verdict} — or un verdict de conformité dépend de la
+classification d'un système précis, de son déploiement, du conseil juridique du client. Un
+outil ne peut pas le prononcer honnêtement. La plupart le prononcent quand même, en petits
+caractères. \texttt{reg-evidence} prend la position inverse et la rend \emph{impossible à
+contourner} : il n'y a nulle part, dans le type de sortie, où écrire « conforme ». Ce document
+décrit les deux couches qui rendent ce refus non pas rhétorique mais \textbf{mécanique}.
+
+\section{2 \;\textbar\; Couche 0 — le reçu re-vérifiable (\texttt{provenance-dag})}
+Chaque décision, chaque appel, chaque hop est un \textbf{nœud} scellé dans un DAG. Le sceau
+lie le nœud à toute la chaîne qui précède :
+\[
+\text{sceau}_i = \mathrm{HMAC}\big(K_{\text{tenant}},\ \text{chaîne}_{i-1}\ \Vert\ \mathrm{canonical}(\text{n\oe ud}_i)\big)
+\]
+\vspace{-6pt}
+\[
+\text{avec}\quad \text{chaîne}_0 = \mathrm{SHA256}(\text{GENESIS}).
+\]
+\texttt{append()} (\texttt{provenance-dag/src/dag.rs:83}, sceau ligne 95) scelle chaque nœud et
+\emph{refuse à l'écriture} les incohérences de structure : référence causale pendante
+(test \texttt{dag.rs:343}) et identifiant dupliqué (test \texttt{dag.rs:361}). Rien de mal formé
+n'entre dans la chaîne.
+
+\textbf{La re-preuve sans confiance.} Un tiers qui possède seulement les \emph{records} et la
+clé de tenant appelle \texttt{reprove\_dag} (\texttt{dag.rs:167}) : il \textbf{re-dérive toute la
+chaîne} depuis GENESIS et recompte chaque sceau, comparé en \emph{temps constant}
+(\texttt{ct\_eq}, \texttt{dag.rs:188}). Il ne fait confiance à \emph{rien} de ce que le producteur
+affirme — il recalcule. \texttt{verify\_against\_root} (\texttt{dag.rs:198}) lie en plus la chaîne
+à une racine publiée. Deux re-prouveurs \emph{indépendants} existent : le CLI
+\texttt{provenance-verify} (dépendances minimales) et \texttt{verify-mini} (\emph{zéro}
+dépendance) — le sceptique peut re-vérifier avec un outil qui ne partage aucun code avec le
+producteur.
+
+\begin{cadre}
+\textbf{Le refus vaut mieux qu'un faux vert.} Un bundle vide ne rend \emph{jamais} « VÉRIFIÉ » :
+il est \textbf{REFUSÉ}. Un test de régression (\texttt{provenance-verify/src/main.rs:312--325})
+épingle « bundle vide $\rightarrow$ exit 1, jamais 0 ». Et une erreur d'usage sort en \texttt{exit 2} — jamais un faux verdict
+d'altération \texttt{exit 1} (\texttt{main.rs:116}). L'outil préfère dire « je ne peux pas
+attester » que mentir par défaut.
+\end{cadre}
+
+\section{3 \;\textbar\; Couche 1 — l'artefact sans champ « conforme » (\texttt{reg-evidence})}
+\texttt{derive()} (\texttt{reg-evidence/src/engine.rs:53}) \textbf{re-prouve le DAG d'abord} : si
+la re-preuve échoue, il renvoie \texttt{RegError::NotProven} et « \emph{ne dérive JAMAIS
+d'évidence sur du non-prouvé} » (\texttt{engine.rs:42}). Aucune évidence n'est construite sur des
+records non re-prouvés.
+
+La sortie est une \textbf{VUE}, pas un verdict. Le type \texttt{RegulatoryArtifact}
+(\texttt{artifact.rs:83}) porte une \textbf{couverture} et les \texttt{node\_id} \emph{cités} — et
+c'est tout :
+\begin{lstlisting}
+// artifact.rs — « outillé != conforme imposé par le TYPE » (l:2)
+pub enum Coverage { Covered, Partial, OutOfDagScope }   // (l:49) couvert / partiel / hors-perimetre
+
+pub struct RegulatoryArtifact {   // (l:83) « Aucun champ 'conforme' nulle part »
+    // requirement, coverage: Coverage, cited_node_ids, semantics: note d'honnetete ...
+    // -> il n'existe AUCUN champ ou ecrire « compliant » / « conforme »
+}
+\end{lstlisting}
+Un développeur qui voudrait, « par pression commerciale, faire dire à l'artefact +système
+conforme+, n'a structurellement nulle part où l'écrire » (\texttt{artifact.rs:8}) : le type
+\emph{interdit} le glissement vers le verdict (\texttt{artifact.rs:57}). Deux gardes complètent
+la couche : \texttt{PhantomCitation} (\texttt{engine.rs:37}) — une exigence ne peut pas citer un
+\texttt{node\_id} absent du DAG re-prouvé (pas d'évidence fantôme) ; et surtout,
+\texttt{MappingSet::new} \textbf{rejette un cadre qui ne déclare aucun trou}
+(\texttt{mapping.rs:121}, garde \texttt{:130}) — « un cadre sans trou serait un \emph{vert
+malhonnête} » (\texttt{mapping.rs:12}, test \texttt{mapping.rs:217}). Le template EU AI Act \emph{déclare} donc ses trous plutôt que de prétendre les
+couvrir : art. 9 (gestion des risques), art. 10 (gouvernance des données), art. 11 + Annexe IV
+(documentation technique), art. 17 (système qualité), art. 72 (surveillance post-marché) — tous
+étiquetés \texttt{OutOfDagScope} (\texttt{templates.rs:73--81}). L'outil dit « je ne couvre pas
+ça », au lieu de faire semblant.
+
+\section{4 \;\textbar\; Les deux axiomes, gravés dans le type et testés au grep}
+L'honnêteté n'est pas une promesse en prose — ce sont deux invariants \emph{exécutables} :
+
+\smallskip
+\textbf{Axiome 1 — outillé $\neq$ conforme.} Aucun champ de conformité dans l'artefact. Un test
+(\texttt{artifact.rs:125--132}) sérialise l'artefact et \textbf{échoue le build} si le JSON
+contient l'un des tokens \texttt{compliant}, \texttt{conforme}, \texttt{compliance} ou
+\texttt{conformity}.
+
+\smallskip
+\textbf{Axiome 2 — intègre $\neq$ correct.} La ligne d'intégrité atteste « authentique et
+non-altéré », \textbf{jamais} « correct » : elle dit atteste « \emph{ce qui s'est passé — pas la
+justesse de la décision, ni une reproductibilité bit-à-bit} » (\texttt{audit-api/src/report.rs:74},
+discipline \texttt{:6--7}). Un test (\texttt{report.rs:129}) interdit littéralement le token
+« correct » dans le rendu.
+
+\smallskip
+Le point : on \emph{ne peut pas} sur-vendre par accident. Le type retire l'endroit où écrire le
+verdict ; la crypto retire la possibilité de faire confiance au producteur ; les grep-tests
+cassent le build si quelqu'un tente de faire passer « conforme » ou « correct ».
+
+\section{5 \;\textbar\; Pourquoi c'est rare, et pourquoi un acheteur conformité y tient}
+Refuser la coche verte est \emph{contre-intuitif} commercialement — c'est plus dur à vendre
+qu'un « conforme ». Mais c'est la seule position honnête : la conformité est une conclusion
+\emph{juridique} sur un déploiement précis, qu'aucun outil ne peut prononcer. La rareté n'est pas
+d'y penser — c'est de rendre le refus \textbf{structurel} (pas de champ) plutôt qu'une note de bas
+de page. Pour un acheteur conformité (achat, RGPD, AI Act), la proposition devient défendable :
+\emph{« Certifié conforme ? Non, délibérément — reg-evidence n'a pas de champ conforme. Voici un
+reçu d'évidence re-vérifiable ; votre juriste conclut. »} On ne lui remet pas un mensonge dont il
+serait responsable — on lui remet une preuve qu'il peut re-vérifier lui-même, sans nous faire
+confiance.
+
+\section{6 \;\textbar\; Le périmètre honnête}
+Ce que l'outil \textbf{n'affirme pas} : il ne prononce pas la conformité (outillé $\neq$
+conforme), il n'atteste pas la justesse de la décision (intègre $\neq$ correct), il ne garantit
+pas une reproductibilité bit-à-bit. Il atteste une seule chose : \emph{ce record est authentique
+et non-altéré}, et voici l'évidence à laquelle chaque exigence se rattache — ou le trou déclaré
+là où il n'y en a pas.
+
+\smallskip
+\textbf{Statut, sans fard.} La machinerie est \textbf{réelle et testée} : \texttt{provenance-dag},
+\texttt{reg-evidence}, \texttt{audit-api}, \texttt{audit-console}, \texttt{provenance-verify},
+\texttt{verify-mini} compilent et passent leurs tests, chaque garde ci-dessus étant épinglée par
+un test nommé. La limite honnête d'aujourd'hui : le point d'entrée servi est un \textbf{binaire
+local} dont le store est réhydraté depuis un fichier JSONL (ou provisionné vide) ; il n'ingère pas
+encore du trafic de production capturé en direct (couche S1). Le \emph{moteur} est là et re-prouvable ;
+le branchement bout-en-bout sur des données vivantes est l'étape suivante — et il ne changera pas
+l'invariant : l'artefact n'aura toujours \emph{aucun champ} où écrire « conforme ».
+
+\end{document}

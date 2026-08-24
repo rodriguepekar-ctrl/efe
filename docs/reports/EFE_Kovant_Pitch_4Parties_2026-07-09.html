@@ -1,0 +1,499 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>EFE — Nano-robots, essaim, méta-essaim, et les tests</title>
+<style>
+  :root{--ink:#0f172a;--muted:#334155;--soft:#64748b;--line:#e2e8f0;--teal:#0d9488;--teal-d:#0f766e;--indigo:#4f46e5;--indigo-d:#4338ca;--ok:#16a34a;--warn:#d97706;--bad:#dc2626;--bg-tint:#f6fbfa;--bg-card:#eef2f1;}
+  *{box-sizing:border-box;} html{font-size:11.3px;}
+  body{font-family:Arial,"Helvetica Neue",Helvetica,sans-serif;color:var(--ink);margin:0;line-height:1.6;background:#fff;-webkit-font-smoothing:antialiased;}
+  .wrap{max-width:176mm;margin:0 auto;padding:0 2mm;}
+  h1,h2,h3,h4{line-height:1.25;font-weight:700;}
+  p{margin:.5rem 0;text-align:justify;} .muted{color:var(--muted);} .small{font-size:.88rem;}
+  code{font-family:Menlo,"Courier New",monospace;font-size:.85em;background:var(--bg-card);padding:.03em .3em;border-radius:4px;color:#0b3b36;}
+  .page{break-before:page;}
+  .parthead{break-before:page;margin:0 0 1rem;padding:1.1rem 0 .7rem;border-bottom:4px solid var(--teal);}
+  .parthead .kick{font-size:.8rem;font-weight:800;letter-spacing:.16em;text-transform:uppercase;color:var(--teal);}
+  .parthead h2{font-size:1.85rem;margin:.15rem 0 .1rem;}
+  .parthead .lede{font-size:1.0rem;color:var(--muted);margin:.3rem 0 0;max-width:150mm;}
+  .parthead .np{float:right;font-size:3.4rem;font-weight:800;color:var(--bg-card);line-height:.8;margin-top:-.1rem;}
+  h3{font-size:1.12rem;margin:1.05rem 0 .3rem;color:var(--teal-d);border-bottom:1px solid var(--line);padding-bottom:.16rem;}
+  h4{font-size:1.0rem;margin:.7rem 0 .15rem;color:var(--ink);}
+  ul.mech{margin:.35rem 0;padding-left:0;list-style:none;}
+  ul.mech>li{position:relative;padding-left:1.1rem;margin:.32rem 0;}
+  ul.mech>li::before{content:"";position:absolute;left:0;top:.62em;width:.42rem;height:.42rem;background:var(--teal);border-radius:50%;}
+  ul.mech>li b{color:var(--ink);}
+  .ec{border-left:3px solid var(--teal-d);background:#effcf9;padding:.4rem .75rem;border-radius:0 6px 6px 0;margin:.5rem 0 .6rem;font-size:.97rem;}
+  .ec b{color:var(--teal-d);text-transform:uppercase;font-size:.72rem;letter-spacing:.05em;}
+  .ex{border:1px solid var(--line);border-left:3px solid var(--soft);border-radius:0 6px 6px 0;background:#fbfcfd;padding:.4rem .75rem;margin:.5rem 0 .6rem;font-size:.95rem;}
+  .ex b.xl{color:var(--soft);text-transform:uppercase;font-size:.72rem;letter-spacing:.05em;display:block;margin-bottom:.1rem;}
+  .apps{margin:.4rem 0;}
+  .apps .app{border:1px solid var(--line);border-radius:8px;padding:.42rem .72rem;margin:.42rem 0;break-inside:avoid;background:#fbfdfd;}
+  .apps .app .t{font-weight:700;color:var(--teal-d);font-size:.98rem;line-height:1.28;}
+  .apps .app p{margin:.15rem 0 0;font-size:.95rem;}
+  table{width:100%;border-collapse:collapse;font-size:.86rem;margin:.55rem 0;}
+  th{text-align:left;color:var(--teal-d);font-size:.72rem;text-transform:uppercase;letter-spacing:.04em;border-bottom:2px solid var(--teal);padding:.2rem .4rem;}
+  td{border-bottom:1px solid var(--line);padding:.24rem .4rem;vertical-align:top;}
+  td.m,th.m{font-family:Menlo,"Courier New",monospace;font-size:.82rem;white-space:nowrap;color:#0b3b36;}
+  td.n,th.n{text-align:right;font-family:Menlo,"Courier New",monospace;white-space:nowrap;}
+  tr{break-inside:avoid;} tr.tot td{font-weight:800;border-top:2px solid var(--teal);border-bottom:none;background:var(--bg-tint);}
+  .box{border-left:4px solid var(--teal);background:var(--bg-tint);padding:.55rem .85rem;border-radius:0 8px 8px 0;margin:.7rem 0;break-inside:avoid;}
+  .box.key{border-color:var(--indigo);background:#eef2ff;} .box.lim{border-color:var(--warn);background:#fffbeb;}
+  .box .lbl{font-weight:800;text-transform:uppercase;letter-spacing:.05em;font-size:.73rem;display:block;margin-bottom:.15rem;color:var(--teal-d);}
+  .box.key .lbl{color:var(--indigo-d);} .box.lim .lbl{color:#92400e;}
+  .box p{margin:.3rem 0;}
+  .cover{height:250mm;display:flex;flex-direction:column;justify-content:center;position:relative;padding:0 6mm;}
+  .cover .eyebrow{color:var(--teal);font-weight:800;letter-spacing:.16em;font-size:.85rem;text-transform:uppercase;}
+  .cover h1{font-size:2.15rem;margin:.5rem 0 .3rem;line-height:1.12;}
+  .cover .sub{font-size:1.12rem;color:var(--muted);margin-bottom:1.2rem;max-width:158mm;}
+  .cover ol.toc{font-size:1.02rem;color:var(--ink);margin:.4rem 0;padding-left:1.3rem;}
+  .cover ol.toc li{margin:.3rem 0;}
+  .cover ol.toc b{color:var(--teal-d);}
+  .cover .meta{position:absolute;bottom:6mm;left:6mm;right:6mm;display:flex;justify-content:space-between;border-top:1px solid var(--line);padding-top:.6rem;font-size:.8rem;color:var(--soft);}
+  @page{size:A4;margin:12mm 12mm;}
+</style>
+</head>
+<body>
+
+<!-- COVER -->
+<div class="wrap"><div class="cover">
+  <div class="eyebrow">EFE → Kovant · présentation posée, sans métaphore</div>
+  <h1>Nano-robots, essaim, méta-essaim,<br>et les tests réalisés</h1>
+  <div class="sub">Quatre parties, décrites une à une : ce que chaque composant est, quel problème il résout, comment il fonctionne, ce qu'il produit, et ce que les tests établissent. Le texte est factuel et progressif. Aucune image, aucune analogie : chaque terme technique est défini au moment où il apparaît, et les points difficiles sont reformulés en langage simple.</div>
+  <ol class="toc">
+    <li><b>Les nano-robots</b> — les agents d'exécution spécialisés et l'enregistrement d'audit.</li>
+    <li><b>L'essaim (swarm)</b> — la composition d'agents en une décision collective vérifiable.</li>
+    <li><b>Le méta-essaim (meta-swarm)</b> — la coordination de plusieurs essaims sous bornes prouvées.</li>
+    <li><b>Les tests réalisés</b> — tests logiciels, vérifications cryptographiques, revue de sécurité, et expériences de mesure.</li>
+  </ol>
+  <div class="meta"><span>EFE — présentation Kovant en quatre parties</span><span>2026-07-09</span></div>
+</div></div>
+
+<!-- FINALITE -->
+<div class="wrap page">
+  <h2 style="font-size:1.5rem;border-bottom:3px solid var(--teal);padding-bottom:.3rem;">La finalité des trois tiers — deux intentions de conception</h2>
+  <p>Avant de décrire les trois composants un à un, il faut énoncer les deux intentions qui ont présidé à leur conception. Elles sont indissociables et de rang égal ; tout le reste du document les décline.</p>
+
+  <h3>Première intention — un substrat d'exécution parallèle</h3>
+  <p>L'intention première est de <b>remplacer une longue suite d'appels à un grand modèle par un collectif de nombreuses unités spécialisées, exécutées en parallèle</b>. Plutôt qu'un seul grand modèle sollicité cent fois de suite, on met en œuvre de nombreuses petites unités à but unique — cent, par exemple — chacune traitant une sous-tâche, en même temps. Les trois tiers sont trois échelles de ce même principe : le nano-robot est l'unité (partie 1) ; l'essaim compose ces unités en parallèle et les coordonne (partie 2) ; le méta-essaim fait converger plusieurs essaims (partie 3).</p>
+  <p>Un point de mécanisme important, et souvent mal compris : ces unités <b>ne s'envoient pas de messages les unes aux autres</b>. Elles se coordonnent à travers un <b>espace d'information partagé</b> — un tableau commun au niveau de l'essaim, un espace de consensus au niveau du méta-essaim. Chaque unité y inscrit son avancement et y lit celui des autres. Ce choix, dit « stigmergique », fait passer le coût de coordination de l'ordre de N² échanges directs (chacun parlant à chacun) à l'ordre de N accès à un espace partagé ; c'est ce qui rend praticable la mise en relation d'un grand nombre d'unités.</p>
+  <div class="ec"><b>En clair</b> — la finalité de conception n'est pas « faire de petites étapes » pour elles-mêmes, mais construire un substrat où de nombreuses unités spécialisées travaillent en parallèle et échangent leur avancement par un espace commun, plutôt que de s'appeler les unes les autres. C'est ce substrat parallèle qui est l'objet des parties 1 à 3.</div>
+  <p><b>Une précision nécessaire, pour ne rien travestir.</b> Ce substrat est <b>model-agnostique</b> : une unité peut être du code déterministe sans aucun paramètre (Mode A), un petit modèle local (Mode B), ou un <i>grand</i> modèle externe encadré par un schéma (Mode C) — et une application dédiée coordonne précisément les grands modèles du marché. Le système ne repose donc pas sur la petite taille des modèles, et il ne prétend nulle part que de petits modèles seraient plus performants ou moins coûteux que de grands : cette hypothèse a été mesurée et n'a pas été confirmée (partie 4). Ce qu'il fournit, c'est le substrat parallèle et sa preuve, indépendamment de la taille des moteurs employés.</p>
+
+  <h3>Seconde intention — la re-preuve</h3>
+  <p>La seconde intention est que <b>chaque étape de cette exécution parallèle soit scellée et rejouable</b>, de sorte qu'un tiers puisse tout re-vérifier lui-même, hors ligne. C'est l'objet de la section suivante, « le cadre commun », puis de chaque partie.</p>
+
+  <h3>Pourquoi les deux sont indissociables</h3>
+  <p>Les deux intentions sont co-conçues, et c'est le point à retenir. D'un côté, c'est précisément la décomposition en petites étapes parallèles et indépendantes qui rend chaque étape <b>peu coûteuse à sceller et à rejouer</b> : une opération étroite a une entrée et une sortie exactes, faciles à empreindre et à recalculer. De l'autre, c'est la re-preuve qui rend ce substrat <b>défendable</b> : de nombreux systèmes exécutent des agents en parallèle, mais rares sont ceux dont chaque étape est prouvable de bout en bout, sans le fournisseur dans la boucle. Le substrat parallèle est le mode de calcul ; la re-preuve est ce qui le rend vérifiable. Aucun des deux n'est secondaire.</p>
+</div>
+
+<!-- CADRE -->
+<div class="wrap page">
+  <h2 style="font-size:1.5rem;border-bottom:3px solid var(--teal);padding-bottom:.3rem;">Le cadre commun — le principe de re-preuve</h2>
+  <p>Les trois composants décrits dans les parties 1 à 3 ont des fonctions différentes, mais ils reposent tous sur un même principe. Ce principe doit être posé en premier, avec soin, car il est la clé de tout le reste : il revient dans chaque partie, et sans lui les termes techniques employés plus loin resteraient obscurs. Cette section prend donc le temps de l'expliquer entièrement.</p>
+
+  <h3>Le point de départ : la différence entre montrer et prouver</h3>
+  <p>Un agent logiciel qui exécute une intelligence artificielle produit des actions : lire une donnée, calculer un score, appeler un modèle, signaler un écart. Dans un système informatique ordinaire, la trace de ces actions prend la forme d'un journal — un fichier dans lequel le système écrit ce qu'il fait. Ce journal a une faiblesse fondamentale : c'est un fichier, et un fichier peut être modifié par celui qui le détient. Pour accepter ce qu'un journal raconte, un tiers doit donc faire l'hypothèse que son propriétaire ne l'a pas altéré.</p>
+  <p>Dans beaucoup de situations, cette hypothèse est acceptable. Elle cesse de l'être dès que la trace peut être <i>contestée</i> : un différend avec un fournisseur, un contrôle réglementaire, un litige. Dans ces cas, « faites-moi confiance, je n'ai rien modifié » n'a aucune valeur probante. Ce qu'il faut, c'est une trace dont un tiers peut vérifier l'intégrité <b>par lui-même</b>, sans avoir à faire confiance à celui qui l'a produite. C'est précisément ce que construit EFE. Nous appelons ce dispositif la <b>re-preuve</b> : la possibilité, pour un tiers, de refaire la preuve depuis le début.</p>
+  <div class="ec"><b>En clair</b> — un journal ordinaire demande qu'on croie son propriétaire. Une trace re-prouvable ne demande de croire personne : elle se recalcule, et le calcul donne le même résultat ou révèle une modification.</div>
+
+  <h3>Les outils employés — trois notions à définir</h3>
+  <p>Le mécanisme repose sur trois notions techniques. Chacune est définie ici avant d'être utilisée.</p>
+  <h4>1. L'empreinte cryptographique</h4>
+  <p>Une empreinte cryptographique est le résultat d'une fonction mathématique qui prend en entrée une donnée de taille quelconque — un mot, un enregistrement, un fichier entier — et produit en sortie une suite de caractères de longueur fixe et courte. Le système emploie pour cela deux fonctions éprouvées, nommées SHA-256 et BLAKE3. Cette fonction possède trois propriétés qui la rendent utile ici :</p>
+  <ul class="mech">
+    <li><b>Elle est déterministe</b> : une même donnée d'entrée produit toujours la même empreinte.</li>
+    <li><b>Elle est sensible</b> : modifier un seul caractère de l'entrée change entièrement l'empreinte, de façon imprévisible.</li>
+    <li><b>Elle est à sens unique</b> : à partir d'une empreinte, on ne peut ni reconstituer l'entrée, ni fabriquer une autre entrée qui produirait la même empreinte.</li>
+  </ul>
+  <div class="ec"><b>En clair</b> — l'empreinte est un identifiant infalsifiable du contenu. Deux contenus différents ont, en pratique, deux empreintes différentes ; et l'on ne peut pas fabriquer un contenu sur mesure pour atteindre une empreinte donnée. Comparer deux empreintes suffit donc à savoir si deux contenus sont identiques, sans les comparer entièrement.</div>
+  <h4>2. Le chaînage</h4>
+  <p>Le chaînage consiste à faire dépendre chaque enregistrement du précédent. L'empreinte calculée pour l'enregistrement n° 2 ne porte pas seulement sur son propre contenu, mais aussi sur l'empreinte de l'enregistrement n° 1 ; celle du n° 3 intègre celle du n° 2 ; et ainsi de suite. Il en résulte une dépendance en cascade.</p>
+  <p>La conséquence est ce qui rend le procédé utile. Si l'on modifie l'enregistrement n° 1 après coup, son empreinte change ; or l'empreinte du n° 2 dépendait de l'ancienne valeur, elle devient donc invalide, ce qui invalide à son tour le n° 3, et toute la suite. Pour vérifier, il suffit de recalculer cette cascade du début. Le premier maillon où le calcul ne correspond plus à la valeur enregistrée est exactement l'endroit où une modification a eu lieu.</p>
+  <div class="ec"><b>En clair</b> — le chaînage ne permet pas seulement de détecter qu'une trace a été modifiée : il indique <i>où</i>. On ne dit pas « quelque chose a changé », on dit « l'enregistrement n° tant a changé ». C'est la localisation qui fait la valeur probante.</div>
+  <h4>3. Le code d'authentification à clé (HMAC)</h4>
+  <p>Aux empreintes s'ajoute une clé secrète. L'opération, nommée HMAC, calcule l'empreinte non pas sur le seul contenu, mais sur le contenu combiné à une clé que seul le serveur détient. Cette clé est propre à chaque client (elle est dérivée pour chacun par un procédé nommé HKDF) et elle ne quitte jamais le serveur : elle n'est <b>jamais</b> écrite dans un dossier remis à un tiers. Son rôle est d'authentifier l'origine des scellements — prouver qu'ils ont été produits par le détenteur légitime de la clé, et pas par quelqu'un d'autre.</p>
+  <div class="ec"><b>En clair</b> — deux propriétés distinctes coexistent. Le chaînage par empreintes, qui ne dépend d'aucune clé, permet à <i>n'importe qui</i> de détecter et de localiser une altération, y compris hors ligne. La clé HMAC ajoute par-dessus une garantie d'origine, vérifiée côté serveur, sans jamais être divulguée. La re-preuve hors ligne d'un tiers s'appuie sur le premier mécanisme ; c'est pourquoi elle ne nécessite pas la clé.</div>
+
+  <h3>Le vérificateur sans dépendance</h3>
+  <p>Le vérificateur est le petit programme qui recalcule les empreintes et contrôle le chaînage. Une dépendance, en logiciel, est une bibliothèque extérieure que le programme utilise sans la contenir lui-même. Chaque dépendance est du code écrit par un tiers, souvent volumineux, qu'il faudrait auditer pour être certain du comportement du programme. Le vérificateur d'EFE, nommé <code>verify-mini</code>, est conçu pour n'avoir <b>aucune</b> dépendance externe : il n'utilise que la bibliothèque standard du langage, et son arbre de dépendances tient en une seule ligne — ce qui se contrôle directement par une commande (<code>cargo tree</code>).</p>
+  <p>La raison de ce choix est directe. Pour qu'un tiers puisse auditer le vérificateur, il faut qu'il puisse le lire en entier ; pour qu'il puisse le reconstruire sans dépendre du réseau ni d'un fournisseur, il faut qu'il ne tire rien de l'extérieur. La surface de code réduite est donc une propriété du produit, pas un détail d'ingénierie.</p>
+
+  <h3>Le mécanisme, en quatre opérations</h3>
+  <p>Les trois notions ci-dessus se combinent en quatre opérations. On les suit ici sur un exemple.</p>
+  <ul class="mech">
+    <li><b>1. Enregistrement scellé.</b> Chaque action produit un enregistrement structuré, réduit à son empreinte, puis chaînée à la précédente et authentifiée par la clé HMAC. Le scellement a lieu au moment de l'action, pas après coup : la trace n'est pas fabriquée pour un contrôle, elle existe déjà.</li>
+    <li><b>2. Constitution du dossier.</b> Pour vérification, on assemble un dossier autoporteur : les enregistrements scellés et le code source du vérificateur. La clé n'y figure jamais. Le destinataire dispose donc de tout ce qu'il faut pour vérifier, et de rien de ce qu'il faudrait pour contrefaire.</li>
+    <li><b>3. Reconstruction et déconnexion.</b> Le destinataire lit le code du vérificateur, le recompile lui-même, puis déconnecte le réseau. À partir de ce moment, aucune influence extérieure n'est possible — ni celle du fournisseur, ni celle d'un tiers.</li>
+    <li><b>4. Re-preuve.</b> Le vérificateur recalcule la cascade d'empreintes. Deux issues, et deux seulement : intact (code de sortie 0), ou altéré (code de sortie 1), avec dans ce dernier cas l'indication de l'enregistrement exact où la chaîne a été rompue.</li>
+  </ul>
+  <div class="ex"><b class="xl">Exemple</b>Un auditeur reçoit le dossier d'une vérification de fournisseur menée six mois plus tôt. Il lit le vérificateur (quelques centaines de lignes), le recompile sur sa propre machine, coupe sa connexion, et lance la re-preuve. Le programme recalcule chaque enregistrement. S'il affiche 0, l'auditeur sait que la trace qu'il a sous les yeux est exactement celle qui a été produite à l'époque. S'il affiche 1 et « enregistrement n° 7 », il sait que le septième enregistrement a été modifié depuis le scellement, et lequel. Dans les deux cas, il n'a fait confiance à personne : il a lu le code, il l'a exécuté, il a lu le résultat.</div>
+  <p>Les fonctions cryptographiques employées (SHA-256, HMAC) sont réimplémentées dans le système plutôt qu'importées d'une bibliothèque externe — précisément pour tenir la propriété de dépendance nulle ci-dessus. Elles sont vérifiées contre les jeux de tests officiels des standards qui les définissent (détaillé en partie 4).</p>
+
+  <div class="box key"><span class="lbl">La propriété obtenue — à retenir</span>
+    <p>La vérification s'effectue chez le tiers, avec un outil qu'il a lui-même reconstruit, réseau déconnecté. Le fournisseur du système n'intervient pas dans cette vérification, et n'a pas besoin d'être cru. C'est ce point qui distingue EFE des outils d'observabilité courants : dans ces derniers, la vérification s'effectue dans le périmètre du fournisseur, à travers son interface et son stockage, et suppose donc qu'on lui fasse confiance. Ici, cette confiance n'est pas requise.</p></div>
+  <div class="box lim"><span class="lbl">Limite, énoncée d'emblée</span>
+    <p>Ce mécanisme établit l'<b>intégrité</b> : ce qui a été enregistré n'a pas été modifié depuis le scellement. Il n'établit pas que la décision enregistrée était <b>correcte</b>. Une décision erronée mais scellée reste erronée ; elle devient seulement attribuable (on sait qui l'a produite), contestable (on peut la discuter sur pièces) et reproductible (on peut la rejouer). Cette distinction entre intégrité et correction est maintenue dans tout le document, et elle est essentielle : le système est un outil de preuve, pas un juge.</p></div>
+</div>
+
+<!-- DIFFERENCE -->
+<div class="wrap page">
+  <h2 style="font-size:1.5rem;border-bottom:3px solid var(--teal);padding-bottom:.3rem;">La différence avec l'état de l'art actuel</h2>
+  <p>Cette section situe EFE par rapport à ce qui existe aujourd'hui, à la mi-2026. Elle distingue trois choses souvent confondues : <b>construire</b> des agents, les <b>observer</b>, et les <b>prouver</b>. Les deux premières sont largement résolues ; la troisième est ce qui différencie EFE.</p>
+
+  <h3>Ce qui est déjà résolu — construire l'orchestration</h3>
+  <p>Faire coopérer plusieurs agents est aujourd'hui un problème résolu et concurrentiel. Une demi-douzaine de cadres de production le permettent : LangGraph (devenu le moteur par défaut de l'écosystème LangChain), l'Agents SDK d'OpenAI, l'ADK de Google, l'Agent SDK d'Anthropic, CrewAI, AutoGen. Monter un graphe d'agents, qui était un exploit il y a deux ans, se fait désormais en quelques jours. C'est la partie devenue banale — et ce n'est donc pas là que se situe la différence d'EFE.</p>
+
+  <h3>Ce que font les outils d'observabilité — et où ils s'arrêtent</h3>
+  <p>À côté des cadres d'orchestration, une famille d'outils d'observabilité (LangSmith, Langfuse, MLflow, Arize) enregistre ce que font les agents : traces d'exécution, évaluations, tableaux de bord. Ils sont utiles, et conçus pour une fin précise — permettre à un ingénieur de <b>déboguer</b> une chaîne d'agents. Deux limites les caractérisent, non comme des défauts, mais comme leur périmètre.</p>
+  <ul class="mech">
+    <li><b>La vérification s'effectue dans le périmètre de l'outil.</b> On lit des traces dans une interface, souvent hébergée par le fournisseur ; pour les accepter, il faut faire confiance à cet outil et à son stockage. L'auto-hébergement (Langfuse, MLflow) répond au besoin de gouvernance des données, mais ne change pas la nature de l'acte : on <i>consulte</i> un journal, on ne le <i>recalcule</i> pas.</li>
+    <li><b>La sortie est une trace, pas un artefact opposable.</b> Ces outils produisent de quoi comprendre une exécution, non de quoi la faire re-vérifier par un tiers qui ne ferait confiance à personne — et ils enferment souvent dans un écosystème (nombre limité de fournisseurs pris en charge, format propriétaire).</li>
+  </ul>
+
+  <h3>Où se situe EFE, précisément</h3>
+  <p>La différence d'EFE n'est pas de « faire de l'audit » là où personne n'en ferait. Depuis 2025, une catégorie émerge autour exactement de ces primitives — reçus cryptographiques, journaux inviolables, vérification par un tiers, rejeu déterministe — portée par des travaux industriels et académiques. Cette convergence est un signal : le besoin est réel. La différence d'EFE tient à sa <b>position précise</b> à l'intérieur de cette catégorie.</p>
+  <table>
+    <tr><th>Sur cet axe</th><th>État de l'art courant (observabilité)</th><th>EFE</th></tr>
+    <tr><td>Lieu de la vérification</td><td>dans l'outil, souvent chez le fournisseur</td><td>chez le tiers, réseau coupé</td></tr>
+    <tr><td>Nature de la vérification</td><td>lecture d'une trace (il faut faire confiance)</td><td>recalcul intégral (preuve)</td></tr>
+    <tr><td>Enregistrement</td><td>ajouté par instrumentation</td><td>scellé par construction, non contournable</td></tr>
+    <tr><td>Outil de vérification</td><td>toute la plateforme du fournisseur</td><td>vérifieur recompilable (<code>cargo tree</code> = 1 ligne)</td></tr>
+    <tr><td>Rejeu d'une exécution</td><td>difficile (modèles non déterministes)</td><td>déterministe (Mode A) ; rejoué depuis l'enregistrement (Mode C)</td></tr>
+    <tr><td>Décision inter-organisations</td><td>hors périmètre</td><td>consensus latent, sans partage des données</td></tr>
+  </table>
+  <p>Deux lignes de cette table méritent d'être soulignées. Le <b>rejeu</b> : il est notoirement difficile de rejouer une exécution d'agents à l'identique, car les modèles hébergés ne sont pas déterministes, même à température nulle (non-associativité des calculs en virgule flottante, noyaux dépendant de la taille de lot). EFE ne prétend pas rendre un modèle déterministe : il rejoue les appels <i>depuis leur enregistrement scellé</i> (partie 1), ce qui contourne précisément ce problème. La <b>décision inter-organisations</b> : ni les cadres d'orchestration ni les outils d'observabilité ne traitent le cas où plusieurs parties doivent décider ensemble sans partager leurs données — c'est l'objet propre du méta-essaim (partie 3).</p>
+
+  <h3>Le moteur externe — la réglementation</h3>
+  <p>Ce qui fait passer ces propriétés de « souhaitables » à « exigées » est réglementaire. Le règlement européen sur l'intelligence artificielle (AI Act) impose, à son article 12, que les systèmes d'IA à haut risque enregistrent <b>automatiquement</b> leurs événements sur toute leur durée de vie — automatiquement, la documentation manuelle ne suffit pas — avec une conservation d'au moins six mois. L'application pleine et entière pour les systèmes à haut risque intervient le <b>2 août 2026</b>. Fidèle à sa ligne, EFE <i>outille</i> cette preuve ; il ne conclut jamais « conforme » — cette conclusion revient au juriste (partie 4).</p>
+
+  <div class="box"><span class="lbl">La position honnête</span>
+    <p>EFE n'est pas seul à explorer la re-preuve des systèmes agentiques, et c'est tant mieux : cette convergence valide le besoin plutôt qu'elle ne l'affaiblit. Sa différence n'est pas d'avoir inventé l'idée, mais d'en fournir une implémentation <b>cohérente et opérée</b> — sur les trois tiers, avec des choix précis (vérifieur à dépendance nulle recompilable par le tiers, substrat model-agnostique, souveraineté préservée par le consensus latent) — là où l'existant offre soit de l'orchestration, soit de l'observabilité, rarement les deux, et presque jamais la re-preuve hors ligne de bout en bout. Et, comme partout dans ce document, cette différence tient à la preuve vérifiable, pas à une prétention de performance des petits modèles.</p></div>
+</div>
+
+<!-- PARTIE 1 : NANO ROBOTS -->
+<div class="parthead"><span class="np">1</span>
+  <div class="kick">Partie 1</div>
+  <h2>Les nano-robots</h2>
+  <div class="lede">Les agents d'exécution spécialisés : le problème qu'ils résolvent, ce qu'ils sont, comment ils s'exécutent, et l'enregistrement d'audit qu'ils produisent.</div>
+</div>
+<div class="wrap">
+  <h3>1.1 Le problème que résout ce composant</h3>
+  <p>La manière la plus répandue de faire exécuter une tâche par une intelligence artificielle consiste à confier la tâche entière à un seul grand modèle de langage, appelé de façon répétée. Cette approche fonctionne, mais elle présente quatre difficultés, qui deviennent des obstacles dès qu'il s'agit d'un usage professionnel contrôlé.</p>
+  <ul class="mech">
+    <li><b>Le coût.</b> Un grand modèle est facturé à l'usage, et une tâche complexe l'appelle de nombreuses fois. Beaucoup de ces appels portent sur des sous-tâches simples qui ne justifieraient pas un grand modèle.</li>
+    <li><b>La lenteur.</b> Chaque appel à un grand modèle prend un temps non négligeable ; les enchaîner allonge la durée totale.</li>
+    <li><b>L'opacité.</b> Le raisonnement d'un grand modèle est un bloc : on obtient une réponse finale, sans point de contrôle intermédiaire que l'on pourrait inspecter.</li>
+    <li><b>Le caractère non reproductible.</b> Un grand modèle de langage n'est pas déterministe : la même requête, posée deux fois, peut produire deux réponses différentes. Une décision qui ne peut pas être reproduite ne peut pas être vérifiée après coup.</li>
+  </ul>
+  <p>Le tier des nano-robots répond à ces quatre difficultés en changeant la granularité de l'exécution.</p>
+
+  <h3>1.2 Définition et principe — ce qu'est un nano-robot, et à quoi il sert</h3>
+  <p>Un nano-robot est la plus petite unité de travail du système. Son fonctionnement est strictement délimité, et tient en quatre temps : il <b>reçoit</b> une entrée précise, il <b>effectue une seule</b> opération bien définie, il <b>renvoie</b> une sortie précise, et il <b>enregistre</b> ce qu'il a fait. Il ne fait rien de plus. Il n'a pas de vue d'ensemble de la tâche à laquelle il participe, et il ne décide pas de ce qui se passe ensuite : il exécute son unique opération, puis s'arrête.</p>
+  <p>Le terme « robot » désigne cette unité d'exécution ; le préfixe « nano » insiste sur sa petite taille — chaque unité est volontairement réduite à une seule fonction. Les trois exemples suivants sont chacun un nano-robot complet : l'opération décrite constitue l'intégralité de leur travail.</p>
+  <ul class="mech">
+    <li><b>Lire une facture scannée et en extraire le numéro de TVA.</b> Entrée : l'image d'une facture. Sortie : le numéro de TVA, et rien d'autre. Ce nano-robot ne classe pas la dépense et ne vérifie pas le fournisseur.</li>
+    <li><b>Indiquer si une entreprise figure sur une liste de sanctions.</b> Entrée : un nom d'entreprise. Sortie : « présente » ou « absente », et le cas échéant la liste concernée. Il ne décide pas d'accepter ou de refuser le fournisseur ; il consulte une liste et renvoie un résultat.</li>
+    <li><b>Comparer deux montants et indiquer s'ils correspondent.</b> Entrée : deux montants — par exemple celui d'une facture et celui d'un bon de commande. Sortie : « concordants » ou « écart de tant ».</li>
+  </ul>
+  <p>Aucun de ces nano-robots ne traite la tâche entière à laquelle il contribue ; chacun fait une chose, la fait de la même manière à chaque fois, et laisse une trace de ce qu'il a fait. Cette étroitesse est délibérée, et c'est précisément elle qui a de la valeur : une unité qui ne fait qu'une seule chose peut être décrite exactement, testée exactement, et ré-exécutée à l'identique. Dès qu'une unité fait plusieurs choses à la fois, on perd la capacité de dire précisément ce qu'elle a fait, et de le reproduire.</p>
+  <p><b>À quoi servent les nano-robots.</b> Un nano-robot seul ne traite pas une tâche métier réelle — vérifier un fournisseur, contrôler une facture — parce qu'une telle tâche demande plusieurs opérations. Les nano-robots sont les <b>briques élémentaires</b> à partir desquelles ces tâches sont construites : on en enchaîne plusieurs, chacun prenant en charge une étape, pour composer le traitement complet (c'est l'objet de la partie 2, l'essaim). Le tier des nano-robots est donc la couche qui fournit des briques fiables — petites, à but unique, reproductibles, et qui enregistrent chacune ce qu'elles font. Les deux tiers suivants sont bâtis sur ces briques.</p>
+  <div class="ec"><b>En clair</b> — à quoi servent les nano-robots : à remplacer une grande opération unique, opaque et impossible à rejouer, par une suite de petites opérations dont chacune a une entrée connue, une sortie connue et une trace. On y gagne trois choses concrètes : on peut inspecter chaque étape (au lieu d'un seul résultat final sans détail), on peut la tester isolément, et on peut la rejouer à l'identique plus tard.</div>
+  <p>Un point à préciser pour éviter un malentendu fréquent : « nano-robot » désigne un <b>rôle</b> — une petite unité à but unique — et non une technologie particulière. Certains nano-robots sont du code ordinaire (comparer deux montants, vérifier qu'une date n'est pas dépassée) ; d'autres font appel à un modèle d'intelligence artificielle lorsque l'étape l'exige réellement (lire un texte libre, par exemple). Dans les deux cas, la portée reste étroite et la forme de la sortie est fixée d'avance. Les trois manières d'exécuter un nano-robot sont détaillées en section 1.4.</p>
+  <p>Le composant logiciel qui exécute ce tier est nommé <code>efe-nano</code> ; il représente environ 51 000 lignes de code et 1 175 tests automatiques.</p>
+
+  <h3>1.3 Le déterminisme, et pourquoi il est central</h3>
+  <p>Le déterminisme est la propriété selon laquelle une même entrée produit toujours une même sortie. C'est la propriété qui rend une étape vérifiable : si une étape est déterministe, on peut la ré-exécuter plus tard, avec les mêmes entrées, et vérifier qu'on obtient bien le même résultat. Un grand modèle de langage n'offre pas cette propriété ; les nano-robots en mode natif, oui. La conception traite explicitement le cas où un modèle de langage doit malgré tout intervenir (section 1.4, mode C), en confinant son imprévisibilité dans une frontière contrôlée.</p>
+
+  <h3>1.4 Les trois modes d'exécution</h3>
+  <p>Le tier propose trois modes d'exécution, choisis selon le degré d'isolation requis par la tâche — c'est-à-dire selon le niveau de séparation que l'on veut imposer entre le code exécuté et le reste du système.</p>
+  <table>
+    <tr><th>Mode</th><th>Exécution</th><th>Latence</th><th>Traitement du déterminisme</th></tr>
+    <tr><td class="m">A</td><td>code Rust natif, dans le processus</td><td class="m">~1 à 10 ms</td><td>déterministe par construction</td></tr>
+    <tr><td class="m">B</td><td>modèle local dans une machine virtuelle isolée</td><td>variable</td><td>reproductible par fixation de version</td></tr>
+    <tr><td class="m">C</td><td>modèle de langage externe, via son interface</td><td>dominée par le modèle</td><td>sortie contrainte par un schéma strict ; appel enregistré et scellé</td></tr>
+  </table>
+  <ul class="mech">
+    <li><b>Mode A</b> — la tâche est réalisée par du code natif, sans appel à un modèle. C'est le mode le plus rapide (de l'ordre de la milliseconde) et pleinement déterministe. Il convient aux étapes bien définies : extraire un champ, appliquer une règle, comparer deux valeurs.</li>
+    <li><b>Mode B</b> — la tâche est réalisée par un modèle exécuté localement, dans une machine virtuelle isolée (un environnement séparé qui empêche le code de toucher au reste du système). La reproductibilité est obtenue en fixant la version du modèle. <b>État réel, énoncé sans détour :</b> la conception de cette isolation est faite, mais le gestionnaire de machines virtuelles est aujourd'hui un composant de substitution, non fonctionnel en production. Ce point figure parmi les chantiers ouverts listés en partie 4.</li>
+    <li><b>Mode C</b> — la tâche fait appel à un modèle de langage externe. Comme ce modèle n'est pas déterministe, le système ne cherche pas à le rendre tel : il contraint la <i>forme</i> de sa sortie par un schéma imposé — un gabarit qui définit exactement quels champs la réponse doit contenir et sous quelle forme — et il scelle l'appel complet (la requête, la réponse, le coût, l'horodatage) dans un enregistrement. La ré-exécution ultérieure rejoue cet enregistrement ; elle ne redemande pas au modèle de répondre.</li>
+  </ul>
+  <div class="ec"><b>En clair</b> — imposer un schéma à la sortie d'un modèle supprime, en aval, tout travail fragile d'interprétation de son texte : la réponse est soit conforme au gabarit, soit rejetée. Et parce que l'appel est scellé, on n'a plus besoin, plus tard, de faire à nouveau confiance au modèle : on rejoue l'enregistrement de ce qu'il a effectivement produit. L'imprévisibilité du modèle est ainsi enfermée dans une frontière où elle ne nuit pas à la vérifiabilité.</div>
+
+  <h3>1.5 Ordonnancement et coût</h3>
+  <ul class="mech">
+    <li><b>Parallélisme.</b> L'ordonnancement interne d'une tâche suit un graphe de dépendances : on établit quelles étapes dépendent de quelles autres, et les étapes indépendantes s'exécutent en parallèle. Comme les étapes en mode A restent de l'ordre de la milliseconde, la durée d'une tâche est déterminée par ses appels de modèle, pas par l'ordonnancement lui-même.</li>
+    <li><b>Cache.</b> Un cache à deux niveaux conserve les résultats déjà obtenus — réponses de modèles et représentations vectorielles — pour éviter de les recalculer. Une même sous-tâche rencontrée deux fois n'est payée qu'une fois.</li>
+  </ul>
+  <p>C'est ici que les deux premières difficultés de la section 1.1 sont traitées : le coût baisse parce que les sous-tâches simples ne mobilisent pas un grand modèle et que rien n'est recalculé inutilement ; la durée baisse parce que les étapes indépendantes s'exécutent en parallèle. Le chiffrage précis de ce gain dépend de la tâche et relève de la couche de mesure (partie 4) ; il n'est pas affirmé ici.</p>
+
+  <h3>1.6 L'enregistrement d'audit</h3>
+  <p>C'est ici que sont traitées les deux difficultés restantes — l'opacité et le caractère non reproductible. L'unité d'enregistrement est nommée <code>AgentCallRecord</code> ; elle fixe quatre éléments pour chaque action : quel agent l'a réalisée, quelle action précise, à quel moment, et à partir de quelles entrées. Ces enregistrements sont chaînés selon le principe exposé dans le cadre commun. Trois propriétés en découlent, chacune couverte par des tests.</p>
+  <ul class="mech">
+    <li><b>Reconstruction d'une décision.</b> On peut retrouver, pour une décision passée, l'agent qui l'a produite, ses entrées exactes, et l'étape concernée — par interrogation de la chaîne, et non par recherche dans des journaux dispersés.</li>
+    <li><b>Effacement conforme au RGPD.</b> Le règlement européen impose un droit à l'effacement des données personnelles. Ce droit entre habituellement en conflit avec une piste d'audit, qui doit rester intacte. EFE résout ce conflit : la donnée personnelle est remplacée par son empreinte seule (procédé nommé « tombstone », littéralement « pierre tombale »), ce qui efface la donnée tout en conservant un jeton vérifiable à sa place. Les fonctions <code>verify_chain</code> et <code>verify_subchain</code> revérifient alors la chaîne autour de l'emplacement effacé : la suppression d'une donnée personnelle ne rompt pas la chaîne.</li>
+    <li><b>Divulgation partielle.</b> On peut extraire et remettre à un tiers une sous-partie vérifiable de la chaîne (<code>verify_subchain</code>), sans exposer le reste de l'historique. La granularité de ce qui est divulgué est donc contrôlée : on montre exactement ce qui doit l'être, et rien d'autre.</li>
+  </ul>
+  <div class="ex"><b class="xl">Exemple — le traitement d'une facture</b>Une facture arrive. Un premier nano-robot en extrait le fournisseur, le numéro de TVA et le montant. Un deuxième classe la dépense dans une catégorie. Un troisième compare la facture au bon de commande correspondant. Un quatrième détecte un écart entre les deux et le signale à un humain. Chacune de ces quatre étapes est un enregistrement scellé et chaîné. Six mois plus tard, à la question « sur quelle base cette facture a-t-elle été signalée ? », la réponse est l'enregistrement exact de la quatrième étape, avec les valeurs comparées — et non une reconstitution.</div>
+
+  <h3>1.7 La gouvernance des capacités</h3>
+  <p>Une capacité est une fonction que le système sait exécuter — par exemple « vérifier qu'un fournisseur n'est pas sous sanctions internationales ». Dans beaucoup de systèmes, une telle capacité n'est qu'un texte de consigne adressé à un modèle, que n'importe qui peut modifier sans que cela se remarque. Pour un usage réglementé, c'est inacceptable : on ne peut pas garantir quelle version d'une capacité a réellement été exécutée. EFE traite ce point en faisant de chaque capacité une entrée de catalogue signée, versionnée et testée. Trois primitives portent ce contrôle.</p>
+  <ul class="mech">
+    <li><b>N18 — identité et révocation.</b> Chaque éditeur de capacité possède une identité cryptographique (une signature Ed25519, qui prouve qui a publié la capacité) et un niveau de vérification d'identité (KYC, à quatre niveaux). Lorsqu'une capacité est révoquée, la révocation se propage à toutes les capacités qui en dépendent ; l'historique, lui, reste dans la chaîne.</li>
+    <li><b>N19 — barrière de qualité.</b> Une capacité ne peut s'exécuter qu'après avoir passé un jeu de tests de référence (« gold-tests »), selon trois stratégies d'évaluation. Tout contournement de cette barrière doit être explicitement signé — il ne peut pas se produire silencieusement.</li>
+    <li><b>N24 — mise sur le chemin de requête.</b> C'est le câblage qui place ces contrôles sur chaque requête, en mode bloquant : si un contrôle attendu manque, la requête est refusée plutôt qu'exécutée quand même. Ce point est repris en partie 4.</li>
+  </ul>
+  <div class="ec"><b>En clair</b> — « quelle version exacte de cette capacité a tourné en mars ? » a une réponse exacte, et « rien ne change sans une modification signée » est une propriété vérifiée du système, pas une règle d'organisation qu'on espère respectée.</div>
+
+  <h3>1.8 Exemples d'applications</h3>
+  <p>Les applications typiques de ce tier sont les tâches de contrôle répétitives, décomposables en étapes de règle, où la traçabilité de chaque étape a une valeur réglementaire.</p>
+  <div class="apps">
+    <div class="app"><div class="t">Criblage de sanctions et de personnes politiquement exposées</div>
+      <p>Un fournisseur est confronté aux listes de sanctions internationales et aux listes de personnes politiquement exposées. Chaque contrôle est une étape scellée : un résultat « aucune correspondance » est lui-même daté et scellé — il constitue une preuve, et non une absence de trace. La capacité de criblage étant une pièce signée et versionnée, on sait quelle version des listes a été appliquée, et à quelle date.</p></div>
+    <div class="app"><div class="t">Contrôle de pièces réglementaires</div>
+      <p>Attestations d'assurance, certificats, déclarations : chaque pièce est lue, ses champs extraits (dates de validité, identités, montants), puis validée contre une règle. Une pièce expirée ou incohérente est signalée à un gestionnaire. Chaque extraction et chaque contrôle sont enregistrés, ce qui permet de démontrer plus tard que la pièce était valide au moment du traitement.</p></div>
+    <div class="app"><div class="t">Contrôle d'une transaction contre une politique interne</div>
+      <p>Le montant, la devise, la contrepartie et la catégorie de dépense sont vérifiés contre les règles internes. Chaque règle est une capacité gouvernée : sa version est connue, son changement est signé. Une transaction hors politique est bloquée ou escaladée, et la raison exacte de la décision est enregistrée.</p></div>
+    <div class="app"><div class="t">Anonymisation puis effacement conforme au RGPD</div>
+      <p>Les données personnelles d'un dossier sont supprimées sur le chemin d'entrée pour le traitement courant ; et lorsqu'une personne exerce son droit à l'effacement, la donnée est remplacée par son empreinte sans rompre la chaîne d'audit du dossier. La preuve que le traitement a eu lieu subsiste ; la donnée personnelle, elle, disparaît.</p></div>
+  </div>
+
+  <div class="box"><span class="lbl">Ce que produit le tier 1</span>
+    <p>Une exécution décomposée en étapes déterministes et vérifiables, chacune enregistrée et scellée au moment où elle a lieu, avec un catalogue de capacités signées et versionnées. Les quatre difficultés de départ sont traitées : coût et durée par la décomposition et le parallélisme, opacité et non-reproductibilité par l'enregistrement et le déterminisme. La traçabilité n'est pas ajoutée après coup : elle est le produit direct de l'exécution.</p></div>
+</div>
+
+<!-- PARTIE 2 : SWARM -->
+<div class="parthead"><span class="np">2</span>
+  <div class="kick">Partie 2</div>
+  <h2>L'essaim (swarm)</h2>
+  <div class="lede">La composition de nano-robots en un collectif qui traite une tâche entière : le problème qu'il résout, la forme de coordination, et la preuve de la décision produite.</div>
+</div>
+<div class="wrap">
+  <h3>2.1 Le problème que résout ce composant</h3>
+  <p>Les nano-robots de la partie 1 sont des exécutants d'étapes. Une tâche métier réelle — noter le risque d'un fournisseur, décider d'approuver une clause de contrat — n'est pas une étape unique : c'est une décision qui demande de faire coopérer plusieurs compétences, parfois de les faire se contrôler mutuellement, et de trancher entre des avis. Deux besoins apparaissent alors, que le tier des nano-robots seul ne couvre pas.</p>
+  <ul class="mech">
+    <li><b>Coordonner de nombreux agents en parallèle</b> selon une forme adaptée à l'enjeu : certaines décisions demandent de la redondance (plusieurs agents traitent le même problème pour fiabiliser le résultat), d'autres une décomposition (un agent découpe et délègue), d'autres un vote. C'est ici que se concrétise le substrat parallèle annoncé en ouverture : l'essaim est la couche qui met les nano-robots en relation.</li>
+    <li><b>Prouver la décision collective</b>, et pas seulement les étapes qui la composent. Quand plusieurs agents contribuent à une même conclusion, il faut pouvoir établir <i>qui</i> a contribué <i>quoi</i>, et le prouver à un tiers.</li>
+  </ul>
+  <p>L'essaim traite ces deux besoins. Un essaim est un ensemble de nano-robots coordonnés pour traiter une tâche complète et produire une décision assortie de sa preuve.</p>
+
+  <h3>2.2 Définition et interface</h3>
+  <p>L'interface d'un essaim est un appel unique : <code>swarm.run(tâche, topologie, budget)</code>. Ses trois paramètres méritent d'être explicités.</p>
+  <ul class="mech">
+    <li>La <b>tâche</b> est le travail à accomplir.</li>
+    <li>La <b>topologie</b> est la forme de coordination retenue entre les agents — les cinq formes disponibles sont décrites en 2.3. Ce paramètre est un choix d'entrée, pas une caractéristique figée dans le code.</li>
+    <li>Le <b>budget</b> est un plafond de coût et de nombre de jetons imposé au traitement. Ce plafond est appliqué comme une contrainte d'exécution : un essaim qui l'atteint s'arrête. Il s'agit d'un moyen de gouvernance — empêcher un traitement de s'emballer — et non d'un simple paramètre de facturation.</li>
+  </ul>
+
+  <h3>2.3 Les cinq topologies</h3>
+  <p>La forme de coordination est choisie selon l'enjeu de la tâche. Elle n'est pas inscrite dans le code : c'est une donnée d'entrée, que l'on change d'un traitement à l'autre.</p>
+  <table>
+    <tr><th>Topologie</th><th>Fonctionnement</th><th>Quand l'employer</th></tr>
+    <tr><td class="m">generate-verify</td><td>plusieurs agents produisent chacun une réponse candidate ; un agent vérificateur retient la meilleure</td><td>enjeu élevé, où l'on veut fiabiliser par redondance</td></tr>
+    <tr><td class="m">pipeline</td><td>des étapes typées s'exécutent en séquence, la sortie de l'une étant l'entrée de la suivante</td><td>traitements en plusieurs phases ordonnées</td></tr>
+    <tr><td class="m">hierarchical</td><td>un agent responsable décompose la tâche et délègue les sous-tâches</td><td>dossiers composites à découper</td></tr>
+    <tr><td class="m">consensus</td><td>les agents votent (méthodes de Borda ou de Condorcet), débattent ou échangent jusqu'à un accord</td><td>décisions où l'on refuse un point de décision unique</td></tr>
+    <tr><td class="m">auto</td><td>la forme est déduite automatiquement de la tâche et du budget</td><td>lorsqu'on ne veut pas choisir soi-même</td></tr>
+  </table>
+  <p>Ces topologies sont implémentées de façon générique, ce qui les rend composables : une topologie hiérarchique peut, dans chacune de ses branches, exécuter une topologie generate-verify. On peut donc combiner les formes selon la structure du problème.</p>
+  <div class="ex"><b class="xl">Exemple — trois tâches, trois formes</b>Noter le risque d'un fournisseur est un enjeu élevé : on emploie <code>generate-verify</code>, où plusieurs agents produisent une note et un vérificateur retient la plus solide. Approuver une clause contractuelle ne doit pas dépendre d'un seul avis : on emploie <code>consensus</code>, où les agents votent. Accueillir un nouveau fournisseur est un dossier composite : on emploie une topologie <code>hierarchical</code>, qui le découpe en vérification d'identité, criblage de sanctions et analyse financière.</div>
+
+  <h3>2.4 La provenance de la décision</h3>
+  <p>C'est le point qui distingue ce tier des systèmes d'orchestration ordinaires. « Provenance » désigne ici l'ensemble des informations qui établissent l'origine d'une décision : quels agents y ont contribué, et de quelle manière. Chaque agent participant — y compris les agents en mode A, qui exécutent du code et n'émettent aucun texte — alimente une chaîne d'empreintes qui lui est propre. Les contributions de tous les agents d'un même traitement sont ensuite agrégées en une empreinte unique, nommée <code>provenance_root</code>.</p>
+  <div class="ec"><b>En clair</b> — <code>provenance_root</code> est une empreinte unique qui résume qui a fait quoi dans une décision collective. La revérifier, c'est revérifier l'ensemble des contributions d'un seul coup. Le fait que même les agents sans sortie textuelle y figurent est important : rien de ce qui a contribué à la décision n'échappe à la trace.</p></div>
+  <ul class="mech">
+    <li><b>Détection et localisation d'une altération.</b> Si un résultat enregistré est modifié après coup, la re-preuve échoue et désigne l'étape modifiée — pas « une incohérence existe quelque part », mais « l'étape n° tant a été modifiée ».</li>
+    <li><b>Vérification sur le fil.</b> L'appel <code>GET /verify/:id</code> revérifie un traitement stocké et renvoie un verdict ; en cas d'altération, il indique l'étape fautive. La clé de scellement ne quitte pas le serveur. L'intégration du côté d'un auditeur se réduit à cet unique appel.</li>
+    <li><b>Vérification sans accès.</b> La forme sans aucun accès au système passe par le dossier autoporteur du cadre commun : un tiers revérifie hors ligne, sans compte ni connexion au système d'information de l'entreprise. La preuve circule ; l'accès, non.</li>
+    <li><b>Intégration des appels de modèle.</b> Les appels en mode C (modèle externe) rejoignent la même preuve par l'intermédiaire de l'enregistrement forensique N17 : ils ne constituent pas un angle mort dans la trace.</li>
+  </ul>
+  <div class="ex"><b class="xl">Exemple — une approbation de fournisseur contestée</b>Une décision d'approbation a réuni trois contributions : un criblage de sanctions, une note financière, un audit de site. Elles sont agrégées en un <code>provenance_root</code>. Un an plus tard, un différend survient et l'on soupçonne que la note financière stockée a été modifiée. L'auditeur lance <code>GET /verify</code> sur l'identifiant du traitement. Le système répond « altéré, étape 2 » : la deuxième contribution ne correspond plus à son empreinte. On ne se demande plus s'il y a eu modification ; on sait laquelle, et où.</div>
+
+  <h3>2.5 Le stack technique et la souveraineté par défaut</h3>
+  <ul class="mech">
+    <li><b>Composants d'infrastructure.</b> L'accès passe par une passerelle construite sur axum ; les traitements sont conservés dans une base PostgreSQL en mode « écriture unique » (les traitements stockés ne sont pas réécrits, on ne fait qu'ajouter) ; l'authentification se fait par OIDC ; les données personnelles sont supprimées sur le chemin d'entrée.</li>
+    <li><b>Souveraineté par défaut.</b> Le système fonctionne sans clé d'accès à un service externe et en auto-hébergement par défaut ; une fonction de contrôle refuse par défaut toute connexion sortante vers une adresse non locale. Le recours à un modèle externe (mode C) est une autorisation explicite, donnée adresse par adresse.</li>
+  </ul>
+  <div class="ec"><b>En clair</b> — la posture par défaut est « la donnée ne sort pas ». Elle ne sort que sur décision explicite, vers une destination autorisée nommément. Pour une entreprise dont les clients sont soumis à des exigences de confidentialité, c'est l'inverse de la posture habituelle, où tout sort vers le service du fournisseur sauf configuration contraire.</div>
+
+  <h3>2.6 Observation et ré-exécution</h3>
+  <ul class="mech">
+    <li><b>Espace de travail partagé — le mécanisme de coordination.</b> C'est ici que se concrétise, dans le détail, le substrat parallèle décrit en ouverture. Les nombreux agents d'un essaim <i>ne s'appellent pas les uns les autres</i> ; ils lisent et écrivent dans un espace de travail commun, partagé et durable, sur lequel chacun inscrit son avancement et consulte celui des autres. Cette coordination indirecte (dite stigmergique) évite que chaque agent ait à dialoguer avec tous les autres, ce qui deviendrait ingérable dès qu'ils sont nombreux. Et comme tout passe par cet espace, il constitue aussi l'enregistrement complet du traitement : c'est ce qui rend la ré-exécution possible.</li>
+    <li><b>Observation en temps réel.</b> Un tableau de bord diffuse l'état d'un traitement en direct. L'observateur est placé hors du chemin de calcul : le fait d'observer ne modifie pas ce qui est calculé. Cette propriété — nommée non-interférence — est testée (voir partie 4).</li>
+    <li><b>Ré-exécution à l'identique.</b> Un traitement passé se rejoue à l'identique, au caractère près : les étapes déterministes sont ré-exécutées, les appels de modèle sont rejoués depuis leur enregistrement (et non redemandés au modèle). Un différend sur une décision passée peut donc être ré-arbitré exactement comme à l'origine, y compris plusieurs années après, puisque les versions des capacités sont fixées par le catalogue (section 1.7).</li>
+  </ul>
+
+  <h3>2.7 Exemples d'applications</h3>
+  <p>Les applications typiques de ce tier sont les décisions composites qui doivent être justifiées à un tiers : une conclusion unique, fondée sur plusieurs contributions, dont on doit pouvoir prouver l'origine.</p>
+  <div class="apps">
+    <div class="app"><div class="t">Notation du risque d'un fournisseur</div>
+      <p>Plusieurs agents produisent une note à partir de sources différentes — criblage de sanctions, santé financière, signaux de réputation — et un agent vérificateur retient la plus solide (topologie generate-verify). L'ensemble est scellé en un <code>provenance_root</code> qu'un auditeur revérifie hors ligne. On peut établir, un an après, quelles sources ont fondé la note et qu'aucune n'a été modifiée depuis.</p></div>
+    <div class="app"><div class="t">Accueil d'un nouveau fournisseur</div>
+      <p>Le dossier est décomposé (topologie hierarchical) en vérification d'identité, criblage de sanctions et analyse financière, chaque branche étant traitée par des agents dédiés. La décision porte un reçu unique qui recense chaque contribution — utile lorsqu'une autorité demande de démontrer la diligence effectuée sur ce fournisseur (obligations de type CSDDD ou LkSG).</p></div>
+    <div class="app"><div class="t">Revue d'une clause contractuelle</div>
+      <p>Une clause sensible — responsabilité, résiliation, sous-traitance — est soumise à plusieurs agents qui votent (topologie consensus), de sorte qu'aucun avis unique ne décide seul. Le vote et les positions divergentes sont scellés dans le reçu, ce qui permet de justifier a posteriori comment la décision a été prise.</p></div>
+    <div class="app"><div class="t">Analyse d'un dossier d'appel d'offres</div>
+      <p>Les offres sont évaluées selon des critères définis, chaque critère traité par un agent, le résultat agrégé et tracé. La décision d'attribution est reproductible à l'identique : en cas de contestation, on rejoue le traitement et on obtient le même classement, avec la preuve qu'il n'a pas été modifié.</p></div>
+  </div>
+
+  <div class="box"><span class="lbl">Ce que produit le tier 2</span>
+    <p>Une décision collective assortie d'une empreinte unique (<code>provenance_root</code>) qui enregistre la contribution de chaque agent, revérifiable hors ligne et par un tiers sans accès au système. La forme de coordination est un paramètre que l'on choisit selon l'enjeu, l'exécution est observable en direct sans être perturbée, et le traitement se rejoue à l'identique.</p></div>
+</div>
+
+<!-- PARTIE 3 : META SWARM -->
+<div class="parthead"><span class="np">3</span>
+  <div class="kick">Partie 3</div>
+  <h2>Le méta-essaim (meta-swarm)</h2>
+  <div class="lede">La coordination de plusieurs essaims indépendants vers une réponse commune, sans partage des données, sous des bornes dont le respect est démontré.</div>
+</div>
+<div class="wrap">
+  <h3>3.1 Le problème que résout ce composant</h3>
+  <p>Les tiers précédents supposaient qu'un essaim appartenait à une seule organisation, qui voyait toutes ses données. Or beaucoup de décisions d'une chaîne d'approvisionnement impliquent plusieurs parties qui ne partagent pas leurs données. Deux situations concrètes.</p>
+  <ul class="mech">
+    <li><b>Des parties aux intérêts distincts.</b> Un acheteur, un fournisseur et un auditeur doivent aboutir à une évaluation commune du risque d'une relation. Chacun détient une partie de l'information, et aucun ne souhaite ouvrir ses données aux autres.</li>
+    <li><b>Des entités cloisonnées par la loi.</b> Deux filiales d'un même groupe, dont les données sont séparées par la réglementation, doivent néanmoins produire une évaluation au niveau du groupe.</li>
+  </ul>
+  <p>Aujourd'hui, ces cas n'ont que deux issues, toutes deux insuffisantes : centraliser les données chez une partie (souvent interdit, toujours refusé), ou réconcilier les positions manuellement (lent et invérifiable). Le méta-essaim ouvre une troisième voie. Son objectif de conception est précis, et c'est l'inverse d'un simple échange d'information : <b>ne faire circuler entre les parties que des signaux de consensus, jamais les données brutes</b> — la préservation de la souveraineté des données est le but, pas une contrainte subie. Le moteur correspondant est couvert par environ 213 tests.</p>
+
+  <h3>3.2 Le consensus latent</h3>
+  <p>Plusieurs essaims indépendants convergent vers une réponse commune sans jamais échanger leurs données brutes ni leurs modèles. Le mécanisme repose sur deux opérations, qu'il faut nommer et définir.</p>
+  <ul class="mech">
+    <li><b>La projection (« lift »).</b> Chaque essaim transforme son état interne en une représentation compacte dans un espace commun à toutes les parties, un espace de dimension 256. Cette représentation — dite « latente » parce qu'elle résume l'état sans en exposer le détail — est ce qui sera partagé. Les enregistrements sous-jacents, eux, ne quittent pas leur détenteur.</li>
+    <li><b>Le consensus et le retour (« pull »).</b> Un opérateur de consensus agit sur ces représentations dans l'espace commun et calcule une position d'accord. Cette position est ensuite redescendue vers chaque participant. Ce qui circule entre les parties se limite donc à des représentations compactes, scellées ; ce qui ne circule jamais, ce sont les données brutes et les poids des modèles.</li>
+  </ul>
+  <div class="ec"><b>En clair</b> — chaque partie ne partage qu'un résumé chiffré de sa position, pas ses dossiers. L'accord se calcule sur ces résumés, puis chacun récupère le résultat commun. Personne n'a vu les données des autres, et pourtant une réponse partagée existe. La dimension 256 est un choix d'ingénierie — assez grand pour porter la structure de l'information, assez petit pour rester rapide — et non une propriété fondamentale.</div>
+
+  <h3>3.3 La confidentialité, précisément</h3>
+  <p>Il faut être exact sur la nature de cette confidentialité, car des techniques voisines existent et il ne faut pas les confondre. La confidentialité est ici <b>architecturale</b> : elle tient au fait que seule une représentation compacte circule, et que chaque échange est scellé. Ce n'est <b>pas</b> du calcul multipartite sécurisé (un ensemble de protocoles cryptographiques où plusieurs parties calculent une fonction commune sans révéler leurs entrées) ni du chiffrement homomorphe (qui permet de calculer directement sur des données chiffrées) — deux familles de techniques plus lourdes et plus coûteuses.</p>
+  <p>La question légitime qui se pose est : que pourrait-on reconstituer à partir d'une représentation de dimension 256 ? La réponse honnête est qu'il s'agit d'un résumé, non des enregistrements, et que sa résistance à une tentative de reconstitution est un objectif de conception. Éprouver cette résistance par des attaques dédiées est un travail approprié pour un projet pilote ; nous le proposons plutôt que de l'écarter.</p>
+
+  <h3>3.4 L'enveloppe de sûreté</h3>
+  <p>Les bornes que la décision collective a le droit de prendre sont déclarées à l'avance, comme une politique. Techniquement, ces bornes définissent un <b>ensemble admissible</b> : l'ensemble des valeurs que la décision est autorisée à prendre, décrit par une région dans l'espace commun (une boîte ou un polyèdre). À chaque étape du calcul, l'état du consensus est ramené dans cet ensemble par une opération nommée <b>projection</b>.</p>
+  <p>Deux propriétés de cette opération sont essentielles, et démontrées plutôt qu'espérées.</p>
+  <ul class="mech">
+    <li><b>La projection est non expansive.</b> Cela signifie qu'elle ne peut jamais augmenter l'écart entre deux états : après projection, deux positions sont au plus aussi éloignées qu'avant, jamais davantage. Cette propriété a une conséquence forte : le calcul converge, c'est-à-dire qu'il se stabilise vers une réponse, <b>y compris</b> lorsqu'il part d'un état initial hostile — un essaim compromis ou une contribution adverse qui chercherait à faire diverger le résultat.</li>
+    <li><b>La correction est enregistrée.</b> L'ampleur de la correction appliquée à chaque étape — la distance dont l'état a été ramené dans les bornes — est mesurée, notée <code>safety_delta</code>, et scellée. Une correction n'est donc jamais silencieuse.</li>
+  </ul>
+  <div class="ec"><b>En clair</b> — on déclare d'avance la zone dans laquelle la décision a le droit de se trouver. Si le calcul tend à en sortir, il est ramené dedans, et l'on prouve mathématiquement que ce rappel fonctionne toujours, même face à une partie malveillante. De plus, chaque rappel est enregistré : une politique trop restrictive ne biaise pas les résultats en secret, elle se lit dans les enregistrements. La procédure de test <code>safety_violation_attempt</code> vérifie précisément qu'un état poussé hors des bornes est ramené à l'intérieur, l'écart étant scellé.</div>
+  <p>Conséquence énonçable dans un contrat : une décision — par exemple la notation d'un fournisseur — ne peut pas se produire hors de la bande de politique déclarée, et toute correction qui l'y ramène est enregistrée. Ce n'est pas une intention affichée, c'est une propriété que l'on peut vérifier.</p>
+
+  <h3>3.5 La provenance de la délibération</h3>
+  <p>Comme aux autres tiers, la délibération elle-même est scellée — pas seulement son résultat. Trois niveaux de détail sont disponibles ; le niveau se choisit par traitement, selon l'enjeu, ce qui permet de doser la quantité de preuve produite.</p>
+  <table>
+    <tr><th class="m">Niveau</th><th>Contenu scellé</th><th>Ce qui est alors établi</th></tr>
+    <tr><td class="m">v1</td><td>la valeur atteinte à chaque étape</td><td>la trajectoire complète de la délibération</td></tr>
+    <tr><td class="m">v2</td><td>+ le déclenchement d'une correction (à quelle étape, de quelle ampleur)</td><td>qu'une borne a agi à une étape précise, prouvé à cette étape et non reconstitué après coup</td></tr>
+    <tr><td class="m">v3</td><td>+ la contribution de chaque partie, et la ré-exécution exacte</td><td>qu'aucun essaim n'a dominé la décision ; le tout reproductible à l'identique des années après</td></tr>
+  </table>
+  <p>Deux garanties d'implémentation encadrent ce dispositif. D'une part, l'observateur qui enregistre la provenance est placé hors du chemin de calcul, et la non-interférence est testée : les résultats sont identiques, au caractère près, avec et sans enregistrement — l'acte d'enregistrer ne change pas ce qui est décidé. D'autre part, deux vérificateurs indépendants existent — <code>verify_meta</code> et <code>verify_meta_mini</code>, ce dernier sans aucune dépendance externe et donc recompilable par un tiers — et leurs résultats sont comparés au caractère près, chacun contrôlant l'autre.</p>
+  <div class="ec"><b>En clair</b> — le niveau v3 permet de démontrer une chose que les directions conformité recherchent : qu'aucune partie n'a pris le dessus sur une décision collective. C'est une preuve d'absence de capture, opposable, et rejouable des années plus tard.</div>
+  <p>La procédure de démonstration correspondante est nommée <code>three_swarms_kovant</code> : trois essaims traitant respectivement la notation de fournisseurs, le risque contractuel et la catégorisation des dépenses convergent sous enveloppe, avec provenance native et re-preuve hors ligne en sortie.</p>
+
+  <h3>3.6 Exemples d'applications</h3>
+  <p>Les applications typiques de ce tier sont les décisions qui doivent réunir plusieurs organisations ne partageant pas leurs données, ou rester dans des bornes contractuelles vérifiables.</p>
+  <div class="apps">
+    <div class="app"><div class="t">Score de risque partagé entre acheteur, fournisseur et auditeur</div>
+      <p>Les trois parties convergent vers une évaluation commune du risque d'une relation, chacune ne partageant qu'une représentation compacte de sa position, jamais ses données. La provenance de niveau v3 permet de démontrer qu'aucune des trois parties n'a imposé son verdict aux autres.</p></div>
+    <div class="app"><div class="t">Consolidation d'une évaluation au niveau d'un groupe</div>
+      <p>Deux filiales dont les données sont cloisonnées par la réglementation produisent une évaluation au niveau du groupe sans que les données de l'une soient exposées à l'autre. La confidentialité est architecturale ; la décision commune est scellée et revérifiable.</p></div>
+    <div class="app"><div class="t">Décision soumise à une bande de politique contractuelle</div>
+      <p>Un client impose que la notation d'un fournisseur ne puisse jamais sortir d'une bande déclarée. L'enveloppe de sûreté garantit ce respect par construction : toute décision qui tendrait à en sortir est ramenée à l'intérieur, et l'écart est scellé. La garantie « aucune notation hors de votre politique » est vérifiable, pas seulement affichée.</p></div>
+    <div class="app"><div class="t">Évaluation conjointe d'un fournisseur commun à plusieurs donneurs d'ordre</div>
+      <p>Plusieurs entreprises partageant un même fournisseur aboutissent à une évaluation conjointe de son risque sans se communiquer leurs conditions commerciales respectives. Chacune conserve ses données ; une position commune émerge, sous enveloppe et avec provenance.</p></div>
+  </div>
+
+  <div class="box lim"><span class="lbl">Statut et limites</span>
+    <p>Ce tier est la frontière du système : il fonctionne, il est testé, il est démontrable aujourd'hui. La détermination des cas où il est mis en production relève d'un projet pilote. Comme aux autres tiers, il établit ce qui s'est passé et le respect des bornes déclarées ; il n'établit pas que la décision collective était correcte. Un consensus mesure l'accord, pas l'exactitude : lorsqu'une réponse de référence existe, un vérificateur de correction peut être ajouté au panel pour corriger ce biais ; sinon, l'enregistrement établit qui a contribué quoi, ce qui est distinct d'une garantie d'exactitude.</p></div>
+</div>
+
+<!-- PARTIE 4 : LES TESTS -->
+<div class="parthead"><span class="np">4</span>
+  <div class="kick">Partie 4</div>
+  <h2>Les tests réalisés</h2>
+  <div class="lede">Cinq familles distinctes : tests logiciels automatiques, vérifications cryptographiques, revue de sécurité, tests d'invariants, et expériences de mesure. Les résultats sont donnés tels qu'ils sont, y compris ceux qui sont négatifs.</div>
+</div>
+<div class="wrap">
+  <p>Le mot « test » recouvre ici deux natures qu'il faut séparer. La première est la vérification que le logiciel fait ce qu'il doit faire : tests automatiques, conformité cryptographique, revue de sécurité, invariants. La seconde est la mesure du comportement du système sur des tâches réelles : expériences quantitatives, dont certaines contredisent des hypothèses internes. Les deux sont présentées.</p>
+
+  <h3>4.1 Tests logiciels automatiques</h3>
+  <p>L'ensemble du système compte environ 65 composants (crates), dont environ 31 forment le cœur agentique. L'ensemble porte environ 5 200 tests automatiques. Le tableau ci-dessous donne le nombre de tests des principaux blocs ; le complément provient des autres composants du périmètre. Chaque test correspond à une affirmation qui peut être ré-exécutée.</p>
+  <h4>Cœur agentique</h4>
+  <table>
+    <tr><th>Bloc</th><th>Contenu</th><th class="n">Tests</th></tr>
+    <tr><td>Cœur d'exécution + serveur gRPC</td><td>le moteur d'exécution et son interface applicative</td><td class="n">2 469</td></tr>
+    <tr><td class="m">efe-nano</td><td>le tier des nano-robots (partie 1)</td><td class="n">1 175</td></tr>
+    <tr><td>Conformité (N17 + N18 + N19)</td><td>enregistrement forensique, identité, barrière de qualité</td><td class="n">533</td></tr>
+    <tr><td>Grounding</td><td>recherche et connaissance (5 composants)</td><td class="n">~250</td></tr>
+    <tr><td>Socle de confiance (P1)</td><td>cryptographie et vérificateurs (8 composants)</td><td class="n">224</td></tr>
+    <tr><td>Moteur méta-essaim</td><td>consensus latent et enveloppe (partie 3)</td><td class="n">~213</td></tr>
+    <tr><td>Harnais de caractérisation (Terrain)</td><td>mesure du comportement des essaims (section 4.5)</td><td class="n">118</td></tr>
+  </table>
+  <h4>Plateforme opérée</h4>
+  <table>
+    <tr><th>Bloc</th><th>Contenu</th><th class="n">Tests</th></tr>
+    <tr><td>Observabilité</td><td>métriques, traces, alertes</td><td class="n">328</td></tr>
+    <tr><td>Passerelle d'API (N22)</td><td>versionnage, quotas, authentification</td><td class="n">185</td></tr>
+    <tr><td>Multi-région et reprise après sinistre</td><td>résidence, bascule, sauvegardes</td><td class="n">144</td></tr>
+    <tr><td>Facturation et comptage</td><td>par client</td><td class="n">88</td></tr>
+    <tr><td>Administration en libre-service</td><td>inscription, gestion des clients</td><td class="n">58</td></tr>
+  </table>
+  <p class="small muted">Les blocs ci-dessus sont les principaux contributeurs. Le total du périmètre agentique est d'environ 5 200 tests ; il ne se réduit pas à la somme de ce tableau, qui n'en liste que les blocs majeurs.</p>
+
+  <h3>4.2 Vérifications cryptographiques</h3>
+  <p>Les fonctions cryptographiques du socle sont réimplémentées dans le système (raison exposée dans le cadre commun) et vérifiées contre les jeux de tests officiels des standards, et non seulement contre des tests internes.</p>
+  <ul class="mech">
+    <li><b>SHA-256</b> — vérifiée contre les vecteurs de test de la norme FIPS 180-4.</li>
+    <li><b>HMAC</b> — vérifié contre les vecteurs de test de la norme RFC 2104.</li>
+    <li><b>Vérificateur à dépendance nulle</b> — le vérificateur <code>verify-mini</code> n'utilise que la bibliothèque standard ; son arbre de dépendances tient en une ligne, ce qui est directement contrôlable par la commande <code>cargo tree</code>. C'est ce qui rend possible sa lecture intégrale et sa recompilation par un tiers.</li>
+    <li><b>Absence de la clé dans les dossiers</b> — la clé de scellement n'est jamais sérialisée dans un dossier exporté ; cette propriété est vérifiable par inspection d'un dossier produit par <code>forensic-export</code>.</li>
+  </ul>
+
+  <h3>4.3 Revue de sécurité adverse</h3>
+  <p>Le chemin de provenance a fait l'objet d'une revue de sécurité adverse interne, dont le résultat est énoncé sans atténuation : <b>21 défauts ont été trouvés et corrigés</b>. Le détail est instructif, car il inclut des défauts de la catégorie la plus grave pour un système de preuve.</p>
+  <ul class="mech">
+    <li><b>Un « faux positif de validité »</b> (« dishonest green ») : un chemin de vérification qui renvoyait un succès à tort. Pour un système dont l'objet est la preuve, c'est le défaut le plus grave possible ; il a été identifié et corrigé.</li>
+    <li><b>Une fuite de données personnelles</b> dans l'interface d'audit : identifiée et corrigée.</li>
+    <li>La répartition : 14 défauts sur les composants de graphe et de capture de provenance et sur le vérificateur, 7 défauts sur l'interface d'audit.</li>
+  </ul>
+  <p>Un audit de sécurité externe n'a pas été réalisé à ce stade ; il constitue un livrable de projet pilote. La position est que la revue interne a été conduite de manière adverse (chercher à faire échouer le système), et que ses résultats — y compris les plus défavorables — sont rendus publics.</p>
+
+  <h3>4.4 Tests d'invariants</h3>
+  <p>Deux propriétés structurelles font l'objet de tests dédiés, car elles conditionnent la validité de l'ensemble.</p>
+  <ul class="mech">
+    <li><b>Non-interférence de la provenance.</b> L'enregistrement de la provenance ne doit pas modifier le calcul. Le test compare les résultats avec et sans enregistrement : ils doivent être identiques octet par octet. Toute divergence invalide la propriété.</li>
+    <li><b>Ré-exécution déterministe.</b> Un run rejoué doit produire un résultat identique octet par octet à l'original. Les étapes déterministes sont ré-exécutées, les appels de modèle rejoués depuis leur enregistrement.</li>
+    <li><b>Absence de monoculture (application multi-modèles).</b> Dans l'application qui coordonne plusieurs modèles externes, un invariant testé garantit qu'aucun fournisseur unique ne domine une mission — le remplacement d'un fournisseur relève de la configuration.</li>
+  </ul>
+
+  <h3>4.5 Expériences de mesure</h3>
+  <p>Le système est mesuré sur des tâches réelles au moyen d'un harnais dont les runs sont reproductibles (environ 1 200 runs, modèles locaux). L'argument n'est pas de croire ces chiffres, mais de pouvoir les recalculer. Les résultats sont donnés tels qu'ils sont, y compris lorsqu'ils contredisent une hypothèse interne.</p>
+  <h4>Résultats principaux</h4>
+  <ul class="mech">
+    <li><b>Effet de la spécialisation.</b> L'instruction précise d'un petit modèle sur une tâche étroite a fait passer sa performance de 40 % à 75,3 % — sur cette tâche, un levier supérieur au recours à un modèle plus grand.</li>
+    <li><b>Résultat contraire à l'hypothèse interne.</b> Un petit assemblage d'experts (mixture-of-experts) a obtenu, sur le coût, un meilleur résultat que notre propre routeur d'essaim. Ce résultat contredit une hypothèse de départ du système ; il est publié tel quel.</li>
+    <li><b>Loi de bascule.</b> Une relation mesurée indique quand l'approche par essaim est avantageuse : <code>C &gt; K/(1−f)</code>, où <code>C</code> est le rapport de coût entre grand et petit modèle, <code>K</code> le nombre d'échantillons de diagnostic, <code>f</code> la fraction des cas escaladés vers le grand modèle. Un rapport de coût élevé et une escalade rare favorisent l'essaim ; le cas contraire le défavorise, et la relation le dit aussi.</li>
+  </ul>
+  <div class="box lim"><span class="lbl">Formulation exacte à retenir</span>
+    <p>Le système ne prétend pas qu'un petit modèle serait supérieur à un grand modèle en général — cet énoncé serait faux. La position mesurée est : le système est la couche de mesure et de preuve qui indique, sur une tâche donnée, quelle architecture est avantageuse. La loi de bascule transforme ce choix en décision instrumentée plutôt qu'en pari.</p></div>
+  <h4>Résultats négatifs (série HB)</h4>
+  <p>Deux campagnes internes ont testé une hypothèse tentante — qu'un bon agrégateur de réponses rattraperait un modèle bruité — sur une combinaison difficile de petit modèle et de tâche mathématique. La conclusion est négative, et le détail est donné parce qu'il est informatif.</p>
+  <ul class="mech">
+    <li><b>Campagne HB.3.</b> Un vérificateur par ré-exécution arithmétique se place <i>sous</i> la simple cohérence par vote à n = 50 : <b>92 % contre 94 %</b>. L'écart résiduel provient de la modélisation, non du calcul.</li>
+    <li><b>Campagne HB.4.</b> Les agrégateurs par synthèse (médiane, moyenne tronquée, médiane pondérée par audit) plafonnent à 85 % ou moins ; la fusion descend à 70 %. La cause est mesurée : les erreurs sont systématiquement orientées (asymétrie de +8,72), elles ne se compensent donc pas.</li>
+    <li><b>Conclusion assumée.</b> Sur cette combinaison, aucune agrégation déployable ne comble l'écart : il s'agit d'un écart de modélisation. La règle qui en découle, et qui est vendue comme telle : mesurer d'abord, choisir l'architecture ensuite.</li>
+  </ul>
+  <h4>Caractérisation (harnais Terrain)</h4>
+  <p>Un harnais dédié (118 tests) cartographie les conditions dans lesquelles une architecture d'essaim récupère effectivement de la valeur. Les premiers sondages sont exploratoires et incluent des résultats négatifs : sur les cellules testées, les conditions favorables (un modèle compétent mais bruité, un écart réel à combler, des erreurs indépendantes) se sont révélées difficiles à réunir simultanément. Ces résultats sont conservés et rapportés.</p>
+
+  <h3>4.6 Ce que les tests établissent, et ce qu'ils n'établissent pas</h3>
+  <div class="box"><span class="lbl">Établi</span>
+    <p>L'intégrité des enregistrements (détection et localisation de toute altération) ; la reproductibilité à l'identique des runs ; la non-interférence de l'enregistrement de provenance ; la conformité des fonctions cryptographiques aux vecteurs officiels ; la convergence de l'enveloppe de sûreté, y compris depuis un état hostile ; et un ensemble de mesures de performance reproductibles sur des tâches réelles.</p></div>
+  <div class="box lim"><span class="lbl">Non établi — énoncé sans détour</span>
+    <p>Aucun test n'établit qu'une décision produite était correcte : le système atteste l'intégrité de ce qui s'est passé, pas la justesse du résultat. Un consensus mesure l'accord, pas l'exactitude. La conclusion « conforme » relève du juriste, pas de l'outil (l'objet <code>reg-evidence</code> n'a volontairement pas de champ « conforme »). Enfin, plusieurs chantiers restent ouverts : le gestionnaire de machines virtuelles du mode B (composant de substitution aujourd'hui), les connecteurs vers les fournisseurs de vérification d'identité et de sanctions, le transport inter-région, et l'ouverture de l'autorisation mutuelle par certificat (refus par défaut aujourd'hui). Ces chantiers sont des travaux d'intégration, pas de recherche.</p></div>
+
+  <div class="box key"><span class="lbl">Synthèse de la partie 4</span>
+    <p>Le système repose sur environ 5 200 tests automatiques, des fonctions cryptographiques vérifiées contre les standards, une revue de sécurité adverse dont les 21 défauts trouvés ont été corrigés, des invariants structurels testés, et un ensemble d'expériences de mesure reproductibles — dont les résultats négatifs sont conservés et publiés. Chaque affirmation de ce document a, derrière elle, un test, une procédure de démonstration ou une mesure recalculable.</p></div>
+</div>
+
+</body>
+</html>
