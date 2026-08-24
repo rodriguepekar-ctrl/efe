@@ -542,8 +542,8 @@ l'accord avec le client HTTP réel. Le gain n'est pas soixante lignes de moins :
 
 Les deux analyseurs que M1.a laissait au méta-essaim étaient, au caractère près, le même découpage
 écrit deux fois \emph{dans le même crate} : \code{tls::endpoint\_is\_loopback} (qui décide si TLS
-peut être retiré d'un lien) et \code{controller::iterate::extract\_san\_from\_endpoint} (qui déduit
-le SAN attendu). Le premier était faux, et sa fausseté était \emph{conditionnelle} --- ce qui
+peut être retiré d'un lien) et, dans \code{controller::iterate},
+\code{extract\_san\_from\_endpoint} (qui déduit le SAN attendu). Le premier était faux, et sa fausseté était \emph{conditionnelle} --- ce qui
 explique qu'aucune relecture ne l'ait vue.
 
 Sans port dans le \code{userinfo}, \code{http://127.0.0.1@evil.com} produit l'« hôte »

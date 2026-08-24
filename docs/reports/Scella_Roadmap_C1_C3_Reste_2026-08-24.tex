@@ -1,0 +1,407 @@
+\documentclass[10pt]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage[french]{babel}
+\usepackage{newpxtext,newpxmath}
+\usepackage[a4paper,top=1.5cm,bottom=1.35cm,left=1.6cm,right=1.6cm]{geometry}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{titlesec}
+\usepackage[most]{tcolorbox}
+\usepackage{enumitem}
+\usepackage{array}
+\usepackage{booktabs}
+\usepackage{fancyhdr}
+
+\definecolor{navy}{HTML}{1F3A5F}
+\definecolor{grey}{HTML}{54606E}
+\definecolor{green}{HTML}{2C6E49}
+\definecolor{amber}{HTML}{9C6A16}
+\definecolor{red}{HTML}{A6322E}
+\definecolor{plum}{HTML}{7A4EA8}
+\definecolor{boxgray}{HTML}{F3F5F8}
+\definecolor{boxred}{HTML}{FCF2F1}
+\definecolor{boxgreen}{HTML}{F1F7F3}
+\definecolor{boxplum}{HTML}{F7F3FB}
+\definecolor{boxamber}{HTML}{FDF7EC}
+\definecolor{boxcode}{HTML}{F7F8FA}
+\definecolor{boxedge}{HTML}{D9E0EA}
+\definecolor{barC3}{HTML}{2C6E49}
+\definecolor{barC1}{HTML}{1F3A5F}
+
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{2.6pt}
+\linespread{1.0}
+
+\pagestyle{fancy}\fancyhf{}
+\lhead{\small\color{grey}Scella}
+\rhead{\small\color{grey}Ce qui reste de C1 et C3 --- 24 août 2026}
+\cfoot{\small\color{grey}\thepage}
+\renewcommand{\headrulewidth}{0.3pt}
+
+\titleformat{\section}{\color{navy}\large\bfseries}{}{0pt}{}
+\titlespacing{\section}{0pt}{11pt}{3pt}
+\titleformat{\subsection}{\color{navy}\bfseries}{}{0pt}{}
+\titlespacing{\subsection}{0pt}{7pt}{1.5pt}
+
+\newtcolorbox{these}{colback=boxgray,colframe=boxedge,boxrule=0.5pt,arc=2.5pt,
+  left=8pt,right=8pt,top=4.5pt,bottom=4.5pt}
+\newtcolorbox{alerte}{colback=boxred,colframe=red!55,boxrule=0.8pt,arc=2.5pt,
+  left=8pt,right=8pt,top=4.5pt,bottom=4.5pt}
+\newtcolorbox{acquis}{colback=boxgreen,colframe=green!45,boxrule=0.8pt,arc=2.5pt,
+  left=8pt,right=8pt,top=4.5pt,bottom=4.5pt}
+\newtcolorbox{piste}{colback=boxplum,colframe=plum!45,boxrule=0.8pt,arc=2.5pt,
+  left=8pt,right=8pt,top=4.5pt,bottom=4.5pt}
+\newtcolorbox{tiede}{colback=boxamber,colframe=amber!50,boxrule=0.8pt,arc=2.5pt,
+  left=8pt,right=8pt,top=4.5pt,bottom=4.5pt}
+\newtcolorbox{extrait}{colback=boxcode,colframe=boxedge,boxrule=0.5pt,arc=1.5pt,
+  left=7pt,right=7pt,top=3.5pt,bottom=3.5pt}
+
+\newcommand{\best}[1]{\textcolor{green}{\textbf{#1}}}
+\newcommand{\pire}[1]{\textcolor{red}{\textbf{#1}}}
+\newcommand{\moyen}[1]{\textcolor{amber}{\textbf{#1}}}
+\newcommand{\sz}[1]{\textcolor{grey}{\small\textsf{#1}}}
+\newcommand{\code}[1]{\texttt{\small #1}}
+\newcommand{\x}{$\times$}
+\newcommand{\fl}{$\rightarrow$}
+\newcommand{\gbar}[2]{\textcolor{#1}{\rule[-0.4ex]{#2}{1.5ex}}}
+\newcommand{\mm}[1]{\textbf{\textcolor{navy}{#1}}}
+
+\begin{document}
+
+\begin{center}
+{\Huge\bfseries\color{navy} Scella}\\[4pt]
+{\large\color{grey}\itshape Ce qui reste de C1 et C3}\\[4pt]
+{\small\color{grey} 24 août 2026 \; · \; le plan de douze semaines est \emph{exécuté} \; · \; ce qui
+reste n'est pas ce qu'on croyait}
+\end{center}
+\vspace{2pt}
+
+\begin{these}
+\textbf{Les douze semaines du 19 août sont faites.} Les dix tâches \code{S1} à \code{O1} de la
+feuille de route précédente correspondent une à une aux modules \code{M0} à \code{M9}, tous
+construits, tous incarnés par un test nommé, et six d'entre eux éprouvés sur un \emph{processus
+réel}. Les cinq trous mesurés à l'époque sont refermés --- rejoués ci-dessous avec les commandes
+que ce document-là fournissait pour se contredire lui-même.
+
+Ce document ne rejoue donc pas un plan : il mesure \textbf{ce qui reste quand un plan est fini}. Et
+la réponse n'est pas « rien ». Elle tient en une phrase : \best{tout est écrit, presque rien n'a été
+mis en service}. La fonction centrale du coin --- router du vrai trafic de modèle --- n'a jamais été
+démarrée dans sa configuration complète, parce que son propre garde de démarrage l'interdit tant que
+trois \emph{features} restent hors du build par défaut. Ce n'est pas du code manquant : le code
+existe, compile et est testé. C'est une \textbf{mise en service} qui n'a jamais eu lieu.
+\end{these}
+
+\section{0 · Quatre corrections, avant le plan}
+
+Cette série ouvre toujours sur ce qu'elle a écrit de faux. Quatre choses, cette fois, et trois
+d'entre elles datent d'aujourd'hui.
+
+\begin{alerte}
+\textbf{Un --- « \mm{M4} n'a jamais été exécuté ».} C'était vrai jusqu'à ce matin et ce ne l'est plus.
+\code{docker compose up} a tourné : image construite, passerelle démarrée avec son rapport de profil,
+les cinq étapes du pilote déroulées, une troncature démasquée par un simple comptage, arrêt gracieux,
+\best{sortie 0}. La seule commande qui \emph{est} toute l'histoire d'installation fonctionne sur une
+machine où elle n'avait jamais tourné.
+
+\textbf{Deux --- « aucun moteur \LaTeX{} sur cette machine ».} Faux. \code{tectonic} est installé, et
+les documents de la série se compilent. Deux PDF étaient périmés et un n'existait pas ; les trois
+existent maintenant. L'affirmation avait été \emph{supposée}, pas vérifiée --- exactement le défaut
+que \mm{M1.b} vient de fermer dans le code.
+
+\textbf{Trois --- « le Cadrage n'est pas sur le chemin servi ».} Vrai du build \emph{par défaut}
+(14 crates), faux du build à frontière : la \emph{feature} \code{frontier-llm} tire bel et bien
+\code{efe-nano-app-coordinator}, et avec lui trois crates de plus. La formulation exacte est plus
+étroite : le Cadrage est \textbf{lié} et \textbf{jamais appelé} --- la passerelle n'en contient
+aucune mention, et \code{efe-coordinator} le tient dans un \code{Option} que rien ne remplit. Il
+reste donc du \emph{poids de liaison} pour un composant que \mm{MZ} déclare \pire{TUÉ}.
+\end{alerte}
+
+\begin{alerte}
+\textbf{Quatre --- \mm{M1.b} a rendu \code{m9-check.sh} rouge ce matin, sans aucune régression.} Ce
+script comptait les analyseurs d'autorité et exigeait « \emph{3 : le crate $+$ les 2 exemptions
+\mm{M1.b}} ». \mm{M1.b} ayant supprimé ces deux exemptions, il en trouve 2 et \pire{échoue} --- alors
+que le dépôt est plus sûr qu'avant.
+
+C'est le \textbf{défaut récurrent} de ce dépôt, la troisième fois qu'il se produit : un contrôle dont
+le \emph{texte} devient faux un module plus tard (l'inventaire de \mm{M3} l'avait fait, la phrase de
+clôture de \code{m6-check.sh} aussi). Et le remède est celui que \code{m6-check.sh} avait déjà
+trouvé : ne pas ré-implémenter une version affaiblie du garde, mais l'\textbf{exécuter}. Le garde
+\code{un\_seul\_analyseur} connaît le compte attendu, ignore les commentaires, balaye tout \code{.rs}
+et non le seul \code{src/}, et possède ses propres contre-épreuves. Un comptage recopié dans un
+script est un \emph{second juge}, et deux juges divergent --- ce que \mm{M1} existe précisément pour
+supprimer. Corrigé ; les \textbf{sept} scripts de vérification du dépôt sortent 0.
+\end{alerte}
+
+\section{1 · Le plan du 19 août, rejoué ligne à ligne}
+
+\renewcommand{\arraystretch}{1.22}
+\begin{center}\small
+\begin{tabular}{@{}c >{\raggedright\arraybackslash}p{5.5cm} c >{\raggedright\arraybackslash}p{7.2cm}@{}}
+\toprule
+& \textbf{Tâche du 19 août} & \textbf{Module} & \textbf{État vérifié le 24 août} \\
+\midrule
+\code{S1} & Le profil --- les 7 interrupteurs & \mm{M0} & \best{fait} --- 20 interrupteurs servis, rapport au démarrage \\
+\code{S2} & Fusionner les gardes d'egress & \mm{M1} & \best{fait} --- 5 analyseurs \fl{} 1, exemptions vides \\
+\code{A1} & Mode observation & \mm{M2} & \best{fait} --- 60 occurrences là où il y en avait 0 \\
+\code{A2} & Fail-open configurable & \mm{M3} & \best{fait} --- le test qui les tue ensemble \\
+\code{A3} & Packaging \sz{(compose, binaire, doc)} & \mm{M4} & \best{fait \emph{et exécuté ce matin}} --- sortie 0 \\
+\code{J1} & La jonction \fl{} \code{reg-evidence} & \mm{M5} & \best{fait} --- \code{POST /reg/:id}, feature OFF par défaut \\
+\code{B1} & Rétention et cycle de vie & \mm{M6} & \best{fait} --- crypto-shredding, la chaîne ne bouge pas \\
+\code{B2} & Le binaire de service & \mm{M7} & \best{fait} --- un processus, plusieurs tenants isolés \\
+\code{B3} & Console en production & \mm{M8} & \moyen{fait, TLS par substitution} \sz{(§4.1)} \\
+\code{O1} & Ancrage tiers & \mm{M9} & \moyen{fait, signature vérifiée par le tiers} \sz{(§4.1)} \\
+\midrule
+\multicolumn{2}{@{}l}{\sz{hors plan, ajouté depuis}} & \mm{MZ} & \pire{TUÉ} --- le Cadrage ne tient pas ce qu'il revendique \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\section{2 · Les cinq trous du 19 août, remesurés}
+
+Ce document fournissait en annexe les commandes permettant de le contredire. Les voici rejouées.
+
+\begin{center}\small
+\renewcommand{\arraystretch}{1.24}
+\begin{tabular}{@{}>{\raggedright\arraybackslash}p{3.5cm} >{\raggedright\arraybackslash}p{4.0cm} >{\raggedright\arraybackslash}p{8.4cm}@{}}
+\toprule
+\textbf{Trou (19 août)} & \textbf{Mesuré alors} & \textbf{Mesuré le 24 août} \\
+\midrule
+Ingestion de C1 & \pire{aucune} & \moyen{toujours aucune voie HTTP d'\emph{écriture} propre à C1} --- et c'est \emph{voulu} : la décision pivot dit que la passerelle EST le collecteur. Voir §4.3 \\
+Rétention / cycle de vie & \pire{0 occurrence} & \best{8 occurrences} --- \mm{M6} \\
+Mode observation & \pire{0 occurrence} & \best{60 occurrences} --- \mm{M2}/\mm{M3} \\
+Garde d'egress dupliqué & \pire{2 fichiers} & \best{2 fichiers, tous deux dans \code{scella-authority}} --- l'implémentation et son propre garde \\
+Seul \code{Declared} produit & \pire{0 \code{Rfc3161}} & \best{6 occurrences} dans \code{provenance-bridge} --- \mm{M9} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{acquis}
+\textbf{Quatre trous sur cinq sont refermés, et le cinquième a changé de nature.} « C1 n'a aucune
+ingestion » reste littéralement vrai --- \code{audit-api} n'a toujours ni binaire ni \code{fn main},
+et les quatre \emph{taps} restent une API Rust en processus. Mais ce n'est plus un trou : c'est
+l'\textbf{architecture (A)} choisie le 19 août. Le client ne parle jamais à C1 ; il route son trafic
+vers C3, qui capture, et \code{POST /reg/:id} en fait un dossier réglementaire. Le collecteur
+générique --- \mm{MX} --- est la branche (B), et elle reste conditionnée à trois prospects qui
+demandent le registre \emph{et le paient}.
+\end{acquis}
+
+\section{3 · Les deux périmètres, mesurés aujourd'hui}
+
+\begin{center}\small
+\renewcommand{\arraystretch}{1.24}
+\begin{tabular}{@{}>{\raggedright\arraybackslash}p{3.2cm} c c c >{\raggedright\arraybackslash}p{7.4cm}@{}}
+\toprule
+& \textbf{crates} & \textbf{tests} & \textbf{lignes} & \textbf{ce qu'il contient} \\
+\midrule
+\textbf{C3} \sz{passerelle} & 14 & 977 & 74\,112 & l'essaim, la provenance, le pont, l'ancre \\
+\textbf{C1} \sz{registre} & 8 & 378 & 19\,386 & la capture, l'API, la console, l'évidence \\
+\midrule
+partagés & 4 & --- & --- & \code{provenance-dag}, \code{scella-authority}, \code{scella-rfc3161}, \code{forensic-export} \\
+\textbf{union} & \textbf{18} & \textbf{1\,223} & \textbf{87\,455} & \sz{sur 74 crates du dépôt} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Deux faits que ce tableau rend visibles et qu'il faut dire. D'abord, \textbf{les deux produits tiennent
+dans 18 crates sur 74} : les 56 autres ne sont ni dans l'un ni dans l'autre, et notamment pas le
+méta-essaim, dont la dette de fermeture (§5) n'appartient donc à aucun des deux. Ensuite, les quatre
+crates partagés sont exactement le \emph{tissu} : la chaîne, l'analyseur d'autorité, l'horodatage
+tiers et l'export forensique. C'est peu, et c'est ce qui rend l'expansion possible sans souder les
+deux périmètres.
+
+\section{4 · Ce qui reste vraiment --- en trois familles}
+
+\subsection{4.1 · Ce qui est satisfait \emph{par substitution}}
+
+Deux modules ont été déclarés faits sur une propriété voisine de celle que leur critère énonçait. Ce
+ne sont pas des trous : ce sont des \textbf{frontières de responsabilité}, écrites et argumentées.
+Mais un prospect les rencontrera, et il vaut mieux les lui présenter que les lui laisser découvrir.
+
+\textbf{\mm{M8} --- la console ne \emph{termine} pas TLS.} Elle exige la \textbf{déclaration} du
+terminateur de canal placé devant elle, et refuse de servir hors de la boucle locale sans cette
+déclaration. Cette déclaration est portante : elle fixe le barreau de confiance du canal, donc le
+droit de \emph{sceller} un acte humain --- lire dégrade, sceller coupe. Le dépôt possède pourtant une
+pile TLS complète (TLS 1.3, mTLS, rotation à chaud) dans \code{efe-meta-swarm-server} ; la tirer dans
+un crate feuille triplerait son arbre de dépendances et serait moins sûr qu'un terminateur mûr. \\
+\emph{Ce qui reste} : un terminateur réel dans une cible de déploiement, et la preuve qu'il y est.
+
+\textbf{\mm{M9} --- aucune signature n'est vérifiée dans le dépôt.} Le jeton \textsc{rfc 3161} est
+déposé tel quel ; le tiers le vérifie avec \code{openssl ts -verify}. Écrire cette vérification
+signifierait une troisième pile cryptographique et de la crypto maison --- ce que le dépôt s'interdit.
+\\ \emph{Ce qui reste} : rien à coder. Une page de mode d'emploi pour l'auditeur, au plus.
+
+\subsection{4.2 · Ce que le rapport de démarrage dit lui-même \sz{--- et c'est le cœur}}
+
+\mm{M0} imprime, à chaque démarrage, ce qui est \emph{réellement câblé}. C'est l'inventaire le plus
+digne de foi du dépôt, parce qu'il est produit par le binaire et non par un document. Au démarrage
+de ce matin, sur le profil \code{docker} : \textbf{6 interrupteurs servis, 11 dégradés}.
+
+\begin{center}\small
+\renewcommand{\arraystretch}{1.2}
+\begin{tabular}{@{}>{\raggedright\arraybackslash}p{4.3cm} >{\raggedright\arraybackslash}p{5.2cm} >{\raggedright\arraybackslash}p{6.0cm}@{}}
+\toprule
+\textbf{Nature de la dégradation} & \textbf{Interrupteurs} & \textbf{Ce qu'il faut} \\
+\midrule
+\best{Configuration} \sz{rien à coder} & provenance \sz{(clé)}, ancre tierce \sz{(URL d'horodateur)}, allowlist d'egress, attestation, relais SLM, pont réglementaire & poser une variable, ou activer une \emph{feature} déjà écrite \\
+\moyen{Feature hors build par défaut} & \textbf{store durable} \sz{(\code{postgres})}, \textbf{authentification} \sz{(\code{oidc})}, \textbf{caviardage PII} \sz{(\code{pii})} & un \textbf{profil de production} qui les compile et les configure \\
+\sz{Sans objet ici} & frontière, routeur de modèles & conséquence des trois lignes ci-dessus \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{alerte}
+\textbf{Le garde de démarrage refuse la frontière tant que les trois ne sont pas là.}
+\code{frontier\_boot\_guard} rend une erreur si \code{EFE\_LLM\_FRONTIER\_ENABLED} est posé sans clé
+valide (« reçus R4 \pire{FORGEABLES} »), sans auth \textsc{oidc} (« egress tiers \pire{PAYANT} sans
+authentification »), ou sans store durable (« les reçus R4 --- la preuve --- sont \pire{perdus à
+chaque rollout} »).
+
+Conséquence, et c'est le fait le plus important de ce document : \textbf{la fonction centrale du coin
+--- router du vrai trafic de modèle en produisant des reçus opposables --- n'a jamais été démarrée
+dans sa configuration complète.} Non parce qu'elle manque : le code existe
+(\code{store\_pg.rs} 286 l., \code{store\_pg\_memory.rs} 309 l. ; 39 sites \code{\#[cfg]} pour
+\code{oidc}, 16 pour \code{pii}, 31 pour \code{frontier-llm}), il compile ensemble, et il est testé.
+Mais personne n'a jamais assemblé le tout et appuyé sur le bouton.
+\end{alerte}
+
+\subsection{4.3 · Ce qu'aucune des deux feuilles de route n'avait listé}
+
+Trois manques, trouvés en cherchant ce que les documents précédents n'avaient pas cherché.
+
+\textbf{Aucune sauvegarde, aucune restauration.} \code{grep -rni 'backup'} sur les trois crates de
+service : \pire{0}. Un registre qui doit tenir dix ans au titre de l'article 12 de l'AI Act, et dont
+personne n'a écrit comment on le remet en place après une perte de disque, est incomplet d'une
+manière qu'un \textsc{dpo} verra tout de suite. La chaîne rend cela \emph{plus} facile que d'habitude
+--- elle est append-only et re-vérifiable --- ce qui rend l'absence d'autant plus voyante.
+
+\textbf{Aucune rotation de clé.} \code{grep -rni 'rotate\textbar rotation'} : \pire{0}. La clé maître
+est posée une fois. Le jour où il faut la changer --- départ d'un administrateur, exigence d'un
+audit, suspicion de fuite --- que deviennent les reçus scellés sous l'ancienne ? La réponse existe
+peut-être (garder les anciennes clés en lecture), mais elle n'est écrite nulle part, et une réponse
+non écrite n'est pas une réponse : c'est la « sûreté par composition » que \mm{M1.b} vient de
+réfuter.
+
+\textbf{Quatre citations « Kovant » dans le code}, pour une cible abandonnée le 11 août. Cosmétique,
+mais un prospect qui lit le code y verra le nom d'un autre.
+
+\section{5 · Ce qui reste \emph{hors} de C1 et C3 --- et qu'il ne faut pas confondre}
+
+\begin{center}\small
+\renewcommand{\arraystretch}{1.24}
+\begin{tabular}{@{}>{\raggedright\arraybackslash}p{4.2cm} >{\raggedright\arraybackslash}p{11.3cm}@{}}
+\toprule
+\textbf{Sujet} & \textbf{Pourquoi il n'est pas dans ce plan} \\
+\midrule
+\code{core-integration} \sz{8 \fl{} 27 crates} & C'est le \textbf{méta-essaim}. Mesuré : ni la passerelle ni la console ne le contiennent. Le correctif reste mécanique --- \code{mode1.rs} fait 1\,979 lignes et un \emph{seul} \code{use crate::} --- mais il n'appartient à aucun des deux produits \\
+\mm{MX} --- le collecteur ouvert & Conditionnel : trois prospects qui demandent le registre \emph{et le paient}. Il y en a \pire{zéro} \\
+\mm{MZ} --- le Cadrage & Verdict \pire{TUÉ}. Il reste 4 crates de poids de liaison sous \code{frontier-llm}, pour un composant jamais appelé \\
+Runtime nano, lignée latente, Fil C, essaim médiateur & Exclus le 19 août, toujours exclus. Aucun n'a acquis d'appelant depuis \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\section{6 · Le plan, tel qu'il reste}
+
+Trois items. \textbf{Deux semaines}, pas douze --- et le premier vaut à lui seul les deux autres.
+
+\begin{center}\small
+\renewcommand{\arraystretch}{1.26}
+\begin{tabular}{@{}c >{\raggedright\arraybackslash}p{8.2cm} >{\raggedright\arraybackslash}p{5.2cm} c@{}}
+\toprule
+& \textbf{Tâche} & \textbf{Le critère qui la prouve} & \textbf{Effort} \\
+\midrule
+\textbf{P1} & \textbf{Le profil de production.} Un \code{profiles/production.env}, un build
+\code{-{}-features postgres,oidc,pii}, la cible de déploiement qui les configure --- et un
+\code{p1-check.sh} qui \textbf{démarre la frontière complète} au lieu de la décrire &
+la passerelle démarre avec \code{EFE\_LLM\_FRONTIER\_ENABLED}, le garde ne refuse pas, et un reçu
+\textsc{r4} survit à un redémarrage & \textbf{1 sem.} \\
+\addlinespace[2pt]
+\textbf{P2} & \textbf{La conservation opérable.} Sauvegarde, restauration, rotation de clé --- et ce
+que devient un reçu scellé sous une clé retirée &
+un store détruit puis restauré, dont \code{verify-mini} re-prouve la chaîne & \textbf{1 sem.} \\
+\addlinespace[2pt]
+\textbf{P3} & \textbf{Le nettoyage.} Les 4 citations « Kovant » ; le poids de liaison du Cadrage sous
+\code{frontier-llm} &
+\code{grep -c Kovant} \fl{} 0 ; la fermeture à frontière perd 4 crates & \sz{1 j} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{center}\small
+\renewcommand{\arraystretch}{1.3}
+\begin{tabular}{@{}>{\raggedright\arraybackslash}p{2.0cm} >{\raggedright\arraybackslash}p{5.6cm} l@{}}
+\toprule
+\textbf{Semaine} & \textbf{Ce qui se fait} & \textbf{Avancement} \\
+\midrule
+1 & \textbf{P1} --- le profil de production & \gbar{barC3}{2.4cm} \\
+\multicolumn{3}{@{}l@{}}{\hspace{2.2cm}\textcolor{green}{\textbf{$\bigstar$ Fin sem. 1 --- le coin est \emph{en service}, pas seulement écrit}}} \\
+2 & \textbf{P2} $+$ \textbf{P3} --- conservation, nettoyage & \hspace{2.4cm}\gbar{barC1}{2.4cm} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\section{7 · Et le point qui n'est pas du code}
+
+\begin{alerte}
+\textbf{La semaine 5 n'est jamais arrivée.} La feuille de route du 19 août plaçait là le seul jalon
+qui décide : \emph{un prospect installe-t-il C3 en mode observation ?} Le mode observation existe
+depuis \mm{M2}, le packaging depuis \mm{M4}, et \code{docker compose up} fonctionne depuis ce matin.
+Ce qui manque n'est pas le produit --- c'est que \textbf{personne ne l'a installé}, et il n'y a
+aujourd'hui \pire{aucune cible extérieure déclarée} depuis l'abandon de la piste Kovant, le 11 août.
+
+Le document du 19 août disait quoi faire dans ce cas, et il avait raison : \emph{« la bonne réaction
+n'est pas de coder les semaines suivantes --- c'est de comprendre pourquoi »}. Les deux semaines
+ci-dessus sont ce qu'il reste \emph{de code}. Elles ne sont pas ce qu'il reste \emph{à faire}.
+\end{alerte}
+
+\begin{piste}
+\textbf{Une recommandation, et une seule.} Faites \textbf{P1}, parce qu'il transforme « le code
+existe » en « le produit tourne » --- et parce que la première question d'un prospect technique sera
+exactement celle que le garde de démarrage pose : \emph{où sont les reçus après un redémarrage, et
+qui s'authentifie ?} Ne faites \textbf{P2} et \textbf{P3} qu'après, ou pendant l'attente. Et
+n'écrivez pas une ligne de \mm{MX} avant que trois personnes aient payé pour l'obtenir.
+\end{piste}
+
+\section{Annexe · Vérifier chaque affirmation soi-même}
+
+\renewcommand{\arraystretch}{1.22}
+\begin{center}\small
+\begin{tabular}{@{}>{\raggedright\arraybackslash}p{5.0cm} >{\raggedright\arraybackslash}p{11.0cm}@{}}
+\toprule
+\textbf{Affirmation} & \textbf{Ce qui la rejoue} \\
+\midrule
+\mm{M4} fonctionne &
+  \code{SCELLA\_PORT=18080 docker compose up -{}-abort-on-container-exit} \sz{\fl{} sortie 0} \\
+Les fermetures, mesurées &
+  \code{cargo tree -p efe-swarm-gateway -e normal -{}-prefix none} \newline
+  \code{cargo tree -p audit-console -e normal -{}-prefix none} \sz{\fl{} intersecter avec \code{cargo metadata -{}-no-deps}} \\
+Le garde refuse la frontière &
+  \code{grep -n 'fn frontier\_boot\_guard' -A 30 crates/efe-swarm-gateway/src/main.rs} \\
+Les features sont du vrai code &
+  \code{wc -l crates/efe-swarm-gateway/src/store\_pg*.rs} \sz{\fl{} 286 $+$ 309} \newline
+  \code{cargo build -p efe-swarm-gateway -{}-features postgres,oidc,pii,reg-evidence} \\
+Ni sauvegarde ni rotation &
+  \code{grep -rniE 'backup|rotate|rotation' crates/provenance-capture/src crates/audit-api/src crates/efe-swarm-gateway/src} \sz{\fl{} 0} \\
+Le Cadrage est lié, jamais appelé &
+  \code{cargo tree -p efe-swarm-gateway -F frontier-llm} \sz{\fl{} \code{efe-nano-app-coordinator}} \newline
+  \code{grep -rn 'Compressor' crates/efe-swarm-gateway/src} \sz{\fl{} vide} \\
+Le méta-essaim n'est dans aucun des deux &
+  \code{cargo tree -p efe-swarm-gateway -e normal | grep -c meta-swarm} \sz{\fl{} 0} \\
+Les sept scripts sortent 0 &
+  \code{for s in profile m1b m5 m6 m7 m8 m9; do bash scripts/\$s-check.sh; done} \sz{\fl{} 7 \x{} exit 0} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{these}
+\small\textbf{Rappel de cadrage, inchangé dans toute la série.} Le reçu atteste l'\textbf{intégrité}
+d'une suite de pas, jamais la \textbf{correction} d'une décision. Il est \emph{tamper-evident pour un
+détenteur de clé}, pas \emph{trustless pour un tiers} --- et c'est \mm{M9} qui corrige cela, à
+condition que le tiers vérifie lui-même la signature. Les participants du mode réel exécutent une
+fusion latente Mode-1 numérique : ce ne sont pas des « vrais \textsc{slm} ». Les \textbf{mesures} de
+ce document sont rejouables par l'annexe ; les \textbf{durées} sont des estimations, et la seule
+échéance qui compte ne dépend toujours pas de votre vitesse.
+\end{these}
+
+\end{document}

@@ -39,10 +39,19 @@ ok "demande émise, jeton lu, liaison contrôlée, preuve déposée, verify_anch
 ok "un jeton menteur ⟹ RIEN n'est déposé, et le journal n'annonce aucune ancre"
 
 titre "4. L'analyseur d'URL reste UNIQUE"
+#
+#  ⚠ Ce contrôle comptait « 3 : le crate + les 2 exemptions M1.b ». M1.b a supprimé ces deux
+#  exemptions le 24 août, et ce script est devenu ROUGE sans qu'aucune régression n'ait eu lieu —
+#  le défaut récurrent de ce dépôt : un contrôle dont le TEXTE devient faux un module plus tard.
+#
+#  Le remède est celui que m6-check.sh a déjà appliqué : ne pas ré-implémenter une version plus
+#  faible du garde, l'EXÉCUTER. `un_seul_analyseur` connaît le nombre attendu, sait ignorer les
+#  commentaires, balaye tout `.rs` (pas seulement `src/`), et il a ses propres contre-épreuves.
+#  Un comptage recopié ici serait un second juge, qui diverge — exactement ce que M1 ferme.
 cargo test -q -p scella-authority >/dev/null 2>&1 || ko "l'analyseur d'autorité ne passe pas"
-N=$(grep -rl '"://"' crates/*/src 2>/dev/null | wc -l | tr -d ' ')
-[ "$N" = "3" ] || ko "$N analyseurs d'autorité (attendu 3 : le crate + les 2 exemptions M1.b)"
-ok "le port et le chemin passent par scella-authority — aucun second découpage d'URL"
+cargo test -q -p scella-authority --test un_seul_analyseur >/dev/null 2>&1 \
+  || ko "le garde d'unicité échoue — un second analyseur d'autorité est réapparu"
+ok "le port et le chemin passent par scella-authority — garde d'unicité exécuté, exemptions vides"
 
 titre "5. La passerelle REFUSE de mentir sur son ancre"
 cargo build -q -p efe-swarm-gateway 2>/dev/null || ko "la passerelle ne compile pas"
