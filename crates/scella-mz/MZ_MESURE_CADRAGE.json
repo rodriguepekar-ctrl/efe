@@ -1,11 +1,12 @@
 {
+  "echecs": 7,
   "endpoint": "http://127.0.0.1:8081",
-  "paliers": [
+  "paliers_exige": [
     {
       "cible_mots": 20,
+      "declarations_infondees": 5,
       "degenerescence": 0.0,
       "ecart": 0.8954545454545455,
-      "menteurs": 5,
       "n": 5,
       "preservation_declaree": 1.0,
       "preservation_verifiee": 0.10454545454545454,
@@ -13,9 +14,9 @@
     },
     {
       "cible_mots": 30,
+      "declarations_infondees": 5,
       "degenerescence": 0.0,
       "ecart": 0.8606060606060606,
-      "menteurs": 5,
       "n": 5,
       "preservation_declaree": 1.0,
       "preservation_verifiee": 0.1393939393939394,
@@ -23,9 +24,9 @@
     },
     {
       "cible_mots": 50,
+      "declarations_infondees": 5,
       "degenerescence": 0.0,
       "ecart": 0.9090909090909091,
-      "menteurs": 5,
       "n": 5,
       "preservation_declaree": 1.0,
       "preservation_verifiee": 0.09090909090909091,
@@ -33,37 +34,100 @@
     },
     {
       "cible_mots": 80,
+      "declarations_infondees": 5,
       "degenerescence": 0.0,
-      "ecart": 0.7178030303030303,
-      "menteurs": 4,
-      "n": 4,
+      "ecart": 0.7742424242424242,
+      "n": 5,
       "preservation_declaree": 1.0,
-      "preservation_verifiee": 0.2821969696969697,
+      "preservation_verifiee": 0.22575757575757577,
       "ratio_median": 2.623529411764706
     },
     {
       "cible_mots": 120,
+      "declarations_infondees": 6,
       "degenerescence": 0.0,
-      "ecart": 0.7742424242424242,
-      "menteurs": 5,
-      "n": 5,
+      "ecart": 0.8118686868686869,
+      "n": 6,
       "preservation_declaree": 1.0,
-      "preservation_verifiee": 0.22575757575757577,
-      "ratio_median": 2.608108108108108
+      "preservation_verifiee": 0.18813131313131315,
+      "ratio_median": 2.623529411764706
     },
     {
       "cible_mots": 200,
+      "declarations_infondees": 6,
       "degenerescence": 0.0,
-      "ecart": 0.7742424242424242,
-      "menteurs": 5,
-      "n": 5,
+      "ecart": 0.8118686868686869,
+      "n": 6,
       "preservation_declaree": 1.0,
-      "preservation_verifiee": 0.22575757575757577,
-      "ratio_median": 2.608108108108108
+      "preservation_verifiee": 0.18813131313131315,
+      "ratio_median": 2.623529411764706
+    }
+  ],
+  "paliers_servi": [
+    {
+      "cible_mots": 20,
+      "declarations_infondees": 0,
+      "degenerescence": 0.0,
+      "ecart": -0.10454545454545454,
+      "n": 5,
+      "preservation_declaree": 0.0,
+      "preservation_verifiee": 0.10454545454545454,
+      "ratio_median": 8.92
+    },
+    {
+      "cible_mots": 30,
+      "declarations_infondees": 0,
+      "degenerescence": 0.0,
+      "ecart": -0.1393939393939394,
+      "n": 5,
+      "preservation_declaree": 0.0,
+      "preservation_verifiee": 0.1393939393939394,
+      "ratio_median": 5.361111111111111
+    },
+    {
+      "cible_mots": 50,
+      "declarations_infondees": 0,
+      "degenerescence": 0.0,
+      "ecart": -0.19090909090909092,
+      "n": 5,
+      "preservation_declaree": 0.0,
+      "preservation_verifiee": 0.19090909090909092,
+      "ratio_median": 3.328358208955224
+    },
+    {
+      "cible_mots": 80,
+      "declarations_infondees": 0,
+      "degenerescence": 0.0,
+      "ecart": -0.18813131313131315,
+      "n": 6,
+      "preservation_declaree": 0.0,
+      "preservation_verifiee": 0.18813131313131315,
+      "ratio_median": 2.623529411764706
+    },
+    {
+      "cible_mots": 120,
+      "declarations_infondees": 0,
+      "degenerescence": 0.0,
+      "ecart": -0.18813131313131315,
+      "n": 6,
+      "preservation_declaree": 0.0,
+      "preservation_verifiee": 0.18813131313131315,
+      "ratio_median": 2.623529411764706
+    },
+    {
+      "cible_mots": 200,
+      "declarations_infondees": 0,
+      "degenerescence": 0.0,
+      "ecart": -0.18813131313131315,
+      "n": 6,
+      "preservation_declaree": 0.0,
+      "preservation_verifiee": 0.18813131313131315,
+      "ratio_median": 2.623529411764706
     }
   ],
   "points": [
     {
+      "bras": "Exige",
       "cible_mots": 200,
       "declarees_absentes": [
         "clause 7.3",
@@ -77,7 +141,7 @@
       "famille": "dense",
       "mots_resume": 79,
       "mots_source": 253,
-      "ms": 4348,
+      "ms": 4657,
       "perdues": [
         "clause 7.3",
         "Vertex Audit Partners",
@@ -91,6 +155,7 @@
       "stable": null
     },
     {
+      "bras": "Exige",
       "cible_mots": 200,
       "declarees_absentes": [
         "OP-3391",
@@ -104,7 +169,7 @@
       "famille": "dense",
       "mots_resume": 85,
       "mots_source": 223,
-      "ms": 3589,
+      "ms": 3675,
       "perdues": [
         "OP-3391",
         "87 400 EUR",
@@ -118,6 +183,31 @@
       "stable": null
     },
     {
+      "bras": "Exige",
+      "cible_mots": 200,
+      "declarees_absentes": [
+        "SCELLA-P3",
+        "2024-10-01",
+        "2024-09-12"
+      ],
+      "degenere": false,
+      "document": "diffus-1",
+      "famille": "diffus",
+      "mots_resume": 76,
+      "mots_source": 223,
+      "ms": 5825,
+      "perdues": [
+        "SCELLA-P3",
+        "2024-10-01",
+        "2024-09-12"
+      ],
+      "preservation_declaree": 1.0,
+      "preservation_verifiee": 0.0,
+      "ratio": 2.9342105263157894,
+      "stable": null
+    },
+    {
+      "bras": "Exige",
       "cible_mots": 200,
       "declarees_absentes": [
         "2024-07-04",
@@ -128,7 +218,7 @@
       "famille": "diffus",
       "mots_resume": 74,
       "mots_source": 193,
-      "ms": 2523,
+      "ms": 2635,
       "perdues": [
         "2024-07-04",
         "2025"
@@ -139,6 +229,7 @@
       "stable": null
     },
     {
+      "bras": "Exige",
       "cible_mots": 200,
       "declarees_absentes": [
         "ACME Metallurgie SA",
@@ -152,7 +243,7 @@
       "famille": "adverse",
       "mots_resume": 70,
       "mots_source": 181,
-      "ms": 3263,
+      "ms": 3348,
       "perdues": [
         "ACME Metallurgie SA",
         "SUP-2024-0417",
@@ -166,6 +257,7 @@
       "stable": null
     },
     {
+      "bras": "Exige",
       "cible_mots": 200,
       "declarees_absentes": [
         "Northline Composites Ltd",
@@ -180,7 +272,7 @@
       "famille": "adverse",
       "mots_resume": 74,
       "mots_source": 171,
-      "ms": 4525,
+      "ms": 4587,
       "perdues": [
         "Northline Composites Ltd",
         "Sheffield",
@@ -195,6 +287,7 @@
       "stable": null
     },
     {
+      "bras": "Exige",
       "cible_mots": 120,
       "declarees_absentes": [
         "clause 7.3",
@@ -208,7 +301,7 @@
       "famille": "dense",
       "mots_resume": 79,
       "mots_source": 253,
-      "ms": 4270,
+      "ms": 4162,
       "perdues": [
         "clause 7.3",
         "Vertex Audit Partners",
@@ -222,6 +315,7 @@
       "stable": null
     },
     {
+      "bras": "Exige",
       "cible_mots": 120,
       "declarees_absentes": [
         "OP-3391",
@@ -235,7 +329,7 @@
       "famille": "dense",
       "mots_resume": 85,
       "mots_source": 223,
-      "ms": 3227,
+      "ms": 3189,
       "perdues": [
         "OP-3391",
         "87 400 EUR",
@@ -249,6 +343,31 @@
       "stable": null
     },
     {
+      "bras": "Exige",
+      "cible_mots": 120,
+      "declarees_absentes": [
+        "SCELLA-P3",
+        "2024-10-01",
+        "2024-09-12"
+      ],
+      "degenere": false,
+      "document": "diffus-1",
+      "famille": "diffus",
+      "mots_resume": 76,
+      "mots_source": 223,
+      "ms": 5154,
+      "perdues": [
+        "SCELLA-P3",
+        "2024-10-01",
+        "2024-09-12"
+      ],
+      "preservation_declaree": 1.0,
+      "preservation_verifiee": 0.0,
+      "ratio": 2.9342105263157894,
+      "stable": null
+    },
+    {
+      "bras": "Exige",
       "cible_mots": 120,
       "declarees_absentes": [
         "2024-07-04",
@@ -259,7 +378,7 @@
       "famille": "diffus",
       "mots_resume": 74,
       "mots_source": 193,
-      "ms": 2517,
+      "ms": 2450,
       "perdues": [
         "2024-07-04",
         "2025"
@@ -270,6 +389,7 @@
       "stable": null
     },
     {
+      "bras": "Exige",
       "cible_mots": 120,
       "declarees_absentes": [
         "ACME Metallurgie SA",
@@ -283,7 +403,7 @@
       "famille": "adverse",
       "mots_resume": 70,
       "mots_source": 181,
-      "ms": 3093,
+      "ms": 3044,
       "perdues": [
         "ACME Metallurgie SA",
         "SUP-2024-0417",
@@ -297,6 +417,7 @@
       "stable": null
     },
     {
+      "bras": "Exige",
       "cible_mots": 120,
       "declarees_absentes": [
         "Northline Composites Ltd",
@@ -311,7 +432,7 @@
       "famille": "adverse",
       "mots_resume": 74,
       "mots_source": 171,
-      "ms": 4651,
+      "ms": 4578,
       "perdues": [
         "Northline Composites Ltd",
         "Sheffield",
@@ -326,6 +447,7 @@
       "stable": null
     },
     {
+      "bras": "Exige",
       "cible_mots": 80,
       "declarees_absentes": [
         "clause 7.3",
@@ -339,7 +461,7 @@
       "famille": "dense",
       "mots_resume": 79,
       "mots_source": 253,
-      "ms": 4241,
+      "ms": 4173,
       "perdues": [
         "clause 7.3",
         "Vertex Audit Partners",
@@ -353,6 +475,7 @@
       "stable": null
     },
     {
+      "bras": "Exige",
       "cible_mots": 80,
       "declarees_absentes": [
         "OP-3391",
@@ -366,7 +489,7 @@
       "famille": "dense",
       "mots_resume": 85,
       "mots_source": 223,
-      "ms": 3095,
+      "ms": 3063,
       "perdues": [
         "OP-3391",
         "87 400 EUR",
@@ -380,6 +503,31 @@
       "stable": null
     },
     {
+      "bras": "Exige",
+      "cible_mots": 80,
+      "declarees_absentes": [
+        "SCELLA-P3",
+        "2024-10-01",
+        "2024-09-12"
+      ],
+      "degenere": false,
+      "document": "diffus-1",
+      "famille": "diffus",
+      "mots_resume": 76,
+      "mots_source": 223,
+      "ms": 5151,
+      "perdues": [
+        "SCELLA-P3",
+        "2024-10-01",
+        "2024-09-12"
+      ],
+      "preservation_declaree": 1.0,
+      "preservation_verifiee": 0.0,
+      "ratio": 2.9342105263157894,
+      "stable": null
+    },
+    {
+      "bras": "Exige",
       "cible_mots": 80,
       "declarees_absentes": [
         "2024-07-04",
@@ -390,7 +538,7 @@
       "famille": "diffus",
       "mots_resume": 74,
       "mots_source": 193,
-      "ms": 2522,
+      "ms": 2452,
       "perdues": [
         "2024-07-04",
         "2025"
@@ -401,6 +549,7 @@
       "stable": null
     },
     {
+      "bras": "Exige",
       "cible_mots": 80,
       "declarees_absentes": [
         "ACME Metallurgie SA",
@@ -414,7 +563,7 @@
       "famille": "adverse",
       "mots_resume": 70,
       "mots_source": 181,
-      "ms": 3096,
+      "ms": 3038,
       "perdues": [
         "ACME Metallurgie SA",
         "SUP-2024-0417",
@@ -428,6 +577,7 @@
       "stable": null
     },
     {
+      "bras": "Exige",
       "cible_mots": 50,
       "declarees_absentes": [
         "P-118",
@@ -442,7 +592,7 @@
       "famille": "dense",
       "mots_resume": 67,
       "mots_source": 223,
-      "ms": 3308,
+      "ms": 3254,
       "perdues": [
         "P-118",
         "OP-3391",
@@ -457,6 +607,7 @@
       "stable": null
     },
     {
+      "bras": "Exige",
       "cible_mots": 50,
       "declarees_absentes": [
         "SCELLA-P3",
@@ -468,7 +619,7 @@
       "famille": "diffus",
       "mots_resume": 60,
       "mots_source": 223,
-      "ms": 1550,
+      "ms": 1526,
       "perdues": [
         "SCELLA-P3",
         "2024-10-01",
@@ -480,6 +631,7 @@
       "stable": true
     },
     {
+      "bras": "Exige",
       "cible_mots": 50,
       "declarees_absentes": [
         "2024-07-04",
@@ -490,7 +642,7 @@
       "famille": "diffus",
       "mots_resume": 61,
       "mots_source": 193,
-      "ms": 2297,
+      "ms": 2245,
       "perdues": [
         "2024-07-04",
         "2025"
@@ -501,6 +653,7 @@
       "stable": null
     },
     {
+      "bras": "Exige",
       "cible_mots": 50,
       "declarees_absentes": [
         "ACME Metallurgie SA",
@@ -514,7 +667,7 @@
       "famille": "adverse",
       "mots_resume": 56,
       "mots_source": 181,
-      "ms": 1740,
+      "ms": 1715,
       "perdues": [
         "ACME Metallurgie SA",
         "SUP-2024-0417",
@@ -528,6 +681,7 @@
       "stable": true
     },
     {
+      "bras": "Exige",
       "cible_mots": 50,
       "declarees_absentes": [
         "Northline Composites Ltd",
@@ -542,7 +696,7 @@
       "famille": "adverse",
       "mots_resume": 58,
       "mots_source": 171,
-      "ms": 1587,
+      "ms": 1556,
       "perdues": [
         "Northline Composites Ltd",
         "Sheffield",
@@ -557,6 +711,7 @@
       "stable": null
     },
     {
+      "bras": "Exige",
       "cible_mots": 30,
       "declarees_absentes": [
         "1 240 000 EUR",
@@ -573,7 +728,7 @@
       "famille": "dense",
       "mots_resume": 33,
       "mots_source": 253,
-      "ms": 2761,
+      "ms": 2704,
       "perdues": [
         "1 240 000 EUR",
         "ISO 14001",
@@ -590,6 +745,7 @@
       "stable": null
     },
     {
+      "bras": "Exige",
       "cible_mots": 30,
       "declarees_absentes": [
         "clause 9.4",
@@ -605,7 +761,7 @@
       "famille": "dense",
       "mots_resume": 36,
       "mots_source": 223,
-      "ms": 2077,
+      "ms": 2045,
       "perdues": [
         "clause 9.4",
         "P-118",
@@ -621,6 +777,7 @@
       "stable": null
     },
     {
+      "bras": "Exige",
       "cible_mots": 30,
       "declarees_absentes": [
         "SCELLA-P3",
@@ -632,7 +789,7 @@
       "famille": "diffus",
       "mots_resume": 36,
       "mots_source": 223,
-      "ms": 2528,
+      "ms": 2505,
       "perdues": [
         "SCELLA-P3",
         "2024-10-01",
@@ -644,6 +801,7 @@
       "stable": null
     },
     {
+      "bras": "Exige",
       "cible_mots": 30,
       "declarees_absentes": [
         "ACME Metallurgie SA",
@@ -657,7 +815,7 @@
       "famille": "adverse",
       "mots_resume": 34,
       "mots_source": 181,
-      "ms": 1904,
+      "ms": 1875,
       "perdues": [
         "ACME Metallurgie SA",
         "SUP-2024-0417",
@@ -671,6 +829,7 @@
       "stable": null
     },
     {
+      "bras": "Exige",
       "cible_mots": 30,
       "declarees_absentes": [
         "Northline Composites Ltd",
@@ -685,7 +844,7 @@
       "famille": "adverse",
       "mots_resume": 37,
       "mots_source": 171,
-      "ms": 1723,
+      "ms": 1705,
       "perdues": [
         "Northline Composites Ltd",
         "Sheffield",
@@ -700,6 +859,7 @@
       "stable": null
     },
     {
+      "bras": "Exige",
       "cible_mots": 20,
       "declarees_absentes": [
         "FR-88231904",
@@ -717,7 +877,7 @@
       "famille": "dense",
       "mots_resume": 22,
       "mots_source": 253,
-      "ms": 2544,
+      "ms": 2521,
       "perdues": [
         "FR-88231904",
         "1 240 000 EUR",
@@ -735,6 +895,7 @@
       "stable": null
     },
     {
+      "bras": "Exige",
       "cible_mots": 20,
       "declarees_absentes": [
         "0,42 mm",
@@ -751,7 +912,7 @@
       "famille": "dense",
       "mots_resume": 22,
       "mots_source": 223,
-      "ms": 2638,
+      "ms": 2594,
       "perdues": [
         "0,42 mm",
         "clause 9.4",
@@ -768,6 +929,7 @@
       "stable": null
     },
     {
+      "bras": "Exige",
       "cible_mots": 20,
       "declarees_absentes": [
         "SCELLA-P3",
@@ -779,7 +941,7 @@
       "famille": "diffus",
       "mots_resume": 25,
       "mots_source": 223,
-      "ms": 1164,
+      "ms": 1151,
       "perdues": [
         "SCELLA-P3",
         "2024-10-01",
@@ -791,6 +953,7 @@
       "stable": null
     },
     {
+      "bras": "Exige",
       "cible_mots": 20,
       "declarees_absentes": [
         "2024-07-04",
@@ -801,7 +964,7 @@
       "famille": "diffus",
       "mots_resume": 25,
       "mots_source": 193,
-      "ms": 1562,
+      "ms": 1736,
       "perdues": [
         "2024-07-04",
         "2025"
@@ -812,6 +975,7 @@
       "stable": null
     },
     {
+      "bras": "Exige",
       "cible_mots": 20,
       "declarees_absentes": [
         "ACME Metallurgie SA",
@@ -825,7 +989,7 @@
       "famille": "adverse",
       "mots_resume": 23,
       "mots_source": 181,
-      "ms": 1681,
+      "ms": 1656,
       "perdues": [
         "ACME Metallurgie SA",
         "SUP-2024-0417",
@@ -837,12 +1001,733 @@
       "preservation_verifiee": 0.0,
       "ratio": 7.869565217391305,
       "stable": null
+    },
+    {
+      "bras": "Servi",
+      "cible_mots": 200,
+      "declarees_absentes": [],
+      "degenere": false,
+      "document": "dense-1",
+      "famille": "dense",
+      "mots_resume": 79,
+      "mots_source": 253,
+      "ms": 1721,
+      "perdues": [
+        "clause 7.3",
+        "Vertex Audit Partners",
+        "clause 12.1",
+        "46 000 EUR",
+        "2025-03-11"
+      ],
+      "preservation_declaree": 0.0,
+      "preservation_verifiee": 0.5833333333333334,
+      "ratio": 3.2025316455696204,
+      "stable": null
+    },
+    {
+      "bras": "Servi",
+      "cible_mots": 200,
+      "declarees_absentes": [],
+      "degenere": false,
+      "document": "dense-2",
+      "famille": "dense",
+      "mots_resume": 85,
+      "mots_source": 223,
+      "ms": 2201,
+      "perdues": [
+        "OP-3391",
+        "87 400 EUR",
+        "AV-2024-0311",
+        "2024-06-30",
+        "2025-01-15"
+      ],
+      "preservation_declaree": 0.0,
+      "preservation_verifiee": 0.5454545454545454,
+      "ratio": 2.623529411764706,
+      "stable": null
+    },
+    {
+      "bras": "Servi",
+      "cible_mots": 200,
+      "declarees_absentes": [],
+      "degenere": false,
+      "document": "diffus-1",
+      "famille": "diffus",
+      "mots_resume": 76,
+      "mots_source": 223,
+      "ms": 2791,
+      "perdues": [
+        "SCELLA-P3",
+        "2024-10-01",
+        "2024-09-12"
+      ],
+      "preservation_declaree": 0.0,
+      "preservation_verifiee": 0.0,
+      "ratio": 2.9342105263157894,
+      "stable": null
+    },
+    {
+      "bras": "Servi",
+      "cible_mots": 200,
+      "declarees_absentes": [],
+      "degenere": false,
+      "document": "diffus-2",
+      "famille": "diffus",
+      "mots_resume": 74,
+      "mots_source": 193,
+      "ms": 1977,
+      "perdues": [
+        "2024-07-04",
+        "2025"
+      ],
+      "preservation_declaree": 0.0,
+      "preservation_verifiee": 0.0,
+      "ratio": 2.608108108108108,
+      "stable": null
+    },
+    {
+      "bras": "Servi",
+      "cible_mots": 200,
+      "declarees_absentes": [],
+      "degenere": false,
+      "document": "adverse-1",
+      "famille": "adverse",
+      "mots_resume": 71,
+      "mots_source": 181,
+      "ms": 1416,
+      "perdues": [
+        "ACME Metallurgie SA",
+        "SUP-2024-0417",
+        "2025-01-06",
+        "2026-01-06",
+        "1 500 000 EUR"
+      ],
+      "preservation_declaree": 0.0,
+      "preservation_verifiee": 0.0,
+      "ratio": 2.5492957746478875,
+      "stable": null
+    },
+    {
+      "bras": "Servi",
+      "cible_mots": 200,
+      "declarees_absentes": [],
+      "degenere": false,
+      "document": "adverse-2",
+      "famille": "adverse",
+      "mots_resume": 74,
+      "mots_source": 171,
+      "ms": 1358,
+      "perdues": [
+        "Northline Composites Ltd",
+        "Sheffield",
+        "2024-11-19",
+        "Vertex Audit Partners",
+        "AUD-2024-0781",
+        "2024-12-20"
+      ],
+      "preservation_declaree": 0.0,
+      "preservation_verifiee": 0.0,
+      "ratio": 2.310810810810811,
+      "stable": null
+    },
+    {
+      "bras": "Servi",
+      "cible_mots": 120,
+      "declarees_absentes": [],
+      "degenere": false,
+      "document": "dense-1",
+      "famille": "dense",
+      "mots_resume": 79,
+      "mots_source": 253,
+      "ms": 1753,
+      "perdues": [
+        "clause 7.3",
+        "Vertex Audit Partners",
+        "clause 12.1",
+        "46 000 EUR",
+        "2025-03-11"
+      ],
+      "preservation_declaree": 0.0,
+      "preservation_verifiee": 0.5833333333333334,
+      "ratio": 3.2025316455696204,
+      "stable": null
+    },
+    {
+      "bras": "Servi",
+      "cible_mots": 120,
+      "declarees_absentes": [],
+      "degenere": false,
+      "document": "dense-2",
+      "famille": "dense",
+      "mots_resume": 85,
+      "mots_source": 223,
+      "ms": 1641,
+      "perdues": [
+        "OP-3391",
+        "87 400 EUR",
+        "AV-2024-0311",
+        "2024-06-30",
+        "2025-01-15"
+      ],
+      "preservation_declaree": 0.0,
+      "preservation_verifiee": 0.5454545454545454,
+      "ratio": 2.623529411764706,
+      "stable": null
+    },
+    {
+      "bras": "Servi",
+      "cible_mots": 120,
+      "declarees_absentes": [],
+      "degenere": false,
+      "document": "diffus-1",
+      "famille": "diffus",
+      "mots_resume": 76,
+      "mots_source": 223,
+      "ms": 2186,
+      "perdues": [
+        "SCELLA-P3",
+        "2024-10-01",
+        "2024-09-12"
+      ],
+      "preservation_declaree": 0.0,
+      "preservation_verifiee": 0.0,
+      "ratio": 2.9342105263157894,
+      "stable": null
+    },
+    {
+      "bras": "Servi",
+      "cible_mots": 120,
+      "declarees_absentes": [],
+      "degenere": false,
+      "document": "diffus-2",
+      "famille": "diffus",
+      "mots_resume": 74,
+      "mots_source": 193,
+      "ms": 4152,
+      "perdues": [
+        "2024-07-04",
+        "2025"
+      ],
+      "preservation_declaree": 0.0,
+      "preservation_verifiee": 0.0,
+      "ratio": 2.608108108108108,
+      "stable": null
+    },
+    {
+      "bras": "Servi",
+      "cible_mots": 120,
+      "declarees_absentes": [],
+      "degenere": false,
+      "document": "adverse-1",
+      "famille": "adverse",
+      "mots_resume": 71,
+      "mots_source": 181,
+      "ms": 2003,
+      "perdues": [
+        "ACME Metallurgie SA",
+        "SUP-2024-0417",
+        "2025-01-06",
+        "2026-01-06",
+        "1 500 000 EUR"
+      ],
+      "preservation_declaree": 0.0,
+      "preservation_verifiee": 0.0,
+      "ratio": 2.5492957746478875,
+      "stable": null
+    },
+    {
+      "bras": "Servi",
+      "cible_mots": 120,
+      "declarees_absentes": [],
+      "degenere": false,
+      "document": "adverse-2",
+      "famille": "adverse",
+      "mots_resume": 74,
+      "mots_source": 171,
+      "ms": 1345,
+      "perdues": [
+        "Northline Composites Ltd",
+        "Sheffield",
+        "2024-11-19",
+        "Vertex Audit Partners",
+        "AUD-2024-0781",
+        "2024-12-20"
+      ],
+      "preservation_declaree": 0.0,
+      "preservation_verifiee": 0.0,
+      "ratio": 2.310810810810811,
+      "stable": null
+    },
+    {
+      "bras": "Servi",
+      "cible_mots": 80,
+      "declarees_absentes": [],
+      "degenere": false,
+      "document": "dense-1",
+      "famille": "dense",
+      "mots_resume": 79,
+      "mots_source": 253,
+      "ms": 1702,
+      "perdues": [
+        "clause 7.3",
+        "Vertex Audit Partners",
+        "clause 12.1",
+        "46 000 EUR",
+        "2025-03-11"
+      ],
+      "preservation_declaree": 0.0,
+      "preservation_verifiee": 0.5833333333333334,
+      "ratio": 3.2025316455696204,
+      "stable": null
+    },
+    {
+      "bras": "Servi",
+      "cible_mots": 80,
+      "declarees_absentes": [],
+      "degenere": false,
+      "document": "dense-2",
+      "famille": "dense",
+      "mots_resume": 85,
+      "mots_source": 223,
+      "ms": 1657,
+      "perdues": [
+        "OP-3391",
+        "87 400 EUR",
+        "AV-2024-0311",
+        "2024-06-30",
+        "2025-01-15"
+      ],
+      "preservation_declaree": 0.0,
+      "preservation_verifiee": 0.5454545454545454,
+      "ratio": 2.623529411764706,
+      "stable": null
+    },
+    {
+      "bras": "Servi",
+      "cible_mots": 80,
+      "declarees_absentes": [],
+      "degenere": false,
+      "document": "diffus-1",
+      "famille": "diffus",
+      "mots_resume": 76,
+      "mots_source": 223,
+      "ms": 2197,
+      "perdues": [
+        "SCELLA-P3",
+        "2024-10-01",
+        "2024-09-12"
+      ],
+      "preservation_declaree": 0.0,
+      "preservation_verifiee": 0.0,
+      "ratio": 2.9342105263157894,
+      "stable": null
+    },
+    {
+      "bras": "Servi",
+      "cible_mots": 80,
+      "declarees_absentes": [],
+      "degenere": false,
+      "document": "diffus-2",
+      "famille": "diffus",
+      "mots_resume": 74,
+      "mots_source": 193,
+      "ms": 1939,
+      "perdues": [
+        "2024-07-04",
+        "2025"
+      ],
+      "preservation_declaree": 0.0,
+      "preservation_verifiee": 0.0,
+      "ratio": 2.608108108108108,
+      "stable": null
+    },
+    {
+      "bras": "Servi",
+      "cible_mots": 80,
+      "declarees_absentes": [],
+      "degenere": false,
+      "document": "adverse-1",
+      "famille": "adverse",
+      "mots_resume": 71,
+      "mots_source": 181,
+      "ms": 1732,
+      "perdues": [
+        "ACME Metallurgie SA",
+        "SUP-2024-0417",
+        "2025-01-06",
+        "2026-01-06",
+        "1 500 000 EUR"
+      ],
+      "preservation_declaree": 0.0,
+      "preservation_verifiee": 0.0,
+      "ratio": 2.5492957746478875,
+      "stable": null
+    },
+    {
+      "bras": "Servi",
+      "cible_mots": 80,
+      "declarees_absentes": [],
+      "degenere": false,
+      "document": "adverse-2",
+      "famille": "adverse",
+      "mots_resume": 74,
+      "mots_source": 171,
+      "ms": 1357,
+      "perdues": [
+        "Northline Composites Ltd",
+        "Sheffield",
+        "2024-11-19",
+        "Vertex Audit Partners",
+        "AUD-2024-0781",
+        "2024-12-20"
+      ],
+      "preservation_declaree": 0.0,
+      "preservation_verifiee": 0.0,
+      "ratio": 2.310810810810811,
+      "stable": null
+    },
+    {
+      "bras": "Servi",
+      "cible_mots": 50,
+      "declarees_absentes": [],
+      "degenere": false,
+      "document": "dense-1",
+      "famille": "dense",
+      "mots_resume": 62,
+      "mots_source": 253,
+      "ms": 1407,
+      "perdues": [
+        "2026-11-02",
+        "clause 7.3",
+        "Vertex Audit Partners",
+        "clause 12.1",
+        "46 000 EUR",
+        "2025-03-11"
+      ],
+      "preservation_declaree": 0.0,
+      "preservation_verifiee": 0.5,
+      "ratio": 4.080645161290323,
+      "stable": true
+    },
+    {
+      "bras": "Servi",
+      "cible_mots": 50,
+      "declarees_absentes": [],
+      "degenere": false,
+      "document": "dense-2",
+      "famille": "dense",
+      "mots_resume": 67,
+      "mots_source": 223,
+      "ms": 1484,
+      "perdues": [
+        "P-118",
+        "OP-3391",
+        "87 400 EUR",
+        "AV-2024-0311",
+        "2024-06-30",
+        "2025-01-15"
+      ],
+      "preservation_declaree": 0.0,
+      "preservation_verifiee": 0.45454545454545453,
+      "ratio": 3.328358208955224,
+      "stable": null
+    },
+    {
+      "bras": "Servi",
+      "cible_mots": 50,
+      "declarees_absentes": [],
+      "degenere": false,
+      "document": "diffus-1",
+      "famille": "diffus",
+      "mots_resume": 60,
+      "mots_source": 223,
+      "ms": 1954,
+      "perdues": [
+        "SCELLA-P3",
+        "2024-10-01",
+        "2024-09-12"
+      ],
+      "preservation_declaree": 0.0,
+      "preservation_verifiee": 0.0,
+      "ratio": 3.716666666666667,
+      "stable": true
+    },
+    {
+      "bras": "Servi",
+      "cible_mots": 50,
+      "declarees_absentes": [],
+      "degenere": false,
+      "document": "adverse-1",
+      "famille": "adverse",
+      "mots_resume": 57,
+      "mots_source": 181,
+      "ms": 1280,
+      "perdues": [
+        "ACME Metallurgie SA",
+        "SUP-2024-0417",
+        "2025-01-06",
+        "2026-01-06",
+        "1 500 000 EUR"
+      ],
+      "preservation_declaree": 0.0,
+      "preservation_verifiee": 0.0,
+      "ratio": 3.175438596491228,
+      "stable": true
+    },
+    {
+      "bras": "Servi",
+      "cible_mots": 50,
+      "declarees_absentes": [],
+      "degenere": false,
+      "document": "adverse-2",
+      "famille": "adverse",
+      "mots_resume": 58,
+      "mots_source": 171,
+      "ms": 1171,
+      "perdues": [
+        "Northline Composites Ltd",
+        "Sheffield",
+        "2024-11-19",
+        "Vertex Audit Partners",
+        "AUD-2024-0781",
+        "2024-12-20"
+      ],
+      "preservation_declaree": 0.0,
+      "preservation_verifiee": 0.0,
+      "ratio": 2.9482758620689653,
+      "stable": null
+    },
+    {
+      "bras": "Servi",
+      "cible_mots": 30,
+      "declarees_absentes": [],
+      "degenere": false,
+      "document": "dense-1",
+      "famille": "dense",
+      "mots_resume": 33,
+      "mots_source": 253,
+      "ms": 2107,
+      "perdues": [
+        "1 240 000 EUR",
+        "ISO 14001",
+        "2026-11-02",
+        "clause 7.3",
+        "Vertex Audit Partners",
+        "clause 12.1",
+        "46 000 EUR",
+        "2025-03-11"
+      ],
+      "preservation_declaree": 0.0,
+      "preservation_verifiee": 0.3333333333333333,
+      "ratio": 7.666666666666667,
+      "stable": null
+    },
+    {
+      "bras": "Servi",
+      "cible_mots": 30,
+      "declarees_absentes": [],
+      "degenere": false,
+      "document": "dense-2",
+      "famille": "dense",
+      "mots_resume": 36,
+      "mots_source": 223,
+      "ms": 2897,
+      "perdues": [
+        "clause 9.4",
+        "P-118",
+        "OP-3391",
+        "87 400 EUR",
+        "AV-2024-0311",
+        "2024-06-30",
+        "2025-01-15"
+      ],
+      "preservation_declaree": 0.0,
+      "preservation_verifiee": 0.36363636363636365,
+      "ratio": 6.194444444444445,
+      "stable": null
+    },
+    {
+      "bras": "Servi",
+      "cible_mots": 30,
+      "declarees_absentes": [],
+      "degenere": false,
+      "document": "diffus-2",
+      "famille": "diffus",
+      "mots_resume": 36,
+      "mots_source": 193,
+      "ms": 1763,
+      "perdues": [
+        "2024-07-04",
+        "2025"
+      ],
+      "preservation_declaree": 0.0,
+      "preservation_verifiee": 0.0,
+      "ratio": 5.361111111111111,
+      "stable": null
+    },
+    {
+      "bras": "Servi",
+      "cible_mots": 30,
+      "declarees_absentes": [],
+      "degenere": false,
+      "document": "adverse-1",
+      "famille": "adverse",
+      "mots_resume": 36,
+      "mots_source": 181,
+      "ms": 893,
+      "perdues": [
+        "ACME Metallurgie SA",
+        "SUP-2024-0417",
+        "2025-01-06",
+        "2026-01-06",
+        "1 500 000 EUR"
+      ],
+      "preservation_declaree": 0.0,
+      "preservation_verifiee": 0.0,
+      "ratio": 5.027777777777778,
+      "stable": null
+    },
+    {
+      "bras": "Servi",
+      "cible_mots": 30,
+      "declarees_absentes": [],
+      "degenere": false,
+      "document": "adverse-2",
+      "famille": "adverse",
+      "mots_resume": 36,
+      "mots_source": 171,
+      "ms": 2069,
+      "perdues": [
+        "Northline Composites Ltd",
+        "Sheffield",
+        "2024-11-19",
+        "Vertex Audit Partners",
+        "AUD-2024-0781",
+        "2024-12-20"
+      ],
+      "preservation_declaree": 0.0,
+      "preservation_verifiee": 0.0,
+      "ratio": 4.75,
+      "stable": null
+    },
+    {
+      "bras": "Servi",
+      "cible_mots": 20,
+      "declarees_absentes": [],
+      "degenere": false,
+      "document": "dense-1",
+      "famille": "dense",
+      "mots_resume": 22,
+      "mots_source": 253,
+      "ms": 1285,
+      "perdues": [
+        "FR-88231904",
+        "1 240 000 EUR",
+        "ISO 14001",
+        "2026-11-02",
+        "clause 7.3",
+        "Vertex Audit Partners",
+        "clause 12.1",
+        "46 000 EUR",
+        "2025-03-11"
+      ],
+      "preservation_declaree": 0.0,
+      "preservation_verifiee": 0.25,
+      "ratio": 11.5,
+      "stable": null
+    },
+    {
+      "bras": "Servi",
+      "cible_mots": 20,
+      "declarees_absentes": [],
+      "degenere": false,
+      "document": "dense-2",
+      "famille": "dense",
+      "mots_resume": 22,
+      "mots_source": 223,
+      "ms": 782,
+      "perdues": [
+        "0,42 mm",
+        "clause 9.4",
+        "P-118",
+        "OP-3391",
+        "87 400 EUR",
+        "AV-2024-0311",
+        "2024-06-30",
+        "2025-01-15"
+      ],
+      "preservation_declaree": 0.0,
+      "preservation_verifiee": 0.2727272727272727,
+      "ratio": 10.136363636363637,
+      "stable": null
+    },
+    {
+      "bras": "Servi",
+      "cible_mots": 20,
+      "declarees_absentes": [],
+      "degenere": false,
+      "document": "diffus-1",
+      "famille": "diffus",
+      "mots_resume": 25,
+      "mots_source": 223,
+      "ms": 1766,
+      "perdues": [
+        "SCELLA-P3",
+        "2024-10-01",
+        "2024-09-12"
+      ],
+      "preservation_declaree": 0.0,
+      "preservation_verifiee": 0.0,
+      "ratio": 8.92,
+      "stable": null
+    },
+    {
+      "bras": "Servi",
+      "cible_mots": 20,
+      "declarees_absentes": [],
+      "degenere": false,
+      "document": "diffus-2",
+      "famille": "diffus",
+      "mots_resume": 25,
+      "mots_source": 193,
+      "ms": 716,
+      "perdues": [
+        "2024-07-04",
+        "2025"
+      ],
+      "preservation_declaree": 0.0,
+      "preservation_verifiee": 0.0,
+      "ratio": 7.72,
+      "stable": null
+    },
+    {
+      "bras": "Servi",
+      "cible_mots": 20,
+      "declarees_absentes": [],
+      "degenere": false,
+      "document": "adverse-1",
+      "famille": "adverse",
+      "mots_resume": 23,
+      "mots_source": 181,
+      "ms": 2400,
+      "perdues": [
+        "ACME Metallurgie SA",
+        "SUP-2024-0417",
+        "2025-01-06",
+        "2026-01-06",
+        "1 500 000 EUR"
+      ],
+      "preservation_declaree": 0.0,
+      "preservation_verifiee": 0.0,
+      "ratio": 7.869565217391305,
+      "stable": null
     }
   ],
+  "temperature": 0.0,
   "verdict": {
     "Tue": {
       "raisons": [
-        "29 mesure(s) où le compresseur DÉCLARE préserver une entité absente du résumé — `validate_preservation` compare à la liste déclarée, jamais au texte : elle ne peut pas voir cela, et le pipeline scellerait la garantie",
+        "32 mesure(s) où la liste `preserved` porte une entité ABSENTE du résumé. Ce n'est pas une tromperie — la mesure des deux bras montre que le modèle recopie la demande — mais l'effet est le même et il est fatal : `validate_preservation` ne lit que cette liste, jamais le texte, donc elle ne peut pas détecter la perte, et le pipeline scellerait la garantie",
         "préservation vérifiée 10.5 % au ratio revendiqué 8.9:1 (exigé 99 %) — dans un produit de preuve, une entité perdue est une falsification scellée"
       ]
     }

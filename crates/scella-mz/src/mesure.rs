@@ -23,6 +23,35 @@
 use serde::{Deserialize, Serialize};
 
 use crate::corpus::Famille;
+
+/// Le **bras** d'une mesure — et la distinction est la correction majeure de la v2.
+///
+/// La v1 ne mesurait que `Exige`, en croyant mesurer le compresseur. Or ce bras n'est **pas** celui
+/// que le service exécute : les deux sites de production passent `must_preserve: vec![]`. On
+/// mesurait donc une configuration hypothétique, et le filtre du client (`validate_preservation`,
+/// qui rejette l'appel quand la liste déclarée ne couvre pas l'exigence) écartait au passage les
+/// réponses où le modèle **avoue** une omission — ne laissant passer que celles qui
+/// déclarent tout avoir gardé.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Bras {
+    /// `must_preserve` = les entités. Le filtre du client est **actif** : il rejette l'appel si la
+    /// liste déclarée ne les couvre pas. C'est la promesse du contrat, éprouvée.
+    Exige,
+    /// `must_preserve` = `vec![]` — **la configuration réellement servie**. Le filtre est vacant
+    /// (une boucle sur une liste vide), donc rien n'est rejeté, et la vérification indépendante de
+    /// MZ est le SEUL contrôle qui subsiste. C'est ce que le pipeline obtient aujourd'hui.
+    Servi,
+}
+
+impl Bras {
+    #[must_use]
+    pub fn code(self) -> &'static str {
+        match self {
+            Bras::Exige => "exige",
+            Bras::Servi => "servi",
+        }
+    }
+}
 use crate::verifieur::Taux;
 
 /// Le ratio que le compresseur **revendique** au bas de sa fourchette (`8:1 à 12:1`).
@@ -40,6 +69,7 @@ pub const DEGENERESCENCE_MAX: f64 = 0.01;
 /// Une mesure : un document, une cible de compression.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Point {
+    pub bras: Bras,
     pub document: String,
     pub famille: String,
     pub cible_mots: u32,
@@ -53,7 +83,7 @@ pub struct Point {
     /// tombe est la moitié du diagnostic.
     pub perdues: Vec<String>,
     /// Ce que le compresseur a déclaré préserver sans que ce soit dans le résumé. **La quantité
-    /// centrale** : elle mesure le mensonge, pas la perte.
+    /// centrale** : elle mesure l'écart entre la DÉCLARATION et le texte, pas la perte.
     pub declarees_absentes: Vec<String>,
     pub degenere: bool,
     pub ms: u64,
@@ -64,7 +94,9 @@ pub struct Point {
 impl Point {
     /// Construit une mesure à partir des deux taux et du résumé.
     #[must_use]
+    #[allow(clippy::too_many_arguments)]
     pub fn nouveau(
+        bras: Bras,
         document: &str,
         famille: Famille,
         cible_mots: u32,
@@ -87,6 +119,7 @@ impl Point {
             .cloned()
             .collect();
         Point {
+            bras,
             document: document.to_string(),
             famille: famille.code().to_string(),
             cible_mots,
@@ -103,9 +136,19 @@ impl Point {
         }
     }
 
-    /// Le compresseur a-t-il affirmé préserver ce qu'il n'a pas préservé ?
+    /// La déclaration du compresseur porte-t-elle une entité **absente du résumé** ?
+    ///
+    /// ⚠ Ce champ s'est d'abord appelé `ment()`, et c'était une erreur de nommage : la mesure des
+    /// deux bras a montré que le modèle **n'invente rien**. Quand on lui demande X il déclare
+    /// « j'ai gardé X », quand on ne demande rien il déclare 0 % — il RECOPIE la demande, ce qui
+    /// est une obéissance, pas une tromperie.
+    ///
+    /// Le défaut observable est le même et reste fatal : `preserved` ne rapporte pas la réalité,
+    /// donc `validate_preservation` — qui ne lit que lui — ne peut pas détecter une perte, et le
+    /// pipeline scellerait la garantie. Mais un nom doit décrire l'observable, jamais une intention
+    /// inférée : la mesure porterait sinon une accusation que les chiffres ne soutiennent pas.
     #[must_use]
-    pub fn ment(&self) -> bool {
+    pub fn declaration_infondee(&self) -> bool {
         !self.declarees_absentes.is_empty()
     }
 }
@@ -121,7 +164,16 @@ pub struct Palier {
     /// `déclarée − vérifiée`. **Non nul ⟹ la garantie est décorative.**
     pub ecart: f64,
     pub degenerescence: f64,
-    pub menteurs: usize,
+    pub declarations_infondees: usize,
+}
+
+/// Agrège les points **d'un bras** par cible de compression.
+///
+/// Mélanger les bras produirait une moyenne qui ne décrit aucune configuration réelle.
+#[must_use]
+pub fn paliers_du_bras(points: &[Point], bras: Bras) -> Vec<Palier> {
+    let lot: Vec<Point> = points.iter().filter(|p| p.bras == bras).cloned().collect();
+    paliers(&lot)
 }
 
 /// Agrège les points par cible de compression.
@@ -162,7 +214,7 @@ pub fn paliers(points: &[Point]) -> Vec<Palier> {
                 preservation_verifiee: v,
                 ecart: d - v,
                 degenerescence: moy(&|p| if p.degenere { 1.0 } else { 0.0 }),
-                menteurs: lot.iter().filter(|p| p.ment()).count(),
+                declarations_infondees: lot.iter().filter(|p| p.declaration_infondee()).count(),
             }
         })
         .collect()
@@ -200,6 +252,30 @@ pub enum Verdict {
     Indecidable { pourquoi: String },
 }
 
+impl Verdict {
+    /// Deux verdicts portent-ils la **même issue** ?
+    ///
+    /// La coupure : le *nombre* de raisons est de la mesure — une raison qui apparaît ou disparaît
+    /// change ce que MZ constate. La *formulation* d'une raison est du rendu — la reformuler ne
+    /// change rien à ce qui a été mesuré.
+    ///
+    /// Sans cette distinction, `--rendre` tomberait à chaque correction de prose : un garde qui
+    /// crie pour rien est la manière dont un vrai signal finit par être ignoré.
+    #[must_use]
+    pub fn meme_issue(&self, autre: &Verdict) -> bool {
+        match (self, autre) {
+            (Verdict::Tue { raisons: a }, Verdict::Tue { raisons: b }) => a.len() == b.len(),
+            (
+                Verdict::Declasse { plafond: pa, revendique: ra },
+                Verdict::Declasse { plafond: pb, revendique: rb },
+            ) => (pa - pb).abs() < 1e-9 && (ra - rb).abs() < 1e-9,
+            (Verdict::Sauve { plafond: a }, Verdict::Sauve { plafond: b }) => (a - b).abs() < 1e-9,
+            (Verdict::Indecidable { .. }, Verdict::Indecidable { .. }) => true,
+            _ => false,
+        }
+    }
+}
+
 /// Rend le verdict. **Pur** : testable sans modèle, donc relisible.
 #[must_use]
 pub fn verdict(paliers: &[Palier]) -> Verdict {
@@ -209,17 +285,19 @@ pub fn verdict(paliers: &[Palier]) -> Verdict {
 
     let mut raisons = Vec::new();
 
-    // ── (1) Le mensonge. Il tue à n'importe quel palier, et sans condition de ratio. ──
+    // ── (1) La déclaration infondée. Elle tue à tout palier, sans condition de ratio. ──
     //
-    // Un compresseur qui affirme préserver ce qu'il n'a pas préservé rend `validate_preservation`
+    // Une liste `preserved` qui porte une entité absente du résumé rend `validate_preservation`
     // décorative — et le pipeline SCELLERAIT cette garantie. Aucune valeur de ratio ne rachète
-    // cela : ce n'est pas une perte de qualité, c'est une fausse déclaration.
-    let menteurs: usize = paliers.iter().map(|p| p.menteurs).sum();
-    if menteurs > 0 {
+    // cela : ce n'est pas une perte de qualité, c'est une garantie qui ne garantit rien.
+    let infondees: usize = paliers.iter().map(|p| p.declarations_infondees).sum();
+    if infondees > 0 {
         raisons.push(format!(
-            "{menteurs} mesure(s) où le compresseur DÉCLARE préserver une entité absente du résumé \
-             — `validate_preservation` compare à la liste déclarée, jamais au texte : elle ne peut \
-             pas voir cela, et le pipeline scellerait la garantie"
+            "{infondees} mesure(s) où la liste `preserved` porte une entité ABSENTE du résumé. Ce \
+             n'est pas une tromperie — la mesure des deux bras montre que le modèle recopie la \
+             demande — mais l'effet est le même et il est fatal : `validate_preservation` ne lit \
+             que cette liste, jamais le texte, donc elle ne peut pas détecter la perte, et le \
+             pipeline scellerait la garantie"
         ));
     }
 
@@ -303,7 +381,7 @@ impl Verdict {
 mod tests {
     use super::*;
 
-    fn palier(cible: u32, ratio: f64, decl: f64, verif: f64, degen: f64, menteurs: usize) -> Palier {
+    fn palier(cible: u32, ratio: f64, decl: f64, verif: f64, degen: f64, declarations_infondees: usize) -> Palier {
         Palier {
             cible_mots: cible,
             n: 6,
@@ -312,7 +390,47 @@ mod tests {
             preservation_verifiee: verif,
             ecart: decl - verif,
             degenerescence: degen,
-            menteurs,
+            declarations_infondees,
+        }
+    }
+
+    /// MZ reproduit deux valeurs du client parce qu'elles sont privées : la température par défaut
+    /// et le détecteur de dégénérescence. Si l'une dérive, les deux mesureraient des choses
+    /// différentes en le disant pareil.
+    #[test]
+    fn la_temperature_par_defaut_reste_celle_du_client() {
+        let client = std::fs::read_to_string(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../efe-nano-app-coordinator/src/clients/compressor.rs"
+        ))
+        .expect("le client est lisible");
+        let i = client.find("fn compressor_temperature").expect("la fonction existe");
+        let corps = &client[i..i + 400];
+        assert!(
+            corps.contains("0.0"),
+            "le défaut du client n'est plus 0.0 : MZ le reproduit et doit suivre, sinon les deux \
+             mesurent des choses différentes en le disant pareil"
+        );
+        let mz = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"))
+            .expect("main.rs");
+        assert!(mz.contains("TEMPERATURE_DEFAUT: f32 = 0.0"), "et MZ doit poser la même");
+    }
+
+    /// Le bras `Servi` doit reproduire EXACTEMENT ce que le pipeline passe. Si les sites de
+    /// production cessaient de passer `vec![]`, ce bras ne décrirait plus rien de réel.
+    #[test]
+    fn le_bras_servi_reproduit_la_configuration_reelle_du_pipeline() {
+        for site in ["mission_a.rs", "mission_b.rs"] {
+            let src = std::fs::read_to_string(format!(
+                "{}/../efe-coordinator/src/workflows/{site}",
+                env!("CARGO_MANIFEST_DIR")
+            ))
+            .unwrap_or_else(|e| panic!("{site} lisible : {e}"));
+            assert!(
+                src.contains("must_preserve: vec![]"),
+                "{site} ne passe plus `must_preserve: vec![]` — le bras « servi » de MZ ne décrit \
+                 alors plus la configuration réelle, et le rapport décrirait un pipeline qui n'existe plus"
+            );
         }
     }
 
@@ -332,16 +450,45 @@ mod tests {
         );
     }
 
-    /// ⭐ **Le mensonge tue, quel que soit le ratio.** Même un palier parfait par ailleurs.
+    /// ⭐ `meme_issue` doit distinguer **reformuler** de **constater autre chose** — sinon
+    /// `--rendre` crie à chaque correction de prose (et cesse d'être écouté), ou bien laisse passer
+    /// une raison de plus (et cesse de garder).
     #[test]
-    fn un_seul_mensonge_tue_meme_avec_un_ratio_excellent() {
+    fn meme_issue_ignore_la_prose_mais_pas_le_nombre_de_raisons() {
+        let a = Verdict::Tue { raisons: vec!["le compresseur MENT".into()] };
+        let reformule = Verdict::Tue { raisons: vec!["déclaration infondée".into()] };
+        let une_de_plus =
+            Verdict::Tue { raisons: vec!["déclaration infondée".into(), "ratio".into()] };
+        assert!(a.meme_issue(&reformule), "reformuler ne change pas ce qui a été mesuré");
+        assert!(!a.meme_issue(&une_de_plus), "une raison de plus EST un constat de plus");
+        assert!(
+            !a.meme_issue(&Verdict::Sauve { plafond: 0.99 }),
+            "et deux issues différentes ne sont jamais la même"
+        );
+        assert!(
+            Verdict::Sauve { plafond: 0.99 }.meme_issue(&Verdict::Sauve { plafond: 0.99 }),
+            "le plafond, lui, est un nombre : il compte"
+        );
+        assert!(!Verdict::Sauve { plafond: 0.99 }.meme_issue(&Verdict::Sauve { plafond: 0.995 }));
+    }
+
+    /// ⭐ **Une déclaration infondée tue, quel que soit le ratio.** Même un palier parfait par
+    /// ailleurs : `validate_preservation` ne lit que la liste déclarée, donc la garantie qu'elle
+    /// prétend offrir est vide — et le pipeline la scellerait.
+    #[test]
+    fn une_seule_declaration_infondee_tue_meme_avec_un_ratio_excellent() {
         let v = verdict(&[palier(30, 12.0, 1.0, 1.0, 0.0, 1)]);
         match v {
             Verdict::Tue { raisons } => {
-                assert!(raisons[0].contains("DÉCLARE préserver une entité absente"));
+                assert!(raisons[0].contains("ABSENTE du résumé"));
                 assert!(raisons[0].contains("scellerait"), "et pourquoi c'est fatal ICI");
+                assert!(
+                    raisons[0].contains("n'est pas une tromperie"),
+                    "la raison ne doit attribuer AUCUNE intention : la mesure des deux bras a \
+                     montré que le modèle recopie la demande, il ne trompe personne"
+                );
             }
-            autre => panic!("un mensonge doit tuer : {autre:?}"),
+            autre => panic!("une déclaration infondée doit tuer : {autre:?}"),
         }
     }
 
@@ -403,6 +550,7 @@ mod tests {
             .iter()
             .enumerate()
             .map(|(i, r)| Point {
+                bras: Bras::Exige,
                 document: format!("d{i}"),
                 famille: "dense".into(),
                 cible_mots: 30,
@@ -424,11 +572,12 @@ mod tests {
     }
 
     #[test]
-    fn un_point_sait_dire_quand_le_compresseur_ment() {
+    fn un_point_sait_dire_quand_la_declaration_est_infondee() {
         use crate::verifieur::{taux_declare, taux_verifie};
         let exigees = ["ACME", "2024-03-11"];
         let declarees: Vec<String> = exigees.iter().map(|s| (*s).to_string()).collect();
         let p = Point::nouveau(
+            Bras::Exige,
             "d",
             Famille::Dense,
             30,
@@ -438,7 +587,7 @@ mod tests {
             &taux_verifie("Un resume qui ne cite rien.", &exigees),
             42,
         );
-        assert!(p.ment());
+        assert!(p.declaration_infondee());
         assert_eq!(p.declarees_absentes.len(), 2);
         assert_eq!(p.preservation_declaree, 1.0);
         assert_eq!(p.preservation_verifiee, 0.0);

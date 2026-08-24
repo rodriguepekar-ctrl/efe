@@ -25,12 +25,15 @@ cd "$(dirname "$0")/.."
 PORT="${MZ_PORT:-8081}"
 MODELE="models/compressor.gguf"
 PID=""
+AVANT=""
+JSON="crates/scella-mz/MZ_MESURE_CADRAGE.json"
 
 ok()    { printf '  \033[32m✓\033[0m %s\n' "$*"; }
 ko()    { printf '  \033[31m✗\033[0m %s\n' "$*"; exit 1; }
 note()  { printf '  \033[33m·\033[0m %s\n' "$*"; }
 titre() { printf '\n\033[1m%s\033[0m\n' "$*"; }
-menage(){ [ -n "$PID" ] && { kill "$PID" 2>/dev/null; wait "$PID" 2>/dev/null; } || true; }
+menage(){ [ -n "$PID" ] && { kill "$PID" 2>/dev/null; wait "$PID" 2>/dev/null; } || true;
+          [ -n "$AVANT" ] && rm -f "$AVANT" || true; }
 trap menage EXIT
 
 titre "1. L'appareil de mesure, éprouvé SANS modèle"
@@ -76,12 +79,81 @@ EFE_COMPRESSOR_URL="http://127.0.0.1:$PORT" cargo run -q -p scella-mz 2>&1 | tai
 [ -f crates/scella-mz/MZ_MESURE_CADRAGE.md ] || ko "aucun rapport produit — la mesure n'a pas eu lieu"
 ok "rapport écrit : crates/scella-mz/MZ_MESURE_CADRAGE.md"
 
-titre "5. Le verdict est-il CHIFFRÉ, comme le critère l'exige ?"
+titre "5. Les DEUX bras sont-ils mesurés ?"
+#
+#  La v1 ne mesurait que le bras « exigé » — une configuration que PERSONNE
+#  n'exécute : les deux sites de production passent `must_preserve: vec![]`.
+#  Et sur ce bras, le filtre du client écarte les réponses où le modèle avoue
+#  une omission : seules passaient les réponses déclarant tout avoir gardé. Le bras « servi »
+#  n'a aucun
+#  filtre : c'est le chiffre à opposer à qui décrit le Cadrage tel qu'il tourne.
+#
+grep -q 'Bras `exigé`' crates/scella-mz/MZ_MESURE_CADRAGE.md \
+  || ko "le rapport ne porte pas le bras exigé"
+grep -q 'Bras `servi`' crates/scella-mz/MZ_MESURE_CADRAGE.md \
+  || ko "le rapport ne porte pas le bras SERVI — il décrirait une configuration que personne n'exécute"
+ok "les deux bras figurent : la promesse ET ce que le pipeline obtient"
+
+grep -q 'biaisé vers les réponses qui déclarent tout préserver' crates/scella-mz/MZ_MESURE_CADRAGE.md \
+  || ko "le rapport ne déclare pas le biais du bras exigé"
+ok "et le biais du filtre est DÉCLARÉ, pas tu"
+
+titre "6. Le verdict est-il CHIFFRÉ, comme le critère l'exige ?"
 grep -qE '[0-9]+[.,][0-9]+:1' crates/scella-mz/MZ_MESURE_CADRAGE.md \
   || ko "le rapport ne porte aucun ratio chiffré — le critère de MZ n'est pas tenu"
 grep -q 'préservation \*\*vérifiée\*\*' crates/scella-mz/MZ_MESURE_CADRAGE.md \
   || ko "le rapport ne distingue pas la préservation vérifiée de la déclarée"
 ok "plafond et taux de préservation chiffrés, et les deux taux distingués"
+
+titre "7. Le rapport DÉRIVE-T-IL des mesures, ou a-t-il dérivé d'elles ?"
+#
+#  Un rapport publié se corrige : une formulation, un mot mal choisi. Re-lancer le balayage pour
+#  cela changerait les CHIFFRES — l'artefact ne prouverait plus rien du changement de mots. D'où
+#  `--rendre`, qui refabrique le `.md` depuis le `.json` sans un appel au modèle.
+#
+#  Ce qui rend ce mode honnête : il RECALCULE paliers et verdict depuis les points bruts au lieu de
+#  recopier ceux qu'il trouve, puis confronte. Recopier aurait fait un re-rendu incapable d'échouer.
+#
+AVANT="$(mktemp)"
+if [ -f "$JSON" ]; then
+  #  Sortie non nulle de `--rendre` = le recalcul depuis les points bruts ne redonne PAS ce que le
+  #  balayage avait enregistré. C'est la vérification qui porte le fond.
+  cp "$JSON" "$AVANT"
+  cargo run -q -p scella-mz -- --rendre >/dev/null 2>&1 \
+    || ko "\`--rendre\` a divergé : le rapport ne se recalcule plus depuis les mesures"
+  ok "le rapport se refabrique depuis les mesures, sans modèle, et le recalcul CONCORDE"
+
+  #  ⭐ Et la mesure doit ressortir INTACTE, à l'octet. C'est ce contrôle qui a trouvé le défaut :
+  #  une première version de `--rendre` rafraîchissait les champs dérivés du JSON, donc relisait et
+  #  ré-émettait `points` — et les flottants en revenaient changés d'1 ulp (`0.45454545454545453`
+  #  → `0.4545454545454546`), la lecture de `serde_json` n'étant pas correctement arrondie. Un
+  #  outil qui prétend conserver un enregistrement en le modifiant : le défaut que ce dépôt traque.
+  if cmp -s "$AVANT" "$JSON"; then
+    ok "et la mesure ressort INTACTE — le re-rendu lit le \`.json\`, il n'y écrit pas"
+  else
+    ko "le re-rendu a MODIFIÉ la mesure qu'il relit :$(printf '\n'; diff "$AVANT" "$JSON" | head -6 | sed 's/^/      /')"
+  fi
+else
+  note "aucun \`$JSON\` : rien à re-rendre tant qu'aucun balayage n'a eu lieu"
+fi
+
+titre "8. L'A/B de température — optionnel, et pourquoi"
+#
+#  La campagne H1.1 avait mesuré ≈ 33 % de no-op à `temperature 0.2` (sans seed,
+#  llama-server tire un aléa par appel) ; le passage au greedy 0.0 était censé
+#  la supprimer. Le rejouer double le temps de mesure, donc il n'est pas
+#  systématique — mais la commande est écrite ici pour que personne n'ait à la
+#  redécouvrir.
+#
+cat <<'FIN'
+  · Le bras de comparaison H1.1 se rejoue ainsi :
+
+      EFE_COMPRESSOR_TEMPERATURE=0.2 cargo run -p scella-mz
+
+    et se compare au rapport courant (dégénérescence attendue ≈ 33 % contre
+    0 % au greedy). Non lancé ici : il double le temps de mesure.
+FIN
+ok "la commande de comparaison est écrite, pas à redécouvrir"
 
 titre "Ce que MZ ne mesure pas, et qu'il faut redire"
 cat <<'FIN'
@@ -93,9 +165,12 @@ cat <<'FIN'
   · Les AUTRES robots. Analyseur, vérifieur et reformulateur ont leurs
     propres plafonds ; les mesurer ensemble mélangerait les causes.
 
-  Et le fait qui encadre tout : les deux sites de production passent
-  `must_preserve: vec![]`. Cette mesure DEMANDE la préservation ; le
-  service, jamais. Un verdict favorable désignerait donc le câblage.
+  Et une limite de la mesure ELLE-MÊME, qu'il faut dire : sur le bras
+  « exigé », le filtre du client écarte les réponses où le modèle avoue
+  une omission. Ce bras est donc, par construction, biaisé vers celles
+  qui déclarent tout préserver. C'est précisément pourquoi le bras
+  « servi » existe — il n'a aucun filtre, et il reproduit la
+  configuration que le pipeline exécute réellement.
 FIN
 
 printf '\n\033[32mLa mesure a eu lieu.\033[0m  (le verdict est dans le rapport — il ne se code pas dans un code de sortie)\n'
