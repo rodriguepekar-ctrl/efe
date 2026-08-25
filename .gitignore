@@ -127,6 +127,18 @@ docs/**/*.pptx
 !docs/reports/EFE_FilB_Rapport_Schemas_2026-07-17.pdf
 !docs/reports/EFE_Nano_Swarm_MetaSwarm_Report_2026-07-14_EN.pdf
 !docs/reports/EFE_Pitch_Deck_EN_2026-07-17.pdf
+
+# ── DECKS SANS SOURCE — le même critère, appliqué aux .pptx ─────────────────
+# Le passage du 2026-08-24 ci-dessus ne balayait que les .pdf : c'est sa
+# REQUÊTE qui était trop étroite, pas son raisonnement. Sur les 5 .pptx exclus
+# par `docs/**/*.pptx`, 3 se régénèrent depuis un générateur SUIVI
+# (scripts/build_kovant_deck{,_v2,_v3}.py) et restent exclus à juste titre.
+# Les 2 ci-dessous n'ont AUCUN générateur : le FR n'est mentionné nulle part
+# dans le dépôt, et l'EN ne l'était que par la ligne qui l'excluait. Les 8 PNG
+# de concepts et le PDF FR sont suivis — c'est le DECK lui-même (mise en page,
+# enchaînement des planches) qui n'existe qu'en un seul exemplaire.
+!docs/reports/EFE_Agent_Exchange_Concepts_2026-07-14_EN.pptx
+!docs/reports/EFE_Concepts_Echange_Agents_2026-07-14_FR.pptx
 # PDF de livraison à la racine (compendium, roadmap, généré)
 /EFE_*.pdf
 # ⚠ Négation APRÈS sa règle : dans un .gitignore la DERNIÈRE correspondance gagne.
