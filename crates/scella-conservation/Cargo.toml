@@ -1,0 +1,25 @@
+# SPDX-License-Identifier: UNLICENSED
+# P2 — scella-conservation : la sauvegarde, la restauration, et la rotation de clé tenant.
+#
+# Hors des deux familles de noms (`efe-*` = calcul, `provenance-*` = preuve), comme
+# `scella-authority` : ce crate est pris PAR les deux périmètres (C1 le registre, C3 le seuil) sans
+# les souder l'un à l'autre. Une seule dépendance, `provenance-dag` — car tout son objet est de
+# transporter une chaîne que S0 seul sait re-prouver. Aucune crypto neuve : ce crate n'invente
+# rien, il conserve.
+[package]
+name = "scella-conservation"
+version = { workspace = true }
+edition = { workspace = true }
+rust-version = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
+description = "P2 — la conservation opérable : archiver une chaîne scellée, la restaurer en distinguant CINQ issues (restaurée, tronquée, mauvaise clé, chaîne rompue, génération détruite), et faire tourner la clé tenant par générations dont le retrait ne casse aucun reçu."
+publish = false
+
+[lib]
+name = "scella_conservation"
+path = "src/lib.rs"
+
+[dependencies]
+provenance-dag = { path = "../provenance-dag", version = "0.0.1" }

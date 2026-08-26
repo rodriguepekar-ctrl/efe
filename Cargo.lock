@@ -7391,6 +7391,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "scella-conservation"
+version = "0.0.1"
+dependencies = [
+ "provenance-dag",
+]
+
+[[package]]
 name = "scella-mz"
 version = "0.0.1"
 dependencies = [
