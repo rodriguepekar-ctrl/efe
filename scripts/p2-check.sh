@@ -80,9 +80,60 @@ sed 's/^/      /' "$TRAVAIL/vm.ko"
 [ "$CODE" -eq 1 ] && ok "l'altération d'UN champ scellé sort 1" || ko "attendu 1, obtenu $CODE"
 grep -q 'cassé au record' "$TRAVAIL/vm.ko" && ok "et le record fautif est NOMMÉ" || ko "l'échec ne désigne aucun record"
 
+titre "6. La commande d'exploitation — un cycle complet, sans jamais nommer la génération"
+CONS=(cargo run -q -p scella-conservation --bin scella-conserver --)
+TM="$TRAVAIL/generations"
+set +e
+"${CONS[@]}" poser --trousseau-maitre "$TM" --numero 1 --cle-hex "$CLE" --a 100 >/dev/null 2>&1
+[ $? -eq 0 ] && ok "poser : la génération 1 entre en service" || ko "poser a échoué"
+"${CONS[@]}" sauvegarder --records "$TRAVAIL/archive/records.jsonl" --vers "$TRAVAIL/arch-cli" \
+    --tenant acme --trousseau-maitre "$TM" --a 200 >/dev/null 2>&1
+[ $? -eq 0 ] && ok "sauvegarder : la génération vient du TROUSSEAU, pas de la mémoire de l'exploitant" \
+             || ko "sauvegarder a échoué"
+grep -q 'generation	1' "$TRAVAIL/arch-cli/MANIFESTE" 2>/dev/null \
+  && ok "le manifeste porte la génération que le trousseau connaissait" \
+  || ko "le manifeste n'annonce pas la génération 1"
+"${CONS[@]}" tourner --trousseau-maitre "$TM" --numero 2 --cle-hex "$(printf '07%.0s' {1..32})" --a 300 >/dev/null 2>&1
+[ $? -eq 0 ] && ok "tourner : la 2 scelle, la 1 est retirée" || ko "tourner a échoué"
+"${CONS[@]}" restaurer --archive "$TRAVAIL/arch-cli" --trousseau-maitre "$TM" >/dev/null 2>&1
+[ $? -eq 0 ] && ok "APRÈS ROTATION, l'archive ancienne remonte encore (rien n'a été détruit)" \
+             || ko "la rotation a cassé une archive ancienne"
+"${CONS[@]}" detruire --trousseau-maitre "$TM" --numero 1 --a 400 >/dev/null 2>&1
+[ $? -eq 1 ] && ok "détruire SANS --je-confirme est refusé (1), et ne touche à rien" \
+             || ko "une destruction non confirmée aurait dû être refusée"
+"${CONS[@]}" detruire --trousseau-maitre "$TM" --numero 1 --a 400 --je-confirme >/dev/null 2>&1
+[ $? -eq 0 ] && ok "détruire --je-confirme : la clé quitte le fichier" || ko "la destruction a échoué"
+grep -q 'DETRUITE' "$TM" && ok "et la pierre tombale DATÉE reste (« détruite » ≠ « jamais vue »)" \
+                         || ko "la date de destruction a disparu"
+SORTIE=$("${CONS[@]}" restaurer --archive "$TRAVAIL/arch-cli" --trousseau-maitre "$TM" 2>&1); CODE=$?
+set -e
+[ "$CODE" -eq 1 ] && ok "restaurer sous une génération détruite : refus MOTIVÉ (1), pas erreur (2)" \
+                  || ko "attendu 1, obtenu $CODE"
+echo "$SORTIE" | grep -q 'DÉTRUITE le 400' \
+  && ok "et le message porte la DATE, sans jamais dire « invalide »" \
+  || ko "le refus n'annonce pas la date de destruction"
+
+titre "7. Ce que l'ANCRE achète — la démonstration qui justifie tout le reste"
+echo "      L'adversaire a re-scellé la chaîne ET réécrit le manifeste pour concorder."
+set +e
+"${CONS[@]}" restaurer --archive "$TRAVAIL/archive.RESCELLEE" --cle-hex "$CLE" >/dev/null 2>&1
+CODE_SANS=$?
+SORTIE_AVEC=$("${CONS[@]}" restaurer --archive "$TRAVAIL/archive.RESCELLEE" --cle-hex "$CLE" \
+    --journal "$TRAVAIL/ancres.journal" 2>&1); CODE_AVEC=$?
+set -e
+[ "$CODE_SANS" -eq 0 ] \
+  && ok "SANS ancre : l'archive falsifiée passe (0) — c'est la limite, énoncée et démontrée" \
+  || ko "attendu 0 sans ancre, obtenu $CODE_SANS"
+[ "$CODE_AVEC" -eq 1 ] \
+  && ok "AVEC l'ancre publiée : elle est attrapée (1)" \
+  || ko "attendu 1 avec ancre, obtenu $CODE_AVEC"
+echo "$SORTIE_AVEC" | grep -q "L'ANCRE PUBLIÉE CONTREDIT" \
+  && ok "et le verdict nomme la raison : le manifeste voyage avec l'archive, l'ancre non" \
+  || ko "le message ne désigne pas l'ancre"
+
 titre "Verdict"
 if [ "$ECHECS" -eq 0 ]; then
-    printf '  \033[0;32mP2 tient : détruit, restauré, re-prouvé par un tiers, et l'"'"'altération démasquée.\033[0m\n\n'
+    printf '  \033[0;32mP2 tient : détruit, restauré, re-prouvé par un tiers, altération démasquée,\n  cycle d'"'"'exploitation complet, et le re-scellement attrapé par l'"'"'ancre.\033[0m\n\n'
     exit 0
 fi
 printf '  \033[0;31m%s contrôle(s) en échec.\033[0m\n\n' "$ECHECS"

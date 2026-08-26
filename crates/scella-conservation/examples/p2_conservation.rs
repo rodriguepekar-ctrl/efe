@@ -18,9 +18,13 @@
 
 use std::path::PathBuf;
 
-use provenance_dag::{Node, SealedDag, TenantKey};
+use provenance_dag::{AnchorRecord, Node, SealedDag, TenantKey};
 use scella_conservation::archive::{sauvegarder, Prise};
+use scella_conservation::manifeste::Manifeste;
 use scella_conservation::{restaurer, TrousseauMaitre};
+
+/// Le run que l'ancre engage. Fixe, pour que le contrôle soit reproductible.
+const RUN: &str = "run-p2-demo";
 
 /// Les octets de la clé de démonstration. Fixes pour que le contrôle soit reproductible.
 const CLE: [u8; 32] = [0x2A; 32];
@@ -68,7 +72,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         cree_a: 1_756_166_400,
         generation: 1,
         empreinte_trousseau: None,
-        ancre: None,
+        ancre: Some(RUN.to_string()),
     };
     let s = sauvegarder(dag.records(), &cle, &prise, &arch)?;
     println!("2. archivé         : {}", s.dossier.display());
@@ -91,9 +95,36 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let brut = std::fs::read_to_string(arch.join("records.jsonl"))?;
     std::fs::write(base.join("records.ALTERE.jsonl"), brut.replacen("\"PASS\"", "\"FAIL\"", 1))?;
 
-    println!("5. clé (hex)       : {hex}");
+    // ── 6. L'ancre, publiée AVANT tout mensonge possible ──────────────────────────────
+    // Elle engage (run, racine, compte) dans un journal que le porteur de l'archive ne détient
+    // pas. C'est la seule pièce qu'un adversaire qui réécrit records ET manifeste ne peut pas
+    // atteindre.
+    let journal = base.join("ancres.journal");
+    std::fs::write(
+        &journal,
+        format!("{}\n", AnchorRecord::new(RUN, "acme-corp", &racine, 4, 1_756_166_400)?.to_line()),
+    )?;
+
+    // ── 7. L'ADVERSAIRE DÉCIDÉ, fabriqué pour de vrai ─────────────────────────────────
+    // Il retourne le criblage PASS → FAIL, re-scelle TOUTE la chaîne, et réécrit le manifeste
+    // pour qu'il concorde. Sans ancre, cette archive est irréprochable.
+    let rescellee = base.join("archive.RESCELLEE");
+    let mut menteuse = SealedDag::new();
+    menteuse.append(&cle, acte("SUP-2024::intake", "supplier_intake", "supplier=Nordwind; DE; rang 1", 1))?;
+    menteuse.append(&cle, acte("SUP-2024::sanction", "sanction_screen", "FAIL", 2))?; // le mensonge
+    menteuse.append(&cle, acte("SUP-2024::esg", "esg_risk_assess", "REVIEW", 3))?;
+    menteuse.append(&cle, acte("SUP-2024::agregat", "diligence_aggregate", "CONDITIONNEL", 4))?;
+    std::fs::create_dir_all(&rescellee)?;
+    std::fs::write(rescellee.join("records.jsonl"), format!("{}\n", menteuse.to_jsonl()))?;
+    let mut m = Manifeste::lire(&std::fs::read_to_string(arch.join("MANIFESTE"))?)?;
+    m.racine = menteuse.manifest_root();
+    std::fs::write(rescellee.join("MANIFESTE"), m.rendre()?)?;
+    println!("6. adversaire      : {} (records + manifeste réécrits ENSEMBLE)", rescellee.display());
+
+    println!("7. clé (hex)       : {hex}");
     println!("   racine attendue : {racine}");
     println!("   à re-prouver    : {}", arch.join("records.jsonl").display());
     println!("   altéré (témoin) : {}", base.join("records.ALTERE.jsonl").display());
+    println!("   journal d'ancres: {}", journal.display());
     Ok(())
 }

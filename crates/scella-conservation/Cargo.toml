@@ -21,5 +21,10 @@ publish = false
 name = "scella_conservation"
 path = "src/lib.rs"
 
+[[bin]]
+# Le producteur. Sans lui, ce crate était une capacité que rien n'invoquait.
+name = "scella-conserver"
+path = "src/bin/scella-conserver.rs"
+
 [dependencies]
 provenance-dag = { path = "../provenance-dag", version = "0.0.1" }
