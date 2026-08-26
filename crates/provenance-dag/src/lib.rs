@@ -3,7 +3,7 @@
 //!
 //! Le contrat que tout P1 consomme : un graphe d'actes d'agents et de messages, **scellé** et
 //! **re-prouvable indépendamment**, qui fait de « beaucoup de petits agents auditables » une réalité
-//! cryptographique plutôt qu'une promesse. Cf. l'architecture P1 (`docs/reports/EFE_Kovant_P1_*`).
+//! cryptographique plutôt qu'une promesse. Cf. l'architecture P1 (`docs/reports/EFE_P1_*`).
 //!
 //! ## Le principe : ZÉRO dépendance crypto (trustless)
 //! Tout le trust-critique — [`sha256`] (FIPS 180-4), [`hmac`] (RFC 2104), la dérivation de [`key`], le

@@ -43,7 +43,8 @@ fn third_party_rederives_the_reg_artifact_from_the_real_bundle() {
     let mapping = templates::eu_ai_act_2026_06();
     let scope = CaseScope::Case("SUP-2024".into());
 
-    // KOVANT : re-prove + derive (in-process), then ASSEMBLE a real forensic bundle embedding reg/.
+    // LE PRODUCTEUR (celui qui détient la clé) : re-prove + derive (in-process), then ASSEMBLE a
+    // real forensic bundle embedding reg/. Le destinataire, lui, re-prouvera SANS la clé.
     let records = SealedDag::records_from_jsonl(&exp.records_jsonl).unwrap();
     let artifact = derive(&records, &key(), &mapping, Framework::EuAiAct, &scope).expect("dérivation");
     let expected_md = render_md(&artifact);

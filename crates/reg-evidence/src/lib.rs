@@ -7,7 +7,7 @@
 //! registre de traitement (GDPR) — et le produire **mieux** que la main : automatiquement, traçablement,
 //! et **re-prouvable par le destinataire lui-même**. C'est ce qui réalise la thèse « moteur d'évidence »
 //! (architecture P1 §7) et le **ROI** qui déclenche la conversion (heures → minutes). Cf.
-//! `docs/reports/EFE_Kovant_P1_S6_RegEvidence_Architecture_2026-06-29.html`.
+//! `docs/reports/EFE_P1_S6_RegEvidence_Architecture_2026-06-29.html`.
 //!
 //! ## Le principe : TRUST-LIGHT (zéro confiance neuve)
 //! S6 n'invente **aucune** crypto et n'ajoute **aucune** surface de confiance. Tout son risque est dans

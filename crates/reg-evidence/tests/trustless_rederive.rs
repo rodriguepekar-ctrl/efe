@@ -47,7 +47,8 @@ fn third_party_rederives_the_artifact_bit_for_bit() {
     let mapping = templates::eu_ai_act_2026_06();
     let scope = CaseScope::Case("SUP-2024".into());
 
-    // KOVANT produit l'artefact.
+    // LE PRODUCTEUR produit l'artefact — c'est la partie qui détient la clé. Nommer le RÔLE et non
+    // une société rend la scène lisible : tout l'objet du test est ce que l'AUTRE partie peut faire.
     let recs_a = SealedDag::records_from_jsonl(&jsonl).unwrap();
     let a = derive(&recs_a, &key(), &mapping, Framework::EuAiAct, &scope).expect("dérivation");
 

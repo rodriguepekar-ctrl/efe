@@ -4,7 +4,7 @@
 //! La surface quotidienne de l'agent de conformité non-cryptographe, et la **dernière** marche de P1.
 //! C'est la **seconde des deux surfaces** (l'autre étant l'export forensic *trustless* de S4) : la console
 //! **opérationnelle**, où l'on **revoit, comprend, agit, et exporte — seul, sans ingénieur**. Cf.
-//! `docs/reports/EFE_Kovant_P1_S3_Console_Architecture_2026-06-29.html`.
+//! `docs/reports/EFE_P1_S3_Console_Architecture_2026-06-29.html`.
 //!
 //! ## Le principe : la console REND la confiance, elle ne l'ÉTABLIT pas
 //! La frontière de confiance s'arrête à **S2** ([`audit_api`]) : tout le trust-critique (projection,

@@ -280,8 +280,11 @@ mod tests {
 
     #[test]
     fn le_registre_couvre_les_neuf_interrupteurs() {
-        // SIX, pas sept : le « septième » de mon relevé initial était `EFE_K`, un faux positif —
-        // le motif attrapait `EFE_Kovant_P1_*` dans des commentaires.
+        // SIX, pas sept : le « septième » de mon relevé initial était `EFE_K`, un faux positif — le
+        // motif avait attrapé un NOM DE DOCUMENT cité en commentaire, pas une variable
+        // d'environnement. Le nom a changé depuis (P3, le nettoyage) ; la leçon n'a pas bougé : un
+        // balayage `EFE_[A-Z_]+` sur du texte libre ramasse les renvois de documentation, et c'est
+        // exactement pourquoi ce registre est écrit à la main plutôt que dérivé d'un grep.
         assert_eq!(REGISTRY.len(), 9, "ADDR, TENANT, ROOT, TOKEN, SUBJECT, BALAYAGE_S, TERMINATEUR_CANAL, DEPLOIEMENT, RECORDS");
         for s in REGISTRY {
             assert!(!s.buys.trim().is_empty(), "{} : `buys` vide", s.name);
