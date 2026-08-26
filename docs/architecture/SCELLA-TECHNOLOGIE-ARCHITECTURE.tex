@@ -1,0 +1,292 @@
+\documentclass[10pt]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage[french]{babel}
+\usepackage{newpxtext,newpxmath}
+\usepackage[a4paper,top=1.6cm,bottom=1.5cm,left=1.9cm,right=1.9cm]{geometry}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{titlesec}
+\usepackage[most]{tcolorbox}
+\usepackage{enumitem}
+\usepackage{array}
+\usepackage{booktabs}
+\usepackage{fancyhdr}
+
+\definecolor{navy}{HTML}{1F3A5F}
+\definecolor{grey}{HTML}{54606E}
+\definecolor{green}{HTML}{2C6E49}
+\definecolor{amber}{HTML}{9C6A16}
+\definecolor{red}{HTML}{A6322E}
+\definecolor{boxgray}{HTML}{F3F5F8}
+\definecolor{boxred}{HTML}{FCF2F1}
+\definecolor{boxgreen}{HTML}{F1F7F3}
+\definecolor{boxcode}{HTML}{F7F8FA}
+\definecolor{boxedge}{HTML}{D9E0EA}
+
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{3.4pt}
+\linespread{1.02}
+
+\pagestyle{fancy}\fancyhf{}
+\lhead{\small\color{grey}Scella — la technologie}
+\rhead{\small\color{grey}26 août 2026}
+\cfoot{\small\color{grey}\thepage}
+\renewcommand{\headrulewidth}{0.3pt}
+
+\titleformat{\section}{\color{navy}\large\bfseries}{\thesection.\;}{0pt}{}
+\titlespacing{\section}{0pt}{13pt}{3pt}
+\titleformat{\subsection}{\color{navy}\bfseries}{}{0pt}{}
+\titlespacing{\subsection}{0pt}{8pt}{1.5pt}
+
+\newtcolorbox{these}{colback=boxgray,colframe=boxedge,boxrule=0.5pt,arc=2.5pt,
+  left=8pt,right=8pt,top=4.5pt,bottom=4.5pt}
+\newtcolorbox{alerte}{colback=boxred,colframe=red!55,boxrule=0.8pt,arc=2.5pt,
+  left=8pt,right=8pt,top=4.5pt,bottom=4.5pt}
+\newtcolorbox{acquis}{colback=boxgreen,colframe=green!45,boxrule=0.8pt,arc=2.5pt,
+  left=8pt,right=8pt,top=4.5pt,bottom=4.5pt}
+\newtcolorbox{extrait}{colback=boxcode,colframe=boxedge,boxrule=0.5pt,arc=1.5pt,
+  left=7pt,right=7pt,top=3.5pt,bottom=3.5pt}
+
+\newcommand{\code}[1]{\texttt{\small #1}}
+\newcommand{\mm}[1]{\textbf{\textcolor{navy}{#1}}}
+\newcommand{\ok}[1]{\textcolor{green}{\textbf{#1}}}
+\newcommand{\ko}[1]{\textcolor{red}{\textbf{#1}}}
+\newcommand{\att}[1]{\textcolor{amber}{\textbf{#1}}}
+
+\begin{document}
+
+\begin{center}
+{\Huge\bfseries\color{navy} Scella}\\[5pt]
+{\large\color{grey}\itshape La technologie — le graphe scellé, le reçu, et la frontière de ce qu'ils prouvent}\\[5pt]
+{\small\color{grey} 26 août 2026 \; · \; description technique \; · \; chaque mécanisme est décrit d'après le code qui l'implémente}
+\end{center}
+\vspace{4pt}
+
+\begin{these}
+\mm{La thèse en une phrase.} Un journal d'exécution ordinaire demande qu'on lui fasse confiance ; Scella produit à la place une \textbf{chaîne de sceaux} dont n'importe qui, muni des enregistrements bruts et de la clé du client, peut re-dériver le calcul avec un programme sans aucune dépendance — et le document remis à l'auditeur écrit lui-même les limites de ce que cette re-dérivation établit. Toute la technologie tient dans cette tension : rendre la preuve \emph{maximalement} vérifiable, et énoncer \emph{exactement} où elle s'arrête.
+\end{these}
+
+\section{Le problème technique, énoncé sans confort}
+
+Lorsqu'une organisation fait passer une décision par un ou plusieurs modèles de langage, elle produit naturellement des traces : des journaux applicatifs, des enregistrements de requêtes, parfois un export du fournisseur. Ces traces ont une propriété commune qui les disqualifie devant un tiers : \mm{elles sont réécrivables sans laisser d'indice}. Un journal est un fichier ; un fichier se modifie ; et rien, dans le fichier lui-même, ne distingue la version d'origine de la version corrigée après coup. Lorsqu'on demande à une équipe de prouver ce qu'un système a fait le 12 mars, elle ne peut, en toute rigueur, que produire une affirmation appuyée sur sa propre bonne foi.
+
+Le second défaut est plus subtil et beaucoup plus fréquent : \mm{l'ordre}. Même un journal signé ligne à ligne ne dit pas que rien n'a été retiré. Chaque ligne prouve son propre contenu, aucune ne prouve l'existence de la suivante. Une suppression sélective — les deux appels où le modèle s'est trompé, la consultation qui contredisait la conclusion — laisse un journal parfaitement cohérent. C'est l'attaque la moins coûteuse et la plus dommageable, et la plupart des dispositifs de traçabilité ne la couvrent pas.
+
+Le troisième défaut est celui de la \mm{dépendance de vérification}. Un dispositif qui exige, pour être vérifié, d'installer le logiciel de celui qui l'a produit, ne fournit pas une preuve : il déplace la confiance d'un cran. L'auditeur ne vérifie alors plus le fait, il vérifie l'outil de celui qu'il audite.
+
+Scella traite ces trois défauts par trois mécanismes distincts — le chaînage, l'ancrage, et le vérifieur à dépendances nulles — et refuse explicitement de traiter un quatrième problème qu'aucune cryptographie ne résout : savoir si la décision enregistrée était \emph{juste}. Cette frontière est portée dans les types, pas seulement dans la documentation ; la section~\ref{sec:limites} y revient.
+
+\section{S0 — Le graphe scellé : le cœur de confiance}
+
+\subsection{Le maillon}
+
+Tout repose sur une chaîne \emph{append-only} d'enregistrements, chacun étant un couple (nœud, sceau). Le repliement est écrit dans \code{provenance-dag/src/dag.rs} et tient sur une ligne :
+\begin{extrait}
+\[ \text{cha\^ine}_0 = \mathrm{SHA256}(\textsc{genesis}) \qquad\qquad \text{sceau}_i = \mathrm{HMAC}\bigl(K_{\text{tenant}},\; \text{cha\^ine}_{i-1} \,\Vert\, \mathrm{canonical}(n_i)\bigr) \]
+\end{extrait}
+Le \mm{manifest-root} est $\text{cha\^ine}_n$ : une seule valeur hexadécimale qui engage la totalité du graphe \emph{dans son ordre}. Cette construction est ce qui répond au deuxième défaut de la section précédente. Modifier un champ d'un nœud change son encodage canonique, donc son sceau, donc toutes les chaînes suivantes : la re-preuve échoue \emph{au point touché} et le vérifieur rend l'indice du record fautif. Réordonner deux nœuds produit le même effet, puisque chaque maillon incorpore l'état de la chaîne qui le précède. Il n'existe pas de manière d'altérer un enregistrement du milieu sans altérer visiblement tout ce qui suit.
+
+\subsection{Pourquoi l'encodage canonique n'est pas le JSON}
+
+Le sceau ne porte pas sur la représentation JSON du nœud, mais sur un \mm{encodage canonique binaire} calculé par \code{Node::canonical()}. La raison est une propriété que le JSON n'a pas : l'injectivité. Deux documents JSON sémantiquement identiques peuvent différer par l'ordre des clés, l'échappement d'un caractère, la représentation d'un flottant ou la présence d'espaces — et donc produire deux empreintes différentes pour le même fait. Un sceau calculé sur du JSON hériterait de cette ambiguïté, et un vérifieur écrit par un tiers, avec une autre bibliothèque de sérialisation, divergerait légitimement du producteur. En scellant un encodage binaire dont chaque valeur n'admet qu'une écriture, on rend la re-preuve \emph{reproductible entre implémentations indépendantes} — ce qui est précisément le but. Le JSONL, lui, subsiste comme forme de stockage et d'inspection humaine : on peut lire un DAG avec \code{cat}, mais ce n'est pas ce qui est scellé.
+
+\subsection{Zéro dépendance cryptographique}
+
+Le choix le plus inhabituel de cette couche est l'absence totale de bibliothèque cryptographique tierce. \code{sha256.rs} implémente FIPS 180-4, \code{hmac.rs} implémente la RFC 2104, \code{key.rs} la dérivation, et l'ensemble est validé par les \mm{vecteurs de test NIST} pour SHA-256 et \mm{RFC 4231} pour HMAC. Ce n'est pas de l'artisanat gratuit : c'est la condition d'un audit réaliste. Un auditeur peut lire l'intégralité du code critique en une heure, le recompiler, et constater qu'il fait ce qu'il annonce — sans avoir à auditer, ni à faire confiance à, une chaîne de dépendances transitives dont personne ne connaît l'étendue. \code{serde} n'intervient que pour le stockage JSONL d'inspection, jamais dans le calcul du sceau.
+
+\subsection{Les quatre types de nœuds}
+
+Le graphe n'est pas une suite d'événements indifférenciés : sa grammaire est fermée et porte le sens dont l'évidence réglementaire aura besoin.
+
+\begin{itemize}[leftmargin=13pt,itemsep=2.5pt,topsep=3pt]
+\item \mm{\code{AgentAct}} — l'acte d'un agent : le \emph{hachage} de ses entrées, sa sortie conservée en clair, le modèle et sa version, et les références vers les évidences qu'il a citées. Le déséquilibre entre entrée hachée et sortie conservée est délibéré : la minimisation des données (RGPD art. 5(1)(c)) porte sur ce qui entre, tandis que la décision attestée doit rester lisible pour être auditée.
+\item \mm{\code{Edge}} — une arête : un artefact \emph{typé} passé d'un nœud-agent à un autre. La communication entre agents est ainsi une grammaire d'artefacts nommés, et non un échange de texte libre dont personne ne pourrait dire ce qui a circulé.
+\item \mm{\code{Evidence}} — une consultation d'outil ou de recherche documentaire, \emph{figée au moment de la décision}. C'est un nœud source : il est récupéré \emph{avant} d'être consommé, et cette antériorité est vérifiée structurellement.
+\item \mm{\code{Human}} — l'action humaine : approbation, dérogation, escalade, commentaire, avec l'identité de l'auteur, le nœud visé et la justification. C'est le nœud qui matérialise l'\emph{oversight} — et c'est aussi le seul point d'écriture du service de lecture.
+\end{itemize}
+
+L'intégrité \emph{structurelle} s'ajoute à l'intégrité cryptographique : les références causales doivent désigner des nœuds déjà scellés, et les identifiants doivent être uniques. Une arête qui référencerait un nœud non encore scellé est rejetée à l'insertion (\code{DanglingRef}) — le graphe ne peut donc pas contenir de citation d'un fait qui n'existe pas. C'est le premier des trois dispositifs anti-citation-fantôme du système ; les deux autres sont dans le vérifieur et dans le langage de sélecteurs.
+
+\subsection{L'identifiant qui porte le cas}
+
+Un détail d'apparence anodine a des conséquences importantes en aval : l'identifiant de nœud suit la forme \code{\{cas\}::\{étape\}}. Le cas — un dossier fournisseur, une demande, un incident — est donc \emph{scellé} avec le reste, et non porté par une métadonnée latérale que l'on pourrait modifier sans casser le sceau. Il devient du même coup \emph{requêtable} : extraire tout ce qui concerne un cas est un filtre sur les identifiants, et non une jointure sur une table externe. Le tout sans modifier le contrat de S0.
+
+\section{S1 — La capture : quatre observateurs et une garde}
+
+La couche de capture (\code{provenance-capture}) convertit ce qui se passe réellement à l'exécution en nœuds scellables. Elle expose \mm{quatre adaptateurs} : l'appel de modèle, le message entre agents, la consultation d'outil ou de recherche, et la revue humaine. Ces quatre points sont le seul endroit où le système applicatif touche la provenance ; tout le reste en découle.
+
+Trois propriétés de cette couche méritent d'être soulignées. D'abord, \mm{les entrées sensibles sont hachées à la capture}, pas plus tard : la minimisation n'est pas une politique appliquée à un journal déjà écrit, c'est une propriété de ce qui est écrit. Ensuite, le magasin scelle \mm{au fil de l'eau} en imposant l'intégrité causale — il n'y a pas d'étape de « clôture » pendant laquelle un graphe incomplet existerait. Enfin, cette couche ne dépend que de \code{provenance-dag} : la chaîne de confiance reste mince de bout en bout.
+
+S'y ajoute une \mm{garde de souveraineté} : l'egress est refusé, seuls les points d'accès en boucle locale sont permis, et les enregistrements persistent localement. La section~\ref{sec:gardes} explique pourquoi cette garde est plus délicate qu'elle n'en a l'air.
+
+\section{La clé : souveraineté et cloisonnement}
+
+La clé de scellement est \mm{dérivée par tenant} par HKDF-SHA256, avec l'UUID du tenant en sel (\code{efe-audit-core/src/keys.rs}). Trois conséquences pratiques en découlent.
+
+Un tenant ne peut re-prouver que son propre graphe : la clé d'un autre tenant est une valeur qu'il n'a pas et qu'il ne peut pas dériver depuis la sienne. Le cloisonnement d'un opérateur multi-clients n'est donc pas une règle applicative — c'est une impossibilité arithmétique. Ensuite, l'identifiant système est \emph{explicitement refusé} à la dérivation : il n'existe pas de clé « racine » qui re-prouverait tout, ce qui supprime la cible la plus attirante d'une compromission. Enfin — et c'est le point qui décide de la valeur du dispositif devant un tiers — \mm{la clé n'entre jamais dans un bundle}. Elle re-prouve, mais elle voyage par un canal distinct : le destinataire l'obtient du responsable de traitement. L'exemple de démonstration du dépôt va jusqu'à l'imprimer au terminal plutôt que de l'écrire sur le disque, précisément pour que ce chemin séparé soit visible.
+
+\section{S2 — Servir : projeter sans jamais inventer}
+
+Entre le substrat scellé et les interfaces se tient \code{audit-api}, qui porte quatre devoirs et \emph{tout} le code critique — la console n'étant qu'une vue.
+
+Le premier est la \mm{projection} : transformer des enregistrements en une vue de décision est une \emph{fonction pure}, et chaque champ de la vue nomme le nœud qui le soutient (\code{backed\_by\_node}). Une vue ne peut donc pas diverger de l'enregistrement, ni afficher un élément qu'aucun nœud ne porte. Le deuxième est la \mm{re-preuve à la lecture} : un badge rapide, dont le cache est indexé par le manifest-root — ce qui est sain, puisque le root engage les enregistrements — doublé d'une re-preuve froide qui fait autorité. Un échec n'est jamais masqué ni adouci. Le troisième est \mm{l'enveloppe honnête}, imposée par le type : la structure retournée n'a aucun champ « correct », de sorte qu'aucune interface en aval ne peut prétendre en afficher un. Le quatrième est \mm{l'isolement} — un magasin, une clé et un contexte par tenant, le tenant du chemin devant égaler le tenant authentifié.
+
+Ce service est aussi l'\mm{unique point d'écriture} du système de lecture, et il n'écrit qu'une seule chose : l'action humaine scellée, sous contrôle de rôle. C'est une décision d'architecture qui mérite d'être notée — la surface d'écriture d'un système d'audit est sa surface d'attaque, et ici elle est réduite à un geste dont l'existence même est ce que le régulateur cherche à constater.
+
+\section{S4 — La re-preuve sans confiance}
+
+\subsection{Un vérifieur dont l'arbre de dépendances est vide}
+
+\code{verify-mini} embarque sa propre SHA-256, son propre HMAC, \emph{parse le JSONL à la main} sans \code{serde}, et réimplémente l'encodage canonique et la re-preuve. Le résultat se lit dans le manifeste : le bloc \code{[dependencies]} est \ok{littéralement vide}. Un tiers sceptique recompile ce programme en ne faisant confiance qu'aux mathématiques et à sa propre chaîne de compilation. Le contrat de ligne de commande est minimal — un fichier d'enregistrements, une clé, éventuellement un root attendu — et les codes de sortie sont \code{0} intègre, \code{1} échec, \code{2} usage.
+
+\subsection{La fidélité, prouvée et non affirmée}
+
+Un vérifieur indépendant n'a de valeur que s'il calcule \emph{exactement} ce que le producteur a scellé ; l'affirmer ne suffit pas. Un test de recoupement construit des graphes avec l'implémentation de référence — en dépendance de développement uniquement, hors du binaire livré — et exige que \code{verify-mini} produise le \mm{manifest-root identique octet pour octet}, accepte l'authentique et rejette l'altéré. Les chaînes piégées y figurent délibérément : guillemets, antislashs, caractères de contrôle, unicode, paires de substitution. C'est exactement là qu'un analyseur écrit à la main pourrait diverger, et c'est donc là que le test le verrouille.
+
+\subsection{Le bundle vendore la source, jamais un binaire}
+
+L'assembleur de bundle (\code{forensic-export}) re-prouve les enregistrements avant d'exporter — défense en profondeur : il refuse un magasin cassé plutôt que de faire confiance à un drapeau — puis écrit dans le bundle la \mm{source} du vérifieur, pas son exécutable. Livrer un binaire à quelqu'un qu'on demande de ne pas nous croire serait contradictoire. Le bundle contient enfin un manifeste de hachages, un récit lisible, et le document décrit à la section~\ref{sec:limites}.
+
+\section{L'ancre : pourquoi un bundle ne peut pas se garder lui-même}
+
+\begin{alerte}
+Une chaîne scellée prouve que ce qu'elle contient n'a pas bougé. Elle ne prouve \ko{pas} que tout y est encore — car \mm{un préfixe d'une chaîne de sceaux valide est lui-même une chaîne valide}. Retirer les derniers enregistrements d'un bundle le laisse parfaitement re-prouvable ; seul le manifest-root change. Et comme ce root voyage \emph{dans} le bundle qu'on tend à l'auditeur, celui-ci n'a rien à quoi le confronter : le bundle ne prouve sa cohérence que contre lui-même.
+\end{alerte}
+
+L'ancre est la sortie de ce cercle. C'est un enregistrement minuscule, publié \emph{ailleurs}, qui dit : pour ce run, la racine attendue est celle-ci, et elle engage $N$ nœuds. L'auditeur la reçoit par un canal distinct de celui du bundle — et c'est cette distinction de canal, non la cryptographie, qui fait le travail.
+
+Le \mm{compte de nœuds} n'est pas décoratif : il borne la troncature une seconde fois, indépendamment de la racine. Un bundle amputé se trahit alors deux fois, par sa racine \emph{et} par son compte. Deux gardes valent mieux qu'un lorsque l'un repose sur une comparaison de chaînes qu'un opérateur pressé pourrait omettre.
+
+Le format suit la même philosophie que le reste : une \mm{ligne à champs séparés par des tabulations}, écrite et relue à la main. Un auditeur doit pouvoir lire un journal d'ancres avec \code{cat}, et un vérifieur sans dépendances doit pouvoir le parser en vingt lignes. Tout champ contenant une tabulation ou un saut de ligne est refusé \emph{à l'écriture} : le format reste injectif par construction.
+
+\att{Ce que l'ancre ne fait pas.} Elle ne dit ni que la décision était correcte, ni que le producteur était honnête au moment d'ancrer. Un producteur malveillant peut tronquer un run \emph{puis} en publier l'ancre : l'ancre sera cohérente avec le mensonge. Ce que l'ancre empêche, c'est la falsification \emph{postérieure} à la publication — ce qui distingue déjà un journal d'un récit. Dans le service, l'ancrage est \emph{opt-in} et le binaire annonce au démarrage « ancrage \textsc{inactif} » lorsqu'il ne l'est pas : la propriété n'est jamais supposée acquise en silence.
+
+\section{Le rejeu déterministe}
+
+Re-prouver l'intégrité et re-jouer l'exécution sont deux questions différentes, et le système les sépare. \code{verify} répond à « ce compte est-il authentique ? » ; \code{replay} répond à « si je relance, obtiens-je la même chose ? ».
+
+Le rejeu se heurte à un obstacle concret : les agents s'exécutent en parallèle, et l'ordre d'achèvement — donc l'horloge murale — n'est pas déterministe. Si l'ordre de la chaîne dépendait de l'horloge, la racine ne serait pas reproductible, et il n'y aurait ni rejeu ni vérification tierce. La décision d'architecture est d'ordonner sur les \mm{coordonnées déterministes du substrat} — la cellule écrite, par (version, pointeur) — en départageant au besoin par le hachage de la charge utile, qui est une adresse de contenu. L'horodatage murale devient consultatif et se trouve exclu du hachage. Conséquence : le même \emph{ensemble} d'enregistrements donne la même racine, quel que soit l'ordre d'exécution.
+
+Deux niveaux existent. Le premier, hors-ligne et gratuit, re-scelle les enregistrements en ordre canonique et vérifie que la racine recomposée est la bonne. Le second re-dérive les sorties d'agents \emph{purs}, fonction de leur entrée et de leur variante, et compare les empreintes de sortie ; lorsqu'un échantillonnage stochastique intervient, il exige une graine épinglée. Aucune horloge logique n'est injectée dans le substrat : les coordonnées existantes suffisaient.
+
+\section{S6 — De la chaîne au dossier réglementaire}
+
+\subsection{Une vue re-dérivable, et rien de neuf à croire}
+
+La dérivation réglementaire n'invente aucune cryptographie et n'ajoute \emph{aucune} surface de confiance. Elle repose sur une égalité : \[ \text{artefact} = \mathrm{derive}(\text{enregistrements scell\'es},\; \text{mapping@version}) \] où \code{derive} est une fonction pure et déterministe. Le destinataire la ré-exécute depuis le bundle et obtient \mm{les mêmes octets}. Le moteur re-prouve lui-même les enregistrements avant de dériver, et refuse de produire un dossier à partir de ce qui n'est pas prouvé. Tout le risque résiduel se déplace donc du calcul vers l'\emph{honnêteté du cadrage} — ce qui est un progrès, car le cadrage, lui, est lisible.
+
+\subsection{Le mapping est une revendication datée, hachée, et qui voyage}
+
+Dire « ce nœud humain constitue l'évidence de telle exigence » n'est pas un fait technique : c'est une \mm{lecture juridique}. Le système la traite comme telle. Un jeu de mappings est versionné, daté, haché, et il \emph{voyage avec l'artefact}. Le dossier ne dit donc pas « nous sommes conformes » ; il dit « voici l'évidence, sous cette lecture-ci, arrêtée à cette date-là ». Quand le réglementaire évolue, ce n'est pas l'artefact passé qui devient faux — c'est la version de lecture qui change, et l'ancienne reste interprétable.
+
+\subsection{Un langage de sélecteurs volontairement pauvre}
+
+Pour désigner les nœuds qui évidencient une exigence, la tentation serait d'admettre du code arbitraire. Le choix inverse a été fait : un \mm{petit langage fermé} — type de nœud, présence ou égalité d'un champ, action humaine, conjonction, disjonction. Cette pauvreté est ce qui donne trois propriétés dont aucune n'est accessoire. Le sélecteur est \emph{lisible à l'œil}, donc un juriste peut le lire et \emph{contester} la revendication. Il est \emph{sérialisable}, donc il voyage dans le bundle et le tiers re-dérive. Il est \emph{déterministe}, donc le même prédicat sur les mêmes enregistrements rend les mêmes identifiants, dans l'ordre de la chaîne. Et surtout : un sélecteur ne peut, par construction, que \emph{sélectionner} des nœuds existants — jamais en inventer.
+
+\subsection{La couverture honnête, imposée par le compilateur}
+
+\begin{acquis}
+Un cadre déclaré \emph{sans aucun trou} est \ko{rejeté}. L'artefact doit énumérer ce qui est couvert, ce qui ne l'est que partiellement, et ce qui sort du périmètre du graphe. Publier la seule couverture ferait passer un dossier vide pour une bonne nouvelle — c'est le « vert malhonnête », et le type l'interdit.
+\end{acquis}
+
+Quatre cadres sont câblés : l'AI Act (Règlement UE 2024/1689, régime haut risque), le RGPD (2016/679), la CSDDD (Directive UE 2024/1760) et la LkSG allemande. À l'intérieur d'un cadre, ajouter une exigence est une \emph{donnée} ; ajouter un cinquième cadre est une modification de code.
+
+\subsection{Outillé n'est pas conforme}
+
+C'est la sœur de « intègre n'est pas correct », et elle est imposée de la même manière : la structure d'artefact réglementaire \mm{n'a aucun champ « conforme »}. Fournir et mapper l'évidence n'est pas prononcer la conformité — laquelle est une conclusion juridique qui suppose la classification du système, le conseil au client et des obligations organisationnelles qu'aucun graphe ne produit. La propriété « intègre $\neq$ correct » est en outre \emph{propagée} : l'évidence ne cite que des identifiants de nœuds, jamais des verdicts, de sorte qu'une décision scellée mais fausse n'est jamais blanchie en « évidence de conformité ».
+
+\section{L'effacement sur une chaîne qui ne se coupe pas}
+
+Le droit à l'effacement (RGPD art. 17) semble incompatible avec une chaîne append-only, et il l'est si l'on s'y prend par suppression : le sceau porte sur les octets entiers du nœud, retirer un enregistrement casse son sceau et tous les suivants, et la re-preuve refuse en plus les références devenues pendantes.
+
+La réponse retenue est le \mm{crypto-shredding} — faire disparaître non pas l'enregistrement, mais la capacité de le lire. Ce n'était pas un choix ouvert : l'artefact réglementaire produit par le moteur d'évidence \emph{annonçait déjà cette réponse} à ses destinataires. Implémenter autre chose — une purge par préfixe, qui aurait techniquement très bien fonctionné — aurait fait \emph{mentir} un document déjà remis à des régulateurs. C'est un cas où la contrainte d'honnêteté a directement déterminé l'architecture.
+
+\section{Les gardes}\label{sec:gardes}
+
+\subsection{Un seul analyseur d'autorité, et pourquoi}
+
+La question qu'une garde d'egress doit trancher n'est pas « que dit la RFC 3986 ? » mais \mm{quel hôte le client HTTP va-t-il réellement contacter ?}. Ces deux questions diffèrent, et tout l'écart entre elles est de la surface d'attaque. \code{http://evil.com\#@127.0.0.1} a pour hôte \code{evil.com} — n'importe quel client le dira — mais un analyseur qui ne coupe pas le fragment y lit « 127.0.0.1 » et conclut au loopback : le code croit parler à la machine locale pendant que la connexion part chez l'attaquant. Cette famille de défauts porte un nom, le \emph{différentiel d'analyseur}.
+
+Le dépôt en a compté jusqu'à cinq exemplaires. Deux étaient durcis et se déclaraient « miroirs exacts », tenus d'accord par une discipline écrite en commentaire ; les trois autres ne l'étaient pas, et le \code{grep} de référence ne les trouvait même pas, car elles ne portaient pas le nom cherché. La discipline a tenu deux fois puis échoué trois, dont une \emph{dans le module qui l'avait édictée}. Elle est aujourd'hui remplacée par une structure : un analyseur unique, et un test qui interdit qu'une copie réapparaisse.
+
+Ce module porte deux devoirs, et le second est le plus lourd. \mm{Appliquer} — refuser un point d'accès non local — est la fonction que tout le monde reconnaît comme de la sécurité. \mm{Attester} l'est moins, et pèse davantage : certains appelants ne bloquent rien, ils \emph{classent}, et la classe est ensuite scellée dans un reçu. Une garde qui se trompe laisse passer un appel : c'est grave et réparable. Un attesteur qui se trompe écrit dans un document non répudiable la phrase « la computation a été témoignée localement » à propos d'un appel parti ailleurs.
+
+\subsection{Le refus de démarrage}
+
+Sur le chemin d'appel payant vers un tiers, quatre invariants sont exigés avant tout démarrage, et leur ordre suit la gravité. \mm{(1)} Une clé HMAC dérivable — sans elle, la provenance est scellée sous une clé publique de test et les reçus sont \emph{forgeables}, ce qui rend tout le reste sans valeur. \mm{(2)} L'authentification, faute de quoi l'egress payant vers un tiers se ferait sans identité vérifiée. \mm{(3)} Un stockage durable, sans quoi la preuve disparaît à chaque redéploiement. \mm{(4)} La \emph{capacité} de caviarder : non la caviardage elle-même — un défaut « désactivé » par politique est légitime — mais le fait que son absence soit \emph{choisie} et jamais subie. Sans cette quatrième garde, le binaire annonçait « préflight correct » pendant que chaque invite sortait en clair, et l'opérateur n'avait même pas le moyen de l'activer.
+
+\subsection{La posture d'observation}
+
+Un dispositif de provenance placé dans un chemin de production doit répondre à une question avant toute autre : que se passe-t-il quand \emph{lui} tombe ? La réponse implémentée est nommée dans les termes de l'industrie à l'intérieur même du module : \code{fail\_open} sur le chemin de capture, sous une posture \code{observe\_only}. La passerelle observe et enregistre ; elle ne refuse jamais une requête \emph{pour un motif de provenance}. Le changement de code de statut d'un chemin servi est précisément ce que le reste du système existe pour interdire : la posture est donc un opt-in déclaré, gouverné par un interrupteur, et annoncé au démarrage. Le troisième terme usuel, \code{shadow} — capture concurrente, hors du chemin de la réponse — est \emph{délibérément non implémenté}, et le module le dit plutôt que de le laisser supposer.
+
+\section{La mémoire scellée}
+
+Le graphe couvre l'exécution d'un run ; il reste la question de ce qu'un système \emph{retient} entre les runs. La mémoire reçoit le même traitement que la décision : une chaîne, une racine, et une re-preuve. Deux points de lecture existent — un instantané de ce qu'un tenant a appris d'une famille donnée, et la re-preuve de la racine de cette mémoire — exactement comme un run offre sa lecture et sa vérification. Le cloisonnement y prend une forme qui mérite d'être notée : la famille d'un \emph{autre} tenant n'est pas refusée, elle est \mm{invisible} — la lecture rend un ensemble vide. Un refus est une information ; il apprend à celui qui interroge que la chose existe. L'invisibilité n'en donne aucune.
+
+\section{Un déroulé complet}
+
+L'exemple de référence du dépôt n'est pas une illustration écrite après coup : c'est un programme qui produit, en une commande, un bundle autoportant sur lequel les démonstrations tournent. Il vaut la peine d'être suivi pas à pas, car il exerce chacun des mécanismes décrits jusqu'ici.
+
+\subsection{Le cas}
+
+\mm{SUP-2024 — Nordwind Textilhandel GmbH}, fournisseur textile de rang 1, Allemagne. Neuf actes sont scellés au fil de l'exécution, dans cet ordre.
+
+\begin{enumerate}[leftmargin=15pt,itemsep=1.5pt,topsep=3pt]
+\item Un acte d'agent, \code{supplier\_intake} : extraction structurée du dossier fournisseur — pays, rang, secteur, nombre de bénéficiaires effectifs.
+\item Une \emph{évidence} : l'instantané de la liste consolidée sanctions/PEP, \emph{figé au moment T} et référencé par une adresse datée. Il est scellé \emph{avant} d'être consommé.
+\item Un acte, \code{sanction\_screen}, qui \emph{cite} cette évidence et conclut \code{PASS}.
+\item Une seconde évidence : le rapport d'audit social et environnemental du sous-traitant de rang inférieur, également figé.
+\item Un acte, \code{esg\_risk\_assess}, qui cite cette seconde évidence et conclut \code{REVIEW} — risque environnemental élevé au sous-tier de teinture.
+\item Un acte d'agrégation, \code{diligence\_aggregate}, qui prend \code{sanction=PASS; esg=REVIEW} et conclut \code{CONDITIONNEL} : approbation sous plan d'atténuation.
+\item[7--8.] Deux \emph{arêtes} typées : le dossier fournisseur circule de l'intake au criblage, le profil de risque de l'évaluation ESG à l'agrégation. Elles sont scellées \emph{après} les nœuds qu'elles relient — une arête ne peut référencer qu'un nœud déjà scellé, sinon le graphe la refuse.
+\item[9.] Deux actions humaines : une \mm{escalade} du risque au comité de conformité, puis une \mm{approbation sous conditions} après validation du plan d'atténuation. Ce sont les seuls nœuds écrits par un humain, sous contrôle de rôle.
+\end{enumerate}
+
+\subsection{Ce que le destinataire fait ensuite}
+
+Le programme re-parse alors les enregistrements \emph{comme le ferait un tiers} — en repartant des seuls records, sans l'état interne du producteur — puis dérive les dossiers. Une \mm{seule capture} est relue sous \mm{trois cadres} : CSDDD, LkSG et AI Act. Ce point est le cœur économique du dispositif : la même exécution, scellée une fois, répond à trois obligations distinctes sans être ré-instrumentée pour chacune.
+
+Trois démonstrations se déduisent du même bundle, et chacune correspond à une propriété décrite plus haut.
+
+\begin{itemize}[leftmargin=13pt,itemsep=2.5pt,topsep=3pt]
+\item \mm{La re-preuve sans confiance.} Le fichier d'enregistrements scellés se re-prouve avec le vérifieur à dépendances nulles, que le destinataire recompile : \ok{sortie 0}.
+\item \mm{L'altération détectée.} Une variante du fichier ne diffère que par \emph{un seul champ scellé} — le verdict de criblage sanctions d'un fournisseur, retourné de \code{FAIL} à \code{PASS}. C'est exactement la falsification qu'un dispositif de traçabilité doit attraper, et c'est la plus tentante. Le vérifieur rend \ko{sortie 1} et \emph{désigne l'enregistrement} fautif.
+\item \mm{Le dossier re-dérivable.} Les rendus réglementaires sont une \emph{vue} : le destinataire re-calcule lui-même $\mathrm{derive}(\text{records re-prouvés},\ \text{mapping@version})$ et compare. Le bundle contient la marche à suivre.
+\end{itemize}
+
+Et la clé du tenant, qui re-prouve tout cela, \mm{n'est écrite nulle part dans le bundle}. Le programme de démonstration l'imprime au terminal — c'est elle que le destinataire obtient « auprès du responsable de traitement », par un canal qui n'est pas celui du dossier. La séparation des canaux, ici encore, fait autant de travail que la cryptographie.
+
+\section{Ce que la technologie ne prouve pas}\label{sec:limites}
+
+\begin{alerte}
+La re-preuve atteste l'\mm{intégrité} : « ce graphe est le compte authentique, non altéré, de ce qui s'est passé — quels agents, ce qu'ils ont reçu, produit et passé à qui, et ce que l'humain a décidé ». Elle n'atteste \ko{ni la correction} de la décision — c'est une couche de mesure, séparée — \ko{ni une reproductibilité bit-à-bit}, les modèles de langage étant non déterministes.
+\end{alerte}
+
+Cette frontière n'est pas seulement documentée : elle est \emph{générée dans le livrable}. Le bundle remis à l'auditeur contient le paragraphe qui explique comment le contester — la déclaration « n'établit \textsc{pas} que l'enregistrement n'a pas été fabriqué a posteriori (le déclarant et le détenteur de la clé peuvent être la même partie) » — et précise que, sans preuve d'ancrage externe, la re-preuve atteste l'intégrité seule.
+
+Il faut nommer la conséquence sans l'adoucir : dans sa configuration de base, le reçu est \mm{tamper-evident pour un détenteur de clé}, et non \emph{trustless} pour un tiers quelconque. C'est l'ancrage externe, publié par un canal distinct — éventuellement contresigné par une autorité d'horodatage tierce — qui déplace cette frontière. Un système qui prétendrait le contraire mentirait sur la nature même de la garantie, et cette phrase est écrite dans le produit précisément pour que personne, y compris de bonne foi, ne le prétende à sa place.
+
+\section{Les mesures}
+
+\begin{center}\small
+\begin{tabular}{@{}l r r r@{}}
+\toprule
+Fermeture de dépendances (mesurée) & crates & tests & lignes \code{.rs}\\
+\midrule
+\mm{Le Seuil} — la passerelle & 14 & 1\,329 & 74\,548\\
+\mm{Le Registre} — la console d'audit & 8 & 378 & 19\,386\\
+socle partagé (graphe, autorité, horodatage, export) & 4 & 132 & 6\,043\\
+\midrule
+union & \textbf{18} / 74 & \textbf{1\,575} & \textbf{87\,891}\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Les fermetures sont \emph{mesurées} — l'arbre de dépendances réelles intersecté avec les membres de l'espace de travail — et non dessinées. Les deux produits ne partagent que quatre modules, tous situés dans le socle de preuve : c'est le bon signe, les produits se joignant par le sceau et non par du code applicatif.
+
+\begin{these}
+\mm{Le fil conducteur.} Chaque mécanisme décrit ici existe pour rendre une classe précise de tricherie \emph{détectable} : le chaînage pour l'altération et le réordonnancement, le compte de nœuds et l'ancre pour la troncature, le vérifieur sans dépendances pour le déplacement de confiance vers l'éditeur, le langage de sélecteurs pour la citation fantôme, la couverture obligatoire des trous pour le « vert malhonnête », l'analyseur d'autorité unique pour le différentiel d'analyseur, et le refus de démarrage pour la preuve qui se croirait acquise. Ce qui reste hors de portée — la correction d'une décision, l'honnêteté du producteur au moment d'ancrer — est écrit dans le document que reçoit l'auditeur, et non dans une note de bas de page que personne ne lit.
+\end{these}
+
+\end{document}

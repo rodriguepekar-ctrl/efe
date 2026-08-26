@@ -1,0 +1,90 @@
+\documentclass[11pt]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage[french]{babel}
+\usepackage{newpxtext,newpxmath}
+\usepackage[a4paper,top=1.3cm,bottom=1.2cm,left=1.5cm,right=1.5cm]{geometry}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{titlesec}
+\usepackage[most]{tcolorbox}
+\usepackage{multicol}
+\usepackage{enumitem}
+
+\definecolor{navy}{HTML}{1F3A5F}
+\definecolor{grey}{HTML}{54606E}
+\definecolor{green}{HTML}{2C6E49}
+\definecolor{red}{HTML}{A6322E}
+\definecolor{boxgray}{HTML}{F3F5F8}
+\definecolor{boxedge}{HTML}{D9E0EA}
+\definecolor{boxwarm}{HTML}{FBF7F0}
+\definecolor{warmedge}{HTML}{D8C9AE}
+
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+\setlength{\columnsep}{15pt}
+\linespread{1.04}
+\pagestyle{empty}
+
+\titleformat{\section}{\color{navy}\bfseries}{}{0pt}{}
+\titlespacing{\section}{0pt}{9pt}{2.5pt}
+
+\newtcolorbox{ouverture}{colback=boxgray,colframe=boxedge,boxrule=0.5pt,arc=2.5pt,
+  left=8pt,right=8pt,top=5pt,bottom=5pt}
+\newtcolorbox{cadre}{colback=boxwarm,colframe=warmedge,boxrule=0.7pt,arc=2.5pt,
+  left=8pt,right=8pt,top=4pt,bottom=4pt}
+\newcommand{\code}[1]{\texttt{\small #1}}
+\newcommand{\mm}[1]{\textbf{\textcolor{navy}{#1}}}
+\newcommand{\ok}[1]{\textcolor{green}{\textbf{#1}}}
+
+\begin{document}
+
+\begin{center}
+{\LARGE\bfseries\color{navy} Scella — Le Seuil \& Le Registre}\\[3pt]
+{\large\color{grey}\itshape Faire passer vos appels de modèles par un périmètre qui laisse une preuve}
+\end{center}
+\vspace{2pt}
+
+\begin{ouverture}
+\mm{Le problème.} Quand vos décisions passent par un modèle de langage tiers, vous ne pouvez rien établir après coup. Le journal appartient au fournisseur, il n'est pas scellé, et il ne survit pas à un redéploiement. L'AI Act impose pourtant aux systèmes à haut risque d'enregistrer leurs événements (art. 12) et le RGPD de tenir un registre des traitements (art. 30) — tandis que les passerelles de routage existantes acheminent, mesurent et mettent en cache sans produire le moindre artefact opposable.
+
+\mm{Ce que Scella résout.} Chaque appel qui sort de chez vous laisse derrière lui un artefact scellé qu'un tiers peut re-vérifier — \ok{sans clé, sans réseau, sans installer notre logiciel} — et qui énonce lui-même les limites de ce qu'il prouve. Vous n'avez plus à demander qu'on vous croie sur parole, ni à croire quiconque sur la sienne.
+\end{ouverture}
+
+\begin{multicols}{2}
+
+\section{Le Seuil — le périmètre}
+Une passerelle que vous déployez chez vous, devant vos modèles. Tout appel la franchit ; ce qui la franchit est scellé, avec la réponse, dans un graphe de provenance. Elle fonctionne \ok{sans aucune clé d'API} : un modèle exécuté sur votre propre infrastructure suffit, et le chemin souverain complet — exécution, enregistrement, re-preuve — est couvert par un test de bout en bout contre un modèle local. Douze routes HTTP sont servies : exécution, relecture déterministe, événements, enregistrements, re-preuve, et dérivation du dossier réglementaire.
+
+\section{Le Registre — le dossier}
+Il traduit un run scellé en dossier opposable : ce qui est \emph{couvert}, ce qui ne l'est que \emph{partiellement}, et ce qui sort du périmètre. Trois cadres sont câblés — AI Act (art. 12), RGPD (art. 30 et art. 5(1)(c)), LkSG (§10) — et le dossier publie toujours les trois nombres ensemble. Publier la seule couverture ferait passer un dossier vide pour une bonne nouvelle.
+
+\section{Le reçu — et ce qu'il ne prouve pas}
+La re-preuve ne demande rien à personne. Deux vérifieurs autonomes, à l'\ok{arbre de dépendances vide}, que votre auditeur recompile lui-même : aucune bibliothèque tierce, aucun réseau, un code de sortie — 0 intègre, 1 échec.
+
+\begin{cadre}
+Et le dossier remis à l'auditeur contient \mm{le paragraphe qui explique comment le défaire} : sans preuve d'ancrage externe, la re-preuve atteste l'intégrité — jamais la correction, jamais la non-fabrication — et le déclarant peut être le détenteur de la clé. Nous préférons vous le dire que vous le laisser le découvrir en audit.
+\end{cadre}
+
+\section{Ce que l'installation demande}
+\begin{itemize}[leftmargin=11pt,itemsep=1.5pt,topsep=2pt]
+\item Un \code{docker compose up}, sur votre infrastructure.
+\item \mm{Posture d'observation} : un échec d'enregistrement ne fait \emph{jamais} échouer la requête de votre client. Le Seuil observe et enregistre ; il ne refuse jamais pour un motif de provenance.
+\item \mm{Refus explicite au démarrage} sur le chemin d'appel payant : sans clé non forgeable, sans authentification, sans stockage durable et sans capacité de caviardage, le binaire ne démarre pas — plutôt que de servir en donnant l'illusion de la preuve.
+\item Rien n'est actif par défaut : chaque capacité s'active explicitement, et le démarrage annonce ce qu'il porte et ce qu'il ne porte pas.
+\end{itemize}
+
+\section{Où en est le produit}
+Deux produits, \mm{1\,575 tests automatisés}. Le chemin souverain — exécution locale, scellement, re-preuve — et la dérivation du dossier réglementaire sont éprouvés et exercés en continu.
+
+Un premier déploiement de production reste à faire, et nous le disons plutôt que de le laisser paraître acquis : la mise en service du profil complet (stockage durable, authentification, caviardage) se fait avec vous, et les procédures de sauvegarde et de rotation de clés ne sont pas encore outillées dans le produit — elles se définissent au pilote, avec votre RSSI et votre DPO.
+
+\section{La prochaine étape}
+Un pilote en posture d'observation : le Seuil est installé à côté de votre chemin de production, il n'en change ni les réponses ni les codes de statut, et il produit dès le premier jour des reçus que votre auditeur re-vérifie seul. Vous décidez ensuite, sur pièces.
+
+\vspace{3pt}
+\hrule\vspace{3pt}
+{\footnotesize\color{grey}\textbf{\textcolor{red}{[ CONTACT À COMPLÉTER ]}}\hfill Scella · août 2026}
+
+\end{multicols}
+\end{document}
