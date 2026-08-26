@@ -73,8 +73,9 @@ pub mod archive;
 pub mod generations;
 pub mod manifeste;
 pub mod restauration;
+pub mod trousseau_maitre_fichier;
 
 pub use archive::{sauvegarder, ArchiveError, Sauvegarde};
 pub use generations::{EtatGeneration, Generation, TrousseauMaitre};
 pub use manifeste::{Manifeste, ManifesteError, FORMAT};
-pub use restauration::{restaurer, restaurer_avec, Issue, Restauration};
+pub use restauration::{restaurer, restaurer_avec, restaurer_controle, Controle, Issue, Restauration};

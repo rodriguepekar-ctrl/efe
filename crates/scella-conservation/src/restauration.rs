@@ -36,18 +36,32 @@
 //! trousseau re-prouve l'archive, ce n'est plus une hypothèse, c'est un fait — [`Issue::MauvaiseGeneration`]
 //! nomme la vraie. Sinon, [`Issue::CleOuPremierRecord`] énonce les deux causes sans choisir.
 //!
-//! ## Pourquoi `RacineDivergente` mérite d'exister
+//! ## Pourquoi `RacineDivergente` mérite d'exister — et ce qu'elle n'attrape PAS
 //!
 //! Le cas paraît impossible : si le contenu changeait, la chaîne ne se re-prouverait plus. Il ne
 //! l'est pas — **pour qui détient la clé**. Modifier un record puis re-sceller toute la chaîne
-//! produit une archive parfaitement re-prouvable, de même longueur, et de racine différente. C'est
-//! la réécriture de l'histoire par le détenteur légitime, et la seule chose qui l'attrape est la
-//! racine écrite ailleurs — au manifeste, et mieux encore dans une ancre publiée hors de sa portée.
+//! produit une archive parfaitement re-prouvable, de même longueur, et de racine différente.
+//!
+//! Mais il faut aller au bout du raisonnement, ce que la première version de ce module n'avait pas
+//! fait : **celui qui détient l'archive détient aussi son manifeste**. Un adversaire qui re-scelle
+//! réécrit la racine du manifeste dans le même geste, et `RacineDivergente` ne se déclenche jamais.
+//! Elle attrape la corruption accidentelle et l'adversaire négligent. Pas l'adversaire décidé.
+//!
+//! ## L'ancre — la seule chose que le porteur de l'archive ne peut pas réécrire
+//!
+//! Le remède est l'**ancre** : un engagement `(run_id, racine, compte)` publié dans un journal que
+//! le porteur de l'archive ne contrôle pas. `provenance-dag` — la seule dépendance de ce crate —
+//! sait déjà l'indexer et la vérifier (`AnchorIndex`, `verify_against_anchor`). Le manifeste ne
+//! porte donc pas une URL décorative mais le **`run_id`** qui indexe ce journal, et [`Controle`]
+//! permet de l'exiger.
+//!
+//! L'ancre est confrontée **avant** le manifeste et son verdict l'emporte, pour une raison qui tient
+//! en une phrase : le manifeste voyage avec l'archive, l'ancre non.
 
 use std::fmt;
 use std::path::Path;
 
-use provenance_dag::{reprove_dag, Record, SealedDag, TenantKey};
+use provenance_dag::{reprove_dag, verify_against_anchor, AnchorIndex, Record, SealedDag, TenantKey};
 
 use crate::generations::{EtatGeneration, TrousseauMaitre};
 use crate::manifeste::{Manifeste, NOM_MANIFESTE, NOM_RECORDS};
@@ -108,6 +122,43 @@ pub enum Issue {
         attendue: String,
         /// La racine re-dérivée.
         obtenue: String,
+    },
+    /// **Le verdict qui compte** : l'ancre publiée contredit ce que l'archive contient.
+    ///
+    /// Contrairement à [`Issue::RacineDivergente`], celle-ci attrape l'adversaire décidé : il a pu
+    /// réécrire les records ET le manifeste, il n'a pas pu réécrire un journal qu'il ne détient pas.
+    AncreDivergente {
+        /// Le `run_id` que le manifeste désigne.
+        run_id: String,
+        /// Ce que l'ancre publiée engage.
+        motif: String,
+    },
+    /// Le manifeste désigne une ancre que le journal fourni ne contient pas.
+    ///
+    /// Pas une accusation : le journal peut être partiel, ou l'ancre pas encore publiée.
+    AncreAbsente {
+        /// Le `run_id` cherché.
+        run_id: String,
+    },
+    /// Le journal d'ancres fourni ne s'analyse pas.
+    AncreIllisible {
+        /// Ce qui n'a pas marché.
+        cause: String,
+    },
+    /// Le trousseau des clés de cas présenté n'est pas celui qui était en vigueur à la prise.
+    ///
+    /// La chaîne se re-prouve — le scellement ne dépend pas de ces clés — mais les champs effaçables
+    /// se liraient `CleAbsente` sans que rien ne le dise. On le dit.
+    TrousseauDivergent {
+        /// L'empreinte inscrite au manifeste.
+        attendue: String,
+        /// Celle du fichier présenté.
+        obtenue: String,
+    },
+    /// Le manifeste porte une empreinte de trousseau, et aucun trousseau n'a été présenté.
+    TrousseauNonPresente {
+        /// L'empreinte que le manifeste attend.
+        attendue: String,
     },
     /// Le manifeste est absent ou illisible.
     ManifesteIllisible {
@@ -176,10 +227,47 @@ impl fmt::Display for Issue {
                 "même longueur, racine différente ({obtenue} au lieu de {attendue}) : la chaîne a été \
                  RE-SCELLÉE. Seul un détenteur de la clé peut faire cela."
             ),
+            Self::AncreDivergente { run_id, motif } => write!(
+                f,
+                "L'ANCRE PUBLIÉE CONTREDIT CETTE ARCHIVE (run {run_id}) : {motif}. Le manifeste voyage \
+                 avec l'archive, l'ancre non — c'est donc l'ancre qui a raison."
+            ),
+            Self::AncreAbsente { run_id } => write!(
+                f,
+                "le manifeste désigne l'ancre « {run_id} », absente du journal fourni — journal partiel \
+                 ou ancre non publiée. Ce n'est pas une accusation."
+            ),
+            Self::AncreIllisible { cause } => write!(f, "journal d'ancres illisible : {cause}"),
+            Self::TrousseauDivergent { attendue, obtenue } => write!(
+                f,
+                "le trousseau présenté ({obtenue}) n'est pas celui de la prise ({attendue}) : la chaîne \
+                 se re-prouve, mais les champs effaçables se liront « clé absente » sans autre \
+                 explication. Restaurez le bon trousseau."
+            ),
+            Self::TrousseauNonPresente { attendue } => write!(
+                f,
+                "le manifeste attend le trousseau d'empreinte {attendue} et aucun n'a été présenté — \
+                 les champs effaçables resteront illisibles"
+            ),
             Self::ManifesteIllisible { cause } => write!(f, "manifeste illisible : {cause}"),
             Self::RecordsIllisibles { cause } => write!(f, "records illisibles : {cause}"),
         }
     }
+}
+
+/// Ce que l'appelant accepte de **confronter** à l'archive, au-delà de la clé.
+///
+/// Vide par défaut, et c'est volontaire : une restauration hors-ligne, sur une machine de secours
+/// qui n'a que l'archive et la clé, doit rester possible. Chaque pièce ajoutée ici resserre le
+/// verdict d'un cran — mais ne pas l'avoir n'est pas une faute, c'est une situation.
+#[derive(Debug, Default, Clone)]
+pub struct Controle<'a> {
+    /// Le **texte** du journal d'ancres. Fourni par l'appelant plutôt que lu par ce module : le
+    /// journal peut venir d'un fichier, d'un objet distant ou d'un dépôt tiers, et c'est
+    /// précisément parce qu'il ne vient pas de l'archive qu'il a de la valeur.
+    pub journal_ancres: Option<&'a str>,
+    /// Le fichier de trousseau des clés de cas dont on veut confronter l'empreinte.
+    pub trousseau_cas: Option<&'a Path>,
 }
 
 /// Le résultat complet d'une tentative — ce qu'on a pu lire, et ce qu'on en conclut.
@@ -236,6 +324,7 @@ fn diagnostiquer(
     records: &[Record],
     cle: &TenantKey,
     autres: &[(u32, &TenantKey)],
+    controle: &Controle<'_>,
 ) -> Issue {
     let v = reprove_dag(records, cle);
     if !v.ok {
@@ -251,6 +340,30 @@ fn diagnostiquer(
         return Issue::ChaineRompue { a };
     }
 
+    // ── L'ANCRE D'ABORD, quand elle est fournie ──────────────────────────────────────────────
+    // Elle passe avant le manifeste, et son verdict l'emporte, pour une raison qui tient en une
+    // phrase : le manifeste voyage avec l'archive, l'ancre non. Un adversaire qui re-scelle réécrit
+    // le premier dans le même geste ; il ne peut rien contre le second.
+    if let Some(journal) = controle.journal_ancres {
+        if let Some(run_id) = manifeste.ancre.as_deref() {
+            match AnchorIndex::parse(journal) {
+                Err(e) => return Issue::AncreIllisible { cause: format!("{e:?}") },
+                Ok(index) => match index.get(run_id) {
+                    None => return Issue::AncreAbsente { run_id: run_id.to_string() },
+                    Some(ancre) => {
+                        let v = verify_against_anchor(records, cle, ancre);
+                        if !v.ok {
+                            return Issue::AncreDivergente {
+                                run_id: run_id.to_string(),
+                                motif: v.reason.unwrap_or_else(|| "sans motif".into()),
+                            };
+                        }
+                    }
+                },
+            }
+        }
+    }
+
     // La chaîne est authentique. Reste à savoir si c'est bien CELLE que le manifeste décrivait.
     // Le compte d'abord : il se compare d'un coup d'œil, là où deux racines de 64 caractères se
     // comparent mal. Deux gardes, et le plus lisible passe en premier.
@@ -264,6 +377,33 @@ fn diagnostiquer(
     if obtenue != manifeste.racine {
         return Issue::RacineDivergente { attendue: manifeste.racine.clone(), obtenue };
     }
+
+    // ── Le trousseau des cas ────────────────────────────────────────────────────────────────
+    // Il ne participe PAS au scellement : la chaîne se re-prouve sans lui. Mais restaurer avec le
+    // mauvais trousseau donne un registre dont les champs effaçables se lisent tous « clé absente »,
+    // à chaque consultation, sans que rien n'en explique la cause. C'est le défaut que M6 et M7
+    // avaient produit ensemble, chacun ayant raison de son côté. On le dit ici, une fois.
+    if let Some(attendue) = manifeste.empreinte_trousseau.as_deref() {
+        match controle.trousseau_cas {
+            None => return Issue::TrousseauNonPresente { attendue: attendue.to_string() },
+            Some(chemin) => match crate::archive::empreinte_fichier(chemin) {
+                Err(e) => {
+                    return Issue::TrousseauDivergent {
+                        attendue: attendue.to_string(),
+                        obtenue: format!("illisible : {e}"),
+                    }
+                }
+                Ok(obtenue_emp) if obtenue_emp != attendue => {
+                    return Issue::TrousseauDivergent {
+                        attendue: attendue.to_string(),
+                        obtenue: obtenue_emp,
+                    }
+                }
+                Ok(_) => {}
+            },
+        }
+    }
+
     Issue::Restauree { racine: obtenue, noeuds: records.len() }
 }
 
@@ -275,7 +415,7 @@ pub fn restaurer(dossier: &Path, cle: &TenantKey) -> Restauration {
         Ok(x) => x,
         Err(r) => return *r,
     };
-    let issue = diagnostiquer(&manifeste, &records, cle, &[]);
+    let issue = diagnostiquer(&manifeste, &records, cle, &[], &Controle::default());
     Restauration { manifeste: Some(manifeste), records, issue }
 }
 
@@ -283,7 +423,24 @@ pub fn restaurer(dossier: &Path, cle: &TenantKey) -> Restauration {
 ///
 /// C'est ici que le bénéfice de la rotation se constate : une archive scellée sous une génération
 /// simplement *retirée* se restaure sans que rien de particulier ne soit à faire.
+///
+/// Ne confronte que l'archive à elle-même. Pour opposer une ancre publiée ou un trousseau de cas,
+/// voir [`restaurer_controle`].
 pub fn restaurer_avec(dossier: &Path, trousseau: &TrousseauMaitre) -> Restauration {
+    restaurer_controle(dossier, trousseau, &Controle::default())
+}
+
+/// Restaure **et confronte** à ce que l'appelant apporte de l'extérieur de l'archive.
+///
+/// La différence avec [`restaurer_avec`] n'est pas de degré. Sans [`Controle`], on vérifie qu'une
+/// archive est cohérente **avec elle-même** — ce qui laisse passer quiconque a réécrit les deux
+/// fichiers ensemble. Avec une ancre, on vérifie qu'elle est cohérente avec un engagement pris
+/// ailleurs, à un moment où l'adversaire n'avait pas encore décidé de mentir.
+pub fn restaurer_controle(
+    dossier: &Path,
+    trousseau: &TrousseauMaitre,
+    controle: &Controle<'_>,
+) -> Restauration {
     let (manifeste, records) = match lire_archive(dossier) {
         Ok(x) => x,
         Err(r) => return *r,
@@ -320,6 +477,6 @@ pub fn restaurer_avec(dossier: &Path, trousseau: &TrousseauMaitre) -> Restaurati
         .filter_map(|g| trousseau.cle_de_lecture(g.numero).map(|c| (g.numero, c)))
         .collect();
 
-    let issue = diagnostiquer(&manifeste, &records, cle, &autres);
+    let issue = diagnostiquer(&manifeste, &records, cle, &autres, controle);
     Restauration { manifeste: Some(manifeste), records, issue }
 }
