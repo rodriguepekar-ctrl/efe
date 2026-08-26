@@ -208,7 +208,15 @@ fn demonstration() -> Result<(), String> {
     let run_id = v["run_id"].as_str().ok_or("réponse de run sans `run_id`")?.to_string();
     let racine_servie = v["run"]["provenance"]["root"].as_str().unwrap_or("").to_string();
     println!("  run servi   : {run_id}");
-    println!("  racine      : {}", if racine_servie.is_empty() { "(non exposée dans la réponse)" } else { &racine_servie });
+    // **Deux racines vont apparaître dans cette démonstration, et elles ne mesurent pas le même
+    // objet.** Celle-ci est la provenance du RUN, telle que la passerelle la sert. Celle du point 5
+    // est celle du BUNDLE, dérivé du run par `GET /v1/swarm/bundle/:id` — c'est elle que l'ancre
+    // engage et que `verify-mini` doit recevoir. Les afficher sans le dire ferait soupçonner une
+    // incohérence à qui les compare, et cette démonstration existe précisément pour être comparée.
+    println!(
+        "  racine      : {}  (provenance du RUN — pas celle du bundle, cf. point 5)",
+        if racine_servie.is_empty() { "(non exposée dans la réponse)" } else { &racine_servie }
+    );
     // M2 : la réponse dit toujours ce que la capture a fait de ce run.
     if v["capture"]["persisted"] == serde_json::Value::Bool(false) {
         println!("  ⚠ capture   : NON PERSISTÉ — {}", v["capture"]["degrade_reason"].as_str().unwrap_or("?"));
@@ -305,6 +313,10 @@ fn demonstration() -> Result<(), String> {
             println!();
             println!("      verify-mini {} \\", f_intact.display());
             println!("        --key-hex <clé tenant> --root {}", a.racine);
+            println!(
+                "      (cette racine est celle du BUNDLE, engagée par l'ancre — pas celle du run\n\
+                 \x20      affichée au point 2, qui porte sur un autre objet.)"
+            );
         }
     }
 

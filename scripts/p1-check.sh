@@ -306,8 +306,16 @@ cat <<'FIN'
       de Keycloak et d'Auth0, sera refusé.
     · Que l'allowlist d'egress soit écrite. Absente ⟹ 403 pour TOUT tenant :
       même avec une vraie clé, la frontière ne sert alors rien.
-    · La tenue en charge, la sauvegarde, la restauration, la rotation de clé.
-      Aucune n'existe (mesuré : 0 occurrence) — c'est P2.
+    · La tenue en charge. Toujours absente : aucun contrôle de ce dépôt ne
+      mesure la passerelle sous charge, et ce script n'y touche pas.
+
+    Cette ligne disait aussi « ni sauvegarde, ni restauration, ni rotation de
+    clé — c'est P2 ». Elle a cessé d'être vraie le jour où P2 a été livré, et
+    elle est corrigée ici plutôt que laissée à vieillir : c'est le défaut
+    récurrent de ce dépôt — un contrôle dont le TEXTE devient faux un module
+    plus tard — et le tolérer une fois de plus reviendrait à faire mentir le
+    document qui sert justement à ne pas se mentir. Les trois existent :
+    `scella-conserver`, et `bash scripts/p2-check.sh` les rejoue.
 FIN
 
 printf '\n\033[32mP1 tient.\033[0m  (démarré, servi, tué, redémarré, re-prouvé)\n'
