@@ -121,6 +121,77 @@ jobs:
       - name: Test (la suite de preuve du DoD #1)
         run: cargo nextest run -p efe-meta-swarm-server --features core-integration --test m1d_core_serving_e2e
 
+  # ══════════════════════════════════════════════════════════════════════════
+  # P1 — le chemin d'egress payant, enfin linté. **PAS ENCORE BLOQUANT** : voir
+  # « Pourquoi ce job n'est pas dans `all-green` » plus bas.
+  #
+  # ## Le trou que ce job ferme
+  #
+  # `fast-checks` passe bien `clippy -D warnings`, mais aux features PAR DÉFAUT
+  # — et `efe-swarm-gateway` déclare `default = []`. Tout ce qui vit derrière
+  # `frontier-llm`, `reg-evidence`, `postgres`, `oidc` et `pii` sort donc de la
+  # rigueur du dépôt : la frontière payante ET le pont M5 vers le registre.
+  #
+  # `rust-tests` en TESTE une partie (`--features "postgres oidc pii
+  # frontier-llm"`) mais ne la LINTE pas, et n'active même pas `reg-evidence` :
+  # `reg_pont::deriver` n'était compilé par AUCUN job. C'est là qu'a vécu le
+  # défaut du 2026-08-26 (`fichiers` construite puis jetée, reg_pont.rs:252) —
+  # visible du compilateur au premier `cargo check`, invisible de la CI.
+  #
+  # ## Portée réelle (à savoir avant de lire un échec)
+  #
+  # `cargo clippy -p X -- -D warnings` ne restreint PAS le deny à `X` : cargo
+  # pose `RUSTC_WORKSPACE_WRAPPER`, donc clippy-driver tourne sur TOUS les
+  # membres du workspace de l'invocation et lit le même `CLIPPY_ARGS`. Ce job
+  # linte donc aussi la fermeture de path-deps que les features tirent
+  # (efe-coordinator, efe-multi-llm, efe-nano-app-coordinator…) — ce qui EST la
+  # couverture que la dette P1 réclame, mais explique qu'un échec puisse tomber
+  # hors de la passerelle.
+  #
+  # ## Pourquoi ce job n'est pas (encore) dans `all-green`
+  #
+  # Parce qu'il est ROUGE aujourd'hui, et le déclarer bloquant tout de suite
+  # bloquerait la fusion sur une dette qu'il ne fait que RÉVÉLER. Relevé du
+  # 2026-08-26 (toolchain 1.88, identique au pin CI) : ~53 sites de lint sur 7
+  # crates — efe-coordinator 24, efe-swarm-gateway 11, efe-multi-llm 11,
+  # efe-nano-app-coordinator 3, efe-swarm-provenance 2, efe-swarm-topology 1,
+  # provenance-bridge 1. Aucun n'est un défaut de correction ; ce sont des
+  # lints de style et de signature (`too_many_arguments` sur des constructeurs
+  # et sur `verify-meta-mini::canonical`, qui MIROITE une spec et ne doit donc
+  # PAS être refactorisée à la légère).
+  #
+  # Le job est laissé DÉCLARÉ et NON BLOQUANT plutôt que retiré : un trou de
+  # couverture qu'on nomme se referme, un trou qu'on tait grandit. Le dernier
+  # geste — l'ajouter à `needs:` d'`all-green` — se fait quand le relevé
+  # ci-dessus tombe à zéro, et pas avant.
+  clippy-frontiere:
+    name: clippy — features servies (frontière + registre) [non bloquant]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.88
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: clippy-frontiere
+      # Le stack de prod exact (cf. Dockerfile) PLUS `reg-evidence` — la seule
+      # feature servie qu'aucun autre job ne compile.
+      - name: clippy (passerelle — toutes features servies)
+        run: >-
+          cargo clippy -p efe-swarm-gateway --all-targets
+          --features "postgres oidc pii reg-evidence frontier-llm"
+          -- -D warnings
+      # Les 3 providers frontière vivent derrière leurs propres features dans
+      # `efe-coordinator` (`default = []`) : `--workspace` compile ce crate SANS
+      # eux. Sans cette étape, le code d'egress lui-même resterait non linté.
+      - name: clippy (coordinator — les 3 providers frontière)
+        run: >-
+          cargo clippy -p efe-coordinator --all-targets
+          --features "anthropic openai gemini"
+          -- -D warnings
+
   python-tests:
     name: Python unit tests
     runs-on: ubuntu-latest

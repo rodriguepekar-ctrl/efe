@@ -56,7 +56,7 @@
 //! `covered: 0` au lieu de passer pour une bonne nouvelle — ce qui serait le « vert malhonnête »
 //! que toute cette série combat.
 
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -249,7 +249,15 @@ pub fn deriver(pont: &RegPont, run_id: Uuid, tenant: &str, a_key: &[u8], stored:
     if let Err(e) = std::fs::create_dir_all(&dossier) {
         return RegReport::echec(slug(pont.framework), format!("dossier « {} » non créé : {e}", dossier.display()));
     }
-    let fichiers = reg_evidence::reg_subtree(&artefact, &mapping).len();
+    // **Aucun compte de fichiers ici, et c'est délibéré.** `reg_subtree` rend un `vec![…]` de TROIS
+    // entrées, toujours (`reg-evidence/src/bundle.rs`) : sa longueur est une constante de
+    // compilation, pas une mesure de ce run — la publier ferait passer pour un résultat ce qui est
+    // la taille d'un littéral. Elle serait de surcroît calculée AVANT l'écriture, donc elle
+    // annoncerait « 3 » d'une écriture qui n'a pas encore eu lieu.
+    //
+    // Le compte n'a pas de destinataire parce qu'il a déjà une preuve : `write_reg_subtree` propage
+    // chaque `fs::write` — son `Ok(())` EST la garantie que les trois fichiers ont atterri. Compter
+    // par-dessus n'ajouterait pas une vérification, seulement un nombre à croire.
     if let Err(e) = reg_evidence::write_reg_subtree(&dossier, &artefact, &mapping) {
         return RegReport::echec(slug(pont.framework), format!("écriture refusée : {e}"));
     }
@@ -267,14 +275,6 @@ pub fn deriver(pont: &RegPont, run_id: Uuid, tenant: &str, a_key: &[u8], stored:
         degrade_reason: None,
         consequence: None,
     }
-}
-
-/// Le nombre de fichiers qu'un dossier contient, tel que [`deriver`] l'écrit. Utile aux tests et à
-/// la route de re-dérivation, qui doivent pouvoir l'affirmer sans relire le disque.
-#[cfg(feature = "reg-evidence")]
-#[must_use]
-pub fn fichiers_attendus(dossier: &Path) -> usize {
-    std::fs::read_dir(dossier.join("reg")).map(|d| d.flatten().count()).unwrap_or(0)
 }
 
 #[cfg(test)]
