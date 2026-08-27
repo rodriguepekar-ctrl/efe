@@ -233,7 +233,9 @@ message IterateRequest {
 // `verify_meta_mini` (P1.2, literally-empty dependency tree) with no trust in
 // this server :
 //
-//     verify_meta_mini meta_steps.jsonl meta_manifest.json --key-hex <64hex>
+// ```text
+// verify_meta_mini meta_steps.jsonl meta_manifest.json --key-hex <64hex>
+// ```
 //
 // HONESTY (inherited from the whole provenance family) : this attests
 // INTEGRITY, never the CORRECTNESS of the consensus decision, and it is

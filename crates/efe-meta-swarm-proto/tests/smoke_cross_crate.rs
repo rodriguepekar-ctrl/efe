@@ -178,6 +178,10 @@ fn iterate_request_roundtrip() {
         }),
         initial_states: vec![],
         traceparent: String::new(),
+        // `true`, et non le défaut : ce test est un ATTRAPEUR DE RÉGRESSIONS D'ENCODAGE, et proto3
+        // n'émet pas un champ resté à sa valeur par défaut. À `false` le champ ne serait jamais sur
+        // le fil, donc jamais éprouvé — le test aurait compilé sans rien vérifier de plus.
+        include_provenance_bundle: true,
     };
 
     let mut bytes = Vec::new();
@@ -188,6 +192,11 @@ fn iterate_request_roundtrip() {
     assert_eq!(it.max_iters, 100);
     assert!((it.tolerance - 1.0e-4).abs() < 1.0e-12);
     assert_eq!(it.max_wall_ms, 15_000);
+
+    // Le champ ajouté par « le reçu nomme ses acteurs » : il n'est asserté NULLE PART ailleurs
+    // dans le dépôt (mesuré). Un drapeau qui décide si un bundle de provenance accompagne la
+    // réponse mérite au moins de survivre à un aller-retour.
+    assert!(decoded.include_provenance_bundle, "le drapeau de bundle doit survivre au round-trip");
 
     let meta = decoded.meta.as_ref().expect("meta round-tripped");
     assert_eq!(meta.dim, 256);

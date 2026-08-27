@@ -41,7 +41,11 @@ fn main() -> Result<()> {
 
     // ── 2. Itérer EN SCELLANT chaque pas (câblage moteur natif). La clé est dérivée, tenue le temps
     //       du run, puis droppée : elle n'entre jamais dans `prov`. ──
-    let (result, prov) = meta.iterate_with_provenance(&HmacKeySource::test_key(), TenantId::system())?;
+    // `None` : cet exemple montre le SCELLEMENT au fil de l'itération, pas la liaison de run
+    // (qui nomme les participants et la règle d'agrégation — voir le chemin servi dans
+    // efe-meta-swarm-server/src/controller/iterate.rs).
+    let (result, prov) =
+        meta.iterate_with_provenance(&HmacKeySource::test_key(), TenantId::system(), None)?;
     println!("=== Méta-essaim « {} » — provenance scellée PAR LE MOTEUR (v1) ===", meta.id());
     println!("→ {} pas · résidu final {:.3e} · arrêt {:?}", result.iterations, result.final_residual, result.stop_reason);
     println!("→ meta_provenance_root : {}", prov.root);
