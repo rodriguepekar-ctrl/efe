@@ -51,6 +51,7 @@ note "le critère de R3 en demande TROIS d'affilée ; R3_TOURS le règle."
 for t in $(seq 1 "$TOURS"); do
     printf '  tour %s/%s … ' "$t" "$TOURS"
     cargo test --workspace --no-fail-fast > "$TRAVAIL/tour$t.log" 2>&1
+    CODE_CARGO=$?
     # Le binaire de test précède ses cas : on garde le contexte pour pouvoir rejouer SEUL.
     # On ne garde QUE le nom du test. La tentation est de retenir aussi le binaire lu sur la
     # ligne « Running » qui précède — c'est faux : avec --workspace, cargo exécute plusieurs
@@ -61,6 +62,19 @@ for t in $(seq 1 "$TOURS"); do
     grep -E '^test .* FAILED$' "$TRAVAIL/tour$t.log" | awk '{print $2}' | sort -u \
       > "$TRAVAIL/echecs$t.txt"
     E=$(wc -l < "$TRAVAIL/echecs$t.txt" | tr -d ' ')
+    # **Croire le CODE DE SORTIE, pas seulement le comptage.** Un binaire de test qui s'ABORTE
+    # (SIGABRT — bibliothèque dynamique manquante, panique dans un initialiseur) n'imprime
+    # AUCUNE ligne « test … FAILED ». Le comptage rend alors 0 pendant que cargo rend 101, et le
+    # script conclurait « aucun échec » sur une course qui s'est effondrée. Un compteur qui ne
+    # sait pas voir un mort n'est pas un compteur.
+    if [ "$CODE_CARGO" -ne 0 ] && [ "$E" -eq 0 ]; then
+        printf '\n'
+        ko "cargo sort en $CODE_CARGO alors qu'aucune ligne FAILED n'a ete lue"
+        note "un binaire s'est probablement aborte sans passer par le harnais de test."
+        grep -E "^error: test failed|SIGABRT|dyld|Library not loaded" "$TRAVAIL/tour$t.log" \
+          | head -5 | sed 's/^/      /'
+        exit 2
+    fi
     # **Distinguer construire de passer.** Cargo écrit « error: test failed, to rerun pass … »
     # quand des TESTS échouent — ce qui est précisément ce que R3 vient mesurer. Un garde qui
     # confond les deux déclare « rien à reproduire » au moment exact où il y a quelque chose à
@@ -97,42 +111,62 @@ if [ "$TOTAL" -eq 0 ]; then
     exit 0
 fi
 
-titre "Discrimination — chaque échec, rejoué SEUL"
+titre "Discrimination — chaque échec, rejoué SEUL (le MÊME binaire)"
+executables_du_workspace > "$TRAVAIL/exes"
 note "c'est ce second passage qui sépare l'instable du cassé."
 INSTABLES=0; REELS=0
-# D'OÙ vient ce test — trouvé dans la SOURCE, pas deviné dans un journal.
+# **Rejouer LE MÊME BINAIRE — pas un binaire rebâti.**
 #
-# Trois méthodes plus simples ont été essayées et sont fausses :
-#   · lire la ligne « Running » qui précède l'échec — cargo entrelace des binaires exécutés en
-#     parallèle, la ligne la plus proche appartient souvent à un autre crate ;
-#   · `cargo test --workspace -- <nom> --exact` — le code de sortie global dépend de N binaires
-#     dont un seul concerne le test : on mesure la santé du workspace, pas celle du test ;
-#   · interroger `--list` sur chaque binaire de `target/debug/deps` — des centaines d'exécutables,
-#     dont certains ne répondent pas.
+# C'est le point sur lequel ce script s'est trompé, et le plus contre-intuitif du lot.
+# `cargo test -p <crate>` ne rejoue pas : il RECONSTRUIT. Or Cargo unifie les features par
+# caisse sur l'ensemble résolu, si bien que le binaire d'une course `--workspace` n'est PAS
+# celui d'une course `-p` — empreintes différentes, et jusqu'aux bibliothèques liées. Mesuré
+# le 2026-08-27 : sous `--workspace`, `efe-agent-runner → axum-server "tls-rustls"` allume un
+# SECOND fournisseur cryptographique rustls ; le binaire lie les deux (19 symboles aws-lc + 54
+# ring, contre 0 + 77 sous `-p`) et rustls refuse de deviner lequel employer.
 #
-# La source, elle, dit exactement où la fonction est déclarée, et son chemin donne le crate et la
-# cible. C'est le seul index qui ne dépende ni du parallélisme ni de l'état de compilation.
-provenance_du_test() {
+# Conséquence : deux tests ont été déclarés « instables » parce qu'ils « passaient seuls ».
+# Ils ne passaient pas seuls — c'est un AUTRE binaire qui passait. La panique était
+# parfaitement déterministe. Comparer deux binaires différents et appeler l'écart
+# « instabilité » est une erreur de méthode qui produit un verdict crédible et faux.
+#
+# On interroge donc `--no-run --message-format=json`, qui donne les exécutables RÉELLEMENT
+# produits par la course de workspace, et on lance celui-là, directement, sans repasser par
+# cargo.
+executables_du_workspace() {
+    cargo test --workspace --no-run --message-format=json 2>/dev/null \
+      | python3 -c "
+import json,sys
+for l in sys.stdin:
+    try: m = json.loads(l)
+    except Exception: continue
+    if m.get('executable') and m.get('target'):
+        print(m['target']['name'] + '\t' + m['executable'])
+"
+}
+
+# La cible qui déclare ce test, trouvée dans la SOURCE — le seul index qui ne dépende ni du
+# parallélisme de cargo ni de l'état de compilation.
+cible_du_test() {
     local nom="$1" f
     f=$(grep -rl --include='*.rs' -E "fn[[:space:]]+${nom}[[:space:]]*\\(" crates/ 2>/dev/null | head -1)
     [ -z "$f" ] && return 1
-    local crate cible
-    crate=$(printf '%s' "$f" | cut -d/ -f2)
     case "$f" in
-        */tests/*) cible=$(basename "$f" .rs); printf -- '-p %s --test %s' "$crate" "$cible" ;;
-        */benches/*) cible=$(basename "$f" .rs); printf -- '-p %s --bench %s' "$crate" "$cible" ;;
-        *) printf -- '-p %s --lib' "$crate" ;;
+        */tests/*|*/benches/*) basename "$f" .rs ;;
+        *) printf '%s' "$(printf '%s' "$f" | cut -d/ -f2)" ;;
     esac
 }
 
 while read -r nom; do
     [ -z "$nom" ] && continue
-    CIBLE=$(provenance_du_test "$nom") || { ko "INTROUVABLE — $nom"; note "aucune source ne declare ce nom : la mesure est caduque."; REELS=$((REELS + 1)); continue; }
-    note "cible : cargo test $CIBLE"
-    # shellcheck disable=SC2086
-    if cargo test $CIBLE -- "$nom" --exact --test-threads=1 > "$TRAVAIL/seul.log" 2>&1; then
+    CIBLE=$(cible_du_test "$nom") || { ko "INTROUVABLE — $nom"; note "aucune source ne declare ce nom : la mesure est caduque."; REELS=$((REELS + 1)); continue; }
+    EXE=$(awk -F'\t' -v c="$CIBLE" '$1==c {print $2; exit}' "$TRAVAIL/exes")
+    [ -z "$EXE" ] && { ko "SANS BINAIRE — $nom"; note "la cible « $CIBLE » n'a produit aucun executable."; REELS=$((REELS + 1)); continue; }
+    note "binaire du workspace : $EXE"
+    if "$EXE" "$nom" --exact --test-threads=1 > "$TRAVAIL/seul.log" 2>&1; then
         att "INSTABLE — $nom"
-        note "passe seul, échoue en masse : il partage une ressource. C'est le sujet de R3."
+        note "LE MEME binaire passe seul et echoue en masse : contention reelle, pas un artefact"
+        note "de reconstruction. C'est le sujet de R3."
         INSTABLES=$((INSTABLES + 1))
     else
         ko "REPRODUCTIBLE — $nom"
