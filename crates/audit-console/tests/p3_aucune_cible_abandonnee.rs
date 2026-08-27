@@ -179,7 +179,7 @@ fn aucun_nom_de_cible_abandonnee_dans_le_code_des_deux_produits() {
 #[test]
 fn le_detecteur_sait_tomber() {
     // La contre-épreuve : sans elle, le test principal serait vert même détecteur cassé.
-    let synthetique = format!("//! Cf. docs/reports/EFE_{}_P1_Architecture.html\nfn x() {{}}\n", MOT);
+    let synthetique = format!("//! Cf. docs/reports/EFE_{MOT}_P1_Architecture.html\nfn x() {{}}\n");
     assert_eq!(
         fautes_dans("faux.rs", &synthetique).len(),
         1,

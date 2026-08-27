@@ -117,21 +117,45 @@ impl fmt::Display for Erreur {
 /// Le marqueur d'une clé détruite, à la place de ses 64 caractères hexadécimaux.
 pub const BROYE: &str = "BROYE";
 
-/// Charge un trousseau : les cas **vivants**, les **pierres tombales** (cas, date), et `true` si le
-/// fichier est lisible **au-delà de son propriétaire**.
+/// Ce que [`charger`] rend — **nommé**. Le triplet anonyme d'avant perdait exactement ce qu'il
+/// fallait garder : lequel des deux `Vec` porte les morts, et ce qu'affirmait un `bool` nu.
+///
+/// `Debug` est sûr pour la même raison que sur [`Entree`], et il fallait la revérifier ici : la
+/// seule clé traversée est un `CaseKey`, dont le `Debug` écrit à la main rend `CaseKey(…)`.
+#[derive(Debug)]
+pub struct Chargement {
+    /// Les cas **vivants** : ceux dont la clé est encore sur le disque, donc encore lisibles.
+    pub vivantes: Vec<Entree>,
+    /// Les **pierres tombales** — `(cas, date de destruction)`. Un cas broyé n'a plus de clé mais
+    /// garde sa date : c'est la différence entre « détruit le 12 mars » et « jamais vu », et c'est
+    /// cette date qu'un régulateur demande.
+    pub broyes: Vec<(String, u64)>,
+    /// Le fichier est **accessible au-delà de son propriétaire** : sous Unix, au moins un bit de
+    /// permission groupe/autrui est posé (`mode & 0o077`, pas seulement la lecture).
+    ///
+    /// C'est un **avertissement que [`charger`] remonte sans refuser** — voir la raison sur
+    /// [`charger`]. L'appelant crie ; le chargement, lui, a bien eu lieu.
+    ///
+    /// Vaut `false` quand on n'a pas pu regarder (hors Unix, ou `metadata` en échec) : c'est une
+    /// absence de mesure, pas une preuve de permissions saines.
+    pub permissions_trop_ouvertes: bool,
+}
+
+/// Charge un trousseau : ses cas vivants, ses pierres tombales et l'état de ses permissions —
+/// chacun nommé dans [`Chargement`].
 ///
 /// On ne refuse pas sur les permissions : un montage de secret peut avoir sa propre discipline, et
 /// refuser de démarrer sur un mode de fichier casserait des déploiements corrects. Mais on le
 /// **dit**, fort, au même titre qu'un secret laissé à son défaut.
-pub fn charger(chemin: &Path) -> Result<(Vec<Entree>, Vec<(String, u64)>, bool), Erreur> {
+pub fn charger(chemin: &Path) -> Result<Chargement, Erreur> {
     let brut = std::fs::read_to_string(chemin).map_err(|e| Erreur::Illisible {
         chemin: chemin.display().to_string(),
         cause: e.to_string(),
     })?;
-    let large = lisible_par_tous(chemin);
+    let permissions_trop_ouvertes = lisible_par_tous(chemin);
 
-    let mut out: Vec<Entree> = Vec::new();
-    let mut tombes: Vec<(String, u64)> = Vec::new();
+    let mut vivantes: Vec<Entree> = Vec::new();
+    let mut broyes: Vec<(String, u64)> = Vec::new();
     let mut vus: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
     for (i, ligne) in brut.lines().enumerate() {
         let n = i + 1;
@@ -159,7 +183,7 @@ pub fn charger(chemin: &Path) -> Result<(Vec<Entree>, Vec<(String, u64)>, bool),
         // Le marqueur se teste AVANT l'hexadécimal : `BROYE` n'en est pas, et le confondre avec une
         // clé invalide ferait refuser le démarrage d'un service dont tout va bien.
         if champs[1] == BROYE {
-            tombes.push((cas, instant));
+            broyes.push((cas, instant));
             continue;
         }
         let cle = match hex32(champs[1]) {
@@ -172,9 +196,9 @@ pub fn charger(chemin: &Path) -> Result<(Vec<Entree>, Vec<(String, u64)>, bool),
                 })
             }
         };
-        out.push(Entree { cas, cle, depuis: instant });
+        vivantes.push(Entree { cas, cle, depuis: instant });
     }
-    Ok((out, tombes, large))
+    Ok(Chargement { vivantes, broyes, permissions_trop_ouvertes })
 }
 
 /// **Broie durablement** des cas : la clé est remplacée par [`BROYE`] et la date retenue.
@@ -296,14 +320,14 @@ mod tests {
     #[test]
     fn un_trousseau_se_charge_et_ouvre_ce_quil_doit() {
         let p = fichier("charge");
-        let (entrees, tombes, _) = charger(&p).expect("chargé");
-        assert_eq!(entrees.len(), 2, "les commentaires et les lignes vides sont ignorés");
-        assert!(tombes.is_empty());
-        assert_eq!(entrees[0].cas, "SUP-A");
-        assert_eq!(entrees[0].depuis, 100);
+        let Chargement { vivantes, broyes, .. } = charger(&p).expect("chargé");
+        assert_eq!(vivantes.len(), 2, "les commentaires et les lignes vides sont ignorés");
+        assert!(broyes.is_empty());
+        assert_eq!(vivantes[0].cas, "SUP-A");
+        assert_eq!(vivantes[0].depuis, 100);
 
         let mut t = Trousseau::new();
-        for e in entrees {
+        for e in vivantes {
             t.poser(&e.cas, e.cle, e.depuis);
         }
         let cle = CaseKey::from_bytes(hex32(&CLE_A.repeat(32)).unwrap());
@@ -347,9 +371,9 @@ mod tests {
         assert!(restant.contains("SUP-A"), "mais le cas demeure");
         assert!(restant.contains("un commentaire"), "et les commentaires sont PRÉSERVÉS");
 
-        let (vivants, tombes, _) = charger(&p).expect("rechargé");
-        assert_eq!(vivants.len(), 1, "seul SUP-B reste vivant");
-        assert_eq!(tombes, vec![("SUP-A".to_string(), 555)], "la pierre tombale porte SA date");
+        let Chargement { vivantes, broyes, .. } = charger(&p).expect("rechargé");
+        assert_eq!(vivantes.len(), 1, "seul SUP-B reste vivant");
+        assert_eq!(broyes, vec![("SUP-A".to_string(), 555)], "la pierre tombale porte SA date");
         let _ = std::fs::remove_file(&p);
     }
 
@@ -359,7 +383,7 @@ mod tests {
         let p = fichier("rebroie");
         broyer(&p, &["SUP-A".to_string()], 100).expect("réécrit");
         assert_eq!(broyer(&p, &["SUP-A".to_string()], 999).expect("réécrit"), 0, "rien à détruire");
-        assert_eq!(charger(&p).expect("rechargé").1, vec![("SUP-A".to_string(), 100)]);
+        assert_eq!(charger(&p).expect("rechargé").broyes, vec![("SUP-A".to_string(), 100)]);
         let _ = std::fs::remove_file(&p);
     }
 
@@ -367,7 +391,7 @@ mod tests {
     fn broyer_un_cas_absent_ne_detruit_rien() {
         let p = fichier("absent");
         assert_eq!(broyer(&p, &["JAMAIS-VU".to_string()], 1).expect("réécrit"), 0);
-        assert_eq!(charger(&p).expect("rechargé").0.len(), 2, "les deux survivent");
+        assert_eq!(charger(&p).expect("rechargé").vivantes.len(), 2, "les deux survivent");
         let _ = std::fs::remove_file(&p);
     }
 
@@ -396,9 +420,9 @@ mod tests {
     fn le_marqueur_de_broyage_nest_pas_une_cle_invalide() {
         let p = temporaire("marqueur");
         ecrire(&p, &format!("SUP-A {BROYE} 42\nSUP-B {} 900\n", CLE_B.repeat(32)));
-        let (vivants, tombes, _) = charger(&p).expect("chargé sans erreur");
-        assert_eq!(vivants.len(), 1);
-        assert_eq!(tombes, vec![("SUP-A".to_string(), 42)]);
+        let Chargement { vivantes, broyes, .. } = charger(&p).expect("chargé sans erreur");
+        assert_eq!(vivantes.len(), 1);
+        assert_eq!(broyes, vec![("SUP-A".to_string(), 42)]);
         let _ = std::fs::remove_file(&p);
     }
 }

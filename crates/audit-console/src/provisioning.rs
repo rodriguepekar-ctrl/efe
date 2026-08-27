@@ -499,23 +499,24 @@ pub fn appliquer(
     for t in &dep.tenants {
         let Some(c) = &t.conservation else { continue };
         let chemin = std::path::Path::new(&c.trousseau);
-        let (entrees, tombes, large) = match trousseau_fichier::charger(chemin) {
-            Ok(v) => v,
-            Err(e) => {
-                refus.push(Refus::TrousseauIllisible {
-                    tenant: t.id.clone(),
-                    cause: e.to_string(),
-                });
-                continue;
-            }
-        };
-        if large {
+        let trousseau_fichier::Chargement { vivantes, broyes, permissions_trop_ouvertes } =
+            match trousseau_fichier::charger(chemin) {
+                Ok(v) => v,
+                Err(e) => {
+                    refus.push(Refus::TrousseauIllisible {
+                        tenant: t.id.clone(),
+                        cause: e.to_string(),
+                    });
+                    continue;
+                }
+            };
+        if permissions_trop_ouvertes {
             trousseaux_larges.push(c.trousseau.clone());
         }
         let Some(svc) = console.service_de(&t.id) else { continue };
         svc.avec_conservation(Trousseau::new());
         let mut poses = 0usize;
-        for e in entrees {
+        for e in vivantes {
             if svc.ouvrir_cas(&e.cas, e.cle, e.depuis) {
                 poses += 1;
             }
@@ -523,7 +524,7 @@ pub fn appliquer(
         // Les pierres tombales AVANT tout le reste de la lecture : sans elles, un cas broyé avant
         // l'arrêt reviendrait « clé absente » et sa DATE de destruction serait perdue — « détruit le
         // 12 mars » redeviendrait « jamais vu », ce que M6 existe pour empêcher.
-        for (cas, le) in tombes {
+        for (cas, le) in broyes {
             svc.restaurer_broyage(&cas, le);
         }
         conservation_par_tenant.insert(t.id.clone(), poses);
