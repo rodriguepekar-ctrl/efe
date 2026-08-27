@@ -270,6 +270,42 @@ fn lancien_analyseur_viole_linvariant_donc_le_test_a_des_dents() {
     );
 }
 
+/// Pose le fournisseur cryptographique de processus dont `tonic` a besoin — et **pourquoi ici,
+/// plutôt que dans la bibliothèque**.
+///
+/// Les deux tests ci-dessous sont les seuls du fichier à construire un
+/// `tonic::transport::ClientTlsConfig` ; les quatre autres n'interrogent que l'analyseur. Ce sont
+/// exactement eux qui tombaient sous `cargo test --workspace` — non par instabilité, mais parce
+/// que `rustls 0.23` résout son `CryptoProvider` de processus **d'après les features de la
+/// caisse**, et qu'il PANIQUE quand `ring` et `aws-lc-rs` sont tous deux allumés.
+///
+/// **Ce n'est pas une course : c'est une propriété de la COMPILATION.** Ce crate épingle
+/// `rustls = { default-features = false, features = ["ring"] }` (Cargo.toml l. 120), mais Cargo
+/// unifie les features par caisse sur l'ensemble résolu : sous `--workspace`, un autre membre
+/// tire `rustls` avec ses features par défaut, `aws-lc-rs` s'allume, et le binaire de test lie
+/// les DEUX fournisseurs. Compilé par `-p efe-meta-swarm-server`, le même fichier n'en lie qu'un.
+/// Mesuré le 2026-08-27 : le binaire issu du workspace échoue **10 fois sur 10**, machine au
+/// repos ; celui issu de `-p` passe **105 fois sur 105**, y compris sous CPU saturé et pendant
+/// l'exécution du workspace. Conséquence de méthode : un « rejeu seul » qui passe par `cargo`
+/// **reconstruit** au lieu de relancer — il ne rejoue pas l'exécutable qui a échoué, il en
+/// fabrique un autre, qui passe. C'est ce qui avait fait classer ces deux tests « instables ».
+///
+/// **Pourquoi le correctif n'est pas dans `connect_with_tls`.** Le chemin SERVEUR est déjà
+/// protégé : `src/tls/config.rs` emploie `builder_with_provider` précisément pour ne pas dépendre
+/// de cette résolution. Le chemin CLIENT n'a pas d'équivalent — `ClientTlsConfig::new()` n'offre
+/// aucun point d'injection en tonic 0.12 — et le seul levier restant, `install_default`, est de
+/// portée **processus** : une bibliothèque qui l'appellerait imposerait `ring` au binaire hôte,
+/// y compris à celui qui voulait l'autre. Les binaires du crate le font donc eux-mêmes
+/// (`src/bin/controller.rs`, `src/bin/participant.rs`) ; ce montage de test fait de même, à la
+/// même place — chez l'appelant.
+///
+/// Le résultat est ignoré à dessein : `install_default` ne rend `Err` que si un fournisseur est
+/// déjà posé. Les deux tests tournent en fils parallèles et posent le MÊME (`ring`) ; celui qui
+/// perd la course reçoit cet `Err`, et c'est le déroulement nominal, pas un échec.
+fn fournisseur_crypto_installe() {
+    let _ = rustls::crypto::ring::default_provider().install_default();
+}
+
 /// Un `TlsClientConfig` **réellement valide** : une autorité auto-signée et une feuille signée
 /// par elle, comme `cert-manager` en produirait. Le contenu n'a pas à être *utile* (aucun serveur
 /// ne présentera ce certificat) ; il doit être **acceptable**, pour que l'échec observé plus bas
@@ -362,6 +398,7 @@ async fn une_ecoute_en_clair_accepte_le_loopback_et_refuse_le_non_local() {
     use efe_meta_swarm_server::client::RemoteParticipant;
     use tokio_util::sync::CancellationToken;
 
+    fournisseur_crypto_installe();
     let (port, _fil) = ecoute_en_clair();
 
     // Pré-contrôle : `0.0.0.0:P` atteint-il bien cette écoute ? Un échec ici rendrait la jambe
@@ -437,6 +474,7 @@ async fn une_ecoute_en_clair_accepte_le_loopback_et_refuse_le_non_local() {
 /// même endroit.** C'est ce que `iterate.rs` fait désormais.
 #[tokio::test]
 async fn le_schema_et_la_configuration_tls_doivent_saccorder() {
+    fournisseur_crypto_installe();
     let (port, _fil) = ecoute_en_clair();
     let tls = configuration_tls_valide();
 
