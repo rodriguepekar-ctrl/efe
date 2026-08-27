@@ -8,10 +8,23 @@ name: Bench — P1 Surface
 # ## Cadence
 #
 # - `push main` : run + freeze p1_baseline as artifact.
-# - `schedule` nightly 02:00 UTC : run + SLO check.
-# - `release tag v*` : RUN obligatoire ; bloque release si fail.
-# - `pull_request` : SKIP par défaut (GPU runner cost contrôlé) ;
-#   override possible via le label `run-p1-bench` sur la PR.
+# - `schedule` nightly 02:00 UTC : run + SLO check — SEUL déclencheur sans
+#   filtre de chemins, donc le seul qui rattrape une dérive que les filtres
+#   ci-dessous auraient manquée. Il rattrape APRÈS la fusion, pas avant.
+# - `pull_request` : les trois jobs `ubuntu-latest` bon marché tournent
+#   (dont le ratchet AST) ; les DEUX jobs de bench sautent, gardés par leur
+#   propre `if:` — `p1-bench-cpu` exige le label `run-p1-bench`,
+#   `p1-bench-gpu` exige `vars.P1_GPU_RUNNER_ENABLED`.
+#
+# ## Ce que cette cadence ne fait PAS
+#
+# Il n'existe **aucun** déclencheur `release`/`tags` dans le bloc `on:`. Une
+# version antérieure de cet en-tête annonçait « `release tag v*` : RUN
+# obligatoire ; bloque release si fail » — c'était une description de code qui
+# n'a jamais été écrit. **Le ratchet ne garde pas les releases.** L'ajouter est
+# une décision de politique (une release doit-elle pouvoir sortir sur une
+# régression hot-path ?), pas une correction mécanique : elle n'a pas été prise
+# ici.
 #
 # ## SLO gated en v0.2.0
 #
@@ -23,15 +36,34 @@ name: Bench — P1 Surface
 # `SLO-P1-BUDGET-7` cible 100 ms) restent `PENDING_GPU_RUNNER`
 # jusqu'à Φ-D D28+.
 
+# Les deux listes `paths` ci-dessous sont **volontairement identiques**. Elles ont
+# divergé une fois, et le ratchet hot-path a laissé passer +4 violations pendant
+# trois jalons (M1.a → R1) : la liste `pull_request` ne citait que deux fichiers,
+# donc une PR touchant `mode1.rs` ne déclenchait rien — alors que le job 1 se
+# décrit lui-même comme « cheap, runs on every PR ». Le garde-fou de coût n'est
+# PAS ce filtre : ce sont les `if:` par job (`p1-bench-cpu` saute sur PR sauf
+# label `run-p1-bench`, `p1-bench-gpu` exige `vars.P1_GPU_RUNNER_ENABLED`). Sur
+# une PR, seuls les trois jobs `ubuntu-latest` bon marché tournent.
+#
+# Toute entrée `crates/**` ajoutée à `HOT_PATH_MODULES`
+# (`crates/efe-server/tests/p1_hot_path_lint.rs`) doit être ajoutée **ici, deux
+# fois**. Le test lui-même et sa baseline sont listés : sans eux, une PR qui
+# re-gèle la dette ne serait vérifiée par aucun job.
 on:
   push:
     branches: [main]
+    # R1 a sorti `mode1.rs` d'`efe-server` ; ce chemin le suivait encore vers
+    # `crates/efe-server/src/mode1.rs`, qui n'existe plus — le déclencheur ne
+    # regardait donc plus le fichier qu'il garde.
     paths:
       - '.github/workflows/bench-p1-surface.yml'
+      - 'crates/efe-server/tests/p1_hot_path_lint.rs'
+      - 'crates/efe-server/tests/data/p1_hot_path_baseline.json'
       - 'crates/efe-server/src/middleware/budget_tracker.rs'
       - 'crates/efe-telemetry/src/metrics/p1_instruments.rs'
       - 'crates/efe-server/src/services/swarm.rs'
-      - 'crates/efe-server/src/mode1.rs'
+      - 'crates/efe-server/src/interceptors/mod.rs'
+      - 'crates/efe-mode1/src/mode1.rs'
       - 'crates/efe-core/src/genesis/**'
       - 'crates/efe-core/src/fusion/**'
       - 'crates/efe-core/src/consensus/**'
@@ -44,9 +76,26 @@ on:
     - cron: '0 2 * * *'   # 02:00 UTC daily
   pull_request:
     types: [opened, synchronize, reopened, labeled]
+    # Copie EXPLICITE de la liste `push` ci-dessus : GitHub Actions ne résout pas
+    # les ancres YAML dans les workflows, donc les deux listes se tiennent à jour
+    # à la main. Les modifier ensemble.
     paths:
+      - '.github/workflows/bench-p1-surface.yml'
+      - 'crates/efe-server/tests/p1_hot_path_lint.rs'
+      - 'crates/efe-server/tests/data/p1_hot_path_baseline.json'
       - 'crates/efe-server/src/middleware/budget_tracker.rs'
       - 'crates/efe-telemetry/src/metrics/p1_instruments.rs'
+      - 'crates/efe-server/src/services/swarm.rs'
+      - 'crates/efe-server/src/interceptors/mod.rs'
+      - 'crates/efe-mode1/src/mode1.rs'
+      - 'crates/efe-core/src/genesis/**'
+      - 'crates/efe-core/src/fusion/**'
+      - 'crates/efe-core/src/consensus/**'
+      - 'crates/efe-core/src/dissolution/**'
+      - 'crates/efe-core/src/alignment/**'
+      - 'crates/efe-core/src/swarm/**'
+      - 'deploy/load-tests/p1/**'
+      - 'bench_baselines/**/p1_slos.yaml'
 
 permissions:
   contents: read
