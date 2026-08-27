@@ -130,3 +130,66 @@ fn roundtrip_v3_vote_hashes() {
         Outcome::Broken { at, reason } => panic!("verify-meta-mini diverge d'efe-meta-verify (v3) au pas {at} : {reason}"),
     }
 }
+
+/// 5) **v4** — le barreau qui manquait à cette échelle.
+///
+/// Les rungs 1-4 figeaient v1 (golden), v2 (`safety_delta`) et v3 (`vote_hashes`) ; v4 (la LIAISON
+/// DE RUN : qui a contribué, dans quel ordre, sous quelle config déclarée, sous quelle règle)
+/// n'avait aucun barreau. C'est **exactement** à cette marche que les deux vérifieurs livrés se sont
+/// séparés : `verify_meta` ne recoupait pas la liaison et rendait « ✓ VÉRIFIÉ — authentique et
+/// non-altéré » (code 0) sur un manifeste aux identités permutées, que `verify_meta_mini` refusait.
+///
+/// Ce test tient donc deux choses, et la seconde est la vraie : (a) les deux calculent le même root
+/// et le même condensé de liaison depuis deux encodages canoniques écrits séparément, et (b) ils
+/// **refusent la même falsification**. Un tiers à qui deux vérifieurs rendent des verdicts opposés
+/// devrait choisir lequel croire — ce qui est la négation de « re-prouvable sans nous faire
+/// confiance ».
+#[test]
+fn roundtrip_v4_binding_and_both_verifiers_refuse_the_same_forgery() {
+    use efe_meta_verify::{MetaChainState, RunBinding};
+    use verify_meta_mini::json::parse_object;
+    use verify_meta_mini::verify::{check_binding, Binding};
+
+    let key = [0x4du8; 32];
+    let binding = RunBinding::try_new(
+        vec!["supplier-scoring".into(), "contract-risk".into()],
+        vec!["a".repeat(64), String::new()], // un participant configuré, un mock : les deux états
+        "uniform",
+        0.5,
+        0.2,
+    )
+    .expect("liaison bien formée");
+    let mut chain = MetaChainState::new_bound("kovant-procurement-v1", key.to_vec(), binding.clone());
+    chain.push(0, 1.0, vec![0.1, 0.2, 0.3], Some(0.0), Some(vec!["b".repeat(64), "c".repeat(64)]));
+    chain.push(1, 0.01, vec![0.4, 0.5, 0.6], Some(1.65), Some(vec!["d".repeat(64), "e".repeat(64)]));
+    let prov = chain.finish();
+    let expected_root = from_hex32(&prov.root).unwrap();
+
+    let mini: Vec<Step> = prov.steps.iter().map(|s| Step::from_json_line(&serde_json::to_string(s).unwrap()).unwrap()).collect();
+    assert_eq!(mini[1].binding_hash, prov.steps[1].binding_hash, "le binding_hash scellé est re-parsé par le parseur fait main");
+
+    // (a) DEUX encodages canoniques écrits séparément — celui de la référence et celui, fait main,
+    //     du mini — doivent produire le MÊME condensé. C'est la fidélité au sens strict : si l'un
+    //     préfixait une longueur autrement, tous les bundles v4 divergeraient silencieusement.
+    let m = parse_object(prov.manifest_json().trim()).expect("manifeste lisible par le parseur fait main");
+    let mini_binding = Binding::from_manifest(&m).expect("liaison lisible").expect("le manifeste v4 porte la liaison");
+    assert_eq!(mini_binding.hash_hex(), binding.hash_hex(), "encodage canonique identique des deux côtés");
+    match verify(&mini, &key, &expected_root) {
+        Outcome::Ok { root } => assert_eq!(to_hex(&root), prov.root, "v4 : root identique à la référence"),
+        Outcome::Broken { at, reason } => panic!("verify-meta-mini diverge d'efe-meta-verify (v4) au pas {at} : {reason}"),
+    }
+    check_binding(&mini, Some(&mini_binding)).expect("le mini accepte la liaison honnête");
+    efe_meta_verify::check_binding(&prov.steps, Some(&binding)).expect("la référence aussi");
+
+    // (b) LA falsification — deux identités permutées dans le manifeste livré, pas scellés intacts.
+    //     Les deux vérifieurs doivent la refuser, et pour la même raison.
+    let mut forged_mini = mini_binding.clone();
+    forged_mini.participant_ids.swap(0, 1);
+    forged_mini.declared_config_hashes.swap(0, 1);
+    let mut forged_ref = binding.clone();
+    forged_ref.participant_ids.swap(0, 1);
+    forged_ref.declared_config_hashes.swap(0, 1);
+    let e_mini = check_binding(&mini, Some(&forged_mini)).expect_err("le mini refuse la permutation");
+    let e_ref = efe_meta_verify::check_binding(&prov.steps, Some(&forged_ref)).expect_err("la référence refuse la permutation");
+    assert!(e_mini.contains("falsifiée") && e_ref.contains("falsifiée"), "même diagnostic : mini={e_mini} / réf={e_ref}");
+}
