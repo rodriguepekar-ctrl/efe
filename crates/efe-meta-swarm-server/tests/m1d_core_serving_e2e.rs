@@ -2,7 +2,7 @@
 //! **Couche 3 · M1.d — un VRAI `SwarmController` efe-core tourne une ronde
 //! SERVIE (Step-sur-gRPC) — le DoD #1 du jalon M1.**
 //!
-//! Gated by `core-integration` : pulls efe-core + efe-server into the test
+//! Gated by `core-integration` : pulls efe-core + efe-mode1 into the test (R1)
 //! build.  Run with :
 //!
 //! ```text

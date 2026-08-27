@@ -79,8 +79,11 @@ const HOT_PATH_MODULES: &[&str] = &[
     "crates/efe-core/src/dissolution/engine.rs",
     // Étage 10 (audit chain) — Cf. D14-bis
     // path TBD post audit chain wire-up ; pour l'instant on garde
-    // mode1.rs qui contient la grande majorité de l'orchestration.
-    "crates/efe-server/src/mode1.rs",
+    // mode1.rs qui contient la grande majorité de l'orchestration. **Depuis R1 il vit dans
+    // `efe-mode1`** (extrait d'efe-server en feuille) : le chemin change, le lint reste — le
+    // retirer de cet inventaire aurait désarmé la garde sur les 1 979 lignes les plus chaudes
+    // du dépôt, ce qu'un simple déménagement ne justifie pas.
+    "crates/efe-mode1/src/mode1.rs",
 ];
 
 // ====================================================================

@@ -9,7 +9,7 @@
 //! efe-core one-round `Φ` is an **intra-cell `~β₁ ≈ 0.17` contraction**, i.e. H1
 //! (`L_Φ ≤ 1`) holds on a within-cell domain.
 //!
-//! Gated by `integration-test` (Voie A) — pulls `efe-server` only for the test.
+//! Gated by `integration-test` (Voie A) — pulls `efe-mode1` only for the test (R1 : une feuille, plus la pile applicative).
 //!
 //! ## Honesty (no over-sell)
 //!
@@ -30,7 +30,7 @@ use efe_meta_swarm::participants::{
     LipschitzProbe, LocalParticipant, NonExpansiveCertificate, SwarmParticipant,
 };
 use efe_meta_swarm::safety::{BoxSafety, SafetySet};
-use efe_server::mode1::{build_mvp_controller, Mode1Config};
+use efe_mode1::mode1::{build_mvp_controller, Mode1Config};
 
 const DIM: usize = 16;
 

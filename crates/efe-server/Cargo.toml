@@ -10,6 +10,9 @@ description = "gRPC server exposing the EFE swarm service"
 
 [dependencies]
 efe-core = { path = "../efe-core" }
+# R1 — l'assemblage Mode-1, extrait en feuille. `efe-server` le ré-exporte (`pub use
+# efe_mode1::mode1`) pour que `efe_server::mode1::…` continue de résoudre chez ses appelants.
+efe-mode1 = { path = "../efe-mode1" }
 efe-telemetry = { path = "../efe-telemetry" }
 
 # Sprint **D28 (Φ-D)** — optional GPU compute substrate. Pulled in

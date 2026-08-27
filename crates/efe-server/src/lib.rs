@@ -145,7 +145,13 @@ pub mod interceptors;
 /// Three layers : correlation_id, backpressure, tenant_quota.
 /// See `docs/EFE_M27_COMMERCIAL_EDGE_ARCHITECTURE.md`.
 pub mod middleware;
-pub mod mode1;
+/// L'assemblage Mode-1 — **déplacé dans `efe-mode1` par R1**, ré-exporté ici.
+///
+/// Le chemin `efe_server::mode1::…` reste donc valide pour `main.rs`, les tests, les benchmarks et
+/// tout appelant externe. Ce qui change n'est pas l'API : c'est que le méta-essaim peut désormais
+/// prendre `efe-mode1` **sans** prendre `efe-server`, et sa fermeture à `core-integration` passe de
+/// vingt-sept crates du dépôt à dix.
+pub use efe_mode1::mode1;
 /// M22 — Mode-3 multi-turn iterative reasoning. See
 /// `docs/EFE_M22_MODE3_MULTI_TURN_ARCHITECTURE.md`.
 pub mod mode3;

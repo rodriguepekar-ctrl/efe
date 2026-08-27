@@ -11,7 +11,7 @@
 //! never existed — the bridge had never run with a real controller.
 //!
 //! Gated by the `integration-test` feature (**Voie A**) so the heavy
-//! `efe-server` crate (which owns `mode1::build_mvp_controller`) is pulled in
+//! `efe-mode1` crate (which owns `mode1::build_mvp_controller` depuis R1) is pulled in
 //! **only** here — never in the default build nor the production
 //! `core-integration` path.  Run with:
 //!
@@ -43,7 +43,7 @@ use efe_core::types::{AlignmentCone, LatentDim, PopulationMix, SwarmId, SwarmSpe
 use efe_meta_swarm::participants::{LocalParticipant, SwarmParticipant};
 use efe_meta_swarm::safety::{BoxSafety, SafetySet};
 use efe_meta_swarm::Tensor;
-use efe_server::mode1::{build_mvp_controller, build_mvp_controller_with_init_sigma, Mode1Config};
+use efe_mode1::mode1::{build_mvp_controller, build_mvp_controller_with_init_sigma, Mode1Config};
 
 /// Small latent dimension — the Mode-1 stub registry / meta-analyzer are
 /// dim-parameterised (`GenesisEngine::build_mvp` → `mvp_defaults(dim)`,

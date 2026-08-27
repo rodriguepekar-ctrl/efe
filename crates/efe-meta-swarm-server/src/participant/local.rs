@@ -7,7 +7,7 @@
 //! * **efe-core** (Couche 3 M1.d, feature `core-integration`) — the REAL
 //!   bridge `efe_meta_swarm::LocalParticipant` over an
 //!   `efe_core::SwarmController` built by
-//!   `efe_server::mode1::build_mvp_controller` (Voie A) : Mode-1 numerical
+//!   `efe_mode1::mode1::build_mvp_controller` (Voie A) : Mode-1 numerical
 //!   fusion on stub templates — real efe-core latent swarms, **not** SLMs
 //!   (no LM weights / tokenizer on the step path).  Its Φ is deterministic
 //!   (M1.b) and its H1 non-expansiveness is property-tested at boot by the
@@ -476,7 +476,7 @@ mod core_engine {
     use efe_meta_swarm::participants::LipschitzProbe;
     use efe_meta_swarm::safety::{BoxSafety, SafetySet};
     use efe_meta_swarm::MetaSwarmError;
-    use efe_server::mode1::{
+    use efe_mode1::mode1::{
         build_mvp_controller, AlignmentAdapter, ConsensusAdapter, FusionAdapter, LastCentroid,
         LastSpecTrace, Mode1Config, PassThroughDissolver,
     };
@@ -602,7 +602,7 @@ mod core_engine {
 
     /// **M1 Palier-2 — the fixed-topology latent controller.**
     ///
-    /// Mirrors `efe_server::mode1::build_mvp_parts`'s LATENT recipe (the
+    /// Mirrors `efe_mode1::mode1::build_mvp_parts`'s LATENT recipe (the
     /// converge-now single-round profile of M1.a/M1.b) with ONE deliberate
     /// difference : genesis routing/cardinality are the CONSTANTS
     /// [`FixedTemplateRouter`]/[`FixedCardinality`] built from the manifest

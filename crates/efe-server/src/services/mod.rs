@@ -42,42 +42,13 @@ use std::time::Instant;
 
 use efe_core::{Request, Response, Result, SwarmController, TelemetryCollector};
 
-/// Minimal abstraction over the swarm controller. Present because
-/// `SwarmController` is a concrete struct in `efe-core`; wrapping it in
-/// a trait lets us inject a stub backend in tests without rebuilding
-/// the entire strategy pipeline.
+/// L'abstraction d'exécution et son adaptateur — **déplacés dans `efe-mode1` par R1**.
 ///
-/// The trait intentionally does **not** require `Debug` — the real
-/// [`SwarmController`] does not derive it. Components that need to
-/// log the backend implement their own opaque `Debug`.
-#[async_trait]
-pub trait ExecuteBackend: Send + Sync {
-    /// Execute a domain request end-to-end.
-    async fn execute(&self, req: Request) -> Result<Response>;
-}
+/// Ré-exportés ici pour que les quarante sites qui écrivent `crate::services::ExecuteBackend`
+/// continuent de résoudre : le déplacement devait réduire une fermeture de dépendances, pas
+/// obliger le serveur à se réécrire.
+pub use efe_mode1::backend::{ExecuteBackend, SwarmControllerBackend};
 
-/// Adapter around the concrete [`SwarmController`].
-///
-/// Use this when wiring a production server:
-/// `Server::builder().backend(Arc::new(SwarmControllerBackend::new(controller)))`.
-pub struct SwarmControllerBackend {
-    controller: SwarmController,
-}
-
-impl SwarmControllerBackend {
-    /// Wrap a pre-built controller.
-    #[must_use]
-    pub fn new(controller: SwarmController) -> Self {
-        Self { controller }
-    }
-}
-
-#[async_trait]
-impl ExecuteBackend for SwarmControllerBackend {
-    async fn execute(&self, req: Request) -> Result<Response> {
-        self.controller.execute(req).await
-    }
-}
 
 /// Instrumented wrapper that calls `TelemetryCollector::begin_swarm` +
 /// `TelemetryGuard::finalize` around any underlying [`ExecuteBackend`].

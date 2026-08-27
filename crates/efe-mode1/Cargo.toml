@@ -1,0 +1,39 @@
+# SPDX-License-Identifier: UNLICENSED
+# R1 — efe-mode1 : l'assemblage Mode-1, extrait de `efe-server` en crate FEUILLE.
+#
+# La raison d'être de ce crate est une mesure. Servir de vrais participants dans le méta-essaim
+# exigeait la feature `core-integration`, qui tirait `efe-server` — et avec lui dix-neuf crates
+# d'une pile applicative entière (facturation, GraphRAG, PII, vecteurs, curation…) pour UNE
+# fonction : `build_mvp_controller`. Fermeture mesurée : 8 → 27 crates du dépôt.
+#
+# `mode1.rs` faisait 1 979 lignes et contenait UN SEUL `use crate::` : les deux items de
+# `services`. Tout le reste était autonome. Le crate est donc une feuille au sens strict — trois
+# dépendances, dont une seule du dépôt (`efe-core`, dont la fermeture propre vaut 1).
+#
+# Ce que R1 achète, et il faut être précis : pas de la performance, pas de la sécurité. La
+# COHÉRENCE entre le discours et l'artefact. Le manifeste du méta-essaim affirme que « le graphe
+# de dépendances par défaut porte ZÉRO crate efe-core/efe-server » — vrai par défaut, faux dès
+# qu'on sert. Un produit qui se présente comme un périmètre scellé ne peut pas avoir une feature
+# de production qui triple son périmètre.
+[package]
+name = "efe-mode1"
+version = { workspace = true }
+edition = { workspace = true }
+rust-version = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
+description = "R1 — l'assemblage Mode-1 (genèse, fusion, dissolution, alignement, consensus) au-dessus d'efe-core, extrait d'efe-server en crate feuille : le méta-essaim sert de vrais participants sans tirer la pile applicative."
+publish = false
+
+[lib]
+name = "efe_mode1"
+path = "src/lib.rs"
+
+[dependencies]
+efe-core = { path = "../efe-core" }
+async-trait = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true }

@@ -2335,8 +2335,8 @@ dependencies = [
  "efe-audit-core",
  "efe-core",
  "efe-meta-verify",
+ "efe-mode1",
  "efe-nano-sdk",
- "efe-server",
  "insta",
  "ndarray 0.15.6",
  "ndarray-npy",
@@ -2413,7 +2413,7 @@ dependencies = [
  "efe-core",
  "efe-meta-swarm",
  "efe-meta-swarm-proto",
- "efe-server",
+ "efe-mode1",
  "futures",
  "http-body-util",
  "hyper 1.9.0",
@@ -2482,6 +2482,16 @@ dependencies = [
  "serde",
  "serde_json",
  "thiserror 1.0.69",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
+name = "efe-mode1"
+version = "0.0.1"
+dependencies = [
+ "async-trait",
+ "efe-core",
  "tokio",
  "tracing",
 ]
@@ -2832,6 +2842,7 @@ dependencies = [
  "efe-kg",
  "efe-meta-swarm-proto",
  "efe-metering",
+ "efe-mode1",
  "efe-multimodal",
  "efe-pii",
  "efe-region",

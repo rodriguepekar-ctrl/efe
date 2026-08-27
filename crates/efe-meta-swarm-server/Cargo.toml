@@ -42,10 +42,12 @@ provenance-dag = { path = "../provenance-dag", version = "0.0.1" }
 scella-authority = { path = "../scella-authority" }
 
 # Couche 3 M1.d — OPTIONAL, gated by the `core-integration` feature (see
-# [features]).  efe-server provides `mode1::build_mvp_controller` (Voie A) ;
+# [features]).  efe-mode1 provides `mode1::build_mvp_controller` (Voie A, extrait par R1) ;
 # efe-core provides the SwarmSpec types the manifest `controller` block maps
 # to ;  sha2 hashes that block into the wire `config_hash`.
-efe-server = { path = "../efe-server", optional = true }
+# R1 — la FEUILLE, et non plus `efe-server`. C'est tout l'objet de R1 : la fermeture à
+# `core-integration` passe de 27 crates du dépôt à 10, pour la même fonction servie.
+efe-mode1 = { path = "../efe-mode1", optional = true }
 efe-core   = { path = "../efe-core",   optional = true }
 sha2       = { version = "0.10" }   # Couche 3 M2/v4 — config_hash déclaré, hors feature
 
@@ -195,7 +197,7 @@ tls = ["tonic/tls"]
 # `cargo tree -p efe-meta-swarm-server -e normal`), and an efe-core manifest
 # row on a default-built binary fails CONSTRUCTION (never a silent mock).
 # `sha2` computes the wire `config_hash` of the manifest controller block.
-core-integration = ["efe-meta-swarm/core-integration", "dep:efe-server", "dep:efe-core"]
+core-integration = ["efe-meta-swarm/core-integration", "dep:efe-mode1", "dep:efe-core"]
 
 # ─────────────────────────────────────────────────────────────────────
 # Dev dependencies.

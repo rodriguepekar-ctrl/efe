@@ -85,7 +85,7 @@ use efe_core::swarm::{
 };
 use efe_core::types::AlignmentCone;
 
-use crate::services::{ExecuteBackend, SwarmControllerBackend};
+use crate::backend::{ExecuteBackend, SwarmControllerBackend};
 
 // =====================================================================
 // LastCentroid — shared publication slot
@@ -475,6 +475,14 @@ impl FusionAdapter {
                     .max_by(|a, b| a.1.partial_cmp(b.1).unwrap_or(std::cmp::Ordering::Equal))
                     .map(|(i, v)| (i, *v));
                 tracing::debug!(
+                    // **Cette cible ne suit PAS le crate, et c'est délibéré (R1).** Le code vit
+                    // désormais dans `efe-mode1`, mais `target:` est une étiquette de filtrage, pas
+                    // un chemin résolu par le compilateur — et trois documents publient la commande
+                    // `RUST_LOG=efe_server::mode1::trace=debug` (BENCHMARKS.md, l'architecture D7,
+                    // le rapport de calibration D7). La renommer pour « faire propre » casserait
+                    // silencieusement des runbooks écrits ; la laisser sans ce commentaire ferait
+                    // qu'on la renomme au prochain passage. Une incohérence assumée et expliquée
+                    // vaut mieux qu'une cohérence qui casse ce qui marche.
                     target: "efe_server::mode1::trace",
                     round,
                     cos_problem = cos_problem,
@@ -1415,32 +1423,45 @@ fn build_mvp_parts(
     //    convergence is driven by the coupled Krasnoselskii–Mann OUTER iteration
     //    (`mix_coupled` + the safety projection), not by this inner per-round
     //    detector : the inner round is just the operator `Φ`.
-    type ConsensusFactory = Box<dyn Fn() -> Box<dyn SwarmConsensusDetector> + Send + Sync>;
-    let (consensus_factory, controller_cfg): (ConsensusFactory, ControllerConfig) = if latent_init_sigma.is_some() {
-        let converge_now = cfg
-            .consensus
-            .clone()
-            .with_confidence_threshold(0.0)
-            .with_hysteresis(1);
-        (
-            Box::new(move || {
-                Box::new(
-                    ConsensusAdapter::new(converge_now.clone())
-                        .expect("converge-now consensus config is valid"),
-                ) as Box<dyn SwarmConsensusDetector>
-            }),
-            ControllerConfig::default(),
-        )
-    } else {
-        let consensus_cfg = cfg.consensus.clone();
-        (
-            Box::new(move || {
-                Box::new(
-                    ConsensusAdapter::new(consensus_cfg.clone())
-                        .expect("consensus config validated at build time"),
-                ) as Box<dyn SwarmConsensusDetector>
-            }),
-            cfg.controller.clone(),
+    //
+    // The branch is taken on the two *values*, not on two factories. M1.a branched one
+    // step too late : an `if`/`else` where each arm built its own closure gave the two
+    // arms two distinct closure types, which then had to be unified behind a
+    // `Box<dyn Fn ...>` — and the closure body had to be written twice, the second copy
+    // being the pre-M1.a one verbatim. That box bought nothing : `consensus_factory<F>`
+    // is generic and already stores the factory as `Arc<dyn Fn ...>`
+    // (cf. `efe_core::swarm::controller`), so boxing first only added an allocation and
+    // a second indirection on the way to it. Selecting the config and the controller
+    // config here leaves exactly ONE closure below — the pre-M1.a shape.
+    let (consensus_cfg, controller_cfg): (ConsensusConfig, ControllerConfig) =
+        if latent_init_sigma.is_some() {
+            (
+                cfg.consensus
+                    .clone()
+                    .with_confidence_threshold(0.0)
+                    .with_hysteresis(1),
+                ControllerConfig::default(),
+            )
+        } else {
+            (cfg.consensus.clone(), cfg.controller.clone())
+        };
+
+    // The factory below CANNOT return a `Result` — `SwarmControllerBuilder::consensus_factory`
+    // takes `F: Fn() -> Box<dyn ConsensusDetector>`, infallible — so it has to `.expect()`.
+    // Until this line, nothing made that expectation true : `Mode1Config::consensus` is a
+    // **public field**, no path validated it, and the message
+    // `"consensus config validated at build time"` was therefore an assertion about code
+    // that did not exist. A malformed `ConsensusConfig` reached the closure intact and
+    // panicked on the FIRST REQUEST — inside the controller loop — instead of refusing to
+    // boot. Validating here, once, on the exact config the closure captures, is what turns
+    // the `.expect()` into an invariant rather than a hope. Fail-closed on purpose : an
+    // unusable consensus detector must stop the boot, not degrade the request path.
+    consensus_cfg.validate()?;
+
+    let consensus_factory = move || -> Box<dyn SwarmConsensusDetector> {
+        Box::new(
+            ConsensusAdapter::new(consensus_cfg.clone())
+                .expect("consensus config validated above, in build_mvp_parts"),
         )
     };
 
@@ -1975,5 +1996,53 @@ mod tests {
         // (needs a valid SwarmSpec + anchors). A live smoke test lives
         // in `tests/mode1_live.rs`.
         let _ = backend;
+    }
+
+    /// The consensus factory closure `.expect()`s, because the controller's
+    /// `consensus_factory` bound is infallible. That `.expect()` is only honest if
+    /// something upstream has actually validated the config — and until
+    /// `build_mvp_parts` called `validate()?`, nothing did : `Mode1Config::consensus`
+    /// is a **public field**, so this exact `Mode1Config` used to build fine and then
+    /// panic inside the controller loop on the FIRST REQUEST.
+    ///
+    /// This test is the one that can make the new guard fall. Delete the
+    /// `consensus_cfg.validate()?` line and it goes from `Err` to `Ok` — the build
+    /// succeeds and the panic moves to request time, where it is a 500 and a
+    /// restart rather than a refused boot.
+    #[tokio::test]
+    async fn an_invalid_consensus_config_refuses_the_build_instead_of_panicking_per_request() {
+        // `hysteresis_rounds = 0` is rejected by `ConsensusConfig::validate`
+        // ("must be ≥ 1"), and is reachable because the field is public.
+        let mut cfg = Mode1Config::default();
+        cfg.consensus = cfg.consensus.clone().with_hysteresis(0);
+
+        // `expect_err` is unavailable here : neither `Arc<dyn ExecuteBackend>` nor
+        // `Arc<SwarmController>` is `Debug`, so the Ok arm has to be discarded by hand.
+        let err = match build_mvp_backend(cfg) {
+            Ok(_) => panic!("an unvalidatable consensus config must NOT produce a live backend"),
+            Err(e) => e,
+        };
+        assert!(
+            matches!(err, EfeError::InvalidConfig(_)),
+            "the refusal must name the config as the cause ; got {err:?}"
+        );
+        assert!(
+            format!("{err}").contains("hysteresis_rounds"),
+            "the refusal must say WHICH knob is wrong ; got {err}"
+        );
+
+        // The latent (Couche 3) profile rewrites `hysteresis_rounds` to 1 on its way
+        // to the converge-now detector, so this particular knob is repaired there —
+        // the branch that must still fail closed is one the rewrite does not touch.
+        let mut latent_cfg = Mode1Config::default();
+        latent_cfg.consensus = latent_cfg.consensus.clone().with_window(1); // history_window < 2
+        let latent_err = match build_mvp_controller(latent_cfg) {
+            Ok(_) => panic!("the latent controller must fail closed on its own config too"),
+            Err(e) => e,
+        };
+        assert!(
+            matches!(latent_err, EfeError::InvalidConfig(_)),
+            "latent refusal must be InvalidConfig ; got {latent_err:?}"
+        );
     }
 }
