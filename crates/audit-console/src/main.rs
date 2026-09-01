@@ -73,7 +73,10 @@ fn main() -> std::io::Result<()> {
             .map(|d| d.as_secs())
             .unwrap_or(0);
         journaliser_balayage(&balayer(&mut console, &dep, maintenant));
-        let intervalle_s = read::value("EFE_CONSOLE_BALAYAGE_S").parse::<u64>().unwrap_or(3600);
+        // `read::entier` et non un `parse().unwrap_or()` local : la décision appartient au
+        // registre, qui est aussi ce que le rapport imprime. Une analyse faite ici serait un
+        // SECOND point de décision, invisible du rapport — et c'est exactement l'écart que M0 ferme.
+        let intervalle_s = read::entier("EFE_CONSOLE_BALAYAGE_S");
         Balayeur { intervalle_s, deploiement: dep }
     });
 

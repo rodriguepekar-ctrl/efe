@@ -144,6 +144,95 @@ pub fn present_of(v: Option<&str>) -> bool {
     v.map(|s| !s.trim().is_empty()).unwrap_or(false)
 }
 
+/// Les interrupteurs **numériques** : leur valeur doit être un entier, et au moins égale au
+/// minimum déclaré ici.
+///
+/// La passerelle a `FLAGS_STRICTS` (booléens) puis `ENUMS` (valeurs finies) ; voici la troisième
+/// forme du même piège. Elle est **déclarée**, jamais dérivée des appels réels à [`read::entier`] :
+/// une liste dérivée de l'usage perdrait précisément l'interrupteur que personne ne lit encore, et
+/// le filet aurait un trou qu'on croirait plein.
+pub const NUMERIQUES: &[(&str, u64)] = &[
+    // 1, et non 0. `server.rs` faisait `intervalle_s.max(1)` : un opérateur qui écrit `0` — pour
+    // « désactiver », ou pour « tout de suite » — obtenait un balayage **toutes les secondes**,
+    // c'est-à-dire l'inverse de ce qu'il demandait, sans que rien ne le dise.
+    ("EFE_CONSOLE_BALAYAGE_S", 1),
+];
+
+/// Une valeur **fournie mais refusée** — le troisième état, celui que ni « présente » ni « absente »
+/// ne décrit, et le seul où l'opérateur a agi sans que son geste ait le moindre effet.
+///
+/// Même forme que l'`Invalide` de la passerelle : qui connaît l'un lit l'autre sans réapprendre.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Invalide {
+    pub name: &'static str,
+    /// La valeur que l'opérateur a réellement posée.
+    pub fourni: String,
+    /// Le domaine attendu, écrit depuis [`NUMERIQUES`] plutôt qu'à la main.
+    pub attendu: String,
+    /// Ce qui se passe en conséquence — repris **tel quel du registre**, jamais réécrit. Une
+    /// conséquence reformulée ici finirait par diverger de celle que le rapport annonce.
+    pub consequence: &'static str,
+    /// La valeur **réellement employée** malgré le refus. Sans elle, le rapport dirait « refusé »
+    /// sans dire ce qui tourne — et l'exploitant devrait deviner.
+    pub effectif: u64,
+}
+
+/// Les valeurs fournies mais refusées, depuis une table quelconque — un fichier de profil compris.
+///
+/// Fonction **pure**, donc un test de profil peut refuser qu'un `.env` livré contienne un footgun :
+/// une faute de frappe versionnée se propagerait à chaque déploiement qui suit ce fichier.
+///
+/// **Le critère n'est pas « la valeur est-elle acceptée ? » mais « le résultat correspond-il à
+/// l'intention ? »** — la règle que la passerelle a fixée. `3600` → 3600 : intention respectée.
+/// `1h` → 3600 par accident : intention trahie. `0` → 1 seconde : intention inversée.
+#[must_use]
+pub fn invalides_from_lookup(get: impl Fn(&str) -> Option<String>) -> Vec<Invalide> {
+    NUMERIQUES
+        .iter()
+        .filter_map(|(name, min)| {
+            let v = get(name)?;
+            let t = v.trim();
+            // Absente ou vide : ce n'est pas une valeur refusée, c'est une absence. Le rapport la
+            // traite déjà en « DÉFAUT », et la confondre avec un footgun noierait le vrai signal.
+            if t.is_empty() {
+                return None;
+            }
+            let sw = switch(name)?;
+            match t.parse::<u64>() {
+                Ok(n) if n >= *min => None,
+                // `effectif` vient de `entier_from_lookup`, la MÊME fonction que le chemin servi
+                // appelle. Le recalculer ici rouvrirait l'écart entre ce que le rapport annonce et
+                // ce que le binaire fait — l'écart que M0 existe pour fermer.
+                _ => Some(Invalide {
+                    name: sw.name,
+                    fourni: t.to_string(),
+                    attendu: format!("un entier ≥ {min}"),
+                    consequence: sw.absence_costs,
+                    effectif: entier_from_lookup(name, &get),
+                }),
+            }
+        })
+        .collect()
+}
+
+/// La valeur effective d'un interrupteur numérique, **depuis une table quelconque**.
+///
+/// C'est la pièce qui rend le garde T5 structurel plutôt que déclaratif : le chemin **servi**
+/// ([`read::entier`], qui lit l'environnement) et le chemin **rapporté**
+/// ([`invalides_from_lookup`], qui alimente le rapport) appellent la même fonction. Ils ne peuvent
+/// donc pas diverger — non pas parce qu'un test les compare, mais parce qu'il n'y a qu'un calcul.
+#[must_use]
+pub fn entier_from_lookup(name: &str, get: impl Fn(&str) -> Option<String>) -> u64 {
+    let sw = switch(name);
+    let defaut = sw.map_or("", |s| s.default).parse().unwrap_or(0);
+    let min = NUMERIQUES.iter().find(|(n, _)| *n == name).map_or(0, |(_, m)| *m);
+    let brut = get(name).unwrap_or_else(|| sw.map_or(String::new(), |s| s.default.to_string()));
+    match brut.trim().parse::<u64>() {
+        Ok(n) if n >= min => n,
+        _ => defaut,
+    }
+}
+
 /// Les lectures — **le seul endroit du crate qui lit l'environnement**.
 pub mod read {
     /// La valeur effective d'un interrupteur : celle de l'environnement, sinon le défaut du
@@ -152,6 +241,22 @@ pub mod read {
     pub fn value(name: &str) -> String {
         let default = super::switch(name).map_or("", |s| s.default);
         std::env::var(name).unwrap_or_else(|_| default.to_string())
+    }
+
+    /// La valeur **effective** d'un interrupteur numérique : celle de l'opérateur si elle est
+    /// recevable, sinon le défaut du registre.
+    ///
+    /// **C'est ici, et nulle part ailleurs, que la décision se prend.** Avant M0, `main.rs` faisait
+    /// `read::value(...).parse().unwrap_or(3600)` et `server.rs` faisait `.max(1)` : deux
+    /// substitutions silencieuses sur le même interrupteur, à deux endroits, dont aucune n'atteignait
+    /// le rapport. Le registre cessait alors d'être le point de décision unique qu'il prétend être.
+    ///
+    /// Prend le nom en paramètre — la leçon de M7 : un accesseur qui code en dur son interrupteur
+    /// rend le registre invisible au point d'appel, et ni un lecteur ni un garde ne peuvent plus dire
+    /// quelle variable le binaire lit.
+    #[must_use]
+    pub fn entier(name: &str) -> u64 {
+        super::entier_from_lookup(name, |n| std::env::var(n).ok())
     }
 
     /// `true` si l'opérateur a réellement posé la variable (par opposition au défaut).
@@ -194,6 +299,9 @@ pub struct Report {
     pub lines: Vec<Line>,
     /// Les interrupteurs de classe secrète laissés au défaut — la liste que l'opérateur doit voir.
     pub secrets_par_defaut: Vec<&'static str>,
+    /// Les valeurs **fournies mais refusées** — le troisième état. Vide dans le cas normal ; une
+    /// entrée signifie qu'un geste de l'opérateur n'a produit aucun effet.
+    pub invalides: Vec<Invalide>,
 }
 
 impl Report {
@@ -211,6 +319,7 @@ impl Report {
     /// pas** diverger — c'est exactement la garantie que M0 existe pour donner.
     #[must_use]
     pub fn from_lookup(f: impl Fn(&str) -> Option<String>) -> Self {
+        let invalides = invalides_from_lookup(&f);
         let mut lines = Vec::new();
         let mut secrets_par_defaut = Vec::new();
         let declare = present_of(f("EFE_CONSOLE_DEPLOIEMENT").as_deref());
@@ -229,6 +338,20 @@ impl Report {
                 lines.push(Line { name: s.name, status: "SANS OBJET", detail: detail.to_string() });
                 continue;
             }
+            // Le troisième état passe AVANT « SERVIE ». Sans cette branche, une valeur refusée
+            // s'affichait « SERVIE » — le rapport contredisait alors ce que le binaire fait, ce que
+            // M0 existe précisément pour empêcher.
+            if let Some(inv) = invalides.iter().find(|i| i.name == s.name) {
+                lines.push(Line {
+                    name: s.name,
+                    status: "REFUSÉE",
+                    detail: format!(
+                        "« {} » n'est pas {} — la valeur employée reste {}. {}",
+                        inv.fourni, inv.attendu, inv.effectif, inv.consequence
+                    ),
+                });
+                continue;
+            }
             let (status, detail) = match (set, s.class) {
                 (true, _) => ("SERVIE", s.buys.to_string()),
                 (false, Class::DegradedSecret) => {
@@ -239,7 +362,7 @@ impl Report {
             };
             lines.push(Line { name: s.name, status, detail });
         }
-        Report { lines, secrets_par_defaut }
+        Report { lines, secrets_par_defaut, invalides }
     }
 
     /// La forme humaine, imprimée au démarrage.
@@ -250,6 +373,15 @@ impl Report {
             out.push_str(&format!("│  {:<24} {:<9} {}\n", l.name, l.status, l.detail));
         }
         out.push_str("└─\n");
+        if !self.invalides.is_empty() {
+            out.push_str("\n⚠  VALEUR(S) FOURNIE(S) MAIS REFUSÉE(S) — un geste sans effet :\n");
+            for i in &self.invalides {
+                out.push_str(&format!(
+                    "   {} = « {} » → attendu {} ; le binaire emploie {}.\n",
+                    i.name, i.fourni, i.attendu, i.effectif
+                ));
+            }
+        }
         if !self.secrets_par_defaut.is_empty() {
             out.push_str(&format!(
                 "\n⚠  AVERTISSEMENT : {} laissé(s) au DÉFAUT PUBLIC — {}.\n   \
@@ -270,7 +402,14 @@ impl Report {
             .iter()
             .map(|l| json!({ "switch": l.name, "status": l.status, "detail": l.detail }))
             .collect();
-        json!({ "switches": lines, "secrets_par_defaut": self.secrets_par_defaut })
+        let invalides: Vec<Value> = self
+            .invalides
+            .iter()
+            .map(|i| json!({ "switch": i.name, "fourni": i.fourni, "attendu": i.attendu,
+                             "effectif": i.effectif }))
+            .collect();
+        json!({ "switches": lines, "secrets_par_defaut": self.secrets_par_defaut,
+                "invalides": invalides })
     }
 }
 

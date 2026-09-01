@@ -82,7 +82,13 @@ pub fn serve(
     if let Some(b) = balayeur {
         let console = Arc::clone(&console);
         std::thread::spawn(move || loop {
-            std::thread::sleep(Duration::from_secs(b.intervalle_s.max(1)));
+            // Pas de `.max(1)` ici. Il y en avait un, et il était la SECONDE substitution
+            // silencieuse de cet interrupteur : `EFE_CONSOLE_BALAYAGE_S=0` devenait un balayage
+            // toutes les secondes — l'inverse de ce que `0` suggère — sans que rien ne le dise.
+            // L'invariant « ≥ 1 » appartient désormais à `profile::NUMERIQUES`, qui le DÉCLARE, et à
+            // `profile::read::entier`, qui l'applique une fois. Deux gardes pour une même propriété,
+            // c'est un garde dont on ne remarque jamais la panne.
+            std::thread::sleep(Duration::from_secs(b.intervalle_s));
             let maintenant =
                 SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
             let rapports = {
