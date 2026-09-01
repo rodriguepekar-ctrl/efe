@@ -45,6 +45,52 @@ ko()    { printf '  \033[0;31m✗\033[0m %s\n' "$1"; }
 att()   { printf '  \033[0;33m!\033[0m %s\n' "$1"; }
 note()  { printf '      %s\n' "$1"; }
 
+# **Rejouer LE MÊME BINAIRE — pas un binaire rebâti.**
+#
+# C'est le point sur lequel ce script s'est trompé, et le plus contre-intuitif du lot.
+# `cargo test -p <crate>` ne rejoue pas : il RECONSTRUIT. Or Cargo unifie les features par
+# caisse sur l'ensemble résolu, si bien que le binaire d'une course `--workspace` n'est PAS
+# celui d'une course `-p` — empreintes différentes, et jusqu'aux bibliothèques liées. Mesuré
+# le 2026-08-27 : sous `--workspace`, `efe-agent-runner → axum-server "tls-rustls"` allume un
+# SECOND fournisseur cryptographique rustls ; le binaire lie les deux (19 symboles aws-lc + 54
+# ring, contre 0 + 77 sous `-p`) et rustls refuse de deviner lequel employer.
+#
+# Conséquence : deux tests ont été déclarés « instables » parce qu'ils « passaient seuls ».
+# Ils ne passaient pas seuls — c'est un AUTRE binaire qui passait. La panique était
+# parfaitement déterministe. Comparer deux binaires différents et appeler l'écart
+# « instabilité » est une erreur de méthode qui produit un verdict crédible et faux.
+#
+# On interroge donc `--no-run --message-format=json`, qui donne les exécutables RÉELLEMENT
+# produits par la course de workspace, et on lance celui-là, directement, sans repasser par
+# cargo.
+executables_du_workspace() {
+    cargo test --workspace --no-run --message-format=json 2>/dev/null \
+      | python3 -c "
+import json,sys
+for l in sys.stdin:
+    try: m = json.loads(l)
+    except Exception: continue
+    if m.get('executable') and m.get('target'):
+        print(m['target']['name'] + '\t' + m['executable'])
+"
+}
+
+# La cible qui déclare ce test, trouvée dans la SOURCE — le seul index qui ne dépende ni du
+# parallélisme de cargo ni de l'état de compilation.
+cible_du_test() {
+    local nom="$1" f
+    f=$(grep -rl --include='*.rs' -E "fn[[:space:]]+${nom}[[:space:]]*\\(" crates/ 2>/dev/null | head -1)
+    [ -z "$f" ] && return 1
+    case "$f" in
+        */tests/*|*/benches/*) basename "$f" .rs ;;
+        *) printf '%s' "$(printf '%s' "$f" | cut -d/ -f2)" ;;
+    esac
+}
+
+# Les deux fonctions ci-dessus sont definies AVANT leur premier appel : bash ne connait pas
+# une fonction declaree plus bas dans le fichier, et l'appel echouait en silence sur
+# « command not found », faisant compter deux instables comme deux regressions.
+
 titre "Reproduction — $TOURS tour(s) de « cargo test --workspace »"
 note "le critère de R3 en demande TROIS d'affilée ; R3_TOURS le règle."
 
@@ -115,48 +161,6 @@ titre "Discrimination — chaque échec, rejoué SEUL (le MÊME binaire)"
 executables_du_workspace > "$TRAVAIL/exes"
 note "c'est ce second passage qui sépare l'instable du cassé."
 INSTABLES=0; REELS=0
-# **Rejouer LE MÊME BINAIRE — pas un binaire rebâti.**
-#
-# C'est le point sur lequel ce script s'est trompé, et le plus contre-intuitif du lot.
-# `cargo test -p <crate>` ne rejoue pas : il RECONSTRUIT. Or Cargo unifie les features par
-# caisse sur l'ensemble résolu, si bien que le binaire d'une course `--workspace` n'est PAS
-# celui d'une course `-p` — empreintes différentes, et jusqu'aux bibliothèques liées. Mesuré
-# le 2026-08-27 : sous `--workspace`, `efe-agent-runner → axum-server "tls-rustls"` allume un
-# SECOND fournisseur cryptographique rustls ; le binaire lie les deux (19 symboles aws-lc + 54
-# ring, contre 0 + 77 sous `-p`) et rustls refuse de deviner lequel employer.
-#
-# Conséquence : deux tests ont été déclarés « instables » parce qu'ils « passaient seuls ».
-# Ils ne passaient pas seuls — c'est un AUTRE binaire qui passait. La panique était
-# parfaitement déterministe. Comparer deux binaires différents et appeler l'écart
-# « instabilité » est une erreur de méthode qui produit un verdict crédible et faux.
-#
-# On interroge donc `--no-run --message-format=json`, qui donne les exécutables RÉELLEMENT
-# produits par la course de workspace, et on lance celui-là, directement, sans repasser par
-# cargo.
-executables_du_workspace() {
-    cargo test --workspace --no-run --message-format=json 2>/dev/null \
-      | python3 -c "
-import json,sys
-for l in sys.stdin:
-    try: m = json.loads(l)
-    except Exception: continue
-    if m.get('executable') and m.get('target'):
-        print(m['target']['name'] + '\t' + m['executable'])
-"
-}
-
-# La cible qui déclare ce test, trouvée dans la SOURCE — le seul index qui ne dépende ni du
-# parallélisme de cargo ni de l'état de compilation.
-cible_du_test() {
-    local nom="$1" f
-    f=$(grep -rl --include='*.rs' -E "fn[[:space:]]+${nom}[[:space:]]*\\(" crates/ 2>/dev/null | head -1)
-    [ -z "$f" ] && return 1
-    case "$f" in
-        */tests/*|*/benches/*) basename "$f" .rs ;;
-        *) printf '%s' "$(printf '%s' "$f" | cut -d/ -f2)" ;;
-    esac
-}
-
 while read -r nom; do
     [ -z "$nom" ] && continue
     CIBLE=$(cible_du_test "$nom") || { ko "INTROUVABLE — $nom"; note "aucune source ne declare ce nom : la mesure est caduque."; REELS=$((REELS + 1)); continue; }
