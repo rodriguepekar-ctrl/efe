@@ -1,0 +1,256 @@
+\documentclass[11pt]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage[english]{babel}
+\usepackage{newpxtext,newpxmath}
+\usepackage[a4paper,top=1.6cm,bottom=1.55cm,left=2.1cm,right=2.1cm]{geometry}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{titlesec}
+\usepackage[most]{tcolorbox}
+\usepackage{fancyhdr}
+\usepackage{enumitem}
+\usepackage{booktabs}
+\usepackage{listings}
+\lstdefinestyle{jsonic}{basicstyle=\ttfamily\footnotesize,backgroundcolor=\color{boxgray},%
+  breaklines=true,columns=fullflexible,keepspaces=true,xleftmargin=6pt,%
+  framexleftmargin=6pt,aboveskip=4pt,belowskip=4pt}
+\lstset{style=jsonic}
+
+\definecolor{efenavy}{HTML}{1F3A5F}
+\definecolor{efeteal}{HTML}{0E7A6E}
+\definecolor{efeamber}{HTML}{B25A1E}
+\definecolor{efeplum}{HTML}{7A4EA8}
+\definecolor{efegray}{HTML}{54606E}
+\definecolor{efesolve}{HTML}{2C6E49}
+\definecolor{boxgray}{HTML}{F3F5F8}
+\definecolor{boxamber}{HTML}{FBF3EA}
+\definecolor{boxedge}{HTML}{D9E0EA}
+
+\titleformat{\section}{\color{efenavy}\large\bfseries}{}{0pt}{}
+\titlespacing{\section}{0pt}{7pt}{3pt}
+\titleformat{\subsection}[runin]{\color{efenavy}\bfseries}{}{0pt}{}[:\;]
+\titlespacing{\subsection}{0pt}{5pt}{0.5em}
+
+\setlength{\parskip}{0.6pt}
+\setlength{\parindent}{0pt}
+\setlength{\emergencystretch}{3em}
+
+\pagestyle{fancy}\fancyhf{}
+\renewcommand{\headrulewidth}{0.3pt}
+\lhead{\small\color{efegray}Scella --- the Threshold \& the Register}
+\rhead{}
+\cfoot{\small\color{efegray}\thepage}
+
+\newcommand{\mesure}[1]{{\color{efeteal}\textbf{Measured.} }#1\par}
+\newcommand{\concept}[1]{{\color{efenavy}\textbf{Concept:} }#1\par}
+\newcommand{\exemple}[1]{{\color{efeamber}\textbf{Example:} }#1\par}
+\newcommand{\utilite}[1]{{\color{efeplum}\textbf{Real-world use:} }#1\par}
+\newcommand{\solves}[2]{{\color{efesolve}\textbf{Solves #1:} }#2\par}
+
+\newtcolorbox{these}{colback=boxgray,colframe=boxedge,boxrule=0.5pt,arc=2.5pt,
+  left=8pt,right=8pt,top=6pt,bottom=6pt}
+\newtcolorbox{cadre}{colback=boxamber,colframe=efeamber!55,boxrule=0.6pt,arc=2.5pt,
+  left=8pt,right=8pt,top=6pt,bottom=6pt}
+
+\begin{document}
+
+\begin{center}
+{\Huge\bfseries\color{efenavy} Scella}\\[3pt]
+{\large\color{efegray}\itshape the threshold that seals, the register that answers}
+\end{center}
+\vspace{6pt}
+
+\begin{these}
+\textbf{The problem.} A regulated organisation wants to use AI without letting its data leave, and
+must later answer a regulator, an auditor or a court \emph{in the language of the text that binds
+it} --- without handing over its systems, and without anyone having to take the operator's word for
+what happened.
+
+\textbf{What Scella concretely solves:}
+\begin{itemize}[leftmargin=1.3em,itemsep=1.5pt,topsep=2pt,parsep=0pt,label=\textendash]
+\item keep the \textbf{data and the AI inside your perimeter}, and seal every call that crosses it;
+\item \textbf{answer a regulator} in the vocabulary of the text --- AI Act, GDPR, CSDDD, LkSG ---
+rather than in the vocabulary of the software;
+\item \textbf{survive an incident}: a rollout, a restore, a key rotation, without losing the proof;
+\item \textbf{never degrade silently}: what is refused is refused \emph{by name}, with its cause;
+\item let a \textbf{third party re-derive the proof offline}, on his own machine, with no access to
+your systems and no trust in you.
+\end{itemize}
+\vspace{2pt}
+\textbf{Two products, one receipt.} \textbf{The Threshold} (C3, 20 crates) is the sovereign gateway:
+it runs where the data is and seals each call. \textbf{The Register} (C1, 8 crates) turns those seals
+into the evidence a \emph{named} regulation asks for. They share the same sealed node, so the
+compliance document and the proof cannot drift apart --- and they ship together or apart.
+\end{these}
+
+\section{I \;\textbar\; The Threshold (C3): the sealed perimeter}
+
+\subsection{What it is}
+A gateway that stands at the edge of your systems. Calls to models pass through it; each one becomes
+a \textbf{sealed node} in an append-only chain, and the chain re-proves offline. It starts with one
+command and it does not need the internet to prove anything.
+\concept{Not a proxy that logs. A threshold that \emph{seals}: what crosses it leaves a mark that
+cannot be edited afterwards without breaking the next mark.}
+\utilite{Bank, hospital, public administration: the model can be remote, the \emph{evidence} stays
+in the building, and the auditor is handed a file rather than an access.}
+\solves{(1)}{the AI comes to the data, not the reverse.}
+
+\subsection{Three states, and never a silent success}
+Every capability the gateway offers is in exactly one of three states: \emph{served}, \emph{refused
+with its cause named}, or \emph{degraded and said so}. The third is the one that costs discipline and
+buys trust: a provenance that cannot persist reports \texttt{degraded} \emph{with a reason} in the
+response, it does not quietly return 200 and drop the record.
+\exemple{Ask for a capability that is switched off and you get a refusal that \emph{names the
+switch}. Ask for one whose store is unreachable and you get your answer \emph{plus} the sentence
+saying the receipt was not persisted, and why.}
+\mesure{The boot guard refuses to start the paying frontier without its preconditions and exits
+\textbf{78} \emph{naming the variable} it wanted --- \texttt{EFE\_NANO\_AUDIT\_HMAC\_MASTER},
+\texttt{EFE\_OIDC\_PUBLIC\_KEY\_PEM}, \texttt{DATABASE\_URL}. Verified in one command:
+\texttt{bash scripts/p1-check.sh}.}
+\solves{(4)}{you always know what the system did \emph{not} do, and why.}
+
+\subsection{One authority analyser, zero exemptions}
+A single component decides which host the HTTP client will \emph{really} contact --- and it is the
+only one allowed to decide. This is not architectural taste: before it existed,
+\texttt{127.0.0.1:8080@evil.com} passed as loopback and \textbf{cut TLS towards
+\texttt{evil.com}}, on \textbf{875} spelling variants of the same trick.
+\concept{A perimeter with two doors has no perimeter. The exemption list is empty, and a test in the
+repository fails if anyone adds a second analyser.}
+\solves{(1)}{one door, one guard, and a test that notices when a second door appears.}
+
+\subsection{The anchor, and the one failure re-proof is blind to}
+Re-proof catches editing. It cannot catch \emph{truncation}: a valid chain's prefix is a valid
+chain, so a receipt with its last three steps removed re-proves \textbf{perfectly}. The root and the
+node count are therefore published to an append-only log \emph{before} the receipt is served.
+\mesure{The truncation is then exposed \textbf{by counting} --- the anchor says three nodes, the
+bundle contains two --- \textbf{with no key and no cryptography at all}. Anyone can redo it with
+\texttt{grep -c} and \texttt{awk}. Verified end-to-end by \texttt{docker compose up}, which brings
+the gateway up, serves a run, exports the bundle, truncates a copy and shows the contradiction.}
+\solves{(0)}{the failure mode that re-proof alone will never see.}
+
+\subsection{Surviving a rollout}
+A receipt is worth what it is worth \emph{after} the incident. The gateway is started against a real
+PostgreSQL, serves a run, is killed; \emph{another process} takes the same port; the receipt is
+re-proved from the new process.
+\mesure{\texttt{verified $\cdot$ root\_matches $\cdot$ chain\_intact $\cdot$ content\_intact}.
+This is the acceptance criterion of the production profile, and it is a script:
+\texttt{bash scripts/p1-check.sh} (it starts its own PostgreSQL 16 in a container).}
+\solves{(3)}{a restart, a deploy or a crash does not cost you the proof.}
+
+\section{II \;\textbar\; The Register (C1): the answer a regulation asks for}
+
+\subsection{Four texts, by name}
+The register produces evidence for \textbf{EU AI Act} (Regulation (EU) 2024/1689, art.~12
+record-keeping), \textbf{GDPR} (Regulation (EU) 2016/679), \textbf{CSDDD} (Directive (EU) 2024/1760)
+and \textbf{LkSG} (Germany). Each artefact is written in the vocabulary of its text.
+\concept{A compliance officer should not have to translate ``sealed DAG node'' into ``record of the
+functioning of the system''. The register does the translation, and the mapping is versioned so that
+re-stamping an unchanged reading is impossible.}
+\utilite{Supply-chain due diligence, high-risk AI record-keeping, processing register: the same
+sealed material, three different readings.}
+\solves{(2)}{an answer that can be handed over as it is.}
+
+\subsection{Derived, never re-declared}
+The evidence is \textbf{derived from the sealed chain} --- not written alongside it. There is no
+second source of truth to keep in sync, and no moment at which a human retypes what the system did.
+\concept{If the register were declared separately, it could drift from the receipt, and the drift
+would be invisible. Deriving makes drift \emph{impossible}: rewriting one breaks the re-proof of the
+other.}
+\solves{(0) \& (2)}{the compliance document \emph{is} the proof, not a story about it.}
+
+\subsection{Erasure without breaking the chain}
+GDPR erasure and record-keeping duties pull in opposite directions. The register resolves it by
+\textbf{crypto-shredding}: erasable fields are sealed \emph{encrypted} under a per-case key, and
+erasing destroys that key. Not one byte of the sealed graph moves; re-proof still passes.
+\concept{An erased field reads \textbf{``destroyed on \emph{date}''} --- never ``unknown''. The two
+must never be confused: the first is a dated fact, the second an absence. Telling a regulator that a
+case he saw pass never existed is the failure this distinction exists to prevent.}
+\mesure{The keyring is durable across restarts, and a destruction that cannot be made durable is
+\emph{refused} rather than performed in memory --- a shredding that the next restart would undo is a
+lie about a destruction.}
+\solves{(2) \& (3)}{the right to erasure and the duty to keep records, in the same artefact.}
+
+\subsection{Joined, not welded}
+The Threshold reaches the Register through a single feature, \textbf{off by default} and guarded by
+a manifest check. Enabling it is a deployment decision, not a rebuild.
+\utilite{Buy the perimeter first because an incident is expensive; add the register when the first
+audit is announced. The second purchase does not disturb the first.}
+\solves{(2)}{two products that ship together or apart, without a fork.}
+
+\section{III \;\textbar\; What binds them: one receipt}
+
+\subsection{The sealed node}
+Both products write the same thing: an \textbf{HMAC chain} of nodes, keyed per tenant, where each
+seal covers the canonical encoding of its node \emph{and} the previous chain value. Tampering with
+one link makes every following link fail.
+\concept{No new cryptography, no home-made construction: SHA-256 (FIPS 180-4) and HMAC (RFC 2104),
+and a key derivation whose context string is versioned so that changing it changes every key
+deliberately rather than by accident.}
+
+\subsection{A verifier with an empty dependency tree}
+The receipt is re-proved by a program whose \textbf{declared dependency tree contains zero crates}.
+A third party recompiles it from source in seconds, reads it in an afternoon, and checks your receipt
+on his own machine.
+\concept{``Trust our verifier'' is not an argument. ``Recompile ours, or write your own from a
+20-line specification'' is one --- and the empty dependency tree is what makes the second sentence
+true rather than rhetorical.}
+\solves{(0)}{offline re-derivation, without your systems and without trusting you.}
+
+\subsection{Conservation: backup, restore, key rotation}
+A register meant to last ten years must survive a disk loss and an administrator's departure. Backup
+writes an archive that carries what a restore needs to \emph{affirm} something --- and nothing more:
+never the key, and only the \emph{fingerprint} of the case keyring, not its contents.
+\concept{Key rotation is \textbf{additive}, never substitutive. A \emph{retired} generation stops
+sealing new records but still re-proves everything it sealed; only a \emph{destroyed} one stops, and
+its receipts then read ``destroyed on \emph{date}'' --- never ``invalid'', which would accuse someone
+of tampering.}
+\mesure{A restore distinguishes \textbf{fourteen} distinct outcomes --- truncated, extended,
+re-sealed, wrong key, destroyed generation, keyring mismatch --- rather than one ``verification
+failed''. Among them, one is \emph{proved} rather than guessed: if another known generation re-proves
+the archive, the manifest is wrong, and the tool says which generation is right.}
+\solves{(3)}{the incident, the ten-year horizon, and the administrator who leaves.}
+
+\begin{cadre}
+\textbf{The exact guarantee --- tamper-evident to whoever holds the key, still \emph{not}
+trustless.} The anchor log holder
+is the key holder, so publishing the root removes \emph{retroactive} rewriting --- it does not remove
+trust in the operator. Third-party time-stamping (RFC 3161) is wired: the token is obtained and
+deposited verbatim, and \textbf{its signature is verified by the third party} with
+\texttt{openssl ts -verify}. Re-implementing that verification inside the repository would require a
+full ASN.1/X.509 stack; \emph{no home-made crypto, no third stack} is a standing rule here, and it
+protects more than it costs. An asset of \textbf{verifiable discipline}, not a distributed vault.
+\end{cadre}
+
+\section{Results --- what it yields, by part}
+What the measurements establish, positively, product by product (measured 2026-08-27):
+\begin{itemize}[leftmargin=1.3em,itemsep=2.5pt,topsep=3pt,label=\textendash]
+\item \textbf{Engineering} --- \textbf{22 crates} across both products (20 for the Threshold, 8 for
+the Register, overlapping on the receipt), \textbf{2{,}539 green tests, 0 red}.
+\item \textbf{Executable claims} --- \textbf{15 checks} under \texttt{scripts/}. Every statement in
+this document is re-runnable in one command; the two that matter most are the rollout
+(\texttt{p1-check.sh}, with a real PostgreSQL) and the single command
+(\texttt{docker compose up}), both verified end-to-end.
+\item \textbf{The Threshold} --- serves without the internet, refuses by name, degrades out loud;
+one authority analyser with an \emph{empty} exemption list, proven necessary against 875 spelling
+variants of a loopback bypass.
+\item \textbf{The Register} --- four named texts; evidence derived from the chain rather than
+re-declared; erasure that destroys a key without moving a byte of the graph, and that reports a
+\emph{date} rather than an absence.
+\item \textbf{The receipt} --- re-proved by a verifier with \textbf{zero declared dependencies};
+truncation caught by counting, \textbf{with no key at all}; backup, restore and rotation with a
+fourteen-way diagnosis and a retired generation that keeps re-proving.
+\item \textbf{The method} --- a re-provable instrument: frozen constants, deterministic results, and
+claims that are refuted in writing when measurement contradicts them.
+\end{itemize}
+
+
+% La note de (0)-(4) glissait seule sur une 4e page. `\enlargethispage` est l'outil prevu :
+% on etire CETTE page plutot que de retoucher la mise en page de tout le document.
+\enlargethispage{4\baselineskip}
+\vspace{4pt}
+{\color{efegray}\hrule height 0.4pt}
+\vspace{2.5pt}
+{\footnotesize\color{efegray}(0)--(4) refer to the problems above: (0)~let a third party re-derive the proof offline, without your systems and without trusting you; (1)~keep the data and the AI inside your perimeter; (2)~answer a regulator in the language of the text that binds you; (3)~survive an incident --- rollout, restore, key rotation; (4)~never a silent degradation: what is refused is named.}
+
+\end{document}

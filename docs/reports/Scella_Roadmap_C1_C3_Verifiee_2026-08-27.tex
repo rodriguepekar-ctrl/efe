@@ -1,0 +1,334 @@
+\documentclass[11pt]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage[french]{babel}
+\usepackage{newpxtext,newpxmath}
+\usepackage[a4paper,top=1.6cm,bottom=1.55cm,left=2.0cm,right=2.0cm]{geometry}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{titlesec}
+\usepackage[most]{tcolorbox}
+\usepackage{fancyhdr}
+\usepackage{enumitem}
+\usepackage{array}      % \arraybackslash, requis par les colonnes >{\raggedright...}
+\usepackage{booktabs}
+\usepackage{longtable}  % le tableau des 17 etapes peut franchir une page
+
+\definecolor{efenavy}{HTML}{1F3A5F}
+\definecolor{efeteal}{HTML}{0E7A6E}
+\definecolor{efeamber}{HTML}{B25A1E}
+\definecolor{efegray}{HTML}{54606E}
+\definecolor{efesolve}{HTML}{2C6E49}
+\definecolor{efered}{HTML}{A32E2E}
+\definecolor{boxgray}{HTML}{F3F5F8}
+\definecolor{boxamber}{HTML}{FBF3EA}
+\definecolor{boxedge}{HTML}{D9E0EA}
+
+\titleformat{\section}{\color{efenavy}\large\bfseries}{}{0pt}{}
+\titlespacing{\section}{0pt}{8pt}{3pt}
+\titleformat{\subsection}[runin]{\color{efenavy}\bfseries}{}{0pt}{}[\;---\;]
+\titlespacing{\subsection}{0pt}{5pt}{0.5em}
+
+\setlength{\parskip}{1pt}
+\setlength{\parindent}{0pt}
+\setlength{\emergencystretch}{3em}
+
+\pagestyle{fancy}\fancyhf{}
+\renewcommand{\headrulewidth}{0.3pt}
+\lhead{\small\color{efegray}Scella --- feuille de route C1 \& C3, vérifiée}
+\cfoot{\small\color{efegray}\thepage}
+
+\newcommand{\code}[1]{\texttt{\small #1}}
+\newcommand{\best}[1]{{\color{efesolve}\textbf{#1}}}
+\newcommand{\pire}[1]{{\color{efered}\textbf{#1}}}
+\newcommand{\moyen}[1]{{\color{efeamber}\textbf{#1}}}
+\newcommand{\mm}[1]{\textbf{#1}}
+\newcommand{\sz}[1]{{\small #1}}
+\newcommand{\mesure}[1]{{\color{efeteal}\textbf{Vérifié.} }#1\par}
+\newcommand{\refute}[1]{{\color{efered}\textbf{Réfuté.} }#1\par}
+
+\newtcolorbox{these}{colback=boxgray,colframe=boxedge,boxrule=0.5pt,arc=2.5pt,
+  left=8pt,right=8pt,top=6pt,bottom=6pt}
+\newtcolorbox{cadre}{colback=boxamber,colframe=efeamber!55,boxrule=0.6pt,arc=2.5pt,
+  left=8pt,right=8pt,top=6pt,bottom=6pt}
+
+\begin{document}
+
+\begin{center}
+{\Huge\bfseries\color{efenavy} C1 \& C3}\\[3pt]
+{\large\color{efegray}\itshape la feuille de route complète, vérifiée pas à pas --- 27 août 2026}
+\end{center}
+\vspace{6pt}
+
+\begin{these}
+\textbf{Ce que ce document est.} Les \textbf{dix-sept étapes} du programme C1/C3, dans l'ordre, avec
+pour chacune : la tâche telle qu'elle avait été écrite, le critère qui devait la prouver, et
+\textbf{le résultat d'une exécution faite aujourd'hui} --- pas une citation d'un rapport antérieur.
+
+\textbf{Ce qu'il n'est pas.} Un état d'avancement déclaratif. Quinze des dix-sept étapes possèdent un
+\emph{contrôle exécutable} (\code{scripts/*-check.sh}) ; les quinze ont été relancés pour ce
+document, y compris ceux qui démarrent un PostgreSQL en conteneur et celui qui charge un modèle de
+869\,Mo pour refaire une mesure d'inférence. Les deux étapes sans script sont vérifiées autrement, et
+le document dit comment.
+
+\textbf{Ce que la vérification a changé.} Quatre étapes ne disent plus ce qu'elles disaient. Un
+critère s'est révélé \emph{arithmétiquement impossible}, deux suppressions demandées portaient sur du
+code vivant, et une « suite de tests instable » ne compilait pas. Ces réfutations sont au \S6 :
+elles sont le résultat le plus utile de l'exercice.
+\end{these}
+
+\section{1 \;\textbar\; La méthode, et ce qu'un contrôle vert prouve}
+
+Chaque étape est jugée sur son \emph{propre} critère, tel qu'il était écrit avant d'être exécuté ---
+jamais sur un critère réécrit après coup pour qu'il passe. Quand la mesure a contredit le critère,
+c'est le critère qui est déclaré faux, et le document le dit.
+
+\mesure{\textbf{15 contrôles relancés le 27 août} : \best{quatorze à 0}, et \moyen{un à 2}
+(\code{r3}, analysé au \S5). Durées observées : de 1\,s
+(\code{m4}, \code{m8}) à 436\,s (\code{orphelins}, qui interroge les 76 membres du workspace un par
+un) et 223\,s (\code{mz}, qui démarre un \code{llama-server} et refait une inférence réelle).}
+
+\begin{cadre}
+\textbf{Ce qu'un contrôle vert ne prouve pas.} Il prouve que le \emph{mécanisme} tient sur cette
+machine, aujourd'hui. Il ne prouve ni que le produit est déployé, ni qu'un tiers l'a accepté, ni que
+le besoin existe. Les quinze contrôles sont une garantie d'ingénierie, pas une garantie de marché.
+\end{cadre}
+
+\section{2 \;\textbar\; Le tableau complet des dix-sept étapes}
+
+{\footnotesize
+\renewcommand{\arraystretch}{1.18}
+\setlength{\LTleft}{0pt}\setlength{\LTright}{0pt}
+\begin{longtable}{@{}c >{\raggedright\arraybackslash}p{4.3cm} >{\raggedright\arraybackslash}p{5.5cm} c c@{}}
+\toprule
+& \textbf{Tâche} & \textbf{Le critère qui la prouve} & \textbf{Contrôle} & \textbf{27 août} \\
+\midrule
+\endhead
+\mm{M0} & Le profil --- les interrupteurs servis & rapport au démarrage de ce qui est réellement câblé & \code{profile} & \best{0} \\
+\mm{M1} & Fusionner les gardes d'egress & un seul analyseur d'autorité, exemptions vides & \code{m1b} & \best{0} \\
+\mm{M2} & Mode observation & l'absence est \emph{expliquée}, jamais muette & \sz{(sans script)} & \best{vérifié} \\
+\mm{M3} & Fail-open configurable & le test qui tue les mécanismes \emph{ensemble} & \sz{(sans script)} & \moyen{partiel} \\
+\mm{M4} & Packaging \sz{(compose, binaire)} & \code{docker compose up} $\rightarrow$ un reçu re-prouvé sans clé & \code{m4} & \best{0} \\
+\mm{M5} & La jonction $\rightarrow$ \code{reg-evidence} & \code{POST /reg/:id}, feature OFF par défaut & \code{m5} & \best{0} \\
+\mm{M6} & Rétention et cycle de vie & crypto-shredding : la chaîne ne bouge pas d'un octet & \code{m6} & \best{0} \\
+\mm{M7} & Le binaire de service & un processus, plusieurs tenants isolés & \code{m7} & \best{0} \\
+\mm{M8} & Console en production & écriture opposable ; TLS \emph{déclaré} & \code{m8} & \best{0} \\
+\mm{M9} & Ancrage tiers \textsc{rfc 3161} & le jeton déposé ; signature vérifiée par le tiers & \code{m9} & \best{0} \\
+\mm{MZ} & La mesure du Cadrage \sz{(hors plan)} & le plafond et le taux de préservation \emph{chiffrés} & \code{mz} & \best{0} \sz{(verdict : \pire{TUÉ})} \\
+\midrule
+\mm{P1} & Le profil de production & la frontière démarre ; un reçu survit à un redémarrage & \code{p1} & \best{0} \\
+\mm{P2} & La conservation opérable & un store détruit puis restauré, re-prouvé par \code{verify-mini} & \code{p2} & \best{0} \\
+\mm{P3} & Le nettoyage & \code{grep -c} $\rightarrow$ 0 ; la fermeture perd 4 crates & \code{p3} & \best{0} \sz{(critère \pire{réfuté})} \\
+\midrule
+\mm{R1} & L'extraction de \code{mode1.rs} & \code{core-integration} $\leq$ 10 crates ; \mm{M1.d} inchangé & \code{r1} & \best{0} \\
+\mm{R2} & Retirer les orphelins stricts & le recensement rend zéro ; \code{build --locked} passe & \code{orphelins} & \best{0} \sz{(2 suppressions \pire{réfutées})} \\
+\mm{R3} & La suite qui crie au loup & \code{cargo test --workspace} sans échec & \code{r3} & \moyen{2} \sz{(2 instables)} \\
+\bottomrule
+\end{longtable}}
+
+\section{3 \;\textbar\; Phase I --- le socle (\mm{M0}$\rightarrow$\mm{M9}, \mm{MZ})}
+
+\subsection{\mm{M0} · le profil servi}
+Le service imprime au démarrage ce qui est \emph{réellement} câblé, capacité par capacité. Trois
+états, jamais deux : \emph{servie}, \emph{refusée en nommant sa cause}, \emph{dégradée et le disant}.
+\mesure{\code{profile-check.sh} $\rightarrow$ 0. L'audit de M0 avait \emph{réfuté deux règles de son
+propre document} : un 404 délibéré bat la transparence, et le champ \code{.provenance.root} qu'il
+citait n'existait pas.}
+
+\subsection{\mm{M1} · un seul analyseur d'autorité}
+Cinq analyseurs d'egress fusionnés en un. La raison écrite des deux exemptions --- « sûrs par
+composition » --- était \pire{fausse} : \code{127.0.0.1:8080@evil.com} faisait couper TLS vers
+\code{evil.com} sur \textbf{875} formes d'écriture. Liste d'exemptions désormais \textbf{vide}.
+\mesure{\code{m1b-check.sh} $\rightarrow$ 0, et il \emph{exécute} le garde plutôt que d'en
+réimplémenter une version affaiblie.}
+
+\subsection{\mm{M2} · l'observation non intrusive}
+Une absence de donnée ne se rend jamais muette. Deux points de décision uniques dans le code :
+\code{decider} et \code{absence\_expliquee}.
+\mesure{Présents et localisés : \code{efe-swarm-gateway/src/capture.rs:340} et \code{:381}, avec un
+test dédié \code{tests/absence\_expliquee.rs}. L'audit avait trouvé que le premier passage n'en
+couvrait que \emph{la moitié} --- le chemin de mission gardait le même défaut, et huit routes
+rendaient encore un 404 muet.}
+
+\subsection{\mm{M3} · la panne qui ne coupe rien}
+La dégradation est configurable et \emph{dite}. Les mécanismes existent (\code{peut\_degrader},
+\code{degradee}, \code{degrade\_reason} dans \code{capture.rs}, 7 tests unitaires).
+\moyen{Réserve honnête :} ce jalon est le seul des dix-sept \textbf{sans contrôle exécutable
+dédié}. Son apport propre était « le test qui les tue \emph{ensemble} » ; les mécanismes sont
+vérifiés, leur combinaison ne l'est pas par un script. C'est le seul trou de méthode du programme.
+
+\subsection{\mm{M4} · une commande}
+\code{docker compose up} $\rightarrow$ un reçu re-prouvé \textbf{sans clé}.
+\mesure{\code{m4-check.sh} $\rightarrow$ 0 \emph{et} le chemin conteneurisé exécuté pour de vrai :
+run servi, bundle exporté, ancre publiée hors bande, troncature démasquée par un \emph{comptage}
+(3 nœuds annoncés, 2 trouvés). Ce chemin n'avait \emph{jamais} tourné avant aujourd'hui, faute de
+démon Docker.}
+
+\subsection{\mm{M5} · le pont vers le registre}
+\code{POST /reg/:id}, derrière une feature \textbf{OFF par défaut} gardée par une lecture du
+manifeste. Ce n'était pas une traduction mais un câblage : les trois pièces s'emboîtaient déjà.
+\mesure{\code{m5-check.sh} $\rightarrow$ 0.}
+
+\subsection{\mm{M6} · la conservation limitée}
+Crypto-shredding : effacer détruit une clé de cas, \textbf{sans déplacer un octet} du graphe scellé.
+Un champ effacé se lit « détruit le \emph{date} », jamais « inconnu ».
+\mesure{\code{m6-check.sh} $\rightarrow$ 0. Le dépôt avait \emph{déjà} publié cette réponse : un
+correctif par purge de préfixe aurait fait \emph{mentir} l'artefact réglementaire.}
+
+\subsection{\mm{M7} · le service de lecture}
+Un processus, plusieurs tenants \emph{isolés}. Son critère d'origine était déjà satisfait et sa
+preuve mesurait \emph{l'emplacement d'un binaire} ; le vrai trou était qu'il ne tenait qu'un tenant.
+\mesure{\code{m7-check.sh} $\rightarrow$ 0.}
+
+\subsection{\mm{M8} · la console opposable}
+Le chemin d'écriture était \pire{cassé tel que livré} (formulaire nu, cookie jamais posé) et sa seule
+façon de marcher passait par une configuration exposée au \textsc{csrf}. Corrigé. La lecture dégrade,
+l'\emph{écriture} coupe.
+\mesure{\code{m8-check.sh} $\rightarrow$ 0. \moyen{TLS est déclaré, non terminé} --- le processus
+exige la \emph{déclaration} du terminateur placé devant lui et refuse de servir hors boucle locale
+sans elle.}
+
+\subsection{\mm{M9} · l'ancrage tiers}
+Le jeton \textsc{rfc 3161} est obtenu et déposé verbatim ; sa signature est vérifiée par le tiers
+avec \code{openssl ts -verify}. Sans lire le jeton, la liaison aurait été \emph{circulaire}.
+\mesure{\code{m9-check.sh} $\rightarrow$ 0.}
+
+\subsection{\mm{MZ} · la mesure du Cadrage \sz{(hors plan)}}
+Le seul jalon dont le produit attendu était peut-être un \emph{refus}. Il l'a été.
+\refute{Verdict \pire{TUÉ et robuste} : meilleur point 22{,}6\,\%, aucun palier à 99\,\%. Le second
+bras a réfuté l'\emph{intention} même du dispositif, ce qui a imposé de renommer une fonction
+\code{ment()} en \code{declaration\_infondee()}. \code{mz-check.sh} $\rightarrow$ 0 en 223\,s : il
+vérifie que \emph{la mesure a eu lieu}, pas que le Cadrage a passé.}
+
+\section{4 \;\textbar\; Phase II --- la mise en service (\mm{P1}$\rightarrow$\mm{P3})}
+
+\subsection{\mm{P1} · le profil de production}
+\code{profiles/production.env}, un build \code{-{}-features postgres,oidc,pii}, et un contrôle qui
+\textbf{démarre la frontière} au lieu de la décrire.
+\mesure{\code{p1-check.sh} $\rightarrow$ 0, PostgreSQL 16 démarré en conteneur. Le critère est tenu :
+passerelle tuée, \emph{un autre processus} reprend le port, le reçu se re-prouve ---
+\code{verified · root\_matches · chain\_intact · content\_intact}. La dernière ligne du script
+affirmait encore « ni sauvegarde, ni restauration, ni rotation » : elle a cessé d'être vraie le jour
+de \mm{P2} et a été corrigée.}
+
+\subsection{\mm{P2} · la conservation opérable}
+Sauvegarde, restauration, rotation de clé. La génération de clé \textbf{ne peut pas} vivre dans le
+nœud scellé --- un champ de plus changerait tous les sceaux et casserait \code{verify-mini} --- elle
+vit donc dans le manifeste de l'archive.
+\mesure{\code{p2-check.sh} $\rightarrow$ 0 : store \emph{détruit} du disque, restauré, re-prouvé par
+le binaire \code{verify-mini} (sortie 0), et l'altération d'un seul champ scellé sort 1 en nommant le
+record. L'audit a trouvé trois trous dont deux de ma main, dont le \code{TrousseauMaitre} \emph{sans
+le fichier que sa propre documentation promettait}.}
+
+\subsection{\mm{P3} · le nettoyage}
+Moitié tenue, moitié réfutée.
+\mesure{\code{p3-check.sh} $\rightarrow$ 0. Le nom de la cible abandonnée a quitté le code des deux
+produits, et un \emph{garde} le tient --- pas un \code{grep}, qui mesure un instant là où un garde
+tient un état. Le plan comptait 4 citations : il y en avait \textbf{7}.}
+\refute{« la fermeture à frontière perd 4 crates » est \pire{arithmétiquement impossible} : voir
+\S6.}
+
+\section{5 \;\textbar\; Phase III --- la dette structurelle (\mm{R1}$\rightarrow$\mm{R3})}
+
+\subsection{\mm{R1} · l'extraction de \code{mode1.rs}}
+Servir de vrais participants exigeait \code{core-integration}, qui tirait \code{efe-server} et
+\textbf{dix-neuf} crates d'une pile applicative entière, pour \emph{une} fonction.
+\mesure{\code{r1-check.sh} $\rightarrow$ 0. Fermeture \textbf{27 $\rightarrow$ 10} crates (critère :
+au plus dix) ; défaut inchangé à 8 ; \mm{M1.d} 5/5 dont le vrai contrôleur servi sur gRPC. Le fichier
+a déménagé \emph{verbatim} : le diff contre l'original fait \textbf{une ligne}.}
+
+\subsection{\mm{R2} · les orphelins stricts}
+\refute{Les \emph{deux} crates visés étaient mal classés. \code{efe-cluster-provisioner} a deux
+dépendants déclarés ; \code{efe-bench-inference} porte 118 tests verts, 7 exemples et six comptes
+rendus de recherche. \textbf{Aucune ligne supprimée.}}
+\mesure{\code{orphelins-check.sh} $\rightarrow$ 0 en 436\,s : 76 membres, 56 pris en dépendance,
+\textbf{0 orphelin strict}. Le recensement est devenu un contrôle, et il refuse les deux
+suppressions que la feuille de route proposait.}
+
+\subsection{\mm{R3} · la suite qui crie au loup}
+\refute{La suite ne \emph{criait} pas au loup : elle ne \pire{compilait pas}, depuis un commit de
+juillet. Quatre défauts de construction, dont un doctest généré par prost à partir d'un commentaire
+\code{.proto}. Personne ne l'avait vu : la \textsc{ci} teste par crate et par features, jamais
+\code{-{}-workspace}.}
+\mesure{Une fois réparée : \textbf{11\,198 tests verts}. Les deux échecs restants n'étaient pas des
+instabilités mais une \textbf{panique rustls déterministe} --- sous \code{-{}-workspace}, l'unification
+des features de Cargo allume un second fournisseur cryptographique et le binaire lie les deux.
+\code{r3-check.sh} $\rightarrow$ \moyen{2} : \textbf{11\,201 tests verts, 2 échecs}, tous deux dans
+\code{server\_rpc\_realism\_check}. Discrimination faite à la main sur le \emph{binaire du
+workspace} --- la seule méthode saine : il les passe \textbf{3/3} en série (137\,s). Ce sont donc
+de vrais instables, sensibles à la charge, et non une régression.}
+\refute{Le « 2 » de sortie est en partie \textbf{un défaut de mon propre harnais} : les fonctions de
+discrimination étaient définies \emph{après} leur appel, et bash ne connaît pas une fonction
+déclarée plus bas. L'appel échouait sur « command not found » et faisait compter deux instables comme
+deux régressions. Corrigé --- mais le fait qu'un harnais de vérification ait produit, à sa cinquième
+révision, un verdict inversé, est le meilleur argument pour ne jamais croire un contrôle sans lire ce
+qu'il a réellement exécuté.}
+
+\section{6 \;\textbar\; Ce que la vérification a réfuté}
+
+C'est le résultat le plus utile de l'exercice : quatre affirmations écrites dans les feuilles de
+route sont fausses, et la mesure le montre.
+
+\begin{itemize}[leftmargin=1.3em,itemsep=3pt,topsep=3pt,label=\textendash]
+\item \textbf{\mm{P3} --- « la fermeture à frontière perd 4 crates ».} Le plan disait que
+\code{frontier-llm} tire \code{efe-nano-app-coordinator} « \emph{et avec lui trois crates de plus} ».
+Mesuré : la fermeture propre de ce crate vaut \textbf{1} --- lui-même. Les deux autres sont tirés
+\emph{directement} par la passerelle, et le troisième \emph{est} la couche des providers frontière.
+Maximum attribuable : \textbf{$-1$}. Et ce $-1$ n'est pas disponible : \code{efe-coordinator}
+importe ce crate en \textbf{34 endroits} pour son \emph{vocabulaire de types}.
+\item \textbf{\mm{R2} --- « deux orphelins stricts, 7\,572 lignes que rien n'atteint ».} Le
+recensement d'origine regardait \code{crates/*} et a raté deux membres du workspace qui vivent
+ailleurs. Surtout, il définissait « atteint » par les \emph{arêtes de dépendance} : or personne
+n'importe jamais un banc d'essai --- il s'exécute par \code{cargo run -{}-example}.
+\item \textbf{\mm{R3} --- « des échecs qui passent en isolement ».} La suite ne construisait pas. Et
+les deux échecs finalement observés n'étaient pas instables : \code{cargo test -p} ne \emph{rejoue}
+pas, il \textbf{reconstruit}, sous une autre unification de features. Comparer deux binaires
+différents et appeler l'écart « instabilité » produit un verdict crédible et faux.
+\item \textbf{\mm{MZ} --- le Cadrage.} Tué par sa propre mesure, et le second bras a réfuté
+l'\emph{intention} du dispositif, pas seulement sa performance.
+\end{itemize}
+
+\section{7 \;\textbar\; L'état mesuré au 27 août}
+
+\begin{center}\small
+\renewcommand{\arraystretch}{1.2}
+\begin{tabular}{@{}>{\raggedright\arraybackslash}p{6.6cm} l@{}}
+\toprule
+\textbf{Grandeur} & \textbf{Mesure} \\
+\midrule
+\mm{C3} --- la passerelle, toutes features servies & \textbf{20} crates du dépôt \\
+\mm{C1} --- la console d'audit & \textbf{8} crates \\
+Union C1 $\cup$ C3 & \textbf{22} sur 76 membres \\
+Tests verts sur l'union & \textbf{2\,539}, \best{0 rouge} \\
+Tests verts sur tout le workspace & \textbf{11\,201} \sz{(+2 instables sous charge)} \\
+Contrôles exécutables & \textbf{15} --- \best{14 à 0}, \moyen{1 à 2} \sz{(r3, 2 instables)} \\
+Dépendances déclarées de \code{verify-mini} & \textbf{0} \\
+Cadres réglementaires produits & \textbf{4} \sz{(AI Act art. 12, GDPR, CSDDD, LkSG)} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\section{8 \;\textbar\; Ce qui reste --- et ce n'est pas du code}
+
+Les dix-sept étapes sont exécutées. Les deux documents de feuille de route disent la même chose de la
+suite, et cette vérification l'a confirmé une troisième fois : les trois derniers travaux de code
+n'ont plus révélé des \emph{manques} mais des \emph{erreurs de description}.
+
+\begin{cadre}
+\textbf{Le seul jalon qui décide n'est pas dans ce tableau.} « Un prospect installe-t-il C3 en mode
+observation ? » Le mode observation existe depuis \mm{M2}, le packaging depuis \mm{M4},
+\code{docker compose up} a tourné pour de vrai aujourd'hui, la sauvegarde et la rotation existent
+depuis \mm{P2}. Il n'y a plus de raison technique d'attendre --- il n'y a personne à qui le montrer.
+\textbf{Aucune cible extérieure n'est déclarée} depuis le 11 août.
+
+Et pour \mm{MX}, le collecteur ouvert, la consigne écrite est catégorique : \emph{n'écrivez pas une
+ligne avant que trois personnes aient payé pour l'obtenir}. Le compteur est à \pire{zéro}.
+\end{cadre}
+
+\vspace{4pt}
+{\color{efegray}\hrule height 0.4pt}
+\vspace{2.5pt}
+{\footnotesize\color{efegray}Toutes les mesures de ce document ont été produites le 27 août 2026 sur
+le dépôt à jour. Les quinze contrôles se rejouent par \code{bash scripts/<nom>-check.sh}.}
+
+\end{document}

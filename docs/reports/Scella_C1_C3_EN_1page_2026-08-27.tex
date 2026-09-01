@@ -1,0 +1,118 @@
+\documentclass[10pt]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage[english]{babel}
+\usepackage{newpxtext,newpxmath}
+% 1.15 -> 0.95 cm. Deux produits sur une page tiennent parce que la moitie du contenu
+% est partagee (le recu) ; il manquait quand meme cinq lignes. Doctrine du 1-pager de
+% juillet : un << une-page >> qui deborde n'est plus un une-page, et on reprend la marge
+% plutot que d'amputer le fond. Ce qu'on n'ampute surtout pas, c'est la derniere puce.
+\usepackage[a4paper,margin=0.95cm]{geometry}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{enumitem}
+
+\definecolor{efenavy}{HTML}{1F3A5F}
+\definecolor{efegray}{HTML}{54606E}
+\definecolor{efesolve}{HTML}{2C6E49}
+
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{2pt}
+\linespread{0.99}
+\pagestyle{empty}
+
+\newcommand{\hd}[1]{\vspace{3.5pt}{\color{efenavy}\large\bfseries #1}\par\vspace{1.5pt}}
+\newlist{tight}{itemize}{1}
+\setlist[tight]{leftmargin=1.25em,itemsep=2pt,topsep=1.5pt,parsep=0pt,label=\textendash}
+
+\begin{document}
+
+\begin{center}
+{\Huge\bfseries\color{efenavy} Scella}\\[3pt]
+{\large\color{efegray}\itshape the threshold that seals, the register that answers}
+\end{center}
+\vspace{2pt}
+
+\textbf{The problem.} A regulated organisation wants to use AI without letting its data leave, and
+must later answer a regulator, an auditor or a court \emph{in the language of the text that binds
+it} --- without handing over its systems and without anyone having to take the operator's word.
+Scella ships this as \textbf{two products that share one receipt}: \textbf{the Threshold}, a
+sovereign gateway that seals every call at the perimeter, and \textbf{the Register}, which turns
+those seals into the evidence a specific regulation asks for.
+
+\hd{The Threshold (C3): the sealed perimeter --- 20 crates}
+\begin{tight}
+\item \textbf{It runs where the data is.} \texttt{docker compose up} brings up a gateway that serves
+a run and writes its receipt. No key is needed to \emph{catch} a truncation, and none is shipped:
+the demonstration runs on a public test key and says so. {\color{efesolve}\textbf{Solves (1):}} the AI comes to the data, not the reverse.
+\item \textbf{Three states, never a silent success.} Every capability is \emph{served},
+\emph{refused with its cause named}, or \emph{degraded and said so}. A missing precondition stops the
+boot with exit 78 and \emph{names} the variable it wanted; a provenance that cannot persist reports
+\texttt{degraded} with a reason, it does not quietly return 200. {\color{efesolve}\textbf{Solves (4):}} you always know what the system did \emph{not} do.
+\item \textbf{Truncation exposed by counting.} The chain's root and node count are published to an
+append-only log \emph{before} the receipt is served. A truncated bundle re-proves \emph{perfectly} ---
+a valid chain's prefix is a valid chain --- so re-proof alone cannot see it. The published claim can,
+\textbf{with no key and no cryptography}: two numbers disagree. {\color{efesolve}\textbf{Solves (0):}} the one failure re-proof is blind to.
+\item \textbf{The receipt survives a rollout.} Verified against a real PostgreSQL: the gateway is
+killed, \emph{another process} takes the port, and the receipt re-proves --- authentic, root
+matching, chain and content intact. {\color{efesolve}\textbf{Solves (3):}} an incident does not cost you the proof.
+\item \textbf{One authority analyser, zero exemptions.} A single component decides which host the
+HTTP client will \emph{really} contact. It was proven necessary: \texttt{127.0.0.1:8080@evil.com}
+used to pass as loopback and cut TLS towards \texttt{evil.com}, on 875 spelling variants. {\color{efesolve}\textbf{Solves (1):}} the perimeter has one door, and one guard.
+\end{tight}
+
+\hd{The Register (C1): the answer a regulation asks for --- 8 crates}
+\begin{tight}
+\item \textbf{Four texts, by name.} EU AI Act (2024/1689, art.~12 record-keeping), GDPR (2016/679),
+CSDDD (2024/1760), LkSG. The artefact is produced in the vocabulary of the text, not in the
+vocabulary of the software. {\color{efesolve}\textbf{Solves (2):}} an answer the compliance officer can hand over as-is.
+\item \textbf{Derived, never re-declared.} The evidence is \emph{derived from the sealed chain}, so
+the register and the receipt cannot drift apart: there is no second source of truth to keep in
+sync, and rewriting one breaks the re-proof of the other. {\color{efesolve}\textbf{Solves (0) \& (2):}} the compliance document \emph{is} the proof.
+\item \textbf{Erasure without breaking the chain.} A GDPR deletion destroys a per-case key; not one
+byte of the sealed graph moves, and re-proof still passes. An erased field reads \textbf{``destroyed
+on \emph{date}''} --- never ``unknown''. Confusing the two would tell a regulator that a case he saw
+never existed. {\color{efesolve}\textbf{Solves (2) \& (3):}} the right to erasure and the duty to keep records, together.
+\item \textbf{Joined, not welded.} The Threshold reaches the Register through one feature, \emph{off
+by default}, guarded by a manifest check. The two products ship together or apart. {\color{efesolve}\textbf{Solves (2):}} buy the perimeter first, add the register when the audit comes.
+\end{tight}
+
+\hd{One receipt binds them}
+Both products write the \textbf{same sealed node}: an HMAC chain, per-tenant key, re-derivable by any
+key-holder; tampering with one link makes the next fail. It is re-proved by a verifier whose
+\textbf{declared dependency tree is empty} --- \textbf{zero} crates --- so a third party recompiles it
+from source and checks your receipt on his own machine, offline. \textbf{Backup, restore and key
+rotation} exist: a \emph{retired} generation still re-proves everything it sealed, a \emph{destroyed}
+one reads ``destroyed on \emph{date}'', and a restore distinguishes fourteen distinct outcomes ---
+truncated, re-sealed, wrong key, destroyed generation --- rather than one ``verification failed''.
+\textbf{Exact guarantee:} tamper-evident to whoever holds the key; \emph{not} trustless --- the log
+holder is the key holder, so the anchor removes \emph{retroactive} rewriting, not trust.
+{\color{efesolve}\textbf{Solves (0):}} a third party re-derives the proof offline, without your systems.
+
+\hd{Measured}
+\begin{tight}
+\item \textbf{Engineering.} 22 crates across both products, \textbf{2{,}539 green tests, 0 red}
+(measured 2026-08-27), and \textbf{15 executable checks} (\texttt{scripts/*-check.sh}): every claim
+above is re-runnable in one command.
+\item \textbf{The single command.} \texttt{docker compose up} brings the gateway up, serves a run,
+exports its bundle, truncates a copy and \textbf{shows the contradiction} against the published
+anchor --- end-to-end, verified.
+\item \textbf{The rollout.} Against a real PostgreSQL: gateway killed, another process on the same
+port, receipt re-proved --- \texttt{verified $\cdot$ root\_matches $\cdot$ chain\_intact $\cdot$
+content\_intact}.
+\item \textbf{The perimeter.} One authority analyser with an \emph{empty} exemption list, proven
+necessary against \textbf{875} spelling variants of a loopback bypass.
+\item \textbf{The register.} Four named texts; evidence derived from the sealed chain rather than
+re-declared; erasure that destroys a key without moving a byte of the graph, and reports a
+\emph{date} rather than an absence.
+\item \textbf{Conservation.} Backup, restore and key rotation, with a \textbf{fourteen-way}
+restore diagnosis and a retired generation that keeps re-proving everything it sealed.
+\end{tight}
+
+\enlargethispage{4\baselineskip}
+\vspace{3pt}
+{\color{efegray}\hrule height 0.4pt}
+\vspace{2pt}
+{\scriptsize\color{efegray}(0)--(4) refer to the problems above: (0)~prove to a third party, offline, without your data or trusting the operator; (1)~keep the data and the AI inside your perimeter; (2)~answer a regulator in the language of the text that binds you; (3)~survive an incident --- rollout, restore, key rotation; (4)~never a silent degradation: what is refused is named.}
+
+\end{document}
