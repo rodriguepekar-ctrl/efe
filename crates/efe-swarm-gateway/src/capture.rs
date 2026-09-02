@@ -114,9 +114,14 @@
 //! **La limite que M3 avait déclarée est fermée.** Elle disait : *« cet inventaire est tenu à la
 //! main ; aucun test n'interdit qu'une dépendance future coupe sans être inscrite ici. Les lignes
 //! ci-dessus gardent contre la régression, pas contre l'oubli. »* C'est désormais faux, et de la
-//! seule façon qui vaille : `tests/m3_inventaire_des_pannes.rs` **relit les imports du chemin servi**
-//! (`routes/run.rs`, `routes/llm.rs`, hors module de tests) et refuse tout crate qui n'a ni ligne
-//! ici ni exemption motivée. Une dépendance ajoutée demain casse le build tant que sa ligne n'est
+//! seule façon qui vaille : `tests/m3_inventaire_des_pannes.rs` **relit les dépendances du chemin
+//! servi** (`routes/run.rs`, `routes/llm.rs`, hors module de tests et hors commentaires) et refuse
+//! toute dépendance qui n'a ni ligne ici ni exemption motivée. Il lit les `use` **et** les chemins
+//! pleinement qualifiés, crates externes **et** coutures internes — les trois formes sont
+//! nécessaires : `use efe_multi_llm::{A, B}` n'est vu que par la première, `crate::reg_pont::RegReport`
+//! que par la seconde, et c'est sous cette seconde forme exacte que la dépendance de M5 entre dans
+//! `llm.rs`. Le test `le_scenario_m5_est_couvert_et_non_seulement_raconte` en fait une mesure plutôt
+//! qu'une affirmation. Une dépendance ajoutée demain casse le build tant que sa ligne n'est
 //! pas écrite — ce qui est exactement ce qui a manqué le jour où M5 a ajouté la sienne sans
 //! l'inscrire.
 //!

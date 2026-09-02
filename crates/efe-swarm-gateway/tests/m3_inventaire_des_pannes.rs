@@ -60,10 +60,12 @@ enum Regime {
 struct Ligne {
     dependance: &'static str,
     regime: Regime,
-    /// Le crate qui la fournit, quand c'en est un. C'est par ce champ que le garde anti-oubli fait
-    /// la correspondance avec les imports réels du chemin servi. `None` = dépendance interne au
-    /// crate (une couture, pas une bibliothèque), que l'analyse d'imports ne verra jamais.
-    fournie_par: Option<&'static str>,
+    /// Ce qui la fournit sur le chemin servi — un crate (`efe_multi_llm`) ou une couture interne
+    /// (`crate::capture`). C'est par ce champ que le garde anti-oubli fait la correspondance.
+    ///
+    /// Une **liste** et non une valeur : le store est atteint par deux modules, et forcer un seul
+    /// nom obligerait à en taire un.
+    fournie_par: &'static [&'static str],
     /// Le test qui l'établit, ou la raison quand il n'y a rien à tester.
     preuve: &'static str,
 }
@@ -73,76 +75,76 @@ const INVENTAIRE: &[Ligne] = &[
     Ligne {
         dependance: "reformulateur SLM mort",
         regime: Regime::Degrade,
-        fournie_par: Some("efe_multi_llm"),
+        fournie_par: &["efe_multi_llm"],
         preuve: "m3_le_slm_mort_ne_coupe_pas_et_sa_raison_remonte",
     },
     Ligne {
         dependance: "store (persistance)",
         regime: Regime::Degrade,
-        fournie_par: None,
+        fournie_par: &["crate::capture", "crate::store"],
         preuve: "m2_une_mission_survit_a_la_mort_du_store",
     },
     Ligne {
         dependance: "les deux à la fois",
         regime: Regime::Degrade,
-        fournie_par: None,
+        fournie_par: &[],
         preuve: "m3_le_slm_et_le_store_meurent_ensemble_et_lappel_passe",
     },
     Ligne {
         dependance: "provider frontière mort",
         regime: Regime::Ecarte,
-        fournie_par: Some("efe_coordinator"),
+        fournie_par: &["efe_coordinator"],
         preuve: "call_many_ok_drops_errors",
     },
     Ligne {
         dependance: "dérivation réglementaire (M5)",
         regime: Regime::Degrade,
-        fournie_par: None,
+        fournie_par: &["crate::reg_pont"],
         preuve: "m5_un_dossier_manque_se_rattrape_a_lidentique",
     },
     Ligne {
         dependance: "caviardage PII",
         regime: Regime::Infaillible,
-        fournie_par: None,
+        fournie_par: &["crate::pii"],
         preuve: "pas de `Result` — il n'y a pas de panne à traiter",
     },
     Ligne {
         dependance: "bus de supervision",
         regime: Regime::BestEffort,
-        fournie_par: Some("efe_swarm_dashboard"),
+        fournie_par: &["efe_swarm_dashboard"],
         preuve: "ring borné + compteur de pertes — la perte est comptée, jamais propagée",
     },
     Ligne {
         dependance: "tenant_id",
         regime: Regime::Coupe,
-        fournie_par: None,
+        fournie_par: &["crate::auth"],
         preuve: "entrée du CLIENT : invalide, c'est une requête malformée, pas une panne",
     },
     Ligne {
         dependance: "derive_key",
         regime: Regime::Coupe,
-        fournie_par: None,
+        fournie_par: &[],
         preuve: "sans clé rien ne peut être scellé : dégrader rendrait une réponse sans aucun reçu \
                  possible, ni maintenant ni plus tard",
     },
     Ligne {
         dependance: "publication d'ancre",
         regime: Regime::Coupe,
-        fournie_par: None,
+        fournie_par: &[],
         preuve: "annoncer `anchored: true` après un échec serait un mensonge sur la garantie",
     },
     // ── Les deux lignes que le garde anti-oubli a fait apparaître ────────────────────────
     Ligne {
         dependance: "mémoire d'essaim (MemoryHandle)",
         regime: Regime::Infaillible,
-        fournie_par: Some("efe_swarm_sdk"),
+        fournie_par: &["efe_swarm_sdk"],
         preuve: "`MemoryHandle::with_config` construit un descripteur, sans `Result` : il n'y a pas \
                  de panne à ce point du chemin",
     },
     Ligne {
         dependance: "re-preuve hors ligne et empreintes",
         regime: Regime::Infaillible,
-        fournie_par: Some("efe_swarm_provenance"),
+        fournie_par: &["efe_swarm_provenance"],
         preuve: "`blake3_bytes` rend une empreinte et `verify_run_offline` rend un VERDICT — un \
                  verdict négatif n'est pas une panne, c'est le résultat que le client demandait",
     },
@@ -164,6 +166,20 @@ const SANS_OBJET: &[(&str, &str)] = &[
     ("crate", "les coutures internes portent leur propre ligne quand elles en méritent une — le \
                champ `fournie_par` vaut alors `None`"),
     ("super", "idem : chemin interne au module"),
+    ("header", "`axum::http::header` — des constantes de nom d'en-tête, sans entrée-sortie ni \
+                `Result`"),
+    ("crate::error", "le TYPE d'erreur de la passerelle. Il transporte les coupures des autres, il \
+                      n'en produit aucune"),
+    ("crate::dto", "des structures de transport : sérialisation en mémoire, déjà couverte par la \
+                    ligne `tenant_id` pour ce qui est des entrées malformées"),
+    ("crate::state", "l'état partagé porte les descripteurs des dépendances ; ce sont ELLES qui ont \
+                      une ligne, pas le sac qui les tient"),
+    ("crate::profile", "le registre des interrupteurs (M0) : une seule décision, au démarrage, avec \
+                        défaut déclaré — rien à dégrader au moment d'une requête"),
+    ("crate::mission", "la plomberie de la mission frontière — c'est le SUJET des lignes ci-dessus \
+                        (SLM, store, providers), pas une dépendance de plus"),
+    ("crate::mission_graph", "idem, et c'est ce module qui porte `m2_une_mission_survit_a_la_mort_du_store` : \
+                              il est le lieu du test, pas une dépendance à inventorier"),
 ];
 
 /// Les fichiers du **chemin d'appel** — ceux que l'inventaire dit couvrir : les deux voies qui
@@ -185,19 +201,90 @@ fn racine() -> PathBuf {
 ///
 /// Un `use` qui n'existe que pour les tests n'est pas une dépendance de service, et l'inscrire à
 /// l'inventaire ferait croire à une surface qui n'est pas exposée au client.
-fn region_servie(src: &str) -> &str {
-    src.find("#[cfg(test)]").map_or(src, |i| &src[..i])
+fn region_servie(src: &str) -> String {
+    let sans_tests = src.find("#[cfg(test)]").map_or(src, |i| &src[..i]);
+    // Les commentaires sont retirés, et ce n'est pas de la coquetterie : `llm.rs` cite
+    // `crate::oidc::OidcVerifier` dans sa documentation de module, alors que le code servi ne
+    // l'appelle jamais. Un garde qui lit la prose comme du code réclame une ligne d'inventaire pour
+    // une dépendance imaginaire — et le bruit fait ajouter des lignes creuses, ou désactiver le garde.
+    sans_tests
+        .lines()
+        .filter(|l| !l.trim_start().starts_with("//"))
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
-/// Les crates racines que ce source importe.
-fn crates_importes(src: &str) -> BTreeSet<String> {
-    src.lines()
-        .map(str::trim_start)
-        .filter_map(|l| l.strip_prefix("use "))
-        .filter_map(|reste| reste.split(&[':', ' ', '{', ';'][..]).next())
-        .filter(|c| !c.is_empty())
-        .map(str::to_string)
-        .collect()
+/// Les dépendances qu'un source atteint — **l'union de deux extracteurs**, parce qu'aucun des deux
+/// seul ne suffit.
+///
+/// * les lignes `use` attrapent `use efe_multi_llm::{A, B}`, que la seconde méthode rate : après
+///   `::` vient une accolade, pas un identifiant ;
+/// * les chemins **pleinement qualifiés** attrapent `crate::reg_pont::RegReport`, qu'aucun `use`
+///   ne déclare.
+///
+/// La première rédaction de ce garde n'avait que la première méthode, et exemptait `crate` en bloc.
+/// Elle ratait donc **deux fois** la dépendance de \[M5\] — celle-là même que son message d'échec
+/// citait en exemple. Un garde qui rate le cas qu'il donne pour motif est pire qu'absent : il
+/// rassure.
+///
+/// Un chemin interne compte pour son **module** (`crate::reg_pont`), pas pour le mot `crate` : c'est
+/// le module qui est la dépendance. Les racines en majuscule sont écartées — `Uuid::new_v4()` est un
+/// appel de fonction associée, pas un chemin de module.
+fn dependances(src: &str) -> BTreeSet<String> {
+    const PRIMITIFS: &[&str] =
+        &["std", "core", "alloc", "self", "super", "crate",
+          // `u32::try_from(..)` est une conversion, pas une dépendance de service.
+          "u8", "u16", "u32", "u64", "u128", "usize", "i8", "i16", "i32", "i64", "isize", "f32", "f64", "bool", "char", "str"];
+    let mut out = BTreeSet::new();
+
+    // (1) les `use`
+    for l in src.lines().map(str::trim_start) {
+        let Some(reste) = l.strip_prefix("use ") else { continue };
+        let racine = reste.split([':', ' ', '{', ';']).next().unwrap_or("");
+        if racine == "crate" {
+            if let Some(m) = reste.strip_prefix("crate::").and_then(|r| r.split([':', ' ', '{', ';', ',']).next()) {
+                if !m.is_empty() {
+                    out.insert(format!("crate::{m}"));
+                }
+            }
+        } else if !racine.is_empty() && !PRIMITIFS.contains(&racine) {
+            out.insert(racine.to_string());
+        }
+    }
+
+    // (2) les chemins pleinement qualifiés
+    let octets: Vec<char> = src.chars().collect();
+    let mut i = 0usize;
+    while i < octets.len() {
+        if !(octets[i].is_ascii_alphabetic() || octets[i] == '_')
+            || (i > 0 && (octets[i - 1].is_alphanumeric() || octets[i - 1] == '_' || octets[i - 1] == ':'))
+        {
+            i += 1;
+            continue;
+        }
+        let debut = i;
+        while i < octets.len() && (octets[i].is_alphanumeric() || octets[i] == '_') {
+            i += 1;
+        }
+        if i + 1 >= octets.len() || octets[i] != ':' || octets[i + 1] != ':' {
+            continue;
+        }
+        let tete: String = octets[debut..i].iter().collect();
+        if tete == "crate" {
+            let d2 = i + 2;
+            let mut j = d2;
+            while j < octets.len() && (octets[j].is_alphanumeric() || octets[j] == '_') {
+                j += 1;
+            }
+            let m: String = octets[d2..j].iter().collect();
+            if !m.is_empty() && m.starts_with(|c: char| c.is_lowercase()) {
+                out.insert(format!("crate::{m}"));
+            }
+        } else if !PRIMITIFS.contains(&tete.as_str()) && tete.starts_with(|c: char| c.is_lowercase()) {
+            out.insert(tete);
+        }
+    }
+    out
 }
 
 // ══════════════════════════════════════════════════════════════════════════════════════
@@ -240,7 +327,7 @@ fn chaque_preuve_nommee_existe_reellement() {
 #[test]
 fn aucune_dependance_du_chemin_servi_nest_hors_inventaire() {
     let racine = racine();
-    let connus: BTreeSet<&str> = INVENTAIRE.iter().filter_map(|l| l.fournie_par).collect();
+    let connus: BTreeSet<&str> = INVENTAIRE.iter().flat_map(|l| l.fournie_par.iter().copied()).collect();
     let exemptes: BTreeSet<&str> = SANS_OBJET.iter().map(|(c, _)| *c).collect();
 
     let mut orphelines = Vec::new();
@@ -248,7 +335,7 @@ fn aucune_dependance_du_chemin_servi_nest_hors_inventaire() {
     for rel in CHEMIN_SERVI {
         let src = std::fs::read_to_string(racine.join(rel))
             .unwrap_or_else(|e| panic!("{rel} illisible : {e} — le chemin servi a-t-il déménagé ?"));
-        for c in crates_importes(region_servie(&src)) {
+        for c in dependances(&region_servie(&src)) {
             vus += 1;
             if !connus.contains(c.as_str()) && !exemptes.contains(c.as_str()) {
                 orphelines.push(format!("  {rel} importe « {c} »"));
@@ -266,6 +353,35 @@ fn aucune_dependance_du_chemin_servi_nest_hors_inventaire() {
          C'est ce garde précis que M3 déclarait ne pas avoir, et c'est ainsi que M5 avait ajouté une \
          dépendance sans inscrire sa ligne.",
         orphelines.join("\n")
+    );
+}
+
+/// **Le scénario M5, rendu vérifiable au lieu d'être affirmé.**
+///
+/// La doc de `capture.rs` raconte que M5 a ajouté une dépendance sur le chemin d'appel sans
+/// inscrire sa ligne. Dire que ce garde l'aurait attrapée est une affirmation ; ce test en fait une
+/// mesure. Il exige les deux moitiés du mécanisme :
+///
+/// * l'extracteur **voit** `crate::reg_pont` dans le vrai `llm.rs` — où il n'apparaît que sous forme
+///   de chemin pleinement qualifié, sans aucun `use` ;
+/// * l'inventaire le **connaît**. Retirez la ligne de M5 et ce test tombe, ce qui est exactement
+///   l'état du dépôt le jour où l'oubli a eu lieu.
+#[test]
+fn le_scenario_m5_est_couvert_et_non_seulement_raconte() {
+    let src = std::fs::read_to_string(racine().join("crates/efe-swarm-gateway/src/routes/llm.rs"))
+        .expect("llm.rs lisible");
+    let vues = dependances(&region_servie(&src));
+    assert!(
+        vues.contains("crate::reg_pont"),
+        "l'extracteur ne voit pas la dépendance de M5 dans `llm.rs` — or elle y entre par un chemin \
+         pleinement qualifié (`crate::reg_pont::RegReport`), la forme même que la première rédaction \
+         de ce garde ratait"
+    );
+    let connus: BTreeSet<&str> = INVENTAIRE.iter().flat_map(|l| l.fournie_par.iter().copied()).collect();
+    assert!(
+        connus.contains("crate::reg_pont"),
+        "l'inventaire ne rattache aucune ligne à `crate::reg_pont` : c'est précisément l'état dans \
+         lequel M5 avait laissé le dépôt, et que ce garde existe pour rendre impossible"
     );
 }
 
@@ -329,18 +445,34 @@ fn chaque_ligne_dit_un_regime_et_une_raison() {
 
 #[test]
 fn les_detecteurs_savent_tomber_et_savent_se_taire() {
-    // Le périmètre étant propre, les trois gardes ci-dessus resteraient verts même si leurs
-    // extracteurs étaient cassés. On les éprouve donc sur des entrées synthétiques.
-    let src = "use efe_inconnu::Chose;\nuse std::fmt;\n#[cfg(test)]\nuse efe_de_test::Truc;\n";
-    let servi = region_servie(src);
-    let vus = crates_importes(servi);
-    assert!(vus.contains("efe_inconnu"), "l'extracteur doit voir un import servi");
-    assert!(vus.contains("std"));
+    // Le périmètre étant propre, les gardes ci-dessus resteraient verts même si leurs extracteurs
+    // étaient cassés. On les éprouve donc sur des entrées synthétiques — et notamment sur les DEUX
+    // formes que la première rédaction ratait.
+    let src = "//! cf. crate::oidc::Verifier\n\
+               use efe_multi_llm::{A, B};\n\
+               use crate::capture::decider;\n\
+               fn f(x: Option<crate::reg_pont::RegReport>) -> Uuid { Uuid::new_v4() }\n\
+               #[cfg(test)]\n\
+               use efe_de_test::Truc;\n";
+    let vus = dependances(&region_servie(src));
+
+    assert!(vus.contains("efe_multi_llm"), "un `use` groupé doit être vu : `use foo::{{A, B}}`");
     assert!(
-        !vus.contains("efe_de_test"),
-        "un import qui n'existe que pour les tests n'est pas une dépendance de service"
+        vus.contains("crate::reg_pont"),
+        "un chemin PLEINEMENT QUALIFIÉ doit être vu — c'est sous cette forme exacte que la \
+         dépendance de M5 entre dans `llm.rs`, et c'est ce que la première rédaction ratait"
     );
-    assert!(crates_importes("fn rien() {}").is_empty(), "et se taire quand il n'y a rien");
+    assert!(vus.contains("crate::capture"), "un `use crate::` compte pour son MODULE");
+    assert!(
+        !vus.contains("crate::oidc"),
+        "un module cité dans un COMMENTAIRE n'est pas une dépendance : `llm.rs` documente \
+         `crate::oidc` sans jamais l'appeler sur le chemin servi"
+    );
+    assert!(!vus.contains("efe_de_test"), "un import de test n'est pas une dépendance de service");
+    assert!(!vus.contains("Uuid"), "`Uuid::new_v4()` est un appel de fonction associée, pas un module");
+    assert!(!vus.contains("crate"), "le mot `crate` n'est pas une dépendance — son MODULE l'est");
+
+    assert!(dependances("fn rien() {}").is_empty(), "et se taire quand il n'y a rien");
 }
 
 /// Parcours récursif — `walkdir` n'est pas une dépendance de ce crate, et l'ajouter pour un test
