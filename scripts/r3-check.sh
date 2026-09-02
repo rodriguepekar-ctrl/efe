@@ -36,6 +36,9 @@ set -uo pipefail
 cd "$(dirname "$0")/.."
 
 TOURS=${R3_TOURS:-1}
+# La borne d'un tour, en secondes. Généreuse par défaut : elle existe pour rendre visible une
+# course qui ne finit pas, pas pour arbitrer la vitesse d'une machine.
+DELAI="${R3_DELAI_S:-5400}"
 TRAVAIL=$(mktemp -d)
 trap 'rm -rf "$TRAVAIL"' EXIT
 
@@ -75,29 +78,81 @@ for l in sys.stdin:
 "
 }
 
-# La cible qui déclare ce test, trouvée dans la SOURCE — le seul index qui ne dépende ni du
-# parallélisme de cargo ni de l'état de compilation.
-cible_du_test() {
-    local nom="$1" f
-    f=$(grep -rl --include='*.rs' -E "fn[[:space:]]+${nom}[[:space:]]*\\(" crates/ 2>/dev/null | head -1)
-    [ -z "$f" ] && return 1
-    case "$f" in
-        */tests/*|*/benches/*) basename "$f" .rs ;;
-        *) printf '%s' "$(printf '%s' "$f" | cut -d/ -f2)" ;;
-    esac
+# L'exécutable qui CONTIENT ce test — on le demande aux binaires, on ne le déduit pas.
+#
+# La version d'avant cherchait le nom dans les sources puis devinait la cible. Elle a produit un
+# faux verdict le 2026-09-02, par DEUX défauts indépendants dont chacun suffisait :
+#
+#   1. libtest nomme un test unitaire « tests::le_nom ». Le grep cherchait donc
+#      « fn tests::le_nom( », qui n'existe nulle part : le script n'a JAMAIS su discriminer un
+#      test unitaire, il n'avait simplement jamais eu à en juger un.
+#   2. `cut -d/ -f2` rend le nom du PAQUET. La table des exécutables est indexée par le nom de la
+#      CIBLE, et les deux diffèrent dès qu'un `[[bin]]` se renomme — efe-nano-inference-daemon
+#      produit « inference-daemon ». Le point 1 corrigé, la recherche aurait échoué ici.
+#
+# Un binaire de test sait ce qu'il contient : `--list` l'énumère. Demander est plus court que
+# déduire, et surtout ce n'est trompable ni par un préfixe de module, ni par une cible renommée,
+# ni par un test qu'une macro engendre — trois hypothèses que l'index par la source portait sans
+# les dire.
+exe_qui_contient() {
+    local nom="$1" exe
+    while IFS=$'\t' read -r _ exe; do
+        [ -x "$exe" ] || continue
+        if "$exe" --list 2>/dev/null | grep -qxF "$nom: test"; then
+            printf '%s' "$exe"
+            return 0
+        fi
+    done < "$TRAVAIL/exes"
+    return 1
 }
 
 # Les deux fonctions ci-dessus sont definies AVANT leur premier appel : bash ne connait pas
 # une fonction declaree plus bas dans le fichier, et l'appel echouait en silence sur
 # « command not found », faisant compter deux instables comme deux regressions.
 
+# Une course BORNÉE dans le temps.
+#
+# Sans borne, ce script peut tourner indéfiniment sans rien écrire : mesuré le 2026-09-02, un tour
+# est resté 4 h sans produire une ligne. Ce n'était PAS un blocage — `realism_loop_does_not_leak_memory`
+# (efe-server) passe, en 467 s, quand on le joue seul — mais la machine paginait (13,4 Gio de swap
+# sur 14,3), et sous `--workspace` les binaires se disputent la mémoire. C'est exactement le mode
+# de défaillance que la note de clôture de ce script décrit : contention avec d'AUTRES PROCESSUS,
+# charge machine.
+#
+# Un instrument qui met quatre heures sans le dire n'est pas plus honnête que celui qui rend un
+# faux verdict : dans les deux cas l'exploitant ne sait pas où il en est. La borne ne juge pas le
+# code — elle rend la NON-CONCLUSION visible, et distincte d'un échec.
+#
+# `timeout(1)` n'existe pas partout (macOS n'en a pas), d'où le tueur en tâche de fond.
+tour_borne() {
+    local log="$1" delai="$2" pid tueur code
+    cargo test --workspace --no-fail-fast > "$log" 2>&1 &
+    pid=$!
+    ( sleep "$delai"; kill -9 "$pid" 2>/dev/null ) & tueur=$!
+    wait "$pid" 2>/dev/null; code=$?
+    kill "$tueur" 2>/dev/null; wait "$tueur" 2>/dev/null || true
+    return "$code"
+}
+
 titre "Reproduction — $TOURS tour(s) de « cargo test --workspace »"
 note "le critère de R3 en demande TROIS d'affilée ; R3_TOURS le règle."
 
 for t in $(seq 1 "$TOURS"); do
     printf '  tour %s/%s … ' "$t" "$TOURS"
-    cargo test --workspace --no-fail-fast > "$TRAVAIL/tour$t.log" 2>&1
+    set +e
+    tour_borne "$TRAVAIL/tour$t.log" "$DELAI"
     CODE_CARGO=$?
+    set -e
+    # 137 = tué par la borne. Ni vert ni rouge : NON CONCLU. Le dire, et s'arrêter là — poursuivre
+    # sur une course tronquée ferait passer pour « aucun échec » ce qui n'a jamais été exécuté.
+    if [ "$CODE_CARGO" = "137" ]; then
+        printf 'NON CONCLU\n'
+        ko "la course n'a pas abouti en ${DELAI}s"
+        note "ce n'est ni un echec ni un succes : la mesure n'a pas eu lieu."
+        note "R3_DELAI_S rallonge la borne ; verifier d'abord la charge et le swap de la machine,"
+        note "car sous pagination un tour de workspace se compte en heures, pas en minutes."
+        exit 3
+    fi
     # Le binaire de test précède ses cas : on garde le contexte pour pouvoir rejouer SEUL.
     # On ne garde QUE le nom du test. La tentation est de retenir aussi le binaire lu sur la
     # ligne « Running » qui précède — c'est faux : avec --workspace, cargo exécute plusieurs
@@ -160,12 +215,20 @@ fi
 titre "Discrimination — chaque échec, rejoué SEUL (le MÊME binaire)"
 executables_du_workspace > "$TRAVAIL/exes"
 note "c'est ce second passage qui sépare l'instable du cassé."
-INSTABLES=0; REELS=0
+# NON_MESURES est un compteur à part, et c'est le correctif de fond. La version d'avant écrivait
+# « la mesure est caduque » puis faisait REELS=REELS+1 : elle transformait « je n'ai pas pu
+# mesurer » en « le code a régressé », c'est-à-dire un verdict sur ce qu'elle venait de déclarer
+# inconnaissable. Un instrument qui tombe en panne doit dire qu'il est en panne.
+INSTABLES=0; REELS=0; NON_MESURES=0
 while read -r nom; do
     [ -z "$nom" ] && continue
-    CIBLE=$(cible_du_test "$nom") || { ko "INTROUVABLE — $nom"; note "aucune source ne declare ce nom : la mesure est caduque."; REELS=$((REELS + 1)); continue; }
-    EXE=$(awk -F'\t' -v c="$CIBLE" '$1==c {print $2; exit}' "$TRAVAIL/exes")
-    [ -z "$EXE" ] && { ko "SANS BINAIRE — $nom"; note "la cible « $CIBLE » n'a produit aucun executable."; REELS=$((REELS + 1)); continue; }
+    EXE=$(exe_qui_contient "$nom") || {
+        ko "NON MESURÉ — $nom"
+        note "aucun binaire de la course ne declare ce test : c'est l'INSTRUMENT qui a echoue,"
+        note "pas forcement le code. Le verdict le dira comme tel."
+        NON_MESURES=$((NON_MESURES + 1))
+        continue
+    }
     note "binaire du workspace : $EXE"
     if "$EXE" "$nom" --exact --test-threads=1 > "$TRAVAIL/seul.log" 2>&1; then
         att "INSTABLE — $nom"
@@ -180,7 +243,12 @@ while read -r nom; do
 done < "$TRAVAIL/tous.txt"
 
 titre "Verdict"
-note "$INSTABLES instable(s) · $REELS reproductible(s)"
+note "$INSTABLES instable(s) · $REELS reproductible(s) · $NON_MESURES non mesure(s)"
+if [ "$NON_MESURES" -gt 0 ]; then
+    printf '\n  \033[0;31mL INSTRUMENT a echoue sur %s cas : ni instable ni regression, INCONNU.\033[0m\n' "$NON_MESURES"
+    printf '  Reparer le script AVANT de conclure quoi que ce soit sur la suite.\n\n'
+    exit 3
+fi
 if [ "$REELS" -gt 0 ]; then
     printf '\n  \033[0;31mDes échecs se reproduisent en isolement : traiter la régression AVANT R3.\033[0m\n\n'
     exit 2
