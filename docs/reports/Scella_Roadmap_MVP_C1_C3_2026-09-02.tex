@@ -1,0 +1,265 @@
+\documentclass[11pt]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage[french]{babel}
+\usepackage{newpxtext,newpxmath}
+\usepackage[a4paper,top=1.6cm,bottom=1.55cm,left=2.0cm,right=2.0cm]{geometry}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{titlesec}
+\usepackage[most]{tcolorbox}
+\usepackage{fancyhdr}
+\usepackage{enumitem}
+\usepackage{array}
+\usepackage{booktabs}
+\usepackage{longtable}
+
+\definecolor{efenavy}{HTML}{1F3A5F}
+\definecolor{efeteal}{HTML}{0E7A6E}
+\definecolor{efeamber}{HTML}{B25A1E}
+\definecolor{efegray}{HTML}{54606E}
+\definecolor{efesolve}{HTML}{2C6E49}
+\definecolor{efered}{HTML}{A32E2E}
+\definecolor{boxgray}{HTML}{F3F5F8}
+\definecolor{boxamber}{HTML}{FBF3EA}
+\definecolor{boxedge}{HTML}{D9E0EA}
+
+\titleformat{\section}{\color{efenavy}\large\bfseries}{}{0pt}{}
+\titlespacing{\section}{0pt}{9pt}{3pt}
+\titleformat{\subsection}[runin]{\color{efenavy}\bfseries}{}{0pt}{}[\;---\;]
+\titlespacing{\subsection}{0pt}{5pt}{0.5em}
+
+\setlength{\parskip}{2pt}
+\setlength{\parindent}{0pt}
+\setlength{\emergencystretch}{3em}
+
+\pagestyle{fancy}\fancyhf{}
+\renewcommand{\headrulewidth}{0.3pt}
+\lhead{\small\color{efegray}Scella --- la feuille de route du MVP (C1 $+$ C3)}
+\cfoot{\small\color{efegray}\thepage}
+
+\newcommand{\code}[1]{\texttt{\small #1}}
+\newcommand{\best}[1]{{\color{efesolve}\textbf{#1}}}
+\newcommand{\pire}[1]{{\color{efered}\textbf{#1}}}
+\newcommand{\moyen}[1]{{\color{efeamber}\textbf{#1}}}
+\newcommand{\mm}[1]{\textbf{#1}}
+\newcommand{\sz}[1]{{\small #1}}
+\newcommand{\mesure}[1]{{\color{efeteal}\textbf{Mesuré.} }#1\par}
+\newcommand{\refute}[1]{{\color{efered}\textbf{Réfuté.} }#1\par}
+\newcommand{\fl}{$\rightarrow$}
+
+\newtcolorbox{these}{colback=boxgray,colframe=boxedge,boxrule=0.5pt,arc=2.5pt,
+  left=8pt,right=8pt,top=6pt,bottom=6pt}
+\newtcolorbox{cadre}{colback=boxamber,colframe=efeamber!55,boxrule=0.6pt,arc=2.5pt,
+  left=8pt,right=8pt,top=6pt,bottom=6pt}
+
+\begin{document}
+
+\begin{center}
+{\Huge\bfseries\color{efenavy} Le MVP}\\[3pt]
+{\large\color{efegray}\itshape ce qui sépare le dépôt d'un produit qu'un inconnu peut lancer
+--- C1 $+$ C3, 2 septembre 2026}
+\end{center}
+
+\vspace{2pt}
+
+\begin{these}
+\textbf{Les dix-sept étapes du programme sont exécutées.} Ce document ne les rejoue pas. Il pose une
+question différente, et plus dure : \emph{qu'est-ce qui empêche aujourd'hui une personne extérieure
+d'installer cette chose, de la faire tourner, et d'en tirer quelque chose ?}
+
+La réponse tient en quatre points, tous mesurés le 2 septembre 2026, et le premier est le seul qui
+compte vraiment : \textbf{la porte d'entrée n'a jamais été ouverte}. Le \code{docker compose up} qui
+constitue le premier geste d'un prospect n'a jamais été exécuté --- pas une fois, par personne.
+\end{these}
+
+\section{1 \;\textbar\; Ce que « MVP » veut dire ici, et ce qu'il ne veut pas dire}
+
+Un programme achevé et un produit minimal viable ne sont pas la même chose, et confondre les deux est
+la façon la plus courante de rester six mois de plus dans un dépôt. Le programme demandait : \emph{les
+mécanismes existent-ils, et tiennent-ils sous la mesure ?} La réponse est oui, module par module,
+contrôle par contrôle. Le MVP demande autre chose : \emph{le plus petit assemblage qu'un inconnu peut
+lancer, qui délivre la promesse du produit, et derrière lequel on peut se tenir sans nuancer.}
+
+La différence n'est pas de degré. Un mécanisme qui passe ses tests unitaires et un service qui démarre
+dans un conteneur sur la machine de quelqu'un d'autre sont séparés par une classe entière de
+défaillances : le contexte de construction, les couches d'image, les volumes partagés, le réseau, les
+variables absentes, la lenteur du premier démarrage. Aucune de ces défaillances n'apparaît dans un
+\code{cargo test}. Toutes apparaissent dans les trente premières secondes d'un prospect.
+
+C'est pourquoi ce document ne classe pas les travaux par difficulté ni par élégance, mais par
+\textbf{ordre de découverte} : ce qu'un inconnu rencontre en premier passe en premier, même si c'est
+techniquement le moins intéressant.
+
+\section{2 \;\textbar\; Le fait qui décide de la forme du MVP}
+
+Avant toute planification, une mesure change la question. On parle de « C1 $+$ C3 » comme de deux
+produits à assembler. Ils n'en sont pas.
+
+\begin{center}\small
+\renewcommand{\arraystretch}{1.2}
+\begin{tabular}{@{}l l r@{}}
+\toprule
+\textbf{Binaire} & \textbf{Features} & \textbf{Crates du dépôt} \\
+\midrule
+\code{efe-swarm-gateway} & défaut & 13 \\
+\code{efe-swarm-gateway} & $+$ \code{reg-evidence} & \best{14} \\
+\code{audit-console} & défaut & 7 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\mesure{\code{cargo tree --edges normal}, crates du dépôt uniquement, le 2 septembre 2026.}
+
+\textbf{Allumer C1 sur un C3 déployé coûte exactement un crate.} Ce n'est pas une commodité
+d'ingénierie, c'est la thèse commerciale rendue littérale : le registre réglementaire n'est pas un
+second produit qu'il faudrait vendre et installer, c'est un \emph{interrupteur} sur un déployable que
+le client fait déjà tourner. La feuille de route de \mm{M5} avait posé ce principe --- « joindre C1 et
+C3 \emph{sans les souder} », feature éteinte par défaut, garde qui lit le manifeste --- et la mesure
+confirme que le principe a survécu à son implémentation.
+
+La conséquence pour le MVP est directe et simplificatrice : \textbf{il n'y a pas deux installations à
+concevoir}. Il y en a une, et une case à cocher. Tout plan qui traiterait C1 comme un déploiement
+séparé ajouterait un travail que le code ne demande pas.
+
+\section{3 \;\textbar\; Ce qui sépare aujourd'hui du MVP --- quatre faits mesurés}
+
+\subsection{(a) La porte d'entrée n'a jamais été ouverte}
+Le dépôt contient \code{compose.yaml} (deux services : \code{passerelle} et \code{preuve}) et
+\code{docker/Dockerfile.coin}, une image \emph{distroless} portant trois binaires --- la passerelle,
+le pilote de démonstration, et \code{verify-mini} dont l'arbre de dépendances est vide. La
+configuration est valide : \code{docker compose config} rend les deux services.
+
+Mais \code{m4-check.sh} le dit lui-même, en toutes lettres, dans son propre en-tête : le critère de
+\mm{M4} \emph{se sépare en deux moitiés} --- la charge utile, qui s'exécute sans conteneur, et
+l'emballage, qui exige un démon Docker --- et « \emph{ce script prouve la première et ne prétend rien
+de la seconde} ». La seconde moitié n'a jamais tourné, faute de démon.
+
+\mesure{Le démon est désormais présent : Docker \code{29.4.0}, Compose \code{v5.1.1}. La contrainte
+qui rendait cette vérification impossible est levée.}
+
+\subsection{(b) La porte de qualité du dépôt est rouge, et elle ne s'ouvre jamais}
+\refute{\code{cargo clippy -{}-workspace -{}-all-targets -{}- -D warnings} --- la commande
+\emph{exacte} de \code{ci.yml:40}, le job \textbf{bloquant} --- rend \pire{exit 101} :
+\textbf{109 erreurs sur 6 crates} (\code{efe-events} 55, \code{efe-core} 26, \code{efe-prompts} 19,
+\code{efe-nano-app-coordinator} 3, \code{verify-meta-mini} 1, \code{efe-kg} 1).}
+
+Deux choses aggravent ce chiffre. D'abord, personne ne pouvait le voir : les déclencheurs du workflow
+sont \code{push} sur \code{main} et \code{release/**}, et \code{pull\_request} vers \code{main} ---
+or tout le travail vit sur \code{couche2-m0-frontier}. La « CI verte » n'était pas verte, elle était
+\textbf{absente}. Ensuite, le relevé que le dépôt tient par écrit --- environ 53 sites sur 7 crates,
+inscrit au-dessus du job \code{clippy-frontiere}, qui est \emph{non bloquant} --- décrit une dette
+\textbf{différente} : un seul de ces sept crates figure parmi les six ci-dessus. Environ 106 erreurs
+de la porte bloquante ne sont écrites nulle part.
+
+Il faut être honnête sur ce que cela pèse : un prospect ne regarde pas les lints. Ce point ne bloque
+donc pas l'usage, il bloque le \emph{discours}. On ne peut pas dire « le dépôt tient ses propres
+portes » d'une porte qui n'a jamais été franchie.
+
+\subsection{(c) La suite complète n'a jamais été vérifiée verte de bout en bout}
+\mesure{Le 2 septembre, \code{cargo test -{}-workspace} rend \textbf{11\,235 verts et un seul échec}
+--- une course sur \code{std::env} dans \code{efe-nano-inference-daemon}, désormais supprimée par
+construction (15/20 \fl{} \best{30/30} en rejeux parallèles).}
+
+Ce qui manque est la \emph{confirmation} : le rejeu complet après correction n'a pas pu se faire, la
+machine paginant lourdement (13,4~Gio de swap sur 14,3). Sous pagination, un tour de workspace se
+compte en heures --- et une mesure qu'on ne peut pas croire ne vaut pas mieux qu'une absence de
+mesure. Le critère de \mm{R3} en demande d'ailleurs \emph{trois} d'affilée.
+
+\subsection{(d) Le registre n'est pas dans la démonstration}
+La feature \code{reg-evidence} est éteinte par défaut --- délibérément, et \mm{M5} explique pourquoi.
+Mais \code{compose.yaml} construit l'image avec les features par défaut : \textbf{le
+\code{docker compose up} d'aujourd'hui montre C3 et ne montre pas C1}. Pour un MVP annoncé
+« C1 $+$ C3 », c'est la moitié du produit qui reste invisible au premier contact.
+
+\section{4 \;\textbar\; Les étapes, dans l'ordre, avec leur critère}
+
+\begin{center}\small
+\renewcommand{\arraystretch}{1.3}
+\begin{tabular}{@{}>{\raggedright\arraybackslash}p{0.7cm} >{\raggedright\arraybackslash}p{4.1cm} >{\raggedright\arraybackslash}p{8.3cm} >{\raggedright\arraybackslash}p{2.1cm}@{}}
+\toprule
+& \textbf{Étape} & \textbf{Le critère --- ce qu'on doit pouvoir exécuter} & \textbf{Coût} \\
+\midrule
+\mm{É1} & \textbf{Ouvrir la porte} & \code{docker compose up} sur cette machine : les deux services
+démarrent, \code{preuve} sort 0, un reçu est exporté et re-prouvé \textbf{sans clé}, la troncature est
+démasquée & \sz{1--2 j} \\
+\mm{É2} & \textbf{Allumer C1 dans la \emph{même} commande} & le compose construit avec
+\code{reg-evidence} ; la démonstration dérive un dossier réglementaire \textbf{du même run}, et
+\code{efe\_swarm\_reg\_pont} vaut 1 & \sz{1--2 j} \\
+\mm{É3} & \textbf{La suite, confirmée} & \code{r3-check.sh} \fl{} 0 avec \code{R3\_TOURS=3}, sur une
+machine qui ne pagine pas & \sz{$\frac{1}{2}$ j} \\
+\mm{É4} & \textbf{La porte de qualité, verte \emph{et} déclenchée} & \code{clippy -{}-workspace
+-{}-all-targets -D warnings} \fl{} 0, \textbf{et} le workflow se déclenche sur la branche de travail
+& \sz{3--5 j} \\
+\mm{É5} & \textbf{La page qu'on tend} & une page : la commande, ce qu'on va voir, ce qu'on peut
+vérifier soi-même, et ce que la démonstration \textbf{ne prouve pas} & \sz{1 j} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{Pourquoi \mm{É1} passe avant \mm{É4}}
+L'ordre inverse serait plus flatteur : réparer sa maison avant d'ouvrir. Il serait faux ici, pour une
+raison précise. Les 109 erreurs de la porte bloquante sont des \emph{lints} --- documentation
+manquante, signatures trop longues, motif remplaçable par \code{clamp} --- et non des défauts de
+correction : \code{cargo check -{}-workspace -{}-all-targets} passe. Elles ne changent donc rien à ce
+qu'un prospect voit, ni à ce que le produit fait. Tandis que \mm{É1} peut révéler une classe entière
+de défaillances qu'aucun test du dépôt n'a jamais pu atteindre, et dont on ne saura rien tant qu'on
+n'aura pas essayé.
+
+Il y a un argument plus fort encore : \mm{É1} est le seul point du plan dont on ignore réellement le
+coût. Les 109 erreurs se comptent et se corrigent ; le premier build de \code{Dockerfile.coin}
+compile la fermeture de la passerelle depuis zéro dans un conteneur, et son en-tête prévient qu'il est
+\emph{long}. \textbf{On planifie mal autour d'une inconnue qu'on garde pour la fin.}
+
+\subsection{Ce qu'il faut attendre de \mm{É1}}
+Non pas un succès, mais une \emph{information}. Un chemin de construction jamais exercé échoue
+rarement du premier coup, et les défaillances probables sont connues d'avance : un fichier absent du
+contexte de build, un binaire non déclaré dans l'étape finale, un volume monté à un chemin que
+l'image distroless ne possède pas, un profil dont une variable manque en conteneur. Aucune n'est
+grave ; toutes coûtent une demi-journée chacune si on les découvre une par une devant un prospect.
+
+\section{5 \;\textbar\; Ce que le MVP n'est pas, et pourquoi le dire ici}
+
+Un plan qui ne dit pas ce qu'il exclut se fait élargir par tout le monde. Les exclusions ci-dessous
+sont \emph{déjà} des décisions du dépôt ; les répéter évite qu'on les rouvre par inadvertance.
+
+\begin{itemize}[leftmargin=1.1em,itemsep=1.5pt,topsep=2pt]
+\item \textbf{Le collecteur ouvert (\mm{MX}) reste hors du MVP.} La consigne écrite est catégorique :
+n'écrire aucune ligne avant que trois personnes aient payé pour l'obtenir. Le compteur est à
+\pire{zéro}.
+\item \textbf{Le processus ne termine pas TLS.} Il exige la \emph{déclaration} du terminateur placé
+devant lui, refuse de servir hors boucle locale sans elle, et depuis le 2 septembre il peut
+\emph{corroborer} cette déclaration par l'adresse source. Tirer une pile TLS dans un crate feuille
+serait moins sûr qu'un terminateur mûr.
+\item \textbf{Le jeton porteur reste un secret partagé.} Une vraie non-répudiation demanderait que
+l'officier \emph{signe} le tuple de l'acte avec une clé que le serveur ne détient pas. C'est nommé,
+et non produit.
+\item \textbf{Le barreau de canal n'est pas scellé dans le nœud \code{Human}.} Le faire changerait le
+format, ce qui est un \emph{événement de version}, pas une étape de MVP. Le service \textbf{coupe} au
+lieu d'enregistrer : un acte qui ne franchit pas le plancher n'est jamais scellé.
+\end{itemize}
+
+\section{6 \;\textbar\; Le jalon qui ne se code pas, et qui décide seul}
+
+\begin{cadre}
+Une fois \mm{É1} à \mm{É5} faites, il ne restera aucune raison technique d'attendre. Le mode
+observation existe depuis \mm{M2}, le paquetage depuis \mm{M4}, la sauvegarde et la rotation depuis
+\mm{P2}, l'ancrage tiers depuis \mm{M9}. Ce qui manquera alors n'est pas dans ce document :
+\textbf{aucune cible extérieure n'est déclarée depuis le 11 août 2026}.
+
+Le seul jalon qui décide reste donc : \emph{un prospect installe-t-il C3 en mode observation ?} S'il
+est atteint et que personne n'installe, le problème n'est pas le produit --- c'est la distribution, et
+aucune des cinq étapes ci-dessus n'y changera quoi que ce soit. Le bon moment pour le découvrir est
+\textbf{après \mm{É2}}, pas après \mm{É5} : dès que la démonstration montre les deux moitiés du
+produit, elle est montrable.
+\end{cadre}
+
+\vspace{4pt}
+{\color{efegray}\hrule height 0.4pt}
+\vspace{2.5pt}
+{\footnotesize\color{efegray}Toutes les mesures de ce document ont été produites le 2 septembre 2026
+sur le dépôt à jour (\code{64f519a}). Les contrôles se rejouent par
+\code{bash scripts/<nom>-check.sh} ; les chiffres de fermeture par
+\code{cargo tree -p <binaire> -{}-edges normal}.}
+
+\end{document}
