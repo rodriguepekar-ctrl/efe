@@ -120,8 +120,20 @@ pub enum Canal {
         /// contrairement à un en-tête.
         corrobore: bool,
     },
-    /// **A3** — distant, rien de déclaré. Le jeton a pu traverser en clair.
-    A3NonProtege,
+    /// **A3** — distant, et rien ne protège ce canal de façon vérifiable ici.
+    A3NonProtege {
+        /// Cette connexion a-t-elle **contourné** un terminateur déclaré ?
+        ///
+        /// `false` — aucun terminateur déclaré : l'exploitant n'a rien promis, et le rang 1 décrit
+        /// simplement un canal nu. C'est une *configuration*.
+        ///
+        /// `true` — un terminateur **et** des origines sont déclarés, et cette connexion ne vient
+        /// d'aucune d'elles : quelqu'un a atteint le service **autour** du terminateur. Même rang
+        /// (le plancher refuse les deux), mais ce ne sont pas les mêmes faits, et seul le second
+        /// demande qu'on aille regarder. Les confondre priverait le journal de la seule chose
+        /// qu'il ait à dire.
+        contournement: bool,
+    },
     /// Le barreau n'a pas été qualifié. **Strictement plus faible que A3** : un chemin qui aurait
     /// oublié de le poser ne doit jamais passer pour fort.
     NonAssertee,
@@ -134,7 +146,7 @@ impl Canal {
         match self {
             Canal::A1LoopbackTemoin => 3,
             Canal::A2ProtegeDeclare { .. } => 2,
-            Canal::A3NonProtege => 1,
+            Canal::A3NonProtege { .. } => 1,
             Canal::NonAssertee => 0,
         }
     }
@@ -145,7 +157,10 @@ impl Canal {
         match self {
             Canal::A1LoopbackTemoin => "a1_loopback_temoin",
             Canal::A2ProtegeDeclare { .. } => "a2_protege_declare",
-            Canal::A3NonProtege => "a3_non_protege",
+            // Le contournement ne change PAS ce code : il part au client dans le refus JSON, et
+            // le format de ce champ est un contrat. La distinction vit dans l'affichage et dans le
+            // journal — c'est-à-dire du côté de qui peut agir.
+            Canal::A3NonProtege { .. } => "a3_non_protege",
             Canal::NonAssertee => "non_assertee",
         }
     }
@@ -195,10 +210,10 @@ impl Canal {
                         // connexion ne vient pas de là. La créditer « protégée » serait sceller un
                         // acte humain sur un canal dont on SAIT qu'il n'a pas traversé le
                         // terminateur — précisément ce que le plancher existe pour refuser.
-                        Canal::A3NonProtege
+                        Canal::A3NonProtege { contournement: true }
                     }
                 }
-                _ => Canal::A3NonProtege,
+                _ => Canal::A3NonProtege { contournement: false },
             },
         }
     }
@@ -249,7 +264,13 @@ impl fmt::Display for Canal {
                 "A2 — canal protégé déclaré (« {terminateur} ») et CORROBORÉ : le pair est une \
                  origine déclarée, observée par le noyau"
             ),
-            Canal::A3NonProtege => f.write_str("A3 — distant, aucun terminateur déclaré"),
+            Canal::A3NonProtege { contournement: false } => {
+                f.write_str("A3 — distant, aucun terminateur déclaré")
+            }
+            Canal::A3NonProtege { contournement: true } => f.write_str(
+                "A3 — distant, et le pair ne figure PAS parmi les origines déclarées du \
+                 terminateur : cette connexion l'a CONTOURNÉ",
+            ),
             Canal::NonAssertee => f.write_str("barreau non asserti"),
         }
     }
@@ -323,7 +344,7 @@ mod tests {
     fn lechelle_est_totale_et_decroissante() {
         let a1 = Canal::A1LoopbackTemoin;
         let a2 = Canal::A2ProtegeDeclare { terminateur: "ingress".into(), corrobore: false };
-        let a3 = Canal::A3NonProtege;
+        let a3 = Canal::A3NonProtege { contournement: false };
         let n = Canal::NonAssertee;
         assert!(a1.rang() > a2.rang() && a2.rang() > a3.rang() && a3.rang() > n.rang());
         assert_eq!(n.rang(), 0, "le non-asserti est strictement le plus faible");
@@ -342,8 +363,8 @@ mod tests {
 
     #[test]
     fn un_pair_distant_sans_declaration_est_non_protege() {
-        assert_eq!(Canal::observer(Some(sock("10.0.0.5:5000")), None, &[]), Canal::A3NonProtege);
-        assert_eq!(Canal::observer(Some(sock("10.0.0.5:5000")), Some("   "), &[]), Canal::A3NonProtege,
+        assert_eq!(Canal::observer(Some(sock("10.0.0.5:5000")), None, &[]), Canal::A3NonProtege { contournement: false });
+        assert_eq!(Canal::observer(Some(sock("10.0.0.5:5000")), Some("   "), &[]), Canal::A3NonProtege { contournement: false },
                    "une déclaration blanche n'est pas une déclaration");
     }
 
@@ -368,7 +389,7 @@ mod tests {
     fn le_contournement_du_terminateur_retombe_sous_le_plancher() {
         let origines = [sock("10.0.0.5:0").ip()];
         let c = Canal::observer(Some(sock("203.0.113.9:5000")), Some("ingress-nginx"), &origines);
-        assert_eq!(c, Canal::A3NonProtege, "le contournement n'est PAS un A2 dégradé : c'est un A3");
+        assert_eq!(c, Canal::A3NonProtege { contournement: true }, "le contournement n'est PAS un A2 dégradé : c'est un A3");
         assert!(
             !Plancher::protege_declare().franchi_par(&c),
             "et il ne franchit pas le plancher : il lit encore, il ne scelle plus"
@@ -454,7 +475,7 @@ mod tests {
         assert_eq!(p, Plancher::loopback(), "le défaut = le comportement d'avant M8");
         assert!(p.franchi_par(&Canal::A1LoopbackTemoin));
         assert!(!p.franchi_par(&Canal::A2ProtegeDeclare { terminateur: "x".into(), corrobore: false }));
-        assert!(!p.franchi_par(&Canal::A3NonProtege));
+        assert!(!p.franchi_par(&Canal::A3NonProtege { contournement: false }));
         assert!(!p.franchi_par(&Canal::NonAssertee));
     }
 
@@ -463,7 +484,7 @@ mod tests {
         let p = Plancher::protege_declare();
         assert!(p.franchi_par(&Canal::A1LoopbackTemoin), "le plus fort passe toujours");
         assert!(p.franchi_par(&Canal::A2ProtegeDeclare { terminateur: "x".into(), corrobore: false }));
-        assert!(!p.franchi_par(&Canal::A3NonProtege), "un canal non protégé ne scelle JAMAIS");
+        assert!(!p.franchi_par(&Canal::A3NonProtege { contournement: true }), "un canal non protégé ne scelle JAMAIS");
         assert!(!p.franchi_par(&Canal::NonAssertee));
     }
 
@@ -483,7 +504,7 @@ mod tests {
 
     #[test]
     fn le_refus_dit_le_geste_qui_corrige() {
-        let r = Plancher::loopback().refus(&Canal::A3NonProtege);
+        let r = Plancher::loopback().refus(&Canal::A3NonProtege { contournement: false });
         assert!(r.contains("Lire reste possible"), "il distingue lire d'écrire : {r}");
         assert!(r.contains("boucle locale") && r.contains("terminateur"), "il donne les deux gestes : {r}");
         assert!(r.contains("non répudiable"), "et pourquoi c'est irréversible : {r}");

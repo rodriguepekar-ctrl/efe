@@ -153,6 +153,59 @@ pub fn journaliser_balayage(rapports: &[crate::provisioning::RapportBalayage]) {
     }
 }
 
+/// La ligne qu'un **contournement** mérite dans le journal d'exploitation — ou rien.
+///
+/// ## Pourquoi elle existe
+///
+/// [`journaliser_balayage`], juste au-dessus, pose la règle du fichier : « un échec est crié ». La
+/// corroboration du terminateur a introduit un échec qui ne criait pas. Elle refuse **par
+/// conception** un scellement dont la connexion n'est venue d'aucune origine déclarée, et ce refus
+/// atteint le client — jamais l'exploitant.
+///
+/// Or le cas le plus fréquent ne sera pas un attaquant : ce sera une réplique de terminateur ajoutée
+/// par la plateforme à une adresse que personne n'a pensé à déclarer. Tous les scellements cessent,
+/// et rien ne dirait pourquoi. C'est le défaut de \[M3\] retourné : là-bas la raison n'atteignait pas
+/// le client, ici elle n'atteint pas celui qui peut corriger.
+///
+/// ## Pourquoi elle ne peut pas être inondée
+///
+/// Elle n'est émise que sur un **403**, et le plancher de canal est évalué APRÈS l'authentification
+/// (`handler::handle` : étape 1 le jeton, étape 3 le plancher). Un client sans session valide reçoit
+/// 401 et ne produit aucune ligne ; les sondes publiques rendent 200. Pour faire crier ce journal il
+/// faut donc **déjà détenir un jeton valide** — et c'est exactement la connexion dont on veut la
+/// trace. Aucun étranglement n'est nécessaire, et n'en pas mettre évite d'avaler la ligne qui compte.
+///
+/// ## Ce qu'elle ne prétend pas
+///
+/// Un 403 peut aussi venir du CSRF ou d'une frontière de tenant. La ligne ne dit donc pas QUELLE
+/// règle a refusé : elle parle du **canal**, qui est un contournement dans les trois cas. Et elle
+/// n'imprime que l'IP — le port est éphémère, et aucun jeton ne doit jamais atteindre un journal.
+///
+/// Et une **limite assumée** : un contournement qui se contente de LIRE rend 200 et ne produit donc
+/// aucune ligne. Élargir la règle aux lectures rouvrirait l'inondation — les sondes publiques
+/// répondent 200 sans jeton. C'est cohérent avec ce que le module déclare déjà de ce cas : *il lit
+/// encore, il ne scelle plus*. Ce qui est tracé ici, c'est la rupture du scellement, parce que c'est
+/// elle qui casse quelque chose sans le dire.
+#[must_use]
+pub fn ligne_de_contournement(
+    canal: &Canal,
+    pair: Option<std::net::SocketAddr>,
+    statut: u16,
+) -> Option<String> {
+    if statut != 403 || !matches!(canal, Canal::A3NonProtege { contournement: true }) {
+        return None;
+    }
+    Some(format!(
+        "⚠ canal : une requête AUTHENTIFIÉE depuis {} a été refusée — ce pair ne figure pas parmi \
+         les origines déclarées du terminateur : la connexion l'a CONTOURNÉ.\n\
+         \x20  Elle peut encore LIRE ; elle ne peut plus sceller.\n\
+         \x20  Si ce pair est légitime (réplique ajoutée, adresse changée), déclarez-le dans \
+         EFE_CONSOLE_TERMINATEUR_ORIGINE.\n\
+         \x20  Sinon, quelqu'un atteint ce service AUTOUR du terminateur, et il faut aller voir.",
+        pair.map_or_else(|| "un pair inconnu".to_string(), |a| a.ip().to_string())
+    ))
+}
+
 /// Traite UNE connexion : lit (avec timeout + bornes), dispatche, écrit, ferme.
 fn handle_conn(
     stream: TcpStream,
@@ -164,20 +217,28 @@ fn handle_conn(
     stream.set_read_timeout(Some(Duration::from_secs(15)))?;
     stream.set_write_timeout(Some(Duration::from_secs(15)))?;
 
+    // M8 — le barreau vient de la CONNEXION, jamais de la requête : un client qui pourrait annoncer
+    // son propre niveau de confiance rendrait l'échelle décorative. `peer_addr` est remplie par le
+    // noyau, pas envoyée par le client — c'est pour cela qu'elle peut arbitrer le contournement du
+    // terminateur, là où un en-tête ne le pourrait pas. Il se calcule donc AVANT toute lecture : une
+    // requête illisible a un canal, elle aussi.
+    let pair = stream.peer_addr().ok();
+    let canal = Canal::observer(pair, terminateur, origines);
+
     let response = match HttpRequest::read_from(&stream) {
         Ok(req) => {
             let now = SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
             // Le verrou n'est tenu QUE pendant le dispatch (handle est rapide et pur).
-            // M8 — le barreau vient de la CONNEXION, jamais de la requête. Un client qui pourrait
-            // annoncer son propre niveau de confiance rendrait l'échelle décorative.
-            // `peer_addr` vient du noyau, pas du client : c'est pour ça qu'il peut arbitrer
-            // le contournement du terminateur, là où un en-tête ne le pourrait pas.
-            let canal = Canal::observer(stream.peer_addr().ok(), terminateur, origines);
             let mut guard = console.lock().unwrap_or_else(|p| p.into_inner());
             handle(&mut guard, &req, now, &canal)
         }
         Err(e) => HttpResponse::html(400, format!("<!doctype html><h1>400</h1><p>requête invalide : {}</p>", html_escape(&e.to_string()))),
     };
+
+    // « Un échec est crié. » Rien n'est émis hors du seul cas qui demande qu'on aille regarder.
+    if let Some(l) = ligne_de_contournement(&canal, pair, response.status) {
+        eprintln!("{l}");
+    }
 
     let mut stream = stream;
     stream.write_all(&response.to_bytes())?;
@@ -188,6 +249,76 @@ fn handle_conn(
 /// Échappement minimal pour le message d'erreur de bas niveau (avant que `render` ne soit en jeu).
 fn html_escape(s: &str) -> String {
     s.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;")
+}
+
+#[cfg(test)]
+mod tests_contournement {
+    use super::ligne_de_contournement;
+    use crate::canal::Canal;
+    use std::net::SocketAddr;
+
+    fn sock(s: &str) -> SocketAddr {
+        s.parse().expect("adresse")
+    }
+
+    /// La ligne dit l'ADRESSE (le fait), le SORT (il lit encore) et le GESTE (l'interrupteur).
+    /// Un journal qui dirait seulement « refusé » obligerait à relire le code pour agir.
+    #[test]
+    fn un_contournement_refuse_est_crie_avec_le_geste_qui_le_leve() {
+        let l = ligne_de_contournement(
+            &Canal::A3NonProtege { contournement: true },
+            Some(sock("10.42.0.9:51234")),
+            403,
+        )
+        .expect("un contournement refusé doit crier");
+        assert!(l.contains("10.42.0.9"), "l'adresse observée par le noyau est le fait utile");
+        assert!(l.contains("EFE_CONSOLE_TERMINATEUR_ORIGINE"), "le geste qui lève le refus est nommé");
+        assert!(l.contains("CONTOURNÉ"), "et le fait est nommé, pas seulement le symptôme");
+        assert!(!l.contains("51234"), "le port est éphémère : il ne dit rien et encombre");
+    }
+
+    /// **Le contre-témoin.** Sans lui, la ligne pourrait être émise pour tout et n'importe quoi, et
+    /// un journal qui crie sur tout ne se lit plus — c'est la règle que `journaliser_balayage` pose.
+    #[test]
+    fn rien_nest_crie_hors_du_contournement() {
+        let pair = Some(sock("10.42.0.9:1"));
+        for c in [
+            Canal::A1LoopbackTemoin,
+            Canal::A2ProtegeDeclare { terminateur: "ingress".into(), corrobore: true },
+            Canal::A2ProtegeDeclare { terminateur: "ingress".into(), corrobore: false },
+            Canal::A3NonProtege { contournement: false },
+            Canal::NonAssertee,
+        ] {
+            assert!(
+                ligne_de_contournement(&c, pair, 403).is_none(),
+                "{c} n'est pas un contournement : ce 403 vient d'ailleurs"
+            );
+        }
+    }
+
+    /// **La propriété anti-inondation, tenue par un test et pas par une phrase.** Le plancher est
+    /// évalué APRÈS l'authentification : un client sans session valide reçoit 401, et un scanner ne
+    /// peut donc pas remplir le journal. Si un jour un 401 criait, cette garantie serait perdue.
+    #[test]
+    fn un_401_ne_crie_jamais_meme_en_contournement() {
+        let c = Canal::A3NonProtege { contournement: true };
+        for statut in [200, 302, 400, 401, 404, 500] {
+            assert!(
+                ligne_de_contournement(&c, Some(sock("10.42.0.9:1")), statut).is_none(),
+                "statut {statut} : seul un 403 est post-authentification à coup sûr"
+            );
+        }
+        assert!(ligne_de_contournement(&c, Some(sock("10.42.0.9:1")), 403).is_some());
+    }
+
+    /// Un pair illisible ne fait pas taire la ligne : le contournement reste le fait, et
+    /// « un pair inconnu » vaut mieux qu'un silence qui ressemblerait à « rien ne s'est passé ».
+    #[test]
+    fn un_pair_illisible_crie_quand_meme() {
+        let l = ligne_de_contournement(&Canal::A3NonProtege { contournement: true }, None, 403)
+            .expect("le fait ne dépend pas de la lisibilité de l'adresse");
+        assert!(l.contains("un pair inconnu"));
+    }
 }
 
 #[cfg(test)]

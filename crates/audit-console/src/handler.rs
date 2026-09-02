@@ -33,8 +33,14 @@ pub fn handle(console: &mut Console, req: &HttpRequest, now: u64, canal: &Canal)
     //
     // C'est la SEULE exception à « tout passe par l'authentification », et le test
     // `seules_les_deux_sondes_sont_publiques` interdit qu'il y en ait une troisième.
-    let segs_pre: Vec<&str> = req.path.split('/').filter(|s| !s.is_empty()).collect();
-    match (&req.method, segs_pre.as_slice()) {
+    //
+    // **Un SEUL découpage**, pour les deux tables *et* pour le plancher. Il y en avait deux : la
+    // même expression, écrite ici et une seconde fois avant le dispatch authentifié. Elles ne
+    // pouvaient pas diverger — mais rien n'empêchait d'en modifier UNE (percent-décodage, barre
+    // finale, normalisation), et le plancher de l'étape 3 aurait alors cessé, en silence, de
+    // porter sur ce que l'étape 4 dispatche. Un calcul, pas deux qu'un test compare.
+    let segs: Vec<&str> = req.path.split('/').filter(|s| !s.is_empty()).collect();
+    match (&req.method, segs.as_slice()) {
         (HttpMethod::Get, ["healthz"]) => return sante(),
         (HttpMethod::Get, ["readyz"]) => return pret(console),
         // M8 — la CONNEXION doit être atteignable sans être connecté. C'est la seule raison pour
@@ -68,13 +74,11 @@ pub fn handle(console: &mut Console, req: &HttpRequest, now: u64, canal: &Canal)
     }
 
     // ── 3. M8 — le PLANCHER DE CANAL, point de décision unique pour les actes scellés. ──
-    if scelle_un_acte(&req.method, &segs_pre) && !console.plancher().franchi_par(canal) {
+    if scelle_un_acte(&req.method, &segs) && !console.plancher().franchi_par(canal) {
         return refus_canal(req, console.plancher(), canal);
     }
     let tenant = auth.tenant.as_str().to_string();
     let role = auth.role;
-
-    let segs: Vec<&str> = req.path.split('/').filter(|s| !s.is_empty()).collect();
 
     match (&req.method, segs.as_slice()) {
         // ── le passe-plat /api : I-S3-VUE-PURE (rend exactement route()) ──
@@ -297,9 +301,14 @@ pub const PUBLIQUES: &[(&str, &str)] = &[
 ///
 /// **Point de décision unique.** Deux routes atteignent `record_human_action` : le passe-plat
 /// `/api/tenants/{t}/cases/{id}/human-action` et le formulaire `/cases/{id}/action`. Les tenir ici,
-/// en un seul endroit, est ce qui empêche une troisième d'apparaître sans plancher — et le garde
-/// `le_predicat_de_scellement_connait_toutes_les_routes_scellantes` compte les arms des deux tables
-/// de routage pour que ce commentaire ne devienne pas faux.
+/// en un seul endroit, est **nécessaire** pour qu'une troisième ne puisse pas apparaître sans
+/// plancher — et ce n'est pas suffisant : rien, dans ce fichier, n'oblige qui ajoute une route à
+/// venir la déclarer ici.
+///
+/// C'est le travail du garde [`tests::le_predicat_de_scellement_connait_toutes_les_routes_scellantes`],
+/// qui joue **chaque** route du dispatch sous un canal non asserti et vérifie que le magasin scellé
+/// ne grandit pas. Cette phrase-ci a longtemps affirmé que ce garde existait ; il n'existait pas —
+/// sa seule occurrence dans le dépôt était la promesse elle-même.
 fn scelle_un_acte(m: &HttpMethod, segs: &[&str]) -> bool {
     if *m != HttpMethod::Post {
         return false;
@@ -616,6 +625,140 @@ mod tests {
             let r = handle(&mut c, &get(p, None), 100, &LOCAL);
             assert_eq!(r.status, 401, "{p} doit exiger un jeton");
         }
+    }
+
+    /// Les routes atteignables **après** authentification : une par arm du dispatch, avec un chemin
+    /// concret qui l'atteint, et si elle **scelle** un acte humain.
+    ///
+    /// [`PUBLIQUES`] fait le même travail pour l'autre table, mais elle est *publique* parce que le
+    /// dispatch s'en sert. Celle-ci reste ici : c'est un inventaire de garde, pas une déclaration
+    /// servie — la publier laisserait croire qu'elle décide de quelque chose.
+    const ROUTES_AUTHENTIFIEES: &[(&str, &str, bool)] = &[
+        ("POST", "/api/tenants/acme/cases/SUP-A/human-action", true),
+        ("GET", "/", false),
+        ("GET", "/exceptions", false),
+        ("GET", "/cases/SUP-A", false),
+        ("POST", "/cases/SUP-A/action", true),
+        ("POST", "/reprove", false),
+        ("GET", "/cases/SUP-A/export", false),
+        ("GET", "/export", false),
+    ];
+
+    /// Le nombre d'enregistrements **scellés** du tenant.
+    ///
+    /// `record_human_action` est « la SEULE écriture » de S2 (`audit-api/src/service.rs`). Ce compte
+    /// est donc un détecteur de scellement qui n'a pas besoin de savoir QUOI a été scellé : une
+    /// route qui ferait apparaître un nœud d'une autre espèce serait attrapée tout autant.
+    fn scelles(c: &mut Console) -> usize {
+        c.service_de("acme").expect("acme est provisionné").store().records().len()
+    }
+
+    /// Une requête d'officier authentifiée par **en-tête**, donc dispensée de la preuve d'origine
+    /// CSRF : ce garde mesure le plancher de canal, pas la défense inter-site, et les faire porter
+    /// par le même test rendrait un échec ambigu.
+    fn requete_officier(methode: &str, chemin: &str, etape: &str) -> HttpRequest {
+        if methode == "GET" {
+            return get(chemin, Some("offtok"));
+        }
+        let corps = if chemin.starts_with("/api/") {
+            format!("{{\"target_step\":\"{etape}\",\"action\":\"APPROVE\",\"justification\":\"garde\"}}")
+        } else {
+            format!("target_step={etape}&action=APPROVE&justification=garde")
+        };
+        HttpRequest::parse(
+            format!(
+                "POST {chemin} HTTP/1.1\r\nAuthorization: Bearer offtok\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{corps}",
+                corps.len()
+            )
+            .as_bytes(),
+        )
+        .expect("requête")
+    }
+
+    /// **Le garde du plancher de scellement.**
+    ///
+    /// La doc de [`scelle_un_acte`] le nommait, et affirmait qu'il « compte les arms des deux tables
+    /// de routage pour que ce commentaire ne devienne pas faux ». **Il n'existait pas** : sa seule
+    /// occurrence dans le dépôt était la phrase qui le promettait. Le prédicat est pourtant ce qui
+    /// rend le scellement de M8 opposable — une troisième route vers `record_human_action` scellerait
+    /// un acte humain sur un canal dont personne ne pourrait dire d'où il venait, en silence, et le
+    /// nœud produit serait indistinguable d'un nœud légitime.
+    ///
+    /// Trois parties, et il faut les trois :
+    ///
+    /// 1. **Le compte.** Le dispatch authentifié a N arms, [`ROUTES_AUTHENTIFIEES`] en déclare N. Une
+    ///    route ajoutée sans être inventoriée fait tomber ce test *avant* de servir. Sans cette
+    ///    partie, (2) ne jouerait jamais la route neuve — un garde qui ne regarde que ce qu'on a bien
+    ///    voulu lui montrer.
+    /// 2. **Le falsificateur.** Chaque route inventoriée est jouée sous `NonAssertee` — rang 0, sous
+    ///    *tout* plancher — avec une session d'officier **valide**, pour que le seul obstacle
+    ///    possible soit le plancher. Le magasin scellé ne doit pas grandir.
+    /// 3. **Le contre-témoin.** Les deux routes déclarées scellantes, jouées au-dessus du plancher,
+    ///    **doivent** faire grandir le magasin. Sans lui, (2) serait vert dans le monde où plus rien
+    ///    ne scelle du tout : c'est exactement l'erreur du garde de M7, qui ne pouvait pas tomber.
+    ///
+    /// **Il a été contre-prouvé, pas seulement écrit.** Une troisième route
+    /// `POST /cases/{id}/approuver` branchée sur `action` et absente de [`scelle_un_acte`] :
+    /// non inventoriée, (1) tombe (9 arms contre 8) ; inventoriée, (2) tombe en montrant
+    /// **HTTP 303** — la route avait *réussi*, elle avait scellé un acte de supervision
+    /// (2 enregistrements → 3) sur un canal non asserti. C'est exactement ce que le dépôt aurait
+    /// livré en silence.
+    ///
+    /// Ce qu'il ne prouve **pas** : qu'aucun chemin *hors* de ces deux tables n'atteigne le magasin.
+    /// Il n'y en a pas aujourd'hui — S2 n'expose qu'une écriture — mais c'est une lecture du code,
+    /// pas une preuve, et il fallait le dire plutôt que de le laisser croire.
+    #[test]
+    fn le_predicat_de_scellement_connait_toutes_les_routes_scellantes() {
+        // ── (1) le compte ──
+        let src = include_str!("handler.rs");
+        let table = &src[src.find("// ── le passe-plat /api").expect("début de la table")..];
+        let table = &table[..table.find("// méthode non supportée sur une route connue").expect("fin de la table")];
+        let arms = table.matches(") => ").count();
+        assert_eq!(
+            arms,
+            ROUTES_AUTHENTIFIEES.len(),
+            "le dispatch authentifié a {arms} routes, l'inventaire en déclare {} : une route ajoutée \
+             doit être inventoriée ICI, sinon elle n'est jamais jouée sous un canal nu et le plancher \
+             ne la protège que si quelqu'un y a pensé",
+            ROUTES_AUTHENTIFIEES.len()
+        );
+
+        // ── (2) le falsificateur : sous un canal NON ASSERTI, rien ne scelle ──
+        for (m, p, _) in ROUTES_AUTHENTIFIEES {
+            let mut c = console();
+            let avant = scelles(&mut c);
+            let r = handle(&mut c, &requete_officier(m, p, "aggregate"), 100, &Canal::NonAssertee);
+            assert_eq!(
+                scelles(&mut c),
+                avant,
+                "{m} {p} a fait GRANDIR le magasin scellé sous un canal non asserti (HTTP {}) : S2 \
+                 n'a qu'une écriture, donc cette croissance EST un acte de supervision scellé sur un \
+                 canal que le processus n'a pas pu qualifier",
+                r.status
+            );
+        }
+
+        // ── (3) le contre-témoin : au-dessus du plancher, les scellantes SCELLENT ──
+        //
+        // Deux étapes DISTINCTES : `node_id` vaut `{cas}::{étape}`, et sceller deux fois la même
+        // collisionnerait (`DuplicateId`). Le second appel échouerait alors pour une raison qui n'a
+        // rien à voir avec le canal, et le garde passerait pour de mauvaises raisons.
+        let etapes = ["aggregate", "sanction"];
+        let mut vus = 0;
+        for (m, p, scelle) in ROUTES_AUTHENTIFIEES.iter().filter(|(_, _, s)| *s) {
+            let mut c = console();
+            let avant = scelles(&mut c);
+            let r = handle(&mut c, &requete_officier(m, p, etapes[vus]), 100, &LOCAL);
+            assert!(
+                scelles(&mut c) > avant,
+                "{m} {p} est déclarée scellante ({scelle}) mais n'a RIEN scellé au-dessus du plancher \
+                 (HTTP {}) : sans cette contre-preuve, l'étape (2) serait verte dans un dépôt où plus \
+                 rien ne scelle jamais",
+                r.status
+            );
+            vus += 1;
+        }
+        assert_eq!(vus, 2, "l'inventaire déclare {vus} routes scellantes ; scelle_un_acte en a deux");
     }
 
     #[test]

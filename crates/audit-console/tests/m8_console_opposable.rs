@@ -39,7 +39,7 @@ use audit_api::{AuthContext, Role};
 const RACINE: &[u8] = b"racine-de-test-m8";
 const T: u64 = 1000;
 const LOCAL: Canal = Canal::A1LoopbackTemoin;
-const NU: Canal = Canal::A3NonProtege;
+const NU: Canal = Canal::A3NonProtege { contournement: false };
 
 fn declare() -> Canal {
     Canal::A2ProtegeDeclare { terminateur: "ingress-de-test".into(), corrobore: false }
@@ -434,7 +434,7 @@ fn m8_le_contournement_du_terminateur_lit_encore_mais_ne_scelle_plus() {
     let origines = ["10.0.0.5".parse().expect("ip")];
     // Un client qui a trouvé le port du service et court-circuite l'ingress.
     let canal = Canal::observer(Some("203.0.113.9:41000".parse().expect("pair")), Some("ingress"), &origines);
-    assert_eq!(canal, Canal::A3NonProtege, "il n'est pas un A2 dégradé : il n'est pas un A2");
+    assert_eq!(canal, Canal::A3NonProtege { contournement: true }, "il n'est pas un A2 dégradé : il n'est pas un A2");
 
     let mut c = service();
     c.avec_plancher(Plancher::protege_declare());

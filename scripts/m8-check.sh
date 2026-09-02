@@ -56,6 +56,11 @@ ok "plancher de scellement, CSRF, session, isolation sous chaque barreau"
 cargo test -q -p audit-console --test profile_files >/dev/null 2>&1 \
   || ko "les trois profils ne servent pas ce qu'ils annoncent"
 ok "les trois profils (console · service · expose) tiennent leur promesse"
+# Le garde du plancher vit dans les tests de la LIB, pas dans la suite d'intégration : ne jouer
+# que celle-ci laisserait M8 prouvé par un contrôle qui ignore son propre garde.
+cargo test -q -p audit-console --lib >/dev/null 2>&1 \
+  || ko "les gardes internes de la console tombent"
+ok "le plancher connaît TOUTES les routes du dispatch (garde à 3 parties, contre-témoin compris)"
 
 titre "1. Servir à distance SANS le déclarer est refusé"
 cargo build -q -p audit-console 2>/dev/null || ko "le binaire ne compile pas"
@@ -191,10 +196,19 @@ cat <<'FIN'
     son absence est ANNONCÉE au démarrage au lieu d'être subie.
       ⚠ Ce script ne peut pas démontrer le REFUS sur une vraie socket : il
         faudrait s'y connecter depuis une adresse non-loopback, et la boucle
-        locale est A1, qui prime. Le chemin complet — d'un SocketAddr de pair
-        jusqu'au 403 — est couvert par m8_console_opposable.rs (section 5) et
-        par les tests unitaires de canal.rs. Ce qui est éprouvé ICI, sur un
-        processus réel, c'est que l'exploitant en est INFORMÉ.
+        locale est A1, qui prime — par conception, pas par accident. Le chemin
+        complet — d'un SocketAddr de pair jusqu'au 403, et jusqu'à la ligne de
+        journal — est couvert par m8_console_opposable.rs (section 5) et par
+        les tests unitaires de canal.rs et server.rs. Ce qui est éprouvé ICI,
+        sur un processus réel, c'est que l'exploitant en est INFORMÉ.
+        Fabriquer une adresse source non-loopback exigerait une interface du
+        réseau de la machine : le contrôle deviendrait vert-ou-sauté selon
+        l'hôte, et « vert » cesserait de vouloir dire quelque chose.
+  · Un contournement qui se contente de LIRE ne produit aucune ligne de journal
+    (il rend 200 ; crier sur les 200 rouvrirait l'inondation, les sondes
+    publiques répondant sans jeton). C'est ce que le module dit déjà de ce cas :
+    il lit encore, il ne scelle plus. Ce qui est tracé, c'est la RUPTURE du
+    scellement — parce que c'est elle qui casse quelque chose sans le dire.
   · Le barreau du canal n'est PAS scellé dans le nœud Human : le faire
     changerait le format de Node::Human, ce qui est un événement de version,
     pas un module. M8 COUPE au lieu d'enregistrer — un acte qui ne franchit
