@@ -87,11 +87,12 @@
 //! | dérivation réglementaire (M5) | **dégrade**, et plus franchement que tout le reste | `m5_un_dossier_manque_se_rattrape_a_lidentique` |
 //! | caviardage PII | infaillible (pas de `Result`) | — |
 //! | bus de supervision | best-effort borné (ring + compteur de pertes) | — |
-//! | mémoire d'essaim (`MemoryHandle`) | infaillible (pas de `Result`) | `with_config` construit un descripteur : il n'y a pas de panne à ce point du chemin |
+//! | mémoire d'essaim (`MemoryHandle`) | infaillible (pas de `Result`) | `with_config` construit un descripteur, et `verify_memory` (route `/memory`) rend un `MemoryChainVerdict` : une chaîne rompue y est un VERDICT, pas une panne |
+//! | types de tenant (`efe-nano-sdk`) | infaillible (pas de `Result`) | un seul site sur tout le chemin servi, en position de TYPE : `&efe_nano_sdk::TenantId`, un `struct TenantId(pub Uuid)`. Rien à joindre, donc rien à dégrader |
 //! | re-preuve hors ligne et empreintes | infaillible (pas de `Result`) | `blake3_bytes` rend une empreinte, `verify_run_offline` rend un VERDICT — un verdict négatif est le résultat demandé, pas une panne |
 //! | `tenant_id` | **coupe** — et c'est correct | le tenant est une **entrée du client** ; invalide, c'est une requête malformée, pas une panne |
 //! | `derive_key` | **coupe** — et c'est correct | sans clé, rien ne peut être scellé : dégrader produirait une réponse **sans aucun reçu possible**, et la condition est déjà gardée au démarrage (`frontier_boot_guard`, `key_ok`) |
-//! | publication d'ancre (`/bundle`) | **coupe** — et c'est délibéré | servir un bundle en annonçant `anchored: true` alors que la publication a échoué serait un mensonge sur la garantie ; mieux vaut refuser la réponse. Hors chemin d'appel |
+//! | publication d'ancre (`/bundle`) | **coupe** — et c'est délibéré | servir un bundle en annonçant `anchored: true` alors que la publication a échoué serait un mensonge sur la garantie ; mieux vaut refuser la réponse. Fournie par `provenance_bridge`, désormais **sur** le chemin lu par le garde |
 //!
 //! **Les deux régimes ne se choisissent pas au cas par cas, mais selon une seule question :** est-ce
 //! que dégrader produit quelque chose d'**utile et d'honnête** ? Le SLM mort laisse une
@@ -115,7 +116,8 @@
 //! main ; aucun test n'interdit qu'une dépendance future coupe sans être inscrite ici. Les lignes
 //! ci-dessus gardent contre la régression, pas contre l'oubli. »* C'est désormais faux, et de la
 //! seule façon qui vaille : `tests/m3_inventaire_des_pannes.rs` **relit les dépendances du chemin
-//! servi** (`routes/run.rs`, `routes/llm.rs`, hors module de tests et hors commentaires) et refuse
+//! servi** --- **tout `routes/`, découvert et non énuméré**, hors module de tests et hors
+//! commentaires --- et refuse
 //! toute dépendance qui n'a ni ligne ici ni exemption motivée. Il lit les `use` **et** les chemins
 //! pleinement qualifiés, crates externes **et** coutures internes — les trois formes sont
 //! nécessaires : `use efe_multi_llm::{A, B}` n'est vu que par la première, `crate::reg_pont::RegReport`
@@ -125,10 +127,20 @@
 //! pas écrite — ce qui est exactement ce qui a manqué le jour où M5 a ajouté la sienne sans
 //! l'inscrire.
 //!
-//! **Les deux lignes infaillibles ci-dessus sont nées de ce garde**, à sa toute première exécution :
+//! **Les lignes infaillibles ci-dessus sont nées de ce garde**, à ses deux exécutions. La première :
 //! `efe-swarm-sdk` et `efe-swarm-provenance` étaient sur le chemin servi sans figurer nulle part.
 //! Aucune des deux ne peut échouer — mais leur silence ne le disait pas. Le silence sur une
 //! dépendance ne signifie pas « elle ne peut pas échouer » : il ne signifie rien.
+//!
+//! **La seconde exécution a corrigé le garde lui-même.** Il tenait son chemin servi dans une liste
+//! ÉCRITE À LA MAIN de deux fichiers, quand `routes/` en contient quatorze : il commettait la faute
+//! qu'il existe pour empêcher, et les douze autres routes atteignaient sept crates du dépôt sans
+//! avoir à se déclarer --- dont `reg_evidence`, celui de C1. Le dossier est désormais **lu**, avec
+//! un plancher qui refuse de passer pour vert s'il ne trouve rien à lire. Ce que le balayage a fait
+//! apparaître : l'index de `publication d'ancre` était **vide** (la ligne existait, rien ne la
+//! reliait à `bundle.rs`), `mémoire d'essaim` ignorait son second point d'entrée
+//! (`efe_swarm_memory`), et les types de tenant n'avaient pas de ligne. L'inventaire avait donc
+//! raison ; c'est son INDEX qui était incomplet, et un index incomplet n'attrape rien.
 //!
 //! **Ce que le garde ne peut toujours pas faire**, et qu'il ne faut pas lui prêter : décider un
 //! régime. La question « dégrader produit-il quelque chose d'utile et d'honnête ? » demande de

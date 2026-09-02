@@ -130,16 +130,34 @@ const INVENTAIRE: &[Ligne] = &[
     Ligne {
         dependance: "publication d'ancre",
         regime: Regime::Coupe,
-        fournie_par: &[],
+        // Cet index était VIDE : la ligne existait, rien ne la reliait au code. Le garde ne
+        // regardait alors que `run.rs` et `llm.rs`, et `bundle.rs` — qui appelle `anchor_of` —
+        // n'était pas lu. Une ligne sans index n'attrape rien : elle décore.
+        fournie_par: &["provenance_bridge"],
         preuve: "annoncer `anchored: true` après un échec serait un mensonge sur la garantie",
     },
     // ── Les deux lignes que le garde anti-oubli a fait apparaître ────────────────────────
     Ligne {
         dependance: "mémoire d'essaim (MemoryHandle)",
         regime: Regime::Infaillible,
-        fournie_par: &["efe_swarm_sdk"],
+        fournie_par: &["efe_swarm_sdk", "efe_swarm_memory"],
         preuve: "`MemoryHandle::with_config` construit un descripteur, sans `Result` : il n'y a pas \
-                 de panne à ce point du chemin",
+                 de panne à ce point du chemin. Le second point d'entrée, `verify_memory` \
+                 (routes/memory.rs), rend un `MemoryChainVerdict` et non un `Result` — une chaîne \
+                 rompue y est un VERDICT, pas une panne, et le distinguer est tout l'intérêt",
+    },
+    Ligne {
+        dependance: "types de tenant (efe-nano-sdk)",
+        regime: Regime::Infaillible,
+        fournie_par: &["efe_nano_sdk"],
+        // Une exemption globale aurait été la faute de M1.b : « sûr par composition » couvre alors
+        // en silence un usage futur qui ne l'est pas. Une LIGNE, elle, est visible dans l'artefact
+        // que lit un auditeur, et sa prose nomme le site exact — de sorte qu'un appel faillible
+        // rendrait ce texte visiblement faux au lieu de passer inaperçu.
+        preuve: "un seul site sur tout le chemin servi — `routes/events.rs`, en position de TYPE : \
+                 `&efe_nano_sdk::TenantId`, un `struct TenantId(pub Uuid)`. Il n'y a rien à \
+                 joindre, donc rien à dégrader. Le jour où une fonction faillible du SDK est \
+                 appelée, cette phrase cesse d'être vraie et doit devenir une autre ligne",
     },
     Ligne {
         dependance: "re-preuve hors ligne et empreintes",
@@ -163,6 +181,10 @@ const SANS_OBJET: &[(&str, &str)] = &[
               rien à dégrader vers"),
     ("tokio", "l'exécuteur : même raisonnement que le cadre HTTP"),
     ("uuid", "génération et analyse d'identifiants, sans entrée-sortie"),
+    ("async_stream", "la macro `stream!` du motif SSE d'axum 0.7 : elle CONSTRUIT un flux, elle ne \
+                      joint rien. Même famille qu'`axum` et `tokio` — si elle manquait, il n'y \
+                      aurait pas de chemin servi à dégrader"),
+    ("futures", "le trait `Stream`, importé pour un type de retour. Un trait ne tombe pas"),
     ("crate", "les coutures internes portent leur propre ligne quand elles en méritent une — le \
                champ `fournie_par` vaut alors `None`"),
     ("super", "idem : chemin interne au module"),
@@ -182,12 +204,27 @@ const SANS_OBJET: &[(&str, &str)] = &[
                               il est le lieu du test, pas une dépendance à inventorier"),
 ];
 
-/// Les fichiers du **chemin d'appel** — ceux que l'inventaire dit couvrir : les deux voies qui
-/// persistent, l'essaim et la mission frontière.
-const CHEMIN_SERVI: &[&str] = &[
-    "crates/efe-swarm-gateway/src/routes/run.rs",
-    "crates/efe-swarm-gateway/src/routes/llm.rs",
-];
+/// Les fichiers du **chemin d'appel** — **découverts**, jamais énumérés.
+///
+/// Ils l'étaient : une liste de deux, `routes/run.rs` et `routes/llm.rs`, les deux voies qui
+/// persistent. Le raisonnement se tenait — ce sont elles qui portent la mission payante — mais il
+/// laissait le garde surveiller **2 fichiers sur 14**. Les douze autres atteignent sept crates du
+/// dépôt (`provenance_bridge`, `efe_swarm_dashboard`, `efe_nano_sdk`, `efe_swarm_memory`,
+/// `efe_swarm_provenance`, `efe_swarm_sdk`, `reg_evidence` — celui de C1) et une dépendance ajoutée
+/// dans `bundle.rs` ou `reg.rs` n'aurait jamais eu à se déclarer.
+///
+/// C'est la faute exacte que ce garde existe pour empêcher, commise par le garde lui-même : une
+/// liste écrite à la main ne voit que ce qu'on a bien voulu lui montrer, et le jour où elle a tort
+/// est le jour où quelqu'un ajoute quelque chose. Le dossier est donc **lu**.
+fn chemin_servi(racine: &Path) -> Vec<PathBuf> {
+    let dir = racine.join("crates/efe-swarm-gateway/src/routes");
+    let mut v: Vec<PathBuf> = walkdir(&dir)
+        .into_iter()
+        .filter(|e| e.extension().is_some_and(|x| x == "rs"))
+        .collect();
+    v.sort();
+    v
+}
 
 fn racine() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -235,6 +272,19 @@ fn dependances(src: &str) -> BTreeSet<String> {
         &["std", "core", "alloc", "self", "super", "crate",
           // `u32::try_from(..)` est une conversion, pas une dépendance de service.
           "u8", "u16", "u32", "u64", "u128", "usize", "i8", "i16", "i32", "i64", "isize", "f32", "f64", "bool", "char", "str"];
+    // Les sous-modules DÉCLARÉS dans ce même source ne sont pas des crates. `routes/mod.rs` écrit
+    // `pub mod bundle;` puis `bundle::poser(...)` : sans cette lecture, l'assemblage du routeur
+    // réclamerait une ligne d'inventaire pour chacune de ses propres routes. Le fait est tiré du
+    // fichier lui-même, pas d'une liste — donc il ne peut pas se démoder.
+    let modules: BTreeSet<String> = src
+        .lines()
+        .filter_map(|l| {
+            let t = l.trim_start();
+            let r = t.strip_prefix("pub mod ").or_else(|| t.strip_prefix("mod "))?;
+            r.split([';', ' ', '{']).next().filter(|m| !m.is_empty()).map(str::to_string)
+        })
+        .collect();
+
     let mut out = BTreeSet::new();
 
     // (1) les `use`
@@ -247,7 +297,7 @@ fn dependances(src: &str) -> BTreeSet<String> {
                     out.insert(format!("crate::{m}"));
                 }
             }
-        } else if !racine.is_empty() && !PRIMITIFS.contains(&racine) {
+        } else if !racine.is_empty() && !PRIMITIFS.contains(&racine) && !modules.contains(racine) {
             out.insert(racine.to_string());
         }
     }
@@ -280,7 +330,10 @@ fn dependances(src: &str) -> BTreeSet<String> {
             if !m.is_empty() && m.starts_with(|c: char| c.is_lowercase()) {
                 out.insert(format!("crate::{m}"));
             }
-        } else if !PRIMITIFS.contains(&tete.as_str()) && tete.starts_with(|c: char| c.is_lowercase()) {
+        } else if !PRIMITIFS.contains(&tete.as_str())
+            && !modules.contains(&tete)
+            && tete.starts_with(|c: char| c.is_lowercase())
+        {
             out.insert(tete);
         }
     }
@@ -330,10 +383,21 @@ fn aucune_dependance_du_chemin_servi_nest_hors_inventaire() {
     let connus: BTreeSet<&str> = INVENTAIRE.iter().flat_map(|l| l.fournie_par.iter().copied()).collect();
     let exemptes: BTreeSet<&str> = SANS_OBJET.iter().map(|(c, _)| *c).collect();
 
+    let fichiers = chemin_servi(&racine);
+    // Le plancher anti-vacuité. Sans lui, un dossier renommé rendrait la liste VIDE et le garde
+    // serait vert sans avoir rien lu — la panne la plus confortable qu'un garde puisse avoir.
+    assert!(
+        fichiers.len() >= 12,
+        "seulement {} fichiers de route trouvés : le dossier a-t-il déménagé ? Un garde qui ne \
+         trouve rien à lire ne doit pas passer pour un garde qui n'a rien trouvé à redire",
+        fichiers.len()
+    );
+
     let mut orphelines = Vec::new();
     let mut vus = 0usize;
-    for rel in CHEMIN_SERVI {
-        let src = std::fs::read_to_string(racine.join(rel))
+    for f in &fichiers {
+        let rel = f.strip_prefix(&racine).unwrap_or(f).display().to_string();
+        let src = std::fs::read_to_string(f)
             .unwrap_or_else(|e| panic!("{rel} illisible : {e} — le chemin servi a-t-il déménagé ?"));
         for c in dependances(&region_servie(&src)) {
             vus += 1;
