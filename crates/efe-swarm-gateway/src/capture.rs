@@ -87,6 +87,8 @@
 //! | dérivation réglementaire (M5) | **dégrade**, et plus franchement que tout le reste | `m5_un_dossier_manque_se_rattrape_a_lidentique` |
 //! | caviardage PII | infaillible (pas de `Result`) | — |
 //! | bus de supervision | best-effort borné (ring + compteur de pertes) | — |
+//! | mémoire d'essaim (`MemoryHandle`) | infaillible (pas de `Result`) | `with_config` construit un descripteur : il n'y a pas de panne à ce point du chemin |
+//! | re-preuve hors ligne et empreintes | infaillible (pas de `Result`) | `blake3_bytes` rend une empreinte, `verify_run_offline` rend un VERDICT — un verdict négatif est le résultat demandé, pas une panne |
 //! | `tenant_id` | **coupe** — et c'est correct | le tenant est une **entrée du client** ; invalide, c'est une requête malformée, pas une panne |
 //! | `derive_key` | **coupe** — et c'est correct | sans clé, rien ne peut être scellé : dégrader produirait une réponse **sans aucun reçu possible**, et la condition est déjà gardée au démarrage (`frontier_boot_guard`, `key_ok`) |
 //! | publication d'ancre (`/bundle`) | **coupe** — et c'est délibéré | servir un bundle en annonçant `anchored: true` alors que la publication a échoué serait un mensonge sur la garantie ; mieux vaut refuser la réponse. Hors chemin d'appel |
@@ -109,10 +111,24 @@
 //! `POST /v1/swarm/reg/:id` le re-dérive à l'identique. Il n'y a donc même pas de brèche à
 //! journaliser : rien n'a disparu.
 //!
-//! **Limite assumée.** Cet inventaire est tenu à la main. Aucun test n'interdit qu'une dépendance
-//! future coupe sans être inscrite ici — un `?` sur un appel faillible suffirait. Les lignes
-//! ci-dessus gardent contre la **régression**, pas contre l'**oubli**. Le dire vaut mieux que
-//! laisser croire à un filet qui n'existe pas.
+//! **La limite que M3 avait déclarée est fermée.** Elle disait : *« cet inventaire est tenu à la
+//! main ; aucun test n'interdit qu'une dépendance future coupe sans être inscrite ici. Les lignes
+//! ci-dessus gardent contre la régression, pas contre l'oubli. »* C'est désormais faux, et de la
+//! seule façon qui vaille : `tests/m3_inventaire_des_pannes.rs` **relit les imports du chemin servi**
+//! (`routes/run.rs`, `routes/llm.rs`, hors module de tests) et refuse tout crate qui n'a ni ligne
+//! ici ni exemption motivée. Une dépendance ajoutée demain casse le build tant que sa ligne n'est
+//! pas écrite — ce qui est exactement ce qui a manqué le jour où M5 a ajouté la sienne sans
+//! l'inscrire.
+//!
+//! **Les deux lignes infaillibles ci-dessus sont nées de ce garde**, à sa toute première exécution :
+//! `efe-swarm-sdk` et `efe-swarm-provenance` étaient sur le chemin servi sans figurer nulle part.
+//! Aucune des deux ne peut échouer — mais leur silence ne le disait pas. Le silence sur une
+//! dépendance ne signifie pas « elle ne peut pas échouer » : il ne signifie rien.
+//!
+//! **Ce que le garde ne peut toujours pas faire**, et qu'il ne faut pas lui prêter : décider un
+//! régime. La question « dégrader produit-il quelque chose d'utile et d'honnête ? » demande de
+//! savoir ce qui reste au client quand la dépendance meurt, et cela se lit dans l'intention, pas
+//! dans le code. Le garde force la question à être POSÉE ; il n'y répond pas.
 //!
 //! ## Ce que M2 ne fait délibérément pas
 //!
