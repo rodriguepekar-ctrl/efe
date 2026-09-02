@@ -35,6 +35,11 @@ const MAX_INFLIGHT: usize = 256;
 /// plancher d'un **scellement**. Sans elle, un pair distant est [`Canal::A3NonProtege`] : il peut
 /// lire, il ne peut rien sceller.
 ///
+/// `origines` — facultatif — porte les adresses **d'où le terminateur se connecte**. Quand elles
+/// sont déclarées, chaque pair y est confronté : une connexion qui contourne le terminateur retombe
+/// en [`Canal::A3NonProtege`] et perd le droit de sceller. Le témoin est `peer_addr`, remplie par le
+/// noyau — le client ne peut pas la fabriquer, contrairement à un en-tête.
+///
 /// **Ce processus ne termine PAS TLS**, et il faut le dire. Le dépôt possède déjà une pile TLS
 /// complète (TLS 1.3, mTLS, rotation à chaud) dans `efe-meta-swarm-server`, hors du produit ; en
 /// réécrire une ici triplerait l'arbre de dépendances d'un crate feuille et serait moins sûr qu'un
@@ -53,6 +58,7 @@ pub fn serve(
     addr: &str,
     console: Console,
     terminateur: Option<String>,
+    origines: Vec<std::net::IpAddr>,
     balayeur: Option<Balayeur>,
 ) -> std::io::Result<()> {
     let declare = terminateur.as_deref().map(str::trim).filter(|t| !t.is_empty()).map(str::to_string);
@@ -71,6 +77,9 @@ pub fn serve(
     }
     let listener = TcpListener::bind(addr)?;
     let console = Arc::new(Mutex::new(console));
+    // Partagées, pas clonées par connexion : la liste est minuscule mais elle est lue à CHAQUE
+    // requête, et un `Vec` recopié par connexion serait une allocation par requête pour rien.
+    let origines: Arc<[std::net::IpAddr]> = origines.into();
     let inflight = Arc::new(AtomicUsize::new(0));
 
     // ── M6, câblé : le fil qui fait réellement expirer ──
@@ -110,8 +119,9 @@ pub fn serve(
                 let console = Arc::clone(&console);
                 let inflight = Arc::clone(&inflight);
                 let declare = declare.clone();
+                let origines = Arc::clone(&origines);
                 std::thread::spawn(move || {
-                    let _ = handle_conn(stream, &console, declare.as_deref());
+                    let _ = handle_conn(stream, &console, declare.as_deref(), &origines);
                     inflight.fetch_sub(1, Ordering::Relaxed);
                 });
             }
@@ -148,6 +158,7 @@ fn handle_conn(
     stream: TcpStream,
     console: &Arc<Mutex<Console>>,
     terminateur: Option<&str>,
+    origines: &[std::net::IpAddr],
 ) -> std::io::Result<()> {
     // Anti-slowloris minimal : un client muet est coupé.
     stream.set_read_timeout(Some(Duration::from_secs(15)))?;
@@ -159,7 +170,9 @@ fn handle_conn(
             // Le verrou n'est tenu QUE pendant le dispatch (handle est rapide et pur).
             // M8 — le barreau vient de la CONNEXION, jamais de la requête. Un client qui pourrait
             // annoncer son propre niveau de confiance rendrait l'échelle décorative.
-            let canal = Canal::observer(stream.peer_addr().ok(), terminateur);
+            // `peer_addr` vient du noyau, pas du client : c'est pour ça qu'il peut arbitrer
+            // le contournement du terminateur, là où un en-tête ne le pourrait pas.
+            let canal = Canal::observer(stream.peer_addr().ok(), terminateur, origines);
             let mut guard = console.lock().unwrap_or_else(|p| p.into_inner());
             handle(&mut guard, &req, now, &canal)
         }
@@ -187,7 +200,7 @@ mod tests {
         // I-S3-SOUVERAIN : un bind non-local est refusé AVANT toute écoute (rien ne sort de la frontière).
         let mut c = Console::new();
         c.provision("acme", TenantKey::from_bytes([1u8; 32]));
-        let err = serve("203.0.113.5:8088", c, None, None).unwrap_err();
+        let err = serve("203.0.113.5:8088", c, None, Vec::new(), None).unwrap_err();
         assert_eq!(err.kind(), std::io::ErrorKind::PermissionDenied, "endpoint public refusé (souveraineté)");
         assert!(err.to_string().contains("souveraineté"));
     }
@@ -197,7 +210,7 @@ mod tests {
     fn le_refus_de_bind_indique_la_declaration_qui_le_leve() {
         let mut c = Console::new();
         c.provision("acme", TenantKey::from_bytes([1u8; 32]));
-        let msg = serve("203.0.113.5:8088", c, None, None).unwrap_err().to_string();
+        let msg = serve("203.0.113.5:8088", c, None, Vec::new(), None).unwrap_err().to_string();
         assert!(msg.contains("DÉCLAREZ le terminateur"), "le geste : {msg}");
         assert!(msg.contains("en clair"), "et le danger que le silence ferait courir : {msg}");
     }
@@ -208,7 +221,7 @@ mod tests {
         for d in [Some(String::new()), Some("   ".to_string())] {
             let mut c = Console::new();
             c.provision("acme", TenantKey::from_bytes([1u8; 32]));
-            let e = serve("203.0.113.5:8088", c, d, None).unwrap_err();
+            let e = serve("203.0.113.5:8088", c, d, Vec::new(), None).unwrap_err();
             assert_eq!(e.kind(), std::io::ErrorKind::PermissionDenied);
         }
     }

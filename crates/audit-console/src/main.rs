@@ -60,7 +60,19 @@ fn main() -> std::io::Result<()> {
         console.avec_plancher(Plancher::protege_declare());
     }
 
-    annoncer(&addr, &resume, declaration.trim().is_empty(), terminateur.as_deref(), &console);
+    // Les origines du terminateur — facultatives, et c'est délibéré : les exiger casserait tout
+    // déploiement A2 existant. Les poser transforme une déclaration crue sur parole en une
+    // déclaration CORROBORÉE, et fait retomber le contournement sous le plancher.
+    let origines = read::origines("EFE_CONSOLE_TERMINATEUR_ORIGINE");
+
+    annoncer(
+        &addr,
+        &resume,
+        declaration.trim().is_empty(),
+        terminateur.as_deref(),
+        &origines,
+        &console,
+    );
 
     // ── M6, câblé : un balayage D'AMORÇAGE, puis le fil ──
     //
@@ -80,7 +92,7 @@ fn main() -> std::io::Result<()> {
         Balayeur { intervalle_s, deploiement: dep }
     });
 
-    serve(&addr, console, terminateur, balayeur)
+    serve(&addr, console, terminateur, origines, balayeur)
 }
 
 /// La posture de **service** : la déclaration décide, et elle est validée avant toute mutation.
@@ -164,6 +176,7 @@ fn annoncer(
     resume: &Resume,
     demonstration: bool,
     terminateur: Option<&str>,
+    origines: &[std::net::IpAddr],
     console: &Console,
 ) {
     eprintln!("service de lecture (S3) — http://{addr}");
@@ -204,8 +217,21 @@ fn annoncer(
             eprintln!("  canal : terminateur DÉCLARÉ « {t} » — non vérifiable par ce processus.");
             eprintln!("          bind hors boucle locale autorisé ; scellement admis jusqu'à A2.");
             eprintln!("          ce processus ne termine PAS TLS : la déclaration engage l'exploitant,");
-            eprintln!("          pas le binaire. Un client qui contourne le terminateur est crédité");
-            eprintln!("          « protégé » — ce processus ne peut pas faire la différence.");
+            eprintln!("          pas le binaire.");
+            if origines.is_empty() {
+                // On ne se résigne plus : on nomme le geste. Un défaut qu'on peut corriger et
+                // qu'on ne dit pas corrigeable est une limite qu'on entretient.
+                eprintln!("          origine NON déclarée : un client qui CONTOURNE le terminateur est");
+                eprintln!("          crédité « protégé » et peut sceller. Posez");
+                eprintln!("          EFE_CONSOLE_TERMINATEUR_ORIGINE=<ip[,ip…]> pour que ce processus");
+                eprintln!("          fasse la différence — l'adresse source vient du noyau, pas du client.");
+            } else {
+                let liste =
+                    origines.iter().map(ToString::to_string).collect::<Vec<_>>().join(", ");
+                eprintln!("          origine(s) déclarée(s) : {liste} — le pair y est confronté.");
+                eprintln!("          une connexion qui CONTOURNE le terminateur retombe en A3 : elle");
+                eprintln!("          lit encore, mais ne scelle plus.");
+            }
         }
     }
     // ── M6, câblé : ce que la conservation fait, et ce qu'elle ne peut PAS lire ──

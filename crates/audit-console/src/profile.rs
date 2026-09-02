@@ -96,6 +96,18 @@ pub const REGISTRY: &[Switch] = &[
         class: Class::Tuning,
     },
     Switch {
+        name: "EFE_CONSOLE_TERMINATEUR_ORIGINE",
+        default: "",
+        buys: "la CORROBORATION du terminateur déclaré : les adresses IP d'où il se connecte, \
+               séparées par des virgules. Le pair leur est alors confronté — et l'adresse source \
+               d'une connexion TCP est observée par le NOYAU, pas envoyée par le client : c'est un \
+               témoin que le client ne peut pas fabriquer, contrairement à un en-tête",
+        absence_costs: "le terminateur est cru sur parole. Un client qui le CONTOURNE et se connecte \
+                        directement est crédité « protégé » (A2), donc autorisé à sceller un acte \
+                        humain. C'est la limite que M8 déclarait ; la déclarer ici la lève",
+        class: Class::Tuning,
+    },
+    Switch {
         name: "EFE_CONSOLE_DEPLOIEMENT",
         default: "",
         buys: "la déclaration du déploiement — quels tenants, quelles sessions (chemin d'un fichier JSON)",
@@ -158,6 +170,32 @@ pub const NUMERIQUES: &[(&str, u64)] = &[
     ("EFE_CONSOLE_BALAYAGE_S", 1),
 ];
 
+/// Les interrupteurs dont la valeur est une **liste d'adresses IP** séparées par des virgules.
+///
+/// Quatrième forme du même piège, après les booléens, les valeurs finies de la passerelle et les
+/// entiers ci-dessus. Elle mérite le filet plus que les autres : une adresse mal écrite dans
+/// `EFE_CONSOLE_TERMINATEUR_ORIGINE` **désactiverait silencieusement la corroboration**, et
+/// l'exploitant croirait avoir fermé une brèche qu'il aurait en fait laissée ouverte.
+pub const ADRESSES: &[&str] = &["EFE_CONSOLE_TERMINATEUR_ORIGINE"];
+
+/// Les origines effectivement déclarées, **depuis une table quelconque**.
+///
+/// Les entrées illisibles sont écartées ici et signalées par [`invalides_from_lookup`] : la même
+/// valeur ne peut pas être à la fois employée et refusée, et c'est le refus qui doit atteindre
+/// l'exploitant. Même discipline que [`entier_from_lookup`] — un seul calcul, pas deux lectures
+/// qu'un test devrait ensuite comparer.
+#[must_use]
+pub fn origines_from_lookup(
+    name: &str,
+    get: impl Fn(&str) -> Option<String>,
+) -> Vec<std::net::IpAddr> {
+    get(name)
+        .unwrap_or_default()
+        .split(',')
+        .filter_map(|t| t.trim().parse().ok())
+        .collect()
+}
+
 /// Une valeur **fournie mais refusée** — le troisième état, celui que ni « présente » ni « absente »
 /// ne décrit, et le seul où l'opérateur a agi sans que son geste ait le moindre effet.
 ///
@@ -173,8 +211,17 @@ pub struct Invalide {
     /// conséquence reformulée ici finirait par diverger de celle que le rapport annonce.
     pub consequence: &'static str,
     /// La valeur **réellement employée** malgré le refus. Sans elle, le rapport dirait « refusé »
-    /// sans dire ce qui tourne — et l'exploitant devrait deviner.
+    /// sans dire ce qui tourne — et l'exploitant devrait deviner. Forme machine, stable.
     pub effectif: u64,
+    /// La même chose **en français**, et c'est un champ distinct pour une raison précise.
+    ///
+    /// `effectif` ne veut pas dire la même chose selon l'interrupteur : pour un entier c'est *la
+    /// valeur*, pour une liste d'adresses c'est *un compte*. Une phrase unique — « le binaire
+    /// emploie 1 » — était donc juste pour l'un et **fausse pour l'autre** : elle laissait croire
+    /// que la valeur employée valait `1`, alors qu'une seule origine était retenue. Un rapport qui
+    /// dit autre chose que ce que fait le binaire est exactement le défaut que M0 supprime ; le
+    /// producteur écrit donc la clause, et le rendu ne l'interprète plus.
+    pub effectif_dit: String,
 }
 
 /// Les valeurs fournies mais refusées, depuis une table quelconque — un fichier de profil compris.
@@ -209,9 +256,49 @@ pub fn invalides_from_lookup(get: impl Fn(&str) -> Option<String>) -> Vec<Invali
                     attendu: format!("un entier ≥ {min}"),
                     consequence: sw.absence_costs,
                     effectif: entier_from_lookup(name, &get),
+                    effectif_dit: format!(
+                        "la valeur employée reste {}",
+                        entier_from_lookup(name, &get)
+                    ),
                 }),
             }
         })
+        .chain(ADRESSES.iter().filter_map(|name| {
+            let v = get(name)?;
+            let t = v.trim();
+            if t.is_empty() {
+                return None;
+            }
+            // Une SEULE entrée illisible suffit à signaler : la liste serait alors PARTIELLEMENT
+            // appliquée — le pire des trois états, car la corroboration paraîtrait active tout en
+            // laissant passer l'origine mal orthographiée.
+            let mauvaises: Vec<&str> = t
+                .split(',')
+                .map(str::trim)
+                .filter(|e| !e.is_empty() && e.parse::<std::net::IpAddr>().is_err())
+                .collect();
+            if mauvaises.is_empty() {
+                return None;
+            }
+            let sw = switch(name)?;
+            let total = t.split(',').filter(|e| !e.trim().is_empty()).count();
+            let retenues = origines_from_lookup(name, &get).len();
+            Some(Invalide {
+                name: sw.name,
+                fourni: mauvaises.join(", "),
+                attendu: "des adresses IP séparées par des virgules".to_string(),
+                consequence: sw.absence_costs,
+                effectif: retenues as u64,
+                effectif_dit: if retenues == 0 {
+                    "aucune origine n'est retenue — la corroboration n'aura PAS lieu".to_string()
+                } else {
+                    format!(
+                        "{retenues} origine(s) sur {total} sont retenues — la corroboration ne \
+                         couvrira pas les autres chemins"
+                    )
+                },
+            })
+        }))
         .collect()
 }
 
@@ -241,6 +328,13 @@ pub mod read {
     pub fn value(name: &str) -> String {
         let default = super::switch(name).map_or("", |s| s.default);
         std::env::var(name).unwrap_or_else(|_| default.to_string())
+    }
+
+    /// Les **origines déclarées** d'un interrupteur d'adresses. Les entrées illisibles sont
+    /// écartées — et signalées par le rapport, jamais appliquées en silence.
+    #[must_use]
+    pub fn origines(name: &str) -> Vec<std::net::IpAddr> {
+        super::origines_from_lookup(name, |n| std::env::var(n).ok())
     }
 
     /// La valeur **effective** d'un interrupteur numérique : celle de l'opérateur si elle est
@@ -346,8 +440,8 @@ impl Report {
                     name: s.name,
                     status: "REFUSÉE",
                     detail: format!(
-                        "« {} » n'est pas {} — la valeur employée reste {}. {}",
-                        inv.fourni, inv.attendu, inv.effectif, inv.consequence
+                        "« {} » n'est pas {} — {}. {}",
+                        inv.fourni, inv.attendu, inv.effectif_dit, inv.consequence
                     ),
                 });
                 continue;
@@ -377,8 +471,8 @@ impl Report {
             out.push_str("\n⚠  VALEUR(S) FOURNIE(S) MAIS REFUSÉE(S) — un geste sans effet :\n");
             for i in &self.invalides {
                 out.push_str(&format!(
-                    "   {} = « {} » → attendu {} ; le binaire emploie {}.\n",
-                    i.name, i.fourni, i.attendu, i.effectif
+                    "   {} = « {} » → attendu {} ; {}.\n",
+                    i.name, i.fourni, i.attendu, i.effectif_dit
                 ));
             }
         }
@@ -406,7 +500,7 @@ impl Report {
             .invalides
             .iter()
             .map(|i| json!({ "switch": i.name, "fourni": i.fourni, "attendu": i.attendu,
-                             "effectif": i.effectif }))
+                             "effectif": i.effectif, "effet": i.effectif_dit }))
             .collect();
         json!({ "switches": lines, "secrets_par_defaut": self.secrets_par_defaut,
                 "invalides": invalides })
@@ -418,13 +512,23 @@ mod tests {
     use super::*;
 
     #[test]
-    fn le_registre_couvre_les_neuf_interrupteurs() {
+    fn le_registre_couvre_les_dix_interrupteurs() {
         // SIX, pas sept : le « septième » de mon relevé initial était `EFE_K`, un faux positif — le
         // motif avait attrapé un NOM DE DOCUMENT cité en commentaire, pas une variable
         // d'environnement. Le nom a changé depuis (P3, le nettoyage) ; la leçon n'a pas bougé : un
         // balayage `EFE_[A-Z_]+` sur du texte libre ramasse les renvois de documentation, et c'est
         // exactement pourquoi ce registre est écrit à la main plutôt que dérivé d'un grep.
-        assert_eq!(REGISTRY.len(), 9, "ADDR, TENANT, ROOT, TOKEN, SUBJECT, BALAYAGE_S, TERMINATEUR_CANAL, DEPLOIEMENT, RECORDS");
+        //
+        // DIX depuis M8×corroboration : `TERMINATEUR_ORIGINE` s'ajoute. Ce compte figé n'est pas une
+        // formalité — c'est lui qui a exigé que le nouvel interrupteur soit DÉCLARÉ au registre
+        // plutôt que lu en douce depuis `std::env`, et donc qu'il apparaisse dans le rapport de
+        // profil et hérite du troisième état.
+        assert_eq!(
+            REGISTRY.len(),
+            10,
+            "ADDR, TENANT, ROOT, TOKEN, SUBJECT, BALAYAGE_S, TERMINATEUR_CANAL, \
+             TERMINATEUR_ORIGINE, DEPLOIEMENT, RECORDS"
+        );
         for s in REGISTRY {
             assert!(!s.buys.trim().is_empty(), "{} : `buys` vide", s.name);
             assert!(!s.absence_costs.trim().is_empty(), "{} : `absence_costs` vide", s.name);

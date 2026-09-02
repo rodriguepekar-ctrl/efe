@@ -42,7 +42,7 @@ const LOCAL: Canal = Canal::A1LoopbackTemoin;
 const NU: Canal = Canal::A3NonProtege;
 
 fn declare() -> Canal {
-    Canal::A2ProtegeDeclare { terminateur: "ingress-de-test".into() }
+    Canal::A2ProtegeDeclare { terminateur: "ingress-de-test".into(), corrobore: false }
 }
 
 const DEUX_TENANTS: &str = r#"{
@@ -388,5 +388,86 @@ fn m8_les_routes_publiques_ne_dependent_pas_du_canal() {
             assert_ne!(r.status, 401, "{m} {p} sous {canal}");
             assert_ne!(r.status, 403, "{m} {p} sous {canal}");
         }
+    }
+}
+
+// ═══ 5. LA CORROBORATION : du pair TCP jusqu'au refus d'écriture ═══════════════════════════════
+//
+// M8 déclarait, en toutes lettres, une limite qu'il tenait pour définitive :
+//
+// > *« La déclaration vaut pour le PROCESSUS, pas pour la connexion : un client qui contourne le
+// > terminateur et se connecte directement est crédité "protégé". Le seul témoin serait un en-tête,
+// > et un en-tête est falsifiable par le client — donc inutilisable ici. »*
+//
+// La première phrase était juste. La seconde était **fausse**, et c'est elle qui fermait la porte :
+// il existe un témoin qui n'est pas un en-tête. **L'adresse source d'une connexion TCP n'est pas
+// envoyée par le client — elle est remplie par le noyau à la poignée de main.** Un client peut
+// mentir sur `X-Forwarded-For` ; il ne peut pas mentir sur l'adresse depuis laquelle il a ouvert
+// la connexion, sauf à ne jamais recevoir la réponse.
+//
+// L'exploitant déclare donc *d'où* son terminateur se connecte (`EFE_CONSOLE_TERMINATEUR_ORIGINE`),
+// et le contournement cesse d'être crédité. Ces trois tests le prouvent **de bout en bout** : d'un
+// `SocketAddr` de pair jusqu'au code HTTP.
+
+/// Le pair correspond à une origine déclarée : le scellement passe, et il est CORROBORÉ.
+#[test]
+fn m8_le_terminateur_corrobore_scelle() {
+    let origines = ["10.0.0.5".parse().expect("ip")];
+    let canal = Canal::observer(Some("10.0.0.5:41000".parse().expect("pair")), Some("ingress"), &origines);
+    assert!(matches!(canal, Canal::A2ProtegeDeclare { corrobore: true, .. }), "{canal}");
+
+    let mut c = service();
+    c.avec_plancher(Plancher::protege_declare());
+    let r = handle(
+        &mut c,
+        &post_entete("/api/tenants/acme/cases/SUP-ACME/human-action", "jeton-acme", ACTE),
+        T,
+        &canal,
+    );
+    assert_eq!(r.status, 200, "une connexion venue du terminateur déclaré scelle");
+}
+
+/// **Le contournement.** Même déclaration, même plancher — mais la connexion ne vient pas de là.
+/// Elle lit toujours ; elle ne scelle plus. C'est la limite de M8, close.
+#[test]
+fn m8_le_contournement_du_terminateur_lit_encore_mais_ne_scelle_plus() {
+    let origines = ["10.0.0.5".parse().expect("ip")];
+    // Un client qui a trouvé le port du service et court-circuite l'ingress.
+    let canal = Canal::observer(Some("203.0.113.9:41000".parse().expect("pair")), Some("ingress"), &origines);
+    assert_eq!(canal, Canal::A3NonProtege, "il n'est pas un A2 dégradé : il n'est pas un A2");
+
+    let mut c = service();
+    c.avec_plancher(Plancher::protege_declare());
+
+    let lu = handle(&mut c, &get("/api/tenants/acme/cases/SUP-ACME", Some("jeton-acme")), T, &canal);
+    assert_eq!(lu.status, 200, "la lecture dégrade — elle n'inscrit rien");
+
+    let scelle = handle(
+        &mut c,
+        &post_entete("/api/tenants/acme/cases/SUP-ACME/human-action", "jeton-acme", ACTE),
+        T,
+        &canal,
+    );
+    assert_eq!(scelle.status, 403, "l'écriture coupe : rien de non répudiable ne s'inscrit ici");
+    assert!(corps(&scelle).contains("a3_non_protege"), "et le refus nomme le barreau constaté");
+}
+
+/// **La compatibilité, prouvée et pas promise.** Sans origine déclarée, le comportement livré par
+/// M8 est intact — y compris sa limite résiduelle, que seul l'exploitant peut lever.
+#[test]
+fn m8_sans_origine_declaree_le_comportement_livre_est_intact() {
+    for pair in ["10.0.0.5:41000", "203.0.113.9:41000"] {
+        let canal = Canal::observer(Some(pair.parse().expect("pair")), Some("ingress-de-test"), &[]);
+        assert_eq!(canal, declare(), "sans origine, tout pair distant reste un A2 non corroboré");
+
+        let mut c = service();
+        c.avec_plancher(Plancher::protege_declare());
+        let r = handle(
+            &mut c,
+            &post_entete("/api/tenants/acme/cases/SUP-ACME/human-action", "jeton-acme", ACTE),
+            T,
+            &canal,
+        );
+        assert_eq!(r.status, 200, "{pair} : le déploiement A2 existant continue de sceller");
     }
 }

@@ -27,7 +27,8 @@
 //! trahie. `0` → 1 seconde : intention inversée.
 
 use audit_console::profile::{
-    entier_from_lookup, invalides_from_lookup, switch, Report, NUMERIQUES, REGISTRY,
+    entier_from_lookup, invalides_from_lookup, origines_from_lookup, switch, Report, ADRESSES,
+    NUMERIQUES, REGISTRY,
 };
 
 /// Une table de valeurs — la seule forme testable sans muter l'environnement partagé du process.
@@ -161,6 +162,118 @@ fn aucun_interrupteur_numerique_du_registre_nest_hors_de_la_liste() {
 }
 
 // ══════════════════════════════════════════════════════════════════════════════════════
+//  M8 — la MÊME discipline pour une valeur qui n'est pas un nombre
+// ══════════════════════════════════════════════════════════════════════════════════════
+//
+// `EFE_CONSOLE_TERMINATEUR_ORIGINE` est une liste d'adresses, et elle est le pire candidat possible
+// à la substitution silencieuse : une adresse mal orthographiée ne dégrade pas un réglage de
+// confort, elle DÉSACTIVE une vérification de sécurité — et l'exploitant, lui, croit l'avoir
+// activée. C'est exactement l'écart entre l'intention et le résultat que M0 nomme.
+
+const ORI: &str = "EFE_CONSOLE_TERMINATEUR_ORIGINE";
+
+#[test]
+fn une_adresse_illisible_est_refusee_et_non_appliquee() {
+    let inv = invalides_from_lookup(table(&[(ORI, "pas-une-ip")]));
+    assert_eq!(inv.len(), 1, "l'opérateur a agi, et son geste n'a aucun effet : c'est un refus");
+    assert_eq!(inv[0].fourni, "pas-une-ip");
+    assert_eq!(inv[0].effectif, 0, "aucune origine retenue — donc aucune corroboration");
+    assert!(origines_from_lookup(ORI, table(&[(ORI, "pas-une-ip")])).is_empty());
+}
+
+/// **Le cas le plus dangereux** : la liste partiellement valide. Elle *paraît* marcher.
+#[test]
+fn une_liste_partiellement_illisible_est_signalee_et_non_tue() {
+    let t = [(ORI, "10.0.0.5, 10.0.0.six, ::ffff:10.0.0.7")];
+    let inv = invalides_from_lookup(table(&t));
+    assert_eq!(inv.len(), 1, "une seule entrée fautive suffit à parler");
+    assert_eq!(inv[0].fourni, "10.0.0.six", "et le rapport NOMME laquelle");
+    assert_eq!(
+        inv[0].effectif, 2,
+        "deux origines seulement sont retenues — la corroboration marcherait pour deux chemins et \
+         refuserait le troisième, et personne ne saurait pourquoi"
+    );
+    assert_eq!(origines_from_lookup(ORI, table(&t)).len(), 2, "servi = rapporté");
+}
+
+#[test]
+fn une_liste_saine_ne_declenche_rien() {
+    for v in ["10.0.0.5", "10.0.0.5,10.0.0.6", " 10.0.0.5 , ::ffff:10.0.0.6 ", "::1"] {
+        assert!(
+            invalides_from_lookup(table(&[(ORI, v)])).is_empty(),
+            "« {v} » est recevable — le signaler crierait au loup"
+        );
+    }
+    // Vide et absent ne sont PAS des refus : c'est une topologie non décrite, pas une faute.
+    assert!(invalides_from_lookup(table(&[(ORI, "  ")])).is_empty());
+    assert!(invalides_from_lookup(table(&[])).is_empty());
+}
+
+/// **Le défaut que ce garde fige.** `effectif` ne veut pas dire la même chose selon
+/// l'interrupteur : pour un entier c'est *la valeur*, pour une liste c'est *un compte*. Le rendu
+/// disait « le binaire emploie 1 » dans les deux cas — juste pour l'entier, **faux** pour la liste,
+/// où il laissait croire que la valeur employée valait `1` au lieu de « une seule origine retenue ».
+///
+/// Un rapport qui dit autre chose que ce que fait le binaire est le défaut exact que M0 supprime.
+/// Le champ `effectif` reste le nombre (machine, stable) ; `effectif_dit` porte la phrase.
+#[test]
+fn la_phrase_du_refus_dit_ce_que_le_nombre_signifie() {
+    let entier = invalides_from_lookup(table(&[(BAL, "1h")]));
+    assert_eq!(entier[0].effectif, 3600, "le champ machine reste un nombre");
+    assert!(
+        entier[0].effectif_dit.contains("la valeur employée reste 3600"),
+        "pour un entier, le nombre EST la valeur : {}",
+        entier[0].effectif_dit
+    );
+
+    let partielle = invalides_from_lookup(table(&[(ORI, "10.0.0.5, pas-une-ip")]));
+    assert_eq!(partielle[0].effectif, 1, "le champ machine reste un nombre");
+    assert!(
+        !partielle[0].effectif_dit.contains("valeur employée"),
+        "pour une liste, le nombre n'est PAS une valeur — la dire ainsi ment : {}",
+        partielle[0].effectif_dit
+    );
+    assert!(
+        partielle[0].effectif_dit.contains("1 origine(s) sur 2"),
+        "il faut dire combien sur combien : {}",
+        partielle[0].effectif_dit
+    );
+
+    // Le cas qui compte le plus : AUCUNE origine ne survit. « emploie 0 » serait illisible ;
+    // l'exploitant doit lire que la corroboration n'aura pas lieu du tout.
+    let nulle = invalides_from_lookup(table(&[(ORI, "pas-une-ip")]));
+    assert!(
+        nulle[0].effectif_dit.contains("aucune origine") && nulle[0].effectif_dit.contains("PAS"),
+        "zéro origine doit se lire comme une absence de corroboration : {}",
+        nulle[0].effectif_dit
+    );
+
+    // Et les deux formes atteignent le rendu HUMAIN, pas seulement la structure.
+    let texte = Report::from_lookup(table(&[(ORI, "pas-une-ip")])).render_human();
+    assert!(texte.contains("aucune origine"), "le rapport lu par l'humain le dit : {texte}");
+    assert!(!texte.contains("emploie 0"), "et ne dit pas l'inverse : {texte}");
+}
+
+#[test]
+fn adresses_est_declare_et_accorde_au_registre() {
+    assert!(!ADRESSES.is_empty(), "une liste vide ferait passer ce garde sans rien garder");
+    for nom in ADRESSES {
+        let sw =
+            switch(nom).unwrap_or_else(|| panic!("{nom} déclaré adresse mais absent du registre"));
+        assert!(
+            sw.default.is_empty(),
+            "{nom} : un défaut non vide serait une origine qu'on n'a jamais déclarée — et donc une \
+             corroboration que personne n'a demandée"
+        );
+    }
+    // Les deux listes ne peuvent pas se recouvrir : `invalides_from_lookup` produirait deux refus
+    // pour une seule valeur, et le rapport se contredirait lui-même.
+    for (n, _) in NUMERIQUES {
+        assert!(!ADRESSES.contains(n), "{n} ne peut pas être à la fois entier et adresse");
+    }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════════════
 //  La contre-épreuve — un garde qui ne peut pas tomber ne garde rien
 // ══════════════════════════════════════════════════════════════════════════════════════
 
@@ -171,6 +284,10 @@ fn le_detecteur_sait_tomber_et_sait_se_taire() {
     assert_eq!(invalides_from_lookup(table(&[(BAL, "pas un nombre")])).len(), 1, "doit voir");
     assert!(invalides_from_lookup(table(&[(BAL, "3600")])).is_empty(), "doit se taire");
     assert!(invalides_from_lookup(|_: &str| None).is_empty(), "et se taire sur rien");
+    // Idem sur le versant adresses : sans cette paire, la branche M8 pourrait rendre `None` en
+    // toute circonstance et les quatre tests ci-dessus resteraient verts.
+    assert_eq!(invalides_from_lookup(table(&[(ORI, "10.0.0.")])).len(), 1, "doit voir");
+    assert!(invalides_from_lookup(table(&[(ORI, "10.0.0.5")])).is_empty(), "doit se taire");
 }
 
 #[test]

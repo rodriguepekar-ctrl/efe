@@ -34,12 +34,19 @@ cd "$(dirname "$0")/.."
 PORT=18289
 TRAVAIL="$(mktemp -d)"
 PID=""
+PID2=""   # le second service (section 6) — dans le trap, sinon un `ko` entre le lancement
+          # et le kill laisserait un processus qui tient le port pour la prochaine exécution.
 RACINE="$(printf '0%.0s' {1..64})"
 
 ok()    { printf '  \033[32m✓\033[0m %s\n' "$*"; }
 ko()    { printf '  \033[31m✗\033[0m %s\n' "$*"; exit 1; }
 titre() { printf '\n\033[1m%s\033[0m\n' "$*"; }
-menage() { [ -n "$PID" ] && { kill "$PID" 2>/dev/null; wait "$PID" 2>/dev/null; } || true; rm -rf "$TRAVAIL"; }
+menage() {
+  for p in "$PID" "$PID2"; do
+    [ -n "$p" ] && { kill "$p" 2>/dev/null; wait "$p" 2>/dev/null; } || true
+  done
+  rm -rf "$TRAVAIL"
+}
 trap menage EXIT
 
 titre "0. Les tests du module"
@@ -130,17 +137,64 @@ CROISE=$(curl -s -o /dev/null -w '%{http_code}' \
 [ "$CROISE" = "403" ] || ko "acme atteint globex (HTTP $CROISE)"
 ok "acme ne franchit pas la frontière de globex (403)"
 
+titre "6. La CORROBORATION du terminateur — la limite que M8 déclarait, levée"
+
+# Le service tournant depuis la section 2 a un terminateur DÉCLARÉ et AUCUNE origine.
+# C'est le cas où la limite subsiste — et le démarrage doit le dire, pas le taire.
+grep -q "origine NON déclarée" "$TRAVAIL/demarrage.log" \
+  || ko "sans origine, le démarrage ne signale pas que le contournement reste crédité"
+grep -q "EFE_CONSOLE_TERMINATEUR_ORIGINE" "$TRAVAIL/demarrage.log" \
+  || ko "et il ne nomme pas le geste qui lève la limite"
+ok "sans origine : la limite RÉSIDUELLE est annoncée, et le geste qui la lève est nommé"
+
+# Un second processus, avec des origines déclarées.
+PORT2=$((PORT + 1))
+EFE_CONSOLE_ADDR="0.0.0.0:$PORT2" \
+EFE_CONSOLE_ROOT="$RACINE" \
+EFE_CONSOLE_TERMINATEUR_CANAL="ingress-de-verification" \
+EFE_CONSOLE_TERMINATEUR_ORIGINE="10.42.0.7, ::ffff:10.42.0.8" \
+EFE_CONSOLE_DEPLOIEMENT="$TRAVAIL/deploiement.json" \
+  "$BIN" > /dev/null 2> "$TRAVAIL/demarrage2.log" &
+PID2=$!
+for _ in $(seq 1 100); do
+  curl -sf "http://127.0.0.1:$PORT2/healthz" >/dev/null 2>&1 && break
+  sleep 0.1
+done
+curl -sf "http://127.0.0.1:$PORT2/healthz" >/dev/null 2>&1 \
+  || { cat "$TRAVAIL/demarrage2.log"; kill "$PID2" 2>/dev/null || true; ko "le service à origines déclarées n'a pas démarré"; }
+kill "$PID2" 2>/dev/null || true; wait "$PID2" 2>/dev/null || true; PID2=""
+grep -q "origine(s) déclarée(s) : 10.42.0.7, ::ffff:10.42.0.8" "$TRAVAIL/demarrage2.log" \
+  || { cat "$TRAVAIL/demarrage2.log"; ko "les origines déclarées ne sont pas rapportées telles quelles"; }
+grep -q "retombe en A3" "$TRAVAIL/demarrage2.log" \
+  || ko "le démarrage ne dit pas ce qu'il advient d'un contournement"
+ok "avec origines : elles sont rapportées, et le sort du contournement est dit (A3)"
+
+# M0, appliqué à ce nouvel interrupteur : une adresse illisible est REFUSÉE, jamais appliquée
+# en silence — c'est le pire cas possible ici, l'exploitant croirait la brèche fermée.
+RAPPORT=$(EFE_CONSOLE_TERMINATEUR_ORIGINE="10.42.0.7, dix-quarante-deux" "$BIN" --profile-report)
+printf '%s' "$RAPPORT" | grep -q '"dix-quarante-deux"' \
+  || { printf '%s\n' "$RAPPORT"; ko "une origine illisible n'apparaît pas dans les refus"; }
+printf '%s' "$RAPPORT" | grep -q '"effectif": *1' \
+  || { printf '%s\n' "$RAPPORT"; ko "le rapport ne dit pas COMBIEN d'origines survivent"; }
+ok "une origine illisible est REFUSÉE et nommée · le nombre retenu est dit (troisième état de M0)"
+
 titre "Ce que M8 NE fait PAS, et qu'il faut redire"
 cat <<'FIN'
   · Ce processus ne termine PAS TLS. Le dépôt a pourtant une pile complète
     (TLS 1.3, mTLS, rotation) dans efe-meta-swarm-server ; la tirer dans un
     crate feuille triplerait son arbre, et un terminateur mûr fait mieux le
     travail. Ce que M8 refuse, c'est de servir à distance EN SILENCE.
-  · La déclaration vaut pour le PROCESSUS, pas pour la connexion : un client
-    qui contourne le terminateur et se connecte directement est crédité
-    « protégé ». Le seul témoin serait un en-tête, et un en-tête est
-    falsifiable par le client — donc inutilisable ici. La parade est un geste
-    de déploiement : ne pas exposer le service à côté de son terminateur.
+  · La corroboration du terminateur est FACULTATIVE, et sans elle la limite
+    d'origine subsiste : un client qui contourne le terminateur reste crédité
+    « protégé ». L'exiger casserait tout déploiement A2 existant ; ce qui a
+    changé, c'est qu'elle est possible (EFE_CONSOLE_TERMINATEUR_ORIGINE) et que
+    son absence est ANNONCÉE au démarrage au lieu d'être subie.
+      ⚠ Ce script ne peut pas démontrer le REFUS sur une vraie socket : il
+        faudrait s'y connecter depuis une adresse non-loopback, et la boucle
+        locale est A1, qui prime. Le chemin complet — d'un SocketAddr de pair
+        jusqu'au 403 — est couvert par m8_console_opposable.rs (section 5) et
+        par les tests unitaires de canal.rs. Ce qui est éprouvé ICI, sur un
+        processus réel, c'est que l'exploitant en est INFORMÉ.
   · Le barreau du canal n'est PAS scellé dans le nœud Human : le faire
     changerait le format de Node::Human, ce qui est un événement de version,
     pas un module. M8 COUPE au lieu d'enregistrer — un acte qui ne franchit
