@@ -1,0 +1,305 @@
+\documentclass[11pt]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage[french]{babel}
+\usepackage{newpxtext,newpxmath}
+\usepackage[a4paper,top=1.6cm,bottom=1.55cm,left=2.0cm,right=2.0cm]{geometry}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{titlesec}
+\usepackage[most]{tcolorbox}
+\usepackage{fancyhdr}
+\usepackage{enumitem}
+\usepackage{array}
+\usepackage{booktabs}
+\usepackage{longtable}
+
+\definecolor{efenavy}{HTML}{1F3A5F}
+\definecolor{efeteal}{HTML}{0E7A6E}
+\definecolor{efeamber}{HTML}{B25A1E}
+\definecolor{efegray}{HTML}{54606E}
+\definecolor{efesolve}{HTML}{2C6E49}
+\definecolor{efered}{HTML}{A32E2E}
+\definecolor{boxgray}{HTML}{F3F5F8}
+\definecolor{boxamber}{HTML}{FBF3EA}
+\definecolor{boxedge}{HTML}{D9E0EA}
+
+\titleformat{\section}{\color{efenavy}\large\bfseries}{}{0pt}{}
+\titlespacing{\section}{0pt}{9pt}{3pt}
+\titleformat{\subsection}[runin]{\color{efenavy}\bfseries}{}{0pt}{}[\;---\;]
+\titlespacing{\subsection}{0pt}{5pt}{0.5em}
+
+\setlength{\parskip}{2pt}
+\setlength{\parindent}{0pt}
+\setlength{\emergencystretch}{3em}
+
+\pagestyle{fancy}\fancyhf{}
+\renewcommand{\headrulewidth}{0.3pt}
+\lhead{\small\color{efegray}Scella --- \mbox{É1} · ouvrir la porte : architecture}
+\cfoot{\small\color{efegray}\thepage}
+
+\newcommand{\code}[1]{\texttt{\small #1}}
+\newcommand{\best}[1]{{\color{efesolve}\textbf{#1}}}
+\newcommand{\pire}[1]{{\color{efered}\textbf{#1}}}
+\newcommand{\moyen}[1]{{\color{efeamber}\textbf{#1}}}
+\newcommand{\mm}[1]{\textbf{#1}}
+\newcommand{\sz}[1]{{\small #1}}
+\newcommand{\mesure}[1]{{\color{efeteal}\textbf{Mesuré.} }#1\par}
+\newcommand{\refute}[1]{{\color{efered}\textbf{Réfuté.} }#1\par}
+\newcommand{\fl}{$\rightarrow$}
+
+\newtcolorbox{these}{colback=boxgray,colframe=boxedge,boxrule=0.5pt,arc=2.5pt,
+  left=8pt,right=8pt,top=6pt,bottom=6pt}
+\newtcolorbox{cadre}{colback=boxamber,colframe=efeamber!55,boxrule=0.6pt,arc=2.5pt,
+  left=8pt,right=8pt,top=6pt,bottom=6pt}
+
+\begin{document}
+
+\begin{center}
+{\Huge\bfseries\color{efenavy} \mbox{É1} · Ouvrir la porte}\\[3pt]
+{\large\color{efegray}\itshape architecture du premier geste d'un inconnu --- 2 septembre 2026}
+\end{center}
+
+\vspace{2pt}
+
+\begin{these}
+\textbf{La première chose que ce document doit faire est de se corriger.} La feuille de route du MVP,
+écrite hier, donnait \mbox{É1} pour « la porte n'a jamais été ouverte ». \textbf{C'est faux.} Elle a
+été ouverte le 23 août 2026 (commit \code{711a6b8}), le critère de \mm{M4} a été atteint de bout en
+bout, et deux défauts que seule une exécution réelle pouvait trouver ont été corrigés ce jour-là.
+
+L'erreur est instructive et vaut d'être nommée : j'ai lu l'\emph{auto-description d'un script} ---
+« \code{m4-check.sh} prouve la charge utile et ne prétend rien de l'emballage » --- comme un
+\emph{état du monde}. La phrase est vraie du script, et le script est honnête ; la preuve de
+l'emballage vivait ailleurs, dans un message de commit.
+
+\mbox{É1} n'est donc pas « faire marcher un \code{compose.yaml} ». C'est trois choses que la mesure
+rend visibles, et la troisième est la seule qui soit vraiment de l'architecture.
+\end{these}
+
+\section{1 \;\textbar\; Ce que \mbox{É1} est réellement --- trois faits mesurés}
+
+\subsection{(a) La porte qui a été ouverte n'est plus la porte qui existe}
+\mesure{\code{scella-coin:local} existe, 53,4~Mo, construite il y a \textbf{6 jours}. Depuis le
+commit de première exécution : \textbf{41 commits}, \code{Cargo.lock} déplacé \textbf{4 fois}, deux
+membres de workspace ajoutés (\code{scella-conservation}, \code{scella-mz}), et \textbf{5 commits sur
+\code{efe-swarm-gateway}} elle-même.}
+
+L'image est l'instantané d'un arbre qui n'existe plus. Et le \code{-{}-locked} de l'étage de
+compilation rend la question binaire : ou bien le verrou résout, ou bien le build s'arrête. Une
+image périmée qui démarre encore ne prouve rien de l'arbre d'aujourd'hui --- elle prouve seulement
+qu'elle a été construite un jour.
+
+\subsection{(b) Deux portes n'ont jamais été ouvertes du tout}
+\mesure{\code{scella-jonction:local} \fl{} \pire{0 image}. \code{scella-production:local} \fl{}
+\pire{0 image}.}
+
+Ces deux-là comptent plus que leur silence ne le laisse croire. Le service \code{jonction}, sous
+profil, construit une \emph{seconde} image avec la feature \code{reg-evidence} et sert sur 8081 :
+\textbf{c'est C1 dans un conteneur}. Le service \code{production} construit une troisième image avec
+\code{postgres,oidc,pii,frontier-llm} et une base PostgreSQL 16 à côté : c'est la pile de \mm{P1}.
+
+La feuille de route d'hier disait « le compose construit les features par défaut, donc
+\code{docker compose up} montre C3 et cache C1 ». C'est exact de la commande nue --- et cela ratait
+que le profil \textbf{existe déjà, câblé}, avec son propre fichier de profil (\code{jonction.env})
+qui désigne \code{/preuve/reg}. \mbox{É2} n'est donc pas « le construire » mais « l'exécuter », ce
+qui est un travail d'un autre ordre de grandeur.
+
+\subsection{(c) Le verdict de l'exécution n'est pas digne de confiance}
+C'est le cœur de ce document. Le commit de première exécution a signalé, et \textbf{délibérément non
+corrigé}, ceci :
+
+\begin{cadre}
+\textbf{Le premier \code{docker compose up} a échoué \emph{et} rendu \code{exit 0}.}
+\code{-{}-exit-code-from} ne propage rien quand l'échec survient à la mise en réseau, \emph{avant}
+qu'un conteneur ne démarre. Un script d'installation qui se fie à ce code croirait avoir réussi.
+\end{cadre}
+
+C'est exactement la maladie soignée hier dans \code{r3-check.sh} : \textbf{un instrument qui
+transforme « je n'ai pas pu mesurer » en « cela a marché »}. Là-bas, le correctif de fond n'était
+aucun des deux symptômes, c'était de faire du \emph{non-mesuré} un troisième état. Ici, la
+conséquence est plus grave encore, parce que le geste est long : un verdict faux au bout de
+quarante minutes de compilation coûte deux fois --- le temps, et la confiance qu'on accorde ensuite
+au chiffre.
+
+\section{2 \;\textbar\; L'anatomie, couche par couche}
+
+\subsection{Couche 0 · les préconditions}
+Elles ont une propriété commune qui décide de leur place : \textbf{elles échouent tard et cher si on
+ne les vérifie pas tôt}. Chacune se contrôle en secondes ; chacune, non contrôlée, se manifeste au
+milieu du plus long travail du plan.
+
+\begin{center}\small
+\renewcommand{\arraystretch}{1.25}
+\begin{tabular}{@{}>{\raggedright\arraybackslash}p{4.0cm} >{\raggedright\arraybackslash}p{7.4cm} >{\raggedright\arraybackslash}p{4.2cm}@{}}
+\toprule
+\textbf{Précondition} & \textbf{Pourquoi elle décide} & \textbf{État le 2 sept.} \\
+\midrule
+un démon Docker & sans lui, rien ne commence & \best{Docker 29.4.0, Compose v5.1.1} \\
+le \emph{chemin de pull} du démon & les deux images de base ne sont pas locales & \pire{ne délivre pas} \\
+de la place disque & le démon porte déjà 82~Go d'images, 22~Go de volumes, 60~Go de cache & \moyen{$\approx$164~Go d'état} \\
+un port hôte libre & défaut du 23 août ; \code{SCELLA\_PORT} le règle & \best{paramétrable} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\refute{La deuxième ligne demande une distinction que personne ne fait spontanément.
+\textbf{Le réseau de l'hôte est bon} --- \code{registry-1.docker.io} répond \code{HTTP 401} en
+0,65~s (c'est la réponse \emph{attendue} : il faut un jeton), \code{crates.io} répond en 1,0~s. Et
+pourtant \code{docker pull alpine}, cinq mégaoctets, \textbf{n'a pas abouti en 60 secondes}. Ce
+n'est donc pas la connectivité : c'est le chemin de pull du démon. Un \code{curl} rassurant ne dit
+rien de ce que \code{docker build} pourra faire, et \code{rust:1.88-bookworm} pèse environ 1,5~Go.}
+
+\subsection{Couche 1 · le contexte de build}
+\code{COPY . .} envoie l'arbre au démon, moins ce que \code{.dockerignore} retire. Le 23 août, ce
+contexte pesait \textbf{7~Go} malgré l'exclusion de \code{target/} : \code{models/} (3,9~Go),
+\code{.venv-efe/} (la règle disait \code{.venv/}, pas \code{.venv*}), \code{node\_modules/}, et cinq
+dossiers d'applications. Sept gigaoctets se traversent \emph{avant la première ligne de
+compilation}.
+
+\mesure{Aujourd'hui l'arbre pèse 58~Go, dont 51~Go pour le seul \code{target/}. En retranchant les
+dix exclusions, le contexte réel tombe à \best{$\approx$250~Mo}. Le correctif tient.}
+
+Ce fichier porte une contre-règle qu'il faut lire avant d'y toucher, et qui n'est devinable
+d'aucune manière : \textbf{ne jamais exclure \code{tools/}, \code{bench/}, \code{smoke/},
+\code{slos/}}. Ce sont des \emph{membres du workspace} hors de \code{crates/}, et \code{cargo
+-{}-locked} a besoin de leur manifeste pour \emph{résoudre}, même sans les compiler. Autrement dit :
+\textbf{le contexte doit contenir des choses que le build ne compile jamais.} C'est le genre de
+contrainte qui ne se découvre qu'en construisant.
+
+\subsection{Couche 2 · la compilation}
+\code{cargo build -{}-release -{}-locked} sur \emph{trois} paquets seulement --- la passerelle, le
+pilote, le vérifieur --- et non les 68 membres. \code{-{}-locked} est la porte de reproductibilité :
+il refuse de résoudre autre chose que ce qui a été testé.
+
+Un point de coût qu'il faut nommer parce qu'il décide de l'ordre du travail : \code{ARG
+CARGO\_FEATURES} est consommé \emph{dans la couche} \code{RUN cargo build}. Changer sa valeur
+invalide cette couche. Les trois profils --- coin (vide), jonction (\code{reg-evidence}), production
+(\code{postgres,oidc,pii,frontier-llm}) --- paient donc \textbf{trois compilations complètes}. Les
+étages de base et le contexte sont mutualisés ; la compilation ne l'est pas.
+
+\subsection{Couche 3 · l'image, et la cascade du « sans shell »}
+\code{gcr.io/distroless/cc-debian12:nonroot}, \code{USER 65532}. Ni shell, ni gestionnaire de
+paquets, ni utilitaire. La justification est juste --- une image de démonstration est ce qu'un
+inconnu exécute \emph{en premier}, le pire moment pour offrir une surface d'attaque --- et elle
+entraîne quatre conséquences, chacune visible dans les fichiers :
+
+\begin{itemize}[leftmargin=1.1em,itemsep=1.5pt,topsep=2pt]
+\item \textbf{pas de \code{chown} au démarrage} \fl{} le \code{mkdir -p /preuve \&\& chown} est fait
+      dans l'étage \emph{builder}, et le volume nommé hérite de ce propriétaire à sa \emph{première}
+      initialisation ;
+\item \textbf{pas de sonde de santé} \fl{} \code{depends\_on} sans \code{condition:
+      service\_healthy}, et c'est \emph{le pilote} qui attend la passerelle, jusqu'à 60~s ;
+\item \textbf{pas de script} \fl{} le pilote est un binaire Rust, ce qui est la seule façon de
+      conduire une démonstration dans une image sans interpréteur ;
+\item \textbf{pas de diagnostic dedans} \fl{} tout ce qu'on saura d'un échec devra sortir par le
+      journal ou par les fichiers du volume.
+\end{itemize}
+
+\subsection{Couche 4 · l'orchestration}
+Deux services par défaut, deux sous profil. Le volume nommé \code{preuve} est le seul canal entre la
+passerelle et le pilote. Le port est publié \textbf{sur la boucle locale uniquement} ---
+\code{127.0.0.1:\$\{SCELLA\_PORT:-8080\}:8080} --- parce que \code{8080:8080} exposerait la
+passerelle sur toutes les interfaces de l'hôte, ce qui n'est pas ce qu'on offre à quelqu'un qui
+découvre le produit. Et la clé est passée si elle existe, jamais posée par défaut : un secret écrit
+dans un fichier versionné est un secret public. Sans elle, \mm{M0} annonce « provenance
+\textsc{dégradée} » --- il \emph{dégrade en le disant}, il ne refuse pas.
+
+\subsection{Couche 5 · la démonstration}
+Le pilote conduit cinq étapes et, la cinquième, \emph{dit ce qui n'a pas été prouvé}. La quatrième
+est celle qui porte la thèse du produit : la troncature d'un bundle est démasquée \textbf{sans
+aucune clé} --- l'ancre annonce trois nœuds, le bundle intact en contient trois, le tronqué deux, et
+la contradiction se lit par un comptage. C'est \code{verify-mini}, dont l'arbre de dépendances est
+\emph{vide}, qui la lit.
+
+\section{3 \;\textbar\; Couche 6 · le verdict, et pourquoi il faut le construire}
+
+Les cinq couches précédentes existent et ont tourné. La sixième --- \emph{comment sait-on que la
+porte s'est ouverte ?} --- n'existe pas, et son absence rend les cinq autres non mesurables.
+
+\subsection{Ce qu'il ne faut pas croire}
+Le code de retour de \code{docker compose up}. Il est \textbf{juste quand un conteneur a démarré et
+qu'il échoue}, et \textbf{muet quand l'échec précède tout conteneur} : création du réseau, du volume,
+absence d'image, port déjà pris. Or ce sont précisément les défaillances d'une \emph{première}
+exécution sur une machine inconnue --- celles que \mbox{É1} existe pour rencontrer.
+
+\subsection{Ce qu'il faut vérifier à la place}
+Un critère \textbf{positif}, porté par des artefacts qu'on peut recompter à la main, et non par un
+entier rendu par l'orchestrateur :
+
+\begin{enumerate}[leftmargin=1.4em,itemsep=1.5pt,topsep=2pt]
+\item le bundle existe dans le volume, et l'ancre existe \textbf{hors} du bundle ;
+\item la copie tronquée existe et diffère de l'intacte ;
+\item \code{verify-mini} re-prouve l'intacte et \textbf{contredit} la tronquée, sans clé ;
+\item les deux conteneurs ont rendu 0, \emph{et ce fait a été observé} --- non déduit.
+\end{enumerate}
+
+\subsection{Et un troisième état}
+Si aucun conteneur n'a démarré, le contrôle ne doit dire ni « échec » ni « succès » mais
+\textbf{« non mesuré »}, avec un code de sortie distinct. C'est la leçon de \code{r3-check.sh},
+payée hier : il écrivait « la mesure est caduque » puis comptait le cas comme une régression, rendant
+un verdict sur ce qu'il venait de déclarer inconnaissable. La règle générale, et elle vaut d'être
+écrite une fois pour toutes : \textbf{un instrument en panne doit dire qu'il est en panne, et ne
+jamais emprunter le vocabulaire du sujet qu'il mesure.}
+
+\section{4 \;\textbar\; Le piège du volume persistant}
+
+\mesure{Le volume \code{scella\_preuve} \textbf{existe déjà} sur cette machine.}
+
+Deux conséquences, toutes deux silencieuses.
+
+D'abord, le \code{chown} de l'étage builder \textbf{ne rejouera pas} : un volume nommé n'hérite du
+propriétaire du dossier de l'image qu'à sa \emph{première} initialisation. Si un jour l'\textsc{uid}
+de l'image changeait, le pilote perdrait le droit d'écrire dans \code{/preuve} sans qu'aucune ligne
+du \code{Dockerfile} n'ait l'air fausse.
+
+Ensuite, et c'est plus grave pour la mesure : \textbf{le volume porte les artefacts des exécutions
+précédentes}. Le bundle, l'ancre et la copie tronquée du 27 août y sont encore. Un contrôle qui
+vérifierait leur \emph{présence} lirait un succès sans qu'une seule ligne neuve ait été écrite ---
+il mesurerait le passé. \mbox{É1} doit donc partir d'un volume vide (\code{docker compose down -v}),
+ou horodater ce qu'il exige. Sans cela, la démonstration n'est pas idempotente, et une démonstration
+non idempotente finit par prouver l'avant-dernière.
+
+\section{5 \;\textbar\; L'ordre du travail, et ce qu'il coûte}
+
+\begin{center}\small
+\renewcommand{\arraystretch}{1.3}
+\begin{tabular}{@{}>{\raggedright\arraybackslash}p{0.8cm} >{\raggedright\arraybackslash}p{4.6cm} >{\raggedright\arraybackslash}p{8.0cm} >{\raggedright\arraybackslash}p{2.0cm}@{}}
+\toprule
+& \textbf{Geste} & \textbf{Pourquoi à cette place} & \textbf{Coût} \\
+\midrule
+1 & les préconditions & elles échouent en secondes ou en quarante minutes, selon qu'on les regarde ou non & \sz{minutes} \\
+2 & \code{down -v}, puis le coin & repartir d'un volume vide, sinon on mesure l'avant-dernière exécution & \sz{1 build} \\
+3 & le contrôle de \mbox{É1} & l'écrire \emph{avant} jonction, pour que les deux suivants soient mesurés et non regardés & \sz{$\frac{1}{2}$ j} \\
+4 & le profil \code{jonction} & \textbf{C1 en conteneur} --- la moitié du MVP qui n'a jamais démarré & \sz{1 build} \\
+5 & le profil \code{production} & la pile de \mm{P1}, PostgreSQL compris & \sz{1 build} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Le contrôle vient en 3 et non en dernier, et c'est délibéré : écrit après, il ne servirait qu'à
+confirmer ce qu'on a déjà cru voir. Écrit avant les deux portes jamais ouvertes, il en fait des
+\emph{mesures}.
+
+\section{6 \;\textbar\; Ce que \mbox{É1} ne prouvera pas}
+
+\begin{itemize}[leftmargin=1.1em,itemsep=1.5pt,topsep=2pt]
+\item \textbf{La substance.} La démonstration tourne sans clé, donc sur la clé de test publique :
+      elle montre le \emph{mécanisme}, jamais l'opposabilité. Avec une vraie clé, la même commande
+      produit un reçu qui engage.
+\item \textbf{L'absence d'egress au \emph{build}.} La promesse « aucun octet qui sort » porte sur
+      l'\emph{exécution}. Le build télécharge les images de base et les caisses. Un prospect sur une
+      machine cloisonnée bute là, et pas sur le produit.
+\item \textbf{« Machine vierge ».} Ce que \mbox{É1} mesurera ici est le comportement sur une machine
+      qui porte 164~Go d'état Docker, 24 conteneurs et un cache de build de 60~Go. C'est une
+      information utile ; ce n'est pas celle que la promesse annonce.
+\end{itemize}
+
+\vspace{4pt}
+{\color{efegray}\hrule height 0.4pt}
+\vspace{2.5pt}
+{\footnotesize\color{efegray}Mesures du 2 septembre 2026 sur le dépôt à \code{c17f87b}.
+Sources lues : \code{docker/Dockerfile.coin}, \code{compose.yaml}, \code{.dockerignore},
+\code{scripts/m4-check.sh}, commit \code{711a6b8}.}
+
+\end{document}
