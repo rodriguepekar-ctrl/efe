@@ -42,19 +42,16 @@ const MOT: &str = concat!("kov", "ant");
 /// grandir en silence. Chaque entrée est validée par [`refus_dexemption`], qui refuse un chemin
 /// périmé et une justification trop courte pour dire quoi que ce soit.
 const EXEMPTIONS: &[(&str, &str)] = &[
-    (
-        "crates/efe-meta-swarm",
-        "Le méta-essaim n'appartient à aucun des deux produits : la feuille de route du 24 août le \
-         place explicitement hors de C1 et C3, et la mesure le confirme (ni la passerelle ni la \
-         console ne le contiennent). Ses occurrences sont des IDENTIFIANTS de scénario de bench et \
-         d'exemple, pas des renvois de documentation.",
-    ),
-    (
-        "crates/efe-meta-swarm-server",
-        "Même périmètre exclu que ci-dessus. Ses occurrences sont des noms de fonctions de harnais \
-         de test, employés par huit fichiers : les renommer est un refactor mécanique large, sans \
-         aucun bénéfice produit, dans un crate que ni C1 ni C3 ne compilent.",
-    ),
+    // ── Deux exemptions RETIRÉES sur la branche c1-c3 ────────────────────────────────────────
+    //
+    // `crates/efe-meta-swarm` et `crates/efe-meta-swarm-server` figuraient ici avec, pour raison,
+    // qu'ils n'appartiennent « à aucun des deux produits ». Sur cette branche, cette raison a cessé
+    // d'être une exemption pour devenir un fait : les deux répertoires n'existent plus.
+    //
+    // Les retirer n'est pas contourner ce garde, c'est lui OBÉIR. `refus_dexemption` refuse
+    // précisément une exemption dont la cible a disparu — « exemption périmée » — et il avait
+    // raison de tomber. Une liste d'exemptions qui survit à ses cibles finit par exempter des
+    // chemins que plus personne ne peut aller vérifier.
     (
         "crates/efe-meta-verify",
         "Même périmètre exclu. Son occurrence est l'identifiant d'une fixture qui alimente le HMAC \

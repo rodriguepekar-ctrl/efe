@@ -1,9 +1,0 @@
-{
-  "crates/efe-core/src/consensus/multi_criteria.rs": 105,
-  "crates/efe-core/src/dissolution/engine.rs": 1,
-  "crates/efe-core/src/fusion/mvp_cpu.rs": 6,
-  "crates/efe-core/src/genesis/engine.rs": 19,
-  "crates/efe-server/src/interceptors/mod.rs": 0,
-  "crates/efe-mode1/src/mode1.rs": 34,
-  "crates/efe-server/src/services/swarm.rs": 2
-}

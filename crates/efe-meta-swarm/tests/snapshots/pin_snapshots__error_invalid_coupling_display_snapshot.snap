@@ -1,5 +1,0 @@
----
-source: crates/efe-meta-swarm/tests/pin_snapshots.rs
-expression: s
----
-invalid coupling : alpha + gamma must be < 1 (got alpha=0.7, gamma=0.5)

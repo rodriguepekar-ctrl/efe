@@ -1,6 +1,0 @@
----
-source: crates/efe-meta-swarm/tests/pin_snapshots.rs
-expression: s
----
-kind: attention_softmax
-temperature: 100.0
