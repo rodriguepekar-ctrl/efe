@@ -3487,6 +3487,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "provenance-verify"
+version = "0.0.1"
+dependencies = [
+ "provenance-dag",
+]
+
+[[package]]
 name = "pulldown-cmark"
 version = "0.12.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"

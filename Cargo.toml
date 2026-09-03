@@ -1,7 +1,16 @@
 [workspace]
 resolver = "2"
 members = [
+    # ── Le registre d'appartenance ────────────────────────────────────────────────────
+    # Ce bloc n'est PAS une liste : c'est le SEUL endroit du dépôt qui dise à quelle
+    # tranche appartient un crate. Sa version nue a coûté cher — la disparition de
+    # provenance-verify (tranche S4) est passée inaperçue exactement parce que rien ne
+    # disait qu'il en était une. Une entrée sans sa raison est une entrée que personne
+    # ne peut relire.
+    # ──────────────────────────────────────────────────────────────────────────────────
+    # Provenance P1 / S2 — le service : isolation tenant, RBAC, la SEULE écriture scellée.
     "crates/audit-api",
+    # Provenance P1 / S3 — la console opposable (C1 « Le Registre »).
     "crates/audit-console",
     "crates/efe-audit-core",
     "crates/efe-blackboard",
@@ -12,23 +21,43 @@ members = [
     "crates/efe-nano-app-coordinator",
     "crates/efe-nano-sdk",
     "crates/efe-pii",
+    # C3 — le bus de supervision de la passerelle.
     "crates/efe-swarm-dashboard",
+    # C3 « Le Seuil » — la passerelle souveraine à reçu. Le binaire du produit.
     "crates/efe-swarm-gateway",
     "crates/efe-swarm-memory",
     "crates/efe-swarm-provenance",
     "crates/efe-swarm-sdk",
     "crates/efe-swarm-topology",
+    # Provenance P1 / S4a — le bundle auto-contenu. include_str! SEPT fichiers de
+    #     verify-mini/src/ : les deux crates DOIVENT rester frères sous crates/.
     "crates/forensic-export",
+    # Fil P / P.1 — LE PONT : dérive un DAG (pile B) depuis un run servi (pile A).
     "crates/provenance-bridge",
+    # Provenance P1 / S1 — les 4 adaptateurs purs (LlmCall/MessageEvent/ToolCall/HumanReview).
     "crates/provenance-capture",
+    # Provenance P1 / S0 — le DAG scellé : nœuds, encodage canonique binaire, re-preuve.
     "crates/provenance-dag",
+    # Provenance P1 / S4 — le vérifieur forensic AUTONOME (binaire-fossé). Dépend
+    #     UNIQUEMENT de provenance-dag. SEUL binaire du périmètre qui sache lire un JOURNAL
+    #     D'ANCRES (--anchor <journal> --run <uuid>) et rendre les TROIS verdicts de Fil P/P.4.
+    "crates/provenance-verify",
+    # Provenance P1 / S6 — la dérivation d'évidence réglementaire (AI Act, CSDDD, GDPR).
     "crates/reg-evidence",
+    # M1 — la garde de souveraineté : un seul analyseur d'endpoint.
     "crates/scella-authority",
+    # P2 — sauvegarde, restauration, rotation de clé (conservation opérable).
     "crates/scella-conservation",
+    # MZ — la mesure du Cadrage (hors plan). Piloté par scripts/mz-check.sh.
     "crates/scella-mz",
+    # M4 — le pilote de la démonstration en une commande (docker compose up).
     "crates/scella-preuve",
+    # M9 — l'ancre tierce : jeton RFC 3161 déposé verbatim.
     "crates/scella-rfc3161",
+    # Le vérifieur méta à zéro dépendance + son cross-check de fidélité.
     "crates/verify-meta-mini",
+    # Provenance P1 / S4 — le vérifieur à arbre de dépendances LITTÉRALEMENT VIDE.
+    #     ⚠ Il ne connaît PAS --anchor : il ne remplace pas provenance-verify, il le complète.
     "crates/verify-mini",
 ]
 
