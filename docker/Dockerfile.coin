@@ -45,6 +45,7 @@ RUN cargo build --release --locked \
       -p efe-swarm-gateway \
       -p scella-preuve \
       -p verify-mini \
+      -p provenance-verify \
       ${CARGO_FEATURES:+--features "$CARGO_FEATURES"}
 
 # Le dossier de travail partagé, créé ICI avec le bon propriétaire : distroless
@@ -58,6 +59,13 @@ FROM gcr.io/distroless/cc-debian12:nonroot AS runtime
 COPY --from=builder /src/target/release/efe-swarm-gateway /usr/local/bin/efe-swarm-gateway
 COPY --from=builder /src/target/release/scella-preuve     /usr/local/bin/scella-preuve
 COPY --from=builder /src/target/release/verify-mini       /usr/local/bin/verify-mini
+# **Fil P / P.4** — le SECOND vérifieur. Il manquait, et son absence était silencieuse : l'image
+# démarrait, la démonstration passait, et pourtant elle ne pouvait pas faire ce que P.4 DÉFINIT —
+# « `verify_against_root` appelé avec une ancre reçue par un canal DISTINCT ». `verify-mini` ne
+# connaît pas `--anchor` (`grep -c anchor` sur son main.rs et son lib.rs → 0/0), donc AUCUN binaire
+# de l'image ne savait lire un journal d'ancres. Le OnePager vend pourtant « deux vérifieurs
+# autonomes » : sans celui-ci, l'image n'en portait qu'un.
+COPY --from=builder /src/target/release/provenance-verify /usr/local/bin/provenance-verify
 COPY --from=builder --chown=65532:65532 /preuve /preuve
 
 # Le profil est livré dans l'image pour être LISIBLE par qui inspecte l'image.
