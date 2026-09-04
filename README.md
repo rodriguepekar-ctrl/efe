@@ -1,27 +1,32 @@
-# EFE — Ephemeral Fluid Swarm
+# Scella — Le Seuil & Le Registre
 
-> Inférence multi-agent par communication en espace latent partagé.
-
-[![CI](https://github.com/efe-ai/efe/actions/workflows/ci.yml/badge.svg)](https://github.com/efe-ai/efe/actions)
-
-EFE (Essaim Fluide Éphémère) remplace la chaîne d'agents LLM textuelle par
-une population de **nano-agents éphémères** qui communiquent via un
-**espace latent partagé** et convergent vers un consensus tensoriel en
-millisecondes.
-
-## Scella — le reçu souverain, en **une** commande
-
-Sur une machine où rien n'est installé, Docker excepté :
+> Un reçu souverain, en **une** commande, sur votre machine.
 
 ```bash
 docker compose up
 ```
 
-Vous verrez d'abord la passerelle **annoncer ce qu'elle sert réellement** — son
-rapport de démarrage nomme chaque capacité et ce que son absence coûte. Puis une
-démonstration : un run, son reçu, son export, et une **troncature démasquée par
-un simple comptage — sans aucune clé, sans cryptographie, sans accorder sa
-confiance à qui que ce soit**.
+Sur une machine où rien n'est installé, Docker excepté. Aucun compte, aucune clé
+d'API, aucune inscription.
+
+**Si rien ne démarre, c'est presque toujours le port.** `8080` est occupé sur
+beaucoup de machines ; il se déplace sans éditer un fichier :
+
+```bash
+SCELLA_PORT=18080 docker compose up
+```
+
+La passerelle n'est publiée que sur la boucle locale `127.0.0.1`, jamais sur
+toutes les interfaces de l'hôte.
+
+## Ce que vous verrez
+
+D'abord la passerelle **annoncer ce qu'elle sert réellement** — son rapport de
+démarrage nomme chaque capacité et ce que son absence coûte, y compris
+« provenance **DÉGRADÉE** », parce qu'aucune clé n'a été fournie. Puis une
+démonstration en cinq étapes : un run, son reçu, son export, et une **troncature
+démasquée par un simple comptage — sans aucune clé, sans cryptographie, sans
+accorder sa confiance à qui que ce soit**.
 
 Cette dernière propriété est la seule qui vaille d'être regardée. Le sceau d'une
 chaîne a une faiblesse que rien, de l'intérieur, ne trahit : *le préfixe d'une
@@ -38,104 +43,87 @@ vous-même avec `grep -c` et `awk` sur les fichiers laissés dans le volume.
 > Et ce qu'un reçu atteste, même avec une vraie clé, reste l'**intégrité** de ce
 > qui a été enregistré — jamais la **correction** de la décision.
 
-**Si rien ne démarre, c'est presque toujours le port.** `8080` est occupé sur
-beaucoup de machines. Il se déplace sans éditer un fichier :
-
-```bash
-SCELLA_PORT=18080 docker compose up
-```
-
-La passerelle n'est publiée que sur la boucle locale `127.0.0.1`, jamais sur
-toutes les interfaces de l'hôte.
-
 **La page à lire avant de lancer** —
 [`docs/reports/Scella_Le_Seuil_En_Une_Commande_2026-09-04.tex`](docs/reports/Scella_Le_Seuil_En_Une_Commande_2026-09-04.tex)
 tient sur une feuille : la commande, ce qui va défiler, les commandes exactes
-pour tout recompter soi-même sur les fichiers du volume, et les quatre choses
-que la démonstration ne prouve pas. Chacun de ses gestes a été joué verbatim.
+pour tout recompter soi-même sur les fichiers du volume, et les quatre choses que
+la démonstration ne prouve pas. Chacun de ses gestes a été joué verbatim.
 
-Le détail se lit dans [`compose.yaml`](compose.yaml),
-[`profiles/docker.env`](profiles/docker.env) et
-[`crates/scella-preuve`](crates/scella-preuve).
-
-**Les deux contrôles.** Sans démon Docker, la charge utile — passerelle, reçu,
-ancre, détection de troncature — se vérifie seule : `bash scripts/m4-check.sh`.
-Avec Docker, l'emballage — l'image, le volume, le réseau — se mesure par
-`bash scripts/e1-check.sh`, qui refait lui-même tous les comptages plutôt que de
-croire le pilote, et qui distingue « je n'ai pas pu mesurer » de « cela a
-échoué ».
-
----
-
-## Quickstart (5 minutes)
+## Le second produit, dans la même commande
 
 ```bash
-git clone git@github.com:efe-ai/efe.git
-cd efe
-just bootstrap     # installe toolchains, deps, hooks (5-10 min)
-just test-smoke    # vérification rapide
+docker compose --profile jonction up
 ```
 
-Pour builder tout le workspace :
+**Le Registre** dérive, du **même** run, un dossier d'évidence réglementaire :
+une vue de cadre daté, son mapping versionné, et son mode d'emploi de
+re-dérivation. Le dossier porte le nom du run — c'est le lien, pas un rangement.
+
+Il ne prononce **pas** la conformité : il mappe de l'évidence sur des exigences
+et publie le compte de ce qui est couvert, partiel, ou hors périmètre. *Outillé
+n'est pas conforme.*
+
+## Les contrôles
+
+Rien de ce qui précède n'est à croire sur parole. Quinze contrôles rejouent
+chacun leur module, et refont eux-mêmes les comptages plutôt que de croire le
+pilote :
+
+| commande | ce qu'elle mesure | démon Docker |
+|---|---|---|
+| `bash scripts/m4-check.sh` | la charge utile — passerelle, reçu, ancre, troncature | non |
+| `bash scripts/e1-check.sh` | l'emballage — image, volume, réseau ; `jonction` en argument y ajoute Le Registre | oui |
+| `bash scripts/p1-check.sh` | le profil de production démarré pour de vrai, tué, redémarré, reçu re-prouvé | oui (PostgreSQL) |
+| `bash scripts/portes-check.sh` | `clippy -D warnings` sur **chaque** profil que `compose.yaml` construit | non |
+| `bash scripts/r3-check.sh` | la suite complète, rejouée (`R3_TOURS=3` pour le critère) | non |
+
+Ils distinguent trois états, et le troisième compte autant que les deux autres :
+`0` mesuré et vert · `1` mesuré et rouge · `3` **non mesuré** — l'instrument n'a
+pas pu regarder. Un contrôle en panne doit dire qu'il est en panne, et ne jamais
+emprunter le vocabulaire du sujet qu'il mesure.
+
+## Structure
+
+```
+crates/                    30 membres de workspace
+  efe-swarm-gateway/       la passerelle — Le Seuil
+  reg-evidence/            l'évidence réglementaire — Le Registre
+  scella-preuve/           le pilote de la démonstration (il conduit, il ne prouve pas)
+  verify-mini/             le vérifieur tiers — arbre de dépendances VIDE
+  provenance-verify/       le second vérifieur, le seul qui sache lire une ancre
+  scella-conservation/     archivage, restauration, générations de clé
+  audit-console/           la console opposable
+compose.yaml               les trois profils : coin · jonction · production
+profiles/                  les profils d'environnement, sous test
+docker/                    l'image distroless (quatre binaires, aucun shell)
+scripts/                   les quinze contrôles
+docs/reports/              la page qu'on tend, et les feuilles de route
+LISEZ-MOI-C1-C3.md         l'inventaire mesuré du périmètre
+```
+
+## Construire et éprouver
 
 ```bash
-just build            # Rust + Python (CUDA optionnel)
-just build-cuda       # inclut les kernels CUDA (requiert GPU)
+cargo test  --locked --workspace              # 3 908 tests
+cargo clippy --locked --workspace --all-targets -- -D warnings
+bash scripts/portes-check.sh                  # la même porte, sur chaque profil servi
 ```
 
-Pour lancer les services de dev (OTel, Prometheus, Jaeger) :
+Rust **1.88**, épinglé par `rust-toolchain.toml` et `Cargo.toml`.
 
-```bash
-just docker-up
-```
+## Le projet de recherche qui vivait ici
 
-## Structure du repo
+Ce dépôt a d'abord porté **EFE — *Ephemeral Fluid Swarm***, un travail sur
+l'inférence multi-agent par communication en espace latent partagé. Ses vingt et
+un documents d'architecture occupaient la racine, et son README était cette page.
 
-```
-crates/          Rust workspace
-  efe-core/      types, erreurs, orchestration (M1, M3-M7, M9, M11)
-  efe-kernels/   bindings CUDA + kernels (Sprint 1+)
-  efe-ffi/       bindings PyO3 pour Python
-  efe-server/    serveur gRPC (M10)
-python/efe/      SDK Python + templates ML (M8)
-protos/          Définitions gRPC
-configs/         Configurations par environnement
-docker/          Images Docker dev + prod
-docs/            Documentation mkdocs (https://docs.efe.ai)
-tests/           Tests d'intégration
-scripts/         Scripts utilitaires (hooks, release)
-```
+Ils ne sont **pas supprimés** : ils sont archivés, intacts et vérifiés octet par
+octet, dans `Downloads/vrai/EFE-docs-racine-2026-09-04/`, avec une note qui dit
+d'où ils viennent et ce que leur propre README affirmait de faux. Le périmètre
+servi ne les référençait nulle part — mesuré avant de les déplacer.
 
-## Documentation
+## Licence
 
-- [Quickstart](docs/docs/quickstart.md)
-- [Architecture](docs/docs/concepts/architecture.md)
-- [Glossaire](docs/docs/concepts/glossary.md)
-- [Contributing](CONTRIBUTING.md)
-- [ADRs](docs/docs/adr/index.md)
-
-## Commandes principales (`just`)
-
-| Recipe | Rôle |
-|--------|------|
-| `just bootstrap` | Installe tout (rustup, uv, pre-commit, etc.) |
-| `just build` | Build Rust + Python |
-| `just build-cuda` | Build kernels CUDA (GPU requis) |
-| `just test` | Exécute fast + unit tests |
-| `just test-smoke` | Vérification rapide (<10s) |
-| `just bench` | Benchmarks |
-| `just fmt` | Formate tout |
-| `just lint` | Linters (fail si warning) |
-| `just clean` | Purge les artefacts |
-| `just docker-up` | Démarre dépendances locales |
-| `just docs-serve` | Serve docs localement sur :8000 |
-
-## Versions supportées
-
-- Rust 1.85 (pinned via `rust-toolchain.toml`)
-- Python 3.12 (géré par `uv`)
-- CUDA 12.4 (optionnel pour dev CPU-only)
-
-## License
-
-Proprietary — see [LICENSE](LICENSE).
+Propriétaire — voir [LICENSE](LICENSE). ⚠ Un crate du périmètre,
+`efe-nano-sdk`, déclare `MIT`, une licence que ce fichier ne mentionne pas :
+la contradiction est relevée et non réglée (étape **D3** de la feuille de route).

@@ -60,6 +60,25 @@ cargo check --locked --workspace --all-targets   exit 0   (1 min 26)
 Contrôles SANS démon : **10 sur 13 sortent 0** — `profile`, `m4`, `m5`, `m6`, `m7`,
 `m8`, `m9`, `p2`, `p3`, `orphelins`.
 
+## D1 — la porte d'entrée
+
+Le `README.md` annonçait **un autre produit** : ligne 1 « EFE — Ephemeral Fluid
+Swarm », ligne 3 « inférence multi-agent en espace latent partagé », et le mot
+*Scella* n'apparaissait qu'à la **ligne 12**. Depuis le 4 septembre 2026, la ligne 1
+nomme le produit et la commande est **ligne 6** — au-dessus du pli.
+
+Et sa seconde moitié décrivait un dépôt qui n'existe plus. Mesuré avant réécriture :
+
+| ce que le README affirmait | ce qui existe |
+|---|---|
+| `crates/efe-core`, `efe-kernels`, `efe-server` | **absents** (retirés par É0) |
+| `crates/efe-ffi` « bindings PyO3 » | un seul fichier : un `.whl` construit |
+| `git clone git@github.com:efe-ai/efe.git` | le dépôt réel est `github.com/rodriguepekar-ctrl/efe` |
+| « Rust 1.85 » | `rust-toolchain.toml` **et** `Cargo.toml` disent **1.88** |
+
+La nouvelle structure est vérifiée ligne à ligne : 30 membres, 15 contrôles,
+4 binaires dans l'image, 3 profils dans `compose.yaml`.
+
 ## La page qu'on tend
 
 `docs/reports/Scella_Le_Seuil_En_Une_Commande_2026-09-04.tex` — **une page**, à lire
@@ -259,11 +278,18 @@ vérifieur que É1 a ajouté à l'image.
   **inconnue**, et le supprimer sur ce prétexte aurait été un mensonge de plus.
 * **`cargo test --workspace` n'a jamais été exécuté** sur cette branche. `check` prouve
   que tout **compile** ; compiler n'est pas passer.
-* **La racine porte encore des artefacts de recherche** — `M*_ARCHITECTURE.md` de la
-  série EFE (à ne pas confondre avec les modules Scella), `apps/`, `platform/`,
-  `playground/`, `clients/`, `sdk/`, `terraform/`… Non retirés **délibérément** : le
-  périmètre référence `docs/` **62 fois**, dont `audit-console/src/lib.rs` et le garde
-  `p3`. Un élagage à l'aveugle casserait des gardes. À faire en second passage, mesuré.
+* **La racine porte encore des artefacts de recherche** — `apps/`, `platform/`,
+  `playground/`, `clients/`, `sdk/`, `terraform/`… soit **11 056 fichiers** dans onze
+  dossiers. Non retirés **délibérément** : le périmètre référence `docs/` **65 fois**
+  (62 à la mesure précédente), dont `audit-console/src/lib.rs` et le garde `p3`. Un
+  élagage à l'aveugle casserait des gardes. C'est l'étape **D2**, et son critère est
+  « les quinze contrôles sortent ENCORE 0 après retrait ».
+
+  ✅ **Les 21 `M*_ARCHITECTURE.md` / `LETTER_*.md` de la série EFE, eux, sont partis**
+  (étape **D1**, 2026-09-04) — pas supprimés : **archivés intacts** dans
+  `Downloads/vrai/EFE-docs-racine-2026-09-04/`, 39 912 lignes, vérifiés par
+  `shasum -a 256` fichier par fichier, avec une note qui dit d'où ils viennent. La
+  racine passe de **32** à **11** fichiers `.md`.
 * **13 signalements `gitleaks`** dans le périmètre — dont une vraie clé privée EC P-256
   en fixture (`efe-swarm-gateway/src/oidc.rs:119`, dupliquée en `routes/llm.rs:1386`) et
   `scripts/demo-consensus-receipt.sh:42` où la clé de forge du mode dégradé est en clair
