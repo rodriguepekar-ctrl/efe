@@ -57,8 +57,48 @@ cargo metadata --locked                          exit 0
 cargo check --locked --workspace --all-targets   exit 0   (1 min 26)
 ```
 
-Contrôles : **10 sur 13 sortent 0** — `profile`, `m4`, `m5`, `m6`, `m7`, `m8`, `m9`,
-`p2`, `p3`, `orphelins`.
+Contrôles SANS démon : **10 sur 13 sortent 0** — `profile`, `m4`, `m5`, `m6`, `m7`,
+`m8`, `m9`, `p2`, `p3`, `orphelins`.
+
+## Le contrôle de la PORTE — le seul qui exige un démon Docker
+
+`scripts/e1-check.sh` mesure les critères de **É1** (le coin) et de **É2** (la
+jonction). Il est le seul du dépôt à exiger Docker, et c'est exactement la moitié
+que `m4-check.sh` déclare, dans son propre en-tête, ne pas prétendre couvrir :
+l'EMBALLAGE — l'image, le volume, le réseau de compose.
+
+```
+bash scripts/e1-check.sh                É1     · 17 contrôles
+bash scripts/e1-check.sh jonction       É1+É2  · 35 contrôles
+bash scripts/e1-check.sh --relire       relit le volume SANS rien exécuter
+```
+
+Trois états, et le troisième n'est pas un raffinement :
+
+| sortie | sens |
+|---|---|
+| `0` | mesuré, et la porte s'ouvre |
+| `1` | mesuré, et elle ne s'ouvre pas |
+| `3` | **NON MESURÉ** — l'instrument n'a pas pu regarder |
+
+Mesuré le 4 septembre 2026 : **É1 17/17**, **É1+É2 35/35**, `exit 0` dans les deux
+cas (`SCELLA_PORT=18080 SCELLA_PORT_JONCTION=18081`). Les trois états ont été
+exercés le même jour — non mesuré sur un port pris, rouge sur un volume abîmé
+(4 échecs), vert sur une exécution réelle.
+
+⚠ **Ne jamais lire `ExitCode` sans lire `State`.** Mesuré ce jour-là : 8080 était
+pris, `up` s'est arrêté à la mise en réseau, **aucun conteneur n'a démarré** — et
+les deux lignes de `docker compose ps -a --format json` portaient
+`"State":"created"` avec `"ExitCode":0`. Zéro est la valeur par DÉFAUT d'un
+conteneur qui n'a jamais tourné : un contrôle qui lit le code sans lire l'état
+fabrique le succès qu'il prétend mesurer.
+
+⚠ **`verify-mini` ne peut pas contredire une troncature**, avec ou sans clé. Sans
+clé il ne rend aucun verdict (sortie 2, usage) ; avec la clé il VALIDERAIT le
+bundle tronqué — « un préfixe de chaîne valide reste valide », dit l'aide de
+`provenance-verify`. Ce qui contredit sans clé, c'est le COMPTAGE contre l'ancre ;
+ce qui contredit avec la clé, c'est `provenance-verify --anchor --run`, le second
+vérifieur que É1 a ajouté à l'image.
 
 ## Ce qui a été retiré, et pourquoi
 

@@ -77,12 +77,25 @@ services:
   #
   #   docker compose --profile jonction up
   #
-  # Une SECONDE passerelle, sur le port 8081, construite avec la feature
-  # `reg-evidence`. Chaque run y produit son dossier d'évidence réglementaire
-  # dans le volume partagé, sans geste manuel :
+  # Une SECONDE passerelle, sur 8081 par défaut (SCELLA_PORT_JONCTION), construite
+  # avec la feature `reg-evidence`. Chaque run y produit son dossier d'évidence
+  # réglementaire dans le volume partagé, sans geste manuel :
   #
-  #   curl -X POST localhost:8081/v1/swarm/run   #        -H 'content-type: application/json' -d @examples/run.json
-  #   docker compose run --rm --entrypoint ls jonction -R /preuve/reg
+  # Rien à taper : le service `preuve-jonction` ci-dessous conduit la démonstration
+  # ET vérifie le dossier. Pour aller y voir soi-même, le geste juste est :
+  #
+  #   docker compose cp preuve:/preuve ./preuve-locale
+  #
+  # ⚠ PAS `docker compose run --entrypoint ls jonction -R /preuve/reg`, qui a été
+  # documenté ici et NE PEUT PAS fonctionner : l'image est distroless, elle n'a
+  # pas de `ls`. `cp` est exécuté par le DÉMON, jamais dans le conteneur — c'est
+  # la seule façon de lire le volume d'une image sans shell, et elle marche même
+  # sur un conteneur arrêté.
+  #
+  # Et pour poster un run à la main :
+  #
+  #   curl -X POST localhost:${SCELLA_PORT_JONCTION:-8081}/v1/swarm/run \
+  #        -H 'content-type: application/json' -d @examples/run.json
   #
   # Elle vit sous un PROFIL, donc `docker compose up` sans argument reste
   # exactement le coin — le critère de M4 n'est pas touché. Et son image est
@@ -105,7 +118,13 @@ services:
     volumes:
       - preuve:/preuve
     ports:
-      - "127.0.0.1:8081:8080"
+      # Paramétrable, comme les deux autres. Ce port était le SEUL codé en dur des
+      # trois — et c'est exactement le défaut que `SCELLA_PORT` a fermé le 23 août
+      # sur le coin. Tant que le profil `jonction` ne servait à rien, il ne coûtait
+      # rien ; depuis que `preuve-jonction` en fait le critère de É2, un 8081 déjà
+      # pris rendrait ce critère inatteignable sans ÉDITER ce fichier — et « une
+      # commande » n'en serait plus une.
+      - "127.0.0.1:${SCELLA_PORT_JONCTION:-8081}:8080"
 
   # ── É2 · le pilote de la JONCTION ──────────────────────────────────────────
   #

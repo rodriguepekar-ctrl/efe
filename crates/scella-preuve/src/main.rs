@@ -311,14 +311,23 @@ fn demonstration() -> Result<(), String> {
     println!("  ancré        : oui — l'ancre est publiée hors du bundle, à l'export.");
 
     println!("\n═══ 4/{t} · la troncature, démasquée SANS CLÉ ═══");
+    // Aucun garde `a.run_id != run_id` ici, et son absence est la CONCLUSION du
+    // correctif, pas un oubli : `ancre_du_run` sélectionne la ligne PAR ce champ et
+    // recopie ce même champ dans l'`Ancre` qu'elle rend. La condition était donc
+    // devenue structurellement infranchissable — un garde qui ne peut pas tomber ne
+    // garde rien, et le sien répétait encore « la DERNIÈRE ancre », le vocabulaire
+    // de la règle que ce correctif venait de réfuter. Deux fautes en une : mort, et
+    // faux sur ce qu'il croyait surveiller.
+    //
+    // Ce qui tient l'invariant à sa place, c'est le test
+    // `lancre_est_choisie_par_run_id_pas_par_position` : il exige qu'un run absent
+    // soit une ERREUR et jamais un repli sur un voisin — précisément ce qu'un
+    // retour à `next_back()` ferait échouer.
     let a = ancre_du_run(&ancre_chemin, &run_id)?;
-    if a.run_id != run_id {
-        return Err(format!(
-            "la dernière ancre porte le run {} et non {run_id} — le journal est partagé avec un \
-             autre export, la démonstration ne peut pas conclure",
-            a.run_id
-        ));
-    }
+    // Dire QUELLE ligne a été retenue, et pas seulement ce qu'elle annonce. Sous le
+    // profil `jonction`, deux passerelles publient dans le même journal : un lecteur
+    // qui ne verrait que « l'ancre annonce 3 » ne saurait pas de qui elle parle.
+    println!("  ancre retenue              : celle du run {}", a.run_id);
     let intact = noeuds_du_bundle(&jsonl);
 
     // La coupure : on retire la dernière ligne. Le bundle tronqué se re-prouve PARFAITEMENT —
@@ -456,7 +465,12 @@ fn demonstration() -> Result<(), String> {
         }
 
         println!();
-        println!("  Refaites-le vous-même, sans ce pilote :");
+        // 8081 est le DÉFAUT, plus une certitude : `SCELLA_PORT_JONCTION` le déplace.
+        // Ce pilote ne peut pas le savoir — il ne connaît que l'adresse INTERNE au
+        // réseau de compose (`jonction:8080`), qui ne veut rien dire depuis l'hôte.
+        // Le dire ainsi reste vrai quel que soit le port ; l'affirmer ne l'était plus.
+        println!("  Refaites-le vous-même, sans ce pilote — sur le port que publie");
+        println!("  SCELLA_PORT_JONCTION (8081 par défaut) :");
         println!("    curl -s localhost:8081/metrics | grep efe_swarm_reg_pont");
         println!("    curl -s -X POST localhost:8081/v1/swarm/reg/{run_id} -H 'x-efe-roles: auditor'");
     }
@@ -593,7 +607,12 @@ mod tests {
     /// un seul niveau et annonçait « 1 fichier » là où `write_reg_subtree` en range trois sous un
     /// `reg/`. Elle était donc verte ET fausse : elle aurait laissé passer un `reg/` vide.
     #[test]
-    fn les_fichiers_se_comptent_en_PROFONDEUR_pas_au_premier_etage() {
+    // Le nom portait « PROFONDEUR » en capitales, et cette emphase coûtait un
+    // `non_snake_case` — un AVERTISSEMENT, donc une erreur sous le `-D warnings`
+    // que la porte de qualité (É3) doit rendre verte. É2 l'avait introduit ; il
+    // ne figurait dans aucun des six défauts recensés. L'emphase descend dans le
+    // message d'assertion, où elle sert le lecteur d'un échec au lieu du compilateur.
+    fn les_fichiers_se_comptent_en_profondeur_pas_au_premier_etage() {
         let base = std::env::temp_dir().join(format!("scella-preuve-rec-{}", std::process::id()));
         let sous = base.join("reg");
         std::fs::create_dir_all(&sous).unwrap();

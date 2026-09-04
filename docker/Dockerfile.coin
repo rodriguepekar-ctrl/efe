@@ -2,13 +2,19 @@
 #
 # ═══ Scella — M4 : la démonstration en une commande ═══════════════════════════
 #
-# Une image, trois binaires, aucun shell.
+# Une image, QUATRE binaires, aucun shell.
 #
 #   efe-swarm-gateway   la passerelle souveraine
 #   scella-preuve       le pilote de la démonstration (il conduit, il ne prouve pas)
 #   verify-mini         le vérifieur tiers — arbre de dépendances VIDE
+#   provenance-verify   le SECOND vérifieur, le seul qui sache lire une ancre (P.4)
 #
-# Pourquoi les trois dans UNE image : la démonstration doit tenir en un `docker
+# Cet en-tête a annoncé « trois binaires » pendant tout le temps où il y en avait
+# quatre : É1 a ajouté `provenance-verify` sans corriger la phrase qui les compte.
+# Un fichier dont l'en-tête ment sur son contenu est le défaut que ce dépôt
+# poursuit partout ailleurs ; il n'avait pas à commencer ici.
+#
+# Pourquoi les quatre dans UNE image : la démonstration doit tenir en un `docker
 # compose up`. Deux images, ce serait deux builds d'un même workspace, donc deux
 # fois la même attente pour rien.
 #
