@@ -60,6 +60,39 @@ cargo check --locked --workspace --all-targets   exit 0   (1 min 26)
 Contrôles SANS démon : **10 sur 13 sortent 0** — `profile`, `m4`, `m5`, `m6`, `m7`,
 `m8`, `m9`, `p2`, `p3`, `orphelins`.
 
+## La page qu'on tend
+
+`docs/reports/Scella_Le_Seuil_En_Une_Commande_2026-09-04.tex` — **une page**, à lire
+*avant* de lancer la commande : ce qui va défiler, ce qu'on peut recompter soi-même,
+et ce que la démonstration ne prouve pas. Construite avec `tectonic` ; seule la
+`.tex` est suivie (`docs/**/*.pdf` est ignoré). Vérifiée : **1 page exactement**,
+**0 débordement**.
+
+Chacun de ses gestes a été joué **verbatim** le jour de son écriture, et chaque
+chiffre concorde :
+
+```
+docker compose cp preuve:/preuve ./p          → 3 fichiers
+awk -F'\t' -v r=$RUN '$2==r {print $5}' …     → 3
+grep -c '[^[:space:]]' p/bundle.sealed.jsonl  → 3
+grep -c '[^[:space:]]' p/bundle.TRONQUE.jsonl → 2
+grep -c $RACINE p/bundle.sealed.jsonl         → 1
+grep -c $RACINE p/bundle.TRONQUE.jsonl        → 0
+tailles annoncées 157/1340/893 = tailles réelles
+```
+
+⚠ **Un document dont le texte devient faux un module plus tard** est le défaut
+récurrent de ce dépôt. Les chiffres de la page sont **datés** et l'en-tête le dit ;
+ses **gestes**, eux, sont gardés : `e1-check.sh` vérifie qu'elle nomme les trois
+fichiers que le pilote écrit et qu'elle enseigne la sélection d'ancre **par le run**.
+Contre-prouvé : renommer un fichier dans la page, ou y réintroduire
+`END{print $5}`, fait tomber le contrôle (`exit 1`).
+
+Au passage, la règle réfutée par É2 — « la dernière ligne du journal » — était encore
+enseignée à **trois** endroits : le pilote lui-même (étape 4), cette page, et
+`m4-check.sh`. Les trois disent désormais la même chose. Un contrôle qui montre un
+geste faux le propage, même là où son contexte le rend inoffensif.
+
 ## Les PORTES — une par profil réellement servi
 
 `scripts/portes-check.sh` joue `clippy -D warnings` sur **chaque profil que

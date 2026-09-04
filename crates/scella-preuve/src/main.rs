@@ -361,9 +361,21 @@ fn demonstration() -> Result<(), String> {
     if coupe == a.noeuds {
         return Err("la troncature n'a pas été détectée — l'ancre ne protège rien".into());
     }
+    // Le geste enseigné ici sélectionne l'ancre PAR LE RUN, et pas par position. Il
+    // disait `END{print $5}` — la DERNIÈRE ligne —, c'est-à-dire exactement la règle
+    // que ce pilote a cessé d'appliquer à lui-même : sous le profil `jonction`, deux
+    // passerelles publient dans le même journal et « la dernière » est celle du
+    // hasard. Le produit enseignait un geste qu'il avait lui-même réfuté.
     println!("  ↑ détection faite avec un COMPTAGE. Aucune clé, aucune cryptographie, aucune");
-    println!("    confiance accordée à qui que ce soit. Refaites-la : `grep -c` sur les deux");
-    println!("    fichiers, `awk -F'\\t' 'END{{print $5}}'` sur {}.", ancre_chemin.display());
+    println!("    confiance accordée à qui que ce soit. Refaites-la vous-même :");
+    println!("      grep -c '[^[:space:]]' {}", f_intact.display());
+    println!("      grep -c '[^[:space:]]' {}", f_tronque.display());
+    println!(
+        "      awk -F'\\t' -v r={run_id} '$2==r {{print $5}}' {}",
+        ancre_chemin.display()
+    );
+    println!("    (par le RUN, jamais par la position : sous le profil `jonction` deux");
+    println!("     passerelles publient dans ce journal, et « la dernière » n'est pas la vôtre.)");
 
     // ── 5/6 · C1 — LA JONCTION, quand elle est branchée ────────────────────────────────────
     //

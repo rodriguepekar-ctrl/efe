@@ -1,0 +1,191 @@
+\documentclass[9pt]{extarticle}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage[french]{babel}
+\usepackage{newpxtext,newpxmath}
+\usepackage[a4paper,top=0.7cm,bottom=0.6cm,left=0.85cm,right=0.85cm]{geometry}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{titlesec}
+\usepackage[most]{tcolorbox}
+\usepackage{fancyvrb}
+\usepackage{multicol}
+\usepackage{enumitem}
+
+\definecolor{navy}{HTML}{1F3A5F}
+\definecolor{grey}{HTML}{54606E}
+\definecolor{green}{HTML}{2C6E49}
+\definecolor{red}{HTML}{A6322E}
+\definecolor{amber}{HTML}{B25A1E}
+\definecolor{boxgray}{HTML}{F3F5F8}
+\definecolor{boxred}{HTML}{FCF2F1}
+\definecolor{boxamber}{HTML}{FBF3EA}
+\definecolor{boxedge}{HTML}{D9E0EA}
+
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{1.2pt}
+\setlength{\columnsep}{11pt}
+\setlength{\emergencystretch}{3em}
+\linespread{0.94}
+\pagestyle{empty}
+
+\titleformat{\section}{\color{navy}\bfseries}{}{0pt}{}
+\titlespacing{\section}{0pt}{4.5pt}{1pt}
+
+\newtcolorbox{these}{colback=boxgray,colframe=boxedge,boxrule=0.5pt,arc=2pt,
+  left=6pt,right=6pt,top=3pt,bottom=3pt}
+\newtcolorbox{alerte}{colback=boxred,colframe=red!55,boxrule=0.7pt,arc=2pt,
+  left=6pt,right=6pt,top=3pt,bottom=3pt}
+\newtcolorbox{cadre}{colback=boxamber,colframe=amber!55,boxrule=0.6pt,arc=2pt,
+  left=6pt,right=6pt,top=3pt,bottom=3pt}
+\newcommand{\code}[1]{\texttt{\footnotesize #1}}
+\newcommand{\mm}[1]{\textbf{\textcolor{navy}{#1}}}
+\newcommand{\ok}[1]{\textcolor{green}{\textbf{#1}}}
+\newcommand{\ko}[1]{\textcolor{red}{\textbf{#1}}}
+\DefineVerbatimEnvironment{cmd}{Verbatim}{fontsize=\footnotesize,xleftmargin=6pt,
+  commandchars=\\\{\}}
+
+\begin{document}
+
+\begin{center}
+{\LARGE\bfseries\color{navy} Le Seuil --- une commande, et ce qu'elle prouve}\\[2pt]
+{\small\color{grey}\itshape La page à lire \emph{avant} de la lancer : ce qui va défiler, ce que vous
+pourrez recompter vous-même, et ce que cela ne prouvera pas}\\[2pt]
+{\footnotesize\color{grey} 4 septembre 2026 \; · \; chaque chiffre de cette page a été mesuré ce
+jour-là, sur cette démonstration, et non repris d'un document antérieur}
+\end{center}
+\vspace{1pt}
+
+\begin{these}
+Une passerelle qui tourne \textbf{sur votre machine} sert un reçu, l'exporte, en publie
+l'empreinte \emph{hors} du reçu, puis en coupe une copie --- et la coupe se voit \textbf{par un
+comptage}, sans clé, sans cryptographie, sans avoir à croire qui que ce soit. C'est tout ce que
+la démonstration prétend. Ce qu'elle ne prétend pas est écrit au bas de cette page, avec la même
+précision.
+\end{these}
+
+\section{La commande}
+\begin{cmd}
+docker compose up
+\end{cmd}
+Rien d'autre. Aucun compte, aucune clé d'API, aucune inscription. Deux services démarrent : la
+\mm{passerelle}, qui reste vivante pour que vous puissiez l'interroger, et \mm{preuve}, un pilote
+qui conduit la démonstration puis s'arrête. \code{Ctrl-C} pour sortir.
+
+\begin{cadre}
+\textbf{Si rien ne démarre, c'est presque toujours le port.} \code{8080} est occupé sur beaucoup de
+machines --- il l'était sur celle-ci le jour de la mesure. Le port hôte se déplace sans éditer
+un fichier :\; \code{SCELLA\_PORT=18080 docker compose up}\;. La passerelle n'est publiée que
+sur la boucle locale \code{127.0.0.1}, jamais sur toutes les interfaces.
+\end{cadre}
+
+\begin{multicols}{2}
+
+\section{Ce qui défile}
+Le pilote conduit \textbf{cinq étapes} et les numérote. Elles disent, dans l'ordre :
+
+\begin{enumerate}[leftmargin=1.15em,itemsep=1pt,topsep=1.5pt]
+\item la passerelle répond --- et le rapport de démarrage annonce
+      «~provenance \textbf{DÉGRADÉE}~», parce qu'aucune clé n'a été fournie. Elle le
+      \emph{dit} ; elle ne le tait pas ;
+\item un run réel est servi, avec son identifiant et sa racine ;
+\item le reçu est exporté : \code{bundle.sealed.jsonl}, \textbf{3 nœuds} --- et son \textbf{ancre}
+      est publiée \emph{hors} du fichier ;
+\item une copie est tronquée. L'ancre annonce \textbf{3}, l'intact en contient \textbf{3}, le
+      tronqué \textbf{2} : la contradiction se lit sans rien déchiffrer ;
+\item ce qui a été prouvé, et ce qui ne l'a pas été --- la démonstration se clôt en
+      énonçant ses propres limites.
+\end{enumerate}
+
+\section{Ce que vous pouvez recompter}
+Le volume \code{scella\_preuve} porte \textbf{trois fichiers}, et rien n'oblige à croire le pilote
+sur parole. Sortez-les :
+\begin{cmd}
+docker compose cp preuve:/preuve ./p
+\end{cmd}
+\vspace{-2pt}
+\code{anchors.log} (157~o) · \code{bundle.sealed.jsonl} (1\,340~o) ·
+\code{bundle.TRONQUE.jsonl} (893~o).
+
+\smallskip
+L'ancre est une ligne à \textbf{six champs tabulés} : \code{\$2} le run, \code{\$4} la racine,
+\code{\$5} le nombre de n\oe uds. Le comptage, refait à la main :
+
+\begin{cmd}
+awk -F'\\t' -v r=<run> '$2==r \{print $5\}' \\
+    p/anchors.log            \textcolor{green}{→ 3}
+grep -c '[^[:space:]]' \\
+    p/bundle.sealed.jsonl    \textcolor{green}{→ 3}
+grep -c '[^[:space:]]' \\
+    p/bundle.TRONQUE.jsonl   \textcolor{red}{→ 2}
+\end{cmd}
+
+\textbf{Par le run, jamais par la position.} Sous le profil \code{jonction}, deux passerelles
+publient dans ce journal : «~la dernière ligne~» n'est pas forcément la vôtre. Le run se lit dans
+le bundle lui-même --- c'est le préfixe de \code{node\_id}, avant le \code{::}.
+
+\section{Le détail qui explique tout}
+La racine annoncée par l'ancre \textbf{est le sceau du dernier maillon}. Elle est donc dans le
+bundle intact, et elle \emph{disparaît} avec la coupe :
+
+\begin{cmd}
+grep -c <racine> p/bundle.sealed.jsonl  \textcolor{green}{→ 1}
+grep -c <racine> p/bundle.TRONQUE.jsonl \textcolor{red}{→ 0}
+\end{cmd}
+
+Le témoin part avec le crime. C'est pourquoi un bundle tronqué \textbf{se re-prouve
+parfaitement} --- un préfixe de chaîne valide reste valide --- et pourquoi une empreinte reçue
+par un canal \emph{distinct} est la seule chose qui puisse le contredire. L'image porte deux
+vérifieurs : \code{verify-mini} (1\,159 lignes, \textbf{arbre de dépendances vide} : un auditeur
+peut le lire en entier) et \code{provenance-verify}, le seul des deux qui sache lire un journal
+d'ancres (\code{-{}-anchor}).
+
+\section{L'image}
+\code{scella-coin:local}, \textbf{54,2~Mo}, \textbf{distroless} : ni shell, ni gestionnaire de
+paquets, ni utilitaire. Quatre binaires, rien d'autre. C'est ce qu'un inconnu exécute en premier
+--- le pire moment pour lui offrir une surface d'attaque. C'est aussi pourquoi le pilote est un
+binaire et non un script, et pourquoi on lit le volume avec \code{docker compose cp} (exécuté par
+le démon) plutôt qu'avec un \code{ls} qui n'existe pas dans l'image.
+
+\smallskip
+\textbf{Aucun octet ne sort à l'exécution}, et ce n'est pas une promesse : le chemin d'appel vers
+un fournisseur tiers vit sous \code{\#[cfg(feature = "frontier-llm")]}, et l'image du Seuil est
+construite \emph{sans aucune feature}. Le code qui appellerait dehors n'est pas compilé.
+
+\end{multicols}
+
+\begin{alerte}
+\textbf{CE QUE CETTE DÉMONSTRATION NE PROUVE PAS.} Quatre choses, et il vaut mieux les lire ici
+que les découvrir plus tard.
+
+\smallskip
+\textbf{1. Elle ne prouve rien \emph{contre} quelqu'un.} Aucune clé n'est injectée : la passerelle
+tourne sur la clé de \textbf{test publique}, connue de quiconque a lu le dépôt. Le reçu démontre
+le \textbf{mécanisme}, jamais la \textbf{substance}. Pour qu'il engage, il faut une clé que vous
+seul détenez (\code{EFE\_NANO\_AUDIT\_HMAC\_MASTER}, injectée au déploiement) --- et alors la même
+commande produit un reçu opposable.
+
+\textbf{2. Le \emph{build}, lui, télécharge.} La promesse «~aucun octet qui sort~» porte sur
+l'\textbf{exécution}. La construction de l'image tire les images de base et les caisses depuis le
+réseau. Sur une machine cloisonnée, c'est là que l'on bute --- et pas sur le produit.
+
+\textbf{3. Un reçu atteste l'\emph{intégrité} de ce qui a été enregistré, jamais la
+\emph{correction} de la décision.} Il dit «~voici exactement ce qui s'est passé, et personne ne
+l'a réécrit depuis~». Il ne dit pas que ce qui s'est passé était juste. Aucune quantité de
+cryptographie ne comble cet écart.
+
+\textbf{4. «~Machine vierge~» n'a pas été mesuré.} Ce qui a été mesuré, c'est le comportement sur
+une machine qui portait déjà un état Docker considérable. C'est une information utile ; ce n'est
+pas celle que la formule annonce.
+\end{alerte}
+
+\vspace{1.5pt}
+{\footnotesize\color{grey}
+\textbf{Et ensuite ?} \code{docker compose -{}-profile jonction up} ajoute \mm{Le Registre} : le
+\emph{même} run produit en plus un dossier réglementaire, nommé par l'identifiant du run, avec sa
+vue de cadre, son mapping daté et son mode d'emploi de re-dérivation. Ce dossier ne prononce pas
+la conformité --- outillé n'est pas conforme.
+\hfill\textbf{Contrôle :} \code{bash scripts/e1-check.sh} rejoue tout ceci et recompte lui-même,
+sans faire confiance au pilote.}
+
+\end{document}

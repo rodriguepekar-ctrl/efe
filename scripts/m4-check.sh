@@ -74,7 +74,15 @@ echo
 echo "═══ 4/4 · on REFAIT ses comptages à la main ═══"
 # Le pilote n'a pas à être cru. Voici la même mesure, avec les outils d'un
 # auditeur — si les deux divergeaient, c'est le pilote qui mentirait.
-ANNONCE=$(awk -F'\t' 'END {print $5}' "${TRAVAIL}/anchors.log")
+# L'ancre est choisie PAR LE RUN, jamais par position. Ici le journal n'a qu'une ligne
+# — une seule passerelle, un seul run — et `END` marchait donc. Mais c'était le
+# troisième endroit du dépôt à enseigner « la dernière ligne », après le pilote et la
+# page qu'on tend, qui ont tous deux cessé : sous le profil `jonction` deux passerelles
+# publient dans le même journal, et « la dernière » devient celle du hasard. Un contrôle
+# qui montre un geste faux le propage, même là où son contexte le rend inoffensif.
+RUN_ID=$(head -1 "${TRAVAIL}/preuve/bundle.sealed.jsonl" \
+  | python3 -c 'import sys,json;print(json.load(sys.stdin)["node_id"].split("::")[0])')
+ANNONCE=$(awk -F'\t' -v r="$RUN_ID" '$2==r {print $5}' "${TRAVAIL}/anchors.log")
 INTACT=$(grep -c '[^[:space:]]' "${TRAVAIL}/preuve/bundle.sealed.jsonl")
 TRONQUE=$(grep -c '[^[:space:]]' "${TRAVAIL}/preuve/bundle.TRONQUE.jsonl")
 

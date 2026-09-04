@@ -82,15 +82,15 @@ for arg in "$@"; do
   esac
 done
 
-JALON="É1"; IMAGE="scella-coin:local"; PILOTE="preuve"; PLANCHER=15
+JALON="É1"; IMAGE="scella-coin:local"; PILOTE="preuve"; PLANCHER=18
 if [ -n "$PROFIL" ]; then
-  JALON="É1+É2"; IMAGE="scella-jonction:local"; PILOTE="preuve-jonction"; PLANCHER=30
+  JALON="É1+É2"; IMAGE="scella-jonction:local"; PILOTE="preuve-jonction"; PLANCHER=33
 fi
 # En relecture, les assertions sur les conteneurs ne sont pas jouées : le plancher
 # descend d'autant, et de RIEN d'autre. Un plancher qu'on baisse « pour que ça
 # passe » ne garde plus rien ; celui-ci se calcule.
 if [ "$RELIRE" = "1" ]; then
-  [ -n "$PROFIL" ] && PLANCHER=26 || PLANCHER=13
+  [ -n "$PROFIL" ] && PLANCHER=29 || PLANCHER=16
   JALON="${JALON} (relecture)"
 fi
 
@@ -416,6 +416,34 @@ mesurer_bundle() {   # $1 = dossier de sortie d'un pilote, $2 = son nom
 
 mesurer_bundle "$VOL" "coin"
 [ -n "$PROFIL" ] && mesurer_bundle "$VOL/jonction" "jonction"
+
+# ── É5 · LA PAGE QU'ON TEND enseigne-t-elle encore des gestes qui MARCHENT ? ──────
+#
+# La page (`docs/reports/Scella_Le_Seuil_En_Une_Commande_*.tex`) est ce qu'un inconnu
+# lit AVANT de lancer la commande, et elle lui apprend à recompter lui-même. Ses
+# chiffres sont datés — l'en-tête le dit — mais ses GESTES doivent rester vrais : un
+# nom de fichier qui change, un champ d'ancre qui se déplace, et la page enseigne une
+# manipulation qui échoue chez le lecteur, au pire moment.
+#
+# Ce garde ne relit pas la prose. Il vérifie exactement trois choses, celles qu'un
+# lecteur va TAPER : les noms des fichiers que le pilote écrit, et la forme de la
+# sélection d'ancre. Il refuse en particulier `END{print $5}` — « la dernière ligne » —
+# qui a été enseignée à trois endroits du dépôt avant d'être réfutée par É2.
+PAGE=$(ls docs/reports/Scella_Le_Seuil_En_Une_Commande_*.tex 2>/dev/null | head -1)
+[ -n "$PAGE" ] && [ -s "$PAGE" ]
+exiger "[page] la page qu'on tend existe (${PAGE:-absente})" $?
+if [ -n "$PAGE" ] && [ -s "$PAGE" ]; then
+  MANQUE=""
+  for f in anchors.log bundle.sealed.jsonl bundle.TRONQUE.jsonl; do
+    grep -qF "$f" "$PAGE" || MANQUE="$MANQUE $f"
+  done
+  [ -z "$MANQUE" ]
+  exiger "[page] elle nomme les trois fichiers que le pilote écrit${MANQUE:+ — manquant :$MANQUE}" $?
+
+  # La sélection par le run, et l'absence de la forme réfutée.
+  grep -qF '$2==r' "$PAGE" && ! grep -qE "END *\\?\{print" "$PAGE"
+  exiger "[page] elle enseigne la sélection PAR LE RUN, pas « la dernière ligne »" $?
+fi
 
 # ── É2 · le dossier réglementaire, recompté lui aussi ───────────────────────
 if [ -n "$PROFIL" ]; then

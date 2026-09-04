@@ -38,11 +38,32 @@ vous-même avec `grep -c` et `awk` sur les fichiers laissés dans le volume.
 > Et ce qu'un reçu atteste, même avec une vraie clé, reste l'**intégrité** de ce
 > qui a été enregistré — jamais la **correction** de la décision.
 
+**Si rien ne démarre, c'est presque toujours le port.** `8080` est occupé sur
+beaucoup de machines. Il se déplace sans éditer un fichier :
+
+```bash
+SCELLA_PORT=18080 docker compose up
+```
+
+La passerelle n'est publiée que sur la boucle locale `127.0.0.1`, jamais sur
+toutes les interfaces de l'hôte.
+
+**La page à lire avant de lancer** —
+[`docs/reports/Scella_Le_Seuil_En_Une_Commande_2026-09-04.tex`](docs/reports/Scella_Le_Seuil_En_Une_Commande_2026-09-04.tex)
+tient sur une feuille : la commande, ce qui va défiler, les commandes exactes
+pour tout recompter soi-même sur les fichiers du volume, et les quatre choses
+que la démonstration ne prouve pas. Chacun de ses gestes a été joué verbatim.
+
 Le détail se lit dans [`compose.yaml`](compose.yaml),
 [`profiles/docker.env`](profiles/docker.env) et
-[`crates/scella-preuve`](crates/scella-preuve). Sans démon Docker, la charge
-utile — passerelle, reçu, ancre, détection de troncature — se vérifie seule :
-`bash scripts/m4-check.sh`.
+[`crates/scella-preuve`](crates/scella-preuve).
+
+**Les deux contrôles.** Sans démon Docker, la charge utile — passerelle, reçu,
+ancre, détection de troncature — se vérifie seule : `bash scripts/m4-check.sh`.
+Avec Docker, l'emballage — l'image, le volume, le réseau — se mesure par
+`bash scripts/e1-check.sh`, qui refait lui-même tous les comptages plutôt que de
+croire le pilote, et qui distingue « je n'ai pas pu mesurer » de « cela a
+échoué ».
 
 ---
 
