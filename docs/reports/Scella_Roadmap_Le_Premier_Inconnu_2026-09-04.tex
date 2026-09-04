@@ -1,0 +1,272 @@
+\documentclass[11pt]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage[french]{babel}
+\usepackage{newpxtext,newpxmath}
+\usepackage[a4paper,top=1.6cm,bottom=1.55cm,left=2.0cm,right=2.0cm]{geometry}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{titlesec}
+\usepackage[most]{tcolorbox}
+\usepackage{fancyhdr}
+\usepackage{enumitem}
+\usepackage{array}
+\usepackage{booktabs}
+
+\definecolor{efenavy}{HTML}{1F3A5F}\definecolor{efeteal}{HTML}{0E7A6E}
+\definecolor{efeamber}{HTML}{B25A1E}\definecolor{efegray}{HTML}{54606E}
+\definecolor{efesolve}{HTML}{2C6E49}\definecolor{efered}{HTML}{A32E2E}
+\definecolor{boxgray}{HTML}{F3F5F8}\definecolor{boxamber}{HTML}{FBF3EA}
+\definecolor{boxedge}{HTML}{D9E0EA}
+
+\titleformat{\section}{\color{efenavy}\large\bfseries}{}{0pt}{}
+\titlespacing{\section}{0pt}{9pt}{3pt}
+\titleformat{\subsection}[runin]{\color{efenavy}\bfseries}{}{0pt}{}[\;---\;]
+\titlespacing{\subsection}{0pt}{5pt}{0.5em}
+\setlength{\parskip}{2pt}\setlength{\parindent}{0pt}\setlength{\emergencystretch}{3em}
+
+\pagestyle{fancy}\fancyhf{}\renewcommand{\headrulewidth}{0.3pt}
+\lhead{\small\color{efegray}Scella --- la feuille de route du premier inconnu}
+\cfoot{\small\color{efegray}\thepage}
+
+\newcommand{\code}[1]{\texttt{\small #1}}
+\newcommand{\best}[1]{{\color{efesolve}\textbf{#1}}}
+\newcommand{\pire}[1]{{\color{efered}\textbf{#1}}}
+\newcommand{\moyen}[1]{{\color{efeamber}\textbf{#1}}}
+\newcommand{\mm}[1]{\textbf{#1}}
+\newcommand{\sz}[1]{{\small #1}}
+\newcommand{\mesure}[1]{{\color{efeteal}\textbf{Mesuré.} }#1\par}
+\newcommand{\refute}[1]{{\color{efered}\textbf{Réfuté.} }#1\par}
+\newcommand{\fl}{$\rightarrow$}
+
+\newtcolorbox{these}{colback=boxgray,colframe=boxedge,boxrule=0.5pt,arc=2.5pt,
+  left=8pt,right=8pt,top=6pt,bottom=6pt}
+\newtcolorbox{cadre}{colback=boxamber,colframe=efeamber!55,boxrule=0.6pt,arc=2.5pt,
+  left=8pt,right=8pt,top=6pt,bottom=6pt}
+
+\begin{document}
+
+\begin{center}
+{\Huge\bfseries\color{efenavy} La feuille de route du premier inconnu}\\[3pt]
+{\large\color{efegray}\itshape Ce qui sépare un MVP démontrable d'un produit que quelqu'un
+d'autre installe --- 4 septembre 2026}
+\end{center}
+\vspace{2pt}
+
+\begin{these}
+\textbf{La feuille de route précédente s'est terminée, et elle avait prévu ce moment.} Son
+paragraphe de clôture disait ceci, mot pour mot : « la question qui décide reste \emph{un prospect
+installe-t-il C3 en mode observation ?} --- et le bon moment pour la poser est \textbf{après
+\mm{É2}}, pas après \mm{É5} ».
+
+Nous sommes après \mm{É5}. Trois étapes ont été franchies au-delà du moment que ce document avait
+lui-même désigné. Elles n'ont pas été perdues --- chacune a trouvé un défaut que seule l'exécution
+pouvait trouver, et l'un d'eux rendait un contrôle \emph{incapable de conclure sur une suite
+verte}. Mais aucune n'a répondu à la question, et aucune ne le pouvait.
+
+\textbf{Ce document ne propose donc pas une sixième échelle technique.} Il énumère ce qu'un
+inconnu rencontre \emph{avant} d'atteindre le produit, et il place la question à sa place :
+en premier.
+\end{these}
+
+\section{0 \;\textbar\; Ce que \mbox{É0}\,\fl\,\mbox{É5} a changé, mesuré ce jour}
+
+\begin{center}\small
+\renewcommand{\arraystretch}{1.25}
+\begin{tabular}{@{}>{\raggedright\arraybackslash}p{5.6cm} >{\raggedright\arraybackslash}p{9.6cm}@{}}
+\toprule
+\textbf{Ce qui se vérifie} & \textbf{État} \\
+\midrule
+Les 15 contrôles du périmètre & \best{14 sortent 0}. Le quinzième, \code{mz-check}, réclame
+\code{models/compressor.gguf} --- plusieurs gigaoctets, délibérément hors du dépôt. Ce n'est pas
+un défaut, c'est une non-applicabilité. \\
+Les portes de qualité & \best{3 profils, 0 défaut} --- le coin, la jonction
+(\code{reg-evidence}), la production (\code{postgres,oidc,pii,frontier-llm}). \\
+La suite de tests & \best{3\,908 tests, 0 échec}, trois tours d'affilée. \\
+La démonstration & \code{docker compose up} \fl{} un reçu, une ancre hors bande, une troncature
+démasquée par un comptage. \code{-{}-profile jonction} y ajoute le dossier réglementaire du
+\emph{même} run. \\
+La page qu'on tend & une feuille, \best{tous ses gestes joués verbatim}, et ses gestes
+\emph{gardés} par \code{e1-check.sh}. \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\mesure{Le produit se montre, se recompte et se garde. \textbf{Il ne se distribue pas.}}
+
+\section{1 \;\textbar\; La question, et pourquoi elle passe devant}
+
+\begin{cadre}
+\textbf{Un prospect installe-t-il C3 en mode observation ?}
+
+Elle n'a pas de \code{exit 0}. Aucun des travaux qui suivent n'y répond, et c'est précisément
+pourquoi elle vient en premier : si personne n'installe, le problème n'est pas le produit, c'est
+la distribution --- et aucune quantité de nettoyage n'y changera rien.
+
+\refute{L'objection naturelle est « finissons d'abord le dépôt ». Elle a déjà été suivie trois
+fois, en \mm{É3}, \mm{É4} et \mm{É5}. Chaque fois le travail était réel. Chaque fois la question
+est restée entière. La leçon n'est pas qu'il ne fallait pas les faire --- c'est qu'ils ne se
+substituent pas.}
+\end{cadre}
+
+Ce qui suit n'est donc pas « la suite du produit ». C'est \textbf{la liste de ce qu'un inconnu
+heurte avant d'arriver au produit}, dans l'ordre où il les heurte. Les quatre premiers points
+retirent des obstacles ; le cinquième \emph{est} la question.
+
+\section{2 \;\textbar\; Les cinq obstacles, dans l'ordre où on les rencontre}
+
+\begin{center}\small
+\renewcommand{\arraystretch}{1.3}
+\begin{tabular}{@{}>{\raggedright\arraybackslash}p{0.8cm} >{\raggedright\arraybackslash}p{4.2cm} >{\raggedright\arraybackslash}p{8.5cm} >{\raggedright\arraybackslash}p{2.0cm}@{}}
+\toprule
+& \textbf{Obstacle} & \textbf{Le critère --- ce qu'on doit pouvoir constater} & \textbf{Coût} \\
+\midrule
+\mm{D1} & \textbf{La porte annonce un autre produit} & la première ligne du \code{README} nomme
+Scella ; la commande est au-dessus du pli & \sz{1 h} \\
+\mm{D2} & \textbf{L'arbre ne ressemble pas au produit} & les 15 contrôles sortent toujours 0
+\emph{après} retrait, et aucune référence ne pend & \sz{1 j} \\
+\mm{D3} & \textbf{Licence contredite, secrets en fixture} & le \code{LICENSE} et les manifestes
+disent la même chose ; \code{gitleaks} \fl{} 0 & \sz{$\frac{1}{2}$ j} \\
+\mm{D4} & \textbf{Rien n'exécute les portes} & un \code{push} sur \code{c1-c3} joue
+\code{portes-check.sh} et les contrôles sans démon, et il est vert & \sz{$\frac{1}{2}$ j} \\
+\mm{D5} & \textbf{Personne d'autre ne l'a lancé} & une personne qui n'est pas l'auteur tape la
+commande et arrive au bout \textbf{sans aide} & \sz{---} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{\mm{D1} · la porte d'entrée annonce un projet de recherche}
+\mesure{\code{README.md} ligne 1 : « \code{\# EFE --- Ephemeral Fluid Swarm} ». Ligne 3 :
+« inférence multi-agent par communication en espace latent partagé ». Le mot \emph{Scella}
+apparaît \pire{ligne 12}.}
+
+Un prospect qui suit un lien lit d'abord un projet de recherche sur l'inférence multi-agent, et
+doit franchir onze lignes avant d'atteindre ce qu'on lui vend. Ce n'est pas une question de goût :
+c'est le premier filtre, et il élimine avant que le produit ne soit vu. Le travail est d'une
+heure et il ne demande aucune décision --- le produit a déjà un nom, une commande et une page.
+
+\subsection{\mm{D2} · l'arbre porte onze mille fichiers qui ne sont pas le produit}
+\mesure{\best{11\,056} fichiers dans onze dossiers hors périmètre --- \code{platform} (5\,538),
+\code{playground} (2\,442), \code{apps} (2\,083), \code{clients} (666), et sept autres. À la
+racine, \best{32} fichiers \code{.md}, dont \best{22} appartiennent à la série d'un autre projet
+(\code{LETTER\_A..E}, \code{M06..M12\_ARCHITECTURE}, \code{MODE1}).}
+
+\begin{cadre}
+\textbf{Ce chantier est déclaré différé, pas oublié}, et sa raison est écrite dans
+\code{LISEZ-MOI-C1-C3.md} : « le périmètre référence \code{docs/} 62 fois, dont
+\code{audit-console/src/lib.rs} et le garde \code{p3}. Un élagage à l'aveugle casserait des
+gardes. À faire en second passage, mesuré. »
+
+\mesure{Le chiffre a monté : \best{65} fichiers du périmètre référencent \code{docs/} aujourd'hui.
+La contrainte tient donc toujours, et le critère de \mm{D2} en découle directement --- ce n'est
+pas « supprimer », c'est « supprimer \emph{et} que les quinze contrôles sortent encore 0 ».}
+\end{cadre}
+
+\subsection{\mm{D3} · la licence contredit un manifeste}
+\mesure{\code{LICENSE} existe --- 64 lignes, une notice de \textbf{double licence}. Par défaut
+propriétaire ; seul \code{/clients/<lang>/**} est en Apache-2.0, et sa règle est explicite :
+« \emph{si un crate déclare Apache-2.0, il est Apache-2.0. Tout le reste est propriétaire} ». Le
+workspace déclare \code{license = "UNLICENSED"}.}
+
+\mesure{Or \best{un} crate du périmètre, \code{efe-nano-sdk}, déclare \pire{\code{license =
+"MIT"}} --- une licence que le fichier \code{LICENSE} \textbf{ne mentionne nulle part}. Son
+manifeste et la licence du dépôt disent donc deux choses différentes du même crate : MIT d'un
+côté, propriétaire de l'autre.}
+
+Et la seule échappée libre du \code{LICENSE} vise \code{/clients/<lang>/**} --- c'est-à-dire
+\textbf{exactement l'un des onze dossiers que \mm{D2} propose de retirer}. Les deux points sont
+liés : élaguer sans toucher à la licence laisserait un texte juridique qui décrit un arbre qui
+n'existe plus. Le critère de \mm{D3} n'est donc pas « ajouter un fichier », c'est
+\textbf{« le \code{LICENSE} et les manifestes disent la même chose »}.
+
+\begin{cadre}
+\refute{Ce point disait d'abord « aucun fichier \code{LICENSE} ». \textbf{C'est faux}, et l'erreur
+vaut d'être nommée : un \code{ls} portant deux motifs a avorté sur celui qui ne correspondait à
+rien, sans rien lister --- et l'absence de sortie a été lue comme une absence de fichier. Un
+instrument muet n'est pas un instrument qui dit non. Le \code{LISEZ-MOI} portait la même
+affirmation ; elle y est corrigée aussi.}
+\end{cadre}
+
+\smallskip
+\textbf{Et des secrets dorment en fixture.}
+\mesure{\code{gitleaks detect} sur \code{crates/} et \code{scripts/} \fl{} \pire{10 signalements}
+--- 6 \code{curl-auth-header}, 3 \code{generic-api-key}, 1 \code{jwt}. S'y ajoutent, hors de son
+champ de règles, \pire{deux clés privées PEM} en dur dans la source
+(\code{efe-swarm-gateway/src/oidc.rs}, \code{src/routes/llm.rs}) et une clé de forge en clair dans
+\code{scripts/demo-consensus-receipt.sh:42}.}
+
+Aucune n'est une clé vive : ce sont des fixtures de test, et le dépôt le sait. Mais elles
+bloqueraient l'ouverture d'un dépôt neuf, et surtout : un produit dont la thèse est
+\emph{« la clé que vous seul détenez »} ne peut pas se présenter avec des clés privées dans ses
+sources. Le remède n'est pas de les cacher --- c'est de les \emph{engendrer} au moment du test.
+
+\subsection{\mm{D4} · les portes existent, rien ne les exécute}
+\mesure{Le dépôt porte \best{90} fichiers de \emph{workflow}. \pire{Aucun} ne lance un
+\code{*-check.sh}. \code{ci.yml} nomme bien la porte \code{clippy -{}-workspace -D warnings},
+mais il ne se déclenche que sur \code{main} et \code{release/**} --- la branche de travail est
+\code{c1-c3}, il \pire{ne part jamais}. Et s'il partait, sa \emph{première} étape,
+\code{cargo fmt --all -- --check}, tomberait sur \pire{4\,643 fichiers} : ce dépôt est formaté à
+la main. Il n'atteindrait donc jamais la porte qu'il nomme.}
+
+Tout ce que \mm{É3}, \mm{É4} et \mm{É5} ont construit ne tourne aujourd'hui que sous une seule
+paire de mains. \code{scripts/portes-check.sh} est exactement la commande qu'un \emph{job} aurait
+à lancer --- il lit les profils dans \code{compose.yaml}, donc il suit le produit sans qu'on ait à
+le tenir à jour.
+
+\begin{cadre}
+\textbf{Pourquoi ce point n'a pas été fait dans \mm{É4}.} Ajouter un \emph{workflow} est un geste
+qui s'exécute \emph{chez GitHub} : il consomme des minutes et peut échouer publiquement. C'est une
+décision d'exploitation, pas un correctif, et elle appartient à qui tient le dépôt. La réparation
+des 90 autres, elle, consiste à en \textbf{retirer} des \emph{jobs} --- jamais à rapatrier le code
+absent qu'ils pilotent.
+\end{cadre}
+
+\subsection{\mm{D5} · la seule étape sans code, et la seule qui décide}
+Tout ce qui précède existe pour rendre une phrase possible : \textbf{quelqu'un qui n'est pas
+l'auteur tape \code{docker compose up} et arrive au bout sans aide.} Il n'y a pas d'\code{exit 0}
+pour cela, pas de contre-épreuve, pas de plancher anti-vacuité. Il y a une personne, une machine
+qui n'est pas celle-ci, et un compte rendu de ce qui a bloqué.
+
+\mesure{Ce qu'on sait déjà de ce qui bloquera : le \textbf{port} (\code{8080} était pris sur cette
+machine ; \code{SCELLA\_PORT} le déplace, et le \code{README} le dit désormais) et le
+\textbf{chemin de \emph{pull}} du démon Docker, qui peut ne pas délivrer alors que le réseau de
+l'hôte répond parfaitement --- mesuré le 2 septembre, \code{registry-1.docker.io} répondait en
+0,65~s pendant qu'un \emph{pull} de cinq mégaoctets n'aboutissait pas en soixante secondes.}
+
+\section{3 \;\textbar\; Ce qu'il ne faut pas rouvrir}
+
+\begin{itemize}[leftmargin=1.1em,itemsep=1.5pt,topsep=2pt]
+\item \textbf{\mm{MX}, le collecteur ouvert} --- gelé. Pas une ligne avant que trois personnes
+aient payé pour l'obtenir. Compteur à \pire{zéro}.
+\item \textbf{\code{fastembed-real}} --- la feature ne compile pas (\code{E0599} : la variante
+\code{BGEM3} n'existe plus dans \code{fastembed 4.9.1}). Personne ne l'active. La réparer demande
+de \emph{choisir} un modèle de remplacement, ce qui change les vecteurs produits : c'est une
+décision produit. La \emph{promesse} a été corrigée ; le reste attend une raison de le faire.
+\item \textbf{Le jeton porteur reste un secret partagé.} Une vraie non-répudiation demanderait que
+l'officier \emph{signe} le tuple de l'acte. C'est nommé, et non produit.
+\item \textbf{M3 sous \code{oidc}} --- les deux tests qui portent son critère ne tournent que sous
+\code{frontier-llm} \emph{sans} \code{oidc}. L'argument qui rendrait ce trou acceptable est écrit
+dans \code{routes/llm.rs} comme une \textbf{revendication}, pas comme une mesure.
+\end{itemize}
+
+\section{4 \;\textbar\; L'ordre, et ce qu'il coûte}
+
+\mm{D1} puis \mm{D3} d'abord --- une heure et une demi-journée, aucune décision à prendre, et ce
+sont les deux que le premier lecteur rencontre avant tout le reste. \mm{D5} \emph{n'attend pas}
+qu'ils soient finis : la question se pose à quelqu'un dès demain, avec le dépôt tel qu'il est, et
+son compte rendu ordonnera \mm{D2} et \mm{D4} bien mieux que ce document.
+
+\begin{these}
+\textbf{Le piège de cette feuille de route est sa propre existence.} Écrire la liste des obstacles
+donne le sentiment d'avancer ; les retirer un par un donnera le même sentiment, plus longtemps.
+Aucun des deux ne remplace la seule mesure qui manque, et qui n'est pas dans ce dépôt : le nom
+d'une personne qui a lancé la commande, et ce qu'elle a rencontré.
+\end{these}
+
+\vspace{4pt}
+{\color{efegray}\hrule height 0.4pt}\vspace{2.5pt}
+{\footnotesize\color{efegray}Mesures du 4 septembre 2026. Dépôt \code{c1-c3} à \code{18e75d0} ;
+dossier \code{\textasciitilde/Downloads/C1-C3}, 1\,065 fichiers. Les contrôles se rejouent par
+\code{bash scripts/<nom>-check.sh}. Les portes de qualité, par
+\code{bash scripts/portes-check.sh}.}
+\end{document}

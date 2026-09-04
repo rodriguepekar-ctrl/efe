@@ -268,8 +268,12 @@ vérifieur que É1 a ajouté à l'image.
   en fixture (`efe-swarm-gateway/src/oidc.rs:119`, dupliquée en `routes/llm.rs:1386`) et
   `scripts/demo-consensus-receipt.sh:42` où la clé de forge du mode dégradé est en clair
   sous une variable `KEY=`. Aucune n'est une clé vive ; toutes bloqueraient un dépôt neuf.
-* **`efe-nano-sdk` se déclare `MIT`** (décision `D-M50-CRATES-001`) et **aucun fichier
-  `LICENSE`/`NOTICE`** n'existe dans le périmètre — la seule condition que MIT impose.
+* **`efe-nano-sdk` se déclare `MIT`** (décision `D-M50-CRATES-001`), et le `LICENSE` du dépôt
+  **ne mentionne pas MIT**. ⚠ La version précédente de cette ligne disait « aucun fichier
+  `LICENSE`/`NOTICE` n'existe » : **c'est faux** — `LICENSE` existe (64 lignes, double licence,
+  propriétaire par défaut, Apache-2.0 pour `/clients/<lang>/**` seulement). Le défaut réel est une
+  **contradiction** : le manifeste dit MIT, la licence dit « tout ce qui ne déclare pas Apache-2.0
+  est propriétaire ». Mesuré le 2026-09-04.
   Sur 413 paquets tiers : **zéro GPL/AGPL/SSPL** (mesuré), mais `webpki-roots 0.25.4`
   est MPL-2.0 en dépendance normale.
 
