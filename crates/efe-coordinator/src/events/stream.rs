@@ -241,7 +241,16 @@ pub enum StreamEvent {
         /// Swarm.
         swarm_id: Uuid,
         /// Métriques agrégées (cf. [`crate::metrics::ChewingMetrics`]).
-        metrics: ChewingMetrics,
+        ///
+        /// **Dans une boîte, et c'est mesuré.** `ChewingMetrics` faisait à elle
+        /// seule 344 octets là où la deuxième plus grosse variante en fait 128 :
+        /// CHAQUE évènement du flux — y compris un `RobotStarted` de trois champs
+        /// — payait la taille de celui-ci, dans le canal comme dans le tampon SSE.
+        /// L'indirection coûte une allocation par évènement `PreChewingMetrics`,
+        /// c'est-à-dire une par swarm ; elle divise par plus de deux l'empreinte
+        /// de tous les autres. Et elle est invisible au dehors : `Box<T>` se
+        /// sérialise exactement comme `T`, le JSON du flux ne bouge pas.
+        metrics: Box<ChewingMetrics>,
         /// Estampille d'émission.
         ts: DateTime<Utc>,
     },
@@ -520,7 +529,7 @@ mod tests {
             },
             StreamEvent::PreChewingMetrics {
                 swarm_id: swarm,
-                metrics: ChewingMetrics {
+                metrics: Box::new(ChewingMetrics {
                     input_tokens_raw: 100,
                     input_tokens_compressed: 25,
                     llm_tokens_generated: 30,
@@ -561,7 +570,7 @@ mod tests {
                     // R3.S8 — A/B test (None : mission non-A/B).
                     ab_arm: None,
                     ab_table_version: None,
-                },
+                }),
                 ts: Utc::now(),
             },
             StreamEvent::SwarmFinished {

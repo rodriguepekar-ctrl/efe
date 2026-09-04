@@ -499,6 +499,7 @@ impl Topology for ConsensusTopology {
 ///   la JUSTESSE, pas l'accord. Un essaim unanime-FAUX échoue l'oracle ⇒ AUCUN « vérifié » fabriqué.
 /// - **SANS oracle** : le score consensuel atteint la **barre** (moyenne du run) — signal des juges
 ///   RÉELS, jamais fabriqué (I-REP5) ; le gagnant (score max ≥ moyenne) est « vérifié ».
+///
 /// Scores incohérents (repli sans juge dégénéré) ⇒ vide.
 ///
 /// **I-REP7 (cohérence attribution↔ordre)** : sous `schedule`, la position `i` a été produite par le

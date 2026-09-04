@@ -38,7 +38,7 @@ impl CanonicalReformulator {
     /// Construit (stateless).
     #[must_use]
     pub fn new() -> Self {
-        Self::default()
+        Self
     }
 
     /// Reformule texte brut vers `CanonicalPlan`.
@@ -407,7 +407,7 @@ fn try_parse_json<T: serde::de::DeserializeOwned>(raw: &str) -> Option<T> {
     // Strip code fence ```json ... ```
     if let Some(rest) = trimmed.strip_prefix("```json") {
         if let Some(end) = rest.rfind("```") {
-            if let Ok(v) = serde_json::from_str::<T>(&rest[..end].trim()) {
+            if let Ok(v) = serde_json::from_str::<T>(rest[..end].trim()) {
                 return Some(v);
             }
         }
@@ -438,7 +438,7 @@ fn extract_first_match(raw: &str, patterns: &[&str]) -> String {
     for p in patterns {
         if let Some(start) = raw.find(p) {
             let after = &raw[start + p.len()..];
-            let end = after.find(|c: char| c == '\n' || c == '<').unwrap_or(after.len());
+            let end = after.find(['\n', '<']).unwrap_or(after.len());
             return after[..end].trim().to_string();
         }
     }
@@ -486,7 +486,7 @@ fn parse_code_language(s: &str) -> Option<CodeLanguage> {
 
 fn first_sentence(raw: &str) -> &str {
     let end = raw
-        .find(|c: char| c == '.' || c == '!' || c == '?')
+        .find(['.', '!', '?'])
         .map(|i| i + 1)
         .unwrap_or(raw.len().min(500));
     raw[..end].trim()
@@ -601,7 +601,9 @@ mod tests {
         let r = CanonicalReformulator::new();
         let xml = "<plan>\n<step>1. Setup tokio</step>\n<step>2. Build axum</step>\n</plan>";
         let plan = r.to_plan(xml, SourceDialect::ClaudeXml).unwrap();
-        assert!(plan.steps.len() >= 1);
+        // `>= 1` laissait passer un parseur qui FUSIONNE les deux `<step>` : le XML
+        // ci-dessus en porte exactement deux, et c'est ce que le test doit dire.
+        assert_eq!(plan.steps.len(), 2, "les deux <step> du XML doivent rester DEUX pas");
     }
 
     #[test]

@@ -42,7 +42,7 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use efe_nano_app_coordinator::types::{CompressionStyle, CompressorInput};
-use efe_nano_app_coordinator::clients::llama_server::LlamaServerClient;
+use efe_nano_app_coordinator::clients::llama_server::{LlamaServerClient, RobotAssets};
 use efe_nano_app_coordinator::{
     clients::compressor::CompressorClient, CallContext, InMemoryAuditWriter, NanoRobotClient,
 };
@@ -101,13 +101,15 @@ async fn main() {
         .and_then(|v| v.parse().ok())
         .unwrap_or(TEMPERATURE_DEFAUT);
     let inner = LlamaServerClient::from_assets(
-        "compressor",
-        "1.0.0",
+        RobotAssets {
+            id: "compressor",
+            schema_version: "1.0.0",
+            grammar_path: &assets.join("grammars/compressor_v1.gbnf"),
+            prompt_path: &assets.join("prompts/compressor.txt"),
+        },
         &endpoint,
-        assets.join("grammars/compressor_v1.gbnf"),
-        assets.join("prompts/compressor.txt"),
-        1536,
-        temperature,
+        /* max_tokens */ 1536,
+        /* temperature */ temperature,
     )
     .and_then(|c| c.with_timeouts(DELAI));
     let client = match inner {
@@ -218,7 +220,7 @@ async fn main() {
     let v = verdict(&table);
 
     // ── le rapport ──
-    let md = rapport(&points, &table, &servi, &v, &endpoint, echecs, temperature);
+    let md = rapport(&points, Paliers { exige: &table, servi: &servi }, &v, &endpoint, echecs, temperature);
     let base = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
     let _ = std::fs::write(base.join("MZ_MESURE_CADRAGE.md"), &md);
     let _ = std::fs::write(
@@ -330,7 +332,7 @@ fn rendre_depuis_le_json() -> i32 {
         }
     }
 
-    let md = rapport(&points, &table, &servi, &v, &endpoint, echecs, temperature);
+    let md = rapport(&points, Paliers { exige: &table, servi: &servi }, &v, &endpoint, echecs, temperature);
     if let Err(e) = std::fs::write(base.join("MZ_MESURE_CADRAGE.md"), &md) {
         eprintln!("MZ --rendre : écriture impossible : {e}");
         return 1;
@@ -379,15 +381,29 @@ fn premier_de_sa_famille(id: &str, f: Famille) -> bool {
     CORPUS.iter().find(|d| d.famille == f).map(|d| d.id) == Some(id)
 }
 
+/// Les deux tables de paliers d'un rapport MZ : ce que le Cadrage **exige**, et ce
+/// que le pipeline a **servi**.
+///
+/// Elles étaient deux `&[Palier]` VOISINS dans une liste de sept arguments. Les
+/// transposer passait le compilateur — et inversait le sens du rapport : l'exigé
+/// deviendrait le servi. Sur une mesure dont l'objet ENTIER est de dire si le
+/// servi atteint l'exigé, c'était la seule paire qu'il fallait absolument nommer.
+struct Paliers<'a> {
+    /// Ce que le Cadrage demande.
+    exige: &'a [scella_mz::mesure::Palier],
+    /// Ce que le pipeline rend.
+    servi: &'a [scella_mz::mesure::Palier],
+}
+
 fn rapport(
     points: &[Point],
-    exige: &[scella_mz::mesure::Palier],
-    servi: &[scella_mz::mesure::Palier],
+    paliers: Paliers<'_>,
     v: &scella_mz::mesure::Verdict,
     endpoint: &str,
     echecs: usize,
     temperature: f32,
 ) -> String {
+    let Paliers { exige, servi } = paliers;
     use std::fmt::Write;
     let mut s = String::new();
     let _ = writeln!(s, "# MZ — la mesure du Cadrage\n");

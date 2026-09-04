@@ -50,7 +50,7 @@ fn ids_sequential_from_1() {
 fn llm_backed_mode_falls_back_to_heuristic() {
     let d = Decomposer::new(DecomposerMode::LlmBacked);
     let t = d.decompose("Explain X. Build Y.").unwrap();
-    assert!(t.len() >= 1);
+    assert!(!t.is_empty());
 }
 
 #[test]

@@ -198,7 +198,7 @@ async fn speculative_emits_speculation_resolved_event() {
     while let Ok(Some(ev)) = tokio::time::timeout(Duration::from_millis(50), rx.recv()).await {
         tags.push(ev.tag());
     }
-    assert!(tags.contains(&"SPECULATION_RESOLVED"), "tags={:?}", tags);
+    assert!(tags.contains(&"SPECULATION_RESOLVED"), "tags={tags:?}");
 }
 
 // ─── Sprint S7 R2 — Tests offline du hot path + chewing_metrics ──────────

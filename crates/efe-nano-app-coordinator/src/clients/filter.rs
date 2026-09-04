@@ -15,7 +15,7 @@ use async_trait::async_trait;
 
 use super::llama_server::RobotHealth;
 use super::{NanoRobotClient, RunMode};
-use crate::context::{blake3_canonical_json, AuditEntry, CallContext};
+use crate::context::{blake3_canonical_json, AuditEntry, CallContext, SuccessRecord};
 use crate::error::{RobotError, RobotResult};
 use crate::types::filter::{AgentRef, FilterInput, FilterOutput, RoutingDecision};
 
@@ -283,13 +283,15 @@ impl NanoRobotClient for FilterClient {
 
         let entry = AuditEntry::success(
             ctx,
-            self.id(),
-            self.schema_version(),
-            input_hash,
-            output_hash,
-            0,
-            0,
-            latency_ms,
+            SuccessRecord {
+                robot_id: self.id(),
+                schema_version: self.schema_version(),
+                input_hash,
+                output_hash,
+                tokens_prompt: 0,
+                tokens_completion: 0,
+                latency_ms,
+            },
         );
         ctx.audit
             .record(entry)

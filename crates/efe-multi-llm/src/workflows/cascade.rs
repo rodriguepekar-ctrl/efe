@@ -9,7 +9,7 @@ use uuid::Uuid;
 
 use crate::budget::BudgetTracker;
 use crate::error::MultiLlmResult;
-use crate::events_ext::{Phase3EventExt, Phase3Publisher};
+use crate::events_ext::{BudgetCharge, Phase3EventExt, Phase3Publisher};
 use crate::request::{CascadeRequest, CascadeResponse};
 
 /// Exécute la cascade speculative à 3 niveaux.
@@ -53,9 +53,11 @@ pub async fn run_cascade(
             &bus,
             swarm_id,
             &req.drafter_llm,
-            drafter_resp.cost_cents,
-            budget.spent_cents(),
-            budget.max_cost_cents(),
+            BudgetCharge {
+                cents: drafter_resp.cost_cents,
+                running_total: budget.spent_cents(),
+                max_budget: budget.max_cost_cents(),
+            },
         )
         .await;
     publisher
@@ -86,9 +88,11 @@ pub async fn run_cascade(
             &bus,
             swarm_id,
             &req.verifier_llm,
-            verifier_resp.cost_cents,
-            budget.spent_cents(),
-            budget.max_cost_cents(),
+            BudgetCharge {
+                cents: verifier_resp.cost_cents,
+                running_total: budget.spent_cents(),
+                max_budget: budget.max_cost_cents(),
+            },
         )
         .await;
 
@@ -130,9 +134,11 @@ pub async fn run_cascade(
                         &bus,
                         swarm_id,
                         &req.validator_llm,
-                        v.cost_cents,
-                        budget.spent_cents(),
-                        budget.max_cost_cents(),
+                        BudgetCharge {
+                            cents: v.cost_cents,
+                            running_total: budget.spent_cents(),
+                            max_budget: budget.max_cost_cents(),
+                        },
                     )
                     .await;
                 (v.text, true)

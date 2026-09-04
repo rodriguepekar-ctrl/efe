@@ -5,7 +5,7 @@
 
 use async_trait::async_trait;
 
-use super::llama_server::{LlamaServerClient, RobotHealth};
+use super::llama_server::{LlamaServerClient, RobotAssets, RobotHealth};
 use super::{NanoRobotClient, RunMode};
 use crate::clients::analyzer::assets_dir;
 use crate::context::CallContext;
@@ -40,13 +40,15 @@ impl ReformulatorClient {
         let assets = assets_dir();
         Ok(Self {
             inner: LlamaServerClient::from_assets(
-                crate::robot_ids::REFORMULATOR,
-                "1.0.0",
+                RobotAssets {
+                    id: crate::robot_ids::REFORMULATOR,
+                    schema_version: "1.0.0",
+                    grammar_path: &assets.join("grammars/reformulator_v1.gbnf"),
+                    prompt_path: &assets.join("prompts/reformulator.txt"),
+                },
                 endpoint,
-                assets.join("grammars/reformulator_v1.gbnf"),
-                assets.join("prompts/reformulator.txt"),
-                1024,
-                0.1,
+                /* max_tokens */ 1024,
+                /* temperature */ 0.1,
             )?,
             profile: ReformulatorProfile::ProvenanceV1,
         })
@@ -64,13 +66,15 @@ impl ReformulatorClient {
     pub fn from_assets_multillm(endpoint: impl Into<String>) -> RobotResult<Self> {
         let assets = assets_dir();
         let inner = LlamaServerClient::from_assets(
-            crate::robot_ids::REFORMULATOR,
-            "1.1.0",
+            RobotAssets {
+                id: crate::robot_ids::REFORMULATOR,
+                schema_version: "1.1.0",
+                grammar_path: &assets.join("grammars/reformulator_multillm_v1.gbnf"),
+                prompt_path: &assets.join("prompts/reformulator_multillm.txt"),
+            },
             endpoint,
-            assets.join("grammars/reformulator_multillm_v1.gbnf"),
-            assets.join("prompts/reformulator_multillm.txt"),
-            1536,
-            0.1,
+            /* max_tokens */ 1536,
+            /* temperature */ 0.1,
         )?
         .with_timeouts(std::time::Duration::from_secs(30))?;
         Ok(Self { inner, profile: ReformulatorProfile::MultiLlmV1 })

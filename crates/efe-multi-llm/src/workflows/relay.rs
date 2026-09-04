@@ -13,7 +13,7 @@ use uuid::Uuid;
 use crate::budget::BudgetTracker;
 use crate::canonical::CanonicalSchemaId;
 use crate::error::{MultiLlmError, MultiLlmResult};
-use crate::events_ext::{Phase3EventExt, Phase3Publisher};
+use crate::events_ext::{BudgetCharge, Phase3EventExt, Phase3Publisher};
 use crate::reformulator_ext::{reformulator_for, SourceDialect};
 use crate::request::{RelayRequest, RelayResponse};
 
@@ -58,9 +58,11 @@ pub async fn run_relay(
             &bus,
             swarm_id,
             &req.planner_llm,
-            plan_resp.cost_cents,
-            budget.spent_cents(),
-            budget.max_cost_cents(),
+            BudgetCharge {
+                cents: plan_resp.cost_cents,
+                running_total: budget.spent_cents(),
+                max_budget: budget.max_cost_cents(),
+            },
         )
         .await;
     let plan_ref = reformulator
@@ -116,9 +118,11 @@ pub async fn run_relay(
             &bus,
             swarm_id,
             &req.implementer_llm,
-            code_resp.cost_cents,
-            budget.spent_cents(),
-            budget.max_cost_cents(),
+            BudgetCharge {
+                cents: code_resp.cost_cents,
+                running_total: budget.spent_cents(),
+                max_budget: budget.max_cost_cents(),
+            },
         )
         .await;
     let code_ref = reformulator
@@ -174,9 +178,11 @@ pub async fn run_relay(
             &bus,
             swarm_id,
             &req.synthesizer_llm,
-            synth_resp.cost_cents,
-            budget.spent_cents(),
-            budget.max_cost_cents(),
+            BudgetCharge {
+                cents: synth_resp.cost_cents,
+                running_total: budget.spent_cents(),
+                max_budget: budget.max_cost_cents(),
+            },
         )
         .await;
     let synth_ref = reformulator

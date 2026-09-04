@@ -7,7 +7,7 @@ use std::path::Path;
 
 use async_trait::async_trait;
 
-use super::llama_server::{LlamaServerClient, RobotHealth};
+use super::llama_server::{LlamaServerClient, RobotAssets, RobotHealth};
 use super::{NanoRobotClient, RunMode};
 use crate::context::CallContext;
 use crate::error::{RobotError, RobotResult};
@@ -27,11 +27,13 @@ impl AnalyzerClient {
         let prompt = assets_root.join("prompts/analyzer.txt");
         Ok(Self {
             inner: LlamaServerClient::from_assets(
-                crate::robot_ids::ANALYZER,
-                "1.0.0",
+                RobotAssets {
+                    id: crate::robot_ids::ANALYZER,
+                    schema_version: "1.0.0",
+                    grammar_path: &grammar,
+                    prompt_path: &prompt,
+                },
                 endpoint,
-                grammar,
-                prompt,
                 /* max_tokens */ analyzer_max_output_tokens(),
                 /* temperature */ 0.1,
             )?,

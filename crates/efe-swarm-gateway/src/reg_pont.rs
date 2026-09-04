@@ -56,11 +56,19 @@
 //! `covered: 0` au lieu de passer pour une bonne nouvelle — ce qui serait le « vert malhonnête »
 //! que toute cette série combat.
 
+// Ces trois-là ne servent QUE sous `reg-evidence` (`RegPont::dir` l.~126 et
+// `deriver()` l.~209, tous deux sous `#[cfg]`). Sans la feature ils sont morts, et
+// un import mort est un avertissement — donc une erreur sous la porte de qualité.
+// Les SUPPRIMER aurait cassé la compilation du build qui compte le plus (celui de
+// la jonction) ; les conditionner dit la vérité : ils suivent leur seul usage.
+#[cfg(feature = "reg-evidence")]
 use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
+#[cfg(feature = "reg-evidence")]
 use uuid::Uuid;
 
+#[cfg(feature = "reg-evidence")]
 use crate::store::StoredRun;
 
 /// Le cadre réglementaire visé.
@@ -324,7 +332,10 @@ mod tests {
     }
 
     #[test]
-    fn un_echec_dit_la_raison_ET_quil_est_rattrapable() {
+    // `ET` en capitales coûtait un `non_snake_case` — un avertissement, donc une
+    // erreur sous `-D warnings`. L'emphase descend dans le message d'assertion,
+    // où elle sert le lecteur d'un échec plutôt que le compilateur.
+    fn un_echec_dit_la_raison_et_quil_est_rattrapable() {
         let r = RegReport::echec("gdpr", "store en carton");
         assert!(!r.produced);
         assert_eq!(r.framework, "gdpr");

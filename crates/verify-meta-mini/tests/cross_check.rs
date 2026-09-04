@@ -6,7 +6,7 @@
 use verify_meta_mini::verify::{from_hex32, seal_step, to_hex, verify, Outcome, Step};
 
 /// 1) VECTEURS GOLDEN repris d'`efe-audit-core::hmac` — figent la construction du maillon.
-/// `chain_hmac(parent, payload) = HMAC-SHA256(clé, parent‖payload)`, `parent = b"genesis"` à la genèse.
+///    `chain_hmac(parent, payload) = HMAC-SHA256(clé, parent‖payload)`, `parent = b"genesis"` à la genèse.
 #[test]
 fn golden_chain_hmac_matches_audit_core() {
     let key = b"test-master-32-bytes-fixed-aaaaaaaaaaaa";
@@ -24,7 +24,7 @@ fn golden_chain_hmac_matches_audit_core() {
 }
 
 /// 2) ROUND-TRIP contre `efe-meta-verify` (la référence P1.1) : sceller là-bas, sérialiser en JSONL,
-/// puis re-parser + re-prouver ici → concordance octet à octet, et altération localisée.
+///    puis re-parser + re-prouver ici → concordance octet à octet, et altération localisée.
 #[test]
 fn roundtrip_against_efe_meta_verify() {
     use efe_meta_verify::{seal_in_place, SealedMetaStep};
@@ -35,7 +35,7 @@ fn roundtrip_against_efe_meta_verify() {
             meta_id: "kovant-procurement-v1".into(),
             step: i,
             residual: 7.4960402424643995 / (i as f64 + 1.0),
-            consensus: vec![f64::from(-0.190_753_86_f32), f64::from(0.328_241_91_f32), f64::from(0.554_084_1_f32), i as f64],
+            consensus: vec![f64::from(-0.190_753_86_f32), f64::from(0.328_241_9_f32), f64::from(0.554_084_1_f32), i as f64],
             safety_delta: None,
             vote_hashes: None,
             binding_hash: None,
@@ -76,7 +76,7 @@ fn tampered_reference_reparsed(reference: &[efe_meta_verify::SealedMetaStep]) ->
 }
 
 /// 3) **v2** : un bundle scellé AVEC `safety_delta` (l'enveloppe de sûreté) se re-prouve aussi ici, et le
-/// delta est bien re-parsé par le parseur fait main.
+///    delta est bien re-parsé par le parseur fait main.
 #[test]
 fn roundtrip_v2_safety_delta() {
     use efe_meta_verify::MetaChainState;
@@ -103,7 +103,7 @@ fn roundtrip_v2_safety_delta() {
 }
 
 /// 4) **v3** : un bundle avec `vote_hashes` (contributions participants, tableau de chaînes) se re-prouve
-/// aussi ici — le parseur fait main lit le tableau de chaînes et le hash entre dans le canonique.
+///    aussi ici — le parseur fait main lit le tableau de chaînes et le hash entre dans le canonique.
 #[test]
 fn roundtrip_v3_vote_hashes() {
     use efe_meta_verify::{content_hash_hex, MetaChainState};

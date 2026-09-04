@@ -107,7 +107,7 @@ async fn live_analyzer_roundtrip_with_grammar() {
     let started = Instant::now();
     let out = client.invoke(input, &ctx).await;
     let elapsed = started.elapsed();
-    eprintln!("live analyzer roundtrip: {:?}", elapsed);
+    eprintln!("live analyzer roundtrip: {elapsed:?}");
 
     let out = out.expect("analyzer must return Ok");
     eprintln!("entities={}, intent={:?}, language={:?}, summary={:?}",

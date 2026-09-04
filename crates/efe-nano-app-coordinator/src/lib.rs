@@ -90,7 +90,8 @@ pub use clients::{
     SlmCircuitBreaker, SlmCircuitState,
 };
 pub use context::{
-    AuditEntry, AuditStatus, AuditWriter, CallContext, InMemoryAuditWriter, SwarmId, TenantId,
+    AuditEntry, AuditStatus, AuditWriter, CallContext, InMemoryAuditWriter, SuccessRecord, SwarmId,
+    TenantId,
 };
 pub use error::{RobotError, RobotResult};
 

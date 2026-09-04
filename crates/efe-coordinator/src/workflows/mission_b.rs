@@ -423,7 +423,7 @@ pub async fn run_mission_b_with_swarm_id(
             latency_ms: r.latency_ms,
         })
         .collect();
-    let quorum = req.quorum.unwrap_or_else(|| (req.llms.len() + 1) / 2);
+    let quorum = req.quorum.unwrap_or_else(|| req.llms.len().div_ceil(2));
 
     let success_rates: HashMap<String, f32> = req
         .llm_metadata
@@ -568,7 +568,7 @@ pub async fn run_mission_b_with_swarm_id(
         .bus
         .publish(StreamEvent::PreChewingMetrics {
             swarm_id,
-            metrics: chewing_metrics.clone(),
+            metrics: Box::new(chewing_metrics.clone()),
             ts: Utc::now(),
         })
         .await;

@@ -109,6 +109,24 @@ impl LlmCaller {
     /// RBAC **strict** (chemin coûteux) : contrairement à [`Caller::require_any_role`], des
     /// rôles **vides sont refusés** — le frontière exige un rôle explicite (§4 puce 4 : pas
     /// de keyless sur l'egress payant). Masque (inherent > Deref) le `require_any_role` laxiste.
+    ///
+    /// # Pourquoi la porte de qualité le déclare « jamais utilisé »
+    ///
+    /// Ses six appelants vivent dans `routes/llm.rs`, et `routes/mod.rs` gate ce
+    /// module sur `#[cfg(feature = "frontier-llm")]`. Or `cargo clippy --workspace
+    /// --all-targets` compile les features **par défaut** : le chemin d'egress
+    /// payant n'est pas compilé, donc pas inspecté — et la seule chose que la porte
+    /// en dit est un avertissement de code mort sur la méthode qui le **protège**.
+    ///
+    /// L'exemption est donc CONDITIONNELLE, et c'est tout son intérêt : sous
+    /// `frontier-llm` elle disparaît, et si les appels venaient à disparaître de
+    /// `llm.rs` la porte le dirait de nouveau. Un `allow` inconditionnel aurait
+    /// éteint l'alarme pour de bon.
+    ///
+    /// ⚠ Ce que cela dit de la porte elle-même : verte ne veut pas dire
+    /// « tout inspecté ». Trois features du périmètre — `frontier-llm`, `oidc`,
+    /// `pii` — sortent du champ de la mesure par défaut.
+    #[cfg_attr(not(feature = "frontier-llm"), allow(dead_code))]
     pub fn require_any_role(&self, allowed: &[&str]) -> Result<(), GatewayError> {
         if self.0.roles.iter().any(|r| allowed.contains(&r.as_str())) {
             Ok(())

@@ -102,30 +102,57 @@ pub struct AuditEntry {
     pub finished_at: chrono::DateTime<chrono::Utc>,
 }
 
+/// Ce qu'un appel réussi a produit — l'entrée d'audit avant qu'elle ne soit datée
+/// et identifiée.
+///
+/// # Pourquoi une structure, et pas huit arguments
+///
+/// La signature remplacée alignait, dans cet ordre : `robot_id`,
+/// `schema_version` (deux `&str` **voisins**), `input_hash`, `output_hash` (deux
+/// `String` **voisines**), `tokens_prompt`, `tokens_completion` (deux `u32`
+/// **voisins**), puis `latency_ms`. **Trois paires transposables sans que le
+/// compilateur ne bronche.**
+///
+/// Ce n'est pas une gêne de lecture, c'est une faute d'archivage. Une entrée dont
+/// les empreintes d'entrée et de sortie sont ÉCHANGÉES est un enregistrement faux
+/// et parfaitement plausible : rien en aval ne peut le rattraper, puisque c'est
+/// LUI la preuve. Aux six sites d'appel, deux passaient `0, 0, latency_ms` et un
+/// autre `10, 20, 50` — trois entiers nus dont seule la position disait le sens.
+///
+/// La feuille de route du MVP classait ce défaut parmi les « lints de forme ».
+/// Le compte d'arguments est une forme ; ce que ce compte cachait ici ne l'est pas.
+pub struct SuccessRecord<'a> {
+    /// Identité du robot appelé.
+    pub robot_id: &'a str,
+    /// Version du schéma de sortie qu'il a respecté.
+    pub schema_version: &'a str,
+    /// Empreinte de l'ENTRÉE.
+    pub input_hash: String,
+    /// Empreinte de la SORTIE.
+    pub output_hash: String,
+    /// Tokens consommés par le prompt.
+    pub tokens_prompt: u32,
+    /// Tokens générés.
+    pub tokens_completion: u32,
+    /// Latence bout-en-bout (ms).
+    pub latency_ms: u64,
+}
+
 impl AuditEntry {
     /// Construit l'instant t une entry "success" depuis les paramètres typiques.
     #[must_use]
-    pub fn success(
-        ctx: &CallContext,
-        robot_id: &str,
-        schema_version: &str,
-        input_hash: String,
-        output_hash: String,
-        tokens_prompt: u32,
-        tokens_completion: u32,
-        latency_ms: u64,
-    ) -> Self {
+    pub fn success(ctx: &CallContext, r: SuccessRecord<'_>) -> Self {
         Self {
             entry_id: Uuid::now_v7(),
             swarm_id: ctx.swarm_id,
             tenant_id: ctx.tenant_id,
-            robot_id: robot_id.to_string(),
-            schema_version: schema_version.to_string(),
-            input_hash,
-            output_hash,
-            tokens_prompt,
-            tokens_completion,
-            latency_ms,
+            robot_id: r.robot_id.to_string(),
+            schema_version: r.schema_version.to_string(),
+            input_hash: r.input_hash,
+            output_hash: r.output_hash,
+            tokens_prompt: r.tokens_prompt,
+            tokens_completion: r.tokens_completion,
+            latency_ms: r.latency_ms,
             status: AuditStatus::Success,
             error_detail: None,
             finished_at: chrono::Utc::now(),
@@ -252,13 +279,15 @@ mod tests {
         let ctx = CallContext::new(Uuid::now_v7(), Arc::new(InMemoryAuditWriter::default()));
         let entry = AuditEntry::success(
             &ctx,
-            "analyzer",
-            "1.0.0",
-            "abc".into(),
-            "def".into(),
-            10,
-            20,
-            50,
+            SuccessRecord {
+                robot_id: "analyzer",
+                schema_version: "1.0.0",
+                input_hash: "abc".into(),
+                output_hash: "def".into(),
+                tokens_prompt: 10,
+                tokens_completion: 20,
+                latency_ms: 50,
+            },
         );
         writer.record(entry.clone()).await.unwrap();
 
@@ -275,13 +304,15 @@ mod tests {
         for i in 0..5 {
             let entry = AuditEntry::success(
                 &ctx,
-                "test",
-                "1.0.0",
-                format!("hash-{i}"),
-                format!("out-{i}"),
-                0,
-                0,
-                0,
+                SuccessRecord {
+                    robot_id: "test",
+                    schema_version: "1.0.0",
+                    input_hash: format!("hash-{i}"),
+                    output_hash: format!("out-{i}"),
+                    tokens_prompt: 0,
+                    tokens_completion: 0,
+                    latency_ms: 0,
+                },
             );
             writer.record(entry).await.unwrap();
         }

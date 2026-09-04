@@ -90,10 +90,16 @@ fn t1_aucune_lecture_denv_hors_du_registre() {
 
 /// Le pendant du précédent : la liste d'exemptions doit rester **vide**. Si elle grossit, M0 s'est
 /// défait sans que personne ne le voie.
+/// La liste étant un `const` vide, `is_empty()` vaut `true` à la compilation —
+/// et **c'est l'assertion**. Ce garde ne peut être constant que TANT QU'IL EST
+/// SATISFAIT : la première entrée ajoutée le rend franchissable, et il tombe.
+/// Même situation, même raison que `scella-authority/tests/un_seul_analyseur.rs`.
 #[test]
 fn t1b_la_liste_dexemptions_reste_vide() {
+    #[allow(clippy::const_is_empty)] // la constance EST l'assertion (cf. supra)
+    let vide = EXEMPTIONS.is_empty();
     assert!(
-        EXEMPTIONS.is_empty(),
+        vide,
         "EXEMPTIONS contient {} entrée(s) : {:?}. Chacune est une dette — un interrupteur non \
          décrit par le rapport de profil.",
         EXEMPTIONS.len(),

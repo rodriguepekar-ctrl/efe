@@ -15,7 +15,7 @@ use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use serde_json::json;
 use tracing::{debug, warn};
 
-use crate::context::{blake3_canonical_json, AuditEntry, CallContext};
+use crate::context::{blake3_canonical_json, AuditEntry, CallContext, SuccessRecord};
 use crate::error::{RobotError, RobotResult};
 
 /// Statut de santé d'un robot (renvoyé par `health()`).
@@ -53,27 +53,57 @@ pub struct LlamaServerClient {
     pub http: HttpClient,
 }
 
+/// L'identité d'un robot et les deux fichiers qu'il charge.
+///
+/// # Ce n'est pas un groupement de confort
+///
+/// Dans la signature à sept arguments que cette structure remplace, `id` et
+/// `schema_version` étaient deux `&'static str` **voisins**, et `grammar_path` /
+/// `prompt_path` deux `impl AsRef<Path>` **voisins**. Les transposer passait le
+/// compilateur en silence : un client qui lit la grammaire comme prompt et le
+/// prompt comme grammaire se construit sans erreur et échoue plus tard, loin du
+/// site où la faute a été écrite.
+///
+/// La preuve que le risque était ressenti sans être nommé : **trois des huit
+/// appels** annotaient `/* max_tokens */` et `/* temperature */` — c'est-à-dire
+/// les deux seuls arguments que le compilateur protégeait déjà (`u32` contre
+/// `f32`) — et laissaient les quatre autres nus. Le commentaire allait là où le
+/// danger n'était pas.
+///
+/// C'est aussi le critère qui distingue ce site de `verify_meta_mini::canonical`,
+/// exempté de la même règle : là-bas les sept types sont tous distincts, donc
+/// aucune transposition ne peut passer le compilateur. Ici quatre se recouvrent
+/// deux à deux.
+pub struct RobotAssets<'a> {
+    /// Identité stable du robot (`crate::robot_ids::*`).
+    pub id: &'static str,
+    /// Version du schéma de sortie, scellée dans chaque entrée d'audit.
+    pub schema_version: &'static str,
+    /// Grammaire GBNF, imposée à chaque requête.
+    pub grammar_path: &'a std::path::Path,
+    /// Prompt système, préfixé à chaque requête.
+    pub prompt_path: &'a std::path::Path,
+}
+
 impl LlamaServerClient {
     /// Construit un nouveau client en lisant grammar + prompt depuis le filesystem.
     ///
     /// Convention : `assets/grammars/{robot}_v{schema_major}.gbnf`
     /// et `assets/prompts/{robot}.txt` relatif à `CARGO_MANIFEST_DIR`.
     pub fn from_assets(
-        id: &'static str,
-        schema_version: &'static str,
+        assets: RobotAssets<'_>,
         endpoint: impl Into<String>,
-        grammar_path: impl AsRef<std::path::Path>,
-        prompt_path: impl AsRef<std::path::Path>,
         max_tokens: u32,
         temperature: f32,
     ) -> RobotResult<Self> {
-        let grammar = std::fs::read_to_string(grammar_path.as_ref()).map_err(|e| {
+        let id = assets.id;
+        let grammar = std::fs::read_to_string(assets.grammar_path).map_err(|e| {
             RobotError::Config {
                 robot: id,
                 reason: format!("cannot read grammar file: {e}"),
             }
         })?;
-        let system_prompt = std::fs::read_to_string(prompt_path.as_ref()).map_err(|e| {
+        let system_prompt = std::fs::read_to_string(assets.prompt_path).map_err(|e| {
             RobotError::Config {
                 robot: id,
                 reason: format!("cannot read prompt file: {e}"),
@@ -89,7 +119,7 @@ impl LlamaServerClient {
             })?;
         Ok(Self {
             id,
-            schema_version,
+            schema_version: assets.schema_version,
             endpoint: endpoint.into(),
             grammar,
             system_prompt,
@@ -289,13 +319,15 @@ impl LlamaServerClient {
         // Audit (succès).
         let entry = AuditEntry::success(
             ctx,
-            self.id,
-            self.schema_version,
-            input_hash,
-            output_hash,
-            raw.tokens_evaluated,
-            raw.tokens_predicted,
-            latency_ms,
+            SuccessRecord {
+                robot_id: self.id,
+                schema_version: self.schema_version,
+                input_hash,
+                output_hash,
+                tokens_prompt: raw.tokens_evaluated,
+                tokens_completion: raw.tokens_predicted,
+                latency_ms,
+            },
         );
         ctx.audit
             .record(entry)
@@ -373,11 +405,13 @@ mod tests {
     #[test]
     fn from_assets_missing_files_returns_config_error() {
         let result = LlamaServerClient::from_assets(
-            "analyzer",
-            "1.0.0",
+            RobotAssets {
+                id: "analyzer",
+                schema_version: "1.0.0",
+                grammar_path: std::path::Path::new("/nonexistent/grammar.gbnf"),
+                prompt_path: std::path::Path::new("/nonexistent/prompt.txt"),
+            },
             "http://127.0.0.1:8090",
-            "/nonexistent/grammar.gbnf",
-            "/nonexistent/prompt.txt",
             512,
             0.1,
         );

@@ -11,7 +11,7 @@ use uuid::Uuid;
 use crate::budget::BudgetTracker;
 use crate::canonical::{CanonicalClaim, CanonicalSchemaId};
 use crate::error::{MultiLlmError, MultiLlmResult};
-use crate::events_ext::{Phase3EventExt, Phase3Publisher};
+use crate::events_ext::{BudgetCharge, Phase3EventExt, Phase3Publisher};
 use crate::reformulator_ext::{reformulator_for, SourceDialect};
 use crate::request::{VoteMode, Vote3LlmRequest, Vote3LlmResponse};
 use crate::vote_ext::{borda_tally, condorcet_tally};
@@ -67,9 +67,11 @@ pub async fn run_vote_3llm(
                 &bus,
                 swarm_id,
                 &r.provider,
-                r.cost_cents,
-                budget.spent_cents(),
-                budget.max_cost_cents(),
+                BudgetCharge {
+                    cents: r.cost_cents,
+                    running_total: budget.spent_cents(),
+                    max_budget: budget.max_cost_cents(),
+                },
             )
             .await;
     }
@@ -116,7 +118,7 @@ pub async fn run_vote_3llm(
     }
 
     // ── Étape 4 : vote selon mode ─────────────────────────────────────
-    let quorum = req.quorum.unwrap_or_else(|| (claims.len() + 1) / 2);
+    let quorum = req.quorum.unwrap_or_else(|| claims.len().div_ceil(2));
     let (winner_provider, winner_text, scores): (String, String, HashMap<String, f32>) =
         match req.mode {
             VoteMode::Plurality => {

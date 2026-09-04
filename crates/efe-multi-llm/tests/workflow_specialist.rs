@@ -78,7 +78,7 @@ async fn specialist_each_subtask_assigned_to_best_llm() {
         .iter()
         .map(|a| a.assigned_llm.clone())
         .collect();
-    assert!(used.len() >= 1);
+    assert!(!used.is_empty());
 }
 
 #[tokio::test]

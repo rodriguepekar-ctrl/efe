@@ -79,7 +79,7 @@ fn argument_thesis_from_xml() {
         )
         .unwrap();
     assert!(a.thesis.contains("Rust"));
-    assert!(a.reasoning.len() >= 1);
+    assert!(!a.reasoning.is_empty());
 }
 
 #[test]

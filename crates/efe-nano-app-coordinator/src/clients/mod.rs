@@ -30,7 +30,7 @@ pub mod verifier;
 pub use analyzer::AnalyzerClient;
 pub use compressor::CompressorClient;
 pub use filter::{EmbeddingBackend, FilterClient, MockEmbedder};
-pub use llama_server::{LlamaServerClient, RobotHealth};
+pub use llama_server::{LlamaServerClient, RobotAssets, RobotHealth};
 pub use reformulator::{ReformulatorClient, ReformulatorProfile};
 pub use router::RouterClient;
 pub use slm_circuit::{SlmCircuitBreaker, SlmCircuitState};

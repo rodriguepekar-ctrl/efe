@@ -172,6 +172,20 @@ pub(crate) trait ReformulatorBackend: Send + Sync {
     /// [`BackendError::DeadlineExhausted`] ET garantit qu'une `AuditEntry`
     /// de la tentative a été capturée (synthétisée si l'annulation a coupé
     /// l'écriture du client — l'invariant B.3 tient sous B.4).
+    ///
+    /// # Sept paramètres, exemptés — et pourquoi ce n'est pas le même cas que `BudgetCharge`
+    ///
+    /// Les sept types sont **tous distincts** (`&str`, `SourceDialect`,
+    /// `CanonicalSchemaId`, `Option<ArgumentStance>`, `&HopCapture`,
+    /// `Option<Duration>`) : aucune transposition d'arguments ne peut passer le
+    /// compilateur. C'est exactement l'inverse de `publish_budget_charged`, dont
+    /// trois `u32` voisins ont été regroupés dans cette même passe : là-bas le
+    /// compteur signalait un vrai danger, ici il ne signale qu'un compte.
+    ///
+    /// S'y ajoute une raison propre aux traits : regrouper changerait le contrat
+    /// de TOUS les implémenteurs, et chacun de ces paramètres porte une sémantique
+    /// documentée séparément (B.3 pour `capture`, B.4 pour `deadline`).
+    #[allow(clippy::too_many_arguments)] // types tous distincts + contrat de trait (cf. supra)
     async fn reformulate(
         &self,
         raw: &str,
@@ -430,7 +444,7 @@ impl SlmReformulator {
     /// cette porte : un hop qui n'a d'emblée plus de temps ne prend pas le
     /// slot du tout.)
     fn circuit_allows(&self) -> bool {
-        self.circuit.as_ref().map_or(true, SlmCircuitBreaker::try_call)
+        self.circuit.as_ref().is_none_or(SlmCircuitBreaker::try_call)
     }
 
     fn circuit_success(&self) {
@@ -1290,8 +1304,10 @@ mod tests {
             ReformulatorClient::from_assets_multillm("http://127.0.0.1:1").expect("assets"),
         );
         let circuit = SlmCircuitBreaker::new(1, std::time::Duration::from_secs(60));
-        let mut clients = efe_coordinator::CoordinatorClients::default();
-        clients.reformulator = Some(client);
+        let mut clients = efe_coordinator::CoordinatorClients {
+            reformulator: Some(client),
+            ..Default::default()
+        };
         clients
             .slm_circuits
             .insert(SLM_REFORMULATOR_CIRCUIT_KEY.to_string(), circuit.clone());
@@ -1624,9 +1640,12 @@ mod tests {
         for id in ["claude_x", "gpt_x", "gemini_x"] {
             reg.register(Arc::new(MockLlmProvider::new(id).with_response("The Fed held rates.")));
         }
-        let mut clients = efe_coordinator::CoordinatorClients::default();
-        clients.reformulator =
-            Some(Arc::new(ReformulatorClient::from_assets_multillm(url).expect("assets")));
+        let clients = efe_coordinator::CoordinatorClients {
+            reformulator: Some(Arc::new(
+                ReformulatorClient::from_assets_multillm(url).expect("assets"),
+            )),
+            ..Default::default()
+        };
         let coord = Coordinator::builder().registry(reg).clients(clients).build().expect("coord");
         let req = crate::request::Vote3LlmRequest {
             user_text: "Did the Fed hold rates?".into(),
@@ -1677,9 +1696,12 @@ mod tests {
         for id in ["claude_x", "gpt_x", "gemini_x"] {
             reg.register(Arc::new(MockLlmProvider::new(id).with_response("The Fed held rates.")));
         }
-        let mut clients = efe_coordinator::CoordinatorClients::default();
-        clients.reformulator =
-            Some(Arc::new(ReformulatorClient::from_assets_multillm(url).expect("assets")));
+        let clients = efe_coordinator::CoordinatorClients {
+            reformulator: Some(Arc::new(
+                ReformulatorClient::from_assets_multillm(url).expect("assets"),
+            )),
+            ..Default::default()
+        };
         let coord = Coordinator::builder().registry(reg).clients(clients).build().expect("coord");
 
         let req = crate::request::Vote3LlmRequest {

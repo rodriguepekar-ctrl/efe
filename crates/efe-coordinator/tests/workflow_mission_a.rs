@@ -93,9 +93,9 @@ async fn mission_a_publishes_swarm_started_and_finished() {
     while let Ok(Some(ev)) = tokio::time::timeout(Duration::from_millis(50), rx.recv()).await {
         tags.push(ev.tag());
     }
-    assert!(tags.contains(&"SWARM_STARTED"), "tags={:?}", tags);
-    assert!(tags.contains(&"SWARM_FINISHED"), "tags={:?}", tags);
-    assert!(tags.contains(&"LLM_FINISHED"), "tags={:?}", tags);
+    assert!(tags.contains(&"SWARM_STARTED"), "tags={tags:?}");
+    assert!(tags.contains(&"SWARM_FINISHED"), "tags={tags:?}");
+    assert!(tags.contains(&"LLM_FINISHED"), "tags={tags:?}");
 }
 
 #[tokio::test]

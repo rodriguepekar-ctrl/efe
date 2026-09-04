@@ -61,9 +61,13 @@ pub enum RunMode {
     /// **Full** : S4 + S6 combinés. Mission A avec pré-mâchage SLM + table
     /// de scoring. Le mode "production-ready" Mission A.
     Full,
-    /// **Speculative** : Mission Speculative drafter cheap (Gemini Flash)
-    /// + verifier premium (Claude Sonnet 4.6). Limité aux task_class
-    /// pertinentes (FactualQa principalement).
+    /// **Speculative** : Mission Speculative drafter cheap (Gemini Flash) et
+    /// verifier premium (Claude Sonnet 4.6). Limité aux task_class pertinentes
+    /// (FactualQa principalement).
+    //
+    // (Le « + » ouvrait la ligne : markdown le lisait comme une PUCE et la doc
+    //  rendue affichait une liste au milieu d'une phrase. Même défaut que dans
+    //  `efe-swarm-provenance::cosign`. C'est le rendu qui était faux.)
     Speculative,
 }
 
@@ -167,6 +171,26 @@ impl RunRecord {
     ///
     /// **R3.S1** : `cost_microcents` est dérivé de `cost_cents × 1000` par
     /// défaut.  Utiliser `new_with_microcents()` pour précision sub-cent.
+    ///
+    /// # Onze arguments — exempté ici, et il faut dire ce qui n'est PAS réglé
+    ///
+    /// `llm_used` et `task_class` sont deux `String` **voisines** : les
+    /// transposer passe le compilateur. C'est le même défaut que celui corrigé
+    /// dans `AuditEntry::success`, et il mériterait le même traitement.
+    ///
+    /// Il ne l'a pas reçu, et pour une raison mesurée : **ce constructeur n'a
+    /// aucun appelant.** Les dix-huit sites du dépôt passent tous par son
+    /// successeur `new_with_microcents`, que sa propre documentation ci-dessus
+    /// désigne. Or ce successeur porte DÉJÀ `#[allow(clippy::too_many_arguments)]`
+    /// — posé sans une ligne de justification, donc invisible à la porte de
+    /// qualité. Refondre la fonction morte en laissant la vivante silencieuse
+    /// aurait déplacé le problème sans le résoudre.
+    ///
+    /// Ce qu'il reste à faire est donc **un seul geste, sur les deux** : un type
+    /// d'enregistrement nommé pour les onze champs, et les dix-huit appels
+    /// réécrits. C'est hors du critère de É3 (rendre la porte verte) et c'est
+    /// une décision de périmètre, pas de lint.
+    #[allow(clippy::too_many_arguments)] // constructeur MORT + jumeau déjà exempté (cf. supra)
     #[must_use]
     pub fn new(
         fixture_name: String,
@@ -531,8 +555,7 @@ impl SavingsReport {
             let multiplier = self.baseline_total_cost_cents as f32
                 / self.full_total_cost_cents as f32;
             md.push_str(&format!(
-                "\n→ **EFE coûte ~{:.1}× moins cher que Claude direct** sur cette mixture.\n\n",
-                multiplier
+                "\n→ **EFE coûte ~{multiplier:.1}× moins cher que Claude direct** sur cette mixture.\n\n"
             ));
         }
 
@@ -586,7 +609,7 @@ impl SavingsReport {
                 full.quality_pass_rate * 100.0,
                 (full.quality_pass_rate - baseline.quality_pass_rate) * 100.0,
             ));
-            md.push_str("\n");
+            md.push('\n');
         }
         md.push_str("---\n\n");
 
@@ -750,8 +773,7 @@ impl SavingsReport {
             let mult = self.baseline_total_cost_microcents as f64
                 / self.full_total_cost_microcents as f64;
             md.push_str(&format!(
-                "\n→ **EFE coûte ~{:.2}× moins cher que Claude direct** (calculé µ¢).\n\n",
-                mult
+                "\n→ **EFE coûte ~{mult:.2}× moins cher que Claude direct** (calculé µ¢).\n\n"
             ));
         }
         md.push_str("---\n\n");

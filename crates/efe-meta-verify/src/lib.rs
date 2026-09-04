@@ -194,7 +194,7 @@ impl RunBinding {
     #[must_use]
     pub fn hash_hex(&self) -> String {
         let mut out = [0u8; 32];
-        out.copy_from_slice(&Sha256::digest(&self.canonical()));
+        out.copy_from_slice(&Sha256::digest(self.canonical()));
         to_hex(&out)
     }
 }
@@ -328,6 +328,21 @@ pub struct Verdict {
 /// Hash de contenu canonique d'un pas : `SHA-256(id ‖ 0x1f ‖ step ‖ résidu ‖ dim ‖ z̃)`.
 /// Encodage **déterministe** (little-endian, ordre de champ gelé). SHA-256 = même
 /// primitive que le moat P1 ⇒ ré-implémentable à la main (vérifieur zéro-dép P1.2).
+///
+/// # Sept arguments, et deux raisons de les garder
+///
+/// 1. **Le sceau reste hors de portée.** Cette fonction RECALCULE ce que le sceau
+///    d'un pas prétend être ; lui passer le `Step` entier — dont ces sept champs
+///    sont les sept premiers — lui donnerait accès au `seal`, et rendrait une
+///    vérification circulaire *écrivable*. Les sept types sont d'ailleurs tous
+///    distincts, donc aucune transposition d'arguments ne peut passer le
+///    compilateur : l'arité est haute, elle n'est pas dangereuse.
+///
+/// 2. **Le jumeau.** `verify_meta_mini::canonical` doit produire les MÊMES octets,
+///    et un lecteur qui met les deux fonctions côte à côte doit voir la même liste
+///    dans le même ordre. Regrouper ici et pas là-bas — ou l'inverse — casserait
+///    la correspondance visuelle qui rend la byte-identité vérifiable à l'œil.
+#[allow(clippy::too_many_arguments)] // préimage explicite, jumelle de verify-meta-mini (cf. supra)
 #[must_use]
 pub fn canonical_hash(
     meta_id: &str,
@@ -765,7 +780,12 @@ mod tests {
                 meta_id: "kovant-procurement-v1".into(),
                 step: i,
                 residual: 7.4960402424643995 / (i as f64 + 1.0),
-                consensus: vec![f64::from(-0.190_753_86_f32), f64::from(0.328_241_91_f32), f64::from(0.554_084_1_f32)],
+                // `0.328_241_9` et non `0.328_241_91` : f32 ne porte que ~7 chiffres
+                // significatifs, et les deux littéraux désignent le MÊME f32
+                // (0.328_241_914_510_726_93 une fois élargi en f64) — donc le même
+                // sceau. Vérifié bit à bit avant l'écriture : une fixture de hachage
+                // ne se raccourcit pas à vue.
+                consensus: vec![f64::from(-0.190_753_86_f32), f64::from(0.328_241_9_f32), f64::from(0.554_084_1_f32)],
                 safety_delta: None,
                 vote_hashes: None,
                 binding_hash: None,

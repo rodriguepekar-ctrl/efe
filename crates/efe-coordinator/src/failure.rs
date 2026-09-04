@@ -401,7 +401,7 @@ mod tests {
             assert!(modes.contains(&FailureMode::SlmDown("analyzer".into())));
             assert!(modes.contains(&FailureMode::SlmDown("compressor".into())));
         } else {
-            panic!("attendu Composite, got {:?}", combined);
+            panic!("attendu Composite, got {combined:?}");
         }
     }
 

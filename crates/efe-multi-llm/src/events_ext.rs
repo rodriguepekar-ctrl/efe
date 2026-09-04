@@ -28,6 +28,30 @@ use efe_coordinator::{EventBus, StreamEvent};
 
 use crate::reformulator_ext::ReformulatorEngine;
 
+/// Une charge sur le budget : ce qu'elle coûte, où en est le cumul, et le plafond.
+///
+/// # Trois `u32` voisins, dans une fonction de comptabilité
+///
+/// `cents`, `running_total` et `max_budget` se suivaient dans une liste de sept
+/// arguments, tous du même type. Aux **onze** sites d'appel, seule la position
+/// disait lequel était lequel — et une transposition passait le compilateur sans
+/// un mot. L'évènement publié annoncerait alors un plafond à la place d'un cumul,
+/// ou l'inverse : une comptabilité fausse, plausible, et lue par l'interface comme
+/// une vérité.
+///
+/// Les nommer ne change rien au calcul. Cela rend la faute impossible à écrire
+/// par distraction, ce qui est la seule chose que le compteur d'arguments
+/// signalait vraiment.
+#[derive(Debug, Clone, Copy)]
+pub struct BudgetCharge {
+    /// Ce que cette charge coûte, en cents.
+    pub cents: u32,
+    /// Le cumul APRÈS cette charge.
+    pub running_total: u32,
+    /// Le plafond de la mission.
+    pub max_budget: u32,
+}
+
 /// Trait d'extension pour publier les évènements Phase 3.
 #[async_trait::async_trait]
 pub trait Phase3EventExt: Send + Sync {
@@ -92,9 +116,7 @@ pub trait Phase3EventExt: Send + Sync {
         bus: &Arc<dyn EventBus>,
         swarm_id: Uuid,
         llm: &str,
-        cents: u32,
-        running_total: u32,
-        max_budget: u32,
+        charge: BudgetCharge,
     );
 
     /// Publie l'annulation d'un LLM in-flight.
@@ -282,9 +304,7 @@ impl Phase3EventExt for Phase3Publisher {
         bus: &Arc<dyn EventBus>,
         swarm_id: Uuid,
         llm: &str,
-        cents: u32,
-        running_total: u32,
-        max_budget: u32,
+        charge: BudgetCharge,
     ) {
         Self::emit(
             bus,
@@ -292,9 +312,9 @@ impl Phase3EventExt for Phase3Publisher {
             "budget",
             "CHARGED",
             serde_json::json!({
-                llm.to_string(): cents as f32,
-                "running_total": running_total as f32,
-                "max_budget": max_budget as f32,
+                llm.to_string(): charge.cents as f32,
+                "running_total": charge.running_total as f32,
+                "max_budget": charge.max_budget as f32,
             }),
         )
         .await;

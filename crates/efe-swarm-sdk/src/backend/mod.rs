@@ -131,6 +131,19 @@ impl ScriptedBackend {
     /// scripte « juste sur ces lignes, faux sur celles-là » en clé-ant les règles sur les textes
     /// (uniques) des lignes — ce qui laisse le banc B1 **vérifier sa propre comptabilité
     /// d'exactitude sur Mac**, sans aucun modèle (I-BENCH-MAC). I-SEAM : inerte/absent en prod.
+    ///
+    /// # Sans appelant depuis É0, et ce n'est pas un lint
+    ///
+    /// Son unique consommateur était le banc B1 — `crates/efe-swarm-sdk/benches`
+    /// n'existe plus : il est parti avec les 47 membres que É0 a retirés du
+    /// périmètre. Le constructeur survit à son usage.
+    ///
+    /// Il n'est pas supprimé ici parce que ce serait une décision de PÉRIMÈTRE et
+    /// non de qualité : `test-util` est une feature publiée, et retirer une API de
+    /// mock documentée pour éteindre un avertissement inverserait l'ordre des
+    /// raisons. Le signaler est le geste juste ; trancher appartient à qui décide
+    /// si le banc B1 revient.
+    #[allow(dead_code)] // consommateur retiré par É0 (banc B1) — cf. supra
     pub fn matching(rules: Vec<(String, String)>) -> Arc<Self> {
         Arc::new(Self { response: None, rules })
     }

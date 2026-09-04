@@ -150,7 +150,7 @@ impl PricingTable {
             + (output_tokens as u64 * out_rate as u64);
         // total est en (cents × tokens) → diviser par M tokens.
         // Arrondi sup pour le budget tracker (conservative).
-        ((total + 999_999) / 1_000_000) as u32
+        total.div_ceil(1_000_000) as u32
     }
 
     /// **R3.S1** : Calcule le coût en **microcents** (1 µ¢ = 1/1000 cent).
@@ -253,9 +253,9 @@ mod tests {
     fn openai_models_listing() {
         let p = PricingTable::openai();
         let m = p.models();
-        assert!(m.iter().any(|n| *n == "gpt-4o"));
-        assert!(m.iter().any(|n| *n == "gpt-4o-mini"));
-        assert!(m.iter().any(|n| *n == "gpt-5"));
+        assert!(m.contains(&"gpt-4o"));
+        assert!(m.contains(&"gpt-4o-mini"));
+        assert!(m.contains(&"gpt-5"));
     }
 
     #[test]
@@ -430,14 +430,12 @@ mod tests {
             assert_eq!(
                 in_mc,
                 (in_cents_legacy as u64) * 1000,
-                "Claude {model} in_mc/M doit être cents/M × 1000 (= {})",
-                in_cents_legacy
+                "Claude {model} in_mc/M doit être cents/M × 1000 (= {in_cents_legacy})"
             );
             assert_eq!(
                 out_mc,
                 (out_cents_legacy as u64) * 1000,
-                "Claude {model} out_mc/M doit être cents/M × 1000 (= {})",
-                out_cents_legacy
+                "Claude {model} out_mc/M doit être cents/M × 1000 (= {out_cents_legacy})"
             );
         }
     }

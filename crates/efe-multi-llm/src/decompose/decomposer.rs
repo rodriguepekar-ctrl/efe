@@ -122,7 +122,7 @@ fn decompose_heuristic(text: &str) -> Vec<SubTask> {
             || lower.contains(". then ")
         {
             for part in s
-                .split(|c| c == ';' || c == ',')
+                .split([';', ','])
                 .map(str::trim)
                 .filter(|p| !p.is_empty())
             {

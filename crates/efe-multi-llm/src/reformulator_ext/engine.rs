@@ -196,6 +196,10 @@ impl Reformulated {
 #[cfg(test)]
 mod tests {
     use super::*;
+    // Importé ICI et non en tête de fichier : le seul appel à `AuditEntry::success`
+    // est un montage de test, et une importation de production inutilisée est un
+    // avertissement — donc une erreur sous la porte de qualité.
+    use efe_nano_app_coordinator::SuccessRecord;
 
     #[test]
     fn tags_are_stable() {
@@ -223,7 +227,18 @@ mod tests {
 
     fn entry_success() -> AuditEntry {
         let ctx = efe_nano_app_coordinator::CallContext::mock();
-        AuditEntry::success(&ctx, "reformulator", "1.1.0", "aa11".into(), "bb22".into(), 120, 40, 350)
+        AuditEntry::success(
+            &ctx,
+            SuccessRecord {
+                robot_id: "reformulator",
+                schema_version: "1.1.0",
+                input_hash: "aa11".into(),
+                output_hash: "bb22".into(),
+                tokens_prompt: 120,
+                tokens_completion: 40,
+                latency_ms: 350,
+            },
+        )
     }
 
     #[test]

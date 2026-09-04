@@ -94,7 +94,8 @@ impl DagExecutor {
 
         let mut queue: VecDeque<NodeId> = in_degree
             .iter()
-            .filter_map(|(k, &v)| (v == 0).then(|| k.clone()))
+            .filter(|&(_, &v)| v == 0)
+            .map(|(k, _)| k.clone())
             .collect();
         let mut order = Vec::with_capacity(nodes.len());
         while let Some(n) = queue.pop_front() {

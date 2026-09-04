@@ -185,10 +185,37 @@ fn un_seul_analyseur_dautorite_dans_tout_le_depot() {
 }
 
 /// **La DoD de M1.b** : la liste est vide.
+///
+/// # Pourquoi `const_is_empty` est exempté ici, et ce que la feuille de route disait de faux
+///
+/// Clippy a raison : `EXEMPTIONS` est un `const` vide, donc `.is_empty()` vaut
+/// `true` à la compilation. **C'est précisément l'assertion.** La DoD de M1.b
+/// n'est pas « la liste est petite », c'est « elle est VIDE » — un fait connu du
+/// compilateur, énoncé à l'exécution pour pouvoir porter le message ci-dessous,
+/// qui explique *pourquoi* la vider était nécessaire.
+///
+/// La feuille de route du MVP décrivait ce site comme « un garde dont une
+/// condition est constante, donc qui ne garde rien » et annonçait « un trou dans
+/// le seul analyseur d'autorité du dépôt ». **Les deux sont faux, et il faut le
+/// dire ici plutôt que dans un rapport que personne ne relira :**
+///
+/// * ce garde garde. Le jour où quelqu'un ajoute une entrée, le `const` cesse
+///   d'être vide, l'assertion devient franchissable — et tombe. Elle ne peut être
+///   constante *que tant qu'elle est satisfaite* ;
+/// * et la discipline derrière n'est pas vide non plus : `refus_dexemption` est
+///   contre-prouvée sur ses **trois** motifs par
+///   `la_validation_dexemption_tombe_sur_chacun_de_ses_trois_motifs`. Si la liste
+///   se remplissait demain, la règle serait debout dès la première entrée.
+///
+/// Il n'y a donc rien à refermer. Ce qu'il y avait à faire, c'était écrire la
+/// raison — un `allow` sans raison est un silence, un `allow` avec sa mesure est
+/// une décision.
 #[test]
 fn la_liste_dexemptions_est_vide() {
+    #[allow(clippy::const_is_empty)] // la constance EST l'assertion (cf. supra)
+    let vide = EXEMPTIONS.is_empty();
     assert!(
-        EXEMPTIONS.is_empty(),
+        vide,
         "la liste d'exemptions n'est pas vide ({} entrées) alors que M1.b l'a vidée. Un nouvel \
          analyseur n'est pas une exception à documenter, c'est un bug à ne pas écrire : la raison \
          écrite de l'exemption précédente (« sûr par composition ») s'est révélée FAUSSE à la \

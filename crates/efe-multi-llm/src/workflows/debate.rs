@@ -10,7 +10,7 @@ use uuid::Uuid;
 use crate::budget::BudgetTracker;
 use crate::canonical::{ArgumentStance, CanonicalArgument};
 use crate::error::{MultiLlmError, MultiLlmResult};
-use crate::events_ext::{Phase3EventExt, Phase3Publisher};
+use crate::events_ext::{BudgetCharge, Phase3EventExt, Phase3Publisher};
 use crate::reformulator_ext::{reformulator_for, SourceDialect};
 use crate::request::{DebateArgumentSummary, DebateRequest, DebateResponse};
 use crate::DEBATE_MAX_ROUNDS;
@@ -123,9 +123,11 @@ pub async fn run_debate(
                 &bus,
                 swarm_id,
                 &req.pro_llm,
-                pro_resp.cost_cents,
-                budget.spent_cents(),
-                budget.max_cost_cents(),
+                BudgetCharge {
+                    cents: pro_resp.cost_cents,
+                    running_total: budget.spent_cents(),
+                    max_budget: budget.max_cost_cents(),
+                },
             )
             .await;
         publisher
@@ -133,9 +135,11 @@ pub async fn run_debate(
                 &bus,
                 swarm_id,
                 &req.contra_llm,
-                contra_resp.cost_cents,
-                budget.spent_cents(),
-                budget.max_cost_cents(),
+                BudgetCharge {
+                    cents: contra_resp.cost_cents,
+                    running_total: budget.spent_cents(),
+                    max_budget: budget.max_cost_cents(),
+                },
             )
             .await;
 
@@ -264,9 +268,11 @@ pub async fn run_debate(
             &bus,
             swarm_id,
             &req.jury_llm,
-            jury_resp.cost_cents,
-            budget.spent_cents(),
-            budget.max_cost_cents(),
+            BudgetCharge {
+                cents: jury_resp.cost_cents,
+                running_total: budget.spent_cents(),
+                max_budget: budget.max_cost_cents(),
+            },
         )
         .await;
 

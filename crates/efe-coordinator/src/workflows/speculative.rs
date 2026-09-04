@@ -263,7 +263,7 @@ pub async fn run_speculative_with_swarm_id(
         .bus
         .publish(StreamEvent::PreChewingMetrics {
             swarm_id,
-            metrics: chewing_metrics.clone(),
+            metrics: Box::new(chewing_metrics.clone()),
             ts: Utc::now(),
         })
         .await;

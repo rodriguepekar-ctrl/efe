@@ -176,16 +176,45 @@ fn hex_decode(s: &str) -> Option<Vec<u8>> {
 ///
 /// Déterministe : mêmes champs ⇒ même tuple, donc l'attestant et le vérifieur calculent la même
 /// chose sans se concerter.
+/// Les champs qui entrent dans le tuple, **dans l'ordre où ils y entrent**.
+///
+/// # Pourquoi ils sont nommés depuis É3
+///
+/// La signature remplacée alignait `tenant` et `manifest_root` : deux `&str`
+/// **voisins**, transposables sans que le compilateur ne bronche. Et cette
+/// fonction n'a que deux appelants — **le signataire et le vérifieur**. C'est la
+/// configuration où une transposition fait le plus de dégâts :
+///
+/// * transposée des deux côtés, elle est **invisible** — la signature vérifie
+///   parfaitement, et le tuple engage autre chose que ce qu'il prétend ;
+/// * transposée d'un seul, **toutes** les attestations cessent de vérifier, sans
+///   que rien ne dise pourquoi.
+///
+/// Les champs nommés ne rendent pas le hachage plus sûr : ils rendent la faute
+/// **impossible à écrire par distraction**, aux deux endroits où elle comptait.
+/// L'ordre de la préimage, lui, est celui de la déclaration ci-dessous — donc
+/// toujours lisible d'un coup d'œil à côté de la formule du doc.
+pub struct AttestFields<'a> {
+    /// Version du schéma d'attestation.
+    pub schema: u16,
+    /// Le run attesté (entre par ses 16 octets bruts).
+    pub run_id: Uuid,
+    /// Le tenant.
+    pub tenant: &'a str,
+    /// La racine du manifeste attestée.
+    pub manifest_root: &'a str,
+    /// Nombre de nœuds engagés.
+    pub node_count: u32,
+    /// Horodatage de signature.
+    pub signed_at: u64,
+    /// Identifiant de la clé signataire.
+    pub key_id: &'a str,
+}
+
 #[must_use]
-pub fn attest_tuple(
-    schema: u16,
-    run_id: Uuid,
-    tenant: &str,
-    manifest_root: &str,
-    node_count: u32,
-    signed_at: u64,
-    key_id: &str,
-) -> [u8; 32] {
+pub fn attest_tuple(champs: AttestFields<'_>) -> [u8; 32] {
+    let AttestFields { schema, run_id, tenant, manifest_root, node_count, signed_at, key_id } =
+        champs;
     let mut buf = Vec::with_capacity(
         ATTEST_DOMAIN_V1.len() + 2 + 16 + 8 + tenant.len() + 8 + manifest_root.len() + 4 + 8 + 8 + key_id.len(),
     );
@@ -280,15 +309,15 @@ impl BundleSigner {
         bundle: &Bundle,
         signed_at: u64,
     ) -> RootAttestation {
-        let tuple = attest_tuple(
-            ATTEST_SCHEMA_V1,
+        let tuple = attest_tuple(AttestFields {
+            schema: ATTEST_SCHEMA_V1,
             run_id,
             tenant,
-            &bundle.manifest_root,
-            bundle.node_count,
+            manifest_root: &bundle.manifest_root,
+            node_count: bundle.node_count,
             signed_at,
-            &self.key_id,
-        );
+            key_id: &self.key_id,
+        });
         let sig: Signature = self.sk.sign(&tuple);
         RootAttestation {
             schema: ATTEST_SCHEMA_V1,
@@ -328,15 +357,15 @@ pub fn verify_attestation(att: &RootAttestation, vk: &VerifyingKey) -> Result<()
         sig_bytes.as_slice().try_into().map_err(|_| AttestError::MalformedSignature)?;
     let sig = Signature::from_bytes(&sig_arr);
 
-    let tuple = attest_tuple(
-        att.schema,
-        att.run_id,
-        &att.tenant_id,
-        &att.manifest_root,
-        att.node_count,
-        att.signed_at,
-        &att.key_id,
-    );
+    let tuple = attest_tuple(AttestFields {
+        schema: att.schema,
+        run_id: att.run_id,
+        tenant: &att.tenant_id,
+        manifest_root: &att.manifest_root,
+        node_count: att.node_count,
+        signed_at: att.signed_at,
+        key_id: &att.key_id,
+    });
     // `verify_strict` et non `verify` : il rejette les clés d'ordre faible et les malléabilités
     // que la vérification permissive laisse passer. Même choix que `cosign.rs`.
     vk.verify_strict(&tuple, &sig).map_err(|_| AttestError::SignatureInvalid)

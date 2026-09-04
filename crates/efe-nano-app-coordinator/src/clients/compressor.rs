@@ -5,7 +5,7 @@
 
 use async_trait::async_trait;
 
-use super::llama_server::{LlamaServerClient, RobotHealth};
+use super::llama_server::{LlamaServerClient, RobotAssets, RobotHealth};
 use super::{NanoRobotClient, RunMode};
 use crate::clients::analyzer::assets_dir;
 use crate::context::CallContext;
@@ -33,11 +33,13 @@ impl CompressorClient {
         let assets = assets_dir();
         Ok(Self {
             inner: LlamaServerClient::from_assets(
-                crate::robot_ids::COMPRESSOR,
-                "1.0.0",
+                RobotAssets {
+                    id: crate::robot_ids::COMPRESSOR,
+                    schema_version: "1.0.0",
+                    grammar_path: &assets.join("grammars/compressor_v1.gbnf"),
+                    prompt_path: &assets.join("prompts/compressor.txt"),
+                },
                 endpoint,
-                assets.join("grammars/compressor_v1.gbnf"),
-                assets.join("prompts/compressor.txt"),
                 /* max_tokens */ 1536,
                 /* temperature */ compressor_temperature(),
             )?,
@@ -83,7 +85,7 @@ impl NanoRobotClient for CompressorClient {
         // `SAFE_CHUNK_TOKENS`, on bascule en compression **map-reduce** (chunked
         // + réduction hiérarchique, cf. `compress_long`). Sinon, appel unique
         // (chemin historique préservé bit-à-bit).
-        let output = if estimate_tokens(&input.text) > safe_chunk_tokens() {
+        let output = if map_reduce_requis(&input.text, safe_chunk_tokens()) {
             self.compress_long(&input, ctx).await?
         } else {
             self.compress_once(&input, ctx).await?
@@ -380,6 +382,25 @@ fn env_usize(var: &str, default: usize, min: usize) -> usize {
 fn safe_chunk_tokens() -> usize {
     env_usize("EFE_COMPRESSOR_CHUNK_TOKENS", SAFE_CHUNK_TOKENS, 12)
 }
+
+/// **La frontière de dispatch, nommée.** `invoke` bascule en map-reduce
+/// **strictement au-dessus** du seuil ; pile au seuil, l'appel reste unique.
+///
+/// Elle existait, dispersée : une comparaison dans `invoke` et trois copies de
+/// cette comparaison dans les tests qui prétendent la « verrouiller ». Des tests
+/// qui RECOPIENT la décision au lieu de l'APPELER ne la verrouillent pas — ils
+/// documentent l'intention de l'auteur au moment où il les a écrits. Un passage
+/// de `>` à `>=` en production les laisserait tous verts.
+///
+/// Le seuil est un PARAMÈTRE et n'est pas lu ici : la production passe
+/// `safe_chunk_tokens()` (qui lit l'environnement), les tests passent la
+/// CONSTANTE. C'est ce qui les garde immunes à un `EFE_COMPRESSOR_CHUNK_TOKENS`
+/// présent pendant `cargo test` — la propriété que le commentaire du bloc de
+/// tests exigeait — sans les couper de la décision réelle.
+#[must_use]
+fn map_reduce_requis(texte: &str, seuil: usize) -> bool {
+    estimate_tokens(texte) > seuil
+}
 /// Nombre max de passes de réduction, configurable via env.
 fn max_reduce_passes() -> usize {
     env_usize("EFE_COMPRESSOR_MAX_REDUCE_PASSES", MAX_REDUCE_PASSES, 1)
@@ -621,7 +642,7 @@ mod chunking_tests {
         let toks = estimate_tokens(&prompt);
         assert_eq!(toks, 700, "2800 chars / 4 = 700 tokens");
         assert!(
-            toks > SAFE_CHUNK_TOKENS,
+            map_reduce_requis(&prompt, SAFE_CHUNK_TOKENS),
             "{toks} t > {SAFE_CHUNK_TOKENS} → dispatch map-reduce conservé"
         );
         let chunks = split_into_chunks_overlap(&prompt, SAFE_CHUNK_TOKENS, 0);
@@ -638,13 +659,17 @@ mod chunking_tests {
         // Donc un prompt pile à 512 t reste en appel unique ; 513 t bascule.
         let at = "z".repeat(SAFE_CHUNK_TOKENS * 4); // 2048 chars → 512 t pile
         assert_eq!(estimate_tokens(&at), SAFE_CHUNK_TOKENS);
+        // `!(x > seuil)` — que clippy voulait réduire en `x <= seuil` — était le
+        // MIROIR de la comparaison de production, écrit à la main. Le miroir était
+        // documentaire, jamais mécanique : il ne pouvait pas tomber si la production
+        // changeait. L'appel, lui, le peut.
         assert!(
-            !(estimate_tokens(&at) > SAFE_CHUNK_TOKENS),
-            "pile au seuil → appel unique (comparaison stricte `>`)"
+            !map_reduce_requis(&at, SAFE_CHUNK_TOKENS),
+            "pile au seuil → appel unique (la bascule est STRICTE)"
         );
         let over = "z".repeat(SAFE_CHUNK_TOKENS * 4 + 4); // +1 token
         assert!(
-            estimate_tokens(&over) > SAFE_CHUNK_TOKENS,
+            map_reduce_requis(&over, SAFE_CHUNK_TOKENS),
             "un token au-dessus du seuil → bascule map-reduce"
         );
     }
@@ -873,13 +898,15 @@ mod chunking_tests {
             .await;
 
         let inner = LlamaServerClient::from_assets(
-            "compressor",
-            "1.0.0",
+            RobotAssets {
+                id: "compressor",
+                schema_version: "1.0.0",
+                grammar_path: &assets_dir().join("grammars/compressor_v1.gbnf"),
+                prompt_path: &assets_dir().join("prompts/compressor.txt"),
+            },
             server.uri(),
-            assets_dir().join("grammars/compressor_v1.gbnf"),
-            assets_dir().join("prompts/compressor.txt"),
-            512,
-            0.1,
+            /* max_tokens */ 512,
+            /* temperature */ 0.1,
         )
         .expect("client mock construit");
         let client = CompressorClient::from_helper(inner);

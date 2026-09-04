@@ -135,10 +135,15 @@ pub enum NodeStatus {
 
 /// Un nœud **pinné** : son identité, sa clé publique ed25519 (hex des 32 octets bruts) et son statut.
 ///
-/// L'orchestrateur ne détient que du **public** — un tiers peut donc tenir le registre + les records
-/// + la clé tenant et **tout vérifier hors ligne**, sans aucun secret. L'enrôlement (publication +
-/// épinglage de la pubkey) est un **acte d'opérateur, hors-bande** — miroir de l'épinglage d'endpoint
-/// de RC-1, mais sur une identité de *signature* et non un canal.
+/// L'orchestrateur ne détient que du **public** — un tiers peut donc tenir le registre,
+/// les records et la clé tenant, et **tout vérifier hors ligne**, sans aucun secret.
+/// L'enrôlement (publication + épinglage de la pubkey) est un **acte d'opérateur,
+/// hors-bande** — miroir de l'épinglage d'endpoint de RC-1, mais sur une identité de
+/// *signature* et non un canal.
+//
+// (Le « + » qui ouvrait une ligne était lu par markdown comme une PUCE : la doc
+// rendue affichait une liste là où la phrase continuait. Remplacé par des virgules
+// — c'est le rendu qui était faux, pas seulement le lint.)
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PinnedNode {
     /// Clé publique ed25519, hex des 32 octets bruts (`VerifyingKey::to_bytes`).

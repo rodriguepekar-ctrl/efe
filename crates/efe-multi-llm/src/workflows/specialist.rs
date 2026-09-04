@@ -13,7 +13,7 @@ use crate::aggregate::{Aggregator, aggregator::AggregateInput};
 use crate::budget::BudgetTracker;
 use crate::decompose::Decomposer;
 use crate::error::{MultiLlmError, MultiLlmResult};
-use crate::events_ext::{Phase3EventExt, Phase3Publisher};
+use crate::events_ext::{BudgetCharge, Phase3EventExt, Phase3Publisher};
 use crate::request::{SpecialistAssignment, SpecialistRequest, SpecialistResponse};
 use crate::ANTI_MONOCULTURE_MAX_RATIO;
 
@@ -95,9 +95,11 @@ pub async fn run_specialist(
                         &bus,
                         swarm_id,
                         &llm,
-                        resp.cost_cents,
-                        budget.spent_cents(),
-                        budget.max_cost_cents(),
+                        BudgetCharge {
+                            cents: resp.cost_cents,
+                            running_total: budget.spent_cents(),
+                            max_budget: budget.max_cost_cents(),
+                        },
                     )
                     .await;
                 assignments.push(SpecialistAssignment {
@@ -176,7 +178,7 @@ fn choose_best_llm(
     if available.is_empty() {
         return Err(MultiLlmError::Config("no LLMs available".into()));
     }
-    let class_key = format!("{:?}", class).to_uppercase();
+    let class_key = format!("{class:?}").to_uppercase();
     // Le format!("{:?}") sur TaskClass donne "FactualQa" → on convertit en SCREAMING_SNAKE_CASE.
     let class_key = pascal_to_screaming_snake(&class_key);
     let mut best: Option<(String, f32)> = None;
@@ -199,7 +201,7 @@ fn choose_best_llm(
 }
 
 fn enforce_anti_monoculture(
-    routing: &mut Vec<(usize, String)>,
+    routing: &mut [(usize, String)],
     sub_tasks: &[crate::decompose::SubTask],
     available: &[String],
     capability_scores: &HashMap<String, HashMap<String, f32>>,

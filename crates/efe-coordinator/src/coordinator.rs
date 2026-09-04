@@ -34,6 +34,7 @@ use efe_nano_app_coordinator::{
 /// Tous optionnels au boot : un Coordinator sans Verifier marche encore
 /// (mais sans fact-checking).  Un Coordinator sans Reformulator marche
 /// aussi (compresseur reçoit le texte brut).
+#[derive(Default)]
 pub struct CoordinatorClients {
     /// Analyseur (NER + intent + sentiment + langue).
     pub analyzer: Option<Arc<AnalyzerClient>>,
@@ -61,19 +62,11 @@ pub struct CoordinatorClients {
     pub slm_circuits: HashMap<String, SlmCircuitBreaker>,
 }
 
-impl Default for CoordinatorClients {
-    fn default() -> Self {
-        Self {
-            analyzer: None,
-            reformulator: None,
-            compressor: None,
-            verifier: None,
-            filter: None,
-            router: None,
-            slm_circuits: HashMap::new(),
-        }
-    }
-}
+// `Default` est DÉRIVÉ (cf. la déclaration de la structure) : l'implémentation
+// écrite à la main ne faisait que réciter le défaut de chaque champ — sept
+// `None` et un `HashMap::new()`, qui EST `HashMap::default()`. Une telle copie
+// ne coûte rien tant qu'elle est juste, et devient un piège au premier champ
+// ajouté sans y penser : le dérivé suit, la copie oublie.
 
 impl CoordinatorClients {
     /// Builder vide.
@@ -217,6 +210,7 @@ pub struct Coordinator {
 }
 
 /// Builder fluide pour `Coordinator`.
+#[derive(Default)]
 pub struct CoordinatorBuilder {
     config: CoordinatorConfig,
     clients: CoordinatorClients,
@@ -231,20 +225,7 @@ pub struct CoordinatorBuilder {
     ab_test: Option<Arc<ABTestRuntime>>,
 }
 
-impl Default for CoordinatorBuilder {
-    fn default() -> Self {
-        Self {
-            config: CoordinatorConfig::default(),
-            clients: CoordinatorClients::default(),
-            registry: None,
-            bus: None,
-            vote: None,
-            policies: None,
-            metrics: None,
-            ab_test: None,
-        }
-    }
-}
+// Idem : `Default` dérivé plutôt que récité champ par champ (cf. la déclaration).
 
 impl CoordinatorBuilder {
     /// Configure.

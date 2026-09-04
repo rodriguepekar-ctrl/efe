@@ -5,7 +5,7 @@
 
 use async_trait::async_trait;
 
-use super::llama_server::{LlamaServerClient, RobotHealth};
+use super::llama_server::{LlamaServerClient, RobotAssets, RobotHealth};
 use super::{NanoRobotClient, RunMode};
 use crate::clients::analyzer::assets_dir;
 use crate::context::CallContext;
@@ -23,11 +23,13 @@ impl VerifierClient {
         let assets = assets_dir();
         Ok(Self {
             inner: LlamaServerClient::from_assets(
-                crate::robot_ids::VERIFIER,
-                "1.0.0",
+                RobotAssets {
+                    id: crate::robot_ids::VERIFIER,
+                    schema_version: "1.0.0",
+                    grammar_path: &assets.join("grammars/verifier_v1.gbnf"),
+                    prompt_path: &assets.join("prompts/verifier.txt"),
+                },
                 endpoint,
-                assets.join("grammars/verifier_v1.gbnf"),
-                assets.join("prompts/verifier.txt"),
                 /* max_tokens */ 768,
                 /* temperature */ 0.1,
             )?,

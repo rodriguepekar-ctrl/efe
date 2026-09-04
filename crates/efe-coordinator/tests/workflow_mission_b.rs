@@ -123,7 +123,7 @@ async fn mission_b_publishes_vote_resolved_event() {
     {
         tags.push(ev.tag());
     }
-    assert!(tags.contains(&"VOTE_RESOLVED"), "tags={:?}", tags);
+    assert!(tags.contains(&"VOTE_RESOLVED"), "tags={tags:?}");
 }
 
 #[tokio::test]

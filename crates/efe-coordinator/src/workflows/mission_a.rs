@@ -721,7 +721,7 @@ pub async fn run_mission_a_with_swarm_id(
         .bus
         .publish(StreamEvent::PreChewingMetrics {
             swarm_id,
-            metrics: chewing_metrics.clone(),
+            metrics: Box::new(chewing_metrics.clone()),
             ts: Utc::now(),
         })
         .await;

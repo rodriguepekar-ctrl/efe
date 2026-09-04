@@ -48,6 +48,23 @@ impl Step {
 
 /// Hash de contenu canonique — **byte-identique** à `efe_meta_verify::canonical_hash` :
 /// `SHA-256( id ‖ 0x1f ‖ step_LE ‖ résidu_LE ‖ dim_LE ‖ z̃_LE )`.
+///
+/// # Sept arguments, et c'est voulu
+///
+/// Clippy compte 7 pour un plafond de 6. La réponse évidente — prendre `&Step`,
+/// dont ces sept champs sont exactement les sept premiers — serait un **recul de
+/// sûreté** : `Step` porte aussi `seal`, et cette fonction RECALCULE ce que le
+/// sceau prétend être. Lui donner accès au sceau, c'est ouvrir la porte à une
+/// vérification circulaire, qu'un futur correctif pourrait franchir sans que rien
+/// ne l'arrête. Ne recevoir que la préimage rend la faute *impossible à écrire*.
+///
+/// Et l'arité n'est pas dangereuse ici, ce qui n'allait pas de soi : les sept
+/// types sont **tous distincts** (`&str`, `u64`, `f64`, `&[f64]`, `Option<f64>`,
+/// `Option<&[String]>`, `Option<&str>`), donc aucune transposition d'arguments ne
+/// peut passer le compilateur. C'est le critère qui sépare ce site des deux
+/// autres `too_many_arguments` du périmètre, où des voisins de MÊME type rendent
+/// la transposition silencieuse — ceux-là ont été corrigés, pas exemptés.
+#[allow(clippy::too_many_arguments)] // préimage explicite : le sceau reste hors de portée (cf. supra)
 #[must_use]
 pub fn canonical(
     meta_id: &str,

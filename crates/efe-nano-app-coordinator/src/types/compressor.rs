@@ -60,10 +60,7 @@ impl CompressorOutput {
     pub fn validate_preservation(&self, must_preserve: &[String]) -> Result<(), String> {
         for entity in must_preserve {
             if !self.preserved.iter().any(|p| p == entity) {
-                return Err(format!(
-                    "must_preserve entity '{}' not found in preserved list",
-                    entity
-                ));
+                return Err(format!("must_preserve entity '{entity}' not found in preserved list"));
             }
         }
         Ok(())

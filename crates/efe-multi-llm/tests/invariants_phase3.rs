@@ -53,9 +53,21 @@ async fn i11_anti_monoculture_max_60_percent() {
     let ratio = gpt_count as f32 / total as f32;
     // Pour 5 sub-tasks toutes "Code" : best we can do = 3/5 = 0.60.
     // L'algo doit redistribuer au moins 2 assignations vers d'autres LLMs.
+    //
+    // ⚠ L'assertion précédente était `gpt_count <= (total * 3) / 5 + 1`. Sur cinq
+    // sous-tâches, cela vaut 4 — soit **80 %**, dans un test qui s'appelle
+    // `i11_anti_monoculture_max_60_percent`. Le `+ 1` rendait le garde plus
+    // permissif que l'invariant qu'il prétend tenir, `ratio` n'était calculé que
+    // pour être IMPRIMÉ, et `ANTI_MONOCULTURE_MAX_RATIO` était importé sans être
+    // lu — c'est cet import mort que la porte de qualité a signalé, et il désignait
+    // le vrai défaut.
+    //
+    // La comparaison ci-dessous est celle de la PRODUCTION (`specialist.rs:227` :
+    // `ratio <= ANTI_MONOCULTURE_MAX_RATIO`), sur la même constante. Le test cesse
+    // de recopier l'invariant pour l'appeler.
     assert!(
-        gpt_count <= (total * 3) / 5 + 1,
-        "I11 violated: gpt has {gpt_count}/{total} (ratio {ratio:.2})"
+        ratio <= ANTI_MONOCULTURE_MAX_RATIO,
+        "I11 violé : gpt a {gpt_count}/{total} (ratio {ratio:.2} > {ANTI_MONOCULTURE_MAX_RATIO})"
     );
 }
 
