@@ -1,0 +1,227 @@
+\documentclass[11pt]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage[french]{babel}
+\usepackage{newpxtext,newpxmath}
+\usepackage[a4paper,top=1.6cm,bottom=1.55cm,left=2.0cm,right=2.0cm]{geometry}
+\usepackage{microtype}\usepackage{xcolor}\usepackage{titlesec}
+\usepackage[most]{tcolorbox}\usepackage{fancyhdr}\usepackage{enumitem}
+\usepackage{array}\usepackage{booktabs}\usepackage{longtable}
+
+\definecolor{efenavy}{HTML}{1F3A5F}\definecolor{efeteal}{HTML}{0E7A6E}
+\definecolor{efeamber}{HTML}{B25A1E}\definecolor{efegray}{HTML}{54606E}
+\definecolor{efesolve}{HTML}{2C6E49}\definecolor{efered}{HTML}{A32E2E}
+\definecolor{boxgray}{HTML}{F3F5F8}\definecolor{boxamber}{HTML}{FBF3EA}
+\definecolor{boxedge}{HTML}{D9E0EA}
+
+\titleformat{\section}{\color{efenavy}\large\bfseries}{}{0pt}{}
+\titlespacing{\section}{0pt}{9pt}{3pt}
+\titleformat{\subsection}[runin]{\color{efenavy}\bfseries}{}{0pt}{}[\;---\;]
+\titlespacing{\subsection}{0pt}{5pt}{0.5em}
+\setlength{\parskip}{2pt}\setlength{\parindent}{0pt}\setlength{\emergencystretch}{3em}
+\pagestyle{fancy}\fancyhf{}\renewcommand{\headrulewidth}{0.3pt}
+\lhead{\small\color{efegray}Scella --- la feuille de route jusqu'au MVP (C1 $+$ C3)}
+\cfoot{\small\color{efegray}\thepage}
+
+\newcommand{\code}[1]{\texttt{\small #1}}
+\newcommand{\best}[1]{{\color{efesolve}\textbf{#1}}}
+\newcommand{\pire}[1]{{\color{efered}\textbf{#1}}}
+\newcommand{\moyen}[1]{{\color{efeamber}\textbf{#1}}}
+\newcommand{\mm}[1]{\textbf{#1}}
+\newcommand{\sz}[1]{{\small #1}}
+\newcommand{\mesure}[1]{{\color{efeteal}\textbf{Mesuré.} }#1\par}
+\newcommand{\refute}[1]{{\color{efered}\textbf{Réfuté.} }#1\par}
+\newcommand{\fl}{$\rightarrow$}
+\newtcolorbox{these}{colback=boxgray,colframe=boxedge,boxrule=0.5pt,arc=2.5pt,left=8pt,right=8pt,top=6pt,bottom=6pt}
+\newtcolorbox{cadre}{colback=boxamber,colframe=efeamber!55,boxrule=0.6pt,arc=2.5pt,left=8pt,right=8pt,top=6pt,bottom=6pt}
+
+\begin{document}
+\begin{center}
+{\Huge\bfseries\color{efenavy} Jusqu'au MVP}\\[3pt]
+{\large\color{efegray}\itshape ce qui reste entre le périmètre vérifié et un produit qu'un inconnu lance --- 4 septembre 2026}
+\end{center}
+\vspace{2pt}
+
+\begin{these}
+\textbf{Le produit existe et il est vérifié.} Un dossier de 1\,229 fichiers, 30 crates, dont chaque
+octet a été confronté à sa source (SHA-256, 1229/1229 identiques), qui compile sous
+\code{-{}-locked}, dont 3\,903 tests passent et dont dix contrôles sortent 0.
+
+\textbf{Ce qui reste n'est presque plus du code.} La dette de qualité, qui pesait 109 erreurs sur
+le dépôt entier, n'en pèse plus que \best{six} sur le périmètre produit --- l'élagage l'a
+dissoute. Restent trois mesures jamais faites, deux décisions à trancher, et une précondition
+d'environnement qui, aujourd'hui, ne tient pas.
+\end{these}
+
+\section{0 \;\textbar\; L'état, mesuré le 4 septembre}
+
+\begin{center}\small
+\renewcommand{\arraystretch}{1.25}
+\begin{tabular}{@{}>{\raggedright\arraybackslash}p{5.3cm} >{\raggedright\arraybackslash}p{6.4cm} >{\raggedright\arraybackslash}p{4.4cm}@{}}
+\toprule
+\textbf{Ce qui est acquis} & \textbf{La mesure} & \textbf{Où} \\
+\midrule
+le périmètre & 1\,229 fichiers · 30 crates · 160 deps par chemin, 0 pendante · 22 \code{include\_str!}, 0 pendant & \code{\textasciitilde/Downloads/C1-C3} \\
+l'intégrité & SHA-256 contre la source : \best{1229/1229} identiques & idem \\
+la compilation & \code{cargo check -{}-locked -{}-workspace -{}-all-targets} \fl{} \best{0} & idem \\
+la suite & \code{cargo test -{}-workspace} \fl{} \best{0}, 3\,903 tests & idem \\
+les contrôles & 10 sur 13 \fl{} \best{0} & idem \\
+la branche & \code{c1-c3} poussée, 30 membres, registre d'appartenance restauré & \code{origin/c1-c3} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{center}\small
+\renewcommand{\arraystretch}{1.25}
+\begin{tabular}{@{}>{\raggedright\arraybackslash}p{5.3cm} >{\raggedright\arraybackslash}p{10.9cm}@{}}
+\toprule
+\textbf{Ce qui ne l'est pas} & \textbf{La mesure} \\
+\midrule
+la porte de qualité & \code{clippy -{}-workspace -{}-all-targets -D warnings} \fl{} \pire{exit 101}, mais \best{6 défauts} seulement (contre 109 sur le dépôt complet) \\
+le démon Docker & \pire{ne répond pas en 20 s} --- les processus tournent, l'API non \\
+\code{p1-check.sh} & \pire{jamais mesuré} : exige PostgreSQL en conteneur \\
+\code{r3-check.sh} & \pire{jamais mené à terme} : mort sur le disque, puis non rejoué \\
+l'emballage de \mm{M4} & \code{docker compose build}/\code{up} \pire{jamais lancés sur ce périmètre} \\
+deux décisions & la cascade \code{examples}/\code{efe\_tool} (171 fichiers) · les deux vérifieurs de méta-essaim \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\section{1 \;\textbar\; Les six étapes, dans l'ordre}
+
+\begin{center}\small
+\renewcommand{\arraystretch}{1.3}
+\begin{tabular}{@{}>{\raggedright\arraybackslash}p{0.8cm} >{\raggedright\arraybackslash}p{4.3cm} >{\raggedright\arraybackslash}p{8.4cm} >{\raggedright\arraybackslash}p{2.0cm}@{}}
+\toprule
+& \textbf{Étape} & \textbf{Le critère --- ce qu'on doit pouvoir exécuter} & \textbf{Coût} \\
+\midrule
+\mm{É0} & \textbf{Trancher les deux décisions} & le périmètre est arrêté ; \code{cargo check} tient encore après retrait & \sz{1 h} \\
+\mm{É1} & \textbf{Ouvrir la porte} & \code{docker compose up} : \code{preuve} sort 0, un reçu exporté et re-prouvé \textbf{sans clé}, la troncature démasquée & \sz{1--2 j} \\
+\mm{É2} & \textbf{Allumer C1 dans la \emph{même} commande} & \code{-{}-profile jonction} : un dossier réglementaire dérivé \textbf{du même run} & \sz{$\frac{1}{2}$--1 j} \\
+\mm{É3} & \textbf{La porte de qualité, verte} & \code{clippy -{}-workspace -{}-all-targets -D warnings} \fl{} 0 & \sz{$\frac{1}{2}$ j} \\
+\mm{É4} & \textbf{Les deux mesures jamais faites} & \code{p1-check.sh} \fl{} 0 \emph{et} \code{r3-check.sh} \fl{} 0 & \sz{1 j} \\
+\mm{É5} & \textbf{La page qu'on tend} & une page : la commande, ce qu'on voit, ce qu'on vérifie soi-même, ce que ça ne prouve pas & \sz{1 j} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{\mm{É0} · trancher, parce que c'est gratuit et que ça allège tout le reste}
+Deux décisions attendent, et la mesure est sans ambiguïté sur les deux --- ce qui ne veut pas dire
+qu'elles m'appartiennent.
+
+\textbf{La cascade (171 fichiers).} \code{examples/} a été copié en entier parce qu'\emph{un} de
+ses fichiers, \code{run.json}, est réellement produit --- \code{compose.yaml}, \code{m5-check.sh}
+et \code{p1-check.sh} le postent sur \code{/v1/swarm/run}. Les douze autres sont des exemples de
+\emph{classification} qui font \code{from efe\_tool import EfeClient}, et \code{efe\_tool} vise
+\code{efe.v1.SwarmService} en gRPC.
+\mesure{Dans le dossier : \best{0} crate implémente \code{SwarmService}, \best{0} fichier
+\code{.proto}, \best{0} serveur gRPC. Ces exemples appellent un service qui n'existe nulle part.
+Et le cœur n'en dépend pas : \code{0} référence depuis \code{crates/}, \code{0} depuis les
+contrôles, \code{0} depuis \code{compose.yaml}.}
+
+\textbf{Les deux vérifieurs de méta-essaim.} \code{verify-meta-mini} et \code{efe-meta-verify}
+se déclarent eux-mêmes « re-prouveurs de consensus de \emph{méta-essaim} », attendent
+\code{meta\_steps.jsonl} et \code{meta\_manifest.json}, et \best{aucun crate du dossier ne produit
+ces deux fichiers}. \code{SCELLA-TECHNOLOGIE-ARCHITECTURE.tex} ne les nomme pas une fois, quand il
+cite deux fois \code{verify-mini}/\code{provenance-verify}.
+
+\textbf{Pourquoi \mm{É0} vient en premier :} l'un des six défauts de la porte de qualité vit
+dans \code{verify-meta-mini} et disparaît avec le crate. Trancher d'abord, c'est travailler
+ensuite sur cinq et non sur six.
+
+\subsection{\mm{É1} · ouvrir la porte --- et sa précondition ne tient pas}
+La moitié « emballage » du critère de \mm{M4} n'a jamais tourné \emph{sur ce périmètre}. Elle a
+tourné le 23 août sur le dépôt complet (commit \code{711a6b8}) : image \code{scella-coin:local},
+53,4~Mo, distroless, les cinq étapes du pilote, deux conteneurs à 0. Mais le \code{Cargo.toml} a
+changé depuis, et \code{-{}-locked} rend la question binaire.
+
+\begin{cadre}
+\textbf{La précondition ne tient pas aujourd'hui.} \code{docker version} \pire{ne répond pas en
+20~secondes}, alors que \code{com.docker.backend} tourne. Ce n'est pas du code : c'est
+l'environnement, et c'est exactement pourquoi l'architecture de \mm{É1} met les préconditions
+avant tout --- elles échouent en secondes si on les regarde, en quarante minutes sinon.
+
+À vérifier \emph{avant} de lancer quoi que ce soit : le démon répond · son \emph{chemin de pull}
+délivre (distinct du réseau de l'hôte : le 2 septembre, \code{registry-1.docker.io} répondait en
+0,65~s pendant qu'un \code{pull} de 5~Mo n'aboutissait pas en 60~s) · le port hôte est libre
+(\code{SCELLA\_PORT}) · le volume \code{scella\_preuve} est \textbf{vide}, sinon la démonstration
+prouvera l'avant-dernière.
+\end{cadre}
+
+\subsection{\mm{É2} · le profil \code{jonction} n'a jamais été construit}
+\mesure{\code{scella-jonction:local} \fl{} \pire{0 image}.} Il est pourtant \emph{déjà câblé} dans
+\code{compose.yaml} : seconde image avec la feature \code{reg-evidence}, port 8081,
+\code{jonction.env} qui désigne \code{/preuve/reg}. \mm{É2} n'est donc pas « le construire » mais
+« l'exécuter ». Et le coût est mesuré : allumer C1 sur un C3 déployé ajoute \best{un seul crate}
+à la fermeture (13 \fl{} 14).
+
+\subsection{\mm{É3} · six défauts, dont un qui n'est pas un lint}
+\mesure{Sur la branche \code{c1-c3} : \code{exit 101}, \textbf{6 défauts} --- contre 109 sur le
+dépôt complet. L'élagage des 47 crates a dissous la dette.}
+
+Cinq sont des lints de forme, et quatre vivent dans le même crate,
+\code{efe-nano-app-coordinator} : deux \code{too\_many\_arguments}
+(\code{llama\_server.rs:61}, \code{context.rs:108}), un \code{uninlined\_format\_args}
+(\code{types/compressor.rs:63}) et un \code{nonminimal\_bool}
+(\code{clients/compressor.rs:642}). Le cinquième est celui de \code{verify-meta-mini}, qui
+disparaît avec \mm{É0}.
+
+\begin{cadre}
+\textbf{Le sixième n'est pas un lint.}
+\code{scella-authority/tests/un\_seul\_analyseur.rs:191} \fl{} \code{clippy::const\_is\_empty},
+« \emph{this expression always evaluates to true} ».
+
+C'est un \textbf{garde dont une condition est constante} : une branche de la garde de souveraineté
+ne peut pas être fausse, donc ne garde rien. Le corriger n'est pas cosmétique --- c'est refermer
+un trou dans le seul analyseur d'autorité du dépôt.
+\end{cadre}
+
+\subsection{\mm{É4} · les deux mesures qu'on n'a jamais faites}
+\code{p1-check.sh} est le \emph{seul} contrôle qui éprouve le profil de production --- postgres,
+oidc, pii et \code{frontier-llm} \emph{ensemble}. Il n'a jamais tourné sur ce périmètre, faute de
+démon. \code{r3-check.sh} est mort sur le disque le 2 septembre ; le disque est libre depuis (96~Gio),
+il n'y a plus d'excuse. Un tour complet de sa suite a d'ailleurs été fait par ailleurs :
+\code{cargo test -{}-workspace} \fl{} 0, 3\,903 tests --- mais \mm{R3} cherche l'\emph{instabilité}
+entre tours, pas la réussite d'un tour. Ce n'est pas la même mesure.
+
+\subsection{\mm{É5} · la page qu'on tend}
+Une page, pas un dossier : la commande, ce qu'on va voir défiler, ce qu'on peut recompter
+soi-même sur les fichiers du volume, et ce que la démonstration \textbf{ne prouve pas}. Le pilote
+le dit déjà à sa cinquième étape ; il reste à l'écrire pour un lecteur qui n'a pas lancé la
+commande.
+
+\section{2 \;\textbar\; Ce que le MVP n'est pas, et qu'il ne faut pas rouvrir}
+
+\begin{itemize}[leftmargin=1.1em,itemsep=1.5pt,topsep=2pt]
+\item \textbf{\mm{MX}, le collecteur ouvert} --- gelé, consigne écrite : pas une ligne avant que
+trois personnes aient payé pour l'obtenir. Compteur à \pire{zéro}.
+\item \textbf{TLS n'est pas terminé par le processus.} Il exige la \emph{déclaration} du
+terminateur, refuse de servir hors boucle locale sans elle, et sait désormais la
+\emph{corroborer} par l'adresse source --- un témoin du noyau, pas un en-tête.
+\item \textbf{Le jeton porteur reste un secret partagé.} Une vraie non-répudiation demanderait que
+l'officier \emph{signe} le tuple de l'acte. C'est nommé, et non produit.
+\item \textbf{\code{ci.yml} et \code{Justfile} pilotent du code absent} --- \code{efe-ffi},
+\code{efe-meta-*}, \code{Dockerfile.prod}, \code{poc.sh}. La réparation est d'en \emph{retirer}
+des jobs, jamais de rapatrier ce code.
+\end{itemize}
+
+\section{3 \;\textbar\; Le jalon qui décide, et qui n'est pas dans ce tableau}
+
+\begin{cadre}
+Après \mm{É2}, il n'y aura plus de raison technique d'attendre : le mode observation existe depuis
+\mm{M2}, le paquetage depuis \mm{M4}, la conservation depuis \mm{P2}, l'ancrage tiers depuis
+\mm{M9}, et les deux moitiés du produit se montreront dans une commande.
+
+Ce qui manquera alors n'est écrit nulle part ici : \textbf{aucune cible extérieure n'est déclarée
+depuis le 11 août 2026}. La question qui décide reste \emph{un prospect installe-t-il C3 en mode
+observation ?} --- et le bon moment pour la poser est \textbf{après \mm{É2}}, pas après \mm{É5}.
+Si personne n'installe, le problème n'est pas le produit : c'est la distribution, et aucune des
+six étapes n'y changera rien.
+\end{cadre}
+
+\vspace{4pt}
+{\color{efegray}\hrule height 0.4pt}\vspace{2.5pt}
+{\footnotesize\color{efegray}Mesures du 4 septembre 2026. Dépôt \code{c1-c3} à \code{23bb24e} ;
+dossier \code{\textasciitilde/Downloads/C1-C3}, 1\,229 fichiers. Les contrôles se rejouent par
+\code{bash scripts/<nom>-check.sh} depuis le dossier.}
+\end{document}
