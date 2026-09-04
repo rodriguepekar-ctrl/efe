@@ -60,6 +60,114 @@ cargo check --locked --workspace --all-targets   exit 0   (1 min 26)
 Contrôles SANS démon : **10 sur 13 sortent 0** — `profile`, `m4`, `m5`, `m6`, `m7`,
 `m8`, `m9`, `p2`, `p3`, `orphelins`.
 
+## Les PORTES — une par profil réellement servi
+
+`scripts/portes-check.sh` joue `clippy -D warnings` sur **chaque profil que
+`compose.yaml` construit** : le coin (features par défaut, workspace entier), la
+jonction (`reg-evidence`) et la production (`postgres,oidc,pii,frontier-llm`).
+
+La liste des profils n'est **pas écrite dans le script** : elle est lue dans
+`compose.yaml`, le fichier qui décide de ce qui est servi. Ajouter un profil au
+compose sans le garder devient donc impossible — la porte suit le produit au lieu
+d'être une liste parallèle qui diverge en silence.
+
+Mesuré le 4 septembre 2026 : **3 portes, 0 échec, `exit 0`.** Les trois états ont été
+exercés le même jour :
+
+| sortie | déclencheur | résultat |
+|---|---|---|
+| `0` | l'arbre tel quel | 3 portes vertes |
+| `1` | un défaut injecté sous `#[cfg(feature = "reg-evidence")]` | la porte du **coin reste verte**, celle de la jonction **tombe** en nommant la ligne |
+| `3` | `CARGO_FEATURES` renommé dans compose.yaml | plancher anti-vacuité : « 0 jeu lu, 2 attendus » |
+
+La contre-épreuve du milieu est la raison d'être du script en une image : un défaut
+que la porte du dépôt ne peut pas voir, attrapé par le profil qui l'embarque.
+
+⚠ **`cargo fmt` n'est pas parmi ces portes**, et c'est mesuré : ce dépôt est formaté
+à la main, `cargo fmt --all -- --check` réécrirait **4 643 fichiers**. C'est aussi
+pourquoi `ci.yml` ne pourrait pas passer même s'il se déclenchait — son job
+`fast-checks` met `rustfmt` **avant** `clippy` et tomberait sans jamais atteindre la
+porte.
+
+⚠ **Rien n'exécute tout cela hors de la machine.** Le dépôt porte **90 workflows** ;
+**aucun** ne lance un `*-check.sh`, et `ci.yml` ne se déclenche que sur
+`main` / `release/**` — la branche de travail est `c1-c3`.
+
+## Une feature qui ne compile pas
+
+`efe-nano-app-coordinator/fastembed-real` échoue en `E0599` : `EmbeddingModel::BGEM3`
+n'existe plus dans `fastembed 4.9.1`. La dépendance a été portée de 3.x à 4 sans que
+le code suive. **Personne ne l'active** — aucun manifeste, aucun script, aucun
+workflow — et aucune porte ne la compilait, d'où le silence.
+
+Elle n'est pas réparée ici : choisir un modèle de remplacement change les vecteurs
+produits, c'est une décision produit. Ce qui est corrigé, c'est la **promesse** — le
+manifeste disait « Pour activer : `cargo test --features fastembed-real` », et cette
+ligne a été retirée au profit du diagnostic.
+
+## Le profil de PRODUCTION — et l'angle mort que la porte de qualité laissait
+
+`scripts/p1-check.sh` est le seul contrôle qui éprouve `postgres`, `oidc`, `pii` et
+`frontier-llm` **ensemble**, en démarrant un vrai binaire contre un vrai Postgres, en
+le tuant, et en re-prouvant le reçu depuis un processus neuf.
+
+Mesuré le 4 septembre 2026, première exécution sur ce périmètre : **17 contrôles,
+`exit 0`.**
+
+⚠ **`cargo clippy --workspace --all-targets` compile les features PAR DÉFAUT.** Les
+quatre ci-dessus n'en sont pas : `routes/mod.rs:18` gate `pub mod llm` sur
+`frontier-llm`, qui allume à son tour trois fournisseurs d'`efe-coordinator`. La porte
+du dépôt pouvait donc être verte pendant que le chemin d'egress payant portait sa dette
+intacte — et elle l'était : **sept défauts** y dormaient, dont
+
+* une paire d'attributs `#[cfg]`/`#[test]` **orpheline** que le rapport de P1 citait
+  déjà comme la preuve que ce chemin vivait hors de la rigueur du dépôt ;
+* le garde de démarrage de l'egress payant, `frontier_boot_guard`, qui prenait **cinq
+  booléens positionnels** — le cas de transposition silencieuse le plus pur du
+  périmètre, invisible à clippy (cinq passe sous le plafond de six) ;
+* deux tests M3 (`le SLM meurt, la mission passe, la raison remonte`) qui sont
+  `#[cfg(not(feature = "oidc"))]` : **sous le profil de production, ils ne tournent
+  pas**. Ce trou est écrit à l'endroit exact, dans `routes/llm.rs` ; il n'est pas comblé.
+
+`p1-check.sh` porte désormais cette porte en tête d'étape 1. Un contrôle qui démarre le
+profil de production sans en éprouver la qualité ne vérifie que la moitié de son sujet.
+
+## R3 — la cause a disparu, personne ne l'a corrigée
+
+`cargo test --locked --workspace` → **3 904 tests, 0 échec**. Mais R3 ne cherche pas
+qu'un tour vert : il cherchait de l'**instabilité**, et la mesure du 27 août l'avait déjà
+réfutée — les deux « instables » étaient parfaitement déterministes. La panique venait de
+**deux fournisseurs cryptographiques rustls** liés dans un même binaire, par unification
+des features sous `--workspace` (`efe-agent-runner → axum-server "tls-rustls"`).
+
+Mesuré le 4 septembre : `axum-server` et `aws-lc-rs` ont **0 entrée** dans `Cargo.lock`,
+`ring` en a une. `crates/efe-agent-runner` est un dossier **vide**, hors workspace. La
+cause n'a pas été réparée — elle est **hors de portée**, emportée par l'élagage de É0.
+
+C'est une propriété fragile et invisible : elle ne tient à aucune ligne de code, et une
+seule dépendance TLS ajoutée la casse. D'où
+`crates/efe-swarm-gateway/tests/r3_fournisseur_unique.rs` — un garde, trois
+contre-épreuves, un plancher anti-vacuité. Contre-prouvé le jour de son écriture : un
+`aws-lc-rs` injecté dans le verrou le fait tomber (`2 fournisseur(s) — ["aws-lc-rs",
+"ring"] — sur 603 paquets`).
+
+Le remède que R3 prescrivait — `serial_test` — est **inopérant** sur ce mode de
+défaillance, et sa propre note le disait : il sérialise *dans* un binaire, quand la
+panique naît de la **résolution des features**, avant qu'un test ne s'exécute.
+
+⚠ **Et `r3-check.sh` ne pouvait pas aboutir sur une suite verte.** Une paire
+`set +e` / `set -e` allumait `errexit` pour la boucle — un état que l'en-tête du
+fichier exclut explicitement. Quinze lignes plus bas,
+`grep '^test .* FAILED$'` rend **1 quand il ne trouve rien**, c'est-à-dire quand le
+tour est vert : le script se tuait là, sans une ligne de sortie, et rendait `1` — que
+son propre contrat documente comme « des échecs **instables** ». Une suite parfaitement
+verte rapportée comme instable.
+
+Le défaut était invisible tant qu'il y avait des échecs : le 27 août il y en avait,
+`grep` trouvait, le script survivait. Il ne pouvait se manifester qu'au moment exact où
+R3 allait enfin pouvoir conclure. **Ce n'est donc pas le disque qui a empêché R3
+d'aboutir.**
+
 ## Le contrôle de la PORTE — le seul qui exige un démon Docker
 
 `scripts/e1-check.sh` mesure les critères de **É1** (le coin) et de **É2** (la

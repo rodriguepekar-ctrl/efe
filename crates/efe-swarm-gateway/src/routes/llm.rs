@@ -603,16 +603,46 @@ mod tests {
     /// Le circuit est inséré comme le fait `frontier.rs` : sans lui, le test éprouverait un
     /// câblage qui n'existe pas. `default_slm_circuits()` ne couvre PAS le reformulateur — elle
     /// s'arrête à analyzer/compressor/verifier — d'où l'insertion explicite, à l'identique.
+    //
+    // ⚠ CE QUE LA PORTE A RÉVÉLÉ, et qui vaut plus que le lint.
+    //
+    // Ces deux auxiliaires n'étaient gardés par aucun `cfg`, mais leurs SEULS
+    // appelants — `m3_le_slm_mort_ne_coupe_pas_et_sa_raison_remonte` et
+    // `m3_le_slm_et_le_store_meurent_ensemble_et_lappel_passe` — sont
+    // `#[cfg(not(feature = "oidc"))]`.
+    //
+    // Or ce fichier entier est déjà sous `#[cfg(feature = "frontier-llm")]`
+    // (`routes/mod.rs:18`). Les deux conditions se composent, et le résultat est plus
+    // étroit qu'il n'y paraît. **Mesuré le 4 septembre 2026 :**
+    //
+    //   cargo test -p efe-swarm-gateway --lib m3_le_slm
+    //     (défaut)                    → 0 test : `routes/llm.rs` n'est pas compilé
+    //     --features frontier-llm     → 2 tests ✓
+    //     --features frontier-llm,oidc → 0 test : `cfg(not(oidc))` les retire
+    //
+    // Le critère de M3 — « le SLM meurt, la mission passe, et la raison remonte » —
+    // n'est donc éprouvé que sous UNE combinaison, que ni `cargo test --workspace`
+    // ni le profil de production n'emploient. Deux portes vertes, et personne ne
+    // jouait ces deux tests.
+    //
+    // `scripts/p1-check.sh` les joue désormais explicitement, sous cette
+    // combinaison-là, à la fin de son parcours. Cela ne rend pas M3 vérifié SOUS
+    // `oidc` : l'argument qui le rendrait acceptable — « la différence entre les deux
+    // profils est l'AUTHENTIFICATION, pas le comportement dégradé sous test » — reste
+    // une revendication, pas une mesure. Elle est écrite ici comme telle.
+    #[cfg(not(feature = "oidc"))]
     fn clients_slm_mort() -> efe_coordinator::CoordinatorClients {
         use efe_coordinator::{CoordinatorClients, ReformulatorClient, SlmCircuitBreaker};
         use efe_multi_llm::SLM_REFORMULATOR_CIRCUIT_KEY;
         use std::time::Duration;
 
-        let mut clients = CoordinatorClients::default();
-        clients.reformulator = Some(Arc::new(
-            ReformulatorClient::from_assets_multillm("http://127.0.0.1:1")
-                .expect("le client se construit sans serveur — il ne fait que lire les assets"),
-        ));
+        let mut clients = CoordinatorClients {
+            reformulator: Some(Arc::new(
+                ReformulatorClient::from_assets_multillm("http://127.0.0.1:1")
+                    .expect("le client se construit sans serveur — il ne fait que lire les assets"),
+            )),
+            ..Default::default()
+        };
         clients
             .slm_circuits
             .insert(SLM_REFORMULATOR_CIRCUIT_KEY.to_string(), SlmCircuitBreaker::new(3, Duration::from_secs(10)));
@@ -620,6 +650,7 @@ mod tests {
     }
 
     /// Un état câblé comme la production, avec un SLM mort et un store au choix.
+    #[cfg(not(feature = "oidc"))]
     fn etat_slm_mort(llms: &[&str], store_mort: bool) -> SwarmGatewayState {
         let reg = ProviderRegistry::new();
         for id in llms {

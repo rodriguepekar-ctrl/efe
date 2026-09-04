@@ -244,7 +244,7 @@ impl LlmProvider for GeminiProvider {
             if let Some(s) = &system {
                 body["systemInstruction"] = json!({"parts": [{"text": s}]});
             }
-            let url = format!("{}/{}:generateContent", GEMINI_BASE, model);
+            let url = format!("{GEMINI_BASE}/{model}:generateContent");
             let http = http.clone();
             let provider_id = format!("gemini_{model}");
             let api_header = api_key.expose().to_string(); // §2.3 : clé en header, jamais en URL

@@ -76,6 +76,11 @@ impl BgeM3Embedder {
     ///
     /// Retourne `RobotError::Config` si l'initialisation ONNX échoue.
     pub fn new() -> RobotResult<Self> {
+        // ⚠ `EmbeddingModel::BGEM3` N'EXISTE PLUS dans `fastembed 4.9.1` : la ligne
+        // suivante ne compile pas (`E0599`). Le manifeste porte le diagnostic complet
+        // et les modèles candidats ; en un mot, le portage 3.x → 4 a laissé ce code
+        // derrière, et aucune porte de qualité ne compilait cette feature pour le dire.
+        // Choisir un remplaçant change les vecteurs produits — décision produit.
         use fastembed::{EmbeddingModel, InitOptions, TextEmbedding};
         let model = TextEmbedding::try_new(
             InitOptions::new(EmbeddingModel::BGEM3).with_show_download_progress(false),

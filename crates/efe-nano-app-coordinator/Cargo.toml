@@ -11,8 +11,28 @@ description = "Phase 1 — JSON Grammar enforcement + Rust clients for the 6 nan
 [features]
 default = []
 # Active fastembed-rs (ONNX runtime) pour les robots Filtreur + Routeur.
-# Par défaut OFF en CI (modèles ONNX = 3.4 GB à télécharger).  Pour activer :
-#     cargo test --features fastembed-real
+# Par défaut OFF en CI (modèles ONNX = 3.4 GB à télécharger).
+#
+# ⚠ CETTE FEATURE NE COMPILE PAS. Mesuré le 4 septembre 2026 :
+#
+#     cargo clippy --workspace --all-features --all-targets
+#     → error[E0599]: no variant named `BGEM3` for enum `fastembed::EmbeddingModel`
+#       crates/efe-nano-app-coordinator/src/clients/filter.rs:81
+#
+# La dépendance a été portée de `fastembed` 3.x à `4` (voir plus bas) sans que le
+# code suive : dans 4.9.1, `EmbeddingModel` ne porte plus BGE-M3 — les modèles BGE
+# disponibles sont la famille v1.5 (`BGESmallENV15`, `BGELargeENV15`,
+# `BGESmallZHV15`…), et le seul `M3` restant, `BGERerankerV2M3`, appartient à un
+# AUTRE énuméré (`RerankerModel`, pour le re-classement, pas l'embedding).
+#
+# Personne ne l'active — aucun manifeste, aucun script, aucun workflow. Elle est
+# restée cassée sans être vue parce qu'aucune porte de qualité ne la compile ;
+# `scripts/portes-check.sh` explique pourquoi il ne la garde pas non plus.
+#
+# La réparer demande de CHOISIR un modèle de remplacement, ce qui change les
+# vecteurs produits : c'est une décision produit, pas un correctif de lint. La ligne
+# « Pour activer : cargo test --features fastembed-real » a donc été RETIRÉE plutôt
+# que laissée à promettre ce qui n'est pas tenu.
 fastembed-real = ["dep:fastembed"]
 
 [dependencies]

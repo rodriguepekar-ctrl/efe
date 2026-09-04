@@ -12,10 +12,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 
-use efe_coordinator::{
-    run_mission_a, ABArm, ABTestConfig, ChewingMetrics, Coordinator, MissionARequest,
-    MockLlmProvider, ProviderRegistry, RunMode, RunRecord, SavingsReport,
-};
+use efe_coordinator::{ABArm, ABTestConfig, ChewingMetrics, Coordinator, MissionARequest, MockLlmProvider, ProviderRegistry, RunFacts, RunMode, RunRecord, SavingsReport, run_mission_a};
 use efe_nano_app_coordinator::types::router::TaskClass;
 use efe_nano_app_coordinator::types::{Budget, LlmMetadata, ScoringWeights, TaskClassScoringTable};
 
@@ -179,17 +176,19 @@ fn ab_test_savings_report_segregates_control_vs_experiment() {
             ..ChewingMetrics::default()
         };
         RunRecord::new_with_microcents(
-            "fixture".into(),
-            RunMode::Full,
             cost_mc,
-            latency,
-            10,
-            "Paris",
-            "llm".into(),
-            "FactualQa".into(),
-            Some(cm),
-            passed,
-            efe_coordinator::FailureMode::None,
+            RunFacts {
+                fixture_name: "fixture".into(),
+                mode: RunMode::Full,
+                latency_ms: latency,
+                tokens_output: 10,
+                final_text: "Paris",
+                llm_used: "llm".into(),
+                task_class: "FactualQa".into(),
+                chewing_metrics: Some(cm),
+                passed_quality: passed,
+                failure_mode: efe_coordinator::FailureMode::None,
+            },
         )
     };
 
@@ -204,8 +203,19 @@ fn ab_test_savings_report_segregates_control_vs_experiment() {
     report.add_run({
         let cm = ChewingMetrics::default(); // ab_arm None
         RunRecord::new_with_microcents(
-            "f".into(), RunMode::Baseline, 9_999, 999, 10, "x", "llm".into(),
-            "FactualQa".into(), Some(cm), true, efe_coordinator::FailureMode::None,
+            9_999,
+            RunFacts {
+                fixture_name: "f".into(),
+                mode: RunMode::Baseline,
+                latency_ms: 999,
+                tokens_output: 10,
+                final_text: "x",
+                llm_used: "llm".into(),
+                task_class: "FactualQa".into(),
+                chewing_metrics: Some(cm),
+                passed_quality: true,
+                failure_mode: efe_coordinator::FailureMode::None,
+            },
         )
     });
 
@@ -236,8 +246,19 @@ fn ab_test_savings_report_segregates_control_vs_experiment() {
 fn ab_comparison_none_when_no_ab_runs() {
     let mut report = SavingsReport::new();
     report.add_run(RunRecord::new_with_microcents(
-        "f".into(), RunMode::Baseline, 100, 50, 10, "x", "llm".into(),
-        "FactualQa".into(), None, true, efe_coordinator::FailureMode::None,
+        100,
+        RunFacts {
+            fixture_name: "f".into(),
+            mode: RunMode::Baseline,
+            latency_ms: 50,
+            tokens_output: 10,
+            final_text: "x",
+            llm_used: "llm".into(),
+            task_class: "FactualQa".into(),
+            chewing_metrics: None,
+            passed_quality: true,
+            failure_mode: efe_coordinator::FailureMode::None,
+        },
     ));
     assert!(report.ab_comparison().is_none(), "aucun run A/B → None");
     assert!(report.ab_section_markdown().is_empty());

@@ -50,10 +50,7 @@ use std::time::Duration;
 
 use efe_coordinator::llm::{LlmProvider, ProviderRegistry};
 use efe_coordinator::workflows::{run_mission_a, run_speculative};
-use efe_coordinator::{
-    ClaudeProvider, Coordinator, FailureMode, GeminiProvider, GptProvider,
-    MissionARequest, RunMode, RunRecord, SavingsReport, SpeculativeRequest,
-};
+use efe_coordinator::{ClaudeProvider, Coordinator, FailureMode, GeminiProvider, GptProvider, MissionARequest, RunFacts, RunMode, RunRecord, SavingsReport, SpeculativeRequest};
 use efe_nano_app_coordinator::types::router::TaskClass;
 use efe_nano_app_coordinator::types::{Budget, LlmMetadata};
 
@@ -320,17 +317,19 @@ async fn run_one(
         .any(|kw| final_lc.contains(kw));
 
     Ok(RunRecord::new_with_microcents(
-        fixture_name.to_string(),
-        mode,
         cost_microcents,
-        latency_ms,
-        tokens,
-        &final_text,
-        llm_used,
-        task_class_str.to_string(),
-        metrics,
-        passed,
-        failure_mode,
+        RunFacts {
+            fixture_name: fixture_name.to_string(),
+            mode: mode,
+            latency_ms: latency_ms,
+            tokens_output: tokens,
+            final_text: &final_text,
+            llm_used: llm_used,
+            task_class: task_class_str.to_string(),
+            chewing_metrics: metrics,
+            passed_quality: passed,
+            failure_mode: failure_mode,
+        },
     ))
 }
 

@@ -171,7 +171,7 @@ pub use efe_nano_app_coordinator::TenantId;
 // (câbler le reformulateur SLM + son circuit) sans dépendre directement du
 // crate nano — même précédent que `TenantId` ci-dessus.
 pub use efe_nano_app_coordinator::{ReformulatorClient, ReformulatorProfile, SlmCircuitBreaker};
-pub use savings_report::{ModeSummary, RunMode, RunRecord, SavingsReport};
+pub use savings_report::{ModeSummary, RunFacts, RunMode, RunRecord, SavingsReport};
 
 #[cfg(feature = "anthropic")]
 pub use llm::ClaudeProvider;

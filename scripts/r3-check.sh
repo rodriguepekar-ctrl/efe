@@ -134,15 +134,52 @@ tour_borne() {
     return "$code"
 }
 
+titre "0. La CAUSE du faux verdict est-elle encore hors de portée ?"
+#
+# Avant de compter des tours, dire POURQUOI ils passent. Le mode de défaillance du
+# 2026-08-27 — deux fournisseurs cryptographiques rustls liés dans un même binaire, panique
+# au démarrage du processus AVANT tout test — n'a pas été réparé : il est hors de portée
+# depuis que É0 a retiré `efe-agent-runner`, et `axum-server`/`aws-lc-rs` du verrou avec lui.
+#
+# C'est une propriété fragile et invisible : elle ne tient à aucune ligne de code. Une seule
+# dépendance ajoutée la casse, et la panique revient EN RESSEMBLANT à de l'instabilité —
+# c'est-à-dire au verdict que R3 a déjà rendu, et qui était faux.
+#
+# Trois tours verts ne disent rien de cela. Ce garde, si.
+if cargo test -q --locked -p efe-swarm-gateway --test r3_fournisseur_unique >/dev/null 2>&1; then
+    ok "un seul fournisseur cryptographique dans Cargo.lock — la panique de 2026-08-27 est hors de portée"
+else
+    ko "le verrou porte PLUSIEURS fournisseurs cryptographiques"
+    note "compter des tours n'a plus de sens : sous --workspace, un binaire peut paniquer AVANT"
+    note "d'executer un seul test, et l'echec ressemblera a de l'instabilite. Voir"
+    note "crates/efe-swarm-gateway/tests/r3_fournisseur_unique.rs pour le detail et le remede."
+    exit 2
+fi
+
 titre "Reproduction — $TOURS tour(s) de « cargo test --workspace »"
 note "le critère de R3 en demande TROIS d'affilée ; R3_TOURS le règle."
 
 for t in $(seq 1 "$TOURS"); do
     printf '  tour %s/%s … ' "$t" "$TOURS"
-    set +e
+    # ⭐ **LE DÉFAUT QUI A EMPÊCHÉ CE SCRIPT D'ABOUTIR, ET QUI NE SE VOIT QUE QUAND TOUT VA BIEN.**
+    #
+    # Il y avait ici une paire `set +e` / `set -e` autour de l'appel. La première moitié était
+    # inerte — l'en-tête de ce fichier a délibérément choisi `set -uo pipefail`, SANS `-e`, et
+    # écrit pourquoi : un contrôle doit CONCLURE, pas mourir à la première commande qui rend 1.
+    # La seconde moitié, elle, ALLUMAIT errexit pour tout le reste de la boucle — un état que ce
+    # script n'a jamais voulu.
+    #
+    # Conséquence, mesurée le 4 septembre 2026 : quinze lignes plus bas, `grep '^test .* FAILED$'`
+    # rend **1 quand il ne trouve rien**, c'est-à-dire quand le tour est VERT. Avec errexit et
+    # `pipefail`, le script se tuait là, en silence, et rendait **1** — que son propre contrat
+    # documente comme « des échecs INSTABLES ». Une suite parfaitement verte était donc rapportée
+    # comme instable, sans une ligne de sortie.
+    #
+    # Le défaut est INVISIBLE tant qu'il y a des échecs : le 27 août il y en avait, `grep`
+    # trouvait, le script survivait. Il ne pouvait se manifester qu'au moment exact où R3 allait
+    # enfin pouvoir conclure. Ce n'est pas le disque qui a empêché R3 d'aboutir — c'est ceci.
     tour_borne "$TRAVAIL/tour$t.log" "$DELAI"
     CODE_CARGO=$?
-    set -e
     # 137 = tué par la borne. Ni vert ni rouge : NON CONCLU. Le dire, et s'arrêter là — poursuivre
     # sur une course tronquée ferait passer pour « aucun échec » ce qui n'a jamais été exécuté.
     if [ "$CODE_CARGO" = "137" ]; then
@@ -160,8 +197,12 @@ for t in $(seq 1 "$TOURS"); do
     # proche d'un échec appartient souvent à un autre crate. Cette erreur a fait déclarer
     # « reproductible » deux tests qui passaient parfaitement seuls — c'est-à-dire l'exact
     # contraire du verdict, sur le seul point que R3 demande de trancher.
+    # `|| true` : `grep` rend 1 quand il ne trouve RIEN — donc quand le tour est vert. Ce n'est
+    # pas une politesse défensive, c'est la correction du défaut décrit plus haut ; elle reste
+    # nécessaire même sans errexit, pour que `pipefail` ne rende pas l'absence d'échec fatale si
+    # quelqu'un rallumait `-e` un jour.
     grep -E '^test .* FAILED$' "$TRAVAIL/tour$t.log" | awk '{print $2}' | sort -u \
-      > "$TRAVAIL/echecs$t.txt"
+      > "$TRAVAIL/echecs$t.txt" || true
     E=$(wc -l < "$TRAVAIL/echecs$t.txt" | tr -d ' ')
     # **Croire le CODE DE SORTIE, pas seulement le comptage.** Un binaire de test qui s'ABORTE
     # (SIGABRT — bibliothèque dynamique manquante, panique dans un initialiseur) n'imprime
@@ -203,9 +244,20 @@ if [ "$TOTAL" -eq 0 ]; then
     titre "Verdict"
     ok "aucun échec sur $TOURS tour(s)"
     if [ "$TOURS" -ge 3 ]; then
-        printf '\n  \033[0;32mLe critère de R3 est TENU : trois tours sans échec.\n'
-        printf '  Sa propre note dit alors quoi faire — RETIRER R3, plutôt que de chercher\n'
-        printf '  un défaut qui n'\''existe plus.\033[0m\n\n'
+        printf '\n  \033[0;32mLe critère de R3 est TENU : trois tours sans échec.\033[0m\n\n'
+        printf '  Sa note d'\''origine disait alors quoi faire — RETIRER R3, plutôt que de chercher\n'
+        printf '  un défaut qui n'\''existe plus. Cette phrase a cessé d'\''être juste le jour où\n'
+        printf '  l'\''étape 0 est apparue, et la corriger vaut mieux que la laisser vieillir :\n\n'
+        printf '    · le défaut de 2026-08-27 n'\''a pas été RÉPARÉ, il est HORS DE PORTÉE — la\n'
+        printf '      caisse qui tirait le second fournisseur cryptographique est partie avec les\n'
+        printf '      47 membres que É0 a retirés du workspace ;\n'
+        printf '    · c'\''est une propriété du VERROU, pas du code : aucune ligne ne la tient, et\n'
+        printf '      une seule dépendance TLS ajoutée la casse ;\n'
+        printf '    · retirer ce script effacerait le seul endroit du dépôt qui écrit ce\n'
+        printf '      mécanisme, et son étape 0 avec.\n\n'
+        printf '  Ce que R3 CHERCHAIT — de l'\''instabilité — n'\''existe pas ici, et n'\''a jamais\n'
+        printf '  existé : la mesure du 27 août l'\''avait déjà réfuté. Ce que R3 SURVEILLE\n'
+        printf '  désormais existe, et il vaut d'\''être surveillé.\n\n'
     else
         note "un seul tour ne tient pas le critère : relancer avec R3_TOURS=3."
     fi

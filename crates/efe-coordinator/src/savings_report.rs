@@ -153,6 +153,53 @@ pub struct RunRecord {
     pub failure_mode: FailureMode,
 }
 
+/// Les faits d'un run, hors coût — le coût est porté par le CONSTRUCTEUR, parce
+/// que c'est lui qui en dit l'unité.
+///
+/// # Onze arguments, et un `allow` sans raison sur le jumeau vivant
+///
+/// `RunRecord::new` et `RunRecord::new_with_microcents` prenaient les mêmes onze
+/// arguments positionnels, dont `llm_used` et `task_class` — deux `String`
+/// **voisines**, transposables sans que le compilateur ne bronche. Aux dix-huit
+/// sites d'appel, plusieurs annotaient `// µ¢` et `// ms` en fin de ligne : le
+/// commentaire compensait ce que la signature ne disait pas.
+///
+/// É3 avait vu le défaut et ne l'avait corrigé sur aucun des deux, pour une raison
+/// qui tenait : `new` était **mort** (zéro appelant), et `new_with_microcents`
+/// portait déjà `#[allow(clippy::too_many_arguments)]` — posé sans une ligne de
+/// justification, donc invisible à la porte de qualité. Refondre le mort en
+/// laissant le vivant silencieux aurait déplacé le problème au lieu de le régler.
+///
+/// C'est fait ici, sur les DEUX, en un seul geste. L'`allow` disparaît avec la
+/// cause plutôt que d'être documenté : c'est toujours préférable.
+///
+/// Le coût reste hors de cette structure, et c'est délibéré. Il est la SEULE chose
+/// qui distingue les deux constructeurs ; le laisser en argument nommé par la
+/// fonction (`new` = cents, `new_with_microcents` = µ¢) met l'unité sous les yeux
+/// du lecteur au moment où il l'écrit. Le mettre dans la structure la cacherait.
+pub struct RunFacts<'a> {
+    /// Nom de la fixture jouée.
+    pub fixture_name: String,
+    /// Le mode dans lequel elle a tourné.
+    pub mode: RunMode,
+    /// Latence bout-en-bout, en millisecondes.
+    pub latency_ms: u64,
+    /// Tokens générés.
+    pub tokens_output: u32,
+    /// Le texte final — tronqué à 200 caractères à la construction.
+    pub final_text: &'a str,
+    /// Le LLM effectivement employé.
+    pub llm_used: String,
+    /// La classe de tâche retenue.
+    pub task_class: String,
+    /// Les métriques de pré-mâchage, si la mission en a produit.
+    pub chewing_metrics: Option<ChewingMetrics>,
+    /// La sortie a-t-elle passé le contrôle qualité ?
+    pub passed_quality: bool,
+    /// Le mode d'échec, s'il y en a un.
+    pub failure_mode: FailureMode,
+}
+
 impl RunRecord {
     /// Tronc le texte à `max_chars` (utile pour l'audit chain — pas besoin
     /// de stocker le texte intégral dans le JSON du report).
@@ -172,39 +219,28 @@ impl RunRecord {
     /// **R3.S1** : `cost_microcents` est dérivé de `cost_cents × 1000` par
     /// défaut.  Utiliser `new_with_microcents()` pour précision sub-cent.
     ///
-    /// # Onze arguments — exempté ici, et il faut dire ce qui n'est PAS réglé
+    /// Le coût et les faits sont séparés : voir [`RunFacts`], qui porte aussi la
+    /// raison du regroupement.
     ///
-    /// `llm_used` et `task_class` sont deux `String` **voisines** : les
-    /// transposer passe le compilateur. C'est le même défaut que celui corrigé
-    /// dans `AuditEntry::success`, et il mériterait le même traitement.
-    ///
-    /// Il ne l'a pas reçu, et pour une raison mesurée : **ce constructeur n'a
-    /// aucun appelant.** Les dix-huit sites du dépôt passent tous par son
-    /// successeur `new_with_microcents`, que sa propre documentation ci-dessus
-    /// désigne. Or ce successeur porte DÉJÀ `#[allow(clippy::too_many_arguments)]`
-    /// — posé sans une ligne de justification, donc invisible à la porte de
-    /// qualité. Refondre la fonction morte en laissant la vivante silencieuse
-    /// aurait déplacé le problème sans le résoudre.
-    ///
-    /// Ce qu'il reste à faire est donc **un seul geste, sur les deux** : un type
-    /// d'enregistrement nommé pour les onze champs, et les dix-huit appels
-    /// réécrits. C'est hors du critère de É3 (rendre la porte verte) et c'est
-    /// une décision de périmètre, pas de lint.
-    #[allow(clippy::too_many_arguments)] // constructeur MORT + jumeau déjà exempté (cf. supra)
+    /// Ce constructeur n'a **aucun appelant** — les dix-huit sites du dépôt passent
+    /// tous par `new_with_microcents`, que la ligne ci-dessus désigne. Il est gardé
+    /// parce qu'il est publié, et il partage désormais la même forme que son
+    /// successeur : refondre l'un sans l'autre aurait laissé deux API divergentes
+    /// pour un même objet.
     #[must_use]
-    pub fn new(
-        fixture_name: String,
-        mode: RunMode,
-        cost_cents: u32,
-        latency_ms: u64,
-        tokens_output: u32,
-        final_text: &str,
-        llm_used: String,
-        task_class: String,
-        chewing_metrics: Option<ChewingMetrics>,
-        passed_quality: bool,
-        failure_mode: FailureMode,
-    ) -> Self {
+    pub fn new(cost_cents: u32, faits: RunFacts<'_>) -> Self {
+        let RunFacts {
+            fixture_name,
+            mode,
+            latency_ms,
+            tokens_output,
+            final_text,
+            llm_used,
+            task_class,
+            chewing_metrics,
+            passed_quality,
+            failure_mode,
+        } = faits;
         Self {
             fixture_name,
             mode,
@@ -228,20 +264,19 @@ impl RunRecord {
     /// `cost_cents` est automatiquement dérivé de `cost_microcents` via
     /// `microcents_to_cents` (policy ≥ 1 si > 0 µ¢) pour cohérence affichage.
     #[must_use]
-    #[allow(clippy::too_many_arguments)]
-    pub fn new_with_microcents(
-        fixture_name: String,
-        mode: RunMode,
-        cost_microcents: u64,
-        latency_ms: u64,
-        tokens_output: u32,
-        final_text: &str,
-        llm_used: String,
-        task_class: String,
-        chewing_metrics: Option<ChewingMetrics>,
-        passed_quality: bool,
-        failure_mode: FailureMode,
-    ) -> Self {
+    pub fn new_with_microcents(cost_microcents: u64, faits: RunFacts<'_>) -> Self {
+        let RunFacts {
+            fixture_name,
+            mode,
+            latency_ms,
+            tokens_output,
+            final_text,
+            llm_used,
+            task_class,
+            chewing_metrics,
+            passed_quality,
+            failure_mode,
+        } = faits;
         let cost_cents = crate::llm::microcents_to_cents(cost_microcents);
         Self {
             fixture_name,
@@ -1007,17 +1042,19 @@ mod tests {
 
     fn make_record(fixture: &str, mode: RunMode, cost: u32, lat: u64, q: bool) -> RunRecord {
         RunRecord::new(
-            fixture.to_string(),
-            mode,
             cost,
-            lat,
-            100, // tokens output stub
-            "stub final text",
-            "claude_claude-sonnet-4-6".to_string(),
-            "FactualQa".to_string(),
-            None,
-            q,
-            FailureMode::None,
+            RunFacts {
+                fixture_name: fixture.to_string(),
+                mode,
+                latency_ms: lat,
+                tokens_output: 100,
+                final_text: "stub final text",
+                llm_used: "claude_claude-sonnet-4-6".to_string(),
+                task_class: "FactualQa".to_string(),
+                chewing_metrics: None,
+                passed_quality: q,
+                failure_mode: FailureMode::None,
+            },
         )
     }
 
@@ -1189,17 +1226,19 @@ mod tests {
     fn run_record_truncates_long_final_text() {
         let long_text = "A".repeat(500);
         let r = RunRecord::new(
-            "x".to_string(),
-            RunMode::Baseline,
             1,
-            100,
-            10,
-            &long_text,
-            "claude".to_string(),
-            "FactualQa".to_string(),
-            None,
-            true,
-            FailureMode::None,
+            RunFacts {
+                fixture_name: "x".to_string(),
+                mode: RunMode::Baseline,
+                latency_ms: 100,
+                tokens_output: 10,
+                final_text: &long_text,
+                llm_used: "claude".to_string(),
+                task_class: "FactualQa".to_string(),
+                chewing_metrics: None,
+                passed_quality: true,
+                failure_mode: FailureMode::None,
+            },
         );
         // Doit être tronqué à 200 chars + "…" → 201 chars max.
         assert!(r.final_text_excerpt.chars().count() <= 201);
@@ -1222,17 +1261,19 @@ mod tests {
     fn r3s1_new_with_microcents_derives_cents() {
         // Gemini Flash 1k/1k = 37 µ¢ exact → arrondi 1 ¢.
         let r = RunRecord::new_with_microcents(
-            "flash_test".to_string(),
-            RunMode::Speculative,
-            37,  // µ¢
-            150, // ms
-            10,
-            "ok",
-            "gemini".to_string(),
-            "FactualQa".to_string(),
-            None,
-            true,
-            FailureMode::None,
+            37,
+            RunFacts {
+                fixture_name: "flash_test".to_string(),
+                mode: RunMode::Speculative,
+                latency_ms: 150,
+                tokens_output: 10,
+                final_text: "ok",
+                llm_used: "gemini".to_string(),
+                task_class: "FactualQa".to_string(),
+                chewing_metrics: None,
+                passed_quality: true,
+                failure_mode: FailureMode::None,
+            },
         );
         assert_eq!(r.cost_microcents, 37);
         assert_eq!(r.cost_cents, 1); // 37 µ¢ < 500 → arrondi à 1 (policy ≥ 1).
@@ -1245,17 +1286,19 @@ mod tests {
         let mut report = SavingsReport::with_version("r3s1-test");
         for i in 0..100 {
             report.add_run(RunRecord::new_with_microcents(
-                format!("f{i}"),
-                RunMode::Speculative,
                 37,
-                100,
-                10,
-                "ok",
-                "g".to_string(),
-                "FactualQa".to_string(),
-                None,
-                true,
-                FailureMode::None,
+                RunFacts {
+                    fixture_name: format!("f{i}"),
+                    mode: RunMode::Speculative,
+                    latency_ms: 100,
+                    tokens_output: 10,
+                    final_text: "ok",
+                    llm_used: "g".to_string(),
+                    task_class: "FactualQa".to_string(),
+                    chewing_metrics: None,
+                    passed_quality: true,
+                    failure_mode: FailureMode::None,
+                },
             ));
         }
         report.aggregate();
@@ -1274,30 +1317,34 @@ mod tests {
         let mut report = SavingsReport::with_version("r3s1-test");
         for i in 0..100 {
             report.add_run(RunRecord::new_with_microcents(
-                format!("b{i}"),
-                RunMode::Baseline,
                 37,
-                100,
-                10,
-                "ok",
-                "claude".into(),
-                "FactualQa".into(),
-                None,
-                true,
-                FailureMode::None,
+                RunFacts {
+                    fixture_name: format!("b{i}"),
+                    mode: RunMode::Baseline,
+                    latency_ms: 100,
+                    tokens_output: 10,
+                    final_text: "ok",
+                    llm_used: "claude".into(),
+                    task_class: "FactualQa".into(),
+                    chewing_metrics: None,
+                    passed_quality: true,
+                    failure_mode: FailureMode::None,
+                },
             ));
             report.add_run(RunRecord::new_with_microcents(
-                format!("f{i}"),
-                RunMode::Full,
                 7,
-                100,
-                10,
-                "ok",
-                "flash".into(),
-                "FactualQa".into(),
-                None,
-                true,
-                FailureMode::None,
+                RunFacts {
+                    fixture_name: format!("f{i}"),
+                    mode: RunMode::Full,
+                    latency_ms: 100,
+                    tokens_output: 10,
+                    final_text: "ok",
+                    llm_used: "flash".into(),
+                    task_class: "FactualQa".into(),
+                    chewing_metrics: None,
+                    passed_quality: true,
+                    failure_mode: FailureMode::None,
+                },
             ));
         }
         report.aggregate();
@@ -1316,30 +1363,34 @@ mod tests {
     fn r3s1_to_markdown_v2_contains_microcents_precision() {
         let mut report = SavingsReport::with_version("r3s1-test");
         report.add_run(RunRecord::new_with_microcents(
-            "01".to_string(),
-            RunMode::Baseline,
-            37_000, // 37 cents (large enough to show)
-            1000,
-            10,
-            "ok",
-            "claude".to_string(),
-            "FactualQa".to_string(),
-            None,
-            true,
-            FailureMode::None,
+            37_000,
+            RunFacts {
+                fixture_name: "01".to_string(),
+                mode: RunMode::Baseline,
+                latency_ms: 1000,
+                tokens_output: 10,
+                final_text: "ok",
+                llm_used: "claude".to_string(),
+                task_class: "FactualQa".to_string(),
+                chewing_metrics: None,
+                passed_quality: true,
+                failure_mode: FailureMode::None,
+            },
         ));
         report.add_run(RunRecord::new_with_microcents(
-            "01".to_string(),
-            RunMode::Full,
             7_000,
-            800,
-            10,
-            "ok",
-            "flash".to_string(),
-            "FactualQa".to_string(),
-            None,
-            true,
-            FailureMode::None,
+            RunFacts {
+                fixture_name: "01".to_string(),
+                mode: RunMode::Full,
+                latency_ms: 800,
+                tokens_output: 10,
+                final_text: "ok",
+                llm_used: "flash".to_string(),
+                task_class: "FactualQa".to_string(),
+                chewing_metrics: None,
+                passed_quality: true,
+                failure_mode: FailureMode::None,
+            },
         ));
         report.aggregate();
         let md = report.to_markdown_v2();
@@ -1385,17 +1436,19 @@ mod tests {
             ..ChewingMetrics::default()
         };
         RunRecord::new_with_microcents(
-            "fixture".to_string(),
-            RunMode::Full,
             cost_mc,
-            100,
-            10,
-            "réponse complète et non triviale",
-            "llm".to_string(),
-            "FactualQa".to_string(),
-            Some(cm),
-            true,
-            FailureMode::None,
+            RunFacts {
+                fixture_name: "fixture".to_string(),
+                mode: RunMode::Full,
+                latency_ms: 100,
+                tokens_output: 10,
+                final_text: "réponse complète et non triviale",
+                llm_used: "llm".to_string(),
+                task_class: "FactualQa".to_string(),
+                chewing_metrics: Some(cm),
+                passed_quality: true,
+                failure_mode: FailureMode::None,
+            },
         )
     }
 
@@ -1427,17 +1480,19 @@ mod tests {
         // Aucun run A/B → `ab_section_markdown()` renvoie "" → no-op strict.
         let mut report = SavingsReport::with_version("s9-r3-test");
         report.add_run(RunRecord::new_with_microcents(
-            "01".to_string(),
-            RunMode::Baseline,
             3_000,
-            1000,
-            10,
-            "réponse baseline",
-            "claude".to_string(),
-            "FactualQa".to_string(),
-            None, // pas de chewing_metrics → pas d'A/B
-            true,
-            FailureMode::None,
+            RunFacts {
+                fixture_name: "01".to_string(),
+                mode: RunMode::Baseline,
+                latency_ms: 1000,
+                tokens_output: 10,
+                final_text: "réponse baseline",
+                llm_used: "claude".to_string(),
+                task_class: "FactualQa".to_string(),
+                chewing_metrics: None,
+                passed_quality: true,
+                failure_mode: FailureMode::None,
+            },
         ));
         report.aggregate();
 

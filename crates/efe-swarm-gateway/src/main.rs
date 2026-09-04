@@ -73,7 +73,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let accepted_cleartext =
             efe_swarm_gateway::profile::read::accept_cleartext_egress();
         let pii_ok = cfg!(feature = "pii") || accepted_cleartext;
-        if let Err(why) = frontier_boot_guard(true, key_ok, auth_ok, store_durable, pii_ok) {
+        if let Err(why) = frontier_boot_guard(Preflight {
+            frontier_on: true,
+            key_ok,
+            auth_ok,
+            store_durable,
+            pii_ok,
+        }) {
             eprintln!("FATAL (M4 gate production) : {why}");
             std::process::exit(78); // EX_CONFIG (sysexits.h) — config invalide, non-retryable
         }
@@ -407,14 +413,40 @@ fn key_source_for(master_present: bool) -> (HmacKeySource, &'static str) {
 /// frontière est activée sans l'un des trois invariants : non-forgeabilité (clé HMAC dérivable),
 /// authentification (OIDC `aud=efe-llm`), durabilité (store Postgres). L'ordre des messages suit
 /// la gravité : une clé forgeable rend TOUT le reste sans valeur.
+/// L'état observé au démarrage, tel que le préflight le reçoit.
+///
+/// # Cinq booléens, et pourquoi ils sont nommés depuis É4
+///
+/// La signature remplacée prenait **cinq `bool` positionnels** — le cas le plus pur
+/// de transposition silencieuse du périmètre : `(true, true, false, true, true)`
+/// et `(true, false, true, true, true)` se compilent aussi bien l'un que l'autre,
+/// et ne veulent pas dire la même chose. Sur les neuf sites d'appel, huit sont des
+/// tables de vérité écrites à la main, et le neuvième est **le démarrage réel de
+/// l'egress payant**.
+///
+/// Clippy ne l'a jamais signalé : cinq arguments passent sous le plafond de six, et
+/// `fn_params_excessive_bools` n'est pas dans le jeu par défaut. C'est la porte de
+/// qualité ÉTENDUE AUX FEATURES (É4) qui a mené jusqu'ici, par le `type_complexity`
+/// de la table de cas — l'indice était le tuple `(bool, bool, bool, bool)`, pas le
+/// garde lui-même.
 #[cfg(feature = "frontier-llm")]
-fn frontier_boot_guard(
+#[derive(Clone, Copy)]
+struct Preflight {
+    /// La frontière est-elle demandée ? (`EFE_LLM_FRONTIER_ENABLED`)
     frontier_on: bool,
+    /// La clé de provenance est-elle dérivée d'un master — donc NON forgeable ?
     key_ok: bool,
+    /// L'authentification est-elle câblée (OIDC `aud=efe-llm`) ?
     auth_ok: bool,
+    /// Le store est-il durable (`postgres` compilé ET `DATABASE_URL`) ?
     store_durable: bool,
+    /// La capacité de caviarder existe-t-elle, ou le risque est-il RECONNU ?
     pii_ok: bool,
-) -> Result<(), &'static str> {
+}
+
+#[cfg(feature = "frontier-llm")]
+fn frontier_boot_guard(p: Preflight) -> Result<(), &'static str> {
+    let Preflight { frontier_on, key_ok, auth_ok, store_durable, pii_ok } = p;
     if !frontier_on {
         return Ok(()); // frontière OFF ⟹ dev/essaim souverain intact (InMemory + test_key légitimes)
     }
@@ -500,15 +532,48 @@ mod tests {
     #[cfg(feature = "frontier-llm")]
     #[test]
     fn frontier_boot_guard_enforces_the_triad() {
-        assert!(frontier_boot_guard(false, false, false, false, false).is_ok(), "frontière OFF ⟹ dev toujours OK");
-        assert!(frontier_boot_guard(true, false, true, true, true).is_err(), "#2 clé forgeable ⟹ refus");
-        assert!(frontier_boot_guard(true, true, false, true, true).is_err(), "#7 auth absente ⟹ refus");
-        assert!(frontier_boot_guard(true, true, true, false, true).is_err(), "#3 store volatil ⟹ refus");
-        assert!(frontier_boot_guard(true, true, true, true, true).is_ok(), "les quatre invariants ⟹ GO");
+        assert!(frontier_boot_guard(Preflight {
+            frontier_on: false,
+            key_ok: false,
+            auth_ok: false,
+            store_durable: false,
+            pii_ok: false,
+        }).is_ok(), "frontière OFF ⟹ dev toujours OK");
+        assert!(frontier_boot_guard(Preflight {
+            frontier_on: true,
+            key_ok: false,
+            auth_ok: true,
+            store_durable: true,
+            pii_ok: true,
+        }).is_err(), "#2 clé forgeable ⟹ refus");
+        assert!(frontier_boot_guard(Preflight {
+            frontier_on: true,
+            key_ok: true,
+            auth_ok: false,
+            store_durable: true,
+            pii_ok: true,
+        }).is_err(), "#7 auth absente ⟹ refus");
+        assert!(frontier_boot_guard(Preflight {
+            frontier_on: true,
+            key_ok: true,
+            auth_ok: true,
+            store_durable: false,
+            pii_ok: true,
+        }).is_err(), "#3 store volatil ⟹ refus");
+        assert!(frontier_boot_guard(Preflight {
+            frontier_on: true,
+            key_ok: true,
+            auth_ok: true,
+            store_durable: true,
+            pii_ok: true,
+        }).is_ok(), "les quatre invariants ⟹ GO");
     }
 
-    #[cfg(feature = "frontier-llm")]
-    #[test]
+    // (Une paire `#[cfg(feature = "frontier-llm")]` + `#[test]` ORPHELINE occupait ces
+    //  deux lignes : sans item entre elle et la suivante, les deux jeux d'attributs
+    //  s'appliquaient au MÊME test. Le rapport de P1 la citait comme la preuve que le
+    //  chemin frontière vit hors de la rigueur du dépôt — aucune porte ne pouvait la
+    //  voir, puisque aucune porte ne compilait cette feature. É4 l'a vue.)
 
     /// ⭐ **P1.a — chaque injection déclarée est une précondition RÉELLE du garde.**
     ///
@@ -525,10 +590,19 @@ mod tests {
     fn p1_chaque_injection_declaree_est_une_precondition_du_garde() {
         use efe_swarm_gateway::profile::INJECTIONS_FRONTIERE;
         // (nom déclaré, la configuration où seule CETTE précondition manque)
-        let cas: &[(&str, (bool, bool, bool, bool))] = &[
-            ("EFE_NANO_AUDIT_HMAC_MASTER", (false, true, true, true)),
-            ("EFE_OIDC_PUBLIC_KEY_PEM", (true, false, true, true)),
-            ("DATABASE_URL", (true, true, false, true)),
+        // Chaque cas porte l'état COMPLET : plus de tuple anonyme de quatre booléens
+        // dont seule la position disait le sens — c'est le `type_complexity` qui a
+        // mené à nommer le garde lui-même.
+        let cas: &[(&str, Preflight)] = &[
+            ("EFE_NANO_AUDIT_HMAC_MASTER", Preflight {
+                frontier_on: true, key_ok: false, auth_ok: true, store_durable: true, pii_ok: true,
+            }),
+            ("EFE_OIDC_PUBLIC_KEY_PEM", Preflight {
+                frontier_on: true, key_ok: true, auth_ok: false, store_durable: true, pii_ok: true,
+            }),
+            ("DATABASE_URL", Preflight {
+                frontier_on: true, key_ok: true, auth_ok: true, store_durable: false, pii_ok: true,
+            }),
         ];
         assert_eq!(
             cas.len(),
@@ -538,12 +612,12 @@ mod tests {
             INJECTIONS_FRONTIERE.len(),
             cas.len()
         );
-        for (nom, (k, a, st, pii)) in cas {
+        for (nom, etat) in cas {
             assert!(
                 INJECTIONS_FRONTIERE.contains(nom),
                 "{nom} est éprouvé ici mais absent de INJECTIONS_FRONTIERE"
             );
-            let err = frontier_boot_guard(true, *k, *a, *st, *pii)
+            let err = frontier_boot_guard(*etat)
                 .expect_err("la précondition manquante doit faire refuser");
             assert!(
                 err.contains(nom),
@@ -562,7 +636,13 @@ mod tests {
         // absente ET risque non reconnu), la frontière refuse de démarrer : jusqu'ici elle
         // imprimait « préflight frontière OK » pendant que chaque prompt sortait en clair, et
         // l'opérateur n'avait même pas le moyen d'activer la caviardage.
-        let err = frontier_boot_guard(true, true, true, true, false)
+        let err = frontier_boot_guard(Preflight {
+            frontier_on: true,
+            key_ok: true,
+            auth_ok: true,
+            store_durable: true,
+            pii_ok: false,
+        })
             .expect_err("capacité PII absente et non reconnue ⟹ refus de démarrer");
         assert!(err.contains("EN CLAIR"), "le message dit ce qui se passerait : {err}");
         assert!(err.contains("EFE_LLM_ACCEPT_CLEARTEXT_EGRESS"), "…et comment le reconnaître");
@@ -570,6 +650,12 @@ mod tests {
 
         // Le défaut PII `Off` PAR POLICY reste légitime : on n'exige pas la caviardage, seulement
         // que son absence soit CHOISIE. Les deux remèdes débloquent.
-        assert!(frontier_boot_guard(true, true, true, true, true).is_ok());
+        assert!(frontier_boot_guard(Preflight {
+            frontier_on: true,
+            key_ok: true,
+            auth_ok: true,
+            store_durable: true,
+            pii_ok: true,
+        }).is_ok());
     }
 }

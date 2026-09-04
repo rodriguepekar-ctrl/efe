@@ -118,6 +118,21 @@ fn take_matching(pool: &mut [Option<LlmProvenanceRecord>], provider: Option<&str
 /// requête) — même modèle de confiance que le blob : builder de confiance + tamper-evidence
 /// clé-détenteur ; l'axe déclaratif (arité attendue relay=3, debate=2·rounds) vit dans le
 /// checker out-of-band `/v1/llm/audit/:id`.
+///
+/// # Sept arguments, exemptés — et son frère l'était déjà
+///
+/// `seal_and_store_mission_with_request`, quelques lignes plus bas, porte la même
+/// exemption avec la même raison depuis longtemps : « pipeline de scellement
+/// explicite ». Celle-ci ne l'avait pas — non par décision contraire, mais parce
+/// que **la porte de qualité ne compile pas `frontier-llm` par défaut** et ne l'a
+/// donc jamais signalée. Deux fonctions jumelles, une exemptée et une muette :
+/// c'est la trace exacte de l'angle mort que É4 vient mesurer.
+///
+/// Le critère qui autorise l'exemption est le même qu'ailleurs dans le périmètre :
+/// les sept types sont **tous distincts** (`TenantId` est un newtype sur `Uuid`,
+/// pas un alias — la transposition des deux premiers ne compile pas), donc aucun
+/// échange d'arguments ne peut passer en silence.
+#[allow(clippy::too_many_arguments)] // pipeline de scellement explicite, types tous distincts
 pub fn build_and_seal_mission(
     tenant_id: TenantId,
     mission_id: Uuid,
@@ -573,7 +588,7 @@ mod tests {
         // Avec : 1 apparie, 2 → Missing → verified=false.
         let state = SwarmGatewayState::in_memory();
         let (sink, mission_id) = run_fanout(&state, &["claude_a"]).await; // 1 record
-        let topo = topology_vote(&vec!["claude_a".into(), "claude_a".into(), "claude_a".into()]); // 3 déclarés, même provider
+        let topo = topology_vote(&["claude_a".into(), "claude_a".into(), "claude_a".into()]); // 3 déclarés, même provider
         let run_id = seal_and_store_mission(&state, TENANT, mission_id, &topo, &sink, json!({})).await.unwrap();
 
         let stored = state.store.get(run_id, TENANT).await.unwrap().unwrap();
@@ -591,7 +606,7 @@ mod tests {
         let (sink, mission_id) = run_fanout(&state, &["claude_a", "gpt_b"]).await; // 2 records
         let key = state.derive_key(TENANT).unwrap();
         let tid = state.tenant_id(TENANT).unwrap();
-        let topo = topology_vote(&vec!["claude_a".into()]); // 1 seul déclaré → gpt_b surnuméraire
+        let topo = topology_vote(&["claude_a".into()]); // 1 seul déclaré → gpt_b surnuméraire
         let err = build_and_seal_mission(tid, mission_id, &key, &topo, sink.drain(), &[], &json!({})).unwrap_err();
         assert_eq!(err, BuildError::UndeclaredCall { provider: "gpt_b".into() });
     }

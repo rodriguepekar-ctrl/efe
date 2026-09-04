@@ -65,6 +65,31 @@ titre "1. Les quatre features cohabitent-elles ?"
 #  `postgres` (store durable), `oidc` (authentification), `pii` (capacité de
 #  caviarder) et `frontier-llm` (le coordinator). Le garde n'existe que sous la
 #  dernière : sans elle, `EFE_LLM_FRONTIER_ENABLED=true` ne refuse RIEN.
+#
+#  ⭐ **É4 — LA PORTE DE QUALITÉ, SUR CES FEATURES.**
+#
+#  `cargo clippy --workspace --all-targets` compile les features PAR DÉFAUT, et les quatre
+#  d'ici n'en sont pas : `frontier-llm` gate `routes/llm.rs` en entier (`routes/mod.rs:18`) et
+#  allume trois fournisseurs d'`efe-coordinator` dont `gemini` est lui-même sous `cfg`. La porte
+#  du dépôt pouvait donc être VERTE pendant que le chemin d'egress payant portait sa dette
+#  intacte — et elle l'était : **sept défauts** y dormaient le 4 septembre, dont une paire
+#  d'attributs `#[cfg]`/`#[test]` ORPHELINE que le rapport de P1 citait déjà comme la preuve que
+#  ce chemin vivait hors de la rigueur du dépôt. Aucune porte ne pouvait la voir, puisque aucune
+#  porte ne compilait cette feature.
+#
+#  Un contrôle qui DÉMARRE le profil de production sans en éprouver la qualité ne vérifie que la
+#  moitié de son sujet. La porte vient donc en premier, avant même le build.
+JOURNAL_PORTE="$(mktemp)"
+if ! cargo clippy -q --locked -p efe-swarm-gateway --features "$FEAT" --all-targets \
+       -- -D warnings > "$JOURNAL_PORTE" 2>&1; then
+  grep -E 'error|warning' "$JOURNAL_PORTE" | head -20 | sed 's/^/      /'
+  rm -f "$JOURNAL_PORTE"
+  ko "la porte de qualité TOMBE sur les features de production. Le workspace peut être vert et \
+ce chemin rouge : c'est exactement l'angle mort que ce contrôle ferme."
+fi
+rm -f "$JOURNAL_PORTE"
+ok "clippy -D warnings passe sur $FEAT — la dette du chemin frontière est mesurée, pas supposée"
+
 cargo build -q -p efe-swarm-gateway --features "$FEAT" 2>&1 \
   | grep -E '^error' && ko "le build de production ne compile pas"
 [ -x "$BIN" ] || ko "binaire introuvable après build : $BIN"
@@ -292,6 +317,34 @@ print(f"  \033[32m✓\033[0m verified · root_matches · chain_intact · content
       f"({d.get('records', '?')} enregistrements)")
 PY
 ok "LE REÇU SURVIT AU ROLLOUT et se re-prouve depuis un processus neuf"
+
+# ═════════════════════════════════════════════════════════════════════════════
+titre "6. Le critère de M3, que personne ne jouait"
+#
+#  ⭐ **É4** — `routes/llm.rs` vit sous `#[cfg(feature = "frontier-llm")]`, et les deux tests
+#  qui portent le critère de M3 — « le SLM meurt, la mission passe, et la RAISON remonte » —
+#  y sont en plus `#[cfg(not(feature = "oidc"))]`. Les deux conditions se composent :
+#
+#      cargo test -p efe-swarm-gateway --lib m3_le_slm
+#        (défaut)                      → 0 test  · le module n'est pas compilé
+#        --features frontier-llm       → 2 tests ✓
+#        --features frontier-llm,oidc  → 0 test  · `cfg(not(oidc))` les retire
+#
+#  Ni `cargo test --workspace` ni le profil de production n'emploient cette combinaison.
+#  Deux portes vertes, et ces deux tests ne tournaient nulle part.
+#
+#  ⚠ Cette commande est ici, EN DERNIER, et pas au début : elle porte un jeu de features
+#  DIFFÉRENT, donc cargo relie un binaire différent dans `target/debug/` — exactement le
+#  piège que l'étape 1 décrit et que `porte_les_features` surveille. Placée plus haut, elle
+#  détruirait la propriété que ce script vient d'établir. Ici, plus rien n'en dépend.
+M3=$(cargo test -q --locked -p efe-swarm-gateway --features frontier-llm --lib m3_le_slm 2>&1 \
+     | grep -E '^test result:' | head -1)
+case "$M3" in
+  *"2 passed; 0 failed"*) ok "les deux tests M3 passent ($M3)" ;;
+  *"0 passed"*) ko "AUCUN test M3 n'a été joué — un \`cfg\` a bougé, et le critère de M3 \
+n'est plus éprouvé nulle part. C'est le trou que cette étape existe pour rendre visible." ;;
+  *) ko "les tests M3 ne passent pas : $M3" ;;
+esac
 
 # ═════════════════════════════════════════════════════════════════════════════
 titre "Ce que ce contrôle ne prouve PAS, et qu'il faut redire"

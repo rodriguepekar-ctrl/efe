@@ -42,9 +42,7 @@ use std::time::Duration;
 
 use efe_coordinator::llm::{LlmProvider, ProviderRegistry};
 use efe_coordinator::workflows::{run_mission_a, run_speculative};
-use efe_coordinator::{
-    ClaudeProvider, Coordinator, MissionARequest, MissionBRequest, SpeculativeRequest,
-};
+use efe_coordinator::{ClaudeProvider, Coordinator, MissionARequest, MissionBRequest, RunFacts, SpeculativeRequest};
 use efe_nano_app_coordinator::types::router::TaskClass;
 use efe_nano_app_coordinator::types::{Budget, LlmMetadata};
 
@@ -2980,17 +2978,19 @@ async fn r3s8_live_ab_test_savings_report() {
         if let Ok(resp) = run_mission_a(&coord, req).await {
             let passed = resp.final_text.to_lowercase().contains("paris");
             report.add_run(RunRecord::new_with_microcents(
-                "r3s8_ab".into(),
-                RunMode::Full,
                 resp.cost_microcents,
-                resp.latency_ms,
-                resp.chewing_metrics.as_ref().map_or(0, |m| m.llm_tokens_generated),
-                &resp.final_text,
-                resp.llm_used.clone(),
-                "FactualQa".into(),
-                resp.chewing_metrics.clone(),
-                passed,
-                resp.failure_mode.clone(),
+                RunFacts {
+                    fixture_name: "r3s8_ab".into(),
+                    mode: RunMode::Full,
+                    latency_ms: resp.latency_ms,
+                    tokens_output: resp.chewing_metrics.as_ref().map_or(0, |m| m.llm_tokens_generated),
+                    final_text: &resp.final_text,
+                    llm_used: resp.llm_used.clone(),
+                    task_class: "FactualQa".into(),
+                    chewing_metrics: resp.chewing_metrics.clone(),
+                    passed_quality: passed,
+                    failure_mode: resp.failure_mode.clone(),
+                },
             ));
         }
     }
