@@ -107,6 +107,40 @@ services:
     ports:
       - "127.0.0.1:8081:8080"
 
+  # ── É2 · le pilote de la JONCTION ──────────────────────────────────────────
+  #
+  # Sans lui, `--profile jonction up` démarrait une passerelle que RIEN ne
+  # pilotait : la démonstration de C1 était un `curl` en commentaire, et le
+  # geste de vérification documenté (`--entrypoint ls`) ne pouvait pas marcher
+  # — l'image est distroless, elle n'a pas de `ls`.
+  #
+  # Ce service est le même binaire que `preuve`, pointé sur la jonction, avec
+  # SCELLA_REG en plus. Cette variable seule ajoute la 6e étape : le dossier
+  # réglementaire, vérifié DU MÊME RUN. C'est le critère de É2, exécutable.
+  preuve-jonction:
+    profiles: ["jonction"]
+    image: scella-jonction:local
+    depends_on:
+      - jonction
+    environment:
+      SCELLA_PASSERELLE: jonction:8080
+      # Le journal d'ancres est PARTAGÉ avec la passerelle du Seuil — les deux y publient. Ce
+      # n'est plus un problème : le pilote choisit désormais l'ancre par run_id, pas par position.
+      SCELLA_ANCRE: /preuve/anchors.log
+      # La SORTIE, elle, doit être distincte : les deux pilotes écrivent bundle.sealed.jsonl et
+      # bundle.TRONQUE.jsonl, et sous ce profil ils tournent EN MÊME TEMPS. Un chemin partagé les
+      # ferait s'écraser l'un l'autre — et le comptage de l'étape 4 mesurerait le bundle du voisin.
+      SCELLA_SORTIE: /preuve/jonction
+      # Le MÊME chemin que EFE_SWARM_REG_EVIDENCE_DIR dans profiles/jonction.env :
+      # la passerelle écrit là, ce pilote lit là. Les tenir ensemble ici est la
+      # seule façon de garantir qu'ils ne divergeront pas en silence.
+      SCELLA_REG: /preuve/reg
+      SCELLA_CLE_HEX: ${SCELLA_CLE_HEX:-}
+    volumes:
+      - preuve:/preuve
+    entrypoint: ["/usr/local/bin/scella-preuve"]
+    restart: "no"
+
   # ── P1 : le profil de PRODUCTION ────────────────────────────────────────────
   #
   #   EFE_NANO_AUDIT_HMAC_MASTER=$(openssl rand -hex 32) \
