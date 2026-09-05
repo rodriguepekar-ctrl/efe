@@ -98,8 +98,18 @@ nommait la porte ne partait jamais sur la branche de travail, et sa première é
 — `cargo fmt --all -- --check` — serait tombée sur 4 643 fichiers, ce dépôt étant
 formaté à la main. Les 90 sont archivés hors du produit, pas supprimés.
 
-Ce workflow a été **joué sur Linux avant d'être écrit dans le dépôt**, dans
-`rust:1.88-bookworm` sous un utilisateur non privilégié. Le premier passage était
+**Il est vert chez GitHub** : run `33977178927`, 10 min 32 s — trois portes,
+onze contrôles, **3 941 tests passés · 0 échoué · 191 binaires**. Le passage
+précédent était tombé, non sur le code mais sur `No space left on device` : ce
+workspace écrit 189 binaires de test *plus* trois jeux d'artefacts clippy dans un
+même `target/`, et le runner n'offre que 14 Gio. Le workflow retire donc
+l'outillage préinstallé (**22 Gio** rendus, mesurés avant/après) et construit sans
+tables de débogage — `target/` tombe à **3,1 Gio**, et une étape finale
+`if: always()` imprime la marge restante (**31 Gio**) pour qu'un manque de place
+ne se relise jamais comme un défaut du code.
+
+Le workflow avait d'abord été **joué sur Linux avant d'être écrit dans le dépôt**,
+dans `rust:1.88-bookworm` sous un utilisateur non privilégié. Le premier passage était
 rouge : un trait jamais importé, trois gardes de plateforme écrites deux fois,
 deux `if let Err(_)`. Ces cinq défauts vivaient tous sous
 `#[cfg(target_os = "linux")]` — jamais compilés, donc jamais lintés, sur aucune
