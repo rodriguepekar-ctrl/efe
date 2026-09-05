@@ -65,7 +65,7 @@ n'est pas conforme.*
 
 ## Les contrôles
 
-Rien de ce qui précède n'est à croire sur parole. Quinze contrôles rejouent
+Rien de ce qui précède n'est à croire sur parole. Seize contrôles rejouent
 chacun leur module, et refont eux-mêmes les comptages plutôt que de croire le
 pilote :
 
@@ -81,6 +81,30 @@ Ils distinguent trois états, et le troisième compte autant que les deux autres
 `0` mesuré et vert · `1` mesuré et rouge · `3` **non mesuré** — l'instrument n'a
 pas pu regarder. Un contrôle en panne doit dire qu'il est en panne, et ne jamais
 emprunter le vocabulaire du sujet qu'il mesure.
+
+### Ce qu'une machine en joue
+
+Un `push` ou une `pull request` sur `c1-c3`, `main` ou `release/**` déclenche
+[`.github/workflows/portes.yml`](.github/workflows/portes.yml) : les trois portes
+`clippy -D warnings`, puis **les onze contrôles restants qui n'exigent
+pas de démon Docker — chacun sa propre étape**, pour qu'un échec nomme le contrôle
+plutôt que la boucle — puis `cargo test --locked --workspace`. Quatre contrôles restent à la
+main, et c'est écrit dans l'en-tête du fichier : `e1` et `p1` veulent un démon (et
+un vrai PostgreSQL), `mz` veut un modèle de plusieurs gigaoctets, `r3` veut trois
+tours d'affilée là où la CI n'en joue qu'un.
+
+Le dépôt portait **90** workflows. Aucun ne lançait un `*-check.sh` ; le seul qui
+nommait la porte ne partait jamais sur la branche de travail, et sa première étape
+— `cargo fmt --all -- --check` — serait tombée sur 4 643 fichiers, ce dépôt étant
+formaté à la main. Les 90 sont archivés hors du produit, pas supprimés.
+
+Ce workflow a été **joué sur Linux avant d'être écrit dans le dépôt**, dans
+`rust:1.88-bookworm` sous un utilisateur non privilégié. Le premier passage était
+rouge : un trait jamais importé, trois gardes de plateforme écrites deux fois,
+deux `if let Err(_)`. Ces cinq défauts vivaient tous sous
+`#[cfg(target_os = "linux")]` — jamais compilés, donc jamais lintés, sur aucune
+machine de développement. C'est le seul argument qui compte pour cette étape : un
+contrôle qui ne tourne que là où l'on travaille ne garde que ce qu'on y voit.
 
 ## Structure
 
@@ -124,9 +148,10 @@ d'où ils viennent et ce que leur propre README affirmait de faux.
 Le 5 septembre, **38 dossiers de la racine** puis **1 085 fichiers** de `docs/`,
 `scripts/`, `docker/` et de la racine ont suivi — le portail, la plateforme
 Python, les SDK polyglottes, les chartes Helm, Terraform, les bancs, les bacs à
-sable : `Downloads/vrai/EFE-arbre-2026-09-05/`, 61 023 fichiers, ~1,5 Gio. Le dépôt
-est passé de **48 dossiers à la racine à six**, et de 13 000 fichiers suivis à
-**1 020**. Ce qui reste est cité par le code, par un contrôle, ou appartient à
+sable : `Downloads/vrai/EFE-arbre-2026-09-05/`, 62 361 fichiers, ~1,6 Gio. Le dépôt
+est passé de **48 dossiers à la racine à six** (plus `.github/` et `.sigstore/`),
+et de 13 000 fichiers suivis à **926** — 925 après le
+retrait, plus le seul workflow que D4 ajoute. Ce qui reste est cité par le code, par un contrôle, ou appartient à
 Scella. Là encore rien n'est supprimé, et rien n'a bougé avant d'avoir été
 vérifié : aucune référence depuis le produit, puis `cargo metadata --locked` et
 `cargo check --locked --workspace` joués juste après les quatre dossiers les plus
@@ -134,6 +159,8 @@ risqués.
 
 ## Licence
 
-Propriétaire — voir [LICENSE](LICENSE). ⚠ Un crate du périmètre,
-`efe-nano-sdk`, déclare `MIT`, une licence que ce fichier ne mentionne pas :
-la contradiction est relevée et non réglée (étape **D3** de la feuille de route).
+Propriétaire — voir [LICENSE](LICENSE). Le crate `efe-nano-sdk` déclare `MIT` :
+la contradiction avec le fichier de licence est **réglée** (étape **D3**) — le crate
+y a sa ligne, et le texte MIT qu'il promettait existe enfin, dans
+[LICENSE-MIT](LICENSE-MIT). `scripts/d3-check.sh` refuse toute divergence entre les
+licences déclarées par les manifestes et ce que le fichier de licence accorde.

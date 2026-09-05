@@ -46,11 +46,16 @@
 /// **Sprint 8 — N11 days 11-15** : Firecracker control-plane HTTP
 /// client (Linux-only).  Provisions VMs via the Firecracker JSON API
 /// over Unix-domain socket.
-#[cfg(target_os = "linux")]
+// `api_client`, `cgroup` et `vsock_client` ne vivent que sous Linux, mais la garde
+// est ÉCRITE DANS CHAQUE FICHIER (`#![cfg(target_os = "linux")]`), pas ici. Elle
+// l'était aux DEUX endroits, et clippy sur Linux l'a dit : `duplicated attribute`.
+// Nous gardons celle du fichier, jamais celle-ci : une garde posée sur `mod` empêche
+// le fichier d'être seulement LU sur macOS ; posée dans le fichier, il est encore
+// analysé (ses éléments seuls disparaissent). C'est le sens qui nous manquait —
+// tout ce code n'avait jamais été compilé nulle part hors d'un runner Linux.
 pub mod api_client;
 /// **Sprint 8 — N11 days 11-15** : cgroup v2 writer (Linux-only).
 /// Enforces per-VM CPU / memory / IO limits.
-#[cfg(target_os = "linux")]
 pub mod cgroup;
 pub mod config;
 pub mod kind_pool;
@@ -63,7 +68,6 @@ pub mod types;
 /// **Sprint 8 — N11 days 12-13** : vsock RPC client (Linux-only).
 /// Communicates with the guest inference daemon over Firecracker's
 /// vsock-over-UDS proxy.
-#[cfg(target_os = "linux")]
 pub mod vsock_client;
 
 pub use config::{ConfigError, FirecrackerPoolConfig, KindConfig, SubPoolBudget};

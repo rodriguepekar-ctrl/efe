@@ -76,7 +76,7 @@ Et sa seconde moitié décrivait un dépôt qui n'existe plus. Mesuré avant ré
 | `git clone git@github.com:efe-ai/efe.git` | le dépôt réel est `github.com/rodriguepekar-ctrl/efe` |
 | « Rust 1.85 » | `rust-toolchain.toml` **et** `Cargo.toml` disent **1.88** |
 
-La nouvelle structure est vérifiée ligne à ligne : 30 membres, 15 contrôles,
+La nouvelle structure est vérifiée ligne à ligne : 30 membres, 16 contrôles,
 4 binaires dans l'image, 3 profils dans `compose.yaml`.
 
 ## La page qu'on tend

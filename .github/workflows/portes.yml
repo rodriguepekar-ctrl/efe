@@ -1,0 +1,145 @@
+# ─────────────────────────────────────────────────────────────────────────────
+#  LES PORTES — la seule chose que ce dépôt exécute automatiquement.
+#
+#  ## Pourquoi ce fichier existe
+#
+#  Le dépôt portait 90 workflows. **Aucun** ne lançait un `scripts/*-check.sh` —
+#  c'est-à-dire aucun ne jouait la discipline de mesure qui fait tout le produit.
+#  Et `ci.yml`, le seul à nommer la porte `clippy -D warnings`, ne se déclenchait
+#  que sur `main` et `release/**` : la branche de travail est `c1-c3`, il ne
+#  partait jamais.
+#
+#  Il n'aurait pas pu passer non plus. Sa PREMIÈRE étape était
+#  `cargo fmt --all -- --check`, et ce dépôt est formaté À LA MAIN : mesuré le
+#  4 septembre 2026, cette commande réécrirait **4 643 fichiers**. Le job serait
+#  tombé là, sans jamais atteindre la porte qu'il nommait.
+#
+#  ⚠ **`cargo fmt` n'est donc PAS ici, et c'est délibéré.** Ce n'est pas un oubli
+#  à réparer : le formatage manuel est un choix du dépôt, et une porte qui exige
+#  le contraire ne garde rien — elle interdit simplement de passer.
+#
+#  ## Ce que ce workflow joue, et dans quel ordre
+#
+#  1. les trois portes de qualité, une par profil que `compose.yaml` construit ;
+#  2. les ONZE contrôles restants qui n'exigent pas de démon Docker, chacun sa
+#     propre étape — un échec doit NOMMER le contrôle, pas dire « la boucle a
+#     échoué ». (Douze contrôles sur seize tournent sans démon ; `portes-check`
+#     est le douzième, et c'est le point 1. Ne pas le compter deux fois.) ;
+#  3. la suite de tests complète.
+#
+#  ## Ce qu'il a trouvé le jour où il a été écrit
+#
+#  Éprouvé sur Linux avant d'être poussé (`rust:1.88-bookworm`, utilisateur non
+#  privilégié uid 1001, comme un runner) : trois portes vertes, 3 930 tests
+#  passés, 0 échoué, 189 binaires. Mais le PREMIER passage était rouge, et de
+#  cinq défauts que macOS ne pouvait pas voir : un trait jamais importé (`E0599`,
+#  trois sites), trois gardes de plateforme écrites deux fois, deux
+#  `if let Err(_)`. Tout cela vit sous `#[cfg(target_os = "linux")]` : ce code
+#  n'avait jamais été COMPILÉ, et donc jamais linté, nulle part. Un `cfg` ne
+#  cache pas seulement du code au compilateur ; il le cache au contrôle.
+#
+#  ⚠ Si `cargo test` meurt sur `collect2: ld terminated with signal 9`, ce n'est
+#  pas le code : c'est le tueur OOM du noyau pendant l'édition de liens, et le
+#  remède est `-j 2`, pas un correctif. Mesuré ici : 11 cœurs pour 7,75 Gio ne
+#  passent pas ; le runner GitHub (16 Gio, 4 cœurs) a quatre fois plus de
+#  mémoire par lien. On laisse donc le parallélisme par défaut — mais si ce
+#  message apparaît un jour, il faut le lire pour ce qu'il est.
+#
+#  ## Ce qu'il ne prouve PAS, et qu'il faut redire
+#
+#  · **L'emballage.** `e1-check.sh` et `p1-check.sh` exigent un démon Docker (et,
+#    pour le second, un vrai PostgreSQL). Ils restent à jouer à la main. Ce que
+#    la CI mesure ici est la CHARGE UTILE, exactement le partage que
+#    `m4-check.sh` écrit dans son propre en-tête.
+#  · **Le Cadrage.** `mz-check.sh` réclame `models/compressor.gguf` — plusieurs
+#    gigaoctets, délibérément hors du dépôt. Non applicable sur un runner.
+#  · **L'instabilité entre tours.** `r3-check.sh` demande TROIS tours d'affilée
+#    pour tenir son critère ; ce workflow n'en joue qu'un (`cargo test`). Un tour
+#    vert ne dit rien de la stabilité — R3 le dit lui-même.
+# ─────────────────────────────────────────────────────────────────────────────
+name: Portes
+
+on:
+  push:
+    branches: [c1-c3, main, 'release/**']
+  pull_request:
+    branches: [c1-c3, main]
+  workflow_dispatch:
+
+concurrency:
+  group: portes-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: 0
+  RUST_BACKTRACE: 1
+
+jobs:
+  portes:
+    name: Portes de qualité, contrôles, tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+
+    steps:
+      # `fetch-depth: 0` n'est pas une précaution : `d3-check.sh` lance
+      # `gitleaks detect`, qui scanne l'HISTORIQUE git. Sur un clone superficiel
+      # il ne verrait qu'un commit et rendrait « aucun secret » sur une mesure
+      # qui n'a pas eu lieu.
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # 1.88 — la version que `rust-toolchain.toml` ET `Cargo.toml` épinglent.
+      - uses: dtolnay/rust-toolchain@1.88
+        with:
+          components: clippy
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: portes
+
+      # La version épinglée dans `.pre-commit-config.yaml`, pour que le hook local
+      # et la CI mesurent avec le même outil.
+      - name: gitleaks
+        run: |
+          set -euo pipefail
+          V=8.18.4
+          curl -sSL "https://github.com/gitleaks/gitleaks/releases/download/v${V}/gitleaks_${V}_linux_x64.tar.gz" \
+            | tar -xz gitleaks
+          sudo mv gitleaks /usr/local/bin/gitleaks
+          gitleaks version
+
+      # ── 1 · les trois portes de qualité ────────────────────────────────────
+      # `portes-check.sh` lit les profils dans `compose.yaml` : ajouter un profil
+      # au compose sans le garder devient impossible, ici comme en local.
+      - name: portes-check (coin · jonction · production)
+        run: bash scripts/portes-check.sh
+
+      # ── 2 · les douze contrôles sans démon, un par étape ───────────────────
+      - name: profile-check
+        run: bash scripts/profile-check.sh
+      - name: m4-check
+        run: bash scripts/m4-check.sh
+      - name: m5-check
+        run: bash scripts/m5-check.sh
+      - name: m6-check
+        run: bash scripts/m6-check.sh
+      - name: m7-check
+        run: bash scripts/m7-check.sh
+      - name: m8-check
+        run: bash scripts/m8-check.sh
+      - name: m9-check
+        run: bash scripts/m9-check.sh
+      - name: p2-check
+        run: bash scripts/p2-check.sh
+      - name: p3-check
+        run: bash scripts/p3-check.sh
+      - name: orphelins-check
+        run: bash scripts/orphelins-check.sh
+      - name: d3-check (licence + secrets)
+        run: bash scripts/d3-check.sh
+
+      # ── 3 · la suite complète ──────────────────────────────────────────────
+      - name: cargo test --locked --workspace
+        run: cargo test --locked --workspace --no-fail-fast

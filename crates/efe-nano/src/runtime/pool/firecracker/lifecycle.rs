@@ -19,6 +19,15 @@ use thiserror::Error;
 
 use super::config::KindConfig;
 use super::rpc::{VsockRpcRequest, VsockRpcResponse};
+// Le trait doit être EN PORTÉE pour que `backend.call(…)` résolve. Il ne l'était
+// pas, et personne ne l'a vu : `vsock_client.rs` porte `#![cfg(target_os = "linux")]`,
+// donc sur macOS le module est VIDE — les trois appels de ce fichier (l. ~627, ~684,
+// ~768) vivent eux-mêmes sous `#[cfg(target_os = "linux")]` et n'ont jamais été
+// compilés ici. Toute cette session a mesuré sur macOS ; c'est D4, en portant les
+// portes sur un runner Linux, qui l'a trouvé — trois `E0599` et un workspace qui ne
+// construit pas.
+#[cfg(target_os = "linux")]
+use super::vsock_client::VsockBackend;
 use super::types::{LifecycleHandle, SubPoolKey, VmId, VmState, WarmVm};
 
 // ─────────────────────────────────────────────────────────────────────
@@ -561,7 +570,7 @@ impl Lifecycle for FirecrackerLifecycle {
         // 5. Wait for the API socket to appear.  Firecracker creates it
         //    a few ms after fork.
         let api_wait_budget = self.config.boot_budget / 4;
-        if let Err(_) = wait_for_uds_sync(&api_socket, api_wait_budget).await {
+        if wait_for_uds_sync(&api_socket, api_wait_budget).await.is_err() {
             self.cleanup_on_failure(vm_id, child).await;
             return Err(LifecycleError::BootTimeout {
                 boot_budget_ms: api_wait_budget.as_millis() as u64,
@@ -616,7 +625,7 @@ impl Lifecycle for FirecrackerLifecycle {
             .checked_sub(started.elapsed())
             .unwrap_or(Duration::from_millis(50));
         let vsock_wait = remaining / 2;
-        if let Err(_) = super::vsock_client::wait_for_uds(&vsock_uds, vsock_wait).await {
+        if super::vsock_client::wait_for_uds(&vsock_uds, vsock_wait).await.is_err() {
             self.cleanup_on_failure(vm_id, child).await;
             return Err(LifecycleError::BootTimeout {
                 boot_budget_ms: self.config.boot_budget.as_millis() as u64,
