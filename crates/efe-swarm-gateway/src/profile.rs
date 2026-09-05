@@ -246,6 +246,23 @@ pub const REGISTRY: &[Switch] = &[
         fatal_if_invalid: false,
     },
     Switch {
+        // La classe décrit l'ABSENCE, pas l'importance : absente, on garde
+        // `https://api.anthropic.com/v1/messages` et rien ne change — donc « réglage ». Cela ne dit
+        // rien de son poids : c'est la DESTINATION de l'egress, et elle est validée par l'analyseur
+        // unique (`scella-authority`) avant d'être acceptée. Elle est lue par `efe-coordinator`, pas
+        // ici ; son entrée existe pour que le rapport de démarrage la NOMME — un interrupteur qui
+        // redirige toute la sortie et que l'exploitant découvrirait en production serait
+        // exactement le défaut que M0 supprime.
+        name: "EFE_ANTHROPIC_URL",
+        buys: "la destination de l'egress frontière — point de terminaison régional, mandataire \
+               d'entreprise, ou faux fournisseur local pour l'éprouver",
+        absence_costs: "défaut https://api.anthropic.com/v1/messages ; fournie et REFUSÉE (http \
+                        distant, userinfo, autorité inanalysable) ⟹ le provider Claude n'est PAS \
+                        enregistré, et le boot le CRIE",
+        class: Class::Tuning,
+        fatal_if_invalid: false,
+    },
+    Switch {
         name: "EFE_LLM_MAX_BUDGET_CENTS",
         buys: "le plafond serveur de dépense par requête",
         absence_costs: "défaut 10 000 c — un client ne dimensionne pas la dépense d'autrui",

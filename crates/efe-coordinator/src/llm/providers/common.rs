@@ -196,3 +196,141 @@ mod tests {
         );
     }
 }
+
+// ═════════════════════════════════════════════════════════════════════════════
+//  L'endpoint de sortie, quand il n'est plus une constante
+// ═════════════════════════════════════════════════════════════════════════════
+
+/// Valide un endpoint de sortie fourni par l'opérateur. **Fail-closed.**
+///
+/// ## Pourquoi cette fonction existe
+///
+/// L'URL de sortie des providers frontière était une **constante compilée**. Une passerelle qui se
+/// dit souveraine et dont la destination ne peut pas changer ne l'est pas : on ne peut la pointer ni
+/// vers un point de terminaison européen, ni vers un mandataire d'entreprise, ni — et c'est ce qui
+/// se voyait le plus — vers un faux fournisseur local, ce qui rendait l'aller-retour frontière
+/// **intestable**. `p1-check.sh` le nomme en tête de ce qu'il ne prouve pas.
+///
+/// Rendre l'URL configurable sans la garder serait pire que la constante : une variable
+/// d'environnement qui détourne l'egress est un trou, pas une fonctionnalité.
+///
+/// ## Les trois règles, et ce que chacune arrête
+///
+/// 1. **Autorité inanalysable ⟹ refus.** C'est la règle de [`scella_authority`] elle-même : dans le
+///    doute, on refuse.
+/// 2. **`https` accepté ; `http` seulement vers la machine locale.** Un `http://` distant enverrait
+///    les prompts en clair. Le loopback est la seule exception, et c'est elle qui rend le faux
+///    fournisseur possible.
+/// 3. **Aucun `userinfo`.** `https://user:motdepasse@hôte/` serait accepté par les deux règles
+///    précédentes — et l'endpoint est **SCELLÉ DANS LE REÇU** (`ProvenanceProvider` scelle
+///    l'endpoint observé). On mettrait un secret dans un artefact conçu pour être conservé sept ans
+///    et montré à un régulateur. Qui a besoin d'authentifier son mandataire le fait par en-tête.
+///
+/// ## Ce qu'elle ne fait PAS : un second analyseur
+///
+/// Elle n'analyse rien. Elle appelle [`scella_authority::authority_of`], l'analyseur **unique** du
+/// dépôt — celui pour lequel M1.b a réduit cinq copies à une, après avoir découvert que
+/// `127.0.0.1:8080@evil.com` faisait couper TLS vers `evil.com` sur 875 formes. Un `starts_with`
+/// local ici recréerait la sixième.
+///
+/// La détection du `userinfo` réutilise le même analyseur au lieu d'en écrire un : après le schéma,
+/// une URL sans `userinfo` **commence par son hôte** (entre crochets s'il est IPv6). Si ce n'est pas
+/// le cas, c'est qu'autre chose se tient devant.
+///
+/// # Errors
+/// Une raison **sûre à journaliser** : elle ne cite jamais l'entrée brute, seulement l'hôte extrait
+/// par l'analyseur — recopier l'URL recopierait son `userinfo` dans un journal.
+pub fn valider_endpoint_sortie(url: &str) -> Result<(), String> {
+    let Some(autorite) = scella_authority::authority_of(url) else {
+        return Err("autorité inanalysable — refusé (fail-closed)".to_string());
+    };
+    let hote = autorite.host();
+
+    let apres_schema = if let Some(r) = url.strip_prefix("https://") {
+        r
+    } else if let Some(r) = url.strip_prefix("http://") {
+        if !autorite.is_loopback() {
+            return Err(format!(
+                "« http:// » n'est permis que vers la machine locale ; « {hote} » n'en est pas — \
+                 les prompts partiraient en clair"
+            ));
+        }
+        r
+    } else {
+        return Err("schéma absent ou non supporté — attendu « https:// », ou « http:// » vers la \
+                    machine locale"
+            .to_string());
+    };
+
+    // Sans `userinfo`, l'autorité commence par l'hôte. `[` couvre la forme IPv6, dont l'analyseur
+    // retire les crochets.
+    let commence_par_lhote = apres_schema.starts_with(hote)
+        || apres_schema.strip_prefix('[').is_some_and(|r| r.starts_with(hote));
+    if !commence_par_lhote {
+        return Err(format!(
+            "l'URL porte un « userinfo » devant « {hote} » — refusé : l'endpoint est SCELLÉ dans le \
+             reçu, on n'y met pas d'identifiants. Authentifiez par en-tête."
+        ));
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests_endpoint_sortie {
+    use super::valider_endpoint_sortie as valider;
+
+    #[test]
+    fn le_defaut_et_les_formes_legitimes_passent() {
+        for u in [
+            "https://api.anthropic.com/v1/messages",
+            "https://eu.example.test/v1/messages",
+            "https://mandataire.interne:8443/v1/messages",
+            "http://127.0.0.1:8099/v1/messages",
+            "http://localhost:8099/v1/messages",
+            "http://[::1]:8099/v1/messages",
+        ] {
+            assert!(valider(u).is_ok(), "aurait dû passer : {u}");
+        }
+    }
+
+    #[test]
+    fn http_distant_est_refuse_car_les_prompts_partiraient_en_clair() {
+        let e = valider("http://api.example.test/v1/messages").unwrap_err();
+        assert!(e.contains("machine locale"), "{e}");
+    }
+
+    /// Le cas exact qui a coûté 875 formes à M1.b — il ne doit PAS passer par la porte loopback.
+    #[test]
+    fn la_ruse_du_userinfo_loopback_est_refusee() {
+        for u in [
+            "http://127.0.0.1:8080@evil.test/v1/messages",
+            "http://localhost@evil.test/v1/messages",
+        ] {
+            let e = valider(u).unwrap_err();
+            assert!(e.contains("machine locale"), "{u} → {e}");
+            assert!(!e.contains("evil.test/v1"), "la raison ne doit pas recopier l'URL brute : {e}");
+        }
+    }
+
+    #[test]
+    fn un_userinfo_meme_en_https_est_refuse_car_lendpoint_est_scelle() {
+        let e = valider("https://cle:secrete@api.example.test/v1/messages").unwrap_err();
+        assert!(e.contains("userinfo"), "{e}");
+        assert!(!e.contains("secrete"), "la raison NE DOIT PAS recopier le secret : {e}");
+    }
+
+    #[test]
+    fn les_schemas_absents_ou_exotiques_sont_refuses() {
+        for u in ["api.anthropic.com", "ftp://x.test/", "file:///etc/passwd", ""] {
+            assert!(valider(u).is_err(), "aurait dû être refusé : {u}");
+        }
+    }
+
+    /// Contre-épreuve du garde lui-même : sans elle, un `valider` qui rendrait toujours `Ok`
+    /// passerait le premier test et l'on ne verrait rien.
+    #[test]
+    fn le_validateur_sait_refuser() {
+        assert!(valider("http://evil.test/").is_err());
+        assert!(valider("https://api.anthropic.com/v1/messages").is_ok());
+    }
+}

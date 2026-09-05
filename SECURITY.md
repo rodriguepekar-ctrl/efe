@@ -59,7 +59,10 @@ suit est du code qu'on peut ouvrir :
 |---|---|
 | chaîne HMAC scellée, ancre re-vérifiable, troncature détectable | `crates/verify-mini/`, `crates/provenance-verify/` |
 | refus de démarrer la frontière sans `postgres`, `oidc` et `pii` — `exit 78` (`EX_CONFIG`) | [`profile.rs:926`](crates/efe-swarm-gateway/src/profile.rs), [`main.rs:53`](crates/efe-swarm-gateway/src/main.rs) |
-| garde de souveraineté sur les cibles de sortie | [`profile.rs`](crates/efe-swarm-gateway/src/profile.rs) |
+| analyseur d'autorité **unique** (5 copies réduites à 1 ; `127.0.0.1:8080@evil.com` coupait TLS vers `evil.com` sur 875 formes) | [`scella-authority`](crates/scella-authority/src/lib.rs) |
+| destination de l'egress **configurable et validée** — `https` partout, `http` seulement en local, jamais de `userinfo` (l'endpoint est scellé dans le reçu) | [`common.rs`](crates/efe-coordinator/src/llm/providers/common.rs), [`EFE_ANTHROPIC_URL`](crates/efe-swarm-gateway/src/profile.rs) |
+| le reçu annonce la destination **réelle**, jamais la constante | [`endpoint_configurable.rs`](crates/efe-coordinator/tests/endpoint_configurable.rs) |
+| aller-retour frontière joué **sur une vraie socket** contre un faux fournisseur | [`aller_retour_frontiere.rs`](crates/efe-coordinator/tests/aller_retour_frontiere.rs) |
 | effacement cryptographique (la chaîne scelle le chiffré) | [`provenance-dag/src/shred.rs`](crates/provenance-dag/src/shred.rs) |
 | recherche de secrets à chaque `push`, **arbre et historique** | [`scripts/d3-check.sh`](scripts/d3-check.sh), joué par `.github/workflows/portes.yml` |
 
@@ -80,9 +83,12 @@ Le plus utile de ce fichier :
 - **Le jeton porteur reste un secret partagé** ([`audit-console/src/session.rs`](crates/audit-console/src/session.rs)).
   Une vraie non-répudiation demanderait que l'officier **signe** le tuple de
   l'acte. C'est nommé, et non produit.
-- **La frontière n'a jamais démarré.** Le garde du point 3 fait son travail :
-  faute de `postgres` + `oidc` + `pii` réunis, la fonction centrale du produit
-  n'a jamais tourné hors des tests.
+- **La frontière ne démarre que sous contrainte, et c'est voulu.** Le garde du
+  point 3 exige `postgres` + `oidc` + `pii` réunis, sinon `exit 78`.
+  `scripts/p1-check.sh` la démarre pour de vrai contre un Postgres réel, la tue,
+  la redémarre et re-prouve le reçu. Ce qui n'a jamais eu lieu, c'est un appel
+  vers un **vrai** fournisseur : il faut une clé, et elle coûte de l'argent.
+  L'aller-retour lui-même est désormais joué contre un faux fournisseur local.
 - **M3 sous `oidc`** : les deux tests qui portent son critère ne tournent que
   sous `frontier-llm` *sans* `oidc`. L'argument qui rendrait ce trou acceptable
   est écrit dans `routes/llm.rs` comme une **revendication**, pas comme une

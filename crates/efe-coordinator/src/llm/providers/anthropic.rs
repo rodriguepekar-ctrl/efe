@@ -26,6 +26,7 @@ use super::DEFAULT_CLAUDE_MODEL;
 use parking_lot::Mutex;
 use std::sync::Arc;
 
+/// L'endpoint par **défaut**. Ce n'est plus une fatalité : voir [`ClaudeProvider::with_endpoint`].
 const ANTHROPIC_URL: &str = "https://api.anthropic.com/v1/messages";
 const ANTHROPIC_VERSION: &str = "2023-06-01";
 
@@ -61,14 +62,32 @@ pub struct ClaudeProvider {
     strip_thinking: bool,
     /// Snapshot des derniers rate-limits observés.
     last_rate_limits: Arc<Mutex<ClaudeRateLimits>>,
+    /// **La destination réelle de l'egress.** Défaut [`ANTHROPIC_URL`] ; remplaçable par
+    /// [`ClaudeProvider::with_endpoint`], qui la valide. C'est cette valeur — jamais la constante —
+    /// que [`LlmProvider::endpoint`] rend, donc celle qui est scellée dans le reçu : un reçu qui
+    /// nommerait `api.anthropic.com` pendant que les données partent ailleurs serait un faux.
+    endpoint_url: String,
 }
 
 impl ClaudeProvider {
     /// Construit le provider à partir de la variable d'environnement
     /// `ANTHROPIC_API_KEY`.  Utilise `DEFAULT_CLAUDE_MODEL`.
+    /// Construit le provider à partir de `ANTHROPIC_API_KEY`, et de `EFE_ANTHROPIC_URL` si elle
+    /// est posée.
+    ///
+    /// Absente ⟹ [`ANTHROPIC_URL`], comportement inchangé. Présente et **refusée** ⟹ erreur, jamais
+    /// un repli silencieux sur le défaut : un opérateur qui a écrit une destination et en obtient
+    /// une autre est le pire des deux mondes.
+    ///
+    /// # Errors
+    /// La clé absente ou mal préfixée, ou l'endpoint refusé.
     pub fn from_env() -> CoordResult<Self> {
         let key = ApiKey::from_env("ANTHROPIC_API_KEY", "sk-ant-")?;
-        Ok(Self::new(key, DEFAULT_CLAUDE_MODEL))
+        let p = Self::new(key, DEFAULT_CLAUDE_MODEL);
+        match std::env::var("EFE_ANTHROPIC_URL") {
+            Ok(u) if !u.trim().is_empty() => p.with_endpoint(u.trim()),
+            _ => Ok(p),
+        }
     }
 
     /// Construit avec clé explicite + modèle au choix.
@@ -84,7 +103,29 @@ impl ClaudeProvider {
             redactor: None,
             strip_thinking: true,
             last_rate_limits: Arc::new(Mutex::new(ClaudeRateLimits::default())),
+            endpoint_url: ANTHROPIC_URL.to_string(),
         }
+    }
+
+    /// Change la destination de l'egress — **validée**, jamais crue sur parole.
+    ///
+    /// Trois usages, dans l'ordre où ils comptent : un **faux fournisseur local**, sans quoi
+    /// l'aller-retour frontière est intestable et ne l'a jamais été ; un **mandataire d'entreprise**
+    /// ou un point de terminaison régional, sans quoi la souveraineté annoncée s'arrête à une
+    /// constante compilée vers les États-Unis ; un **bac à sable**.
+    ///
+    /// La validation est [`super::common::valider_endpoint_sortie`] — qui n'analyse rien elle-même
+    /// et délègue à l'analyseur unique du dépôt.
+    ///
+    /// # Errors
+    /// [`CoordError::Config`] si l'endpoint est refusé. Le message est sûr à journaliser : il ne
+    /// recopie jamais l'entrée brute.
+    pub fn with_endpoint(mut self, url: impl Into<String>) -> CoordResult<Self> {
+        let url = url.into();
+        super::common::valider_endpoint_sortie(&url)
+            .map_err(|raison| CoordError::Config(format!("EFE_ANTHROPIC_URL refusé : {raison}")))?;
+        self.endpoint_url = url;
+        Ok(self)
     }
 
     /// Attache un redactor PII (closure).  Le redactor est appliqué AVANT
@@ -212,7 +253,8 @@ impl LlmProvider for ClaudeProvider {
     }
 
     fn endpoint(&self) -> Option<String> {
-        Some(ANTHROPIC_URL.to_string())
+        // La valeur RÉELLE, pas la constante : c'est elle que `ProvenanceProvider` scelle.
+        Some(self.endpoint_url.clone())
     }
 
     async fn call(&self, req: LlmCall) -> CoordResult<LlmResponse> {
@@ -232,6 +274,7 @@ impl LlmProvider for ClaudeProvider {
         let temperature = req.temperature.clamp(0.0, 1.0);
         let api_key = self.api_key.clone();
         let http = self.http.clone();
+        let url = self.endpoint_url.clone();
         let rate_limits_snap = Arc::clone(&self.last_rate_limits);
 
         let started = Instant::now();
@@ -250,9 +293,10 @@ impl LlmProvider for ClaudeProvider {
             let api_key = api_key.clone();
             let provider_id = format!("claude_{model}");
             let rate_limits_snap = Arc::clone(&rate_limits_snap);
+            let url = url.clone();
             async move {
                 let req_send = http
-                    .post(ANTHROPIC_URL)
+                    .post(&url)
                     .header("x-api-key", api_key.expose())
                     .header("anthropic-version", ANTHROPIC_VERSION)
                     .header("content-type", "application/json")
@@ -358,7 +402,7 @@ impl LlmProvider for ClaudeProvider {
         let started = Instant::now();
         let resp = self
             .http
-            .post(ANTHROPIC_URL)
+            .post(&self.endpoint_url)
             .header("x-api-key", self.api_key.expose())
             .header("anthropic-version", ANTHROPIC_VERSION)
             .header("content-type", "application/json")
@@ -425,7 +469,7 @@ impl LlmProvider for ClaudeProvider {
         });
         let resp = self
             .http
-            .post(ANTHROPIC_URL)
+            .post(&self.endpoint_url)
             .header("x-api-key", self.api_key.expose())
             .header("anthropic-version", ANTHROPIC_VERSION)
             .json(&body)

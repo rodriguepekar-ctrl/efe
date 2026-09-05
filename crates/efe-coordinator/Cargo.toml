@@ -36,6 +36,13 @@ metrics = ["tokio/net"]
 # Crate frère : les 6 clients nano-robots Phase 1.
 efe-nano-app-coordinator = { path = "../efe-nano-app-coordinator" }
 
+# L'ANALYSEUR UNIQUE d'autorité. Sans dépendance lui-même. Il est ici parce que
+# l'endpoint de sortie est devenu configurable : la valider avec un `starts_with`
+# local rouvrirait exactement le trou que M1.b a fermé — `127.0.0.1:8080@evil.com`
+# coupait TLS vers evil.com sur 875 formes. Un second analyseur est le défaut,
+# jamais le remède.
+scella-authority = { path = "../scella-authority" }
+
 # Workspace-pinned.
 tokio       = { workspace = true, features = ["sync", "time", "rt-multi-thread", "macros", "signal"] }
 serde       = { workspace = true }
@@ -64,6 +71,9 @@ tokio       = { workspace = true, features = ["full", "test-util", "macros"] }
 proptest    = "1.5"
 serial_test = "3.1"
 criterion   = { version = "0.5", features = ["async_tokio", "html_reports"] }
+# Pour l'ALLER-RETOUR RÉEL sur socket contre un faux fournisseur — la chose que
+# `p1-check.sh` déclarait impossible tant que l'endpoint était une constante.
+wiremock    = "0.6"
 futures     = { workspace = true }
 
 [lib]

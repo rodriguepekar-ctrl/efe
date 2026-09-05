@@ -47,9 +47,29 @@ pub fn coordinator_from_env() -> Option<Arc<Coordinator>> {
 
     // Best-effort : un provider dont la clé manque est omis (from_env → Err), jamais fatal.
     // L'id est capturé AVANT le wrap (qui consomme le provider) — cf. log ci-dessous (§3.3).
-    if let Ok(p) = ClaudeProvider::from_env() {
-        ids.push(p.id());
-        registry.register(crate::mission::ProvenanceProvider::wrap(Arc::new(p)));
+    // Claude porte désormais DEUX raisons d'échouer, et elles ne se valent pas :
+    //
+    //   · la clé absente — normal, attendu, silencieux : l'opérateur n'a rien demandé ;
+    //   · l'endpoint `EFE_ANTHROPIC_URL` REFUSÉ — l'opérateur a agi, et sans cette branche il
+    //     obtiendrait un provider silencieusement absent. C'est le troisième état de M0,
+    //     « fournie mais refusée », et le taire ici reproduirait exactement l'absence inexpliquée
+    //     que M2 a passé son temps à fermer.
+    //
+    // Le message ne recopie jamais l'entrée : `valider_endpoint_sortie` ne rend que l'hôte extrait
+    // par l'analyseur, précisément pour qu'un `userinfo` ne finisse pas dans un journal collecté.
+    match ClaudeProvider::from_env() {
+        Ok(p) => {
+            ids.push(p.id());
+            registry.register(crate::mission::ProvenanceProvider::wrap(Arc::new(p)));
+        }
+        Err(efe_coordinator::CoordError::Config(raison)) => {
+            eprintln!(
+                "⚠ provider Claude NON enregistré — configuration REFUSÉE : {raison}\n\
+                 → ce n'est pas une clé manquante : une valeur a été fournie et rejetée. Corrigez-la \
+                 ou retirez-la ; la laisser telle quelle laisse la frontière sans Claude."
+            );
+        }
+        Err(_) => { /* clé absente ou mal préfixée : omission normale, cf. doc ci-dessus */ }
     }
     if let Ok(p) = GptProvider::from_env() {
         ids.push(p.id());

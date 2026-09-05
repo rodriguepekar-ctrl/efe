@@ -154,9 +154,14 @@ if [ "$ECHECS" = "0" ]; then
   printf '    le joue trois fois d'\''affilée ;\n'
   printf '  · que le profil de production DÉMARRE — c'\''est `p1-check.sh`, qui exige un\n'
   printf '    vrai Postgres et tue le processus pour de bon ;\n'
-  printf '  · que quoi que ce soit soit exécuté ailleurs qu'\''ici. Aucun des 90 workflows\n'
-  printf '    du dépôt ne lance un `*-check.sh`, et `ci.yml` ne se déclenche que sur\n'
-  printf '    `main`/`release/**`.\n\n'
+  printf '  · le PROFIL de production, ni l'\''emballage : `p1-check.sh` et `e1-check.sh`\n'
+  printf '    exigent un démon Docker, et la CI ne les joue pas.\n\n'
+  printf '  Cette ligne disait « aucun des 90 workflows du dépôt ne lance un *-check.sh,\n'
+  printf '  et ci.yml ne se déclenche que sur main/release/** ». C'\''était vrai jusqu'\''au\n'
+  printf '  5 septembre 2026 ; D4 l'\''a rendu faux : `.github/workflows/portes.yml` joue ce\n'
+  printf '  script et onze contrôles à chaque push sur `c1-c3`. Corrigé ici plutôt que\n'
+  printf '  laissé vieillir — un contrôle dont le texte survit à ce qu'\''il décrit est le\n'
+  printf '  défaut que ce dépôt attrape le plus souvent.\n\n'
   exit 0
 fi
 printf '\033[31mUNE PORTE AU MOINS TOMBE — %s sur %s.\033[0m\n\n' "$ECHECS" "$PORTES"
