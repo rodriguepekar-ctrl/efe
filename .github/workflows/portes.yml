@@ -38,12 +38,19 @@
 #  n'avait jamais été COMPILÉ, et donc jamais linté, nulle part. Un `cfg` ne
 #  cache pas seulement du code au compilateur ; il le cache au contrôle.
 #
-#  ⚠ Si `cargo test` meurt sur `collect2: ld terminated with signal 9`, ce n'est
-#  pas le code : c'est le tueur OOM du noyau pendant l'édition de liens, et le
-#  remède est `-j 2`, pas un correctif. Mesuré ici : 11 cœurs pour 7,75 Gio ne
-#  passent pas ; le runner GitHub (16 Gio, 4 cœurs) a quatre fois plus de
-#  mémoire par lien. On laisse donc le parallélisme par défaut — mais si ce
-#  message apparaît un jour, il faut le lire pour ce qu'il est.
+#  ⚠ DEUX pannes de ressource, et je me suis trompé de ressource. En local,
+#  `cargo test` est mort sur `collect2: ld terminated with signal 9` : le tueur
+#  OOM pendant l'édition de liens (11 cœurs pour 7,75 Gio de démon Docker).
+#  J'ai donc écrit ici une mise en garde sur la MÉMOIRE — et le premier passage
+#  chez GitHub est mort sur `No space left on device`. Le runner a de la mémoire
+#  (16 Gio) et pas de disque : 189 binaires de test plus trois jeux d'artefacts
+#  clippy, avec `debuginfo=2`, ne tiennent pas.
+#
+#  Les deux remèdes sont ci-dessous et ils ne se ressemblent pas : `-j 2` contre
+#  la mémoire (à la main, si besoin), et contre le disque `CARGO_PROFILE_*_DEBUG:
+#  0` plus le retrait de l'outillage préinstallé. L'étape « la marge qu'il
+#  restait » tourne `if: always()` — parce qu'un manque de place se relit comme
+#  un défaut du code tant que personne n'a imprimé le chiffre.
 #
 #  ## Ce qu'il ne prouve PAS, et qu'il faut redire
 #
@@ -74,6 +81,15 @@ env:
   CARGO_TERM_COLOR: always
   CARGO_INCREMENTAL: 0
   RUST_BACKTRACE: 1
+  # Le premier passage chez GitHub est mort sur `No space left on device` — pas
+  # sur la mémoire, que l'en-tête ci-dessus prévoyait. Ce workspace construit 189
+  # binaires de test ET trois jeux d'artefacts clippy (un par profil) dans le même
+  # `target/`. Avec `debuginfo=2` par défaut, cela ne tient pas sur un runner.
+  # Les tables de débogage ne servent à rien à une porte : elle dit passe/tombe.
+  # Contrepartie assumée et écrite : les backtraces gardent les symboles mais
+  # perdent les numéros de ligne. Pour déboguer, on rejoue en local.
+  CARGO_PROFILE_DEV_DEBUG: 0
+  CARGO_PROFILE_TEST_DEBUG: 0
 
 jobs:
   portes:
@@ -89,6 +105,18 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
+      # ── De la place, et la preuve qu'on en a ────────────────────────────────
+      # Un runner `ubuntu-latest` arrive avec ~25 Gio d'outillage préinstallé dont
+      # rien ici ne se sert (Android, .NET, GHC, CodeQL). On le retire, et surtout
+      # on IMPRIME le disque avant et après : un correctif de place qui ne montre
+      # pas la place qu'il libère n'est pas mesuré, il est espéré.
+      - name: de la place (et sa mesure)
+        run: |
+          echo "── avant ──"; df -h / | tail -1
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc \
+                      /usr/local/.ghcup /opt/hostedtoolcache/CodeQL || true
+          echo "── après ──"; df -h / | tail -1
 
       # 1.88 — la version que `rust-toolchain.toml` ET `Cargo.toml` épinglent.
       - uses: dtolnay/rust-toolchain@1.88
@@ -143,3 +171,11 @@ jobs:
       # ── 3 · la suite complète ──────────────────────────────────────────────
       - name: cargo test --locked --workspace
         run: cargo test --locked --workspace --no-fail-fast
+
+      # Toujours, même si les tests tombent : combien restait-il ? Sans ce chiffre
+      # un « No space left on device » se relit comme un défaut du code.
+      - name: la marge qu'il restait
+        if: always()
+        run: |
+          df -h / | tail -1
+          du -sh target 2>/dev/null || true
