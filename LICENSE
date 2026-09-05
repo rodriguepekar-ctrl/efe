@@ -13,8 +13,17 @@ The EFE repository ships under two licenses, applied per-directory :
   │ /clients/typescript/**                  │ Apache License 2.0              │
   │ /clients/java/**                        │ Apache License 2.0              │
   │ /clients/go/**                          │ Apache License 2.0              │
+  │ /crates/efe-nano-sdk/**                 │ MIT (see ./LICENSE-MIT)         │
   │ Everything else (server, ops, models)   │ EFE Proprietary (see § 1 below) │
   └─────────────────────────────────────────┴─────────────────────────────────┘
+
+The `/crates/efe-nano-sdk/**` row was added on 2026-09-05 and grants nothing new :
+decision D-M50-CRATES-001 (ACCEPTED, 2026-05-18) already reads « SDK MIT-licensed,
+runtime commercial », and the crate's own `Cargo.toml` has declared `license = "MIT"`
+since M50. What was missing was the MIT text itself — `crates/efe-nano-sdk/README.md`
+pointed at a workspace `LICENSE-MIT` that did not exist. This file was the outlier,
+not the manifest. The runtime crate `efe-nano` remains proprietary, which is the whole
+point of the split.
 
 Each `/clients/<lang>/.../LICENSE` file contains the full Apache-2.0 text
 applicable to that SDK's published artifact (PyPI wheel, npm package,
@@ -26,10 +35,22 @@ client SDKs are open-source so customers can audit, vendor, and fork
 them ; the server, model bundles, operator tooling, helm charts and
 proto definitions are proprietary EFE intellectual property.
 
-Boundary rule : if a file lives under `/clients/<lang>/` AND its
-package manifest (`pyproject.toml`, `package.json`, `pom.xml`, `go.mod`)
-declares `Apache-2.0`, it is Apache-2.0. Everything else is proprietary
-per § 1.
+Boundary rule : a file is open-source **only** if one of these holds ; everything
+else is proprietary per § 1.
+
+  (a) it lives under `/clients/<lang>/` AND that SDK declares Apache-2.0 where its
+      ecosystem declares licenses — `pyproject.toml`, `package.json` or `pom.xml`
+      for Python, TypeScript and Java ; the **`LICENSE` file of the module** for Go ;
+
+  (b) it lives under a path listed in the table above with a license other than
+      « EFE Proprietary », and the corresponding license text ships at the repository
+      root (`./LICENSE-MIT` for `/crates/efe-nano-sdk/**`).
+
+Clause (a) was corrected on 2026-09-05. It previously named `go.mod` as the place
+where the Go SDK declares Apache-2.0 — **`go.mod` has no license field**, and none
+can exist : the Go toolchain has no such mechanism. Read literally, the old rule made
+the Go SDK proprietary while its directory shipped an Apache-2.0 `LICENSE` and a
+`NOTICE`. A boundary rule that no artifact can satisfy is not a boundary.
 
 Proto definitions under `/protos/efe/` are dual-licensed by reference :
 when consumed from a `/clients/<lang>/` build (the SDK proto codegen),

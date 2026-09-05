@@ -290,10 +290,31 @@ vérifieur que É1 a ajouté à l'image.
   `Downloads/vrai/EFE-docs-racine-2026-09-04/`, 39 912 lignes, vérifiés par
   `shasum -a 256` fichier par fichier, avec une note qui dit d'où ils viennent. La
   racine passe de **32** à **11** fichiers `.md`.
-* **13 signalements `gitleaks`** dans le périmètre — dont une vraie clé privée EC P-256
-  en fixture (`efe-swarm-gateway/src/oidc.rs:119`, dupliquée en `routes/llm.rs:1386`) et
-  `scripts/demo-consensus-receipt.sh:42` où la clé de forge du mode dégradé est en clair
-  sous une variable `KEY=`. Aucune n'est une clé vive ; toutes bloqueraient un dépôt neuf.
+* ✅ **D3 est fait** (2026-09-05). `gitleaks` sortait **13** puis **10** selon la
+  commande employée — deux chiffres, deux mesures différentes, aucune juste. Mesuré
+  proprement, comme la CI et le hook `pre-commit` le lancent :
+
+  | commande | avant | après |
+  |---|---|---|
+  | `gitleaks detect` (historique git) | 21 | **0** |
+  | `gitleaks detect --no-git` (arbre) | 100 | **0** |
+  | dont fichiers **suivis** par git | 19 | **0** |
+
+  **Aucun des 19 n'était un secret** : deux fixtures PKCS8 nommées `TEST_PRIV*`, huit
+  jetons littéraux `jeton-acme-*`, des empreintes SHA-256 dans un exemple livré, des
+  espaces réservés de documentation, un nom de fichier et une affectation
+  `EFE_LLM_FRONTIER_ENABLED=true`. Les 81 autres étaient des artefacts de build —
+  `rustls`, `pem`, `pkcs8` embarquent « BEGIN PRIVATE KEY » dans leur *documentation*,
+  qui atterrit dans les `.rmeta` de `target/`.
+
+  Trois des quatre exemptions de `.gitleaks.toml` visaient des crates que É0 a
+  retirés. ⚠ **Les retirer a rouvert quatre signalements dans l'historique** : une
+  allowlist sert deux publics — l'arbre et les commits — et un chemin peut être périmé
+  pour l'un tout en restant nécessaire à l'autre. Elles sont restaurées sous une
+  rubrique qui le dit.
+
+  `bash scripts/d3-check.sh` rejoue les deux moitiés (6 contrôles, trois états).
+  Contre-prouvé : retirer `LICENSE-MIT` → 2 échecs ; injecter un `ghp_…` → 1 échec.
 * **`efe-nano-sdk` se déclare `MIT`** (décision `D-M50-CRATES-001`), et le `LICENSE` du dépôt
   **ne mentionne pas MIT**. ⚠ La version précédente de cette ligne disait « aucun fichier
   `LICENSE`/`NOTICE` n'existe » : **c'est faux** — `LICENSE` existe (64 lignes, double licence,

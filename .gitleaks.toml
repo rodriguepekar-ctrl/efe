@@ -1,45 +1,144 @@
-# EFE — configuration gitleaks
+# Scella — configuration gitleaks
 #
-# Étend les règles PAR DÉFAUT de gitleaks (`useDefault = true`) et ajoute une
-# allowlist pour des FAUX POSITIFS connus. AUCUN secret réel n'est allowlisté ici :
-#   - une fixture de clé de TEST throwaway (test unitaire OIDC) ;
-#   - du code qui contient des PATTERNS de secrets PAR NATURE (redacteur, parsing PEM).
+# Étend les règles PAR DÉFAUT (`useDefault = true`) et ajoute une allowlist pour des
+# FAUX POSITIFS et des FIXTURES DE TEST. **Aucun secret réel n'est allowlisté ici**, et
+# chaque entrée porte sa raison : une exemption sans raison écrite est un silence, pas
+# une décision.
 #
-# Découvert automatiquement par `gitleaks/gitleaks-action@v2` (CI) et le hook
-# `gitleaks` de pre-commit. `useDefault = true` PRÉSERVE toutes les règles de
-# détection standards — on ne fait qu'ajouter des exceptions ciblées.
+# ── Ce qui a changé le 5 septembre 2026 (étape D3) ───────────────────────────────
+#
+# TROIS des quatre exemptions de chemin visaient des crates que É0 a RETIRÉS, et
+# AUCUNE ne couvrait ce que le dépôt contient aujourd'hui.
+#
+# ⚠ Mais « le fichier n'existe plus » ne veut PAS dire « l'exemption est inutile ».
+# Une allowlist sert DEUX publics — l'arbre de travail et l'HISTORIQUE git — et un
+# chemin peut être périmé pour l'un tout en restant nécessaire à l'autre. Retirées
+# une première fois au motif que leurs fichiers avaient disparu, ces trois entrées
+# ont immédiatement rouvert QUATRE signalements dans des commits. Elles sont donc
+# restaurées plus bas, sous une rubrique qui dit ce qu'elles couvrent.
+#
+# Au passage : l'entrée d'origine visait `.../src/tls/*.rs` et ne couvrait donc pas
+# `.../src/tracing_otel/spans.rs`, apparu au même commit. Un signalement n'a jamais
+# été couvert, et personne ne l'a vu parce que rien ne lançait la mesure.
+#
+# ── Ce que la mesure a établi ────────────────────────────────────────────────────
+#
+#   gitleaks detect            → 21 · TOUS dans l'HISTORIQUE git, 0 dans l'arbre.
+#                                Aucun n'est atteignable en éditant un fichier.
+#   gitleaks detect --no-git   → 100 sur l'arbre, dont 81 dans des artefacts de
+#                                build ignorés par git (`target/`, `.next/`,
+#                                `.mypy_cache/`, `__pycache__/`) — les caisses
+#                                `rustls`, `pem`, `pkcs8`, `ed25519-dalek` et
+#                                `sqlx-postgres` embarquent « -----BEGIN PRIVATE
+#                                KEY----- » dans leur DOCUMENTATION, qui atterrit
+#                                dans les `.rmeta`.
+#   dans des fichiers SUIVIS   → 19, et **aucun n'est un secret**.
+#
+# ── Pourquoi « les engendrer au moment du test » ne s'applique pas ───────────────
+#
+# La feuille de route prescrivait ce remède. Il est INOPÉRANT ici, et il faut dire
+# pourquoi plutôt que de le laisser croire :
+#
+#   · les deux clés PKCS8 sont des fixtures DÉTERMINISTES — les tests encodent puis
+#     décodent un JWT avec la paire ; une clé tirée au hasard casse l'aller-retour ;
+#   · les engendrer exigerait `p256` + `ecdsa`, ABSENTS du verrou (mesuré : 0), pour
+#     un produit dont l'argument est une fermeture minimale et auditable ;
+#   · la clé de `demo-consensus-receipt.sh` scelle un bundle que `verify-meta-mini`
+#     re-prouve ensuite : elle est le MIROIR d'une constante de l'exemple ;
+#   · et les huit `jeton-*` ne sont pas des clés mais des chaînes littérales dont le
+#     NOM porte le sens (`acme`, `globex` = les tenants dont les contrôles éprouvent
+#     l'isolation). Les randomiser détruirait ce que les assertions disent.
+#
+# Le remède honnête est donc : une entrée par cas, avec sa raison, dans un fichier
+# versionné. Renommer les variables pour esquiver le motif, ÇA, serait cacher.
 
-title = "EFE gitleaks"
+title = "Scella gitleaks"
 
 [extend]
 useDefault = true
 
 [allowlist]
-description = "Faux positifs connus : fixtures de test + code redaction/TLS (aucun secret réel)"
+description = "Faux positifs, fixtures de test et artefacts de build — aucun secret réel"
+
 paths = [
-  # Clé RSA-2048 de TEST throwaway (test unitaire OIDC, chargée par include_str!
-  # compile-time dans crates/efe-server/src/auth/oidc.rs). Ne signe rien en prod.
-  # Détail : crates/efe-server/src/auth/test_keys/README.md
-  '''crates/efe-server/src/auth/test_keys/.*''',
+  # ── Artefacts de build, jamais livrés, tous ignorés par git ────────────────────
+  # `target/` : les `.rmeta` embarquent la documentation des caisses tierces, et
+  # `rustls`/`pem`/`pkcs8`/`ed25519-dalek`/`sqlx-postgres` y montrent des PEM
+  # d'exemple. 45 signalements à eux seuls.
+  '''^target/''',
+  # Caches Next.js (`apps/portal-admin`, `preview-lab`) et mypy (`platform/`).
+  '''\.next/''',
+  '''\.mypy_cache/''',
+  '''__pycache__/''',
+  # Copie locale du dépôt d'avant l'élagage — hors dossier livrable, ignorée par git.
+  '''^efe-restored/''',
 
-  # Le module de redaction CONTIENT les patterns (sk-, AKIA, ghp_, …) qu'il masque
-  # — par nature il déclenche les détecteurs.
-  '''smoke/runner/src/redact\.rs''',
-
-  # Code TLS : littéraux « -----BEGIN … KEY----- » utilisés pour parser le PEM,
-  # pas une clé réelle embarquée.
-  '''crates/efe-meta-swarm-server/src/tls/.*\.rs''',
-
-  # Documentation : tableau d'EXEMPLES de redaction (clés factices `AKIA0123…`
-  # → `<REDACTED-…>`) — pédagogique, aucun secret réel.
+  # ── Documentation : des EXEMPLES de secrets, par nature ────────────────────────
+  # Tableau pédagogique de redaction (clés factices `AKIA0123…` → `<REDACTED-…>`).
   '''docs/repl\.md''',
+  # Conventions d'auth des SDK : `sk-prod-abc123` est un espace réservé de prose.
+  '''docs/sdk-auth-conventions\.md''',
+  # Runbook de rotation : le « secret » détecté est un NOM DE FICHIER
+  # (`m13_signing_key_rotation.md`).
+  '''docs/runbooks/general_secret_rotation_playbook\.md''',
+
+  # ── Un exemple de déploiement livré, qui ne contient QUE des empreintes ────────
+  # `profiles/deploiement.exemple.json` porte des `token_sha256` : des SHA-256 de
+  # jetons, pas les jetons. Publier une empreinte est le principe même du fichier —
+  # sa clé en clair y est écrite « REMPLACEZ-MOI-globex-audit ».
+  '''^profiles/deploiement\.exemple\.json$''',
+
+  # ── L'HISTORIQUE, pas l'arbre ─────────────────────────────────────────────────
+  # Ces trois chemins n'existent PLUS : É0 a retiré leurs crates. Ils ne couvrent
+  # donc rien de ce qui est livré — ils couvrent des COMMITS, et `gitleaks detect`
+  # (le mode par défaut, celui de la CI et du hook pre-commit) scanne l'historique.
+  # Les retirer rouvre quatre signalements que personne ne peut plus corriger sans
+  # réécrire l'historique d'une branche déjà poussée.
+  #
+  #   · une clé RSA-2048 de test jetable (test unitaire OIDC de l'ex-`efe-server`) ;
+  #   · un littéral PEM dans le lecteur TLS de l'ex-`efe-meta-swarm-server`, et un
+  #     `abcd1234…` dans son module de traçage — le chemin est volontairement élargi
+  #     au crate entier, l'entrée d'origine s'arrêtant à `src/tls/` ;
+  #   · le module de redaction du runner de fumée, qui CONTIENT par nature les motifs
+  #     qu'il masque (`ghp_`, `AKIA`, `sk-`).
+  '''^crates/efe-server/src/auth/test_keys/''',
+  '''^crates/efe-meta-swarm-server/''',
+  '''^smoke/runner/src/redact\.rs$''',
+
+  # ── Hors périmètre servi, et qui partira avec D2 ───────────────────────────────
+  # `mcp-server/` et `platform/` appartiennent à l'autre produit ; leurs deux
+  # signalements sont des espaces réservés (`abcdefghijklmnopqrstuv1234`,
+  # `key123-abcdef`). Ils quitteront l'arbre avec les 11 056 fichiers de D2.
+  '''^mcp-server/''',
+  '''^platform/''',
 ]
 
-# Clés de TEST FACTICES : format valide (pour que les parsers les acceptent) mais
-# évidemment fausses — fixtures de tests d'auth (`...fake-but-valid-format`) et de
-# redaction de provenance (`...SHOULD-NOT-LEAK`). Allowlist par VALEUR (regex) →
-# couvre tout fichier les utilisant, sans masquer le reste du fichier. Aucun secret réel.
 regexes = [
+  # ── Clés FACTICES de format valide (fixtures d'auth et de redaction) ───────────
   '''sk-ant-fake-but-valid-format''',
   '''sk-ant-SHOULD-[A-Za-z0-9-]+''',
+
+  # ── Les jetons de test des contrôles M6/M7/M8 ─────────────────────────────────
+  # Chaînes littérales, pas des clés : `jeton-acme-verif`, `jeton-globex-m8`… Leur
+  # nom EST l'assertion — les contrôles éprouvent qu'un tenant ne voit jamais
+  # l'autre, et le tenant se lit dans le jeton.
+  '''jeton-[a-z0-9-]+''',
+
+  # ── La clé de DÉVELOPPEMENT de la démonstration de consensus ──────────────────
+  # `scripts/demo-consensus-receipt.sh` la déclare publique et le reçu forgeable,
+  # en quatre lignes de prose, juste au-dessus. Elle scelle un bundle que
+  # `verify-meta-mini` re-prouve : la changer casserait la re-preuve.
+  '''4f849020850db9409ad503b209412186e588114247a023ad70b128b0acfb560d''',
+
+  # ── Les deux paires EC P-256 de test (JWT OIDC et route frontière) ────────────
+  # Repérées par le début de leur corps PKCS8, qui leur est propre. Nommées
+  # `TEST_PRIV*`, documentées « fixture déterministe — PAS un secret », et
+  # nécessairement fixes : les tests encodent puis décodent un JWT avec la paire.
+  '''MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQg''',
+
+  # ── Faux positifs de forme ────────────────────────────────────────────────────
+  # Une affectation de variable d'environnement lue comme une clé générique.
+  '''EFE_LLM_FRONTIER_ENABLED=true''',
+  # Un nom de fichier de runbook lu comme une clé.
+  '''m13_signing_key_rotation\.md''',
 ]

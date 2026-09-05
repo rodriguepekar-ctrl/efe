@@ -189,7 +189,15 @@ affirmation ; elle y est corrigée aussi.}
 
 \smallskip
 \textbf{Et des secrets dorment en fixture.}
-\mesure{\code{gitleaks detect} sur \code{crates/} et \code{scripts/} \fl{} \pire{10 signalements}
+\refute{Le chiffre annoncé ici était \pire{10}, mesuré par \code{gitleaks detect
+-{}-no-git -{}-source crates -{}-source scripts} --- une commande qui \textbf{contourne le
+\code{.gitleaks.toml} du dépôt}, ignore le reste de l'arbre, et ne regarde pas
+l'historique. Mesuré comme la CI et le hook \code{pre-commit} le lancent : \pire{21}
+dans l'\textbf{historique} et \pire{100} dans l'arbre, dont \pire{19} dans des fichiers
+suivis. \textbf{Aucun des 19 n'est un secret.} \best{D3 est fait le 5 septembre 2026} :
+les deux modes sortent \best{0}, et \code{scripts/d3-check.sh} les rejoue.}
+
+\mesure{Le relevé d'origine, pour mémoire : \code{gitleaks} sur \code{crates/} et \code{scripts/} \fl{} \pire{10 signalements}
 --- 6 \code{curl-auth-header}, 3 \code{generic-api-key}, 1 \code{jwt}. S'y ajoutent, hors de son
 champ de règles, \pire{deux clés privées PEM} en dur dans la source
 (\code{efe-swarm-gateway/src/oidc.rs}, \code{src/routes/llm.rs}) et une clé de forge en clair dans
