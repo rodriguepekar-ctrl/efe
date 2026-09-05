@@ -121,11 +121,13 @@ Ils ne sont **pas supprimés** : ils sont archivés, intacts et vérifiés fichi
 fichier, dans `Downloads/vrai/EFE-docs-racine-2026-09-04/`, avec une note qui dit
 d'où ils viennent et ce que leur propre README affirmait de faux.
 
-Le 5 septembre, **38 dossiers de la racine** ont suivi — le portail, la plateforme
+Le 5 septembre, **38 dossiers de la racine** puis **1 085 fichiers** de `docs/`,
+`scripts/`, `docker/` et de la racine ont suivi — le portail, la plateforme
 Python, les SDK polyglottes, les chartes Helm, Terraform, les bancs, les bacs à
 sable : `Downloads/vrai/EFE-arbre-2026-09-05/`, 61 023 fichiers, ~1,5 Gio. Le dépôt
 est passé de **48 dossiers à la racine à six**, et de 13 000 fichiers suivis à
-**2 117**. Là encore rien n'est supprimé, et rien n'a bougé avant d'avoir été
+**1 020**. Ce qui reste est cité par le code, par un contrôle, ou appartient à
+Scella. Là encore rien n'est supprimé, et rien n'a bougé avant d'avoir été
 vérifié : aucune référence depuis le produit, puis `cargo metadata --locked` et
 `cargo check --locked --workspace` joués juste après les quatre dossiers les plus
 risqués.

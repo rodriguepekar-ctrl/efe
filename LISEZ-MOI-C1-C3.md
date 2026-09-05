@@ -301,9 +301,28 @@ vérifieur que É1 a ajouté à l'image.
   et `.gitleaks.toml` — dont retirer `^mcp-server/` et `^platform/` **rouvre deux
   signalements dans l'historique**, mesuré. Seconde confirmation de la leçon de D3.
 
-  **Reste mixte** : `docs/` (le produit cite une vingtaine de ses documents
-  `EFE_*` depuis ses propres sources) et `scripts/` (les seize contrôles y voisinent
-  avec les outils d'EFE). Les séparer demande de résoudre chaque citation.
+  **Et la séparation de `docs/` et `scripts/` a suivi le même jour.** Sur leurs
+  1 172 fichiers suivis, **64 sont cités** par le code ou par les contrôles.
+
+  ⚠ Une première fermeture transitive suivait les citations **en prose** : de 111
+  fichiers de graine elle est montée à **561 en sept tours**, les documents d'EFE se
+  citant densément. Critère faux — la question n'est pas « qu'est-ce qu'un document
+  mentionne » mais « **qu'est-ce qui casse si ce fichier part** ». Une mention en
+  prose ne casse rien. Refaite en ne suivant que l'exécution et la lecture, la
+  fermeture ajoute **un seul fichier** : un critère qui converge en un tour vise juste.
+
+  ⟹ **112 gardés, 1 060 déplacés, 0 refus.** Restent au dépôt les archives de
+  conception des crates encore servis (`EFE_M50_*`, `EFE_A1_PHASE3_*` — un nom EFE,
+  mais elles documentent le produit), la décision qu'invoque `LICENSE-MIT`,
+  `scripts/slm/` et `scripts/swarm/` cités depuis le code, et les seize contrôles.
+
+  Puis la racine : D1 avait laissé `CHANGELOG.md` et `BENCHMARKS.md` **exprès**,
+  « leurs liens partant des documents d'EFE encore présents ». Ces documents venaient
+  de partir — `BENCHMARKS.md` est passé de **30 références à 0**. Vingt fichiers de
+  la racine ont suivi, plus cinq de `docker/`, qui ne porte plus que
+  `Dockerfile.coin`.
+
+  **Fichiers suivis : 2 105 → 1 020.** Références pendantes depuis le code : **0**.
 * ✅ **D3 est fait** (2026-09-05). `gitleaks` sortait **13** puis **10** selon la
   commande employée — deux chiffres, deux mesures différentes, aucune juste. Mesuré
   proprement, comme la CI et le hook `pre-commit` le lancent :
