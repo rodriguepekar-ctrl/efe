@@ -49,6 +49,49 @@ tient sur une feuille : la commande, ce qui va défiler, les commandes exactes
 pour tout recompter soi-même sur les fichiers du volume, et les quatre choses que
 la démonstration ne prouve pas. Chacun de ses gestes a été joué verbatim.
 
+## Quand c'est fini — et ça ne se voit pas tout seul
+
+La démonstration s'arrête sur `═══ DÉMONSTRATION OK ═══`, et le conteneur
+`preuve` sort en `0`. **La commande, elle, ne rend pas la main** : la passerelle
+est un serveur, elle continue de servir. Rien à l'écran ne dit que c'est
+terminé — c'était, jusqu'au 5 septembre 2026, le seul endroit de ce parcours que
+ce README ne décrivait pas.
+
+```bash
+# quitter : Ctrl-C
+docker compose down -v     # et ne rien laisser derrière : conteneurs, réseau, volume
+```
+
+Tant que la passerelle tourne, elle répond sur `127.0.0.1:8080` (ou le port que
+vous lui avez donné). Sans le `-v`, le volume `scella_preuve` survit — c'est ce
+qu'il faut si vous voulez recompter les fichiers plus tard, et ce qu'il ne faut
+pas si vous voulez repartir de zéro.
+
+**Combien de temps.** Mesuré le 5 septembre 2026, image `scella-coin:local`
+supprimée au préalable : **75 s** entre `docker compose up` et la dernière ligne
+de la démonstration. Le cache de construction de Docker était chaud (seules les
+couches applicatives ont été refaites) ; une machine vraiment neuve reconstruit
+les dépendances **et** télécharge les images de base, donc davantage.
+
+> Ce chiffre a d'abord été écrit à **201 s**, et c'était faux : 201 s était le
+> plafond de la boucle qui attendait la fin — une boucle qui ne pouvait pas la
+> voir, puisque la commande ne rend pas la main. C'est la ligne de fin ajoutée
+> ci-dessus qui a rendu la mesure possible. Une durée sans point d'arrêt
+> observable n'est pas une mesure, c'est un délai d'attente.
+
+**Si le port est pris**, voici le message exact — il vaut d'être lu de près :
+
+```
+Error response from daemon: failed to set up container networking:
+Bind for 0.0.0.0:8080 failed: port is already allocated
+```
+
+Deux choses qu'il ne dit pas. D'abord **`SCELLA_PORT` n'y apparaît pas** : le
+remède est ici, dans ce fichier, pas dans l'erreur. Ensuite le `0.0.0.0` n'est
+**pas** notre liaison — `compose.yaml` demande `127.0.0.1:${SCELLA_PORT:-8080}`,
+et Docker rapporte la liaison de *celui qui détient déjà le port*, pas celle
+qu'on réclamait. La passerelle n'est jamais publiée sur toutes les interfaces.
+
 ## Le second produit, dans la même commande
 
 ```bash

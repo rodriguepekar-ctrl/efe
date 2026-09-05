@@ -540,6 +540,20 @@ fn demonstration() -> Result<(), String> {
     println!("    a été enregistré — jamais la CORRECTION de la décision.");
     println!();
     println!("═══ DÉMONSTRATION OK ═══");
+    println!();
+    // La démonstration est finie ; `docker compose up` ne l'est PAS — la passerelle est un
+    // serveur et continue de servir. Rien ne le disait, et le terminal reste bloqué sur une
+    // sortie qui a l'air terminée : c'est le seul point du parcours que la répétition à froid
+    // du 5 septembre 2026 a trouvé sans remède écrit. Le README le dit maintenant aussi, mais
+    // le README ne sert qu'à qui le relit — cette ligne-ci atteint tout le monde.
+    println!("  La démonstration est terminée. La passerelle, elle, tourne toujours :");
+    println!("  `docker compose up` ne rendra pas la main.");
+    println!();
+    println!("      Ctrl-C                  pour quitter");
+    println!("      docker compose down -v  pour ne rien laisser derrière");
+    println!();
+    println!("  Sans le -v, le volume survit — gardez-le si vous voulez recompter les");
+    println!("  fichiers vous-même plus tard.");
     Ok(())
 }
 
