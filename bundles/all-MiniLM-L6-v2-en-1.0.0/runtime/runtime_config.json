@@ -1,7 +1,0 @@
-{
-  "_dev_placeholder": true,
-  "dtype": "float32",
-  "max_seq_len": 256,
-  "normalize": true,
-  "pooling": "mean"
-}

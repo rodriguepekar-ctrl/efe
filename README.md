@@ -96,7 +96,7 @@ crates/                    30 membres de workspace
 compose.yaml               les trois profils : coin · jonction · production
 profiles/                  les profils d'environnement, sous test
 docker/                    l'image distroless (quatre binaires, aucun shell)
-scripts/                   les quinze contrôles
+scripts/                   les seize contrôles
 docs/reports/              la page qu'on tend, et les feuilles de route
 LISEZ-MOI-C1-C3.md         l'inventaire mesuré du périmètre
 ```
@@ -117,10 +117,18 @@ Ce dépôt a d'abord porté **EFE — *Ephemeral Fluid Swarm***, un travail sur
 l'inférence multi-agent par communication en espace latent partagé. Ses vingt et
 un documents d'architecture occupaient la racine, et son README était cette page.
 
-Ils ne sont **pas supprimés** : ils sont archivés, intacts et vérifiés octet par
-octet, dans `Downloads/vrai/EFE-docs-racine-2026-09-04/`, avec une note qui dit
-d'où ils viennent et ce que leur propre README affirmait de faux. Le périmètre
-servi ne les référençait nulle part — mesuré avant de les déplacer.
+Ils ne sont **pas supprimés** : ils sont archivés, intacts et vérifiés fichier par
+fichier, dans `Downloads/vrai/EFE-docs-racine-2026-09-04/`, avec une note qui dit
+d'où ils viennent et ce que leur propre README affirmait de faux.
+
+Le 5 septembre, **38 dossiers de la racine** ont suivi — le portail, la plateforme
+Python, les SDK polyglottes, les chartes Helm, Terraform, les bancs, les bacs à
+sable : `Downloads/vrai/EFE-arbre-2026-09-05/`, 61 023 fichiers, ~1,5 Gio. Le dépôt
+est passé de **48 dossiers à la racine à six**, et de 13 000 fichiers suivis à
+**2 117**. Là encore rien n'est supprimé, et rien n'a bougé avant d'avoir été
+vérifié : aucune référence depuis le produit, puis `cargo metadata --locked` et
+`cargo check --locked --workspace` joués juste après les quatre dossiers les plus
+risqués.
 
 ## Licence
 

@@ -278,18 +278,32 @@ vérifieur que É1 a ajouté à l'image.
   **inconnue**, et le supprimer sur ce prétexte aurait été un mensonge de plus.
 * **`cargo test --workspace` n'a jamais été exécuté** sur cette branche. `check` prouve
   que tout **compile** ; compiler n'est pas passer.
-* **La racine porte encore des artefacts de recherche** — `apps/`, `platform/`,
-  `playground/`, `clients/`, `sdk/`, `terraform/`… soit **11 056 fichiers** dans onze
-  dossiers. Non retirés **délibérément** : le périmètre référence `docs/` **65 fois**
-  (62 à la mesure précédente), dont `audit-console/src/lib.rs` et le garde `p3`. Un
-  élagage à l'aveugle casserait des gardes. C'est l'étape **D2**, et son critère est
-  « les quinze contrôles sortent ENCORE 0 après retrait ».
+* ✅ **D2 est fait** (2026-09-05). La racine portait **48 dossiers** ; il en reste
+  **six** — `crates/`, `docker/`, `docs/`, `examples/`, `profiles/`, `scripts/`. Les
+  38 autres sont archivés dans `Downloads/vrai/EFE-arbre-2026-09-05/` : 61 023
+  fichiers, ~1,5 Gio, **0 divergence**. Fichiers suivis : 13 000 → **2 117**.
 
-  ✅ **Les 21 `M*_ARCHITECTURE.md` / `LETTER_*.md` de la série EFE, eux, sont partis**
-  (étape **D1**, 2026-09-04) — pas supprimés : **archivés intacts** dans
-  `Downloads/vrai/EFE-docs-racine-2026-09-04/`, 39 912 lignes, vérifiés par
-  `shasum -a 256` fichier par fichier, avec une note qui dit d'où ils viennent. La
-  racine passe de **32** à **11** fichiers `.md`.
+  L'ordre a compté. Les quatre dossiers que l'architecture de É1 interdisait de
+  toucher — `tools/`, `bench/`, `smoke/`, `slos/`, « membres du workspace dont
+  `cargo --locked` a besoin pour résoudre » — sont partis **en premier**, après
+  vérification que É0 avait retiré leurs manifestes (`find … -name Cargo.toml` → 0).
+  L'épreuve a suivi immédiatement : `cargo metadata --locked` → 0, 30 membres ;
+  `cargo check --locked --workspace --all-targets` → 0.
+
+  ⚠ **`diff -r` a bloqué 28 minutes sur `clients/`** (666 fichiers, 5 Mo) : il suit
+  les liens symboliques, et `.venv/bin/python3` pointe sur l'interpréteur système.
+  Remplacé par un comparateur qui ne suit rien — SHA-256 des fichiers réguliers,
+  cible des liens — contre-prouvé avant emploi. Les 27 dossiers restants : quelques
+  secondes.
+
+  Trois fichiers décrivaient aussitôt un arbre disparu et ont été corrigés :
+  `.dockerignore`, `LICENSE` (sa seule échappée libre visait `/clients/<lang>/**`)
+  et `.gitleaks.toml` — dont retirer `^mcp-server/` et `^platform/` **rouvre deux
+  signalements dans l'historique**, mesuré. Seconde confirmation de la leçon de D3.
+
+  **Reste mixte** : `docs/` (le produit cite une vingtaine de ses documents
+  `EFE_*` depuis ses propres sources) et `scripts/` (les seize contrôles y voisinent
+  avec les outils d'EFE). Les séparer demande de résoudre chaque citation.
 * ✅ **D3 est fait** (2026-09-05). `gitleaks` sortait **13** puis **10** selon la
   commande employée — deux chiffres, deux mesures différentes, aucune juste. Mesuré
   proprement, comme la CI et le hook `pre-commit` le lancent :

@@ -25,10 +25,21 @@ pointed at a workspace `LICENSE-MIT` that did not exist. This file was the outli
 not the manifest. The runtime crate `efe-nano` remains proprietary, which is the whole
 point of the split.
 
-Each `/clients/<lang>/.../LICENSE` file contains the full Apache-2.0 text
-applicable to that SDK's published artifact (PyPI wheel, npm package,
-Maven jar, Go module). Each accompanying `NOTICE` file contains the
-attribution required by Apache-2.0 § 4(d).
+⚠ **The four `/clients/<lang>/**` trees and `/protos/` left this repository on
+2026-09-05** (step D2 of the roadmap), together with 38 other directories that
+belong to the EFE research project rather than to the Scella product. They were
+**moved, not deleted** : `Downloads/vrai/EFE-arbre-2026-09-05/`, verified file by
+file (SHA-256 for every regular file, target for every symlink).
+
+The rows above are **kept, not removed**, and that is deliberate : an Apache-2.0
+grant already made on a published artifact (PyPI wheel, npm package, Maven jar, Go
+module) is not withdrawn by moving its source out of a repository. What changed is
+where the source lives, not what was granted. Each of those SDK directories carried
+its own `LICENSE` (full Apache-2.0 text) and `NOTICE` (the attribution required by
+Apache-2.0 § 4(d)) ; both travelled with it.
+
+What this repository ships today is proprietary (§ 1), except
+`crates/efe-nano-sdk/**`, which is MIT — see `./LICENSE-MIT`.
 
 The carve-out is intentional and reflects EFE's commercial model :
 client SDKs are open-source so customers can audit, vendor, and fork
@@ -52,12 +63,13 @@ can exist : the Go toolchain has no such mechanism. Read literally, the old rule
 the Go SDK proprietary while its directory shipped an Apache-2.0 `LICENSE` and a
 `NOTICE`. A boundary rule that no artifact can satisfy is not a boundary.
 
-Proto definitions under `/protos/efe/` are dual-licensed by reference :
-when consumed from a `/clients/<lang>/` build (the SDK proto codegen),
-the generated stubs inherit Apache-2.0 ; when consumed from the server
-build, they remain proprietary. The `.proto` source files themselves
-are proprietary — you cannot fork them and redistribute outside the
-SDK-codegen path without an explicit license from EFE.
+Proto definitions under `/protos/efe/` were dual-licensed by reference : when
+consumed from a `/clients/<lang>/` build (the SDK proto codegen), the generated
+stubs inherit Apache-2.0 ; when consumed from the server build, they remain
+proprietary. The `.proto` source files themselves are proprietary — they cannot be
+forked and redistributed outside the SDK-codegen path without an explicit license
+from EFE. **This clause governs artifacts already generated ; `/protos/` is no
+longer in this repository** (see the notice above).
 
 For dual-license questions : legal@efe.ai
 

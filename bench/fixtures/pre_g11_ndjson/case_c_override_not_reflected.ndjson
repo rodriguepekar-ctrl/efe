@@ -1,1 +1,0 @@
-{"schema_version":2,"scenario_id":"CB-20_kernels_cuda_throughput","metric_name":"tokens_per_sec_attention","observed":120000,"verdict":"PASS","tolerance_used":50000,"runner":{"kind":"gpu","id":"gpu-runner-A100-001","has_gpu":true,"gpu_model":"nvidia-A100-80GB"},"applied_at":"2025-12-15T03:14:30Z"}

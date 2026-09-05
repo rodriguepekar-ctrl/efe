@@ -66,7 +66,9 @@ paths = [
   # `rustls`/`pem`/`pkcs8`/`ed25519-dalek`/`sqlx-postgres` y montrent des PEM
   # d'exemple. 45 signalements à eux seuls.
   '''^target/''',
-  # Caches Next.js (`apps/portal-admin`, `preview-lab`) et mypy (`platform/`).
+  # Caches Next.js et mypy. Leurs dossiers (`apps/`, `preview-lab/`, `platform/`)
+  # sont partis avec D2 ; les motifs restent pour l'historique et pour tout cache
+  # qu'un outil recréerait dans l'arbre.
   '''\.next/''',
   '''\.mypy_cache/''',
   '''__pycache__/''',
@@ -105,10 +107,16 @@ paths = [
   '''^crates/efe-meta-swarm-server/''',
   '''^smoke/runner/src/redact\.rs$''',
 
-  # ── Hors périmètre servi, et qui partira avec D2 ───────────────────────────────
-  # `mcp-server/` et `platform/` appartiennent à l'autre produit ; leurs deux
-  # signalements sont des espaces réservés (`abcdefghijklmnopqrstuv1234`,
-  # `key123-abcdef`). Ils quitteront l'arbre avec les 11 056 fichiers de D2.
+  # ── D2 les a fait partir — et ces deux entrées restent NÉCESSAIRES ─────────────
+  # `mcp-server/` et `platform/` ont quitté l'arbre le 5 septembre 2026 avec les
+  # 38 dossiers de D2. Leurs deux signalements étaient des espaces réservés
+  # (`abcdefghijklmnopqrstuv1234`, `key123-abcdef`).
+  #
+  # ⚠ Les retirer maintenant que les dossiers sont partis ROUVRE deux signalements
+  # dans l'historique — mesuré, pas supposé : `gitleaks detect` sans ces deux lignes
+  # rend `platform/tests_scheduling/test_triggers.py:244` et
+  # `mcp-server/tests/test_auth_bridge.py:57`. C'est exactement la leçon de D3, et
+  # elle se vérifie une seconde fois : une allowlist sert l'arbre ET les commits.
   '''^mcp-server/''',
   '''^platform/''',
 ]

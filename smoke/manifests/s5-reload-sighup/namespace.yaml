@@ -1,5 +1,0 @@
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: efe-smoke-s5
-  labels: { efe.io/smoke: "true", efe.io/smoke-check: "S5_reload_sighup", efe.io/auto-reap: "true" }

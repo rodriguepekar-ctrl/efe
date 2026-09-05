@@ -55,16 +55,20 @@ __pycache__/
 # Un contexte de 7 Go se traverse avant la première ligne de compilation,
 # et la promesse de M4 est « machine vierge, une commande ».
 #
-# ⚠ NE JAMAIS exclure `tools/`, `bench/`, `smoke/`, `slos/` : ce sont des
-#   MEMBRES du workspace (hors `crates/`), et `cargo --locked` a besoin de
-#   leur manifeste pour résoudre, même sans les compiler.
-models/
-node_modules/
-.venv*/
-preview-lab/
-apps/
-platform/
-playground/
+# ⚠ Le bloc qui occupait ces lignes disait « NE JAMAIS exclure `tools/`, `bench/`,
+# `smoke/`, `slos/` : ce sont des membres du workspace hors de `crates/`, et
+# `cargo --locked` a besoin de leur manifeste pour RÉSOUDRE ». C'était vrai, et
+# c'était le genre de contrainte qu'on ne découvre qu'en construisant.
+#
+# Ce n'est plus vrai. É0 a retiré ces quatre membres, et D2 a retiré leurs dossiers
+# le 5 septembre 2026 — vérifié avant de le faire : `find tools bench smoke slos
+# -name Cargo.toml` → 0, et les 30 membres vivent tous dans `crates/`. L'épreuve a
+# été jouée dans cet ordre : déplacer, PUIS `cargo metadata --locked` (exit 0,
+# 30 membres) et `cargo check --locked --workspace --all-targets` (exit 0).
+#
+# Les exclusions `preview-lab/`, `apps/`, `platform/`, `playground/` sont parties
+# avec eux : ces dossiers n'existent plus. Une exclusion qui ne désigne rien ne
+# pèse rien, mais elle fait croire à un contexte qui n'est plus là.
 # Copie restaurée, non-membre, qui porte son propre Cargo.toml : sa présence
 # ne sert à rien et pourrait troubler la résolution du workspace racine.
 efe-restored/

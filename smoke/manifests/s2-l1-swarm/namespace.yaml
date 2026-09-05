@@ -1,5 +1,0 @@
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: efe-smoke-s2
-  labels: { efe.io/smoke: "true", efe.io/smoke-check: "S2_l1_swarm", efe.io/auto-reap: "true" }

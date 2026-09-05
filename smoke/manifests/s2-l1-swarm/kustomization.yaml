@@ -1,9 +1,0 @@
-# PR #23 § 7.2 — S2 L1 SwarmService.  No overlay : vanilla chart.
-apiVersion: kustomize.config.k8s.io/v1beta1
-kind: Kustomization
-namespace: efe-smoke-s2
-commonLabels:
-  efe.io/smoke: "true"
-  efe.io/smoke-check: "S2_l1_swarm"
-resources:
-  - namespace.yaml

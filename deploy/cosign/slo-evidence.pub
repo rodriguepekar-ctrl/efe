@@ -1,8 +1,0 @@
------BEGIN PUBLIC KEY-----
-# PR #22 § 22.3 — public-key placeholder.
-# Replace this with the actual ECDSA P-256 public key produced by
-# `cosign generate-key-pair` after the org KMS-backed flow lands
-# (Phase-3 G.8).  For Phase-2 with cosign keyless OIDC, this file
-# is unused at signing time (Fulcio issues an ephemeral cert per run)
-# but verifiers may still pin to it when keyed-signing is the fallback.
------END PUBLIC KEY-----

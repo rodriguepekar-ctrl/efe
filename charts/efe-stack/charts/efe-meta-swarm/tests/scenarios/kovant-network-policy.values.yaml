@@ -1,6 +1,0 @@
-# PR #13 — kovant-network-policy scenario : enabled + NetworkPolicy.
-enabled: true
-image:
-  tag: "0.2.0-snapshot"
-networkPolicy:
-  enabled: true
