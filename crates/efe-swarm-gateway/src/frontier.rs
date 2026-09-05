@@ -45,40 +45,19 @@ pub fn coordinator_from_env() -> Option<Arc<Coordinator>> {
     let registry = ProviderRegistry::new();
     let mut ids: Vec<String> = Vec::new();
 
-    // Best-effort : un provider dont la clé manque est omis (from_env → Err), jamais fatal.
-    // L'id est capturé AVANT le wrap (qui consomme le provider) — cf. log ci-dessous (§3.3).
-    // Claude porte désormais DEUX raisons d'échouer, et elles ne se valent pas :
+    // Les trois providers ont désormais DEUX raisons d'échouer, et elles ne se valent pas :
     //
-    //   · la clé absente — normal, attendu, silencieux : l'opérateur n'a rien demandé ;
-    //   · l'endpoint `EFE_ANTHROPIC_URL` REFUSÉ — l'opérateur a agi, et sans cette branche il
-    //     obtiendrait un provider silencieusement absent. C'est le troisième état de M0,
-    //     « fournie mais refusée », et le taire ici reproduirait exactement l'absence inexpliquée
-    //     que M2 a passé son temps à fermer.
+    //   · la clé absente — normal, attendu, SILENCIEUX : l'opérateur n'a rien demandé ;
+    //   · la destination (`EFE_ANTHROPIC_URL`, `EFE_OPENAI_BASE_URL`, `EFE_GEMINI_BASE_URL`)
+    //     REFUSÉE — l'opérateur a agi, et sans traitement il obtiendrait un provider
+    //     silencieusement absent. C'est le troisième état de M0, « fournie mais refusée », et le
+    //     taire reproduirait exactement l'absence inexpliquée que M2 a passé son temps à fermer.
     //
-    // Le message ne recopie jamais l'entrée : `valider_endpoint_sortie` ne rend que l'hôte extrait
-    // par l'analyseur, précisément pour qu'un `userinfo` ne finisse pas dans un journal collecté.
-    match ClaudeProvider::from_env() {
-        Ok(p) => {
-            ids.push(p.id());
-            registry.register(crate::mission::ProvenanceProvider::wrap(Arc::new(p)));
-        }
-        Err(efe_coordinator::CoordError::Config(raison)) => {
-            eprintln!(
-                "⚠ provider Claude NON enregistré — configuration REFUSÉE : {raison}\n\
-                 → ce n'est pas une clé manquante : une valeur a été fournie et rejetée. Corrigez-la \
-                 ou retirez-la ; la laisser telle quelle laisse la frontière sans Claude."
-            );
-        }
-        Err(_) => { /* clé absente ou mal préfixée : omission normale, cf. doc ci-dessus */ }
-    }
-    if let Ok(p) = GptProvider::from_env() {
-        ids.push(p.id());
-        registry.register(crate::mission::ProvenanceProvider::wrap(Arc::new(p)));
-    }
-    if let Ok(p) = GeminiProvider::from_env() {
-        ids.push(p.id());
-        registry.register(crate::mission::ProvenanceProvider::wrap(Arc::new(p)));
-    }
+    // Écrit UNE fois : trois `match` identiques auraient divergé, et c'est toujours celui qu'on
+    // oublie de mettre à jour qui redevient silencieux.
+    enregistrer(&registry, &mut ids, "Claude", ClaudeProvider::from_env());
+    enregistrer(&registry, &mut ids, "GPT", GptProvider::from_env());
+    enregistrer(&registry, &mut ids, "Gemini", GeminiProvider::from_env());
 
     if ids.is_empty() {
         return None;
@@ -105,6 +84,44 @@ pub fn coordinator_from_env() -> Option<Arc<Coordinator>> {
     // `build()` n'échoue que sur une config invalide (`max_concurrency == 0`) ; le défaut est
     // sain, donc `ok()` ne masque aucun cas atteignable ici.
     Coordinator::builder().registry(registry).policies(policies).clients(clients).build().ok().map(Arc::new)
+}
+
+/// Enregistre un provider frontière, ou **dit pourquoi il n'y en a pas**.
+///
+/// La distinction est tout l'intérêt de cette fonction :
+///
+/// - [`CoordError::Config`] ⟹ une valeur a été **fournie et rejetée** (destination en `http` vers
+///   un hôte distant, `userinfo` dans l'URL, autorité inanalysable). L'opérateur a agi ; il doit
+///   l'apprendre au démarrage, pas en constatant des 403 plus tard.
+/// - toute autre erreur ⟹ la clé d'API manque ou son préfixe ne convient pas. Silence : c'est le
+///   cas normal d'un déploiement qui n'utilise pas ce fournisseur.
+///
+/// Le message ne recopie jamais l'entrée. `valider_endpoint_sortie` ne rend que l'hôte extrait par
+/// l'analyseur, précisément pour qu'un `userinfo` ne finisse pas dans un journal collecté, archivé,
+/// et lu par des gens qui n'avaient pas à l'avoir.
+fn enregistrer<P>(
+    registry: &ProviderRegistry,
+    ids: &mut Vec<String>,
+    nom: &str,
+    issu: efe_coordinator::CoordResult<P>,
+) where
+    P: LlmProvider + 'static,
+{
+    match issu {
+        Ok(p) => {
+            // L'id est capturé AVANT le wrap, qui consomme le provider (§3.3).
+            ids.push(p.id());
+            registry.register(crate::mission::ProvenanceProvider::wrap(Arc::new(p)));
+        }
+        Err(efe_coordinator::CoordError::Config(raison)) => {
+            eprintln!(
+                "⚠ provider {nom} NON enregistré — configuration REFUSÉE : {raison}\n\
+                 → ce n'est pas une clé manquante : une valeur a été fournie et rejetée. \
+                 Corrigez-la ou retirez-la ; la laisser telle quelle laisse la frontière sans {nom}."
+            );
+        }
+        Err(_) => { /* clé absente ou mal préfixée : omission normale, cf. doc ci-dessus */ }
+    }
 }
 
 /// **Fil B.2** — construit le bundle `CoordinatorClients` du reformulateur SLM.

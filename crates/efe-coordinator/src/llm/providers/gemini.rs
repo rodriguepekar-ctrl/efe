@@ -25,6 +25,9 @@ use super::DEFAULT_GEMINI_MODEL;
 use parking_lot::Mutex;
 use std::sync::Arc;
 
+/// La **base** par défaut. Gemini compose TROIS formes à partir d'elle — `…/{modèle}:generateContent`,
+/// `…/{modèle}:streamGenerateContent`, et la base nue pour `health` — donc c'est la base qui est le
+/// bouton, jamais une URL complète.
 const GEMINI_BASE: &str = "https://generativelanguage.googleapis.com/v1beta/models";
 
 /// Observabilité Gemini : usage du dernier call + safety blocks éventuels.
@@ -64,6 +67,10 @@ pub struct GeminiProvider {
     /// - `*pro*` → `None` (API default, mais on peut limiter avec `with_thinking_budget(N)`)
     /// - autre → `None`
     thinking_budget: Option<i32>,
+    /// **La base réelle de l'egress.** Défaut [`GEMINI_BASE`] ; remplaçable par
+    /// [`GeminiProvider::with_base_url`], qui la valide. Les trois formes d'URL en dérivent, et
+    /// c'est elle que [`LlmProvider::endpoint`] rend — donc elle qui est scellée dans le reçu.
+    base_url: String,
 }
 
 impl GeminiProvider {
@@ -74,9 +81,18 @@ impl GeminiProvider {
     /// deviné côté client rejette à tort des clés valides ; la validation
     /// d'authentification appartient à l'API Google (400/403). On exige
     /// seulement une valeur non vide (`""` = accepte tout préfixe non vide).
+    /// Lit aussi `EFE_GEMINI_BASE_URL` si elle est posée. Absente ⟹ [`GEMINI_BASE`], comportement
+    /// inchangé. Présente et **refusée** ⟹ erreur, jamais un repli silencieux.
+    ///
+    /// # Errors
+    /// La clé absente, ou la base refusée.
     pub fn from_env() -> CoordResult<Self> {
         let key = ApiKey::from_env("GOOGLE_AI_KEY", "")?;
-        Ok(Self::new(key, DEFAULT_GEMINI_MODEL))
+        let p = Self::new(key, DEFAULT_GEMINI_MODEL);
+        match std::env::var("EFE_GEMINI_BASE_URL") {
+            Ok(u) if !u.trim().is_empty() => p.with_base_url(u.trim()),
+            _ => Ok(p),
+        }
     }
 
     /// Construit avec clé explicite + modèle au choix.
@@ -103,6 +119,7 @@ impl GeminiProvider {
             redactor: None,
             last_observability: Arc::new(Mutex::new(GeminiObservability::default())),
             thinking_budget,
+            base_url: GEMINI_BASE.to_string(),
         }
     }
 
@@ -184,13 +201,28 @@ impl GeminiProvider {
     // **M4 (§2.3)** : la clé N'EST PLUS en query-string (`?key=`) — elle transite en en-tête
     // `x-goog-api-key` (ajouté au builder de requête). Ferme la classe « URL keyée dans un
     // `Display` d'erreur / dans les logs ». Les URLs ne portent donc plus de secret.
-    #[allow(dead_code)]
+    /// L'URL de complétion. Elle n'est plus `#[allow(dead_code)]` : `call` la CALCULE désormais au
+    /// lieu de recopier sa formule dans la fermeture de retry — deux formules qui doivent rester
+    /// identiques finissent par diverger, et l'une des deux est celle que le reçu scelle.
     fn url_non_stream(&self) -> String {
-        format!("{}/{}:generateContent", GEMINI_BASE, self.model)
+        format!("{}/{}:generateContent", self.base_url, self.model)
     }
 
     fn url_stream(&self) -> String {
-        format!("{}/{}:streamGenerateContent?alt=sse", GEMINI_BASE, self.model)
+        format!("{}/{}:streamGenerateContent?alt=sse", self.base_url, self.model)
+    }
+
+    /// Change la base de l'egress — **validée**, jamais crue sur parole.
+    ///
+    /// # Errors
+    /// [`CoordError::Config`] si la base est refusée ; le message ne recopie jamais l'entrée brute.
+    pub fn with_base_url(mut self, url: impl Into<String>) -> CoordResult<Self> {
+        let url = url.into();
+        super::common::valider_endpoint_sortie(&url).map_err(|raison| {
+            CoordError::Config(format!("EFE_GEMINI_BASE_URL refusé : {raison}"))
+        })?;
+        self.base_url = url.trim_end_matches('/').to_string();
+        Ok(self)
     }
 }
 
@@ -201,8 +233,10 @@ impl LlmProvider for GeminiProvider {
     }
 
     fn endpoint(&self) -> Option<String> {
-        // Endpoint canonique de l'API Gemini (l'hôte suffit à classer la localité : distant).
-        Some("https://generativelanguage.googleapis.com/v1beta/models".to_string())
+        // La base RÉELLE, pas un littéral recopié : c'est elle que `ProvenanceProvider` scelle.
+        // Elle recopiait la constante à la main — deux écritures de la même chose, dont l'une
+        // aurait survécu à un changement de l'autre.
+        Some(self.base_url.clone())
     }
 
     async fn call(&self, req: LlmCall) -> CoordResult<LlmResponse> {
@@ -221,6 +255,7 @@ impl LlmProvider for GeminiProvider {
         let temperature = req.temperature.clamp(0.0, 2.0);
         let api_key = self.api_key.clone();
         let http = self.http.clone();
+        let url = self.url_non_stream();
         let thinking_budget = self.thinking_budget;
 
         let started = Instant::now();
@@ -244,7 +279,7 @@ impl LlmProvider for GeminiProvider {
             if let Some(s) = &system {
                 body["systemInstruction"] = json!({"parts": [{"text": s}]});
             }
-            let url = format!("{GEMINI_BASE}/{model}:generateContent");
+            let url = url.clone();
             let http = http.clone();
             let provider_id = format!("gemini_{model}");
             let api_header = api_key.expose().to_string(); // §2.3 : clé en header, jamais en URL
@@ -439,7 +474,7 @@ impl LlmProvider for GeminiProvider {
         // Endpoint /models existe et est cheap (pas d'inférence). Clé en header (§2.3).
         let resp = self
             .http
-            .get(GEMINI_BASE)
+            .get(&self.base_url)
             .header("x-goog-api-key", self.api_key.expose())
             .timeout(Duration::from_secs(10))
             .send()

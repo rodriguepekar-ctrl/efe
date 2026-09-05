@@ -60,9 +60,10 @@ suit est du code qu'on peut ouvrir :
 | chaîne HMAC scellée, ancre re-vérifiable, troncature détectable | `crates/verify-mini/`, `crates/provenance-verify/` |
 | refus de démarrer la frontière sans `postgres`, `oidc` et `pii` — `exit 78` (`EX_CONFIG`) | [`profile.rs:926`](crates/efe-swarm-gateway/src/profile.rs), [`main.rs:53`](crates/efe-swarm-gateway/src/main.rs) |
 | analyseur d'autorité **unique** (5 copies réduites à 1 ; `127.0.0.1:8080@evil.com` coupait TLS vers `evil.com` sur 875 formes) | [`scella-authority`](crates/scella-authority/src/lib.rs) |
-| destination de l'egress **configurable et validée** — `https` partout, `http` seulement en local, jamais de `userinfo` (l'endpoint est scellé dans le reçu) | [`common.rs`](crates/efe-coordinator/src/llm/providers/common.rs), [`EFE_ANTHROPIC_URL`](crates/efe-swarm-gateway/src/profile.rs) |
+| les **trois** destinations d'egress **configurables et validées** — `https` partout, `http` seulement en local, jamais de `userinfo` (la destination est scellée dans le reçu) | [`common.rs`](crates/efe-coordinator/src/llm/providers/common.rs) ; `EFE_ANTHROPIC_URL`, `EFE_OPENAI_BASE_URL`, `EFE_GEMINI_BASE_URL` au [registre](crates/efe-swarm-gateway/src/profile.rs) |
 | le reçu annonce la destination **réelle**, jamais la constante | [`endpoint_configurable.rs`](crates/efe-coordinator/tests/endpoint_configurable.rs) |
-| aller-retour frontière joué **sur une vraie socket** contre un faux fournisseur | [`aller_retour_frontiere.rs`](crates/efe-coordinator/tests/aller_retour_frontiere.rs) |
+| une destination **refusée** ne fait pas disparaître un fournisseur en silence : le boot le crie | [`frontier.rs`](crates/efe-swarm-gateway/src/frontier.rs) |
+| les **trois** allers-retours frontière joués **sur une vraie socket** contre un faux fournisseur, en-têtes vérifiés depuis l'extérieur | [`aller_retour_frontiere.rs`](crates/efe-coordinator/tests/aller_retour_frontiere.rs) |
 | effacement cryptographique (la chaîne scelle le chiffré) | [`provenance-dag/src/shred.rs`](crates/provenance-dag/src/shred.rs) |
 | recherche de secrets à chaque `push`, **arbre et historique** | [`scripts/d3-check.sh`](scripts/d3-check.sh), joué par `.github/workflows/portes.yml` |
 

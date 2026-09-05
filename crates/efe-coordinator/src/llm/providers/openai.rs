@@ -42,7 +42,11 @@ use super::retry::{retry_with_backoff, RetryPolicy};
 use super::streaming::parse_openai_sse;
 use super::DEFAULT_GPT_MODEL;
 
-const OPENAI_URL: &str = "https://api.openai.com/v1/chat/completions";
+/// La **base** par défaut. C'est une base et non l'URL complète parce qu'OpenAI expose DEUX
+/// chemins que ce fichier emploie — `/chat/completions` et `/models` (pour `health`) — et que tous
+/// les déploiements compatibles (Azure OpenAI, vLLM, LiteLLM, Ollama) les publient sous une même
+/// base. Un seul bouton suffit donc, là où Anthropic n'a qu'un chemin et prend l'URL entière.
+const OPENAI_BASE: &str = "https://api.openai.com/v1";
 
 /// Snapshot des informations rate-limit lues depuis les headers OpenAI.
 ///
@@ -82,6 +86,10 @@ pub struct GptProvider {
     /// requêtes streaming pour recevoir `usage` dans le dernier chunk.
     /// Default `true` — utile pour le BudgetTracker.
     include_usage_in_stream: bool,
+    /// **La base réelle de l'egress.** Défaut [`OPENAI_BASE`] ; remplaçable par
+    /// [`GptProvider::with_base_url`], qui la valide. `/chat/completions` et `/models` en dérivent,
+    /// et c'est le premier que [`LlmProvider::endpoint`] rend — donc celui qui est scellé au reçu.
+    base_url: String,
 }
 
 impl GptProvider {
@@ -89,9 +97,21 @@ impl GptProvider {
     ///
     /// Validate que la clé commence par `sk-` (clés legacy ET nouvelles
     /// `sk-proj-...` partagent ce préfixe).
+    /// Construit depuis `OPENAI_API_KEY`, et `EFE_OPENAI_BASE_URL` si elle est posée.
+    ///
+    /// Absente ⟹ [`OPENAI_BASE`], comportement inchangé. Présente et **refusée** ⟹ erreur, jamais
+    /// un repli silencieux : un opérateur qui écrit une destination et en obtient une autre est le
+    /// pire des deux mondes.
+    ///
+    /// # Errors
+    /// La clé absente ou mal préfixée, ou la base refusée.
     pub fn from_env() -> CoordResult<Self> {
         let key = ApiKey::from_env("OPENAI_API_KEY", "sk-")?;
-        Ok(Self::new(key, DEFAULT_GPT_MODEL))
+        let p = Self::new(key, DEFAULT_GPT_MODEL);
+        match std::env::var("EFE_OPENAI_BASE_URL") {
+            Ok(u) if !u.trim().is_empty() => p.with_base_url(u.trim()),
+            _ => Ok(p),
+        }
     }
 
     /// Construit avec clé explicite + modèle au choix.
@@ -108,7 +128,36 @@ impl GptProvider {
             redactor: None,
             last_rate_limits: Arc::new(Mutex::new(OpenAiRateLimits::default())),
             include_usage_in_stream: true,
+            base_url: OPENAI_BASE.to_string(),
         }
+    }
+
+    /// Change la base de l'egress — **validée**, jamais crue sur parole.
+    ///
+    /// C'est ce qui rend joignables Azure OpenAI, un mandataire d'entreprise, un serveur
+    /// compatible auto-hébergé, ou un faux fournisseur local pour éprouver le chemin.
+    ///
+    /// # Errors
+    /// [`CoordError::Config`] si la base est refusée. Le message est sûr à journaliser : il ne
+    /// recopie jamais l'entrée brute.
+    pub fn with_base_url(mut self, url: impl Into<String>) -> CoordResult<Self> {
+        let url = url.into();
+        super::common::valider_endpoint_sortie(&url).map_err(|raison| {
+            CoordError::Config(format!("EFE_OPENAI_BASE_URL refusé : {raison}"))
+        })?;
+        self.base_url = url.trim_end_matches('/').to_string();
+        Ok(self)
+    }
+
+    /// L'URL de complétion — la destination réelle des prompts, donc celle du reçu.
+    fn url_chat(&self) -> String {
+        format!("{}/chat/completions", self.base_url)
+    }
+
+    /// L'URL de sonde, dérivée de la MÊME base : sonder un hôte et appeler l'autre mentirait sur
+    /// ce que `health` mesure.
+    fn url_models(&self) -> String {
+        format!("{}/models", self.base_url)
     }
 
     /// Override du modèle.
@@ -235,7 +284,8 @@ impl LlmProvider for GptProvider {
     }
 
     fn endpoint(&self) -> Option<String> {
-        Some(OPENAI_URL.to_string())
+        // La valeur RÉELLE, pas la constante : c'est elle que `ProvenanceProvider` scelle.
+        Some(self.url_chat())
     }
 
     async fn call(&self, req: LlmCall) -> CoordResult<LlmResponse> {
@@ -256,6 +306,7 @@ impl LlmProvider for GptProvider {
         let api_key = self.api_key.clone();
         let org = self.organization.clone();
         let http = self.http.clone();
+        let url = self.url_chat();
         let rate_limits_snap = Arc::clone(&self.last_rate_limits);
 
         let started = Instant::now();
@@ -280,9 +331,10 @@ impl LlmProvider for GptProvider {
             let org = org.clone();
             let rate_limits_snap = Arc::clone(&rate_limits_snap);
             let provider_id = format!("gpt_{model}");
+            let url = url.clone();
             async move {
                 let mut request = http
-                    .post(OPENAI_URL)
+                    .post(&url)
                     .header("authorization", format!("Bearer {}", api_key.expose()))
                     .header("content-type", "application/json")
                     .json(&body);
@@ -394,7 +446,7 @@ impl LlmProvider for GptProvider {
         let started = Instant::now();
         let mut request = self
             .http
-            .post(OPENAI_URL)
+            .post(self.url_chat())
             .header("authorization", format!("Bearer {}", self.api_key.expose()))
             .header("content-type", "application/json")
             .json(&body);
@@ -454,7 +506,8 @@ impl LlmProvider for GptProvider {
 
     async fn health(&self) -> CoordResult<bool> {
         // Endpoint `/v1/models` (GET) — cheap, pas d'inférence.
-        let url = "https://api.openai.com/v1/models";
+        // Dérivée de la base configurée — plus un littéral qui pointerait ailleurs qu'elle.
+        let url = self.url_models();
         let mut request = self
             .http
             .get(url)

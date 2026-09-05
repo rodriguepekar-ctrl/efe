@@ -154,8 +154,12 @@ titre "3. Les portes d'entrée citent-elles des chemins qui existent ?"
 # ici une version affaiblie — la leçon de `m6-check.sh`.
 JOURNAL=$(mktemp)
 cargo test -q -p audit-console --test d1_portes_dentree >"$JOURNAL" 2>&1
-exiger "les 4 portes d'entrée ne citent que des chemins existants (5 tests, contre-épreuves comprises)" $?
-[ "$ECHECS" = "0" ] || sed 's/^/      /' "$JOURNAL" | tail -12
+PORTES=$?
+exiger "les 4 portes d'entrée ne citent que des chemins existants (5 tests, contre-épreuves comprises)" "$PORTES"
+# Le journal ne sort que si CE contrôle-CI a échoué. La première écriture testait `$ECHECS`, le
+# compteur GLOBAL : elle recrachait donc le journal d'une section verte dès qu'une AUTRE section
+# était tombée — un instrument qui montre la mauvaise preuve envoie chercher au mauvais endroit.
+[ "$PORTES" = "0" ] || sed 's/^/      /' "$JOURNAL" | tail -12
 rm -f "$JOURNAL"
 
 # ═════════════════════════════════════════════════════════════════════

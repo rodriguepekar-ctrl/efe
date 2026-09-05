@@ -347,7 +347,7 @@ n'est plus éprouvé nulle part. C'est le trou que cette étape existe pour rend
 esac
 
 # ═════════════════════════════════════════════════════════════════════════════
-titre "7. La destination de l'egress n'est plus une constante"
+titre "7. Les TROIS destinations d'egress ne sont plus des constantes"
 #
 #  La PREMIÈRE ligne de « ce que ce contrôle ne prouve pas » disait : « ANTHROPIC_URL est une
 #  constante EN DUR : il n'existe aucun moyen de pointer un faux fournisseur local, ni un Azure
@@ -355,41 +355,48 @@ titre "7. La destination de l'egress n'est plus une constante"
 #  l'aller-retour frontière intestable — et qui limitait la souveraineté annoncée à une adresse
 #  gravée vers les États-Unis.
 #
-#  `ClaudeProvider::with_endpoint` la remplace, VALIDÉE par l'analyseur unique du dépôt
+#  Les trois les remplacent — `ClaudeProvider::with_endpoint` (URL entière : un seul chemin),
+#  `GptProvider::with_base_url` et `GeminiProvider::with_base_url` (une BASE : deux et trois
+#  chemins en dérivent) — toutes VALIDÉES par l'analyseur unique du dépôt
 #  (`scella-authority`) : `https` partout, `http` seulement vers la machine locale, et aucun
 #  `userinfo` — parce que l'endpoint est SCELLÉ DANS LE REÇU et qu'on n'y met pas d'identifiants.
 #
 #  ⚠ Même piège que la section 6, et même remède : ces tests vivent sous
-#  `#![cfg(feature = "anthropic")]`, qui n'est PAS dans le défaut de `efe-coordinator`
+#  `#![cfg(all(feature = "anthropic", feature = "openai", feature = "gemini"))]`, aucune n'étant
+#  dans le défaut de `efe-coordinator`
 #  (`default = []`). `cargo test --workspace` les compte donc pour ZÉRO. C'est ici qu'ils
 #  tournent — et « 0 passed » est un ÉCHEC, pas un succès : ce serait le signe qu'un `cfg` a
 #  bougé et que plus rien ne garde la destination de l'egress.
-EP=$(cargo test -q -p efe-coordinator --features anthropic --test endpoint_configurable 2>&1 | grep -E '^test result' | head -1)
+EP=$(cargo test -q -p efe-coordinator --features anthropic,openai,gemini --test endpoint_configurable 2>&1 | grep -E '^test result' | head -1)
 case "$EP" in
-  *"7 passed; 0 failed"*) ok "l'endpoint est configurable, validé, et le reçu annonce la VRAIE destination ($EP)" ;;
+  *"10 passed; 0 failed"*) ok "les 3 destinations sont configurables, validées, et le reçu annonce la VRAIE ($EP)" ;;
   *"0 passed"*) ko "AUCUN test d'endpoint n'a été joué — un \`cfg\` a bougé, et plus rien ne \
 garde la destination de l'egress ni ce que le reçu en dit." ;;
   *) ko "les tests d'endpoint ne passent pas : $EP" ;;
 esac
 
 # ═════════════════════════════════════════════════════════════════════════════
-titre "8. L'aller-retour frontière, sur une vraie socket"
+titre "8. L'aller-retour frontière, sur une vraie socket, pour les trois"
 #
 #  Ce que la section 7 rend possible, celle-ci l'EXÉCUTE. Un serveur HTTP réel écoute sur la
 #  boucle locale, le provider est pointé vers lui, et l'appel part, arrive, et revient — avec
 #  ses en-têtes vérifiés depuis L'EXTÉRIEUR, en regardant la requête reçue plutôt que le code
 #  qui la construit.
 #
-#  Ce chemin — l'egress payant, de bout en bout — n'avait JAMAIS été parcouru dans ce dépôt.
-#  Il ne pouvait pas l'être : la destination était une constante, donc l'atteindre exigeait une
-#  clé, de l'argent et un réseau.
+#  Ce chemin — l'egress payant, de bout en bout — n'avait JAMAIS été parcouru dans ce dépôt, pour
+#  AUCUN des trois. Il ne pouvait pas l'être : les destinations étaient des constantes, donc les
+#  atteindre exigeait une clé, de l'argent et un réseau.
+#
+#  Chaque cas vérifie aussi ses EN-TÊTES depuis l'extérieur : `anthropic-version` + `x-api-key`,
+#  `authorization: Bearer`, et `x-goog-api-key` — ce dernier gardant la règle §2.3 de Gemini,
+#  « la clé en en-tête, jamais dans l'URL », contre une régression qui la remettrait en query.
 #
 #  Ce qu'il ne prouve toujours pas : qu'Anthropic réponde ainsi. Le faux fournisseur rend la
 #  forme documentée de l'API ; si l'API changeait, ce test resterait vert. Il prouve le CHEMIN,
 #  jamais le PARTENAIRE.
-AR=$(cargo test -q -p efe-coordinator --features anthropic --test aller_retour_frontiere 2>&1 | grep -E '^test result' | head -1)
+AR=$(cargo test -q -p efe-coordinator --features anthropic,openai,gemini --test aller_retour_frontiere 2>&1 | grep -E '^test result' | head -1)
 case "$AR" in
-  *"3 passed; 0 failed"*) ok "l'aller-retour part, arrive et revient ($AR)" ;;
+  *"5 passed; 0 failed"*) ok "les 3 allers-retours partent, arrivent et reviennent ($AR)" ;;
   *"0 passed"*) ko "AUCUN aller-retour n'a été joué — le chemin d'egress n'est de nouveau \
 éprouvé nulle part." ;;
   *) ko "l'aller-retour ne passe pas : $AR" ;;
@@ -401,8 +408,9 @@ cat <<'FIN'
     · Un aller-retour vers un VRAI fournisseur. Cette ligne disait autre chose :
       « `ANTHROPIC_URL` est une constante EN DUR : aucun moyen de pointer un faux
       fournisseur local, ni un Azure OpenAI, ni un mandataire d'entreprise ». Ce
-      n'est plus vrai — la constante est un défaut, la destination se configure et
-      se valide (section 7), et l'aller-retour SUR SOCKET est joué (section 8).
+      n'est plus vrai d'AUCUN des trois — les constantes sont des défauts, les
+      destinations se configurent et se valident (section 7), et les trois
+      allers-retours SUR SOCKET sont joués (section 8).
       Ce qui reste manquant est plus étroit, et plus honnête : que le partenaire
       réponde comme le faux fournisseur le suppose. Si l'API d'Anthropic changeait,
       les sections 7 et 8 resteraient vertes. Elles prouvent le CHEMIN, jamais le

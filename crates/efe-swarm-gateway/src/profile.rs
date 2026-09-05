@@ -246,19 +246,45 @@ pub const REGISTRY: &[Switch] = &[
         fatal_if_invalid: false,
     },
     Switch {
-        // La classe décrit l'ABSENCE, pas l'importance : absente, on garde
-        // `https://api.anthropic.com/v1/messages` et rien ne change — donc « réglage ». Cela ne dit
-        // rien de son poids : c'est la DESTINATION de l'egress, et elle est validée par l'analyseur
-        // unique (`scella-authority`) avant d'être acceptée. Elle est lue par `efe-coordinator`, pas
-        // ici ; son entrée existe pour que le rapport de démarrage la NOMME — un interrupteur qui
-        // redirige toute la sortie et que l'exploitant découvrirait en production serait
-        // exactement le défaut que M0 supprime.
+        // ── Les TROIS destinations d'egress ────────────────────────────────────────────────
+        //
+        // La classe décrit l'ABSENCE, pas l'importance : absentes, chaque fournisseur garde son
+        // point de terminaison public et rien ne change — donc « réglage ». Cela ne dit rien de
+        // leur poids : ce sont les DESTINATIONS de l'egress, et chacune est validée par
+        // l'analyseur unique (`scella-authority`) avant d'être acceptée.
+        //
+        // Elles sont lues par `efe-coordinator`, pas ici ; leurs entrées existent pour que le
+        // rapport de démarrage les NOMME — un interrupteur qui redirige toute la sortie et que
+        // l'exploitant découvrirait en production est exactement le défaut que M0 supprime.
+        //
+        // Anthropic prend une URL COMPLÈTE (un seul chemin, `/v1/messages`) ; OpenAI et Gemini
+        // prennent une BASE, dont dérivent leurs deux et trois chemins. Le suffixe `_BASE_URL` le
+        // dit, plutôt que de laisser trois noms identiques recouvrir deux sémantiques.
         name: "EFE_ANTHROPIC_URL",
-        buys: "la destination de l'egress frontière — point de terminaison régional, mandataire \
+        buys: "la destination de l'egress Claude — point de terminaison régional, mandataire \
                d'entreprise, ou faux fournisseur local pour l'éprouver",
         absence_costs: "défaut https://api.anthropic.com/v1/messages ; fournie et REFUSÉE (http \
                         distant, userinfo, autorité inanalysable) ⟹ le provider Claude n'est PAS \
                         enregistré, et le boot le CRIE",
+        class: Class::Tuning,
+        fatal_if_invalid: false,
+    },
+    Switch {
+        name: "EFE_OPENAI_BASE_URL",
+        buys: "la base de l'egress GPT — Azure OpenAI, serveur compatible auto-hébergé \
+               (vLLM/LiteLLM/Ollama), mandataire, ou faux fournisseur local",
+        absence_costs: "défaut https://api.openai.com/v1 ; fournie et REFUSÉE ⟹ le provider GPT \
+                        n'est PAS enregistré, et le boot le CRIE. `/chat/completions` ET `/models` \
+                        (la sonde) en dérivent : sonder un hôte et appeler l'autre mentirait",
+        class: Class::Tuning,
+        fatal_if_invalid: false,
+    },
+    Switch {
+        name: "EFE_GEMINI_BASE_URL",
+        buys: "la base de l'egress Gemini — mandataire, point de terminaison régional, ou faux \
+               fournisseur local",
+        absence_costs: "défaut https://generativelanguage.googleapis.com/v1beta/models ; fournie \
+                        et REFUSÉE ⟹ le provider Gemini n'est PAS enregistré, et le boot le CRIE",
         class: Class::Tuning,
         fatal_if_invalid: false,
     },
