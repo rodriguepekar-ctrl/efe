@@ -1,138 +1,101 @@
-# EFE Security Policy
+# Sécurité — Scella
 
-> **Status** : Sprint M14 D40 audit fix M14-A3 — top-level security policy.
-> **Audience** : security researchers, customers, regulators.
-> **Last updated** : 2026-04-30.
+> **État** : dépôt **privé**, aucun service déployé, aucune équipe.
+> **Dernière mesure** : 5 septembre 2026.
 
----
+Ce fichier remplace une politique de sécurité qui promettait quatre adresses
+courriel chez un domaine, une clé PGP, un programme de primes HackerOne, un
+formulaire d'avis sur un dépôt qui n'est pas celui-ci, des délais de correction
+contractuels (7 jours en critique, 30 en élevé), un *safe harbor*, un tableau
+d'honneur, et sept documents de conformité **dont aucun n'existe**.
 
-## 🛡 Reporting a vulnerability
-
-We take security vulnerabilities seriously and welcome coordinated
-disclosure from researchers.
-
-### Quick steps
-
-1. **Email** : security@efe.ai (PGP-encrypted preferred — key at
-   `https://efe.ai/.well-known/security.txt`)
-2. **GitHub Security Advisory** : for non-critical findings,
-   https://github.com/efe-project/efe/security/advisories/new
-3. **Bug bounty (post-1.0 GA)** : HackerOne private program
-
-For full details on our coordinated disclosure procedure, see
-`docs/security/vulnerability_disclosure.md`.
+Elle s'adressait à *« security researchers, customers, regulators »*. **Ce dépôt
+est privé** : ce public ne peut pas la lire. Une politique adressée à des gens
+qui n'y ont pas accès n'est pas une politique, c'est un décor — et son danger
+est réel : un chercheur qui aurait écrit à l'adresse annoncée aurait cru avoir
+divulgué de façon responsable.
 
 ---
 
-## 🔐 Supported versions
+## 1 · Signaler une vulnérabilité
 
-EFE 1.0 LTS support window :
+Tant que le dépôt est privé, **il n'y a pas de canal public, et nous n'en
+inventons pas un**. Le seul chemin est le contact direct avec la personne qui
+détient le dépôt.
 
-| Version | Supported until | Severity threshold |
-|---|---|---|
-| **1.0.x** | 2031-12-31 (5-year LTS) | All severities until 2027-12 ; Critical+High until 2030-12 ; Critical only until 2031-12 |
-| 0.x | EOL 2026-12-31 | Critical only |
+Le formulaire d'avis privé de GitHub — le canal qu'un dépôt de ce genre devrait
+offrir — **n'est pas disponible sur un dépôt privé** (l'API rend `404`, vérifié
+le 5 septembre 2026). C'est le premier geste à faire le jour où le dépôt
+s'ouvre, avant toute annonce.
 
----
-
-## 🔒 Security architecture
-
-EFE 1.0 GA implements defense-in-depth via :
-
-- **Authentication** : OIDC + JWT + JWKS rotation (D15)
-- **Authorization** : Per-tenant RBAC (D11)
-- **Network isolation** : NetworkPolicy strict (M12 D21)
-- **Transport** : TLS 1.3 + mTLS optional (M12 D22)
-- **Audit log** : HMAC-chained tamper-evident (D14-bis)
-- **Supply chain** : Bundle Ed25519 signature + SBOM CycloneDX 1.5 (M13)
-- **Backup + DR** : Quarterly drill + 7-yr Object Lock (D17 + D40)
-- **Continuous monitoring** : Prometheus + Loki + OTel (D13)
-
-For details, see :
-- `docs/security/threat_model.md` — STRIDE consolidated, 66 threats
-- `docs/compliance/iso27001.md` — ISO 27001:2022 Annex A mapping
-- `docs/compliance/soc2_evidence.md` — SOC 2 Trust Services Criteria
-- `docs/compliance/gdpr_art32.md` — GDPR Art. 32 mesures
-- `docs/compliance/ai_act_annex_iv.md` — EU AI Act Annex IV
-- `docs/compliance/nist_800_53.md` — NIST SP 800-53 r5
+**Aucun délai de correction n'est promis.** Il n'y a pas d'équipe pour le tenir.
 
 ---
 
-## 🏛 Compliance certifications
+## 2 · Licence — une contradiction, et sa correction
 
-EFE 1.0 GA targets :
-- **SOC 2 Type II** — initial audit 2026-Q3 → annual
-- **ISO 27001:2022** — Stage 1+2 2026-Q3-Q4 → 3-year recert cycle
-- **GDPR Art. 32** — documented + DPIA template + DPA template
-- **EU AI Act 2024/1689** — Annex IV technical doc (limited-risk)
-- **NIST SP 800-53 r5** — 97 % Moderate baseline
+L'ancien fichier se terminait par : *« EFE is open source under the Apache
+License 2.0 »*.
 
----
+**C'est faux, et cette phrase est retirée.** [`LICENSE`](LICENSE) dit
+`All rights reserved` ; le périmètre est **propriétaire**. Une seule exception,
+et elle est écrite dans le fichier de licence : `crates/efe-nano-sdk/**` est
+sous **MIT**, dont le texte est dans [`LICENSE-MIT`](LICENSE-MIT).
 
-## ⚖ Responsible disclosure timeline
-
-Per `docs/security/vulnerability_disclosure.md` :
-
-```
-T+0       : Report received → automated ack
-T+1d      : Triage by security team
-T+3d      : Severity assigned + reporter notified
-T+7d      : Critical findings → mitigation in progress
-T+30d     : High findings → fix shipped or compensating control
-T+60d     : Medium findings → fix in next release
-T+90d     : Public disclosure (default ; negotiable)
-T+90d+1   : CVE assigned (if applicable) + advisory published
-```
+Cette incohérence est exactement celle que l'étape **D3** avait pour objet, et
+elle avait survécu ici. `scripts/d3-check.sh` refuse désormais toute divergence
+entre les licences déclarées par les manifestes et ce que le fichier de licence
+accorde — mais il lit les manifestes, pas la prose. Ce paragraphe-ci n'est gardé
+par rien d'autre que sa lecture.
 
 ---
 
-## 🛠 Severity classification
+## 3 · Ce qui est vrai, et où le vérifier
 
-| Severity | Description | Fix SLA |
-|---|---|---|
-| **Critical** | RCE, privilege escalation, data exfil at scale | 7 days |
-| **High** | Auth bypass, cross-tenant info disclosure | 30 days |
-| **Medium** | Limited info disclosure, DoS single-tenant | 90 days |
-| **Low** | Hardening recommendation, info leak | Next minor release |
-| **Informational** | Best practice deviation | Documented, no fix |
+Sans certification, sans audit, sans « 97 % de la ligne de base NIST ». Ce qui
+suit est du code qu'on peut ouvrir :
 
----
+| propriété | où |
+|---|---|
+| chaîne HMAC scellée, ancre re-vérifiable, troncature détectable | `crates/verify-mini/`, `crates/provenance-verify/` |
+| refus de démarrer la frontière sans `postgres`, `oidc` et `pii` — `exit 78` (`EX_CONFIG`) | [`profile.rs:926`](crates/efe-swarm-gateway/src/profile.rs), [`main.rs:53`](crates/efe-swarm-gateway/src/main.rs) |
+| garde de souveraineté sur les cibles de sortie | [`profile.rs`](crates/efe-swarm-gateway/src/profile.rs) |
+| effacement cryptographique (la chaîne scelle le chiffré) | [`provenance-dag/src/shred.rs`](crates/provenance-dag/src/shred.rs) |
+| recherche de secrets à chaque `push`, **arbre et historique** | [`scripts/d3-check.sh`](scripts/d3-check.sh), joué par `.github/workflows/portes.yml` |
 
-## 🤝 Safe harbor
-
-Per `docs/security/vulnerability_disclosure.md` §5 — researchers
-acting in good faith have safe harbor.
-
----
-
-## 📞 Contact
-
-| Role | Email | PGP |
-|---|---|---|
-| Security team | security@efe.ai | yes (`.well-known/security.txt`) |
-| DPO (privacy issues) | dpo@efe.ai | yes |
-| Press / coordinated disclosure | comms@efe.ai | optional |
-| Compliance | compliance@efe.ai | optional |
+**Outillé n'est pas conforme.** `crates/reg-evidence/` produit des artefacts qui
+répondent à des exigences nommées (AI Act art. 12, CSDDD/LkSG, RGPD). Produire
+l'artefact n'est pas être conforme, et ce dépôt ne prétend ni l'un ni l'autre au
+nom d'un tiers.
 
 ---
 
-## 🏆 Hall of fame
+## 4 · Ce qui manque, et qui n'était écrit nulle part
 
-Researchers who responsibly disclose are listed at
-`https://efe.ai/security/researchers/` (with consent).
+Le plus utile de ce fichier :
+
+- **Sauvegarde : zéro.** Aucune procédure, aucun essai de restauration.
+- **Rotation de clé : zéro.** `crates/scella-conservation/` sait produire des
+  générations de clé ; rien ne les fait tourner.
+- **Le jeton porteur reste un secret partagé** ([`audit-console/src/session.rs`](crates/audit-console/src/session.rs)).
+  Une vraie non-répudiation demanderait que l'officier **signe** le tuple de
+  l'acte. C'est nommé, et non produit.
+- **La frontière n'a jamais démarré.** Le garde du point 3 fait son travail :
+  faute de `postgres` + `oidc` + `pii` réunis, la fonction centrale du produit
+  n'a jamais tourné hors des tests.
+- **M3 sous `oidc`** : les deux tests qui portent son critère ne tournent que
+  sous `frontier-llm` *sans* `oidc`. L'argument qui rendrait ce trou acceptable
+  est écrit dans `routes/llm.rs` comme une **revendication**, pas comme une
+  mesure.
 
 ---
 
-## 📜 Standards we follow
+## 5 · Ce qu'il faudra avant qu'une vraie politique existe
 
-- ISO 29147 (Vulnerability Disclosure)
-- ISO 30111 (Vulnerability Handling)
-- NIST SP 800-216 (Coordinated Vulnerability Disclosure)
-- EU CRA 2024 Art. 11 (vulnerability handling)
-- SOC 2 CC3.4 (vulnerability identification + response)
+Dans cet ordre, et aucun ne s'invente à l'avance :
 
----
-
-## 📜 License
-
-EFE is open source under the **Apache License 2.0**.
+1. un service qui tourne, donc une surface à attaquer ;
+2. une adresse que quelqu'un relève, et quelqu'un pour la relever ;
+3. l'ouverture du dépôt, et avec elle le formulaire d'avis privé de GitHub ;
+4. alors seulement des délais — parce qu'un délai est une promesse, et qu'une
+   promesse sans personne derrière est ce que ce fichier remplace.

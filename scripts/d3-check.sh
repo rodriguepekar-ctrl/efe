@@ -43,7 +43,7 @@ CONTROLES=0
 # + les deux modes de gitleaks (2) = 6. Un plancher au-dessus du compte réel fait
 # rendre NON MESURÉ à un contrôle parfaitement exécuté — c'est arrivé à la première
 # version de ce fichier, et c'était le garde qui avait raison contre son auteur.
-PLANCHER=6
+PLANCHER=7
 
 exiger() { CONTROLES=$((CONTROLES+1)); if [ "$2" = "0" ]; then ok "$1"; else ko "$1"; fi; }
 
@@ -139,7 +139,27 @@ gitleaks detect --no-banner >/dev/null 2>&1
 exiger "historique git : aucun secret" $?
 
 # ═════════════════════════════════════════════════════════════════════
-titre "3. Le verdict"
+titre "3. Les portes d'entrée citent-elles des chemins qui existent ?"
+# ═════════════════════════════════════════════════════════════════════
+# D3 lisait les MANIFESTES, pas la prose — et c'est par la prose que la
+# contradiction est revenue : `SECURITY.md` accordait « open source under the
+# Apache License 2.0 » quand `LICENSE` dit `All rights reserved`, et citait
+# SEPT documents de conformité dont aucun n'existait. `CONTRIBUTING.md`
+# renvoyait à un ADR, un CHANGELOG et un CODEOWNERS tous absents.
+#
+# Ce garde ne relit pas la prose (aucune règle syntaxique ne sépare un chemin
+# d'un identifiant de code entre accents graves — sa propre documentation le
+# dit). Il tient la moitié qui est mécanisable : tout lien markdown relatif des
+# quatre portes d'entrée doit résoudre. On l'EXÉCUTE plutôt que d'en réécrire
+# ici une version affaiblie — la leçon de `m6-check.sh`.
+JOURNAL=$(mktemp)
+cargo test -q -p audit-console --test d1_portes_dentree >"$JOURNAL" 2>&1
+exiger "les 4 portes d'entrée ne citent que des chemins existants (5 tests, contre-épreuves comprises)" $?
+[ "$ECHECS" = "0" ] || sed 's/^/      /' "$JOURNAL" | tail -12
+rm -f "$JOURNAL"
+
+# ═════════════════════════════════════════════════════════════════════
+titre "4. Le verdict"
 # ═════════════════════════════════════════════════════════════════════
 [ "$CONTROLES" -ge "$PLANCHER" ] || nonmesure \
   "seulement $CONTROLES contrôle(s) exécutés, $PLANCHER attendus au minimum." \
@@ -148,7 +168,8 @@ titre "3. Le verdict"
 printf '  %s contrôle(s) · %s échec(s)\n\n' "$CONTROLES" "$ECHECS"
 if [ "$ECHECS" = "0" ]; then
   printf '\033[32mD3 TIENT.\033[0m  Chaque licence déclarée a son texte, le LICENSE la nomme,\n'
-  printf 'et ni l'\''arbre ni l'\''historique ne portent de secret.\n\n'
+  printf 'ni l'\''arbre ni l'\''historique ne portent de secret, et les quatre portes\n'
+  printf 'd'\''entrée ne renvoient qu'\''à des chemins qui existent.\n\n'
   printf '  ⚠ CE QUE CECI NE PROUVE PAS : que les exemptions de `.gitleaks.toml` soient\n'
   printf '  JUSTES. Elles portent chacune leur raison écrite ; les relire est un travail\n'
   printf '  humain, qu'\''aucun compteur ne remplace.\n\n'

@@ -174,3 +174,18 @@ la contradiction avec le fichier de licence est **réglée** (étape **D3**) —
 y a sa ligne, et le texte MIT qu'il promettait existe enfin, dans
 [LICENSE-MIT](LICENSE-MIT). `scripts/d3-check.sh` refuse toute divergence entre les
 licences déclarées par les manifestes et ce que le fichier de licence accorde.
+
+## Les deux autres portes
+
+- [`CONTRIBUTING.md`](CONTRIBUTING.md) — la chaîne d'outils, la règle qu'on
+  enfreint en premier (**jamais `cargo fmt`**), et ce qui remplace ici la revue
+  par un pair : seize contrôles, trois états, des planchers anti-vacuité.
+- [`SECURITY.md`](SECURITY.md) — ce qui est vrai de la posture et **où le
+  vérifier**, ce qui manque (sauvegarde : zéro ; rotation de clé : zéro), et
+  pourquoi aucun canal de divulgation n'est publié tant que le dépôt est privé.
+
+Les deux décrivaient encore, le 5 septembre 2026, un dépôt disparu — un ADR, un
+`CHANGELOG`, un `CODEOWNERS`, une chaîne Go, sept documents de conformité, quatre
+adresses courriel et une licence Apache-2.0 que [LICENSE](LICENSE) contredit. Un
+garde exécuté par `scripts/d3-check.sh` tient désormais la moitié mécanisable du
+problème : **tout lien relatif de ces quatre documents doit résoudre**.
