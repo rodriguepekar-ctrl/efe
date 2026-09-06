@@ -215,6 +215,12 @@ mon-premier-recu/
 # défaut que le script refuse en interdisant `demo-root-secret`.
 banc-registre/
 
+# L'atelier du dossier complet : recensements JSON, sortie de `cargo metadata`,
+# cartographies structurées. Ce sont des MESURES intermédiaires, régénérables par
+# les commandes que le document cite lui-même. Seul le `.tex` est suivi — et le
+# PDF l'est dans le dépôt de livraison.
+docs/architecture/.dossier-complet/
+
 # Le dossier que `scripts/banc-seuil.sh` écrit : il contient VOTRE master de
 # provenance et la clé privée OIDC du banc. Le versionner publierait un master, et
 # un reçu scellé sous un master public n'oppose plus rien à personne.

@@ -1,0 +1,2208 @@
+% SPDX-License-Identifier: UNLICENSED
+% Scella — C1 « Le Registre » et C3 « Le Seuil »
+% Fonctionnement · technologie · architecture des fichiers
+% Construit avec tectonic. Seule la source .tex est suivie par git dans le dépôt
+% de travail ; le PDF l'est dans le dépôt de livraison (C1-C3final).
+\documentclass[10pt]{report}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage[french]{babel}
+\usepackage{newpxtext,newpxmath}
+\usepackage[a4paper,top=2.0cm,bottom=1.8cm,left=2.0cm,right=2.0cm]{geometry}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{titlesec}
+\usepackage[most]{tcolorbox}
+\usepackage{enumitem}
+\usepackage{array}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{fancyhdr}
+\usepackage{tikz}
+\usetikzlibrary{positioning,arrows.meta,fit,backgrounds}
+\usepackage[hidelinks]{hyperref}
+
+\definecolor{navy}{HTML}{1F3A5F}
+\definecolor{grey}{HTML}{54606E}
+\definecolor{green}{HTML}{2C6E49}
+\definecolor{amber}{HTML}{9C6A16}
+\definecolor{red}{HTML}{A6322E}
+\definecolor{boxgray}{HTML}{F3F5F8}
+\definecolor{boxred}{HTML}{FCF2F1}
+\definecolor{boxgreen}{HTML}{F1F7F3}
+\definecolor{boxcode}{HTML}{F7F8FA}
+\definecolor{boxedge}{HTML}{D9E0EA}
+\definecolor{c3col}{HTML}{1F3A5F}
+\definecolor{c1col}{HTML}{6B3FA0}
+
+% Un document technique porte des identifiants longs et insécables
+% (`valider_endpoint_sortie`, `Lieferkettensorgfaltspflichtengesetz`). Sans marge
+% d'urgence, TeX les laisse déborder dans la marge plutôt que d'étirer la ligne.
+\setlength{\emergencystretch}{3.2em}
+\tolerance=1200
+\hbadness=4000
+\sloppy
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{3.6pt}
+\linespread{1.03}
+\setlength{\LTpre}{4pt}\setlength{\LTpost}{6pt}
+
+\pagestyle{fancy}\fancyhf{}
+\lhead{\small\color{grey}Scella — C1 « Le Registre » \& C3 « Le Seuil »}
+\rhead{\small\color{grey}\leftmark}
+\cfoot{\small\color{grey}\thepage}
+\renewcommand{\headrulewidth}{0.3pt}
+\renewcommand{\chaptermark}[1]{\markboth{#1}{}}
+
+\titleformat{\chapter}[display]
+  {\color{navy}\bfseries}{\Large\chaptertitlename~\thechapter}{6pt}{\huge}
+\titlespacing*{\chapter}{0pt}{0pt}{18pt}
+\titleformat{\section}{\color{navy}\large\bfseries}{\thesection\;}{0pt}{}
+\titlespacing{\section}{0pt}{14pt}{3pt}
+\titleformat{\subsection}{\color{navy}\bfseries}{\thesubsection\;}{0pt}{}
+\titlespacing{\subsection}{0pt}{9pt}{2pt}
+\titleformat{\subsubsection}{\color{grey}\bfseries}{}{0pt}{}
+\titlespacing{\subsubsection}{0pt}{7pt}{1pt}
+
+\newtcolorbox{these}{colback=boxgray,colframe=boxedge,boxrule=0.5pt,arc=2.5pt,
+  left=8pt,right=8pt,top=5pt,bottom=5pt}
+\newtcolorbox{alerte}{colback=boxred,colframe=red!55,boxrule=0.8pt,arc=2.5pt,
+  left=8pt,right=8pt,top=5pt,bottom=5pt}
+\newtcolorbox{acquis}{colback=boxgreen,colframe=green!45,boxrule=0.8pt,arc=2.5pt,
+  left=8pt,right=8pt,top=5pt,bottom=5pt}
+\newtcolorbox{extrait}{colback=boxcode,colframe=boxedge,boxrule=0.5pt,arc=1.5pt,
+  left=7pt,right=7pt,top=4pt,bottom=4pt}
+
+\newcommand{\code}[1]{\texttt{\small #1}}
+\newcommand{\mm}[1]{\textbf{\textcolor{navy}{#1}}}
+\newcommand{\ok}[1]{\textcolor{green}{\textbf{#1}}}
+\newcommand{\ko}[1]{\textcolor{red}{\textbf{#1}}}
+\newcommand{\att}[1]{\textcolor{amber}{\textbf{#1}}}
+\newcommand{\ctrois}{\textcolor{c3col}{\textbf{C3}}}
+\newcommand{\cun}{\textcolor{c1col}{\textbf{C1}}}
+% Une mesure : sa valeur, et la commande qui la produit.
+\newcommand{\mesure}[2]{\textbf{#1}\,\footnotesize\textcolor{grey}{(#2)}\normalsize}
+
+\begin{document}
+
+\begin{titlepage}
+\centering
+\vspace*{3.2cm}
+{\color{navy}\Huge\bfseries Scella\par}
+\vspace{0.7cm}
+{\color{grey}\LARGE C1 « Le Registre » \quad\textbullet\quad C3 « Le Seuil »\par}
+\vspace{1.6cm}
+{\Large\bfseries Fonctionnement, technologie,\\[2pt] et architecture des fichiers\par}
+\vspace{1.2cm}
+\begin{minipage}{0.78\textwidth}
+\begin{these}
+\small
+Ce document décrit deux produits qui cohabitent dans un même dépôt et
+qu'une propriété d'architecture sépare : \ctrois{} « Le Seuil », la
+passerelle souveraine et son reçu re-prouvable ; \cun{} « Le Registre »,
+le registre d'évidence réglementaire et sa console.
+
+\medskip
+\textbf{Chaque chiffre de ce document a été mesuré}, et porte la commande qui
+le produit. Aucun n'a été recopié d'une prose --- pas même de celles de ce
+dépôt, qui sont pourtant justes.
+\end{these}
+\end{minipage}
+\vfill
+{\color{grey}\small 6 septembre 2026 \quad\textbullet\quad 1\,019 fichiers \quad\textbullet\quad 30 crates \quad\textbullet\quad 207\,468 lignes de Rust\par}
+\end{titlepage}
+
+\tableofcontents
+
+%% ═══════════════ ch01-produits ═══════════════
+\chapter{Les deux produits}
+
+\section{Ce qu'ils sont, en une page}
+
+\begin{these}
+\ctrois{} \textbf{« Le Seuil »} --- une passerelle souveraine. On lui soumet un travail ; elle le
+fait exécuter, \textbf{scelle la trace} de ce qui s'est passé, et rend un \textbf{reçu} qu'un tiers
+peut re-prouver sans rien nous demander --- pas même le code, qu'il recompile.
+
+\medskip
+\cun{} \textbf{« Le Registre »} --- ce que ces traces scellées deviennent quand on les relit sous
+une exigence réglementaire : un dossier d'évidence, une console qui le montre, un export qu'un
+auditeur ouvre ailleurs.
+\end{these}
+
+Le premier est le \emph{coin} : petit, refermé, vendable seul. Le second est l'\emph{expansion} :
+il consomme ce que le premier produit. La distinction n'est pas commerciale, elle est
+\textbf{architecturale} --- et le chapitre~\ref{ch:archi} montre qu'elle se vérifie par une
+commande sur le graphe de dépendances, pas par une intention écrite dans un commentaire.
+
+\section{La thèse, et ce qu'elle refuse de promettre}
+
+Tout le périmètre repose sur une distinction que personne ne croit avant de l'avoir vue.
+
+\begin{alerte}
+\textbf{Un bundle tronqué se re-prouve parfaitement.}
+
+Le préfixe d'une chaîne scellée est lui-même une chaîne scellée valide. Rien, \emph{de
+l'intérieur}, ne trahit ce qui a été coupé. Un vérifieur qui n'a que le bundle atteste
+l'\textbf{intégrité} ; il ne peut rien dire de la \textbf{complétude}.
+\end{alerte}
+
+C'est l'\textbf{ancre} qui referme l'écart --- un journal publié \emph{hors} du bundle, remis par un
+canal distinct, qui engage le nombre de nœuds. Elle attrape la troncature par un
+\textbf{comptage}, sans clé et sans cryptographie. Mesuré le 6 septembre 2026, sur un reçu de trois
+records :
+
+\begin{longtable}{@{}p{7.8cm}c c@{}}
+\toprule \textbf{instrument} & \textbf{reçu intact} & \textbf{reçu tronqué} \\ \midrule \endhead
+\code{verify-mini} seul & \ok{0} & \ko{\textbf{0} --- il passe} \\
+\code{verify-mini -{}-root <racine publiée>} & \ok{0} & \ok{1} \\
+\code{provenance-verify -{}-anchor -{}-run} & \ok{0} \footnotesize« intègre ET complet » & \ok{1} \footnotesize« attendu 3, obtenu 2 » \\
+\bottomrule
+\end{longtable}
+
+Le vérifieur méta le dit encore mieux, sur un bundle de 30 pas coupé à 29, \textbf{sans détenir
+aucune clé} :
+
+\begin{extrait}
+\footnotesize
+\ko{$\times$ ANCRE DISCORDANTE --- TRONCATURE} : le journal engage 30 pas, le bundle en présente 29
+--- \emph{la chaîne présentée est pourtant parfaitement intègre, c'est l'ancre qui le révèle}.
+\end{extrait}
+
+Et la seconde limite, énoncée par le produit lui-même en haut de chaque page de sa console :
+
+\begin{these}
+\textbf{« Intègre » n'est jamais « correct ».} La chaîne atteste l'intégrité de ce qui a été
+\emph{enregistré} --- que rien n'a été modifié, retiré ni ajouté après coup. Elle n'atteste jamais
+la \textbf{correction} de la décision : un raisonnement faux, scellé fidèlement, produit un reçu
+parfaitement valide.
+\end{these}
+
+Le banc du Registre en fait sa deuxième épreuve, et c'est celle qui apprend quelque chose : un
+dossier \emph{menteur}, scellé de bonne foi, passe au \textbf{vert}. Aucune signature au monde ne
+rattrape cela, et le produit le dit avant qu'on le lui demande.
+
+\section{Les trois états}
+
+Chaque instrument de ce périmètre --- les seize contrôles, les deux bancs, les quatre vérifieurs ---
+distingue trois issues, et la troisième compte autant que les deux autres.
+
+\begin{longtable}{@{}c p{4.4cm} p{9.2cm}@{}}
+\toprule \textbf{code} & \textbf{sens} & \textbf{pourquoi il existe} \\ \midrule \endhead
+\ok{0} & mesuré, et vert & la propriété tient, et on l'a regardée \\
+\ko{1} & mesuré, et rouge & la propriété ne tient pas \\
+\att{3} & \textbf{non mesuré} & l'instrument n'a pas pu regarder : un outil manque, un port est pris, un modèle de plusieurs gigaoctets est absent \\
+\bottomrule
+\end{longtable}
+
+\begin{acquis}
+Un contrôle en panne doit dire qu'il est en panne, et ne \textbf{jamais} emprunter le vocabulaire
+du sujet qu'il mesure. Les vérifieurs tiennent la même discipline : \code{verify-mini} rend
+\att{2} sur une erreur d'usage --- sans clé, deux clés, fichier absent, option volée comme valeur
+--- et jamais \ko{1}, qui accuserait le reçu d'une faute qui est celle de la commande.
+\end{acquis}
+
+Sept des vingt-deux scripts portent explicitement ce troisième état, par une fonction dédiée
+(\code{nonmesure}, \code{nm}) : \code{banc-seuil}, \code{banc-registre}, \code{mon-premier-recu},
+\code{d3-check}, \code{e1-check}, \code{portes-check}, \code{r3-check}.
+
+
+%% ═══════════════ ch02-fonctionnement ═══════════════
+\chapter{Le fonctionnement}
+
+\section{\ctrois{} --- du travail soumis au reçu opposable}
+
+\subsection{Le trajet, en sept temps}
+
+\begin{longtable}{@{}c p{4.4cm} p{9.6cm}@{}}
+\toprule & \textbf{temps} & \textbf{ce qui se passe, et où} \\ \midrule \endhead
+1 & la soumission & \code{POST /v1/swarm/run} --- une tâche, une topologie, un budget facultatif, une largeur facultative \\
+2 & l'admission & la passerelle \textbf{écrête} : largeur ramenée au plafond serveur, deadline bornée, budget confronté \\
+3 & l'exécution & le moteur d'essaim produit le travail --- ce n'est pas ce que le produit vend \\
+4 & la capture & chaque acte devient un \textbf{record} : appel de modèle, outil, message, revue humaine \\
+5 & le scellement & les records sont chaînés et scellés sous la clé du tenant (\emph{pile A}) \\
+6 & l'export & \code{GET /v1/swarm/bundle/:id} rend le \textbf{bundle}, scellé sous une clé dérivée (\emph{pile B}), et publie l'\textbf{ancre} \\
+7 & la re-preuve & un tiers recompile \code{verify-mini} et vérifie, sans nous \\
+\bottomrule
+\end{longtable}
+
+\att{L'ancre est publiée à l'EXPORT, pas au run.} Une ligne par bundle servi --- mesuré. Elle porte
+six champs séparés par des tabulations :
+
+\begin{extrait}
+\footnotesize
+\code{rang} \quad\textbullet\quad \code{run\_id} \quad\textbullet\quad \code{tenant} \quad\textbullet\quad
+\code{racine} \quad\textbullet\quad \mm{nombre de nœuds} \quad\textbullet\quad \code{horodatage\_ms}
+\end{extrait}
+
+C'est le cinquième champ, et lui seul, qui rend une troncature visible.
+
+\subsection{Les routes servies}
+
+\begin{longtable}{@{}p{2.0cm} p{6.6cm} p{6.4cm}@{}}
+\toprule \textbf{méthode} & \textbf{chemin} & \textbf{condition de montage} \\ \midrule \endhead
+\code{POST} & \code{/v1/swarm/run} & toujours \\
+\code{GET} & \code{/v1/swarm/verify/:id} & toujours --- le \emph{moat} exposé \\
+\code{GET} & \code{/v1/swarm/gaps} & toujours \\
+\code{GET}/\code{POST} & \code{/v1/swarm/replay/:id} & toujours \\
+\code{GET} & \code{/v1/swarm/runs/:id} & toujours \\
+\code{GET} & \code{/v1/swarm/runs/:id/records} & toujours \\
+\code{GET} & \code{/v1/swarm/runs/:id/n17} & toujours --- export forensique hors-ligne \\
+\code{GET} & \code{/v1/swarm/runs/:id/events} & toujours --- SSE, rejeu et direct \\
+\code{GET} & \code{/v1/swarm/events} & toujours --- SSE, firehose du tenant \\
+\code{GET} & \code{/v1/swarm/memory/:family} & toujours \\
+\code{GET} & \code{/v1/swarm/memory/:family/verify} & toujours \\
+\code{GET} & \code{/healthz} \quad \code{/readyz} & toujours --- sondes \\
+\code{GET} & \code{/metrics} \quad \code{/dashboard} & toujours \\
+\code{GET} & \code{/v1/swarm/bundle/:id} & \att{opt-in d'exécution} \code{EFE\_SWARM\_BUNDLE\_ENABLED=true} \\
+\code{POST} & \code{/v1/swarm/reg/:id} & \cun{} feature \code{reg-evidence} \\
+\code{POST} & \code{/v1/llm/vote} \dots \code{/cascade} & feature \code{frontier-llm} (5 routes) \\
+\code{GET} & \code{/v1/llm/audit/:id} & feature \code{frontier-llm} \\
+\bottomrule
+\end{longtable}
+
+\textbf{23 chemins distincts} et 24 paires méthode-chemin --- \code{replay} en porte deux.
+\footnotesize\textcolor{grey}{(comptés par \code{grep -rn} sur les appels à \code{.route} dans
+\code{crates/efe-swarm-gateway/src/})}\normalsize
+
+\subsection{L'écrêtage : ce qu'un client demande, ce que le serveur accorde}
+
+Le mot du code est « plafonnée côté serveur », pas « refusée » --- « \emph{un client ne dimensionne
+pas la machine d'autrui} ». C'est un choix de produit, et il est visible dans le reçu :
+
+\begin{extrait}
+\footnotesize
+\code{POST /v1/swarm/run} avec \code{"width": 100000} \\
+$\rightarrow$ \code{run.accounting.width = }\mm{32}
+\end{extrait}
+
+Demander cent mille agents rend \textbf{32}, et le chiffre servi est écrit dans le reçu du
+demandeur. Un refus (\code{400}) aurait été un autre produit ; celui-ci sert la requête en la
+ramenant à ce qu'il accepte, et le client peut le \emph{vérifier} --- ce qu'une promesse ne permet
+pas. Le code le dit en un mot : \code{w.clamp(1, self.max\_width)}.
+
+Le \code{deadline\_ms} suit la même règle, mais son clamp est \textbf{bilatéral} :
+\code{clamp(MIN\_DEADLINE\_MS, max\_deadline\_ms)}, plancher 50\,ms et plafond 300\,000\,ms par
+défaut --- parce qu'un deadline absurdement court refuserait tout aussi sûrement qu'un plafond absent
+monopoliserait la machine.
+
+\begin{alerte}
+\textbf{Et il y a une asymétrie que le code assume.} La largeur ne change \emph{jamais} le résultat,
+seulement les durées. Le \textbf{deadline}, lui, \textbf{tronque réellement le travail} --- le temps
+est un plafond, pas un réglage. Mesuré : un consensus adaptatif de $k_{\max}=4000$ sous
+\code{deadline\_ms = 60} s'arrête à 95 agents, avec \code{termination = deadline\_exceeded}.
+
+Le run ainsi tronqué reste \textbf{re-prouvable} : la chaîne scelle ce qui a eu lieu. Il n'est
+simplement plus \emph{reproductible}. Le reçu ne ment pas sur la différence, il la nomme.
+\end{alerte}
+
+Le budget, lui, connaît \textbf{trois} politiques, et elles ne diffèrent pas seulement par leur code
+HTTP : elles répondent à trois questions différentes. Mesurées sur la \emph{même} requête --- un
+consensus $k=8$ avec deux juges, soit dix appels estimés à 10\,c :
+
+\begin{longtable}{@{}p{2.4cm} c c c p{6.4cm}@{}}
+\toprule \textbf{politique} & \textbf{1\,c} & \textbf{4\,c} & \textbf{100\,c} & \textbf{ce qu'elle décide} \\ \midrule \endhead
+\code{error} & \att{402} & \att{402} & \ok{200} & \textbf{ne rien faire} plutôt que faire à moitié. Le refus nomme les deux chiffres : « budget trop bas : ${\sim}10$c requis > plafond 1c » \\
+\code{stop} \footnotesize(défaut) & \ok{200} & \ok{200} & \ok{200} & \textbf{commencer et s'arrêter net}. Les dix agents partent, un seul est débité, \code{termination = budget\_stopped} \\
+\code{degrade} & \ok{200} & \ok{200} & \ok{200} & \textbf{redimensionner le travail} pour qu'il tienne : 1\,c $\rightarrow$ 2 agents, 4\,c $\rightarrow$ 4 agents, et \code{termination = completed} \\
+\bottomrule
+\end{longtable}
+
+\ok{La troisième est la plus intéressante.} Sous \code{degrade}, le run se termine \emph{complet} ---
+il a simplement fait moins. Sous \code{stop}, il se termine \emph{interrompu} : dix agents ont été
+lancés et un seul débité. Le reçu distingue les deux, et un exploitant qui les confondrait facturerait
+mal.
+
+\att{Et le refus de \code{error} précède la résolution des agents.} Mesuré par accident : une requête
+portant un nom de juge inexistant rend \att{402} en mode \code{error}, mais \att{400}
+« agent judge introuvable » en \code{stop} et \code{degrade}. Le préflight de budget passe avant
+l'annuaire de la flotte --- ce qui est le bon ordre, puisqu'il évite de résoudre ce qu'on ne servira
+pas.
+
+\subsubsection*{L'admission, et le refus qui dit lequel des deux étages a mordu}
+
+Deux étages, testés dans l'ordre \textbf{équité puis capacité}, et le \att{429} nomme celui qui a
+refusé --- avec un en-tête \code{Retry-After} :
+
+\begin{longtable}{@{}p{4.4cm} p{4.0cm} p{6.6cm}@{}}
+\toprule \textbf{étage} & \code{reason} & \textbf{ce qu'il protège} \\ \midrule \endhead
+quota par tenant (10) & \code{tenant\_quota} & qu'un tenant ne prenne pas toute la machine \\
+capacité globale (11) & \code{gateway\_full} & que la machine ne se noie pas \\
+\bottomrule
+\end{longtable}
+
+Un \code{429} qui ne dirait pas \emph{lequel} laisserait l'appelant deviner s'il doit ralentir ou
+attendre que d'autres finissent --- deux conduites opposées.
+
+Et les codes d'erreur se distinguent aussi entre eux :
+
+\begin{longtable}{@{}p{7.0cm} c p{6.4cm}@{}}
+\toprule \textbf{geste} & \textbf{code} & \textbf{ce que le code dit} \\ \midrule \endhead
+\code{verify/<uuid inconnu>} & \att{404} & « je ne l'ai pas » \\
+\code{verify/<pas un uuid>} & \att{400} & « ce n'est pas un identifiant » \\
+corps sans \code{topology} & \att{400} & \emph{et le message nomme le champ manquant} \\
+\code{bundle/:id} sans l'opt-in & \att{404} & et non \code{501} : une surface désactivée ne trahit pas son existence \\
+\bottomrule
+\end{longtable}
+
+\subsection{Les deux piles de clés}
+
+\begin{alerte}
+Le \textbf{run} est scellé sous la clé de la \emph{pile~A} ; le \textbf{bundle exporté} sous celle
+de la \emph{pile~B}, dérivée de la première. Les confondre fait échouer la re-preuve
+« \textbf{au record 0} » --- un message qui accuse la chaîne alors que le fautif est la clé.
+\end{alerte}
+
+La passerelle sait dériver les deux, et c'est elle qu'on interroge plutôt que de refaire la formule
+ailleurs :
+
+\begin{extrait}
+\footnotesize
+\code{efe-swarm-gateway -{}-cle-tenant} \hfill $\rightarrow$ la clé de la \mm{pile A} (scelle les records du run)\\
+\code{efe-swarm-gateway -{}-cle-tenant -{}-bundle} \hfill $\rightarrow$ la clé de la \mm{pile B} (scelle le bundle exporté)
+\end{extrait}
+
+\att{Le numéro du record sépare les causes.} Le message d'échec nomme trois causes possibles ---
+« record altéré, réordonné, \emph{ou mauvaise clé tenant} » --- mais la position les distingue :
+
+\begin{longtable}{@{}p{6.2cm} p{8.8cm}@{}}
+\toprule \textbf{ce qu'on observe} & \textbf{ce qu'on peut en conclure} \\ \midrule \endhead
+cassé au record \textbf{0} & rien n'a vérifié : la clé est probablement la mauvaise \\
+cassé au record \textbf{n > 0} & les $n$ records précédents ont vérifié \emph{sous cette clé} : la clé est bonne, et c'est le record $n$ qui est en cause \\
+\bottomrule
+\end{longtable}
+
+\section{\cun{} --- du record scellé au dossier réglementaire}
+
+\subsection{Quatre cadres, et une couverture qui s'avoue}
+
+\code{reg-evidence} relit une chaîne scellée sous une exigence nommée. Les cadres sont
+\textbf{exactement quatre}, dans une énumération fermée :
+
+\begin{longtable}{@{}p{2.4cm} p{4.2cm} r r r r@{}}
+\toprule \textbf{cadre} & \textbf{texte} & \textbf{mailles} & \textbf{couvert} & \textbf{partiel} & \textbf{hors} \\ \midrule \endhead
+EU AI Act & Règlement (UE) 2024/1689 & 9 & \textbf{2} & 2 & 5 \\
+RGPD \footnotesize v1 figée & Règlement (UE) 2016/679 & 4 & \ko{\textbf{0}} & 3 & 1 \\
+RGPD \footnotesize v2 courante & Règlement (UE) 2016/679 & 5 & \ko{\textbf{0}} & 4 & 1 \\
+CSDDD & Directive (UE) 2024/1760 & 4 & 2 & 1 & 1 \\
+LkSG & \footnotesize loi allemande sur le devoir de vigilance & 4 & 3 & 0 & 1 \\
+\bottomrule
+\end{longtable}
+
+\footnotesize\textcolor{grey}{(mesuré en interrogeant \code{MappingSet::for\_framework} sur les
+quatre gabarits ; CSDDD et LkSG partagent un même registre de 8 mailles tout en restant deux cadres
+distincts.)}\normalsize
+
+\att{Le RGPD ne compte AUCUNE maille couverte}, dans l'une comme dans l'autre de ses deux lectures.
+C'est le cadre où ce périmètre reconnaît le moins --- et il le dit dans son propre artefact plutôt
+que dans une note de bas de page.
+
+\begin{acquis}
+\textbf{La couverture honnête est imposée à la construction.} \code{MappingSet::new} \emph{refuse}
+tout cadre qui ne déclarerait aucune maille \code{OutOfDagScope} --- c'est-à-dire tout cadre qui
+prétendrait tout couvrir. Un registre qui ne s'avoue aucun trou ne peut pas exister dans ce code :
+la modestie est un invariant de type, pas une consigne de rédaction.
+\end{acquis}
+
+\begin{these}
+\textbf{Outillé n'est pas conforme.} \code{reg-evidence} produit des artefacts qui répondent à des
+exigences \emph{nommées}. Produire l'artefact n'est pas être conforme, et ce périmètre ne prétend
+ni l'un ni l'autre au nom d'un tiers.
+\end{these}
+
+\subsection{La console, et ce qu'elle refuse de faire croire}
+
+La console de conformité affiche, en haut de \textbf{chaque} page :
+
+\begin{these}
+« \textbf{Montré vérifié $\neq$ prouvé sans confiance.} Ce que cet écran affiche est rendu par le
+cœur d'audit --- confiance opérationnelle, vous êtes dans le tenant. Ce n'est pas une preuve
+opposable. Pour cela, exportez le dossier : un tiers le re-prouve sans nous. »
+\end{these}
+
+Cette honnêteté n'est pas qu'une phrase : \code{IntegritySemantics} est une énumération à
+\textbf{une seule valeur} (\code{INTEGRITY\_ONLY}). Le type ne peut pas exprimer « correct ». Et
+l'isolation tenant est appliquée au \emph{premier} pas du routeur : le \code{\{t\}} du chemin doit
+égaler le tenant du contexte authentifié, sinon \att{403} --- avant toute lecture.
+
+Deux badges, et le rouge n'est pas décoratif --- il a été obtenu en retouchant un fichier scellé à
+la main :
+
+\begin{longtable}{@{}p{4.8cm} p{10.2cm}@{}}
+\toprule \textbf{badge} & \textbf{ce qu'il dit} \\ \midrule \endhead
+\ok{Vérifié} & « record authentique \& non-altéré », avec la fraîcheur, le nombre de records et le \code{manifest-root} \\
+\ko{Altération détectée} & « le record n'est PAS authentique », \textbf{avec le numéro du record cassé} et le motif \\
+\bottomrule
+\end{longtable}
+
+Et la fraude s'y lit comme une \textbf{contradiction visible} : un criblage sanctions retourné de
+\code{FAIL} à \code{PASS} fait afficher « Statut : \ok{CONFORME} (record) $\cdot$ verdict
+\ko{BLOQUÉ} » --- le statut dérivé et l'agrégat scellé, côte à côte, qui ne disent plus la même
+chose.
+
+\att{Une limite mesurée, et écrite.} La console \textbf{scelle} la supervision humaine mais ne la
+\textbf{persiste pas}. Un officier qui scelle une revue voit \code{303}, puis la revue sur la page ;
+le fichier de records, lui, reste \textbf{identique à l'octet près} --- 6 lignes / 2\,125 octets
+avant, 6 lignes / 2\,125 octets après. La revue vit en mémoire et disparaît au redémarrage.
+
+
+%% ═══════════════ ch03-technologie ═══════════════
+\chapter{La technologie}
+
+\section{Le scellement}
+
+\subsection{La clé, et d'où elle vient}
+
+Le sceau de chaque maillon est un HMAC-SHA256 sous une clé \textbf{dérivée par tenant}. Le client
+détient sa clé : lui seul --- ou l'auditeur à qui il la confie --- peut re-prouver. La confiance
+n'exige donc pas de faire confiance à l'éditeur.
+
+Deux dérivations coexistent, et ce n'est pas une redondance : elles servent deux sous-systèmes.
+
+\begin{longtable}{@{}p{3.8cm} p{11.2cm}@{}}
+\toprule \textbf{où} & \textbf{la formule, lue dans le code} \\ \midrule \endhead
+\code{provenance-dag} & $K_{\text{tenant}} = \mathrm{HMAC}(\text{secret racine},\ \texttt{"efe-prov-dag:v1:tenant:"} \Vert \text{tenant\_id})$ \\
+& \footnotesize\code{src/key.rs}. Le contexte est \textbf{versionné} : changer \code{v1} change toutes les clés, par dessein. \\
+\code{efe-swarm-gateway} & HKDF-SHA256 : sel = les octets de l'UUID du tenant, IKM = le master serveur, info = \code{efe-nano/audit/v1}, 32 octets \\
+\bottomrule
+\end{longtable}
+
+\begin{alerte}
+\code{TenantKey} ne dérive pas \code{Debug} : son \code{Debug} est \textbf{rédigé}, et
+\code{as\_bytes()} est \code{pub(crate)}. La clé ne peut pas fuir dans un journal par accident ---
+la propriété est tenue par le \emph{type}, pas par une consigne.
+\end{alerte}
+
+\subsection{La chaîne, et pourquoi un préfixe se re-prouve}
+
+Le DAG scellé est une chaîne de HMAC courants. Chaque nœud est d'abord validé
+\emph{structurellement} --- ses références doivent exister parmi les identifiants antérieurs, et son
+identifiant doit être unique --- puis scellé :
+
+\begin{these}
+\[
+\text{chaîne}_0 = \mathrm{SHA256}(\textsc{genesis}) \qquad
+\text{sceau}_i = \mathrm{HMAC}\big(K_{\text{tenant}},\ \text{chaîne}_{i-1} \Vert \mathrm{canonical}(n_i)\big) \qquad
+\text{chaîne}_i = \text{sceau}_i
+\]
+\centering Le \code{manifest-root} est le \textbf{dernier} sceau : $\text{chaîne}_n$.
+\end{these}
+
+\ok{La conséquence est immédiate, et c'est tout le produit.} Un préfixe de cette chaîne est
+lui-même une chaîne valide --- elle se termine simplement à \emph{son} dernier sceau. Couper la fin
+d'un bundle ne casse donc rien : cela produit un bundle plus court dont la racine est
+$\text{chaîne}_k$ au lieu de $\text{chaîne}_n$. Le vérifieur qui n'a que le bundle recalcule
+$\text{chaîne}_k$, la trouve cohérente, et rend \ok{0}.
+
+Trois choses, et trois seulement, rattrapent la coupe :
+
+\begin{longtable}{@{}p{5.4cm} p{9.6cm}@{}}
+\toprule \textbf{le témoin} & \textbf{ce qu'il faut détenir} \\ \midrule \endhead
+la \textbf{racine publiée} & $\text{chaîne}_n$, reçue d'ailleurs --- l'option \code{-{}-root} \\
+le \textbf{nombre de nœuds} & publié par l'ancre : le comptage suffit, \textbf{sans clé} \\
+l'\textbf{ancre elle-même} & rang, run, tenant, racine, \textbf{nombre de nœuds}, horodatage \\
+\bottomrule
+\end{longtable}
+
+\att{Et l'ancre reste \emph{notre} fichier.} Le rapport de démarrage le dit sans être interrogé :
+« l'\emph{ailleurs} de l'ancre reste NOTRE fichier, remis par nous : il détecte une troncature, il
+ne dit rien à qui doute de nous ». Une ancre tierce (RFC 3161) est prévue ---
+\code{crates/scella-rfc3161}, variable \code{EFE\_SWARM\_TSA\_URL} --- et sa pose fait
+\emph{dépendre} la route d'export d'un tiers : horodateur muet, export en échec. Le coût est écrit
+avant d'être payé.
+
+\subsection{L'effacement cryptographique}
+
+\code{provenance-dag/src/shred.rs} --- le plus gros fichier du crate --- résout une tension : un
+registre à conserver dix ans doit pouvoir effacer une donnée personnelle sans casser la chaîne. La
+réponse est que \textbf{la chaîne scelle le chiffré} : détruire la clé du contenu rend celui-ci
+illisible sans toucher au sceau, donc sans rompre la re-preuve.
+
+\att{Et le code refuse d'affirmer une destruction qu'il n'a pas faite.} Un cas dont la clé manque
+se lit « clé absente », jamais « broyé » : un trousseau incomplet est une \emph{perte}, pas un
+effacement.
+
+\section{Les vérifieurs}
+
+\subsection{L'arbre de dépendances vide}
+
+\code{verify-mini} porte sa propre implémentation de SHA-256, de HMAC, de l'encodage canonique et du
+parseur JSONL --- sans \code{serde}, sans crate de crypto, sans rien. C'est une propriété
+\textbf{vérifiable} et non une affirmation :
+
+\begin{extrait}
+\footnotesize
+\code{\$ cargo tree -p verify-mini -{}-edges normal}\\
+\code{verify-mini v0.0.1 (crates/verify-mini)}\\[2pt]
+\textcolor{grey}{--- une ligne. La crate, et rien d'autre. Le même essai sur \code{verify-meta-mini}
+rend la même chose.}
+\end{extrait}
+
+\begin{acquis}
+Un tiers sceptique reçoit la source, la recompile \textbf{hors-ligne}, et vérifie. Il ne fait
+confiance ni à l'éditeur, ni à un binaire, ni à un écosystème de paquets. Mesuré : la source
+embarquée dans le bundle de démonstration, copiée \emph{hors} du workspace et recompilée avec
+\code{-{}-offline}, re-prouve 13 records et rend \ok{0} ; sur la copie altérée, \ko{1} au record 11.
+\end{acquis}
+
+Cette source embarquée n'est pas copiée à la main : sept \code{include\_str!} au niveau de la
+bibliothèque la lisent dans \code{crates/verify-mini/src/}. Le bundle transporte donc
+\textbf{toujours} la version du dépôt, et les deux ne peuvent pas diverger.
+
+\subsection{Quatre vérifieurs, deux niveaux}
+
+\begin{longtable}{@{}p{4.0cm} p{3.8cm} p{7.2cm}@{}}
+\toprule \textbf{binaire} & \textbf{ce qu'il lit} & \textbf{ce qu'il sait faire de plus} \\ \midrule \endhead
+\code{verify-mini} & records JSONL & rien --- c'est le point : zéro dépendance \\
+\code{provenance-verify} & records JSONL & \code{-{}-anchor} + \code{-{}-run} : conclure à la \textbf{complétude} \\
+\code{verify-meta-mini} & pas méta + manifeste & \code{-{}-anchor} \textbf{sans clé} : constater une troncature sans rien détenir \\
+\code{efe-meta-verify} & pas méta + manifeste & le cross-check de fidélité \\
+\bottomrule
+\end{longtable}
+
+\code{verify-meta-mini} est à la fois \textbf{feuille et racine} du graphe interne : zéro dépendance
+entrante, zéro sortante. C'est la propriété exacte qu'on demande à un instrument qu'un tiers doit
+pouvoir recompiler sans rien croire.
+
+\section{La frontière, et l'egress gardé}
+
+\subsection{Quatre destinations, une seule règle}
+
+Le seul endroit d'où des octets peuvent sortir de la machine est la frontière LLM. Quatre
+destinations sont configurables, et un \textbf{unique} validateur les gouverne --- il existe
+exactement cinq sites d'appel de \code{valider\_endpoint\_sortie} dans le dépôt : les quatre
+fournisseurs, et le reformulateur SLM.
+
+\begin{longtable}{@{}p{6.0cm} p{9.0cm}@{}}
+\toprule \textbf{la règle, en trois clauses} & \textbf{ce qu'elle refuse} \\ \midrule \endhead
+autorité inanalysable $\Rightarrow$ refus & \emph{fail-closed} : on ne devine pas \\
+\code{https} partout ; \code{http} \textbf{seulement} vers la machine locale & « \code{http://} n'est permis que vers la machine locale ; \code{evil.example} n'en est pas --- les prompts partiraient en clair » \\
+jamais de \code{userinfo} & un identifiant dans une URL finirait dans le reçu \emph{scellé}, donc dans un artefact d'audit conservé et remis à un tiers \\
+\bottomrule
+\end{longtable}
+
+\begin{alerte}
+\textbf{La troisième clause n'était pas tenue, et c'est ce document qui l'a trouvée.} Elle était
+approchée par « l'autorité commence-t-elle par l'hôte ? » --- condition \emph{nécessaire} mais pas
+\emph{suffisante}. Mesuré le 6 septembre 2026 :
+
+\medskip
+\begin{tabular}{@{}p{9.4cm}l@{}}
+\code{https://secret@api.anthropic.com/v1} & \ok{refusé} \\
+\code{https://api.anthropic.com@evil.com/v1} & \ok{refusé} (confusion d'hôte) \\
+\code{https://api.anthropic.com:jeton@api.anthropic.com/v1} & \ko{ACCEPTÉ} \\
+\code{https://api.anthropic.com.evil@api.anthropic.com/v1} & \ko{ACCEPTÉ} \\
+\end{tabular}
+
+\medskip
+Le cas \emph{dangereux} --- celui où l'hôte réel n'est pas celui qu'on croit --- était bien attrapé.
+Ce qui passait, c'est un \textbf{identifiant}. Corrigé en demandant la réponse à l'analyseur
+unique, qui découpait déjà le \code{userinfo} et jetait le résultat : \code{Cible} porte désormais
+\code{porte\_userinfo}. Refaire le découpage dans le validateur en aurait fait un \emph{second}
+analyseur --- ce que M1 a supprimé, et pour exactement cette raison.
+\end{alerte}
+
+Et l'analyseur d'autorité est \textbf{unique} : le crate \code{scella-authority}, feuille du graphe,
+existe parce qu'il en avait existé cinq copies, et que l'une d'elles lisait
+\code{127.0.0.1:8080@evil.com} comme un hôte local --- coupant TLS vers \code{evil.com} sur
+875 formes d'URL. Il refuse aussi le non-ASCII (l'IDNA contacterait le punycode, que ce crate ne
+calcule pas), l'antislash, l'espace et les caractères de contrôle : plutôt refuser que \emph{mentir}
+sur la localité.
+
+\subsection{Crier sur un acte, se taire sur une absence}
+
+Au démarrage, un fournisseur qui ne s'enregistre pas pose une question : faut-il le dire ?
+
+\begin{longtable}{@{}p{5.4cm} c p{7.8cm}@{}}
+\toprule \textbf{situation} & & \textbf{pourquoi} \\ \midrule \endhead
+la variable n'existe pas & \textbf{silence} & personne n'a agi : c'est le déploiement normal de qui n'utilise pas ce fournisseur \\
+une valeur est posée puis rejetée & \textbf{on crie} & l'opérateur a agi ; il doit l'apprendre au boot, pas en constatant des 403 plus tard \\
+\bottomrule
+\end{longtable}
+
+\att{Le discriminant était juste et pourtant faux.} \code{ApiKey::from\_env} typait les
+\textbf{trois} situations --- variable absente, valeur vide, préfixe non conforme --- en un seul
+\code{CoordError::Config}. Le bras bruyant s'exécutait donc sur une clé \emph{manquante}, et
+imprimait « ce n'est pas une clé manquante » --- trois fois, sur la posture la plus fréquente qui
+soit. Un discriminant juste, rendu faux par le \emph{type} de l'erreur qu'il discriminait, et
+qu'aucun test ne pouvait viser parce qu'il vivait dans les bras d'un \code{match} plutôt que dans
+une fonction. Corrigé par une variante \code{ConfigAbsent} et l'extraction du prédicat
+\code{bruyant()}, tous deux sous test.
+
+\section{Le garde de configuration}
+
+La frontière est un egress \textbf{payant} vers un tiers. Chaque invariant manquant \textbf{refuse
+de démarrer} --- \code{exit 78}, \code{EX\_CONFIG} de \code{sysexits.h} : configuration invalide,
+non-retryable. Jamais de dégradation en silence.
+
+\begin{longtable}{@{}p{4.2cm} p{10.8cm}@{}}
+\toprule \textbf{invariant} & \textbf{ce que son absence coûte, dit par le message lui-même} \\ \midrule \endhead
+master $\geq$ 32 octets & « provenance non-scellable, chaque run échouerait 500 » \\
+auth OIDC frontière & « sinon egress tiers \textbf{PAYANT} sans authentification (tenant/rôles en clair) » \\
+store durable & « sinon les reçus R4 (la preuve) sont \textbf{perdus à chaque rollout} » \\
+capacité de caviardage & la feature \code{pii}, ou une reconnaissance explicite du risque \\
+\bottomrule
+\end{longtable}
+
+\ok{Le préflight lit des \emph{intentions} d'environnement, jamais une connexion.} C'est pourquoi
+les trois refus se démontrent sans démon Docker et sans base de données --- le banc du Seuil les
+joue en 163 secondes, et la CI aussi. Un cinquième cas, plus subtil, est également gardé : un master
+\emph{fourni} mais trop court booterait « vert » puis échouerait 500 à chaque scellement ; il est
+refusé tout de suite, par le \emph{même} contrat que le scellement (une dérivation à blanc).
+
+\section{L'authentification}
+
+\begin{acquis}
+L'algorithme de vérification est \textbf{dérivé de la clé}, jamais lu dans l'en-tête du jeton. Une
+clé EC donne ES256, une clé RSA donne RS256. Un jeton HS256 signé avec la \emph{clé publique} ---
+l'attaque par confusion d'algorithme, où le vérifieur accepte comme secret partagé ce qui est
+public --- est refusé, parce que le vérifieur ne demande jamais au jeton quel algorithme employer.
+\end{acquis}
+
+\section{Le profil servi}
+
+\subsection{Déclarer n'est pas servir}
+
+La passerelle imprime, avant d'écouter, la liste de ce qu'elle sert \emph{réellement} : chaque
+capacité, son état (\ok{SERVIE} ou \att{DÉGRADÉE}), la variable qui la gouverne, et --- pour les
+dégradées --- \textbf{ce que l'absence coûte}. Sur le profil du coin : 6 servies, 11 dégradées, et
+chacune des onze nomme son coût.
+
+\mesure{Neuf profils}{\code{ls profiles/*.env}} vivent dans \code{profiles/}, et chacun porte à côté
+de lui un \code{*.expected.json} : la matrice de capacités \textbf{attendue}. Un test confronte les
+deux --- l'écart entre le déclaré et le servi ne peut pas s'installer en silence.
+
+\begin{these}
+Aucun profil ne porte de secret. Un profil qui embarquerait le master ferait dire au rapport
+« provenance : SERVIE » alors que la clé serait \textbf{publiquement connue} --- un vert malhonnête
+de manuel. Le contrôle \code{profile-check.sh} le refuse, et le test
+\code{aucun\_profil\_ne\_contient\_de\_secret} aussi. Les variables qu'un profil \emph{exige} sans
+les porter sont déclarées par un marqueur \code{\#!injection}.
+\end{these}
+
+\subsection{Un interrupteur posé qui n'a aucun effet doit le dire}
+
+\code{EFE\_SWARM\_BUNDLE\_ENABLED=1} est \textbf{refusé} : la passerelle exige exactement
+\code{true}, et elle ne se contente pas d'ignorer la valeur --- elle annonce que le geste de
+l'opérateur n'a rien produit.
+
+\begin{extrait}
+\footnotesize
+$\triangle$\; \code{EFE\_SWARM\_BUNDLE\_ENABLED = '1'} --- REFUSÉ (attendu : exactement \code{true}).\\
+\hspace*{1.2em}\emph{Vous avez posé cet interrupteur et il n'a EU AUCUN EFFET : route NON montée (404).}
+\end{extrait}
+
+Le drapeau \code{-{}-profile-report} rend la même chose en JSON, et \textbf{sort} --- il porte un
+tableau \code{invalides} listant, pour chaque interrupteur refusé, ce qui a été \emph{fourni} et ce
+qui était \emph{attendu}. Avec la bonne valeur, le tableau est vide : c'est la contre-épreuve, et
+elle tient en un mot changé.
+
+\section{L'emballage}
+
+\begin{longtable}{@{}p{4.0cm} p{11.0cm}@{}}
+\toprule \textbf{choix} & \textbf{pourquoi} \\ \midrule \endhead
+image \textbf{distroless} & ni shell, ni gestionnaire de paquets, ni utilitaires. Une image de démonstration est ce qu'un inconnu exécute \emph{en premier} : c'est le pire moment pour offrir une surface d'attaque \\
+quatre binaires, une image & la démonstration doit tenir en un \code{docker compose up} ; deux images seraient deux builds du même workspace \\
+un pilote \textbf{compilé} & sans shell, un script n'aurait rien pour tourner \\
+\code{-{}-locked} & le build échoue si \code{Cargo.lock} a bougé, plutôt que de résoudre en silence d'autres versions que celles testées \\
+uid \textbf{65532}, non-root & et les répertoires de travail créés à l'étage builder \emph{avec le bon propriétaire} : un volume nommé hérite du propriétaire du dossier de l'image \\
+\bottomrule
+\end{longtable}
+
+\att{Ce dernier point a coûté un défaut invisible.} Le chemin \code{/var/lib/scella} n'existait pas
+dans l'image ; le volume naissait donc \code{root:root} alors que le conteneur tourne en 65532. La
+publication d'ancre échouait en « Permission denied », et la route de bundle rendait \code{500}.
+\textbf{Le profil de production n'avait jamais produit de bundle dans Docker} --- et aucun contrôle
+ne pouvait le voir, parce que tous lancent le binaire de l'\emph{hôte}, qui possède son répertoire.
+Seul le chemin d'un inconnu passe par là.
+
+
+%% ═══════════════ ch04-architecture ═══════════════
+\chapter{L'architecture des fichiers}
+\label{ch:archi}
+
+\section{Le recensement, et pourquoi il porte sa commande}
+
+Le périmètre livré compte \mesure{1\,019 fichiers}{\code{find . -type f -not -path './.git/*' | wc -l}},
+répartis en \mesure{23 extensions}{comptées par \code{os.walk}} et
+\mesure{180 répertoires}{toutes profondeurs, racine comprise}, dont
+\mesure{172}{contiennent au moins un fichier}.
+
+\att{Ce chiffre-là, ce document l'a d'abord donné faux.} Il annonçait « 52 répertoires » --- qui
+n'était pas un compte de répertoires mais un \emph{regroupement à la profondeur 2}, présenté comme
+un compte. La faute que ce document décrit ailleurs, commise par lui, et corrigée en recomptant.
+
+Ce document donne des comptes, et il donne avec eux la commande qui les produit. Ce n'est pas une
+coquetterie : le dépôt lui-même a payé pour l'apprendre. Son fichier \code{profiles/README.md} porte
+cette phrase, et elle vaut pour ce document autant que pour lui :
+
+\begin{these}
+« Ce fichier ne donne volontairement \textbf{aucun compte} de profils. La version précédente
+annonçait \emph{trois} configurations alors qu'il y en avait \emph{neuf} : un nombre figé dans une
+phrase vieillit à chaque ajout, et personne ne le voit. \code{ls profiles/*.env} répond, et il ne se
+trompe pas. »
+\end{these}
+
+\begin{alerte}
+\textbf{Un piège, tombé trois fois.} Le dossier porte un \code{Cargo.toml} de workspace à sa racine.
+Toute commande \code{cargo} lancée depuis n'importe lequel de ses sous-répertoires y recrée un
+\code{target/} --- cargo remonte les parents jusqu'au premier workspace trouvé.
+
+Le 6 septembre 2026, trois fois : une commande de vérification a laissé 322 fichiers et 13\,Mo ; une
+autre, 383 ; et les agents qui ont cartographié ce périmètre pour écrire ce document en ont laissé
+\textbf{150\,966, soit 22\,Go}. Un recensement lancé sans nettoyer aurait rendu \textbf{151\,147} au
+lieu de 1\,019.
+
+C'est le premier chiffre de ce document, et il a fallu le mesurer trois fois pour l'obtenir.
+\end{alerte}
+
+\section{Ce que porte la racine}
+
+Vingt-six fichiers décident, à la racine, de ce que le dépôt est.
+
+\begin{longtable}{@{}p{4.0cm}p{11.0cm}@{}}
+\toprule \textbf{fichier} & \textbf{ce qu'il décide} \\ \midrule \endhead
+\code{Cargo.toml} & les 30 membres du workspace, et les versions partagées \\
+\code{Cargo.lock} & la résolution épinglée --- \code{-{}-locked} fait échouer le build si elle a bougé \\
+\code{rust-toolchain.toml} & Rust \textbf{1.88}, épinglé : la CI et la machine de l'auteur compilent le même \\
+\code{compose.yaml} & les six services et les trois profils de \emph{build} \\
+\code{clippy.toml}, \code{rustfmt.toml} & les règles de lint et de forme \\
+\code{.gitignore} & ce qui n'est pas versionné --- et, dans le dépôt de livraison, deux levées explicites \\
+\code{.gitleaks.toml} & les exemptions de recherche de secrets, chacune portant sa raison écrite \\
+\code{.dockerignore} & sans lui le contexte de build pèserait ${\sim}116$\,Go (\code{target/}) \\
+\code{LICENSE} & \code{All rights reserved} --- le périmètre est propriétaire \\
+\code{LICENSE-MIT} & l'unique exception : \code{crates/efe-nano-sdk/**} \\
+\code{README.md} & la première porte : la commande, ce qu'elle montre, ce qu'elle ne prouve pas \\
+\code{LISEZ-MOI-C1-C3.md} & l'inventaire mesuré du périmètre \\
+\code{CONTRIBUTING.md} & comment on travaille ici, et ce que le dépôt n'a pas \\
+\code{SECURITY.md} & ce qui est vrai, où le vérifier, et ce qui manque \\
+\code{DECISION-PERIMETRE.md} & la décision É0 : \emph{ce} qui a été retiré, et sur quelle preuve \\
+\code{LISEZ-MOI-LE-DOSSIER.md} & ce que le dossier de livraison contient, et ce qu'il n'a pas \\
+\code{.pre-commit-config.yaml}, \code{.yamllint} & l'outillage de forme \\
+\code{mypy.ini}, \code{ruff.toml}, \code{pyproject.toml} & la configuration Python résiduelle \\
+\code{renovate.json}, \code{.editorconfig}, \code{.envrc}, \code{.env.template} & la maintenance et l'environnement local \\
+\bottomrule
+\end{longtable}
+
+\att{Trois fichiers de plus qu'on n'attendrait.} \code{mypy.ini}, \code{ruff.toml} et
+\code{pyproject.toml} configurent un outillage \textbf{Python} dans un dépôt qui compte
+\mesure{deux fichiers \code{.py}}{\code{find . -name '*.py' | wc -l}} --- un évaluateur d'agrégateur
+et un validateur de grammaires. C'est un résidu de l'ère précédente : la règle de É0 (« garder ce qui
+est seulement inutilisé ») les a laissés, et ils ne coûtent que ce bruit-ci.
+
+\section{Les 30 crates}
+
+\subsection{Ce que chacun pèse, et à quel produit il appartient}
+
+L'appartenance n'est pas déclarée : elle est \textbf{calculée}, par fermeture transitive du graphe de
+dépendances réel (\code{cargo metadata}), en écartant les \code{dev-dependencies} --- qui ne lient
+rien à l'exécution.
+
+\begin{itemize}[leftmargin=1.1em,itemsep=1pt]
+\item \ctrois{} --- atteint depuis \code{efe-swarm-gateway} ou \code{scella-preuve} \emph{avec les features par défaut} ;
+\item \ctrois{}$^{\circ}$ --- atteint seulement par une dépendance \textbf{optionnelle}, donc sous une feature (\code{frontier-llm}, \code{pii}, \code{reg-evidence}\ldots) ;
+\item \cun{} --- atteint depuis \code{audit-console} ou \code{reg-evidence} ;
+\item vér. --- atteint depuis l'un des quatre vérifieurs ;
+\item --- --- atteint par aucun des quatre points d'entrée.
+\end{itemize}
+
+% généré depuis .dossier-complet/censement.json — ne pas éditer à la main
+\begin{longtable}{@{}p{4.3cm}p{1.6cm}r r r p{5.7cm}@{}}
+\toprule \textbf{crate} & \textbf{produit} & \textbf{.rs} & \textbf{lignes} & \textbf{tests} & \textbf{rôle déclaré} \\ \midrule \endhead
+\code{efe-nano} & --- & 103 & 51\,372 & 1\,173 & \footnotesize EFE Nano Agent Swarm runtime : catalog + dispatcher + Mode A/B/C executors + audit trace + billing. \\
+\code{efe-coordinator} & \ctrois{}$^{\circ}$ & 95 & 34\,050 & 753 & \footnotesize DAG orchestrator + stigmergic blackboard + multi-LLM bridge + SSE streaming for the nano-robots swarm. \\
+\code{efe-swarm-gateway} & \ctrois{} & 49 & 17\,879 & 250 & \footnotesize passerelle HTTP du SDK essaim : POST /v1/swarm/run + GET /v1/swarm/verify/:id (le moat exposé : re-preuve indépe \\
+\code{efe-nano-sdk} & \ctrois{} vér. & 22 & 11\,055 & 331 & \footnotesize EFE Nano Agent Swarm SDK : public API + shared types + proc-macros for nano agent authoring. \\
+\code{efe-swarm-sdk} & \ctrois{} & 42 & 10\,372 & 113 & \footnotesize SDK unifié : swarm.run(task, topology, budget). TopologySpec (T1/T2/T3/Consensus/Auto), ClientMode (Keyless/Self \\
+\code{efe-multi-llm} & \ctrois{}$^{\circ}$ & 48 & 9\,453 & 250 & \footnotesize Coordination multi-LLM (Vote/Relay/Debate/Specialist/Cascade) via nano-robots. \\
+\code{efe-swarm-provenance} & \ctrois{} & 33 & 9\,303 & 158 & \footnotesize provenance par-agent : l'atome AgentCallRecord (« qui a dit quoi, quand, à partir de quoi »), hashé canoniquemen \\
+\code{efe-nano-app-coordinator} & \ctrois{}$^{\circ}$ & 29 & 8\,812 & 201 & \footnotesize JSON Grammar enforcement + Rust clients for the 6 nano-robots SLM swarm. \\
+\code{audit-console} & \cun{} & 26 & 8\,476 & 167 & \footnotesize audit-console : la console opérationnelle de conformité. Coquille de transport (HTTP fait main, egress-gardé) + \\
+\code{efe-blackboard} & \ctrois{} & 30 & 8\,070 & 134 & \footnotesize Sprint 13 N21 : Shared blackboard + EventBus for inter-agent communication in a swarm DAG. \\
+\code{efe-swarm-topology} & \ctrois{} & 30 & 7\,623 & 107 & \footnotesize couche topologie : T1 Generate-Verify + T2 Pipeline composées sur le substrat efe-blackboard (WS1-WS6). \\
+\code{scella-conservation} & --- & 12 & 3\,687 & 65 & \footnotesize la conservation opérable : archiver une chaîne scellée, la restaurer en distinguant CINQ issues (restaurée, tron \\
+\code{provenance-bridge} & \ctrois{} & 10 & 2\,734 & 49 & \footnotesize dérivation PURE et déterministe d'un run scellé (pile A : AgentCallRecord + chaîne HMAC tenant) vers les nœuds t \\
+\code{reg-evidence} & \ctrois{}$^{\circ}$ \cun{} & 12 & 2\,700 & 42 & \footnotesize reg-evidence : dérive du DAG scellé re-prouvé les artefacts d'évidence réglementaire (EU AI Act art. 12/13/14/26 \\
+\code{audit-api} & \cun{} & 11 & 2\,326 & 43 & \footnotesize audit-api : projette le DAG scellé en décisions lisibles + statut d'intégrité, re-prouve à la lecture (cache-par \\
+\code{provenance-dag} & \ctrois{} \cun{} vér. & 8 & 2\,153 & 52 & \footnotesize le DAG scellé re-prouvable : nœuds typés (acte/arête/évidence/humain), encodage canonique, chaîne HMAC-SHA256 éc \\
+\code{efe-swarm-memory} & \ctrois{} & 6 & 1\,997 & 40 & \footnotesize mémoire/apprentissage inter-runs : la mémoire est une ENTRÉE épinglée/hachée/tracée. Store versionné tenant-scop \\
+\code{forensic-export} & \ctrois{} \cun{} & 9 & 1\,725 & 34 & \footnotesize assembleur du bundle forensic trustless : re-prouve les records, vendore la source du vérifieur (à re-compiler p \\
+\code{provenance-capture} & \ctrois{}$^{\circ}$ \cun{} & 9 & 1\,724 & 32 & \footnotesize la couche de capture : garde de souveraineté (egress refusé), les trois taps (appel LLM→acte, message→arête, out \\
+\code{scella-mz} & --- & 5 & 1\,722 & 28 & \footnotesize --- \\
+\code{verify-mini} & \ctrois{} vér. & 9 & 1\,447 & 32 & \footnotesize verify-mini : le vérifieur forensic re-prouvable à arbre de dépendances LITTÉRALEMENT vide (std-only). SHA-256/H \\
+\code{verify-meta-mini} & vér. & 7 & 1\,443 & 14 & \footnotesize Zero-dependency re-prover for meta-swarm consensus provenance: hand-written SHA-256/HMAC + hand-written JSONL pa \\
+\code{efe-meta-verify} & vér. & 2 & 1\,246 & 21 & \footnotesize Standalone re-prover for meta-swarm consensus provenance (2 files + 1 tenant key -> exit 0/1, localized fault). \\
+\code{efe-pii} & \ctrois{}$^{\circ}$ & 8 & 1\,203 & 32 & \footnotesize PII detection + auto-redaction. Presidio-backed. \\
+\code{scella-rfc3161} & \ctrois{} \cun{} & 5 & 1\,121 & 28 & \footnotesize --- \\
+\code{scella-authority} & \ctrois{} \cun{} & 3 & 1\,119 & 18 & \footnotesize l'unique analyseur d'autorité : extrait d'un endpoint l'hôte que le client HTTP contactera RÉELLEMENT, ou refuse \\
+\code{efe-swarm-dashboard} & \ctrois{} & 7 & 1\,110 & 21 & \footnotesize cœur du dashboard live : DashboardBus (ring de rejeu + broadcast) sur les seams substrat (WriteSink/EventSink) + \\
+\code{scella-preuve} & \ctrois{} & 1 & 678 & 6 & \footnotesize le pilote de la démonstration en une commande : il fait servir un reçu par la passerelle, l'exporte, et le re-pr \\
+\code{provenance-verify} & vér. & 1 & 545 & 14 & \footnotesize vérifieur forensic autonome : prend un JSONL de records scellés + la clé tenant, re-dérive et vérifie l'intégrit \\
+\code{efe-audit-core} & \ctrois{} vér. & 3 & 323 & 14 & \footnotesize primitives d'audit PARTAGÉES : HMAC chaîné (HMAC-SHA256) + dérivation de clés par tenant (HKDF-SHA256), byte-ide \\
+\midrule \textbf{30 crates} & & \textbf{635} & \textbf{207\,468} & \textbf{4\,222} & \\ \bottomrule
+\end{longtable}
+
+
+\subsection{Les quatre fermetures, et la propriété qui sépare les deux produits}
+
+\begin{longtable}{@{}p{7.2cm}r p{6.6cm}@{}}
+\toprule \textbf{fermeture} & \textbf{crates} & \textbf{ce qu'elle est} \\ \midrule \endhead
+\ctrois{} avec les features par défaut & 16 & ce que le \emph{coin} embarque réellement \\
+\ctrois{} avec ses dépendances optionnelles & 22 & les profils \code{jonction} et \code{production} \\
+\cun{} « Le Registre » & 8 & la console et le registre d'évidence \\
+les quatre vérifieurs & 7 & ce qu'un tiers recompile \\
+\bottomrule
+\end{longtable}
+
+\begin{acquis}
+\textbf{La séparation des deux produits tient au niveau du graphe, pas seulement du manifeste.}
+
+\code{reg-evidence} \textbf{n'appartient pas} à la fermeture par défaut de \ctrois{} (16 crates) ; il
+apparaît dans la fermeture avec options (22 crates), qui est exactement le profil \code{jonction}. Le
+coin ne transporte donc rien de l'expansion, et ce n'est pas une intention écrite dans un
+commentaire : c'est une propriété du graphe, vérifiable par une commande.
+\end{acquis}
+
+\subsection{Trois crates n'appartiennent à aucun produit}
+
+\begin{longtable}{@{}p{4.4cm}r r p{7.6cm}@{}}
+\toprule \textbf{crate} & \textbf{lignes} & \textbf{tests} & \textbf{ce qu'il est} \\ \midrule \endhead
+\code{efe-nano} & 51\,372 & 1\,175 & une \textbf{bibliothèque} sans binaire --- le runtime de l'ère précédente \\
+\code{scella-conservation} & 3\,687 & 65 & le binaire \code{scella-conserver} : archivage, restauration, rotation de génération de clé \\
+\code{scella-mz} & 1\,722 & 28 & le binaire \code{scella-mz} : la mesure du cadrage \\
+\bottomrule
+\end{longtable}
+
+Les deux derniers sont des \textbf{outils autonomes} : rien ne doit en dépendre, et
+\code{p2-check.sh} et \code{mz-check.sh} les jouent. Le premier est plus remarquable.
+
+\begin{alerte}
+\code{efe-nano} est le plus gros crate du workspace : \mesure{51\,372 lignes}{24{,}8\,\% de tout le
+Rust} et \mesure{1\,175 tests}{29{,}6\,\% de tous les tests}. Il ne déclare \textbf{aucun}
+\code{[[bin]]}, et \textbf{aucun crate n'en dépend à l'exécution} : les deux seules déclarations ---
+\code{efe-swarm-topology} et \code{efe-blackboard} --- sont des \code{[dev-dependencies]}, présentes
+uniquement pour compiler leurs propres tests.
+
+Ce n'est pas un défaut : c'est l'application littérale de la règle écrite dans
+\code{DECISION-PERIMETRE.md} --- « \emph{retirer ce qu'un document diffère ou exclut} \ldots
+\emph{garder ce qui est seulement inutilisé} », une ligne « asymétrique à dessein », parce qu'« un
+fichier en trop qui compile coûte du bruit, un fichier manquant coûte une pièce du produit ». Un quart
+du Rust de ce dépôt est du bruit assumé, et c'est écrit.
+\end{alerte}
+
+\subsection{Le graphe interne}
+
+\mesure{78 arcs}{\code{cargo metadata}, dépendances internes au workspace} relient les 30 crates,
+dont 16 de \code{dev} et 5 optionnels.
+
+\begin{longtable}{@{}p{5.2cm}p{9.8cm}@{}}
+\toprule \textbf{propriété} & \textbf{crates} \\ \midrule \endhead
+\textbf{feuilles} --- zéro dépendance interne, donc recompilables seules & \code{verify-mini}, \code{verify-meta-mini}, \code{provenance-dag}, \code{scella-authority}, \code{scella-rfc3161}, \code{efe-pii}, \code{efe-nano-sdk}, \code{efe-nano-app-coordinator} \\
+\textbf{racines} --- rien n'en dépend, ce sont les points d'entrée & \code{efe-swarm-gateway}, \code{audit-console}, \code{scella-preuve}, \code{provenance-verify}, \code{verify-meta-mini}, \code{efe-meta-verify}, \code{efe-nano}, \code{scella-conservation}, \code{scella-mz} \\
+\textbf{les plus dépendus} & \code{efe-nano-sdk} (10), \code{provenance-dag} (9), \code{scella-authority} (5), \code{efe-blackboard} (5) \\
+\bottomrule
+\end{longtable}
+
+\section{Les fichiers, par extension}
+
+\begin{longtable}{@{}lr p{10.6cm}@{}}
+\toprule \textbf{extension} & \textbf{n} & \textbf{ce que c'est} \\ \midrule \endhead
+\code{.rs} & 642 & \footnotesize le code Rust des 30 crates \\
+\code{.json} & 85 & \footnotesize recensements, mappings réglementaires versionnés, profils \emph{attendus}, trust-root Sigstore \\
+\code{.md} & 71 & \footnotesize documentation : les quatre portes d'entrée, runbooks, dossiers réglementaires rendus \\
+\code{.pdf} & 47 & \footnotesize les livrables --- 40 dans \code{docs/}, 7 dans \code{hors-depot/} \\
+\code{.tex} & 40 & \footnotesize les sources LaTeX des 40 livrables de \code{docs/} \\
+\code{.toml} & 38 & \footnotesize manifestes Cargo (30 + racine), clippy, rustfmt, rust-toolchain, gitleaks, ruff \\
+\code{.sh} & 31 & \footnotesize les 16 contrôles, les 2 bancs, et l'outillage SLM de \code{scripts/} \\
+\code{.env} & 9 & \footnotesize les 9 profils d'environnement --- aucun ne porte de secret \\
+\code{(sans extension)} & 8 & \footnotesize \code{LICENSE}, \code{LICENSE-MIT}, \code{.envrc}, \code{.editorconfig} et divers \\
+\code{.jsonl} & 8 & \footnotesize journaux scellés : records et bundles de démonstration \\
+\code{.html} & 7 & \footnotesize les trois dossiers réglementaires rendus pour lecture \\
+\code{.sql} & 6 & \footnotesize six migrations de schéma (\code{crates/efe-nano/migrations/}) \\
+\code{.gbnf} & 5 & \footnotesize cinq grammaires de décodage contraint pour les SLM locaux \\
+\code{.txt} & 5 & \footnotesize fixtures et notes \\
+\code{.yaml} & 4 & \footnotesize \code{compose.yaml}, politiques Sigstore, pre-commit, yamllint \\
+\code{.yml} & 4 & \footnotesize les workflows GitHub Actions \\
+\code{.py} & 2 & \footnotesize deux outils : évaluation d'agrégateur, validation de grammaires \\
+\code{.log} & 2 & \footnotesize les deux journaux d'\textbf{ancres} des bundles de démonstration \\
+\code{.lock} & 1 & \footnotesize \code{Cargo.lock} --- la résolution épinglée, imposée par \code{-{}-locked} \\
+\code{.ini} & 1 & \footnotesize configuration mypy \\
+\code{.template} & 1 & \footnotesize le gabarit d'environnement \\
+\code{.coin} & 1 & \footnotesize \code{docker/Dockerfile.coin} --- l'image des quatre binaires \\
+\code{.svg} & 1 & \footnotesize l'animation Seuil/Registre \\
+\midrule \textbf{23 extensions} & \textbf{1\,019} & \\ \bottomrule
+\end{longtable}
+
+
+\section{Les répertoires}
+
+\begin{longtable}{@{}p{3.4cm}r p{10.6cm}@{}}
+\toprule \textbf{répertoire} & \textbf{fichiers} & \textbf{contenu} \\ \midrule \endhead
+\code{crates/} & 765 & les 30 membres du workspace \\
+\code{docs/} & 110 & 40 \code{.tex} et leurs 40 \code{.pdf}, plus les runbooks et rapports \\
+\code{scripts/} & 47 & les 16 contrôles, les 2 bancs, et l'outillage SLM \\
+\code{hors-depot/} & 42 & ce qui est C1/C3 sans venir du dépôt de travail \\
+(racine) & 26 & les fichiers du § précédent \\
+\code{profiles/} & 20 & les 9 profils \code{.env} et leurs 9 \code{.expected.json} \\
+\code{.github/} & 4 & le workflow \code{portes.yml} et ses annexes \\
+\code{.sigstore/} & 3 & \code{policy.yaml}, \code{trusted-root.json} (racine TUF épinglée), \code{README.md} \\
+\code{docker/} & 1 & \code{Dockerfile.coin} --- deux étages, distroless, quatre binaires \\
+\code{examples/} & 1 & \code{run.json} --- la charge d'un run de démonstration \\
+\midrule \textbf{total} & \textbf{1\,019} & \\
+\bottomrule
+\end{longtable}
+
+\section{Les vingt-deux scripts}
+
+\mesure{16 portent le suffixe \code{-check.sh}}{\code{ls scripts/*-check.sh | wc -l}} ; les six autres
+sont les deux bancs, les deux démonstrations, le forgeur de jeton, et l'assemblage du premier reçu.
+
+\begin{longtable}{@{}p{4.6cm}r c c p{6.0cm}@{}}
+\toprule \textbf{script} & \textbf{lignes} & \textbf{docker} & \textbf{3 états} & \textbf{ce qu'il mesure} \\ \midrule \endhead
+\code{portes-check.sh} & 168 & --- & oui & \code{clippy -D warnings} sur \emph{chaque} profil lu dans \code{compose.yaml} \\
+\code{profile-check.sh} & 133 & --- & --- & le profil déclaré face au profil servi ; aucun secret dans un \code{.env} \\
+\code{m4-check.sh} & 106 & --- & --- & la charge utile : passerelle, reçu, ancre, troncature \\
+\code{m5-check.sh} & 95 & --- & --- & la jonction : le pont réglementaire \\
+\code{m6-check.sh} & 189 & --- & --- & la conservation câblée au service \\
+\code{m7-check.sh} & 151 & --- & --- & le service de lecture (S3) \\
+\code{m8-check.sh} & 222 & --- & --- & la console opposable, les barreaux de canal \\
+\code{m9-check.sh} & 135 & --- & --- & --- \\
+\code{mz-check.sh} & 176 & --- & --- & la mesure du cadrage (exige un modèle de plusieurs Go) \\
+\code{p1-check.sh} & 584 & \textbf{oui} & --- & le profil de production, démarré, tué, redémarré, reçu re-prouvé \\
+\code{p2-check.sh} & 140 & --- & --- & archivage, restauration, rotation de génération \\
+\code{p3-check.sh} & 116 & --- & --- & aucune cible abandonnée \\
+\code{e1-check.sh} & 551 & \textbf{oui} & oui & l'emballage : image, volume, réseau \\
+\code{d3-check.sh} & 183 & --- & oui & licences, secrets (arbre \emph{et} historique), liens des portes \\
+\code{orphelins-check.sh} & 142 & --- & --- & le recensement des orphelins, rendu répétable \\
+\code{r3-check.sh} & 318 & --- & oui & la suite complète, rejouée (trois tours pour le critère) \\
+\midrule
+\code{banc-seuil.sh} & 476 & --- & oui & \ctrois{} : runs, écrêtages, reçu, troncature, \code{exit 78} \\
+\code{banc-registre.sh} & 330 & --- & oui & \cun{} : conforme, menteur-mais-scellé, altéré \\
+\code{mon-premier-recu.sh} & 279 & \textbf{oui} & oui & l'assemblage du premier reçu opposable \\
+\code{p1-jeton.sh} & 142 & --- & --- & la forge d'un jeton OIDC de test \\
+\code{demo-local-receipt.sh} & 101 & --- & --- & le bundle de démonstration local \\
+\code{demo-consensus-receipt.sh} & 127 & --- & --- & le bundle de consensus méta \\
+\bottomrule
+\end{longtable}
+
+\mesure{Trois scripts}{lignes \code{docker} exécutables, hors commentaires et hors chaînes affichées}
+exigent réellement un démon Docker : \code{e1-check}, \code{p1-check} et \code{mon-premier-recu}. Les
+quatre contrôles que la CI ne joue pas sont ces deux premiers (démon), \code{mz-check} (un modèle de
+plusieurs gigaoctets) et \code{r3-check} (trois tours d'affilée là où la CI n'en joue qu'un) --- soit
+\textbf{douze sur seize} joués à chaque \code{push}.
+
+\section{L'appareil de test}
+
+\subsection{Trois nombres, et pourquoi ils diffèrent}
+
+\begin{longtable}{@{}p{7.0cm}r p{6.6cm}@{}}
+\toprule \textbf{ce qu'on compte} & & \textbf{par quoi} \\ \midrule \endhead
+attributs déclarés dans les sources & \textbf{4\,222} & \code{\textasciicircum{}\textbackslash{}s*\#[test]\$} → 2\,745 · \code{\textasciicircum{}\textbackslash{}s*\#[tokio::test} → 1\,477 \\
+\quad dont ordonnanceur multi-thread & 254 & \code{\#[tokio::test(flavor = "multi\_thread"\ldots)]} \\
+cas exécutés par la commande de la CI & \textbf{3\,962} & 3\,927 passés · 0 échoué · 35 ignorés, sur 193 binaires et sections de doctests \\
+\bottomrule
+\end{longtable}
+
+\att{Ces deux nombres ne se soustraient pas.} Un attribut n'est pas un cas (un doctest produit un cas
+sans attribut ; un test paramétré peut en produire plusieurs), et surtout : \textbf{la commande de la
+CI compile le jeu de features par défaut}. Tout ce qui vit derrière \code{frontier-llm},
+\code{oidc}, \code{pii}, \code{postgres} ou \code{reg-evidence} est compilé à \emph{zéro} par elle.
+
+\begin{alerte}
+Mesuré sur le seul \code{efe-swarm-gateway}, en listant les tests de bibliothèque :
+
+\medskip
+\begin{tabular}{@{}p{7.6cm}r@{}}
+jeu par défaut --- \emph{ce que voit} \code{cargo test -{}-workspace} & \textbf{124} \\
+\code{-{}-features reg-evidence} & 130 \\
+\code{-{}-features oidc} & 135 \\
+\code{-{}-features frontier-llm} & 180 \\
+\code{-{}-features postgres,oidc,pii,frontier-llm} --- \emph{le profil de production} & \textbf{186} \\
+\end{tabular}
+
+\medskip
+\textbf{Soixante-deux tests de ce crate sont invisibles} à la commande qui sert de garde-fou. Ce
+n'est pas un oubli : c'est la conséquence mécanique de la compilation conditionnelle, et c'est
+exactement la forme du défaut « M3 sous \code{oidc} » --- deux tests qui portaient un critère et ne
+tournaient sous aucun jeu servi.
+\end{alerte}
+
+Le remède employé ici n'est pas d'ajouter des features à la commande de CI --- ce qui multiplierait
+les temps de compilation --- mais de faire jouer ces tests par un \emph{contrôle} qui, lui, est dans
+la CI : \code{banc-seuil.sh -{}-production} exécute les tests du module \code{frontier}, et la CI
+exécute le banc.
+
+\subsection{Ce que la doctrine de test impose}
+
+\begin{longtable}{@{}p{5.0cm}p{10.0cm}@{}}
+\toprule \textbf{le motif} & \textbf{ce qu'il empêche} \\ \midrule \endhead
+\textbf{plancher anti-vacuité} & qu'un test passe sur un dépôt vide. \code{r3\_fournisseur\_unique.rs} refuse de rendre un verdict en dessous de 100 paquets observés : sous ce seuil il dit « non mesuré », pas « vert » \\
+\textbf{contre-épreuve} & qu'un garde rende vert sans pouvoir rougir. Le motif « un garde incapable de tomber ne garde rien » est écrit textuellement en 13 endroits et matérialisé par 9 fonctions \code{contre\_epreuve\_*} \\
+\textbf{auto-lecture de la source} & qu'une propriété structurelle que le compilateur ne peut pas tenir se perde. Quatre tests lisent \emph{leur propre fichier} par \code{include\_str!(file!())} ; trois autres lisent la source d'un module voisin \\
+\textbf{vraie socket, vrai processus} & qu'un aller-retour soit « testé » en mémoire. Les trois allers-retours frontière sont joués contre un faux fournisseur local, en-têtes vérifiés depuis l'extérieur \\
+\textbf{déclaré face à servi} & qu'un profil annonce une capacité qu'il ne sert pas : les 9 \code{*.expected.json} sont confrontés au rapport réel \\
+\bottomrule
+\end{longtable}
+
+\section{Les 40 documents}
+
+\mesure{40 sources \code{.tex}}{\code{find docs -name '*.tex' | wc -l}} et \mesure{40 rendus
+\code{.pdf}}{idem pour \code{'*.pdf'}}, \textbf{zéro orphelin dans l'un ou l'autre sens} : chaque
+source a son rendu, chaque rendu a sa source. Six architectures dans \code{docs/architecture/},
+trente-quatre rapports et feuilles de route dans \code{docs/reports/}, pour
+\mesure{2\,603\,295 octets}{somme des tailles} de PDF.
+
+\section{\code{hors-depot/} --- ce qui est C1/C3 sans venir du dépôt}
+
+\begin{longtable}{@{}p{4.4cm}r p{9.4cm}@{}}
+\toprule \textbf{répertoire} & \textbf{n} & \textbf{ce que c'est} \\ \midrule \endhead
+\code{bundle-demo-csddd/} & 20 & le livrable qu'on tend à un prospect : records scellés, copie altérée, trois dossiers réglementaires, et le vérifieur en source complète. Entièrement \emph{généré} par \code{examples/csddd\_seed.rs} \\
+\code{demo-bundles/} & 12 & les trois autres bundles de démonstration \\
+\code{documents/} & 6 & des fichiers restés à la racine de \code{Downloads} \\
+\code{lignee-efe/} & 3 & trois documents de l'ère précédente sur le reçu et le Seuil \\
+\bottomrule
+\end{longtable}
+
+\att{Une affirmation de \code{.gitignore} qui n'était vraie que de trois quarts.} Le fichier exclut
+\code{demo-bundles/} avec la mention « Régénérer : \code{cargo run … -{}-example …} ». C'est vrai de
+trois bundles sur quatre. Le quatrième, \code{meta-provenance-bundle} (564\,Ko), n'est nommé par
+\textbf{aucune} source du dépôt, et \textbf{aucune} clé du dépôt ne le re-prouve : \code{verify\_meta\_mini}
+casse au \emph{pas 0}, ce qui désigne une mauvaise clé et non une altération. Ce ne sont pas des
+livrables : ce sont des octets orphelins, gardés parce qu'ils existent en un seul exemplaire.
+
+
+%% ═══════════════ ch05-methode ═══════════════
+\chapter{La méthode}
+
+\section{Ce que l'historique raconte}
+
+\mesure{478 commits}{\code{git rev-list -{}-count af789cc}}, du 16 mai au 6 septembre 2026, un
+seul auteur.
+
+\footnotesize\textcolor{grey}{Ce compte est ancré à un commit précis, et non à une branche. Écrit
+« \code{git rev-list -{}-count c1-c3} », il aurait été faux dès le commit suivant --- à commencer par
+celui qui ajoute ce document. C'est le piège que le § « le nombre recopié » décrit ; il se referme
+en nommant le point de mesure.}\normalsize Ce qui distingue cet historique n'est pas son volume : c'est que ses messages documentent des
+\textbf{mesures}, et le plus souvent des défauts trouvés \emph{en mesurant}.
+
+\mesure{19 titres de commit}{ceux qui contiennent l'une des formules « était faux », « n'existait
+pas », « jamais », « manquait », « défaut », « mentait », « invisible », « au lieu de »} nomment
+explicitement un défaut. \textcolor{grey}{\footnotesize Ce compte-là dépend du motif, et le motif est
+donc écrit : avec une formulation plus large, il monte à 34. Un nombre dont la définition n'est pas
+donnée n'est pas une mesure.}\normalsize
+
+En voici quelques-uns, tels qu'ils sont écrits :
+
+\begin{extrait}
+\footnotesize
+\code{99d046d} \quad M8 --- le garde que la doc promettait \textbf{n'existait pas}\\
+\code{f05fa21} \quad M3 --- la panne qui ne coupe rien : le critère \textbf{n'avait jamais été exécuté}\\
+\code{8026b0f} \quad R3 --- la suite ne criait pas au loup : elle \textbf{ne COMPILAIT PAS}\\
+\code{4c0cf2d} \quad r3-check.sh : ma discrimination comparait \textbf{deux binaires différents}\\
+\code{f2ae252} \quad M8 --- « le seul témoin serait un en-tête » était \textbf{faux} : \code{peer\_addr} vient du noyau\\
+\code{8142f4f} \quad É1 --- la porte s'ouvre, et elle livrait \textbf{UN} vérifieur au lieu de \textbf{deux}\\
+\code{2d92091} \quad R2 --- le recensement devient un contrôle, et il \textbf{REFUSE} les deux suppressions demandées\\
+\code{048e59d} \quad D4 --- les portes s'exécutent, et elles ont trouvé \textbf{cinq défauts invisibles sur macOS}
+\end{extrait}
+
+\section{Les familles de défauts}
+
+Le même défaut revient sous des habits différents. Les nommer est la moitié du travail.
+
+\subsection{La description fausse, plutôt que la fonction manquante}
+
+C'est la famille dominante. Presque rien ne \emph{manquait} : ce qui manquait, c'était l'exactitude
+de ce qu'on en disait. Une politique de sécurité promettait quatre adresses, une clé PGP, un programme
+de primes et sept documents de conformité \emph{dont aucun n'existait} --- adressée à un public qui,
+le dépôt étant privé, ne pouvait pas la lire. Un fichier de licence déclarait Apache-2.0 sur un
+périmètre \code{All rights reserved}. Un en-tête de Dockerfile annonçait « trois binaires » pendant
+tout le temps où il y en avait quatre.
+
+\begin{these}
+Un fichier dont l'en-tête ment sur son contenu est le défaut que ce dépôt poursuit partout ailleurs ;
+il n'avait pas à commencer chez lui.
+\end{these}
+
+\subsection{Construit, mais jamais assemblé}
+
+La variante la plus coûteuse. Chaque pièce existe, chaque pièce est testée, et le geste qui les
+réunit n'a jamais été fait --- donc personne n'a jamais parcouru le chemin en entier.
+
+\begin{longtable}{@{}p{6.4cm}p{8.6cm}@{}}
+\toprule \textbf{ce qui existait} & \textbf{ce qui manquait} \\ \midrule \endhead
+le profil de production, éprouvé par \code{p1-check} & le geste qu'un inconnu pouvait faire --- d'où \code{mon-premier-recu.sh} \\
+\code{audit-console}, éprouvée par M7 et M8 & elle était \textbf{injoignable} : absente de \code{compose.yaml}, absente de l'image \\
+la variable \code{EFE\_CONSOLE\_RECORDS} & \textbf{aucun} script, \textbf{aucun} test ne l'écrivait : le chemin de réhydratation compilait sans avoir jamais servi \\
+le bundle de démo CSDDD & son vérifieur ne compilait plus une fois \emph{posé} dans le dossier de livraison \\
+\bottomrule
+\end{longtable}
+
+\subsection{Le garde incapable de tomber}
+
+\begin{these}
+« Un garde incapable de tomber ne garde rien. »
+\end{these}
+
+Un contrôle qui rend vert doit être poussé jusqu'à ce qu'il rende rouge, sans quoi son vert ne
+distingue rien. C'est pourquoi chaque contrôle de ce dépôt porte une \emph{contre-épreuve}, et
+pourquoi les deux bancs ont été éprouvés en leur mentant : une attente inversée, un défaut réel
+réintroduit --- et l'on vérifie qu'ils tombent, et qu'ils tombent \emph{pour la bonne raison}.
+
+\att{Une contre-épreuve peut elle-même échouer pour la mauvaise raison.} Le banc du Registre a été
+« vérifié » une première fois en copiant son script dans \code{/tmp} : il y est bien sorti en
+\code{1}, mais parce que \code{cd "\$(dirname "\$0")/.."} l'avait envoyé à la racine du système, où
+il ne trouvait pas de \code{Cargo.toml}. Le code de sortie était juste, la mesure ne valait rien.
+
+\subsection{Le test qui encode le défaut}
+
+Un test peut passer parce qu'il assertait précisément ce qui était faux.
+
+\begin{longtable}{@{}p{5.4cm}p{9.6cm}@{}}
+\toprule \textbf{le test} & \textbf{ce qu'il figeait} \\ \midrule \endhead
+\code{from\_env\_missing\_var\_errors} & assertait \code{CoordError::Config} sur une variable \emph{absente} --- exactement le typage qui faisait dire à la passerelle « ce n'est pas une clé manquante » sur une clé manquante \\
+\code{un\_userinfo\_meme\_en\_https…} & employait \code{cle:secrete@hôte} --- un \code{userinfo} qui ne \emph{commence pas} par le nom de l'hôte, donc le seul cas que l'approximation refusait correctement \\
+\bottomrule
+\end{longtable}
+
+Dans les deux cas la correction n'est pas seulement dans le code : c'est le test qui est réécrit, pour
+qu'il asserte la \emph{propriété} et non l'exemple. \code{from\_env\_distingue\_absence\_et\_rejet}
+asserte les trois cas \textbf{ensemble} --- assertés séparément, ils passaient tous quand tous
+rendaient la même chose.
+
+\subsection{L'instrument qui mesure sa propre source}
+
+Le plus insidieux, parce qu'il rend un vert parfaitement crédible.
+
+\begin{alerte}
+Une vérification d'archivage cherchait chaque document par
+\code{find ~/Downloads/vrai -name "X.pdf"} --- et le dépôt lui-même \emph{vit sous} \code{vrai/}.
+L'instrument se trouvait donc lui-même, et rendait « archivé » pour tout. Le verdict annoncé fut
+« 4 sur 4 archivés » ; la vérité, une fois \code{-not -path "*/jjjj copie/*"} ajouté, était
+\textbf{75 sur 77 NON archivés}.
+
+Deux fautes en une : un instrument qui mesure sa propre source, et une conclusion « tous » tirée d'un
+échantillon de quatre.
+\end{alerte}
+
+\subsection{Le \code{\#{}[cfg]} qui rend un test invisible}
+
+Un attribut de compilation conditionnelle cache le code au compilateur --- \emph{et au linter, et aux
+tests}. Deux tests portant le critère de M3 étaient \code{\#{}[cfg(not(feature = "oidc"))]} : ils ne
+tournaient donc sous \textbf{aucun} jeu de features réellement servi. Ils existaient, ils étaient
+justes, et ils ne mesuraient rien.
+
+La même forme s'est reproduite en écrivant ce document : le module \code{frontier} n'existe que sous
+\code{frontier-llm}, que \code{cargo test -{}-workspace} --- ce que joue la CI --- compile à zéro. Un
+test ajouté là serait resté mort. Il a fallu que le banc du Seuil le joue, et que la CI joue le banc.
+
+\subsection{Le nombre recopié au lieu d'être compté}
+
+\begin{these}
+« Un nombre figé dans une phrase vieillit à chaque ajout, et personne ne le voit. »
+\end{these}
+
+« Trois configurations » là où il y en avait neuf. « 201 secondes » qui n'étaient pas une durée mais
+le plafond d'une boucle d'attente sur une commande qui ne rendait jamais la main --- la vraie valeur
+était 75. « Seize variables déclarées » là où le registre en compte dix.
+
+\att{Et deux fois dans ce document même.} « 52 répertoires » était un regroupement à la profondeur 2
+présenté comme un compte. Et le nombre de tests, annoncé \textbf{3\,975}, valait en réalité
+\textbf{4\,222} : le motif de comptage, \code{grep -o '\#[tokio::test]'}, exigeait le crochet
+fermant immédiatement après \code{test} --- il manquait donc les \textbf{254} formes
+\code{\#[tokio::test(flavor = "multi\_thread"\ldots)]}. Un motif trop littéral est une variante du
+nombre recopié : il donne un chiffre \emph{reproductible}, ce qui le rend crédible, et \emph{faux}.
+
+\begin{these}
+La leçon commune aux deux : un compte n'est pas une mesure tant que la \textbf{définition} de ce
+qu'on compte n'est pas écrite à côté. C'est pourquoi chaque chiffre de ce document porte la commande
+qui le produit --- non par pédanterie, mais parce que c'est la seule forme qu'un lecteur puisse
+contredire.
+\end{these}
+
+\section{Ce que le dépôt s'impose}
+
+\begin{longtable}{@{}p{5.0cm}p{10.0cm}@{}}
+\toprule \textbf{la règle} & \textbf{ce qu'elle interdit} \\ \midrule \endhead
+les \textbf{trois états} & qu'une panne d'instrument emprunte le vocabulaire de ce qu'elle mesure \\
+les \textbf{planchers anti-vacuité} & qu'un test passe sur un dépôt vide, ou qu'un compteur descende en silence \\
+la \textbf{contre-épreuve} & qu'un vert soit rendu par un garde incapable de rougir \\
+un \textbf{seul analyseur} & que deux découpages divergents lisent deux URL différentes \\
+l'\textbf{absence nommée} & qu'un manque se lise comme un oubli plutôt que comme une décision \\
+le \textbf{coût écrit} & qu'une capacité dégradée passe pour un simple « non configuré » \\
+\bottomrule
+\end{longtable}
+
+\begin{acquis}
+Et la règle qui les contient toutes : \textbf{rien ne s'affirme qui n'ait été mesuré}. Y compris ---
+surtout --- dans ce document, dont chaque chiffre porte la commande qui le produit, et dont trois
+comptes ont dû être repris parce que la première mesure était fausse.
+\end{acquis}
+
+
+%% ═══════════════ ch06-manques ═══════════════
+\chapter{Ce qui manque, et qui est nommé}
+
+\section{Pourquoi ce chapitre existe}
+
+Un dossier technique qui ne dirait que ce qui marche serait, dans ce périmètre précis, une faute de
+méthode : tout le produit repose sur la distinction entre ce qu'on atteste et ce qu'on n'atteste pas.
+Ce chapitre rassemble ce que le dépôt déclare lui-même comme manquant --- pas ce qu'un lecteur
+pourrait deviner.
+
+\section{Les capacités qui existent sans cadence}
+
+\begin{longtable}{@{}p{4.4cm}p{10.6cm}@{}}
+\toprule \textbf{ce qui existe} & \textbf{ce qui n'existe pas} \\ \midrule \endhead
+la \textbf{sauvegarde}, éprouvée par destruction & \textbf{rien ne la PLANIFIE}. \code{p1-check.sh} détruit la table de runs, réimporte, et le reçu revient et se re-prouve --- mais aucune cadence n'est décidée. C'est une décision d'exploitation, pas du code \\
+la \textbf{rotation de clé} & même forme : \code{scella-conserver tourner} fait tourner une génération, et un test éprouve qu'une archive \emph{antérieure} se restaure encore après --- mais rien ne déclenche la rotation, et aucun document ne dit à quelle fréquence \\
+\bottomrule
+\end{longtable}
+
+\att{Cette ligne disait « zéro » à tort.} La capacité de rotation existait déjà quand
+\code{SECURITY.md} l'annonçait absente. Ce qui était réellement à zéro n'était pas la capacité, mais
+la \emph{cadence} --- et confondre les deux est une autre forme de description fausse.
+
+\section{Les limites nommées}
+
+\begin{longtable}{@{}p{5.0cm}p{10.0cm}@{}}
+\toprule \textbf{la limite} & \textbf{ce qu'elle coûte} \\ \midrule \endhead
+le jeton porteur de la console reste un \textbf{secret partagé} & une vraie non-répudiation demanderait que l'officier \emph{signe} le tuple de l'acte. C'est nommé, et non produit \\
+la console \textbf{ne persiste pas} la revue scellée & mesuré : le fichier de records reste identique à l'octet près après un scellement réussi. La revue vit en mémoire \\
+l'ancre reste \textbf{notre} fichier & elle détecte une troncature ; elle ne dit rien à qui doute de nous. Une ancre tierce (RFC 3161) est prévue et non posée \\
+aucun appel vers un \textbf{vrai} fournisseur & il faut une clé, et elle coûte de l'argent. L'aller-retour est joué contre un faux fournisseur local, sur une vraie socket \\
+\code{meta-provenance-bundle} & 564\,Ko qu'aucune source ne régénère et qu'aucune clé du dépôt ne re-prouve. Conservé, et étiqueté comme tel \\
+un \textbf{outil local} hors du garde d'egress & \code{scella-mz} lit \code{EFE\_COMPRESSOR\_URL} et construit son client \emph{sans} passer par \code{valider\_endpoint\_sortie} \\
+\bottomrule
+\end{longtable}
+
+\subsection*{L'asymétrie du garde d'egress, nommée précisément}
+
+Le validateur d'egress compte \mesure{cinq sites d'appel}{\code{grep -rn 'valider\_endpoint\_sortie('}}
+--- les quatre fournisseurs et le reformulateur SLM de la passerelle. Ils couvrent la surface
+\textbf{servie}. Un sixième chemin existe et n'y passe pas :
+
+\begin{longtable}{@{}p{4.9cm}p{10.1cm}@{}}
+\toprule \textbf{ce que c'est} & \textbf{ce que cela implique} \\ \midrule \endhead
+\code{scella-mz/src/main.rs} & lit \code{EFE\_COMPRESSOR\_URL} (défaut \code{http://127.0.0.1:8081}) et construit \code{LlamaServerClient} sans validation \\
+sa nature & un \textbf{outil de mesure local} : absent de \code{compose.yaml}, absent de l'image, absent de la CI. Joué à la main par \code{mz-check.sh} \\
+sa fermeture de dépendances & \code{efe-nano-app-coordinator}, \textbf{pas} \code{efe-coordinator} --- le validateur n'y est donc pas atteignable sans ajouter une dépendance \\
+\bottomrule
+\end{longtable}
+
+\att{Ce n'est pas un trou dans la frontière du produit} : l'opérateur pose sa propre variable sur sa
+propre machine, et rien de servi ne passe par là. C'est une \textbf{asymétrie}, et elle est nommée
+ici plutôt que découverte plus tard --- parce qu'un garde qui couvre « tous les chemins sauf un »
+doit dire lequel.
+
+\section{L'étape qui n'a pas d'\texttt{exit 0}}
+
+\begin{these}
+Tout le reste de ce périmètre se mesure : seize contrôles, deux bancs, trois portes de qualité,
+près de quatre mille tests, une CI qui joue les portes à chaque \code{push}. \textbf{D5 est la seule
+étape pour laquelle il n'existe pas d'\code{exit 0}.} Elle demande une personne, une machine qui
+n'est pas celle de l'auteur, et un compte rendu.
+
+Un formulaire vide n'est pas un succès. C'est une étape \textbf{non jouée}.
+\end{these}
+
+Le compte rendu qui l'attend (\code{docs/D5-COMPTE-RENDU.md}) n'est pas un questionnaire de
+satisfaction. Sa question centrale est : « \emph{à quel moment avez-vous eu envie de demander quelque
+chose à l'auteur ?} » --- parce que chaque question posée à l'auteur est un défaut de documentation,
+et que c'est elle qu'on cherche, pas l'avis.
+
+\section{Ce que le périmètre ne prétend pas}
+
+\begin{alerte}
+\textbf{Outillé n'est pas conforme.} \code{reg-evidence} produit des artefacts qui répondent à des
+exigences nommées. Produire l'artefact n'est ni être conforme, ni le faire être. Ce périmètre ne
+prétend ni l'un ni l'autre au nom d'un tiers --- et son propre registre RGPD ne classe
+\textbf{aucune} maille comme couverte.
+
+\medskip
+\textbf{« Intègre » n'est jamais « correct ».} La chaîne atteste que rien n'a été modifié, retiré ni
+ajouté après coup. Elle n'atteste pas que la décision enregistrée soit juste. Un raisonnement faux,
+scellé fidèlement, produit un reçu parfaitement valide --- et le banc du Registre en fait une épreuve
+plutôt qu'une note.
+
+\medskip
+\textbf{Pas de certification, pas d'audit, pas de « 97\,\% de la ligne de base NIST ».} Ce qui est
+affirmé est du code qu'on peut ouvrir, et chaque affirmation de \code{SECURITY.md} porte le chemin
+où la vérifier.
+\end{alerte}
+
+
+\appendix
+% généré — l'inventaire exhaustif des 1019 fichiers du périmètre livré
+\chapter{Annexe --- les 1\,019 fichiers}
+
+Cette annexe liste \textbf{chaque} fichier du périmètre livré, répertoire par répertoire, dans
+l'ordre alphabétique. Elle est produite par un parcours de l'arborescence, en excluant \code{.git}
+et les trois répertoires régénérables que des commandes y créent (\code{target/} et les deux
+dossiers de travail des bancs). Le total retombe sur \textbf{1\,019}, et ce document échouerait à
+le dire s'il ne le faisait pas.
+
+
+\subsection*{\code{(racine)} \normalfont\textcolor{grey}{--- 26 fichiers}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{.dockerignore} \;\textbullet\; \code{.editorconfig} \;\textbullet\; \code{.env.template} \;\textbullet\; \code{.envrc} \;\textbullet\; \code{.gitignore} \;\textbullet\; \code{.gitleaks.toml} \;\textbullet\; \code{.pre-commit-config.yaml} \;\textbullet\; \code{.yamllint} \;\textbullet\; \code{CONTRIBUTING.md} \;\textbullet\; \code{Cargo.lock} \;\textbullet\; \code{Cargo.toml} \;\textbullet\; \code{DECISION-PERIMETRE.md} \;\textbullet\; \code{LICENSE} \;\textbullet\; \code{LICENSE-MIT} \;\textbullet\; \code{LISEZ-MOI-C1-C3.md} \;\textbullet\; \code{LISEZ-MOI-LE-DOSSIER.md} \;\textbullet\; \code{README.md} \;\textbullet\; \code{SECURITY.md} \;\textbullet\; \code{clippy.toml} \;\textbullet\; \code{compose.yaml} \;\textbullet\; \code{mypy.ini} \;\textbullet\; \code{pyproject.toml} \;\textbullet\; \code{renovate.json} \;\textbullet\; \code{ruff.toml} \;\textbullet\; \code{rust-toolchain.toml} \;\textbullet\; \code{rustfmt.toml}
+\end{sloppypar}
+
+\subsection*{\code{.github/ISSUE\_TEMPLATE} \normalfont\textcolor{grey}{--- 3 fichiers}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{bug.yml} \;\textbullet\; \code{feature.yml} \;\textbullet\; \code{tech-debt.yml}
+\end{sloppypar}
+
+\subsection*{\code{.github/workflows} \normalfont\textcolor{grey}{--- 1 fichier}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{portes.yml}
+\end{sloppypar}
+
+\subsection*{\code{.sigstore} \normalfont\textcolor{grey}{--- 3 fichiers}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{README.md} \;\textbullet\; \code{policy.yaml} \;\textbullet\; \code{trusted-root.json}
+\end{sloppypar}
+
+\subsection*{\code{crates/audit-api} \normalfont\textcolor{grey}{--- 1 fichier}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{Cargo.toml}
+\end{sloppypar}
+
+\subsection*{\code{crates/audit-api/src} \normalfont\textcolor{grey}{--- 10 fichiers}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{auth.rs} \;\textbullet\; \code{envelope.rs} \;\textbullet\; \code{index.rs} \;\textbullet\; \code{lib.rs} \;\textbullet\; \code{monitor.rs} \;\textbullet\; \code{project.rs} \;\textbullet\; \code{registry.rs} \;\textbullet\; \code{report.rs} \;\textbullet\; \code{router.rs} \;\textbullet\; \code{service.rs}
+\end{sloppypar}
+
+\subsection*{\code{crates/audit-api/tests} \normalfont\textcolor{grey}{--- 1 fichier}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{airgap.rs}
+\end{sloppypar}
+
+\subsection*{\code{crates/audit-console} \normalfont\textcolor{grey}{--- 1 fichier}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{Cargo.toml}
+\end{sloppypar}
+
+\subsection*{\code{crates/audit-console/examples} \normalfont\textcolor{grey}{--- 1 fichier}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{seed\_demo.rs}
+\end{sloppypar}
+
+\subsection*{\code{crates/audit-console/src} \normalfont\textcolor{grey}{--- 14 fichiers}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{app.rs} \;\textbullet\; \code{canal.rs} \;\textbullet\; \code{export.rs} \;\textbullet\; \code{handler.rs} \;\textbullet\; \code{http.rs} \;\textbullet\; \code{lib.rs} \;\textbullet\; \code{main.rs} \;\textbullet\; \code{profile.rs} \;\textbullet\; \code{provisioning.rs} \;\textbullet\; \code{render.rs} \;\textbullet\; \code{server.rs} \;\textbullet\; \code{session.rs} \;\textbullet\; \code{tar.rs} \;\textbullet\; \code{trousseau\_fichier.rs}
+\end{sloppypar}
+
+\subsection*{\code{crates/audit-console/src/bin} \normalfont\textcolor{grey}{--- 1 fichier}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{console-semence.rs}
+\end{sloppypar}
+
+\subsection*{\code{crates/audit-console/tests} \normalfont\textcolor{grey}{--- 10 fichiers}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{console\_wire\_e2e.rs} \;\textbullet\; \code{d1\_portes\_dentree.rs} \;\textbullet\; \code{gate\_loop\_smoke.rs} \;\textbullet\; \code{m0\_troisieme\_etat.rs} \;\textbullet\; \code{m6\_cable\_au\_service.rs} \;\textbullet\; \code{m7\_service\_de\_lecture.rs} \;\textbullet\; \code{m8\_console\_opposable.rs} \;\textbullet\; \code{p3\_aucune\_cible\_abandonnee.rs} \;\textbullet\; \code{profile\_files.rs} \;\textbullet\; \code{profile\_no\_raw\_env.rs}
+\end{sloppypar}
+
+\subsection*{\code{crates/efe-audit-core} \normalfont\textcolor{grey}{--- 1 fichier}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{Cargo.toml}
+\end{sloppypar}
+
+\subsection*{\code{crates/efe-audit-core/src} \normalfont\textcolor{grey}{--- 3 fichiers}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{hmac.rs} \;\textbullet\; \code{keys.rs} \;\textbullet\; \code{lib.rs}
+\end{sloppypar}
+
+\subsection*{\code{crates/efe-blackboard} \normalfont\textcolor{grey}{--- 1 fichier}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{Cargo.toml}
+\end{sloppypar}
+
+\subsection*{\code{crates/efe-blackboard/examples} \normalfont\textcolor{grey}{--- 11 fichiers}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{bench\_mail.rs} \;\textbullet\; \code{lot\_msg.rs} \;\textbullet\; \code{swarm\_async\_slm.rs} \;\textbullet\; \code{swarm\_load.rs} \;\textbullet\; \code{swarm\_metrics.rs} \;\textbullet\; \code{swarm\_relay.rs} \;\textbullet\; \code{swarm\_reliable.rs} \;\textbullet\; \code{swarm\_sharded.rs} \;\textbullet\; \code{swarm\_slm.rs} \;\textbullet\; \code{swarm\_streaming.rs} \;\textbullet\; \code{swarm\_verifier.rs}
+\end{sloppypar}
+
+\subsection*{\code{crates/efe-blackboard/src} \normalfont\textcolor{grey}{--- 14 fichiers}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{blackboard.rs} \;\textbullet\; \code{error.rs} \;\textbullet\; \code{eventbus.rs} \;\textbullet\; \code{lib.rs} \;\textbullet\; \code{mailbox.rs} \;\textbullet\; \code{metrics.rs} \;\textbullet\; \code{observer.rs} \;\textbullet\; \code{reliable.rs} \;\textbullet\; \code{replay.rs} \;\textbullet\; \code{sink.rs} \;\textbullet\; \code{snapshot.rs} \;\textbullet\; \code{streaming.rs} \;\textbullet\; \code{topic\_router.rs} \;\textbullet\; \code{work\_queue.rs}
+\end{sloppypar}
+
+\subsection*{\code{crates/efe-blackboard/tests} \normalfont\textcolor{grey}{--- 5 fichiers}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{reliable\_delivery.rs} \;\textbullet\; \code{streaming\_quiescence.rs} \;\textbullet\; \code{substrate\_hardening.rs} \;\textbullet\; \code{swarm\_cas\_invariant.rs} \;\textbullet\; \code{work\_queue\_sharding.rs}
+\end{sloppypar}
+
+\subsection*{\code{crates/efe-coordinator} \normalfont\textcolor{grey}{--- 21 fichiers}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{CHANGELOG.md} \;\textbullet\; \code{CHEWING\_SAVINGS\_REPORT.json} \;\textbullet\; \code{CHEWING\_SAVINGS\_REPORT.md} \;\textbullet\; \code{CHEWING\_SAVINGS\_REPORT\_v2.json} \;\textbullet\; \code{CHEWING\_SAVINGS\_REPORT\_v2.md} \;\textbullet\; \code{Cargo.toml} \;\textbullet\; \code{R1b\_LIVE\_VALIDATION.md} \;\textbullet\; \code{R2\_LIVE\_VALIDATION.md} \;\textbullet\; \code{R3\_LIVE\_VALIDATION.md} \;\textbullet\; \code{README.md} \;\textbullet\; \code{S2\_LIVE\_VALIDATION.md} \;\textbullet\; \code{S3\_LIVE\_VALIDATION.md} \;\textbullet\; \code{S4\_LIVE\_VALIDATION.md} \;\textbullet\; \code{S5\_LIVE\_VALIDATION.md} \;\textbullet\; \code{S5\_LIVE\_VALIDATION.template.md} \;\textbullet\; \code{S6\_LIVE\_VALIDATION.md} \;\textbullet\; \code{S6\_LIVE\_VALIDATION.template.md} \;\textbullet\; \code{S7\_LIVE\_VALIDATION.template.md} \;\textbullet\; \code{S8\_VALIDATION.md} \;\textbullet\; \code{S9\_VALIDATION.md} \;\textbullet\; \code{S9\_VALIDATION.template.md}
+\end{sloppypar}
+
+\subsection*{\code{crates/efe-coordinator/benches} \normalfont\textcolor{grey}{--- 2 fichiers}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{coordinator\_throughput.rs} \;\textbullet\; \code{metering\_overhead.rs}
+\end{sloppypar}
+
+\subsection*{\code{crates/efe-coordinator/examples} \normalfont\textcolor{grey}{--- 3 fichiers}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{mission\_a\_demo.rs} \;\textbullet\; \code{mission\_b\_demo.rs} \;\textbullet\; \code{speculative\_demo.rs}
+\end{sloppypar}
+
+\subsection*{\code{crates/efe-coordinator/src} \normalfont\textcolor{grey}{--- 15 fichiers}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{ab\_test.rs} \;\textbullet\; \code{audit.rs} \;\textbullet\; \code{chaos.rs} \;\textbullet\; \code{coordinator.rs} \;\textbullet\; \code{error.rs} \;\textbullet\; \code{failure.rs} \;\textbullet\; \code{heartbeat.rs} \;\textbullet\; \code{lib.rs} \;\textbullet\; \code{metering.rs} \;\textbullet\; \code{metrics.rs} \;\textbullet\; \code{metrics\_server.rs} \;\textbullet\; \code{multi\_tenant.rs} \;\textbullet\; \code{request.rs} \;\textbullet\; \code{savings\_report.rs} \;\textbullet\; \code{sse.rs}
+\end{sloppypar}
+
+\subsection*{\code{crates/efe-coordinator/src/blackboard} \normalfont\textcolor{grey}{--- 3 fichiers}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{entry.rs} \;\textbullet\; \code{mod.rs} \;\textbullet\; \code{pheromone.rs}
+\end{sloppypar}
+
+\subsection*{\code{crates/efe-coordinator/src/dag} \normalfont\textcolor{grey}{--- 3 fichiers}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{executor.rs} \;\textbullet\; \code{mod.rs} \;\textbullet\; \code{node.rs}
+\end{sloppypar}
+
+\subsection*{\code{crates/efe-coordinator/src/events} \normalfont\textcolor{grey}{--- 5 fichiers}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{bus.rs} \;\textbullet\; \code{inmem.rs} \;\textbullet\; \code{mod.rs} \;\textbullet\; \code{nats.rs} \;\textbullet\; \code{stream.rs}
+\end{sloppypar}
+
+\subsection*{\code{crates/efe-coordinator/src/llm} \normalfont\textcolor{grey}{--- 5 fichiers}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{bridge.rs} \;\textbullet\; \code{mock.rs} \;\textbullet\; \code{mod.rs} \;\textbullet\; \code{provider.rs} \;\textbullet\; \code{registry.rs}
+\end{sloppypar}
+
+\subsection*{\code{crates/efe-coordinator/src/llm/providers} \normalfont\textcolor{grey}{--- 11 fichiers}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{anthropic.rs} \;\textbullet\; \code{auth.rs} \;\textbullet\; \code{circuit.rs} \;\textbullet\; \code{common.rs} \;\textbullet\; \code{gemini.rs} \;\textbullet\; \code{local\_slm.rs} \;\textbullet\; \code{mod.rs} \;\textbullet\; \code{openai.rs} \;\textbullet\; \code{pricing.rs} \;\textbullet\; \code{retry.rs} \;\textbullet\; \code{streaming.rs}
+\end{sloppypar}
+
+\subsection*{\code{crates/efe-coordinator/src/speculate} \normalfont\textcolor{grey}{--- 3 fichiers}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{mod.rs} \;\textbullet\; \code{noise.rs} \;\textbullet\; \code{speculator.rs}
+\end{sloppypar}
+
+\subsection*{\code{crates/efe-coordinator/src/vote} \normalfont\textcolor{grey}{--- 2 fichiers}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{engine.rs} \;\textbullet\; \code{mod.rs}
+\end{sloppypar}
+
+\subsection*{\code{crates/efe-coordinator/src/workflows} \normalfont\textcolor{grey}{--- 5 fichiers}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{mission\_a.rs} \;\textbullet\; \code{mission\_b.rs} \;\textbullet\; \code{mod.rs} \;\textbullet\; \code{slm\_guard.rs} \;\textbullet\; \code{speculative.rs}
+\end{sloppypar}
+
+\subsection*{\code{crates/efe-coordinator/tests} \normalfont\textcolor{grey}{--- 38 fichiers}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{ab\_test.rs} \;\textbullet\; \code{aller\_retour\_frontiere.rs} \;\textbullet\; \code{chaos\_offline.rs} \;\textbullet\; \code{endpoint\_configurable.rs} \;\textbullet\; \code{invariants.rs} \;\textbullet\; \code{live\_chaos.rs} \;\textbullet\; \code{live\_chewing\_savings\_report.rs} \;\textbullet\; \code{live\_chewing\_savings\_report\_v2.rs} \;\textbullet\; \code{live\_missions.rs} \;\textbullet\; \code{live\_providers.rs} \;\textbullet\; \code{local\_slm\_drafter.rs} \;\textbullet\; \code{metering.rs} \;\textbullet\; \code{multi\_tenant\_policies.rs} \;\textbullet\; \code{offline\_savings\_report.rs} \;\textbullet\; \code{preview\_streaming.rs} \;\textbullet\; \code{sse\_stream.rs} \;\textbullet\; \code{unit\_audit.rs} \;\textbullet\; \code{unit\_blackboard.rs} \;\textbullet\; \code{unit\_bridge.rs} \;\textbullet\; \code{unit\_bus.rs} \;\textbullet\; \code{unit\_bus\_filters.rs} \;\textbullet\; \code{unit\_dag.rs} \;\textbullet\; \code{unit\_dag\_dataflow.rs} \;\textbullet\; \code{unit\_heartbeat.rs} \;\textbullet\; \code{unit\_parse\_claude.rs} \;\textbullet\; \code{unit\_parse\_gemini.rs} \;\textbullet\; \code{unit\_parse\_openai.rs} \;\textbullet\; \code{unit\_speculator.rs} \;\textbullet\; \code{unit\_sse.rs} \;\textbullet\; \code{unit\_stream\_many.rs} \;\textbullet\; \code{unit\_streaming\_edge.rs} \;\textbullet\; \code{unit\_streaming\_events.rs} \;\textbullet\; \code{unit\_vote.rs} \;\textbullet\; \code{workflow\_failure\_modes.rs} \;\textbullet\; \code{workflow\_mission\_a.rs} \;\textbullet\; \code{workflow\_mission\_b.rs} \;\textbullet\; \code{workflow\_slm\_circuits.rs} \;\textbullet\; \code{workflow\_speculative.rs}
+\end{sloppypar}
+
+\subsection*{\code{crates/efe-coordinator/tests/fixtures/claude} \normalfont\textcolor{grey}{--- 8 fichiers}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{001\_factual\_qa\_simple.json} \;\textbullet\; \code{002\_with\_thinking\_tag.json} \;\textbullet\; \code{003\_code\_block\_rust.json} \;\textbullet\; \code{004\_max\_tokens\_truncated.json} \;\textbullet\; \code{005\_tool\_use.json} \;\textbullet\; \code{006\_multi\_text\_blocks.json} \;\textbullet\; \code{007\_error\_rate\_limit.json} \;\textbullet\; \code{008\_long\_reasoning.json}
+\end{sloppypar}
+
+\subsection*{\code{crates/efe-coordinator/tests/fixtures/gemini} \normalfont\textcolor{grey}{--- 8 fichiers}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{001\_factual\_qa\_simple.json} \;\textbullet\; \code{002\_markdown\_with\_footnote.json} \;\textbullet\; \code{003\_multi\_parts\_concatenation.json} \;\textbullet\; \code{004\_max\_tokens\_truncated.json} \;\textbullet\; \code{005\_code\_block\_python.json} \;\textbullet\; \code{006\_error\_quota.json} \;\textbullet\; \code{007\_safety\_blocked.json} \;\textbullet\; \code{008\_empty\_candidates.json}
+\end{sloppypar}
+
+\subsection*{\code{crates/efe-coordinator/tests/fixtures/missions} \normalfont\textcolor{grey}{--- 11 fichiers}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{01\_factual\_simple.json} \;\textbullet\; \code{02\_factual\_with\_sources.json} \;\textbullet\; \code{03\_factual\_compressible.json} \;\textbullet\; \code{05\_code\_gen\_rust.json} \;\textbullet\; \code{06\_creative\_writing.json} \;\textbullet\; \code{07\_translation\_fr\_en.json} \;\textbullet\; \code{08\_speculative\_factual.json} \;\textbullet\; \code{08\_speculative\_local\_only.json} \;\textbullet\; \code{09\_long\_document\_compressible.json} \;\textbullet\; \code{10\_medium\_compressible.json} \;\textbullet\; \code{README.md}
+\end{sloppypar}
+
+\subsection*{\code{crates/efe-coordinator/tests/fixtures/openai} \normalfont\textcolor{grey}{--- 8 fichiers}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{001\_factual\_qa\_simple.json} \;\textbullet\; \code{002\_code\_block\_rust.json} \;\textbullet\; \code{003\_max\_tokens\_truncated.json} \;\textbullet\; \code{004\_tool\_call\_single.json} \;\textbullet\; \code{005\_tool\_call\_parallel.json} \;\textbullet\; \code{006\_long\_reasoning.json} \;\textbullet\; \code{007\_error\_rate\_limit.json} \;\textbullet\; \code{008\_refusal.json}
+\end{sloppypar}
+
+\subsection*{\code{crates/efe-meta-verify} \normalfont\textcolor{grey}{--- 1 fichier}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{Cargo.toml}
+\end{sloppypar}
+
+\subsection*{\code{crates/efe-meta-verify/src} \normalfont\textcolor{grey}{--- 1 fichier}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{lib.rs}
+\end{sloppypar}
+
+\subsection*{\code{crates/efe-meta-verify/src/bin} \normalfont\textcolor{grey}{--- 1 fichier}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{verify\_meta.rs}
+\end{sloppypar}
+
+\subsection*{\code{crates/efe-multi-llm} \normalfont\textcolor{grey}{--- 3 fichiers}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{CHANGELOG.md} \;\textbullet\; \code{Cargo.toml} \;\textbullet\; \code{README.md}
+\end{sloppypar}
+
+\subsection*{\code{crates/efe-multi-llm/assets/schemas/canonical} \normalfont\textcolor{grey}{--- 5 fichiers}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{argument\_v1.json} \;\textbullet\; \code{claim\_v1.json} \;\textbullet\; \code{code\_v1.json} \;\textbullet\; \code{plan\_v1.json} \;\textbullet\; \code{synthesis\_v1.json}
+\end{sloppypar}
+
+\subsection*{\code{crates/efe-multi-llm/benches} \normalfont\textcolor{grey}{--- 1 fichier}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{multi\_llm\_throughput.rs}
+\end{sloppypar}
+
+\subsection*{\code{crates/efe-multi-llm/src} \normalfont\textcolor{grey}{--- 5 fichiers}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{canonical.rs} \;\textbullet\; \code{error.rs} \;\textbullet\; \code{events\_ext.rs} \;\textbullet\; \code{lib.rs} \;\textbullet\; \code{request.rs}
+\end{sloppypar}
+
+\subsection*{\code{crates/efe-multi-llm/src/aggregate} \normalfont\textcolor{grey}{--- 2 fichiers}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{aggregator.rs} \;\textbullet\; \code{mod.rs}
+\end{sloppypar}
+
+\subsection*{\code{crates/efe-multi-llm/src/budget} \normalfont\textcolor{grey}{--- 2 fichiers}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{mod.rs} \;\textbullet\; \code{tracker.rs}
+\end{sloppypar}
+
+\subsection*{\code{crates/efe-multi-llm/src/cancellation} \normalfont\textcolor{grey}{--- 2 fichiers}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{mod.rs} \;\textbullet\; \code{tokens.rs}
+\end{sloppypar}
+
+\subsection*{\code{crates/efe-multi-llm/src/decompose} \normalfont\textcolor{grey}{--- 2 fichiers}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{decomposer.rs} \;\textbullet\; \code{mod.rs}
+\end{sloppypar}
+
+\subsection*{\code{crates/efe-multi-llm/src/reformulator\_ext} \normalfont\textcolor{grey}{--- 4 fichiers}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{canonical.rs} \;\textbullet\; \code{engine.rs} \;\textbullet\; \code{mod.rs} \;\textbullet\; \code{slm.rs}
+\end{sloppypar}
+
+\subsection*{\code{crates/efe-multi-llm/src/tenant} \normalfont\textcolor{grey}{--- 2 fichiers}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{blackboard.rs} \;\textbullet\; \code{mod.rs}
+\end{sloppypar}
+
+\subsection*{\code{crates/efe-multi-llm/src/vote\_ext} \normalfont\textcolor{grey}{--- 3 fichiers}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{borda.rs} \;\textbullet\; \code{condorcet.rs} \;\textbullet\; \code{mod.rs}
+\end{sloppypar}
+
+\subsection*{\code{crates/efe-multi-llm/src/workflows} \normalfont\textcolor{grey}{--- 6 fichiers}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{cascade.rs} \;\textbullet\; \code{debate.rs} \;\textbullet\; \code{mod.rs} \;\textbullet\; \code{relay.rs} \;\textbullet\; \code{specialist.rs} \;\textbullet\; \code{vote.rs}
+\end{sloppypar}
+
+\subsection*{\code{crates/efe-multi-llm/tests} \normalfont\textcolor{grey}{--- 19 fichiers}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{canonical\_schemas.rs} \;\textbullet\; \code{chaos\_multi\_llm.rs} \;\textbullet\; \code{invariants\_phase3.rs} \;\textbullet\; \code{live\_slm\_reformulator.rs} \;\textbullet\; \code{no\_spawn\_guard.rs} \;\textbullet\; \code{unit\_aggregate.rs} \;\textbullet\; \code{unit\_budget.rs} \;\textbullet\; \code{unit\_cancellation.rs} \;\textbullet\; \code{unit\_decompose.rs} \;\textbullet\; \code{unit\_reformulator\_ext.rs} \;\textbullet\; \code{unit\_reformulator\_pluggable.rs} \;\textbullet\; \code{unit\_slm\_assets.rs} \;\textbullet\; \code{unit\_tenant.rs} \;\textbullet\; \code{unit\_vote\_ext.rs} \;\textbullet\; \code{workflow\_cascade.rs} \;\textbullet\; \code{workflow\_debate.rs} \;\textbullet\; \code{workflow\_relay.rs} \;\textbullet\; \code{workflow\_specialist.rs} \;\textbullet\; \code{workflow\_vote\_3llm.rs}
+\end{sloppypar}
+
+\subsection*{\code{crates/efe-nano} \normalfont\textcolor{grey}{--- 3 fichiers}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{ARCHITECTURE\_SPRINT\_6.md} \;\textbullet\; \code{Cargo.toml} \;\textbullet\; \code{README.md}
+\end{sloppypar}
+
+\subsection*{\code{crates/efe-nano-app-coordinator} \normalfont\textcolor{grey}{--- 4 fichiers}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{CHANGELOG.md} \;\textbullet\; \code{Cargo.toml} \;\textbullet\; \code{MODELS\_DOWNLOAD.md} \;\textbullet\; \code{README.md}
+\end{sloppypar}
+
+\subsection*{\code{crates/efe-nano-app-coordinator/assets/grammars} \normalfont\textcolor{grey}{--- 5 fichiers}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{analyzer\_v1.gbnf} \;\textbullet\; \code{compressor\_v1.gbnf} \;\textbullet\; \code{reformulator\_multillm\_v1.gbnf} \;\textbullet\; \code{reformulator\_v1.gbnf} \;\textbullet\; \code{verifier\_v1.gbnf}
+\end{sloppypar}
+
+\subsection*{\code{crates/efe-nano-app-coordinator/assets/prompts} \normalfont\textcolor{grey}{--- 5 fichiers}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{analyzer.txt} \;\textbullet\; \code{compressor.txt} \;\textbullet\; \code{reformulator.txt} \;\textbullet\; \code{reformulator\_multillm.txt} \;\textbullet\; \code{verifier.txt}
+\end{sloppypar}
+
+\subsection*{\code{crates/efe-nano-app-coordinator/assets/schemas} \normalfont\textcolor{grey}{--- 7 fichiers}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{analyzer\_v1.json} \;\textbullet\; \code{compressor\_v1.json} \;\textbullet\; \code{filter\_v1.json} \;\textbullet\; \code{reformulator\_multillm\_v1.json} \;\textbullet\; \code{reformulator\_v1.json} \;\textbullet\; \code{router\_v1.json} \;\textbullet\; \code{verifier\_v1.json}
+\end{sloppypar}
+
+\subsection*{\code{crates/efe-nano-app-coordinator/benches} \normalfont\textcolor{grey}{--- 1 fichier}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{robot\_latencies.rs}
+\end{sloppypar}
+
+\subsection*{\code{crates/efe-nano-app-coordinator/scripts} \normalfont\textcolor{grey}{--- 2 fichiers}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{generate-grammars.sh} \;\textbullet\; \code{validate-grammars.py}
+\end{sloppypar}
+
+\subsection*{\code{crates/efe-nano-app-coordinator/src} \normalfont\textcolor{grey}{--- 3 fichiers}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{context.rs} \;\textbullet\; \code{error.rs} \;\textbullet\; \code{lib.rs}
+\end{sloppypar}
+
+\subsection*{\code{crates/efe-nano-app-coordinator/src/canonical} \normalfont\textcolor{grey}{--- 1 fichier}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{mod.rs}
+\end{sloppypar}
+
+\subsection*{\code{crates/efe-nano-app-coordinator/src/clients} \normalfont\textcolor{grey}{--- 9 fichiers}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{analyzer.rs} \;\textbullet\; \code{compressor.rs} \;\textbullet\; \code{filter.rs} \;\textbullet\; \code{llama\_server.rs} \;\textbullet\; \code{mod.rs} \;\textbullet\; \code{reformulator.rs} \;\textbullet\; \code{router.rs} \;\textbullet\; \code{slm\_circuit.rs} \;\textbullet\; \code{verifier.rs}
+\end{sloppypar}
+
+\subsection*{\code{crates/efe-nano-app-coordinator/src/types} \normalfont\textcolor{grey}{--- 8 fichiers}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{analyzer.rs} \;\textbullet\; \code{compressor.rs} \;\textbullet\; \code{filter.rs} \;\textbullet\; \code{mod.rs} \;\textbullet\; \code{reformulator.rs} \;\textbullet\; \code{router.rs} \;\textbullet\; \code{scoring.rs} \;\textbullet\; \code{verifier.rs}
+\end{sloppypar}
+
+\subsection*{\code{crates/efe-nano-app-coordinator/tests} \normalfont\textcolor{grey}{--- 7 fichiers}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{audit\_chain\_integrity.rs} \;\textbullet\; \code{chaos\_robot\_down.rs} \;\textbullet\; \code{compressor\_chunking.rs} \;\textbullet\; \code{live\_smoke.rs} \;\textbullet\; \code{phase\_1\_workflow.rs} \;\textbullet\; \code{unit\_1000\_tirages.rs} \;\textbullet\; \code{unit\_schema\_validation.rs}
+\end{sloppypar}
+
+\subsection*{\code{crates/efe-nano-sdk} \normalfont\textcolor{grey}{--- 2 fichiers}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{Cargo.toml} \;\textbullet\; \code{README.md}
+\end{sloppypar}
+
+\subsection*{\code{crates/efe-nano-sdk/src} \normalfont\textcolor{grey}{--- 2 fichiers}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{error.rs} \;\textbullet\; \code{lib.rs}
+\end{sloppypar}
+
+\subsection*{\code{crates/efe-nano-sdk/src/traits} \normalfont\textcolor{grey}{--- 3 fichiers}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{catalog.rs} \;\textbullet\; \code{mod.rs} \;\textbullet\; \code{runtime.rs}
+\end{sloppypar}
+
+\subsection*{\code{crates/efe-nano-sdk/src/types} \normalfont\textcolor{grey}{--- 17 fichiers}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{catalog.rs} \;\textbullet\; \code{compliance.rs} \;\textbullet\; \code{envelope.rs} \;\textbullet\; \code{gold.rs} \;\textbullet\; \code{identifier.rs} \;\textbullet\; \code{limits.rs} \;\textbullet\; \code{llm\_provenance.rs} \;\textbullet\; \code{mod.rs} \;\textbullet\; \code{publisher.rs} \;\textbullet\; \code{region.rs} \;\textbullet\; \code{replay.rs} \;\textbullet\; \code{rollout.rs} \;\textbullet\; \code{scheduling.rs} \;\textbullet\; \code{swarm.rs} \;\textbullet\; \code{swarm\_dag.rs} \;\textbullet\; \code{tenant.rs} \;\textbullet\; \code{version.rs}
+\end{sloppypar}
+
+\subsection*{\code{crates/efe-nano/migrations} \normalfont\textcolor{grey}{--- 6 fichiers}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{v004\_nano\_agent\_traces.sql} \;\textbullet\; \code{v005\_indexes.sql} \;\textbullet\; \code{v006\_replay\_attempts.sql} \;\textbullet\; \code{v007\_constraints.sql} \;\textbullet\; \code{v008\_epoch\_roots.sql} \;\textbullet\; \code{v009\_tombstone.sql}
+\end{sloppypar}
+
+\subsection*{\code{crates/efe-nano/src} \normalfont\textcolor{grey}{--- 2 fichiers}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{error.rs} \;\textbullet\; \code{lib.rs}
+\end{sloppypar}
+
+\subsection*{\code{crates/efe-nano/src/audit} \normalfont\textcolor{grey}{--- 8 fichiers}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{chain\_store.rs} \;\textbullet\; \code{drift.rs} \;\textbullet\; \code{hkdf.rs} \;\textbullet\; \code{hmac\_chain.rs} \;\textbullet\; \code{mod.rs} \;\textbullet\; \code{payload.rs} \;\textbullet\; \code{stub.rs} \;\textbullet\; \code{verify.rs}
+\end{sloppypar}
+
+\subsection*{\code{crates/efe-nano/src/audit/merkle} \normalfont\textcolor{grey}{--- 5 fichiers}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{epoch.rs} \;\textbullet\; \code{mod.rs} \;\textbullet\; \code{notary.rs} \;\textbullet\; \code{store.rs} \;\textbullet\; \code{tree.rs}
+\end{sloppypar}
+
+\subsection*{\code{crates/efe-nano/src/budget} \normalfont\textcolor{grey}{--- 2 fichiers}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{mod.rs} \;\textbullet\; \code{stub.rs}
+\end{sloppypar}
+
+\subsection*{\code{crates/efe-nano/src/catalog} \normalfont\textcolor{grey}{--- 2 fichiers}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{in\_memory.rs} \;\textbullet\; \code{mod.rs}
+\end{sloppypar}
+
+\subsection*{\code{crates/efe-nano/src/dispatcher} \normalfont\textcolor{grey}{--- 8 fichiers}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{compare.rs} \;\textbullet\; \code{dag.rs} \;\textbullet\; \code{envelope.rs} \;\textbullet\; \code{executor.rs} \;\textbullet\; \code{mod.rs} \;\textbullet\; \code{routing.rs} \;\textbullet\; \code{shadow.rs} \;\textbullet\; \code{types.rs}
+\end{sloppypar}
+
+\subsection*{\code{crates/efe-nano/src/idempotency} \normalfont\textcolor{grey}{--- 3 fichiers}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{cache\_entry.rs} \;\textbullet\; \code{cache\_key.rs} \;\textbullet\; \code{mod.rs}
+\end{sloppypar}
+
+\subsection*{\code{crates/efe-nano/src/metering} \normalfont\textcolor{grey}{--- 3 fichiers}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{inmem.rs} \;\textbullet\; \code{mod.rs} \;\textbullet\; \code{noop.rs}
+\end{sloppypar}
+
+\subsection*{\code{crates/efe-nano/src/replay} \normalfont\textcolor{grey}{--- 5 fichiers}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{cli.rs} \;\textbullet\; \code{determinism.rs} \;\textbullet\; \code{mod.rs} \;\textbullet\; \code{reconstructor.rs} \;\textbullet\; \code{types.rs}
+\end{sloppypar}
+
+\subsection*{\code{crates/efe-nano/src/runtime} \normalfont\textcolor{grey}{--- 12 fichiers}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{context.rs} \;\textbullet\; \code{cost\_attribution.rs} \;\textbullet\; \code{llm\_augmented.rs} \;\textbullet\; \code{llm\_client.rs} \;\textbullet\; \code{local\_model.rs} \;\textbullet\; \code{mod.rs} \;\textbullet\; \code{model\_loader.rs} \;\textbullet\; \code{multi\_mode.rs} \;\textbullet\; \code{output\_validator.rs} \;\textbullet\; \code{pii\_redactor.rs} \;\textbullet\; \code{prompt\_injection.rs} \;\textbullet\; \code{pure\_rust.rs}
+\end{sloppypar}
+
+\subsection*{\code{crates/efe-nano/src/runtime/pool} \normalfont\textcolor{grey}{--- 2 fichiers}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{mod.rs} \;\textbullet\; \code{stub.rs}
+\end{sloppypar}
+
+\subsection*{\code{crates/efe-nano/src/runtime/pool/firecracker} \normalfont\textcolor{grey}{--- 12 fichiers}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{api\_client.rs} \;\textbullet\; \code{cgroup.rs} \;\textbullet\; \code{config.rs} \;\textbullet\; \code{kind\_pool.rs} \;\textbullet\; \code{lifecycle.rs} \;\textbullet\; \code{metrics.rs} \;\textbullet\; \code{mod.rs} \;\textbullet\; \code{pool.rs} \;\textbullet\; \code{reaper.rs} \;\textbullet\; \code{rpc.rs} \;\textbullet\; \code{types.rs} \;\textbullet\; \code{vsock\_client.rs}
+\end{sloppypar}
+
+\subsection*{\code{crates/efe-nano/src/scheduler} \normalfont\textcolor{grey}{--- 7 fichiers}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{admission.rs} \;\textbullet\; \code{drr.rs} \;\textbullet\; \code{metrics.rs} \;\textbullet\; \code{mod.rs} \;\textbullet\; \code{policy\_lookup.rs} \;\textbullet\; \code{token\_bucket.rs} \;\textbullet\; \code{tracker.rs}
+\end{sloppypar}
+
+\subsection*{\code{crates/efe-nano/src/starter\_pack} \normalfont\textcolor{grey}{--- 21 fichiers}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{classify\_topic\_llm.rs} \;\textbullet\; \code{csv\_normalize.rs} \;\textbullet\; \code{currency\_normalize.rs} \;\textbullet\; \code{date\_normalize.rs} \;\textbullet\; \code{embed\_text.rs} \;\textbullet\; \code{extract\_structured.rs} \;\textbullet\; \code{html\_extract\_main\_content.rs} \;\textbullet\; \code{intent\_classify\_generic.rs} \;\textbullet\; \code{json\_validate.rs} \;\textbullet\; \code{lang\_detect.rs} \;\textbullet\; \code{markdown\_extract\_headings.rs} \;\textbullet\; \code{mod.rs} \;\textbullet\; \code{ner\_clinical.rs} \;\textbullet\; \code{ner\_legal.rs} \;\textbullet\; \code{pdf\_extract\_text.rs} \;\textbullet\; \code{qa\_grounded.rs} \;\textbullet\; \code{regex\_extract.rs} \;\textbullet\; \code{sentiment\_nuanced.rs} \;\textbullet\; \code{sql\_parse\_safe.rs} \;\textbullet\; \code{summarize\_strict.rs} \;\textbullet\; \code{xml\_validate.rs}
+\end{sloppypar}
+
+\subsection*{\code{crates/efe-nano/tests} \normalfont\textcolor{grey}{--- 11 fichiers}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{phase\_1\_integration.rs} \;\textbullet\; \code{phase\_2\_audit\_chain.rs} \;\textbullet\; \code{phase\_2\_gdpr\_tombstone.rs} \;\textbullet\; \code{phase\_2\_merkle\_epochs.rs} \;\textbullet\; \code{phase\_2\_mode\_b.rs} \;\textbullet\; \code{phase\_2\_mode\_c.rs} \;\textbullet\; \code{phase\_2\_n12\_cache\_hit.rs} \;\textbullet\; \code{phase\_2\_n13\_shadow\_canary.rs} \;\textbullet\; \code{phase\_2\_n14\_swarm\_envelope.rs} \;\textbullet\; \code{phase\_2\_replay.rs} \;\textbullet\; \code{phase\_3\_n15\_fairness\_scheduling.rs}
+\end{sloppypar}
+
+\subsection*{\code{crates/efe-pii} \normalfont\textcolor{grey}{--- 1 fichier}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{Cargo.toml}
+\end{sloppypar}
+
+\subsection*{\code{crates/efe-pii/src} \normalfont\textcolor{grey}{--- 8 fichiers}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{canonicalize.rs} \;\textbullet\; \code{circuit\_breaker.rs} \;\textbullet\; \code{error.rs} \;\textbullet\; \code{lib.rs} \;\textbullet\; \code{metrics.rs} \;\textbullet\; \code{policy.rs} \;\textbullet\; \code{presidio\_client.rs} \;\textbullet\; \code{redactor.rs}
+\end{sloppypar}
+
+\subsection*{\code{crates/efe-swarm-dashboard} \normalfont\textcolor{grey}{--- 1 fichier}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{Cargo.toml}
+\end{sloppypar}
+
+\subsection*{\code{crates/efe-swarm-dashboard/src} \normalfont\textcolor{grey}{--- 6 fichiers}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{bus.rs} \;\textbullet\; \code{event.rs} \;\textbullet\; \code{lib.rs} \;\textbullet\; \code{metrics.rs} \;\textbullet\; \code{registry.rs} \;\textbullet\; \code{tap.rs}
+\end{sloppypar}
+
+\subsection*{\code{crates/efe-swarm-dashboard/tests} \normalfont\textcolor{grey}{--- 1 fichier}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{replay\_and\_live.rs}
+\end{sloppypar}
+
+\subsection*{\code{crates/efe-swarm-gateway} \normalfont\textcolor{grey}{--- 2 fichiers}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{Cargo.toml} \;\textbullet\; \code{Dockerfile}
+\end{sloppypar}
+
+\subsection*{\code{crates/efe-swarm-gateway/assets} \normalfont\textcolor{grey}{--- 1 fichier}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{dashboard.html}
+\end{sloppypar}
+
+\subsection*{\code{crates/efe-swarm-gateway/examples} \normalfont\textcolor{grey}{--- 6 fichiers}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{curl\_e2e.sh} \;\textbullet\; \code{curl\_network\_e2e.sh} \;\textbullet\; \code{litellm-config.yaml} \;\textbullet\; \code{local\_receipt\_demo.rs} \;\textbullet\; \code{lot\_admit\_deadline.rs} \;\textbullet\; \code{serve\_standalone.rs}
+\end{sloppypar}
+
+\subsection*{\code{crates/efe-swarm-gateway/src} \normalfont\textcolor{grey}{--- 21 fichiers}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{auth.rs} \;\textbullet\; \code{capture.rs} \;\textbullet\; \code{dto.rs} \;\textbullet\; \code{error.rs} \;\textbullet\; \code{frontier.rs} \;\textbullet\; \code{frontier\_metrics.rs} \;\textbullet\; \code{inventaire.rs} \;\textbullet\; \code{lib.rs} \;\textbullet\; \code{main.rs} \;\textbullet\; \code{mission.rs} \;\textbullet\; \code{mission\_graph.rs} \;\textbullet\; \code{oidc.rs} \;\textbullet\; \code{pii.rs} \;\textbullet\; \code{profile.rs} \;\textbullet\; \code{reg\_pont.rs} \;\textbullet\; \code{router\_map.rs} \;\textbullet\; \code{state.rs} \;\textbullet\; \code{store.rs} \;\textbullet\; \code{store\_pg.rs} \;\textbullet\; \code{store\_pg\_memory.rs} \;\textbullet\; \code{test\_support.rs}
+\end{sloppypar}
+
+\subsection*{\code{crates/efe-swarm-gateway/src/routes} \normalfont\textcolor{grey}{--- 14 fichiers}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{bundle.rs} \;\textbullet\; \code{dashboard.rs} \;\textbullet\; \code{events.rs} \;\textbullet\; \code{gaps.rs} \;\textbullet\; \code{health.rs} \;\textbullet\; \code{llm.rs} \;\textbullet\; \code{memory.rs} \;\textbullet\; \code{metrics.rs} \;\textbullet\; \code{mod.rs} \;\textbullet\; \code{records.rs} \;\textbullet\; \code{reg.rs} \;\textbullet\; \code{replay.rs} \;\textbullet\; \code{run.rs} \;\textbullet\; \code{verify.rs}
+\end{sloppypar}
+
+\subsection*{\code{crates/efe-swarm-gateway/tests} \normalfont\textcolor{grey}{--- 11 fichiers}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{absence\_expliquee.rs} \;\textbullet\; \code{admission\_http.rs} \;\textbullet\; \code{deux\_produits\_separables.rs} \;\textbullet\; \code{iterative\_http.rs} \;\textbullet\; \code{m3\_inventaire\_des\_pannes.rs} \;\textbullet\; \code{n17\_persist.rs} \;\textbullet\; \code{network\_inprocess.rs} \;\textbullet\; \code{p1\_injections.rs} \;\textbullet\; \code{profile\_files.rs} \;\textbullet\; \code{profile\_no\_raw\_env.rs} \;\textbullet\; \code{r3\_fournisseur\_unique.rs}
+\end{sloppypar}
+
+\subsection*{\code{crates/efe-swarm-memory} \normalfont\textcolor{grey}{--- 1 fichier}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{Cargo.toml}
+\end{sloppypar}
+
+\subsection*{\code{crates/efe-swarm-memory/src} \normalfont\textcolor{grey}{--- 6 fichiers}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{cells.rs} \;\textbullet\; \code{chain.rs} \;\textbullet\; \code{family.rs} \;\textbullet\; \code{fold.rs} \;\textbullet\; \code{lib.rs} \;\textbullet\; \code{store.rs}
+\end{sloppypar}
+
+\subsection*{\code{crates/efe-swarm-provenance} \normalfont\textcolor{grey}{--- 1 fichier}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{Cargo.toml}
+\end{sloppypar}
+
+\subsection*{\code{crates/efe-swarm-provenance/examples} \normalfont\textcolor{grey}{--- 16 fichiers}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{atom.rs} \;\textbullet\; \code{bridge.rs} \;\textbullet\; \code{capture.rs} \;\textbullet\; \code{chain.rs} \;\textbullet\; \code{instrumented\_consensus.rs} \;\textbullet\; \code{lot\_n17persist.rs} \;\textbullet\; \code{lot\_p4.rs} \;\textbullet\; \code{lot\_replay.rs} \;\textbullet\; \code{replay.rs} \;\textbullet\; \code{selfhost\_mailbox.rs} \;\textbullet\; \code{swarm\_all\_phases\_real.rs} \;\textbullet\; \code{swarm\_llama.rs} \;\textbullet\; \code{swarm\_mailbox.rs} \;\textbullet\; \code{uniform\_provenance.rs} \;\textbullet\; \code{verify.rs} \;\textbullet\; \code{verify\_offline.rs}
+\end{sloppypar}
+
+\subsection*{\code{crates/efe-swarm-provenance/src} \normalfont\textcolor{grey}{--- 15 fichiers}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{attest.rs} \;\textbullet\; \code{bridge.rs} \;\textbullet\; \code{canon.rs} \;\textbullet\; \code{chain.rs} \;\textbullet\; \code{cosign.rs} \;\textbullet\; \code{decorator.rs} \;\textbullet\; \code{hash.rs} \;\textbullet\; \code{lib.rs} \;\textbullet\; \code{metrics.rs} \;\textbullet\; \code{n17\_chain.rs} \;\textbullet\; \code{record.rs} \;\textbullet\; \code{recorder.rs} \;\textbullet\; \code{replay.rs} \;\textbullet\; \code{sink.rs} \;\textbullet\; \code{verify.rs}
+\end{sloppypar}
+
+\subsection*{\code{crates/efe-swarm-provenance/tests} \normalfont\textcolor{grey}{--- 2 fichiers}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{instrumented\_consensus.rs} \;\textbullet\; \code{mailbox\_provenance.rs}
+\end{sloppypar}
+
+\subsection*{\code{crates/efe-swarm-sdk} \normalfont\textcolor{grey}{--- 1 fichier}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{Cargo.toml}
+\end{sloppypar}
+
+\subsection*{\code{crates/efe-swarm-sdk/examples} \normalfont\textcolor{grey}{--- 15 fichiers}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{bench\_scale.rs} \;\textbullet\; \code{bench\_width.rs} \;\textbullet\; \code{lot\_kadapt.rs} \;\textbullet\; \code{lot\_memory.rs} \;\textbullet\; \code{lot\_p5.rs} \;\textbullet\; \code{lot\_pattern\_bias.rs} \;\textbullet\; \code{lot\_reputation.rs} \;\textbullet\; \code{lot\_s2bis.rs} \;\textbullet\; \code{lot\_s3bis.rs} \;\textbullet\; \code{lot\_sizer\_reputation.rs} \;\textbullet\; \code{lot\_sizer\_reputation\_live.rs} \;\textbullet\; \code{quickstart.rs} \;\textbullet\; \code{selfhost\_flagship.rs} \;\textbullet\; \code{selfhost\_iterative.rs} \;\textbullet\; \code{selfhost\_ollama.rs}
+\end{sloppypar}
+
+\subsection*{\code{crates/efe-swarm-sdk/src} \normalfont\textcolor{grey}{--- 13 fichiers}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{agents.rs} \;\textbullet\; \code{budget.rs} \;\textbullet\; \code{client.rs} \;\textbullet\; \code{deadline.rs} \;\textbullet\; \code{lib.rs} \;\textbullet\; \code{llm.rs} \;\textbullet\; \code{memory.rs} \;\textbullet\; \code{n17.rs} \;\textbullet\; \code{observer.rs} \;\textbullet\; \code{resolver.rs} \;\textbullet\; \code{result.rs} \;\textbullet\; \code{sdk.rs} \;\textbullet\; \code{spec.rs}
+\end{sloppypar}
+
+\subsection*{\code{crates/efe-swarm-sdk/src/backend} \normalfont\textcolor{grey}{--- 3 fichiers}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{mod.rs} \;\textbullet\; \code{ollama.rs} \;\textbullet\; \code{openai\_local.rs}
+\end{sloppypar}
+
+\subsection*{\code{crates/efe-swarm-sdk/tests} \normalfont\textcolor{grey}{--- 11 fichiers}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{adaptive\_keyless.rs} \;\textbullet\; \code{fewshot\_modec.rs} \;\textbullet\; \code{iterative\_keyless.rs} \;\textbullet\; \code{keyless\_guardrails.rs} \;\textbullet\; \code{mailbox\_sdk\_bridge.rs} \;\textbullet\; \code{modec\_memory\_active.rs} \;\textbullet\; \code{modec\_seam.rs} \;\textbullet\; \code{n17\_persist\_real.rs} \;\textbullet\; \code{replay\_real.rs} \;\textbullet\; \code{reputation\_schedule\_live.rs} \;\textbullet\; \code{width\_keyless.rs}
+\end{sloppypar}
+
+\subsection*{\code{crates/efe-swarm-topology} \normalfont\textcolor{grey}{--- 1 fichier}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{Cargo.toml}
+\end{sloppypar}
+
+\subsection*{\code{crates/efe-swarm-topology/examples} \normalfont\textcolor{grey}{--- 8 fichiers}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{compare\_topologies.rs} \;\textbullet\; \code{consensus\_topology.rs} \;\textbullet\; \code{llm\_judge.rs} \;\textbullet\; \code{lot\_s3.rs} \;\textbullet\; \code{t1\_slm.rs} \;\textbullet\; \code{t3\_hierarchical.rs} \;\textbullet\; \code{validate.rs} \;\textbullet\; \code{validate\_consensus.rs}
+\end{sloppypar}
+
+\subsection*{\code{crates/efe-swarm-topology/src} \normalfont\textcolor{grey}{--- 10 fichiers}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{catalog.rs} \;\textbullet\; \code{consensus\_topology.rs} \;\textbullet\; \code{fleet.rs} \;\textbullet\; \code{generate\_verify.rs} \;\textbullet\; \code{hierarchical.rs} \;\textbullet\; \code{lib.rs} \;\textbullet\; \code{pipeline.rs} \;\textbullet\; \code{sizing.rs} \;\textbullet\; \code{topology.rs} \;\textbullet\; \code{traits.rs}
+\end{sloppypar}
+
+\subsection*{\code{crates/efe-swarm-topology/src/consensus} \normalfont\textcolor{grey}{--- 7 fichiers}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{borda.rs} \;\textbullet\; \code{condorcet.rs} \;\textbullet\; \code{judges.rs} \;\textbullet\; \code{mod.rs} \;\textbullet\; \code{rank.rs} \;\textbullet\; \code{selector.rs} \;\textbullet\; \code{vote.rs}
+\end{sloppypar}
+
+\subsection*{\code{crates/efe-swarm-topology/src/iterative} \normalfont\textcolor{grey}{--- 4 fichiers}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{debate.rs} \;\textbullet\; \code{gossip.rs} \;\textbullet\; \code{mod.rs} \;\textbullet\; \code{round\_driver.rs}
+\end{sloppypar}
+
+\subsection*{\code{crates/efe-swarm-topology/tests} \normalfont\textcolor{grey}{--- 1 fichier}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{probe\_panic\_swallow.rs}
+\end{sloppypar}
+
+\subsection*{\code{crates/forensic-export} \normalfont\textcolor{grey}{--- 1 fichier}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{Cargo.toml}
+\end{sloppypar}
+
+\subsection*{\code{crates/forensic-export/examples} \normalfont\textcolor{grey}{--- 1 fichier}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{emit\_bundle.rs}
+\end{sloppypar}
+
+\subsection*{\code{crates/forensic-export/src} \normalfont\textcolor{grey}{--- 6 fichiers}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{anchor.rs} \;\textbullet\; \code{bundle.rs} \;\textbullet\; \code{lib.rs} \;\textbullet\; \code{manifest.rs} \;\textbullet\; \code{readme.rs} \;\textbullet\; \code{vendor.rs}
+\end{sloppypar}
+
+\subsection*{\code{crates/forensic-export/tests} \normalfont\textcolor{grey}{--- 2 fichiers}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{recit\_is\_a\_view.rs} \;\textbullet\; \code{trustless\_end\_to\_end.rs}
+\end{sloppypar}
+
+\subsection*{\code{crates/provenance-bridge} \normalfont\textcolor{grey}{--- 1 fichier}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{Cargo.toml}
+\end{sloppypar}
+
+\subsection*{\code{crates/provenance-bridge/src} \normalfont\textcolor{grey}{--- 9 fichiers}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{anchor.rs} \;\textbullet\; \code{attest.rs} \;\textbullet\; \code{derive.rs} \;\textbullet\; \code{error.rs} \;\textbullet\; \code{lib.rs} \;\textbullet\; \code{mapping.rs} \;\textbullet\; \code{rfc3161.rs} \;\textbullet\; \code{seal.rs} \;\textbullet\; \code{view.rs}
+\end{sloppypar}
+
+\subsection*{\code{crates/provenance-bridge/tests} \normalfont\textcolor{grey}{--- 1 fichier}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{m9\_ancre\_tierce.rs}
+\end{sloppypar}
+
+\subsection*{\code{crates/provenance-capture} \normalfont\textcolor{grey}{--- 1 fichier}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{Cargo.toml}
+\end{sloppypar}
+
+\subsection*{\code{crates/provenance-capture/examples} \normalfont\textcolor{grey}{--- 2 fichiers}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{emit\_demo\_case.rs} \;\textbullet\; \code{m6\_conservation.rs}
+\end{sloppypar}
+
+\subsection*{\code{crates/provenance-capture/src} \normalfont\textcolor{grey}{--- 5 fichiers}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{conservation.rs} \;\textbullet\; \code{guard.rs} \;\textbullet\; \code{lib.rs} \;\textbullet\; \code{store.rs} \;\textbullet\; \code{tap.rs}
+\end{sloppypar}
+
+\subsection*{\code{crates/provenance-capture/tests} \normalfont\textcolor{grey}{--- 2 fichiers}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{m6\_conservation\_limitee.rs} \;\textbullet\; \code{m6\_un\_seul\_scellement.rs}
+\end{sloppypar}
+
+\subsection*{\code{crates/provenance-dag} \normalfont\textcolor{grey}{--- 1 fichier}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{Cargo.toml}
+\end{sloppypar}
+
+\subsection*{\code{crates/provenance-dag/src} \normalfont\textcolor{grey}{--- 8 fichiers}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{anchor.rs} \;\textbullet\; \code{dag.rs} \;\textbullet\; \code{hmac.rs} \;\textbullet\; \code{key.rs} \;\textbullet\; \code{lib.rs} \;\textbullet\; \code{node.rs} \;\textbullet\; \code{sha256.rs} \;\textbullet\; \code{shred.rs}
+\end{sloppypar}
+
+\subsection*{\code{crates/provenance-verify} \normalfont\textcolor{grey}{--- 1 fichier}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{Cargo.toml}
+\end{sloppypar}
+
+\subsection*{\code{crates/provenance-verify/src} \normalfont\textcolor{grey}{--- 1 fichier}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{main.rs}
+\end{sloppypar}
+
+\subsection*{\code{crates/reg-evidence} \normalfont\textcolor{grey}{--- 1 fichier}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{Cargo.toml}
+\end{sloppypar}
+
+\subsection*{\code{crates/reg-evidence/examples} \normalfont\textcolor{grey}{--- 1 fichier}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{csddd\_seed.rs}
+\end{sloppypar}
+
+\subsection*{\code{crates/reg-evidence/src} \normalfont\textcolor{grey}{--- 9 fichiers}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{artifact.rs} \;\textbullet\; \code{bundle.rs} \;\textbullet\; \code{engine.rs} \;\textbullet\; \code{framework.rs} \;\textbullet\; \code{lib.rs} \;\textbullet\; \code{mapping.rs} \;\textbullet\; \code{render.rs} \;\textbullet\; \code{selector.rs} \;\textbullet\; \code{templates.rs}
+\end{sloppypar}
+
+\subsection*{\code{crates/reg-evidence/tests} \normalfont\textcolor{grey}{--- 2 fichiers}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{rederive\_from\_real\_bundle.rs} \;\textbullet\; \code{trustless\_rederive.rs}
+\end{sloppypar}
+
+\subsection*{\code{crates/scella-authority} \normalfont\textcolor{grey}{--- 1 fichier}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{Cargo.toml}
+\end{sloppypar}
+
+\subsection*{\code{crates/scella-authority/src} \normalfont\textcolor{grey}{--- 1 fichier}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{lib.rs}
+\end{sloppypar}
+
+\subsection*{\code{crates/scella-authority/tests} \normalfont\textcolor{grey}{--- 2 fichiers}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{accord\_avec\_url.rs} \;\textbullet\; \code{un\_seul\_analyseur.rs}
+\end{sloppypar}
+
+\subsection*{\code{crates/scella-conservation} \normalfont\textcolor{grey}{--- 1 fichier}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{Cargo.toml}
+\end{sloppypar}
+
+\subsection*{\code{crates/scella-conservation/examples} \normalfont\textcolor{grey}{--- 1 fichier}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{p2\_conservation.rs}
+\end{sloppypar}
+
+\subsection*{\code{crates/scella-conservation/src} \normalfont\textcolor{grey}{--- 6 fichiers}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{archive.rs} \;\textbullet\; \code{generations.rs} \;\textbullet\; \code{lib.rs} \;\textbullet\; \code{manifeste.rs} \;\textbullet\; \code{restauration.rs} \;\textbullet\; \code{trousseau\_maitre\_fichier.rs}
+\end{sloppypar}
+
+\subsection*{\code{crates/scella-conservation/src/bin} \normalfont\textcolor{grey}{--- 1 fichier}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{scella-conserver.rs}
+\end{sloppypar}
+
+\subsection*{\code{crates/scella-conservation/tests} \normalfont\textcolor{grey}{--- 4 fichiers}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{p2\_aller\_retour.rs} \;\textbullet\; \code{p2\_confrontation.rs} \;\textbullet\; \code{p2\_diagnostics.rs} \;\textbullet\; \code{p2\_rotation.rs}
+\end{sloppypar}
+
+\subsection*{\code{crates/scella-mz} \normalfont\textcolor{grey}{--- 3 fichiers}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{Cargo.toml} \;\textbullet\; \code{MZ\_MESURE\_CADRAGE.json} \;\textbullet\; \code{MZ\_MESURE\_CADRAGE.md}
+\end{sloppypar}
+
+\subsection*{\code{crates/scella-mz/src} \normalfont\textcolor{grey}{--- 5 fichiers}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{corpus.rs} \;\textbullet\; \code{lib.rs} \;\textbullet\; \code{main.rs} \;\textbullet\; \code{mesure.rs} \;\textbullet\; \code{verifieur.rs}
+\end{sloppypar}
+
+\subsection*{\code{crates/scella-preuve} \normalfont\textcolor{grey}{--- 1 fichier}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{Cargo.toml}
+\end{sloppypar}
+
+\subsection*{\code{crates/scella-preuve/src} \normalfont\textcolor{grey}{--- 1 fichier}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{main.rs}
+\end{sloppypar}
+
+\subsection*{\code{crates/scella-rfc3161} \normalfont\textcolor{grey}{--- 1 fichier}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{Cargo.toml}
+\end{sloppypar}
+
+\subsection*{\code{crates/scella-rfc3161/src} \normalfont\textcolor{grey}{--- 5 fichiers}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{der.rs} \;\textbullet\; \code{fabrique.rs} \;\textbullet\; \code{jeton.rs} \;\textbullet\; \code{lib.rs} \;\textbullet\; \code{requete.rs}
+\end{sloppypar}
+
+\subsection*{\code{crates/verify-meta-mini} \normalfont\textcolor{grey}{--- 1 fichier}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{Cargo.toml}
+\end{sloppypar}
+
+\subsection*{\code{crates/verify-meta-mini/src} \normalfont\textcolor{grey}{--- 5 fichiers}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{hmac.rs} \;\textbullet\; \code{json.rs} \;\textbullet\; \code{lib.rs} \;\textbullet\; \code{sha256.rs} \;\textbullet\; \code{verify.rs}
+\end{sloppypar}
+
+\subsection*{\code{crates/verify-meta-mini/src/bin} \normalfont\textcolor{grey}{--- 1 fichier}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{verify\_meta\_mini.rs}
+\end{sloppypar}
+
+\subsection*{\code{crates/verify-meta-mini/tests} \normalfont\textcolor{grey}{--- 1 fichier}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{cross\_check.rs}
+\end{sloppypar}
+
+\subsection*{\code{crates/verify-mini} \normalfont\textcolor{grey}{--- 1 fichier}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{Cargo.toml}
+\end{sloppypar}
+
+\subsection*{\code{crates/verify-mini/src} \normalfont\textcolor{grey}{--- 7 fichiers}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{hmac.rs} \;\textbullet\; \code{json.rs} \;\textbullet\; \code{lib.rs} \;\textbullet\; \code{main.rs} \;\textbullet\; \code{record.rs} \;\textbullet\; \code{sha256.rs} \;\textbullet\; \code{verify.rs}
+\end{sloppypar}
+
+\subsection*{\code{crates/verify-mini/tests} \normalfont\textcolor{grey}{--- 2 fichiers}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{cross\_check\_against\_s0.rs} \;\textbullet\; \code{m6\_broyage\_invisible\_au\_verifieur.rs}
+\end{sloppypar}
+
+\subsection*{\code{docker} \normalfont\textcolor{grey}{--- 1 fichier}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{Dockerfile.coin}
+\end{sloppypar}
+
+\subsection*{\code{docs} \normalfont\textcolor{grey}{--- 1 fichier}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{D5-COMPTE-RENDU.md}
+\end{sloppypar}
+
+\subsection*{\code{docs/architecture} \normalfont\textcolor{grey}{--- 35 fichiers}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{E1-OUVRIR-LA-PORTE-ARCHITECTURE.pdf} \;\textbullet\; \code{E1-OUVRIR-LA-PORTE-ARCHITECTURE.tex} \;\textbullet\; \code{EFE\_A1\_PHASE3\_R2\_MISSIONS\_REELLES\_LIVE\_ARCHITECTURE.md} \;\textbullet\; \code{EFE\_A1\_PHASE3\_R2\_S2\_MISSION\_A\_NAKED\_ARCHITECTURE.md} \;\textbullet\; \code{EFE\_A1\_PHASE3\_R2\_S3\_ANALYZER\_VERIFIER\_ARCHITECTURE.md} \;\textbullet\; \code{EFE\_A1\_PHASE3\_R2\_S4\_FULL\_PIPELINE\_CHEWING\_METRICS\_ARCHITECTURE.md} \;\textbullet\; \code{EFE\_A1\_PHASE3\_R2\_S5\_MISSION\_B\_3LLM\_CONSENSUS\_ARCHITECTURE.md} \;\textbullet\; \code{EFE\_A1\_PHASE3\_R2\_S6\_ROUTER\_TUNING\_TASK\_CLASS\_ARCHITECTURE.md} \;\textbullet\; \code{EFE\_A1\_PHASE3\_R2\_S7\_SPECULATIVE\_DRAFTER\_VERIFIER\_ARCHITECTURE.md} \;\textbullet\; \code{EFE\_A1\_PHASE3\_R2\_S8\_FAILURE\_MODES\_GRACEFUL\_DEGRADATION\_ARCHITECTURE.md} \;\textbullet\; \code{EFE\_A1\_PHASE3\_R2\_S9\_CHEWING\_SAVINGS\_REPORT\_ARCHITECTURE.md} \;\textbullet\; \code{EFE\_A1\_PHASE3\_R3\_S9\_CHEWING\_SAVINGS\_REPORT\_V2\_ARCHITECTURE.md} \;\textbullet\; \code{EFE\_M50\_AGENTIC\_ARCHITECTURE.md} \;\textbullet\; \code{EFE\_M50\_N11\_FIRECRACKER\_POOL\_ARCHITECTURE.md} \;\textbullet\; \code{EFE\_M50\_N12\_CACHE\_KEY\_HARDENING\_ARCHITECTURE.md} \;\textbullet\; \code{EFE\_M50\_N13\_SHADOW\_CANARY\_CATALOG\_ARCHITECTURE.md} \;\textbullet\; \code{EFE\_M50\_N14\_SWARM\_ENVELOPE\_TRACE\_ARCHITECTURE.md} \;\textbullet\; \code{EFE\_M50\_N15\_FAIRNESS\_SCHEDULING\_ARCHITECTURE.md} \;\textbullet\; \code{EFE\_M50\_N16\_MULTI\_REGION\_REPLAY\_ARCHITECTURE.md} \;\textbullet\; \code{EFE\_M50\_N17\_LLM\_PROVENANCE\_ARCHITECTURE.md} \;\textbullet\; \code{EFE\_M50\_N18\_PUBLISHER\_IDENTITY\_ARCHITECTURE.md} \;\textbullet\; \code{EFE\_M50\_N21\_SWARM\_ORCHESTRATION\_AGENTIC\_BRIDGE\_ARCHITECTURE.md} \;\textbullet\; \code{EFE\_M50\_PHASE\_1\_ARCHITECTURE.md} \;\textbullet\; \code{EFE\_M50\_SPRINT\_0\_VALIDATION\_REPORT.md} \;\textbullet\; \code{FIL-P-pont-pile-A-vers-pile-B-ARCHITECTURE.md} \;\textbullet\; \code{M0-PROFIL-SERVI-ARCHITECTURE.pdf} \;\textbullet\; \code{M0-PROFIL-SERVI-ARCHITECTURE.tex} \;\textbullet\; \code{M1-GARDE-UNIQUE-ARCHITECTURE.pdf} \;\textbullet\; \code{M1-GARDE-UNIQUE-ARCHITECTURE.tex} \;\textbullet\; \code{MZ-MESURE-DU-CADRAGE-ARCHITECTURE.pdf} \;\textbullet\; \code{MZ-MESURE-DU-CADRAGE-ARCHITECTURE.tex} \;\textbullet\; \code{P1-PROFIL-DE-PRODUCTION-ARCHITECTURE.pdf} \;\textbullet\; \code{P1-PROFIL-DE-PRODUCTION-ARCHITECTURE.tex} \;\textbullet\; \code{SCELLA-TECHNOLOGIE-ARCHITECTURE.pdf} \;\textbullet\; \code{SCELLA-TECHNOLOGIE-ARCHITECTURE.tex}
+\end{sloppypar}
+
+\subsection*{\code{docs/decisions} \normalfont\textcolor{grey}{--- 2 fichiers}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{D-M50-CRATES-001.md} \;\textbullet\; \code{D-M50-INFRA-001.md}
+\end{sloppypar}
+
+\subsection*{\code{docs/reports} \normalfont\textcolor{grey}{--- 71 fichiers}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{EFE\_P1\_S3\_Console\_Architecture\_2026-06-29.html} \;\textbullet\; \code{EFE\_P1\_S6\_RegEvidence\_Architecture\_2026-06-29.html} \;\textbullet\; \code{Scella\_Animation\_Seuil\_Registre\_2026-08-26.svg} \;\textbullet\; \code{Scella\_C1\_C3\_EN\_1page\_2026-08-27.pdf} \;\textbullet\; \code{Scella\_C1\_C3\_EN\_1page\_2026-08-27.tex} \;\textbullet\; \code{Scella\_C1\_C3\_EN\_2026-08-27.pdf} \;\textbullet\; \code{Scella\_C1\_C3\_EN\_2026-08-27.tex} \;\textbullet\; \code{Scella\_Classement\_Potentiel\_2026-08-05.pdf} \;\textbullet\; \code{Scella\_Classement\_Potentiel\_2026-08-05.tex} \;\textbullet\; \code{Scella\_Classement\_Potentiel\_Intrinseque\_2026-08-05.pdf} \;\textbullet\; \code{Scella\_Classement\_Potentiel\_Intrinseque\_2026-08-05.tex} \;\textbullet\; \code{Scella\_Composants\_Reste\_A\_Faire\_2026-08-03.pdf} \;\textbullet\; \code{Scella\_Composants\_Reste\_A\_Faire\_2026-08-03.tex} \;\textbullet\; \code{Scella\_Composants\_Reste\_A\_Faire\_v2\_2026-08-05.pdf} \;\textbullet\; \code{Scella\_Composants\_Reste\_A\_Faire\_v2\_2026-08-05.tex} \;\textbullet\; \code{Scella\_Couples\_Classement\_Intrinseque\_2026-08-11.pdf} \;\textbullet\; \code{Scella\_Couples\_Classement\_Intrinseque\_2026-08-11.tex} \;\textbullet\; \code{Scella\_Couples\_Croisement\_Complet\_2026-08-11.pdf} \;\textbullet\; \code{Scella\_Couples\_Croisement\_Complet\_2026-08-11.tex} \;\textbullet\; \code{Scella\_Couples\_Elements\_Usages\_2026-08-11.pdf} \;\textbullet\; \code{Scella\_Couples\_Elements\_Usages\_2026-08-11.tex} \;\textbullet\; \code{Scella\_Couples\_Etude\_Detaillee\_2026-08-11.pdf} \;\textbullet\; \code{Scella\_Couples\_Etude\_Detaillee\_2026-08-11.tex} \;\textbullet\; \code{Scella\_Deux\_Classements\_2026-08-11.pdf} \;\textbullet\; \code{Scella\_Deux\_Classements\_2026-08-11.tex} \;\textbullet\; \code{Scella\_EN\_1page\_2026-07-19.pdf} \;\textbullet\; \code{Scella\_EN\_1page\_2026-07-19.tex} \;\textbullet\; \code{Scella\_EN\_2026-07-19.pdf} \;\textbullet\; \code{Scella\_EN\_2026-07-19.tex} \;\textbullet\; \code{Scella\_Ensembles\_Internes\_2026-08-11.pdf} \;\textbullet\; \code{Scella\_Ensembles\_Internes\_2026-08-11.tex} \;\textbullet\; \code{Scella\_Etat\_Des\_Lieux\_2026-08-10.pdf} \;\textbullet\; \code{Scella\_Etat\_Des\_Lieux\_2026-08-10.tex} \;\textbullet\; \code{Scella\_Groupes\_Rachetables\_2026-08-11.pdf} \;\textbullet\; \code{Scella\_Groupes\_Rachetables\_2026-08-11.tex} \;\textbullet\; \code{Scella\_Groupes\_Revolutionnaires\_2026-08-11.pdf} \;\textbullet\; \code{Scella\_Groupes\_Revolutionnaires\_2026-08-11.tex} \;\textbullet\; \code{Scella\_Le\_Seuil\_En\_Une\_Commande\_2026-09-04.pdf} \;\textbullet\; \code{Scella\_Le\_Seuil\_En\_Une\_Commande\_2026-09-04.tex} \;\textbullet\; \code{Scella\_Meilleurs\_Couples\_2026-08-11.pdf} \;\textbullet\; \code{Scella\_Meilleurs\_Couples\_2026-08-11.tex} \;\textbullet\; \code{Scella\_OnePager\_Entreprise\_2026-08-26.pdf} \;\textbullet\; \code{Scella\_OnePager\_Entreprise\_2026-08-26.tex} \;\textbullet\; \code{Scella\_OnePager\_Seuil\_Registre\_2026-08-26.pdf} \;\textbullet\; \code{Scella\_OnePager\_Seuil\_Registre\_2026-08-26.tex} \;\textbullet\; \code{Scella\_Partnership\_Map\_2026-07-23.pdf} \;\textbullet\; \code{Scella\_Partnership\_Map\_2026-07-23.tex} \;\textbullet\; \code{Scella\_Prix\_Rachat\_Niveaux\_2026-08-11.pdf} \;\textbullet\; \code{Scella\_Prix\_Rachat\_Niveaux\_2026-08-11.tex} \;\textbullet\; \code{Scella\_Produit\_Unique\_2026-08-11.pdf} \;\textbullet\; \code{Scella\_Produit\_Unique\_2026-08-11.tex} \;\textbullet\; \code{Scella\_Rachetables\_Deux\_Documents\_2026-08-11.pdf} \;\textbullet\; \code{Scella\_Rachetables\_Deux\_Documents\_2026-08-11.tex} \;\textbullet\; \code{Scella\_Roadmap\_C1\_C3\_2026-08-19.pdf} \;\textbullet\; \code{Scella\_Roadmap\_C1\_C3\_2026-08-19.tex} \;\textbullet\; \code{Scella\_Roadmap\_C1\_C3\_Reste\_2026-08-24.pdf} \;\textbullet\; \code{Scella\_Roadmap\_C1\_C3\_Reste\_2026-08-24.tex} \;\textbullet\; \code{Scella\_Roadmap\_C1\_C3\_Verifiee\_2026-08-27.pdf} \;\textbullet\; \code{Scella\_Roadmap\_C1\_C3\_Verifiee\_2026-08-27.tex} \;\textbullet\; \code{Scella\_Roadmap\_Le\_Premier\_Inconnu\_2026-09-04.pdf} \;\textbullet\; \code{Scella\_Roadmap\_Le\_Premier\_Inconnu\_2026-09-04.tex} \;\textbullet\; \code{Scella\_Roadmap\_MVP\_2026-09-04.pdf} \;\textbullet\; \code{Scella\_Roadmap\_MVP\_2026-09-04.tex} \;\textbullet\; \code{Scella\_Roadmap\_MVP\_C1\_C3\_2026-09-02.pdf} \;\textbullet\; \code{Scella\_Roadmap\_MVP\_C1\_C3\_2026-09-02.tex} \;\textbullet\; \code{Scella\_Roadmap\_Modules\_2026-08-20.pdf} \;\textbullet\; \code{Scella\_Roadmap\_Modules\_2026-08-20.tex} \;\textbullet\; \code{Scella\_Roadmap\_Reste\_2026-08-24.pdf} \;\textbullet\; \code{Scella\_Roadmap\_Reste\_2026-08-24.tex} \;\textbullet\; \code{Scella\_Startup\_Meilleurs\_Produits\_2026-08-19.pdf} \;\textbullet\; \code{Scella\_Startup\_Meilleurs\_Produits\_2026-08-19.tex}
+\end{sloppypar}
+
+\subsection*{\code{docs/roadmap} \normalfont\textcolor{grey}{--- 1 fichier}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{EFE\_M50\_ROADMAP.md}
+\end{sloppypar}
+
+\subsection*{\code{examples} \normalfont\textcolor{grey}{--- 1 fichier}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{run.json}
+\end{sloppypar}
+
+\subsection*{\code{hors-depot} \normalfont\textcolor{grey}{--- 1 fichier}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{LISEZ-MOI.md}
+\end{sloppypar}
+
+\subsection*{\code{hors-depot/bundle-demo-csddd} \normalfont\textcolor{grey}{--- 3 fichiers}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{README.md} \;\textbullet\; \code{records.TAMPERED.jsonl} \;\textbullet\; \code{records.sealed.jsonl}
+\end{sloppypar}
+
+\subsection*{\code{hors-depot/bundle-demo-csddd/reg} \normalfont\textcolor{grey}{--- 9 fichiers}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{REDERIVE.md} \;\textbullet\; \code{csddd.html} \;\textbullet\; \code{csddd.md} \;\textbullet\; \code{eu\_ai\_act.html} \;\textbullet\; \code{eu\_ai\_act.md} \;\textbullet\; \code{lksg.html} \;\textbullet\; \code{lksg.md} \;\textbullet\; \code{mapping.diligence.2026-06.json} \;\textbullet\; \code{mapping.eu\_ai\_act.2026-06.json}
+\end{sloppypar}
+
+\subsection*{\code{hors-depot/bundle-demo-csddd/verify/verify-mini} \normalfont\textcolor{grey}{--- 1 fichier}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{Cargo.toml}
+\end{sloppypar}
+
+\subsection*{\code{hors-depot/bundle-demo-csddd/verify/verify-mini/src} \normalfont\textcolor{grey}{--- 7 fichiers}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{hmac.rs} \;\textbullet\; \code{json.rs} \;\textbullet\; \code{lib.rs} \;\textbullet\; \code{main.rs} \;\textbullet\; \code{record.rs} \;\textbullet\; \code{sha256.rs} \;\textbullet\; \code{verify.rs}
+\end{sloppypar}
+
+\subsection*{\code{hors-depot/demo-bundles/local-receipt} \normalfont\textcolor{grey}{--- 3 fichiers}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{anchors.log} \;\textbullet\; \code{records.TRUNCATED.jsonl} \;\textbullet\; \code{records.sealed.jsonl}
+\end{sloppypar}
+
+\subsection*{\code{hors-depot/demo-bundles/meta-consensus-served} \normalfont\textcolor{grey}{--- 6 fichiers}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{anchors.log} \;\textbullet\; \code{meta\_manifest.FORGED.json} \;\textbullet\; \code{meta\_manifest.TRUNCATED.json} \;\textbullet\; \code{meta\_manifest.json} \;\textbullet\; \code{meta\_steps.TRUNCATED.jsonl} \;\textbullet\; \code{meta\_steps.jsonl}
+\end{sloppypar}
+
+\subsection*{\code{hors-depot/demo-bundles/meta-provenance-bundle} \normalfont\textcolor{grey}{--- 3 fichiers}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{meta\_manifest.json} \;\textbullet\; \code{meta\_steps.TAMPERED.jsonl} \;\textbullet\; \code{meta\_steps.jsonl}
+\end{sloppypar}
+
+\subsection*{\code{hors-depot/documents} \normalfont\textcolor{grey}{--- 6 fichiers}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{PROMPT\_Scella\_video.md} \;\textbullet\; \code{Scella\_EN 2.pdf} \;\textbullet\; \code{Scella\_EN copie.pdf} \;\textbullet\; \code{Scella\_EN-1.pdf} \;\textbullet\; \code{Scella\_EN\_1page copie.pdf} \;\textbullet\; \code{Scella\_Roadmap\_Modules\_2026-08-20\_version-racine.pdf}
+\end{sloppypar}
+
+\subsection*{\code{hors-depot/lignee-efe} \normalfont\textcolor{grey}{--- 3 fichiers}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{EFE\_Kovant\_P2\_Seuil\_Bascule\_Routeur\_2026-07-01.html} \;\textbullet\; \code{EFE\_Kovant\_P2\_Seuil\_Bascule\_Routeur\_2026-07-01.pdf} \;\textbullet\; \code{EFE\_Reg\_Evidence\_Recu\_Reverifiable\_2026-07-19.pdf}
+\end{sloppypar}
+
+\subsection*{\code{profiles} \normalfont\textcolor{grey}{--- 20 fichiers}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{README.md} \;\textbullet\; \code{console.env} \;\textbullet\; \code{console.expected.json} \;\textbullet\; \code{demo.env} \;\textbullet\; \code{demo.expected.json} \;\textbullet\; \code{deploiement.exemple.json} \;\textbullet\; \code{docker.env} \;\textbullet\; \code{docker.expected.json} \;\textbullet\; \code{expose.env} \;\textbullet\; \code{expose.expected.json} \;\textbullet\; \code{frontiere.env} \;\textbullet\; \code{frontiere.expected.json} \;\textbullet\; \code{jonction.env} \;\textbullet\; \code{jonction.expected.json} \;\textbullet\; \code{production.env} \;\textbullet\; \code{production.expected.json} \;\textbullet\; \code{service.env} \;\textbullet\; \code{service.expected.json} \;\textbullet\; \code{souverain.env} \;\textbullet\; \code{souverain.expected.json}
+\end{sloppypar}
+
+\subsection*{\code{scripts} \normalfont\textcolor{grey}{--- 22 fichiers}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{banc-registre.sh} \;\textbullet\; \code{banc-seuil.sh} \;\textbullet\; \code{d3-check.sh} \;\textbullet\; \code{demo-consensus-receipt.sh} \;\textbullet\; \code{demo-local-receipt.sh} \;\textbullet\; \code{e1-check.sh} \;\textbullet\; \code{m4-check.sh} \;\textbullet\; \code{m5-check.sh} \;\textbullet\; \code{m6-check.sh} \;\textbullet\; \code{m7-check.sh} \;\textbullet\; \code{m8-check.sh} \;\textbullet\; \code{m9-check.sh} \;\textbullet\; \code{mon-premier-recu.sh} \;\textbullet\; \code{mz-check.sh} \;\textbullet\; \code{orphelins-check.sh} \;\textbullet\; \code{p1-check.sh} \;\textbullet\; \code{p1-jeton.sh} \;\textbullet\; \code{p2-check.sh} \;\textbullet\; \code{p3-check.sh} \;\textbullet\; \code{portes-check.sh} \;\textbullet\; \code{profile-check.sh} \;\textbullet\; \code{r3-check.sh}
+\end{sloppypar}
+
+\subsection*{\code{scripts/slm} \normalfont\textcolor{grey}{--- 6 fichiers}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{bench.sh} \;\textbullet\; \code{download\_models.sh} \;\textbullet\; \code{health.sh} \;\textbullet\; \code{lib\_common.sh} \;\textbullet\; \code{logs.sh} \;\textbullet\; \code{start.sh}
+\end{sloppypar}
+
+\subsection*{\code{scripts/swarm} \normalfont\textcolor{grey}{--- 19 fichiers}}
+\begin{sloppypar}\footnotesize\raggedright
+\code{EFE\_SWARM\_ADMITDL\_2026-06-17.json} \;\textbullet\; \code{EFE\_SWARM\_ALLPHASES\_2026-06-09.json} \;\textbullet\; \code{EFE\_SWARM\_FEWSHOT\_MODEC\_2026-06-18.json} \;\textbullet\; \code{EFE\_SWARM\_LLAMA\_2026-06-09.json} \;\textbullet\; \code{EFE\_SWARM\_MEMORY\_2026-06-17.json} \;\textbullet\; \code{EFE\_SWARM\_N17PERSIST\_2026-06-15.json} \;\textbullet\; \code{EFE\_SWARM\_P4\_2026-06-09.json} \;\textbullet\; \code{EFE\_SWARM\_PATBIAS\_2026-06-18.json} \;\textbullet\; \code{EFE\_SWARM\_REPLAY\_2026-06-17.json} \;\textbullet\; \code{EFE\_SWARM\_REPUTATION\_2026-06-18.json} \;\textbullet\; \code{EFE\_SWARM\_S3\_2026-06-09.json} \;\textbullet\; \code{EFE\_SWARM\_S3\_2026-06-09.md} \;\textbullet\; \code{EFE\_SWARM\_SIZER\_REPUTATION\_2026-06-18.json} \;\textbullet\; \code{EFE\_SWARM\_SIZER\_REPUTATION\_LIVE\_2026-06-18.json} \;\textbullet\; \code{EFE\_SWARM\_VALCONS\_2026-06-09.json} \;\textbullet\; \code{n17\_sample\_export.TAMPERED.json} \;\textbullet\; \code{n17\_sample\_export.json} \;\textbullet\; \code{n17\_sample\_records.json} \;\textbullet\; \code{swarm\_aggregator\_eval.py}
+\end{sloppypar}
+
+\bigskip\begin{acquis}\centering \textbf{1019 fichiers} --- le compte du chapitre~\ref{ch:archi}.\end{acquis}
+
+
+\end{document}
