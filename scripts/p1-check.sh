@@ -503,11 +503,11 @@ cat <<'FIN'
       « `ANTHROPIC_URL` est une constante EN DUR : aucun moyen de pointer un faux
       fournisseur local, ni un Azure OpenAI, ni un mandataire d'entreprise ». Ce
       n'est plus vrai d'AUCUN des trois — les constantes sont des défauts, les
-      destinations se configurent et se valident (section 7), et les trois
+      destinations se configurent et se valident (section 8), et les trois
       allers-retours SUR SOCKET sont joués (section 9).
       Ce qui reste manquant est plus étroit, et plus honnête : que le partenaire
       réponde comme le faux fournisseur le suppose. Si l'API d'Anthropic changeait,
-      les sections 7 et 8 resteraient vertes. Elles prouvent le CHEMIN, jamais le
+      les sections 8 et 9 resteraient vertes. Elles prouvent le CHEMIN, jamais le
       PARTENAIRE — et vers lui, ce qui manque tient en une clé : la vôtre, et elle
       coûte de l'argent.
     · Que votre IdP fonctionne. La paire ES256 de ce script est fabriquée sur
