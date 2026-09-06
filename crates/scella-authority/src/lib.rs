@@ -271,6 +271,21 @@ pub struct Cible<'a> {
     pub port: Option<u16>,
     /// Ce qui suit l'autorité (chemin, requête, fragment), ou `"/"` si rien.
     pub chemin: &'a str,
+    /// L'autorité portait-elle un `userinfo` — c'est-à-dire un `@` avant l'hôte ?
+    ///
+    /// ## Pourquoi ce booléen vit ICI
+    ///
+    /// L'appelant qui veut refuser les identifiants dans une URL doit savoir s'il y en a. La
+    /// seule façon correcte de le savoir est de couper l'autorité comme ce crate la coupe —
+    /// au PREMIER `/`, `?` ou `#`, puis au PREMIER `@`. Le refaire chez l'appelant recréerait
+    /// le découpage que ce crate existe pour tenir en un seul endroit.
+    ///
+    /// ⚠ `valider_endpoint_sortie` l'approchait par « l'autorité commence-t-elle par l'hôte ? ».
+    /// La condition est **nécessaire mais pas suffisante** : un `userinfo` dont le texte commence
+    /// par le nom de l'hôte la satisfait. Mesuré le 6 septembre 2026 —
+    /// `https://api.anthropic.com:jeton@api.anthropic.com/v1` passait, et l'endpoint étant
+    /// **scellé dans le reçu**, le jeton y serait entré.
+    pub porte_userinfo: bool,
 }
 
 /// Décompose un endpoint en [`Cible`]. Rend `None` exactement quand [`authority_of`] refuse.
@@ -284,13 +299,18 @@ pub fn decomposer(endpoint: &str) -> Option<Cible<'_>> {
     let (autorite, reste) = apres_schema.split_at(coupe);
     let chemin = if reste.is_empty() { "/" } else { reste };
 
-    let hostport = autorite.split_once('@').map(|(_, h)| h).unwrap_or(autorite);
+    // Le PREMIER `@` sépare le `userinfo` de l'hôte-et-port. Sa présence est la réponse exacte à
+    // « cette URL porte-t-elle des identifiants ? », et on la rend plutôt que de la jeter.
+    let (porte_userinfo, hostport) = match autorite.split_once('@') {
+        Some((_, h)) => (true, h),
+        None => (false, autorite),
+    };
     // Le port se lit après le `]` d'une IPv6 littérale, ou après le seul `:` d'un hôte simple.
     // `authority_of` a déjà refusé toute IPv6 nue, donc il n'y a jamais d'ambiguïté ici.
     let queue = match hostport.split_once(']') {
         Some((_, apres)) => apres,
         None => match hostport.split_once(':') {
-            Some((_, p)) => return Some(Cible { hote, port: port_de(p)?, chemin }),
+            Some((_, p)) => return Some(Cible { hote, port: port_de(p)?, chemin, porte_userinfo }),
             None => "",
         },
     };
@@ -298,7 +318,7 @@ pub fn decomposer(endpoint: &str) -> Option<Cible<'_>> {
         Some(p) => port_de(p)?,
         None => None,
     };
-    Some(Cible { hote, port, chemin })
+    Some(Cible { hote, port, chemin, porte_userinfo })
 }
 
 /// Un port écrit en décimal, non vide, sans zéro de tête superflu et non nul.

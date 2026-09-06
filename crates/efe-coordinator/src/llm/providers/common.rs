@@ -262,16 +262,34 @@ pub fn valider_endpoint_sortie(url: &str) -> Result<(), String> {
             .to_string());
     };
 
-    // Sans `userinfo`, l'autorité commence par l'hôte. `[` couvre la forme IPv6, dont l'analyseur
-    // retire les crochets.
-    let commence_par_lhote = apres_schema.starts_with(hote)
-        || apres_schema.strip_prefix('[').is_some_and(|r| r.starts_with(hote));
-    if !commence_par_lhote {
+    // ── Le `userinfo` — demandé à l'analyseur, pas approché ────────────────────────────────
+    //
+    //  Cette clause s'écrivait « l'autorité commence-t-elle par l'hôte ? ». La condition est
+    //  NÉCESSAIRE mais PAS SUFFISANTE : un `userinfo` dont le texte commence par le nom de l'hôte
+    //  la satisfait. Mesuré le 6 septembre 2026 — ces deux URL passaient :
+    //
+    //      https://api.anthropic.com:jeton@api.anthropic.com/v1
+    //      https://api.anthropic.com.evil@api.anthropic.com/v1
+    //
+    //  L'endpoint étant SCELLÉ DANS LE REÇU, le jeton y serait entré — c'est-à-dire dans un
+    //  artefact d'audit conservé, exporté, et remis à un tiers. Le cas dangereux de confusion
+    //  d'hôte (`https://api.anthropic.com@evil.com/`) était, lui, correctement refusé.
+    //
+    //  La réponse exacte est « l'autorité contient-elle un `@` ? », et elle appartient à
+    //  l'analyseur unique : `decomposer` coupe déjà l'autorité au premier `/`, `?` ou `#`, puis au
+    //  premier `@`. Refaire ce découpage ici en aurait fait un second analyseur — ce que M1 a
+    //  supprimé, et pour la raison qu'on voit ici : deux découpages qui divergent d'un caractère
+    //  ne lisent pas la même URL.
+    let porte_userinfo = scella_authority::decomposer(url).is_some_and(|c| c.porte_userinfo);
+    if porte_userinfo {
         return Err(format!(
             "l'URL porte un « userinfo » devant « {hote} » — refusé : l'endpoint est SCELLÉ dans le \
              reçu, on n'y met pas d'identifiants. Authentifiez par en-tête."
         ));
     }
+    // `apres_schema` reste employé plus haut pour trancher le schéma ; il n'a plus à porter la
+    // détection du `userinfo`.
+    let _ = apres_schema;
     Ok(())
 }
 
@@ -317,6 +335,45 @@ mod tests_endpoint_sortie {
         let e = valider("https://cle:secrete@api.example.test/v1/messages").unwrap_err();
         assert!(e.contains("userinfo"), "{e}");
         assert!(!e.contains("secrete"), "la raison NE DOIT PAS recopier le secret : {e}");
+    }
+
+    /// **Le cas que le test précédent ne pouvait pas voir.**
+    ///
+    /// `un_userinfo_meme_en_https_est_refuse…` emploie `cle:secrete@api.example.test` — un
+    /// `userinfo` qui ne commence PAS par le nom de l'hôte. L'ancienne implémentation approchait
+    /// la clause par « l'autorité commence-t-elle par l'hôte ? », condition nécessaire mais **pas
+    /// suffisante** : elle refusait bien ce cas-là, et laissait passer ceux-ci. Le test choisissait
+    /// l'exemple facile, et le défaut a vécu derrière lui.
+    ///
+    /// Les trois formes ci-dessous étaient ACCEPTÉES jusqu'au 6 septembre 2026. L'endpoint étant
+    /// scellé dans le reçu, le jeton serait entré dans un artefact d'audit conservé, exporté, et
+    /// remis à un tiers.
+    #[test]
+    fn un_userinfo_qui_commence_par_lhote_est_refuse_lui_aussi() {
+        for u in [
+            "https://api.anthropic.com:jeton@api.anthropic.com/v1/messages",
+            "https://api.anthropic.com.evil@api.anthropic.com/v1/messages",
+            "https://api.anthropic.com@api.anthropic.com/v1/messages",
+        ] {
+            let e = valider(u).unwrap_err();
+            assert!(e.contains("userinfo"), "{u} aurait dû être refusé pour userinfo : {e}");
+            assert!(!e.contains("jeton"), "la raison NE DOIT PAS recopier le secret : {e}");
+        }
+    }
+
+    /// **Anti-vacuité.** Les trois URL ci-dessus ne diffèrent de la forme légitime que par leur
+    /// `userinfo` : sans cette assertion, un `valider` qui refuserait TOUT ferait passer le test
+    /// précédent sans rien garder.
+    #[test]
+    fn la_meme_url_sans_userinfo_passe() {
+        assert!(valider("https://api.anthropic.com/v1/messages").is_ok());
+    }
+
+    /// La confusion d'hôte — le cas dangereux — était déjà refusée, et doit le rester : ici l'hôte
+    /// réel est `evil.com`, et `api.anthropic.com` n'est que le `userinfo`.
+    #[test]
+    fn la_confusion_dhote_reste_refusee() {
+        assert!(valider("https://api.anthropic.com@evil.com/v1/messages").is_err());
     }
 
     #[test]
