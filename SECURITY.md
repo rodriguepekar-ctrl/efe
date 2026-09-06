@@ -64,6 +64,8 @@ suit est du code qu'on peut ouvrir :
 | le reçu annonce la destination **réelle**, jamais la constante | [`endpoint_configurable.rs`](crates/efe-coordinator/tests/endpoint_configurable.rs) |
 | une destination **refusée** ne fait pas disparaître un fournisseur en silence : le boot le crie | [`frontier.rs`](crates/efe-swarm-gateway/src/frontier.rs) |
 | les **trois** allers-retours frontière joués **sur une vraie socket** contre un faux fournisseur, en-têtes vérifiés depuis l'extérieur | [`aller_retour_frontiere.rs`](crates/efe-coordinator/tests/aller_retour_frontiere.rs) |
+| le store durable **s'énumère** — le primitif sans lequel aucune sauvegarde n'est possible ; trait SÉPARÉ de `RunStore` pour qu'aucune route ne puisse lire entre tenants | [`inventaire.rs`](crates/efe-swarm-gateway/src/inventaire.rs) |
+| sauvegarde **éprouvée par destruction** : table effacée, reçu disparu (404), import, reçu revenu et re-prouvé | [`p1-check.sh`](scripts/p1-check.sh) §6 |
 | effacement cryptographique (la chaîne scelle le chiffré) | [`provenance-dag/src/shred.rs`](crates/provenance-dag/src/shred.rs) |
 | recherche de secrets à chaque `push`, **arbre et historique** | [`scripts/d3-check.sh`](scripts/d3-check.sh), joué par `.github/workflows/portes.yml` |
 
@@ -78,7 +80,15 @@ nom d'un tiers.
 
 Le plus utile de ce fichier :
 
-- **Sauvegarde : zéro.** Aucune procédure, aucun essai de restauration.
+- **Sauvegarde : faite, et ÉPROUVÉE par destruction** — c'était « zéro » jusqu'au
+  6 septembre 2026, et la cause était plus basse qu'un script manquant :
+  `RunStore` n'avait **aucune méthode qui énumère**. Un registre à conserver dix
+  ans qu'aucun code ne sait parcourir ne peut être ni exporté, ni sauvegardé, ni
+  migré. `--exporter-runs` / `--importer-runs` le parcourent désormais, et
+  `p1-check.sh` §6 **détruit la table** puis remonte : le reçu revient et se
+  re-prouve. Rejouer l'import n'écrase rien (write-once).
+  ⚠ Ce qui reste : **rien ne PLANIFIE** cette sauvegarde. La capacité existe, la
+  cadence n'existe pas — c'est une décision d'exploitation, pas du code.
 - **Rotation de clé : zéro.** `crates/scella-conservation/` sait produire des
   générations de clé ; rien ne les fait tourner.
 - **Le jeton porteur reste un secret partagé** ([`audit-console/src/session.rs`](crates/audit-console/src/session.rs)).

@@ -41,6 +41,69 @@ const DDL_ALTER: &[&str] = &[
     "ALTER TABLE swarm_runs ADD COLUMN IF NOT EXISTS request JSONB NOT NULL DEFAULT '{}'::jsonb",
 ];
 
+/// L'inventaire Postgres — le primitif qui manquait pour qu'une sauvegarde soit possible.
+///
+/// Cf. [`crate::inventaire`] : trait SÉPARÉ de `RunStore` parce qu'énumérer traverse les tenants,
+/// et pagination par CLÉ parce qu'`OFFSET` saute et duplique sous insertion concurrente.
+///
+/// La comparaison de n-uplets `(created_at, id) > ($1, $2)` est celle de Postgres, lexicographique
+/// — elle fait exactement ce que « strictement après ce couple » veut dire, et l'index sur
+/// `(created_at, id)` la sert. Écrire la même chose en `created_at > $1 OR (created_at = $1 AND
+/// id > $2)` serait équivalent et se tromperait un jour.
+#[async_trait]
+impl crate::inventaire::RunStoreInventaire for PgRunStore {
+    async fn inventorier(
+        &self,
+        apres: crate::inventaire::Curseur,
+        limite: u32,
+    ) -> Result<Vec<crate::inventaire::LigneExport>, GatewayError> {
+        let (borne_t, borne_id) = match apres {
+            None => (None, None),
+            Some((t, id)) => (Some(i64::try_from(t).unwrap_or(i64::MAX)), Some(id)),
+        };
+        let rows = sqlx::query(
+            "SELECT id, tenant, records, root, output, topology, created_at, \
+                    llm_records, n17_leaves, n17_root, request \
+             FROM swarm_runs \
+             WHERE $1::bigint IS NULL OR (created_at, id) > ($1::bigint, $2::uuid) \
+             ORDER BY created_at, id LIMIT $3",
+        )
+        .bind(borne_t)
+        .bind(borne_id)
+        .bind(i64::from(limite))
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| GatewayError::Internal(format!("store.inventorier : {e}")))?;
+
+        let map = |e: sqlx::Error| GatewayError::Internal(format!("décodage ligne : {e}"));
+        let mut out = Vec::with_capacity(rows.len());
+        for row in rows {
+            let records: Json<Vec<AgentCallRecord>> = row.try_get("records").map_err(map)?;
+            let llm_records: Json<Vec<LlmProvenanceRecord>> = row.try_get("llm_records").map_err(map)?;
+            let n17_leaves: Json<Vec<String>> = row.try_get("n17_leaves").map_err(map)?;
+            let output: Json<Value> = row.try_get("output").map_err(map)?;
+            let request: Json<Value> = row.try_get("request").map_err(map)?;
+            let created_at: i64 = row.try_get("created_at").map_err(map)?;
+            out.push(crate::inventaire::LigneExport {
+                id: row.try_get("id").map_err(map)?,
+                tenant: row.try_get("tenant").map_err(map)?,
+                records: records.0,
+                root: row.try_get("root").map_err(map)?,
+                llm_records: llm_records.0,
+                n17_leaves: n17_leaves.0,
+                n17_root: row.try_get("n17_root").map_err(map)?,
+                output: output.0,
+                topology: row.try_get("topology").map_err(map)?,
+                request: request.0,
+                // Une époque négative en base est une donnée corrompue, pas un run d'avant 1970 :
+                // on la ramène à 0 plutôt que de paniquer sur une conversion.
+                created_at: u64::try_from(created_at).unwrap_or(0),
+            });
+        }
+        Ok(out)
+    }
+}
+
 /// Store Postgres des runs (prod). Les records sont immuables (write-once).
 pub struct PgRunStore {
     pool: PgPool,

@@ -36,6 +36,65 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         return Ok(());
     }
 
+    // ── Sauvegarde : `--exporter-runs` / `--importer-runs` ───────────────────────────
+    //
+    // Même forme que `--profile-report`, et pour la même raison : un DRAPEAU, jamais une route.
+    // Énumérer le store traverse les tenants ; en faire un point d'entrée HTTP mettrait une
+    // lecture inter-tenants sur la surface servie, à un oubli de garde près. Ici, il faut déjà
+    // tenir la base — et qui tient la base a déjà tout.
+    //
+    // Ils calculent, impriment et sortent, sans jamais binder. Le couple se lit :
+    //
+    //     efe-swarm-gateway --exporter-runs           > registre.jsonl
+    //     efe-swarm-gateway --importer-runs           < registre.jsonl
+    //
+    // Le store est write-once (`ON CONFLICT DO NOTHING`) : réimporter est idempotent et ne peut
+    // pas écraser un run vivant. C'est ce qui rend la restauration sûre à rejouer.
+    #[cfg(feature = "postgres")]
+    {
+        let exporter = std::env::args().any(|a| a == "--exporter-runs");
+        let importer = std::env::args().any(|a| a == "--importer-runs");
+        if exporter && importer {
+            eprintln!("--exporter-runs et --importer-runs s'excluent : choisir un sens.");
+            std::process::exit(64); // EX_USAGE
+        }
+        if exporter || importer {
+            let Some(url) = efe_swarm_gateway::profile::read::database_url() else {
+                // Sans base, un export rendrait ZÉRO ligne et sortirait 0 : une sauvegarde vide
+                // qui se croit faite. On refuse plutôt que de produire ce silence.
+                eprintln!("DATABASE_URL absent — il n'y a pas de store durable à parcourir.");
+                std::process::exit(78); // EX_CONFIG, comme le reste du binaire
+            };
+            let pg = efe_swarm_gateway::PgRunStore::connect(&url).await?;
+            pg.migrate().await?;
+            if exporter {
+                let mut sortie = std::io::BufWriter::new(std::io::stdout().lock());
+                let n = efe_swarm_gateway::inventaire::exporter_vers(&pg, &mut sortie).await?;
+                // Le compte va sur STDERR : stdout porte les données, et mêler les deux ferait
+                // d'un `> fichier.jsonl` un fichier avec une ligne de trop.
+                use std::io::Write as _;
+                sortie.flush()?;
+                eprintln!("→ {n} run(s) exporté(s).");
+            } else {
+                let bilan = efe_swarm_gateway::inventaire::importer_depuis(
+                    &pg,
+                    std::io::BufReader::new(std::io::stdin().lock()),
+                )
+                .await?;
+                // Les DEUX nombres, toujours. « lues » seul cacherait une restauration qui n'a
+                // rien écrit parce que tout existait déjà — ce qui est un succès, mais pas le
+                // même que celui qu'on croyait obtenir.
+                eprintln!(
+                    "→ {} ligne(s) lue(s), {} écrite(s) ({} existaient déjà).",
+                    bilan.lues,
+                    bilan.ecrites,
+                    bilan.lues - bilan.ecrites
+                );
+            }
+            return Ok(());
+        }
+    }
+
     let addr = efe_swarm_gateway::profile::read::gateway_addr();
 
     // ── Source de clé de provenance — le cœur du durcissement prod ──────────────

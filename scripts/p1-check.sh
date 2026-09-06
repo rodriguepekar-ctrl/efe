@@ -319,7 +319,84 @@ PY
 ok "LE REÇU SURVIT AU ROLLOUT et se re-prouve depuis un processus neuf"
 
 # ═════════════════════════════════════════════════════════════════════════════
-titre "6. Le critère de M3, que personne ne jouait"
+titre "6. L'ÉPREUVE DE RESTAURATION — détruire, et remonter"
+#
+#  Le trou que cette section ferme n'était pas « il manque un script de sauvegarde ». C'était
+#  plus bas : `RunStore` a `put`, `put_stored` et `get`, et **aucune méthode n'énumère**. Un
+#  registre que l'AI Act art. 12 demande de garder dix ans, et qu'aucun code ne sait PARCOURIR,
+#  ne peut être ni exporté, ni sauvegardé, ni migré. Il manquait la seule opération dont un
+#  script de sauvegarde aurait eu besoin.
+#
+#  `--exporter-runs` / `--importer-runs` la fournissent. Cette section les éprouve de la seule
+#  façon qui compte : en DÉTRUISANT le store et en le remontant. Une sauvegarde qu'on n'a jamais
+#  restaurée n'est pas une sauvegarde, c'est un fichier.
+#
+#  ⚠ ELLE NE DÉTRUIT QUE CE QU'ELLE A CRÉÉ. Si l'exploitant a désigné sa propre base par
+#  `P1_DATABASE_URL`, l'épreuve est SAUTÉE et le dit : effacer la table d'une base qu'on ne
+#  possède pas serait un défaut bien pire que celui qu'on cherche à fermer.
+if [ -z "$CONTENEUR" ]; then
+  note "épreuve de restauration SAUTÉE : la base vient de P1_DATABASE_URL, elle ne nous"
+  note "appartient pas, et cette épreuve efface la table. Rejouer sans P1_DATABASE_URL."
+else
+  psql() { docker exec "$CONTENEUR" psql -qtAX -U postgres -d scella "$@"; }
+  export_bin() { env -i PATH="$PATH" DATABASE_URL="$DB" "$BIN" "$@"; }
+
+  export_bin --exporter-runs > "$TMP/registre.jsonl" 2>"$TMP/export.log" \
+    || ko "l'export a échoué : $(tail -2 "$TMP/export.log")"
+  LIGNES=$(wc -l < "$TMP/registre.jsonl" | tr -d ' ')
+  # Plancher anti-vacuité : un export qui rend zéro ligne sortirait 0 et se croirait fait.
+  [ "${LIGNES:-0}" -ge 1 ] || ko "l'export a rendu $LIGNES ligne(s) — il n'a rien parcouru"
+  grep -q "$RUN" "$TMP/registre.jsonl" || ko "l'export ne contient pas le run servi ($RUN)"
+  ok "export : $LIGNES ligne(s), dont le run servi"
+
+  #  On DÉTRUIT. C'est le seul geste qui distingue une sauvegarde d'une copie d'espoir.
+  psql -c "DELETE FROM swarm_runs" >/dev/null 2>&1 || ko "la destruction du store a échoué"
+  RESTE=$(psql -c "SELECT count(*) FROM swarm_runs" 2>/dev/null | tr -d ' \r')
+  [ "$RESTE" = "0" ] || ko "la table n'est pas vide après destruction ($RESTE ligne(s))"
+
+  #  Et on VÉRIFIE que le reçu a bien disparu. Sans ce contrôle, un cache rendrait la
+  #  restauration verte sans qu'elle ait servi à quoi que ce soit — le pire des faux positifs :
+  #  celui qui valide une sauvegarde qui ne restaure rien.
+  CODE_VIDE=$(curl -s -o /dev/null -w '%{http_code}' -H "authorization: Bearer $JWT" \
+    "http://127.0.0.1:$PORT/v1/swarm/verify/$RUN")
+  [ "$CODE_VIDE" != "200" ] \
+    || ko "le reçu se re-prouve encore alors que la table est VIDE — un cache rend cette épreuve \
+sans objet, et la sauvegarde ne prouverait rien."
+  ok "store détruit : le reçu ne répond plus (HTTP $CODE_VIDE)"
+
+  export_bin --importer-runs < "$TMP/registre.jsonl" 2>"$TMP/import.log" \
+    || ko "l'import a échoué : $(tail -2 "$TMP/import.log")"
+  grep -qE "$LIGNES ligne\(s\) lue\(s\), $LIGNES écrite" "$TMP/import.log" \
+    || ko "l'import n'a pas réécrit tout ce qu'il a lu : $(cat "$TMP/import.log")"
+  ok "import : $(tr -d '\n' < "$TMP/import.log" | sed 's/^→ //')"
+
+  curl -s -o "$TMP/verify3.json" -w '%{http_code}' -H "authorization: Bearer $JWT" \
+    "http://127.0.0.1:$PORT/v1/swarm/verify/$RUN" > "$TMP/code3.txt"
+  [ "$(cat "$TMP/code3.txt")" = "200" ] \
+    || ko "verify après restauration : HTTP $(cat "$TMP/code3.txt") — le reçu n'est pas remonté"
+  python3 - "$TMP/verify3.json" <<'PY2' || exit 1
+import json, sys
+d = json.load(open(sys.argv[1]))
+manques = [k for k in ("verified", "root_matches", "chain_intact", "content_intact") if not d.get(k)]
+if manques:
+    print(f"  \033[31m✗\033[0m restauré mais ne se re-prouve plus : {manques} — {d}")
+    sys.exit(1)
+print(f"  \033[32m✓\033[0m LE REÇU EST REVENU D'UN STORE DÉTRUIT et se re-prouve "
+      f"({d.get('records', '?')} enregistrements)")
+PY2
+
+  #  L'idempotence : le store est write-once (`ON CONFLICT DO NOTHING`). Rejouer une restauration
+  #  ne doit rien écraser — sans quoi personne n'oserait la rejouer, et une restauration qu'on
+  #  n'ose pas rejouer est une restauration qu'on ne fera pas à trois heures du matin.
+  export_bin --importer-runs < "$TMP/registre.jsonl" 2>"$TMP/import2.log" \
+    || ko "le second import a échoué"
+  grep -qE "$LIGNES ligne\(s\) lue\(s\), 0 écrite" "$TMP/import2.log" \
+    || ko "rejouer l'import a RÉÉCRIT des lignes : $(cat "$TMP/import2.log") — le write-once ne tient pas"
+  ok "rejouer la restauration n'écrase rien (0 écrite, $LIGNES existaient déjà)"
+fi
+
+# ═════════════════════════════════════════════════════════════════════════════
+titre "7. Le critère de M3, que personne ne jouait"
 #
 #  ⭐ **É4** — `routes/llm.rs` vit sous `#[cfg(feature = "frontier-llm")]`, et les deux tests
 #  qui portent le critère de M3 — « le SLM meurt, la mission passe, et la RAISON remonte » —
@@ -347,7 +424,7 @@ n'est plus éprouvé nulle part. C'est le trou que cette étape existe pour rend
 esac
 
 # ═════════════════════════════════════════════════════════════════════════════
-titre "7. Les TROIS destinations d'egress ne sont plus des constantes"
+titre "8. Les TROIS destinations d'egress ne sont plus des constantes"
 #
 #  La PREMIÈRE ligne de « ce que ce contrôle ne prouve pas » disait : « ANTHROPIC_URL est une
 #  constante EN DUR : il n'existe aucun moyen de pointer un faux fournisseur local, ni un Azure
@@ -361,7 +438,7 @@ titre "7. Les TROIS destinations d'egress ne sont plus des constantes"
 #  (`scella-authority`) : `https` partout, `http` seulement vers la machine locale, et aucun
 #  `userinfo` — parce que l'endpoint est SCELLÉ DANS LE REÇU et qu'on n'y met pas d'identifiants.
 #
-#  ⚠ Même piège que la section 6, et même remède : ces tests vivent sous
+#  ⚠ Même piège que la section 7, et même remède : ces tests vivent sous
 #  `#![cfg(all(feature = "anthropic", feature = "openai", feature = "gemini"))]`, aucune n'étant
 #  dans le défaut de `efe-coordinator`
 #  (`default = []`). `cargo test --workspace` les compte donc pour ZÉRO. C'est ici qu'ils
@@ -376,9 +453,9 @@ garde la destination de l'egress ni ce que le reçu en dit." ;;
 esac
 
 # ═════════════════════════════════════════════════════════════════════════════
-titre "8. L'aller-retour frontière, sur une vraie socket, pour les trois"
+titre "9. L'aller-retour frontière, sur une vraie socket, pour les trois"
 #
-#  Ce que la section 7 rend possible, celle-ci l'EXÉCUTE. Un serveur HTTP réel écoute sur la
+#  Ce que la section 8 rend possible, celle-ci l'EXÉCUTE. Un serveur HTTP réel écoute sur la
 #  boucle locale, le provider est pointé vers lui, et l'appel part, arrive, et revient — avec
 #  ses en-têtes vérifiés depuis L'EXTÉRIEUR, en regardant la requête reçue plutôt que le code
 #  qui la construit.
@@ -410,7 +487,7 @@ cat <<'FIN'
       fournisseur local, ni un Azure OpenAI, ni un mandataire d'entreprise ». Ce
       n'est plus vrai d'AUCUN des trois — les constantes sont des défauts, les
       destinations se configurent et se valident (section 7), et les trois
-      allers-retours SUR SOCKET sont joués (section 8).
+      allers-retours SUR SOCKET sont joués (section 9).
       Ce qui reste manquant est plus étroit, et plus honnête : que le partenaire
       réponde comme le faux fournisseur le suppose. Si l'API d'Anthropic changeait,
       les sections 7 et 8 resteraient vertes. Elles prouvent le CHEMIN, jamais le
@@ -434,4 +511,4 @@ cat <<'FIN'
     `scella-conserver`, et `bash scripts/p2-check.sh` les rejoue.
 FIN
 
-printf '\n\033[32mP1 tient.\033[0m  (démarré, servi, tué, redémarré, re-prouvé)\n'
+printf '\n\033[32mP1 tient.\033[0m  (démarré, servi, tué, redémarré, DÉTRUIT, restauré, re-prouvé)\n'

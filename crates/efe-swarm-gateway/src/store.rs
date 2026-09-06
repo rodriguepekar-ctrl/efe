@@ -264,6 +264,37 @@ impl InMemoryRunStore {
     }
 }
 
+/// L'inventaire en mémoire — cf. [`crate::inventaire`] pour la raison du trait séparé.
+///
+/// Le tri se fait ici, à chaque appel : une `HashMap` n'a pas d'ordre, et une sauvegarde qui
+/// lirait dans l'ordre de hachage ne serait pas reproductible d'une exécution à l'autre. Le coût
+/// est sans objet — ce store est celui de la démo et du souverain autonome.
+#[async_trait]
+impl crate::inventaire::RunStoreInventaire for InMemoryRunStore {
+    async fn inventorier(
+        &self,
+        apres: crate::inventaire::Curseur,
+        limite: u32,
+    ) -> Result<Vec<crate::inventaire::LigneExport>, GatewayError> {
+        let mut lignes: Vec<crate::inventaire::LigneExport> = {
+            let g = self
+                .runs
+                .lock()
+                .map_err(|_| GatewayError::Internal("verrou du store empoisonné".into()))?;
+            g.iter().map(|(id, r)| crate::inventaire::LigneExport::depuis(*id, r)).collect()
+        };
+        lignes.sort_by_key(crate::inventaire::LigneExport::cle);
+        // `partition_point` : le premier indice STRICTEMENT après le curseur.
+        let debut = match apres {
+            None => 0,
+            Some(c) => lignes.partition_point(|l| l.cle() <= c),
+        };
+        lignes.drain(..debut);
+        lignes.truncate(limite as usize);
+        Ok(lignes)
+    }
+}
+
 #[async_trait]
 impl RunStore for InMemoryRunStore {
     async fn put(&self, id: Uuid, tenant: &str, outcome: &RunOutcome) -> Result<(), GatewayError> {

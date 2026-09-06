@@ -60,6 +60,7 @@ mod pii;
 mod router_map;
 mod routes;
 mod state;
+pub mod inventaire;
 mod store;
 #[cfg(feature = "frontier-llm")]
 mod frontier; // Couche 2 : construit le Coordinator frontière (Claude/Gemini/GPT) depuis l'env
