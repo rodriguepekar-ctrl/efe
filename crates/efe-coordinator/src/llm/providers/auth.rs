@@ -23,13 +23,19 @@ impl ApiKey {
 
     /// Construit depuis une variable d'environnement.
     ///
-    /// Erreur `Config` si :
-    /// - La variable n'existe pas
-    /// - La valeur est vide
-    /// - Le préfixe attendu (`expected_prefix`) ne match pas
+    /// Deux erreurs, et la distinction est **portante** — cf. [`CoordError::ConfigAbsent`] :
+    ///
+    /// - [`CoordError::ConfigAbsent`] si la variable **n'existe pas**. Rien n'a été fourni ;
+    ///   personne n'a agi. Le démarrage de la passerelle se tait sur ce cas.
+    /// - [`CoordError::Config`] si la valeur est **vide** ou si le **préfixe** ne convient pas.
+    ///   Dans les deux cas une valeur a été posée puis rejetée : l'opérateur a agi, et il doit
+    ///   l'apprendre au boot.
+    ///
+    /// ⚠ Les trois situations étaient auparavant typées `Config`, ce qui faisait affirmer à la
+    /// passerelle « ce n'est pas une clé manquante » sur une clé manquante.
     pub fn from_env(var_name: &str, expected_prefix: &str) -> CoordResult<Self> {
         let v = std::env::var(var_name).map_err(|_| {
-            CoordError::Config(format!("env var {var_name} not set"))
+            CoordError::ConfigAbsent(format!("env var {var_name} not set"))
         })?;
         if v.is_empty() {
             return Err(CoordError::Config(format!("env var {var_name} is empty")));
@@ -101,20 +107,42 @@ mod tests {
         assert_eq!(k.expose(), "sk-ant-secret");
     }
 
+    /// **La distinction qui porte une décision.** Ce test asserte les DEUX cas ensemble, et non
+    /// chacun de son côté : ce qui compte n'est pas qu'ils échouent, c'est qu'ils échouent
+    /// DIFFÉREMMENT. Assertés séparément, ils passaient tous les deux quand les deux rendaient
+    /// `Config` — et la passerelle affirmait alors « ce n'est pas une clé manquante » sur une clé
+    /// manquante. Un test par cas ne pouvait pas voir cela ; celui-ci ne peut pas le manquer.
     #[test]
-    fn from_env_missing_var_errors() {
-        // S'assure que la variable n'existe pas pour ce test.
+    fn from_env_distingue_absence_et_rejet() {
         std::env::remove_var("EFE_TEST_NONEXISTENT_KEY_XYZ");
-        let r = ApiKey::from_env("EFE_TEST_NONEXISTENT_KEY_XYZ", "sk-");
-        assert!(matches!(r, Err(CoordError::Config(_))));
-    }
+        let absente = ApiKey::from_env("EFE_TEST_NONEXISTENT_KEY_XYZ", "sk-");
+        assert!(
+            matches!(absente, Err(CoordError::ConfigAbsent(_))),
+            "variable inexistante ⟹ ConfigAbsent (personne n'a agi), obtenu : {absente:?}"
+        );
 
-    #[test]
-    fn from_env_wrong_prefix_errors() {
         std::env::set_var("EFE_TEST_BAD_PREFIX", "wrong-format-key");
-        let r = ApiKey::from_env("EFE_TEST_BAD_PREFIX", "sk-ant-");
-        assert!(matches!(r, Err(CoordError::Config(_))));
+        let mauvais_prefixe = ApiKey::from_env("EFE_TEST_BAD_PREFIX", "sk-ant-");
         std::env::remove_var("EFE_TEST_BAD_PREFIX");
+        assert!(
+            matches!(mauvais_prefixe, Err(CoordError::Config(_))),
+            "préfixe non conforme ⟹ Config (une valeur a été posée puis rejetée), obtenu : {mauvais_prefixe:?}"
+        );
+
+        std::env::set_var("EFE_TEST_EMPTY_KEY", "");
+        let vide = ApiKey::from_env("EFE_TEST_EMPTY_KEY", "sk-");
+        std::env::remove_var("EFE_TEST_EMPTY_KEY");
+        assert!(
+            matches!(vide, Err(CoordError::Config(_))),
+            "valeur vide ⟹ Config : poser une variable vide EST un acte, obtenu : {vide:?}"
+        );
+
+        // L'anti-vacuité : si les trois rendaient la même chose, les trois assertions ci-dessus
+        // passeraient encore le jour où quelqu'un les ré-unifierait. On l'interdit explicitement.
+        assert!(
+            !matches!(absente, Err(CoordError::Config(_))),
+            "une absence ne doit JAMAIS être typée Config — c'est le défaut que ce test ferme"
+        );
     }
 
     #[test]

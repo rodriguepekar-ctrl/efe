@@ -95,9 +95,23 @@ pub enum CoordError {
         dropped: u64,
     },
 
-    /// Erreur de configuration au boot.
+    /// Erreur de configuration au boot : une valeur a été **fournie et rejetée**.
     #[error("coordinator config error: {0}")]
     Config(String),
+
+    /// La configuration est **absente** — rien n'a été fourni.
+    ///
+    /// Distincte de [`CoordError::Config`], et la distinction porte une décision réelle : le
+    /// démarrage de la passerelle CRIE sur une valeur rejetée (l'opérateur a agi, il doit
+    /// l'apprendre au boot plutôt qu'en constatant des 403 plus tard) et se TAIT sur une
+    /// absence (c'est le cas normal d'un déploiement qui n'utilise pas ce fournisseur).
+    ///
+    /// Sans cette variante, `ApiKey::from_env` typait les deux en `Config`, et la passerelle
+    /// imprimait « ce n'est pas une clé manquante » **précisément quand c'en était une** — trois
+    /// fois, sur le chemin le plus fréquenté qui soit (frontière activée, aucune clé fournisseur).
+    /// Mesuré le 6 septembre 2026 en construisant le banc du Seuil.
+    #[error("coordinator config absente: {0}")]
+    ConfigAbsent(String),
 }
 
 impl CoordError {
@@ -118,6 +132,7 @@ impl CoordError {
             Self::MissionBTooFewLlms { .. } => false,
             Self::SubscriberLag { .. } => false,
             Self::Config(_) => false,
+            Self::ConfigAbsent(_) => false,
         }
     }
 

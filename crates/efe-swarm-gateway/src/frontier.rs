@@ -91,10 +91,17 @@ pub fn coordinator_from_env() -> Option<Arc<Coordinator>> {
 /// La distinction est tout l'intérêt de cette fonction :
 ///
 /// - [`CoordError::Config`] ⟹ une valeur a été **fournie et rejetée** (destination en `http` vers
-///   un hôte distant, `userinfo` dans l'URL, autorité inanalysable). L'opérateur a agi ; il doit
-///   l'apprendre au démarrage, pas en constatant des 403 plus tard.
-/// - toute autre erreur ⟹ la clé d'API manque ou son préfixe ne convient pas. Silence : c'est le
-///   cas normal d'un déploiement qui n'utilise pas ce fournisseur.
+///   un hôte distant, `userinfo` dans l'URL, autorité inanalysable, clé vide, préfixe non conforme).
+///   L'opérateur a agi ; il doit l'apprendre au démarrage, pas en constatant des 403 plus tard.
+/// - [`CoordError::ConfigAbsent`] ⟹ **rien n'a été fourni**. Silence : c'est le cas normal d'un
+///   déploiement qui n'utilise pas ce fournisseur.
+/// - toute autre erreur ⟹ silence également.
+///
+/// ⚠ Cette discrimination était **défaite en amont** jusqu'au 6 septembre 2026 : `ApiKey::from_env`
+/// typait « variable absente » en `Config`, si bien que le bras bruyant s'exécutait sur une clé
+/// manquante et affirmait « ce n'est pas une clé manquante ». Trois fois, sur le chemin le plus
+/// fréquenté qui soit — frontière activée sans clé fournisseur, qui est la posture par défaut.
+/// Un discriminant juste, rendu faux par le type de l'erreur qu'il discrimine.
 ///
 /// Le message ne recopie jamais l'entrée. `valider_endpoint_sortie` ne rend que l'hôte extrait par
 /// l'analyseur, précisément pour qu'un `userinfo` ne finisse pas dans un journal collecté, archivé,
@@ -113,14 +120,37 @@ fn enregistrer<P>(
             ids.push(p.id());
             registry.register(crate::mission::ProvenanceProvider::wrap(Arc::new(p)));
         }
-        Err(efe_coordinator::CoordError::Config(raison)) => {
+        Err(e) if bruyant(&e) => {
             eprintln!(
-                "⚠ provider {nom} NON enregistré — configuration REFUSÉE : {raison}\n\
+                "⚠ provider {nom} NON enregistré — configuration REFUSÉE : {e_raison}\n\
                  → ce n'est pas une clé manquante : une valeur a été fournie et rejetée. \
-                 Corrigez-la ou retirez-la ; la laisser telle quelle laisse la frontière sans {nom}."
+                 Corrigez-la ou retirez-la ; la laisser telle quelle laisse la frontière sans {nom}.",
+                e_raison = raison_de(&e),
             );
         }
-        Err(_) => { /* clé absente ou mal préfixée : omission normale, cf. doc ci-dessus */ }
+        Err(_) => { /* rien n'a été fourni, ou erreur non imputable à l'opérateur : silence */ }
+    }
+}
+
+/// **Faut-il CRIER ?** — le discriminant, isolé pour être éprouvé.
+///
+/// Il vivait auparavant dans les bras du `match` de [`enregistrer`], donc nulle part où un test
+/// puisse le viser : le seul moyen de l'exercer était de démarrer une passerelle et de lire son
+/// flux d'erreur. C'est ainsi qu'il a pu rester faux — non parce qu'il était mal écrit, mais
+/// parce qu'aucune assertion ne pouvait l'atteindre.
+///
+/// La règle tient en une phrase : **on crie si l'opérateur a agi.** Une valeur posée puis rejetée
+/// est un acte ; une variable absente n'en est pas un.
+#[must_use]
+fn bruyant(e: &efe_coordinator::CoordError) -> bool {
+    matches!(e, efe_coordinator::CoordError::Config(_))
+}
+
+/// La raison à afficher — jamais l'entrée brute (cf. l'en-tête de [`enregistrer`]).
+fn raison_de(e: &efe_coordinator::CoordError) -> String {
+    match e {
+        efe_coordinator::CoordError::Config(r) | efe_coordinator::CoordError::ConfigAbsent(r) => r.clone(),
+        autre => autre.to_string(),
     }
 }
 
@@ -379,6 +409,35 @@ mod tests {
         // Autorité dangereuse ⟹ `None` ⟹ l'appelant écrit un marqueur, jamais l'entrée brute.
         assert_eq!(provenance_capture::host_of("http://evil.com\\@127.0.0.1/v1"), None);
         assert_eq!(provenance_capture::host_of("http://"), None);
+    }
+
+    /// **On crie si l'opérateur a agi — et seulement alors.**
+    ///
+    /// Les deux cas sont assertés ENSEMBLE : ce qui compte n'est pas que l'un crie, c'est qu'ils
+    /// se comportent DIFFÉREMMENT. C'est très exactement la propriété qui était fausse jusqu'au
+    /// 6 septembre 2026, et qu'aucun test ne pouvait voir parce que le discriminant n'existait
+    /// pas comme fonction.
+    #[test]
+    fn on_crie_sur_un_acte_et_jamais_sur_une_absence() {
+        use efe_coordinator::CoordError;
+        let rejete = CoordError::Config("EFE_ANTHROPIC_URL refusé : http distant".into());
+        let absent = CoordError::ConfigAbsent("env var ANTHROPIC_API_KEY not set".into());
+
+        assert!(bruyant(&rejete), "une valeur posée puis rejetée est un ACTE : on le dit au boot");
+        assert!(!bruyant(&absent), "une variable absente n'est pas un acte : silence");
+        assert_ne!(
+            bruyant(&rejete),
+            bruyant(&absent),
+            "anti-vacuité : un discriminant qui rend la même chose des deux côtés ne discrimine rien"
+        );
+
+        // Et la raison affichée reste celle de l'erreur, jamais l'entrée brute reconstruite.
+        assert_eq!(raison_de(&rejete), "EFE_ANTHROPIC_URL refusé : http distant");
+        assert_eq!(raison_de(&absent), "env var ANTHROPIC_API_KEY not set");
+
+        // Une erreur qui n'est pas une décision d'opérateur (transport, quorum…) ne crie pas non
+        // plus : le bras bruyant est réservé à ce que l'opérateur peut CORRIGER.
+        assert!(!bruyant(&CoordError::VoteNoQuorum { ballots_received: 0, quorum_required: 2 }));
     }
 
     /// **Fil B.2** — la fonction pure du wiring SLM (race-free, pas d'env).

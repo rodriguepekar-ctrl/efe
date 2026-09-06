@@ -214,3 +214,8 @@ mon-premier-recu/
 # rendrait la clé tenant publique, donc la re-preuve sans valeur — exactement le
 # défaut que le script refuse en interdisant `demo-root-secret`.
 banc-registre/
+
+# Le dossier que `scripts/banc-seuil.sh` écrit : il contient VOTRE master de
+# provenance et la clé privée OIDC du banc. Le versionner publierait un master, et
+# un reçu scellé sous un master public n'oppose plus rien à personne.
+banc-seuil/

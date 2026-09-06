@@ -181,6 +181,27 @@ jobs:
           BANC_PORT: "8791"
         run: bash scripts/banc-registre.sh --verifier
 
+      # Le banc du Seuil, étage « démonstration » : 2 s mesurées, aucune base, aucun
+      # démon. Il joue ce qu'aucun autre contrôle ne joue — la TRONCATURE, où le
+      # verdict attendu de `verify-mini` seul est ZÉRO (un bundle tronqué se re-prouve
+      # parfaitement), et l'ancre qui la rattrape par un comptage.
+      - name: banc-seuil (Le Seuil, de bout en bout)
+        env:
+          BANC_PORT: "18791"
+        run: bash scripts/banc-seuil.sh --verifier
+
+      # L'étage production : trois formes d'`exit 78`, et le discriminant
+      # bruyant/silencieux de la frontière. Il joue AUSSI les tests unitaires du
+      # module `frontier`, qui n'existent que sous `frontier-llm` : `cargo test
+      # --workspace` — l'étape ci-dessous — les compte pour ZÉRO, et `p1-check.sh`,
+      # qui les jouerait, exige un démon Docker que ce runner n'a pas.
+      # Placé APRÈS `portes-check`, qui a déjà compilé ce jeu de features pour clippy.
+      # Coût mesuré à cache chaud : 163 s, dont l'essentiel est le build.
+      - name: banc-seuil --production (exit 78, et les tests que --workspace ne voit pas)
+        env:
+          BANC_PORT: "18891"
+        run: bash scripts/banc-seuil.sh --verifier --production
+
       # ── 3 · la suite complète ──────────────────────────────────────────────
       - name: cargo test --locked --workspace
         run: cargo test --locked --workspace --no-fail-fast

@@ -44,6 +44,40 @@ Il ne régénère jamais une clé existante : un master qui change ne rend pas l
 anciens reçus faux, il les rend **orphelins**, et plus personne ne peut le
 démontrer.
 
+## Et pour éprouver Le Seuil (C3)
+
+Les deux gestes ci-dessus **donnent** un reçu. Le banc, lui, vous laisse le
+**casser** :
+
+```bash
+bash scripts/banc-seuil.sh
+```
+
+Il tire votre master, démarre la passerelle, joue des runs variés, exporte un
+reçu portable, le re-prouve — puis fait tomber chaque garde devant vous et vous
+rend la main sur une passerelle ouverte, avec la liste de ce que vous pouvez
+abîmer. Ce qu'il établit, dans l'ordre :
+
+| geste | ce que le produit répond |
+|---|---|
+| demander `width: 100000` | **32** — écrêté, et écrit dans *votre* reçu, pas dans une promesse |
+| `budget: {max_cents: 1, on_exceed: "error"}` | **402** « budget trop bas : ~3¢ requis > plafond 1¢ » |
+| re-prouver avec la **mauvaise pile de clés** | « cassé au record **0** » — un `0` accuse la clé, un `n > 0` accuse le record |
+| re-prouver un bundle **tronqué**, sans l'ancre | **`0` — il PASSE** |
+| le même, **contre l'ancre** | **`1`** « compte de nœuds NON concordant — attendu 3, obtenu 2 » |
+| une erreur d'usage du vérifieur | **`2`**, jamais `1` — une panne d'instrument n'emprunte pas le vocabulaire de ce qu'elle mesure |
+
+**Les deux lignes du milieu sont tout le produit.** Le préfixe d'une chaîne
+scellée est lui-même une chaîne scellée valide : rien, de l'intérieur, ne trahit
+ce qui a été coupé. L'intégrité ne dit **rien** de la complétude. C'est l'ancre —
+publiée hors du bundle, remise par un canal distinct — qui referme l'écart, et
+elle le fait par un **comptage**, sans clé et sans cryptographie.
+
+Avec `--production`, le banc ajoute le garde de configuration : trois formes
+d'`exit 78`, chacune nommant l'invariant manquant **et son coût** (« sinon les
+reçus R4 sont perdus à chaque rollout »). Il n'exige ni Docker ni PostgreSQL :
+le préflight lit des *intentions* d'environnement, jamais une connexion.
+
 ## Et pour éprouver Le Registre (C1)
 
 Les deux gestes ci-dessus sont ceux du **Seuil** — la passerelle et son reçu. Le
@@ -166,9 +200,9 @@ n'est pas conforme.*
 
 Rien de ce qui précède n'est à croire sur parole. Seize contrôles rejouent
 chacun leur module, et refont eux-mêmes les comptages plutôt que de croire le
-pilote — plus **un banc**, qui n'est pas un contrôle : il reste ouvert et se
-laisse casser (`--verifier` en fait un contrôle, et la CI le joue sous ce
-drapeau) :
+pilote — plus **deux bancs**, qui ne sont pas des contrôles : ils restent ouverts
+et se laissent casser, un par produit (`--verifier` en fait des contrôles, et la
+CI les joue sous ce drapeau) :
 
 | commande | ce qu'elle mesure | démon Docker |
 |---|---|---|
@@ -178,6 +212,8 @@ drapeau) :
 | `bash scripts/portes-check.sh` | `clippy -D warnings` sur **chaque** profil que `compose.yaml` construit | non |
 | `bash scripts/r3-check.sh` | la suite complète, rejouée (`R3_TOURS=3` pour le critère) | non |
 | `bash scripts/banc-registre.sh --verifier` | le banc du Registre : trois postures jouées de bout en bout — vert · vert-mais-faux · rouge | non |
+| `bash scripts/banc-seuil.sh --verifier` | le banc du Seuil : runs, écrêtages, reçu, **troncature**, altération, les trois états | non |
+| `bash scripts/banc-seuil.sh --verifier --production` | le garde de configuration — trois formes d'`exit 78`, sans base ni Docker | non |
 
 Ils distinguent trois états, et le troisième compte autant que les deux autres :
 `0` mesuré et vert · `1` mesuré et rouge · `3` **non mesuré** — l'instrument n'a
@@ -232,7 +268,7 @@ crates/                    30 membres de workspace
 compose.yaml               les trois profils : coin · jonction · production
 profiles/                  les profils d'environnement, sous test
 docker/                    l'image distroless (quatre binaires, aucun shell)
-scripts/                   les seize contrôles, et le banc du Registre
+scripts/                   les seize contrôles, et les deux bancs
 docs/reports/              la page qu'on tend, et les feuilles de route
 LISEZ-MOI-C1-C3.md         l'inventaire mesuré du périmètre
 ```
@@ -240,7 +276,7 @@ LISEZ-MOI-C1-C3.md         l'inventaire mesuré du périmètre
 ## Construire et éprouver
 
 ```bash
-cargo test  --locked --workspace              # 3 908 tests
+cargo test  --locked --workspace              # 3 924 tests · 193 binaires (macOS, 6 sept. 2026)
 cargo clippy --locked --workspace --all-targets -- -D warnings
 bash scripts/portes-check.sh                  # la même porte, sur chaque profil servi
 ```

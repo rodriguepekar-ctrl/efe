@@ -58,6 +58,8 @@ suit est du code qu'on peut ouvrir :
 | propriété | où |
 |---|---|
 | chaîne HMAC scellée, ancre re-vérifiable, troncature détectable | `crates/verify-mini/`, `crates/provenance-verify/` |
+| **l'intégrité ne dit rien de la complétude** — un bundle tronqué se re-prouve PARFAITEMENT (`verify-mini` seul rend `0`) ; seule l'ancre, publiée hors du bundle, l'attrape, et par un simple COMPTAGE | [`banc-seuil.sh`](scripts/banc-seuil.sh) § 7, joué à chaque `push` |
+| le discriminant bruyant/silencieux de la frontière, **isolé en fonction** pour être éprouvé — on crie sur un acte de l'opérateur, jamais sur une absence | [`frontier.rs`](crates/efe-swarm-gateway/src/frontier.rs) `bruyant()`, [`auth.rs`](crates/efe-coordinator/src/llm/providers/auth.rs) |
 | refus de démarrer la frontière sans `postgres`, `oidc` et `pii` — `exit 78` (`EX_CONFIG`) | [`profile.rs:926`](crates/efe-swarm-gateway/src/profile.rs), [`main.rs:53`](crates/efe-swarm-gateway/src/main.rs) |
 | analyseur d'autorité **unique** (5 copies réduites à 1 ; `127.0.0.1:8080@evil.com` coupait TLS vers `evil.com` sur 875 formes) | [`scella-authority`](crates/scella-authority/src/lib.rs) |
 | les **quatre** destinations d'egress **validées** — y compris `EFE_LOCAL_SLM_URL`, qui n'avait aucun contrôle et dont le nom dit « local » — `https` partout, `http` seulement en local, jamais de `userinfo` (la destination est scellée dans le reçu) | [`common.rs`](crates/efe-coordinator/src/llm/providers/common.rs) ; `EFE_ANTHROPIC_URL`, `EFE_OPENAI_BASE_URL`, `EFE_GEMINI_BASE_URL` au [registre](crates/efe-swarm-gateway/src/profile.rs) |
@@ -134,6 +136,26 @@ Le plus utile de ce fichier :
   réhydratation, HTTP, badge. Le badge rouge avait son test unitaire
   (`badge_is_red_fail_loud_when_broken`, sur une enveloppe synthétique) ; ce
   qui n'existait pas, c'est un fichier réellement altéré traversant tout.
+- **La frontière affirmait « ce n'est pas une clé manquante » sur une clé
+  manquante** — trouvé le 6 septembre 2026 en construisant `scripts/banc-seuil.sh`.
+  `frontier::enregistrer` distingue depuis toujours deux cas, et la distinction est
+  juste : on CRIE sur une valeur fournie puis rejetée (l'opérateur a agi, il doit
+  l'apprendre au boot), on se TAIT sur une absence (déploiement qui n'utilise pas
+  ce fournisseur). Mais `ApiKey::from_env` typait **les trois** situations —
+  variable absente, valeur vide, préfixe non conforme — en un seul
+  `CoordError::Config`. Le bras bruyant s'exécutait donc sur une absence, et
+  imprimait **trois fois** une phrase fausse, sur la posture la plus fréquente qui
+  soit : frontière activée sans clé fournisseur.
+  Un discriminant juste, rendu faux par le type de l'erreur qu'il discriminait —
+  et qu'aucun test ne pouvait viser, parce qu'il vivait dans les bras d'un `match`
+  plutôt que dans une fonction. Corrigé par une variante `CoordError::ConfigAbsent`
+  et l'extraction du prédicat `bruyant()`, tous deux sous test — dont un test
+  d'anti-vacuité qui refuse que les deux cas se remettent à rendre la même chose.
+- **Les tests du module `frontier` ne tournaient nulle part** — ils n'existent que
+  sous `frontier-llm`, or `cargo test --locked --workspace` (ce que joue la CI)
+  compile cette feature à ZÉRO, et `p1-check.sh`, qui la joue, exige un démon
+  Docker que le runner n'a pas. Même forme que M3 sous `oidc`, fermé le même mois.
+  `banc-seuil.sh --production` les joue désormais, et la CI le joue.
 
 ## 5 · Ce qu'il faudra avant qu'une vraie politique existe
 
