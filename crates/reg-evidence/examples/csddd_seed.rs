@@ -306,7 +306,7 @@ fn write_bundle(
 
     // Le mode d'emploi de la re-dérivation (trust-light) + le README de la démo.
     write(dir, "reg/REDERIVE.md", &rederive_md(root, &diligence.set_hash(), &eu.set_hash()))?;
-    write(dir, "README.md", &readme_md(dir, root))?;
+    write(dir, "README.md", &readme_md(root))?;
     Ok(())
 }
 
@@ -335,10 +335,27 @@ fn write_embedded_verifier(dir: &Path) -> std::io::Result<()> {
         ("sha256.rs", include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/../verify-mini/src/sha256.rs"))),
         ("verify.rs", include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/../verify-mini/src/verify.rs"))),
     ];
-    // Un manifeste AUTONOME (pas de `{ workspace = true }`) : buildable seul, hors de tout workspace.
-    const CARGO_TOML: &str = "# Verifieur forensic zero-dependance — copie AUTONOME embarquee dans le bundle\n\
-# (sans heritage de workspace), pour la re-compilation hors-ligne par le destinataire.\n\
-# Octet-a-octet identique au verify-mini du depot. `cargo tree` = verify-mini SEUL.\n\
+    // Un manifeste AUTONOME : buildable seul, hors de tout workspace.
+    //
+    // ⚠ L'en-tête a longtemps affirmé « sans heritage de workspace » SANS la table `[workspace]`
+    // vide — et l'affirmation était donc fausse. Cargo remonte les répertoires parents jusqu'au
+    // premier `Cargo.toml` de workspace : posé dans un dossier qui en contient un (le dossier de
+    // livraison C1-C3 porte celui du dépôt), le bundle échouait sur « current package believes
+    // it's in a workspace when it's not », et sa promesse centrale — « recompilez-le hors-ligne,
+    // re-prouvez sans nous » — tombait. Mesuré le 6 septembre 2026.
+    //
+    // Les 7 sources, elles, sont identiques au dépôt PAR CONSTRUCTION : `include_str!` les lit
+    // dans `../verify-mini/src/`. Rien ne peut les faire diverger — sauf un bundle déjà écrit qui
+    // n'aurait pas été régénéré depuis, ce qui était le cas de celui livré (son `lib.rs` portait
+    // encore l'ancien nom du projet).
+    const CARGO_TOML: &str = "# Verifieur forensic zero-dependance — copie AUTONOME embarquee dans le bundle,\n\
+# pour la re-compilation hors-ligne par le destinataire.\n\
+# Octet-a-octet identique au verify-mini du depot (include_str!). `cargo tree` = verify-mini SEUL.\n\
+\n\
+# La table vide ci-dessous DÉCLARE l'autonomie : sans elle, cargo rattache ce paquet au premier\n\
+# workspace trouvé en remontant les parents, et la re-compilation echoue.\n\
+[workspace]\n\
+\n\
 [package]\n\
 name = \"verify-mini\"\n\
 version = \"0.0.0\"\n\
@@ -403,11 +420,17 @@ une **fonction déterministe** de deux entrées que vous détenez déjà — les
 }
 
 /// Le `README.md` du bundle — le runbook des trois démos, avec les commandes prêtes à coller.
-fn readme_md(dir: &Path, root: &str) -> String {
+/// Le README de la démo.
+///
+/// ⚠ Il recevait `dir` et interpolait le chemin ABSOLU du dossier de génération dans ses quatre
+/// commandes — c'est-à-dire le répertoire personnel de l'auteur. Le destinataire ne pouvait en
+/// exécuter aucune. Les commandes sont désormais RELATIVES au bundle, et le README le dit.
+fn readme_md(root: &str) -> String {
     let hex = key_hex();
-    let d = dir.display();
     format!(
         "# Bundle de démo — diligence fournisseur (CSDDD / LkSG / EU AI Act)\n\
+\n\
+> **Toutes les commandes ci-dessous se lancent DEPUIS CE DOSSIER.**\n\
 \n\
 Un **seul** workflow de diligence fournisseur, scellé au fil de l'exécution (capture S1 + gate humain S2),\n\
 **relu sous trois cadres**. Ce bundle est **autoportant** : les trois démos ci-dessous tournent dessus\n\
@@ -427,22 +450,27 @@ sans rien préparer d'autre. La **clé tenant n'est pas ici** (souveraineté) �
 ## D1 — la re-preuve sans confiance, HORS-LIGNE (→ exit 0)\n\
 Coupez le Wi-Fi. **Re-compilez** le vérifieur depuis ce que vous avez reçu, puis re-prouvez :\n\
 ```\n\
-cargo build --release --offline --manifest-path \"{d}/verify/verify-mini/Cargo.toml\" --target-dir /tmp/vm\n\
-/tmp/vm/release/verify-mini \"{d}/records.sealed.jsonl\" --key-hex {hex} --root {root}\n\
+cargo build --release --offline --manifest-path verify/verify-mini/Cargo.toml --target-dir /tmp/vm\n\
+/tmp/vm/release/verify-mini records.sealed.jsonl --key-hex {hex} --root {root}\n\
 ```\n\
 Arbre de dépendances **vide** → compile en secondes, **sans réseau**. Le `--root` ancre au manifest-root\n\
-publié. _(Alternative rapide depuis le dépôt : `cargo run -q -p verify-mini -- <records> --key-hex … --root …`.)_\n\
+publié. _(Alternative depuis le dépôt Scella, si vous l'avez : `cargo run -q -p verify-mini -- <records> --key-hex … --root …`.)_\n\
+\n\
+> ⚠ D2 employait cette forme comme commande PRINCIPALE. Elle n'aboutit que dans un workspace\n\
+> cargo contenant `verify-mini` : ailleurs elle échoue — ou pire, compile UN AUTRE `verify-mini`\n\
+> que celui du bundle, ce qu'un vérifieur tiers ne doit jamais faire. D2 emploie désormais le\n\
+> binaire que D1 vient de construire depuis la source EMBARQUÉE.\n\
 \n\
 ## D2 — l'altération détectée (→ exit 1)\n\
 ```\n\
-cargo run -q -p verify-mini -- \"{d}/records.TAMPERED.jsonl\" --key-hex {hex}\n\
+/tmp/vm/release/verify-mini records.TAMPERED.jsonl --key-hex {hex}\n\
 ```\n\
 Un octet scellé a changé : le vérifieur **rejette** le bundle et **pointe le record** altéré. Aucun champ\n\
 scellé ne peut être modifié après coup sans que la re-preuve casse.\n\
 \n\
 ## D3 — le dossier réglementaire (la VUE re-dérivable)\n\
 ```\n\
-open \"{d}/reg/csddd.html\"      # ou lksg.html / eu_ai_act.html\n\
+open reg/csddd.html      # ou lksg.html / eu_ai_act.html\n\
 ```\n\
 Le dossier **fournit et mappe** l'évidence (chaque ligne cite un `node_id` scellé), **déclare ses trous**\n\
 (HORS-PÉRIMÈTRE-DAG), et n'affirme **jamais** la conformité — **outillé ≠ conforme**. Il est\n\
