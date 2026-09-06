@@ -723,7 +723,19 @@ Seul le chemin d'un inconnu passe par là.
 
 \section{Le recensement, et pourquoi il porte sa commande}
 
-Le périmètre livré compte \mesure{1\,019 fichiers}{\code{find . -type f -not -path './.git/*' | wc -l}},
+\begin{alerte}
+\textbf{Un document qui décrit un périmètre en fait partie.} Tous les comptes de ce chapitre ont été
+pris \emph{avant} que ce document n'y entre : \textbf{1\,019 fichiers}, \textbf{40 sources
+\code{.tex}} et \textbf{40 rendus \code{.pdf}}. Une fois sa source et son rendu déposés, le périmètre
+en compte \textbf{1\,021}, et l'invariant devient \textbf{41 $\leftrightarrow$ 41}.
+
+Les deux lectures sont vraies ; c'est leur point de mesure qui diffère, et c'est pourquoi il est
+écrit. Un document qui aurait annoncé « 1\,021 » sans dire qu'il s'y comptait aurait été
+\emph{exact} et pourtant impossible à reproduire : la commande citée aurait rendu 1\,019 tant que le
+PDF n'existait pas.
+\end{alerte}
+
+Le périmètre livré comptait, à la mesure, \mesure{1\,019 fichiers}{\code{find . -type f -not -path './.git/*' | wc -l}},
 répartis en \mesure{23 extensions}{comptées par \code{os.walk}} et
 \mesure{180 répertoires}{toutes profondeurs, racine comprise}, dont
 \mesure{172}{contiennent au moins un fichier}.
@@ -1046,8 +1058,8 @@ exécute le banc.
 
 \section{Les 40 documents}
 
-\mesure{40 sources \code{.tex}}{\code{find docs -name '*.tex' | wc -l}} et \mesure{40 rendus
-\code{.pdf}}{idem pour \code{'*.pdf'}}, \textbf{zéro orphelin dans l'un ou l'autre sens} : chaque
+\mesure{40 sources \code{.tex}}{\code{find docs -name '*.tex' | wc -l}, avant que ce document n'y
+entre --- 41 après} et autant de rendus \code{.pdf}, \textbf{zéro orphelin dans l'un ou l'autre sens} : chaque
 source a son rendu, chaque rendu a sa source. Six architectures dans \code{docs/architecture/},
 trente-quatre rapports et feuilles de route dans \code{docs/reports/}, pour
 \mesure{2\,603\,295 octets}{somme des tailles} de PDF.
