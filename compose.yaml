@@ -207,6 +207,38 @@ services:
     ports:
       - "127.0.0.1:${SCELLA_PORT_PROD:-8082}:8080"
 
+  # ── La CONSOLE du Registre (C1) — pourquoi elle n'est PAS un service ici ────
+  #
+  # On la cherche ici, et c'est légitime : `audit-console` sert une vraie
+  # interface web, éprouvée par M7 et M8. Elle n'y est pas, et l'absence est
+  # une DÉCISION, pas un oubli :
+  #
+  #   la console REFUSE de binder hors de la boucle locale sans qu'on ait
+  #   déclaré le terminateur de canal placé devant elle (garde I-S3-SOUVERAIN,
+  #   `crates/audit-console/src/server.rs`). Or Docker ne publie un port que si
+  #   le conteneur écoute sur SON interface — le loopback d'un conteneur est
+  #   inatteignable depuis l'hôte.
+  #
+  # Un service ici exigerait donc `EFE_CONSOLE_TERMINATEUR_CANAL`, et cette
+  # déclaration est PORTANTE : elle abaisse le plancher de scellement à A2,
+  # c'est-à-dire qu'elle autorise un pair NON observé comme local à sceller des
+  # actes humains. Écrire « un terminateur protège ce service » quand la seule
+  # chose devant est `docker-proxy` serait le décor que ce dépôt retire partout
+  # ailleurs — et le payer en droits de scellement.
+  #
+  # Sur l'hôte, le pair EST la boucle locale, observée par le noyau : A1, le
+  # barreau le plus haut, sans rien déclarer et sans rien mentir. D'où :
+  #
+  #     bash scripts/banc-registre.sh
+  #
+  # Il compile, sème un dossier de diligence fournisseur scellé, s'éprouve
+  # (vert / vert-mais-faux / rouge), puis vous laisse la console ouverte.
+  #
+  # ⚠ Ce que cela coûte, et il faut le dire : ce chemin demande `cargo`, là où
+  # tout le reste de ce fichier n'exige que Docker. C'est acceptable parce que
+  # la console est l'expansion (C1) et non ce qu'on tend à un inconnu — son
+  # chemin à lui reste `docker compose up` puis `mon-premier-recu.sh`.
+
 volumes:
   # Le bundle, sa copie tronquée, l'ancre — et, sous le profil « jonction », les
   # dossiers réglementaires. Tout ce que la démonstration affirme se recontrôle

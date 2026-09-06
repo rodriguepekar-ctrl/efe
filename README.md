@@ -44,6 +44,37 @@ Il ne régénère jamais une clé existante : un master qui change ne rend pas l
 anciens reçus faux, il les rend **orphelins**, et plus personne ne peut le
 démontrer.
 
+## Et pour éprouver Le Registre (C1)
+
+Les deux gestes ci-dessus sont ceux du **Seuil** — la passerelle et son reçu. Le
+**Registre**, lui, a une console de conformité, et elle se laisse casser :
+
+```bash
+bash scripts/banc-registre.sh
+```
+
+Elle sème un dossier de diligence fournisseur scellé — six records, l'évidence de
+criblage citée avec son nœud, la revue d'un officier — puis **joue trois postures
+devant vous** avant de vous rendre la main :
+
+| posture | chaîne | badge | verdict |
+|---|---|---|---|
+| le cas conforme | intacte | 🔒 vert | BLOQUÉ — et c'est **juste** |
+| le cas **menteur**, scellé de bonne foi | intacte | 🔒 **vert** | COMPLIANT — et c'est **faux** |
+| le fichier **retouché** après coup | cassée | ⚠ **rouge** | et il NOMME le record |
+
+La deuxième ligne est celle qui compte. Une chaîne atteste l'**intégrité** de ce
+qui a été enregistré, jamais la **correction** de la décision : un dossier
+mensonger scellé de bonne foi passe au vert, et aucune signature au monde ne
+rattrape cela. La console l'écrit en haut de chaque page — ce banc le fait
+toucher.
+
+Il tourne sur l'hôte et non dans Docker, pour une raison écrite dans
+[`compose.yaml`](compose.yaml) à l'endroit où on chercherait le service : la
+console **refuse** de servir hors de la boucle locale sans qu'on ait déclaré le
+terminateur de canal placé devant elle, et déclarer un terminateur qui n'existe
+pas coûterait des droits de scellement.
+
 ## Ce que vous verrez
 
 D'abord la passerelle **annoncer ce qu'elle sert réellement** — son rapport de
@@ -135,7 +166,9 @@ n'est pas conforme.*
 
 Rien de ce qui précède n'est à croire sur parole. Seize contrôles rejouent
 chacun leur module, et refont eux-mêmes les comptages plutôt que de croire le
-pilote :
+pilote — plus **un banc**, qui n'est pas un contrôle : il reste ouvert et se
+laisse casser (`--verifier` en fait un contrôle, et la CI le joue sous ce
+drapeau) :
 
 | commande | ce qu'elle mesure | démon Docker |
 |---|---|---|
@@ -144,6 +177,7 @@ pilote :
 | `bash scripts/p1-check.sh` | le profil de production démarré pour de vrai, tué, redémarré, reçu re-prouvé | oui (PostgreSQL) |
 | `bash scripts/portes-check.sh` | `clippy -D warnings` sur **chaque** profil que `compose.yaml` construit | non |
 | `bash scripts/r3-check.sh` | la suite complète, rejouée (`R3_TOURS=3` pour le critère) | non |
+| `bash scripts/banc-registre.sh --verifier` | le banc du Registre : trois postures jouées de bout en bout — vert · vert-mais-faux · rouge | non |
 
 Ils distinguent trois états, et le troisième compte autant que les deux autres :
 `0` mesuré et vert · `1` mesuré et rouge · `3` **non mesuré** — l'instrument n'a
@@ -198,7 +232,7 @@ crates/                    30 membres de workspace
 compose.yaml               les trois profils : coin · jonction · production
 profiles/                  les profils d'environnement, sous test
 docker/                    l'image distroless (quatre binaires, aucun shell)
-scripts/                   les seize contrôles
+scripts/                   les seize contrôles, et le banc du Registre
 docs/reports/              la page qu'on tend, et les feuilles de route
 LISEZ-MOI-C1-C3.md         l'inventaire mesuré du périmètre
 ```

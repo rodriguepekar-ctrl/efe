@@ -113,6 +113,27 @@ Le plus utile de ce fichier :
   ES256 de test vivait dans un `mod tests` privé, donc les tests n'avaient d'autre
   choix que l'extracteur de développement. Fixture partagée, vrai jeton d'audience
   `efe-llm`, et `p1-check.sh` §7 joue désormais **les deux** jeux de features.
+- **La console SCELLE la supervision humaine, mais ne la PERSISTE pas** —
+  trouvé le 6 septembre 2026 en construisant `scripts/banc-registre.sh`. Un
+  officier qui scelle une revue voit `303`, puis la revue sur la page : elle est
+  bien scellée. Le fichier de records, lui, reste **identique à l'octet près**
+  (mesuré : 6 lignes / 2 125 octets avant, 6 lignes / 2 125 octets après un
+  scellement réussi) — `Console::rehydrate` lit `EFE_CONSOLE_RECORDS`, rien ne
+  le réécrit. La revue vit en mémoire et disparaît au redémarrage.
+  Un registre de conformité dont la supervision scellée s'évapore n'est pas un
+  registre ; c'est une session. Le banc en fait sa troisième épreuve, pour que
+  ce soit constaté plutôt que découvert.
+- **`EFE_CONSOLE_RECORDS` n'était alimentée par RIEN** — la variable qui
+  réhydrate un tenant depuis un journal scellé est déclarée au registre de
+  profil, lue par `main.rs`, et **zéro** script et **zéro** test ne l'écrivaient
+  (mesuré par `grep -rl` sur `scripts/` et `crates/*/tests/`). M7 et M8
+  démarraient bien la console et l'interrogeaient par HTTP, mais sur un tenant
+  provisionné VIDE : le chemin de réhydratation compilait sans avoir jamais
+  servi. `console-semence` l'alimente désormais avec la **même** dérivation de
+  clé que le serveur, et le banc joue la chaîne entière — sceau réel, fichier,
+  réhydratation, HTTP, badge. Le badge rouge avait son test unitaire
+  (`badge_is_red_fail_loud_when_broken`, sur une enveloppe synthétique) ; ce
+  qui n'existait pas, c'est un fichier réellement altéré traversant tout.
 
 ## 5 · Ce qu'il faudra avant qu'une vraie politique existe
 

@@ -23,7 +23,8 @@
 #  1. les trois portes de qualité, une par profil que `compose.yaml` construit ;
 #  2. les ONZE contrôles restants qui n'exigent pas de démon Docker, chacun sa
 #     propre étape — un échec doit NOMMER le contrôle, pas dire « la boucle a
-#     échoué ». (Douze contrôles sur seize tournent sans démon ; `portes-check`
+#     échoué ». (Douze contrôles sur seize tournent sans démon, plus le banc du
+#     Registre sous `--verifier` ; `portes-check`
 #     est le douzième, et c'est le point 1. Ne pas le compter deux fois.) ;
 #  3. la suite de tests complète.
 #
@@ -167,6 +168,18 @@ jobs:
         run: bash scripts/orphelins-check.sh
       - name: d3-check (licence + secrets)
         run: bash scripts/d3-check.sh
+
+      # Le banc du Registre, sous `--verifier` : il ne reste pas ouvert, il joue
+      # ses trois postures et sort. C'est le SEUL contrôle qui traverse la chaîne
+      # entière de la console — sceau réel, fichier sur disque, réhydratation par
+      # `EFE_CONSOLE_RECORDS`, HTTP, badge — et le seul qui exige que le badge
+      # ROUGE apparaisse pour de vrai. Port explicite : 8088 pourrait être pris
+      # sur un runner, et le banc sortirait alors en 3 (non mesuré), ce qui
+      # passerait pour un succès si on ne regardait que « pas d'échec ».
+      - name: banc-registre (le Registre, de bout en bout)
+        env:
+          BANC_PORT: "8791"
+        run: bash scripts/banc-registre.sh --verifier
 
       # ── 3 · la suite complète ──────────────────────────────────────────────
       - name: cargo test --locked --workspace

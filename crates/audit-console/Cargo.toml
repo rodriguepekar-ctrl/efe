@@ -21,6 +21,15 @@ publish = false
 name = "audit-console"
 path = "src/main.rs"
 
+# Le semeur. Il vit ICI et pas dans `provenance-capture` parce qu'il doit dériver la clé tenant
+# EXACTEMENT comme le serveur — mêmes variables, même lecteur, même `TenantKey::derive`. Deux
+# programmes qui doivent s'accorder sur une clé n'ont pas le droit de la calculer chacun de leur
+# côté : c'est ainsi qu'on obtient un registre qui « ne se re-prouve pas » pour une raison qui
+# n'a rien à voir avec la chaîne.
+[[bin]]
+name = "console-semence"
+path = "src/bin/console-semence.rs"
+
 [lib]
 path = "src/lib.rs"
 

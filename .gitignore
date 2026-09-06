@@ -208,3 +208,9 @@ clients/python/efe_tool/_proto/efe/v1/*_pb2_grpc.py
 # l'exploitant. Le versionner publierait un master. Le défaut est ignoré ici ; un
 # chemin choisi par l'utilisateur reste sa responsabilité, et le script le dit.
 mon-premier-recu/
+
+# Le dossier que `scripts/banc-registre.sh` écrit : il contient la RACINE de la
+# console (dont la clé tenant est dérivée) et le jeton de session. Le versionner
+# rendrait la clé tenant publique, donc la re-preuve sans valeur — exactement le
+# défaut que le script refuse en interdisant `demo-root-secret`.
+banc-registre/
