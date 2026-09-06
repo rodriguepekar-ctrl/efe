@@ -50,6 +50,25 @@ nonmesure() {
   exit 3
 }
 
+#  ⚠ UN ÉCHEC NE DOIT PAS LAISSER LA PILE DEBOUT. Sans ce garde, un run raté
+#  laissait `base` et `production` en marche : la tentative SUIVANTE butait sur
+#  « le port est déjà pris » et accusait la machine, alors que le coupable était
+#  la tentative précédente. Mesuré deux fois de suite en assemblant ce script.
+#
+#  On ne coupe PAS en cas de succès : la passerelle sert encore, c'est voulu, et
+#  la fin du texte dit comment l'arrêter. On ne coupe que sur un échec.
+DEMARREE=0
+menage() {
+  local code=$?
+  if [ "$code" != "0" ] && [ "$DEMARREE" = "1" ]; then
+    printf '\n  \033[33m·\033[0m la pile est arrêtée — un échec ne doit pas bloquer le port de la\n'
+    printf '    tentative suivante.\n'
+    docker compose stop base production >/dev/null 2>&1
+    docker compose rm -f base production >/dev/null 2>&1
+  fi
+}
+trap menage EXIT
+
 DOSSIER="${1:-mon-premier-recu}"
 PORT="${SCELLA_PORT_PROD:-8082}"
 IMAGE="scella-production:local"
@@ -126,6 +145,7 @@ done
 curl -sf "http://127.0.0.1:$PORT/healthz" >/dev/null 2>&1 \
   || { docker compose logs --tail 30 production 2>&1 | tail -20
        ko "la passerelle n'a pas répondu en 90 s"; }
+DEMARREE=1
 ok "la passerelle sert sur 127.0.0.1:$PORT, sous VOTRE master"
 
 # ═════════════════════════════════════════════════════════════════════════════

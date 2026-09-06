@@ -243,6 +243,24 @@ y a sa ligne, et le texte MIT qu'il promettait existe enfin, dans
 [LICENSE-MIT](LICENSE-MIT). `scripts/d3-check.sh` refuse toute divergence entre les
 licences déclarées par les manifestes et ce que le fichier de licence accorde.
 
+## Si vous n'êtes pas l'auteur
+
+Alors vous êtes la seule mesure qui manque à ce dépôt. Tout le reste s'y vérifie
+tout seul — seize contrôles, trois portes, une CI. **Une seule étape n'a pas
+d'`exit 0` : celle-ci.**
+
+[`docs/D5-COMPTE-RENDU.md`](docs/D5-COMPTE-RENDU.md) est la page à remplir en
+marchant. Elle ne demande pas si c'était agréable : elle demande **ce qui a
+bloqué**, où exactement, et — la question qui compte le plus — **à quel moment
+vous avez eu envie de demander quelque chose**. Chaque question posée à l'auteur
+est un défaut de documentation, pas un malentendu.
+
+Deux défauts ont déjà été trouvés par ce chemin, et par lui seul : le profil de
+production n'avait **jamais** produit de reçu portable dans Docker (un volume né
+sous le mauvais propriétaire), et un échec laissait la pile debout, ce qui faisait
+accuser la machine à l'essai suivant. Ni les tests, ni les portes, ni la CI ne les
+avaient vus.
+
 ## Les deux autres portes
 
 - [`CONTRIBUTING.md`](CONTRIBUTING.md) — la chaîne d'outils, la règle qu'on

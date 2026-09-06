@@ -73,6 +73,25 @@ COPY --from=builder /src/target/release/verify-mini       /usr/local/bin/verify-
 # autonomes » : sans celui-ci, l'image n'en portait qu'un.
 COPY --from=builder /src/target/release/provenance-verify /usr/local/bin/provenance-verify
 COPY --from=builder --chown=65532:65532 /preuve /preuve
+# ── /var/lib/scella — le chemin du profil de PRODUCTION ───────────────────────
+#
+#  Il manquait, et son absence était invisible jusqu'au 6 septembre 2026.
+#  `profiles/production.env` écrit son ancre dans `/var/lib/scella/anchors.log`,
+#  et `compose.yaml` y monte le volume `preuve`. Or Docker initialise un volume
+#  NEUF depuis le contenu de l'image au point de montage — propriétaire compris.
+#  Ce chemin n'existant pas dans l'image, le volume naissait `root:root`, et le
+#  conteneur tourne en 65532 : la première publication d'ancre échouait en
+#  « Permission denied (os error 13) », et `GET /v1/swarm/bundle/:id` rendait 500.
+#
+#  ⚠ AUTREMENT DIT : le profil de production n'avait JAMAIS produit de bundle
+#  dans Docker. `p1-check.sh` ne pouvait pas le voir — il lance le binaire de
+#  l'HÔTE, pas le conteneur, et l'hôte écrit dans un répertoire qu'il possède.
+#  Seul le chemin d'un inconnu (`scripts/mon-premier-recu.sh`) passe par ici.
+#  C'est très exactement ce que l'étape D5 existe pour trouver.
+#
+#  On réemploie le `/preuve` vide de l'étage builder : distroless n'a pas de shell,
+#  donc pas de `RUN mkdir` possible à cet étage.
+COPY --from=builder --chown=65532:65532 /preuve /var/lib/scella
 
 # Le profil est livré dans l'image pour être LISIBLE par qui inspecte l'image.
 # Il n'est pas lu par elle : c'est `compose.yaml` qui l'injecte via `env_file`,
