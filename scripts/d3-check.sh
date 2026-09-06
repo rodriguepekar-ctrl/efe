@@ -155,7 +155,7 @@ titre "3. Les portes d'entrée citent-elles des chemins qui existent ?"
 JOURNAL=$(mktemp)
 cargo test -q -p audit-console --test d1_portes_dentree >"$JOURNAL" 2>&1
 PORTES=$?
-exiger "les 4 portes d'entrée ne citent que des chemins existants (5 tests, contre-épreuves comprises)" "$PORTES"
+exiger "les 4 portes d'entrée : chemins existants ET structure intacte (7 tests, contre-épreuves comprises)" "$PORTES"
 # Le journal ne sort que si CE contrôle-CI a échoué. La première écriture testait `$ECHECS`, le
 # compteur GLOBAL : elle recrachait donc le journal d'une section verte dès qu'une AUTRE section
 # était tombée — un instrument qui montre la mauvaise preuve envoie chercher au mauvais endroit.

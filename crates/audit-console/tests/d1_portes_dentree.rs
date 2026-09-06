@@ -61,6 +61,23 @@ const PORTES: &[&str] = &[
 /// une : un lien mort se répare en corrigeant le lien.
 const PLANCHER: usize = 12;
 
+/// Nombre minimal de sections `##` par porte d'entrée, mesuré le 6 septembre 2026 :
+/// README 9 · LISEZ-MOI 13 · CONTRIBUTING 5 · SECURITY 5. Le plancher est posé sous chacune avec
+/// de la marge — il n'interdit pas de réorganiser, il interdit qu'un document PERDE la moitié de
+/// sa structure sans que rien ne le dise.
+///
+/// **Ce plancher existe parce que ce garde a laissé passer exactement cela.** Le 6 septembre 2026,
+/// une édition par script a supprimé la section 5 entière de `SECURITY.md` — un repli
+/// `j = len(s)` qui a effacé tout ce qui suivait le dernier point d'une liste. Les cinq tests de
+/// ce fichier sont restés VERTS : ils comptent les **liens**, et la section perdue n'en portait
+/// aucun. Un garde qui ne vérifie qu'une dimension laisse passer tout ce qui vit dans les autres.
+const PLANCHER_SECTIONS: &[(&str, usize)] = &[
+    ("README.md", 6),
+    ("LISEZ-MOI-C1-C3.md", 8),
+    ("CONTRIBUTING.md", 4),
+    ("SECURITY.md", 4),
+];
+
 fn racine() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("..")
@@ -187,3 +204,32 @@ fn contre_epreuve_lextracteur_trouve_vraiment_quelque_chose() {
          extracteur cassé, pas un document sobre"
     );
 }
+
+#[test]
+fn aucune_porte_dentree_ne_perd_sa_structure() {
+    let racine = racine();
+    let mut maigres: Vec<String> = Vec::new();
+    for (porte, plancher) in PLANCHER_SECTIONS {
+        let texte = std::fs::read_to_string(racine.join(porte))
+            .unwrap_or_else(|e| panic!("{porte} doit être lisible : {e}"));
+        let n = texte.lines().filter(|l| l.starts_with("## ")).count();
+        if n < *plancher {
+            maigres.push(format!("{porte} : {n} section(s), plancher {plancher}"));
+        }
+    }
+    assert!(
+        maigres.is_empty(),
+        "une porte d'entrée a perdu sa structure — c'est le défaut exact qu'une édition par \
+         script a produit sur SECURITY.md sans que les cinq autres tests le voient :\n  {}",
+        maigres.join("\n  ")
+    );
+}
+
+/// Contre-épreuve : sans elle, un compteur qui rendrait toujours `usize::MAX` passerait.
+#[test]
+fn contre_epreuve_le_compteur_de_sections_compte_vraiment() {
+    let texte = std::fs::read_to_string(racine().join("SECURITY.md")).expect("SECURITY.md");
+    let n = texte.lines().filter(|l| l.starts_with("## ")).count();
+    assert!((4..=40).contains(&n), "compte invraisemblable ({n}) — le compteur est cassé");
+}
+

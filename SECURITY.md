@@ -90,8 +90,13 @@ Le plus utile de ce fichier :
   re-prouve. Rejouer l'import n'écrase rien (write-once).
   ⚠ Ce qui reste : **rien ne PLANIFIE** cette sauvegarde. La capacité existe, la
   cadence n'existe pas — c'est une décision d'exploitation, pas du code.
-- **Rotation de clé : zéro.** `crates/scella-conservation/` sait produire des
-  générations de clé ; rien ne les fait tourner.
+- **Rotation de clé : la capacité existe, la CADENCE n'existe pas** — exactement
+  la même forme que la sauvegarde ci-dessus, et cette ligne disait « zéro » à tort.
+  `scella-conserver tourner` fait tourner une génération, `p2_rotation` éprouve
+  qu'une archive **antérieure** se restaure encore après, et `p2-check.sh` rejoue
+  les deux. Ce qui est réellement à zéro : **rien ne déclenche** cette rotation, et
+  aucun document ne dit à quelle fréquence elle devrait avoir lieu. C'est une
+  décision d'exploitation, pas du code.
 - **Le jeton porteur reste un secret partagé** ([`audit-console/src/session.rs`](crates/audit-console/src/session.rs)).
   Une vraie non-répudiation demanderait que l'officier **signe** le tuple de
   l'acte. C'est nommé, et non produit.
@@ -107,3 +112,13 @@ Le plus utile de ce fichier :
   ES256 de test vivait dans un `mod tests` privé, donc les tests n'avaient d'autre
   choix que l'extracteur de développement. Fixture partagée, vrai jeton d'audience
   `efe-llm`, et `p1-check.sh` §7 joue désormais **les deux** jeux de features.
+
+## 5 · Ce qu'il faudra avant qu'une vraie politique existe
+
+Dans cet ordre, et aucun ne s'invente à l'avance :
+
+1. un service qui tourne, donc une surface à attaquer ;
+2. une adresse que quelqu'un relève, et quelqu'un pour la relever ;
+3. l'ouverture du dépôt, et avec elle le formulaire d'avis privé de GitHub ;
+4. alors seulement des délais — parce qu'un délai est une promesse, et qu'une
+   promesse sans personne derrière est ce que ce fichier remplace.
