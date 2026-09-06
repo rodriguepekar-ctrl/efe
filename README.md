@@ -19,6 +19,31 @@ SCELLA_PORT=18080 docker compose up
 La passerelle n'est publiée que sur la boucle locale `127.0.0.1`, jamais sur
 toutes les interfaces de l'hôte.
 
+## Et quand la démonstration ne suffit plus
+
+Le reçu ci-dessus dit, **de lui-même**, qu'il ne prouve rien contre personne : la
+démonstration tourne sur une clé de **test publique**, connue de quiconque a lu ce
+dépôt. Elle montre le **mécanisme**, et c'est ce qu'on lui demande.
+
+Le jour où vous voulez l'**autre** reçu — celui qui oppose quelque chose, parce
+qu'il est scellé sous une clé que vous seul détenez :
+
+```bash
+bash scripts/mon-premier-recu.sh
+```
+
+Il fabrique **vos** clés (elles ne quittent jamais votre machine), démarre le
+profil de **production** — quatre features et un vrai PostgreSQL, pas la
+démonstration —, sert un run sous un jeton que vous seul pouvez forger, vous remet
+le bundle et l'ancre, dérive la clé qui les re-prouve, **et la re-prouve devant
+vous** avant de vous dire qu'elle marche. Il finit en imprimant la commande exacte
+que vous seul pouvez exécuter, et en disant ce que ce reçu oppose — et ce qu'il
+n'oppose pas.
+
+Il ne régénère jamais une clé existante : un master qui change ne rend pas les
+anciens reçus faux, il les rend **orphelins**, et plus personne ne peut le
+démontrer.
+
 ## Ce que vous verrez
 
 D'abord la passerelle **annoncer ce qu'elle sert réellement** — son rapport de

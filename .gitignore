@@ -203,3 +203,8 @@ clients/python/efe_tool/_proto/efe/v1/*_pb2_grpc.py
 /efe-restored/
 # Matrice RouterBench générée (8.4 Mo) — régénérable via convert_routerbench.py.
 /scripts/routing/routerbench_matrix.json
+
+# Le dossier que `scripts/mon-premier-recu.sh` écrit : il contient les clés de
+# l'exploitant. Le versionner publierait un master. Le défaut est ignoré ici ; un
+# chemin choisi par l'utilisateur reste sa responsabilité, et le script le dit.
+mon-premier-recu/

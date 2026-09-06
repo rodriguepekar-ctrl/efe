@@ -34,6 +34,34 @@ impl TenantKey {
     pub(crate) fn as_bytes(&self) -> &[u8; 32] {
         &self.0
     }
+
+    /// **La clé, en hexadécimal — pour celui qui la DÉTIENT déjà.**
+    ///
+    /// ## Pourquoi cette sortie existe, alors que `as_bytes` est délibérément privée
+    ///
+    /// `as_bytes` reste `pub(crate)` : elle empêche qu'une clé se retrouve par mégarde dans une
+    /// structure sérialisée, un journal ou une réponse. Cette méthode-ci est l'inverse — un geste
+    /// EXPLICITE, qu'on ne peut pas faire par accident, et qui a un destinataire précis.
+    ///
+    /// Sans elle, la promesse centrale du produit n'avait pas de dernier mètre. Un bundle exporté
+    /// est scellé sous une clé dérivée ; `verify-mini` et `provenance-verify` réclament tous deux
+    /// ses 64 caractères hexadécimaux ; et **rien** ne les donnait. Le dépôt entier ne contenait
+    /// aucun endroit où un bundle ait jamais été re-prouvé avec une vraie clé — les contrôles
+    /// vérifiaient que les vérifieurs EXISTENT, et la démonstration imprimait
+    /// `--key-hex <clé tenant>` comme un espace réservé. Un reçu que son détenteur ne peut pas
+    /// re-prouver n'oppose rien à personne.
+    ///
+    /// ## Ce que cela ne donne à personne
+    ///
+    /// Cette clé se dérive du master, que l'appelant détient déjà pour avoir pu construire cet
+    /// objet. Elle ne franchit aucune frontière de confiance : elle traverse une frontière de
+    /// COMMODITÉ. Le garde reste ailleurs — dans le fait qu'aucune route HTTP ne construit ni ne
+    /// rend cette valeur, et que le seul chemin qui l'imprime est un drapeau d'exploitant sur un
+    /// binaire qu'il faut déjà pouvoir lancer avec le master en environnement.
+    #[must_use]
+    pub fn to_hex(&self) -> String {
+        self.0.iter().map(|b| format!("{b:02x}")).collect()
+    }
 }
 
 impl std::fmt::Debug for TenantKey {

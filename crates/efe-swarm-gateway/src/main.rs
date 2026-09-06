@@ -36,6 +36,74 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         return Ok(());
     }
 
+    // ── `--cle-tenant [uuid]` — la clé qui RE-PROUVE, dérivée comme le scellement ─────
+    //
+    // Sans ce drapeau, la chaîne du premier reçu opposable était rompue au dernier maillon :
+    // l'exploitant détient le MASTER (`EFE_NANO_AUDIT_HMAC_MASTER`), mais `verify-mini` attend la
+    // clé TENANT, qui en est dérivée par HKDF. Rien ne la lui donnait — et re-dériver la formule
+    // dans un script serait un SECOND analyseur, exactement ce que M1.b a coûté à ce dépôt.
+    //
+    // Ce drapeau appelle donc `HmacKeySource::EnvHkdf.derive(...)` : la MÊME fonction que le
+    // scellement. Si la dérivation changeait, les deux changeraient ensemble ou aucune.
+    //
+    // Un DRAPEAU, jamais une route : la clé dérivée re-prouve les reçus d'un tenant. L'exposer en
+    // HTTP la donnerait à qui ne tient pas la machine ; ici, il faut déjà tenir le master.
+    {
+        let mut args = std::env::args().skip_while(|a| a != "--cle-tenant");
+        if args.next().is_some() {
+            if !efe_swarm_gateway::profile::read::master_present() {
+                // Refuser plutôt que dériver depuis la clé de TEST : rendre une clé qui re-prouve
+                // des reçus forgeables serait le pire des services rendus.
+                eprintln!("{MASTER_ENV} absent — il n'y a aucun master d'où dériver.");
+                std::process::exit(78); // EX_CONFIG, comme le reste du binaire
+            }
+            // L'argument suivant, s'il ressemble à un UUID, est le tenant ; sinon le tenant système.
+            let tenant = match args.next().filter(|v| !v.starts_with("--")) {
+                Some(v) => match v.parse::<uuid::Uuid>() {
+                    Ok(u) => efe_nano_sdk::TenantId(u),
+                    Err(_) => {
+                        eprintln!("« {v} » n'est pas un UUID de tenant.");
+                        std::process::exit(64); // EX_USAGE
+                    }
+                },
+                None => efe_nano_sdk::TenantId::system(),
+            };
+            // `--bundle` : la clé de la PILE B, celle qui re-prouve un bundle exporté. Ce sont
+            // DEUX clés distinctes — réutiliser les mêmes octets à travers deux schémas de
+            // scellement est la classe d'erreur que `derive_bundle_key` documente. Sans ce
+            // drapeau, le détenteur d'un bundle n'avait AUCUN moyen d'obtenir la clé que
+            // `verify-mini` et `provenance-verify` lui réclament tous les deux : le reçu
+            // « opposable » n'avait pas de dernier mètre.
+            let pile_b = std::env::args().any(|a| a == "--bundle");
+            match HmacKeySource::EnvHkdf.derive(tenant) {
+                Ok(cle) if pile_b => {
+                    eprintln!(
+                        "⚠ Clé de BUNDLE (pile B) : elle re-prouve les bundles exportés de ce \
+                         tenant. Un SECRET — fichier en 0600, jamais un copier-coller."
+                    );
+                    println!(
+                        "{}",
+                        provenance_bridge::stack_b_key(&cle, &tenant.0.to_string()).to_hex()
+                    );
+                }
+                Ok(cle) => {
+                    // La VALEUR sur stdout (pour `> fichier`), l'avertissement sur stderr : mêler
+                    // les deux mettrait une ligne de prose dans un fichier de clé.
+                    eprintln!(
+                        "⚠ Ceci est un SECRET : il re-prouve tous les reçus de ce tenant. \
+                         Écrivez-le dans un fichier en 0600, ne le collez nulle part."
+                    );
+                    println!("{}", cle.iter().map(|b| format!("{b:02x}")).collect::<String>());
+                }
+                Err(e) => {
+                    eprintln!("dérivation impossible : {e}");
+                    std::process::exit(78);
+                }
+            }
+            return Ok(());
+        }
+    }
+
     // ── Sauvegarde : `--exporter-runs` / `--importer-runs` ───────────────────────────
     //
     // Même forme que `--profile-report`, et pour la même raison : un DRAPEAU, jamais une route.
