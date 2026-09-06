@@ -33,10 +33,10 @@
 // simplement vide — ce qui serait pire si personne ne le jouait jamais. C'est `scripts/p1-check.sh`
 // qui le joue, et qui ÉCHOUE si zéro test a tourné. Le précédent est sa propre section 6 :
 // « le critère de M3, que personne ne jouait ».
-#![cfg(all(feature = "anthropic", feature = "openai", feature = "gemini"))]
+#![cfg(all(feature = "anthropic", feature = "openai", feature = "gemini", feature = "local-slm"))]
 
 use efe_coordinator::llm::providers::auth::ApiKey;
-use efe_coordinator::{ClaudeProvider, GeminiProvider, GptProvider, LlmProvider};
+use efe_coordinator::{ClaudeProvider, GeminiProvider, GptProvider, LlmProvider, LocalSlmProvider};
 
 const CLAUDE_DEFAUT: &str = "https://api.anthropic.com/v1/messages";
 const GPT_DEFAUT: &str = "https://api.openai.com/v1/chat/completions";
@@ -50,6 +50,20 @@ fn gpt() -> GptProvider {
 }
 fn gemini() -> GeminiProvider {
     GeminiProvider::new(ApiKey::new("cle-de-test-gemini-non-secrete"), "gemini-test")
+}
+/// Le QUATRIÈME. Il n'a pas de `with_*` : son endpoint se donne à la construction, et c'est
+/// `new` qui valide — donc ici le constructeur rend un `Result`, là où les trois autres
+/// construisent d'abord et valident ensuite.
+fn slm(url: &str) -> efe_coordinator::error::CoordResult<LocalSlmProvider> {
+    LocalSlmProvider::new("local-test", url, "modele-test")
+}
+/// Le refus, en texte. `unwrap_err` exigerait `Debug` sur `LocalSlmProvider` — on n'ajoute pas un
+/// `derive` à un type de production pour la commodité d'un test.
+fn refus_slm(url: &str) -> String {
+    match slm(url) {
+        Ok(_) => panic!("« {url} » aurait dû être refusé"),
+        Err(e) => format!("{e}"),
+    }
 }
 
 // ── 1 · Le défaut ne bouge pour personne ────────────────────────────────────────────────────────
@@ -174,4 +188,41 @@ fn contre_epreuve_un_refus_ne_laisse_rien_derriere() {
     assert_eq!(gpt().endpoint().as_deref(), Some(GPT_DEFAUT));
     assert!(gemini().with_base_url("pas-une-url").is_err());
     assert_eq!(gemini().endpoint().as_deref(), Some(GEMINI_DEFAUT));
+}
+
+// ── 6 · LE QUATRIÈME FOURNISSEUR — celui dont le nom dit « local » ──────────────────────────────
+//
+// Il n'avait AUCUN contrôle : `from_env` lisait `EFE_LOCAL_SLM_URL` et le passait tel quel à
+// `new`. Les trois autres refusaient depuis toujours un `http://` distant ; celui-là l'acceptait
+// en silence. Un « SLM local » pointé ailleurs est une violation de souveraineté déguisée en
+// optimisation — et son reçu n'en disait rien, puisqu'il héritait du défaut `endpoint() -> None`.
+
+#[test]
+fn le_slm_local_accepte_ce_qui_est_reellement_local() {
+    for u in ["http://127.0.0.1:8099", "http://localhost:8099", "https://slm.interne.test:8443"] {
+        assert!(slm(u).is_ok(), "aurait dû passer : {u}");
+    }
+}
+
+#[test]
+fn le_slm_local_refuse_le_clair_distant_comme_les_trois_autres() {
+    let e = refus_slm("http://slm.exemple.test:8099");
+    assert!(e.contains("machine locale"), "{e}");
+    assert!(e.contains("EFE_LOCAL_SLM_URL"), "le refus doit nommer SA variable : {e}");
+}
+
+#[test]
+fn le_slm_local_ne_franchit_pas_la_porte_loopback_par_userinfo() {
+    let e = refus_slm("http://127.0.0.1:8099@evil.test");
+    assert!(e.contains("machine locale"), "{e}");
+    assert!(!e.contains("evil.test:"), "la raison ne doit pas recopier l'URL brute : {e}");
+}
+
+/// Son `endpoint()` héritait du défaut du trait — `None` — donc le reçu ne disait **rien** de la
+/// destination, y compris quand elle était distante. Le silence sur une sortie réelle est du même
+/// genre que la nommer mal.
+#[test]
+fn le_recu_nomme_desormais_la_destination_du_slm_local() {
+    let p = slm("http://127.0.0.1:8099").unwrap();
+    assert_eq!(p.endpoint().as_deref(), Some("http://127.0.0.1:8099"));
 }

@@ -172,6 +172,31 @@ fn slm_clients_from(url: Option<&str>) -> CoordinatorClients {
     // `mission.rs` l'appelle déjà. La dépendance était donc DÉJÀ payée : le miroir minimal
     // n'économisait rien et n'achetait que la faille.
     let hote = provenance_capture::host_of(url).unwrap_or("«autorité inanalysable»");
+
+    // ── Le CLAIR est refusé ; le distant chiffré reste un avertissement ────────────────────────
+    //
+    // La décision « prévenir plutôt que refuser » ci-dessus est délibérée et elle est CONSERVÉE :
+    // un llama-server distant en `https` est un déploiement légitime, et son défaut — un egress ni
+    // gardé par l'allowlist tenant ni décompté — se répare en changeant de configuration, pas en
+    // interdisant.
+    //
+    // Mais cet argument ne couvre PAS le clair. `http://` vers un hôte distant ne rend pas la
+    // souveraineté « non garantie » : il fait partir les prompts EN CLAIR sur le réseau. C'est une
+    // perte de confidentialité, pas une nuance de comptage — et les trois fournisseurs frontière la
+    // refusent depuis toujours. La refuser ici aussi rend les quatre chemins de sortie cohérents.
+    //
+    // Même validateur, jamais un quatrième prédicat : `valider_endpoint_sortie` délègue à
+    // l'analyseur unique, exactement comme les deux lignes ci-dessous. Ce fichier a DÉJÀ payé pour
+    // un « miroir minimal » écrit à la main (cf. P1 plus haut) ; on ne recommence pas.
+    if let Err(raison) = efe_coordinator::llm::providers::common::valider_endpoint_sortie(url) {
+        eprintln!(
+            "⚠ reformulateur SLM NON câblé — EFE_SLM_REFORMULATOR_URL refusée : {raison}\n\
+             → la reformulation reste DÉTERMINISTE (règle). Ce n'est pas une panne : c'est une \
+             valeur fournie et rejetée, et la taire enverrait les prompts en clair sans le dire."
+        );
+        return clients;
+    }
+
     if !provenance_capture::is_local_endpoint(url) {
         // On nomme l'HÔTE, jamais l'URL. `http://user:pass@hôte/v1` recopierait un secret dans la
         // sortie de démarrage, où il sera collecté et archivé par une chaîne de logs qui n'a aucune
@@ -370,6 +395,36 @@ mod tests {
         assert!(off.slm_circuits.is_empty(), "sans URL : pas de circuit");
         let blank = slm_clients_from(Some("   "));
         assert!(blank.reformulator.is_none(), "URL vide = pas d'opt-in");
+
+        // ── Le CLAIR distant est REFUSÉ, et refuser veut dire « pas de client » ────────────
+        //
+        // Sans ces cas, la seule chose qui garderait la confidentialité du reformulateur serait
+        // une ligne d'`eprintln!` — c'est-à-dire rien : un avertissement au démarrage se noie
+        // dans un journal, et personne ne relit un journal de boot vert.
+        for clair in [
+            "http://slm.exemple.test:8099",
+            // La forme qui a coûté 875 cas à M1.b : elle ne doit pas franchir la porte loopback.
+            "http://127.0.0.1:8099@evil.test",
+        ] {
+            let r = slm_clients_from(Some(clair));
+            assert!(
+                r.reformulator.is_none(),
+                "« {clair} » ferait partir les prompts EN CLAIR : le reformulateur ne doit PAS \
+                 être câblé"
+            );
+            assert!(r.slm_circuits.is_empty(), "refusé ⟹ aucun circuit non plus : {clair}");
+        }
+
+        // ── Le distant CHIFFRÉ reste accepté — la décision « prévenir plutôt que refuser » ────
+        //
+        // Elle est délibérée et documentée dans `slm_clients_from` : un llama-server distant en
+        // `https` est un déploiement légitime, dont le défaut (egress ni gardé ni décompté) se
+        // répare par la configuration. Ce cas FIXE cette frontière : si un jour quelqu'un durcit
+        // la règle jusqu'à refuser `https` distant, il devra le faire exprès, pas par glissement.
+        assert!(
+            slm_clients_from(Some("https://slm.interne.test:8443")).reformulator.is_some(),
+            "un SLM distant CHIFFRÉ reste câblé, avec un avertissement — pas un refus"
+        );
 
         // Opt-in ⟹ client au profil multi-llm + circuit sous la clé partagée.
         let on = slm_clients_from(Some("http://127.0.0.1:1"));

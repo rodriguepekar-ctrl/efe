@@ -109,26 +109,59 @@ pub(crate) fn parse_bearer(headers: &axum::http::HeaderMap) -> Option<String> {
         .filter(|s| !s.is_empty())
 }
 
+/// **La paire de test, partagée** — pour que le critère de M3 soit prouvable SOUS `oidc`.
+///
+/// Elle vivait dans le `mod tests` de ce fichier, donc invisible ailleurs. Conséquence : les deux
+/// tests qui portent le critère de M3 s'authentifiaient par en-têtes de développement et étaient
+/// `#[cfg(not(feature = "oidc"))]` — c'est-à-dire qu'ils **ne tournaient sous aucun jeu de features
+/// de production**. Le trou n'était pas dans M3 : il était dans l'accessibilité de cette fixture.
 #[cfg(test)]
-mod tests {
-    use super::*;
+pub(crate) mod fixture {
+    use super::{Algorithm, GatewayError, OidcVerifier};
     use jsonwebtoken::{encode, EncodingKey, Header};
 
     // ── Paire de clés EC P-256 de TEST (fixture déterministe — PAS un secret) ──────
     // Générée localement pour les tests unitaires de validation JWT. Ne protège rien.
-    const TEST_PRIV_PKCS8: &str = "-----BEGIN PRIVATE KEY-----\n\
+    pub(crate) const TEST_PRIV_PKCS8: &str = "-----BEGIN PRIVATE KEY-----\n\
 MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgv4ad14ofQ83JXwDG\n\
 VEWEF6e59s+JE5EvkQaqvNuxN1ShRANCAARoN8FXUFCqiAOqKjEZBXA9x83gosue\n\
 1m0JJbEEeOUyiLXTD1lsnCVeQKm3hfz6Dkk06VYWCtBVfNBO13YdRLC5\n\
 -----END PRIVATE KEY-----\n";
-    const TEST_PUB: &str = "-----BEGIN PUBLIC KEY-----\n\
+    pub(crate) const TEST_PUB: &str = "-----BEGIN PUBLIC KEY-----\n\
 MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEaDfBV1BQqogDqioxGQVwPcfN4KLL\n\
 ntZtCSWxBHjlMoi10w9ZbJwlXkCpt4X8+g5JNOlWFgrQVXzQTtd2HUSwuQ==\n\
 -----END PUBLIC KEY-----\n";
 
-    fn sign(claims: serde_json::Value) -> String {
-        encode(&Header::new(Algorithm::ES256), &claims, &EncodingKey::from_ec_pem(TEST_PRIV_PKCS8.as_bytes()).unwrap()).unwrap()
+    /// Signe des revendications arbitraires avec la clé privée de test.
+    pub(crate) fn sign(claims: serde_json::Value) -> String {
+        encode(
+            &Header::new(Algorithm::ES256),
+            &claims,
+            &EncodingKey::from_ec_pem(TEST_PRIV_PKCS8.as_bytes()).unwrap(),
+        )
+        .unwrap()
     }
+
+    /// Un vérifieur du chemin frontière — audience épinglée `efe-llm`, comme `llm_from_env`.
+    pub(crate) fn verifieur_llm() -> Result<OidcVerifier, GatewayError> {
+        OidcVerifier::from_pem(TEST_PUB, None, Some("efe-llm"))
+    }
+
+    /// Un jeton d'opérateur valide pour le chemin frontière.
+    pub(crate) fn jeton_operateur(tenant: &str) -> String {
+        sign(serde_json::json!({
+            "sub": "test-operateur", "tenant": tenant, "aud": "efe-llm",
+            "roles": ["operator"], "exp": 9_999_999_999i64
+        }))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use super::fixture::{sign, TEST_PUB};
+
+    // Les constantes vivent désormais dans `fixture` (cf. ci-dessus). Ce bloc les emploie.
 
     #[test]
     fn verifies_valid_jwt_and_maps_tenant_and_roles() {

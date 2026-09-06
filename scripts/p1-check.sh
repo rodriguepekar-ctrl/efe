@@ -396,35 +396,49 @@ PY2
 fi
 
 # ═════════════════════════════════════════════════════════════════════════════
-titre "7. Le critère de M3, que personne ne jouait"
+titre "7. Le critère de M3, SOUS LE JEU DE FEATURES DE PRODUCTION"
 #
-#  ⭐ **É4** — `routes/llm.rs` vit sous `#[cfg(feature = "frontier-llm")]`, et les deux tests
-#  qui portent le critère de M3 — « le SLM meurt, la mission passe, et la RAISON remonte » —
-#  y sont en plus `#[cfg(not(feature = "oidc"))]`. Les deux conditions se composent :
+#  ⭐ **É4** — `routes/llm.rs` vit sous `#[cfg(feature = "frontier-llm")]`, et les deux tests qui
+#  portent le critère de M3 — « le SLM meurt, la mission passe, et la RAISON remonte » — y étaient
+#  EN PLUS `#[cfg(not(feature = "oidc"))]`. Les deux conditions se composaient :
 #
 #      cargo test -p efe-swarm-gateway --lib m3_le_slm
 #        (défaut)                      → 0 test  · le module n'est pas compilé
 #        --features frontier-llm       → 2 tests ✓
-#        --features frontier-llm,oidc  → 0 test  · `cfg(not(oidc))` les retire
+#        --features frontier-llm,oidc  → 0 test  · `cfg(not(oidc))` les retirait
 #
-#  Ni `cargo test --workspace` ni le profil de production n'emploient cette combinaison.
-#  Deux portes vertes, et ces deux tests ne tournaient nulle part.
+#  Ni `cargo test --workspace` ni le profil de production n'employaient cette combinaison. Deux
+#  portes vertes, et ces deux tests ne tournaient nulle part — CE SCRIPT COMPRIS, qui les jouait
+#  en RETIRANT `oidc`, c'est-à-dire pas sur la configuration qu'il venait lui-même de démarrer.
+#
+#  ⭐ **Fermé le 6 septembre 2026.** La cause n'était pas dans M3 : elle était dans une fixture.
+#  La paire de clés ES256 de test vivait dans le `mod tests` privé de `oidc.rs`, donc invisible
+#  ailleurs ; les tests n'avaient d'autre choix que l'extracteur de développement (`x-efe-roles`),
+#  que `oidc` remplace. La fixture est désormais partagée (`oidc::fixture`), les tests forgent un
+#  vrai jeton d'audience `efe-llm` sous `oidc`, et `body_json` — gardé PAR RICOCHET, sans raison
+#  propre — a perdu sa garde avec eux. C'est ce ricochet qui avait fait disparaître le critère
+#  sans que personne l'écrive.
+#
+#  Cette étape joue donc désormais LES DEUX : sans `oidc` (le chemin de développement) et AVEC
+#  (le chemin servi). Un seul des deux ne prouverait que la moitié.
 #
 #  ⚠ Cette commande est ici, EN DERNIER, et pas au début : elle porte un jeu de features
 #  DIFFÉRENT, donc cargo relie un binaire différent dans `target/debug/` — exactement le
 #  piège que l'étape 1 décrit et que `porte_les_features` surveille. Placée plus haut, elle
 #  détruirait la propriété que ce script vient d'établir. Ici, plus rien n'en dépend.
-M3=$(cargo test -q --locked -p efe-swarm-gateway --features frontier-llm --lib m3_le_slm 2>&1 \
-     | grep -E '^test result:' | head -1)
-case "$M3" in
-  *"2 passed; 0 failed"*) ok "les deux tests M3 passent ($M3)" ;;
-  *"0 passed"*) ko "AUCUN test M3 n'a été joué — un \`cfg\` a bougé, et le critère de M3 \
-n'est plus éprouvé nulle part. C'est le trou que cette étape existe pour rendre visible." ;;
-  *) ko "les tests M3 ne passent pas : $M3" ;;
-esac
+for FEAT_M3 in "frontier-llm" "frontier-llm,oidc"; do
+  M3=$(cargo test -q --locked -p efe-swarm-gateway --features "$FEAT_M3" --lib m3_le_slm 2>&1 \
+       | grep -E '^test result:' | head -1)
+  case "$M3" in
+    *"2 passed; 0 failed"*) ok "M3 tient sous « $FEAT_M3 » ($M3)" ;;
+    *"0 passed"*) ko "AUCUN test M3 sous « $FEAT_M3 » — un \`cfg\` a bougé, et le critère \
+n'est plus éprouvé sur ce jeu de features. C'est le trou que cette étape existe pour rendre visible." ;;
+    *) ko "les tests M3 ne passent pas sous « $FEAT_M3 » : $M3" ;;
+  esac
+done
 
 # ═════════════════════════════════════════════════════════════════════════════
-titre "8. Les TROIS destinations d'egress ne sont plus des constantes"
+titre "8. Les QUATRE destinations d'egress sont gardées"
 #
 #  La PREMIÈRE ligne de « ce que ce contrôle ne prouve pas » disait : « ANTHROPIC_URL est une
 #  constante EN DUR : il n'existe aucun moyen de pointer un faux fournisseur local, ni un Azure
@@ -434,7 +448,10 @@ titre "8. Les TROIS destinations d'egress ne sont plus des constantes"
 #
 #  Les trois les remplacent — `ClaudeProvider::with_endpoint` (URL entière : un seul chemin),
 #  `GptProvider::with_base_url` et `GeminiProvider::with_base_url` (une BASE : deux et trois
-#  chemins en dérivent) — toutes VALIDÉES par l'analyseur unique du dépôt
+#  chemins en dérivent). Le QUATRIÈME, `LocalSlmProvider`, était configurable depuis toujours et
+#  n'avait AUCUN contrôle : un « SLM local » pointé sur un hôte distant en `http://` faisait
+#  partir les prompts en clair, et son reçu n'en disait rien (`endpoint()` héritait de `None`).
+#  Les quatre sont désormais VALIDÉES par l'analyseur unique du dépôt
 #  (`scella-authority`) : `https` partout, `http` seulement vers la machine locale, et aucun
 #  `userinfo` — parce que l'endpoint est SCELLÉ DANS LE REÇU et qu'on n'y met pas d'identifiants.
 #
@@ -444,9 +461,9 @@ titre "8. Les TROIS destinations d'egress ne sont plus des constantes"
 #  (`default = []`). `cargo test --workspace` les compte donc pour ZÉRO. C'est ici qu'ils
 #  tournent — et « 0 passed » est un ÉCHEC, pas un succès : ce serait le signe qu'un `cfg` a
 #  bougé et que plus rien ne garde la destination de l'egress.
-EP=$(cargo test -q -p efe-coordinator --features anthropic,openai,gemini --test endpoint_configurable 2>&1 | grep -E '^test result' | head -1)
+EP=$(cargo test -q -p efe-coordinator --features anthropic,openai,gemini,local-slm --test endpoint_configurable 2>&1 | grep -E '^test result' | head -1)
 case "$EP" in
-  *"10 passed; 0 failed"*) ok "les 3 destinations sont configurables, validées, et le reçu annonce la VRAIE ($EP)" ;;
+  *"14 passed; 0 failed"*) ok "les 4 destinations sont gardées, et le reçu annonce la VRAIE ($EP)" ;;
   *"0 passed"*) ko "AUCUN test d'endpoint n'a été joué — un \`cfg\` a bougé, et plus rien ne \
 garde la destination de l'egress ni ce que le reçu en dit." ;;
   *) ko "les tests d'endpoint ne passent pas : $EP" ;;
@@ -471,7 +488,7 @@ titre "9. L'aller-retour frontière, sur une vraie socket, pour les trois"
 #  Ce qu'il ne prouve toujours pas : qu'Anthropic réponde ainsi. Le faux fournisseur rend la
 #  forme documentée de l'API ; si l'API changeait, ce test resterait vert. Il prouve le CHEMIN,
 #  jamais le PARTENAIRE.
-AR=$(cargo test -q -p efe-coordinator --features anthropic,openai,gemini --test aller_retour_frontiere 2>&1 | grep -E '^test result' | head -1)
+AR=$(cargo test -q -p efe-coordinator --features anthropic,openai,gemini,local-slm --test aller_retour_frontiere 2>&1 | grep -E '^test result' | head -1)
 case "$AR" in
   *"5 passed; 0 failed"*) ok "les 3 allers-retours partent, arrivent et reviennent ($AR)" ;;
   *"0 passed"*) ko "AUCUN aller-retour n'a été joué — le chemin d'egress n'est de nouveau \

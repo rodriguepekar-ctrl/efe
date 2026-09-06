@@ -578,7 +578,13 @@ mod tests {
     use axum::body::Body;
     use axum::http::Request;
     use efe_coordinator::{Coordinator, CoordResult, LlmCall, LlmProvider, LlmResponse, PolicyRegistry, ProviderRegistry, TenantPolicies};
-    #[cfg(not(feature = "oidc"))] // MultiLlmBridge n'est utilisé que par les tests audit dev-headers
+    // Ses TROIS usages sont des tests `#[cfg(not(feature = "oidc"))]` de la famille dev-headers,
+    // dont la raison est écrite à chaque garde : « l'auth OIDC est couverte par `vote_401_*` ».
+    // Ce choix est délibéré et il RESTE — seuls les deux tests qui portent le CRITÈRE DE FIN de
+    // M3 ont été ouverts aux deux jeux de features, parce qu'un critère d'étape qui ne s'éprouve
+    // pas sur la configuration servie n'éprouve rien. Ouvrir toute la famille serait un autre
+    // travail, et il n'aurait pas le même argument.
+    #[cfg(not(feature = "oidc"))]
     use efe_coordinator::MultiLlmBridge;
     use std::sync::Arc;
     use tower::ServiceExt as _;
@@ -630,7 +636,6 @@ mod tests {
     // `oidc` : l'argument qui le rendrait acceptable — « la différence entre les deux
     // profils est l'AUTHENTIFICATION, pas le comportement dégradé sous test » — reste
     // une revendication, pas une mesure. Elle est écrite ici comme telle.
-    #[cfg(not(feature = "oidc"))]
     fn clients_slm_mort() -> efe_coordinator::CoordinatorClients {
         use efe_coordinator::{CoordinatorClients, ReformulatorClient, SlmCircuitBreaker};
         use efe_multi_llm::SLM_REFORMULATOR_CIRCUIT_KEY;
@@ -650,7 +655,6 @@ mod tests {
     }
 
     /// Un état câblé comme la production, avec un SLM mort et un store au choix.
-    #[cfg(not(feature = "oidc"))]
     fn etat_slm_mort(llms: &[&str], store_mort: bool) -> SwarmGatewayState {
         let reg = ProviderRegistry::new();
         for id in llms {
@@ -668,6 +672,14 @@ mod tests {
             .expect("coordinator de test");
 
         let state = SwarmGatewayState::in_memory().with_coordinator(Arc::new(coord));
+        // Sous `oidc`, le chemin frontière EXIGE un vérifieur d'audience `efe-llm` — sans lui les
+        // requêtes ci-dessous rendraient 401 et le critère de M3 ne serait pas éprouvé, il serait
+        // seulement inaccessible. C'est exactement ce qui se passait : les tests étaient
+        // `#[cfg(not(feature = "oidc"))]`, donc verts sous un jeu de features que personne ne sert.
+        #[cfg(feature = "oidc")]
+        let state = state.with_oidc_llm(Arc::new(
+            crate::oidc::fixture::verifieur_llm().expect("vérifieur de test"),
+        ));
         if store_mort {
             state
                 .with_store(Arc::new(crate::test_support::StoreEnPanne))
@@ -677,22 +689,48 @@ mod tests {
         }
     }
 
+    /// **L'autorisation, selon le jeu de features** — et c'était TOUT ce qui séparait ces deux
+    /// tests de la production.
+    ///
+    /// Ils passaient par `x-efe-roles`, l'extracteur de développement, que `oidc` remplace. D'où
+    /// leur `#[cfg(not(feature = "oidc"))]` — et donc : le critère de M3 n'était éprouvé sous
+    /// AUCUN jeu de features servi. Ni `cargo test --workspace` (pas de `frontier-llm`), ni le
+    /// profil de production (`oidc` actif) ne le jouaient. `p1-check.sh` le jouait, mais en
+    /// retirant `oidc` — c'est-à-dire pas sur la configuration qu'il venait de démarrer.
+    ///
+    /// Le même tenant des DEUX côtés (`system`, le défaut de `dev_caller_from_headers`) : un
+    /// tenant différent ferait tomber le test sur la politique d'egress, et l'on croirait avoir
+    /// mesuré M3.
+    fn autoriser(b: axum::http::request::Builder) -> axum::http::request::Builder {
+        #[cfg(feature = "oidc")]
+        {
+            b.header(
+                "authorization",
+                format!("Bearer {}", crate::oidc::fixture::jeton_operateur("system")),
+            )
+        }
+        #[cfg(not(feature = "oidc"))]
+        {
+            b.header("x-efe-roles", "operator")
+        }
+    }
+
     /// La moitié « SLM » du critère, isolée : le robot est mort, la mission passe, et la RAISON
     /// remonte jusqu'au client — pas seulement un compte.
-    #[cfg(not(feature = "oidc"))]
     #[tokio::test]
     async fn m3_le_slm_mort_ne_coupe_pas_et_sa_raison_remonte() {
         let llms = ["claude_a", "gpt_b", "gemini_c"];
         let app = crate::router(etat_slm_mort(&llms, false));
         let resp = app
             .oneshot(
-                Request::builder()
-                    .method("POST")
-                    .uri("/v1/llm/vote")
-                    .header("content-type", "application/json")
-                    .header("x-efe-roles", "operator")
-                    .body(Body::from(vote_body(&llms).to_string()))
-                    .unwrap(),
+                autoriser(
+                    Request::builder()
+                        .method("POST")
+                        .uri("/v1/llm/vote")
+                        .header("content-type", "application/json"),
+                )
+                .body(Body::from(vote_body(&llms).to_string()))
+                .unwrap(),
             )
             .await
             .unwrap();
@@ -723,20 +761,20 @@ mod tests {
     /// Ce que ce test exige, et qu'aucun autre n'exigeait : que le client reçoive **sa réponse**,
     /// **la raison de la dégradation SLM**, et **l'aveu que ce run n'est pas persisté** — les trois
     /// en même temps, dans la même réponse.
-    #[cfg(not(feature = "oidc"))]
     #[tokio::test]
     async fn m3_le_slm_et_le_store_meurent_ensemble_et_lappel_passe() {
         let llms = ["claude_a", "gpt_b", "gemini_c"];
         let app = crate::router(etat_slm_mort(&llms, true));
         let resp = app
             .oneshot(
-                Request::builder()
-                    .method("POST")
-                    .uri("/v1/llm/vote")
-                    .header("content-type", "application/json")
-                    .header("x-efe-roles", "operator")
-                    .body(Body::from(vote_body(&llms).to_string()))
-                    .unwrap(),
+                autoriser(
+                    Request::builder()
+                        .method("POST")
+                        .uri("/v1/llm/vote")
+                        .header("content-type", "application/json"),
+                )
+                .body(Body::from(vote_body(&llms).to_string()))
+                .unwrap(),
             )
             .await
             .unwrap();
@@ -793,7 +831,9 @@ mod tests {
             .unwrap()
     }
 
-    #[cfg(not(feature = "oidc"))]
+    /// La garde `#[cfg(not(feature = "oidc"))]` a sauté avec celles de ses appelants : elle ne
+    /// tenait à rien d'autre. Un auxiliaire gardé PAR RICOCHET est le mécanisme exact par lequel
+    /// le critère de M3 avait disparu du jeu de features de production sans que personne l'écrive.
     async fn body_json(resp: Response) -> Value {
         let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
         serde_json::from_slice(&bytes).unwrap()

@@ -105,18 +105,33 @@ impl LocalSlmProvider {
     /// `id` : identifiant registry (ex: `"local_gemma-2-1.5b"`).
     /// `endpoint` : URL base llama-server (ex: `"http://127.0.0.1:8099"`).
     /// `model_label` : nom du modèle (audit/pricing).
+    ///
+    /// # Errors
+    /// Un client HTTP inconstructible, ou un `endpoint` REFUSÉ.
+    ///
+    /// **La validation est neuve, et le trou qu'elle ferme était le pire des quatre.** Les trois
+    /// fournisseurs frontière refusent depuis toujours un `http://` distant — les prompts y
+    /// partiraient en clair. Celui-ci, dont le nom même dit « local », n'avait **aucun contrôle** :
+    /// `from_env` lisait `EFE_LOCAL_SLM_URL` et le passait tel quel. Un « SLM local » qui sort en
+    /// silence vers un hôte distant est une violation de souveraineté déguisée en optimisation.
+    ///
+    /// Même règle et même analyseur que les trois autres, pas un quatrième écrit à la main.
     pub fn new(
         id: impl Into<String>,
         endpoint: impl Into<String>,
         model_label: impl Into<String>,
     ) -> CoordResult<Self> {
+        let endpoint = endpoint.into();
+        super::common::valider_endpoint_sortie(&endpoint).map_err(|raison| {
+            CoordError::Config(format!("EFE_LOCAL_SLM_URL refusé : {raison}"))
+        })?;
         let http = reqwest::Client::builder()
             .pool_max_idle_per_host(8)
             .build()
             .map_err(|e| CoordError::Config(format!("local SLM HTTP client: {e}")))?;
         Ok(Self {
             id: id.into(),
-            endpoint: endpoint.into(),
+            endpoint,
             model_label: model_label.into(),
             system_prompt: String::new(),
             max_tokens: DEFAULT_LOCAL_SLM_MAX_TOKENS,
@@ -204,6 +219,19 @@ impl LocalSlmProvider {
 impl LlmProvider for LocalSlmProvider {
     fn id(&self) -> ProviderId {
         self.id.clone()
+    }
+
+    /// La destination RÉELLE. Elle héritait du défaut du trait — `None` — donc le reçu ne disait
+    /// **rien** de l'endroit où le prompt était parti.
+    ///
+    /// Tant que ce provider était réellement local, le silence était défendable : rien ne quittait
+    /// la machine. Mais son URL est configurable depuis toujours (`EFE_LOCAL_SLM_URL`), et rien ne
+    /// la contraignait avant aujourd'hui : un « SLM local » pointé sur un hôte distant produisait
+    /// un egress dont le reçu ne portait **aucune trace**. Un reçu muet sur une sortie réelle est
+    /// du même genre qu'un reçu qui la nomme mal — c'est le grief que les trois fournisseurs
+    /// frontière ont déjà réglé.
+    fn endpoint(&self) -> Option<String> {
+        Some(self.endpoint.clone())
     }
 
     async fn call(&self, req: LlmCall) -> CoordResult<LlmResponse> {
@@ -296,6 +324,13 @@ mod tests {
     use tokio::net::TcpListener;
     use tokio::sync::mpsc;
 
+    /// Un endpoint de fixture VALIDE. Les tests ci-dessous passaient `"http://x"` — un hôte qui
+    /// n'est pas la machine locale, et que `new` REFUSE désormais. Aucun d'eux n'appelle le
+    /// réseau (ils éprouvent le prompt, l'id, le coût, la température), donc la valeur leur est
+    /// indifférente ; mais une fixture qui ne passerait plus en production est une fixture qui
+    /// ment sur ce qu'elle éprouve. Celle-ci est celle qu'emploie déjà le test du reformulateur.
+    const BIDON: &str = "http://127.0.0.1:1";
+
     fn provider(endpoint: &str) -> LocalSlmProvider {
         LocalSlmProvider::new("local_gemma-2-1.5b", endpoint, "gemma-2-1.5b")
             .expect("provider builds")
@@ -334,7 +369,7 @@ mod tests {
 
     #[test]
     fn r3s4_local_slm_builds_full_prompt_with_system() {
-        let p = provider("http://x").with_system_prompt("You are a drafter.");
+        let p = provider(BIDON).with_system_prompt("You are a drafter.");
         assert_eq!(
             p.build_prompt("Capital of France?"),
             "You are a drafter.\n\nCapital of France?"
@@ -343,7 +378,7 @@ mod tests {
 
     #[test]
     fn r3s4_local_slm_builds_prompt_without_system() {
-        let p = provider("http://x");
+        let p = provider(BIDON);
         assert_eq!(p.build_prompt("Capital of France?"), "Capital of France?");
     }
 
@@ -352,7 +387,7 @@ mod tests {
         // 1000 in @ 1500 µ¢/M = floor(1_500_000/1M) = 1 ; idem out = 1 → 2 µ¢.
         // (chaque terme est floored séparément avant somme — cf.
         // compute_cost_microcents R3.S1).
-        let p = provider("http://x");
+        let p = provider(BIDON);
         assert_eq!(p.cost_microcents_for(1_000, 1_000), 2);
     }
 
@@ -360,7 +395,7 @@ mod tests {
     fn r3s4_local_slm_cost_far_below_gemini_flash() {
         // Gemini Flash : 1000 in @ 7500 + 1000 out @ 30000 = 7 + 30 = 37 µ¢.
         // Local @ 1500/1500 = 3 µ¢ → ~12× moins cher.
-        let p = provider("http://x");
+        let p = provider(BIDON);
         let local = p.cost_microcents_for(1_000, 1_000);
         let gemini = compute_cost_microcents(1_000, 1_000, 7_500, 30_000);
         assert!(local * 10 < gemini, "local ({local}) doit être ≪ gemini ({gemini})");
@@ -368,19 +403,19 @@ mod tests {
 
     #[test]
     fn r3s4_local_slm_id_is_stable() {
-        assert_eq!(provider("http://x").id(), "local_gemma-2-1.5b");
+        assert_eq!(provider(BIDON).id(), "local_gemma-2-1.5b");
     }
 
     #[test]
     fn r3s4_local_slm_with_cost_override() {
-        let p = provider("http://x").with_cost(5_000, 5_000);
+        let p = provider(BIDON).with_cost(5_000, 5_000);
         // 1000 in @ 5000 µ¢/M = floor(5_000_000/1M) = 5 ; idem out → 10 µ¢.
         assert_eq!(p.cost_microcents_for(1_000, 1_000), 10);
     }
 
     #[test]
     fn r3s4_local_slm_temperature_clamped() {
-        let p = provider("http://x").with_temperature(5.0);
+        let p = provider(BIDON).with_temperature(5.0);
         assert!((p.temperature - 2.0).abs() < f32::EPSILON);
     }
 

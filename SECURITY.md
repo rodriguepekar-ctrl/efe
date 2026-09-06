@@ -60,7 +60,8 @@ suit est du code qu'on peut ouvrir :
 | chaîne HMAC scellée, ancre re-vérifiable, troncature détectable | `crates/verify-mini/`, `crates/provenance-verify/` |
 | refus de démarrer la frontière sans `postgres`, `oidc` et `pii` — `exit 78` (`EX_CONFIG`) | [`profile.rs:926`](crates/efe-swarm-gateway/src/profile.rs), [`main.rs:53`](crates/efe-swarm-gateway/src/main.rs) |
 | analyseur d'autorité **unique** (5 copies réduites à 1 ; `127.0.0.1:8080@evil.com` coupait TLS vers `evil.com` sur 875 formes) | [`scella-authority`](crates/scella-authority/src/lib.rs) |
-| les **trois** destinations d'egress **configurables et validées** — `https` partout, `http` seulement en local, jamais de `userinfo` (la destination est scellée dans le reçu) | [`common.rs`](crates/efe-coordinator/src/llm/providers/common.rs) ; `EFE_ANTHROPIC_URL`, `EFE_OPENAI_BASE_URL`, `EFE_GEMINI_BASE_URL` au [registre](crates/efe-swarm-gateway/src/profile.rs) |
+| les **quatre** destinations d'egress **validées** — y compris `EFE_LOCAL_SLM_URL`, qui n'avait aucun contrôle et dont le nom dit « local » — `https` partout, `http` seulement en local, jamais de `userinfo` (la destination est scellée dans le reçu) | [`common.rs`](crates/efe-coordinator/src/llm/providers/common.rs) ; `EFE_ANTHROPIC_URL`, `EFE_OPENAI_BASE_URL`, `EFE_GEMINI_BASE_URL` au [registre](crates/efe-swarm-gateway/src/profile.rs) |
+| le reformulateur SLM **refuse le clair distant** ; le distant chiffré reste accepté **avec avertissement** — la frontière est fixée par des tests, pas par une ligne de journal | [`frontier.rs`](crates/efe-swarm-gateway/src/frontier.rs) |
 | le reçu annonce la destination **réelle**, jamais la constante | [`endpoint_configurable.rs`](crates/efe-coordinator/tests/endpoint_configurable.rs) |
 | une destination **refusée** ne fait pas disparaître un fournisseur en silence : le boot le crie | [`frontier.rs`](crates/efe-swarm-gateway/src/frontier.rs) |
 | les **trois** allers-retours frontière joués **sur une vraie socket** contre un faux fournisseur, en-têtes vérifiés depuis l'extérieur | [`aller_retour_frontiere.rs`](crates/efe-coordinator/tests/aller_retour_frontiere.rs) |
@@ -100,19 +101,9 @@ Le plus utile de ce fichier :
   la redémarre et re-prouve le reçu. Ce qui n'a jamais eu lieu, c'est un appel
   vers un **vrai** fournisseur : il faut une clé, et elle coûte de l'argent.
   L'aller-retour lui-même est désormais joué contre un faux fournisseur local.
-- **M3 sous `oidc`** : les deux tests qui portent son critère ne tournent que
-  sous `frontier-llm` *sans* `oidc`. L'argument qui rendrait ce trou acceptable
-  est écrit dans `routes/llm.rs` comme une **revendication**, pas comme une
-  mesure.
-
----
-
-## 5 · Ce qu'il faudra avant qu'une vraie politique existe
-
-Dans cet ordre, et aucun ne s'invente à l'avance :
-
-1. un service qui tourne, donc une surface à attaquer ;
-2. une adresse que quelqu'un relève, et quelqu'un pour la relever ;
-3. l'ouverture du dépôt, et avec elle le formulaire d'avis privé de GitHub ;
-4. alors seulement des délais — parce qu'un délai est une promesse, et qu'une
-   promesse sans personne derrière est ce que ce fichier remplace.
+- **M3 sous `oidc` : FERMÉ** le 6 septembre 2026. Les deux tests qui portent son
+  critère étaient `#[cfg(not(feature = "oidc"))]` — ils ne tournaient donc sous
+  **aucun** jeu de features servi. La cause n'était pas dans M3 : la paire de clés
+  ES256 de test vivait dans un `mod tests` privé, donc les tests n'avaient d'autre
+  choix que l'extracteur de développement. Fixture partagée, vrai jeton d'audience
+  `efe-llm`, et `p1-check.sh` §7 joue désormais **les deux** jeux de features.
