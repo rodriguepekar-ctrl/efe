@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: UNLICENSED
 #
-# P1.d — forger un JWT ES256 pour appeler une passerelle en profil `production`.
+# P1.d — forger un JWT (ES256 ou RS256) pour appeler une passerelle en profil `production`.
 #
 #   scripts/p1-jeton.sh <clé-privée.pem> [tenant] [rôles] [aud] [ttl_s]
 #
@@ -27,9 +27,14 @@
 #
 # ── Ce que votre IdP doit émettre ─────────────────────────────────────────────
 #
-#    alg     ES256, et RIEN D'AUTRE. La passerelle appelle `from_ec_pem` puis
-#            `Validation::new(Algorithm::ES256)` : une clé RSA est refusée — or
-#            RS256 est le défaut de Keycloak et d'Auth0.
+#    alg     DÉDUIT DE LA CLÉ : EC P-256 → ES256, RSA → RS256. Ce bloc disait
+#            « ES256, et RIEN D'AUTRE […] une clé RSA est refusée — or RS256 est
+#            le défaut de Keycloak et d'Auth0 ». C'était vrai, et c'était le
+#            blocage d'adoption que `p1-check.sh` nommait dans « ce qu'il ne
+#            prouve pas ». Levé le 6 septembre 2026 : la passerelle déduit
+#            l'algorithme de la clé (`oidc::cle_et_algorithme`), et ce script fait
+#            la MÊME déduction sur la MÊME entrée. Jamais depuis l'en-tête du
+#            jeton : ce serait la confusion d'algorithmes.
 #    aud     `efe-llm` pour la frontière (EFE_OIDC_LLM_AUDIENCE) ; pour le chemin
 #            souverain, la validation d'audience est DÉSACTIVÉE tant que
 #            EFE_OIDC_AUDIENCE n'est pas posée.
@@ -61,27 +66,34 @@ FIN
   exit 2
 fi
 
-# ── La clé est-elle bien une P-256 ? ─────────────────────────────────────────
+# ── De QUELLE famille est la clé ? ───────────────────────────────────────────
 #
-#  Sans ce contrôle, une clé RSA produirait un jeton d'apparence normale que la
-#  passerelle refuserait en 401 — et l'opérateur chercherait le défaut du mauvais
-#  côté. Mieux vaut échouer ici, en nommant la cause.
-if ! openssl ec -in "$CLE" -noout -text 2>/dev/null | grep -q 'prime256v1\|NIST CURVE: P-256'; then
-  echo "ERREUR : $CLE n'est pas une clé EC P-256 (prime256v1)." >&2
-  echo "         La passerelle n'accepte QUE ES256 — une clé RSA sera refusée en 401." >&2
+#  L'algorithme se déduit de la CLÉ, exactement comme le fait la passerelle
+#  (`oidc::cle_et_algorithme`). Deux endroits qui déduisent la même chose de la
+#  même entrée : si l'un changeait sans l'autre, le jeton serait forgé sous un
+#  algorithme que le vérifieur n'attend pas, et l'opérateur chercherait le défaut
+#  du mauvais côté — c'est ce que la version précédente de ce bloc évitait déjà,
+#  en refusant simplement RSA.
+if openssl ec -in "$CLE" -noout -text 2>/dev/null | grep -q 'prime256v1\|NIST CURVE: P-256'; then
+  ALG=ES256
+elif openssl rsa -in "$CLE" -noout -check >/dev/null 2>&1; then
+  ALG=RS256
+else
+  echo "ERREUR : $CLE n'est ni une EC P-256 (ES256) ni une RSA (RS256)." >&2
+  echo "         Ce sont les deux seules familles que la passerelle accepte." >&2
   exit 2
 fi
 
-python3 - "$CLE" "$TENANT" "$ROLES" "$AUD" "$TTL" <<'PY'
+python3 - "$CLE" "$TENANT" "$ROLES" "$AUD" "$TTL" "$ALG" <<'PY'
 import base64, json, subprocess, sys, time
 
-cle, tenant, roles, aud, ttl = sys.argv[1:6]
+cle, tenant, roles, aud, ttl, alg = sys.argv[1:7]
 
 def b64u(b: bytes) -> str:
     """base64url sans remplissage — l'encodage que le JWT impose."""
     return base64.urlsafe_b64encode(b).rstrip(b"=").decode()
 
-entete = {"alg": "ES256", "typ": "JWT"}
+entete = {"alg": alg, "typ": "JWT"}
 maintenant = int(time.time())
 charge = {
     "sub": "p1-jeton",
@@ -95,7 +107,7 @@ signe = f"{b64u(json.dumps(entete, separators=(',', ':')).encode())}." \
         f"{b64u(json.dumps(charge, separators=(',', ':')).encode())}"
 
 # La SIGNATURE vient d'openssl. Ce script ne calcule rien.
-der = subprocess.run(
+brut = subprocess.run(
     ["openssl", "dgst", "-sha256", "-sign", cle],
     input=signe.encode(), capture_output=True, check=True,
 ).stdout
@@ -123,5 +135,8 @@ def der_vers_brut(d: bytes) -> bytes:
         ent.append(v.rjust(32, b"\x00"))    # rembourre à gauche
     return b"".join(ent)
 
-print(f"{signe}.{b64u(der_vers_brut(der))}")
+# RS256 : `openssl dgst -sign` rend DÉJÀ les octets PKCS#1 v1.5 attendus par le JWT — rien à
+# convertir. ES256 est le cas compliqué, pas RS256 : ECDSA sort en DER, et c'est cette conversion
+# (ci-dessus) qui demandait tout le soin. La branche RSA tient donc en une ligne, et c'est normal.
+print(f"{signe}.{b64u(brut if alg == 'RS256' else der_vers_brut(brut))}")
 PY

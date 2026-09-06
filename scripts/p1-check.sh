@@ -396,7 +396,55 @@ PY2
 fi
 
 # ═════════════════════════════════════════════════════════════════════════════
-titre "7. Le critère de M3, SOUS LE JEU DE FEATURES DE PRODUCTION"
+titre "7. RS256 — l'IdP d'entreprise, pour de vrai"
+#
+#  Ce que cette section ferme était écrit depuis toujours dans « ce que ce contrôle ne prouve
+#  pas » : « la passerelle n'accepte QUE ES256 — RS256, défaut de Keycloak et d'Auth0, sera
+#  refusé ». Ce n'était pas une limite technique, c'était un BLOCAGE D'ADOPTION : les deux
+#  fournisseurs d'identité d'entreprise les plus déployés émettent en RS256, et un prospect
+#  devait reconfigurer son IdP pour une seule audience avant même de voir le produit.
+#
+#  La passerelle DÉDUIT désormais l'algorithme de la CLÉ (`oidc::cle_et_algorithme`), jamais de
+#  l'en-tête du jeton — ce dernier serait la confusion d'algorithmes. Cette section le joue de
+#  bout en bout : une vraie paire RSA fabriquée ici, une passerelle redémarrée dessus, un jeton
+#  RS256 forgé par `p1-jeton.sh`, et un run servi.
+#
+#  ⚠ Elle est ICI, avant la section 8, et pas plus loin : les sections suivantes relient le
+#  binaire sous d'AUTRES features, ce qui remplacerait `$BIN`. Elle a besoin de celui-ci.
+openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out "$TMP/rsa.pem" 2>/dev/null \
+  || ko "openssl n'a pas su fabriquer une paire RSA"
+openssl rsa -in "$TMP/rsa.pem" -pubout -out "$TMP/rsa.pub" 2>/dev/null
+
+JWT_EC="$JWT"                      # gardé pour la contre-épreuve ci-dessous
+kill "$PID" 2>/dev/null; wait "$PID" 2>/dev/null; PID=""
+PEM="$(cat "$TMP/rsa.pub")"        # `lancer` lit $PEM
+lancer "$TMP/boot-rsa.log"
+grep -q "JWT RS256" "$TMP/boot-rsa.log" \
+  || ko "le rapport de démarrage n'annonce pas RS256 : $(grep -i 'auth OIDC' "$TMP/boot-rsa.log" | head -1)"
+ok "la passerelle a démarré sur une clé RSA, et son rapport le NOMME"
+
+JWT_RSA="$(bash scripts/p1-jeton.sh "$TMP/rsa.pem" 2>/dev/null)" \
+  || ko "p1-jeton.sh n'a pas su forger de jeton RS256"
+CODE_RSA=$(curl -s -o "$TMP/run-rsa.json" -w '%{http_code}' -X POST \
+  "http://127.0.0.1:$PORT/v1/swarm/run" -H "authorization: Bearer $JWT_RSA" \
+  -H 'content-type: application/json' -d @examples/run.json)
+[ "$CODE_RSA" = "200" ] \
+  || { cat "$TMP/run-rsa.json"; ko "un jeton RS256 a été REFUSÉ (HTTP $CODE_RSA) — Keycloak et \
+Auth0 resteraient hors d'atteinte."; }
+ok "un run souverain servi sous un jeton RS256 — Keycloak et Auth0 sont joignables"
+
+#  LA CONTRE-ÉPREUVE, et c'est elle qui prouve que l'algorithme est ÉPINGLÉ À LA CLÉ. Sans elle,
+#  un vérifieur qui accepterait les deux familles à la fois passerait le test ci-dessus — et ce
+#  serait la confusion d'algorithmes, c'est-à-dire exactement la faille qu'on croit avoir évitée.
+CODE_EC=$(curl -s -o /dev/null -w '%{http_code}' -X POST "http://127.0.0.1:$PORT/v1/swarm/run" \
+  -H "authorization: Bearer $JWT_EC" -H 'content-type: application/json' -d @examples/run.json)
+[ "$CODE_EC" = "401" ] \
+  || ko "l'ancien jeton ES256 est encore accepté (HTTP $CODE_EC) alors que la clé est RSA — \
+l'algorithme n'est PAS épinglé à la clé, et c'est la confusion d'algorithmes."
+ok "le jeton ES256 est REFUSÉ sous une clé RSA (401) — l'algorithme suit la clé, pas le jeton"
+
+# ═════════════════════════════════════════════════════════════════════════════
+titre "8. Le critère de M3, SOUS LE JEU DE FEATURES DE PRODUCTION"
 #
 #  ⭐ **É4** — `routes/llm.rs` vit sous `#[cfg(feature = "frontier-llm")]`, et les deux tests qui
 #  portent le critère de M3 — « le SLM meurt, la mission passe, et la RAISON remonte » — y étaient
@@ -438,7 +486,7 @@ n'est plus éprouvé sur ce jeu de features. C'est le trou que cette étape exis
 done
 
 # ═════════════════════════════════════════════════════════════════════════════
-titre "8. Les QUATRE destinations d'egress sont gardées"
+titre "9. Les QUATRE destinations d'egress sont gardées"
 #
 #  La PREMIÈRE ligne de « ce que ce contrôle ne prouve pas » disait : « ANTHROPIC_URL est une
 #  constante EN DUR : il n'existe aucun moyen de pointer un faux fournisseur local, ni un Azure
@@ -455,7 +503,7 @@ titre "8. Les QUATRE destinations d'egress sont gardées"
 #  (`scella-authority`) : `https` partout, `http` seulement vers la machine locale, et aucun
 #  `userinfo` — parce que l'endpoint est SCELLÉ DANS LE REÇU et qu'on n'y met pas d'identifiants.
 #
-#  ⚠ Même piège que la section 7, et même remède : ces tests vivent sous
+#  ⚠ Même piège que la section 8, et même remède : ces tests vivent sous
 #  `#![cfg(all(feature = "anthropic", feature = "openai", feature = "gemini"))]`, aucune n'étant
 #  dans le défaut de `efe-coordinator`
 #  (`default = []`). `cargo test --workspace` les compte donc pour ZÉRO. C'est ici qu'ils
@@ -470,9 +518,9 @@ garde la destination de l'egress ni ce que le reçu en dit." ;;
 esac
 
 # ═════════════════════════════════════════════════════════════════════════════
-titre "9. L'aller-retour frontière, sur une vraie socket, pour les trois"
+titre "10. L'aller-retour frontière, sur une vraie socket, pour les trois"
 #
-#  Ce que la section 8 rend possible, celle-ci l'EXÉCUTE. Un serveur HTTP réel écoute sur la
+#  Ce que la section 9 rend possible, celle-ci l'EXÉCUTE. Un serveur HTTP réel écoute sur la
 #  boucle locale, le provider est pointé vers lui, et l'appel part, arrive, et revient — avec
 #  ses en-têtes vérifiés depuis L'EXTÉRIEUR, en regardant la requête reçue plutôt que le code
 #  qui la construit.
@@ -503,17 +551,22 @@ cat <<'FIN'
       « `ANTHROPIC_URL` est une constante EN DUR : aucun moyen de pointer un faux
       fournisseur local, ni un Azure OpenAI, ni un mandataire d'entreprise ». Ce
       n'est plus vrai d'AUCUN des trois — les constantes sont des défauts, les
-      destinations se configurent et se valident (section 8), et les trois
-      allers-retours SUR SOCKET sont joués (section 9).
+      destinations se configurent et se valident (section 9), et les trois
+      allers-retours SUR SOCKET sont joués (section 10).
       Ce qui reste manquant est plus étroit, et plus honnête : que le partenaire
       réponde comme le faux fournisseur le suppose. Si l'API d'Anthropic changeait,
-      les sections 8 et 9 resteraient vertes. Elles prouvent le CHEMIN, jamais le
+      les sections 9 et 10 resteraient vertes. Elles prouvent le CHEMIN, jamais le
       PARTENAIRE — et vers lui, ce qui manque tient en une clé : la vôtre, et elle
       coûte de l'argent.
-    · Que votre IdP fonctionne. La paire ES256 de ce script est fabriquée sur
-      place : quiconque la détient forge un jeton. Elle démontre le MÉCANISME,
-      jamais la SUBSTANCE. Et la passerelle n'accepte QUE ES256 — RS256, défaut
-      de Keycloak et d'Auth0, sera refusé.
+    · Que votre IdP fonctionne. Les paires de ce script sont fabriquées sur
+      place : quiconque les détient forge un jeton. Elles démontrent le MÉCANISME,
+      jamais la SUBSTANCE. Cette ligne ajoutait « et la passerelle n'accepte QUE
+      ES256 — RS256, défaut de Keycloak et d'Auth0, sera refusé » : c'était le
+      blocage d'adoption, et la section 7 le lève (algorithme déduit de la CLÉ,
+      run servi sous RS256, jeton ES256 refusé sous clé RSA). Restent NON
+      acceptés, et délibérément : ES384, RS512, PS256, EdDSA — chacun est une
+      décision, et on préfère refuser un jeton qu'accepter une famille qu'on n'a
+      pas éprouvée.
     · Que l'allowlist d'egress soit écrite. Absente ⟹ 403 pour TOUT tenant :
       même avec une vraie clé, la frontière ne sert alors rien.
     · La tenue en charge. Toujours absente : aucun contrôle de ce dépôt ne

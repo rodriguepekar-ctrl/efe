@@ -403,17 +403,23 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // ── Prod (feature `oidc`) : auth JWT OIDC ES256 (clé PUBLIQUE server-side) ───
     #[cfg(feature = "oidc")]
     if let Some(verifier) = efe_swarm_gateway::OidcVerifier::from_env()? {
+        // L'algorithme est NOMMÉ, pas supposé : il est dérivé du type de la clé fournie, et cette
+        // ligne disait « ES256 » en dur — elle serait devenue fausse le jour où une clé RSA est
+        // configurée. Un exploitant dont l'IdP émet du RS256 lit ici, en une ligne, si sa clé a
+        // bien été comprise.
+        let alg = verifier.algorithme();
         state = state.with_oidc(std::sync::Arc::new(verifier));
         observed.oidc = true;
-        println!("→ auth OIDC activée (JWT ES256, clé publique server-side).");
+        println!("→ auth OIDC activée (JWT {alg}, clé publique server-side).");
     }
 
     // ── Couche 2 (M3, feature `oidc`) : auth DÉDIÉE du chemin frontière (aud=efe-llm) ───
     // Séparée de l'auth essaim : un jeton souverain ne déverrouille pas l'egress tiers coûteux.
     #[cfg(feature = "oidc")]
     if let Some(verifier) = efe_swarm_gateway::OidcVerifier::llm_from_env()? {
+        let alg = verifier.algorithme();
         state = state.with_oidc_llm(std::sync::Arc::new(verifier));
-        println!("→ auth OIDC frontière activée (JWT aud=efe-llm, clé publique server-side).");
+        println!("→ auth OIDC frontière activée (JWT {alg}, aud=efe-llm, clé publique server-side).");
     }
 
     // ── G9 (feature `pii`) : politique PII par défaut depuis l'env (détection locale) ──
