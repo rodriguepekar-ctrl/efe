@@ -1,0 +1,975 @@
+\documentclass[10pt]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage[french]{babel}
+\frenchsetup{AutoSpacePunctuation=false}
+\usepackage{newpxtext,newpxmath}
+\usepackage[a4paper,top=1.7cm,bottom=1.5cm,left=1.7cm,right=1.7cm]{geometry}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{titlesec}
+\usepackage[most]{tcolorbox}
+\usepackage{enumitem}
+\usepackage{array}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{fancyhdr}
+\usepackage[hidelinks]{hyperref}
+
+\definecolor{navy}{HTML}{1F3A5F}
+\definecolor{grey}{HTML}{54606E}
+\definecolor{green}{HTML}{2C6E49}
+\definecolor{amber}{HTML}{9C6A16}
+\definecolor{red}{HTML}{A6322E}
+\definecolor{plum}{HTML}{7A4EA8}
+\definecolor{boxgray}{HTML}{F3F5F8}
+\definecolor{boxred}{HTML}{FCF2F1}
+\definecolor{boxgreen}{HTML}{F1F7F3}
+\definecolor{boxplum}{HTML}{F7F3FB}
+\definecolor{boxcode}{HTML}{F7F8FA}
+\definecolor{boxedge}{HTML}{D9E0EA}
+\definecolor{c3col}{HTML}{1F3A5F}
+\definecolor{c1col}{HTML}{6B3FA0}
+
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{2.8pt}
+\setlength{\tabcolsep}{4pt}
+\setlength{\emergencystretch}{2.5em}
+\linespread{1.0}
+
+\pagestyle{fancy}\fancyhf{}
+\lhead{\small\color{grey}Scella}
+\rhead{\small\color{grey}Les meilleurs concepts -- 24 septembre 2026}
+\cfoot{\small\color{grey}\thepage}
+\renewcommand{\headrulewidth}{0.3pt}
+
+\titleformat{\section}{\color{navy}\large\bfseries}{}{0pt}{}
+\titlespacing{\section}{0pt}{12pt}{3pt}
+\titleformat{\subsection}{\color{navy}\bfseries}{}{0pt}{}
+\titlespacing{\subsection}{0pt}{8pt}{2pt}
+
+\newtcolorbox{these}{colback=boxgray,colframe=boxedge,boxrule=0.5pt,arc=2.5pt,
+  left=8pt,right=8pt,top=4.5pt,bottom=4.5pt}
+\newtcolorbox{alerte}{colback=boxred,colframe=red!55,boxrule=0.8pt,arc=2.5pt,
+  left=8pt,right=8pt,top=4.5pt,bottom=4.5pt}
+\newtcolorbox{acquis}{colback=boxgreen,colframe=green!45,boxrule=0.8pt,arc=2.5pt,
+  left=8pt,right=8pt,top=4.5pt,bottom=4.5pt}
+\newtcolorbox{piste}{colback=boxplum,colframe=plum!45,boxrule=0.8pt,arc=2.5pt,
+  left=8pt,right=8pt,top=4.5pt,bottom=4.5pt}
+\newtcolorbox{extrait}{colback=boxcode,colframe=boxedge,boxrule=0.5pt,arc=1.5pt,
+  left=7pt,right=7pt,top=3.5pt,bottom=3.5pt}
+
+\newcommand{\best}[1]{\textcolor{green}{\textbf{#1}}}
+\newcommand{\pire}[1]{\textcolor{red}{\textbf{#1}}}
+\newcommand{\code}[1]{\texttt{\small #1}}
+\newcommand{\loc}[1]{{\footnotesize\color{grey}\texttt{#1}}}
+\newcommand{\mm}[1]{\textbf{\textcolor{navy}{#1}}}
+\newcommand{\ok}[1]{\textcolor{green}{\textbf{#1}}}
+\newcommand{\ko}[1]{\textcolor{red}{\textbf{#1}}}
+\newcommand{\att}[1]{\textcolor{amber}{\textbf{#1}}}
+\newcommand{\lat}[1]{\textcolor{plum}{\textbf{#1}}}
+\newcommand{\nm}[1]{\textcolor{grey}{\textbf{#1}}}
+\newcommand{\sz}[1]{\textcolor{grey}{\small\textsf{#1}}}
+\newcommand{\x}{$\times$}
+\newcommand{\pc}{\,\%}
+\newcommand{\ctrois}{\textcolor{c3col}{\textbf{C3}}}
+\newcommand{\cun}{\textcolor{c1col}{\textbf{C1}}}
+\newcommand{\nt}[1]{\ifcase#1\textcolor{red}{\textbf{0}}\or\textcolor{amber}{\textbf{1}}\or\textcolor{navy}{\textbf{2}}\or\textcolor{green}{\textbf{3}}\fi}
+\newcolumntype{L}[1]{>{\raggedright\arraybackslash}p{#1}}
+\newcolumntype{C}{>{\centering\arraybackslash}p{0.34cm}}
+
+\begin{document}
+
+\begin{center}
+{\Huge\bfseries\color{navy} Scella}\\[4pt]
+{\large\color{grey}\itshape Les meilleurs concepts --- quinze documents, cinq pivots, et ce que le code en a gardé}\\[4pt]
+{\small\color{grey} 24 septembre 2026 \; · \; les quinze documents du 20 juillet au 26 août \; · \; confrontés au code à \code{276a03d} (branche \code{c1-c3}, 30 crates) \; · \; «~Portes~» verte sur ce commit}
+\end{center}
+\vspace{2pt}
+
+\begin{these}
+\textbf{Le résultat central.} Les quinze documents portent \textbf{soixante-six concepts}. Les meilleurs sont
+\textbf{tous du côté de la preuve}, et ils convergent vers une seule promesse. En tête, seul à la note maximale de la
+grille technique et en tête sous ses six perturbations : \mm{le re-prouveur que l'auditeur lit en entier}. Viennent
+ensuite \mm{l'ancre}, qui sépare l'intégrité de la complétude, \mm{la limite livrée}, où le bundle écrit ce
+qu'il ne prouve pas et où le type interdit la surenchère, et \mm{le dossier réglementaire re-dérivable}. À
+l'inverse, \textbf{tous les concepts du côté de l'intelligence} ($\Phi$, nano-robots, méta-essaim, Cadrage, essaim
+médiateur, Colonne, Flexible MLP) sont morts, n'ont jamais été écrits ou ont été réfutés par une mesure. Et la
+confrontation au code trouve \textbf{cinq erreurs dans la série}, dont trois de la nature même que la série
+dénonce : \textbf{une affirmation négative écrite sans avoir été exécutée}.
+\end{these}
+
+\section{0 · Le verdict, en une page}
+
+{\small
+\renewcommand{\arraystretch}{1.22}
+\begin{longtable}{@{}L{0.95cm}L{4.05cm}L{1.45cm}L{1.0cm}L{4.0cm}L{4.6cm}@{}}
+\toprule
+\textbf{rang} & \textbf{le concept} & \textbf{famille} & \textbf{note} & \textbf{où il vit} & \textbf{sa limite, dite d'avance} \\ \midrule \endhead
+\best{1} & \mm{Le re-prouveur que l'auditeur lit en entier} & technique & \best{15/15} & \code{verify-mini} : \code{[dependencies]} vide, source vendorée dans chaque bundle & il exige la clé du tenant ; il porte \code{UNLICENSED} \\
+\best{2} & \mm{Intégrité et complétude : l'ancre} & technique & \best{14/15} & \code{provenance-dag/\allowbreak src/\allowbreak anchor.rs} ; allumée par le profil du coin & tronquer \emph{avant} d'ancrer reste possible ; l'horodateur tiers n'est posé par aucun profil \\
+\best{3=} & \mm{La limite livrée} --- écrite dans le bundle, imposée par le type & technique & 13/15 & \code{forensic-export/\allowbreak src/\allowbreak readme.rs} ; \code{reg-evidence/\allowbreak src/\allowbreak mapping.rs} & elle désarme la surpromesse du produit, pas celle d'un tiers \\
+\best{3=} & \mm{Le dossier re-dérivable} & technique & 13/15 & \code{reg-evidence} : \code{derive(records, mapping@version)} & pas de porte d'entrée propre, aucun client \\
+--- & \mm{Le système réfutable} & promesse & 10/12 & ses quatre pieds sont les quatre concepts ci-dessus & «~sans clé~» y est de trop (§6.5) \\
+--- & \mm{Le routage est la porte, le reçu est le fossé} & stratégie & \best{11/12} & les deux produits ne partagent que quatre crates, tous dans le socle de preuve & l'épreuve du marché n'a pas eu lieu \\
+--- & \mm{Un garde incapable de tomber ne garde rien} ; \mm{la capacité n'est pas le service} & méthode & \best{12/12} & les bancs et les portes de \code{portes.yml} & sa règle sœur --- exécuter les négatives --- est la plus violée \\
+\lat{latent} & \mm{La co-signature R3} & technique & 9/15 & \code{cosign.rs}, \code{attest.rs}, \code{n17\_chain.rs} & aucun chemin servi ne co-signe, six semaines après le diagnostic \\
+\bottomrule
+\end{longtable}
+}
+
+\textbf{Comment lire ce document.} Deux régimes s'y côtoient et ne se mélangent jamais. Les \textbf{faits} --- un
+emplacement, un compte, une date de commit --- ont été relus à \code{276a03d} et portent leur commande en annexe ;
+un désaccord sur un fait s'ouvre en une commande. Les \textbf{notes} sont un jugement structuré par des critères
+écrits (§5) ; un désaccord sur une note est légitime et ne se tranche par aucune commande. Trois états partout :
+\ok{vrai mesuré}, \ko{faux mesuré}, \nm{non mesuré} --- le troisième compte autant que les deux autres.
+
+\section{1 · Ce qui a été lu, et comment}
+
+\subsection{1.1 · Le corpus, remis dans son ordre réel}
+
+Les dates des titres ne sont pas les dates de création. Celles-ci, lues par \code{pdfinfo}, remettent la série dans
+l'ordre où elle s'est écrite --- et l'ordre compte, parce que ces documents se corrigent les uns les autres.
+
+{\small
+\renewcommand{\arraystretch}{1.15}
+\begin{longtable}{@{}L{0.5cm}L{5.3cm}L{1.3cm}L{2.1cm}L{7.2cm}@{}}
+\toprule
+\textbf{n°} & \textbf{document} & \textbf{titre} & \textbf{créé le} & \textbf{ce qu'il fait} \\ \midrule \endhead
+15 & \code{Scella\_EN 2} & --- & 20 juil. 00:23 & le pitch anglais : six briques, deux lignées, des résultats chiffrés \\
+03 & \code{Composants\_Reste\_A\_Faire\_v2} & 5 août & 5 août 01:44 & treize composants : statut, taille, ordre des neuf actions \\
+02 & \code{Classement\_Potentiel} & 5 août & 02:22 & cinq lentilles, dont l'argument d'embauche (piste Kovant) \\
+01 & \code{Classement\_Potentiel\_Intrinseque} & 5 août & 02:33 & les quatre lentilles intrinsèques \\
+04 & \code{Etat\_Des\_Lieux} & 10 août & 11 août 00:34 & de «~coordonner~» à «~attester~» ; tout est opt-in \\
+09 & \code{Meilleurs\_Couples} & 11 août & 01:24 & les couples sous la lentille Kovant ; R3 «~à un fil~» \\
+05 & \code{Couples\_Classement\_Intrinseque} & 11 août & 02:33 & les couples sans finalité : tout bouge \\
+07 & \code{Couples\_Elements\_Usages} & 11 août & 02:42 & éléments, liants, modèle de menace \\
+08 & \code{Couples\_Etude\_Detaillee} & 11 août & 02:53 & mécanisme, falsifieur, notation de chaque couple \\
+06 & \code{Couples\_Croisement\_Complet} & 11 août & 03:34 & les 91 paires ; deux chaînes re-prouvables sur neuf \\
+11 & \code{Produit\_Unique} & 11 août & 14 août 01:36 & les frontières mesurées ; l'essaim attestable retenu \\
+10 & \code{Groupes\_Revolutionnaires} & 11 août & 14 août 01:36 & six levées d'impossibilité ; «~le système réfutable~» \\
+12 & \code{Startup\_Meilleurs\_Produits} & 19 août & 19 août 02:24 & \ctrois{} le coin, \cun{} l'expansion \\
+13 & \code{OnePager\_Seuil\_Registre} & 26 août & 26 août 16:23 & Le Seuil et Le Registre, ramenés à leur maturité \\
+14 & \code{SCELLA-TECHNOLOGIE-ARCHITECTURE} & 26 août & 26 août 17:10 & la technologie, mécanisme par mécanisme \\
+\bottomrule
+\end{longtable}
+}
+
+Deux corrections d'ordre en sortent. \textbf{Le document 15 n'est pas le dernier : c'est le premier.} Compilé le
+20 juillet, il précède de trois semaines le remaniement du 10 août que le dépôt conserve sous
+\code{Scella\_EN\_2026-07-19} --- empreintes différentes, 2\,352 mots contre 2\,799. C'est donc le texte de départ que
+les quatorze autres corrigent. Et \textbf{le 11 précède le 10} : le 10 parle des «~neuf crates du produit désigné la
+veille~», qui sont ceux du 11 ; les deux ont été recompilés ensemble le 14.
+
+Hors du corpus, trois documents ont été ouverts \emph{seulement} pour lever des renvois --- \code{Deux\_Classements}
+et \code{Prix\_Rachat\_Niveaux} (qui définissent \cun{}, C2 et \ctrois{}), \code{Scella\_EN\_2026-07-19} (pour
+dater le 15) --- ainsi que deux notes de mesure du code dont la série cite les chiffres :
+\code{efe-coordinator/\allowbreak R3\_LIVE\_VALIDATION.md} et \code{scella-mz/\allowbreak MZ\_MESURE\_CADRAGE.md}. Le dépôt compte 34
+rapports Scella ; les autres n'ont pas été analysés.
+
+\subsection{1.2 · La méthode, en sept étapes}
+
+\begin{enumerate}[leftmargin=1.4em,itemsep=1pt,topsep=2pt]
+\item \textbf{Lecture intégrale} des quinze textes, extraits par \code{pdftotext -layout}, dans l'ordre réel.
+\item \textbf{Catalogue} : chaque concept, sa première apparition, son sommet dans la série, sa famille (§3).
+\item \textbf{Chronologie} : ce que chaque document corrige du précédent, et ce que le code a fait entre-temps (§2).
+\item \textbf{Confrontation au code} à \code{276a03d} : toute affirmation dont dépend un rang est relue à son
+fichier et à sa ligne, ou recomptée (§4).
+\item \textbf{Notation} sur des critères écrits, par famille --- technique sur 15, produit et méthode sur 12 (§5).
+\item \textbf{Sensibilité} : retirer chaque critère tour à tour, doubler le poids de la force. Un haut de
+classement qui ne survit pas à cela ne mesurait que la grille (§5.3).
+\item \textbf{Contre-épreuve} : attaquer ses propres conclusions, avec la même dureté que la série (§9).
+\end{enumerate}
+
+\section{2 · La chronologie : ce que chaque document corrige du précédent}
+
+{\small
+\renewcommand{\arraystretch}{1.18}
+\begin{longtable}{@{}L{1.5cm}L{1.9cm}L{6.2cm}L{7.1cm}@{}}
+\toprule
+\textbf{quand} & \textbf{document} & \textbf{son verdict} & \textbf{ce que la suite a corrigé} \\ \midrule \endhead
+20 juil. & 15, le pitch & six briques en deux lignées ; $-$27\pc{} «~validé en direct~» sur le méta-essaim ; $\Phi$ «~pur, mesuré~» ; 3,8B égale 12B ; Cadrage $-$85\pc{} de tokens & presque tous les chiffres de performance (§4.2) \\
+5 août & 03, 02, 01 & «~presque tout est construit ; presque rien n'est servi~» ; le Relais premier composant (2,25), le reçu réuni premier actif ; le défaut récurrent est l'\emph{auto-attestation} & la pile A est corrigée le 10 ; le Relais sort de la promesse le 19 \\
+10–11 août & 04 & le méta-essaim passe de coordonner à attester ; \textbf{tout est opt-in, aucun profil ne l'allume} & le profil est livré le 20 août \\
+11 août 01:24 & 09 & topologie × appariement injectif, meilleur couple ; R3 «~le couple le plus important~» ; la signature de racine «~latente~» & 05 : hiérarchie périmée ; 06 : la signature était servie depuis le 8 \\
+11 août 02:33–02:53 & 05, 07, 08 & les vérifieurs zéro-dépendance passent premiers ; R3 tombe septième ; la chaîne HMAC porte 7 couples sur 8 ; «~aucun test ne garde l'invariant~» & la garde existait pour \code{verify-mini} (§4.1, E1) \\
+11 août 03:34 & 06 & le pont pile A → pile B (C9) premier ; deux chaînes re-prouvables sur neuf ; le registre gold, meilleur latent & 11 : «~un sur un~» après frontière ; C10 et C11 meurent à l'élagage \\
+11→14 août & 11 & un seul produit : l'essaim attestable, 26 crates, 9 après extraction de Mode-1 & 12 : \ctrois{} d'abord ; l'élagage retire l'essaim \\
+11→14 août & 10 & six levées d'impossibilité ; l'ancre et la limite écrite ex æquo ; la promesse se retourne en «~système réfutable~» & le canari (levée D) est retiré ; «~sans clé~» est de trop (§6.5) \\
+19 août & 12 & le meilleur actif (\cun{}) est la plus mauvaise startup ; \ctrois{} le coin, \cun{} l'expansion ; «~vendez le coût~» & 13 : «~vendre le reçu, pas le prix~» \\
+26 août & 13, 14 & Le Seuil et Le Registre ; «~l'argument de coût n'a pas de source~» ; quinze mécanismes, un fil conducteur & la source du coût existe (E3) ; «~l'identifiant système refusé~» n'est pas dans le code (E4) \\
+\bottomrule
+\end{longtable}
+}
+
+\subsection{2.1 · Les cinq pivots}
+
+\begin{enumerate}[leftmargin=1.4em,itemsep=1pt,topsep=2pt]
+\item \textbf{5 août --- l'inventaire.} La série découvre que son défaut n'est pas la fonction manquante mais la
+vérification refermée à l'intérieur de ce qu'elle vérifie. Tout ce qui suit en découle.
+\item \textbf{11 août --- la piste Kovant meurt.} Les lentilles deviennent intrinsèques ; les composants ne bougent
+presque pas, les couples bougent beaucoup (05) : une propriété composée se juge sur qui pose la question.
+\item \textbf{11–14 août --- un seul produit.} La frontière se mesure par \code{cargo tree} ; la promesse se retourne,
+de «~le système peut prouver qu'il a raison~» à «~le système peut être pris en défaut~».
+\item \textbf{19 août --- l'axe startup.} Le classement d'actif s'inverse : \ctrois{} devient le coin, \cun{}
+l'expansion.
+\item \textbf{26 août → 3 septembre --- les noms, puis l'élagage.} Le Seuil et Le Registre ; puis la lignée latente
+quitte le dépôt (\code{2718082}) --- conservée dans l'historique, rien n'est effacé.
+\end{enumerate}
+
+\subsection{2.2 · Ce que le code a fait pendant et après la série}
+
+{\small
+\renewcommand{\arraystretch}{1.12}
+\begin{longtable}{@{}L{1.6cm}L{2.2cm}L{13.2cm}@{}}
+\toprule
+\textbf{date} & \textbf{commit} & \textbf{ce qui est entré} \\ \midrule \endhead
+30 mai & \code{e085037} & la mesure en direct du routage : 27 exécutions, $-$27,4\pc{} agrégé (\code{R3\_LIVE\_VALIDATION.md}) \\
+29 juin & \code{ab56b00} & le vérifieur vendoré devient zéro-dépendance, \textbf{et deux tests le gardent} \\
+14 juil. & \code{a8f1798} & le canari de Lipschitz, fail-closed au démarrage \\
+8 août & \code{c51c538} & l'attestation ed25519 de la racine (Fil P.3) \\
+20 août & \code{e463f40}, \code{d2bfd8e} & le profil servi : 27 lectures d'environnement sous un registre ; dix trous fermés \\
+22 août & \code{751ebe9} & un seul analyseur d'autorité, et le test qui interdit qu'un second réapparaisse \\
+23 août & \code{543bd19} & l'ancre tierce RFC 3161 (M9) \\
+26 août & \code{7d8c1d9}, \code{1411c94} & le compte mort de \code{reg\_pont} ; la conservation (sauvegarde, restauration, rotation), deux heures après le one-pager qui la disait absente \\
+3 sept. & \code{2718082} & l'élagage É0 : la lignée latente quitte le périmètre \\
+6 sept. & \code{4fc7f27}, \code{276a03d} & le dossier complet sur C1 et C3, puis sa correction --- HEAD inchangé depuis ; au 24 septembre : 30 crates, 4\,226 annotations de test (24 \code{\#[ignore]}), «~Portes~» verte \\
+\bottomrule
+\end{longtable}
+}
+
+\subsection{2.3 · La série se corrige elle-même --- et une de ses corrections était fausse}
+
+La capacité d'auto-correction de la série est réelle, et c'est son meilleur trait : quatorze documents en trois
+semaines, et au moins onze corrections écrites contre soi.
+
+{\small
+\renewcommand{\arraystretch}{1.12}
+\begin{longtable}{@{}L{8.4cm}L{8.8cm}@{}}
+\toprule
+\textbf{ce qui était écrit} & \textbf{la correction, et où} \\ \midrule \endhead
+RFC 3161 «~n'apparaît qu'en commentaire~» & \code{forensic-export} porte déjà \code{AnchorProof} et \code{verify\_anchor} (04 §1) \\
+la branche «~jamais fusionnée~» & fusionnée le 12 juillet ; ce sont 31 commits qui ne l'étaient pas (04 §1) \\
+R3 «~reste à inventer~» & écrit, servi côté vérification ; «~à un fil~» (09 §8) \\
+la signature de racine «~latente~» (09) & servie par la route bundle, avec ancre (06, C9) \\
+le banc «~rien de rejouable~» & vrai de \code{efe-bench}, faux du registre gold (06 §3.3) \\
+PII × scellement deuxième & cinquième sans la lentille Kovant (05) \\
+deux chaînes re-prouvables sur neuf & «~une sur une~» une fois la frontière tracée (11 §5) \\
+le garde dupliqué contre P3 & il enjambe la frontière : argument retiré en cours d'écriture (11 §6) \\
+\cun{} premier actif, deux fois & plus mauvaise startup des trois (12) \\
+977 tests pour le Seuil & 1\,329 en comptant les \code{\#[tokio::test]} (13) \\
+la garde «~en triade~» & quatre invariants depuis M4 ; le nom du test est resté (13) \\
+«~vendez le coût~» (12) & «~l'argument de coût n'a pas de source~» (13) --- \ko{correction fausse} : la source existe (E3) \\
+\bottomrule
+\end{longtable}
+}
+
+\section{3 · Le catalogue : soixante-six concepts, sept familles}
+
+Un concept, ici, est une idée qui s'énonce en une phrase, dont la valeur ne dépend pas d'une implémentation
+particulière, et que la série défend. «~Sommet~» est le meilleur traitement reçu dans la série ; «~au 24 sept.~»
+est l'état mesuré au code.
+
+{\small
+\renewcommand{\arraystretch}{1.1}
+\begin{longtable}{@{}L{0.7cm}L{5.9cm}L{1.2cm}L{4.0cm}L{4.65cm}@{}}
+\toprule
+\textbf{id} & \textbf{le concept} & \textbf{apparaît} & \textbf{son sommet dans la série} & \textbf{au 24 septembre} \\ \midrule \endhead
+\multicolumn{5}{@{}l}{\textbf{\color{navy}A · La preuve --- ce que l'artefact établit}} \\
+A1 & la chaîne HMAC sur encodage canonique binaire & 15 & porte 7 couples sur 8 (07, 08) & \ok{servi} \\
+A2 & le re-prouveur à dépendances vides & 01 & 1\textsuperscript{er} (05, 07, 08) & \ok{servi}, gardé en CI \\
+A3 & la fidélité prouvée : vecteurs NIST et RFC 4231, recoupement octet à octet & 08 & caution du 1\textsuperscript{er} (08) & \ok{servi} \\
+A4 & le bundle vendore la source, jamais un binaire & 14 & §6 (14) & \ok{servi} \\
+A5 & l'ancre : la troncature se voit sans clé & 04 & 1\textsuperscript{re} ex æquo (10, levée B) & \ok{servi}, profil du coin \\
+A6 & une ancre partagée par deux binaires (C10) & 06 & 4\textsuperscript{e} (06) & \ko{mort} : un binaire retiré \\
+A7 & l'ancre tierce RFC 3161 (3b, M9) & 04 & «~le jalon suivant~» (04, 07) & \ok{servi} \att{opt-in}, aucun profil \\
+A8 & l'attestation ed25519 de la racine, clé épinglée hors bande & 01 & dans C9, 1\textsuperscript{er} (06) & \ok{servi} \att{opt-in}, aucun profil \\
+A9 & le pont pile A → pile B (C9) & 01 & 1\textsuperscript{er} (06) & \ok{servi} : l'assemblage de A2, A5, A8 \\
+A10 & topologie déclarée × appariement injectif & 09 & 1\textsuperscript{er} (09) ; 2\textsuperscript{e} (05, 08) & \ok{servi} \\
+A11 & la liaison nominative v4 & 04 & 3\textsuperscript{e} avec l'ancre (05) & \ko{retiré} (3 sept.) \\
+A12 & la co-signature R3 et la non-élévation & 09 & «~le plus important~» (09) & \lat{latent} : aucun chemin servi ne co-signe \\
+A13 & le registre gold × un re-prouveur (C11) & 06 & «~meilleur rendement latent~» (06) & \ko{mort} : crate retiré \\
+A14 & la clé par tenant, jamais dans le bundle & 14 & §4 (14) & \ok{servi} ; attribution ouverte (E4) \\
+A15 & le rejeu déterministe & 14 & §8 (14) & \ok{servi} \\
+A16 & le crypto-shredding & 14 & §10 (14) & \ok{servi}, CI (m6) \\
+A17 & la mémoire scellée, invisible plutôt que refusée & 14 & §12 (14) & \ok{servi} \\
+A18 & la grammaire fermée des nœuds et l'identifiant \code{\{cas\}::\{étape\}} & 14 & §2 (14) & \ok{servi} \\
+\multicolumn{5}{@{}l}{\textbf{\color{navy}B · L'honnêteté structurelle --- ce que le système refuse de prétendre}} \\
+B1 & la limite écrite dans le bundle («~Ce que ça NE prouve PAS~») & 10 & 1\textsuperscript{re} ex æquo, écart 1 (10) & \ok{servi} \\
+B2 & aucun champ «~correct~» ni «~conforme~» & 14 & §5, §9 (14) & \ok{servi} \\
+B3 & la couverture qui nomme ses trous & 14 & §9 (14) & \ok{servi} \\
+B4 & aucune revendication plus forte que sa preuve & 07 & «~la famille la plus caractéristique~» (07) & \ok{servi} \\
+B5 & le refus de démarrer, par ordre de gravité & 08 & «~ce qui refuse de démarrer~» (13) & \ok{servi}, CI \\
+B6 & le canari de Lipschitz : le système réfute sa propre note & 08 & 3\textsuperscript{e} ex æquo (10, levée D) & \ko{retiré} (3 sept.) \\
+B7 & un seul analyseur d'autorité & 09 & §11 (14) & \ok{servi} (22 août), CI \\
+B8 & la vue projetée depuis la source scellée (\code{backed\_by\_node}) & 14 & §5 (14) & \ok{servi} \\
+B9 & le vert gênant : montrer sa garantie tomber là où elle ne s'applique pas & 04 & démontrabilité 1 (08) & \ok{servi} (banc du Seuil, CI) \\
+\multicolumn{5}{@{}l}{\textbf{\color{navy}C · Les liants d'ordre --- l'ordre est le mécanisme}} \\
+C1 & caviarder avant de sceller & 09 & 2\textsuperscript{e} (09) & \ok{servi} \\
+C2 & borner avant de sceller & 09 & 4\textsuperscript{e} (09) & \ok{servi} \\
+C3 & ancrer avant de répondre & 09 & 3\textsuperscript{e} (09) & \ok{servi} \\
+\multicolumn{5}{@{}l}{\textbf{\color{navy}D · Le produit et la stratégie}} \\
+D1 & le routage est la porte, le reçu est le fossé & 12 & titre (13) & positionnement \\
+D2 & le coin et l'expansion & 12 & thèse (12) & structure vérifiée \\
+D3 & le système réfutable & 10 & «~seule promesse tenue sans réserve~» (13) & 3 pieds sur 4 ; à reformuler \\
+D4 & le Seuil : tout ce qui sort est scellé & 13 & produit (13) & \ok{servi} \\
+D5 & le Registre sans porte d'entrée propre & 13 & produit (13) & \ok{vérifié} \\
+D6 & le dossier re-dérivable & 14 & §9 (14) & \ok{servi} \\
+D7 & une capture, plusieurs cadres & 14 & §13 (14) & \ok{servi} \\
+D8 & la posture d'observation d'abord & 12 & «~non négociable~» (12) & \ok{servi}, profil du coin \\
+D9 & le self-host sans clé & 12 & «~la mesure qui décide~» (12) & test \code{\#[ignore]} \\
+D10 & l'open-core : le vérifieur comme lettre de créance & 12 & modèle (12) & \att{non réalisé} (\code{UNLICENSED}) \\
+D11 & le profil nommé & 04 & «~l'écart le plus rentable~» (04) & \ok{servi} (20 août), CI \\
+D12 & l'essaim attestable (P2) & 11 & produit retenu (11) & \ko{retiré} \\
+D13 & le relais souverain (P3) & 11 & 2\textsuperscript{e} (11) & devenu le Seuil ; souveraineté affaiblie \\
+D14 & la Colonne comme produit (P4) & 11 & éliminée (11) & \ko{jamais écrite} \\
+D15 & le coût $-$27\pc{} comme argument & 15 & titre du produit (12) & mesure réelle mais mince \\
+\multicolumn{5}{@{}l}{\textbf{\color{navy}E · L'interstice --- ce qui se passe entre deux modèles}} \\
+E1 & le Relais (Fil B) & 15 & 1\textsuperscript{er} composant (01, 02) & \ok{servi} \att{opt-in}, hors promesse \\
+E2 & le Cadrage : compresser avant, vérifier après & 15 & «~la v2 du coin~» (12) & compresseur \ko{réfuté} (MZ) \\
+E3 & l'essaim médiateur & 15 & 8\textsuperscript{e} composant (01) & \ko{jamais écrit} \\
+E4 & l'interstice gouverné & 10 & «~le plafond le plus haut~» (10) & deux tiers \ko{jamais écrits} \\
+E5 & l'agent latéral, à côté d'un agent de code & 15 & --- & \ko{jamais écrit} \\
+\multicolumn{5}{@{}l}{\textbf{\color{navy}F · La lignée latente}} \\
+F1 & les nano-robots & 15 & 11\textsuperscript{e} (01) & \ko{retiré} du périmètre \\
+F2 & $\Phi$, la fusion latente & 15 & 6\textsuperscript{e} (01) & \ko{retiré} ; pureté jamais commitée \\
+F3 & le méta-essaim & 15 & produit retenu (11) & \ko{retiré} (3 sept.) \\
+F4 & le runtime nano & 15 & 13\textsuperscript{e} et dernier (01) & \ko{retiré} \\
+F5 & le Flexible MLP (SOMNIA) & 15 & 9\textsuperscript{e} ex æquo (01) & hors dépôt \\
+F6 & Fil C, la Colonne & 15 & 9\textsuperscript{e} ex æquo (01) & \ko{jamais écrit} \\
+\multicolumn{5}{@{}l}{\textbf{\color{navy}G · La méthode}} \\
+G1 & un garde incapable de tomber ne garde rien & tous & --- & incarné : bancs, portes \\
+G2 & la capacité n'est pas le service & 04 & résultat central (04) & incarné : \code{profile-check} \\
+G3 & vérifier hors du producteur & 01 & «~un seul principe de réparation~» (01) & incarné \\
+G4 & la frontière se mesure, elle ne se dessine pas & 11 & méthode (11) & incarné : \code{p3-check} \\
+G5 & une structure plutôt qu'une discipline & 14 & §11 (14) & incarné : \code{un\_seul\_analyseur} \\
+G6 & faits et jugements séparés ; annexes rejouables & 04 & toutes les annexes & appliqué \\
+G7 & les affirmations négatives s'exécutent avant de s'écrire & 08 & §5 (08) & \ko{violée trois fois} (§4) \\
+G8 & un couple = deux éléments + un liant ; l'élément porteur ; l'écart & 05 & --- & outil d'analyse \\
+G9 & le test de la levée d'impossibilité & 10 & --- & outil d'analyse \\
+G10 & retirer l'axe extérieur, et vérifier s'il filtrait plus étroit & 05 & règle (05) & outil d'analyse \\
+\bottomrule
+\end{longtable}
+}
+
+\section{4 · La confrontation au code}
+
+\subsection{4.1 · Les cinq erreurs de la série}
+
+\begin{alerte}
+\textbf{E1 --- 05 et 08, 11 août : «~l'invariant zéro-dépendance n'est gardé par aucun test~».} Faux pour
+\code{verify-mini}, et déjà faux à cette date : depuis le 29 juin (\code{ab56b00}, ancêtre des HEAD du 11 août), deux
+tests le gardent. \code{vendored\_dep\_tree\_is\_literally\_empty} (\loc{forensic-export/src/vendor.rs:191}) vérifie
+le manifeste vendoré ; \code{third\_party\_recompiles\_vendored\_verify\_and\_reproves\_offline}
+(\loc{tests/trustless\_end\_to\_end.rs:39}) recompile hors ligne la source vendorée --- sept fichiers
+\code{include\_str!} du vrai crate --- et échoue dur à la première dépendance utilisée. Vrai, en revanche, pour
+\code{verify-meta-mini}.
+
+\textbf{E2 --- 09, 11 août 01:24 : «~signer la racine du reçu : aucune route ne le fait~».} La route bundle la signe
+depuis le 8 août (\code{c51c538}). Le document 06, deux heures plus tard, la range parmi les couples servis.
+
+\textbf{E3 --- 13, 26 août : «~aucune de ces mesures n'existe dans le dépôt, et le levier qui les aurait produites a
+été tué~».} La mesure existe depuis le 30 mai (\loc{efe-coordinator/R3\_LIVE\_VALIDATION.md:77}) ; et son levier
+était le \emph{routage} ($-$28\pc{}), pas la compression, qui \emph{augmentait} le coût ($+$3,5\pc{}) --- celle que MZ
+a en effet réfutée.
+
+\textbf{E4 --- 14, 26 août : «~l'identifiant système est explicitement refusé à la dérivation~».} Aucun refus n'est
+dans le code : \code{efe-audit-core} et \code{efe-nano} dérivent une clé pour le tenant système. Et
+\loc{efe-swarm-gateway/src/oidc.rs:159-160} range un jeton OIDC valide qui ne porte ni \code{tenant} ni \code{tid}
+\emph{dans} le tenant système --- le même pour tous les jetons dans ce cas.
+
+\textbf{E5 --- 13, 26 août, repris de 10 : «~par n'importe qui ensuite sans clé ni dépendance (les deux
+vérifieurs)~».} Les vérifieurs sont sans dépendance mais exigent la clé du tenant (\code{-{}-key-hex}). Ce qui se
+fait sans clé, c'est la comparaison à l'ancre, et la vérification d'une attestation contre une clé publique
+épinglée.
+\end{alerte}
+
+Trois de ces erreurs --- E1, E2, E3 --- sont des \textbf{affirmations négatives non exécutées}, la classe d'erreur
+que la série a elle-même nommée (08 §5 : «~les seules qu'un auteur doit exécuter avant d'écrire~»). Et trois des
+cinq --- E3, E4, E5 --- sont dans les deux documents du 26 août, ceux qui sont écrits pour être lus par d'autres. La
+série a appliqué au code le principe qu'elle n'appliquait pas à elle-même : ses annexes rendaient ses affirmations
+\emph{rejouables}, mais personne ne les rejouait hors de l'auteur. La confrontation d'aujourd'hui est ce contrôle
+extérieur.
+
+\subsection{4.2 · Le pitch du 20 juillet, confronté}
+
+{\small
+\renewcommand{\arraystretch}{1.15}
+\begin{longtable}{@{}L{6.6cm}L{10.6cm}@{}}
+\toprule
+\textbf{ce que dit le document 15} & \textbf{ce que la suite et le code établissent} \\ \midrule \endhead
+le méta-essaim «~validé en direct (Claude + Gemini)~» : $-$27\pc{} agrégé, jusqu'à $-$90\pc{}, latence 3\x{} plus basse & \ko{mal attribué} : c'est le routeur d'\code{efe-coordinator}, mesuré le 30 mai, «~SLM non câblé~» ; le \x2,95 est le mode spéculatif sur une seule classe, le mode complet fait \x1,22 \\
+$\Phi$ «~pur par construction … Measured~» & \ko{faux au 11 août} : \code{dissolution\_centroid} n'est pas dans HEAD (06) ; la lignée est retirée le 3 septembre \\
+«~un petit modèle (3,8B) seul égale un gros (12B), 87,5\pc{}~», rangé sous $\Phi$ & c'est une comparaison de modèles seuls ; le banc «~réfute sa propre thèse~» (01) ; sa source a quitté le dépôt le 5 septembre (\code{7a917bf}) \\
+le Cadrage : «~$-$85\pc{} (132 → 20 tokens), SUPPORTED~» & \ko{réfuté comme argument} : MZ mesure 10,5\pc{} des entités préservées au ratio revendiqué 8,9:1, pour 99\pc{} exigés \\
+le nano-agent, «~rejoué et audité au bit~» & les priors \code{sin(i)} sont «~non signifiants~» de l'aveu du code (01) ; le runtime est retiré \\
+le Relais : «~four adversarial reviews (twenty-six fixes)~», puis «~~19 fixes~» & deux chiffres différents dans le même document \\
+«~nearly 1,200 green tests~» & 4\,226 annotations de test à \code{276a03d}, après l'élagage (24 ignorées) \\
+\bottomrule
+\end{longtable}
+}
+
+\subsection{4.3 · Le tableau de confrontation}
+
+Chaque ligne est une affirmation dont dépend un rang. Emplacements relatifs à \code{crates/} sauf mention.
+
+{\small
+\renewcommand{\arraystretch}{1.13}
+\begin{longtable}{@{}L{3.3cm}L{4.2cm}L{2.2cm}L{7.0cm}@{}}
+\toprule
+\textbf{concept} & \textbf{ce que dit la série} & \textbf{au 24 sept.} & \textbf{où} \\ \midrule \endhead
+re-prouveur 0-dép & \code{[dependencies]} vide & \ok{vrai} & \loc{verify-mini/Cargo.toml} ; 1\,159 lignes \\
+sa garde & «~aucun test~» (05, 08) & \ko{faux} pour \code{verify-mini} & \loc{forensic-export/src/vendor.rs:191} ; \loc{tests/trustless\_end\_to\_end.rs:39} \\
+son jumeau méta & deux re-prouveurs & \att{orphelin} & aucun producteur du format méta ; démo morte : \loc{scripts/demo-consensus-receipt.sh:51} \\
+la racine comparée & corrigée le 10 (04) & \ok{vrai} & \loc{efe-swarm-gateway/src/routes/verify.rs:85-89} \\
+l'ancre & troncature sans clé & \ok{vrai} & \loc{provenance-dag/src/anchor.rs} ; «~ancrage INACTIF~» \loc{main.rs:419} ; \loc{profiles/docker.env} \\
+l'ancre tierce & «~jalon suivant~» & \ok{servie} \att{opt-in} & \code{543bd19} ; \loc{main.rs:355-406} ; aucun profil ne la pose \\
+l'attestation de racine & «~latente~» (09) & \ok{servie} \att{opt-in} & \code{c51c538} ; \loc{routes/bundle.rs:91-100} : champ absent, jamais vide \\
+le profil & «~aucun profil~» (04) & \ok{livré} & \code{e463f40} ; \loc{efe-swarm-gateway/src/profile.rs} ; \code{profile-check} en CI \\
+l'appariement injectif & \code{Option::take()} & \ok{vrai} & \loc{mission\_graph.rs:98-104} ; tests \loc{:568}, \loc{:585} \\
+caviarder avant de sceller & l'ordre & \ok{vrai} & \loc{routes/llm.rs:360}, \loc{:390}, \loc{:423}, \loc{:451}, \loc{:485} \\
+le plafond serveur & inconditionnel & \ok{vrai} & \loc{routes/llm.rs:281}, \loc{:307} \\
+\code{slm\_mediated} & la revendication tombe & \ok{vrai} & \loc{routes/llm.rs:189} \\
+R3 & vérifieur servi, producteur absent & \ok{inchangé} & \code{attest\_remote\_call} et \code{cosign\_stamp} savent co-signer, mais tous leurs appels sont sous \code{\#[cfg(test)]} ; seul attestant : \code{MockAttestor} «~[SIMULÉ]~» ; \code{weakest\_rank} servi \loc{llm.rs:261} \\
+les copies de la règle de souveraineté & trois, divergentes (09) & \ok{une seule} & \code{751ebe9} ; \loc{scella-authority/tests/un\_seul\_analyseur.rs} \\
+l'URL du SLM & avertie, pas refusée & \att{partiel} & le clair distant est refusé ; le chiffré distant averti, egress ni gardé ni décompté : \loc{frontier.rs:206-237} \\
+le refus de démarrer & quatre invariants & \ok{vrai} & \loc{main.rs:581} ; le test s'appelle encore \code{…\_enforces\_the\_triad} \loc{:667} \\
+la posture d'observation & \code{fail\_open} & \ok{vrai} & \loc{capture.rs:173-179} ; allumée par le profil du coin \\
+le self-host sans clé & \code{\#[ignore]} & \ok{inchangé} & \loc{lib.rs:1880-1882} \\
+la couverture honnête & cadre sans trou refusé & \ok{vrai} & \loc{reg-evidence/src/mapping.rs:130-132} ; tests \loc{:220}, \loc{:239} \\
+outillé et conforme & aucun champ «~conforme~» & \ok{vrai} & \loc{reg-evidence/src/render.rs:14} \\
+la limite écrite & «~Ce que ça NE prouve PAS~» & \ok{vrai} & \loc{forensic-export/src/readme.rs:32}, \loc{:52}, \loc{:109} ; test \loc{:182} \\
+la dérivation & re-preuve avant dérivation & \ok{vrai} & \loc{reg-evidence/src/engine.rs:10} ; sélecteurs fermés \loc{selector.rs:91} \\
+le crypto-shredding & effacement sans couper & \ok{vrai} & \loc{provenance-dag/src/shred.rs} ; \code{m6-check} en CI \\
+la clé par tenant & HKDF, sel = UUID & \ok{vrai} & \loc{efe-audit-core/src/keys.rs:89-91} \\
+«~système refusé~» & à la dérivation (14) & \ko{faux} & \loc{oidc.rs:159-160} ; \loc{main.rs:175} dérive pour le tenant système \\
+la conservation & «~zéro occurrence~» (13) & \ok{livrée} & \code{1411c94}, deux heures après le one-pager \\
+la frontière complète & «~jamais démarrée~» (13) & \nm{non mesuré} & le banc \code{-{}-production} éprouve les refus, «~ni Docker ni PostgreSQL~» \\
+le $-$27\pc{} & «~sans source~» (13) & \ko{faux} & \loc{efe-coordinator/R3\_LIVE\_VALIDATION.md:77-107} \\
+le Cadrage & $-$85\pc{} de tokens & \ko{réfuté} & \loc{scella-mz/MZ\_MESURE\_CADRAGE.md:13}, \loc{:29}, \loc{:62} \\
+le compresseur & --- & présent & \loc{efe-coordinator/src/workflows/mission\_b.rs:225} : \code{must\_preserve: vec![]} \\
+le canari & servi (08) & \ko{retiré} & \code{a8f1798} → \code{2718082} \\
+l'interstice & zéro ligne & \ok{toujours zéro} & \code{HopKind}, \code{SwarmMediator}, \code{EdgePlan} : 0 occurrence \\
+les fermetures & 14, 8, 4 partagés (13) & \ok{vrai} & gateway 14 (20 avec options) ; console 8 ; partagés 4 (6) \\
+les licences & open-core (12) & \att{non réalisé} & 512 fichiers \code{UNLICENSED}, 1 MIT ; \code{verify-mini} compris \\
+\bottomrule
+\end{longtable}
+}
+
+\subsection{4.4 · Trois faits que la série ne pouvait pas voir}
+
+\textbf{L'élagage du 3 septembre a retiré deux des six levées d'impossibilité.} La liaison nominative v4 (C) et le
+canari de Lipschitz (D) vivaient dans la lignée latente ; ils ont quitté le produit avec elle. Le jumeau méta du
+re-prouveur, \code{verify-meta-mini}, reste membre du workspace : son test de fidélité tourne encore en CI, mais il
+re-prouve un format que plus rien ne produit, son invariant n'est pas gardé, et le seul script qui le vérifiait
+appelle un crate retiré.
+
+\textbf{Les deux mécanismes qui étendent la confiance sont nommés, et posés par personne.} Aucun des neuf profils ne
+pose \code{EFE\_SWARM\_BUNDLE\_SIGNING\_SEED} ni \code{EFE\_SWARM\_TSA\_URL}. \loc{profiles/production.env:53-80} les
+documente --- la graine est un secret injecté au déploiement, l'horodateur rend la route dépendante d'un tiers ---
+et \code{profile.rs} les annonce au démarrage. C'est juste. C'est aussi le motif du 10 août, «~tout est opt-in~»,
+sous une forme désormais écrite et assumée : il faut le dire avant qu'on le découvre.
+
+\textbf{L'open-core n'est pas encore une réalité de licence.} 512 fichiers Rust sur 513 portent
+\code{SPDX-License-Identifier: UNLICENSED}, \code{verify-mini} compris, et le bundle vendore sa source sans licence.
+«~La passerelle et le vérifieur sont gratuits et ouverts~» (12) est une décision de titulaire, pas un travail de
+code --- mais tant qu'elle n'est pas prise, l'auditeur lit un programme qu'il n'a pas le droit formel d'exécuter.
+
+\section{5 · La notation}
+
+\subsection{5.1 · Les critères de la famille technique (sur 15)}
+
+{\small
+\renewcommand{\arraystretch}{1.15}
+\begin{longtable}{@{}L{3.6cm}L{13.6cm}@{}}
+\toprule
+\textbf{critère} & \textbf{les quatre niveaux} \\ \midrule \endhead
+\textbf{S} · tenue dans la série & 3 : dans les trois premiers d'au moins trois lentilles \emph{et} repris le 26 août · 2 : en tête d'une lentille, ou mécanisme à part entière dans les documents finaux · 1 : présent, moyen ou instable (écart $\geq$ 5) · 0 : écarté par la série \\
+\textbf{V} · tenue au code & 3 : servi par défaut ou par le profil nommé, testé, la suite passant en CI · 2 : servi et testé, mais opt-in posé par aucun profil, ou test principal ignoré, ou faille connue qui borne la propriété · 1 : vérifié sans producteur, ou hors produit · 0 : absent, retiré ou réfuté par une mesure \\
+\textbf{F} · contre qui il tient & 3 : contre le détenteur de la clé ou l'opérateur lui-même, ou retire une dépendance de confiance entière · 2 : contre un opérateur qui ment sur une partie, qu'un tiers détecte · 1 : contre l'erreur de bonne foi · 0 : contre personne \\
+\textbf{R} · singularité & 3 : sans équivalent connu chez les passerelles et les outils de conformité · 2 : discipline rare sur un principe connu · 1 : bonne pratique connue · 0 : banal \\
+\textbf{P} · portée produit & 3 : porte la promesse d'un des deux produits · 2 : dans une fermeture de produit et nécessaire · 1 : dans le dépôt, hors promesse, ou en v2 · 0 : hors produit \\
+\bottomrule
+\end{longtable}
+}
+
+À total égal, le départage suit V, puis F, puis R : ce qui tourne passe devant ce qui promet.
+
+\subsection{5.2 · La grille technique}
+
+{\small
+\renewcommand{\arraystretch}{1.12}
+\begin{longtable}{@{}L{0.7cm}L{4.6cm}CCCCC>{\centering\arraybackslash}p{0.55cm}L{7.8cm}@{}}
+\toprule
+\textbf{rang} & \textbf{concept} & \textbf{S} & \textbf{V} & \textbf{F} & \textbf{R} & \textbf{P} & \textbf{/15} & \textbf{la raison, en une ligne} \\ \midrule \endhead
+\best{1} & le re-prouveur à dépendances vides (A2–A4) & \nt3 & \nt3 & \nt3 & \nt3 & \nt3 & \best{15} & 1\textsuperscript{er} de trois lentilles ; gardé par deux tests ; retire la confiance dans l'éditeur ; aucun concurrent n'en livre \\
+\best{2} & l'ancre (A5, A7, C3) & \nt3 & \nt3 & \nt3 & \nt2 & \nt3 & \best{14} & allumée par le profil du coin, jouée par le banc ; seul mécanisme contre le détenteur ; principe connu des journaux de transparence \\
+3= & la limite écrite dans le bundle (B1) & \nt2 & \nt3 & \nt2 & \nt3 & \nt3 & 13 & écart 1 dans 10 ; générée et testée ; désarme la surpromesse, n'arrête pas un tricheur \\
+3= & l'honnêteté imposée par le type (B2, B3) & \nt2 & \nt3 & \nt2 & \nt3 & \nt3 & 13 & un cadre sans trou ne se construit pas ; aucun champ «~conforme~» à remplir \\
+3= & le dossier re-dérivable (D6, D7) & \nt2 & \nt3 & \nt2 & \nt3 & \nt3 & 13 & re-preuve avant dérivation ; lecture juridique datée et hachée ; sélecteurs fermés \\
+6= & topologie × appariement injectif (A10) & \nt2 & \nt3 & \nt2 & \nt2 & \nt2 & 11 & premier sous Kovant, absent des documents finaux ; prouve la conformité à la déclaration, pas son ambition \\
+6= & aucune revendication plus forte que sa preuve (B4, B8) & \nt2 & \nt3 & \nt2 & \nt2 & \nt2 & 11 & \code{slm\_mediated}, \code{weakest\_rank}, champ absent jamais vide, «~ancrage INACTIF~» \\
+6= & un seul analyseur d'autorité (B7) & \nt2 & \nt3 & \nt2 & \nt2 & \nt2 & 11 & un test compte le littéral «~://~» ; il a trouvé un retrait de TLS vivant \\
+9 & le chaînage canonique binaire (A1, A18) & \nt2 & \nt3 & \nt2 & \nt1 & \nt3 & 11 & porte 7 couples sur 8 ; les chaînes de hachage sont connues \\
+10 & l'attestation ed25519 de la racine (A8) & \nt2 & \nt2 & \nt3 & \nt2 & \nt2 & 11 & engage l'opérateur sur toute la chaîne ; aucun profil ne pose la graine \\
+11 & le rejeu déterministe (A15) & \nt2 & \nt3 & \nt1 & \nt2 & \nt2 & 10 & ordre sur \code{(version, pointer)}, horloge exclue \\
+12 & le refus de démarrer (B5) & \nt2 & \nt3 & \nt1 & \nt1 & \nt3 & 10 & trois formes d'exit 78 en CI ; contre l'erreur, pas contre l'adversaire \\
+13 & la clé par tenant, hors du bundle (A14) & \nt2 & \nt2 & \nt2 & \nt1 & \nt3 & 10 & la dérivation est cloisonnée, l'attribution du tenant échoue ouverte (E4) \\
+14 & la mémoire invisible (A17) & \nt2 & \nt3 & \nt1 & \nt2 & \nt1 & 9 & un refus informe, l'invisibilité non \\
+15= & le crypto-shredding (A16) & \nt2 & \nt3 & \nt1 & \nt1 & \nt2 & 9 & dicté par un document déjà remis aux destinataires \\
+15= & caviarder avant de sceller (C1) & \nt2 & \nt3 & \nt1 & \nt1 & \nt2 & 9 & l'ordre est juste ; sans policy, le texte sort en clair \\
+\lat{17} & la co-signature R3 (A12) & \nt1 & \nt1 & \nt3 & \nt3 & \nt1 & 9 & la conception la plus fine du corpus ; ne se déclenche jamais \\
+18 & le Relais (E1) & \nt2 & \nt2 & \nt1 & \nt2 & \nt1 & 8 & premier composant le 5 août, sorti de la promesse depuis \\
+19 & borner avant de sceller (C2) & \nt1 & \nt3 & \nt1 & \nt0 & \nt2 & 7 & solide et banal : la comptabilité de coût est un acquis \\
+20 & la liaison nominative v4 (A11) & \nt2 & \nt0 & \nt2 & \nt2 & \nt0 & 6 & retirée avec le méta-essaim \\
+21 & le canari de Lipschitz (B6) & \nt2 & \nt0 & \nt1 & \nt3 & \nt0 & 6 & la chose la plus inimitable du dépôt, hors produit \\
+22 & le méta-essaim (F3) & \nt2 & \nt0 & \nt1 & \nt2 & \nt0 & 5 & produit retenu le 11 août, retiré le 3 septembre \\
+23 & l'essaim médiateur (E3) & \nt1 & \nt0 & \nt1 & \nt2 & \nt0 & 4 & zéro ligne \\
+24 & le Cadrage (E2) & \nt1 & \nt0 & \nt0 & \nt2 & \nt1 & 4 & le compresseur perd les entités qu'il déclare garder \\
+25 & $\Phi$ (F2) & \nt1 & \nt0 & \nt0 & \nt2 & \nt0 & 3 & pureté jamais commitée ; retiré \\
+26 & le Flexible MLP (F5) & \nt0 & \nt0 & \nt0 & \nt2 & \nt0 & 2 & hors dépôt ; «~réduit le coût, n'établit pas la confiance~» \\
+27= & Fil C, la Colonne (F6) & \nt0 & \nt0 & \nt0 & \nt1 & \nt0 & 1 & décrit une architecture, pas une levée \\
+27= & les nano-robots (F1) & \nt0 & \nt0 & \nt0 & \nt1 & \nt0 & 1 & priors «~non signifiants~» \\
+29 & le runtime nano (F4) & \nt0 & \nt0 & \nt0 & \nt0 & \nt0 & 0 & «~ré-implémente du résolu, et le ré-implémente faux~» (01) \\
+\bottomrule
+\end{longtable}
+}
+
+\subsection{5.3 · La sensibilité : le haut survit à toutes les perturbations}
+
+{\small
+\renewcommand{\arraystretch}{1.15}
+\begin{longtable}{@{}L{4.0cm}L{5.3cm}L{7.7cm}@{}}
+\toprule
+\textbf{perturbation} & \textbf{les cinq premiers} & \textbf{ce qui bouge} \\ \midrule \endhead
+sans S (la série) & inchangés : 12, puis quatre à 11 & rien dans le haut : la grille ne recopie pas la série \\
+sans V (le code) & inchangés : 12, 11, 10, 10, 10 & R3 monte au 7\textsuperscript{e} rang ex æquo ; l'attestation au 6\textsuperscript{e} \\
+sans F (la force) & inchangés : 12, 11, 11, 11, 11 & la limite écrite rejoint l'ancre \\
+sans R (la singularité) & inchangés, et le chaînage canonique rejoint le 3\textsuperscript{e} rang ex æquo & le socle banal remonte quand on cesse de noter la rareté \\
+sans P (le produit) & inchangés : 12, 11, 10, 10, 10 & R3 gagne quatre rangs (17\textsuperscript{e} → 13\textsuperscript{e}) : c'est le concept que la portée produit pénalise le plus \\
+F compté double & inchangés : 18, 17, 15, 15, 15 & l'attestation monte au 6\textsuperscript{e} rang \\
+\bottomrule
+\end{longtable}
+}
+
+\begin{acquis}
+\textbf{Le haut du classement est invariant.} Aucune des six perturbations ne fait sortir un des cinq premiers, ni
+entrer un autre concept --- une seule en fait \emph{rejoindre} un sixième à égalité. Le re-prouveur est premier dans
+cinq, premier ex æquo dans la sixième. C'est la version, pour ce document, de la règle que la série s'était donnée le 5 août : un classement qui
+survit au retrait de son cadre mesurait la chose et non le cadre.
+\end{acquis}
+
+\subsection{5.4 · La famille produit et stratégie (sur 12)}
+
+Critères : \textbf{S} survie aux cinq pivots ; \textbf{A} ancrage dans une structure mesurable du dépôt ;
+\textbf{N} netteté, au test du 11 --- une phrase, sans «~et aussi~» ; \textbf{D} défendabilité --- ce qu'une équipe
+financée ne recopie pas en dix-huit mois (12). Départage : A, puis D. Et une ligne commune à tous, qu'aucune note
+ne remplace : \textbf{l'épreuve du marché est \nm{non mesurée}} --- aucun interlocuteur extérieur n'est nommé (13).
+
+{\small
+\renewcommand{\arraystretch}{1.12}
+\begin{longtable}{@{}L{0.7cm}L{5.4cm}CCCC>{\centering\arraybackslash}p{0.55cm}L{7.6cm}@{}}
+\toprule
+\textbf{rang} & \textbf{concept} & \textbf{S} & \textbf{A} & \textbf{N} & \textbf{D} & \textbf{/12} & \textbf{la raison} \\ \midrule \endhead
+\best{1} & le routage est la porte, le reçu est le fossé (D1, D4) & \nt3 & \nt3 & \nt3 & \nt2 & \best{11} & a survécu au 19, au 26 et à l'élagage ; les produits se joignent par le sceau \\
+2 & le coin et l'expansion (D2, D5) & \nt3 & \nt3 & \nt2 & \nt2 & 10 & le Registre n'a pas d'ingestion : son collecteur est le Seuil, câblé \\
+3 & le système réfutable (D3) & \nt3 & \nt2 & \nt2 & \nt3 & 10 & l'inverse d'une catégorie saturée ; un pied retiré, un pied surpromis \\
+4= & la posture d'observation d'abord (D8) & \nt2 & \nt3 & \nt3 & \nt0 & 8 & condition d'adoption, pas fossé \\
+4= & le profil nommé (D11) & \nt2 & \nt3 & \nt3 & \nt0 & 8 & chaque interrupteur, ce qu'il achète, ce que son absence coûte \\
+6 & la souveraineté vérifiée par l'acheteur (D9, D13) & \nt2 & \nt2 & \nt3 & \nt1 & 8 & vraie en self-host ; test ignoré, non empaqueté \\
+7 & l'open-core (D10) & \nt2 & \nt1 & \nt3 & \nt2 & 8 & la structure s'y prête, la licence non \\
+8 & le coût $-$27\pc{} comme argument (D15) & \nt1 & \nt1 & \nt3 & \nt0 & 5 & réel sur six requêtes ; le routage est la catégorie encombrée \\
+9 & le Cadrage $-$85\pc{} comme v2 (E2) & \nt1 & \nt0 & \nt3 & \nt1 & 5 & réfuté par MZ \\
+10 & l'essaim attestable (D12) & \nt0 & \nt0 & \nt2 & \nt2 & 4 & retiré \\
+11 & la Colonne (D14) & \nt0 & \nt0 & \nt0 & \nt1 & 1 & échoue au test de la phrase \\
+\bottomrule
+\end{longtable}
+}
+
+\subsection{5.5 · La famille méthode (sur 12)}
+
+Critères : \textbf{G} générativité --- combien de résultats justes elle a produits ; \textbf{A} appliquée par la série
+à elle-même ; \textbf{I} incarnée dans un instrument (CI, banc, test) ; \textbf{T} transférable hors de Scella.
+Départage : A, puis I.
+
+{\small
+\renewcommand{\arraystretch}{1.12}
+\begin{longtable}{@{}L{0.7cm}L{5.6cm}CCCC>{\centering\arraybackslash}p{0.55cm}L{7.4cm}@{}}
+\toprule
+\textbf{rang} & \textbf{concept} & \textbf{G} & \textbf{A} & \textbf{I} & \textbf{T} & \textbf{/12} & \textbf{la raison} \\ \midrule \endhead
+\best{1=} & un garde incapable de tomber ne garde rien (G1, B9) & \nt3 & \nt3 & \nt3 & \nt3 & \best{12} & le vert gênant, les bancs à trois états, MZ qui refuse d'acquitter par construction \\
+\best{1=} & la capacité n'est pas le service (G2) & \nt3 & \nt3 & \nt3 & \nt3 & \best{12} & du «~tout est opt-in~» au profil vérifié en CI \\
+3 & la frontière se mesure (G4) & \nt3 & \nt3 & \nt3 & \nt2 & 11 & 26 → 9 crates ; «~deux sur neuf~» devenu «~un sur un~» ; l'élagage \\
+4 & vérifier hors du producteur (G3) & \nt3 & \nt2 & \nt3 & \nt3 & 11 & appliquée au code, pas aux documents (§4.1) \\
+5 & une structure plutôt qu'une discipline (G5) & \nt2 & \nt2 & \nt3 & \nt3 & 10 & «~une exemption documentée reste une exemption~» \\
+6 & faits et jugements séparés (G6) & \nt2 & \nt3 & \nt1 & \nt3 & 9 & rend les notes discutables sans les rendre arbitraires \\
+7 & les affirmations négatives s'exécutent (G7) & \nt3 & \nt1 & \nt2 & \nt3 & 9 & sa meilleure règle, et la plus violée \\
+8 & le couple et son liant (G8) & \nt3 & \nt2 & \nt0 & \nt3 & 8 & a trouvé l'injectivité, l'ordre, l'élément porteur \\
+9 & retirer l'axe extérieur (G10) & \nt1 & \nt3 & \nt0 & \nt3 & 7 & a expliqué pourquoi les couples bougeaient \\
+10 & le test de la levée (G9) & \nt2 & \nt2 & \nt0 & \nt3 & 7 & a retourné la promesse \\
+\bottomrule
+\end{longtable}
+}
+
+\subsection{5.6 · Ce qui ferait bouger le classement}
+
+{\small
+\renewcommand{\arraystretch}{1.15}
+\begin{longtable}{@{}L{7.9cm}L{4.3cm}L{4.8cm}@{}}
+\toprule
+\textbf{le chantier} & \textbf{le concept} & \textbf{l'effet} \\ \midrule \endhead
+un attestant réel appelé sur le chemin servi --- les fonctions existent --- et un registre de nœuds peuplé par un profil & la co-signature R3 & 9 → 12 : du 17\textsuperscript{e} au 6\textsuperscript{e} rang \\
+exiger la graine d'attestation dans le profil de production, par la garde de démarrage & l'attestation ed25519 & 11 → 12 : du 10\textsuperscript{e} au 6\textsuperscript{e} rang \\
+refuser un jeton OIDC sans tenant & la clé par tenant & 10 → 11 \\
+accorder une licence au vérifieur & l'open-core & 8 → 10 \\
+garder aussi le manifeste du crate \code{verify-mini}, et trancher le sort de \code{verify-meta-mini} & le re-prouveur & protège le plafond : au sommet, il ne peut que descendre \\
+\bottomrule
+\end{longtable}
+}
+
+\section{6 · Les meilleurs concepts, un par un}
+
+\subsection{6.1 · Le re-prouveur que l'auditeur lit en entier --- 15/15}
+
+\begin{these}
+\textbf{L'énoncé.} Le programme qui vérifie la preuve n'a aucune dépendance : l'auditeur en lit toute la source, la
+recompile hors ligne, et ne fait confiance qu'aux mathématiques et à son propre compilateur.
+\end{these}
+
+\textbf{Le mécanisme.} \code{verify-mini} --- 1\,159 lignes --- réécrit à la main SHA-256 (FIPS 180-4), HMAC
+(RFC 2104), un analyseur JSON et l'encodage canonique binaire. Son bloc \code{[dependencies]} est vide ; son contrat
+tient en trois codes de sortie (0 intègre, 1 échec, 2 usage). Le bundle n'embarque pas son binaire mais sa
+\emph{source} : \code{forensic-export} en inclut les sept fichiers par \code{include\_str!} --- livrer un exécutable à
+qui l'on demande de ne pas nous croire serait contradictoire.
+
+\textbf{Pourquoi réécrire de la cryptographie n'est pas ici une faute.} C'en est une par défaut, et le dépôt le
+sait. Ici elle est encadrée : vecteurs NIST et RFC 4231, recoupement octet à octet contre l'implémentation de
+référence --- en dépendance de développement seulement --- sur des chaînes piégées (guillemets, antislashs,
+caractères de contrôle, paires de substitution). Et la vérification hors ligne n'a ni aléa ni secret à protéger
+d'un canal auxiliaire.
+
+\textbf{La garde --- meilleure que la série ne le disait.} Deux tests, depuis le 29 juin, exercés par
+\code{cargo test -{}-workspace} dans «~Portes~» : l'un lit le manifeste vendoré, l'autre recompile la source vendorée
+en \code{-{}-offline} hors du dépôt et échoue dur à la première dépendance utilisée. \code{m6-check} et
+\code{p2-check} le font en outre re-prouver une chaîne broyée, puis une chaîne restaurée.
+
+\textbf{Ce qu'il ne prouve pas.} Il exige la clé du tenant : «~sans dépendance~» n'est pas «~sans clé~». Il atteste
+l'intégrité, jamais la correction. Et il ne voit pas une troncature : il faut lui donner la racine attendue, ou
+passer par \code{provenance-verify}, seul binaire qui lise le journal d'ancres.
+
+\textbf{Ce qui le ferait tomber.} Une dépendance ajoutée au \code{Cargo.toml} du crate sans être utilisée : le test
+vendoré ne la verrait pas, puisqu'il garde le manifeste vendoré, pas celui du crate. Et, hors code, la licence
+\code{UNLICENSED}.
+
+\textbf{Pourquoi il est premier.} La décomposition en couples l'avait montré (07, 08) : sept couples sur huit
+reposent sur la même chaîne HMAC. La seule chose qui compte vraiment est donc de pouvoir contrôler cet élément sans
+dépendre de celui qui l'a produit --- et c'est exactement ce que fait ce programme. Il est en tête sous les six
+perturbations, et c'est le seul concept de la grille technique à la note maximale.
+
+\subsection{6.2 · Intégrité et complétude : l'ancre --- 14/15}
+
+\begin{these}
+\textbf{L'énoncé.} Une chaîne scellée prouve que rien n'a bougé, jamais que rien n'a été retiré : le préfixe d'une
+chaîne valide est une chaîne valide. Seule une racine publiée ailleurs, avec son nombre de nœuds, rend la coupure
+visible --- et ce contrôle ne demande aucune clé.
+\end{these}
+
+\textbf{Le mécanisme.} Une ligne à champs séparés par des tabulations --- racine, nombre de nœuds --- que
+\code{provenance-dag/\allowbreak src/\allowbreak anchor.rs} refuse d'écrire si un champ contient une tabulation ou un saut de ligne : le
+format reste injectif. La route bundle publie l'ancre \emph{hors} du bundle et échoue fort plutôt que d'annoncer
+\code{anchored: true} sans ancre. \code{provenance-verify -{}-anchor -{}-run} compare d'abord les comptes, et
+seulement ensuite la racine (\loc{provenance-dag/\allowbreak src/\allowbreak anchor.rs:318-331}) : «~compte de nœuds NON concordant avec
+l'ancre publiée --- attendu $N$, obtenu $n$ (bundle tronqué ou complété)~» est un diagnostic, «~les racines
+diffèrent~» n'en est pas un. Le profil du coin l'allume (\code{EFE\_SWARM\_ANCHOR\_LOG=\allowbreak/preuve/\allowbreak anchors.log}) ; sans elle, le binaire annonce
+«~ancrage INACTIF~».
+
+\textbf{Le principe dessous : la séparation des canaux.} «~C'est cette distinction de canal, non la cryptographie,
+qui fait le travail~» (14 §7). Le même principe fait voyager la clé du tenant hors du bundle, et épingler la clé
+publique d'attestation hors bande --- n'en servir que l'empreinte \code{key\_id}, pour que la vérification ne soit pas
+circulaire.
+
+\textbf{Le vert gênant.} Le banc du Seuil, en CI, montre d'abord le bundle tronqué se re-prouver parfaitement, puis
+tomber sur l'ancre. Montrer sa garantie échouer là où elle ne s'applique pas est ce qui la rend crédible là où elle
+s'applique.
+
+\textbf{Ce qu'elle ne prouve pas.} Un producteur qui tronque \emph{avant} d'ancrer publie une ancre cohérente avec son
+mensonge. Et le journal reste chez l'opérateur : il empêche la réécriture après publication, pas la confiance.
+L'horodateur tiers RFC 3161 (M9, 23 août) la rend opposable au détenteur lui-même --- mais aucun profil ne le pose.
+
+\textbf{Pourquoi elle est deuxième.} C'est le seul mécanisme du corpus qui retire un pouvoir au détenteur de la clé
+(10, levée B). Elle ne perd un point que sur la singularité : l'ancrage est le principe des journaux de
+transparence ; ce qui est rare, c'est de l'avoir compris pour une chaîne HMAC, et de le contrôler sans clé, par un
+comptage.
+
+\subsection{6.3 · La limite livrée --- 13/15, deux fois}
+
+\begin{these}
+\textbf{L'énoncé.} L'artefact écrit lui-même ce qu'il ne prouve pas, et le type rend la surenchère impossible à
+écrire.
+\end{these}
+
+\textbf{Dans le bundle.} \code{forensic-export/src/readme.rs} génère, à l'intérieur du dossier remis à l'auditeur, le
+paragraphe qui explique comment le défaire : la déclaration «~n'établit PAS que le record n'a pas été fabriqué a
+posteriori (le déclarant et le détenteur de la clé peuvent être la même partie)~», une section intitulée «~Ce que ça
+NE prouve PAS~», et le remède à exiger --- un ancrage externe. Un test vérifie que la phrase est là.
+
+\textbf{Dans le type.} Il n'existe aucun champ «~correct~» ni «~conforme~» dans les structures que rendent
+\code{reg-evidence}, \code{audit-api} et la console : aucune interface en aval ne peut prétendre en afficher un. Un
+jeu de mappings dont un cadre ne déclare aucun trou est refusé à la construction (\code{NoDeclaredHoles}), et un
+hors-périmètre qui ne nomme pas son trou aussi (\code{SilentHole}). «~Outillé ≠ conforme~» est écrit dans chaque
+rendu (\loc{render.rs:14}).
+
+\textbf{Pourquoi c'est rare.} «~Toutes les incitations du domaine vont dans l'autre sens~» (10) : un artefact de
+conformité est d'ordinaire écrit pour clore la discussion ; celui-ci l'arme, et nomme le remède à exiger du
+fournisseur --- c'est-à-dire de lui-même.
+
+\textbf{Ce qu'elle ne fait pas.} Elle n'empêche pas un tiers d'écrire sa propre lettre d'accompagnement ; elle empêche
+que le produit serve lui-même à surpromettre. D'où F = 2 et non 3. Le 10 lui donnait l'écart le plus faible de sa
+grille --- bon partout, faible nulle part --- et c'est encore son profil.
+
+\subsection{6.4 · Le dossier re-dérivable --- 13/15}
+
+\begin{these}
+\textbf{L'énoncé.} Le dossier réglementaire n'est pas un document qu'on croit : c'est une fonction qu'on
+ré-exécute --- \code{artefact = derive(enregistrements scellés, mapping@version)}.
+\end{these}
+
+\textbf{Le mécanisme.} \code{reg-evidence} re-prouve les enregistrements avant de dériver et refuse le non-prouvé
+(\code{I-S6-\allowbreak SUR-PROUVÉ}). La lecture juridique --- «~ce nœud humain constitue l'évidence de telle exigence~» --- est
+traitée comme ce qu'elle est : une revendication versionnée, datée, hachée, qui voyage avec l'artefact. Les nœuds
+sont désignés par un langage \emph{volontairement pauvre} (type de nœud, présence ou égalité d'un champ, action
+humaine, conjonction, disjonction) : lisible par un juriste, sérialisable, déterministe, et incapable de désigner un
+nœud qui n'existe pas. Quatre cadres sont câblés --- AI Act, RGPD, CSDDD, LkSG --- et une seule capture se relit sous
+plusieurs (SUP-2024 : CSDDD, LkSG et AI Act depuis les mêmes enregistrements).
+
+\textbf{Pourquoi c'est fort.} Le risque résiduel passe du calcul à l'honnêteté du cadrage --- qui, lui, est lisible. Et
+quand la réglementation change, ce n'est pas l'artefact passé qui devient faux : c'est la version de lecture qui
+change, et l'ancienne reste interprétable.
+
+\textbf{Sa limite.} Il n'a pas de porte d'entrée propre --- \code{audit-api} n'a aucun binaire ; son collecteur est le
+Seuil --- et aucun client. C'est la limite du produit \cun{}, pas du concept : le 12 l'a dit, le meilleur actif est la
+plus mauvaise startup.
+
+\subsection{6.5 · La promesse qui les unit : le système réfutable --- et sa formulation corrigée}
+
+Le 10 l'avait trouvée, le 13 l'appelle «~la seule promesse que le code tient aujourd'hui sans réserve~» :
+
+\begin{extrait}
+«~Un système qui peut être pris en défaut : par lui-même au démarrage, par n'importe qui ensuite --- sans clé et
+sans dépendance --- et qui dit lui-même comment le défier.~»
+\end{extrait}
+
+Ses quatre pieds sont les quatre meilleurs concepts techniques, et c'est pourquoi elle est la meilleure promesse. Mais
+deux pieds ne tiennent plus tels qu'écrits. \textbf{«~Par lui-même au démarrage~»} était porté le 11 août par le
+canari de Lipschitz, qui mesurait une propriété de sûreté ; il est retiré. Le pied est aujourd'hui porté par
+\code{frontier\_boot\_guard}, qui refuse de démarrer sur des invariants de configuration : un refus réel, mais d'une
+autre nature. \textbf{«~Sans clé et sans dépendance~»} fond deux mécanismes : l'ancre est sans clé ; le vérifieur est
+sans dépendance mais exige la clé (E5). La formulation que le code tient, mot pour mot :
+
+\begin{acquis}
+«~Un système qui peut être pris en défaut : \textbf{par lui-même}, qui refuse de démarrer quand une garantie manque ;
+\textbf{par tout détenteur de la clé}, avec un programme sans dépendance qu'il lit en entier ; \textbf{par n'importe
+qui, sans clé}, sur ce qui a été retiré ; et qui écrit dans chaque livrable où s'arrête ce qu'il prouve.~»
+\end{acquis}
+
+\subsection{6.6 · La stratégie : le routage est la porte, le reçu est le fossé --- 11/12}
+
+Le seul concept de stratégie qui a survécu aux cinq pivots sans changer de sens. Le 12 le formule, le 13 en fait son
+titre, l'élagage le confirme : les deux produits ne partagent que quatre crates --- \code{forensic-export},
+\code{provenance-dag}, \code{scella-authority}, \code{scella-rfc3161}, mesurés aujourd'hui --- tous dans le socle de
+preuve. Ils se joignent par le sceau, pas par du code applicatif. Le coin et l'expansion (10/12) en sont la
+conséquence commerciale : le Registre n'ayant aucune ingestion, son collecteur est le Seuil, et la jonction est câblée
+(\code{POST /v1/swarm/reg/:id}).
+
+\textbf{Sur le coût, la conclusion du 13 tient --- pour une meilleure raison que la sienne.} Il ne faut pas vendre le
+prix, non parce que la mesure manque (elle existe, E3), mais parce qu'elle est mince et qu'elle porte sur le routage :
+27 exécutions, six requêtes, environ 2,4 centimes de dépense de référence, dont une seule requête pèse 63\pc{}. Le
+routage est précisément la catégorie où Portkey, Helicone, LiteLLM et les autres sont gratuits et mieux financés.
+
+\subsection{6.7 · La méthode : un garde incapable de tomber ne garde rien --- 12/12}
+
+Et sa jumelle, \textbf{la capacité n'est pas le service}. La première a produit le vert gênant, les bancs à trois
+états, la mesure MZ qui refuse de juger le compresseur «~sur une configuration où on ne lui demande rien~». La seconde
+a produit le constat central du 10 août --- un build par défaut ne servait aucun reçu --- puis le profil, puis
+\code{profile-check} en CI. Toutes deux sont incarnées dans des instruments qui tournent à chaque commit.
+
+Leur sœur, \textbf{«~les affirmations négatives s'exécutent avant de s'écrire~»}, est la meilleure règle de la série
+et la plus violée : trois fois dans les quinze documents (§4.1). La première recherche de cette analyse a failli
+tomber dans le même piège --- elle cherchait \code{cargo tree} et ne trouvait la garde du re-prouveur que dans des
+scripts de démonstration. C'est en lisant \code{vendor.rs} qu'elle est apparue : chercher un nom au lieu d'une
+propriété est exactement le défaut que \code{un\_seul\_analyseur.rs} décrit en tête.
+
+\section{7 · Les meilleurs latents, et ce qui est mort}
+
+\subsection{7.1 · La co-signature R3 --- pire réalisée, meilleure latente, toujours}
+
+Rien n'a bougé depuis le 11 août. La vérification est servie de bout en bout : dix motifs de dégradation nommés, la
+règle de non-élévation (I-RC9 : une co-signature invérifiable redescend le record à R4, jamais en silence), et
+\code{weakest\_rank} jusqu'au client. Et la moitié productrice est plus avancée que la série ne le disait : deux
+fonctions de production, \code{attest\_remote\_call} et \code{cosign\_stamp}, savent faire co-signer un nœud et estampiller
+R3 si la signature vérifie. Mais tous leurs appels sont dans des tests, et le seul attestant du dépôt est un
+\code{MockAttestor} marqué «~[SIMULÉ]~». C'est la conception la plus fine du corpus (F 3, R 3) et elle ne se déclenche
+jamais (V 1, P 1). Ce qui manque n'est plus une fonction : c'est un attestant réel, un appel sur le chemin servi et un
+registre de nœuds peuplé par un profil --- de quoi la faire passer de 9 à 12.
+
+\subsection{7.2 · L'attestation et l'ancre tierce --- construites, nommées, posées par personne}
+
+Ce sont les deux mécanismes qui déplacent la frontière «~tamper-evident pour un détenteur de clé~» vers «~opposable au
+détenteur lui-même~». Ils sont écrits, testés, enregistrés par le profil, annoncés au démarrage --- et aucun des neuf
+profils ne les pose. La raison est bonne (un secret, une dépendance à un tiers). Mais c'est la seule raison pour
+laquelle l'attestation n'est pas dans le haut du classement.
+
+\subsection{7.3 · L'interstice gouverné --- le plafond le plus haut, un pilier réfuté}
+
+Le 10 le disait honnêtement : c'est la levée conceptuellement la plus grande --- elle ne donne pas une propriété
+nouvelle à un objet existant, elle crée un lieu gouverné entre deux modèles. Aujourd'hui, un tiers est servi (le
+Relais, en option), un tiers n'a jamais été écrit (l'essaim médiateur), et le troisième a été réfuté par mesure : le
+compresseur du Cadrage, présent en production avec une liste \code{must\_preserve} vide, préserve 10,5\pc{} des
+entités au ratio qu'il revendique, et son champ \code{preserved} «~recopie la demande~». Le plafond reste le plus
+haut ; le chemin qui y menait est coupé tant que la préservation n'est pas démontrée.
+
+\subsection{7.4 · Ce qui est mort, et pourquoi c'est un résultat}
+
+Le partage est net. Ce qui a survécu à tous les changements de lentille et à tous les pivots est \textbf{du côté de
+la preuve} ; ce qui est mort est \textbf{du côté de l'intelligence} --- $\Phi$, les nano-robots, le runtime nano, le
+méta-essaim, la Colonne, le Flexible MLP, l'essaim médiateur, et le Cadrage trois semaines après avoir été désigné
+comme la v2. Ce n'est pas un jugement sur leur intérêt de recherche --- le canari de Lipschitz reste, selon la série,
+la chose la plus inimitable du dépôt --- c'est un constat sur ce que le produit peut défendre. Le Relais est le cas
+limite : premier composant le 5 août, il est servi aujourd'hui mais a quitté la promesse, sa souveraineté n'étant pas
+vérifiée et son extension réfutée.
+
+Rien n'est perdu : l'élagage du 3 septembre a retiré ces crates du périmètre sans rien effacer. Ils vivent dans
+l'historique git --- \code{a8f1798} pour le canari, \code{2718082} pour la sortie --- et, pour une partie, dans
+\code{\textasciitilde/\allowbreak Downloads/\allowbreak vrai/\allowbreak EFE-restored-2026-09-06}.
+
+\section{8 · Ce qu'il ne faut plus dire}
+
+{\small
+\renewcommand{\arraystretch}{1.18}
+\begin{longtable}{@{}L{4.5cm}L{6.3cm}L{6.2cm}@{}}
+\toprule
+\textbf{la phrase} & \textbf{pourquoi elle est fausse au 24 septembre} & \textbf{ce qui est vrai, et peut se dire} \\ \midrule \endhead
+«~un tiers re-prouve sans clé~» & \code{verify-mini} exige \code{-{}-key-hex} & tout détenteur de la clé re-prouve avec un programme sans dépendance ; n'importe qui, sans clé, voit ce qui a été retiré \\
+«~le reçu est trustless~» & tamper-evident pour un détenteur de clé ; l'horodateur existe, aucun profil ne le pose & opposable au détenteur lui-même dès qu'un horodateur tiers est configuré \\
+«~le cloisonnement est une impossibilité arithmétique~» & la dérivation l'est ; l'attribution du tenant échoue ouverte (\loc{oidc.rs:159-160}) & un tenant ne peut pas dériver la clé d'un autre \\
+«~petits modèles locaux, vos données restent chez vous~» & un SLM distant en https n'est qu'averti ; la frontière sort par définition & en self-host sans clé, rien ne sort --- et l'acheteur le vérifie lui-même \\
+«~$-$27\pc{}, jusqu'à $-$90\pc{}, latence 3\x{}~» & six requêtes, 2,4 centimes, routage seul ; le 3\x{} est un mode sur une classe & le routage ne paie pas le premium quand il n'est pas nécessaire (mesuré le 30 mai) \\
+«~le Cadrage réduit les tokens de 85\pc{}~» & 10,5\pc{} des entités préservées au ratio revendiqué & rien, tant que la préservation n'est pas démontrée \\
+«~un 3,8B égale un 12B grâce à $\Phi$~» & comparaison de modèles seuls ; source sortie du dépôt & --- \\
+«~$\Phi$ est pur et rejouable au bit~» & pureté jamais commitée ; lignée retirée & --- \\
+«~cet agent, dans cette version précise~» & v4 scellait le déclaré, pas le rapporté ; retiré & --- \\
+«~un essaim de SLM~» & fusion latente numérique ; retirée & --- \\
+«~deux piles re-prouvées sans dépendance~» & \code{verify-meta-mini} n'a plus de producteur & le bundle se re-prouve par \code{verify-mini} \\
+«~le vérifieur est gratuit et ouvert~» & \code{UNLICENSED} & le vérifieur est dans le bundle, lisible en entier \\
+«~la frontière tourne en production~» & jamais démarrée en configuration complète --- \nm{non mesuré} & les quatre refus de démarrer sont éprouvés en CI \\
+«~~9\,500 tests~» ; «~près de 1\,200~» & 4\,226 annotations à \code{276a03d}, dont 24 ignorées & le compte, avec sa commande et son commit \\
+\bottomrule
+\end{longtable}
+}
+
+\section{9 · La contre-épreuve de cette analyse}
+
+Une analyse qui trouve cinq erreurs dans la série doit s'infliger le même traitement. Voici les objections les plus
+dures qu'on puisse lui opposer, et ce qu'elles donnent.
+
+\begin{enumerate}[leftmargin=1.5em,itemsep=2.5pt,topsep=2pt]
+\item \textbf{«~Le haut du classement recopie la série.~»} Retirer le critère S laisse les cinq mêmes en tête (§5.3).
+Et la confrontation au code a changé des rangs contre la série : le canari, 3\textsuperscript{e} ex æquo des levées
+dans le 10, est 21\textsuperscript{e} ; R3, «~le couple le plus important~» dans le 09, reste 17\textsuperscript{e}.
+\item \textbf{«~Réécrire SHA-256 et HMAC est un défaut.~»} Par défaut, oui ; ici encadré par les vecteurs de
+référence et un recoupement octet à octet sur des chaînes piégées (§6.1). Le risque résiduel --- un analyseur qui
+accepte ce que le producteur n'écrirait pas --- est précisément ce que le recoupement verrouille.
+\item \textbf{«~L'ancre est chez l'opérateur.~»} Oui, et c'est écrit (§6.2). F = 3 est maintenu parce que la
+propriété vaut contre le détenteur à partir de la publication --- ce que la cryptographie seule ne peut pas donner.
+\item \textbf{«~La limite livrée n'est que de la documentation.~»} Non : elle est générée dans le livrable et imposée
+par le type ; un cadre sans trou ne se construit pas. Elle n'arrête pas un tiers qui surpromet à côté : F = 2.
+\item \textbf{«~Le Registre n'a ni client ni ingestion.~»} La grille technique note le concept ; le risque commercial
+est porté par la grille produit, où l'épreuve du marché reste \nm{non mesurée}.
+\item \textbf{«~Pourquoi pas R3 en tête ?~»} Parce qu'aucune co-signature n'est produite. Sans le critère V, il
+remonte au 7\textsuperscript{e} rang ex æquo ; avec un producteur, il atteindrait 12/15.
+\item \textbf{«~Le partage preuve / intelligence est un artefact de l'élagage.~»} L'élagage est une décision informée
+par la même série : la survie après le 3 septembre est en partie circulaire. Mais le partage se lit \emph{avant}
+lui, dans des faits indépendants : zéro ligne pour le médiateur et la Colonne dès le 11 août, pureté de $\Phi$ jamais
+commitée, runtime nano sans appelant, et MZ qui réfute le compresseur le 23 août. La circularité ne touche que le
+critère P --- et le haut du classement survit à son retrait.
+\item \textbf{«~Le système réfutable est surpromis.~»} En partie, et c'est corrigé mot pour mot (§6.5).
+\item \textbf{«~La notation est un jugement.~»} Oui, et elle le dit. Chaque note porte sa raison, chaque fait sa
+commande, et le haut résiste aux six perturbations.
+\item \textbf{«~La trouvaille OIDC est-elle réelle ?~»} Lue dans \code{claims\_to\_caller}, non exercée. Elle dépend
+de la configuration du fournisseur d'identité ; elle est réelle au sens où rien ne la refuse. Elle ne touche pas la
+cryptographie : elle déplace le cloisonnement d'une impossibilité arithmétique vers une convention de jeton.
+\item \textbf{«~4\,226 tests ?~»} Ce sont des annotations comptées --- 2\,748 \code{\#[test]}, 1\,478
+\code{\#[tokio::test…]} --- pas des exécutions. La suite n'a pas été rejouée aujourd'hui ; «~Portes~» l'a rejouée sur
+ce commit le 6 septembre, avec succès.
+\item \textbf{«~Vos propres négatives ont-elles été exécutées ?~»} Toutes : zéro occurrence de \code{HopKind},
+\code{SwarmMediator}, \code{EdgePlan} ; aucun producteur du format méta ; aucun profil qui pose la graine ou
+l'horodateur ; aucun champ «~conforme~» ; aucun refus du tenant système. Chacune a sa commande en annexe.
+\end{enumerate}
+
+\section{10 · Portée et limites}
+
+\begin{itemize}[leftmargin=1.3em,itemsep=1pt,topsep=2pt]
+\item \textbf{Le périmètre} est celui des quinze documents remis. Le dépôt compte 34 rapports Scella ; trois autres
+n'ont été ouverts que pour lever des renvois.
+\item \textbf{Les jugements de marché} --- qui achète, à quelle vitesse, contre qui --- ne se mesurent pas ici :
+\nm{non mesuré}, comme le disait déjà le 12.
+\item \textbf{Le démarrage de la frontière en configuration complète} (PostgreSQL, OIDC, PII, frontière réelle) :
+\nm{non mesuré} --- aucun instrument du dépôt ne le fait.
+\item \textbf{La trouvaille OIDC} est lue dans le code, pas exercée contre un fournisseur d'identité.
+\item \textbf{Les comptes de tests} sont des annotations ; la suite n'a pas été rejouée aujourd'hui.
+\item \textbf{Les notes} sont un jugement ; un désaccord sur une note est légitime, un désaccord sur un fait s'ouvre
+en une commande.
+\end{itemize}
+
+\begin{these}
+\textbf{Rappel de cadrage, inchangé depuis le 5 août.} La re-preuve atteste l'intégrité d'une suite de pas, jamais la
+correction d'une décision. Le reçu est tamper-evident pour un détenteur de clé, pas trustless pour un tiers --- sauf
+là où l'ancre, sans clé, et l'horodateur tiers, quand il est posé, déplacent cette frontière. C'est exactement ce que
+les meilleurs concepts de ce corpus ont en commun : ils ne prétendent pas davantage.
+\end{these}
+
+\section{Annexe · Rejouer chaque fait}
+
+Depuis la racine du dépôt de travail, branche \code{c1-c3}, commit \code{276a03d}. Les absences valent à cette date.
+
+{\small
+\renewcommand{\arraystretch}{1.16}
+\begin{longtable}{@{}L{4.4cm}L{12.8cm}@{}}
+\toprule
+\textbf{le fait} & \textbf{ce qui le rejoue} \\ \midrule \endhead
+les dates réelles & \code{pdfinfo <document>.pdf | grep CreationDate} \\
+le re-prouveur est sans dépendance & \code{cargo tree -p verify-mini -e normal -{}-prefix none} → une ligne \\
+sa garde date du 29 juin & \code{git log -S'vendored\_dep\_tree\_is\_literally\_empty' -{}-format='\%h \%ad' -{}-date=short | tail -1} \\
+elle précédait le 11 août & \code{git merge-base -{}-is-ancestor ab56b00 580782f \&\& echo oui} \\
+le jumeau méta est orphelin & \code{grep -rln meta\_manifest crates -{}-include='*.rs'} → seulement \code{verify-meta-mini} et \code{efe-meta-verify} \\
+sa démo appelle un crate retiré & \code{sed -n 51p scripts/demo-consensus-receipt.sh} \\
+la signature date du 8 août & \code{git log -S'EFE\_SWARM\_BUNDLE\_SIGNING\_SEED' -{}-format='\%h \%ad' -{}-date=short | tail -1} \\
+l'ancre est dans le profil du coin & \code{grep ANCHOR profiles/docker.env} \\
+aucun profil ne pose graine ni horodateur & \code{grep -l -e '\textasciicircum{}EFE\_SWARM\_BUNDLE\_SIGNING\_SEED=' -e '\textasciicircum{}EFE\_SWARM\_TSA\_URL=' profiles/*.env} → vide \\
+l'ancre tierce date du 23 août & \code{git log -S'Rfc3161Sink' -{}-format='\%h \%ad' -{}-date=short | tail -1} \\
+l'appariement injectif & \code{sed -n '98,104p' crates/efe-swarm-gateway/src/mission\_graph.rs} \\
+aucun chemin servi ne co-signe & \code{grep -rn -e 'attest\_remote\_call(' -e 'cosign\_stamp(' crates -{}-include='*.rs'} → hors définitions, tous après \code{\#[cfg(test)]} (\loc{attest.rs:164}, \loc{cosign.rs:490}) \\
+un seul analyseur & \code{cargo test -p scella-authority -{}-test un\_seul\_analyseur} \\
+le refus de démarrer & \code{sed -n '581,605p' crates/efe-swarm-gateway/src/main.rs} \\
+la couverture qui nomme ses trous & \code{sed -n '128,133p' crates/reg-evidence/src/mapping.rs} \\
+la limite écrite & \code{grep -n 'NE prouve PAS' crates/forensic-export/src/readme.rs} \\
+le repli OIDC & \code{sed -n '159,160p' crates/efe-swarm-gateway/src/oidc.rs} \\
+la source du $-$27\pc{} & \code{sed -n '77,107p' crates/efe-coordinator/R3\_LIVE\_VALIDATION.md} \\
+la mesure du Cadrage & \code{sed -n '10,30p' crates/scella-mz/MZ\_MESURE\_CADRAGE.md} \\
+l'élagage du 3 septembre & \code{git log -{}-diff-filter=D -{}-format='\%h \%ad' -{}-date=short -{}- crates/efe-meta-swarm-server/Cargo.toml} \\
+l'interstice à zéro ligne & \code{grep -rwn -e HopKind -e SwarmMediator -e EdgePlan crates -{}-include='*.rs' | wc -l} → 0 \\
+les tests & \code{git ls-files 'crates/*.rs' | xargs grep -ho '\#\textbackslash{}[test\textbackslash{}]' | wc -l} → 2\,748 ; \code{'\#\textbackslash{}[tokio::test'} → 1\,478 \\
+les fermetures & \code{cargo tree -{}-offline -{}-locked -p <racine> -e normal -{}-prefix none}, intersecté avec les 30 membres : \code{efe-swarm-gateway} 14, \code{audit-console} 8 \\
+les licences & \code{git ls-files 'crates/*.rs' | xargs grep -ho 'SPDX-License-Identifier: [A-Za-z]*' | sort | uniq -c} \\
+la CI sur ce commit & API GitHub, \code{repos/rodriguepekar-ctrl/efe/actions/runs?branch=c1-c3} → \code{276a03d}, «~Portes~», succès \\
+\bottomrule
+\end{longtable}
+}
+
+\textbf{Deux avertissements.} Les fermetures dépendent de la définition du point d'entrée : le dossier complet du
+6 septembre compte 16 et 22 crates parce qu'il ajoute \code{scella-preuve} à la passerelle ; le document 13, et celui-ci, ne
+partent que de la passerelle --- 14 et 20. Les deux chiffres sont justes, chacun sous sa définition. Et les
+comptes «~0 occurrence~» valent pour les fichiers \emph{suivis} : huit répertoires de \code{crates/} ne contiennent
+que des résidus non suivis, que \code{grep -r} compterait à tort.
+
+\end{document}

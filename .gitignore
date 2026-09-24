@@ -221,6 +221,10 @@ banc-registre/
 # PDF l'est dans le dépôt de livraison.
 docs/architecture/.dossier-complet/
 
+# L'atelier de l'analyse des concepts : textes extraits des PDF, catalogues,
+# confrontations au code. Régénérable par `pdftotext` sur les documents sources.
+docs/reports/.atelier-concepts/
+
 # Le dossier que `scripts/banc-seuil.sh` écrit : il contient VOTRE master de
 # provenance et la clé privée OIDC du banc. Le versionner publierait un master, et
 # un reçu scellé sous un master public n'oppose plus rien à personne.
