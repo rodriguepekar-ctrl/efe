@@ -26,6 +26,7 @@
 
 \setlength{\parindent}{0pt}
 \setlength{\parskip}{3.4pt}
+\setlength{\emergencystretch}{2.5em}
 \linespread{1.02}
 
 \pagestyle{fancy}\fancyhf{}
@@ -59,7 +60,8 @@
 \begin{center}
 {\Huge\bfseries\color{navy} Scella}\\[5pt]
 {\large\color{grey}\itshape La technologie — le graphe scellé, le reçu, et la frontière de ce qu'ils prouvent}\\[5pt]
-{\small\color{grey} 26 août 2026 \; · \; description technique \; · \; chaque mécanisme est décrit d'après le code qui l'implémente}
+{\small\color{grey} 26 août 2026 \; · \; description technique \; · \; chaque mécanisme est décrit d'après le code qui l'implémente}\\[1pt]
+{\small\color{grey}\itshape §4 corrigé le 29 septembre 2026}
 \end{center}
 \vspace{4pt}
 
@@ -122,9 +124,15 @@ S'y ajoute une \mm{garde de souveraineté} : l'egress est refusé, seuls les poi
 
 \section{La clé : souveraineté et cloisonnement}
 
-La clé de scellement est \mm{dérivée par tenant} par HKDF-SHA256, avec l'UUID du tenant en sel (\code{efe-audit-core/src/keys.rs}). Trois conséquences pratiques en découlent.
+La clé de scellement est \mm{dérivée par tenant} par HKDF-SHA256, avec l'UUID du tenant en sel (\code{efe-audit-core/\allowbreak src/\allowbreak keys.rs}). Trois conséquences pratiques en découlent, dont une limite.
 
-Un tenant ne peut re-prouver que son propre graphe : la clé d'un autre tenant est une valeur qu'il n'a pas et qu'il ne peut pas dériver depuis la sienne. Le cloisonnement d'un opérateur multi-clients n'est donc pas une règle applicative — c'est une impossibilité arithmétique. Ensuite, l'identifiant système est \emph{explicitement refusé} à la dérivation : il n'existe pas de clé « racine » qui re-prouverait tout, ce qui supprime la cible la plus attirante d'une compromission. Enfin — et c'est le point qui décide de la valeur du dispositif devant un tiers — \mm{la clé n'entre jamais dans un bundle}. Elle re-prouve, mais elle voyage par un canal distinct : le destinataire l'obtient du responsable de traitement. L'exemple de démonstration du dépôt va jusqu'à l'imprimer au terminal plutôt que de l'écrire sur le disque, précisément pour que ce chemin séparé soit visible.
+Un tenant ne peut re-prouver que son propre graphe : la clé d'un autre tenant est une valeur qu'il n'a pas et qu'il ne peut pas dériver depuis la sienne. Entre les clés, le cloisonnement d'un opérateur multi-clients n'est donc pas une règle applicative — c'est une impossibilité arithmétique.
+
+Ensuite, et c'est la limite, \mm{le rattachement d'un appelant à un tenant} est, lui, une règle applicative : il ne vaut que ce que vaut l'authentification. La dérivation ne refuse aucun identifiant : le tenant système reçoit sa clé comme les autres, et la passerelle la dérive même au démarrage pour éprouver le maître qu'on lui fournit (\code{efe-swarm-gateway/\allowbreak src/\allowbreak main.rs:175}). Jusqu'au 29 septembre, ce rattachement échouait ouvert : un jeton OIDC valide qui ne nommait aucun tenant était rangé dans le tenant système, le même pour tous les jetons dans ce cas, qui partageaient alors une clé et une partition du magasin. Depuis \code{27b89e1}, ce jeton est refusé en 401 (\code{oidc.rs:176-180}) : le tenant se déclare, par \code{tenant} ou par \code{tid}, et un jeton qui déclare le tenant système reste accepté, puisque c'est alors l'IdP qui le signe. Sans OIDC, le tenant est un en-tête que l'appelant pose lui-même, et son absence vaut le tenant système (\code{auth.rs:49}) : ce mode n'authentifie personne, et le rapport de démarrage l'annonce dégradé, «~dev/standalone uniquement~». Aucune clé de tenant ne re-prouve tout ; mais toutes procèdent d'un même maître, côté serveur (\code{EFE\_NANO\_AUDIT\_HMAC\_MASTER}), et c'est lui — non l'identifiant système — la cible la plus attirante d'une compromission.
+
+Enfin — et c'est le point qui décide de la valeur du dispositif devant un tiers — \mm{la clé n'entre jamais dans un bundle}. Elle re-prouve, mais elle voyage par un canal distinct : le destinataire l'obtient du responsable de traitement. L'exemple de démonstration du dépôt va jusqu'à l'imprimer au terminal plutôt que de l'écrire sur le disque, précisément pour que ce chemin séparé soit visible.
+
+{\small\color{grey}\emph{Corrigé le 29 septembre 2026. La version du 26 août écrivait que l'identifiant système est « explicitement refusé » à la dérivation, et en tirait qu'aucune clé « racine » n'existe : aucun refus n'est dans la dérivation, et le maître est cette racine. Ce que la passerelle refuse depuis \code{27b89e1}, c'est un jeton qui ne nomme aucun tenant — non le tenant système.}}
 
 \section{S2 — Servir : projeter sans jamais inventer}
 
@@ -252,7 +260,7 @@ Trois démonstrations se déduisent du même bundle, et chacune correspond à un
 \begin{itemize}[leftmargin=13pt,itemsep=2.5pt,topsep=3pt]
 \item \mm{La re-preuve sans confiance.} Le fichier d'enregistrements scellés se re-prouve avec le vérifieur à dépendances nulles, que le destinataire recompile : \ok{sortie 0}.
 \item \mm{L'altération détectée.} Une variante du fichier ne diffère que par \emph{un seul champ scellé} — le verdict de criblage sanctions d'un fournisseur, retourné de \code{FAIL} à \code{PASS}. C'est exactement la falsification qu'un dispositif de traçabilité doit attraper, et c'est la plus tentante. Le vérifieur rend \ko{sortie 1} et \emph{désigne l'enregistrement} fautif.
-\item \mm{Le dossier re-dérivable.} Les rendus réglementaires sont une \emph{vue} : le destinataire re-calcule lui-même $\mathrm{derive}(\text{records re-prouvés},\ \text{mapping@version})$ et compare. Le bundle contient la marche à suivre.
+\item \mm{Le dossier re-dérivable.} Les rendus réglementaires sont une \emph{vue} : le destinataire re-calcule lui-même $\mathrm{derive}(\text{records re-prouvés},\allowbreak\ \text{mapping@version})$ et compare. Le bundle contient la marche à suivre.
 \end{itemize}
 
 Et la clé du tenant, qui re-prouve tout cela, \mm{n'est écrite nulle part dans le bundle}. Le programme de démonstration l'imprime au terminal — c'est elle que le destinataire obtient « auprès du responsable de traitement », par un canal qui n'est pas celui du dossier. La séparation des canaux, ici encore, fait autant de travail que la cryptographie.

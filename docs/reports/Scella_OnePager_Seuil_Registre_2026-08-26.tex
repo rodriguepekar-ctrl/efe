@@ -23,7 +23,7 @@
 \setlength{\parindent}{0pt}
 \setlength{\parskip}{1.1pt}
 \setlength{\columnsep}{12pt}
-\linespread{0.94}
+\linespread{0.925}
 \pagestyle{empty}
 
 \titleformat{\section}{\color{navy}\bfseries}{}{0pt}{}
@@ -43,12 +43,12 @@
 \begin{center}
 {\LARGE\bfseries\color{navy} Scella — Le Seuil \& Le Registre}\\[2pt]
 {\small\color{grey}\itshape Les deux produits (ex-C3 et ex-C1), renommés, mesurés et ramenés à leur maturité réelle}\\[2pt]
-{\footnotesize\color{grey} 26 août 2026 \; · \; one-pager \; · \; chaque chiffre est re-mesuré ce jour, chaque affirmation porte son fichier et sa ligne}
+{\footnotesize\color{grey} 26 août 2026 (coût et re-preuve corrigés le 29 septembre) \; · \; one-pager \; · \; chaque chiffre est re-mesuré à sa date, chaque affirmation porte son fichier et sa ligne}
 \end{center}
 \vspace{1pt}
 
 \begin{these}
-\mm{Le but.} Faire qu'un appel sorti vers un modèle tiers laisse derrière lui un artefact que quelqu'un d'autre peut re-vérifier — sans clé, sans réseau, sans installer Scella — et qui écrit lui-même ce qu'il ne prouve pas.
+\mm{Le but.} Faire qu'un appel sorti vers un modèle tiers laisse derrière lui un artefact que quelqu'un d'autre peut re-vérifier — sans réseau ni Scella installé, avec la clé du client, et sans aucune clé pour voir ce qu'on en a retiré — et qui écrit lui-même ce qu'il ne prouve pas.
 
 \mm{Ce que ça résout.} Une organisation qui fait passer ses décisions par un modèle tiers ne peut, aujourd'hui, rien établir après coup : le journal appartient au fournisseur, il n'est pas scellé, et il ne survit pas au rollout. L'AI Act impose pourtant au système à haut risque de journaliser ses événements (art. 12) — et les passerelles existantes, Portkey, Helicone, LiteLLM, Cloudflare, routent, mesurent et mettent en cache sans produire aucun artefact opposable. L'écart visé n'est donc pas « router moins cher » : c'est \mm{rendre le passage re-prouvable}.
 
@@ -60,7 +60,7 @@
 \section{Le Seuil — ce qui tourne, et ce qui refuse de démarrer}
 Le Seuil est une passerelle qui exécute un consensus de modèles et rend, avec la réponse, un reçu re-prouvable. Le fait qui décide de sa vendabilité est vérifié : \code{crates/efe-swarm-gateway/src/lib.rs:1881}, test \code{selfhost\_e2e\_real}, « E2E self-host RÉEL (Ollama local, keyless) » — consensus LLM complet, records persistés, re-preuve par \code{verify/:id}, \ok{sans aucune clé d'API}. La réserve est dans le même fichier : le test porte \code{\#[ignore]} (« nécessite un Ollama local »). C'est une capacité prouvée, \ko{pas une démo empaquetée}.
 
-Le pendant de cette liberté est un refus explicite. \code{main.rs:411}, \code{frontier\_boot\_guard} : dès que la frontière payante est activée, quatre invariants doivent tenir, sinon le binaire ne démarre pas. Clé HMAC dérivable (sans elle « les reçus R4 sont \textsc{forgeables} »), authentification OIDC (sinon « egress tiers \textsc{payant} sans authentification »), store durable (sinon « les reçus R4 (la preuve) sont perdus à chaque rollout »), et la \emph{capacité} de caviarder — non le caviardage lui-même, mais le fait que son absence soit choisie et jamais subie.
+Le pendant de cette liberté est un refus explicite. \code{main.rs:411}, \code{frontier\_boot\_guard} : dès que la frontière payante est activée, quatre invariants doivent tenir, sinon le binaire ne démarre pas. Clé HMAC dérivable (sans elle « les reçus R4 sont \textsc{forgeables} »), authentification OIDC (sinon « egress tiers \textsc{payant} sans authentification »), store durable (sinon « les reçus R4 (la preuve) sont perdus à chaque rollout~»), et la \emph{capacité} de caviarder — non le caviardage lui-même, mais le fait que son absence soit choisie et jamais subie.
 
 La posture d'observation, jalon central pour qui met une passerelle dans un chemin critique, est \ok{livrée} : \code{capture.rs:140} nomme lui-même les termes usuels — \code{fail\_open} sur le chemin de capture, sous une posture \code{observe\_only} — un échec de persistance ne fait plus échouer la requête du client. Le troisième terme, \code{shadow} (capture concurrente, hors du chemin de la réponse), est \ko{délibérément non implémenté}, et le module le dit.
 
@@ -91,11 +91,11 @@ Ce qui sépare le Seuil d'une passerelle de routage, c'est l'artefact : un graph
 
 La limite est plus rare encore que la propriété, parce qu'elle est \emph{générée dans le livrable}. \code{forensic-export/src/readme.rs:32} écrit, dans le bundle remis à l'auditeur, le paragraphe qui explique comment le défaire : la déclaration « \ko{n'établit PAS} que le record n'a pas été fabriqué a posteriori (le déclarant et le détenteur de la clé peuvent être la même partie) », et, sans preuve d'ancrage externe, la re-preuve n'atteste que l'intégrité — jamais la correction, jamais la non-fabrication.
 
-C'est de là que vient le bon cadrage. « Attestable » est une catégorie saturée : tout le monde le dit. \mm{Réfutable} est presque vide — un système construit pour être pris en défaut, par lui-même au démarrage (le garde de la frontière refuse), par n'importe qui ensuite sans clé ni dépendance (les deux vérifieurs), et qui écrit lui-même le mode d'emploi du défi. C'est la seule promesse que le code tient aujourd'hui sans réserve.
+C'est de là que vient le bon cadrage. « Attestable » est une catégorie saturée : tout le monde le dit. \mm{Réfutable} est presque vide — un système construit pour être pris en défaut : par lui-même, qui refuse de démarrer quand une garantie manque ; par tout détenteur de la clé, avec un programme sans dépendance qu'il lit en entier ; par n'importe qui, sans clé, sur ce qui a été retiré ; et qui écrit dans chaque livrable où s'arrête ce qu'il prouve. C'est la seule promesse que le code tient aujourd'hui sans réserve.
 
 \section{Ce qu'il ne faut pas vendre}
 \begin{alerte}
-\mm{L'argument de coût n'a pas de source.} Le mémo du 19 août vendait le Seuil sur le prix (« $-27\,\%$ agrégé, jusqu'à $-90\,\%$ ») ; \ko{aucune de ces mesures n'existe dans le dépôt}, et le levier qui les aurait produites a été tué depuis : MZ (23 août) mesure le Cadrage à un meilleur point de $22{,}6\,\%$ de préservation, zéro palier sur douze à $99\,\%$, et établit que \code{must\_preserve} est un paramètre \emph{inerte}. \mm{Vendre le reçu, pas le prix.}
+\mm{L'argument de coût a une source.} Le mémo du 19 août vendait le Seuil sur le prix («~$-27\,\%$ agrégé, jusqu'à $-90\,\%$~») ; la mesure date du 30 mai (\code{R3\_LIVE\_VALIDATION.md:77-107}) : 27 exécutions, six requêtes, SLM non câblé, 2,4 centimes de référence dont $63\,\%$ pour la seule génération de code. Routage $-28\,\%$, pré-mâchage $+3{,}5\,\%$, ensemble $-27{,}5\,\%$ : le levier est le \emph{routage}, pas la compression, que MZ (23 août) a réfutée. \mm{Vendre le reçu, pas le prix} : la mesure est mince, et le routage, la catégorie encombrée.
 \end{alerte}
 Trois autres réserves, toutes vérifiées ce jour. \ko{La frontière n'a jamais démarré en configuration complète} : ce n'est pas un manque de code — les deux jeux complets compilent, \emph{re-vérifiés ce jour} (\code{postgres,oidc,pii,reg-evidence}, puis le même \code{+frontier-llm} ; sortie 0) — mais une mise en service jamais faite. Le compilateur y laisse la trace de ce qu'aucune CI ne regarde : \code{reg\_pont.rs:252} calcule le nombre de fichiers du dossier réglementaire et le \ko{jette}, faute d'un champ pour le porter dans \code{RegReport}. \ko{Sauvegarde : zéro occurrence} dans les trois crates de service ; un registre de conservation longue sans plan de restauration est une promesse qu'un DPO démonte en une question. \ko{Rotation de clé : une seule occurrence}, \code{audit-console/src/server.rs:39}, et elle renvoie explicitement \emph{hors} du produit.
 
@@ -103,11 +103,11 @@ Trois autres réserves, toutes vérifiées ce jour. \ko{La frontière n'a jamais
 Deux semaines de travail nommé — mise en service du profil complet, puis sauvegarde et rotation. Ce n'est pas ce qui manque. L'objectif est déclaré depuis le 19 août (fonder une startup) ; ce qui manque est d'un autre ordre : \ko{aucun interlocuteur extérieur n'est nommé}, ni prospect, ni client, ni partenaire de conception. La semaine décisive du plan de douze semaines — \emph{un prospect installe-t-il le Seuil en mode observation ?} — n'est donc jamais arrivée. Le risque est la distribution, pas le produit.
 
 \section{Deux corrections nées de la vérification}
-\mm{1.} Le compte de tests du Seuil circulait à \textbf{977}. C'était le compte de \code{\#[test]} seul : en ajoutant les \textbf{348} \code{\#[tokio::test]}, le chiffre réel est \textbf{1\,329}. Invisible sur le Registre, qui n'a \emph{aucun} test asynchrone : son chiffre tombait juste par accident. \mm{2.} \code{frontier\_boot\_guard} s'annonce en « triade » et son test s'appelle \code{..\_enforces\_the\_triad} ; il applique \textbf{quatre} invariants depuis M4 §2.2, et son propre corps écrit « le quatrième invariant ». Le nom est resté au stade d'avant.
+\mm{1.} Le compte de tests du Seuil circulait à \textbf{977}. C'était le compte de \code{\#[test]} seul : en ajoutant les \textbf{348} \code{\#[tokio::test]}, le chiffre réel est \textbf{1\,329}. Invisible sur le Registre, qui n'a \emph{aucun} test asynchrone : son chiffre tombait juste par accident. \mm{2.} \code{frontier\_boot\_guard} s'annonce en «~triade~» et son test s'appelle \code{..\_enforces\_the\_triad} ; il applique \textbf{quatre} invariants depuis M4 §2.2, et son propre corps écrit « le quatrième invariant ». Le nom est resté au stade d'avant.
 
 
 \section{L'essayer}
-\code{docker compose up} amène le Seuil, produit un run scellé et le re-prouve \emph{sans clé} : exécuté le 24 août (sortie 0, cinq étapes, troncature démasquée), \emph{non} rejoué ce jour — le démon Docker de cette machine est arrêté.
+\code{docker compose up} amène le Seuil, produit un run scellé et démasque \emph{sans clé} une troncature ; la re-preuve complète, elle, demande la clé. Exécuté le 24 août (sortie 0, cinq étapes), \emph{non} rejoué ce jour — le démon Docker de cette machine est arrêté.
 
 \end{multicols}
 \end{document}
