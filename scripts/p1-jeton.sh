@@ -38,7 +38,13 @@
 #    aud     `efe-llm` pour la frontière (EFE_OIDC_LLM_AUDIENCE) ; pour le chemin
 #            souverain, la validation d'audience est DÉSACTIVÉE tant que
 #            EFE_OIDC_AUDIENCE n'est pas posée.
-#    tenant  ou `tid`. Absent ⟹ le tenant système.
+#    tenant  ou `tid` — EXIGÉ. Ce bloc disait « Absent ⟹ le tenant système » :
+#            c'était vrai, et c'était le défaut. Deux organisations dont l'IdP
+#            n'émettait pas la claim partageaient une clé et un magasin, sans
+#            que rien ne le signale. Fermé le 29 septembre 2026 : absent, vide
+#            ou blanc ⟹ 401 (`oidc::claims_to_caller`). Ce script en émet
+#            toujours un — par défaut le tenant système …0001, DÉCLARÉ, donc
+#            accepté : c'est le repli qui est refusé, pas le tenant.
 #    roles   ou `realm_access.roles`. C'est ce qui décide l'accès aux routes
 #            d'audit (`auditor`) et d'action.
 #

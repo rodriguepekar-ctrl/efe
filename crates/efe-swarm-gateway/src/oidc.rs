@@ -9,13 +9,12 @@
 use jsonwebtoken::{decode, Algorithm, DecodingKey, Validation};
 use serde::Deserialize;
 
-use efe_nano_sdk::TenantId;
-
 use crate::auth::Caller;
 use crate::error::GatewayError;
 
-/// Claims OIDC reconnues. `tenant`/`tid` portent le tenant ; `roles` (ou `realm_access.roles`
-/// façon Keycloak) portent le RBAC. `exp`/`iss`/`aud` sont validés par `jsonwebtoken`.
+/// Claims OIDC reconnues. `tenant`/`tid` portent le tenant — l'un des deux est EXIGÉ (voir
+/// [`claims_to_caller`]) ; `roles` (ou `realm_access.roles` façon Keycloak) portent le RBAC.
+/// `exp`/`iss`/`aud` sont validés par `jsonwebtoken`.
 #[derive(Debug, Deserialize)]
 struct Claims {
     #[allow(dead_code)]
@@ -148,21 +147,42 @@ impl OidcVerifier {
         Ok(Some(Self::from_pem(&pem, issuer.as_deref(), Some(&audience))?))
     }
 
-    /// Vérifie le jeton → `Caller`. Signature/exp/iss/aud invalides → 401.
+    /// Vérifie le jeton → `Caller`. Signature/exp/iss/aud invalides → 401 ; jeton sans tenant → 401.
     pub fn verify(&self, token: &str) -> Result<Caller, GatewayError> {
         let data = decode::<Claims>(token, &self.key, &self.validation)
             .map_err(|e| GatewayError::Unauthenticated(format!("JWT invalide : {e}")))?;
-        Ok(claims_to_caller(data.claims))
+        claims_to_caller(data.claims)
     }
 }
 
-fn claims_to_caller(c: Claims) -> Caller {
-    let tenant = c.tenant.or(c.tid).filter(|s| !s.is_empty()).unwrap_or_else(|| TenantId::system().to_string());
+/// **Le tenant se DÉCLARE, il ne se devine pas.**
+///
+/// Cette fonction rangeait un jeton sans `tenant` ni `tid` dans le tenant système — le même pour
+/// tous les jetons dans ce cas. La dérivation restait cloisonnée, mais l'ATTRIBUTION échouait
+/// ouverte : selon la configuration de l'IdP, deux organisations partageaient une clé et un
+/// magasin sans que rien ne le signale. `profiles/production.env` exigeait pourtant déjà un
+/// jeton « portant `aud`, `tenant` (ou `tid`) et `roles` » ; le code ne le tenait pas.
+///
+/// Refus en **401** plutôt qu'en 403 : le jeton est authentique, mais il ne vaut pas titre pour
+/// ce serveur — le remède est côté IdP (émettre la claim), pas dans les rôles.
+///
+/// Une claim vide ou blanche compte pour absente, et c'est AVANT le repli sur `tid` qu'on l'écarte :
+/// filtrer après `or` rendait `tenant: ""` prioritaire sur un `tid` valide.
+///
+/// Un jeton qui DÉCLARE le tenant système (`system` ou son UUID) reste accepté : c'est une
+/// attribution signée par l'IdP, pas un défaut.
+fn claims_to_caller(c: Claims) -> Result<Caller, GatewayError> {
+    let presente = |s: &String| !s.trim().is_empty();
+    let tenant = c.tenant.filter(presente).or(c.tid.filter(presente)).ok_or_else(|| {
+        GatewayError::Unauthenticated(
+            "jeton sans tenant : ni `tenant` ni `tid` — l'IdP doit émettre l'un des deux".into(),
+        )
+    })?;
     let mut roles = c.roles.unwrap_or_default();
     if let Some(ra) = c.realm_access {
         roles.extend(ra.roles);
     }
-    Caller { tenant, roles }
+    Ok(Caller { tenant, roles })
 }
 
 /// Extrait le jeton d'un en-tête `Authorization: Bearer <token>`.
@@ -372,6 +392,182 @@ mod tests_algorithme {
             Err(e) => format!("{e}"),
         };
         assert!(m.contains("EC") && m.contains("RSA"), "le refus doit dire ce qui EST accepté : {m}");
+    }
+}
+
+// ═════════════════════════════════════════════════════════════════════════════════════════════
+//  L'attribution du tenant — un jeton valide qui ne porte ni `tenant` ni `tid`
+// ═════════════════════════════════════════════════════════════════════════════════════════════
+
+/// ## L'histoire de ce module, parce qu'elle fait partie de la preuve
+///
+/// Ses deux premiers tests ont d'abord été écrits pour affirmer le DÉFAUT : un jeton valide sans
+/// tenant recevait le tenant système (même clé pour deux organisations), et en HTTP
+/// l'organisation B re-prouvait le run de A (200). Ils étaient verts sur le code fautif. Le
+/// correctif posé, SANS toucher aux tests, les a fait tomber tous les deux — l'un sur
+/// `Unauthenticated("jeton sans tenant …")`, l'autre sur `401 ≠ 200` — pendant que le témoin
+/// restait vert. Ils ont ensuite été retournés en gardes du comportement corrigé.
+///
+/// Aucun test ne branchait `with_oidc` sur le routeur avant celui-ci : le chemin essaim sous
+/// OIDC n'avait jamais été joué en HTTP — seul le chemin frontière l'était.
+#[cfg(test)]
+mod tests_attribution {
+    use super::fixture::{sign, verifieur_llm, TEST_PUB};
+    use super::{Caller, GatewayError, OidcVerifier};
+    use crate::SwarmGatewayState;
+    use axum::body::Body;
+    use axum::http::{Request, StatusCode};
+    use efe_nano_sdk::TenantId;
+    use http_body_util::BodyExt;
+    use serde_json::{json, Value};
+    use std::sync::Arc;
+    use tower::ServiceExt; // oneshot
+
+    const ISS: &str = "https://idp.example";
+    const AUD: &str = "efe-swarm";
+    const EXP: i64 = 9_999_999_999;
+
+    /// Un vérifieur qui exerce les QUATRE contrôles de `jsonwebtoken` : signature, `exp`, `iss`,
+    /// `aud`. Un jeton qui passe ici n'a plus rien à prouver — sauf son tenant.
+    fn verifieur() -> OidcVerifier {
+        OidcVerifier::from_pem(TEST_PUB, Some(ISS), Some(AUD)).expect("clé de test")
+    }
+
+    /// Un jeton valide sur les quatre contrôles. `org_id` est la claim d'organisation d'Auth0 :
+    /// l'IdP DISTINGUE les deux organisations, mais dans une claim que la passerelle ne lit pas.
+    fn jeton(sub: &str, org_id: &str, tenant: Option<&str>) -> String {
+        let mut c = json!({
+            "sub": sub, "org_id": org_id, "iss": ISS, "aud": AUD,
+            "roles": ["operator"], "exp": EXP
+        });
+        if let Some(t) = tenant {
+            c["tenant"] = json!(t);
+        }
+        sign(c)
+    }
+
+    /// Le refus attendu : un 401 qui NOMME ce qui manque — sans quoi l'exploitant chercherait
+    /// dans ses rôles un défaut qui est dans la configuration de son IdP.
+    fn refus_401(r: Result<Caller, GatewayError>) -> String {
+        match r {
+            Err(GatewayError::Unauthenticated(m)) => {
+                assert!(m.contains("tenant") && m.contains("tid"), "le refus doit nommer les deux claims : {m}");
+                m
+            }
+            autre => panic!("attendu un refus 401 (Unauthenticated), obtenu {autre:?}"),
+        }
+    }
+
+    fn app() -> axum::Router {
+        crate::router(SwarmGatewayState::in_memory().with_oidc(Arc::new(verifieur())))
+    }
+
+    /// Exécute un run sous `jeton` et rend `(statut, corps)`.
+    async fn run_sous(app: &axum::Router, jeton: &str) -> (StatusCode, Value) {
+        let req = Request::builder()
+            .method("POST")
+            .uri("/v1/swarm/run")
+            .header("content-type", "application/json")
+            .header("authorization", format!("Bearer {jeton}"))
+            .body(Body::from(json!({ "task": { "text": "x" }, "topology": { "kind": "auto" } }).to_string()))
+            .unwrap();
+        let resp = app.clone().oneshot(req).await.unwrap();
+        let statut = resp.status();
+        let bytes = resp.into_body().collect().await.unwrap().to_bytes();
+        (statut, serde_json::from_slice(&bytes).unwrap_or(Value::Null))
+    }
+
+    /// Re-prouve `run_id` sous `jeton` et rend le statut.
+    async fn verifier_sous(app: &axum::Router, run_id: &str, jeton: &str) -> StatusCode {
+        let req = Request::builder()
+            .uri(format!("/v1/swarm/verify/{run_id}"))
+            .header("authorization", format!("Bearer {jeton}"))
+            .body(Body::empty())
+            .unwrap();
+        app.clone().oneshot(req).await.unwrap().status()
+    }
+
+    /// **LE DÉFAUT, FERMÉ.** Deux jetons valides sur les quatre contrôles, deux organisations pour
+    /// l'IdP, ni `tenant` ni `tid` : ils recevaient le tenant système, donc la même clé. Refusés
+    /// désormais — et par les DEUX vérifieurs. Essaim et frontière partagent `claims_to_caller` ;
+    /// le second cas le MESURE plutôt que de le déduire de la lecture du code.
+    #[test]
+    fn un_jeton_valide_sans_tenant_ni_tid_est_refuse_401() {
+        let v = verifieur();
+        refus_401(v.verify(&jeton("u-a", "org_A", None)));
+        refus_401(v.verify(&jeton("u-b", "org_B", None)));
+
+        // Le chemin frontière (egress PAYANT) : audience épinglée `efe-llm`, même refus.
+        let frontiere = sign(json!({ "sub": "u-a", "aud": "efe-llm", "roles": ["operator"], "exp": EXP }));
+        refus_401(verifieur_llm().expect("vérifieur de test").verify(&frontiere));
+    }
+
+    /// **LE DÉFAUT, FERMÉ EN HTTP.** Le run est créé sous un jeton qui DÉCLARE le tenant système,
+    /// dans la forme EXACTE que fabriquait l'ancien repli (`TenantId::system().to_string()`) : le
+    /// magasin compare des chaînes (`store.rs`), si bien qu'une autre forme (`"system"`) aurait
+    /// rendu 404 même sur le code fautif, et ce test n'aurait rien mesuré.
+    ///
+    /// Sur le code fautif, le jeton sans tenant exécutait (200) et relisait ce run (200). Désormais :
+    /// 401 à la porte, dans les deux cas. Le déclarant, lui, re-prouve toujours son run.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn en_http_un_jeton_sans_tenant_est_refuse_401_et_ne_lit_plus_le_tenant_systeme() {
+        let app = app();
+        let declarant = jeton("u-op", "org_ops", Some(&TenantId::system().to_string()));
+        let (statut, corps) = run_sous(&app, &declarant).await;
+        assert_eq!(statut, StatusCode::OK, "le tenant système DÉCLARÉ reste accepté");
+        let run_id = corps["run_id"].as_str().expect("run_id").to_string();
+
+        let sans = jeton("u-b", "org_B", None);
+        let (statut, corps) = run_sous(&app, &sans).await;
+        assert_eq!(statut, StatusCode::UNAUTHORIZED, "exécuter sans tenant : 401");
+        assert_eq!(corps["error"], json!("unauthenticated"));
+        assert!(
+            corps["message"].as_str().is_some_and(|m| m.contains("tenant")),
+            "le corps dit ce qui manque : {corps}"
+        );
+        assert_eq!(verifier_sous(&app, &run_id, &sans).await, StatusCode::UNAUTHORIZED, "relire sans tenant : 401");
+        assert_eq!(verifier_sous(&app, &run_id, &declarant).await, StatusCode::OK, "le déclarant re-prouve");
+    }
+
+    /// Une claim vide compte pour absente, et c'est AVANT le repli sur `tid` qu'on l'écarte.
+    /// L'ancien code filtrait APRÈS `or` : `tenant: ""` masquait un `tid` valide, et le jeton
+    /// tombait… dans le tenant système. Une claim blanche, seule, est refusée comme une absente.
+    #[test]
+    fn une_claim_tenant_vide_cede_a_tid_et_une_claim_blanche_seule_est_refusee() {
+        const T: &str = "33333333-3333-3333-3333-333333333333";
+        let v = verifieur();
+
+        let vide_puis_tid = sign(json!({ "sub": "u", "iss": ISS, "aud": AUD, "exp": EXP, "tenant": "", "tid": T }));
+        assert_eq!(v.verify(&vide_puis_tid).expect("le tid est valide").tenant, T, "`tid` prend le relais");
+
+        let tid_seul = sign(json!({ "sub": "u", "iss": ISS, "aud": AUD, "exp": EXP, "tid": T }));
+        assert_eq!(v.verify(&tid_seul).expect("le tid suffit").tenant, T, "`tid` seul (façon Entra ID)");
+
+        let blanche = sign(json!({ "sub": "u", "iss": ISS, "aud": AUD, "exp": EXP, "tenant": "   " }));
+        refus_401(v.verify(&blanche));
+    }
+
+    /// **LE TÉMOIN** — il tient avant ET après le correctif. Deux tenants DÉCLARÉS : deux clés,
+    /// et B ne voit pas le run de A. Le cloisonnement fonctionne ; seule l'attribution faillit.
+    /// Sans ce témoin, un test qui verrait « la même clé » ne prouverait rien — il pourrait
+    /// aussi bien mesurer un instrument incapable de distinguer.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn temoin_deux_tenants_declares_sont_cloisonnes() {
+        const TA: &str = "11111111-1111-1111-1111-111111111111";
+        const TB: &str = "22222222-2222-2222-2222-222222222222";
+        let (ja, jb) = (jeton("u-a", "org_A", Some(TA)), jeton("u-b", "org_B", Some(TB)));
+
+        let v = verifieur();
+        let s = SwarmGatewayState::in_memory();
+        let (a, b) = (v.verify(&ja).unwrap(), v.verify(&jb).unwrap());
+        assert_ne!(s.derive_key(&a.tenant).unwrap(), s.derive_key(&b.tenant).unwrap(), "deux clés");
+
+        let app = app();
+        let (statut, corps) = run_sous(&app, &ja).await;
+        assert_eq!(statut, StatusCode::OK);
+        let run_id = corps["run_id"].as_str().expect("run_id").to_string();
+        assert_eq!(verifier_sous(&app, &run_id, &jb).await, StatusCode::NOT_FOUND, "B ne voit rien");
+        assert_eq!(verifier_sous(&app, &run_id, &ja).await, StatusCode::OK, "A re-prouve son run");
     }
 }
 
