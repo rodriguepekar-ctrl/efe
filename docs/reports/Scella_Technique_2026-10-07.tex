@@ -1,0 +1,273 @@
+\documentclass[10pt]{extarticle}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage[french]{babel}
+\frenchsetup{AutoSpacePunctuation=false}
+\usepackage{newpxtext,newpxmath}
+\usepackage[a4paper,top=1.25cm,bottom=1.2cm,left=1.3cm,right=1.3cm]{geometry}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{titlesec}
+\usepackage[most]{tcolorbox}
+\usepackage{enumitem}
+\usepackage{array}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{fancyhdr}
+
+\definecolor{navy}{HTML}{1F3A5F}
+\definecolor{grey}{HTML}{54606E}
+\definecolor{green}{HTML}{2C6E49}
+\definecolor{red}{HTML}{A6322E}
+\definecolor{boxgray}{HTML}{F3F5F8}
+\definecolor{boxred}{HTML}{FCF2F1}
+\definecolor{boxedge}{HTML}{D9E0EA}
+\definecolor{boxcode}{HTML}{F7F8FA}
+
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{2.2pt}
+\setlength{\tabcolsep}{4pt}
+\setlength{\emergencystretch}{2.5em}
+\linespread{1.0}
+
+\pagestyle{fancy}\fancyhf{}
+\lhead{\small\color{grey}Scella}
+\rhead{\small\color{grey}La technique, en trois pages --- 7 octobre 2026}
+\cfoot{\small\color{grey}\thepage\,/\,3}
+\renewcommand{\headrulewidth}{0.3pt}
+
+\titleformat{\section}{\color{navy}\large\bfseries}{}{0pt}{}
+\titlespacing{\section}{0pt}{7pt}{2pt}
+
+\newtcolorbox{these}{colback=boxgray,colframe=boxedge,boxrule=0.5pt,arc=2pt,
+  left=7pt,right=7pt,top=3pt,bottom=3pt}
+\newtcolorbox{alerte}{colback=boxred,colframe=red!55,boxrule=0.7pt,arc=2pt,
+  left=7pt,right=7pt,top=3pt,bottom=3pt}
+\newtcolorbox{extrait}{colback=boxcode,colframe=boxedge,boxrule=0.5pt,arc=1.5pt,
+  left=7pt,right=7pt,top=2pt,bottom=2pt}
+
+\newcommand{\code}[1]{\texttt{\small #1}}
+\newcommand{\loc}[1]{{\footnotesize\color{grey}\texttt{#1}}}
+\newcommand{\mm}[1]{\textbf{\textcolor{navy}{#1}}}
+\newcolumntype{L}[1]{>{\raggedright\arraybackslash}p{#1}}
+
+\begin{document}
+
+\begin{center}
+{\LARGE\bfseries\color{navy} Scella --- la technique}\\[3pt]
+{\large\color{grey}\itshape Un seul projet, un seul sceau : du point de passage au dossier réglementaire}\\[3pt]
+{\footnotesize\color{grey} 7 octobre 2026 \; · \; mesuré au commit \texttt{fb710b5} \; · \; chaque mécanisme porte son
+fichier et sa ligne, relatifs à \texttt{crates/}}
+\end{center}
+\vspace{1pt}
+
+\begin{these}
+\mm{L'architecture en une phrase.} Un point de passage (\code{efe-swarm-gateway}) scelle chaque appel de modèle dans
+une chaîne HMAC. Un export en fait un dossier autoportant, re-prouvé par un vérifieur sans dépendance et protégé de la
+troncature par une ancre publiée ailleurs. Un moteur (\code{reg-evidence}) en dérive les dossiers réglementaires sous
+une lecture juridique datée, servis par une console (\code{audit-console}). Le passage et le dossier ne partagent que
+quatre composants, tous dans le socle de preuve --- \code{provenance-dag}, \code{forensic-export},
+\code{scella-authority}, \code{scella-rfc3161} --- et ne se touchent par rien d'autre.
+\end{these}
+
+\section{1 · Le modèle de confiance : contre quoi chaque mécanisme tient}
+
+{\small
+\renewcommand{\arraystretch}{1.13}
+\begin{longtable}{@{}L{3.9cm}L{6.4cm}L{3.9cm}L{3.3cm}@{}}
+\toprule
+\textbf{la menace} & \textbf{le mécanisme} & \textbf{où} & \textbf{sa limite} \\ \midrule \endhead
+altérer ou réordonner un enregistrement & chaîne HMAC sur un encodage canonique binaire ; la re-preuve désigne
+l'indice fautif & \loc{provenance-dag/\allowbreak src/\allowbreak dag.rs} & re-prouver exige la clé du client \\
+publier la moitié qui arrange & ancre hors du bundle : racine et nombre de nœuds ; contrôle par comptage, sans clé &
+\loc{provenance-dag/\allowbreak src/\allowbreak anchor.rs} & le journal reste chez l'opérateur, sauf horodatage tiers \\
+faire croire l'outil de l'éditeur & vérifieur à arbre de dépendances vide, dont la source est vendorée dans le bundle &
+\loc{verify-mini} ; \loc{forensic-export/\allowbreak src/\allowbreak vendor.rs} & --- \\
+prétendre un panel de modèles & topologie déclarée, appariement injectif des appels réellement effectués &
+\loc{efe-swarm-gateway/\allowbreak src/\allowbreak mission\_graph.rs:98} & prouve la conformité à la déclaration, pas
+son ambition \\
+laisser sortir des données sans le savoir & caviardage avant le sceau ; refus de démarrer sans la capacité, sauf aveu
+explicite & \loc{routes/\allowbreak llm.rs:347} ; \loc{main.rs:581} & sans politique client, le texte sort --- c'est
+écrit \\
+surpromettre avec le produit lui-même & aucun champ «~conforme~» ; un cadre sans trou déclaré est refusé ; chaque
+bundle écrit ce qu'il ne prouve pas & \loc{reg-evidence/\allowbreak src/\allowbreak mapping.rs:128} ;
+\loc{forensic-export/\allowbreak src/\allowbreak readme.rs} & n'empêche pas un tiers d'écrire autre chose à côté \\
+contourner la garde d'egress & un seul analyseur d'URL dans tout le dépôt, et un test qui interdit le second &
+\loc{scella-authority/\allowbreak tests/\allowbreak un\_seul\_analyseur.rs} & --- \\
+citer un fait qui n'existe pas & une arête vers un nœud non scellé est refusée ; les sélecteurs ne savent pas inventer
+un nœud & \loc{provenance-dag} ; \loc{reg-evidence/\allowbreak src/\allowbreak selector.rs:91} & --- \\
+\bottomrule
+\end{longtable}
+}
+
+\section{2 · Le socle scellé}
+
+\begin{extrait}
+\centering
+$\textit{chaîne}_0 = \mathrm{SHA256}(\textit{GENESIS}) \qquad
+\textit{sceau}_i = \mathrm{HMAC}\bigl(K_{\textit{client}},\ \textit{chaîne}_{i-1} \,\|\, \mathrm{canonical}(n_i)\bigr)
+\qquad \textit{racine} = \textit{chaîne}_n$
+\end{extrait}
+
+Le sceau ne porte pas sur le JSON, qui admet plusieurs écritures d'un même fait, mais sur un \mm{encodage binaire
+canonique et injectif} : une ré-implémentation indépendante retrouve la même racine, octet pour octet. Le JSONL ne
+sert qu'au stockage lisible. La \mm{grammaire} est fermée, quatre nœuds : l'acte d'un agent (entrée hachée, sortie
+conservée), l'arête typée, l'évidence figée avant d'être consommée, l'action humaine. Chaque identifiant porte son cas
+(\code{\{cas\}::\{étape\}}), et une référence vers un nœud non encore scellé est refusée à l'insertion.
+
+Les \mm{clés} sont dérivées par client : HKDF-SHA256, sel = UUID du client (\loc{efe-audit-core/\allowbreak
+src/\allowbreak keys.rs:89-91}) ; côté dossier, $K = \mathrm{HMAC}(\textit{racine}, \texttt{efe-prov-dag:v1:tenant:}
+\,\|\, \textit{client})$ (\loc{provenance-dag/\allowbreak src/\allowbreak key.rs}). La clé ne voyage jamais dans le
+bundle : elle passe par un canal distinct, et c'est cette séparation, autant que la cryptographie, qui fait la preuve.
+SHA-256 (FIPS 180-4) et HMAC (RFC 2104) sont écrits sans bibliothèque et validés par les vecteurs NIST et RFC 4231.
+L'ordre de la chaîne suit les coordonnées du substrat, \code{(version, pointer)}, jamais l'horloge : le même ensemble
+d'enregistrements donne la même racine, quel que soit l'ordre d'exécution des agents. L'effacement RGPD se fait par
+destruction de clé (\loc{provenance-dag/\allowbreak src/\allowbreak shred.rs}) : la chaîne reste re-prouvable.
+
+\section{3 · Le point de passage}
+
+\begin{itemize}[leftmargin=1.2em,itemsep=1.5pt,topsep=1pt]
+\item \mm{Le chemin d'un appel} est écrit dans le code (\loc{routes/\allowbreak llm.rs:347}) : rôle → garde → borne
+et caviardage → admission → périmètre → exécution → sceau. Le caviardage précède le hachage scellé : le sceau couvre
+ce qui est réellement sorti. Le plafond de dépense s'applique même sans politique client, et la conversion sature vers
+le budget d'origine (\loc{routes/\allowbreak llm.rs:281-307}).
+\item \mm{Cinq topologies} sont servies --- vote, relay, debate, specialist, cascade (\loc{mission\_graph.rs:268-333}).
+L'appariement \emph{consomme} l'enregistrement retenu (\code{Option::take}) : trois appels déclarés au même fournisseur
+ne peuvent pas pointer le même enregistrement. Le verdict est décomposé : la chaîne peut être intègre pendant que le
+pont vers les appels est rompu, et le reçu dit lequel.
+\item \mm{Le refus de démarrer} (\loc{main.rs:581}) exige quatre invariants, par ordre de gravité : une clé HMAC
+dérivable ; l'authentification OIDC --- un jeton sans tenant est refusé, 401 (\loc{oidc.rs:174}) ; un stockage durable
+; la capacité de caviarder, ou un aveu explicite de sortie en clair.
+\item \mm{La posture d'observation} (\loc{capture.rs:173}) : \code{fail\_open} sur la capture, \code{observe\_only}.
+Un échec d'enregistrement ne fait pas échouer la requête du client : le passage n'ajoute pas de panne au chemin
+critique.
+\item \mm{La garde d'egress} repose sur un seul analyseur d'autorité. Un point d'accès distant en clair est refusé ;
+distant mais chiffré, il est signalé au démarrage (\loc{frontier.rs:206-237}).
+\item \mm{Trois profils nommés}, vérifiés en CI : le coin (export, ancre, observation), la jonction (plus le dossier
+réglementaire), la production (plus base durable, OIDC, caviardage, modèles distants).
+\end{itemize}
+
+\section{4 · Re-preuve, ancre, attestation}
+
+\begin{itemize}[leftmargin=1.2em,itemsep=1.5pt,topsep=1pt]
+\item \mm{Le vérifieur} \code{verify-mini} : bloc \code{[dependencies]} vide, 1\,159 lignes, trois codes de sortie
+(0 intègre, 1 altéré, 2 usage). Sa source --- sept fichiers --- est vendorée dans chaque bundle. Un test la recompile
+hors ligne, hors du dépôt, et échoue dur à la première dépendance
+(\loc{forensic-export/\allowbreak tests/\allowbreak trustless\_end\_to\_end.rs:39}) ; un autre lit le manifeste vendoré
+(\loc{vendor.rs:191}). Sa fidélité est prouvée par recoupement octet à octet contre \code{provenance-dag}, chaînes
+piégées comprises.
+\item \mm{L'ancre} est une ligne à champs tabulés --- racine, nombre de nœuds. Un champ contenant une tabulation ou un
+saut de ligne est refusé : le format reste injectif (\loc{anchor.rs:101-122}). Elle est publiée hors du bundle ; sans
+elle, le binaire annonce «~ancrage INACTIF~» au démarrage (\loc{main.rs:419}). \emph{Sans clé}, on compare le nombre
+de nœuds du bundle à celui de l'ancre ; \emph{avec la clé}, \code{provenance-verify} compare le compte, puis la racine
+(\loc{anchor.rs:318}).
+\item \mm{En option}, nommées dans le profil mais posées par aucun par défaut : la signature ed25519 de la racine ---
+champ absent, jamais vide, et seule l'empreinte de la clé publique est servie (\loc{routes/\allowbreak bundle.rs:91})
+--- et l'horodatage tiers RFC 3161, qui enveloppe l'ancre sans la remplacer.
+\item \mm{La co-signature de nœud} : la vérification est servie, avec sa règle de non-élévation --- une co-signature
+invérifiable redescend d'un cran, sous l'un de dix motifs nommés, et le tuple signé inclut l'empreinte du modèle
+(\loc{efe-swarm-provenance/\allowbreak src/\allowbreak cosign.rs}). Aucun chemin servi ne la produit encore.
+\end{itemize}
+
+\section{5 · Le dossier réglementaire}
+
+\begin{itemize}[leftmargin=1.2em,itemsep=1.5pt,topsep=1pt]
+\item \mm{Une fonction, pas un document} : \emph{dossier = derive(enregistrements, mapping@version)}. Le moteur
+re-prouve d'abord, et refuse le non-prouvé (\loc{reg-evidence/\allowbreak src/\allowbreak engine.rs:10}). La lecture
+juridique est une revendication versionnée, datée et hachée, qui voyage avec le dossier (\loc{mapping.rs:109}) : quand
+la règle change, c'est la version de lecture qui change, et l'ancien dossier reste interprétable.
+\item \mm{Les sélecteurs} forment un langage fermé --- type de nœud, présence ou égalité d'un champ, action humaine,
+conjonction, disjonction (\loc{selector.rs:91-103}). Lisibles par un juriste, sérialisables, déterministes, ils ne
+peuvent désigner que des nœuds qui existent.
+\item \mm{La couverture honnête} : «~Tout cadre présent DOIT déclarer au moins un trou~» --- sinon le jeu de mappings
+est refusé (\code{NoDeclaredHoles}), et un hors-périmètre qui ne nomme pas son trou aussi (\code{SilentHole})
+(\loc{mapping.rs:128-133}). Aucune structure n'a de champ «~conforme~» ; «~outillé n'est pas conforme~» est écrit dans
+chaque rendu (\loc{render.rs:14}).
+\item \mm{Quatre cadres} sont câblés --- AI Act, RGPD, CSDDD, LkSG --- et l'exemple de référence relit une seule
+capture sous trois d'entre eux.
+\item \mm{La console} est le seul exécutable du dossier (\code{audit-api} est une bibliothèque). Chaque champ affiché
+nomme le nœud qui le porte, et la seule écriture est l'action humaine scellée --- approbation, dérogation, escalade ---
+sous contrôle de rôle (\loc{audit-api/\allowbreak src/\allowbreak service.rs:349}). La conservation --- sauvegarde,
+restauration, rotation de clé --- est assurée par \code{scella-conservation}.
+\end{itemize}
+
+\section{6 · Le parcours d'une preuve, artefact par artefact}
+
+\begin{enumerate}[leftmargin=1.4em,itemsep=1.5pt,topsep=1pt]
+\item \mm{L'appel.} Il entre par \code{POST /v1/swarm/run}, ou par une route de mission quand les modèles distants
+sont activés. Chaque appel de modèle devient un enregistrement scellé et persisté ; \code{GET /v1/swarm/verify/:id}
+le re-prouve côté serveur et compare la racine recalculée à la racine persistée.
+\item \mm{L'export.} \code{GET /v1/swarm/bundle/:id}, monté seulement si l'export est activé, produit un dossier
+autoportant : \code{records.sealed.jsonl}, \code{manifest.root}, \code{report.md}, \code{README.md} --- ce que le
+dossier ne prouve pas ---, \code{MANIFEST.sha256}, qui couvre tout le reste, et \code{verify/}, la source du
+vérifieur avec sa spécification et son script de construction.
+\item \mm{L'ancre.} Au même moment, une ligne part dans le journal d'ancres, hors du dossier ; un jeton d'horodatage
+RFC 3161 peut l'envelopper.
+\item \mm{Le dossier réglementaire.} \code{POST /v1/swarm/reg/:id} le re-dérive du même run, sous un mapping daté ; la
+console le sert, et y scelle les actions humaines.
+\item \mm{Chez l'auditeur.} Compter les nœuds contre l'ancre, sans clé ; recompiler \code{verify/} hors ligne et
+re-prouver avec la clé reçue par un autre canal ; re-dériver le dossier, et comparer les octets.
+\end{enumerate}
+
+\section{7 · Mesures}
+
+{\small
+\renewcommand{\arraystretch}{1.13}
+\begin{longtable}{@{}L{4.4cm}L{5.4cm}L{7.7cm}@{}}
+\toprule
+\textbf{quoi} & \textbf{valeur} & \textbf{comment} \\ \midrule \endhead
+le projet & 18 composants · 92\,006 lignes · 1\,639 tests & union des deux fermetures ; annotations \code{\#[test]} et
+\code{\#[tokio::test]} des fichiers suivis \\
+le point de passage & 14 composants & \code{cargo tree -e normal -p efe-swarm-gateway}, croisé avec les membres \\
+le dossier & 8 composants & même mesure, depuis \code{audit-console} \\
+le socle partagé & 4 composants & \code{provenance-dag}, \code{forensic-export}, \code{scella-authority},
+\code{scella-rfc3161} \\
+le vérifieur & 1\,159 lignes, 0 dépendance & \code{verify-mini/src} ; hors des deux fermetures, vendoré dans chaque
+bundle \\
+la configuration de production & démarre, survit à un redémarrage, re-prouve son reçu & \code{scripts/p1-check.sh}
+: vrai Postgres, jeton ES256, processus tué puis relancé ; exige Docker, donc hors CI --- dernier passage consigné
+le 6 septembre \\
+le dépôt entier & 30 composants · 4\,230 tests, dont 24 ignorés & il garde aussi des bibliothèques héritées, hors du
+projet \\
+les portes de contrôle & bancs du passage et du dossier ; m4--m9, p2, p3, d3 (licence, secrets), orphelins ; la suite
+complète & \code{.github/workflows/portes.yml} : chaque garde y est poussé jusqu'à tomber \\
+\bottomrule
+\end{longtable}
+}
+
+\section{8 · Ce qui n'est pas fait, pas mesuré, ou pas prouvé}
+
+\begin{alerte}
+\begin{itemize}[leftmargin=1.1em,itemsep=1pt,topsep=0pt]
+\item Les allers-retours vers les modèles distants sont éprouvés contre un serveur local qui imite leur API : le
+chemin, jamais le partenaire. Aucun appel à un vrai fournisseur n'est mesuré par le dépôt.
+\item La co-signature de nœud n'a pas de producteur sur le chemin servi ; la signature de racine et l'horodatage tiers
+ne sont posés par aucun profil.
+\item Le chemin auto-hébergé sans clé d'API est un test ignoré en CI, parce qu'il exige un modèle local ; les autres
+serveurs compatibles OpenAI ne sont pas mesurés.
+\item La licence est propriétaire à ce jour ; le vérifieur reste lisible en entier dans chaque bundle.
+\item Et ce que la technologie ne prouve jamais : la justesse d'une décision. Le dossier est inviolable pour un
+détenteur de clé ; seuls l'ancre, sans clé, et l'horodatage tiers le rendent opposable à son propre détenteur.
+\end{itemize}
+\end{alerte}
+
+\section{9 · Rejouer soi-même}
+
+{\small
+\renewcommand{\arraystretch}{1.12}
+\begin{longtable}{@{}L{6.0cm}L{11.5cm}@{}}
+\toprule
+\textbf{ce qu'on veut voir} & \textbf{la commande} \\ \midrule \endhead
+le vérifieur est seul dans son arbre & \code{cargo tree -p verify-mini -e normal -{}-prefix none} → une ligne \\
+la coupure démasquée sans clé & \code{docker compose up} \\
+le même run en dossier réglementaire & \code{docker compose -{}-profile jonction up} \\
+chaque garde tient, puis tombe & \code{bash scripts/banc-seuil.sh -{}-verifier} ; \code{bash scripts/banc-registre.sh
+-{}-verifier} \\
+un cadre sans trou est refusé & \code{cargo test -p reg-evidence} \\
+un seul analyseur d'URL & \code{cargo test -p scella-authority -{}-test un\_seul\_analyseur} \\
+la re-preuve, avec la clé & \code{verify-mini records.sealed.jsonl -{}-key-hex <clé> -{}-root <racine>} \\
+\bottomrule
+\end{longtable}
+}
+
+\end{document}

@@ -1,0 +1,130 @@
+\documentclass[10pt]{extarticle}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage[french]{babel}
+\frenchsetup{AutoSpacePunctuation=false}
+\usepackage{newpxtext,newpxmath}
+\usepackage[a4paper,top=1.0cm,bottom=0.9cm,left=1.15cm,right=1.15cm]{geometry}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{titlesec}
+\usepackage[most]{tcolorbox}
+\usepackage{enumitem}
+\usepackage{multicol}
+
+\definecolor{navy}{HTML}{1F3A5F}
+\definecolor{grey}{HTML}{54606E}
+\definecolor{green}{HTML}{2C6E49}
+\definecolor{red}{HTML}{A6322E}
+\definecolor{boxgray}{HTML}{F3F5F8}
+\definecolor{boxgreen}{HTML}{F1F7F3}
+\definecolor{boxedge}{HTML}{D9E0EA}
+
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{2.6pt}
+\setlength{\columnsep}{14pt}
+\setlength{\emergencystretch}{2.5em}
+\linespread{1.0}
+\pagestyle{empty}
+
+\titleformat{\section}{\color{navy}\bfseries}{}{0pt}{}
+\titlespacing{\section}{0pt}{6pt}{1.5pt}
+
+\newtcolorbox{these}{colback=boxgray,colframe=boxedge,boxrule=0.5pt,arc=2pt,
+  left=7pt,right=7pt,top=3pt,bottom=3pt}
+\newtcolorbox{acquis}{colback=boxgreen,colframe=green!45,boxrule=0.6pt,arc=2pt,
+  left=6pt,right=6pt,top=2.5pt,bottom=2.5pt}
+\newcommand{\code}[1]{\texttt{\footnotesize #1}}
+\newcommand{\mm}[1]{\textbf{\textcolor{navy}{#1}}}
+
+\begin{document}
+
+\begin{center}
+{\LARGE\bfseries\color{navy} Scella}\\[3pt]
+{\large\color{grey}\itshape Prouver ce qu'une IA a fait, à quelqu'un qui n'a aucune raison de vous croire}\\[3pt]
+{\footnotesize\color{grey} 7 octobre 2026 \; · \; un projet, une page \; · \; chaque chiffre est mesuré dans le code (commit \code{fb710b5}) ; la version technique donne les fichiers et les lignes}
+\end{center}
+\vspace{1pt}
+
+\begin{these}
+\mm{En une phrase.} Quand une décision passe par un modèle d'IA, Scella laisse derrière elle un dossier qu'un
+tiers re-vérifie hors ligne --- sans installer Scella et sans croire l'éditeur --- et qui écrit lui-même ce qu'il ne
+prouve pas.
+
+\mm{Le problème.} Une organisation qui fait passer ses décisions par des modèles d'IA ne peut, aujourd'hui, presque
+rien établir après coup devant un tiers. Ses traces se réécrivent sans laisser d'indice. Une suppression ne se voit
+pas : une chaîne scellée dont on retire la fin reste parfaitement valide. Et les vérifier exige l'outil de celui
+qu'on audite. L'AI Act impose pourtant aux systèmes à haut risque une journalisation automatique (art.~12, applicable
+au 2~décembre~2027 aux systèmes de l'annexe~III, depuis le règlement~(UE)~2026/1744), et chaque cadre --- AI Act, RGPD, devoir de vigilance ---
+réclame son propre dossier.
+\end{these}
+
+\begin{multicols}{2}
+
+\section{Ce que fait Scella : trois gestes, un seul projet}
+
+\mm{1 · Sceller au passage.} Chaque appel vers un modèle traverse un point de passage qui l'inscrit dans une chaîne
+scellée : un sceau HMAC sur un encodage canonique, sous une clé propre à chaque client, qui ne voyage jamais avec le
+dossier. Les données personnelles sont caviardées \emph{avant} le sceau, la dépense est bornée \emph{avant} le
+sceau. Et un panel annoncé de trois modèles ne peut pas être prétendu avec un seul appel : chaque appel déclaré doit
+trouver son propre enregistrement.
+
+\mm{2 · Re-prouver sans croire l'éditeur.} Chaque dossier exporté embarque la \emph{source} de son vérifieur --- aucune
+dépendance, 1\,159 lignes qu'un auditeur lit en entier. Le détenteur de la clé le recompile et re-prouve hors ligne.
+Une ancre publiée ailleurs, qui annonce la racine et le nombre d'éléments, démasque une coupure par un simple
+comptage, \emph{sans aucune clé}. En option : la signature de la racine et un horodatage tiers RFC~3161.
+
+\mm{3 · Re-dériver le dossier réglementaire.} Le dossier n'est pas un document qu'on croit : c'est une fonction qu'on
+ré-exécute, \emph{dossier = dériver(enregistrements scellés, lecture juridique datée)}. Le moteur re-prouve avant de
+dériver et refuse le non-prouvé. Une seule capture se relit sous plusieurs cadres --- quatre sont câblés : AI Act, RGPD, CSDDD, LkSG. La lecture
+est versionnée, hachée, et voyage avec le dossier : quand la règle change, l'ancien dossier reste interprétable.
+
+\section{Ce qui le distingue}
+
+La base --- chaîne scellée, vérifieur hors ligne, ancre --- se répand en 2026. Scella la tient avec une discipline
+qui, elle, reste rare :
+\begin{itemize}[leftmargin=1.1em,itemsep=1pt,topsep=1pt]
+\item \mm{un cadre qui ne déclare aucun trou est refusé} dès sa construction : aucun règlement n'est entièrement
+couvert par un journal, et le prétendre serait un faux vert ;
+\item \mm{aucun champ «~conforme~» n'existe} : le dossier fournit l'évidence, il ne prononce pas la conformité ;
+\item \mm{aucune revendication plus forte que sa preuve} : chacune est calculée depuis la source scellée, et tombe
+visiblement, son motif nommé ;
+\item \mm{chaque livrable écrit ce qu'il ne prouve pas}, et le remède à exiger.
+\end{itemize}
+
+\section{Ce qui tourne, mesuré}
+
+Dix-huit composants Rust (92\,006 lignes, 1\,639 tests), plus le vérifieur. Des portes de contrôle qui font
+volontairement tomber chaque garde : un contrôle incapable d'échouer ne prouverait rien. Sur une machine vierge,
+\code{docker compose up} exécute un run réel, l'exporte et l'ancre, puis démasque une copie tronquée --- par
+comptage, sans clé. La re-preuve complète se fait chez le détenteur de la clé. Sous le profil «~jonction~», le même run se relit
+en dossier réglementaire. La configuration de production démarre contre une vraie base, survit à un
+redémarrage et re-prouve son reçu.
+
+\section{Ce qu'il ne prouve pas}
+
+L'intégrité d'une suite d'événements, jamais la justesse d'une décision. Le dossier est inviolable pour quiconque
+détient la clé, sans être «~sans confiance~» pour tous : l'ancre, sans clé, et l'horodatage tiers, en option, le
+rendent opposable à son propre détenteur. Le refus de démarrer protège d'une configuration incomplète, pas d'un
+opérateur malveillant.
+
+\section{Pour qui}
+
+Les organisations régulées qui font passer des décisions par des modèles d'IA --- banque, assurance,
+santé, secteur public --- et ceux qui doivent ensuite les auditer.
+
+\section{Où en est-on}
+
+Aucun client encore. Les allers-retours vers les modèles distants sont éprouvés contre un serveur local qui imite
+leur API : le chemin, pas encore le partenaire. La co-signature des nœuds de calcul est vérifiée, mais pas encore
+produite.
+
+\begin{acquis}
+\mm{Ce que nous cherchons.} Un premier partenaire régulé --- banque, assurance, santé, secteur public --- pour un
+pilote en mode observation : Scella enregistre et scelle, et un échec d'enregistrement ne bloque jamais une
+requête.
+\end{acquis}
+
+\end{multicols}
+
+\end{document}
